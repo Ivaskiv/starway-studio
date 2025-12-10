@@ -4,9 +4,11 @@ import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
 export default defineConfig([
-  globalIgnores(['dist', 'node_modules']),
+  globalIgnores(['dist']),
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
@@ -14,16 +16,22 @@ export default defineConfig([
       sourceType: 'module',
       globals: globals.browser,
       parserOptions: {
-        project: ['./tsconfig.app.json', './tsconfig.node.json'],
-        tsconfigRootDir: import.meta.url
+        project: ['./tsconfig.json'],
+        tsconfigRootDir: import.meta.dirname,
       }
     },
+    
     extends: [
       js.configs.recommended,
       tseslint.configs.recommendedTypeChecked,
+      tseslint.configs.strictTypeChecked,
+      tseslint.configs.stylisticTypeChecked,
       react.configs.recommended,
-      reactHooks.configs.recommended
+      reactHooks.configs.recommended,
+      reactX.configs['recommended-typescript'],
+      reactDom.configs.recommended,
     ],
+
     rules: {
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'off',
