@@ -3,11 +3,11 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from './store'
 import Sidebar from './components/sidebar/Sidebar'
-import Dashboard from './pages/DashboardAdmin'
+import Dashboard from './pages/admin/DashboardAdmin'
 import ProductsList from './pages/products/List'
 import ProductForm from './pages/products/ProductForm'
 import Funnels from './pages/funnels/Builder'
-import Auth from './components/auth/Auth'
+// import Auth from './components/auth/Auth'
 import Home from './pages/home/Home'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -28,8 +28,8 @@ function App() {
         <Routes>
           {/* Публічні */}
           <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Auth />} />
-          <Route path="/register" element={<Auth />} />
+          {/* <Route path="/login" element={<Auth />} />
+          <Route path="/register" element={<Auth />} /> */}
 
           {/* Адмінка — тільки для залогінених */}
           <Route
