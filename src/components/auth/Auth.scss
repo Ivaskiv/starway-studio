@@ -1,0 +1,103 @@
+// src/components/auth/Auth.scss
+
+.auth-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 50px 0;
+
+  .tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+
+    button {
+      padding: 10px 20px;
+      background: #fff;
+      color: #000;
+      border: 2px solid #000;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.2s, color 0.2s;
+
+      &.active {
+        background: #000;
+        color: #fff;
+      }
+
+      &:hover {
+        background: #000;
+        color: #fff;
+      }
+    }
+  }
+
+  .form-wrapper {
+    width: 320px;
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      padding: 30px;
+      background-color: #fff;
+      border: 2px solid #000;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+
+      h2 {
+        text-align: center;
+        color: #000;
+      }
+
+      input {
+        padding: 10px;
+        border: 1px solid #000;
+        border-radius: 4px;
+        font-size: 16px;
+        color: #000;
+        background-color: #fff;
+
+        &::placeholder {
+          color: #000;
+          opacity: 0.6;
+        }
+
+        &:focus {
+          outline: none;
+          border-color: #333;
+        }
+      }
+
+      button {
+        padding: 10px;
+        background-color: #000;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.2s, opacity 0.2s;
+
+        &:hover {
+          background-color: #333;
+        }
+      }
+    }
+  }
+
+  .forgot-password {
+    margin-top: 15px;
+    background: none;
+    border: none;
+    color: #000;
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 14px;
+
+    &:hover {
+      opacity: 0.8;
+    }
+  }
+}
