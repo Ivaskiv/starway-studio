@@ -1,5 +1,6 @@
+//src/store/index.ts
 import { create } from 'zustand'
-import api from '../api'
+import api from '../lib/api'
 
 export interface User {
   id: string

@@ -1,67 +1,89 @@
+// src/components/Sidebar.tsx 
 import { Link, useLocation } from 'react-router-dom'
-import { useStore } from '../../store'
-import { LogOut, Moon, Sun, Package, GitBranch, Home } from 'lucide-react'
+import { 
+  Home, 
+  Package, 
+  GitBranch, 
+  LogOut, 
+  Sun, 
+  Moon 
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/store/auth'
 
-const nav = [
-  { to: '/', label: 'Dashboard', icon: Home },
-  { to: '/products', label: 'Продукти', icon: Package },
-  { to: '/funnels', label: 'Воронки', icon: GitBranch },
-]
+const navigation = [
+  { name: 'Dashboard', href: '/admin', icon: Home },
+  { name: 'Продукти', href: '/admin/products', icon: Package },
+  { name: 'Воронки', href: '/admin/funnels', icon: GitBranch },
+] as const
 
 export default function Sidebar() {
   const location = useLocation()
-  const { user, logout, theme, toggleTheme } = useStore()
+  const { user, logout, theme, toggleTheme } = useAuthStore()
+
+  if (!user) return null
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-gray-900 border-r border-gray-800 p-6 flex flex-col">
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+    <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+      {/* Логотип */}
+      <div className="flex h-16 items-center justify-center border-b border-gray-800 px-6">
+        <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-orange-400 bg-clip-text text-transparent">
           Starway
         </h1>
-        <p className="text-gray-400 text-sm">AI Воронки</p>
       </div>
 
-      <nav className="flex-1 space-y-2">
-        {nav.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-              location.pathname === item.to
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
-                : 'hover:bg-gray-800 text-gray-300'
-            }`}
-          >
-            <item.icon size={20} />
-            <span className="font-medium">{item.label}</span>
-          </Link>
-        ))}
+      {/* Навігація */}
+      <nav className="flex-1 space-y-1 p-4">
+        {navigation.map((item) => {
+          const isActive = location.pathname === item.href
+          return (
+            <Link
+              key={item.name}
+              to={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200",
+                isActive
+                  ? "bg-gradient-to-r from-indigo-600 to-orange-600 text-white shadow-lg shadow-indigo-500/20"
+                  : "text-gray-300 hover:bg-gray-800 hover:text-white"
+              )}
+            >
+              <item.icon className="h-5 w-5" />
+              <span>{item.name}</span>
+            </Link>
+          )
+        })}
       </nav>
 
-      <div className="border-t border-gray-800 pt-4 space-y-3">
+      {/* Підвал */}
+      <div className="border-t border-gray-800 p-4 space-y-4">
+        {/* Перемикання теми */}
         <button
           onClick={toggleTheme}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-800 transition"
+          className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 transition"
         >
-          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           <span>{theme === 'dark' ? 'Світла тема' : 'Темна тема'}</span>
         </button>
 
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center font-bold">
-            {user?.name[0]}
+        {/* Профіль користувача */}
+        <div className="flex items-center gap-3 rounded-lg bg-gray-800/50 px-4 py-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-orange-500 font-bold text-white">
+            {user.name.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <p className="font-medium">{user?.name}</p>
-            <p className="text-xs text-gray-400">{user?.role}</p>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-white">{user.name}</p>
+            <p className="text-xs text-orange-400">
+              {user.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+            </p>
           </div>
         </div>
 
+        {/* Вихід */}
         <button
           onClick={logout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-red-900/50 text-red-400 transition"
+          className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm text-red-400 hover:bg-red-900/30 transition"
         >
-          <LogOut size={20} />
+          <LogOut className="h-5 w-5" />
           <span>Вийти</span>
         </button>
       </div>

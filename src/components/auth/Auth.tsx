@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import './Auth.scss'
-import api from '../../api'
+import api from '../../lib/api'
 import { useStore } from '../../store'
 import axios from 'axios'
 
