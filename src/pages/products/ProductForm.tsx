@@ -13,7 +13,7 @@ interface ProductFormInputs {
   title: string
   price: number
   description: string
-  modules: string[] // масив значень модулів
+  modules: string[] 
 }
 
 const modulesList: Module[] = [

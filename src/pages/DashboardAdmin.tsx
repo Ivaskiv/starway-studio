@@ -1,4 +1,4 @@
-export default function Dashboard() {
+export default function DashboardAdmin() {
   return (
     <div className="p-8">
       <h1 className="text-4xl font-bold mb-8 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">

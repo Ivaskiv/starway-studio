@@ -13,8 +13,8 @@ interface Product {
 
 export default function ProductsList() {
   const [products, setProducts] = useState<Product[]>([])
-  const { user } = useStore() // отримуємо токен/ролі
-
+  const { user } = useStore() 
+  
   useEffect(() => {
     const fetchProducts = async () => {
       try {
