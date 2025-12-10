@@ -26,62 +26,56 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ theme: newTheme })
   },
 
-login: async (email, password) => {
-  try {
-    if (!email || !password) throw new Error('missing_fields');
+  login: async (email, password) => {
+    try {
+      if (!email || !password) throw new Error('missing_fields');
 
-    const emailStr = typeof email === 'string' ? email : email;
+      const { data } = await api.post('/auth/login', {
+        email: String(email),
+        password: String(password),
+      });
 
-    const { data } = await api.post('/auth/login', {
-      email: emailStr,
-      password: String(password),
-    });
+      localStorage.setItem('token', data.token)
+      api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
+      set({ user: data.user, isLoading: false })
 
-    localStorage.setItem('token', data.token);
-    api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
-    set({ user: data.user, isLoading: false });
-
-    if (data.user.role === 'super_admin' || data.user.role === 'admin') {
-      window.location.href = '/admin';
-    } else {
-      window.location.href = '/profile';
+      if (data.user.role === 'super_admin' || data.user.role === 'admin') {
+        window.location.href = '/admin'
+      } else {
+        window.location.href = '/profile'
+      }
+    } catch (err: any) {
+      console.error('LOGIN ERROR:', err.response?.data || err.message)
+      set({ user: null, isLoading: false })
+      throw err
     }
-  } catch (err: any) {
-    console.error('LOGIN ERROR:', err.response?.data || err.message);
-    set({ user: null, isLoading: false });
-    throw err;
-  }
-},
+  },
 
-register: async (email, password, name) => {
-  try {
-    if (!email || !password) throw new Error('missing_fields');
+  register: async (email, password, name) => {
+    try {
+      if (!email || !password) throw new Error('missing_fields');
 
-    const emailStr = typeof email === 'string' ? email : email;
+      const { data } = await api.post('/auth/register', {
+        email: String(email),
+        password: String(password),
+        name,
+      });
 
-    const { data } = await api.post('/auth/register', {
-      email: emailStr,
-      password: String(password),
-      name,
-    });
+      localStorage.setItem('token', data.token)
+      api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
+      set({ user: data.user, isLoading: false })
 
-    localStorage.setItem('token', data.token);
-    api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
-    set({ user: data.user, isLoading: false });
-
-    // автоматичний редірект після реєстрації
-    if (data.user.role === 'super_admin' || data.user.role === 'admin') {
-      window.location.href = '/admin';
-    } else {
-      window.location.href = '/profile';
+      if (data.user.role === 'super_admin' || data.user.role === 'admin') {
+        window.location.href = '/admin'
+      } else {
+        window.location.href = '/profile'
+      }
+    } catch (err: any) {
+      console.error('REGISTER ERROR:', err.response?.data || err.message)
+      set({ user: null, isLoading: false })
+      throw err
     }
-  } catch (err: any) {
-    console.error('REGISTER ERROR:', err.response?.data || err.message);
-    set({ user: null, isLoading: false });
-    throw err;
-  }
-},
-
+  },
 
   logout: () => {
     localStorage.removeItem('token')
@@ -90,32 +84,31 @@ register: async (email, password, name) => {
     window.location.href = '/login'
   },
 
-checkAuth: async () => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    set({ user: null, isLoading: false });
-    if (window.location.pathname !== '/') window.location.href = '/';
-    return;
-  }
-
-  try {
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    const { data } = await api.get('/auth/me');
-    set({ user: data.user, isLoading: false });
-
-    if (data.user.role === 'super_admin' || data.user.role === 'admin') {
-      if (window.location.pathname !== '/admin') window.location.href = '/admin';
-    } else {
-      if (window.location.pathname !== '/profile') window.location.href = '/profile';
+  checkAuth: async () => {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      set({ user: null, isLoading: false })
+      if (window.location.pathname !== '/') window.location.href = '/'
+      return
     }
-  } catch {
-    localStorage.removeItem('token');
-    delete api.defaults.headers.common['Authorization'];
-    set({ user: null, isLoading: false });
-    if (window.location.pathname !== '/') window.location.href = '/';
-  }
-}
 
+    try {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      const { data } = await api.get('/auth/me')
+      set({ user: data.user, isLoading: false })
+
+      if (data.user.role === 'super_admin' || data.user.role === 'admin') {
+        if (window.location.pathname !== '/admin') window.location.href = '/admin'
+      } else {
+        if (window.location.pathname !== '/profile') window.location.href = '/profile'
+      }
+    } catch {
+      localStorage.removeItem('token')
+      delete api.defaults.headers.common['Authorization']
+      set({ user: null, isLoading: false })
+      if (window.location.pathname !== '/') window.location.href = '/'
+    }
+  },
 }))
 
 // Ініціалізація теми + перевірка авторизації
