@@ -4,7 +4,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import './Auth.scss'
 import api from '../../lib/api'
-import { useAuthStore } from '../../store/auth' // ТВІЙ СТОР
+import { useStore } from '@/store'
 
 interface LoginForm {
   email: string
@@ -19,7 +19,7 @@ interface RegisterForm {
 
 export default function Auth() {
   const [tab, setTab] = useState<'login' | 'register'>('login')
-  const { login } = useAuthStore()
+  const { login } = useStore()
   const navigate = useNavigate()
 
   const {

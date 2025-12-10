@@ -1,49 +1,51 @@
-// src/pages/Home.tsx — ОСТАТОЧНА ВЕРСІЯ, 100% ПРАЦЮЄ
+// src/pages/Home.tsx
 import { useStore } from '@/store'
 
 export default function Home() {
   const { user } = useStore()
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 text-white">
-      <div className="text-center p-10 bg-black/30 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/10">
-        <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-indigo-400 to-orange-400 bg-clip-text text-transparent">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 flex items-center justify-center p-8">
+      <div className="text-center max-w-4xl">
+        <h1 className="text-6xl md:text-8xl font-bold mb-6 bg-gradient-to-r from-indigo-400 to-orange-400 bg-clip-text text-transparent">
           Starway
         </h1>
-        <p className="text-xl mb-4 mb-10 text-gray-300">
+        <p className="text-2xl md:text-4xl text-gray-300 mb-12">
           Найкращий AI-конструктор воронок в Україні
         </p>
 
-        {!user ? (
-          <div className="space-x-6">
+        <div className="space-x-6">
+          {!user ? (
+            <>
+              <a
+                href="/login"
+                className="inline-block px-12 py-6 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl font-bold text-2xl hover:scale-110 transition shadow-2xl"
+              >
+                Увійти
+              </a>
+              <a
+                href="/register"
+                className="inline-block px-12 py-6 bg-gradient-to-r from-orange-600 to-pink-600 rounded-2xl font-bold text-2xl hover:scale-110 transition shadow-2xl"
+              >
+                Зареєструватися
+              </a>
+            </>
+          ) : user.role === 'super_admin' || user.role === 'admin' ? (
             <a
-              href="/login"
-              className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-bold text-lg hover:scale-105 transition"
+              href="/admin"
+              className="inline-block px-16 py- py-8 bg-gradient-to-r from-indigo-600 to-orange-600 rounded-3xl font-bold text-3xl hover:scale-110 transition shadow-2xl"
             >
-              Увійти
+              В адмінку
             </a>
+          ) : (
             <a
-              href="/register"
-              className="px-8 py-4 bg-gradient-to-r from-orange-600 to-pink-600 rounded-xl font-bold text-lg hover:scale-105 transition"
+              href="/profile"
+              className="inline-block px-16 py-8 bg-gradient-to-r from-green-600 to-teal-600 rounded-3xl font-bold text-3xl hover:scale-110 transition shadow-2xl"
             >
-              Зареєструватися
+              В профіль
             </a>
-          </div>
-        ) : user.role === 'super_admin' || user.role === 'admin' ? (
-          <a
-            href="/admin"
-            className="px-12 py-5 bg-gradient-to-r from-indigo-600 to-orange-600 rounded-2xl font-bold text-2xl hover:scale-110 transition shadow-2xl"
-          >
-            Перейти в адмінку
-          </a>
-        ) : (
-          <a
-            href="/profile"
-            className="px-12 py-5 bg-gradient-to-r from-green-600 to-teal-600 rounded-2xl font-bold text-2xl hover:scale-110 transition shadow-2xl"
-          >
-            Перейти в профіль
-          </a>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

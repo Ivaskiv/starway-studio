@@ -11,7 +11,7 @@ import {
   Sun,
   Moon
 } from 'lucide-react';
-import { useAuthStore } from '@/store/auth';
+import { useStore } from '@/store'
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: Home },
@@ -24,7 +24,7 @@ const navigation = [
 
 export default function Sidebar() {
   const location = useLocation();
-  const { user, logout, theme, toggleTheme } = useAuthStore();
+  const { user, logout, theme, toggleTheme } = useStore();
 
   if (!user) return null;
 

@@ -1,0 +1,152 @@
+// src/index.scss — ЄДИНИЙ ФАЙЛ СТИЛІВ, 100% ПРАЦЮЄ
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+// ─── ГЛОБАЛЬНІ ЗМІННІ ─────────────────────
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-card: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --border: #334155;
+  --accent-indigo: #6366f1;
+  --accent-orange: #f97316;
+  --success: #10b981;
+  --error: #ef4444;
+  --shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.5);
+}
+
+.dark {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-card: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --border: #334155;
+}
+
+.light {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #e2e8f0;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border: #cbd5e1;
+}
+
+// ─── БАЗОВІ СТИЛІ ────────────────────────
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+// ─── КАРТОЧКИ ─────────────────────────────
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+  // backdrop-filter: blur(10px);
+
+  &:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6);
+  }
+}
+
+// ─── ГРАДІЄНТИ ───────────────────────────
+.gradient-indigo-orange {
+  background: linear-gradient(135deg, var(--accent-indigo), var(--accent-orange));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+}
+
+.gradient-bg-indigo-orange {
+  background: linear-gradient(135deg, var(--accent-indigo), var(--accent-orange));
+}
+
+// ─── КНОПКИ ───────────────────────────────
+.btn-primary {
+  @apply px-8 py-4 bg-gradient-to-r from-indigo-600 to-orange-600 text-white font-bold rounded-xl shadow-lg transition hover:scale-105 hover:shadow-2xl;
+}
+
+.btn-secondary {
+  @apply px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl shadow-lg transition hover:scale-105 hover:shadow-2xl;
+}
+
+.btn-success {
+  @apply px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition;
+}
+
+.btn-danger {
+  @apply px-6 py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition;
+}
+
+// ─── ФОРМИ ────────────────────────────────
+.input {
+  @apply w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition;
+}
+
+// ─── ЗАГОЛОВКИ ───────────────────────────
+.page-title {
+  @apply text-4xl font-bold mb-8 gradient-indigo-orange;
+}
+
+.section-title {
+  @apply text-2xl font-semibold mb-6 text-gray-200;
+}
+
+// ─── АДАПТИВНІСТЬ ─────────────────────────
+.container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+// ─── АНІМАЦІЇ ─────────────────────────────
+.fade-in {
+  animation: fadeIn 0.6s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+// ─── SCROLLBAR (опціонально) ──────────────
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-indigo);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-orange);
+}
