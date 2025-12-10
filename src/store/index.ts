@@ -1,4 +1,4 @@
-//src/store/index.ts
+// src/store/index.ts 
 import { create } from 'zustand'
 import api from '../lib/api'
 
@@ -6,49 +6,87 @@ export interface User {
   id: string
   email: string
   name: string
-  role: 'admin' | 'super_admin' | 'user'
+  role: 'super_admin' | 'admin' | 'user'
   avatar?: string
 }
 
 interface Store {
   user: User | null
-  token: string | null
-  theme: 'dark' | 'light'
-  login: (user: User, token: string) => void
-  logout: () => void
+  isLoading: boolean
+  theme: 'light' | 'dark'
   toggleTheme: () => void
-  refreshUser: () => Promise<void>
+  login: (email: string, password: string) => Promise<void>
+  register: (email: string, password: string, name?: string) => Promise<void>
+  logout: () => void
+  checkAuth: () => Promise<void>
 }
 
 export const useStore = create<Store>((set, get) => ({
   user: null,
-  token: localStorage.getItem('token'),
+  isLoading: true,
   theme: 'dark',
 
-  login: (user, token) => {
-    localStorage.setItem('token', token)
-    set({ user, token })
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+  toggleTheme: () => {
+    const newTheme = get().theme === 'dark' ? 'light' : 'dark'
+    localStorage.setItem('theme', newTheme)
+    document.documentElement.classList.toggle('dark', newTheme === 'dark')
+    set({ theme: newTheme })
+  },
+
+  login: async (email, password) => {
+    try {
+      const { data } = await api.post('/auth/login', { email, password })
+      localStorage.setItem('token', data.token)
+      set({ user: data.user, isLoading: false })
+    } catch (err: any) {
+      console.error('Login failed:', err.response?.data || err.message)
+      set({ isLoading: false })
+      throw err
+    }
+  },
+
+  register: async (email, password, name) => {
+    try {
+      const { data } = await api.post('/auth/register', { email, password, name })
+      localStorage.setItem('token', data.token)
+      set({ user: data.user, isLoading: false })
+    } catch (err: any) {
+      console.error('Register failed:', err.response?.data || err.message)
+      set({ isLoading: false })
+      throw err
+    }
   },
 
   logout: () => {
     localStorage.removeItem('token')
-    set({ user: null, token: null })
     delete api.defaults.headers.common['Authorization']
+    set({ user: null, isLoading: false })
+    window.location.href = '/login'
   },
 
-  toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
+  checkAuth: async () => {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      set({ user: null, isLoading: false })
+      return
+    }
 
-  refreshUser: async () => {
     try {
-      const { token } = get()
-      if (!token) return
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      const res = await api.get('/api/me')
-      set({ user: res.data })
-    } catch (err) {
-      console.error('Failed to refresh user', err)
-      get().logout()
+      const { data } = await api.get('/api/me')
+      set({ user: data.user, isLoading: false })
+    } catch {
+      localStorage.removeItem('token')
+      delete api.defaults.headers.common['Authorization']
+      set({ user: null, isLoading: false })
     }
   },
 }))
+
+// Ініціалізація
+if (typeof window !== 'undefined') {
+  const saved = localStorage.getItem('theme') as 'light' | 'dark' | null
+  const theme = saved || 'dark'
+  document.documentElement.classList.toggle('dark', theme === 'dark')
+  useStore.setState({ theme })
+  useStore.getState().checkAuth()
+}
