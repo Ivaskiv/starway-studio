@@ -1,11 +1,10 @@
-// src/components/auth/Auth.tsx
+// src/components/auth/Auth.tsx — ОСТАТОЧНА ВЕРСІЯ
 import { useState } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import './Auth.scss'
 import api from '../../lib/api'
-import { useStore } from '../../store'
-import axios from 'axios'
+import { useAuthStore } from '../../store/auth' // ТВІЙ СТОР
 
 interface LoginForm {
   email: string
@@ -18,71 +17,43 @@ interface RegisterForm {
   confirmPassword: string
 }
 
-interface AuthResponse {
-  access?: string;
-  token?: string;
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    role: 'admin' | 'super_admin' | 'user'; // <- обов'язково цей union
-    avatar?: string;
-  };
-}
-
-
-interface ErrorResponse {
-  error: string
-  message?: string
-}
-
 export default function Auth() {
   const [tab, setTab] = useState<'login' | 'register'>('login')
-  const { login } = useStore()
+  const { login } = useAuthStore()
   const navigate = useNavigate()
 
-  // ─── Login form
   const {
     register: registerLogin,
     handleSubmit: handleLoginSubmit,
     reset: resetLogin,
+    formState: { errors: loginErrors },
   } = useForm<LoginForm>()
 
-  // ─── Register form
   const {
     register: registerRegister,
     handleSubmit: handleRegisterSubmit,
     reset: resetRegister,
+    formState: { errors: registerErrors },
   } = useForm<RegisterForm>()
 
-  // ─── Login
   const onLogin: SubmitHandler<LoginForm> = async (data) => {
     try {
-      const res = await api.post<AuthResponse>('/auth/login', data)
-      const token = res.data.access || res.data.token
+      const res = await api.post('/auth/login', data)
+      const token = res.data.token || res.data.access
       const user = res.data.user
 
-      if (token && user) {
-const safeRole = (user.role === 'admin' || user.role === 'super_admin') 
-  ? user.role 
-  : 'user'
+      login(user, token)
 
-login({ ...user, role: safeRole, name: user.name || '' }, token)
-
-if (user.role === 'admin' || user.role === 'super_admin') navigate('/admin')
-  else navigate('/cabinet')
-}
-    } catch (err) {
-      if (axios.isAxiosError<ErrorResponse>(err) && err.response) {
-        alert(err.response.data.error || 'Не вдалося увійти')
+      if (user.role === 'super_admin' || user.role === 'admin') {
+        navigate('/admin')
       } else {
-        console.error(err)
-        alert('Сталася помилка')
+        navigate('/cabinet')
       }
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Помилка входу')
     }
   }
 
-  // ─── Register
   const onRegister: SubmitHandler<RegisterForm> = async (data) => {
     if (data.password !== data.confirmPassword) {
       alert('Паролі не збігаються')
@@ -90,61 +61,93 @@ if (user.role === 'admin' || user.role === 'super_admin') navigate('/admin')
     }
 
     try {
-      await api.post<AuthResponse>('/auth/register', {
+      await api.post('/auth/register', {
         email: data.email,
         password: data.password,
       })
-      alert('Реєстрація успішна! Тепер можете увійти.')
+      alert('Реєстрація успішна! Тепер увійдіть.')
       resetRegister()
       setTab('login')
-    } catch (err) {
-      if (axios.isAxiosError<ErrorResponse>(err) && err.response) {
-        alert(err.response.data.error || 'Помилка реєстрації')
-      } else {
-        console.error(err)
-        alert('Сталася помилка')
-      }
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Помилка реєстрації')
     }
   }
 
   return (
     <div className="auth-container">
-      <div className="tabs">
-        <button
-          className={tab === 'login' ? 'active' : ''}
-          onClick={() => {
-            setTab('login')
-            resetLogin()
-          }}
-        >
-          Вхід
-        </button>
-        <button
-          className={tab === 'register' ? 'active' : ''}
-          onClick={() => {
-            setTab('register')
-            resetRegister()
-          }}
-        >
-          Реєстрація
-        </button>
-      </div>
+      <div className="auth-card">
+        <h1 className="auth-title">Starway Admin</h1>
 
-      <div className="form-wrapper">
+        <div className="tabs">
+          <button
+            className={tab === 'login' ? 'tab-active' : 'tab-inactive'}
+            onClick={() => {
+              setTab('login')
+              resetLogin()
+            }}
+          >
+            Вхід
+          </button>
+          <button
+            className={tab === 'register' ? 'tab-active' : 'tab-inactive'}
+            onClick={() => {
+              setTab('register')
+              resetRegister()
+            }}
+          >
+            Реєстрація
+          </button>
+        </div>
+
         {tab === 'login' && (
-          <form className="login-form" onSubmit={handleLoginSubmit(onLogin)}>
-            <input {...registerLogin('email')} placeholder="Email" />
-            <input {...registerLogin('password')} type="password" placeholder="Пароль" />
-            <button type="submit">Вхід</button>
+          <form onSubmit={handleLoginSubmit(onLogin)} className="auth-form">
+            <input
+              {...registerLogin('email', { required: 'Email обов’язковий' })}
+              placeholder="Email"
+              className="auth-input"
+            />
+            {loginErrors.email && <p className="error-text">{loginErrors.email.message}</p>}
+
+            <input
+              {...registerLogin('password', { required: 'Пароль обов’язковий' })}
+              type="password"
+              placeholder="Пароль"
+              className="auth-input"
+            />
+            {loginErrors.password && <p className="error-text">{loginErrors.password.message}</p>}
+
+            <button type="submit" className="auth-button">
+              Увійти
+            </button>
           </form>
         )}
 
         {tab === 'register' && (
-          <form className="register-form" onSubmit={handleRegisterSubmit(onRegister)}>
-            <input {...registerRegister('email')} placeholder="Email" />
-            <input {...registerRegister('password')} type="password" placeholder="Пароль" />
-            <input {...registerRegister('confirmPassword')} type="password" placeholder="Підтвердження пароля" />
-            <button type="submit">Зареєструватися</button>
+          <form onSubmit={handleRegisterSubmit(onRegister)} className="auth-form">
+            <input
+              {...registerRegister('email', { required: 'Email обов’язковий' })}
+              placeholder="Email"
+              className="auth-input"
+            />
+            {registerErrors.email && <p className="error-text">{registerErrors.email.message}</p>}
+
+            <input
+              {...registerRegister('password', { required: 'Пароль обов’язковий' })}
+              type="password"
+              placeholder="Пароль"
+              className="auth-input"
+            />
+
+            <input
+              {...registerRegister('confirmPassword', { required: 'Підтвердіть пароль' })}
+              type="password"
+              placeholder="Підтвердження пароля"
+              className="auth-input"
+            />
+
+            <button type="submit" className="auth-button">
+              Зареєструватися
+            </button>
           </form>
         )}
       </div>

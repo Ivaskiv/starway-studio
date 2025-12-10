@@ -1,4 +1,4 @@
-// src/store/auth.ts — додаємо тему
+// src/store/auth.ts
 import { create } from 'zustand'
 import api from '../lib/api'
 
@@ -24,7 +24,9 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: true,
-  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'dark',
+  theme: (typeof window !== 'undefined'
+    ? (localStorage.getItem('theme') as 'light' | 'dark')
+    : 'dark') || 'dark',
 
   toggleTheme: () => {
     const newTheme = get().theme === 'dark' ? 'light' : 'dark'
@@ -47,7 +49,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     localStorage.removeItem('token')
-    set({ user: null, isLoading: false })
+    set({ user: null })
   },
 
   checkAuth: async () => {
@@ -56,20 +58,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: false })
       return
     }
+
     try {
-      const { data } = await api.get('/api/me')
+      const { data } = await api.get('/auth/me')
       set({ user: data.user, isLoading: false })
     } catch {
       localStorage.removeItem('token')
-      set({ isLoading: false })
+      set({ user: null, isLoading: false })
     }
-  },
+  }
 }))
 
+// Ініціалізація теми + перевірка авторизації
 if (typeof window !== 'undefined') {
   const saved = localStorage.getItem('theme') as 'light' | 'dark' | null
-  const theme = saved || 'dark'
-  document.documentElement.classList.toggle('dark', theme === 'dark')
-  useAuthStore.setState({ theme })
+  document.documentElement.classList.toggle('dark', saved === 'dark')
+  useAuthStore.setState({ theme: saved || 'dark' })
   useAuthStore.getState().checkAuth()
 }
