@@ -1,4 +1,6 @@
 // src/components/layout/Footer.tsx
+import './Footer.scss'
+
 export default function Footer() {
   return (
     <footer className="home-footer">

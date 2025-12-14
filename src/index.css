@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Глобальні стилі */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #000;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Кастомні компоненти */
+@layer components {
+  .glass-card {
+    @apply bg-gray-900/50 backdrop-blur-lg border border-gray-800 rounded-2xl p-6;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-starway-purple to-starway-orange bg-clip-text text-transparent font-bold;
+  }
+  
+  .btn-starway {
+    @apply bg-gradient-to-r from-starway-orange to-starway-pink px-6 py-3 rounded-lg font-bold hover:scale-105 transition;
+  }
+}
+
+/* Кастомні анімації */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}

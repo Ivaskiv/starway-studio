@@ -14,7 +14,9 @@ interface Store {
   user: User | null
   isLoading: boolean
   theme: 'light' | 'dark'
+  sidebarOpen: boolean  // ⭐ ДОДАНО
   toggleTheme: () => void
+  toggleSidebar: () => void  // ⭐ ДОДАНО
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name?: string) => Promise<void>
   logout: () => void
@@ -25,12 +27,17 @@ export const useStore = create<Store>((set, get) => ({
   user: null,
   isLoading: true,
   theme: 'dark',
+  sidebarOpen: true,  // ⭐ ДОДАНО
 
   toggleTheme: () => {
     const newTheme = get().theme === 'dark' ? 'light' : 'dark'
     localStorage.setItem('theme', newTheme)
     document.documentElement.classList.toggle('dark', newTheme === 'dark')
     set({ theme: newTheme })
+  },
+
+  toggleSidebar: () => {  // ⭐ ДОДАНО
+    set({ sidebarOpen: !get().sidebarOpen })
   },
 
   login: async (email, password) => {
