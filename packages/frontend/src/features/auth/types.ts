@@ -1,10 +1,4 @@
-// src/features/auth/types.ts
-  id: string
-  name: string
-  email?: string
-  token?: string
-  demo?: boolean
-}
+// /starway-studio/packages/frontend/src/features/auth/types.ts
 
 export interface AuthState {
   isAuthenticated: boolean

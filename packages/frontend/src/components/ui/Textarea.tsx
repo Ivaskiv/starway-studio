@@ -1,6 +1,4 @@
-// ═══════════════════════════════════════════════════════════
 // src/components/ui/Textarea.tsx
-// ═══════════════════════════════════════════════════════════
 import { TextareaHTMLAttributes, forwardRef } from 'react'
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {

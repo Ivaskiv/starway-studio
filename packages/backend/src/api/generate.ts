@@ -2,60 +2,30 @@
 import OpenAI from 'openai'
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY!
 })
 
-  field:
-    | 'name'
-    | 'audience'
-    | 'goal'
-    | 'steps'
-    | 'structure'
-  prompt: string
-  context?: {
-    name?: string
-    audience?: string
-    niche?: string
-    goal?: string
-    steps?: unknown[]
-  }
-}
-
-export async function generateAI(req: AIGenerateRequest) {
-  const { field, prompt, context } = req
-
-  if (!prompt?.trim()) {
+export async function generateWithAI(
+  field: string,
+  prompt: string,
+  context?: any
+): Promise<string> {
+  if (!prompt.trim()) {
     throw new Error('Empty prompt')
   }
 
-  const response = await openai.responses.create({
-    model: 'gpt-4.1-mini',
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
     temperature: 0.6,
-    max_output_tokens: 600,
+    max_tokens: 600,
     messages: [
-      {
-        role: 'system',
-        content: SYSTEM_PROMPT
-      },
-      {
-        role: 'developer',
-        content: buildDeveloperPrompt(field)
-      },
-      {
-        role: 'user',
-        content: buildUserPrompt(prompt, context)
-      }
+      { role: 'system', content: 'You are a helpful AI assistant.' },
+      { role: 'user', content: prompt }
     ]
   })
 
-  const text = response.output_text?.trim()
+  const text = response.choices[0]?.message?.content
+  if (!text) throw new Error('Empty AI response')
 
-  if (!text) {
-    throw new Error('Empty AI response')
-  }
-
-  return {
-    field,
-    result: JSON.parse(text)
-  }
+  return text
 }

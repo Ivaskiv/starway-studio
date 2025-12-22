@@ -1,31 +1,14 @@
 {
-  "name": "starway-backend",
-  "version": "3.0.0",
+  "name": "@starway/backend",
+  "version": "1.0.0",
+  "private": true,
   "type": "module",
-  "main": "api/index.js",
   "scripts": {
-    "dev": "tsx watch src/api/index.ts",
-    "start": "node src/api/index.js",
-    "build": "tsc"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "dependencies": {
-      "@starway/shared": "workspace:*",
-    "@neondatabase/serverless": "^1.0.2",
-    "bcryptjs": "^3.0.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.6.1",
-    "express": "^4.22.1",
-    "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.1",
-    "multer": "^2.0.2",
-    "openai": "^6.10.0",
-    "pg": "^8.16.3",
-    "serverless-http": "^3.2.0",
-    "ws": "^8.18.3"
-  },
-  "devDependencies": {
-    "@types/multer": "^2.0.0",
-    "nodemon": "^3.0.2",
-    "tsx": "^4.21.0"
+    "lucide-react": "^0.469.0"
   }
 }

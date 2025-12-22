@@ -1,6 +1,4 @@
-// ═══════════════════════════════════════════════════════════
 // src/components/ui/Input.tsx
-// ═══════════════════════════════════════════════════════════
 import { InputHTMLAttributes, forwardRef } from 'react'
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {

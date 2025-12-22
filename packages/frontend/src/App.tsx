@@ -20,9 +20,9 @@ const LiveAnalytics = lazy(() => import('./pages/admin/LiveAnalytics'))
 const ABTesting = lazy(() => import('./pages/admin/ABTesting'))
 const Modules = lazy(() => import('./pages/admin/Modules'))
 
-const Step1DemoRegister = lazy(() => import('./pages/demo/steps/Step1DemoRegister'))
-const Step2DemoLogin = lazy(() => import('./pages/demo/steps/Step2DemoLogin'))
-const Step3DemoDashboard = lazy(() => import('./pages/demo/steps/Step3DemoDashboard'))
+const Step1DemoRegister = lazy(() => import('./demo/steps/Step1DemoRegister'))
+const Step2DemoLogin = lazy(() => import('./demo/steps/Step2DemoLogin'))
+const Step3DemoDashboard = lazy(() => import('./demo/steps/Step3DemoDashboard'))
 
 function App() {
 const theme = useAppSelector(state => state.ui.theme)

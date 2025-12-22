@@ -1,16 +1,16 @@
-// types/models.ts
+// /starway-studio/packages/backend/types/models.ts
 
-export interface Progress {
-  id: number;
-  user_id: number;
-  product_id: number;
-  lesson_id: number;
-  completed: boolean;
-  status: string;
-  watched_video?: boolean;
-  task_sent?: boolean;
+export interface User {
+  id: string;
+  email: string | null;
+  name: string | null;
+  role: string;
+  telegram_id: string;
+  telegram_username: string | null;
+  avatar?: string;
   created_at: Date;
   updated_at: Date;
+  password_hash?: string;
 }
 
 export interface Enrollment {
@@ -26,36 +26,19 @@ export interface Enrollment {
   created_at: Date;
 }
 
+export interface Progress {
   id: number;
-  title: string;
-  slug: string;
-  description: string;
-  price: number;
-  type: "free" | "paid";
-  category: string;
-  duration_days: number;
-  access_type: string;
-  modules: string[];
-  payment_url: string | null;
-  free: boolean;
-  trial: boolean;
-  upsell: boolean;
-  published: boolean;
-  author_id: number;
+  user_id: number;
+  product_id: number;
+  lesson_id: number;
+  completed: boolean;
+  status: string;
+  watched_video?: boolean;
+  task_sent?: boolean;
   created_at: Date;
   updated_at: Date;
 }
 
-export interface User {
-  email: string | null;
-  name: string | null;
-  role: string;
-  telegram_id: string;
-  telegram_username: string | null;
-  avatar?: string;
-  created_at: Date;
-  updated_at: Date;
-}
 
 export interface Miniapp {
   id: number;
@@ -102,4 +85,29 @@ export interface MiniappItem {
 export interface CabinetResponse {
   products: ProductItem[];
   miniapps: MiniappItem[];
+}
+
+// ───────────────────────────────────────────────────────────────
+// Types
+// ───────────────────────────────────────────────────────────────
+
+
+export interface RegisterBody {
+  email: string;
+  password: string;
+  name?: string;
+}
+
+export interface LoginBody {
+  email: string;
+  password: string;
+}
+
+export interface AuthRequest extends Request {
+  user: User;
+}
+
+export interface JwtPayload {
+  id: string;
+  role: string;
 }

@@ -1,47 +1,114 @@
-// ═══════════════════════════════════════════════════════════
 // src/components/ui/Select.tsx
-// ═══════════════════════════════════════════════════════════
-import { SelectHTMLAttributes, forwardRef } from 'react'
+import * as React from 'react'
 
-interface SelectOption {
-  value: string
-  label: string
+type SelectContextType = {
+  value: string | undefined
+  onChange: (v: string) => void
 }
 
-interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string
-  error?: string
-  options: SelectOption[]
+const SelectContext = React.createContext<SelectContextType | null>(null)
+
+/* ─────────────────────────────
+   ROOT
+───────────────────────────── */
+interface SelectProps {
+  value?: string
+  defaultValue?: string
+  onValueChange?: (value: string) => void
+  children: React.ReactNode
 }
 
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className = '', label, error, options, id, ...props }, ref) => {
-    const selectId = id || `select-${Math.random().toString(36).substr(2, 9)}`
-    
-    return (
-      <div className="w-full">
-        {label && (
-          <label htmlFor={selectId} className="block text-sm text-gray-400 mb-2">
-            {label}
-          </label>
-        )}
-        <select
-          ref={ref}
-          id={selectId}
-          className={`w-full bg-black border ${error ? 'border-red-500' : 'border-gray-700'} rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500 transition ${className}`}
-          {...props}
-        >
-          {options.map(opt => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-      </div>
-    )
+export function Select({
+  value: controlledValue,
+  defaultValue,
+  onValueChange,
+  children,
+}: SelectProps) {
+  const [value, setValue] = React.useState(defaultValue)
+  const actualValue = controlledValue ?? value
+
+  const handleChange = (v: string) => {
+    setValue(v)
+    onValueChange?.(v)
   }
-)
 
-Select.displayName = 'Select'
+  return (
+    <SelectContext.Provider
+      value={{ value: actualValue, onChange: handleChange }}
+    >
+      <div className="relative w-full">{children}</div>
+    </SelectContext.Provider>
+  )
+}
 
+/* ─────────────────────────────
+   TRIGGER
+───────────────────────────── */
+export function SelectTrigger({
+  className = '',
+  children,
+}: {
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      className={`w-full bg-black border border-gray-700 rounded-lg px-4 py-3 text-left text-white ${className}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+/* ─────────────────────────────
+   VALUE
+───────────────────────────── */
+export function SelectValue({ placeholder }: { placeholder?: string }) {
+  const ctx = React.useContext(SelectContext)
+  if (!ctx) return null
+
+  return (
+    <span className={ctx.value ? 'text-white' : 'text-gray-500'}>
+      {ctx.value ?? placeholder}
+    </span>
+  )
+}
+
+/* ─────────────────────────────
+   CONTENT
+───────────────────────────── */
+export function SelectContent({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <div className="absolute z-50 mt-2 w-full bg-black border border-gray-700 rounded-lg overflow-hidden">
+      {children}
+    </div>
+  )
+}
+
+/* ─────────────────────────────
+   ITEM
+───────────────────────────── */
+export function SelectItem({
+  value,
+  children,
+}: {
+  value: string
+  children: React.ReactNode
+}) {
+  const ctx = React.useContext(SelectContext)
+  if (!ctx) return null
+
+  return (
+    <div
+      onClick={() => ctx.onChange(value)}
+      className="px-4 py-2 cursor-pointer hover:bg-gray-800 text-white"
+    >
+      {children}
+    </div>
+  )
+}

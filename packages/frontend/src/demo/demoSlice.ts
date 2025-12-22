@@ -1,9 +1,10 @@
 // src/features/demo/demoSlice.ts
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { login } from '../auth/authSlice'
+import { login } from '../features/auth/authSlice'
 import { DemoFunnelResult, DemoFunnelStage, DemoState } from './demoTypes'
 import { DEMO_MENTOR, DEMO_STUDENT, DEMO_ADMIN } from './demoUsers'
-import { AuthUser } from '@starway/shared/src/types/user'
+import { AuthUser } from '@starway/shared/src/types/api'
+import { api } from '@/lib/api';
 
 // fake AI funnel генератор
 export const runDemoFunnel = createAsyncThunk<DemoFunnelResult>(

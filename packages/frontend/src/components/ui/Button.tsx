@@ -1,6 +1,4 @@
-// ═══════════════════════════════════════════════════════════
 // src/components/ui/Button.tsx
-// ═══════════════════════════════════════════════════════════
 import { ButtonHTMLAttributes, forwardRef } from 'react'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

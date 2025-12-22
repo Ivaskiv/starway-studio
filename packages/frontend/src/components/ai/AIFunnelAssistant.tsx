@@ -1,18 +1,9 @@
 // src/components/ai/AIFunnelAssistant.tsx
 import { useState } from 'react'
-import { Button, Textarea } from '@/components/ui'
 import { Loader2 } from 'lucide-react'
-
-import {
-import { AI_FIELD_CONFIGS }import { AIFieldConfig, AIFieldFocus, AIFunnelAssistantProps } from '@starway/shared/src/types/ai'
- from '@shared/prompts/funnimport { buildGenerationPrompt } from '@shared/prompts/funnel';
-el';import { AI_FIELD_CONFIGS } from '@shared/prompts/funnel';
-
-  AIFunnelAssistantProps,
-  AIFieldConfig,
-  AIFieldFocus
-} from '@starway/shared/src/types/ai'
-
+import { Button, Textarea } from '../ui';
+import { AIFieldFocus, AIFieldConfig, AI_FIELD_CONFIGS, buildGenerationPrompt } from '@starway/shared/ai/prompts'
+import { AIFunnelAssistantProps } from 'src/types/modules';
 
 export default function AIFunnelAssistant({
   currentField,
@@ -23,12 +14,10 @@ export default function AIFunnelAssistant({
 }: AIFunnelAssistantProps) {
   const [prompt, setPrompt] = useState('')
 
-  const config: AIFieldConfig =
-    AI_FIELD_CONFIGS[currentField as AIFieldFocus]
+const config: AIFieldConfig = AI_FIELD_CONFIGS[currentField as AIFieldFocus]
+const Icon = config.icon
 
-  const Icon = config.icon
-
-  const totalGens = generations.base + generations.bonus
+const totalGens = generations.base + generations.bonus
 
   const hasContext =
     Boolean(funnelDraft.name) ||
@@ -40,7 +29,7 @@ export default function AIFunnelAssistant({
   const handleGenerateClick = () => {
     if (!prompt.trim()) return
 
-    const generationPrompt = buildPrompttsts(
+    const generationPrompt = buildGenerationPrompt(
       currentField,
       prompt,
       {

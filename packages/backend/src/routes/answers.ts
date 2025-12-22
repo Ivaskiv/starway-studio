@@ -1,40 +1,114 @@
-// routes/answers.ts
-import { Router, Request, Response } from "express";
-import { getLessonById } from "../models/lessons.js";
-import { sql } from "../db/client.js";
+// packages/backend/src/routes/answers.ts
 
-const router = Router();
+import { ServerResponse } from 'http'
+import { AuthRequest } from '../middleware/auth'
+import { sql } from '../db/client'
 
-router.post("/", async (req: Request, res: Response) => {
-  const userId = req.user.id; // Виправлено: req.user.id замість req.userId
-  const { lesson_id, text } = req.body;
-  
-  if (!lesson_id || !text) {
-    return res.status(400).json({ error: "missing_fields" });
+async function parseBody(req: AuthRequest): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.on('data', chunk => {
+      body += chunk.toString()
+    })
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(body))
+      } catch (e) {
+        reject(new Error('Invalid JSON'))
+      }
+    })
+    req.on('error', reject)
+  })
+}
+
+export async function handleAnswers(
+  req: AuthRequest,
+  res: ServerResponse,
+  pathname: string
+): Promise<void> {
+  const userId = req.user?.id
+
+  if (!userId) {
+    res.writeHead(401, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'unauthorized' }))
+    return
   }
 
-  try {
-    const lesson = await getLessonById(lesson_id);
-    if (!lesson) {
-      return res.status(404).json({ error: "lesson_not_found" });
+  // GET /api/answers - Отримати всі відповіді
+  if (pathname === '/api/answers' && req.method === 'GET') {
+    try {
+      const answers = await sql`
+        SELECT * FROM answers WHERE user_id = ${userId}
+        ORDER BY updated_at DESC
+      `
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ answers }))
+    } catch (error: any) {
+      console.error('Get answers error:', error)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'internal_error', message: error.message }))
     }
-
-    await sql`
-      INSERT INTO answers (user_id, lesson_id, raw_text, source)
-      VALUES (${userId}, ${lesson_id}, ${text}, 'miniapp')
-    `;
-
-    await sql`
-      UPDATE progress
-      SET task_sent = true, updated_at = NOW()
-      WHERE user_id = ${userId} AND lesson_id = ${lesson_id}
-    `;
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("Answer save error:", err);
-    res.status(500).json({ error: "server_error" });
+    return
   }
-});
 
-export default router;
+  // POST /api/answers - Створити або оновити відповідь
+  if (pathname === '/api/answers' && req.method === 'POST') {
+    try {
+      const { questionId, answer } = await parseBody(req)
+
+      if (!questionId || answer === undefined) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'question_id_and_answer_required' }))
+        return
+      }
+
+      // Upsert відповіді
+      const [result] = await sql`
+        INSERT INTO answers (user_id, question_id, answer)
+        VALUES (${userId}, ${questionId}, ${answer})
+        ON CONFLICT (user_id, question_id)
+        DO UPDATE SET answer = ${answer}, updated_at = NOW()
+        RETURNING *
+      `
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ answer: result }))
+    } catch (error: any) {
+      console.error('Save answer error:', error)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'internal_error', message: error.message }))
+    }
+    return
+  }
+
+  // DELETE /api/answers/:id - Видалити відповідь
+  if (pathname.startsWith('/api/answers/') && req.method === 'DELETE') {
+    try {
+      const answerId = pathname.split('/')[3]
+
+      if (!answerId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'answer_id_required' }))
+        return
+      }
+
+      await sql`
+        DELETE FROM answers 
+        WHERE id = ${answerId} AND user_id = ${userId}
+      `
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true }))
+    } catch (error: any) {
+      console.error('Delete answer error:', error)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'internal_error', message: error.message }))
+    }
+    return
+  }
+
+  // 404
+  res.writeHead(404, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ error: 'route_not_found' }))
+}

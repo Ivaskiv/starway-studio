@@ -1,5 +1,4 @@
 // src/features/funnel/components/FunnelCenterSteps.tsx
-import { FunnelStep } from '@starway/shared'
 import FunnelStepCard from './FunnelStepCard'
 
 type Props = {

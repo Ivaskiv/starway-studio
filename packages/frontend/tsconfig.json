@@ -1,24 +1,18 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
     "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["react", "react-dom"],
     "strict": true,
+    "moduleResolution": "Node",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["packages/shared/src/*"]
+      "@starway/shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["src", "../shared/src/api/api.ts", "../shared/src/ai/ai.ts", "../shared/src/types/jsx.d.ts", "../shared/src/types/user.ts"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src"],
+  "references": [
+    { "path": "../shared" }
+  ]
 }

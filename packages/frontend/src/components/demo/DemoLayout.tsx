@@ -2,7 +2,7 @@
 // src/components/demo/DemoLayout.tsx
 import { ReactNode } from 'react'
 import { Outlet } from 'react-router-dom'
-import Header from '@/components/layout/Header'
+import Header from '../layout/Header'
 
 interface DemoLayoutProps {
   children?: ReactNode
