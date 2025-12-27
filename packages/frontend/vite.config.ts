@@ -1,17 +1,23 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+// packages/frontend/vite.config.ts
+
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tsconfigPaths from 'vite-tsconfig-paths';
+import path from 'path';
 
 export default defineConfig({
-  plugins: [react(),
+  plugins: [
+    react(),
+    tsconfigPaths()
   ],
-  
   resolve: {
     alias: {
- '@': path.resolve(__dirname, 'src'),
-      '@features': path.resolve(__dirname, 'src/features'),
-      '@components': path.resolve(__dirname, 'src/components'),
-      '@shared': path.resolve(__dirname, '../shared/src'),
-      '@starway/shared': path.resolve(__dirname, '../shared')    },
+      '@starway-studio/shared': path.resolve(__dirname, '../shared/src'),
+      '@frontend': path.resolve(__dirname, './src'),
+    }
   },
-})
+  server: {
+    port: 5173,
+    open: true
+  }
+});

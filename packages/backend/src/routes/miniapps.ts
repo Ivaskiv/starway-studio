@@ -5,38 +5,6 @@ import { sql } from '../db/client.js';
 const router = Router();
 
 // ───────────────────────────────────────────────────────────────
-// Types
-// ───────────────────────────────────────────────────────────────
-
-interface Miniapp {
-  id: number;
-  slug: string;
-  title: string;
-  code: string | null;
-  created_at?: Date;
-}
-
-interface Lesson {
-  id: number;
-  title: string;
-  video_url: string | null;
-  short_text: string | null;
-  full_text: string | null;
-  tasks: any;
-  order_index: number;
-}
-
-interface User {
-  id: number;
-  telegram_id: string | null;
-}
-
-interface Progress {
-  lesson_id: number;
-  completed: boolean;
-}
-
-// ───────────────────────────────────────────────────────────────
 // GET /api/miniapps/:slug/manifest
 // ───────────────────────────────────────────────────────────────
 

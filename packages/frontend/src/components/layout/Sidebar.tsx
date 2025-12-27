@@ -1,83 +1,108 @@
-// src/components/sidebar/Sidebar.tsx
-import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Boxes, Workflow, BarChart3, Settings, X } from 'lucide-react'
-import { useStore } from '../../store/store'
+// packages/frontend/src/components/layout/Sidebar.tsx
+
+import { NavLink } from 'react-router-dom';
+import { LayoutDashboard, Zap, BarChart3, Settings, X, Sparkles } from 'lucide-react';
+import { useAppSelector } from '@frontend/store/store';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Продукти', href: '/admin/products', icon: Boxes },
-  { name: 'Воронки', href: '/admin/funnels', icon: Workflow },
+  { name: 'Воронки', href: '/admin/funnels', icon: Zap },
   { name: 'Аналітика', href: '/admin/analytics', icon: BarChart3 },
   { name: 'Налаштування', href: '/admin/settings', icon: Settings },
-]
+];
 
-export default function Sidebar() {
-  const { sidebarOpen, toggleSidebar } = useStore()
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const user = useAppSelector((state) => state.auth.user);
 
   return (
     <>
       {/* Overlay для мобільних */}
-      {sidebarOpen && (
+      {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={toggleSidebar}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 lg:hidden"
+          onClick={onClose}
         />
       )}
 
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 left-0 z-50 h-screen w-64
-        bg-gray-900 border-r border-gray-800
-        transition-transform duration-300
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        fixed top-0 left-0 z-50 h-screen w-72
+        bg-black/95 backdrop-blur-xl border-r border-white/10
+        transition-transform duration-300 ease-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
       `}>
         
         {/* Header */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-800">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg" />
+        <div className="flex items-center justify-between h-16 px-6 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-starway-orange to-starway-pink rounded-2xl flex items-center justify-center rotate-6">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
             <span className="text-xl font-bold">Starway</span>
           </div>
           
           <button
-            onClick={toggleSidebar}
-            className="lg:hidden p-2 hover:bg-gray-800 rounded-lg"
+            onClick={onClose}
+            className="lg:hidden p-2 hover:bg-white/10 rounded-xl transition"
             aria-label="Закрити меню"
           >
             <X size={20} />
           </button>
         </div>
 
+        {/* User Info */}
+        {user && (
+          <div className="px-6 py-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-starway-purple to-starway-pink rounded-2xl flex items-center justify-center text-xl font-bold">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-semibold text-white">{user.name}</p>
+                <p className="text-xs text-gray-400">
+                  {user.role === 'super_admin' ? '👑 Super Admin' : 'Admin'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Navigation */}
-        <nav className="p-4 space-y-2">
+        <nav className="p-4 space-y-1">
           {navigation.map((item) => (
             <NavLink
               key={item.name}
               to={item.href}
               end={item.href === '/admin'}
               className={({ isActive }) => `
-                flex items-center gap-3 px-4 py-3 rounded-lg
-                transition-all duration-200
+                flex items-center gap-3 px-4 py-3 rounded-xl
+                transition-all duration-200 group
                 ${isActive 
-                  ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg' 
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  ? 'bg-gradient-to-r from-starway-orange to-starway-pink text-white shadow-lg shadow-starway-orange/20' 
+                  : 'text-gray-400 hover:bg-white/5 hover:text-white'
                 }
               `}
             >
-              <item.icon size={20} />
-              <span className="font-medium">{item.name}</span>
+              <item.icon size={20} className="group-hover:scale-110 transition-transform" />
+              <span className="font-semibold">{item.name}</span>
             </NavLink>
           ))}
         </nav>
 
         {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
-          <div className="text-xs text-gray-500 text-center">
-            Starway Studio v1.0
+        <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-white/10">
+          <div className="text-xs text-gray-500 text-center space-y-1">
+            <p className="font-semibold">Starway Studio</p>
+            <p>v1.0.0</p>
           </div>
         </div>
       </aside>
     </>
-  )
+  );
 }

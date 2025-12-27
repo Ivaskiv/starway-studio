@@ -1,18 +1,12 @@
+// packages/frontend/tsconfig.json
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
     "jsx": "react-jsx",
-    "strict": true,
-    "moduleResolution": "Node",
-    "baseUrl": ".",
     "paths": {
-      "@starway/shared/*": ["../shared/src/*"]
+      "@starway-studio/shared": ["../shared/src"],
+      "@frontend/*": ["./src/*"]
     }
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../shared" }
-  ]
+  "include": ["src", "src/main.tsx"]
 }

@@ -6,33 +6,6 @@ import bcrypt from "bcryptjs";
 const router = Router();
 
 // ───────────────────────────────────────────────────────────────
-// Types
-// ───────────────────────────────────────────────────────────────
-
-interface User {
-  id: string;
-  email: string | null;
-  telegram_id: string | null;
-  telegram_username: string | null;
-  name: string;
-  role: string;
-  password_hash?: string;
-  created_at?: Date;
-}
-
-interface CreateTelegramUserBody {
-  telegram_id: string;
-  telegram_username?: string;
-  name?: string;
-}
-
-interface CreateEmailUserBody {
-  email: string;
-  password: string;
-  name?: string;
-}
-
-// ───────────────────────────────────────────────────────────────
 // GET /api/users/telegram/:tgId
 // ───────────────────────────────────────────────────────────────
 

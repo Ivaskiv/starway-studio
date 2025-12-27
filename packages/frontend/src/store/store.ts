@@ -1,77 +1,31 @@
-import { configureStore, combineReducers } from '@reduxjs/toolkit'
-import { persistStore, persistReducer } from 'redux-persist'
-import storage from 'redux-persist/lib/storage'
-import {
-  FLUSH,
-  REHYDRATE,
-  PAUSE,
-  PERSIST,
-  PURGE,
-  REGISTER,
-} from 'redux-persist'
+// packages/frontend/src/store/store.ts
 
-import funnelReducer from '../features/funnel/funnelSlice'
-import authReducer from '../features/auth/authSlice'
-// import demoReducer from '@/features/demo/demoSlice'
-// import { uiReducer } from '@/features/ui/uiSlice'
+import { configureStore } from '@reduxjs/toolkit';
+import { setupListeners } from '@reduxjs/toolkit/query';
+import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 
-import {
-  TypedUseSelectorHook,
-  useDispatch,
-  useSelector,
-} from 'react-redux'
-import { uiReducer } from '@frontend/features/ui/uiSlice'
-
-// ───────────────────────────────────────────────
-// Root reducer
-// ───────────────────────────────────────────────
-
-const rootReducer = combineReducers({
-  funnel: funnelReducer,
-  auth: authReducer,
-  ui: uiReducer,
-  demo: demoReducer,
-})
-
-export type RootState = ReturnType<typeof rootReducer>
-
-// ───────────────────────────────────────────────
-// Persist config
-// ───────────────────────────────────────────────
-
-const persistConfig = {
-  key: 'root',
-  storage,
-  whitelist: ['funnel', 'auth'],
-}
-
-const persistedReducer = persistReducer<RootState>(
-  persistConfig,
-  rootReducer
-)
-
-// ───────────────────────────────────────────────
-// Store
-// ───────────────────────────────────────────────
+import { api } from '../services/api';
+import { authReducer } from './auth/authSlice';
+// import uiReducer from './uiSlice';
+import  uiReducer  from '../components/redux/uiSlice';
 
 export const store = configureStore({
-  reducer: persistedReducer,
-  middleware: getDefaultMiddleware =>
-    getDefaultMiddleware({
-      serializableCheck: {
-        ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
-      },
-    }),
-  devTools: import.meta.env.MODE === 'development',
-})
+  reducer: {
+    [api.reducerPath]: api.reducer,
+    auth: authReducer,
+    ui: uiReducer,
+  },
+  
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(api.middleware),
+  
+  devTools: true,
+});
 
-export const persistor = persistStore(store)
+setupListeners(store.dispatch);
 
-// ───────────────────────────────────────────────
-// Typed hooks
-// ───────────────────────────────────────────────
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
 
-export type AppDispatch = typeof store.dispatch
-
-export const useAppDispatch = () => useDispatch<AppDispatch>()
-export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector
+export const useAppDispatch = () => useDispatch<AppDispatch>();
+export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;

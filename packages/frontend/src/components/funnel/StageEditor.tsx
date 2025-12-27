@@ -8,6 +8,7 @@ import {
   Sparkles, Plus, Trash2, Clock, 
   Target, MessageSquare, Mail
 } from 'lucide-react'
+import { Label } from '@starway-studio/shared/components/ui'
 
 interface StageData {
   id: string
@@ -112,7 +113,7 @@ export default function StageEditor({
       {/* Tabs */}
       <div className="flex border-b border-gray-800">
         {['general', 'product', 'automation'].map(tab => (
-          <button
+          <Button
             key={tab}
             onClick={() => setTab(tab as any)}
             className={`px-6 py-3 font-medium transition ${
@@ -124,7 +125,7 @@ export default function StageEditor({
             {tab === 'general' && '⚙️ Загальне'}
             {tab === 'product' && '📦 Продукт'}
             {tab === 'automation' && '🤖 Автоматизація'}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -150,8 +151,8 @@ export default function StageEditor({
             <div>
               <p className="text-sm font-medium mb-3">Канали</p>
               {['landing', 'telegram', 'email', 'payment', 'ai-mentor'].map(ch => (
-                <label key={ch} className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg mb-2 cursor-pointer">
-                  <input
+                <Label key={ch} className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg mb-2 cursor-pointer">
+                  <Input
                     type="checkbox"
                     checked={data.channels.includes(ch)}
                     onChange={(e) => {
@@ -163,7 +164,7 @@ export default function StageEditor({
                     className="w-4 h-4 text-orange-500 rounded"
                   />
                   <span className="text-sm capitalize">{ch}</span>
-                </label>
+                </Label>
               ))}
             </div>
           </>

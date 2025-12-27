@@ -1,10 +1,10 @@
 // src/pages/funnels/FunnelOnboarding.tsx
 import React, { useState } from 'react';
 import { Plus, Sparkles, Mail, MessageCircle, Layout, Edit2, Trash2, ChevronRight } from 'lucide-react';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
-import { Textarea } from '../../components/ui/Textarea';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
+import { Textarea } from '../ui/Textarea';
 
 // Типи
 interface Step {

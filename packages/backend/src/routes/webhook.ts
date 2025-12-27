@@ -4,56 +4,6 @@ import { sql } from '../db/client.js';
 
 const router = Router();
 
-// ───────────────────────────────────────────────────────────────
-// Types
-// ───────────────────────────────────────────────────────────────
-
-interface User {
-  id: number;
-  email: string | null;
-  telegram_id: string | null;
-  source: string | null;
-  created_at?: Date;
-}
-
-interface Miniapp {
-  id: number;
-  slug: string;
-  code: string | null;
-  title?: string;
-  created_at?: Date;
-}
-
-interface Purchase {
-  id: number;
-  user_id: number;
-  miniapp_id: number;
-  source: string;
-  external_id: string | null;
-  status: string;
-  amount: number | null;
-  currency: string | null;
-  created_at?: Date;
-}
-
-interface WayForPayPayload {
-  orderReference: string;
-  merchantSignature: string;
-  email?: string;
-  product?: string;
-  telegram_id?: string;
-  amount?: number;
-  currency?: string;
-}
-
-interface StartParamPayload {
-  start?: string;
-  startParam?: string;
-  email?: string;
-  telegram_id?: string;
-}
-
-type WebhookPayload = Partial<WayForPayPayload & StartParamPayload>;
 
 // ───────────────────────────────────────────────────────────────
 // Helpers

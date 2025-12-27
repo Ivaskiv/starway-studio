@@ -1,70 +1,76 @@
-// src/components/layout/Header.tsx
-import { Link } from 'react-router-dom'
-import { Menu, Bell, Settings, LogOut, User } from 'lucide-react'
-import { useStore } from '../../store/store'
+// packages/frontend/src/components/layout/Header.tsx
+
+import { Link, useNavigate } from 'react-router-dom';
+import { Bell, Settings, LogOut, Sparkles } from 'lucide-react';
+import { useAppSelector, useAppDispatch } from '@frontend/store/store';
+import { selectIsLoggedIn, selectUser } from '@frontend/store/auth/authSelectors';
+import { logOut } from '@frontend/store/auth/authOperations';
 
 export default function Header() {
-  const { user, logout, toggleSidebar } = useStore()
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const isLoggedIn = useAppSelector(selectIsLoggedIn);
+  const user = useAppSelector(selectUser);
+
+  const handleLogout = async () => {
+    await dispatch(logOut());
+    navigate('/');
+  };
 
   return (
-    <header className="sticky top-0 z-50 bg-gray-900/95 backdrop-blur-lg border-b border-gray-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10">
+      <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center justify-between h-16">
           
-          {/* Ліва частина: Logo + Mobile Menu */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleSidebar}
-              className="lg:hidden p-2 hover:bg-gray-800 rounded-lg transition"
-              aria-label="Відкрити меню"
-            >
-              <Menu size={20} />
-            </button>
-            
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg" />
-              <span className="text-xl font-bold bg-gradient-to-r from-orange-400 to-pink-400 bg-clip-text text-transparent">
-                Starway
-              </span>
-            </Link>
-          </div>
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-starway-orange to-starway-pink rounded-2xl flex items-center justify-center rotate-6 hover:rotate-0 transition-transform">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-2xl font-bold hidden sm:block">Starway</span>
+          </Link>
 
-          {/* Права частина: User Menu */}
-          {user ? (
+          {/* Right side */}
+          {isLoggedIn && user ? (
             <div className="flex items-center gap-3">
+              
               {/* Notifications */}
               <button 
-                className="p-2 hover:bg-gray-800 rounded-lg transition relative"
+                className="p-2.5 hover:bg-white/10 rounded-xl transition relative text-gray-400 hover:text-white"
                 aria-label="Сповіщення"
               >
                 <Bell size={20} />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-orange-500 rounded-full" />
+                <span className="absolute top-2 right-2 w-2 h-2 bg-starway-orange rounded-full animate-pulse" />
               </button>
 
               {/* Settings */}
               <Link 
                 to="/admin/settings"
-                className="p-2 hover:bg-gray-800 rounded-lg transition"
+                className="p-2.5 hover:bg-white/10 rounded-xl transition text-gray-400 hover:text-white"
                 aria-label="Налаштування"
               >
                 <Settings size={20} />
               </Link>
 
-              {/* User Dropdown */}
-              <div className="flex items-center gap-3 pl-3 border-l border-gray-800">
+              {/* User Menu */}
+              <div className="flex items-center gap-3 pl-3 border-l border-white/10">
                 <div className="text-right hidden sm:block">
-                  <p className="text-sm font-medium">{user.name}</p>
-                  <p className="text-xs text-gray-400">{user.email}</p>
+                  <p className="text-sm font-semibold text-white">{user.name}</p>
+                  <p className="text-xs text-gray-400">
+                    {user.role === 'super_admin' ? '👑 Super Admin' : user.role === 'funnel_admin' ? 'Admin' : 'User'}
+                  </p>
                 </div>
                 
-                <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-pink-500 rounded-full flex items-center justify-center">
-                  <User size={20} />
+                <div className="w-10 h-10 bg-gradient-to-br from-starway-purple to-starway-pink rounded-full flex items-center justify-center ring-2 ring-white/20">
+                  <span className="text-white font-bold text-lg">
+                    {user.name.charAt(0).toUpperCase()}
+                  </span>
                 </div>
 
                 <button
-                  onClick={logout}
-                  className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg transition"
-                  aria-label="Вийти з системи"
+                  onClick={handleLogout}
+                  className="p-2.5 hover:bg-red-500/10 text-gray-400 hover:text-red-400 rounded-xl transition"
+                  aria-label="Вийти"
                 >
                   <LogOut size={20} />
                 </button>
@@ -72,22 +78,20 @@ export default function Header() {
             </div>
           ) : (
             <div className="flex items-center gap-3">
-              <Link
-                to="/login"
-                className="px-4 py-2 text-sm hover:bg-gray-800 rounded-lg transition"
-              >
-                Увійти
+              <Link to="/auth">
+                <button className="px-4 py-2 text-gray-300 hover:text-white transition font-medium">
+                  Увійти
+                </button>
               </Link>
-              <Link
-                to="/register"
-                className="px-4 py-2 text-sm bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg font-medium hover:scale-105 transition"
-              >
-                Реєстрація
+              <Link to="/auth">
+                <button className="px-6 py-2.5 bg-gradient-to-r from-starway-orange to-starway-pink text-white rounded-xl font-semibold hover:scale-105 transition-transform shadow-lg shadow-starway-orange/20">
+                  Почати
+                </button>
               </Link>
             </div>
           )}
         </div>
       </div>
     </header>
-  )
+  );
 }

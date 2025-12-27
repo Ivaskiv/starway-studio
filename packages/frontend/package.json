@@ -1,7 +1,6 @@
 {
   "name": "@starway/frontend",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +8,26 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "redux-persist": "^6.0.0"
+    "@hookform/resolvers": "^3.10.0",
+    "@reduxjs/toolkit": "^2.11.2",
+    "@starway-studio/shared": "workspace:*",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.69.0",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^6.28.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.7.2",
+    "vite": "^7.3.0",
+    "vite-tsconfig-paths": "^5.1.4"
   }
 }

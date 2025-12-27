@@ -1,16 +1,19 @@
+// packages/backend/tsconfig.json
+
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "module": "ESNext",
-    "moduleResolution": "Node",
-    "types": ["node"],
+    "target": "ESNext",
     "outDir": "dist",
-    "baseUrl": ".",
-    "paths": {
-      "@frontend/*": ["src/*"],         
-      "@shared/*": ["../shared/src/*"]   
-    }
-  
-  },
-  "include": ["src", "src/index.ts"]
+    "rootDir": "src",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,},
+  "include": ["src"]
 }

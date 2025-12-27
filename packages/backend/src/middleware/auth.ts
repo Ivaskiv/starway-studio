@@ -4,14 +4,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { sql } from '../db/client.js'
 
-export interface AuthRequest extends Request {
-  user: {
-    id: string
-    email: string
-    name: string
-    role: string
-  }
-}
+
 
 export async function authRequired(
   req: Request, 

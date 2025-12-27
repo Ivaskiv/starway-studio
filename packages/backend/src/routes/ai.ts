@@ -5,11 +5,6 @@ import { AuthRequest } from '../middleware/auth'
 import { generateWithAI } from '../services/ai'
 import { checkGenerationLimit, incrementGenerations } from '../services/generations'
 
-interface AIRequestBody {
-  field: string
-  prompt: string
-  context?: any
-}
 
 async function parseBody(req: IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {

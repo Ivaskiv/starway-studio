@@ -1,0 +1,12 @@
+// packages/ai-mentor/tsconfig.json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "paths": {
+      "@starway-studio/shared": ["../shared/src/index.ts"],
+      "@ai-mentor/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

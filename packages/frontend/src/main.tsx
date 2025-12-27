@@ -1,19 +1,22 @@
-import React from 'react'
-import { Provider } from 'react-redux'
-import { PersistGate } from 'redux-persist/integration/react'
-import { store, persistor } from './store/store'
-import { createRoot } from 'react-dom/client'
-import './index.css' 
-import App from './App'
+// packages/frontend/src/main.tsx
 
-createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
+import { StrictMode } from 'react';
+import { Provider } from 'react-redux';
+import { createRoot } from 'react-dom/client';
+import { store } from './store/store';
+import App from './App';
+import './index.css';
+
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error('Root element not found');
+}
+
+createRoot(rootElement).render(
+  <StrictMode>
     <Provider store={store}>
-      <PersistGate loading={null} persistor={persistor}>
-        <App />
-      </PersistGate>
+      <App />
     </Provider>
-  </React.StrictMode>
-
-)
-
+  </StrictMode>
+);

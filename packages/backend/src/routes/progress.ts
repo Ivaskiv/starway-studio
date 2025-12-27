@@ -13,54 +13,6 @@ const __dirname = path.dirname(__filename);
 const router = Router();
 
 // ───────────────────────────────────────────────────────────────
-// Types
-// ───────────────────────────────────────────────────────────────
-
-interface Block {
-  id: string;
-  product_id: number;
-  type: string;
-  title: string;
-  points: number;
-  [key: string]: any;
-}
-
-interface UserProgress {
-  id: string;
-  user_id: number;
-  product_id: number;
-  total_points: number;
-  completed_blocks: number;
-  current_streak: number;
-  level: number;
-  last_activity_date: Date;
-  total_blocks?: number;
-}
-
-interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  unlocked_at?: Date | null;
-  unlocked: boolean;
-  created_at?: Date;
-}
-
-interface CompleteBlockBody {
-  block_id: string;
-  answer?: string;
-}
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    id: string;
- email: string;
-    name: string;
-    role: string;  };
-}
-
-// ───────────────────────────────────────────────────────────────
 // Multer Configuration
 // ───────────────────────────────────────────────────────────────
 

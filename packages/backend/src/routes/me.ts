@@ -2,26 +2,9 @@
 import { Router, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { sql } from "../db/client.js";
+import { JwtPayload, User } from "../../types/models.js";
 
 const router = Router();
-
-// ───────────────────────────────────────────────────────────────
-// Types
-// ───────────────────────────────────────────────────────────────
-
-interface User {
-  id: number;
-  name: string | null;
-  email: string | null;
-  telegram_id: string | null;
-  telegram_username: string | null;
-}
-
-interface JwtPayload {
-  userId?: number;
-  id?: number;
-  [key: string]: any;
-}
 
 // ───────────────────────────────────────────────────────────────
 // GET /api/me

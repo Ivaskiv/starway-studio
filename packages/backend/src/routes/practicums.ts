@@ -5,40 +5,6 @@ import { authRequired } from '../utils/auth-required.js';
 
 const router = Router();
 
-// ───────────────────────────────────────────────────────────────
-// Types
-// ───────────────────────────────────────────────────────────────
-
-interface Practicum {
-  id: number;
-  title: string;
-  description: string | null;
-  category: string | null;
-  duration_days: number | null;
-  price: number | null;
-  steps: any;
-  created_by: string;
-  created_at?: Date;
-}
-
-interface PracticumBody {
-  title: string;
-  description?: string;
-  category?: string;
-  duration_days?: number;
-  price?: number;
-  steps?: any;
-}
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    role: string;
-  };
-  body: PracticumBody;
-}
 
 // ───────────────────────────────────────────────────────────────
 // POST /api/practicums

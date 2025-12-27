@@ -3,35 +3,6 @@
 import { useState, useEffect } from 'react'
 import { Trophy, Flame, Clock, Target, CheckCircle, Lock, Play, MessageCircle, BookOpen, Award, TrendingUp, Calendar, Bell } from 'lucide-react'
 
-interface UserProgress {
-  total_points: number
-  current_streak: number
-  level: number
-  completed_blocks: number
-  total_blocks: number
-  time_spent_minutes: number
-  achievements: Achievement[]
-}
-
-interface Achievement {
-  id: string
-  title: string
-  icon: string
-  unlocked: boolean
-  progress?: number
-  requirement?: number
-}
-
-interface Block {
-  id: string
-  type: string
-  title: string
-  content: string
-  completed: boolean
-  locked: boolean
-  points: number
-  user_answer?: string
-}
 
 export default function StudentDashboard() {
   const [progress, setProgress] = useState<UserProgress>({
