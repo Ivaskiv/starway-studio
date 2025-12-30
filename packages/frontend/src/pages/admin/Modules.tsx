@@ -2,8 +2,8 @@
 import { useState } from 'react'
 import { moduleManager } from '../../lib/moduleManager'
 import { Module, ModuleId } from '../../types/modules'
-import { Button } from '../../components/ui/Button'
-import { Select } from '../../components/ui/Select'
+import { Button } from '@starway-studio/shared/ui/Button.js'
+import { Select } from '@starway-studio/shared/ui/Select.js'
 import { 
   Power, PowerOff, Settings, Crown, 
   Check, AlertCircle, Filter

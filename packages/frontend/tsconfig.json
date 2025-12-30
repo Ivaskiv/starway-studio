@@ -1,18 +1,17 @@
+// packages/frontend/tsconfig.json
+
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "jsx": "react-jsx",
-    "strict": true,
-    "moduleResolution": "Node",
     "baseUrl": ".",
     "paths": {
+      "@frontend/*": ["./src/*"],
+      "@starway/shared": ["../shared/src"],
       "@starway/shared/*": ["../shared/src/*"]
-    }
+    },
+    "jsx": "react-jsx",
+    "types": ["vite/client"]
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../shared" }
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

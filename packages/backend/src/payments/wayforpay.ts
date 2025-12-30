@@ -1,11 +1,11 @@
 import { Router, Request, Response } from "express";
 // api/payments/wayforpay.js
 
-import { Router } from "express";
-import { sql } from "../../db/client.js";
-import { getProductBySlug } from "../../models/products.js";
-import { createEnrollment } from "../../models/enrollments.js";
-import { logPayment } from "../../models/payments.js";
+// import { sql } from "../../db/client.js";
+// import { getProductBySlug } from "../../models/products.js";
+// import { createEnrollment } from "../../models/enrollments.js";
+// import { logPayment } from "../../models/payments.js";
+import { sql } from "../db/client.js";
 
 const router = Router();
 

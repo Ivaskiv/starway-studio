@@ -1,22 +1,27 @@
+// tsconfig.base.json (корінь проекту)
+
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "moduleResolution": "node",
-    "rootDir": ".",
-    "baseUrl": ".",
-  
-    "paths": {
-      "@shared/*": ["packages/shared/*"],
-      "@backend/*": ["packages/backend/src/*"],
-      "@frontend/*": ["packages/frontend/src/*"]
-    },
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
     "strict": true,
-    "skipLibCheck": true
-  },
-  
-  "include": ["packages/**/*"],
-  "exclude": ["node_modules"]
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  }
 }

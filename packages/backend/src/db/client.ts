@@ -1,17 +1,25 @@
 // packages/backend/src/db/client.ts
 
-import { neon } from '@neondatabase/serverless'
+import { neon } from '@neondatabase/serverless';
 
-const DATABASE_URL = process.env.DATABASE_URL
+const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
-  console.warn('⚠️  DATABASE_URL is not set. Using mock database.')
-  // В dev режимі можна використати mock
+  console.error('❌ DATABASE_URL not found!');
+  console.error('📝 Available env keys:', Object.keys(process.env).slice(0, 10));
+  process.exit(1);
 }
 
-export const sql = DATABASE_URL 
-  ? neon(DATABASE_URL)
-  : (() => {
-      console.warn('🔴 Using MOCK database - data will not persist!')
-      return async () => []
-    }) as any
+console.log('✅ Connecting to database...');
+
+export const sql = neon(DATABASE_URL);
+
+// Test connection
+sql`SELECT 1 as test`
+  .then(() => {
+    console.log('✅ Database connected');
+  })
+  .catch((err) => {
+    console.error('❌ Database failed:', err.message);
+    process.exit(1);
+  });

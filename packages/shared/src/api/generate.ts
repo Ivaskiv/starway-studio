@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { AIGenerateRequest } from '../ai/types'
+import { AIGenerateRequest } from '../ai'
 import { buildMessages } from '../ai/buildPrompt'
 
 const openai = new OpenAI({

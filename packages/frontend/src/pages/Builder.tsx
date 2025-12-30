@@ -1,5 +1,6 @@
-// src/pages/funnels/Builder.tsx
-import { useState, useCallback } from 'react'
+// packages/frontend/src/pages/user/Builder.tsx
+
+import { useState, useCallback } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -9,133 +10,158 @@ import ReactFlow, {
   applyNodeChanges,
   applyEdgeChanges,
   Panel,
-} from 'reactflow'
-import type { 
-  Node, 
-  Edge, 
-  Connection, 
-  NodeChange, 
-  EdgeChange, 
-  OnNodesChange, 
-  OnEdgesChange 
-} from 'reactflow'
-import 'reactflow/dist/style.css'
-import { 
-  Plus, Save, Download, Zap, Mail, MessageCircle, 
-  CreditCard, Gift, Users, Bell
-} from 'lucide-react'
-import { Button } from '../components/ui/Button'
+  type Node,
+  type Edge,
+  type Connection,
+  type NodeChange,
+  type EdgeChange,
+  type OnNodesChange,
+  type OnEdgesChange,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
 
-interface FunnelNode extends Node {
-  data: { 
-    label: string
-    type: string
-    icon: any
-    description?: string
-  }
+import {
+  Plus,
+  Save,
+  Download,
+  Zap,
+  Mail,
+  MessageCircle,
+  CreditCard,
+  Gift,
+  Users,
+  Bell,
+} from 'lucide-react';
+
+import { Button } from '@starway-studio/shared/ui/Button';
+
+// ───────────────────────────────────────────────
+// Types
+// ───────────────────────────────────────────────
+
+interface FunnelNodeData {
+  label: string;
+  type: string;
+  icon: any;
+  description?: string;
 }
 
-// Доступні типи блоків для воронки
-const nodeTypes = [
+type FunnelNode = Node<FunnelNodeData>;
+
+// ───────────────────────────────────────────────
+// Node palette
+// ───────────────────────────────────────────────
+
+const nodeTypesPalette = [
   { 
     type: 'trigger', 
     label: 'Тригер', 
     icon: Zap, 
-    color: 'from-yellow-500 to-orange-500',
-    description: 'Початок воронки'
+    gradient: 'bg-gradient-orange',
+    description: 'Початок воронки' 
   },
   { 
     type: 'email', 
     label: 'Email', 
     icon: Mail, 
-    color: 'from-blue-500 to-cyan-500',
-    description: 'Відправити лист'
+    gradient: 'bg-gradient-blue',
+    description: 'Відправити лист' 
   },
   { 
     type: 'telegram', 
     label: 'Telegram', 
     icon: MessageCircle, 
-    color: 'from-sky-500 to-blue-500',
-    description: 'Telegram повідомлення'
+    gradient: 'bg-gradient-blue',
+    description: 'Telegram повідомлення' 
   },
   { 
     type: 'payment', 
     label: 'Оплата', 
     icon: CreditCard, 
-    color: 'from-green-500 to-emerald-500',
-    description: 'WayForPay чекаут'
+    gradient: 'bg-gradient-green',
+    description: 'WayForPay чекаут' 
   },
   { 
     type: 'gift', 
     label: 'Подарунок', 
     icon: Gift, 
-    color: 'from-pink-500 to-rose-500',
-    description: 'Видати доступ'
+    gradient: 'bg-gradient-orange',
+    description: 'Видати доступ' 
   },
   { 
     type: 'segment', 
     label: 'Сегмент', 
     icon: Users, 
-    color: 'from-purple-500 to-pink-500',
-    description: 'Розділити аудиторію'
+    gradient: 'bg-gradient-orange',
+    description: 'Розділити аудиторію' 
   },
   { 
     type: 'notify', 
     label: 'Нагадування', 
     icon: Bell, 
-    color: 'from-orange-500 to-red-500',
-    description: 'Push нотифікація'
-  }
-]
+    gradient: 'bg-gradient-orange',
+    description: 'Push нотифікація' 
+  },
+];
+
+// ───────────────────────────────────────────────
+// Component
+// ───────────────────────────────────────────────
 
 export default function Builder() {
   const [nodes, setNodes] = useState<FunnelNode[]>([
-    { 
-      id: '1', 
-      type: 'input', 
-      data: { 
-        label: '🚀 Старт воронки', 
+    {
+      id: 'start',
+      type: 'input',
+      data: {
+        label: '🚀 Старт воронки',
         type: 'trigger',
-        icon: Zap 
-      }, 
+        icon: Zap,
+      },
       position: { x: 250, y: 50 },
       style: {
-        background: 'linear-gradient(135deg, #f59e0b, #f97316)',
+        background: 'linear-gradient(135deg, rgb(249, 115, 22), rgb(239, 68, 68))',
         color: 'white',
-        border: 'none',
-        borderRadius: '12px',
+        borderRadius: '16px',
         padding: '16px',
         fontWeight: 'bold',
-        minWidth: '200px'
-      }
-    }
-  ])
-  
-  const [edges, setEdges] = useState<Edge[]>([])
-  const [selectedNodeType, setSelectedNodeType] = useState<string | null>(null)
+        minWidth: '200px',
+        border: 'none',
+        boxShadow: '0 8px 32px rgba(249, 115, 22, 0.3)',
+      },
+    },
+  ]);
+
+  const [edges, setEdges] = useState<Edge[]>([]);
 
   const onNodesChange: OnNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    (changes: NodeChange[]) => setNodes(nds => applyNodeChanges(changes, nds)),
     []
-  )
+  );
 
   const onEdgesChange: OnEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+    (changes: EdgeChange[]) => setEdges(eds => applyEdgeChanges(changes, eds)),
     []
-  )
+  );
 
   const onConnect = useCallback(
-    (params: Edge | Connection) => setEdges((eds) => addEdge({
-      ...params,
-      animated: true,
-      style: { stroke: '#f97316', strokeWidth: 2 }
-    }, eds)),
+    (params: Edge | Connection) =>
+      setEdges(eds =>
+        addEdge(
+          {
+            ...params,
+            animated: true,
+            style: { stroke: 'rgb(249, 115, 22)', strokeWidth: 2 },
+          },
+          eds
+        )
+      ),
     []
-  )
+  );
 
-  // Додати новий блок
-  const addNode = (type: typeof nodeTypes[0]) => {
-    const id = `${Date.now()}`
+  const addNode = (type: typeof nodeTypesPalette[number]) => {
+    const id = crypto.randomUUID();
+
     const newNode: FunnelNode = {
       id,
       type: 'default',
@@ -143,61 +169,57 @@ export default function Builder() {
         label: type.label,
         type: type.type,
         icon: type.icon,
-        description: type.description
+        description: type.description,
       },
       position: {
-        x: Math.random() * 400 + 100,
-        y: Math.random() * 300 + 200
+        x: 200 + Math.random() * 400,
+        y: 150 + Math.random() * 300,
       },
       style: {
-        background: `linear-gradient(135deg, ${type.color.split(' ')[0].replace('from-', '#')})`,
+        background: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(20px)',
         color: 'white',
-        border: 'none',
-        borderRadius: '12px',
-        padding: '16px',
-        minWidth: '180px'
-      }
-    }
-    
-    setNodes((nds) => [...nds, newNode])
-  }
+        borderRadius: '16px',
+        padding: '14px',
+        minWidth: '180px',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.37)',
+      },
+    };
 
-  // Зберегти воронку
+    setNodes(nds => [...nds, newNode]);
+  };
+
   const saveFunnel = () => {
-    const funnelData = {
-      nodes,
-      edges,
-      createdAt: new Date().toISOString()
-    }
-    console.log('Saving funnel:', funnelData)
-    // Тут додамо API виклик
-    alert('Воронка збережена! ✅')
-  }
+    console.log('[Builder] save funnel', { nodes, edges });
+    alert('Воронка збережена ✅');
+  };
 
-  // Експорт в JSON
   const exportFunnel = () => {
-    const data = JSON.stringify({ nodes, edges }, null, 2)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `funnel-${Date.now()}.json`
-    link.click()
-  }
+    const blob = new Blob([JSON.stringify({ nodes, edges }, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `funnel-${Date.now()}.json`;
+    a.click();
+  };
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex gap-6">
-      {/* Sidebar з блоками */}
-      <div className="w-64 bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-4 overflow-y-auto">
-        <h3 className="font-bold text-lg mb-4">Блоки воронки</h3>
-        
-        {nodeTypes.map((type) => {
-          const Icon = type.icon
+    <div className="h-[calc(100vh-8rem)] flex gap-6 p-6">
+      {/* Sidebar */}
+      <div className="w-64 glass-card p-4 space-y-4 overflow-y-auto scrollbar-hide">
+        <h3 className="font-bold text-lg text-white mb-4">Блоки воронки</h3>
+
+        {nodeTypesPalette.map(type => {
+          const Icon = type.icon;
           return (
             <button
               key={type.type}
               onClick={() => addNode(type)}
-              className={`w-full p-4 rounded-xl bg-gradient-to-br ${type.color} hover:scale-105 transition text-left group`}
+              className={`w-full p-4 rounded-xl ${type.gradient} hover:scale-105 transition-all text-left shadow-lg`}
             >
               <div className="flex items-center gap-3 mb-2">
                 <Icon size={20} className="text-white" />
@@ -205,12 +227,12 @@ export default function Builder() {
               </div>
               <p className="text-xs text-white/80">{type.description}</p>
             </button>
-          )
+          );
         })}
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden relative">
+      <div className="flex-1 glass-card overflow-hidden">
         <ReactFlowProvider>
           <ReactFlow
             nodes={nodes}
@@ -219,67 +241,42 @@ export default function Builder() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             fitView
-            style={{ background: '#0f172a' }}
+            style={{
+              background: 'transparent',
+            }}
           >
             <MiniMap 
-              style={{ 
-                background: '#1e293b',
-                border: '1px solid #334155'
+              style={{
+                background: 'rgba(0, 0, 0, 0.5)',
+                backdropFilter: 'blur(10px)',
               }}
-              maskColor="rgba(0, 0, 0, 0.6)"
             />
-            
             <Controls 
               style={{
-                background: '#1e293b',
-                border: '1px solid #334155'
+                background: 'rgba(0, 0, 0, 0.5)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '12px',
               }}
             />
-            
             <Background 
-              color="#334155" 
               gap={16} 
-              size={1}
+              color="rgba(255, 255, 255, 0.1)"
             />
 
-            {/* Панель дій */}
             <Panel position="top-right" className="flex gap-2">
-              <Button
-                onClick={saveFunnel}
-                variant="success"
-                className="flex items-center gap-2"
-                aria-label="Зберегти воронку"
-              >
-                <Save size={16} />
+              <Button onClick={saveFunnel} variant="primary" className="gradient-button">
+                <Save size={16} className="mr-2" />
                 Зберегти
               </Button>
-              
-              <Button
-                onClick={exportFunnel}
-                variant="secondary"
-                className="flex items-center gap-2"
-                aria-label="Експортувати воронку"
-              >
-                <Download size={16} />
+              <Button variant="ghost" onClick={exportFunnel} className="glass-button">
+                <Download size={16} className="mr-2" />
                 Експорт
               </Button>
             </Panel>
           </ReactFlow>
         </ReactFlowProvider>
-
-        {/* Підказка */}
-        {nodes.length === 1 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-gray-800/90 backdrop-blur-sm border border-gray-700 rounded-2xl p-8 text-center max-w-md">
-              <Zap size={48} className="text-orange-400 mx-auto mb-4" />
-              <h3 className="text-xl font-bold mb-2">Створи свою першу воронку!</h3>
-              <p className="text-gray-400">
-                Обери блоки зліва та з'єднай їх, щоб створити автоматизацію
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
-  )
+  );
 }

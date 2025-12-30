@@ -1,83 +1,130 @@
-// src/components/sidebar/Sidebar.tsx
-import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Boxes, Workflow, BarChart3, Settings, X } from 'lucide-react'
-import { useStore } from '../../store/store'
+// packages/frontend/src/components/layout/Sidebar.tsx
 
-const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Продукти', href: '/admin/products', icon: Boxes },
-  { name: 'Воронки', href: '/admin/funnels', icon: Workflow },
-  { name: 'Аналітика', href: '/admin/analytics', icon: BarChart3 },
-  { name: 'Налаштування', href: '/admin/settings', icon: Settings },
-]
+import { NavLink } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  Zap, 
+  Sparkles, 
+  Boxes, 
+  BarChart3, 
+  Users, 
+  Settings,
+  X
+} from 'lucide-react';
+import { useAppSelector } from '@frontend/store/hooks';
+import { selectUser } from '@frontend/store/auth/authSelectors';
+import { Button } from '@starway/shared/ui';
 
-export default function Sidebar() {
-  const { sidebarOpen, toggleSidebar } = useStore()
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
+  const user = useAppSelector(selectUser);
+
+  const navigation = [
+    { name: 'Огляд', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Воронки', href: '/dashboard/funnels', icon: Zap },
+    { name: 'AI Генератор', href: '/dashboard/ai-generator', icon: Sparkles },
+    { name: 'Продукти', href: '/dashboard/products', icon: Boxes },
+    { name: 'Аналітика', href: '/dashboard/analytics', icon: BarChart3 },
+    { name: 'Користувачі', href: '/dashboard/users', icon: Users },
+    { name: 'Налаштування', href: '/dashboard/settings', icon: Settings },
+  ];
 
   return (
     <>
       {/* Overlay для мобільних */}
-      {sidebarOpen && (
+      {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={toggleSidebar}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 lg:hidden"
+          onClick={onClose}
         />
       )}
 
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 left-0 z-50 h-screen w-64
-        bg-gray-900 border-r border-gray-800
-        transition-transform duration-300
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0
+        fixed lg:static top-0 left-0 z-50 h-screen w-64
+        bg-slate-950/50 backdrop-blur-xl border-r border-white/10
+        transition-transform duration-300 ease-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        
-        {/* Header */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-800">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg" />
-            <span className="text-xl font-bold">Starway</span>
-          </div>
-          
-          <button
-            onClick={toggleSidebar}
-            className="lg:hidden p-2 hover:bg-gray-800 rounded-lg"
-            aria-label="Закрити меню"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="p-4 space-y-2">
-          {navigation.map((item) => (
-            <NavLink
-              key={item.name}
-              to={item.href}
-              end={item.href === '/admin'}
-              className={({ isActive }) => `
-                flex items-center gap-3 px-4 py-3 rounded-lg
-                transition-all duration-200
-                ${isActive 
-                  ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg' 
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                }
-              `}
-            >
-              <item.icon size={20} />
-              <span className="font-medium">{item.name}</span>
+        <div className="flex flex-col h-full">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-white/10">
+            <NavLink to="/dashboard" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-orange rounded-2xl flex items-center justify-center shadow-lg">
+                <Sparkles className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-xl font-bold text-white">Starway Studio</span>
             </NavLink>
-          ))}
-        </nav>
 
-        {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
-          <div className="text-xs text-gray-500 text-center">
-            Starway Studio v1.0
+            {/* Close button (mobile only) */}
+            <Button
+              onClick={onClose}
+              className="lg:hidden p-2 hover:bg-white/10 rounded-xl transition"
+              aria-label="Закрити меню"
+            >
+              <X className="w-5 h-5 text-slate-400" />
+            </Button>
+          </div>
+
+          {/* User Info */}
+          {user && (
+            <div className="px-6 py-4 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-xl font-bold text-white">
+                  {user.firstName?.charAt(0).toUpperCase() || 'N'}
+                </div>
+                <div>
+                  <p className="font-semibold text-white">{user.firstName}</p>
+                  <p className="text-xs text-slate-400">
+                    {user.role === 'super_admin' ? '👑 Super Admin' : 
+                     user.role === 'funnel_admin' ? '🎯 Funnel Admin' : 'User'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation */}
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+            {navigation.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  end={item.href === '/dashboard'}
+                  onClick={onClose} // Close sidebar on mobile when clicking link
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+                      isActive
+                        ? 'bg-gradient-orange text-white shadow-lg'
+                        : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    }`
+                  }
+                >
+                  <Icon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  <span className="font-medium">{item.name}</span>
+                </NavLink>
+              );
+            })}
+          </nav>
+
+          {/* Footer */}
+          <div className="p-6 border-t border-white/10">
+            <div className="text-xs text-slate-500 text-center space-y-1">
+              <p className="font-semibold text-white">Starway Studio</p>
+              <p>v1.0.0 • Beta</p>
+            </div>
           </div>
         </div>
       </aside>
     </>
-  )
-}
+  );
+};
+
+export default Sidebar;

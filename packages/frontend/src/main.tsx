@@ -1,19 +1,26 @@
-import React from 'react'
-import { Provider } from 'react-redux'
-import { PersistGate } from 'redux-persist/integration/react'
-import { store, persistor } from './store/store'
-import { createRoot } from 'react-dom/client'
-import './index.css' 
-import App from './App'
+// packages/frontend/src/main.tsx
 
-createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-    <Provider store={store}>
-      <PersistGate loading={null} persistor={persistor}>
-        <App />
-      </PersistGate>
-    </Provider>
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { Provider } from 'react-redux';
+import { GoogleOAuthProvider } from '@react-oauth/google';
+import { Toaster } from 'react-hot-toast';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { store } from '@frontend/store/store';
+import App from './App';
+import './index.css';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <Provider store={store}>
+        <ThemeProvider>
+          <Toaster position="top-right" />
+          <App />
+        </ThemeProvider>
+      </Provider>
+    </GoogleOAuthProvider>
   </React.StrictMode>
-
-)
-
+);

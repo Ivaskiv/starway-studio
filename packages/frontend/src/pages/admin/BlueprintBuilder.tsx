@@ -21,9 +21,9 @@ import {
   DollarSign, Gift, Users, Target, TrendingUp,
   Play, Settings, Layers, ChevronRight
 } from 'lucide-react'
-import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
-import { Select } from '../../components/ui/Select'
+import { Button } from '@starway-studio/shared/ui/Button.js'
+import { Input } from '@starway-studio/shared/ui/Input.js'
+import { Select } from '@starway-studio/shared/ui/Select.js'
 
 // Типи блоків воронки
 const BLOCK_TYPES = [

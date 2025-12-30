@@ -36,6 +36,7 @@ export default defineConfig([
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'off',
       'react/react-in-jsx-scope': 'off',
+      'import/no-unassigned-import': 'off',
       'react/prop-types': 'off'
     }
   }

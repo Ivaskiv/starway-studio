@@ -1,48 +1,51 @@
 // packages/backend/src/middleware/auth.ts
 
-import { Request, Response, NextFunction } from 'express'
-import jwt from 'jsonwebtoken'
-import { sql } from '../db/client.js'
+import type { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { sql } from '../db/client';
 
-export interface AuthRequest extends Request {
-  user: {
-    id: string
-    email: string
-    name: string
-    role: string
-  }
-}
-
-export async function authRequired(
-  req: Request, 
-  res: Response, 
+export const authRequired = async (
+  req: Request,
+  res: Response,
   next: NextFunction
-): Promise<void | Response> {
-  const token = req.headers.authorization?.split(' ')[1]
-  
-  if (!token) {
-    return res.status(401).json({ error: 'unauthorized' })
-  }
-
+) => {
   try {
-    const secret = process.env.JWT_SECRET
-    if (!secret) throw new Error('JWT_SECRET not configured')
+    const authHeader = req.headers.authorization;
 
-    const decoded = jwt.verify(token, secret) as { id: string }
-    
-    const [user] = await sql`
-      SELECT id, email, name, role 
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+
+    const token = authHeader.substring(7);
+    const secret = process.env.JWT_SECRET!;
+
+    const decoded = jwt.verify(token, secret) as { id: string };
+
+    // Отримуємо користувача - тільки існуючі колонки
+    const users = await sql`
+      SELECT id, email, first_name, last_name, role 
       FROM users 
       WHERE id = ${decoded.id}
-    `
-    
-    if (!user) {
-      return res.status(401).json({ error: 'user_not_found' })
+    `;
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: 'user_not_found' });
     }
-    
-    (req as AuthRequest).user = user
-    next()
+
+    const user = users[0];
+
+    // Додаємо користувача в request
+    req.user = {
+      id: user.id,
+      email: user.email,
+      firstName: user.first_name || '',
+      lastName: user.last_name || '',
+      role: user.role
+    };
+
+    next();
   } catch (err) {
-    return res.status(401).json({ error: 'invalid_token' })
+    console.error('[auth middleware]', err);
+    return res.status(401).json({ error: 'invalid_token' });
   }
-}
+};
