@@ -1,402 +1,251 @@
-// packages/backend/src/routes/funnel.ts
+// packages/backend/src/routes/funnels.ts
 
-import { Router, Request, Response } from 'express';
-import crypto from 'crypto';
-import { sql } from '../db/client.js';
-import { authRequired, AuthRequest } from '../middleware/auth.js';
+import { Router } from 'express';
+import { authRequired } from '../middleware/auth';
+import { sql } from '../db/client';
 
 const router = Router();
 
-// ============================================
-// HELPER: Generate slug from name
-// ============================================
-function generateSlug(name: string): string {
-  const baseSlug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  
-  const randomPart = crypto.randomUUID().substring(0, 8);
-  return `${baseSlug}-${randomPart}`;
-}
-
-// ============================================
-// POST /api/funnels
-// Створити воронку (тільки funnel_admin і super_admin)
-// ============================================
-const createFunnel = async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const { name, type, description } = authReq.body;
-
-  // Перевіряємо роль
-  if (authReq.user.role !== 'funnel_admin' && authReq.user.role !== 'super_admin') {
-    res.status(403).json({
-      success: false,
-      message: 'Тільки адміністратори можуть створювати воронки'
-    });
-    return;
-  }
-
-  if (!name) {
-    res.status(400).json({
-      success: false,
-      message: 'Назва воронки обов\'язкова'
-    });
-    return;
-  }
-
+// GET all funnels
+router.get('/', authRequired, async (req, res) => {
   try {
-    const funnelId = crypto.randomUUID();
-    const slug = generateSlug(name);
-    const funnelType = type || 'telegram';
+    const userId = req.user!.id;
 
-    const [funnel] = await sql`
+    console.log('📋 [funnels/GET] Fetching for user:', userId);
+
+    const funnels = await sql`
+      SELECT 
+        id, 
+        owner_id as user_id,
+        name, 
+        description,
+        type,
+        status,
+        theme,
+        user_prompt,
+        ai_generated_data,
+        steps,
+        settings,
+        is_public,
+        slug,
+        created_at, 
+        updated_at
+      FROM funnels 
+      WHERE owner_id = ${userId}
+      ORDER BY created_at DESC
+    `;
+
+    console.log(`✅ [funnels/GET] Found ${funnels.length} funnels`);
+
+    res.json({ 
+      success: true,
+      funnels 
+    });
+  } catch (error: any) {
+    console.error('❌ [funnels/GET] Error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'server_error',
+      message: error.message 
+    });
+  }
+});
+
+// POST create funnel
+router.post('/', authRequired, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const { 
+      name, 
+      description, 
+      theme = 'orange',
+      type = 'mixed',
+      user_prompt,
+      ai_generated_data 
+    } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'missing_name',
+        message: 'Name is required' 
+      });
+    }
+
+    console.log('📝 [funnels/POST] Creating funnel:', { name, userId });
+
+    const result = await sql`
       INSERT INTO funnels (
-        id, owner_id, name, type, description,
-        slug, status, is_public, steps, settings,
-        created_at, updated_at
-      )
-      VALUES (
-        ${funnelId},
-        ${authReq.user.id},
+        owner_id,
+        name,
+        description,
+        type,
+        status,
+        theme,
+        user_prompt,
+        ai_generated_data,
+        steps,
+        created_at,
+        updated_at
+      ) VALUES (
+        ${userId},
         ${name},
-        ${funnelType},
         ${description || ''},
-        ${slug},
+        ${type},
         'draft',
-        true,
-        '[]'::jsonb,
-        '{}'::jsonb,
+        ${theme},
+        ${user_prompt || ''},
+        ${ai_generated_data ? JSON.stringify(ai_generated_data) : '{}'},
+        '[]',
         NOW(),
         NOW()
       )
       RETURNING *
     `;
 
-    res.status(201).json({
+    const funnel = result[0];
+
+    console.log('✅ [funnels/POST] Created funnel:', funnel.id);
+
+    res.status(201).json({ 
       success: true,
-      funnel: {
-        id: funnel.id,
-        owner_id: funnel.owner_id,
-        name: funnel.name,
-        type: funnel.type,
-        description: funnel.description,
-        slug: funnel.slug,
-        status: funnel.status,
-        is_public: funnel.is_public,
-        created_at: funnel.created_at,
-        updated_at: funnel.updated_at
-      }
+      message: 'Funnel created successfully',
+      funnel 
     });
-  } catch (err) {
-    console.error('[funnels/create]', err);
-    res.status(500).json({
+
+  } catch (error: any) {
+    console.error('❌ [funnels/POST] Error:', error);
+    res.status(500).json({ 
       success: false,
-      message: 'Помилка сервера'
+      error: 'creation_failed',
+      message: error.message 
     });
   }
-};
+});
 
-router.post('/', authRequired, createFunnel);
-
-// ============================================
-// GET /api/funnels
-// Отримати всі СВОЇ воронки
-// ============================================
-const getMyFunnels = async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-
+// GET single funnel
+router.get('/:id', authRequired, async (req, res) => {
   try {
-    let funnels;
+    const { id } = req.params;
+    const userId = req.user!.id;
 
-    if (authReq.user.role === 'super_admin') {
-      // Super admin бачить всі воронки
-      funnels = await sql`
-        SELECT * FROM funnels 
-        ORDER BY created_at DESC
-      `;
-    } else if (authReq.user.role === 'funnel_admin') {
-      // Funnel admin бачить тільки свої
-      funnels = await sql`
-        SELECT * FROM funnels 
-        WHERE owner_id = ${authReq.user.id}
-        ORDER BY created_at DESC
-      `;
-    } else {
-      res.status(403).json({
-        success: false,
-        message: 'Доступ заборонено'
-      });
-      return;
-    }
-
-    res.json({
-      success: true,
-      funnels
-    });
-  } catch (err) {
-    console.error('[funnels/list]', err);
-    res.status(500).json({
-      success: false,
-      message: 'Помилка сервера'
-    });
-  }
-};
-
-router.get('/', authRequired, getMyFunnels);
-
-// ============================================
-// GET /api/funnels/:funnelId
-// Отримати воронку по ID (тільки власник)
-// ============================================
-const getFunnelById = async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const { funnelId } = authReq.params;
-
-  try {
-    const [funnel] = await sql`
+    const result = await sql`
       SELECT * FROM funnels 
-      WHERE id = ${funnelId}
+      WHERE id = ${id} AND owner_id = ${userId}
     `;
 
-    if (!funnel) {
-      res.status(404).json({
+    if (result.length === 0) {
+      return res.status(404).json({ 
         success: false,
-        message: 'Воронка не знайдена'
+        error: 'not_found',
+        message: 'Funnel not found' 
       });
-      return;
     }
 
-    // Перевіряємо доступ
-    if (authReq.user.role !== 'super_admin' && funnel.owner_id !== authReq.user.id) {
-      res.status(403).json({
-        success: false,
-        message: 'Це не ваша воронка'
-      });
-      return;
-    }
-
-    res.json({
+    res.json({ 
       success: true,
-      funnel
+      funnel: result[0] 
     });
-  } catch (err) {
-    console.error('[funnels/get]', err);
-    res.status(500).json({
+
+  } catch (error: any) {
+    console.error('❌ [funnels/GET:id] Error:', error);
+    res.status(500).json({ 
       success: false,
-      message: 'Помилка сервера'
+      error: 'server_error',
+      message: error.message 
     });
   }
-};
+});
 
-router.get('/:funnelId', authRequired, getFunnelById);
-
-// ============================================
-// GET /api/funnels/:funnelId/users
-// Отримати юзерів воронки (тільки власник)
-// ============================================
-const getFunnelUsers = async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const { funnelId } = authReq.params;
-
+// PATCH update funnel
+router.patch('/:id', authRequired, async (req, res) => {
   try {
-    // Перевіряємо що воронка існує
-    const [funnel] = await sql`
-      SELECT owner_id FROM funnels 
-      WHERE id = ${funnelId}
+    const { id } = req.params;
+    const userId = req.user!.id;
+    const updates = req.body;
+
+    console.log('📝 [funnels/PATCH] Updating funnel:', id);
+
+    // Перевіряємо що воронка належить користувачу
+    const existing = await sql`
+      SELECT id FROM funnels 
+      WHERE id = ${id} AND owner_id = ${userId}
     `;
 
-    if (!funnel) {
-      res.status(404).json({
+    if (existing.length === 0) {
+      return res.status(404).json({ 
         success: false,
-        message: 'Воронка не знайдена'
+        error: 'not_found'
       });
-      return;
     }
 
-    // Перевіряємо доступ
-    if (authReq.user.role !== 'super_admin' && funnel.owner_id !== authReq.user.id) {
-      res.status(403).json({
-        success: false,
-        message: 'Це не ваша воронка'
-      });
-      return;
-    }
-
-    // Отримуємо юзерів
-    const users = await sql`
-      SELECT 
-        id, name, email, role, funnel_id,
-        telegram_id, created_at, updated_at
-      FROM users
-      WHERE funnel_id = ${funnelId} AND role = 'user'
-      ORDER BY created_at DESC
-    `;
-
-    res.json({
-      success: true,
-      users,
-      total: users.length
-    });
-  } catch (err) {
-    console.error('[funnels/users]', err);
-    res.status(500).json({
-      success: false,
-      message: 'Помилка сервера'
-    });
-  }
-};
-
-router.get('/:funnelId/users', authRequired, getFunnelUsers);
-
-// ============================================
-// PUT /api/funnels/:funnelId
-// Оновити воронку (тільки власник)
-// ============================================
-const updateFunnel = async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const { funnelId } = authReq.params;
-  const { name, type, description, status, steps, settings } = authReq.body;
-
-  try {
-    // Перевіряємо що воронка існує
-    const [funnel] = await sql`
-      SELECT owner_id FROM funnels 
-      WHERE id = ${funnelId}
-    `;
-
-    if (!funnel) {
-      res.status(404).json({
-        success: false,
-        message: 'Воронка не знайдена'
-      });
-      return;
-    }
-
-    // Перевіряємо доступ
-    if (authReq.user.role !== 'super_admin' && funnel.owner_id !== authReq.user.id) {
-      res.status(403).json({
-        success: false,
-        message: 'Це не ваша воронка'
-      });
-      return;
-    }
-
-    // Оновлюємо через окремі запити або один великий
-    const [updatedFunnel] = await sql`
+    // Оновлюємо
+    const result = await sql`
       UPDATE funnels 
       SET 
-        name = COALESCE(${name}, name),
-        type = COALESCE(${type}, type),
-        description = COALESCE(${description}, description),
-        status = COALESCE(${status}, status),
-        steps = COALESCE(${steps ? JSON.stringify(steps) : null}::jsonb, steps),
-        settings = COALESCE(${settings ? JSON.stringify(settings) : null}::jsonb, settings),
+        name = COALESCE(${updates.name}, name),
+        description = COALESCE(${updates.description}, description),
+        status = COALESCE(${updates.status}, status),
+        steps = COALESCE(${updates.steps ? JSON.stringify(updates.steps) : null}, steps),
         updated_at = NOW()
-      WHERE id = ${funnelId}
+      WHERE id = ${id} AND owner_id = ${userId}
       RETURNING *
     `;
 
-    res.json({
+    console.log('✅ [funnels/PATCH] Updated funnel:', id);
+
+    res.json({ 
       success: true,
-      funnel: updatedFunnel
+      message: 'Funnel updated successfully',
+      funnel: result[0] 
     });
-  } catch (err) {
-    console.error('[funnels/update]', err);
-    res.status(500).json({
+
+  } catch (error: any) {
+    console.error('❌ [funnels/PATCH] Error:', error);
+    res.status(500).json({ 
       success: false,
-      message: 'Помилка сервера'
+      error: 'update_failed',
+      message: error.message 
     });
   }
-};
+});
 
-router.put('/:funnelId', authRequired, updateFunnel);
-
-// ============================================
-// DELETE /api/funnels/:funnelId
-// Видалити воронку (тільки власник)
-// ============================================
-const deleteFunnel = async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const { funnelId } = authReq.params;
-
+// DELETE funnel
+router.delete('/:id', authRequired, async (req, res) => {
   try {
-    // Перевіряємо що воронка існує
-    const [funnel] = await sql`
-      SELECT owner_id FROM funnels 
-      WHERE id = ${funnelId}
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    console.log('🗑️ [funnels/DELETE] Deleting funnel:', id);
+
+    const result = await sql`
+      DELETE FROM funnels 
+      WHERE id = ${id} AND owner_id = ${userId}
+      RETURNING id
     `;
 
-    if (!funnel) {
-      res.status(404).json({
+    if (result.length === 0) {
+      return res.status(404).json({ 
         success: false,
-        message: 'Воронка не знайдена'
+        error: 'not_found'
       });
-      return;
     }
 
-    // Перевіряємо доступ
-    if (authReq.user.role !== 'super_admin' && funnel.owner_id !== authReq.user.id) {
-      res.status(403).json({
-        success: false,
-        message: 'Це не ваша воронка'
-      });
-      return;
-    }
+    console.log('✅ [funnels/DELETE] Deleted funnel:', id);
 
-    // Видаляємо (CASCADE автоматично видалить users)
-    await sql`DELETE FROM funnels WHERE id = ${funnelId}`;
-
-    res.json({
+    res.json({ 
       success: true,
-      message: 'Воронка видалена'
+      message: 'Funnel deleted successfully'
     });
-  } catch (err) {
-    console.error('[funnels/delete]', err);
-    res.status(500).json({
+
+  } catch (error: any) {
+    console.error('❌ [funnels/DELETE] Error:', error);
+    res.status(500).json({ 
       success: false,
-      message: 'Помилка сервера'
+      error: 'deletion_failed',
+      message: error.message 
     });
   }
-};
-
-router.delete('/:funnelId', authRequired, deleteFunnel);
-
-// ============================================
-// GET /api/funnels/slug/:slug
-// Публічний доступ - для реєстрації
-// ============================================
-const getFunnelBySlug = async (req: Request, res: Response) => {
-  const { slug } = req.params;
-
-  try {
-    const [funnel] = await sql`
-      SELECT id, name, type, slug, description, status, is_public
-      FROM funnels 
-      WHERE slug = ${slug} AND status = 'active' AND is_public = true
-    `;
-
-    if (!funnel) {
-      res.status(404).json({
-        success: false,
-        message: 'Воронка не знайдена або неактивна'
-      });
-      return;
-    }
-
-    res.json({
-      success: true,
-      funnel
-    });
-  } catch (err) {
-    console.error('[funnels/slug]', err);
-    res.status(500).json({
-      success: false,
-      message: 'Помилка сервера'
-    });
-  }
-};
-
-router.get('/slug/:slug', getFunnelBySlug);
+});
 
 export default router;

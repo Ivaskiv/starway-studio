@@ -1,9 +1,9 @@
 // src/pages/admin/ABTesting.tsx
 // 
 import { useState } from 'react'
-import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
-import { Select } from '../../components/ui/Select'
+import { Button } from '@starway-studio/shared/ui/Button.js'
+import { Input } from '@starway-studio/shared/ui/Input.js'
+import { Select } from '@starway-studio/shared/ui/Select.js'
 import { 
   FlaskConical, Play, Pause, TrendingUp, 
   Copy, CheckCircle, XCircle, BarChart3,

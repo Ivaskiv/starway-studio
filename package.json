@@ -5,11 +5,11 @@
   "description": "starway-studio Studio - AI-powered funnel builder",
   "scripts": {
     "dev": "pnpm --parallel --filter \"./packages/*\" dev",
-    "dev:frontend": "pnpm --filter @starway-studio/frontend dev",
-    "dev:backend": "pnpm --filter @starway-studio/backend dev",
+    "dev:frontend": "pnpm --filter @starway/frontend dev",
+    "dev:backend": "pnpm --filter @starway/backend dev",
     "build": "pnpm --filter \"./packages/*\" build",
-    "build:frontend": "pnpm --filter @starway-studio/frontend build",
-    "build:backend": "pnpm --filter @starway-studio/backend build",
+    "build:frontend": "pnpm --filter @starway/frontend build",
+    "build:backend": "pnpm --filter @starway/backend build",
     "clean": "rm -rf node_modules packages/*/node_modules packages/*/.next packages/*/dist .turbo pnpm-lock.yaml",
     "install:all": "pnpm install"
   },

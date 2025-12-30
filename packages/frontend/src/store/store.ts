@@ -7,17 +7,20 @@ import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import { api } from '../services/api';
 import { authReducer } from './auth/authSlice';
 // import uiReducer from './uiSlice';
-import  uiReducer  from '../components/redux/uiSlice';
+import  uiReducer  from './ui/uiSlice';
+import funnelsReducer from './funnels/funnelsSlice';
 
 export const store = configureStore({
   reducer: {
     [api.reducerPath]: api.reducer,
     auth: authReducer,
     ui: uiReducer,
+    funnels: funnelsReducer,
   },
   
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(api.middleware),
+  
   
   devTools: true,
 });

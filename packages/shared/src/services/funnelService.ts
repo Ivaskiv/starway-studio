@@ -1,49 +1,13 @@
 // packages/shared/src/services/funnelService.ts
 
+import type {
+  Funnel,
+  FunnelStep,
+  CreateFunnelRequest,
+  UpdateFunnelRequest
+} from '../types';
+
 const API_URL = 'http://localhost:3001/api';
-
-export interface Funnel {
-  id: string;
-  owner_id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  status: 'draft' | 'active' | 'paused';
-  is_published: boolean;
-  branding: Record<string, any>;
-  ai_config: Record<string, any>;
-  created_at: string;
-  updated_at: string;
-  published_at?: string;
-  steps_count?: number;
-}
-
-export interface FunnelStep {
-  id: string;
-  funnel_id: string;
-  order_index: number;
-  type: string;
-  title: string;
-  description?: string;
-  config: Record<string, any>;
-  ai_prompt?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateFunnelDto {
-  name: string;
-  slug: string;
-  description?: string;
-}
-
-export interface UpdateFunnelDto {
-  name?: string;
-  description?: string;
-  status?: 'draft' | 'active' | 'paused';
-  branding?: Record<string, any>;
-  ai_config?: Record<string, any>;
-}
 
 class FunnelService {
   private getToken(): string | null {
@@ -75,7 +39,7 @@ class FunnelService {
   }
 
   // Отримати одну воронку
-  async getFunnel(id: string): Promise<Funnel & { steps: FunnelStep[] }> {
+  async getFunnel(id: string): Promise<Funnel> {
     const response = await fetch(`${API_URL}/funnels/${id}`, {
       headers: this.getHeaders(),
     });
@@ -90,7 +54,7 @@ class FunnelService {
   }
 
   // Створити воронку
-  async createFunnel(dto: CreateFunnelDto): Promise<Funnel> {
+  async createFunnel(dto: CreateFunnelRequest): Promise<Funnel> {
     const response = await fetch(`${API_URL}/funnels`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -107,7 +71,7 @@ class FunnelService {
   }
 
   // Оновити воронку
-  async updateFunnel(id: string, dto: UpdateFunnelDto): Promise<Funnel> {
+  async updateFunnel(id: string, dto: UpdateFunnelRequest): Promise<Funnel> {
     const response = await fetch(`${API_URL}/funnels/${id}`, {
       method: 'PATCH',
       headers: this.getHeaders(),
@@ -135,6 +99,121 @@ class FunnelService {
     if (!response.ok) {
       throw new Error(data.message || 'Помилка видалення воронки');
     }
+  }
+
+  // Додати крок до воронки
+  async addStep(funnelId: string, step: Omit<FunnelStep, 'id'>): Promise<Funnel> {
+    const response = await fetch(`${API_URL}/funnels/${funnelId}/steps`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(step),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Помилка додавання кроку');
+    }
+
+    return data.funnel;
+  }
+
+  // Оновити крок
+  async updateStep(funnelId: string, stepId: string, updates: Partial<FunnelStep>): Promise<Funnel> {
+    const response = await fetch(`${API_URL}/funnels/${funnelId}/steps/${stepId}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify(updates),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Помилка оновлення кроку');
+    }
+
+    return data.funnel;
+  }
+
+  // Видалити крок
+  async deleteStep(funnelId: string, stepId: string): Promise<Funnel> {
+    const response = await fetch(`${API_URL}/funnels/${funnelId}/steps/${stepId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Помилка видалення кроку');
+    }
+
+    return data.funnel;
+  }
+
+  // Змінити порядок кроків
+  async reorderSteps(funnelId: string, stepIds: string[]): Promise<Funnel> {
+    const response = await fetch(`${API_URL}/funnels/${funnelId}/steps/reorder`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ stepIds }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Помилка зміни порядку кроків');
+    }
+
+    return data.funnel;
+  }
+
+  // Опублікувати воронку
+  async publishFunnel(id: string): Promise<Funnel> {
+    const response = await fetch(`${API_URL}/funnels/${id}/publish`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Помилка публікації воронки');
+    }
+
+    return data.funnel;
+  }
+
+  // Зняти з публікації
+  async unpublishFunnel(id: string): Promise<Funnel> {
+    const response = await fetch(`${API_URL}/funnels/${id}/unpublish`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Помилка зняття з публікації');
+    }
+
+    return data.funnel;
+  }
+
+  // Дублювати воронку
+  async duplicateFunnel(id: string): Promise<Funnel> {
+    const response = await fetch(`${API_URL}/funnels/${id}/duplicate`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Помилка дублювання воронки');
+    }
+
+    return data.funnel;
   }
 }
 

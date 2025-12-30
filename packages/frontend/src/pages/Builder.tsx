@@ -1,4 +1,6 @@
-import { useState, useCallback } from 'react'
+// packages/frontend/src/pages/user/Builder.tsx
+
+import { useState, useCallback } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -15,8 +17,8 @@ import ReactFlow, {
   type EdgeChange,
   type OnNodesChange,
   type OnEdgesChange,
-} from 'reactflow'
-// import 'reactflow/dist/style.css'
+} from 'reactflow';
+import 'reactflow/dist/style.css';
 
 import {
   Plus,
@@ -29,44 +31,84 @@ import {
   Gift,
   Users,
   Bell,
-} from 'lucide-react'
+} from 'lucide-react';
 
-import { Button } from '@starway-studio/shared'
+import { Button } from '@starway-studio/shared/ui/Button';
 
 // ───────────────────────────────────────────────
 // Types
 // ───────────────────────────────────────────────
 
 interface FunnelNodeData {
-  label: string
-  type: string
-  icon: any
-  description?: string
+  label: string;
+  type: string;
+  icon: any;
+  description?: string;
 }
 
-type FunnelNode = Node<FunnelNodeData>
+type FunnelNode = Node<FunnelNodeData>;
 
 // ───────────────────────────────────────────────
 // Node palette
 // ───────────────────────────────────────────────
 
 const nodeTypesPalette = [
-  { type: 'trigger', label: 'Тригер', icon: Zap, color: 'from-yellow-500 to-orange-500', description: 'Початок воронки' },
-  { type: 'email', label: 'Email', icon: Mail, color: 'from-blue-500 to-cyan-500', description: 'Відправити лист' },
-  { type: 'telegram', label: 'Telegram', icon: MessageCircle, color: 'from-sky-500 to-blue-500', description: 'Telegram повідомлення' },
-  { type: 'payment', label: 'Оплата', icon: CreditCard, color: 'from-green-500 to-emerald-500', description: 'WayForPay чекаут' },
-  { type: 'gift', label: 'Подарунок', icon: Gift, color: 'from-pink-500 to-rose-500', description: 'Видати доступ' },
-  { type: 'segment', label: 'Сегмент', icon: Users, color: 'from-purple-500 to-pink-500', description: 'Розділити аудиторію' },
-  { type: 'notify', label: 'Нагадування', icon: Bell, color: 'from-orange-500 to-red-500', description: 'Push нотифікація' },
-]
+  { 
+    type: 'trigger', 
+    label: 'Тригер', 
+    icon: Zap, 
+    gradient: 'bg-gradient-orange',
+    description: 'Початок воронки' 
+  },
+  { 
+    type: 'email', 
+    label: 'Email', 
+    icon: Mail, 
+    gradient: 'bg-gradient-blue',
+    description: 'Відправити лист' 
+  },
+  { 
+    type: 'telegram', 
+    label: 'Telegram', 
+    icon: MessageCircle, 
+    gradient: 'bg-gradient-blue',
+    description: 'Telegram повідомлення' 
+  },
+  { 
+    type: 'payment', 
+    label: 'Оплата', 
+    icon: CreditCard, 
+    gradient: 'bg-gradient-green',
+    description: 'WayForPay чекаут' 
+  },
+  { 
+    type: 'gift', 
+    label: 'Подарунок', 
+    icon: Gift, 
+    gradient: 'bg-gradient-orange',
+    description: 'Видати доступ' 
+  },
+  { 
+    type: 'segment', 
+    label: 'Сегмент', 
+    icon: Users, 
+    gradient: 'bg-gradient-orange',
+    description: 'Розділити аудиторію' 
+  },
+  { 
+    type: 'notify', 
+    label: 'Нагадування', 
+    icon: Bell, 
+    gradient: 'bg-gradient-orange',
+    description: 'Push нотифікація' 
+  },
+];
 
 // ───────────────────────────────────────────────
 // Component
 // ───────────────────────────────────────────────
 
 export default function Builder() {
-  console.log('[Builder] render')
-
   const [nodes, setNodes] = useState<FunnelNode[]>([
     {
       id: 'start',
@@ -78,28 +120,29 @@ export default function Builder() {
       },
       position: { x: 250, y: 50 },
       style: {
-        background: 'linear-gradient(135deg, #f59e0b, #f97316)',
+        background: 'linear-gradient(135deg, rgb(249, 115, 22), rgb(239, 68, 68))',
         color: 'white',
-        borderRadius: '12px',
+        borderRadius: '16px',
         padding: '16px',
         fontWeight: 'bold',
         minWidth: '200px',
         border: 'none',
+        boxShadow: '0 8px 32px rgba(249, 115, 22, 0.3)',
       },
     },
-  ])
+  ]);
 
-  const [edges, setEdges] = useState<Edge[]>([])
+  const [edges, setEdges] = useState<Edge[]>([]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes(nds => applyNodeChanges(changes, nds)),
     []
-  )
+  );
 
   const onEdgesChange: OnEdgesChange = useCallback(
     (changes: EdgeChange[]) => setEdges(eds => applyEdgeChanges(changes, eds)),
     []
-  )
+  );
 
   const onConnect = useCallback(
     (params: Edge | Connection) =>
@@ -108,16 +151,16 @@ export default function Builder() {
           {
             ...params,
             animated: true,
-            style: { stroke: '#f97316', strokeWidth: 2 },
+            style: { stroke: 'rgb(249, 115, 22)', strokeWidth: 2 },
           },
           eds
         )
       ),
     []
-  )
+  );
 
   const addNode = (type: typeof nodeTypesPalette[number]) => {
-    const id = crypto.randomUUID()
+    const id = crypto.randomUUID();
 
     const newNode: FunnelNode = {
       id,
@@ -133,61 +176,63 @@ export default function Builder() {
         y: 150 + Math.random() * 300,
       },
       style: {
-        background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
+        background: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(20px)',
         color: 'white',
-        borderRadius: '12px',
+        borderRadius: '16px',
         padding: '14px',
         minWidth: '180px',
-        border: 'none',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.37)',
       },
-    }
+    };
 
-    setNodes(nds => [...nds, newNode])
-  }
+    setNodes(nds => [...nds, newNode]);
+  };
 
   const saveFunnel = () => {
-    console.log('[Builder] save funnel', { nodes, edges })
-    alert('Воронка збережена ✅')
-  }
+    console.log('[Builder] save funnel', { nodes, edges });
+    alert('Воронка збережена ✅');
+  };
 
   const exportFunnel = () => {
     const blob = new Blob([JSON.stringify({ nodes, edges }, null, 2)], {
       type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
+    });
+    const url = URL.createObjectURL(blob);
 
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `funnel-${Date.now()}.json`
-    a.click()
-  }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `funnel-${Date.now()}.json`;
+    a.click();
+  };
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex gap-6">
+    <div className="h-[calc(100vh-8rem)] flex gap-6 p-6">
       {/* Sidebar */}
-      <div className="w-64 bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-4 overflow-y-auto">
-        <h3 className="font-bold text-lg">Блоки воронки</h3>
+      <div className="w-64 glass-card p-4 space-y-4 overflow-y-auto scrollbar-hide">
+        <h3 className="font-bold text-lg text-white mb-4">Блоки воронки</h3>
 
         {nodeTypesPalette.map(type => {
-          const Icon = type.icon
+          const Icon = type.icon;
           return (
             <button
               key={type.type}
               onClick={() => addNode(type)}
-              className={`w-full p-4 rounded-xl bg-gradient-to-br ${type.color} hover:scale-105 transition text-left`}
+              className={`w-full p-4 rounded-xl ${type.gradient} hover:scale-105 transition-all text-left shadow-lg`}
             >
               <div className="flex items-center gap-3 mb-2">
-                <Icon size={20} />
-                <span className="font-bold">{type.label}</span>
+                <Icon size={20} className="text-white" />
+                <span className="font-bold text-white">{type.label}</span>
               </div>
-              <p className="text-xs opacity-80">{type.description}</p>
+              <p className="text-xs text-white/80">{type.description}</p>
             </button>
-          )
+          );
         })}
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="flex-1 glass-card overflow-hidden">
         <ReactFlowProvider>
           <ReactFlow
             nodes={nodes}
@@ -196,22 +241,42 @@ export default function Builder() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             fitView
+            style={{
+              background: 'transparent',
+            }}
           >
-            <MiniMap />
-            <Controls />
-            <Background gap={16} />
+            <MiniMap 
+              style={{
+                background: 'rgba(0, 0, 0, 0.5)',
+                backdropFilter: 'blur(10px)',
+              }}
+            />
+            <Controls 
+              style={{
+                background: 'rgba(0, 0, 0, 0.5)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '12px',
+              }}
+            />
+            <Background 
+              gap={16} 
+              color="rgba(255, 255, 255, 0.1)"
+            />
 
             <Panel position="top-right" className="flex gap-2">
-              <Button onClick={saveFunnel}>
-                <Save size={16} /> Зберегти
+              <Button onClick={saveFunnel} variant="primary" className="gradient-button">
+                <Save size={16} className="mr-2" />
+                Зберегти
               </Button>
-              <Button variant="secondary" onClick={exportFunnel}>
-                <Download size={16} /> Експорт
+              <Button variant="ghost" onClick={exportFunnel} className="glass-button">
+                <Download size={16} className="mr-2" />
+                Експорт
               </Button>
             </Panel>
           </ReactFlow>
         </ReactFlowProvider>
       </div>
     </div>
-  )
+  );
 }

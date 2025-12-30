@@ -1,90 +1,279 @@
 // packages/backend/src/routes/ai.ts
 
-import { IncomingMessage, ServerResponse } from 'http'
-import { AuthRequest } from '../middleware/auth'
-import { generateWithAI } from '../services/ai'
-import { checkGenerationLimit, incrementGenerations } from '../services/generations'
+import { Router } from 'express'
+import { authRequired } from '../middleware/auth.js'
+import { 
+  generateWithAI,
+  analyzeUserPrompt,
+  generateFunnelStepVariants,
+  generateProductsFromFunnel
+} from '../services/ai.js'
+import { checkGenerationLimit, incrementGenerations } from '../services/generations.js'
 
+const router = Router()
 
-async function parseBody(req: IncomingMessage): Promise<any> {
-  return new Promise((resolve, reject) => {
-    let body = ''
-    req.on('data', chunk => {
-      body += chunk.toString()
-    })
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(body))
-      } catch (e) {
-        reject(new Error('Invalid JSON'))
-      }
-    })
-    req.on('error', reject)
-  })
-}
-
-export async function handleAIGenerate(
-  req: AuthRequest, 
-  res: ServerResponse
-): Promise<void> {
+// POST /generate - ІСНУЮЧИЙ ENDPOINT (БЕЗ ЗМІН)
+router.post('/generate', authRequired, async (req, res) => {
   try {
-    // Перевірка методу
-    if (req.method !== 'POST') {
-      res.writeHead(405, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'Method not allowed' }))
-      return
-    }
+    const { field, prompt, context } = req.body
+    const userId = req.user!.id
 
-    // Парсинг body
-    const body = await parseBody(req) as AIRequestBody
-    const { field, prompt, context } = body
-    const userId = (req as AuthRequest).user?.id
-
-    if (!userId) {
-      res.writeHead(401, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'unauthorized' }))
-      return
-    }
-
-    // Валідація
     if (!field || !prompt) {
-      res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'missing_field_or_prompt' }))
-      return
+      return res.status(400).json({ error: 'missing_field_or_prompt' })
     }
 
-    // Перевірка ліміту генерацій
     const { canGenerate, remaining } = await checkGenerationLimit(userId)
     
     if (!canGenerate) {
-      res.writeHead(403, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ 
-        error: 'generation_limit_reached',
-        remaining: 0 
-      }))
-      return
+      return res.status(403).json({ error: 'generation_limit_reached', remaining: 0 })
     }
 
-    // Генерація з AI
     const result = await generateWithAI(field, prompt, context)
     
-    // Збільшення лічильника
     await incrementGenerations(userId, field, result)
 
-    // Успішна відповідь
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({
+    res.json({ success: true, result, remaining: remaining - 1 })
+  } catch (error: any) {
+    res.status(500).json({ error: 'generation_failed', message: error.message })
+  }
+})
+
+// GET /limit - ІСНУЮЧИЙ ENDPOINT (БЕЗ ЗМІН)
+router.get('/limit', authRequired, async (req, res) => {
+  try {
+    const { canGenerate, remaining } = await checkGenerationLimit(req.user!.id)
+    res.json({ canGenerate, remaining })
+  } catch (error: any) {
+    res.status(500).json({ error: 'server_error' })
+  }
+})
+
+// ============ НОВІ ENDPOINTS ДЛЯ AI ВОРОНКИ ============
+
+// POST /analyze-prompt - Аналіз промпту користувача
+router.post('/analyze-prompt', authRequired, async (req, res) => {
+  try {
+    const { prompt } = req.body
+    const userId = req.user!.id
+
+    if (!prompt || prompt.length < 20) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'prompt_too_short',
+        message: 'Prompt занадто короткий (мінімум 20 символів)' 
+      })
+    }
+
+    // Перевіряємо ліміт генерацій
+    const { canGenerate, remaining } = await checkGenerationLimit(userId)
+    
+    if (!canGenerate) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'generation_limit_reached', 
+        remaining: 0 
+      })
+    }
+
+    console.log('🤖 Analyzing prompt with OpenAI GPT-4...')
+    const analysis = await analyzeUserPrompt(prompt)
+
+    // Зберігаємо генерацію
+    await incrementGenerations(userId, 'funnel_analysis', JSON.stringify(analysis))
+
+    res.json({ 
       success: true,
-      result,
+      analysis,
       remaining: remaining - 1
-    }))
+    })
 
   } catch (error: any) {
-    console.error('AI generation error:', error)
-    res.writeHead(500, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ 
+    console.error('❌ AI analysis error:', error)
+    res.status(500).json({ 
+      success: false,
+      error: 'analysis_failed',
+      message: error.message 
+    })
+  }
+})
+
+// POST /generate-step - Генерація варіантів для кроку воронки
+router.post('/generate-step', authRequired, async (req, res) => {
+  try {
+    const { stepNumber, stepTitle, stepDescription, analysis } = req.body
+    const userId = req.user!.id
+
+    if (!stepNumber || !stepTitle || !analysis) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'missing_fields',
+        message: 'Missing required fields' 
+      })
+    }
+
+    // Перевіряємо ліміт (кожен крок = окрема генерація)
+    const { canGenerate, remaining } = await checkGenerationLimit(userId)
+    
+    if (!canGenerate) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'generation_limit_reached', 
+        remaining: 0 
+      })
+    }
+
+    console.log(`🤖 Generating variants for step ${stepNumber}: ${stepTitle}`)
+    const variants = await generateFunnelStepVariants(
+      stepNumber,
+      stepTitle,
+      stepDescription,
+      analysis
+    )
+
+    // Зберігаємо генерацію
+    await incrementGenerations(userId, `funnel_step_${stepNumber}`, JSON.stringify(variants))
+
+    res.json({ 
+      success: true,
+      variants,
+      remaining: remaining - 1
+    })
+
+  } catch (error: any) {
+    console.error('❌ Generate step error:', error)
+    res.status(500).json({ 
+      success: false,
       error: 'generation_failed',
       message: error.message 
-    }))
+    })
   }
-}
+})
+
+// POST /generate-products - Генерація продуктів для воронки
+router.post('/generate-products', authRequired, async (req, res) => {
+  try {
+    const { analysis } = req.body
+    const userId = req.user!.id
+
+    if (!analysis) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'missing_analysis',
+        message: 'Analysis data required' 
+      })
+    }
+
+    // Перевіряємо ліміт
+    const { canGenerate, remaining } = await checkGenerationLimit(userId)
+    
+    if (!canGenerate) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'generation_limit_reached', 
+        remaining: 0 
+      })
+    }
+
+    console.log('🤖 Generating products for funnel...')
+    const products = await generateProductsFromFunnel(analysis)
+
+    // Зберігаємо генерацію
+    await incrementGenerations(userId, 'funnel_products', JSON.stringify(products))
+
+    res.json({ 
+      success: true,
+      products,
+      remaining: remaining - 1
+    })
+
+  } catch (error: any) {
+    console.error('❌ Generate products error:', error)
+    res.status(500).json({ 
+      success: false,
+      error: 'generation_failed',
+      message: error.message 
+    })
+  }
+})
+
+// POST /generate-bulk-steps - Генерація всіх 11 кроків за раз (оптимізація)
+router.post('/generate-bulk-steps', authRequired, async (req, res) => {
+  try {
+    const { analysis, steps } = req.body
+    const userId = req.user!.id
+
+    if (!analysis || !steps || !Array.isArray(steps)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'invalid_request',
+        message: 'Analysis and steps array required' 
+      })
+    }
+
+    // Перевіряємо ліміт (11 кроків = 11 генерацій)
+    const { canGenerate, remaining } = await checkGenerationLimit(userId)
+    
+    if (!canGenerate || remaining < steps.length) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'insufficient_generations',
+        message: `Need ${steps.length} generations, only ${remaining} remaining`,
+        remaining 
+      })
+    }
+
+    console.log(`🤖 Bulk generating ${steps.length} funnel steps...`)
+    
+    const results = []
+    let generationsUsed = 0
+
+    for (const step of steps) {
+      try {
+        const variants = await generateFunnelStepVariants(
+          step.stepNumber,
+          step.title,
+          step.description,
+          analysis
+        )
+
+        results.push({
+          stepNumber: step.stepNumber,
+          success: true,
+          variants
+        })
+
+        // Зберігаємо кожну генерацію
+        await incrementGenerations(userId, `funnel_step_${step.stepNumber}`, JSON.stringify(variants))
+        generationsUsed++
+
+        // Невелика затримка між запитами
+        await new Promise(resolve => setTimeout(resolve, 300))
+
+      } catch (error: any) {
+        console.error(`❌ Error generating step ${step.stepNumber}:`, error)
+        results.push({
+          stepNumber: step.stepNumber,
+          success: false,
+          error: error.message
+        })
+      }
+    }
+
+    res.json({ 
+      success: true,
+      results,
+      generationsUsed,
+      remaining: remaining - generationsUsed
+    })
+
+  } catch (error: any) {
+    console.error('❌ Bulk generate error:', error)
+    res.status(500).json({ 
+      success: false,
+      error: 'bulk_generation_failed',
+      message: error.message 
+    })
+  }
+})
+
+export default router

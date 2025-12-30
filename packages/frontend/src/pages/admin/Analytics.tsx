@@ -5,8 +5,8 @@ import {
   Mail, MessageCircle, CreditCard, Filter,
   Calendar, Download, ArrowUpRight, ArrowDownRight
 } from 'lucide-react'
-import { Select } from '../../components/ui/Select'
-import { Button } from '../../components/ui/Button'
+import { Select } from '@starway-studio/shared/ui/Select.js'
+import { Button } from '@starway-studio/shared/ui/Button.js'
 
 type TimeRange = '7d' | '30d' | '90d' | 'all'
 

@@ -1,12 +1,17 @@
 // packages/frontend/tsconfig.json
+
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
+    "baseUrl": ".",
     "paths": {
-      "@starway-studio/shared": ["../shared/src"],
-      "@frontend/*": ["./src/*"]
-    }
+      "@frontend/*": ["./src/*"],
+      "@starway/shared": ["../shared/src"],
+      "@starway/shared/*": ["../shared/src/*"]
+    },
+    "jsx": "react-jsx",
+    "types": ["vite/client"]
   },
-  "include": ["src", "src/main.tsx"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

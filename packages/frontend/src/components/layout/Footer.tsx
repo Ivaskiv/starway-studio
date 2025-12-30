@@ -2,46 +2,46 @@
 
 export default function Footer() {
   return (
-    <footer className="border-t border-white/10 mt-20 bg-gray-950">
+    <footer className="border-t border-white/10 mt-20 glass-card rounded-none">
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           
           {/* Copyright */}
-          <p className="text-gray-400 text-sm">
-            © 2025 Starway Studio. Створено з 💜
+          <p className="text-slate-400 text-sm">
+            © 2025 Starway Studio. Створено з 🧡
           </p>
 
           {/* Links */}
           <div className="flex items-center gap-4 text-sm">
             <a 
               href="/privacy" 
-              className="text-gray-400 hover:text-white transition"
+              className="text-slate-400 hover:text-white transition"
             >
               Політика конфіденційності
             </a>
-            <span className="text-gray-600">•</span>
+            <span className="text-slate-600">•</span>
             <a 
               href="/terms" 
-              className="text-gray-400 hover:text-white transition"
+              className="text-slate-400 hover:text-white transition"
             >
               Умови використання
             </a>
-            <span className="text-gray-600">•</span>
+            <span className="text-slate-600">•</span>
             <a 
               href="/contact" 
-              className="text-gray-400 hover:text-white transition"
+              className="text-slate-400 hover:text-white transition"
             >
               Контакти
             </a>
           </div>
 
-          {/* Social (опціонально) */}
+          {/* Social */}
           <div className="flex items-center gap-3">
             <a 
               href="https://t.me/your_channel" 
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 hover:text-white transition"
+              className="text-slate-400 hover:text-white transition p-2 glass-button rounded-lg"
               aria-label="Telegram"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -52,7 +52,7 @@ export default function Footer() {
               href="https://instagram.com/your_profile" 
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 hover:text-white transition"
+              className="text-slate-400 hover:text-white transition p-2 glass-button rounded-lg"
               aria-label="Instagram"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
