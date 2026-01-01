@@ -1,73 +1,54 @@
 // packages/backend/src/index.ts
 
-import 'dotenv/config'
-import express from 'express'
-import cors from 'cors'
-import morgan from 'morgan'
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
 
-// routes
-import authRoutes from './routes/auth.js'
-import productsRoutes from './routes/products.js'
-import funnelsRoutes from './routes/funnels.js'
-import aiRoutes from './routes/ai.js'
-import systemRoutes from './routes/system.js'
+console.log('🔍 Environment check:');
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✅ Set' : '❌ Not set');
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✅ Set' : '❌ Not set');
+console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? '✅ Set' : '❌ Not set');
 
-const app = express()
-const PORT = process.env.PORT || 3001
+import authRoutes from './auth';
+import funnelsRoutes from './funnel';
+import usersRoutes from './users';
+import aiRoutes from './ai'; 
+import wayforpayRoutes from '../payments/wayforpay'; 
 
-// ─────────────────────────────────────────────
-// Middleware
-// ─────────────────────────────────────────────
+const app = express();
 
-app.use(cors({ origin: true, credentials: true }))
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true }))
+app.use(cors());
+app.use(express.json());
 
-if (process.env.NODE_ENV !== 'production') {
-  app.use(morgan('dev'))
-}
+app.get('/health', (_req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    env: process.env.NODE_ENV 
+  });
+});
 
-// ─────────────────────────────────────────────
-// Routes
-// ─────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/funnels', funnelsRoutes);
+app.use('/api/ai', aiRoutes); 
+app.use('/api/payments/wayforpay', wayforpayRoutes);
 
-app.use('/api/auth', authRoutes)
-app.use('/api/products', productsRoutes)
-app.use('/api/funnels', funnelsRoutes)
-app.use('/api/ai', aiRoutes)
-app.use('/api', systemRoutes)
+const PORT = process.env.PORT || 3001;
 
-// ─────────────────────────────────────────────
-// Health check
-// ─────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`🚀 API: http://localhost:${PORT}/api`);
+});
 
-app.get('/', (_req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Starway Backend API',
-    version: '3.0.0',
-  })
-})
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
 
-// ─────────────────────────────────────────────
-// Global error handler
-// ─────────────────────────────────────────────
+process.on('SIGINT', () => {
+  console.log('👋 SIGINT received, shutting down gracefully');
+  process.exit(0);
+});
 
-app.use((err: any, _req: any, res: any, _next: any) => {
-  console.error('[ERROR]', err)
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-  })
-})
-
-// ─────────────────────────────────────────────
-// Start server (local only)
-// ─────────────────────────────────────────────
-
-if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`✅ Backend running on http://localhost:${PORT}`)
-  })
-}
-
-export default app
+export default app;

@@ -8,6 +8,9 @@
     "target": "ESNext",
     "outDir": "dist",
     "rootDir": "src",
+    "paths": {
+      "@starway/shared/*": ["../shared/src/*"]
+    },
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -16,5 +19,5 @@
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,},
-  "include": ["src"]
+  "include": ["src", "../shared/src"]
 }
