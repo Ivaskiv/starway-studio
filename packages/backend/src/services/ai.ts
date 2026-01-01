@@ -26,9 +26,9 @@ interface PromptAnalysis {
 }
 
 export async function generateWithAI(
-  field: string,
+  _field: string,
   prompt: string,
-  context?: any
+  _context?: any
 ): Promise<string> {
   if (!prompt?.trim()) {
     throw new Error('Prompt cannot be empty')

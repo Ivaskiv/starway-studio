@@ -1,31 +1,54 @@
-// starway-studio/packages/backend/src/api/generate.ts
-import OpenAI from 'openai'
+// // starway-studio/packages/backend/src/api/generate.ts
+// import OpenAI from 'openai'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!
-})
+// const openai = new OpenAI({
+//   apiKey: process.env.OPENAI_API_KEY!
+// })
 
-export async function generateWithAI(
-  field: string,
-  prompt: string,
-  context?: any
-): Promise<string> {
-  if (!prompt.trim()) {
-    throw new Error('Empty prompt')
-  }
+// export async function generateWithAI(
+//   _field: string,
+//   prompt: string,
+//   _context?: any
+// ): Promise<string> {
+//   if (!prompt.trim()) {
+//     throw new Error('Empty prompt')
+//   }
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.6,
-    max_tokens: 600,
-    messages: [
-      { role: 'system', content: 'You are a helpful AI assistant.' },
-      { role: 'user', content: prompt }
-    ]
-  })
+//  if (!process.env.OPENAI_API_KEY) {
+//     throw new Error('OPENAI_API_KEY is not configured');
+//   }
 
-  const text = response.choices[0]?.message?.content
-  if (!text) throw new Error('Empty AI response')
+//   try {
+//     const completion = await openai.chat.completions.create({
+//       model: 'gpt-4o',
+//       temperature: 0.7,
+//       max_tokens: 2000,
+//       messages: [
+//         {
+//           role: 'user',
+//           content: prompt
+//         }
+//       ]
+//     });
 
-  return text
-}
+//     const result = completion.choices[0]?.message?.content?.trim();
+
+//     if (!result) {
+//       throw new Error('AI returned empty response');
+//     }
+
+//     return result;
+
+//   } catch (error: any) {
+//     console.error('❌ OpenAI Error:', error.message);
+
+//     if (error.status === 401) {
+//       throw new Error('Invalid OPENAI_API_KEY');
+//     }
+//     if (error.status === 429) {
+//       throw new Error('Rate limit exceeded');
+//     }
+
+//     throw new Error(`AI generation failed: ${error.message}`);
+//   }
+// }
