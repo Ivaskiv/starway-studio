@@ -2,13 +2,7 @@
 import { useState } from 'react'
 import { Button } from '@/ui'
 import { VariantCard } from '../../ai-generator/components/VariantCard';
-
-interface Props {
-  userInput: string
-  context: Record<string, string>
-  onConfirm: (selected: string) => void
-  generate: (payload: { userInput: string; context: Record<string, string> }) => Promise<{ variants: string[] }>
-}
+import { Props } from '@/features/funnels/types/funnel.types';
 
 export function FunnelVariants({
   userInput,

@@ -5,17 +5,17 @@ import { useForm, Controller } from 'react-hook-form'
 import { useParams, useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 
-import {
-  ProductFormInputs,
-  ProductType,
-  Currency,
-  ProductFormat,
-  ProductIntegration,
-  PRODUCT_TYPE_LABELS,
-  CURRENCY_SYMBOLS,
-  Product,
-  Module,
-} from '@/features/products/types/product.types'
+// import {
+//   ProductFormInputs,
+//   ProductType,
+//   Currency,
+//   ProductFormat,
+//   ProductIntegration,
+//   PRODUCT_TYPE_LABELS,
+//   CURRENCY_SYMBOLS,
+//   Product,
+//   Module,
+// } from '@/features/products/types/product.types'
 
 import { Input, Button, Select, Textarea } from '@/ui'
 import {

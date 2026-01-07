@@ -1,13 +1,9 @@
 // packages/frontend/src/features/funnels/components/FunnelProgressTracker.tsx
-import { FUNNEL_STEP_DEFINITIONS, TOTAL_FUNNEL_STEPS } from '@/features/funnels/types/funnel.types'
+import { FUNNEL_STEP_DEFINITIONS, Props, TOTAL_FUNNEL_STEPS } from '@/features/funnels/types/funnel.types'
 import { GlassCard } from '@/ui'
 import { Check, Sparkles, Zap } from 'lucide-react'
 
-interface Props {
-  currentStep: number
-  completedSteps: number[]
-  remainingAttempts: number
-}
+
 
 export function FunnelProgressTracker({ currentStep, completedSteps, remainingAttempts }: Props) {
   const progress = Math.round((completedSteps.length / TOTAL_FUNNEL_STEPS) * 100)

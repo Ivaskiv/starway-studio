@@ -2,11 +2,11 @@
 
 import { Module } from '@/features/products/types/product.education'
 import type {
-  ProductType,
-  ProductFormat,
-  ProductIntegration,
-  Currency,
-  ProductStatus,
+  // ProductType,
+  // ProductFormat,
+  // ProductIntegration,
+  // Currency,
+  // ProductStatus,
   ProductBase,
 } from './product.base'
 
@@ -46,32 +46,32 @@ export interface Product extends ProductBase{
 // // PRODUCT TYPES
 // // ═══════════════════════════════════════════════════════════════
 
-// export type ProductType =
-//   | 'course'
-//   | 'membership'
-//   | 'coaching'
-//   | 'digital_product'
-//   | 'webinar'
-//   | 'ebook'
-//   | 'mini_app'
-//   | 'telegram_bot'
-//   | 'service'
-//   | 'physical_product'
-//   | 'other'
+export type ProductType =
+  | 'course'
+  | 'membership'
+  | 'coaching'
+  | 'digital_product'
+  | 'webinar'
+  | 'ebook'
+  | 'mini_app'
+  | 'telegram_bot'
+  | 'service'
+  | 'physical_product'
+  | 'other'
 
-// export type ProductFormat =
-//   | 'web'
-//   | 'mini_app'
-//   | 'telegram_task'
-//   | 'mixed' // web + telegram
+export type ProductFormat =
+  | 'web'
+  | 'mini_app'
+  | 'telegram_task'
+  | 'mixed' // web + telegram
 
-// export type ProductIntegration =
-//   | 'telegram'
-//   | 'web'
-//   | 'future' // для майбутніх соцмереж
+export type ProductIntegration =
+  | 'telegram'
+  | 'web'
+  | 'future' // для майбутніх соцмереж
 
-// export type Currency = 'UAH' | 'USD' | 'EUR'
-// export type ProductStatus = 'draft' | 'published' | 'archived'
+export type Currency = 'UAH' | 'USD' | 'EUR'
+export type ProductStatus = 'draft' | 'published' | 'archived'
 
 // // ═══════════════════════════════════════════════════════════════
 // // MODULE & LESSON
@@ -160,25 +160,25 @@ export interface Product extends ProductBase{
 // // Додаткові утиліти
 // // ═══════════════════════════════════════════════════════════════
 
-// export const PRODUCT_TYPE_LABELS: Record<ProductType, string> = {
-//   course: 'Онлайн-курс',
-//   membership: 'Підписка',
-//   coaching: 'Коучинг / Наставництво',
-//   digital_product: 'Цифровий продукт',
-//   webinar: 'Вебінар',
-//   ebook: 'Електронна книга',
-//   mini_app: 'Telegram Mini App',
-//   telegram_bot: 'Telegram-бот',
-//   service: 'Послуга',
-//   physical_product: 'Фізичний товар',
-//   other: 'Інше',
-// }
+export const PRODUCT_TYPE_LABELS: Record<ProductType, string> = {
+  course: 'Онлайн-курс',
+  membership: 'Підписка',
+  coaching: 'Коучинг / Наставництво',
+  digital_product: 'Цифровий продукт',
+  webinar: 'Вебінар',
+  ebook: 'Електронна книга',
+  mini_app: 'Telegram Mini App',
+  telegram_bot: 'Telegram-бот',
+  service: 'Послуга',
+  physical_product: 'Фізичний товар',
+  other: 'Інше',
+}
 
-// export const CURRENCY_SYMBOLS: Record<Currency, string> = {
-//   UAH: '₴',
-//   USD: '$',
-//   EUR: '€',
-// }
+export const CURRENCY_SYMBOLS: Record<Currency, string> = {
+  UAH: '₴',
+  USD: '$',
+  EUR: '€',
+}
 
 // // ═══════════════════════════════════════════════════════════════
 // // AI GENERATOR TYPES (для FunnelBlueprint / StepData)

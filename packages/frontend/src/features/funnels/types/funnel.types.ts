@@ -133,6 +133,11 @@ export interface FunnelGenerationAttempt {
   isSelected: boolean
 }
 
+export interface FunnelCardProps {
+  funnel: Funnel
+  onUpdate?: () => void
+}
+
 // export interface FunnelBlueprint {
 // name: string
 //   audience: string
@@ -154,3 +159,24 @@ export type PaymentProvider = 'wayforpay' | 'stripe' | 'liqpay' | 'fondy';
 export interface FunnelSettings { domain?: string; theme: { primaryColor: string; fontFamily: string } }
 export interface FunnelAnalytics { views: number; uniqueVisitors: number; conversions: number; revenue: number; stepAnalytics: StepAnalytics[] }
 export interface StepAnalytics { stepId: string; views: number; completions: number; dropoffRate: number; avgTimeSpent: number }
+
+export interface Props {
+  currentStep: number
+  completedSteps: number[]
+  remainingAttempts: number
+  step: FunnelStepDefinition
+  userInput: string
+  onUserInputChange: (value: string) => void
+  onGenerate: (newVariants: string[]) => void
+  attempts: { id: string; content: string; isSelected: boolean }[]
+  onSelectVariant: (id: string) => void
+  isGenerating?: boolean
+  context: Record<string, string>
+  onConfirm: (selected: string) => void
+  generate: (payload: { userInput: string; context: Record<string, string> }) => Promise<{ variants: string[] }>
+}
+
+
+export interface FunnelDashboardProps {
+  funnelId: string;
+}

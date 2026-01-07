@@ -2,19 +2,8 @@
 
 import { Sparkles, RefreshCw, Check } from 'lucide-react'
 import { Button, GlassCard, Textarea } from '@/ui'
-import { type FunnelStepDefinition } from '@/features/funnels/types/funnel.types'
+import { Props, type FunnelStepDefinition } from '@/features/funnels/types/funnel.types'
 import { useGenerateFunnelVariantsMutation } from '@/services'
-
-interface Props {
-  step: FunnelStepDefinition
-  userInput: string
-  onUserInputChange: (value: string) => void
-  onGenerate: (newVariants: string[]) => void
-  remainingAttempts: number
-  attempts: { id: string; content: string; isSelected: boolean }[]
-  onSelectVariant: (id: string) => void
-  isGenerating?: boolean
-}
 
 export function FunnelStepCard({
   step,
