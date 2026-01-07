@@ -1,11 +1,11 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/pages/funnels/FunnelCreatePage.tsx
 // packages/frontend/src/pages/dashboard/funnels/FunnelCreatePage.tsx
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Sparkles } from 'lucide-react';
+import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Button, Input, Textarea } from '@starway/shared/ui';
-import { FunnelTheme } from '@starway/shared';
-import { AIFunnelGeneratorSidebar } from '@frontend/components/aIGenerator/AIFunnelGeneratorSidebar';
+import { useNavigate } from 'react-router-dom';
+import { FunnelTheme } from '../../features/funnels/types/funnelsTypes';
+import { Button, Input, Textarea } from '../../ui';
 
 const FunnelCreatePage = () => {
   const navigate = useNavigate();
@@ -73,7 +73,6 @@ const handleSubmit = async (e: React.FormEvent) => {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button
-            variant="ghost"
             size="sm"
             onClick={() => navigate('/dashboard/funnels')}
             className="glass-button"
@@ -89,7 +88,6 @@ const handleSubmit = async (e: React.FormEvent) => {
         </div>
 
         <Button
-          variant="ghost"
           size="md"
           onClick={() => setShowAIGenerator(!showAIGenerator)}
           className={`glass-button ${showAIGenerator ? 'ring-2 ring-orange-500' : ''}`}
@@ -171,7 +169,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               <div className="flex space-x-4">
                 <Button
                   type="submit"
-                  variant="primary"
                   size="lg"
                   disabled={loading || !formData.name}
                   className="gradient-button"
@@ -181,7 +178,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </Button>
                 <Button
                   type="button"
-                  variant="ghost"
                   size="lg"
                   onClick={() => navigate('/dashboard/funnels')}
                   className="glass-button"
@@ -216,7 +212,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                     Дозвольте AI створити воронку автоматично на основі вашої ніші та цілей
                   </p>
                   <Button
-                    variant="primary"
                     size="md"
                     className="gradient-button w-full"
                     onClick={() => setShowAIGenerator(true)}

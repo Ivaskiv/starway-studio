@@ -1,9 +1,10 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/features/demo/Block0Form.tsx
 // packages/frontend/src/pages/demo/steps/Block0Form.tsx
 
 import React from 'react'
 import { useForm } from 'react-hook-form'
-import { Button, Input, Label, Select, Textarea } from '@frontend/components/ui';
-import { SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/Select';
+import { Button, Input, Label, Select, Textarea } from '@/components/ui';
+import { SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 
 interface Block0FormData {
   businessName: string

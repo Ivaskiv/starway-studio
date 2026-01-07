@@ -1,17 +1,18 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/pages/funnels/FunnelsPage.tsx
 // packages/frontend/src/pages/dashboard/funnels/FunnelsPage.tsx
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Grid, List, Sparkles } from 'lucide-react';
-import { Button, Input, Select } from '@starway/shared/ui';
-import { Funnel, getFunnelThemeConfig } from '@starway/shared';
-import { useAppDispatch, useAppSelector } from '@frontend/store/hooks';
-import { fetchFunnels, deleteFunnel } from '@frontend/store/funnels/funnelsOperations';
+import { Button, Input, Select } from '@/ui';
+import { Funnel, getFunnelThemeConfig } from '@/types';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { fetchFunnels, deleteFunnel } from '@/store/funnels/funnelsOperations';
 import { 
   selectFunnels, 
   selectFunnelsLoading, 
   selectFunnelsError 
-} from '@frontend/store/funnels/funnelsSelectors';
+} from '@/store/funnels/funnelsSelectors';
 import toast from 'react-hot-toast';
 
 const FunnelsPage = () => {

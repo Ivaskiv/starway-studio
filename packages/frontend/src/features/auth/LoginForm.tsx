@@ -1,28 +1,24 @@
-// packages/shared/src/components/auth/LoginForm.tsx
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/features/auth/LoginForm.tsx
 
-import { useForm } from 'react-hook-form';
+import {  Card, CardContent, CardHeader, ErrorAlert, FormField, PasswordField } from '../../ui';
 import { Mail } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@starway-studio/shared/ui/Button.js';
-import { FormField } from '@starway-studio/shared/ui/FormField.js';
-import { PasswordField } from '@starway-studio/shared/ui/PasswordField.js';
-import { ErrorAlert } from '@starway-studio/shared/ui/ErrorAlert.js';
-import { Card, CardContent, CardHeader } from '@starway-studio/shared/ui/Card.js';
-import { cn } from '@starway-studio/shared/utils/cn.js';
+import { useForm } from 'react-hook-form';
+import Button from '../../ui/Button';
 
-interface LoginFormData {
+export interface LoginFormData {
   email: string;
   password: string;
 }
 
-interface LoginFormProps {
+export interface LoginFormProps {
   onSubmit: (email: string, password: string) => Promise<void>;
   onRegisterClick?: () => void;
   className?: string;
   isLoading?: boolean;
 }
 
-export function LoginForm({ 
+export default function LoginForm({ 
   onSubmit: handleLoginSubmit, 
   onRegisterClick, 
   className,
@@ -49,7 +45,7 @@ export function LoginForm({
   const loading = isLoading || isSubmitting;
 
   return (
-    <Card className={cn('w-full animate-scale-in', className)} hover glass>
+    <Card className={'w-full animate-scale-in'} hover glass>
       <CardHeader>
         <h2 className="text-2xl font-bold text-center mb-2">Вхід</h2>
         <p className="text-text-secondary text-center text-sm">
@@ -82,26 +78,20 @@ export function LoginForm({
             })}
           />
 
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            className="w-full"
-            isLoading={loading}
-            disabled={loading}
-          >
+          <Button 
+          type="submit" 
+          size="lg" 
+          isLoading={loading} 
+          disabled={loading}>
             Увійти
           </Button>
 
           {onRegisterClick && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="md"
-              className="w-full"
-              onClick={onRegisterClick}
-              disabled={loading}
-            >
+            <Button 
+            type="button" 
+            size="md" 
+            onClick={onRegisterClick} 
+            disabled={loading}>
               Створити акаунт
             </Button>
           )}

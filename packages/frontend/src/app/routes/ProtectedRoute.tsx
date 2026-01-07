@@ -1,32 +1,38 @@
-// packages/shared/src/components/auth/ProtectedRoute.tsx
+// packages/frontend/src/components/auth/ProtectedRoute.tsx
 
 import { Navigate, useLocation } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { AlertCircle, Loader } from 'lucide-react';
+import { Button, GlassCard } from '@/ui';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: ('user' | 'funnel_admin' | 'super_admin')[];
-  redirectTo?: string;
-  user?: { role: string } | null;
-  isAuthenticated?: boolean;
+  allowedRoles?: string[];
 }
 
-export function ProtectedRoute({ 
-  children, 
-  allowedRoles,
-  redirectTo = '/auth',
-  user,
-  isAuthenticated 
-}: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+  const { authStatus, user } = useAuth();
   const location = useLocation();
 
-  // Not authenticated
-  if (!isAuthenticated) {
-    return <Navigate to={redirectTo} state={{ from: location }} replace />;
+  // ✅ КЛЮЧ: Поки loading - НЕ редіректимо
+  if (authStatus === 'loading') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <GlassCard className="p-12 flex flex-col items-center gap-4" data-blur="xl">
+          <Loader className="w-12 h-12 animate-spin text-orange-500" />
+          <p className="text-white/60">Перевірка аутентифікації...</p>
+        </GlassCard>
+      </div>
+    );
   }
 
-  // Check role permissions
-  if (allowedRoles && user && !allowedRoles.includes(user.role as any)) {
+  // ✅ Тільки ПІСЛЯ loading - редіректимо
+  if (authStatus === 'guest') {
+    return <Navigate to="/auth" state={{ from: location }} replace />;
+  }
+
+  // ✅ Перевірка ролі
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950 p-4">
         <div className="text-center space-y-4 max-w-md">
@@ -34,15 +40,10 @@ export function ProtectedRoute({
             <AlertCircle className="w-8 h-8 text-red-400" />
           </div>
           <h2 className="text-2xl font-bold text-white">Доступ заборонено</h2>
-          <p className="text-gray-400">
-            У тебе немає прав для перегляду цієї сторінки
-          </p>
-          <button
-            onClick={() => window.history.back()}
-            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition"
-          >
+          <p className="text-gray-400">У тебе немає прав для перегляду цієї сторінки</p>
+          <Button onClick={() => window.history.back()} className="gradient-button">
             Повернутись назад
-          </button>
+          </Button>
         </div>
       </div>
     );

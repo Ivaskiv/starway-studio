@@ -1,5 +1,5 @@
 import { calculateConversion } from '@/utils/calculate'
-import { FunnelStats } from '@starway/shared'
+import { FunnelStats } from '@/types'
 
 export const useFunnelConversion = (
   stats: FunnelStats | null

@@ -1,24 +1,27 @@
-// packages/shared/src/components/auth/RegisterForm.tsx
-
-import { useForm } from 'react-hook-form';
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/components/auth/RegisterForm.tsx
+import { cn } from '../../lib';
+import {  
+  Card, 
+  CardContent, 
+  CardHeader, 
+  ErrorAlert, 
+  FormField, 
+  PasswordField, 
+  PasswordStrength
+} from '../../ui';
 import { Mail, User as UserIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@starway-studio/shared/ui/Button.js';
-import { FormField } from '@starway-studio/shared/ui/FormField.js';
-import { PasswordField } from '@starway-studio/shared/ui/PasswordField.js';
-import { PasswordStrength } from '@starway-studio/shared/ui/PasswordStrength.js';
-import { ErrorAlert } from '@starway-studio/shared/ui/ErrorAlert.js';
-import { Card, CardContent, CardHeader } from '@starway-studio/shared/ui/Card.js';
-import { cn } from '@starway-studio/shared/utils/cn.js';
+import { useForm } from 'react-hook-form';
+import Button from '../../ui/Button';
 
-interface RegisterFormData {
+export interface RegisterFormData {
   name: string;
   email: string;
   password: string;
   confirmPassword: string;
 }
 
-interface RegisterFormProps {
+export interface RegisterFormProps {
   onSubmit: (name: string, email: string, password: string) => Promise<void>;
   onLoginClick?: () => void;
   variant?: 'default' | 'funnel-admin';
@@ -26,7 +29,7 @@ interface RegisterFormProps {
   isLoading?: boolean;
 }
 
-export function RegisterForm({
+export default function RegisterForm({
   onSubmit: handleRegisterSubmit,
   onLoginClick,
   variant = 'default',
@@ -34,25 +37,16 @@ export function RegisterForm({
   isLoading = false
 }: RegisterFormProps) {
   const [serverError, setServerError] = useState('');
-
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<RegisterFormData>();
-
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<RegisterFormData>();
   const password = watch('password', '');
   const loading = isLoading || isSubmitting;
 
   const onSubmit = async (data: RegisterFormData) => {
     setServerError('');
-
     if (data.password !== data.confirmPassword) {
       setServerError('Паролі не співпадають');
       return;
     }
-
     try {
       await handleRegisterSubmit(data.name, data.email, data.password);
     } catch (err) {
@@ -124,8 +118,8 @@ export function RegisterForm({
 
           <Button
             type="submit"
-            variant="primary"
-            size="lg"
+            data-color="orange"
+            data-size="lg"
             className="w-full"
             isLoading={loading}
             disabled={loading}
@@ -136,8 +130,9 @@ export function RegisterForm({
           {onLoginClick && (
             <Button
               type="button"
-              variant="ghost"
-              size="md"
+              data-color="orange"
+              data-size="md"
+              // variant="ghost"
               className="w-full"
               onClick={onLoginClick}
               disabled={loading}

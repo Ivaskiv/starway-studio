@@ -1,21 +1,21 @@
-// packages/backend/tsconfig.json
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "module": "ESNext",
-    "lib": ["ES2020"],
+    "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    // "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/api/generate.ts"]
+  "exclude": ["node_modules", "dist"]
 }

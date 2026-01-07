@@ -1,19 +1,19 @@
 // packages/backend/src/index.ts
 
+import cors from 'cors';
 import 'dotenv/config';
 import express from 'express';
-import cors from 'cors';
 
 console.log('🔍 Environment check:');
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✅ Set' : '❌ Not set');
 console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✅ Set' : '❌ Not set');
 console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? '✅ Set' : '❌ Not set');
 
+import wayforpayRoutes from '../payments/wayforpay';
+import aiRoutes from './ai';
 import authRoutes from './auth';
 import funnelsRoutes from './funnel';
 import usersRoutes from './users';
-import aiRoutes from './ai'; 
-import wayforpayRoutes from '../payments/wayforpay'; 
 
 const app = express();
 

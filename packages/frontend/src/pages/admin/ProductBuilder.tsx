@@ -1,3 +1,4 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/pages/admin/ProductBuilder.tsx
 // src/pages/admin/ProductBuilder.tsx
 import { useState } from 'react';
 import { Sparkles, Video, FileText, CheckSquare, MessageCircle, Calendar, Gift, ClipboardCheck, Trash2, Save, ArrowLeft, Plus, GripVertical } from 'lucide-react';
@@ -5,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Select } from '@/components/ui/Select';
-import { Block, ProductForm, BlockType, SaveProductRequest } from '@starway/shared';
+import { Block, ProductForm, BlockType, SaveProductRequest } from '@/types';
 
 interface BlockTypeUI {
   type: BlockType;

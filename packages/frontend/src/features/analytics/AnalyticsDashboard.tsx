@@ -1,6 +1,7 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/features/analytics/AnalyticsDashboard.tsx
 // packages/frontend/src/pages/dashboard/Analytics.tsx
 
-import { Card, CardHeader, CardContent } from '@starway-studio/shared';
+import { Card, CardContent } from '@/ui';
 import { BarChart3 } from 'lucide-react';
 
 const Analytics = () => {

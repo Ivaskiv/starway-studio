@@ -1,15 +1,12 @@
 // src/pages/admin/LiveAnalytics.tsx
-// Live Analytics - real-time dashboard з auto-refresh
 
 
 import { useState, useEffect } from 'react'
-import { Select } from '@starway-studio/shared/ui/Select.js'
-import { Button } from '@starway-studio/shared/ui/Button.js'
 import { 
   Activity, TrendingUp, Users, DollarSign,
   ArrowUpRight, ArrowDownRight, Download, RefreshCw
 } from 'lucide-react'
-import { analyticsApi } from '../../services/api'
+import {  useGetDashboardStatsQuery } from '@/services'
 
 export default function LiveAnalytics() {
   const [period, setPeriod] = useState('30d')
@@ -26,7 +23,7 @@ export default function LiveAnalytics() {
   const loadAnalytics = async () => {
     setIsRefreshing(true)
     try {
-      const data = await analyticsApi.getDashboardStats()
+      const data = await useGetDashboardStatsQuery()
       setAnalytics(data)
     } catch (error) {
       console.error('Failed to load analytics:', error)

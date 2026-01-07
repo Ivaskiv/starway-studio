@@ -1,6 +1,7 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/pages/products/ProductsPage.tsx
 // packages/frontend/src/pages/dashboard/Products.tsx
 
-import { Card, CardHeader, CardContent } from '@starway-studio/shared';
+import { Card, CardContent } from '@/ui';
 import { Package } from 'lucide-react';
 
 const Products = () => {

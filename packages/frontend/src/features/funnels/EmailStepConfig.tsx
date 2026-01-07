@@ -1,7 +1,7 @@
 // packages/frontend/src/components/funnel/stepConfigs/EmailStepConfig.tsx
 
 import { Mail } from 'lucide-react';
-import { Input, Textarea } from '@starway/shared/ui';
+import { Input, Textarea } from '@/ui';
 
 interface EmailStepConfigProps {
   config: any;

@@ -1,6 +1,6 @@
 /** src/features/funnel/data/demoFunnelTemplate.ts */
 
-import { FunnelStep } from "@starway/shared";
+import { FunnelStep } from "@/types";
 
 
 export const DEMO_FUNNEL_STEPS: FunnelStep[] = [

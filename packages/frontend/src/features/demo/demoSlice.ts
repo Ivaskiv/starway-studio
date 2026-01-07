@@ -3,7 +3,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import { login } from '../features/auth/authSlice'
 import { DemoFunnelResult, DemoFunnelStage, DemoState } from './demoTypes'
 import { DEMO_MENTOR, DEMO_STUDENT, DEMO_ADMIN } from './demoUsers'
-import { AuthUser } from '@starway/shared/src/types/api'
+import { AuthUser } from '@/types/src/types/api'
 import { api } from '@/lib/api';
 
 // fake AI funnel генератор

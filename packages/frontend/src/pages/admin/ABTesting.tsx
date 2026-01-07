@@ -1,42 +1,16 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/pages/admin/ABTesting.tsx
 // src/pages/admin/ABTesting.tsx
 // 
 import { useState } from 'react'
-import { Button } from '@starway-studio/shared/ui/Button.js'
-import { Input } from '@starway-studio/shared/ui/Input.js'
-import { Select } from '@starway-studio/shared/ui/Select.js'
 import { 
   FlaskConical, Play, Pause, TrendingUp, 
   Copy, CheckCircle, XCircle, BarChart3,
   Target, Users, DollarSign
 } from 'lucide-react'
+import { ABTest } from './adminTypes'
+import { Button } from '../../ui'
 
-interface ABTest {
-  id: string
-  name: string
-  status: 'draft' | 'running' | 'paused' | 'completed'
-  variants: Variant[]
-  metric: string
-  startDate?: string
-  endDate?: string
-  traffic: number
-  results?: TestResults
-}
 
-interface Variant {
-  id: string
-  name: string
-  traffic: number
-  conversions: number
-  visitors: number
-  revenue: number
-  isControl: boolean
-}
-
-interface TestResults {
-  winner?: string
-  confidence: number
-  improvement: number
-}
 
 export default function ABTesting() {
   const [tests, setTests] = useState<ABTest[]>([
@@ -51,7 +25,7 @@ export default function ABTesting() {
         { id: 'a', name: 'Контроль', traffic: 50, conversions: 89, visitors: 423, revenue: 106800, isControl: true },
         { id: 'b', name: 'Варіант B', traffic: 50, conversions: 112, visitors: 445, revenue: 134400, isControl: false }
       ],
-      results: { winner: 'b', confidence: 95, improvement: 25.8 }
+      results: { winnerId: 'b', confidence: 95, improvement: 25.8 }
     },
     {
       id: '2',
@@ -119,7 +93,7 @@ export default function ABTesting() {
           <p className="text-gray-400">Оптимізуй конверсії через експерименти</p>
         </div>
 
-        <Button variant="primary">
+        <Button>
           <FlaskConical size={16} />
           Новий тест
         </Button>
@@ -167,7 +141,7 @@ export default function ABTesting() {
               <div className="flex gap-2">
                 {test.status === 'running' && (
                   <Button
-                    variant="ghost"
+                  
                     onClick={(e) => {
                       e.stopPropagation()
                       pauseTest(test.id)
@@ -181,7 +155,6 @@ export default function ABTesting() {
 
                 {test.status === 'paused' && (
                   <Button
-                    variant="ghost"
                     onClick={(e) => {
                       e.stopPropagation()
                       startTest(test.id)
@@ -194,7 +167,6 @@ export default function ABTesting() {
                 )}
 
                 <Button
-                  variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation()
                     duplicateTest(test.id)
@@ -214,7 +186,7 @@ export default function ABTesting() {
                   ? ((variant.conversions / variant.visitors) * 100).toFixed(1)
                   : '0'
 
-                const isWinner = test.results?.winner === variant.id
+                const isWinner = test.results?.winnerId === variant.id
 
                 return (
                   <div

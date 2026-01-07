@@ -1,3 +1,4 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/pages/admin/Modules.tsx
 // src/pages/admin/Modules.tsx
 import { useState } from 'react'
 import { moduleManager } from '../../lib/moduleManager'

@@ -1,6 +1,6 @@
 // src/features/demo/demoModels.ts
 
-import { Module } from "@starway/shared/src/types/api";
+import { Module } from "@/types/src/types/api";
 
 export const DEMO_MODULES: Module[] = [
   {

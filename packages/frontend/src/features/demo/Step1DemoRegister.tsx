@@ -1,3 +1,4 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/features/demo/Step1DemoRegister.tsx
 // src/pages/demo/steps/Step1DemoRegister.tsx
 import { useState } from 'react'
 import { Input, Button } from '@/components/ui'

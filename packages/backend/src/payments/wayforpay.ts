@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 
-interface PaymentData {
+export interface PaymentData {
   orderReference: string;
   amount: number;
   currency: string;
@@ -14,7 +14,7 @@ interface PaymentData {
   clientLastName: string;
 }
 
-export function generateSignature(data: PaymentData): string {
+export default function generateSignature(data: PaymentData): string {
   const merchantAccount = process.env.WAYFORPAY_MERCHANT_ACCOUNT || '';
   const merchantSecret = process.env.WAYFORPAY_SECRET_KEY || '';
 

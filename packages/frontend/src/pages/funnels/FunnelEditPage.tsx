@@ -1,13 +1,14 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/pages/funnels/FunnelEditPage.tsx
 // packages/frontend/src/pages/dashboard/funnels/FunnelEditPage.tsx
 
+import AIStepGenerator from '@/components/aIGenerator/AIStepGenerator';
+import StepList from '@/features/funnels/components/StepList';
+import { Funnel, FunnelStep, StepType } from '@/types';
+import { Button, Input, Textarea } from '@/ui';
+import { ArrowLeft, Play, Plus, Save, Settings, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Play, Settings, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { Button, Input, Textarea } from '@starway/shared/ui';
-import { Funnel, FunnelStep, StepType } from '@starway/shared';
 import toast from 'react-hot-toast';
-import AIStepGenerator from '@frontend/components/aIGenerator/AIStepGenerator';
-import StepList from '@frontend/components/funnel/StepList';
+import { useNavigate, useParams } from 'react-router-dom';
 
 const FunnelEditPage = () => {
   const { id } = useParams<{ id: string }>();

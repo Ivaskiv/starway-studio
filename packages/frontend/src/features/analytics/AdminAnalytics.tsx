@@ -1,3 +1,4 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/features/analytics/AdminAnalytics.tsx
 // src/pages/admin/Analytics.tsx
 import { useState } from 'react'
 import { 
@@ -5,8 +6,7 @@ import {
   Mail, MessageCircle, CreditCard, Filter,
   Calendar, Download, ArrowUpRight, ArrowDownRight
 } from 'lucide-react'
-import { Select } from '@starway-studio/shared/ui/Select.js'
-import { Button } from '@starway-studio/shared/ui/Button.js'
+import { Button, Select } from '@/ui'
 
 type TimeRange = '7d' | '30d' | '90d' | 'all'
 
@@ -154,7 +154,7 @@ export default function Analytics() {
 
           {/* Export */}
           <Button
-            variant="secondary"
+            // variant="secondary"
             className="flex items-center gap-2"
             aria-label="Експортувати дані"
           >

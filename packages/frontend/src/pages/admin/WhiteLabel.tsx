@@ -1,3 +1,4 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/src/pages/admin/WhiteLabel.tsx
 // src/pages/admin/FunnelManager.tsx
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
