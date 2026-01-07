@@ -1,9 +1,9 @@
 // packages/frontend/src/pages/user/DashboardUser.tsx
-import { Link } from 'react-router-dom';
-import { useGetUserProductsQuery, useGetMyProductsQuery } from '@/services/products.api';
+import { useGetMyProductsQuery, useGetUserProductsQuery } from '@/features/products/services/products.api';
 import { useGetMeQuery } from '@/services/auth.api';
-import { GlassCard, Button } from '@/ui';
+import { Button, GlassCard } from '@/ui';
 import { Boxes, Workflow } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function DashboardUser() {
   // Публічні продукти

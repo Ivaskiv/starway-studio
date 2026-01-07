@@ -10,6 +10,7 @@ export interface SelectProps
   extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
   options: SelectOption[];
   label?: string;
+  error?: string;
   color?: 'green' | 'olive' | 'red' | 'yellow' | 'orange';
   size?: 'sm' | 'md' | 'lg';
 }

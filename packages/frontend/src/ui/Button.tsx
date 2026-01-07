@@ -8,7 +8,7 @@ import { forwardRef, ReactNode } from 'react';
   color?: 'green' | 'olive' | 'red' | 'yellow' | 'orange';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
-  // variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost';
 }
 
 

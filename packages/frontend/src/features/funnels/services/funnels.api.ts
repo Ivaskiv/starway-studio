@@ -1,5 +1,7 @@
+// packages/frontend/src/services/funnels.api.ts   (або де в тебе цей файл зараз)
+
+import { Funnel } from '@/features/funnels/types/funnel.types'
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import type { Funnel } from '../types/funnels.types'
 
 export const funnelsApi = createApi({
   reducerPath: 'funnelsApi',
@@ -13,6 +15,7 @@ export const funnelsApi = createApi({
   }),
   tagTypes: ['Funnel'],
   endpoints: builder => ({
+    // === CRUD воронок ===
     getFunnels: builder.query<Funnel[], void>({
       query: () => '/funnels',
       providesTags: ['Funnel']
@@ -47,14 +50,29 @@ export const funnelsApi = createApi({
         method: 'DELETE'
       }),
       invalidatesTags: ['Funnel']
-    })
+    }),
+
+    // === НОВА МУТАЦІЯ: генерація варіантів кроку воронки ===
+    generateFunnelVariants: builder.mutation<
+      { variants: string[] },
+      { stepNumber: number; userInput: string; context?: Record<string, string> }
+    >({
+      query: body => ({
+        url: '/funnels/generate-variants',
+        method: 'POST',
+        body
+      }),
+      // Не інвалідуємо Funnel, бо це тимчасова генерація
+    }),
   })
 })
 
+// Експортуємо ВСІ хуки
 export const {
   useGetFunnelsQuery,
   useGetFunnelByIdQuery,
   useCreateFunnelMutation,
   useUpdateFunnelMutation,
-  useDeleteFunnelMutation
+  useDeleteFunnelMutation,
+  useGenerateFunnelVariantsMutation, 
 } = funnelsApi

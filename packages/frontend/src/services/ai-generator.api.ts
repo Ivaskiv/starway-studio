@@ -1,7 +1,7 @@
 // packages/frontend/src/services/ai-generator.api.ts
 
-import { api } from './api';
 import type { FunnelBlueprint } from '@/features/ai-generator/types/generator.types';
+import { api } from './api';
 
 interface GenerateStepRequest {
   stepNumber: number;

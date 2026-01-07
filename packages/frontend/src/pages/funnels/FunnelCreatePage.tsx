@@ -4,7 +4,7 @@ import { ArrowLeft, Save, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { FunnelTheme } from '../../features/funnels/types/funnelsTypes';
+import { FunnelTheme } from '../../features/funnels/types/funnel.types';
 import { Button, Input, Textarea } from '../../ui';
 
 const FunnelCreatePage = () => {

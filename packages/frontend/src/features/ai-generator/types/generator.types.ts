@@ -1,7 +1,10 @@
 // packages/frontend/src/features/ai-generator/types/generator.types.ts
 
-export const TOTAL_STEPS = 11;
-export const ATTEMPTS_PER_STEP = 3;
+import { Product, ProductMini } from "@/features/products/types/product.types"
+
+export const TOTAL_STEPS = 11
+export const ATTEMPTS_PER_STEP = 3
+export const TRIAL_DAYS = 7 // додано для продуктів з пробним періодом
 
 export const STEP_DEFINITIONS = [
   {
@@ -70,61 +73,70 @@ export const STEP_DEFINITIONS = [
     description: 'Що точно НЕ хочеш робити',
     placeholder: 'Наприклад: Не хочу знімати відео, працювати з холодним трафіком',
   },
-] as const;
+] as const
 
-// ... решта типів без змін
+// Тип для одного кроку
+export type StepDefinition = typeof STEP_DEFINITIONS[number]
 
+// Генерація варіантів для кроку
 export interface GenerationAttempt {
-  id: string;
-  content: string;
-  createdAt: string;
-  isSelected: boolean;
+  id: string
+  content: string
+  createdAt: string
+  isSelected: boolean
 }
 
+// Дані одного кроку в стані генератора
 export interface StepData {
-  number: number;
-  userInput: string;
-  attempts: GenerationAttempt[];
-  remainingAttempts: number;
-  selectedAttemptId: string | null;
+  number: number
+  userInput: string
+  attempts: GenerationAttempt[]
+  remainingAttempts: number
+  selectedAttemptId: string | null
 }
 
+
+// Основний результат генерації — Blueprint воронки
 export interface FunnelBlueprint {
-  name: string;
-  type: 'fast_cash' | 'diagnostic' | 'evergreen';
-  targetAudience: string;
-  painPoint: string;
-  quickWin: string;
+  name: string
+  type: 'fast_cash' | 'diagnostic' | 'evergreen'
+  targetAudience: string
+  painPoint: string
+  quickWin: string
   coreOffer: {
-    name: string;
-    price: number;
-    format: string;
-  };
+    name: string
+    price: number
+    format: string
+  }
   upsell?: {
-    name: string;
-    price: number;
-  };
+    name: string
+    price: number
+  }
   financialModel: {
-    targetRevenue: number;
-    averageCheck: number;
-    requiredSales: number;
-    conversionRate: number;
-  };
-  automation: string[];
+    targetRevenue: number
+    averageCheck: number
+    requiredSales: number
+    conversionRate: number
+  }
+  automation: string[]
   steps: {
-    hook: string;
-    diagnostic: string;
-    quickWin: string;
-    coreOffer: string;
-    upsell: string;
-  };
+    hook: string
+    diagnostic: string
+    quickWin: string
+    coreOffer: string
+    upsell: string
+  }
+  products: ProductForAI[]
 }
 
+
+
+// Глобальний стан AI-генератора
 export interface AIGeneratorState {
-  currentStep: number;
-  stepsData: StepData[];
-  totalRemainingAttempts: number;
-  isGenerating: boolean;
-  generatedBlueprint: FunnelBlueprint | null;
-  error: string | null;
+  currentStep: number
+  stepsData: StepData[]
+  totalRemainingAttempts: number
+  isGenerating: boolean
+  generatedBlueprint: FunnelBlueprint | null
+  error: string | null
 }

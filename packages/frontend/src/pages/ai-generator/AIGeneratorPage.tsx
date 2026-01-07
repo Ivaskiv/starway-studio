@@ -1,7 +1,7 @@
 // packages/frontend/src/pages/ai-generator/AIGeneratorPage.tsx
 import { AIGeneratorPageHeader } from '@/features/ai-generator/components/AIGeneratorPageHeader'
 import FunnelCard from '@/features/funnels/components/FunnelCard'
-import type { Funnel } from '@/features/funnels/types/funnelsTypes'
+import type { Funnel } from '@/features/funnels/types/funnel.types'
 import { useEffect, useState } from 'react'
 
 export function AIGeneratorPage() {

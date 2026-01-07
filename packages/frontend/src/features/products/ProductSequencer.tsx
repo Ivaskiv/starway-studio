@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import * as LucideIcons from 'lucide-react'
 import { Input, Icon } from '../../ui'
-import { Product } from './productsType'
+import { Product } from '@/services'
 
 type LucideIconName = keyof typeof LucideIcons
 

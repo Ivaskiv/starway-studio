@@ -1,5 +1,5 @@
 // packages/frontend/src/components/funnel/FunnelCard.tsx
-import type { Funnel } from '@/features/funnels/types/funnelsTypes'
+import type { Funnel } from '@/features/funnels/types/funnel.types'
 import { Button, Card, CardContent } from '@/ui'
 import { Edit, MoreVertical, Pause, Play, Trash2, TrendingUp, Users } from 'lucide-react'
 import { useState } from 'react'

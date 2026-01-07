@@ -1,6 +1,7 @@
 // packages/frontend/src/features/ai-generator/utils/templates.ts
 
-import type { FunnelBlueprint } from '../types/generator.types';
+import { FunnelBlueprint } from "@/features/ai-generator/types/generator.types";
+
 
 export const DEMO_TEMPLATES: FunnelBlueprint[] = [
   {
@@ -37,8 +38,28 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
       coreOffer: 'Персональний AI-план на 14 днів: що змінити, як протестувати, чого чекати',
       upsell: 'Хочеш AI зробить це за тебе? Готова воронка + інтеграції за 299 грн',
     },
+    products: [
+      {
+        id: 'audit-basic',
+        name: 'AI-Аудит (основний)',
+        type: 'one-time',
+        price: 99,
+        format: 'web',
+        integration: 'other',
+        includesMentorship: false,
+      },
+      {
+        id: 'audit-upsell',
+        name: 'Повна AI-воронка під ключ',
+        type: 'one-time',
+        price: 299,
+        format: 'mini-app',
+        integration: 'telegram',
+        includesMentorship: true,
+      },
+    ],
   },
-  
+
   {
     name: 'AI-Діагностика твого доходу',
     type: 'diagnostic',
@@ -73,6 +94,26 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
       coreOffer: 'AI-Стратегія: покроковий план виходу на стабільний дохід за 30-60 днів',
       upsell: 'AI збудує всю воронку: лендинг, бот, email, аналітику — готове рішення',
     },
+    products: [
+      {
+        id: 'diagnostic-strategy',
+        name: 'AI-Стратегія росту',
+        type: 'one-time',
+        price: 399,
+        format: 'web',
+        integration: 'other',
+        includesMentorship: false,
+      },
+      {
+        id: 'diagnostic-full-funnel',
+        name: 'Повна воронка під ключ',
+        type: 'one-time',
+        price: 999,
+        format: 'mini-app',
+        integration: 'telegram',
+        includesMentorship: true,
+      },
+    ],
   },
 
   {
@@ -109,5 +150,25 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
       coreOffer: 'AI створює 14 днів контенту + мікроворонку під кожен пост',
       upsell: 'Підписка: AI генерує контент щодня + автоматично веде до продажу',
     },
+    products: [
+      {
+        id: 'content-plan',
+        name: 'AI-Контент план на 14 днів',
+        type: 'one-time',
+        price: 79,
+        format: 'web',
+        integration: 'other',
+        includesMentorship: false,
+      },
+      {
+        id: 'content-subscription',
+        name: 'AI-Контент машина (підписка)',
+        type: 'subscription',
+        price: 199,
+        format: 'mini-app',
+        integration: 'telegram',
+        includesMentorship: false,
+      },
+    ],
   },
-];
+]

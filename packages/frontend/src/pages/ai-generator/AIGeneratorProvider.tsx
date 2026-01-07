@@ -1,20 +1,20 @@
 // packages/frontend/src/pages/ai-generator/AIGeneratorProvider.tsx
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
 import {
-  useGenerateStepVariantsMutation,
+  ATTEMPTS_PER_STEP,
+  TOTAL_STEPS,
+  type AIGeneratorState,
+  type GenerationAttempt,
+  type StepData,
+} from '@/features/ai-generator/types/generator.types'
+import {
   useGenerateFunnelBlueprintMutation,
+  useGenerateStepVariantsMutation,
   useSaveFunnelFromBlueprintMutation,
 } from '@/services/ai-generator.api'
-import {
-  TOTAL_STEPS,
-  ATTEMPTS_PER_STEP,
-  type AIGeneratorState,
-  type StepData,
-  type GenerationAttempt,
-} from '@/features/ai-generator/types/generator.types'
+import { createContext, ReactNode, useCallback, useContext, useState } from 'react'
+import toast from 'react-hot-toast'
+import { useNavigate } from 'react-router-dom'
 
 interface AIGeneratorContextType extends AIGeneratorState {
   handleUserInput: (stepNumber: number, value: string) => void

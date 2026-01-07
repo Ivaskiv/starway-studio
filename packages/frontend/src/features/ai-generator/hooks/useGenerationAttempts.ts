@@ -1,6 +1,6 @@
 // packages/frontend/src/features/ai-generator/hooks/useGenerationAttempts.ts
 
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { ATTEMPTS_PER_STEP } from '../types/generator.types';
 
 export function useGenerationAttempts(initialAttempts: number = ATTEMPTS_PER_STEP) {

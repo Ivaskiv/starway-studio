@@ -1,6 +1,7 @@
 // packages/frontend/src/services/index.ts
 
 export * from '../features/funnels/services/funnels.api';
+export * from '../features/products/services/products.api';
 export * from './ai.api';
 export * from './analytics.api';
 export { api } from './api';
@@ -11,7 +12,6 @@ export * from './integrations.api';
 export * from './miniapps.api';
 export * from './monetization.api';
 export * from './notifications.api';
-export * from './products.api';
 export * from './progress.api';
 export * from './settings.api';
 export * from './stats.api';

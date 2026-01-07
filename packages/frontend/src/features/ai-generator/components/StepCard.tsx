@@ -1,9 +1,9 @@
 // packages/frontend/src/features/ai-generator/components/StepCard.tsx
 
-import { Sparkles, RefreshCw, Check } from 'lucide-react';
 import { Button, GlassCard, Textarea } from '@/ui';
-import { STEP_DEFINITIONS } from '../types/generator.types';
+import { Check, RefreshCw, Sparkles } from 'lucide-react';
 import type { GenerationAttempt } from '../types/generator.types';
+import { STEP_DEFINITIONS } from '../types/generator.types';
 
 interface StepCardProps {
   stepNumber: number;

@@ -1,14 +1,14 @@
 // packages/frontend/src/features/ai-generator/components/ResultsPreview.tsx
 
-import { Sparkles, Check, DollarSign, TrendingUp, Users, Zap } from 'lucide-react';
-import { Button, GlassCard } from '@/ui';
-import type { FunnelBlueprint } from '../types/generator.types';
+import { Button, GlassCard } from '@/ui'
+import { Check, DollarSign, Sparkles, TrendingUp, Users, Zap } from 'lucide-react'
+import type { FunnelBlueprint } from '../types/generator.types'
 
 interface ResultsPreviewProps {
-  blueprint: FunnelBlueprint;
-  onSave: () => void;
-  onEdit: () => void;
-  isSaving: boolean;
+  blueprint: FunnelBlueprint
+  onSave: () => void
+  onEdit: () => void
+  isSaving: boolean
 }
 
 export default function ResultsPreview({
@@ -32,8 +32,8 @@ export default function ResultsPreview({
             <p className="text-slate-300 mb-4">{blueprint.targetAudience}</p>
             <div className="flex flex-wrap gap-2">
               <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 text-sm font-semibold border border-green-500/30">
-                {blueprint.type === 'fast_cash' ? '⚡ Швидкий продаж' : 
-                 blueprint.type === 'diagnostic' ? '🎯 Діагностика' : 
+                {blueprint.type === 'fast_cash' ? '⚡ Швидкий продаж' :
+                 blueprint.type === 'diagnostic' ? '🎯 Діагностика' :
                  '♾️ Evergreen'}
               </span>
               <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-sm font-semibold border border-blue-500/30">
@@ -94,7 +94,7 @@ export default function ResultsPreview({
             { title: '💎 Core Offer', content: blueprint.steps.coreOffer },
             { title: '🚀 Upsell', content: blueprint.steps.upsell },
           ].map((step, idx) => (
-            <div key={idx} className="glass-card bg-slate-800/50 p-4">
+            <div key={idx} className="glass-card bg-slate-800/50 p-4 rounded-lg">
               <h4 className="font-semibold text-white mb-2">{step.title}</h4>
               <p className="text-sm text-slate-300">{step.content}</p>
             </div>
@@ -102,7 +102,7 @@ export default function ResultsPreview({
         </div>
       </GlassCard>
 
-      {/* Products */}
+      {/* Products (Core + Upsell) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <GlassCard className="p-6">
           <h4 className="font-bold text-white mb-4 text-lg">💎 Основний продукт</h4>
@@ -125,6 +125,40 @@ export default function ResultsPreview({
           </GlassCard>
         )}
       </div>
+
+      {/* Додаткові продукти з Mini Apps */}
+      {blueprint.products && blueprint.products.length > 0 && (
+        <GlassCard className="p-6">
+          <h4 className="font-bold text-white mb-4 text-lg">Продукти з Mini Apps та підписками</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {blueprint.products.map((product, idx) => (
+              <div key={idx} className="glass-card p-4 rounded-lg">
+                <p className="text-xl font-bold text-white mb-2">{product.name}</p>
+                <p className="text-2xl font-bold text-green-400 mb-2">
+                  ₴{product.price.toLocaleString('uk-UA')}
+                  {product.type === 'subscription' && ' /міс'}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-sm">
+                    {product.format}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm">
+                    {product.integration}
+                  </span>
+                  {product.includesMentorship && (
+                    <span className="px-3 py-1 rounded-full bg-orange-500/20 text-orange-400 text-sm">
+                      + Наставництво
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-sm text-slate-400 mt-4">
+            Завдання та нагадування через Telegram Mini App
+          </p>
+        </GlassCard>
+      )}
 
       {/* Automation */}
       <GlassCard className="p-6">
@@ -165,5 +199,5 @@ export default function ResultsPreview({
         </Button>
       </div>
     </div>
-  );
+  )
 }
