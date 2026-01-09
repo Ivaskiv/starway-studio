@@ -1,5 +1,5 @@
 // packages/frontend/src/features/ai-generator/hooks/useAIGeneration.ts
-import { useGenerateStepVariantsMutation } from '@/services/ai-generator.api'
+import { useGenerateStepVariantsMutation } from '@/features/ai-generator/services/ai-generator.api'
 
 export function useAIGeneration() {
   const [generateStepVariants, state] =

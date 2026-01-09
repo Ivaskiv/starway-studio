@@ -4,7 +4,7 @@ import {
   CardContent, 
   CardHeader, 
   ErrorAlert, 
-  FormField, 
+  FormFieldController, 
   PasswordField, 
   PasswordStrength
 } from '../../ui';
@@ -71,21 +71,21 @@ export default function RegisterForm({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <ErrorAlert message={serverError} />
 
-          <FormField
+          <FormFieldController
             label="Ім'я"
             type="text"
             placeholder="Надя"
-            icon={UserIcon}
+            // icon={UserIcon}
             error={errors.name?.message}
             disabled={loading}
             {...register('name', { required: 'Ім\'я обов\'язкове' })}
           />
 
-          <FormField
+          <FormFieldController
             label="Email"
             type="email"
             placeholder="your@email.com"
-            icon={Mail}
+            // icon={Mail}
             error={errors.email?.message}
             disabled={loading}
             {...register('email', { required: 'Email обов\'язковий' })}

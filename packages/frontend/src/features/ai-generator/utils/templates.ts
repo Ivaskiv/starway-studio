@@ -2,9 +2,9 @@
 
 import { FunnelBlueprint } from "@/features/ai-generator/types/generator.types";
 
-
 export const DEMO_TEMPLATES: FunnelBlueprint[] = [
   {
+    id: 'template1',
     name: 'AI-Аудит: Де ти втрачаєш гроші',
     type: 'fast_cash',
     targetAudience: 'Експерти, фрілансери, малі бізнеси без стабільних продажів',
@@ -47,6 +47,8 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         format: 'web',
         integration: 'other',
         includesMentorship: false,
+        goal: 'lead',
+        purpose: 'збір потенційних клієнтів',
       },
       {
         id: 'audit-upsell',
@@ -56,11 +58,14 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         format: 'mini-app',
         integration: 'telegram',
         includesMentorship: true,
+        goal: 'sale',
+        purpose: 'продаж повного пакету',
       },
     ],
   },
 
   {
+    id: 'diagnostic',
     name: 'AI-Діагностика твого доходу',
     type: 'diagnostic',
     targetAudience: 'Експерти, коучі, онлайн-школи з продуктом але без стабільного доходу',
@@ -103,6 +108,8 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         format: 'web',
         integration: 'other',
         includesMentorship: false,
+        goal: 'sale',
+        purpose: 'продаж повного пакету',
       },
       {
         id: 'diagnostic-full-funnel',
@@ -112,11 +119,14 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         format: 'mini-app',
         integration: 'telegram',
         includesMentorship: true,
+        goal: 'sale',
+        purpose: 'продаж повного пакету',
       },
     ],
   },
 
   {
+    id: 'ai-mentorship',
     name: 'AI: Досвід → Продажі',
     type: 'evergreen',
     targetAudience: 'Контент-кріейтори, блогери, експерти з аудиторією',
@@ -159,6 +169,8 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         format: 'web',
         integration: 'other',
         includesMentorship: false,
+        goal: 'lead',
+        purpose: 'збір потенційних клієнтів',
       },
       {
         id: 'content-subscription',
@@ -168,7 +180,9 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         format: 'mini-app',
         integration: 'telegram',
         includesMentorship: false,
+        goal: 'sale',
+        purpose: 'щоденний продаж контенту',
       },
     ],
   },
-]
+];

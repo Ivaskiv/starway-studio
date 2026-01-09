@@ -1,10 +1,12 @@
 // packages/frontend/src/types/modules.ts
 
+import { ProductType } from '@/features/products/types/product.types'
 import type { Block } from './Block'
 
 // ═══════════════════════════════════════════════════════════════
 // USER & AUTH
 // ═══════════════════════════════════════════════════════════════
+export type FieldType = 'input' | 'email' | 'textarea' | 'select' | 'number' | 'checkbox' | 'radio' | 'date' | 'time' | 'datetime-local' | 'month' | 'week' | 'range' | 'color' | 'file' | 'password' |'text'
 
 export interface FrontendUser {
   id: string
@@ -18,18 +20,6 @@ export interface AuthState {
   isAuthenticated: boolean
 }
 
-// ═══════════════════════════════════════════════════════════════
-// PRODUCT TYPE
-// ═══════════════════════════════════════════════════════════════
-
-export type ProductType = 
-  | 'digital_product'
-  | 'course'
-  | 'coaching'
-  | 'service'
-  | 'physical_product'
-  | 'membership'
-  | 'other'
 
 // ═══════════════════════════════════════════════════════════════
 // FUNNEL DRAFT

@@ -1,7 +1,8 @@
 // frontend/src/features/products/services/products.api.ts
-import {  Product} from '@/features/products/types/product.types';
+import { Lesson, Quiz, Task } from '@/features/products/types/product.education';
+import { Product } from '@/features/products/types/product.types';
 import { api } from '../../../services/api';
-import { Lesson, Module, Quiz, Task } from '@/features/products/types/product.education';
+import { Module } from '@/features/modules/module.types';
 // import type { Product, Module, Lesson, Quiz, Task, Block } from '../types/products.types';
 
 export const productsApi = api.injectEndpoints({

@@ -1,6 +1,14 @@
 // /Users/viravira/Documents/starway-studio/packages/frontend/src/features/auth/LoginForm.tsx
 
-import {  Card, CardContent, CardHeader, ErrorAlert, FormField, PasswordField } from '../../ui';
+import {  
+  Card, 
+  CardContent, 
+  CardHeader, 
+  ErrorAlert, 
+  FormFieldController, 
+  PasswordField 
+} from '../../ui';
+
 import { Mail } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -21,7 +29,6 @@ export interface LoginFormProps {
 export default function LoginForm({ 
   onSubmit: handleLoginSubmit, 
   onRegisterClick, 
-  className,
   isLoading = false 
 }: LoginFormProps) {
   const [serverError, setServerError] = useState('');
@@ -57,11 +64,11 @@ export default function LoginForm({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <ErrorAlert message={serverError} />
 
-          <FormField
+          <FormFieldController
             label="Email"
             type="email"
             placeholder="your@email.com"
-            icon={Mail}
+            // iconName={Mail}
             error={errors.email?.message}
             disabled={loading}
             {...register('email', { required: 'Email обов\'язковий' })}

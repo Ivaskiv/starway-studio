@@ -1,0 +1,1 @@
+// /frontend/src/features/products/pages/CoursesPage.tsx

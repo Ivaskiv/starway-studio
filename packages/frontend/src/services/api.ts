@@ -26,7 +26,6 @@ async (args, api, extraOptions) => {
   // Автоматичний logout при 401
   if (result.error && result.error.status === 401) {
     localStorage.removeItem('starway_auth_token');
-    window.location.href = '/auth';
   }
 
   return result;
@@ -140,7 +139,22 @@ export const api = createApi({
     'Chat',
     'Stats', 
     'Funnels', 
-    'Users'
+    'Users',
+    'AIMentor',
+    'Wheel',
+     'Profile',
+    'Sessions',
+    'Gamification',
+    'Goals',
+    'Weekly',
+    'Monthly',
+    'Metrics',
+    'Courses',
+    'Notifications',
+    'Subscription',
   ],
   endpoints: () => ({}),
 });
+
+
+

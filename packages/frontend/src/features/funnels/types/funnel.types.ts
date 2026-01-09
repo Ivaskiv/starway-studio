@@ -1,182 +1,97 @@
-// packages/frontend/src/features/funnels/funnel.types.ts
+// features/funnels/types/funnel.types.ts
 
-export enum FunnelStatus {
-  DRAFT = 'draft',
-  ACTIVE = 'active',
-  PAUSED = 'paused',
-  ARCHIVED = 'archived',
-}
+export type FunnelStatus = 'draft' | 'active' | 'paused' | 'archived'
+export type FunnelTheme = 'orange' | 'green' | 'blue' | 'red' | 'purple' | 'yellow'
+export type StepType = 'message' | 'form' | 'payment' | 'condition' | 'delay' | 'webhook' | 'ai_mentor' | 'gamification' | 'email' | 'sms' | 'telegram'
 
-export type FunnelTheme = 'orange' | 'green' | 'blue' | 'red' | 'purple' | 'yellow';
+export const TOTAL_STEPS = 8
+export const ATTEMPTS_PER_STEP = 3
 
-export enum StepType {
-MESSAGE = 'message',
-  FORM = 'form',
-  PAYMENT = 'payment',
-  CONDITION = 'condition',
-  DELAY = 'delay',
-  WEBHOOK = 'webhook',
-  AI_MENTOR = 'ai_mentor',
-  GAMIFICATION = 'gamification',
-  EMAIL = 'email',
-  SMS = 'sms',
-  TELEGRAM = 'telegram',
-}
+export const STEP_DEFINITIONS: FunnelStepDefinition[] = [
+  { order: 1, title: 'Назва воронки', description: 'Коротка, продаюча назва', placeholder: 'AI-Аудит: Де ти втрачаєш гроші за 5 хвилин' },
+  { order: 2, title: 'Цільова аудиторія', description: 'Хто саме купить у тебе', placeholder: 'Експерти з продуктом, але без стабільних продажів' },
+  { order: 3, title: 'Головна біль', description: 'Проблема, за яку платять', placeholder: 'Продукт є, але продажі нестабільні' },
+  { order: 4, title: 'Швидкий результат', description: 'Що клієнт отримає за 1–7 днів', placeholder: 'PDF-звіт з 3 помилками + AI-коментар' },
+  { order: 5, title: 'Тип воронки', description: 'Який формат тобі ближчий', options: ['Швидкий low-ticket', 'Діагностика + консультація', 'Evergreen з підписками'] },
+  { order: 6, title: 'Формат продукту', description: 'Що ти будеш продавати', options: ['Консультація', 'Курс/шаблони', 'AI-супровід', 'Чат-бот', 'Підписка'] },
+  { order: 7, title: 'Джерело трафіку', description: 'Звідки прийдуть ліди', options: ['Соцмережі', 'Реклама', 'Органіка', 'База', 'Партнери'] },
+  { order: 8, title: 'Фінансова мета', description: 'Скільки хочеш заробляти', placeholder: '100000 грн/міс' },
+]
 
-export const TOTAL_FUNNEL_STEPS = 8
-export const ATTEMPTS_PER_FUNNEL_STEP = 3
-
-export const FUNNEL_STEP_DEFINITIONS = [
-  {
-    order: 1,
-    title: 'Назва воронки',
-    description: 'Коротка, продаюча назва для твоєї воронки',
-    placeholder: 'Наприклад: "AI-Аудит: Де ти втрачаєш гроші за 5 хвилин"',
-  },
-  {
-    order: 2,
-    title: 'Цільова аудиторія',
-    description: 'Хто саме купить у тебе',
-    placeholder: 'Наприклад: Експерти та фрілансери з продуктом, але без стабільних продажів',
-  },
-  {
-    order: 3,
-    title: 'Головна біль',
-    description: 'Проблема, за яку платять прямо зараз',
-    placeholder: 'Наприклад: Продукт є, але продажі нестабільні',
-  },
-  {
-    order: 4,
-    title: 'Швидкий результат',
-    description: 'Що клієнт отримає за 1–7 днів',
-    placeholder: 'Наприклад: PDF-звіт з 3 головними помилками + AI-коментар',
-  },
-  {
-    order: 5,
-    title: 'Тип воронки',
-    description: 'Який формат тобі ближчий',
-    options: ['Швидкий low-ticket', 'Діагностика + консультація', 'Evergreen з підписками'],
-  },
-  {
-    order: 6,
-    title: 'Формат основного продукту',
-    description: 'Що ти будеш продавати',
-    options: ['Консультація', 'Курс/шаблони', 'AI-супровід', 'Чат-бот', 'Підписка'],
-  },
-  {
-    order: 7,
-    title: 'Джерело трафіку',
-    description: 'Звідки прийдуть ліди',
-    options: ['Соцмережі', 'Реклама', 'Органіка', 'База', 'Партнери'],
-  },
-  {
-    order: 8,
-    title: 'Фінансова мета',
-    description: 'Скільки хочеш заробляти на місяць',
-    placeholder: 'Наприклад: 100000 грн',
-  },
-] as const
-
-export type FunnelStepDefinition = {
-  readonly order: number
-  readonly title: string
-  readonly description: string
-  readonly placeholder?: string
-  readonly options?: readonly string[]
-  readonly rows?: number
+export interface FunnelStepDefinition {
+  order: number
+  title: string
+  description: string
+  placeholder?: string
+  options?: string[]
 }
 
 export interface Funnel {
-  id: string;
-  userId: string;
-  name: string;
-  description?: string;
-  theme: FunnelTheme;
-  status: FunnelStatus;
-  steps: FunnelStep[];
-  settings: FunnelSettings;
-  analytics: FunnelAnalytics;
-  createdAt: string;
-  updatedAt: string;
+  id: string
+  userId: string
+  name: string
+  description?: string
+  theme: FunnelTheme
+  status: FunnelStatus
+  steps: FunnelStep[]
+  analytics?: FunnelAnalytics
+  createdAt: string
+  updatedAt: string
 }
 
 export interface FunnelStep {
-  id: string;
-  type: StepType;
-  name: string;
-  order: number;
-  config: StepConfig;
-  nextStepId?: string;
-  isActive: boolean;
-  title: string;
-  description?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  id: string
+  type: StepType
+  name: string
+  order: number
+  config: StepConfig
+  isActive: boolean
 }
 
 export interface StepConfig {
-  message?: { text: string; buttons?: Button[] };
-  form?: { fields: FormField[]; submitText: string; successMessage?: string };
-  payment?: { amount: number; currency: string; provider: PaymentProvider; description: string };
-  condition?: { rules: ConditionRule[]; defaultNextStepId?: string };
-  delay?: { duration: number; unit: 'minutes' | 'hours' | 'days' };
-  webhook?: { url: string; method: 'GET' | 'POST' | 'PUT'; headers?: Record<string,string>; body?: any };
-  aiMentor?: { type: 'wheel_of_life' | 'morning_questions' | 'evening_questions' | 'goal_setting'; questions: string[]; analysisPrompt: string };
-  gamification?: { type: 'points' | 'badge' | 'level' | 'streak'; reward: number };
-  email?: { subject: string; body: string; from?: string };
-  sms?: { text: string; from?: string };
+  message?: { text: string; buttons?: StepButton[] }
+  form?: { fields: FormField[]; submitText: string }
+  payment?: { amount: number; currency: string; provider: string }
+  delay?: { duration: number; unit: 'minutes' | 'hours' | 'days' }
+  webhook?: { url: string; method: 'GET' | 'POST' }
+  aiMentor?: { type: string; questions: string[] }
+  gamification?: { type: string; reward: number }
 }
 
-export interface FunnelGenerationAttempt {
+export interface StepButton {
+  id: string
+  text: string
+  action: 'next' | 'url' | 'payment'
+  value?: string
+}
+
+export interface FormField {
+  id: string
+  name: string
+  type: string
+  label: string
+  required: boolean
+}
+
+export interface FunnelAnalytics {
+  views: number
+  uniqueVisitors: number
+  conversions: number
+  revenue: number
+}
+
+export interface GenerateVariantsRequest {
+  stepNumber: number
+  userInput: string
+  context?: Record<string, string>
+}
+
+export interface GenerateVariantsResponse {
+  variants: string[]
+}
+
+export interface FunnelAttempt {
   id: string
   content: string
   isSelected: boolean
-}
-
-export interface FunnelCardProps {
-  funnel: Funnel
-  onUpdate?: () => void
-}
-
-// export interface FunnelBlueprint {
-// name: string
-//   audience: string
-//   pain: string
-//   quickWin: string
-//   type: string
-//   productFormat: string
-//   trafficSource: string
-//   targetRevenue: number
-//   structure: string[]
-// }
-
-export interface Button { id: string; text: string; action: 'next' | 'url' | 'callback' | 'payment'; value?: string; style?: 'primary' | 'secondary' | 'danger' }
-export interface FormField { id: string; name: string; type: string; label: string; required: boolean; placeholder?: string; validation?: FieldValidation }
-export interface FieldValidation { min?: number; max?: number; pattern?: string; errorMessage?: string }
-export interface ConditionRule { field: string; operator: string; value: any; nextStepId: string }
-export type PaymentProvider = 'wayforpay' | 'stripe' | 'liqpay' | 'fondy';
-
-export interface FunnelSettings { domain?: string; theme: { primaryColor: string; fontFamily: string } }
-export interface FunnelAnalytics { views: number; uniqueVisitors: number; conversions: number; revenue: number; stepAnalytics: StepAnalytics[] }
-export interface StepAnalytics { stepId: string; views: number; completions: number; dropoffRate: number; avgTimeSpent: number }
-
-export interface Props {
-  currentStep: number
-  completedSteps: number[]
-  remainingAttempts: number
-  step: FunnelStepDefinition
-  userInput: string
-  onUserInputChange: (value: string) => void
-  onGenerate: (newVariants: string[]) => void
-  attempts: { id: string; content: string; isSelected: boolean }[]
-  onSelectVariant: (id: string) => void
-  isGenerating?: boolean
-  context: Record<string, string>
-  onConfirm: (selected: string) => void
-  generate: (payload: { userInput: string; context: Record<string, string> }) => Promise<{ variants: string[] }>
-}
-
-
-export interface FunnelDashboardProps {
-  funnelId: string;
 }

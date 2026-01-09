@@ -256,6 +256,32 @@ body::before {
   @apply opacity-40 cursor-not-allowed;
 }
 
+/* Field sizes */
+.glass-field[data-size="sm"] {
+  @apply px-3 py-2 text-sm;
+}
+
+.glass-field[data-size="md"] {
+  @apply px-4 py-3;
+}
+
+.glass-field[data-size="lg"] {
+  @apply px-5 py-4 text-lg;
+}
+
+/* Select field */
+.glass-field.select {
+  @apply appearance-none cursor-pointer pr-10;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+}
+
+.glass-field.select option {
+  @apply bg-slate-900 text-white;
+}
+
 /* ===========================
    Modern Buttons
 =========================== */
@@ -271,10 +297,6 @@ body::before {
 [data-size="md"] { @apply px-6 py-3 text-base rounded-xl; }
 [data-size="lg"] { @apply px-8 py-4 text-lg rounded-2xl; }
 
-
-/* ===========================
-   Enhanced Buttons with Glassmorphism
-=========================== */
 .btn {
   @apply inline-flex items-center justify-center font-semibold text-white transition-all duration-300 relative overflow-hidden;
   background: linear-gradient(
@@ -400,18 +422,6 @@ body::before {
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Pulse glow animation */
-@keyframes pulse-glow {
-  0%, 100% {
-    opacity: 0.6;
-    filter: blur(20px);
-  }
-  50% {
-    opacity: 0.8;
-    filter: blur(25px);
-  }
-}
-
 /* Disabled state */
 .btn:disabled,
 .btn.disabled {
@@ -425,7 +435,10 @@ body::before {
 .btn.disabled::after {
   display: none;
 }
-/* Badge */
+
+/* ===========================
+   Badge
+=========================== */
 .badge {
   @apply inline-flex items-center px-3 py-1.5 rounded-full font-medium text-white text-sm transition-all duration-300;
   background: linear-gradient(
@@ -446,6 +459,83 @@ body::before {
     inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
 }
 
+/* Badge colors */
+.badge[data-color="green"] {
+  @apply bg-green-500/20 text-green-400;
+}
+
+.badge[data-color="orange"] {
+  @apply bg-orange-500/20 text-orange-400;
+}
+
+.badge[data-color="red"] {
+  @apply bg-red-500/20 text-red-400;
+}
+
+.badge[data-color="purple"] {
+  @apply bg-purple-500/20 text-purple-400;
+}
+
+.badge[data-color="blue"] {
+  @apply bg-blue-500/20 text-blue-400;
+}
+
+.badge[data-color="amber"] {
+  @apply bg-amber-500/20 text-amber-400;
+}
+
+/* ===========================
+   Progress Bar
+=========================== */
+.progress {
+  @apply w-full rounded-full overflow-hidden;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.progress[data-size="sm"] {
+  @apply h-1;
+}
+
+.progress[data-size="md"] {
+  @apply h-2;
+}
+
+.progress[data-size="lg"] {
+  @apply h-3;
+}
+
+.progress-bar {
+  @apply h-full rounded-full transition-all duration-500 ease-out;
+}
+
+.progress[data-color="orange"] .progress-bar {
+  @apply bg-gradient-to-r from-orange-500 to-amber-500;
+}
+
+.progress[data-color="green"] .progress-bar {
+  @apply bg-gradient-to-r from-green-500 to-emerald-500;
+}
+
+.progress[data-color="olive"] .progress-bar {
+  @apply bg-gradient-to-r from-lime-500 to-green-500;
+}
+
+.progress[data-color="red"] .progress-bar {
+  @apply bg-gradient-to-r from-red-500 to-rose-500;
+}
+
+.progress[data-color="yellow"] .progress-bar {
+  @apply bg-gradient-to-r from-yellow-500 to-amber-400;
+}
+
+.progress[data-color="purple"] .progress-bar {
+  @apply bg-gradient-to-r from-purple-500 to-pink-500;
+}
+
+.progress[data-color="blue"] .progress-bar {
+  @apply bg-gradient-to-r from-blue-500 to-cyan-500;
+}
+
 /* ===========================
    Typography
 =========================== */
@@ -464,6 +554,25 @@ p, span, label {
 }
 
 /* ===========================
+   Gradient Helpers
+=========================== */
+.bg-gradient-orange {
+  @apply bg-gradient-to-r from-orange-500 to-red-500;
+}
+
+.bg-gradient-purple {
+  @apply bg-gradient-to-r from-purple-500 to-pink-500;
+}
+
+.bg-gradient-green {
+  @apply bg-gradient-to-r from-green-500 to-emerald-500;
+}
+
+.bg-gradient-blue {
+  @apply bg-gradient-to-r from-blue-500 to-cyan-500;
+}
+
+/* ===========================
    Animations
 =========================== */
 @keyframes glow-pulse {
@@ -478,6 +587,17 @@ p, span, label {
       0 10px 40px 0 rgba(0, 0, 0, 0.4),
       0 0 100px rgba(249, 115, 22, 0.4),
       inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.6;
+    filter: blur(20px);
+  }
+  50% {
+    opacity: 0.8;
+    filter: blur(25px);
   }
 }
 

@@ -1,15 +1,6 @@
 // features/products/types/product.education.ts
 import type { Block } from '@/types/Block'
 
-export interface Module {
-  id: string
-  productId: string
-  name: string
-  order: number
-  isLocked: boolean
-  lessons: Lesson[]
-}
-
 export interface Lesson {
   id: string
   moduleId: string

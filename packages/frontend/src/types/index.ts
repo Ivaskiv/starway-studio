@@ -7,14 +7,8 @@ export type { Block } from './Block';
 // User types
 export type {
   AuthResponse, SignInRequest, SignUpRequest, Tokens, User
-} from '@/services/auth.api';
+} from '@/features/auth/services/auth.api';
 
-// Product types
-export type {
-  Lesson, Product,
-  Module as ProductModule, Quiz,
-  Task
-} from '@/features/products/services/products.api';
 
 // AI types
 export type {

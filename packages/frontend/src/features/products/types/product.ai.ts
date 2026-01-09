@@ -1,7 +1,14 @@
-// frontend/src/features/products/types/product.ai.ts
+// features/products/types/product.ai.ts
 
-import { ProductMini } from "@/features/products/types/product.mini";
+export interface ProductForAI {
+  id: string
+  name: string
+  format: string
+  integration: string
+  includesMentorship: boolean
+  price: number
+  type: 'subscription' | 'one-time'
 
-export interface ProductForAI extends ProductMini {
   goal: 'lead' | 'sale'
+  purpose: string
 }

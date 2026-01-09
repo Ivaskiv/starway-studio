@@ -8,7 +8,7 @@ export interface SelectOption {
 
 export interface SelectProps
   extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
-  options: SelectOption[];
+  options?: SelectOption[];
   label?: string;
   error?: string;
   color?: 'green' | 'olive' | 'red' | 'yellow' | 'orange';
@@ -28,7 +28,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           className={`glass-field select ${disabled ? 'disabled' : ''} ${className || ''}`}
           {...props}
         >
-          {options.map(option => (
+          {options?.map(option => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

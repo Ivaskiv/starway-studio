@@ -7,6 +7,7 @@ export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextArea
   variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
+  ref?: React.Ref<HTMLTextAreaElement>;
 }
 
 export const Textarea = ({ label, error, helperText, size = 'md', isLoading, className, ...props }: TextareaProps) => (

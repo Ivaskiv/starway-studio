@@ -16,6 +16,7 @@ import aiRoutes from './routes/ai.js';
 import productsRoutes from './routes/products.js';
 import systemRoutes from './routes/system.js';
 import statsRoutes from './routes/stats.js';
+import wheelRoutes from './routes/wheel.js'
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/products', productsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/wheel', wheelRoutes)
 
 const PORT = process.env.PORT || 3001;
 
