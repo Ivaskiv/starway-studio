@@ -1,20 +1,18 @@
 // packages/frontend/src/features/subscription/pages/SubscriptionPage.tsx
 
-import { useState } from 'react'
+import { useGetMeQuery } from '@/features/auth/services/auth.api'
+import { Button, GlassCard } from '@/ui'
 import { motion } from 'framer-motion'
-import { 
-  Crown, 
-  Check, 
-  Star, 
-  Zap,
-  MessageCircle,
+import {
+  ArrowRight,
   BookOpen,
   Brain,
-  Users,
-  ArrowRight,
+  Check,
+  Crown,
+  MessageCircle,
+  Users
 } from 'lucide-react'
-import { useGetMeQuery } from '@/features/auth/services/auth.api'
-import { GlassCard, Button, Badge } from '@/ui'
+import { useState } from 'react'
 
 interface Plan {
   id: string
@@ -90,11 +88,11 @@ export default function SubscriptionPage() {
   const [selectedPlan, setSelectedPlan] = useState<string>('yearly')
   const [isProcessing, setIsProcessing] = useState(false)
 
-  const hasSubscription = user?.subscriptionStatus === 'active'
+  const hasSubscription = user?.subscription_status === 'active'
   
   // Trial info
-  const trialDaysLeft = user?.trialEndsAt 
-    ? Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+  const trialDaysLeft = user?.trial_ends_at 
+    ? Math.max(0, Math.ceil((new Date(user.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0
 
   const handleSubscribe = async (planId: string) => {

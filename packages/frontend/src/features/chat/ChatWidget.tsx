@@ -3,17 +3,17 @@ import { useGetMessagesQuery, useSendMessageMutation } from '@/features/chat/ser
 import { useState } from 'react';
 
 interface ChatWidgetProps {
-  userId: string;
+  user_id: string;
 }
 
-export default function ChatWidget({ userId }: ChatWidgetProps) {
-  const { data: messages } = useGetMessagesQuery({ userId });
+export default function ChatWidget({ user_id }: ChatWidgetProps) {
+  const { data: messages } = useGetMessagesQuery({ user_id });
   const [sendMessage] = useSendMessageMutation();
   const [input, setInput] = useState('');
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    await sendMessage({ userId, text: input });
+    await sendMessage({ user_id, text: input });
     setInput('');
   };
 

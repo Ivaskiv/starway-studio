@@ -60,7 +60,7 @@
 //         onChange={(e) => handleChange('body', e.target.value)}
 //         rows={12}
 //         className="glass-textarea"
-//         helperText="Підтримує HTML та змінні: {userName}, {weekNumber}"
+//         helperText="Підтримує HTML та змінні: {user_name}, {weekNumber}"
 //       />
 //     </div>
 //   );

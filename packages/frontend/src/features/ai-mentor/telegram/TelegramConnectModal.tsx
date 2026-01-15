@@ -1,8 +1,11 @@
-// packages/frontend/src/features/ai-mentor/telegram/TelegramConnectModal.tsx
+// packages/frontend/src/features/ai-mentor/components/TelegramConnectModal.tsx
 
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, MessageCircle, Bell, Trophy, ChevronRight } from 'lucide-react'
-import { Button } from '@/ui'
+import { useLazyGetTelegramLinkQuery } from '@/services/social.api'
+import { Button, Input } from '@/ui'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Bell, Check, ChevronRight, Copy, Loader2, MessageCircle, Trophy, X } from 'lucide-react'
+import { useState } from 'react'
+import toast from 'react-hot-toast'
 
 interface TelegramConnectModalProps {
   isOpen: boolean
@@ -16,10 +19,27 @@ const BENEFITS = [
 ]
 
 export const TelegramConnectModal = ({ isOpen, onClose }: TelegramConnectModalProps) => {
-  const BOT_USERNAME = process.env.VITE_TELEGRAM_BOT_USERNAME || 'StarwayMentorBot'
+  const [getTelegramLink, { isLoading }] = useLazyGetTelegramLinkQuery()
+  const [link, setLink] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
-  const handleConnect = () => {
-    window.open(`https://t.me/${BOT_USERNAME}?start=connect`, '_blank')
+  const handleGetLink = async () => {
+    try {
+      const result = await getTelegramLink().unwrap()
+      setLink(result.link)
+      window.open(result.link, '_blank')
+    } catch (error) {
+      toast.error('Не вдалося отримати посилання')
+    }
+  }
+
+  const handleCopyLink = () => {
+    if (link) {
+      navigator.clipboard.writeText(link)
+      setCopied(true)
+      toast.success('Посилання скопійовано!')
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   return (
@@ -31,27 +51,17 @@ export const TelegramConnectModal = ({ isOpen, onClose }: TelegramConnectModalPr
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
-          {/* Backdrop */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
             onClick={onClose}
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           />
           
-          {/* Modal */}
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="relative w-full max-w-md rounded-3xl overflow-hidden"
-            style={{
-              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-            }}
+            className="relative w-full max-w-md rounded-3xl overflow-hidden bg-slate-900/95 border border-white/10"
           >
-            {/* Close button */}
             <Button
               onClick={onClose}
               className="absolute top-4 right-4 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors z-10"
@@ -86,29 +96,48 @@ export const TelegramConnectModal = ({ isOpen, onClose }: TelegramConnectModalPr
               ))}
             </div>
 
+            {/* Link display */}
+            {link && (
+              <div className="mx-6 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="text"
+                    value={link}
+                    readOnly
+                    className="flex-1 px-3 py-2 rounded-lg bg-white/5 text-white text-sm truncate border-0"
+                  />
+                  <Button
+                    onClick={handleCopyLink}
+                    className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                  >
+                    {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-white/60" />}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Warning */}
-            <div className="mx-6 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <div className="mx-6 mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
               <p className="text-amber-400 text-sm text-center">
-                ⚠️ Без Telegram ти не отримаєш нагадування та не зможеш відслідковувати прогрес
+                ⚠️ Без Telegram ти не отримаєш нагадування
               </p>
             </div>
 
             {/* Actions */}
             <div className="p-6 space-y-3">
               <Button
-                onClick={handleConnect}
-                className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90 
-                         text-white font-semibold rounded-xl flex items-center justify-center gap-2"
+                onClick={handleGetLink}
+                disabled={isLoading}
+                className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-xl"
               >
-                Підключити Telegram
-                <ChevronRight className="w-5 h-5" />
+                {isLoading ? (
+                  <><Loader2 className="w-5 h-5 animate-spin mr-2" />Завантаження...</>
+                ) : (
+                  <><ChevronRight className="w-5 h-5 mr-2" />Підключити Telegram</>
+                )}
               </Button>
               
-              <Button
-                onClick={onClose}
-                variant="ghost"
-                className="w-full py-3 text-white/60 hover:text-white"
-              >
+              <Button onClick={onClose} className="w-full py-3 text-white/60 hover:text-white">
                 Пізніше
               </Button>
             </div>

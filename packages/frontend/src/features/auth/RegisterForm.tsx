@@ -1,18 +1,17 @@
 // /Users/viravira/Documents/starway-studio/packages/frontend/src/components/auth/RegisterForm.tsx
-import {  
-  Card, 
-  CardContent, 
-  CardHeader, 
-  ErrorAlert, 
-  FormFieldController, 
-  PasswordField, 
-  PasswordStrength
-} from '../../ui';
-import { Mail, User as UserIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  ErrorAlert,
+  FormFieldController,
+  PasswordField,
+  PasswordStrength
+} from '../../ui';
 import Button from '../../ui/Button';
-import { cn } from '@/lib/utils';
 
 export interface RegisterFormData {
   name: string;

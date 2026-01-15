@@ -1,6 +1,7 @@
 // packages/frontend/src/features/ai-generator/types/generator.types.ts
 
-import { ProductForAI } from "@/features/products/types/product.ai"
+import { ProductForAI } from "@/features/products/types/product.mappers"
+
 
 export const TOTAL_STEPS = 11
 export const ATTEMPTS_PER_STEP = 3
@@ -24,7 +25,7 @@ export interface FunnelBlueprint {
     targetRevenue: number
     averageCheck: number
     requiredSales: number
-    conversionRate: number
+    conversion_rate: number
   }
   automation: string[]
   steps: {
@@ -42,7 +43,7 @@ export interface FunnelBlueprint {
 export interface GenerationAttempt {
   id: string
   content: string
-  createdAt: string
+  created_at: string
   isSelected: boolean
 }
 

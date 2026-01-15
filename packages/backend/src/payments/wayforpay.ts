@@ -3,15 +3,15 @@
 import crypto from 'crypto';
 
 export interface PaymentData {
-  orderReference: string;
+  order_reference: string;
   amount: number;
   currency: string;
-  productName: string[];
-  productPrice: number[];
-  productCount: number[];
-  clientEmail: string;
-  clientFirstName: string;
-  clientLastName: string;
+  product_name: string[];
+  product_price: number[];
+  product_count: number[];
+  client_email: string;
+  client_first_name: string;
+  client_last_name: string;
 }
 
 export default function generateSignature(data: PaymentData): string {
@@ -20,12 +20,12 @@ export default function generateSignature(data: PaymentData): string {
 
   const signatureString = [
     merchantAccount,
-    data.orderReference,
+    data.order_reference,
     data.amount.toString(),
     data.currency,
-    ...data.productName,
-    ...data.productCount.map(String),
-    ...data.productPrice.map(String)
+    ...data.product_name,
+    ...data.product_count.map(String),
+    ...data.product_price.map(String)
   ].join(';');
 
   return crypto
@@ -36,20 +36,20 @@ export default function generateSignature(data: PaymentData): string {
 
 export async function handlePaymentCallback(callbackData: any) {
   try {
-    const { orderReference, transactionStatus, reasonCode } = callbackData;
+    const { order_reference, transaction_status, reason_code } = callbackData;
 
-    console.log('💰 Payment callback:', { orderReference, transactionStatus });
+    console.log('💰 Payment callback:', { order_reference, transaction_status });
 
-    if (transactionStatus === 'Approved') {
-      const [userId, productSlug] = orderReference.split('_');
-      console.log('✅ Payment approved:', { userId, productSlug });
+    if (transaction_status === 'Approved') {
+      const [user_id, product_slug] = order_reference.split('_');
+      console.log('✅ Payment approved:', { user_id, product_slug });
       
       // TODO: Implement after database models are ready
-      // const product = await getProductBySlug(productSlug);
-      // await createEnrollment(userId, product.id);
-      // await logPayment(orderReference, transactionStatus, userId, callbackData.amount);
+      // const product = await getProductBySlug(product_slug);
+      // await createEnrollment(user_id, product.id);
+      // await logPayment(order_reference, transaction_status, user_id, callbackData.amount);
     } else {
-      console.log('❌ Payment failed:', { orderReference, reasonCode });
+      console.log('❌ Payment failed:', { order_reference, reason_code });
     }
 
     return { success: true };

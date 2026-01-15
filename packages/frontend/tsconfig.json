@@ -1,7 +1,10 @@
-// packages/frontend/tsconfig.json
+// /Users/viravira/Documents/starway-studio/packages/frontend/tsconfig.json
+// https://www.typescriptlang.org/tsconfig
 {
   "compilerOptions": {
     "target": "ES2020",
+        "types": ["vite/client"],
+
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
@@ -18,18 +21,19 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@app/*": ["./src/app/*"],
-      "@features/*": ["./src/features/*"],
-      "@pages/*": ["./src/pages/*"],
-      "@components/*": ["./src/components/*"],
-      "@services/*": ["./src/services/*"],
-      "@lib/*": ["./src/lib/*"],
-      "@hooks/*": ["./src/hooks/*"],
-      "@types/*": ["./src/types/*"],
-      "@contexts/*": ["./src/contexts/*"],
-      "@ui/*": ["./src/ui/*"]
+      "@app/*": ["./src/app*"],
+      "@features/*": ["./features/*"],
+      "@pages/*": ["./pages/*"],
+      "@components/*": ["./components/*"],
+      "@services/*": ["./services/*"],
+      "@lib/*": ["./lib/*"],
+      "@hooks/*": ["/features/auth/hooks/*"],
+      "@types/*": ["./types/*"],
+      "@contexts/*": ["./contexts/*"],
+      "@ui/*": ["./ui/*"]
     }
   },
-  "include": ["src", "global.d.ts"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.spec.tsx"],
+  "include": ["src", "global.d.ts", "src/features/landingPage/ABTesting.tsx"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

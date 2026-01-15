@@ -1,51 +1,91 @@
 // packages/backend/src/middleware/auth.ts
+// import { Request, Response, NextFunction } from 'express';
 
-import type { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { sql } from '../db/client';
+// export async function authRequired(req: Request, res: Response, next: NextFunction) {
+//   try {
+//     const token = req.headers.authorization?.split(' ')[1];
+//     if (!token) return res.status(401).json({ error: 'unauthorized' });
 
-export const authRequired = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+//     // Припустимо, ти декодуєш JWT
+//     const user = { id: '123', email: 'test@test.com' }; // заміни на реальну перевірку
+//     req.user = user; // тут TS вже типізовано
+
+//     next();
+//   } catch {
+//     res.status(401).json({ error: 'unauthorized' });
+//   }
+// }
+
+
+import { Request, Response, NextFunction } from 'express'
+import jwt from 'jsonwebtoken'
+
+export interface JwtPayload {
+  id: string
+  role: 'super_admin' | 'admin' | 'user'
+  email: string
+}
+
+export interface AuthRequest extends Request {
+  user?: JwtPayload
+}
+
+const JWT_SECRET = process.env.JWT_SECRET as string
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is not defined')
+}
+
+export async function authRequired(req: Request, res: Response, next: NextFunction) {
   try {
-    const authHeader = req.headers.authorization;
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'unauthorized' });
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'unauthorized' });
-    }
-
-    const token = authHeader.substring(7);
-    const secret = process.env.JWT_SECRET!;
-
-    const decoded = jwt.verify(token, secret) as { id: string };
-
-    // Отримуємо користувача - тільки існуючі колонки
-    const users = await sql`
-      SELECT id, email, first_name, last_name, role 
-      FROM users 
-      WHERE id = ${decoded.id}
-    `;
-
-    if (users.length === 0) {
-      return res.status(401).json({ error: 'user_not_found' });
-    }
-
-    const user = users[0];
-
-    // Додаємо користувача в request
-    req.user = {
-      id: user.id,
-      email: user.email,
-      firstName: user.first_name || '',
-      lastName: user.last_name || '',
-      role: user.role
-    };
-
+    // Припустимо, ти декодуєш JWT
+    const user = { id: '123', email: 'test@test.com' }; // заміни на реальну перевірку
+    req.user = user; // тут TS вже типізовано
+    // const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    // req.user = payload;
     next();
-  } catch (err) {
-    console.error('[auth middleware]', err);
-    return res.status(401).json({ error: 'invalid_token' });
+  } catch {
+    res.status(401).json({ error: 'unauthorized' });
   }
-};
+}
+
+
+export function auth(
+  req: AuthRequest, 
+  res: Response, 
+  next: NextFunction) {
+    const authHeader = req.headers.authorization
+
+    if (!authHeader) {
+      return res.status(401).json({ message: 'No authorization header' })
+    }
+
+    const token = authHeader.split(' ')[1]
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload
+      req.user = decoded
+      next()
+    } catch {
+      res.status(401).json({ message: 'Invalid token' })
+    }
+
+    }
+
+export function requireRole(
+  allowedRoles: JwtPayload['role'][]
+) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' })
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Forbidden' })
+    }
+
+    next()
+  }
+}

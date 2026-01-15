@@ -26,7 +26,7 @@ router.post('/webhook', async (req, res) => {
   
   try {
     // WayForPay
-    if (payload.orderReference && payload.merchantSignature) {
+    if (payload.order_reference && payload.merchant_signature) {
       // Обробка платежу
       res.json({ ok: true, source: 'wayforpay' })
       return

@@ -1,5 +1,5 @@
 // packages/frontend/src/features/ai-mentor/telegram/MentorChat.tsx
-
+import { ChatMessage } from '@/types/mentor.types';
 import { Button, Textarea } from '@/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../../../app/store/hooks';
-import { useGetChatHistoryQuery, useSendChatMessageMutation } from '../services/aiMentorApi';
+import { useGetChatHistoryQuery, useSendChatMessageMutation } from '../services/aiMentor.api';
 import {
   addChatMessage,
   clearChatInput,
@@ -22,7 +22,6 @@ import {
   setChatInput,
   setChatTyping,
 } from '../services/aiMentorSlice';
-import type { ChatMessage } from '../types/ai-mentor.types';
 
 // ============ MESSAGE BUBBLE ============
 interface MessageBubbleProps {
@@ -203,18 +202,18 @@ const ChatInput = ({ value, onChange, onSend, isLoading }: ChatInputProps) => {
 
 // ============ MAIN CHAT COMPONENT ============
 interface MentorChatProps {
-  userId: string;
+  user_id: string;
   onClose?: () => void;
 }
 
-export const MentorChat = ({ userId, onClose }: MentorChatProps) => {
+export const MentorChat = ({ user_id, onClose }: MentorChatProps) => {
   const dispatch = useAppDispatch();
   const { messages, isTyping, inputValue } = useAppSelector(selectChat);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showQuickActions, setShowQuickActions] = useState(true);
   
   // RTK Query
-  const { data: chatHistory, isLoading: isLoadingHistory } = useGetChatHistoryQuery({ userId, limit: 50 });
+  const { data: chat_history, isLoading: isLoadingHistory } = useGetChatHistoryQuery({ user_id, limit: 50 });
   const [sendMessage, { isLoading: isSending }] = useSendChatMessageMutation();
   
   // Scroll to bottom on new messages
@@ -224,29 +223,28 @@ export const MentorChat = ({ userId, onClose }: MentorChatProps) => {
   
   // Initialize chat history
   useEffect(() => {
-    if (chatHistory && chatHistory.length > 0) {
-      // Set messages from history
-      chatHistory.forEach(msg => dispatch(addChatMessage(msg)));
+    if (chat_history && chat_history.length > 0) {
+      chat_history.forEach(msg => dispatch(addChatMessage(msg)));
     }
-  }, [chatHistory, dispatch]);
+  }, [chat_history, dispatch]);
 
   const handleSend = useCallback(async () => {
     if (!inputValue.trim() || isSending) return;
     
-    const userMessage: ChatMessage = {
+    const user_message: ChatMessage = {
       id: `temp-${Date.now()}`,
       role: 'user',
       content: inputValue.trim(),
       timestamp: new Date().toISOString(),
     };
     
-    dispatch(addChatMessage(userMessage));
+    dispatch(addChatMessage(user_message));
     dispatch(clearChatInput());
     dispatch(setChatTyping(true));
     setShowQuickActions(false);
     
     try {
-      const response = await sendMessage({ userId, content: userMessage.content }).unwrap();
+      const response = await sendMessage({ user_id, content: user_message.content }).unwrap();
       dispatch(addChatMessage(response));
     } catch (error) {
       console.error('Send message error:', error);
@@ -259,7 +257,7 @@ export const MentorChat = ({ userId, onClose }: MentorChatProps) => {
     } finally {
       dispatch(setChatTyping(false));
     }
-  }, [dispatch, inputValue, userId, sendMessage, isSending]);
+  }, [dispatch, inputValue, user_id, sendMessage, isSending]);
 
   const handleQuickAction = useCallback((action: string) => {
     const actionMessages: Record<string, string> = {
@@ -309,7 +307,6 @@ export const MentorChat = ({ userId, onClose }: MentorChatProps) => {
       
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4">
-        {/* Welcome message if no messages */}
         {messages.length === 0 && !isLoadingHistory && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -327,7 +324,6 @@ export const MentorChat = ({ userId, onClose }: MentorChatProps) => {
           </motion.div>
         )}
         
-        {/* Messages */}
         <AnimatePresence mode="popLayout">
           {messages.map((message, index) => (
             <MessageBubble
@@ -338,7 +334,6 @@ export const MentorChat = ({ userId, onClose }: MentorChatProps) => {
           ))}
         </AnimatePresence>
         
-        {/* Typing indicator */}
         <AnimatePresence>
           {isTyping && <TypingIndicator />}
         </AnimatePresence>

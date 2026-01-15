@@ -1,3 +1,5 @@
+// /Users/viravira/Documents/starway-studio/packages/frontend/tsconfig.node.json
+// https://vitejs.dev/config/#shared-options-between-client-and-server
 {
   "compilerOptions": {
     "composite": true,

@@ -6,15 +6,15 @@ export interface TelegramBot {
   name: string;
   username: string;
   token: string;
-  isActive: boolean;
+  is_active: boolean;
   webhookUrl?: string;
   commands: BotCommand[];
   stats: {
-    totalUsers: number;
+    total_users: number;
     activeUsers: number;
     messagesPerDay: number;
   };
-  createdAt: string;
+  created_at: string;
 }
 
 export interface BotCommand {
@@ -47,7 +47,7 @@ export interface SocialMediaConnection {
 export interface PaymentIntegration {
   id: string;
   provider: 'wayforpay' | 'liqpay' | 'stripe' | 'fondy';
-  isActive: boolean;
+  is_active: boolean;
   merchantId: string;
   config: any;
   testMode: boolean;
@@ -56,7 +56,7 @@ export interface PaymentIntegration {
 export interface EmailIntegration {
   id: string;
   provider: 'sendpulse' | 'mailchimp' | 'sendgrid';
-  isActive: boolean;
+  is_active: boolean;
   apiKey: string;
   fromEmail: string;
   fromName: string;
@@ -67,7 +67,7 @@ export interface Webhook {
   name: string;
   url: string;
   events: string[];
-  isActive: boolean;
+  is_active: boolean;
   secret?: string;
   lastTriggered?: string;
 }

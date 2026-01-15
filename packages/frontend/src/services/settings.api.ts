@@ -1,29 +1,6 @@
 // packages/frontend/src/services/settings.api.ts
 import { api } from './api';
 
-export interface UserSettings {
-  id: string;
-  userId: string;
-  theme: 'light' | 'dark' | 'auto';
-  language: 'uk' | 'en' | 'ru';
-  notifications: {
-    email: boolean;
-    push: boolean;
-    telegram: boolean;
-    achievements: boolean;
-    updates: boolean;
-  };
-  privacy: {
-    profileVisibility: 'public' | 'private' | 'friends';
-    showProgress: boolean;
-    showAchievements: boolean;
-  };
-  preferences: {
-    autoplay: boolean;
-    quality: 'auto' | '720p' | '1080p';
-    speed: number;
-  };
-}
 
 export interface Theme {
   id: string;
@@ -46,9 +23,9 @@ export interface Template {
   category: 'education' | 'marketing' | 'sales' | 'onboarding';
   thumbnail?: string;
   structure: any;
-  isPublic: boolean;
+  is_public: boolean;
   usageCount: number;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Blueprint {
@@ -62,7 +39,7 @@ export interface Blueprint {
   isPremium: boolean;
   rating?: number;
   reviews?: number;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface WhiteLabelConfig {
@@ -78,27 +55,11 @@ export interface WhiteLabelConfig {
   customCSS?: string;
   footerText?: string;
   supportEmail?: string;
-  isActive: boolean;
+  is_active: boolean;
 }
 
 export const settingsApi = api.injectEndpoints({
   endpoints: (builder) => ({
-    // User Settings
-    getUserSettings: builder.query<UserSettings, void>({
-      query: () => '/settings/user',
-      providesTags: ['Setting'],
-    }),
-
-    updateUserSettings: builder.mutation<UserSettings, Partial<UserSettings>>({
-      query: (data) => ({
-        url: '/settings/user',
-        method: 'PUT',
-        body: data,
-      }),
-      invalidatesTags: ['Setting'],
-    }),
-
-    // Themes
     getThemes: builder.query<Theme[], void>({
       query: () => '/settings/themes',
       providesTags: ['Theme'],
@@ -178,7 +139,7 @@ export const settingsApi = api.injectEndpoints({
       providesTags: (result, error, id) => [{ type: 'Blueprint', id }],
     }),
 
-    purchaseBlueprint: builder.mutation<{ funnelId: string; productId: string }, string>({
+    purchaseBlueprint: builder.mutation<{ funnelId: string; product_id: string }, string>({
       query: (blueprintId) => ({
         url: `/settings/blueprints/${blueprintId}/purchase`,
         method: 'POST',
@@ -213,8 +174,6 @@ export const settingsApi = api.injectEndpoints({
 });
 
 export const {
-  useGetUserSettingsQuery,
-  useUpdateUserSettingsMutation,
   useGetThemesQuery,
   useCreateThemeMutation,
   useUpdateThemeMutation,

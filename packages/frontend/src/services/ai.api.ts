@@ -23,7 +23,7 @@ export interface AIPromptHistory {
   id: string;
   prompt: string;
   analysis: AnalyzedPrompt;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface AITemplate {
@@ -38,9 +38,9 @@ export interface AITemplate {
     required: boolean;
     options?: string[];
   }[];
-  isPublic: boolean;
+  is_public: boolean;
   usageCount: number;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface AIContentGeneration {
@@ -50,7 +50,7 @@ export interface AIContentGeneration {
   output: string;
   model: 'gpt-4' | 'gpt-3.5-turbo';
   tokens: number;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface AIAnalysis {
@@ -63,7 +63,7 @@ export interface AIAnalysis {
     score: number;
     recommendation: string;
   }[];
-  createdAt: string;
+  created_at: string;
 }
 
 export const aiApi = api.injectEndpoints({

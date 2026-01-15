@@ -1,11 +1,11 @@
-// packages/frontend/src/features/ai-mentor/WheelOfBalance.tsx
+// //packages/frontend/src/features/ai-mentor/WheelOfBalance.tsx
 
 // import { Button, Input } from '@/ui';
 // import { motion } from 'framer-motion';
 // import { ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react';
 // import { useCallback, useMemo } from 'react';
 // import { useAppDispatch, useAppSelector } from '../../app/store/hooks';
-// import { useCreateWheelAssessmentMutation } from './services/aiMentorApi';
+// // import { useCreateWheelAssessmentMutation } from './services/aiMentorApi';
 // import {
 //   finishWheelAssessment,
 //   nextWheelCategory,
@@ -14,7 +14,9 @@
 //   setShowWheelModal,
 //   setWheelScore,
 // } from './services/aiMentorSlice';
-// import { WHEEL_CATEGORIES, type WheelScore } from './types/ai-mentor.types';
+// import { WHEEL_CATEGORIES } from './types/ai-mentor.types';
+// import { WheelScore } from '@/features/wheel';
+// import { useCreateWheelAssessmentMutation } from '@/features/ai-mentor';
 
 // // ============ WHEEL VISUALIZATION ============
 // interface WheelChartProps {
@@ -40,7 +42,7 @@
 //     if (scores.length === 0) return '';
     
 //     const points = WHEEL_CATEGORIES.map((cat, i) => {
-//       const score = scores.find(s => s.categoryId === cat.id)?.score || 0;
+//       const score = scores.find(s => s.category_id === cat.id)?.score || 0;
 //       return getPoint(i, getScoreRadius(score));
 //     });
     
@@ -96,7 +98,7 @@
       
 //       {/* Score points */}
 //       {WHEEL_CATEGORIES.map((cat, i) => {
-//         const score = scores.find(s => s.categoryId === cat.id)?.score || 0;
+//         const score = scores.find(s => s.category_id === cat.id)?.score || 0;
 //         const point = getPoint(i, getScoreRadius(score));
 //         const labelPoint = getPoint(i, maxRadius + 25);
         
@@ -205,7 +207,7 @@
 //   const [createAssessment, { isLoading }] = useCreateWheelAssessmentMutation();
   
 //   const currentCategory = WHEEL_CATEGORIES[currentCategoryIndex];
-//   const currentScore = scores.find(s => s.categoryId === currentCategory?.id)?.score || 5;
+//   const currentScore = scores.find(s => s.category_id === currentCategory?.id)?.score || 5;
 //   const isLastCategory = currentCategoryIndex === WHEEL_CATEGORIES.length - 1;
 //   const progress = ((currentCategoryIndex + 1) / WHEEL_CATEGORIES.length) * 100;
 
@@ -213,16 +215,16 @@
 //     if (!currentCategory) return;
     
 //     dispatch(setWheelScore({
-//       categoryId: currentCategory.id,
+//       category_id: currentCategory.id,
 //       score: value,
-//       createdAt: new Date().toISOString(),
+//       created_at: new Date().toISOString(),
 //     }));
 //   }, [dispatch, currentCategory]);
 
 //   const handleNext = useCallback(() => {
 //     if (isLastCategory) {
 //       // Submit assessment
-//       // createAssessment({ userId, scores });
+//       // createAssessment({ user_id, scores });
 //       dispatch(finishWheelAssessment());
 //     } else {
 //       dispatch(nextWheelCategory());

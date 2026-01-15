@@ -26,15 +26,16 @@
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-hook-form": "^7.69.0",
+    "react-hook-form": "^7.71.1",
     "react-hot-toast": "^2.6.0",
     "react-redux": "^9.2.0",
-    "react-router-dom": "^7.11.0",
+    "react-router-dom": "^6.30.3",
     "reactflow": "^11.11.4",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/node": "^25.0.8",
     "@types/react": "^18.3.27",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",

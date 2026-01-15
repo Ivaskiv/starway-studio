@@ -1,281 +1,188 @@
-// packages/backend/src/routes/products.ts
-// Об'єднує: products, cabinet, lessons, enrollments, purchases, progress
-
-import { Router } from 'express'
-import { authRequired } from '../middleware/auth.js'
-import { sql } from '../db/client.js'
-import multer from 'multer'
 import { randomUUID } from 'crypto'
+import { Router } from 'express'
+import { sql } from '../db/client.js'
+import { authRequired } from '../middleware/auth.js'
+import type { Products } from '../types/types.js'
 
 const router = Router()
 
-// ============================================================
-// PRODUCTS CRUD
-// ============================================================
+type ProductWithEnrollment = Products & {
+  enrollment_id?: string | null
+  enrolled_at?: string | null
+}
 
 function slugify(text: string): string {
   return text
     .toLowerCase()
-    .replace(/[^a-z0-9а-яії]+/g, '-')
+    .replace(/[^a-z0-9а-яіїєґ]+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
 
-// POST / - Створити продукт
+// ======================= CREATE =======================
 router.post('/', authRequired, async (req, res) => {
   try {
-    const userId = req.user.id
-    const { title, description, type, price, duration_days, category } = req.body
-    
+    const user_id = req.user!.id
+
+    const title = req.body.title?.trim()
+    if (!title) {
+      return res.status(400).json({ error: 'title_required' })
+    }
+
     const slug = slugify(title)
-    
-    const [product] = await sql`
+
+    const existing = await sql`
+      SELECT id FROM products WHERE slug = ${slug}
+    `
+    if (existing.length > 0) {
+      return res.status(409).json({ error: 'slug_already_exists' })
+    }
+
+    const rows = await sql<Products[]>`
       INSERT INTO products (
-        title, slug, description, type, price, 
-        duration_days, category, author_id, published
-      )
-      VALUES (
-        ${title}, ${slug}, ${description || ''}, ${type}, ${price || 0},
-        ${duration_days || 7}, ${category || 'course'}, ${userId}, false
+        id, title, slug, description, type,
+        price, duration_days, category, author_id, published
+      ) VALUES (
+        ${randomUUID()},
+        ${title},
+        ${slug},
+        ${req.body.description?.trim() ?? null},
+        ${req.body.type ?? 'course'},
+        ${Number(req.body.price) || 0},
+        ${Number(req.body.duration_days) || 7},
+        ${req.body.category ?? 'personal_growth'},
+        ${user_id},
+        false
       )
       RETURNING *
     `
-    
-    res.json(product)
+
+    res.status(201).json(rows[0])
   } catch (err: any) {
-    console.error('CREATE PRODUCT ERROR:', err)
     res.status(500).json({ error: 'server_error', message: err.message })
   }
 })
 
-// GET / - Список продуктів автора
-router.get('/', authRequired, async (req, res) => {
-  try {
-    const products = await sql`
-      SELECT * FROM products 
-      WHERE author_id = ${req.user.id}
-      ORDER BY created_at DESC
-    `
-    res.json(products)
-  } catch (err: any) {
-    res.status(500).json({ error: 'server_error' })
-  }
-})
-
-// GET /:id - Один продукт
-router.get('/:id', authRequired, async (req, res) => {
-  try {
-    const [product] = await sql`
-      SELECT * FROM products 
-      WHERE id = ${req.params.id} AND author_id = ${req.user.id}
-    `
-    
-    if (!product) {
-      return res.status(404).json({ error: 'product_not_found' })
-    }
-    
-    res.json(product)
-  } catch (err: any) {
-    res.status(500).json({ error: 'server_error' })
-  }
-})
-
-// PUT /:id - Оновити
+// ======================= UPDATE =======================
 router.put('/:id', authRequired, async (req, res) => {
   try {
-    const { title, description, price, duration_days, published } = req.body
-    
-    const [product] = await sql`
-      UPDATE products 
-      SET 
-        title = COALESCE(${title}, title),
-        description = COALESCE(${description}, description),
-        price = COALESCE(${price}, price),
-        duration_days = COALESCE(${duration_days}, duration_days),
-        published = COALESCE(${published}, published),
+    const rows = await sql<Products[]>`
+      UPDATE products SET
+        title = COALESCE(${req.body.title?.trim() ?? null}, title),
+        description = COALESCE(${req.body.description?.trim() ?? null}, description),
+        price = COALESCE(${Number(req.body.price) ?? null}, price),
+        duration_days = COALESCE(${Number(req.body.duration_days) ?? null}, duration_days),
+        published = COALESCE(${req.body.published ?? null}, published),
         updated_at = NOW()
-      WHERE id = ${req.params.id} AND author_id = ${req.user.id}
+      WHERE id = ${req.params.id}
+        AND author_id = ${req.user!.id}
       RETURNING *
     `
-    
-    if (!product) {
-      return res.status(404).json({ error: 'product_not_found' })
+
+    if (!rows[0]) {
+      return res.status(404).json({ error: 'product_not_found_or_not_owner' })
     }
-    
-    res.json(product)
-  } catch (err: any) {
+
+    res.json(rows[0])
+  } catch {
     res.status(500).json({ error: 'server_error' })
   }
 })
 
-// DELETE /:id
+// ======================= DELETE =======================
 router.delete('/:id', authRequired, async (req, res) => {
   try {
-    await sql`
-      DELETE FROM products 
-      WHERE id = ${req.params.id} AND author_id = ${req.user.id}
+    const user_id = req.user!.id
+    const product_id = req.params.id
+
+    const rows = await sql<{ id: string }[]>`
+      DELETE FROM products
+      WHERE id = ${product_id}
+        AND author_id = ${user_id}
+      RETURNING id
     `
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'product_not_found_or_not_owner' })
+    }
+
     res.json({ success: true })
-  } catch (err: any) {
-    res.status(500).json({ error: 'server_error' })
-  }
-})
-
-// ============================================================
-// LESSONS (blocks)
-// ============================================================
-
-// GET /:product_id/lessons
-router.get('/:product_id/lessons', authRequired, async (req, res) => {
-  try {
-    const lessons = await sql`
-      SELECT * FROM blocks 
-      WHERE product_id = ${req.params.product_id}
-      ORDER BY order_index ASC
-    `
-    res.json(lessons)
   } catch (err) {
+    console.error('[DELETE /products/:id]', err)
     res.status(500).json({ error: 'server_error' })
   }
 })
 
-// ============================================================
-// ENROLLMENTS
-// ============================================================
 
-// POST /enroll
+// ======================= ENROLL =======================
 router.post('/enroll', authRequired, async (req, res) => {
-  try {
-    const { product_id, pay_ref, amount, currency } = req.body
-    
-    const enrollment = await sql`
-      INSERT INTO enrollments (user_id, product_id, pay_ref, amount, currency)
-      VALUES (${req.user.id}, ${product_id}, ${pay_ref}, ${amount}, ${currency})
-      ON CONFLICT (user_id, product_id) DO UPDATE 
-      SET updated_at = NOW()
-      RETURNING *
-    `
-    
-    res.json(enrollment)
-  } catch (err) {
-    res.status(500).json({ error: 'server_error' })
+  const user_id = req.user!.id
+  const product_id = req.body.product_id
+
+  if (!product_id) {
+    return res.status(400).json({ error: 'product_id_required' })
   }
-})
 
-// ============================================================
-// PROGRESS
-// ============================================================
+  // 1️⃣ Перевіряємо продукт
+  const productRows = await sql<{ id: string }[]>`
+    SELECT id
+    FROM products
+    WHERE id = ${product_id}
+      AND published = true
+  `
 
-// Multer для файлів завдань
-const upload = multer({
-  dest: 'uploads/tasks/',
-  limits: { fileSize: 100 * 1024 * 1024 }
-})
-
-// POST /progress/complete
-router.post('/progress/complete', authRequired, upload.single('file'), async (req, res) => {
-  try {
-    const { block_id, answer } = req.body
-    const fileUrl = req.file ? `/uploads/tasks/${req.file.filename}` : null
-
-    const [block] = await sql`
-      SELECT * FROM blocks WHERE id = ${block_id}
-    `
-
-    if (!block) {
-      return res.status(404).json({ error: 'block_not_found' })
-    }
-
-    // Зберегти completion
-    await sql`
-      INSERT INTO block_completions (
-        id, user_id, block_id, completed, user_answer, file_url, points_earned
-      ) VALUES (
-        ${randomUUID()}, ${req.user.id}, ${block_id}, true, ${answer}, ${fileUrl}, ${block.points}
-      )
-      ON CONFLICT (user_id, block_id) DO UPDATE 
-      SET user_answer = ${answer}, file_url = COALESCE(${fileUrl}, block_completions.file_url)
-    `
-
-    // Оновити прогрес
-    const [progress] = await sql`
-      INSERT INTO user_progress (
-        id, user_id, product_id, total_points, completed_blocks
-      ) VALUES (
-        ${randomUUID()}, ${req.user.id}, ${block.product_id}, ${block.points}, 1
-      )
-      ON CONFLICT (user_id, product_id) DO UPDATE SET
-        total_points = user_progress.total_points + ${block.points},
-        completed_blocks = user_progress.completed_blocks + 1,
-        level = FLOOR((user_progress.total_points + ${block.points}) / 500) + 1
-      RETURNING *
-    `
-
-    res.json({ success: true, points_earned: block.points, progress })
-  } catch (err) {
-    res.status(500).json({ error: 'complete_failed' })
+  if (!productRows[0]) {
+    return res.status(404).json({ error: 'product_not_found_or_unpublished' })
   }
+
+  // 2️⃣ Enroll
+const rows = await sql<{ id: string }[]>`
+  INSERT INTO enrollments (
+    id,
+    user_id,
+    product_id,
+    purchased,
+    trial_start,
+    trial_end
+  ) VALUES (
+    ${randomUUID()},
+    ${user_id},
+    ${product_id},
+    true,
+    NOW(),
+    NOW() + INTERVAL '7 days'
+  )
+  ON CONFLICT (user_id, product_id)
+  DO NOTHING
+  RETURNING id
+`
+
+if (!rows[0]) {
+  return res.status(200).json({ alreadyEnrolled: true })
+}
+
+res.json({ enrollment_id: rows[0].id })
 })
 
-// GET /progress/:product_id
-router.get('/progress/:product_id', authRequired, async (req, res) => {
-  try {
-    const [progress] = await sql`
-      SELECT up.*, 
-        (SELECT COUNT(*) FROM blocks WHERE product_id = ${req.params.product_id}) as total_blocks
-      FROM user_progress up
-      WHERE up.user_id = ${req.user.id} AND up.product_id = ${req.params.product_id}
-    `
 
-    if (!progress) {
-      const [newProgress] = await sql`
-        INSERT INTO user_progress (id, user_id, product_id)
-        VALUES (${randomUUID()}, ${req.user.id}, ${req.params.product_id})
-        RETURNING *
-      `
-      return res.json(newProgress)
-    }
-
-    res.json(progress)
-  } catch (err) {
-    res.status(500).json({ error: 'fetch_failed' })
-  }
-})
-
-// ============================================================
-// CABINET (user dashboard)
-// ============================================================
-
-// GET /cabinet - Дані кабінету користувача
+// ======================= CABINET =======================
 router.get('/cabinet', authRequired, async (req, res) => {
-  try {
-    // Отримати всі продукти + enrollments + progress
-    const products = await sql`
-      SELECT 
-        p.*,
-        e.id as enrollment_id,
-        up.total_points,
-        up.completed_blocks,
-        (SELECT COUNT(*) FROM blocks WHERE product_id = p.id) as total_blocks
-      FROM products p
-      LEFT JOIN enrollments e ON e.product_id = p.id AND e.user_id = ${req.user.id}
-      LEFT JOIN user_progress up ON up.product_id = p.id AND up.user_id = ${req.user.id}
-      WHERE p.published = true OR p.author_id = ${req.user.id}
-      ORDER BY p.created_at DESC
-    `
+  const products = await sql<ProductWithEnrollment[]>`
+    SELECT p.*, e.id AS enrollment_id, e.created_at AS enrolled_at
+    FROM products p
+    LEFT JOIN enrollments e
+      ON e.product_id = p.id
+     AND e.user_id = ${req.user!.id}
+    WHERE p.published = true OR p.author_id = ${req.user!.id}
+    ORDER BY p.created_at DESC
+  `
 
-    res.json({ 
-      user: req.user, 
-      products: products.map(p => ({
-        ...p,
-        is_active: !!p.enrollment_id,
-        progress: p.total_blocks > 0 
-          ? Math.round((p.completed_blocks / p.total_blocks) * 100) 
-          : 0
-      }))
-    })
-  } catch (err: any) {
-    res.status(500).json({ error: 'server_error' })
-  }
+  res.json({
+    products: products.map(p => ({
+      ...p,
+      is_active: Boolean(p.enrollment_id),
+      enrolled_at: p.enrolled_at,
+    })),
+  })
 })
 
 export default router

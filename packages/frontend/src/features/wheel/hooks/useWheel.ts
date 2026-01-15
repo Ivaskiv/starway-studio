@@ -1,141 +1,102 @@
-// features/wheel/hooks/useWheel.ts
-
-import { useState, useCallback, useMemo } from 'react'
-import { WHEEL_CATEGORIES, TOTAL_CATEGORIES, type WheelScore, type WheelFormState } from '../types/wheel.types'
-import { useSubmitWheelMutation, useAnalyzeWheelMutation } from '../api/wheel.api'
+// useWheel.ts
+import { useAnalyzeWheelMutation, useCreateWheelAssessmentMutation } from '@/features/ai-mentor/services/aiMentor.api'
+import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
+import { TOTAL_CATEGORIES, WHEEL_CATEGORIES, WheelScore } from '../types/wheel.types'
 
-const createInitialScores = (): WheelScore[] =>
-  WHEEL_CATEGORIES.map((cat) => ({
-    categoryId: cat.id,
-    score: 5,
-  }))
-
-export const useWheel = (userId: string) => {
-  const [submitWheel, { isLoading: isSubmitting }] = useSubmitWheelMutation()
-  const [analyzeWheel, { isLoading: isAnalyzing }] = useAnalyzeWheelMutation()
-
-  const [state, setState] = useState<WheelFormState>({
-    currentIndex: 0,
-    scores: createInitialScores(),
-    isComplete: false,
-  })
+export const useWheel = (user_id: string) => {
+const [state, setState] = useState<{
+  currentIndex: number
+  score: WheelScore[]
+  isComplete: boolean
+  assessmentId: string | null
+}>({
+  currentIndex: 0,
+  score: WHEEL_CATEGORIES.map(cat => ({ category_id: cat.id, score: 5 })),
+  isComplete: false,
+  assessmentId: null,
+})
+  const [createWheel, saveState] = useCreateWheelAssessmentMutation()
+  const [analyzeWheel, analyzeState] = useAnalyzeWheelMutation()
 
   const currentCategory = WHEEL_CATEGORIES[state.currentIndex]
-  const currentScore = state.scores.find((s) => s.categoryId === currentCategory?.id)?.score ?? 5
-  const isFirstStep = state.currentIndex === 0
-  const isLastStep = state.currentIndex === TOTAL_CATEGORIES - 1
-  const progress = ((state.currentIndex + 1) / TOTAL_CATEGORIES) * 100
+  const currentScore = state.score[state.currentIndex]?.score ?? 5
 
-  const setScore = useCallback((score: number) => {
-    setState((prev) => ({
-      ...prev,
-      scores: prev.scores.map((s) =>
-        s.categoryId === WHEEL_CATEGORIES[prev.currentIndex].id
-          ? { ...s, score }
-          : s
-      ),
-    }))
-  }, [])
+  const nextStep = () => setState(prev => ({ ...prev, currentIndex: Math.min(prev.currentIndex + 1, TOTAL_CATEGORIES - 1) }))
+  const prevStep = () => setState(prev => ({ ...prev, currentIndex: Math.max(prev.currentIndex - 1, 0) }))
 
-  const setNotes = useCallback((notes: string) => {
-    setState((prev) => ({
-      ...prev,
-      scores: prev.scores.map((s) =>
-        s.categoryId === WHEEL_CATEGORIES[prev.currentIndex].id
-          ? { ...s, notes }
-          : s
-      ),
-    }))
-  }, [])
-
-  const nextStep = useCallback(() => {
-    if (!isLastStep) {
-      setState((prev) => ({ ...prev, currentIndex: prev.currentIndex + 1 }))
-    }
-  }, [isLastStep])
-
-  const prevStep = useCallback(() => {
-    if (!isFirstStep) {
-      setState((prev) => ({ ...prev, currentIndex: prev.currentIndex - 1 }))
-    }
-  }, [isFirstStep])
-
-  const goToStep = useCallback((index: number) => {
-    if (index >= 0 && index < TOTAL_CATEGORIES) {
-      setState((prev) => ({ ...prev, currentIndex: index }))
-    }
-  }, [])
-
-  const submit = useCallback(async () => {
-    try {
-      const result = await submitWheel({ userId, scores: state.scores }).unwrap()
-      setState((prev) => ({ ...prev, isComplete: true }))
-      toast.success('Колесо балансу збережено! 🎯')
-      return result
-    } catch {
-      toast.error('Помилка збереження')
-      return null
-    }
-  }, [userId, state.scores, submitWheel])
-
-  const analyze = useCallback(async () => {
-    try {
-      return await analyzeWheel({ userId, scores: state.scores }).unwrap()
-    } catch {
-      toast.error('Помилка аналізу')
-      return null
-    }
-  }, [userId, state.scores, analyzeWheel])
-
-  const reset = useCallback(() => {
-    setState({
-      currentIndex: 0,
-      scores: createInitialScores(),
-      isComplete: false,
+  const setScore = (score: number) => {
+    setState(prev => {
+      const scoreArr = [...prev.score]
+      scoreArr[prev.currentIndex] = { ...scoreArr[prev.currentIndex], score }
+      return { ...prev, score: scoreArr }
     })
-  }, [])
-
-  // Статистика
-  const stats = useMemo(() => {
-    const total = state.scores.reduce((sum, s) => sum + s.score, 0)
-    const average = total / TOTAL_CATEGORIES
-    const sorted = [...state.scores].sort((a, b) => b.score - a.score)
-    const strengths = sorted.slice(0, 3).map((s) => s.categoryId)
-    const gaps = sorted.slice(-3).reverse().map((s) => s.categoryId)
-
-    return { total, average, strengths, gaps }
-  }, [state.scores])
-
-  return {
-    // State
-    currentIndex: state.currentIndex,
-    currentCategory,
-    currentScore,
-    scores: state.scores,
-    isComplete: state.isComplete,
-    
-    // Progress
-    progress,
-    isFirstStep,
-    isLastStep,
-    
-    // Actions
-    setScore,
-    setNotes,
-    nextStep,
-    prevStep,
-    goToStep,
-    submit,
-    analyze,
-    reset,
-    
-    // Loading
-    isSubmitting,
-    isAnalyzing,
-    isLoading: isSubmitting || isAnalyzing,
-    
-    // Stats
-    stats,
   }
+const progress = Math.round((state.currentIndex + 1) / TOTAL_CATEGORIES * 100)
+const isFirstStep = state.currentIndex === 0
+const isLastStep = state.currentIndex === TOTAL_CATEGORIES - 1
+const goToStep = (index: number) =>
+  setState(prev => ({ ...prev, currentIndex: Math.max(0, Math.min(index, TOTAL_CATEGORIES - 1)) }))
+
+const submit = async () => {
+  const result = await createWheel({
+    user_id,
+    scores: state.score,
+  }).unwrap()
+
+  setState(prev => ({
+    ...prev,
+    isComplete: true,
+    assessmentId: result.id, 
+  }))
+
+  toast.success('Колесо збережено 🎯')
+  return result
+}
+
+const analyze = async () => {
+  if (!state.assessmentId) return
+  return analyzeWheel({
+    user_id,
+    assessmentId: state.assessmentId,
+  }).unwrap()
+}
+
+const reset = () =>
+  setState({
+    currentIndex: 0,
+    score: WHEEL_CATEGORIES.map(cat => ({
+      category_id: cat.id,
+      score: 5,
+    })),
+    isComplete: false,
+    assessmentId: null,
+  })
+
+
+  const stats = useMemo(() => {
+    const total = state.score.reduce((sum, s) => sum + s.score, 0)
+    const average = total / TOTAL_CATEGORIES
+    const sorted = [...state.score].sort((a, b) => b.score - a.score)
+    return { total, average, strengths: sorted.slice(0, 3).map(s => s.category_id), gaps: sorted.slice(-3).map(s => s.category_id) }
+  }, [state.score])
+
+return { 
+  ...state,
+  currentCategory,
+  currentScore,
+  nextStep,
+  prevStep,
+  setScore,
+  submit,
+  analyze,
+  reset,
+  stats,
+  progress,
+  isFirstStep,
+  isLastStep,
+  goToStep,
+  isSubmitting: saveState.isLoading,
+  isAnalyzing: analyzeState.isLoading
+}
 }

@@ -1,20 +1,45 @@
 // packages/frontend/src/services/index.ts
+// Центральний експорт всіх API services
 
-export * from '../features/analytics/services/analytics.api';
-export * from '../features/auth/services/auth.api';
-export * from '../features/chat/services/feedback.api';
-export * from '../features/funnels/services/funnels.api';
-export * from '../features/integrations/services/integrations.api';
-export * from '../features/products/services/products.api';
-export * from './ai.api';
-export { api } from './api';
-export * from './gamification.api';
-export * from './miniapps.api';
-export * from './monetization.api';
-export * from './notifications.api';
-export * from './progress.api';
-export * from './settings.api';
-export * from './stats.api';
-export * from './support.api';
-// export * from './chat.api';
-// export * from './media.api';
+// Base API
+export { api } from './api'
+
+// Progress API
+export {
+  progressApi, useGetAdminProgressOverviewQuery, useGetProgressOverviewQuery
+} from '../features/progress/services/progress.api'
+
+// Wheel API
+export {
+  // useAnalyzeWheelMutation,
+  useGetWheelCooldownQuery,
+  // useGetWheelDetailQuery,
+  useGetWheelHistoryQuery,
+  useGetWheelQuery,
+  useSaveWheelMutation, wheelApi, 
+  // type SaveWheelPayload,
+  type WheelData,
+  // type WheelDetail,
+  // type WheelHistoryItem
+} from '../features/wheel/wheel.api'
+
+// Mentor API
+export {
+  
+  mentorApi,
+  useCompleteSessionMutation,
+  useCompleteTaskMutation,
+  useConvertToSmartMutation,
+  useCreateTaskMutation,
+  useDeleteTaskMutation,
+  useGetChatHistoryQuery,
+  useGetMentorStatsQuery,
+  useGetTodaySessionsQuery,
+  useGetTodayTasksQuery,
+  useGetYearlyGoalsQuery,
+  useSaveSessionAnswerMutation,
+  useSendChatMessageMutation,
+  useStartSessionMutation,
+  useUpdateYearlyGoalsMutation,
+} from '../services/mentor.api'
+

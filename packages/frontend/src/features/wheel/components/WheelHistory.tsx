@@ -1,25 +1,32 @@
-// frontend/src/features/wheel/components/WheelHistory.tsx
-// features/wheel/components/WheelHistory.tsx
+// packages/frontend/src/features/wheel/components/WheelHistory.tsx
 
+import { WHEEL_CATEGORIES } from '@/features/ai-mentor'
+import { useGetWheelHistoryQuery } from '@/services'
 import { motion } from 'framer-motion'
-import { Calendar, TrendingUp, TrendingDown, Minus } from 'lucide-react'
-import { useGetWheelHistoryQuery, useCompareWheelsQuery } from '../api/wheel.api'
-import { WHEEL_CATEGORIES, type WheelAssessment } from '../types/wheel.types'
+import { Calendar, Loader2, Minus, TrendingDown, TrendingUp } from 'lucide-react'
 import { WheelChart } from './WheelChart'
 
-interface WheelHistoryProps {
-  userId: string
-  onSelect?: (assessment: WheelAssessment) => void
+interface WheelHistoryItem {
+  id: string
+  scores: Array<{ category_id: string; score: number }>
+  total_score: number
+  average_score: number
+  strengths: string[]
+  gaps: string[]
+  created_at: string
 }
 
-export const WheelHistory = ({ userId, onSelect }: WheelHistoryProps) => {
-  const { data: history, isLoading } = useGetWheelHistoryQuery({ userId, limit: 6 })
-  const { data: comparison } = useCompareWheelsQuery({ userId }, { skip: !history || history.length < 2 })
+interface WheelHistoryProps {
+  onSelect?: (assessment: WheelHistoryItem) => void
+}
+
+export const WheelHistory = ({ onSelect }: WheelHistoryProps) => {
+  const { data: history, isLoading } = useGetWheelHistoryQuery({ limit: 6 })
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
       </div>
     )
   }
@@ -32,6 +39,18 @@ export const WheelHistory = ({ userId, onSelect }: WheelHistoryProps) => {
     )
   }
 
+  // Порівняння двох останніх
+  const comparison =
+    history.length >= 2
+      ? history[0].scores.map((curr) => {
+          const prev = history[1].scores.find((p) => p.category_id === curr.category_id)
+          return {
+            category_id: curr.category_id,
+            delta: curr.score - (prev?.score || 0),
+          }
+        })
+      : null
+
   return (
     <div className="space-y-6">
       {/* Comparison summary */}
@@ -43,21 +62,25 @@ export const WheelHistory = ({ userId, onSelect }: WheelHistoryProps) => {
         >
           <h3 className="text-sm font-semibold text-white/80 mb-3">Порівняння з попереднім</h3>
           <div className="flex flex-wrap gap-2">
-            {comparison.changes.map((change) => {
-              const cat = WHEEL_CATEGORIES.find((c) => c.id === change.categoryId)
+            {comparison.map((change) => {
+              const cat = WHEEL_CATEGORIES.find((c) => c.id === change.category_id)
               if (!cat) return null
-              
+
               const Icon = change.delta > 0 ? TrendingUp : change.delta < 0 ? TrendingDown : Minus
-              const color = change.delta > 0 ? 'text-green-400' : change.delta < 0 ? 'text-red-400' : 'text-white/40'
-              
+              const color =
+                change.delta > 0 ? 'text-green-400' : change.delta < 0 ? 'text-red-400' : 'text-white/40'
+
               return (
                 <div
-                  key={change.categoryId}
+                  key={change.category_id}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 text-xs"
                 >
-                  <span>{cat.icon}</span>
+                  <span>{cat.icon }</span>
                   <Icon className={`w-3 h-3 ${color}`} />
-                  <span className={color}>{change.delta > 0 ? '+' : ''}{change.delta}</span>
+                  <span className={color}>
+                    {change.delta > 0 ? '+' : ''}
+                    {change.delta}
+                  </span>
                 </div>
               )
             })}
@@ -78,19 +101,18 @@ export const WheelHistory = ({ userId, onSelect }: WheelHistoryProps) => {
           >
             <div className="flex items-center gap-2 mb-3 text-xs text-white/60">
               <Calendar className="w-3 h-3" />
-              {new Date(assessment.createdAt).toLocaleDateString('uk-UA', {
+              {new Date(assessment.created_at).toLocaleDateString('uk-UA', {
                 day: 'numeric',
                 month: 'short',
-                year: assessment.createdAt.slice(0, 4) !== new Date().getFullYear().toString() ? 'numeric' : undefined,
               })}
             </div>
-            
+
             <div className="flex justify-center mb-3">
-              <WheelChart scores={assessment.scores} size={100} animated={false} />
+<WheelChart scores={assessment.scores} size={100} animated={false} showEmoji={false} />
             </div>
-            
+
             <div className="text-center">
-              <span className="text-2xl font-bold text-white">{assessment.averageScore?.toFixed(1) || (assessment.totalScore / 8).toFixed(1)}</span>
+              <span className="text-2xl font-bold text-white">{assessment.average_score.toFixed(1)}</span>
               <span className="text-xs text-white/40 ml-1">/ 10</span>
             </div>
           </motion.button>
@@ -99,3 +121,5 @@ export const WheelHistory = ({ userId, onSelect }: WheelHistoryProps) => {
     </div>
   )
 }
+
+export default WheelHistory

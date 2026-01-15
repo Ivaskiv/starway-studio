@@ -3,7 +3,7 @@ import { api } from './api';
 
 export interface SupportTicket {
   id: string;
-  userId: string;
+  user_id: string;
   subject: string;
   description: string;
   category: 'technical' | 'billing' | 'general' | 'bug' | 'feature';
@@ -16,23 +16,23 @@ export interface SupportTicket {
     url: string;
     size: number;
   }[];
-  createdAt: string;
-  updatedAt?: string;
+  created_at: string;
+  updated_at?: string;
   resolvedAt?: string;
 }
 
 export interface SupportMessage {
   id: string;
   ticketId: string;
-  userId: string;
-  userName: string;
+  user_id: string;
+  user_name: string;
   isStaff: boolean;
   content: string;
   attachments?: {
     name: string;
     url: string;
   }[];
-  createdAt: string;
+  created_at: string;
 }
 
 export interface FAQ {
@@ -46,8 +46,8 @@ export interface FAQ {
   notHelpful: number;
   order: number;
   isPublished: boolean;
-  createdAt: string;
-  updatedAt?: string;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface FAQCategory {
@@ -75,8 +75,8 @@ export interface KnowledgeBaseArticle {
   helpful: number;
   relatedArticles?: string[];
   isPublished: boolean;
-  createdAt: string;
-  updatedAt?: string;
+  created_at: string;
+  updated_at?: string;
 }
 
 export const supportApi = api.injectEndpoints({

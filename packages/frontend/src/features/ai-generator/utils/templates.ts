@@ -23,7 +23,7 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
       targetRevenue: 10000,
       averageCheck: 99,
       requiredSales: 101,
-      conversionRate: 18,
+      conversion_rate: 18,
     },
     automation: [
       'AI-діагностика автоматична',
@@ -84,7 +84,7 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
       targetRevenue: 50000,
       averageCheck: 399,
       requiredSales: 125,
-      conversionRate: 15,
+      conversion_rate: 15,
     },
     automation: [
       'AI-аналіз бізнес-моделі',
@@ -145,7 +145,7 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
       targetRevenue: 30000,
       averageCheck: 79,
       requiredSales: 380,
-      conversionRate: 12,
+      conversion_rate: 12,
     },
     automation: [
       'AI-генерація контенту',

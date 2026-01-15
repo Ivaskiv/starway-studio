@@ -3,7 +3,7 @@ import { api } from './api';
 
 export interface PricingPlan {
   id: string;
-  productId?: string;
+  product_id?: string;
   name: string;
   description?: string;
   price: number;
@@ -11,10 +11,10 @@ export interface PricingPlan {
   billingPeriod: 'once' | 'monthly' | 'quarterly' | 'yearly';
   features: string[];
   isPopular?: boolean;
-  isActive: boolean;
+  is_active: boolean;
   trialDays?: number;
   maxUsers?: number;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Coupon {
@@ -25,30 +25,30 @@ export interface Coupon {
   currency?: 'UAH' | 'USD' | 'EUR';
   maxUses?: number;
   usedCount: number;
-  expiresAt?: string;
-  isActive: boolean;
+  expires_at?: string;
+  is_active: boolean;
   applicableTo?: {
     type: 'all' | 'products' | 'plans';
     ids?: string[];
   };
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Subscription {
   id: string;
-  userId: string;
+  user_id: string;
   planId: string;
   status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired';
   currentPeriodStart: string;
   currentPeriodEnd: string;
   cancelAtPeriodEnd: boolean;
-  trialEnd?: string;
-  createdAt: string;
+  trial_end?: string;
+  created_at: string;
 }
 
 export interface Transaction {
   id: string;
-  userId: string;
+  user_id: string;
   type: 'payment' | 'refund' | 'subscription';
   amount: number;
   currency: 'UAH' | 'USD' | 'EUR';
@@ -56,12 +56,12 @@ export interface Transaction {
   paymentMethod: 'card' | 'paypal' | 'crypto' | 'bank_transfer';
   description?: string;
   metadata?: any;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Invoice {
   id: string;
-  userId: string;
+  user_id: string;
   subscriptionId?: string;
   number: string;
   amount: number;
@@ -76,7 +76,7 @@ export interface Invoice {
     total: number;
   }[];
   pdf?: string;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Refund {
@@ -86,16 +86,16 @@ export interface Refund {
   currency: 'UAH' | 'USD' | 'EUR';
   reason?: string;
   status: 'pending' | 'completed' | 'failed';
-  createdAt: string;
+  created_at: string;
 }
 
 export const monetizationApi = api.injectEndpoints({
   endpoints: (builder) => ({
     // Pricing Plans
-    getPricingPlans: builder.query<PricingPlan[], { productId?: string }>({
-      query: ({ productId }) => ({
+    getPricingPlans: builder.query<PricingPlan[], { product_id?: string }>({
+      query: ({ product_id }) => ({
         url: '/monetization/pricing',
-        params: { productId },
+        params: { product_id },
       }),
       providesTags: ['Pricing'],
     }),

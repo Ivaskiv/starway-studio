@@ -28,15 +28,15 @@ export interface FunnelStepDefinition {
 
 export interface Funnel {
   id: string
-  userId: string
+  user_id: string
   name: string
   description?: string
   theme: FunnelTheme
   status: FunnelStatus
   steps: FunnelStep[]
   analytics?: FunnelAnalytics
-  createdAt: string
-  updatedAt: string
+  created_at: string
+  updated_at: string
 }
 
 export interface FunnelStep {
@@ -45,7 +45,7 @@ export interface FunnelStep {
   name: string
   order: number
   config: StepConfig
-  isActive: boolean
+  is_active: boolean
 }
 
 export interface StepConfig {

@@ -16,8 +16,8 @@ export interface MiniApp {
     logo?: string;
     features: string[];
   };
-  createdAt: string;
-  updatedAt?: string;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface MiniAppAnalytics {
@@ -25,7 +25,7 @@ export interface MiniAppAnalytics {
   activeUsers: number;
   totalSessions: number;
   avgSessionDuration: number;
-  conversionRate: number;
+  conversion_rate: number;
 }
 
 export const miniappsApi = api.injectEndpoints({

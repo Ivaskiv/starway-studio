@@ -1,8 +1,8 @@
 // features/funnels/components/FunnelStepCard.tsx
 
-import { Sparkles, RefreshCw, Check } from 'lucide-react'
 import { Button, GlassCard, Textarea } from '@/ui'
-import type { FunnelStepDefinition, FunnelAttempt } from '../types/funnel.types'
+import { Check, RefreshCw, Sparkles } from 'lucide-react'
+import type { FunnelAttempt, FunnelStepDefinition } from '../types/funnel.types'
 
 interface Props {
   step: FunnelStepDefinition
@@ -25,7 +25,7 @@ export function FunnelStepCard({
   onSelectVariant,
   isGenerating,
 }: Props) {
-  const canGenerate = userInput.trim() && remainingAttempts > 0 && !isGenerating
+  const can_generate = userInput.trim() && remainingAttempts > 0 && !isGenerating
 
   return (
     <GlassCard className="p-6 md:p-8">
@@ -81,7 +81,7 @@ export function FunnelStepCard({
 
         <Button
           onClick={onGenerate}
-          disabled={!canGenerate}
+          disabled={!can_generate}
           data-color="purple"
           data-size="lg"
           className="w-full"
