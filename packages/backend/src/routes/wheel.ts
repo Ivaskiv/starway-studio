@@ -1,202 +1,124 @@
 // packages/backend/src/routes/wheel.ts
-
 import { Router } from 'express'
-import { authRequired } from '../middleware/auth.js'
-import { sql } from '../db/client.js'
-import { analyzeWheelWithAI } from '../services/wheel-prompts.js'
+import { sql } from '../db/client'
+import { authRequired } from '../middleware/auth'
 
 const router = Router()
+const COOLDOWN_DAYS = 0
+// const COOLDOWN_DAYS = 30
 
-/**
- * GET /wheel/latest/:userId
- * Останній результат колеса
- */
-router.get('/latest/:userId', authRequired, async (req, res) => {
+
+// GET /api/wheel
+router.get('/', authRequired, async (req, res) => {
   try {
-    const { userId } = req.params
+    const user_id = req.user!.id
 
-    const [wheel] = await sql`
-      SELECT 
-        id, user_id, scores, total_score, average_score,
-        strengths, gaps, created_at
-      FROM wheel_assessments
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT 1
+    const rows = await sql`
+      SELECT id, scores, total_score, average_score, strengths, gaps, ai_analysis, created_at
+      FROM wheel_assessments WHERE user_id = ${user_id} ORDER BY created_at DESC LIMIT 12
     `
 
-    if (!wheel) {
-      return res.json(null)
+    const current = rows[0] || null
+    let canFillNew = true, daysUntilNext = 0
+
+    if (current) {
+      const daysSince = Math.floor((Date.now() - new Date(current.created_at).getTime()) / (1000*60*60*24))
+      canFillNew = daysSince >= COOLDOWN_DAYS
+      daysUntilNext = Math.max(0, COOLDOWN_DAYS - daysSince)
     }
 
-    res.json({
-      id: wheel.id,
-      userId: wheel.user_id,
-      scores: wheel.scores,
-      totalScore: wheel.total_score,
-      averageScore: wheel.average_score,
-      strengths: wheel.strengths,
-      gaps: wheel.gaps,
-      createdAt: wheel.created_at,
-    })
-  } catch (error: any) {
-    console.error('❌ [Wheel] Get latest error:', error)
-    res.status(500).json({ error: 'server_error', message: error.message })
+    const mapped = current ? {
+      id: current.id,
+      scores: current.scores,
+      average: parseFloat(current.average_score) || 0,
+      total_score: current.total_score || 0,
+      strengths: current.strengths || [],
+      gaps: current.gaps || [],
+      ai_analysis: current.ai_analysis,
+      completed_at: current.created_at,
+    } : null
+
+    res.json({ current: mapped, history: rows, canFillNew, daysUntilNext })
+  } catch (err: any) {
+    console.error('Get wheel error:', err)
+    res.json({ current: null, history: [], canFillNew: true, daysUntilNext: 0 })
   }
 })
 
-/**
- * GET /wheel/history/:userId
- * Історія оцінок
- */
-router.get('/history/:userId', authRequired, async (req, res) => {
-  try {
-    const { userId } = req.params
-    const limit = parseInt(req.query.limit as string) || 12
-
-    const wheels = await sql`
-      SELECT 
-        id, user_id, scores, total_score, average_score,
-        strengths, gaps, created_at
-      FROM wheel_assessments
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT ${limit}
-    `
-
-    res.json(wheels.map(w => ({
-      id: w.id,
-      userId: w.user_id,
-      scores: w.scores,
-      totalScore: w.total_score,
-      averageScore: w.average_score,
-      strengths: w.strengths,
-      gaps: w.gaps,
-      createdAt: w.created_at,
-    })))
-  } catch (error: any) {
-    console.error('❌ [Wheel] Get history error:', error)
-    res.status(500).json({ error: 'server_error', message: error.message })
-  }
-})
-
-/**
- * GET /wheel/compare/:userId
- * Порівняння поточного з попереднім
- */
-router.get('/compare/:userId', authRequired, async (req, res) => {
-  try {
-    const { userId } = req.params
-
-    const wheels = await sql`
-      SELECT 
-        id, scores, total_score, created_at
-      FROM wheel_assessments
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT 2
-    `
-
-    if (wheels.length < 2) {
-      return res.status(404).json({ error: 'not_enough_data' })
-    }
-
-    const [current, previous] = wheels
-
-    // Обчислюємо зміни по категоріях
-    const changes = current.scores.map((curr: any) => {
-      const prev = previous.scores.find((p: any) => p.categoryId === curr.categoryId)
-      return {
-        categoryId: curr.categoryId,
-        delta: curr.score - (prev?.score || 0),
-      }
-    })
-
-    res.json({
-      current: { id: current.id, scores: current.scores, createdAt: current.created_at },
-      previous: { id: previous.id, scores: previous.scores, createdAt: previous.created_at },
-      changes,
-    })
-  } catch (error: any) {
-    console.error('❌ [Wheel] Compare error:', error)
-    res.status(500).json({ error: 'server_error', message: error.message })
-  }
-})
-
-/**
- * POST /wheel
- * Зберегти нову оцінку колеса
- */
+// POST /api/wheel
 router.post('/', authRequired, async (req, res) => {
   try {
-    const { userId, scores } = req.body
+    const user_id = req.user!.id
+    const { scores } = req.body
 
-    if (!userId || !scores || !Array.isArray(scores) || scores.length !== 8) {
+    if (!scores || !Array.isArray(scores) || scores.length !== 8) {
       return res.status(400).json({ error: 'invalid_data', message: 'Expected 8 scores' })
     }
 
-    // Розрахунки
-    const totalScore = scores.reduce((sum: number, s: any) => sum + s.score, 0)
-    const averageScore = totalScore / 8
-
-    // Сортуємо для визначення сильних/слабких сторін
+    const total_score = scores.reduce((s: number, i: any) => s + i.score, 0)
+    const avgScore = (total_score / 8).toFixed(1)
     const sorted = [...scores].sort((a: any, b: any) => b.score - a.score)
-    const strengths = sorted.slice(0, 3).map((s: any) => s.categoryId)
-    const gaps = sorted.slice(-3).map((s: any) => s.categoryId)
+    const strengths = sorted.slice(0, 3).map((s: any) => s.category_id)
+    const gaps = sorted.slice(-3).reverse().map((s: any) => s.category_id)
 
-    const [wheel] = await sql`
-      INSERT INTO wheel_assessments (
-        user_id, scores, total_score, average_score, strengths, gaps, created_at
-      ) VALUES (
-        ${userId},
-        ${JSON.stringify(scores)},
-        ${totalScore},
-        ${averageScore},
-        ${JSON.stringify(strengths)},
-        ${JSON.stringify(gaps)},
-        NOW()
-      )
-      RETURNING id, user_id, scores, total_score, average_score, strengths, gaps, created_at
-    `
+    const result = await sql`
+      INSERT INTO wheel_assessments (user_id, scores, total_score, average_score, strengths, gaps)
+      VALUES (${user_id}, ${JSON.stringify(scores)}, ${total_score}, ${avgScore}, ${JSON.stringify(strengths)}, ${JSON.stringify(gaps)})
+      RETURNING *
+    `.then(r => r[0])
 
-    console.log(`✅ [Wheel] Assessment saved for user ${userId}, avg: ${averageScore.toFixed(1)}`)
+    await sql`UPDATE user_progress SET total_points = total_points + 100 WHERE user_id = ${user_id}`
 
     res.json({
-      id: wheel.id,
-      userId: wheel.user_id,
-      scores: wheel.scores,
-      totalScore: wheel.total_score,
-      averageScore: wheel.average_score,
-      strengths: wheel.strengths,
-      gaps: wheel.gaps,
-      createdAt: wheel.created_at,
+      id: result.id, scores: result.scores, average: parseFloat(result.average_score),
+      total_score: result.total_score, strengths: result.strengths, gaps: result.gaps, completed_at: result.created_at,
     })
-  } catch (error: any) {
-    console.error('❌ [Wheel] Save error:', error)
-    res.status(500).json({ error: 'save_failed', message: error.message })
+  } catch (err: any) {
+    console.error('Save wheel error:', err)
+    res.status(500).json({ error: 'save_failed', message: err.message })
   }
 })
 
-/**
- * POST /wheel/analyze
- * AI аналіз колеса з рекомендаціями
- */
-router.post('/analyze', authRequired, async (req, res) => {
+// GET /api/wheel/cooldown
+router.get('/cooldown', authRequired, async (req, res) => {
   try {
-    const { userId, scores } = req.body
+    const row = await sql`
+      SELECT created_at FROM wheel_assessments WHERE user_id = ${req.user!.id} ORDER BY created_at DESC LIMIT 1
+    `.then(r => r[0])
 
-    if (!scores || scores.length !== 8) {
-      return res.status(400).json({ error: 'invalid_scores' })
-    }
+    if (!row) return res.json({ canFill: true, daysLeft: 0, lastFilledAt: null })
 
-    console.log(`🤖 [Wheel] AI analysis for user ${userId}`)
+    const daysSince = Math.floor((Date.now() - new Date(row.created_at).getTime()) / (1000*60*60*24))
+    res.json({ canFill: daysSince >= COOLDOWN_DAYS, daysLeft: Math.max(0, COOLDOWN_DAYS - daysSince), lastFilledAt: row.created_at })
+  } catch { res.json({ canFill: true, daysLeft: 0, lastFilledAt: null }) }
+})
 
-    const analysis = await analyzeWheelWithAI(scores)
+// GET /api/wheel/latest/:user_id
+router.get('/latest/:user_id', authRequired, async (req, res) => {
+  try {
+    const w = await sql`
+      SELECT id, scores, total_score, average_score, strengths, gaps, created_at
+      FROM wheel_assessments WHERE user_id = ${req.params.user_id} ORDER BY created_at DESC LIMIT 1
+    `.then(r => r[0])
 
-    res.json(analysis)
-  } catch (error: any) {
-    console.error('❌ [Wheel] Analysis error:', error)
-    res.status(500).json({ error: 'analysis_failed', message: error.message })
+    if (!w) return res.json(null)
+    res.json({ id: w.id, scores: w.scores, total_score: w.total_score, average_score: parseFloat(w.average_score), strengths: w.strengths, gaps: w.gaps, created_at: w.created_at })
+  } catch (err: any) {
+    res.status(500).json({ error: 'server_error', message: err.message })
+  }
+})
+
+// GET /api/wheel/history/:user_id
+router.get('/history/:user_id', authRequired, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 12
+    const rows = await sql`
+      SELECT id, scores, total_score, average_score, strengths, gaps, created_at
+      FROM wheel_assessments WHERE user_id = ${req.params.user_id} ORDER BY created_at DESC LIMIT ${limit}
+    `
+    res.json(rows.map(w => ({ id: w.id, scores: w.scores, total_score: w.total_score, average_score: parseFloat(w.average_score), strengths: w.strengths, gaps: w.gaps, created_at: w.created_at })))
+  } catch (err: any) {
+    res.status(500).json({ error: 'server_error', message: err.message })
   }
 })
 

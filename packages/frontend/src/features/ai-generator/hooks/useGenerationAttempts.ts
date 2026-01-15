@@ -36,6 +36,6 @@ export function useGenerationAttempts(initialAttempts: number = ATTEMPTS_PER_STE
     useAttempt,
     carryOverToNextStep,
     resetWithCarryOver,
-    canGenerate: remainingAttempts > 0,
+    can_generate: remainingAttempts > 0,
   };
 }

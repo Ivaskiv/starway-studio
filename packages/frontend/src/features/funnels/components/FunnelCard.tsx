@@ -1,9 +1,9 @@
 // features/funnels/components/FunnelCard.tsx
 
-import { Link } from 'react-router-dom'
-import { Edit, MoreVertical, Pause, Play, Trash2, TrendingUp, Users } from 'lucide-react'
-import { useState, useRef, useEffect } from 'react'
 import { Button, GlassCard } from '@/ui'
+import { Edit, MoreVertical, Pause, Play, Trash2, TrendingUp, Users } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { Funnel, FunnelStatus } from '../types/funnel.types'
 
 const STATUS_CONFIG: Record<FunnelStatus, { bg: string; text: string; label: string }> = {
@@ -35,7 +35,7 @@ export function FunnelCard({ funnel, view, onDelete, onToggleStatus }: Props) {
   }, [])
 
   const status = STATUS_CONFIG[funnel.status]
-  const isActive = funnel.status === 'active'
+  const is_active = funnel.status === 'active'
 
   if (view === 'list') {
     return (
@@ -93,8 +93,8 @@ export function FunnelCard({ funnel, view, onDelete, onToggleStatus }: Props) {
                   onClick={() => { setMenuOpen(false); onToggleStatus() }}
                   className="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2"
                 >
-                  {isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                  {isActive ? 'Призупинити' : 'Активувати'}
+                  {is_active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  {is_active ? 'Призупинити' : 'Активувати'}
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); onDelete() }}

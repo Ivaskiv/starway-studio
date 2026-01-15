@@ -21,6 +21,7 @@ export type ProductType =
   | 'service'
   | 'physical_product'
   | 'other'
+  | 'type'
 
 export type ProductFormat =
   | 'web'
@@ -40,7 +41,7 @@ export interface Product {
   name: string
   description?: string
 
-  type: ProductType
+  type?: ProductType
   price: number
   currency: Currency
   status: ProductStatus
@@ -49,17 +50,21 @@ export interface Product {
   trialDays: number
   includesMentorship: boolean
 
-  format: ProductFormat
-  integration: ProductIntegration
+  format?: ProductFormat
+  integration?: ProductIntegration
 
   thumbnailUrl?: string
   modules: Module[]
 
   funnelId: string
+  goals: string[]
 
-  createdAt: string
-  updatedAt?: string
+  created_at: string
+  updated_at?: string
   publishedAt?: string
+
+
+
 }
 
 export interface ProductFormInputs {

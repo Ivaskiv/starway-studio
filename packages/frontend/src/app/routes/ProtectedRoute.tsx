@@ -1,9 +1,9 @@
 // packages/frontend/src/components/auth/ProtectedRoute.tsx
 
-import { Navigate, useLocation } from 'react-router-dom';
-import { AlertCircle, Loader } from 'lucide-react';
-import { Button, GlassCard } from '@/ui';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { Button, GlassCard } from '@/ui';
+import { AlertCircle, Loader } from 'lucide-react';
+import { Navigate, useLocation } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

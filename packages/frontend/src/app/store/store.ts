@@ -1,23 +1,26 @@
 // packages/frontend/src/app/store/store.ts
 import { configureStore } from '@reduxjs/toolkit';
+import authReducer from '@/features/auth/services/auth.slice'
 
-import { setupListeners } from '@reduxjs/toolkit/query';
+import aiMentorReducer from '@/features/ai-mentor/services/aiMentorSlice';
 import { api } from '@/services/api';
-import { aiMentorReducer } from '@/features/ai-mentor';
+import { setupListeners } from '@reduxjs/toolkit/query';
+
 export const store = configureStore({
   reducer: {
-    [api.reducerPath]: api.reducer,
-    // ui: uiReducer, // Якщо потрібен локальний UI state
-      aiMentor: aiMentorReducer,
+auth: authReducer,
+    api: api.reducer,    aiMentorChat: aiMentorReducer,        // інші редюсери      aiMentorChat: aiMentorReducer,
 
   },
-  middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware({
-      serializableCheck: {
-        // Ignore these action types
-        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
-      },
-    }).concat(api.middleware),
+    middleware: (gDM) => gDM().concat(api.middleware),
+
+  // middleware: (getDefaultMiddleware) =>
+  //   getDefaultMiddleware({
+  //     serializableCheck: {
+  //       ignoredPaths: ['auth.user'],
+  //       ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+  //     },
+  //   }).concat(api.middleware),
     devTools: process.env.NODE_ENV !== 'production',
 });
 setupListeners(store.dispatch);

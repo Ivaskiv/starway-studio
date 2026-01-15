@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { useNavigate } from 'react-router-dom'
 
 import {
   useGenerateFunnelBlueprintMutation,
@@ -94,7 +94,7 @@ export function useAIGeneratorManager(): AIGeneratorState & {
       const attempts: GenerationAttempt[] = res.variants.map((content, i) => ({
         id: `${stepNumber}-${Date.now()}-${i}`,
         content,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
         isSelected: false,
       }))
 

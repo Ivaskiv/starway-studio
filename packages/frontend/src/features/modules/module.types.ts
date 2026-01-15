@@ -4,7 +4,7 @@ import type { Block } from '@/types/Block'
 
 export interface Module {
   id: string
-  productId: string
+  product_id: string
   name: string
   order: number
   isLocked?: boolean
@@ -22,7 +22,7 @@ export type ModuleCategory =
 
 export interface Module {
   id: string
-  productId: string
+  product_id: string
   name: string
   icon?: string             // для UI, emoji або іконка
   category: ModuleCategory

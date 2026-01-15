@@ -23,7 +23,7 @@ import {
   useGenerateSmartActionsMutation,
   useSubmitEveningSessionMutation,
   useSubmitMorningSessionMutation,
-} from '../services/aiMentorApi';
+} from '../services/aiMentor.api';
 import {
   nextSessionStep,
   prevSessionStep,
@@ -37,7 +37,7 @@ import type { EveningSessionAnswers, MorningSessionAnswers, SessionType } from '
 // ============ MORNING QUESTIONS ============
 const MORNING_QUESTIONS = [
   {
-    key: 'currentState',
+    key: 'current_state',
     title: 'Як ти почуваєшся зараз?',
     subtitle: 'Опиши свій стан кількома словами',
     type: 'textarea',
@@ -45,7 +45,7 @@ const MORNING_QUESTIONS = [
     icon: Heart,
   },
   {
-    key: 'energyLevel',
+    key: 'energy_level',
     title: 'Рівень енергії',
     subtitle: 'Оціни від 1 до 10',
     type: 'slider',
@@ -54,7 +54,7 @@ const MORNING_QUESTIONS = [
     icon: Zap,
   },
   {
-    key: 'mainGoalToday',
+    key: 'main_goal_today',
     title: 'Головна ціль на сьогодні',
     subtitle: 'Що найважливіше зробити?',
     type: 'textarea',
@@ -71,7 +71,7 @@ const MORNING_QUESTIONS = [
     icon: CheckCircle2,
   },
   {
-    key: 'potentialBlocks',
+    key: 'potential_blocks',
     title: 'Можливі перешкоди',
     subtitle: 'Що може завадити?',
     type: 'tags',
@@ -91,7 +91,7 @@ const MORNING_QUESTIONS = [
 // ============ EVENING QUESTIONS ============
 const EVENING_QUESTIONS = [
   {
-    key: 'completedActions',
+    key: 'completed_actions',
     title: 'Що вдалося зробити?',
     subtitle: 'Відзнач виконані дії',
     type: 'checklist',
@@ -107,7 +107,7 @@ const EVENING_QUESTIONS = [
     icon: Sparkles,
   },
   {
-    key: 'blocksEncountered',
+    key: 'blocks_encountered',
     title: 'Які блоки виникли?',
     subtitle: 'Що заважало?',
     type: 'tags',
@@ -288,11 +288,11 @@ const TagsQuestion = ({ question, value, onChange }: QuestionProps) => {
 // ============ MAIN COMPONENT ============
 interface DailySessionProps {
   type: SessionType;
-  userId: string;
+  user_id: string;
   onComplete?: () => void;
 }
 
-export const DailySession = ({ type, userId, onComplete }: DailySessionProps) => {
+export const DailySession = ({ type, user_id, onComplete }: DailySessionProps) => {
   const dispatch = useAppDispatch();
   const { step, answers, isSubmitting } = useAppSelector(selectCurrentSession);
   
@@ -327,22 +327,22 @@ export const DailySession = ({ type, userId, onComplete }: DailySessionProps) =>
       // Submit session
       try {
         if (type === 'morning') {
-          await submitMorning({ userId, answers: answers as MorningSessionAnswers }).unwrap();
+          await submitMorning({ user_id, answers: answers as MorningSessionAnswers }).unwrap();
           
           // Generate AI actions
           const result = await generateActions({
-            userId,
+            user_id,
             context: {
-              wheelScores: [],
+              wheel_scores: [],
               goals: [],
               recentSessions: [],
-              focusArea: (answers as MorningSessionAnswers).focusArea || '',
+              focus_area: (answers as MorningSessionAnswers).focus_area || '',
             },
           }).unwrap();
           
           setAiResponse(result);
         } else {
-          await submitEvening({ userId, answers: answers as EveningSessionAnswers }).unwrap();
+          await submitEvening({ user_id, answers: answers as EveningSessionAnswers }).unwrap();
         }
         
         onComplete?.();
@@ -352,7 +352,7 @@ export const DailySession = ({ type, userId, onComplete }: DailySessionProps) =>
     } else {
       dispatch(nextSessionStep());
     }
-  }, [dispatch, isLastStep, type, userId, answers, submitMorning, submitEvening, generateActions, onComplete]);
+  }, [dispatch, isLastStep, type, user_id, answers, submitMorning, submitEvening, generateActions, onComplete]);
 
   const handlePrev = useCallback(() => {
     dispatch(prevSessionStep());

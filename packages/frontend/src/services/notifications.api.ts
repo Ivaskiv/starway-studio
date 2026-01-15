@@ -3,14 +3,14 @@ import { api } from './api';
 
 export interface Notification {
   id: string;
-  userId: string;
+  user_id: string;
   type: 'info' | 'success' | 'warning' | 'achievement' | 'reminder' | 'system';
   title: string;
   message: string;
   icon?: string;
   actionUrl?: string;
   isRead: boolean;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Message {
@@ -27,19 +27,19 @@ export interface Message {
     name: string;
   }[];
   isRead: boolean;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Conversation {
   id: string;
   participants: {
-    userId: string;
+    user_id: string;
     name: string;
     avatar?: string;
   }[];
   lastMessage?: Message;
   unreadCount: number;
-  updatedAt: string;
+  updated_at: string;
 }
 
 export interface EmailCampaign {
@@ -74,9 +74,9 @@ export interface Schedule {
     daysOfWeek?: number[];
     date?: string;
   };
-  isActive: boolean;
+  is_active: boolean;
   nextRun?: string;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Automation {
@@ -92,13 +92,13 @@ export interface Automation {
     config: any;
     delay?: number; // minutes
   }[];
-  isActive: boolean;
+  is_active: boolean;
   stats?: {
     triggered: number;
     completed: number;
     failed: number;
   };
-  createdAt: string;
+  created_at: string;
 }
 
 export const notificationsApi = api.injectEndpoints({

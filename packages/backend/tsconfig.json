@@ -1,5 +1,9 @@
+// /Users/viravira/Documents/starway-studio/packages/backend/tsconfig.json
+
 {
   "compilerOptions": {
+    // "moduleResolution": "Node",
+    "moduleResolution": "bundler",
     "target": "ES2022",
     "module": "ESNext",
     "lib": ["ES2022"],
@@ -11,11 +15,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "bundler",
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "src/index.ts"],
   "exclude": ["node_modules", "dist"]
 }

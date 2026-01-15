@@ -7,6 +7,7 @@ export interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
   size?: 'sm' | 'md' | 'lg';
   showLabel?: boolean;
   label?: string;
+  levelProgress?: number;
 }
 
 export const Progress = forwardRef<HTMLDivElement, ProgressProps>(

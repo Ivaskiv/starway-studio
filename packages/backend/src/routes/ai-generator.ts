@@ -25,8 +25,8 @@ interface PromptAnalysis {
 /**
  * Аналіз початкового промпту користувача (для старої системи, якщо потрібно)
  */
-export async function analyzeUserPrompt(userPrompt: string): Promise<PromptAnalysis> {
-  const systemPrompt = `Ти AI-аналітик маркетингових воронок. Проаналізуй промпт користувача і витягни ключову інформацію.
+export async function analyzeUserPrompt(user_prompt: string): Promise<PromptAnalysis> {
+  const system_prompt = `Ти AI-аналітик маркетингових воронок. Проаналізуй промпт користувача і витягни ключову інформацію.
 
 Поверни ТІЛЬКИ валідний JSON об'єкт (без markdown, без пояснень):
 {
@@ -48,8 +48,8 @@ export async function analyzeUserPrompt(userPrompt: string): Promise<PromptAnaly
       temperature: 0.3,
       max_tokens: 500,
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'system', content: system_prompt },
+        { role: 'user', content: user_prompt },
       ],
     });
 
@@ -100,9 +100,9 @@ export async function generateFunnelStepVariants(
     throw new Error(`Invalid step number: ${stepNumber}`);
   }
 
-  const systemPrompt = `Ти AI-генератор маркетингових воронок. Створюй конкретні, продаючі варіанти без абстракцій.
+  const system_prompt = `Ти AI-генератор маркетингових воронок. Створюй конкретні, продаючі варіанти без абстракцій.
 
-${stepDef.systemPrompt}
+${stepDef.system_prompt}
 
 ФОРМАТ ВІДПОВІДІ: JSON масив з 3 варіантами
 ["варіант 1", "варіант 2", "варіант 3"]
@@ -118,7 +118,7 @@ ${stepDef.systemPrompt}
     .map(([key, value]) => `${key}: ${value}`)
     .join('\n');
 
-  const userPrompt = `Крок ${stepNumber}: ${stepDef.title}
+  const user_prompt = `Крок ${stepNumber}: ${stepDef.title}
 
 USER INPUT: ${userInput}
 
@@ -133,8 +133,8 @@ ${contextString || 'Немає попереднього контексту'}
       temperature: 0.8,
       max_tokens: 600,
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'system', content: system_prompt },
+        { role: 'user', content: user_prompt },
       ],
     });
 
@@ -170,7 +170,7 @@ ${contextString || 'Немає попереднього контексту'}
  * Генерація фінального blueprint воронки
  */
 export async function generateFunnelBlueprint(stepsData: any[]) {
-  const systemPrompt = `Ти AI-архітектор маркетингових воронок. Створи ГОТОВУ ДО ЗАПУСКУ систему продажів.
+  const system_prompt = `Ти AI-архітектор маркетингових воронок. Створи ГОТОВУ ДО ЗАПУСКУ систему продажів.
 
 НЕ МОТИВАЦІЯ. НЕ КУРС. СИСТЕМА ДОХОДУ.
 
@@ -201,7 +201,7 @@ export async function generateFunnelBlueprint(stepsData: any[]) {
     "targetRevenue": число,
     "averageCheck": число,
     "requiredSales": число,
-    "conversionRate": число
+    "conversion_rate": число
   },
   "automation": ["крок 1", "крок 2"],
   "steps": {
@@ -217,7 +217,7 @@ export async function generateFunnelBlueprint(stepsData: any[]) {
     .map(s => `${s.number}. ${s.userInput} → ${s.selectedContent}`)
     .join('\n');
 
-  const userPrompt = `11 КРОКІВ КОРИСТУВАЧА:
+  const user_prompt = `11 КРОКІВ КОРИСТУВАЧА:
 ${stepsContext}
 
 Створи ГРОШОВУ СИСТЕМУ на основі цих даних.`;
@@ -228,8 +228,8 @@ ${stepsContext}
       temperature: 0.7,
       max_tokens: 2000,
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'system', content: system_prompt },
+        { role: 'user', content: user_prompt },
       ],
     });
 
@@ -259,7 +259,7 @@ ${stepsContext}
  * Генерація продуктів на основі воронки (опціонально)
  */
 export async function generateProductsFromFunnel(blueprint: any) {
-  const systemPrompt = `Ти AI-генератор продуктів для маркетингової воронки.
+  const system_prompt = `Ти AI-генератор продуктів для маркетингової воронки.
 
 На основі blueprint воронки, згенеруй 3-5 MiniApps/продуктів.
 
@@ -275,7 +275,7 @@ export async function generateProductsFromFunnel(blueprint: any) {
   }
 ]`;
 
-  const userPrompt = `Blueprint воронки:
+  const user_prompt = `Blueprint воронки:
 ${JSON.stringify(blueprint, null, 2)}
 
 Згенеруй 3-5 продуктів для цієї воронки.`;
@@ -286,8 +286,8 @@ ${JSON.stringify(blueprint, null, 2)}
       temperature: 0.7,
       max_tokens: 1000,
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'system', content: system_prompt },
+        { role: 'user', content: user_prompt },
       ],
     });
 

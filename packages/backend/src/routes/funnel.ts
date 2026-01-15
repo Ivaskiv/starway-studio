@@ -1,17 +1,17 @@
 // packages/backend/src/routes/funnels.ts
 
 import { Router } from 'express';
-import { authRequired } from '../middleware/auth';
 import { sql } from '../db/client';
+import { authRequired } from '../middleware/auth';
 
 const router = Router();
 
 // GET all funnels
 router.get('/', authRequired, async (req, res) => {
   try {
-    const userId = req.user!.id;
+    const user_id = req.user!.id;
 
-    console.log('📋 [funnels/GET] Fetching for user:', userId);
+    console.log('📋 [funnels/GET] Fetching for user:', user_id);
 
     const funnels = await sql`
       SELECT 
@@ -31,7 +31,7 @@ router.get('/', authRequired, async (req, res) => {
         created_at, 
         updated_at
       FROM funnels 
-      WHERE owner_id = ${userId}
+      WHERE owner_id = ${user_id}
       ORDER BY created_at DESC
     `;
 
@@ -54,7 +54,7 @@ router.get('/', authRequired, async (req, res) => {
 // POST create funnel
 router.post('/', authRequired, async (req, res) => {
   try {
-    const userId = req.user!.id;
+    const user_id = req.user!.id;
     const { 
       name, 
       description, 
@@ -72,7 +72,7 @@ router.post('/', authRequired, async (req, res) => {
       });
     }
 
-    console.log('📝 [funnels/POST] Creating funnel:', { name, userId });
+    console.log('📝 [funnels/POST] Creating funnel:', { name, user_id });
 
     const result = await sql`
       INSERT INTO funnels (
@@ -88,7 +88,7 @@ router.post('/', authRequired, async (req, res) => {
         created_at,
         updated_at
       ) VALUES (
-        ${userId},
+        ${user_id},
         ${name},
         ${description || ''},
         ${type},
@@ -127,11 +127,11 @@ router.post('/', authRequired, async (req, res) => {
 router.get('/:id', authRequired, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.id;
+    const user_id = req.user!.id;
 
     const result = await sql`
       SELECT * FROM funnels 
-      WHERE id = ${id} AND owner_id = ${userId}
+      WHERE id = ${id} AND owner_id = ${user_id}
     `;
 
     if (result.length === 0) {
@@ -161,7 +161,7 @@ router.get('/:id', authRequired, async (req, res) => {
 router.patch('/:id', authRequired, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.id;
+    const user_id = req.user!.id;
     const updates = req.body;
 
     console.log('📝 [funnels/PATCH] Updating funnel:', id);
@@ -169,7 +169,7 @@ router.patch('/:id', authRequired, async (req, res) => {
     // Перевіряємо що воронка належить користувачу
     const existing = await sql`
       SELECT id FROM funnels 
-      WHERE id = ${id} AND owner_id = ${userId}
+      WHERE id = ${id} AND owner_id = ${user_id}
     `;
 
     if (existing.length === 0) {
@@ -188,7 +188,7 @@ router.patch('/:id', authRequired, async (req, res) => {
         status = COALESCE(${updates.status}, status),
         steps = COALESCE(${updates.steps ? JSON.stringify(updates.steps) : null}, steps),
         updated_at = NOW()
-      WHERE id = ${id} AND owner_id = ${userId}
+      WHERE id = ${id} AND owner_id = ${user_id}
       RETURNING *
     `;
 
@@ -214,13 +214,13 @@ router.patch('/:id', authRequired, async (req, res) => {
 router.delete('/:id', authRequired, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.id;
+    const user_id = req.user!.id;
 
     console.log('🗑️ [funnels/DELETE] Deleting funnel:', id);
 
     const result = await sql`
       DELETE FROM funnels 
-      WHERE id = ${id} AND owner_id = ${userId}
+      WHERE id = ${id} AND owner_id = ${user_id}
       RETURNING id
     `;
 

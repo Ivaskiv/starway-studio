@@ -2,14 +2,14 @@
 import { api } from './api'
 
 export interface DashboardStats {
-  totalUsers: number
-  totalFunnels: number
-  activeFunnels: number
-  totalRevenue: number
-  conversionRate: number
-  avgTimeOnPlatform: number
-  newUsersThisMonth: number
-  revenueGrowth: number
+  total_users: number
+  total_funnels: number
+  active_funnels: number
+  total_revenue: number
+  conversion_rate: number
+  avg_time_on_platform: number
+  new_users_this_month: number
+  revenue_growth: number
 }
 
 export interface TimeSeriesData {

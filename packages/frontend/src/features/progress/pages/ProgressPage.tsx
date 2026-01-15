@@ -1,129 +1,70 @@
 // packages/frontend/src/features/progress/pages/ProgressPage.tsx
 
-import { motion } from 'framer-motion'
-import { 
-  Trophy, 
-  Flame, 
-  Target, 
-  Calendar,
-  TrendingUp,
-  Award,
-  Star,
-  Zap,
-} from 'lucide-react'
-import { useGetMeQuery } from '@/features/auth/services/auth.api'
+import { useGetProgressOverviewQuery, useGetWeeklyActivityQuery } from '@/features/progress/services/progress.api'
+import { WheelChart } from '@/features/wheel/components/WheelChart'
 import { GlassCard, Progress } from '@/ui'
-import { WheelChart } from '@/features/wheel'
-
-// Mock data
-const STATS = {
-  streakDays: 12,
-  longestStreak: 21,
-  totalSessions: 45,
-  completedGoals: 8,
-  totalXp: 3450,
-  level: 7,
-  nextLevelXp: 4000,
-}
-
-const WEEKLY_ACTIVITY = [
-  { day: 'Пн', sessions: 2, completed: true },
-  { day: 'Вт', sessions: 1, completed: true },
-  { day: 'Ср', sessions: 2, completed: true },
-  { day: 'Чт', sessions: 0, completed: false },
-  { day: 'Пт', sessions: 1, completed: true },
-  { day: 'Сб', sessions: 2, completed: true },
-  { day: 'Нд', sessions: 0, completed: false },
-]
+import { motion } from 'framer-motion'
+import { Award, Flame, Loader2, Target, TrendingUp, Trophy, Zap } from 'lucide-react'
 
 const ACHIEVEMENTS = [
-  { id: '1', title: 'Перший крок', description: 'Завершив першу сесію', icon: Star, unlocked: true, date: '10.01.2026' },
-  { id: '2', title: 'Тижнева серія', description: '7 днів поспіль', icon: Flame, unlocked: true, date: '17.01.2026' },
-  { id: '3', title: 'Цілеспрямований', description: 'Досягнув 5 цілей', icon: Target, unlocked: true, date: '20.01.2026' },
-  { id: '4', title: 'Місячна серія', description: '30 днів поспіль', icon: Trophy, unlocked: false },
-  { id: '5', title: 'Майстер балансу', description: 'Всі сфери > 7', icon: Zap, unlocked: false },
-  { id: '6', title: 'Легенда', description: 'Досягнув рівня 10', icon: Award, unlocked: false },
-]
-
-const WHEEL_SCORES = [
-  { categoryId: 'health', score: 7 },
-  { categoryId: 'career', score: 8 },
-  { categoryId: 'finance', score: 5 },
-  { categoryId: 'relationships', score: 6 },
-  { categoryId: 'personal_growth', score: 9 },
-  { categoryId: 'fun', score: 4 },
-  { categoryId: 'environment', score: 7 },
-  { categoryId: 'spirituality', score: 6 },
+  { id: 'first_step', title: 'Перший крок', description: 'Завершив першу сесію', icon: Trophy, color: 'from-amber-500 to-orange-500' },
+  { id: 'week_streak', title: 'Тижнева серія', description: '7 днів поспіль', icon: Flame, color: 'from-orange-500 to-red-500' },
+  { id: 'goal_focused', title: 'Цілеспрямований', description: 'Досягнув 5 цілей', icon: Target, color: 'from-green-500 to-emerald-500' },
+  { id: 'month_streak', title: 'Місячна серія', description: '30 днів поспіль', icon: Trophy, color: 'from-purple-500 to-pink-500' },
+  { id: 'wheel_master', title: 'Майстер балансу', description: 'Всі сфери > 7', icon: Zap, color: 'from-blue-500 to-cyan-500' },
+  { id: 'legend', title: 'Легенда', description: 'Досягнув рівня 10', icon: Award, color: 'from-yellow-500 to-amber-500' },
 ]
 
 export default function ProgressPage() {
-  const { data } = useGetMeQuery()
-  const user = data?.user
+  const { data: progress, isLoading } = useGetProgressOverviewQuery()
+  const { data: weeklyData } = useGetWeeklyActivityQuery()
 
-  const levelProgress = (STATS.totalXp / STATS.nextLevelXp) * 100
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-12 h-12 animate-spin text-purple-500" />
+      </div>
+    )
+  }
+
+  if (!progress) {
+    return <div className="text-center text-white/60 py-20">Не вдалося завантажити прогрес</div>
+  }
+
+  const wheel_scores = progress.wheel?.scores || {}
+  const hasWheel = Object.keys(wheel_scores).length > 0
+
+  // Merge achievements from API with our config
+  const achievementsList = ACHIEVEMENTS.map(a => {
+    const apiAchievement = progress.achievements?.list?.find((item: any) => item.id === a.id)
+    return {
+      ...a,
+      unlocked: apiAchievement?.unlocked || false,
+      progress: apiAchievement?.progress || 0,
+      unlockedAt: apiAchievement?.unlockedAt,
+    }
+  })
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-white">Мій прогрес</h1>
-        <p className="text-white/60 mt-1">Відстежуй свої досягнення та ріст</p>
-      </div>
-
-      {/* Level Card */}
-      <GlassCard className="p-6">
-        <div className="flex flex-col md:flex-row md:items-center gap-6">
-          {/* Level Badge */}
-          <div className="flex items-center gap-4">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 
-                          flex items-center justify-center shadow-lg shadow-purple-500/30">
-              <span className="text-3xl font-bold text-white">{STATS.level}</span>
-            </div>
-            <div>
-              <p className="text-white font-semibold text-lg">Рівень {STATS.level}</p>
-              <p className="text-white/60 text-sm">{STATS.totalXp} XP</p>
-            </div>
-          </div>
-
-          {/* Progress */}
-          <div className="flex-1">
-            <div className="flex justify-between text-sm text-white/60 mb-2">
-              <span>Прогрес до рівня {STATS.level + 1}</span>
-              <span>{STATS.totalXp} / {STATS.nextLevelXp} XP</span>
-            </div>
-            <Progress value={levelProgress} className="h-3" />
-            <p className="text-white/40 text-xs mt-2">
-              Ще {STATS.nextLevelXp - STATS.totalXp} XP до наступного рівня
-            </p>
-          </div>
-        </div>
-      </GlassCard>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <GlassCard className="p-4 text-center">
-          <Flame className="w-8 h-8 text-orange-400 mx-auto mb-2" />
-          <p className="text-2xl font-bold text-white">{STATS.streakDays}</p>
+      {/* Header with stats */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="text-center">
+          <p className="text-2xl font-bold text-white">{progress.streak || 0}</p>
           <p className="text-xs text-white/50">Поточна серія</p>
-        </GlassCard>
-
-        <GlassCard className="p-4 text-center">
-          <Trophy className="w-8 h-8 text-amber-400 mx-auto mb-2" />
-          <p className="text-2xl font-bold text-white">{STATS.longestStreak}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-2xl font-bold text-white">{progress.longestStreak || 0}</p>
           <p className="text-xs text-white/50">Найдовша серія</p>
-        </GlassCard>
-
-        <GlassCard className="p-4 text-center">
-          <Calendar className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-          <p className="text-2xl font-bold text-white">{STATS.totalSessions}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-2xl font-bold text-white">{progress.totalSessions || 0}</p>
           <p className="text-xs text-white/50">Всього сесій</p>
-        </GlassCard>
-
-        <GlassCard className="p-4 text-center">
-          <Target className="w-8 h-8 text-green-400 mx-auto mb-2" />
-          <p className="text-2xl font-bold text-white">{STATS.completedGoals}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-2xl font-bold text-white">{progress.goalsCompleted || 0}</p>
           <p className="text-xs text-white/50">Цілей досягнуто</p>
-        </GlassCard>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
@@ -134,16 +75,16 @@ export default function ProgressPage() {
             Активність за тиждень
           </h2>
 
-          <div className="flex justify-between items-end h-32 mb-4">
-            {WEEKLY_ACTIVITY.map((day, i) => (
-              <div key={i} className="flex flex-col items-center gap-2">
-                <div 
-                  className={`w-8 rounded-t-lg transition-all ${
-                    day.completed 
-                      ? 'bg-gradient-to-t from-green-500 to-emerald-400' 
+          <div className="flex justify-between items-end h-24 mb-4">
+            {(weeklyData?.days || ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'].map(d => ({ day: d, completed: false, sessions: 0 }))).map((day: any, i: number) => (
+              <div key={i} className="flex flex-col items-center gap-2 flex-1">
+                <div
+                  className={`w-6 md:w-8 rounded-t-lg transition-all ${
+                    day.completed
+                      ? 'bg-gradient-to-t from-green-500 to-emerald-400'
                       : 'bg-white/10'
                   }`}
-                  style={{ height: `${Math.max(day.sessions * 30, 10)}%` }}
+                  style={{ height: day.completed ? '60px' : '20px' }}
                 />
                 <span className={`text-xs ${day.completed ? 'text-white' : 'text-white/40'}`}>
                   {day.day}
@@ -154,32 +95,31 @@ export default function ProgressPage() {
 
           <div className="flex items-center justify-between text-sm">
             <span className="text-white/60">
-              {WEEKLY_ACTIVITY.filter(d => d.completed).length}/7 днів активності
+              {weeklyData?.days?.filter((d: any) => d.completed).length || 0}/7 днів активності
             </span>
-            <span className="text-green-400">
-              +{WEEKLY_ACTIVITY.reduce((sum, d) => sum + d.sessions, 0)} сесій
-            </span>
+            <span className="text-green-400">+{progress.weekly?.sessions || 0} сесій</span>
           </div>
         </GlassCard>
 
-        {/* Wheel Progress */}
+        {/* Wheel Balance */}
         <GlassCard className="p-6">
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <Zap className="w-5 h-5 text-purple-400" />
             Колесо балансу
           </h2>
 
-          <div className="flex justify-center">
-            <WheelChart scores={WHEEL_SCORES} size={200} animated={false} />
-          </div>
-
-          <div className="mt-4 text-center">
-            <p className="text-white/60 text-sm">
-              Середній бал: <span className="text-white font-semibold">
-                {(WHEEL_SCORES.reduce((sum, s) => sum + s.score, 0) / 8).toFixed(1)}
-              </span> / 10
-            </p>
-          </div>
+          {hasWheel ? (
+            <div className="flex flex-col items-center">
+              <WheelChart scores={wheel_scores} size={200} />
+              <p className="text-white/60 text-sm mt-4">
+                Середній бал: <span className="text-white font-bold">{progress.wheel?.average?.toFixed(1) || 0}</span> / 10
+              </p>
+            </div>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-white/40">
+              Колесо ще не заповнено
+            </div>
+          )}
         </GlassCard>
       </div>
 
@@ -191,35 +131,54 @@ export default function ProgressPage() {
         </h2>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {ACHIEVEMENTS.map((achievement) => {
+          {achievementsList.map((achievement, i) => {
             const Icon = achievement.icon
+            const isUnlocked = achievement.unlocked
+
             return (
               <motion.div
                 key={achievement.id}
-                whileHover={{ scale: achievement.unlocked ? 1.05 : 1 }}
-                className={`relative p-4 rounded-xl text-center transition-all ${
-                  achievement.unlocked
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className={`relative p-4 rounded-2xl text-center transition-all ${
+                  isUnlocked
                     ? 'bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30'
-                    : 'bg-white/5 border border-white/10 opacity-50 grayscale'
+                    : 'bg-white/5 border border-white/10'
                 }`}
               >
-                <div className={`w-12 h-12 rounded-xl mx-auto mb-2 flex items-center justify-center ${
-                  achievement.unlocked 
-                    ? 'bg-gradient-to-br from-amber-500 to-orange-500' 
-                    : 'bg-white/10'
-                }`}>
-                  <Icon className={`w-6 h-6 ${achievement.unlocked ? 'text-white' : 'text-white/40'}`} />
+                {/* Icon */}
+                <div
+                  className={`w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center ${
+                    isUnlocked
+                      ? `bg-gradient-to-br ${achievement.color}`
+                      : 'bg-white/10'
+                  }`}
+                >
+                  <Icon className={`w-7 h-7 ${isUnlocked ? 'text-white' : 'text-white/30'}`} />
                 </div>
-                <p className="text-sm font-medium text-white">{achievement.title}</p>
-                <p className="text-xs text-white/50 mt-1">{achievement.description}</p>
-                {achievement.unlocked && achievement.date && (
-                  <p className="text-[10px] text-amber-400 mt-2">{achievement.date}</p>
+
+                {/* Title */}
+                <p className={`text-sm font-semibold mb-1 ${isUnlocked ? 'text-white' : 'text-white/50'}`}>
+                  {achievement.title}
+                </p>
+
+                {/* Description */}
+                <p className={`text-xs ${isUnlocked ? 'text-white/70' : 'text-white/30'}`}>
+                  {achievement.description}
+                </p>
+
+                {/* Unlocked date */}
+                {isUnlocked && achievement.unlockedAt && (
+                  <p className="text-xs text-amber-400 mt-2">
+                    {new Date(achievement.unlockedAt).toLocaleDateString('uk', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                  </p>
                 )}
-                {!achievement.unlocked && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
-                      <span className="text-white/60 text-xs">🔒</span>
-                    </div>
+
+                {/* Progress bar for locked */}
+                {!isUnlocked && achievement.progress > 0 && (
+                  <div className="mt-3">
+                    <Progress value={achievement.progress} color="orange" size="sm" />
                   </div>
                 )}
               </motion.div>

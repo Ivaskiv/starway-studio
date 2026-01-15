@@ -3,7 +3,7 @@ import { api } from './api';
 
 export interface Media {
   id: string;
-  userId: string;
+  user_id: string;
   type: 'image' | 'video' | 'audio' | 'document' | 'archive';
   name: string;
   url: string;
@@ -15,8 +15,8 @@ export interface Media {
   duration?: number; // seconds for video/audio
   folder?: string;
   tags?: string[];
-  isPublic: boolean;
-  createdAt: string;
+  is_public: boolean;
+  created_at: string;
 }
 
 export interface UploadProgress {
@@ -31,7 +31,7 @@ export interface Folder {
   parentId?: string;
   filesCount: number;
   size: number;
-  createdAt: string;
+  created_at: string;
 }
 
 export const mediaApi = api.injectEndpoints({

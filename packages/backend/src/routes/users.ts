@@ -12,11 +12,12 @@ router.patch('/:id/role', authRequired, async (req, res) => {
   
   try {
     // Перевірка чи користувач має права
-    if (req.user?.role !== 'super_admin' && req.user?.role !== 'admin') {
-      console.warn('⚠️ [users/role] Unauthorized attempt');
-      return res.status(403).json({ error: 'forbidden', message: 'Недостатньо прав' });
-    }
+const userRole = req.user?.role?.toLowerCase(); // нормалізуємо до нижнього регістру
 
+if (!['super_admin', 'admin'].includes(userRole || '')) {
+  console.warn('⚠️ [users/role] Unauthorized attempt');
+  return res.status(403).json({ error: 'forbidden', message: 'Недостатньо прав' });
+}
     const { id } = req.params;
     const { role } = req.body;
 

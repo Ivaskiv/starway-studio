@@ -1,328 +1,168 @@
 // packages/backend/src/routes/auth.ts
-
-import { Request, Response } from 'express'
 import { Router } from 'express'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-import { sql } from '../db/client'
-import { authRequired } from '../middleware/auth'
-
-const ALLOWED_ROLES = ['funnel_admin', 'user'] as const
-type AllowedRole = typeof ALLOWED_ROLES[number]
+import crypto from 'crypto'
 
 const router = Router()
 
-// POST /api/auth/register
-router.post('/register', async (req: Request, res: Response) => {
-  try {
-    const { email, password, firstName, lastName, role } = req.body
+// ✅ In-memory database (для тестування)
+let users: any[] = []
 
-    // Обов’язкові поля
-    if (!email || !password || !firstName) {
-      return res.status(400).json({ error: 'invalid_data', message: 'Ім’я, email і пароль обов’язкові' })
-    }
+// ====================== REGISTER ======================
+router.post('/register', (req, res) => {
+  console.log('📝 POST /auth/register', req.body)
+  
+  const { email, first_name, last_name, password, role } = req.body
 
-    // 1. Перевірка чи існує користувач
-    const existingUsers = await sql`
-      SELECT id FROM users WHERE email = ${email}
-    `
-    if (existingUsers.length > 0) {
-      return res.status(409).json({ error: 'user_exists', message: 'Користувач з таким email вже існує' })
-    }
-
-    // 2. Безпечна роль — сервер не довіряє клієнту!
-    let safeRole: AllowedRole = 'user'
-
-    if (ALLOWED_ROLES.includes(role)) {
-      safeRole = role
-    } else {
-      console.warn(`Невалідна роль від клієнта: ${role}. Використано дефолт 'user'`)
-    }
-
-    // 3. Trial 7 днів
-    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-
-    // 4. Хеш пароля
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // 5. Створення користувача
-    const users = await sql`
-      INSERT INTO users (
-        email,
-        password_hash,
-        first_name,
-        last_name,
-        role,
-        trial_ends_at,
-        subscription_status,
-        is_active,
-        is_email_verified
-      )
-      VALUES (
-        ${email},
-        ${hashedPassword},
-        ${firstName},
-        ${lastName || null},
-        ${safeRole},
-        ${trialEndsAt},
-        'none',
-        true,
-        false
-      )
-      RETURNING
-        id,
-        email,
-        first_name,
-        last_name,
-        role,
-        trial_ends_at,
-        telegram_id,
-        telegram_username,
-        is_active,
-        is_email_verified,
-        created_at
-    `
-    const user = users[0]
-
-    // 6. Токени
-    const secret = process.env.JWT_SECRET!
-    const accessToken = jwt.sign({ id: user.id }, secret, { expiresIn: '30d' })
-    const refreshToken = jwt.sign({ id: user.id }, secret, { expiresIn: '30d' })
-
-    res.status(201).json({
-      success: true,
-      user: {
-      id: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        role: user.role,
-        isActive: user.is_active,
-        isEmailVerified: user.is_email_verified,
-        createdAt: user.created_at,
-        updatedAt: user.created_at,
-        // Subscription
-        trialEndsAt: user.trial_ends_at,
-        subscriptionStatus: user.subscription_status || 'none',
-        subscriptionPlan: user.subscription_plan || null,
-        subscriptionEndsAt: user.subscription_ends_at || null,
-        // Telegram
-        telegramId: user.telegram_id || null,
-        telegramUsername: user.telegram_username || null,
-      },
-      tokens: {
-        accessToken,
-        refreshToken,
-        expiresIn: 30 * 24 * 60 * 60,
-      },
-      message: `Вітаємо! Ви зареєстровані як ${user.role === 'funnel_admin' ? 'власник AI-воронок' : 'користувач'}`
+  // Валідація
+  if (!email || !password || !first_name) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Email, ім\'я та пароль обов\'язкові' 
     })
-  } catch (err: any) {
-    console.error('Register error:', err)
-    res.status(500).json({ error: 'server_error', message: 'Помилка сервера' })
   }
-})
 
-// POST /api/auth/login
-router.post('/login', async (req: Request, res: Response) => {
-  try {
-    const { email, password } = req.body
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'invalid_data', message: 'Email і пароль обов’язкові' })
-    }
-
-    const users = await sql`
-      SELECT
-        id,
-        email,
-        password_hash,
-        first_name,
-        last_name,
-        role,
-        trial_ends_at,
-        subscription_status,
-        subscription_plan,
-        subscription_ends_at,
-        telegram_id,
-        telegram_username,
-        is_active,
-        is_email_verified,
-        created_at,
-        updated_at
-      FROM users
-      WHERE email = ${email}
-    `
-
-    if (users.length === 0) {
-      return res.status(401).json({ error: 'invalid_credentials', message: 'Невірний email або пароль' })
-    }
-
-    const user = users[0]
-
-    const valid = await bcrypt.compare(password, user.password_hash)
-    if (!valid) {
-      return res.status(401).json({ error: 'invalid_credentials', message: 'Невірний email або пароль' })
-    }
-
-    const secret = process.env.JWT_SECRET!
-    const accessToken = jwt.sign({ id: user.id }, secret, { expiresIn: '30d' })
-    const refreshToken = jwt.sign({ id: user.id }, secret, { expiresIn: '30d' })
-
-    res.json({
-      success: true,
-      user: {
-id: user.id,
-        email: user.email,
-        firstName: user.first_name ?? '',
-        lastName: user.last_name ?? '',
-        role: user.role,
-        isActive: user.is_active,
-        isEmailVerified: user.is_email_verified,
-        createdAt: user.created_at,
-        updatedAt: user.updated_at,
-        // Subscription
-        trialEndsAt: user.trial_ends_at,
-        subscriptionStatus: user.subscription_status || 'none',
-        subscriptionPlan: user.subscription_plan || null,
-        subscriptionEndsAt: user.subscription_ends_at || null,
-        // Telegram
-        telegramId: user.telegram_id || null,
-        telegramUsername: user.telegram_username || null,      },
-      tokens: {
-        accessToken,
-        refreshToken,
-        expiresIn: 30 * 24 * 60 * 60,
-      },
-      message: 'Вхід успішний!'
+  // Перевірка чи користувач вже існує
+  if (users.find(u => u.email === email)) {
+    return res.status(409).json({ 
+      success: false, 
+      message: 'Користувач з таким email вже існує' 
     })
-  } catch (err: any) {
-    console.error('Login error:', err)
-    res.status(500).json({ error: 'server_error', message: 'Помилка сервера' })
   }
+
+  // Створення нового користувача
+  const user = {
+    id: crypto.randomUUID(),
+    email,
+    first_name,
+    last_name: last_name || '',
+    password, // В реальному проєкті хешувати!
+    role: role || 'user',
+    is_active: true,
+    is_email_verified: false,
+    created_at: new Date().toISOString(),
+  }
+
+  users.push(user)
+
+  // Повертаємо дані без пароля
+  const { password: _, ...userWithoutPassword } = user
+
+  console.log('✅ User registered:', userWithoutPassword.email)
+
+  res.status(201).json({
+    success: true,
+    user: userWithoutPassword,
+    tokens: { 
+      accessToken: `token-${user.id}`, 
+      refreshToken: `refresh-${user.id}`, 
+      expiresIn: 3600 
+    },
+  })
 })
 
-// ============ GET ME ============
-router.get('/me', authRequired, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id
+// ====================== LOGIN ======================
+router.post('/login', (req, res) => {
+  console.log('🔐 POST /auth/login', { email: req.body.email })
+  
+  const { email, password } = req.body
 
-    if (!userId) {
-      return res.status(401).json({ error: 'unauthorized', message: 'Не авторизовано' })
-    }
-
-    const users = await sql`
-      SELECT
-        id,
-        email,
-        first_name,
-        last_name,
-        role,
-        avatar,
-        phone,
-        timezone,
-        trial_ends_at,
-        subscription_status,
-        subscription_plan,
-        subscription_ends_at,
-        telegram_id,
-        telegram_username,
-        telegram_connected_at,
-        is_active,
-        is_email_verified,
-        last_login_at,
-        created_at,
-        updated_at
-      FROM users
-      WHERE id = ${userId}
-    `
-
-    if (users.length === 0) {
-      return res.status(404).json({ error: 'not_found', message: 'Користувача не знайдено' })
-    }
-
-    const user = users[0]
-
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.first_name ?? '',
-        lastName: user.last_name ?? '',
-        role: user.role,
-        avatar: user.avatar || null,
-        phone: user.phone || null,
-        timezone: user.timezone || null,
-        isActive: user.is_active,
-        isEmailVerified: user.is_email_verified,
-        lastLoginAt: user.last_login_at,
-        createdAt: user.created_at,
-        updatedAt: user.updated_at,
-        // Subscription
-        trialEndsAt: user.trial_ends_at,
-        subscriptionStatus: user.subscription_status || 'none',
-        subscriptionPlan: user.subscription_plan || null,
-        subscriptionEndsAt: user.subscription_ends_at || null,
-        // Telegram
-        telegramId: user.telegram_id || null,
-        telegramUsername: user.telegram_username || null,
-        telegramConnectedAt: user.telegram_connected_at || null,
-      },
+  // Валідація
+  if (!email || !password) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Email та пароль обов\'язкові' 
     })
-  } catch (err: any) {
-    console.error('Get me error:', err)
-    res.status(500).json({ error: 'server_error', message: 'Помилка сервера' })
   }
+
+  // Пошук користувача
+  const user = users.find(u => u.email === email)
+
+  if (!user) {
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Невірний email або пароль' 
+    })
+  }
+
+  // Перевірка пароля
+  if (user.password !== password) {
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Невірний email або пароль' 
+    })
+  }
+
+  // Повертаємо дані без пароля
+  const { password: _, ...userWithoutPassword } = user
+
+  console.log('✅ User logged in:', userWithoutPassword.email)
+
+  res.json({
+    success: true,
+    user: userWithoutPassword,
+    tokens: { 
+      accessToken: `token-${user.id}`, 
+      refreshToken: `refresh-${user.id}`, 
+      expiresIn: 3600 
+    },
+  })
 })
 
-// ============ CONNECT TELEGRAM ============
-router.post('/telegram/connect', authRequired, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id
-    const { telegramId, username } = req.body
+// ====================== GET /ME ======================
+router.get('/me', (req, res) => {
+  const authHeader = req.headers['authorization']
+  const token = authHeader?.split(' ')[1]
 
-    if (!telegramId) {
-      return res.status(400).json({ error: 'invalid_data', message: 'Telegram ID обов\'язковий' })
-    }
+  console.log('👤 GET /auth/me', { token: token ? '***' : 'null' })
 
-    await sql`
-      UPDATE users 
-      SET 
-        telegram_id = ${telegramId},
-        telegram_username = ${username || null},
-        telegram_connected_at = NOW(),
-        updated_at = NOW()
-      WHERE id = ${userId}
-    `
-
-    res.json({ success: true, message: 'Telegram підключено' })
-  } catch (err: any) {
-    console.error('Connect telegram error:', err)
-    res.status(500).json({ error: 'server_error', message: 'Помилка сервера' })
+  if (!token) {
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Unauthorized' 
+    })
   }
+
+  // Витягуємо user_id з токена (формат: token-{user_id})
+  const userId = token.replace('token-', '')
+  const user = users.find(u => u.id === userId)
+
+  if (!user) {
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Unauthorized' 
+    })
+  }
+
+  // Повертаємо дані без пароля
+  const { password: _, ...userWithoutPassword } = user
+
+  console.log('✅ User found:', userWithoutPassword.email)
+
+  res.json({
+    success: true,
+    user: userWithoutPassword,
+    tokens: { 
+      accessToken: token,
+      refreshToken: `refresh-${user.id}`,
+      expiresIn: 3600 
+    },
+  })
 })
 
-// ============ DISCONNECT TELEGRAM ============
-router.post('/telegram/disconnect', authRequired, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id
+// ====================== LOGOUT ======================
+router.post('/logout', (req, res) => {
+  console.log('👋 POST /auth/logout')
+  res.json({ success: true, message: 'Logged out successfully' })
+})
 
-    await sql`
-      UPDATE users 
-      SET 
-        telegram_id = NULL,
-        telegram_username = NULL,
-        telegram_connected_at = NULL,
-        updated_at = NOW()
-      WHERE id = ${userId}
-    `
-
-    res.json({ success: true, message: 'Telegram відключено' })
-  } catch (err: any) {
-    console.error('Disconnect telegram error:', err)
-    res.status(500).json({ error: 'server_error', message: 'Помилка сервера' })
-  }
+// ====================== DEBUG: Get all users ======================
+router.get('/users', (req, res) => {
+  const usersWithoutPasswords = users.map(({ password, ...user }) => user)
+  res.json({ 
+    success: true, 
+    count: users.length,
+    users: usersWithoutPasswords 
+  })
 })
 
 export default router

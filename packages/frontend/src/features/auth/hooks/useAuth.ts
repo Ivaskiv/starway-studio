@@ -1,50 +1,60 @@
 // packages/frontend/src/features/auth/hooks/useAuth.ts
 
-import { useGetMeQuery, useLogOutMutation } from '../services/auth.api'
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
 
-type AuthStatus = 'loading' | 'guest' | 'authenticated'
+import type { RootState } from '@/app/store'
+import { api } from '@/services/api'
+import type { User } from '../../../types/user.types'
+import { useGetMeQuery } from '../services/auth.api'
+import { logout, setCredentials } from '../services/auth.slice'
+
+export type AuthStatus = 'loading' | 'guest' | 'authenticated'
 
 export function useAuth() {
-  const hasToken = Boolean(localStorage.getItem('starway_auth_token'))
-  
-  const { data, isLoading, isError, isUninitialized } = useGetMeQuery(undefined, {
-    skip: !hasToken,
+  const dispatch = useDispatch()
+  const navigate = useNavigate()
+  const { accessToken, user } = useSelector((s: RootState) => s.auth)
+
+  const { data, isLoading } = useGetMeQuery(undefined, {
+    skip: !accessToken,
   })
 
-  const [logOutMutation] = useLogOutMutation()
-
-  // ✅ Визначаємо статус
-  let authStatus: AuthStatus = 'guest'
-  
-  if (!hasToken) {
-    authStatus = 'guest'
-  } else if (isUninitialized || isLoading) {
-    authStatus = 'loading'
-  } else if (isError || !data?.user) {
-    authStatus = 'guest'
-  } else {
-    authStatus = 'authenticated'
-  }
-
-  const user = data?.user ?? null
-
-  const logout = useCallback(async () => {
-    try {
-      await logOutMutation().unwrap()
-    } catch {
-      // ignore
+  useEffect(() => {
+    if (data?.user && data.tokens?.accessToken) {
+      dispatch(
+        setCredentials({
+          user: data.user,
+          accessToken: data.tokens.accessToken,
+        })
+      )
     }
-    localStorage.removeItem('starway_auth_token')
-    window.location.href = '/auth'
-  }, [logOutMutation])
+  }, [data, dispatch])
+
+  const logoutUser = useCallback(() => {
+    dispatch(logout())
+    dispatch(api.util.resetApiState())
+    navigate('/auth', { replace: true })
+  }, [dispatch, navigate])
+
+  let authStatus: AuthStatus = 'guest'
+  if (isLoading) authStatus = 'loading'
+  else if (user && accessToken) authStatus = 'authenticated'
+
+  const setAuth = useCallback(
+    (payload: { user: User; accessToken: string }) => {
+      dispatch(setCredentials(payload))
+    },
+    [dispatch]
+  )
 
   return {
-    authStatus,
     user,
-    logout,
-    isLoading: authStatus === 'loading',
+    authStatus,
     isAuthenticated: authStatus === 'authenticated',
-    isGuest: authStatus === 'guest',
+    isLoading: authStatus === 'loading',
+    logout: logoutUser,
+    setCredentials: setAuth,
   }
 }

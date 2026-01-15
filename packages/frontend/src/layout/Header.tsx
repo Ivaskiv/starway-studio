@@ -1,8 +1,10 @@
 // packages/frontend/src/components/Header.tsx
-import { useGetMeQuery, useLogOutMutation } from '@/features/auth/services/auth.api';
+import { useGetMeQuery } from '@/features/auth/services/auth.api';
+import { logout } from '@/features/auth/services/auth.slice';
 import { Button, GlassCard } from '@/ui';
 import { Bell, LogOut, Menu, Settings, Sparkles, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
@@ -10,16 +12,19 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuClick }: HeaderProps) {
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
-  
-  const { data: userData } = useGetMeQuery(undefined, {
-    skip: !onMenuClick,
-  });
-  const [logOut, { isLoading: isLoggingOut }] = useLogOutMutation();
 
-  const user = userData?.user;
-  const isLoggedIn = !!user;
+const { data: userData } = useGetMeQuery();
+const user = userData?.user;
+const isLoggedIn = !!user;
+
+const handleLogout = () => {
+  dispatch(logout());
+  localStorage.removeItem('starway_auth_token');
+  navigate('/');
+};
 
   useEffect(() => {
     if (onMenuClick) {
@@ -27,15 +32,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
       return () => clearInterval(interval);
     }
   }, [onMenuClick]);
-
-  const handleLogout = async () => {
-    try {
-      await logOut().unwrap();
-      navigate('/');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   const currentDate = onMenuClick
     ? currentTime.toLocaleDateString('uk-UA', { 
@@ -69,7 +65,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
             <div>
               <h2 className="text-xl lg:text-2xl font-bold text-white">
-                Вітаємо, {user.firstName}! 👋
+                Вітаємо, {user.first_name}! 👋
               </h2>
               {currentDate && (
                 <p className="text-xs lg:text-sm text-slate-400 mt-1">
@@ -92,7 +88,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
             <Button
               onClick={handleLogout}
-              disabled={isLoggingOut}
               className="hidden lg:flex glass-card p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
               aria-label="Вийти"
             >
@@ -132,20 +127,19 @@ export default function Header({ onMenuClick }: HeaderProps) {
               <div className="flex items-center gap-3 pl-3 border-l border-white/10">
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-semibold text-white">
-                    {user.firstName} {user.lastName}
+                    {user.first_name} {user.last_name}
                   </p>
                   <p className="text-xs text-slate-400">{user.email}</p>
                 </div>
 
                 <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-500 rounded-full flex items-center justify-center ring-2 ring-white/20 shadow-lg">
                   <span className="text-white font-bold text-lg">
-                    {user.firstName?.charAt(0).toUpperCase()}
+                    {user.first_name?.charAt(0).toUpperCase()}
                   </span>
                 </div>
 
                 <Button
                   onClick={handleLogout}
-                  disabled={isLoggingOut}
                   className="glass-card p-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                   aria-label="Вийти"
                 >

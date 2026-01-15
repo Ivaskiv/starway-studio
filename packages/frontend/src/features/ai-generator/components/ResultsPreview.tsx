@@ -66,7 +66,7 @@ export default function ResultsPreview({
           <TrendingUp className="w-8 h-8 text-green-400 mx-auto mb-2" />
           <p className="text-sm text-slate-400 mb-1">Конверсія</p>
           <p className="text-2xl font-bold text-white">
-            {blueprint.financialModel.conversionRate}%
+            {blueprint.financialModel.conversion_rate}%
           </p>
         </GlassCard>
 

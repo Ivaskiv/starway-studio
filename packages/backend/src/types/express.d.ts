@@ -1,17 +1,12 @@
 // packages/backend/src/types/express.d.ts
 
-import { UserRole } from '../../../shared/src/types';
+import type { AuthUser } from './auth';
 
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role?: UserRole;
-      };
+      // user?: AuthUser;
+      user?: User;
     }
   }
 }

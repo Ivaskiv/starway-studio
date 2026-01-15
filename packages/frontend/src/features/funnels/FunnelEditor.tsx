@@ -36,7 +36,7 @@
 //       order: activeFunnel.steps.length,
 //       config: {},
 //       conditions: [],
-//       isActive: true
+//       is_active: true
 //     };
 
 //     dispatch(addStep({ funnelId: activeFunnel.id, step: newStep }));

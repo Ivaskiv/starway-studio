@@ -1,12 +1,15 @@
 // src/pages/admin/LiveAnalytics.tsx
 
-import { useState } from 'react'
-import { 
-  Activity, TrendingUp, Users, DollarSign,
-  ArrowUpRight, Download, RefreshCw
-} from 'lucide-react'
-import { Button, Select } from '@/ui'
 import { useGetDashboardStatsQuery } from '@/services/stats.api'
+import { Button, Select } from '@/ui'
+import {
+  Activity,
+  ArrowUpRight,
+  DollarSign,
+  Download, RefreshCw,
+  TrendingUp, Users
+} from 'lucide-react'
+import { useState } from 'react'
 
 export default function LiveAnalytics() {
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d')
@@ -35,37 +38,37 @@ export default function LiveAnalytics() {
   const dashboardStats = [
     {
       label: 'Всього користувачів',
-      value: stats?.totalUsers ?? '—',
-      change: `+${stats?.newUsersThisMonth ?? 0}`,
+      value: stats?.total_users ?? '—',
+      change: `+${stats?.new_users_this_month ?? 0}`,
       trend: 'up' as const,
       icon: Users,
       color: 'blue'
     },
     {
       label: 'Активні воронки',
-      value: stats?.activeFunnels ?? '—',
-      change: `з ${stats?.totalFunnels ?? 0} створених`,
+      value: stats?.active_funnels ?? '—',
+      change: `з ${stats?.total_funnels ?? 0} створених`,
       trend: 'up' as const,
       icon: Activity,
       color: 'purple'
     },
     {
       label: 'Конверсія',
-      value: stats?.conversionRate ? `${stats.conversionRate.toFixed(1)}%` : '—',
-      change: stats?.revenueGrowth != null 
-        ? `${stats.revenueGrowth >= 0 ? '+' : ''}${stats.revenueGrowth.toFixed(1)}%`
+      value: stats?.conversion_rate ? `${stats.conversion_rate.toFixed(1)}%` : '—',
+      change: stats?.revenue_growth != null 
+        ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
         : '0%',
-        trend: (stats?.revenueGrowth ?? 0) >= 0 ? 'up' : 'down',
+        trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : 'down',
       icon: TrendingUp,
       color: 'green'
     },
     {
       label: 'Дохід за період',
-      value: stats?.totalRevenue ? `₴${stats.totalRevenue.toLocaleString('uk-UA')}` : '₴—',
-      change: stats?.revenueGrowth != null 
-            ? `${stats.revenueGrowth >= 0 ? '+' : ''}${stats.revenueGrowth.toFixed(1)}%`
+      value: stats?.total_revenue ? `₴${stats.total_revenue.toLocaleString('uk-UA')}` : '₴—',
+      change: stats?.revenue_growth != null 
+            ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
             : '0%',
-            trend: (stats?.revenueGrowth ?? 0) >= 0 ? 'up' : 'down',
+            trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : 'down',
       icon: DollarSign,
       color: 'orange'
     }

@@ -3,11 +3,11 @@
 import { sql } from '../db/client.js';
 
 interface GenerationResult {
-  canGenerate: boolean;
+  can_generate: boolean;
   remaining: number;
 }
 
-export async function checkGenerationLimit(userId: string): Promise<GenerationResult> {
+export async function checkGenerationLimit(user_id: string): Promise<GenerationResult> {
   try {
     const [user] = await sql`
       SELECT 
@@ -15,7 +15,7 @@ export async function checkGenerationLimit(userId: string): Promise<GenerationRe
         COALESCE(generations_limit, 33) as generations_limit,
         COALESCE(plan, 'free') as plan
       FROM users 
-      WHERE id = ${userId}
+      WHERE id = ${user_id}
     `;
 
     if (!user) {
@@ -26,24 +26,24 @@ export async function checkGenerationLimit(userId: string): Promise<GenerationRe
     const used = user.generations_used || 0;
     const remaining = Math.max(0, maxGens - used);
 
-    console.log(`🔍 [Generations] User ${userId}: ${used}/${maxGens} (${remaining} remaining)`);
+    console.log(`🔍 [Generations] User ${user_id}: ${used}/${maxGens} (${remaining} remaining)`);
 
     return {
-      canGenerate: remaining > 0,
+      can_generate: remaining > 0,
       remaining,
     };
   } catch (error: any) {
     console.error('❌ [Generations] Check limit error:', error);
     // ✅ Fallback: дозволяємо генерацію якщо помилка БД
     return {
-      canGenerate: true,
+      can_generate: true,
       remaining: 33,
     };
   }
 }
 
 export async function incrementGenerations(
-  userId: string,
+  user_id: string,
   field: string,
   result: string
 ): Promise<void> {
@@ -53,17 +53,17 @@ export async function incrementGenerations(
       SET 
         generations_used = COALESCE(generations_used, 0) + 1,
         updated_at = NOW()
-      WHERE id = ${userId}
+      WHERE id = ${user_id}
     `;
 
-    console.log(`✅ [Generations] Incremented for user ${userId}: ${field}`);
+    console.log(`✅ [Generations] Incremented for user ${user_id}: ${field}`);
   } catch (error: any) {
     console.error('❌ [Generations] Increment error:', error);
     // Не кидаємо помилку - генерація вже відбулась
   }
 }
 
-export async function getGenerationsStats(userId: string) {
+export async function getGenerationsStats(user_id: string) {
   try {
     const [user] = await sql`
       SELECT 
@@ -71,7 +71,7 @@ export async function getGenerationsStats(userId: string) {
         COALESCE(generations_used, 0) as generations_used,
         COALESCE(generations_limit, 33) as generations_limit
       FROM users 
-      WHERE id = ${userId}
+      WHERE id = ${user_id}
     `;
 
     if (!user) {

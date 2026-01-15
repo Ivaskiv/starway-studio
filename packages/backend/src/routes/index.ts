@@ -9,11 +9,11 @@ console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✅ Set' : '❌ Not set
 console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✅ Set' : '❌ Not set');
 console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? '✅ Set' : '❌ Not set');
 
-import wayforpayRoutes from '../payments/wayforpay';
 import aiRoutes from './ai';
 import authRoutes from './auth';
 import funnelsRoutes from './funnel';
 import usersRoutes from './users';
+import paymentsRoutes from './payments.js';
 
 const app = express();
 
@@ -32,7 +32,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/funnels', funnelsRoutes);
 app.use('/api/ai', aiRoutes); 
-app.use('/api/payments/wayforpay', wayforpayRoutes);
+app.use('/api/payments', paymentsRoutes);
 
 const PORT = process.env.PORT || 3001;
 

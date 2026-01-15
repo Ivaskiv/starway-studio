@@ -4,6 +4,7 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
   label?: string;
   error?: string;
   helperText?: string;
+  rows?: number;
 }
 
 export const Input = ({ label, error, helperText, className, ...props }: InputProps) => (

@@ -1,13 +1,13 @@
 // features/funnels/pages/FunnelEditPage.tsx
 
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Play, Plus, Sparkles, FlaskConical, Trophy, Cpu } from 'lucide-react'
+import { Button, GlassCard } from '@/ui'
+import { ArrowLeft, Cpu, FlaskConical, Play, Plus, Save, Sparkles, Trophy } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { useGetFunnelByIdQuery, useUpdateFunnelMutation } from '../services/funnels.api'
+import { useNavigate, useParams } from 'react-router-dom'
 import { FunnelStepEditor } from '../components/FunnelStepEditor'
 import { FunnelStepList } from '../components/FunnelStepList'
-import { Button, GlassCard } from '@/ui'
-import { useState, useCallback, useEffect } from 'react'
+import { useGetFunnelByIdQuery, useUpdateFunnelMutation } from '../services/funnels.api'
 import type { FunnelStep, StepType } from '../types/funnel.types'
 
 type Tab = 'builder' | 'optimizer' | 'testing' | 'achievements'
@@ -58,7 +58,7 @@ export default function FunnelEditPage() {
       name: `Крок ${localSteps.length + 1}`,
       order: localSteps.length,
       config: {},
-      isActive: true,
+      is_active: true,
     }
     setLocalSteps(prev => [...prev, newStep])
     setSelectedStepId(newStep.id)
