@@ -7,12 +7,12 @@ import { sql } from '../db/client.js'
 const router = Router()
 
 // GET /ping
-router.get('/ping', (req, res) => {
+router.get('/ping', (_req, res) => {
   res.json({ ok: true, status: 'alive', timestamp: Date.now() })
 })
 
 // GET /health
-router.get('/health', (req, res) => {
+router.get('/health', (_req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
