@@ -1,0 +1,36 @@
+{
+  "env": {
+    "es2023": true,
+    "browser": true,
+    "node": true,
+    "jest": true
+  },
+  "globals": {},
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "ecmaFeature": {
+      "jsx": true,
+      "modules": true
+    }
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:react/recommended",
+    "plugin:react/jsx-runtime",
+    "prettier",
+    "plugin:import/recommended"
+  ],
+  "plugins": ["react", "import"],
+  "rules": {
+    "react/prop-types": "off",
+    "import/no-named-as-default-member": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.js"],
+      "env": {
+        "jest": true
+      }
+    }
+  ]
+}
