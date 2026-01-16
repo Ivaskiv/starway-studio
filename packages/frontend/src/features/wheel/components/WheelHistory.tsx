@@ -1,10 +1,10 @@
 // packages/frontend/src/features/wheel/components/WheelHistory.tsx
 
 import { useGetWheelHistoryQuery } from '@/services'
-import { WHEEL_CATEGORIES } from '@/templates/ai-mentor'
 import { motion } from 'framer-motion'
 import { Calendar, Loader2, Minus, TrendingDown, TrendingUp } from 'lucide-react'
 import { WheelChart } from './WheelChart'
+import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
 
 interface WheelHistoryItem {
   id: string
@@ -75,7 +75,7 @@ export const WheelHistory = ({ onSelect }: WheelHistoryProps) => {
                   key={change.category_id}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 text-xs"
                 >
-                  <span>{cat.icon }</span>
+                  <span>{cat.emoji }</span>
                   <Icon className={`w-3 h-3 ${color}`} />
                   <span className={color}>
                     {change.delta > 0 ? '+' : ''}

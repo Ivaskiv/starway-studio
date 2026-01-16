@@ -1,13 +1,13 @@
 // packages/frontend/src/features/wheel/components/WheelForm.tsx
 
 import { useSaveWheelMutation } from '@/services'
-import { WHEEL_CATEGORIES } from '@/templates/ai-mentor'
 import { Button, Input } from '@/ui'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Loader2, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { WheelChart } from './WheelChart'
+import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
 // import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
 
 const TOTAL_CATEGORIES = WHEEL_CATEGORIES.length
@@ -80,7 +80,7 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
             className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl"
             style={{ backgroundColor: `${currentCategory.color}20` }}
           >
-            {currentCategory.icon}
+            {currentCategory.emoji}
           </div>
           <div>
             <h2 className="text-xl font-bold text-white">{currentCategory.name}</h2>
@@ -119,7 +119,7 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
                 ${is_active ? 'bg-white/20 text-white' : isPast ? 'bg-white/5 text-white/60' : 'bg-white/5 text-white/40'}
               `}
             >
-              <span className="mr-1">{cat.icon}</span>
+              <span className="mr-1">{cat.emoji}</span>
               <span className="font-medium">{categoryScore}</span>
             </button>
           )

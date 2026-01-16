@@ -1,5 +1,3 @@
-// /Users/viravira/Documents/starway-studio/packages/frontend/tsconfig.node.json
-// https://vitejs.dev/config/#shared-options-between-client-and-server
 {
   "compilerOptions": {
     "composite": true,
@@ -7,7 +5,8 @@
     "moduleResolution": "bundler",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
-    "strict": true
+    "strict": true,
+    "types": ["node"]
   },
-  "include": ["vite.config.ts", "bcryptjs.d.ts"]
+  "include": ["vite.config.ts"]
 }

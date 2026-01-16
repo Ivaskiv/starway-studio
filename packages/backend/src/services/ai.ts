@@ -1,6 +1,6 @@
 // packages/backend/src/services/ai.ts
-import { AIRequest, ChatMessage, PromptAnalysis } from '../types/types'
-import { chatCompletion } from './openai-client'
+import { AIRequest, ChatMessage, PromptAnalysis } from '../types/types.js'
+import { chatCompletion } from './openai-client.js'
 
 
 // ======== УНІВЕРСАЛЬНА ФУНКЦІЯ ========
