@@ -1,5 +1,5 @@
 // useWheelStatus.ts
-import { useGetLatestWheelAssessmentQuery } from '@/features/ai-mentor/services/aiMentor.api'
+import { useGetLatestWheelAssessmentQuery } from '@/templates/ai-mentor/services/aiMentor.api'
 import { useMemo } from 'react'
 
 export const useWheelStatus = (user_id: string) => {

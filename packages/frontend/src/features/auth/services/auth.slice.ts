@@ -22,13 +22,15 @@ const authSlice = createSlice({
       state,
       action: PayloadAction<{ accessToken: string; user: User }>
     ) {
-      state.accessToken = action.payload.accessToken
       state.user = action.payload.user
+      state.accessToken = action.payload.accessToken
+            console.log('✅ Auth credentials set:', action.payload.user.email);
+
       saveAuth(action.payload)
     },
     logout(state) {
-      state.accessToken = null
       state.user = null
+      state.accessToken = null
       clearAuth()
     },
   },

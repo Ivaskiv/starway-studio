@@ -15,8 +15,21 @@ export type AuthStatus = 'loading' | 'guest' | 'authenticated'
 export function useAuth() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const { accessToken, user } = useSelector((s: RootState) => s.auth)
-
+// 🐛 DEBUG
+  const rootState = useSelector((s: RootState) => s);
+  console.log('🔍 Root state:', rootState);
+  
+  const authState = useSelector((s: RootState) => s.auth);
+  
+  if (!authState) {
+    console.error('❌ Auth state is undefined!');
+    console.error('Available keys:', Object.keys(rootState));
+  }
+  
+const accessToken = authState?.accessToken || null;      // ← accessToken, не token!
+const user = authState?.user || null;  
+  console.log('✅ accessToken:', accessToken);
+  console.log('✅ user:', user);
   const { data, isLoading } = useGetMeQuery(undefined, {
     skip: !accessToken,
   })

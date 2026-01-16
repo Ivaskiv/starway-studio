@@ -1,6 +1,7 @@
 // packages/frontend/src/features/modules/module.types.ts
 
-import type { Block } from '@/types/Block'
+import { Block } from "@/types/modules.types"
+
 
 export interface Module {
   id: string

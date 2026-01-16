@@ -1,17 +1,33 @@
 // /packages/frontend/src/features/modals/SubscriptionModal.tsx
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Check, Zap, ArrowRight } from 'lucide-react'
-import { Button } from '@/ui'
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Crown, Check, ArrowRight } from 'lucide-react';
+import { Button } from '@/ui';
 
-interface SubscriptionModalProps {
-  isOpen: boolean
-  onClose: () => void
-  highlightedPlan?: 'monthly' | 'yearly'
+// ============ TYPES ============
+
+type PlanId = 'monthly' | 'yearly';
+
+interface Plan {
+  id: PlanId;
+  name: string;
+  price: number;
+  period: string;
+  originalPrice?: number;
+  badge?: string;
+  features: string[];
 }
 
-const QUICK_PLANS = [
+interface SubscriptionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  highlightedPlan?: PlanId;
+}
+
+// ============ PLANS ============
+
+const QUICK_PLANS: Plan[] = [
   {
     id: 'monthly',
     name: 'Місячна',
@@ -28,21 +44,27 @@ const QUICK_PLANS = [
     badge: '-33%',
     features: ['Все з місячної', 'Пріоритетна підтримка', 'Ранній доступ'],
   },
-]
+];
 
-export const SubscriptionModal = ({ isOpen, onClose, highlightedPlan = 'yearly' }: SubscriptionModalProps) => {
-  const [selectedPlan, setSelectedPlan] = useState(highlightedPlan)
-  const [isProcessing, setIsProcessing] = useState(false)
+// ============ COMPONENT ============
+
+export const SubscriptionModal = ({ 
+  isOpen, 
+  onClose, 
+  highlightedPlan = 'yearly' 
+}: SubscriptionModalProps) => {
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>(highlightedPlan);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleSubscribe = async () => {
-    setIsProcessing(true)
+    setIsProcessing(true);
     // TODO: WayForPay integration
-    console.log('Subscribe to:', selectedPlan)
+    console.log('Subscribe to:', selectedPlan);
     setTimeout(() => {
-      setIsProcessing(false)
-      onClose()
-    }, 2000)
-  }
+      setIsProcessing(false);
+      onClose();
+    }, 2000);
+  };
 
   return (
     <AnimatePresence>
@@ -94,7 +116,7 @@ export const SubscriptionModal = ({ isOpen, onClose, highlightedPlan = 'yearly' 
             {/* Plans */}
             <div className="px-6 py-4 space-y-3">
               {QUICK_PLANS.map((plan) => (
-                <Button
+                <button
                   key={plan.id}
                   onClick={() => setSelectedPlan(plan.id)}
                   className={`w-full p-4 rounded-xl text-left transition-all ${
@@ -139,7 +161,7 @@ export const SubscriptionModal = ({ isOpen, onClose, highlightedPlan = 'yearly' 
                       </span>
                     ))}
                   </div>
-                </Button>
+                </button>
               ))}
             </div>
 
@@ -148,7 +170,7 @@ export const SubscriptionModal = ({ isOpen, onClose, highlightedPlan = 'yearly' 
               <Button
                 onClick={handleSubscribe}
                 disabled={isProcessing}
-                className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl"
+                className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl flex items-center justify-center"
               >
                 {isProcessing ? (
                   'Обробка...'
@@ -168,5 +190,5 @@ export const SubscriptionModal = ({ isOpen, onClose, highlightedPlan = 'yearly' 
         </motion.div>
       )}
     </AnimatePresence>
-  )
-}
+  );
+};

@@ -1,7 +1,7 @@
 // packages/frontend/src/features/courses/pages/CoursesPage.tsx
 
-import { SubscriptionModal } from '@/features/ai-mentor'
 import { useGetMeQuery } from '@/features/auth/services/auth.api'
+import { SubscriptionModal } from '@/templates/ai-mentor'
 import { Badge, Button, GlassCard, Progress } from '@/ui'
 import { motion } from 'framer-motion'
 import {

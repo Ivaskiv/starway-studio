@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,css,scss,md}'"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -30,6 +31,7 @@
     "react-hot-toast": "^2.6.0",
     "react-redux": "^9.2.0",
     "react-router-dom": "^6.30.3",
+    "react-svg": "^16.3.0",
     "reactflow": "^11.11.4",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.25.76"
@@ -38,9 +40,16 @@
     "@types/node": "^25.0.8",
     "@types/react": "^18.3.27",
     "@types/react-dom": "^18.3.7",
+    "@types/react-svg": "^5.0.0",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.23",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.5",
+    "globals": "^17.0.0",
     "postcss": "^8.5.6",
+    "prettier": "^3.8.0",
     "sass-embedded": "^1.97.1",
     "tailwindcss": "^3.4.19",
     "tailwindcss-animate": "^1.0.7",

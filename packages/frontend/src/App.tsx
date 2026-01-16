@@ -16,7 +16,7 @@ import PublicLayout from '@/layout/PublicLayout'
 import ProtectedRoute from '@/app/routes/ProtectedRoute'
 
 // Components
-import TelegramMenu from '@/features/ai-mentor/telegram/TelegramMenu'
+import TelegramMenu from '@/templates/ai-mentor/telegram/TelegramMenu'
 
 // Lazy pages (ОДИН source of truth)
 import {

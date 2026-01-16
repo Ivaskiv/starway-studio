@@ -1,0 +1,226 @@
+// packages/frontend/src/templates/ai-mentor/config.json
+
+{
+  "id": "ai-mentor",
+  "version": "1.0.0",
+  "name": "AI-Ментор",
+  "description": "Персональний AI-ментор для особистісного росту. Trial → Paid onboarding.",
+  "icon": "brain",
+  "category": "personal_growth",
+  
+  "modules": [
+    {
+      "id": "wheel",
+      "name": "Колесо балансу",
+      "description": "Оцінка 6 сфер життя",
+      "required": false,
+      "customizable": true,
+      "availableIn": ["trial", "paid"],
+      "settings": {
+        "areas": [
+          "money",
+          "realization",
+          "relationships",
+          "energy",
+          "freedom",
+          "inner_support"
+        ],
+        "frequency_trial": "once",
+        "frequency_paid": "monthly"
+      }
+    },
+    {
+      "id": "daily_cycle",
+      "name": "Щоденний цикл",
+      "description": "Стан → Злив → Вибір → Факт → Опора",
+      "required": true,
+      "customizable": true,
+      "availableIn": ["trial", "paid"],
+      "settings": {
+        "states": ["tension", "fear", "stability", "inner_support"],
+        "slips": ["doubt", "procrastination", "emotional_slip", "external_pressure"],
+        "choices": ["confirmed_old", "chose_new"]
+      }
+    },
+    {
+      "id": "trial",
+      "name": "Trial період",
+      "description": "Динамічна тривалість з адаптивною логікою",
+      "required": false,
+      "customizable": true,
+      "availableIn": ["trial"],
+      "settings": {
+        "duration_days_default": 7,
+        "duration_days_min": 3,
+        "duration_days_max": 14,
+        "day_1": "wheel",
+        "day_1_3": "daily_cycle",
+        "mid_point": "mirror_1",
+        "final_days": "daily_cycle",
+        "last_day": "final_mirror_cta"
+      }
+    },
+    {
+      "id": "paid_onboarding",
+      "name": "Paid onboarding",
+      "description": "Структурований вхід (динамічна тривалість)",
+      "required": false,
+      "customizable": true,
+      "availableIn": ["paid"],
+      "settings": {
+        "onboarding_hours_default": 72,
+        "onboarding_hours_min": 24,
+        "onboarding_hours_max": 168,
+        "phase_1": "entry_fix",
+        "phase_2": "vision",
+        "phase_3": "goals",
+        "phase_4": "choice_decision",
+        "phase_5": "actions"
+      }
+    },
+    {
+      "id": "vision",
+      "name": "Бачення життя",
+      "description": "3 питання про точку Б",
+      "required": false,
+      "customizable": false,
+      "availableIn": ["paid"],
+      "settings": {
+        "questions": [
+          "Як я хочу жити?",
+          "Що більше не норма?",
+          "Опис точки Б"
+        ]
+      }
+    },
+    {
+      "id": "goals",
+      "name": "Головна ціль",
+      "description": "5 цілей → 1 primary",
+      "required": false,
+      "customizable": false,
+      "availableIn": ["paid"],
+      "settings": {
+        "total_goals": 5,
+        "primary_goals": 1
+      }
+    },
+    {
+      "id": "actions",
+      "name": "Дії",
+      "description": "2-3 дії на 7/14 днів",
+      "required": false,
+      "customizable": false,
+      "availableIn": ["paid"],
+      "settings": {
+        "min_actions": 2,
+        "max_actions": 3,
+        "duration_options": [7, 14]
+      }
+    },
+    {
+      "id": "zoom",
+      "name": "Zoom сесії",
+      "description": "Щотижня, AI збирає запити",
+      "required": false,
+      "customizable": false,
+      "availableIn": ["paid"],
+      "settings": {
+        "frequency": "weekly"
+      }
+    },
+    {
+      "id": "mini_courses",
+      "name": "Міні-курси",
+      "description": "AI пропонує при патернах",
+      "required": false,
+      "customizable": false,
+      "availableIn": ["paid"],
+      "settings": {
+        "courses": [
+          {
+            "id": "state_key",
+            "title": "Стан — ключ до змін",
+            "trigger": "state_pattern",
+            "min_days": 5
+          },
+          {
+            "id": "five_points",
+            "title": "5 точок опори",
+            "trigger": "instability_pattern",
+            "min_days": 7
+          },
+          {
+            "id": "system_21",
+            "title": "Система 21",
+            "trigger": "habit_pattern",
+            "min_days": 14
+          },
+          {
+            "id": "exit_stagnation",
+            "title": "Алгоритм виходу із застою",
+            "trigger": "stagnation_pattern",
+            "min_days": 21
+          }
+        ]
+      }
+    },
+    {
+      "id": "consultation",
+      "name": "Індивідуальна консультація",
+      "description": "Тригери: повтор 14-21 день, перекіс, курси не допомогли",
+      "required": false,
+      "customizable": false,
+      "availableIn": ["paid"],
+      "settings": {
+        "triggers": {
+          "repeat_pattern_days": 14,
+          "strong_imbalance": true,
+          "courses_no_shift_days": 21
+        }
+      }
+    }
+  ],
+  
+  "pricing": {
+    "defaults": {
+      "trial_days": 7,
+      "trial_price": 0,
+      "monthly": 33,
+      "yearly": 316,
+      "currency": "EUR"
+    },
+    "customizable": true,
+    "limits": {
+      "trial_days_min": 3,
+      "trial_days_max": 30,
+      "monthly_min": 9,
+      "monthly_max": 199,
+      "yearly_discount_percent": 20
+    }
+  },
+  
+  "integrations": {
+    "required": [],
+    "optional": ["telegram", "viber", "whatsapp"]
+  },
+  
+  "customization_options": {
+    "branding": true,
+    "module_selection": true,
+    "pricing": true,
+    "trial_duration": true,
+    "paid_onboarding_duration": true,
+    "wheel_areas": false,
+    "daily_states": true,
+    "daily_slips": true
+  },
+  
+  "ai_features": {
+    "mirror_analysis": true,
+    "course_recommendations": true,
+    "consultation_triggers": true,
+    "zoom_request_collection": true,
+    "goal_alignment_check": true
+  }
+}

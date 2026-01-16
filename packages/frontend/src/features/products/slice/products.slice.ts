@@ -2,7 +2,6 @@
 
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { Product } from '@/features/products/types/product.types';
-import type { ProductMini } from '@/features/products/types/product.mini';
 
 interface ProductsState {
   all: Product[];

@@ -1,30 +1,28 @@
 // packages/frontend/src/services/social.api.ts
 
-import { api } from './api'
+import { api } from './api';
+import { type SocialPlatform } from '@/constants/socialPlatforms';
 
 // ============ TYPES ============
-export type SocialProvider = 'telegram' | 'instagram' | 'facebook' | 'google'
 
 export interface SocialConnection {
-  provider: SocialProvider
-  external_id: string
-  username?: string
-  metadata?: Record<string, any>
-  connectedAt: string
-
-  telegram_id?: string
-  discord_id?: string
-  instagram_id?: string
-  
-  is_notifications?: boolean 
+  provider: SocialPlatform;
+  external_id: string;
+  username?: string;
+  metadata?: Record<string, any>;
+  connectedAt: string;
+  is_notifications?: boolean;
+  accessToken?: string;
+  refreshToken?: string;
 }
 
 export interface TelegramLink {
-  link: string
-  expiresIn: number
+  link: string;
+  expiresIn: number;
 }
 
 // ============ API ============
+
 export const socialApi = api.injectEndpoints({
   endpoints: (builder) => ({
     // Отримати всі підключення
@@ -34,13 +32,16 @@ export const socialApi = api.injectEndpoints({
     }),
 
     // Підключити соцмережу
-    connectSocial: builder.mutation<{ success: boolean }, {
-      provider: SocialProvider
-      external_id: string
-      username?: string
-      accessToken?: string
-      metadata?: Record<string, any>
-    }>({
+    connectSocial: builder.mutation<
+      { success: boolean },
+      {
+        provider: SocialPlatform;
+        external_id: string;
+        username?: string;
+        accessToken?: string;
+        metadata?: Record<string, any>;
+      }
+    >({
       query: (data) => ({
         url: '/social/connect',
         method: 'POST',
@@ -50,7 +51,7 @@ export const socialApi = api.injectEndpoints({
     }),
 
     // Відключити соцмережу
-    disconnectSocial: builder.mutation<{ success: boolean }, { provider: SocialProvider }>({
+    disconnectSocial: builder.mutation<{ success: boolean }, { provider: SocialPlatform }>({
       query: (data) => ({
         url: '/social/disconnect',
         method: 'POST',
@@ -64,7 +65,7 @@ export const socialApi = api.injectEndpoints({
       query: () => '/social/telegram/link',
     }),
   }),
-})
+});
 
 export const {
   useGetSocialConnectionsQuery,
@@ -72,4 +73,4 @@ export const {
   useDisconnectSocialMutation,
   useGetTelegramLinkQuery,
   useLazyGetTelegramLinkQuery,
-} = socialApi
+} = socialApi;

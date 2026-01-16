@@ -31,5 +31,5 @@ export const ProgressPage = lazy(() => import('../features/progress/pages/Progre
 export const SubscriptionPage = lazy(() => import('../features/subscription/pages/SubscriptionPage'))
 
 // ============ AI MENTOR ============
-export const AIMentorPage = lazy(() => import('../features/ai-mentor/pages/AIMentorPage'))
+export const AIMentorPage = lazy(() => import('../templates/ai-mentor/pages/AIMentorPage'))
 export const WheelPage = lazy(() => import('../features/wheel/pages/WheelPage'))

@@ -1,28 +1,32 @@
 // packages/frontend/src/app/store/store.ts
-import { configureStore } from '@reduxjs/toolkit';
-import authReducer from '@/features/auth/services/auth.slice'
 
-import aiMentorReducer from '@/features/ai-mentor/services/aiMentorSlice';
-import { api } from '@/services/api';
+import { configureStore } from '@reduxjs/toolkit';
 import { setupListeners } from '@reduxjs/toolkit/query';
+
+// API
+import { api } from '@/services/api';
+
+// Reducers
+import authReducer from '@/features/auth/services/auth.slice'; // ← Додати
+import aiMentorReducer from '@/templates/ai-mentor/services/aiMentorSlice';
+import uiReducer from './uiSlice';
 
 export const store = configureStore({
   reducer: {
-auth: authReducer,
-    api: api.reducer,    aiMentorChat: aiMentorReducer,        // інші редюсери      aiMentorChat: aiMentorReducer,
-
+    // API
+    [api.reducerPath]: api.reducer,
+    auth: authReducer,  
+    // Features
+    ui: uiReducer,
+    aiMentor: aiMentorReducer, // Додали aiMentor
   },
-    middleware: (gDM) => gDM().concat(api.middleware),
-
-  // middleware: (getDefaultMiddleware) =>
-  //   getDefaultMiddleware({
-  //     serializableCheck: {
-  //       ignoredPaths: ['auth.user'],
-  //       ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
-  //     },
-  //   }).concat(api.middleware),
-    devTools: process.env.NODE_ENV !== 'production',
+  
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: false, // Для RTK Query
+    }).concat(api.middleware),
 });
+
 setupListeners(store.dispatch);
 
 export type RootState = ReturnType<typeof store.getState>;

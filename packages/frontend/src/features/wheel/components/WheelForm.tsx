@@ -1,7 +1,7 @@
 // packages/frontend/src/features/wheel/components/WheelForm.tsx
 
-import { WHEEL_CATEGORIES } from '@/features/ai-mentor'
 import { useSaveWheelMutation } from '@/services'
+import { WHEEL_CATEGORIES } from '@/templates/ai-mentor'
 import { Button, Input } from '@/ui'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Loader2, Sparkles } from 'lucide-react'

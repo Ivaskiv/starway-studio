@@ -1,5 +1,5 @@
 // packages/frontend/src/features/dashboard/blocks/mentor/MentorStats.tsx
-import { useGetGamificationStateQuery } from '@/features/ai-mentor/services/aiMentor.api'
+import { useGetGamificationStateQuery } from '@/templates/ai-mentor/services/aiMentor.api'
 import { GlassCard } from '@/ui'
 
 export default function MentorStats({ user_id }: { user_id: string }) {

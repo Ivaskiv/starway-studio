@@ -1,7 +1,7 @@
 // packages/frontend/src/features/wheel/components/WheelHistory.tsx
 
-import { WHEEL_CATEGORIES } from '@/features/ai-mentor'
 import { useGetWheelHistoryQuery } from '@/services'
+import { WHEEL_CATEGORIES } from '@/templates/ai-mentor'
 import { motion } from 'framer-motion'
 import { Calendar, Loader2, Minus, TrendingDown, TrendingUp } from 'lucide-react'
 import { WheelChart } from './WheelChart'

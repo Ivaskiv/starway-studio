@@ -1,5 +1,5 @@
 // useWheel.ts
-import { useAnalyzeWheelMutation, useCreateWheelAssessmentMutation } from '@/features/ai-mentor/services/aiMentor.api'
+import { useAnalyzeWheelMutation, useCreateWheelAssessmentMutation } from '@/templates/ai-mentor/services/aiMentor.api'
 import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { TOTAL_CATEGORIES, WHEEL_CATEGORIES, WheelScore } from '../types/wheel.types'

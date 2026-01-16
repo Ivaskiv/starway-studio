@@ -1,5 +1,5 @@
 // packages/frontend/src/features/dashboard/blocks/mentor/Recommendations.tsx
-import { useGetCourseRecommendationsQuery } from '@/features/ai-mentor/services/aiMentor.api'
+import { useGetCourseRecommendationsQuery } from '@/templates/ai-mentor/services/aiMentor.api'
 import { GlassCard } from '@/ui'
 
 export default function Recommendations({ user_id }: { user_id: string }) {
