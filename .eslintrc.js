@@ -1,56 +1,69 @@
+// eslint.config.cjs або .eslintrc.cjs
+
 module.exports = {
   root: true,
+
   parser: '@typescript-eslint/parser',
+
   parserOptions: {
     ecmaVersion: 'latest',
     sourceType: 'module',
-    ecmaFeatures: {
-      jsx: true,
-    },
     project: ['./tsconfig.json'],
+    tsconfigRootDir: __dirname,
   },
+
   env: {
     browser: true,
-    es2021: true,
     node: true,
+    es2023: true,
   },
-  plugins: [
-    '@typescript-eslint',
-    'import',
-    'prettier',
-    'react',
-    'react-hooks',
-    'tailwindcss',
-  ],
+
+  plugins: ['@typescript-eslint', 'import', 'react', 'react-hooks', 'tailwindcss', 'prettier'],
+
   extends: [
     'eslint:recommended',
+
+    // TypeScript
     'plugin:@typescript-eslint/recommended',
+    'plugin:@typescript-eslint/recommended-requiring-type-checking',
+
+    // React
     'plugin:react/recommended',
     'plugin:react-hooks/recommended',
-    'plugin:import/errors',
-    'plugin:import/warnings',
+
+    // Imports
+    'plugin:import/recommended',
     'plugin:import/typescript',
+
+    // Tailwind
+    'plugin:tailwindcss/recommended',
+
+    // Prettier (ЗАВЖДИ ОСТАННІМ)
     'plugin:prettier/recommended',
   ],
+
   settings: {
     react: {
       version: 'detect',
     },
     'import/resolver': {
-      typescript: {}, // автоімпорти з tsconfig paths
+      typescript: {
+        project: './tsconfig.json',
+      },
     },
   },
-  rules: {
-    // ---- TypeScript ----
-    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/explicit-function-return-type': 'off',
-    '@typescript-eslint/no-explicit-any': 'off',
 
-    // ---- React ----
-    'react/react-in-jsx-scope': 'off', // Vite + React 17+
+  rules: {
+    // ---------- TypeScript ----------
+    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    '@typescript-eslint/no-explicit-any': 'off',
+    '@typescript-eslint/explicit-function-return-type': 'off',
+
+    // ---------- React ----------
+    'react/react-in-jsx-scope': 'off',
     'react/prop-types': 'off',
 
-    // ---- Import ----
+    // ---------- Imports ----------
     'import/order': [
       'warn',
       {
@@ -60,11 +73,11 @@ module.exports = {
       },
     ],
 
-    // ---- Prettier ----
-    'prettier/prettier': ['error'],
-
-    // ---- Tailwind ----
+    // ---------- Tailwind ----------
     'tailwindcss/classnames-order': 'warn',
     'tailwindcss/enforces-negative-arbitrary-values': 'error',
+
+    // ---------- Prettier ----------
+    'prettier/prettier': 'error',
   },
 };

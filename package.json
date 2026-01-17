@@ -10,6 +10,8 @@
     "dev:backend": "pnpm run dev --workspace=packages/backend",
     "build:frontend": "pnpm run build --workspace=packages/frontend",
     "build:backend": "pnpm run build --workspace=packages/backend",
-    "start:backend": "node packages/backend/dist/index.js"
+    "start:backend": "node packages/backend/dist/index.js",
+    "build": "pnpm -r build",
+    "lint": "eslint ."
   }
 }

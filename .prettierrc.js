@@ -7,4 +7,9 @@ module.exports = {
   arrowParens: 'always',
   bracketSpacing: true,
   endOfLine: 'auto',
+  useTabs: false,
+jsxBracketSameLin: false,
+  arrowParens: "avoid",
+  proseWrap: "always"
+
 };
