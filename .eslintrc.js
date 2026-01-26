@@ -21,7 +21,7 @@ module.exports = {
       typescript: {
         project: [
           './tsconfig.json',
-          './packages/frontend/tsconfig.json',
+          './frontend/tsconfig.json',
           './backend/tsconfig.json',
         ],
       },
@@ -50,11 +50,11 @@ module.exports = {
   overrides: [
     {
       files: [
-        'packages/frontend/**/*.ts',
-        'packages/frontend/**/*.tsx',
+        'frontend/**/*.ts',
+        'frontend/**/*.tsx',
       ],
       parserOptions: {
-        project: ['./packages/frontend/tsconfig.json'],
+        project: ['.frontend/tsconfig.json'],
       },
     },
     {
