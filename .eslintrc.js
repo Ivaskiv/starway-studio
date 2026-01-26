@@ -5,7 +5,7 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
-    project: ['./tsconfig.json'],
+    project: ['./tsconfig.json'], // якщо є глобальний tsconfig
   },
   plugins: ['@typescript-eslint', 'import'],
   extends: [
@@ -20,7 +20,6 @@ module.exports = {
     'import/resolver': {
       typescript: {
         project: [
-          './tsconfig.json',
           './frontend/tsconfig.json',
           './backend/tsconfig.json',
         ],
@@ -49,12 +48,9 @@ module.exports = {
   },
   overrides: [
     {
-      files: [
-        'frontend/**/*.ts',
-        'frontend/**/*.tsx',
-      ],
+      files: ['frontend/**/*.ts', 'frontend/**/*.tsx'],
       parserOptions: {
-        project: ['.frontend/tsconfig.json'],
+        project: ['./frontend/tsconfig.json'],
       },
     },
     {
