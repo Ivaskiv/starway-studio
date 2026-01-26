@@ -1,83 +1,58 @@
-// eslint.config.cjs або .eslintrc.cjs
-
 module.exports = {
   root: true,
-
+  ignorePatterns: ['dist', 'node_modules'],
   parser: '@typescript-eslint/parser',
-
   parserOptions: {
-    ecmaVersion: 'latest',
+    ecmaVersion: 2022,
     sourceType: 'module',
-    project: ['./tsconfig.json'],
-    tsconfigRootDir: __dirname,
+    project: ['./tsconfig.json'], 
   },
-
-  env: {
-    browser: true,
-    node: true,
-    es2023: true,
-  },
-
-  plugins: ['@typescript-eslint', 'import', 'react', 'react-hooks', 'tailwindcss', 'prettier'],
-
+  plugins: ['@typescript-eslint', 'import'],
   extends: [
     'eslint:recommended',
-
-    // TypeScript
     'plugin:@typescript-eslint/recommended',
-    'plugin:@typescript-eslint/recommended-requiring-type-checking',
-
-    // React
-    'plugin:react/recommended',
-    'plugin:react-hooks/recommended',
-
-    // Imports
-    'plugin:import/recommended',
+    'plugin:import/errors',
+    'plugin:import/warnings',
     'plugin:import/typescript',
-
-    // Tailwind
-    'plugin:tailwindcss/recommended',
-
-    // Prettier (ЗАВЖДИ ОСТАННІМ)
-    'plugin:prettier/recommended',
+    'prettier',
   ],
-
   settings: {
-    react: {
-      version: 'detect',
-    },
     'import/resolver': {
       typescript: {
-        project: './tsconfig.json',
+        project: ['./tsconfig.json', './packages/*/tsconfig.json'],
       },
     },
   },
-
   rules: {
-    // ---------- TypeScript ----------
-    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/no-explicit-any': 'off',
-    '@typescript-eslint/explicit-function-return-type': 'off',
-
-    // ---------- React ----------
-    'react/react-in-jsx-scope': 'off',
-    'react/prop-types': 'off',
-
-    // ---------- Imports ----------
+    // правила
+    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     'import/order': [
-      'warn',
+      'error',
       {
-        groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+        groups: [['builtin', 'external'], 'internal', ['parent', 'sibling', 'index']],
         'newlines-between': 'always',
-        alphabetize: { order: 'asc', caseInsensitive: true },
       },
     ],
+    'import/no-unresolved': 'error',
+    // 🔴 дубльовані імпорти
+    'import/no-duplicates': 'error',
 
-    // ---------- Tailwind ----------
-    'tailwindcss/classnames-order': 'warn',
-    'tailwindcss/enforces-negative-arbitrary-values': 'error',
-
-    // ---------- Prettier ----------
-    'prettier/prettier': 'error',
+    // 🟡 змушує імпортувати типи явно → легше бачити дублікати
+    '@typescript-eslint/consistent-type-imports': [
+      'warn',
+      {
+        prefer: 'type-imports',
+        vars: 'all', 
+        args: 'after-used'
+      },
+    ],
   },
+  overrides: [
+    {
+      files: ['packages/frontend/**/*.ts', 'packages/frontend/**/*.tsx', 'packages/backend/**/*.ts'],
+      parserOptions: {
+        project: ['./packages/frontend/tsconfig.json', './packages/backend/tsconfig.json'],
+      },
+    },
+  ],
 };

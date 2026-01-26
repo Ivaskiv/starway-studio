@@ -18,6 +18,7 @@ export default defineConfig([
       parserOptions: {
         project: ['./tsconfig.json'],
         tsconfigRootDir: process.dirname,
+        
       }
     },
     

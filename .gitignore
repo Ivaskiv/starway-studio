@@ -63,3 +63,15 @@ public/**
 !public/avatars
 !public/avatars/.gitkeep
 
+/eslintrc.js
+.eslintignore
+.prettierrc
+.prettierignore
+.eslintcache
+jest.config.js
+jest.config.ts
+jest.config.json
+
+/eslint.config.js
+/.eslintignore
+/.prettierignore

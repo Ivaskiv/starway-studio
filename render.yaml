@@ -22,7 +22,7 @@ services:
     region: frankfurt
     plan: starter
     buildCommand: npm install && npm run build:frontend
-    staticPublishPath: ./packages/frontend/dist
+    staticPublishPath: ./frontend/dist
     routes:
       - type: rewrite
         source: /*
