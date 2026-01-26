@@ -5,7 +5,7 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
-    project: ['./tsconfig.json'], 
+    project: ['./tsconfig.json'],
   },
   plugins: ['@typescript-eslint', 'import'],
   extends: [
@@ -19,12 +19,15 @@ module.exports = {
   settings: {
     'import/resolver': {
       typescript: {
-        project: ['./tsconfig.json', './packages/*/tsconfig.json'],
+        project: [
+          './tsconfig.json',
+          './packages/frontend/tsconfig.json',
+          './backend/tsconfig.json',
+        ],
       },
     },
   },
   rules: {
-    // правила
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     'import/order': [
       'error',
@@ -34,24 +37,30 @@ module.exports = {
       },
     ],
     'import/no-unresolved': 'error',
-    // 🔴 дубльовані імпорти
     'import/no-duplicates': 'error',
-
-    // 🟡 змушує імпортувати типи явно → легше бачити дублікати
     '@typescript-eslint/consistent-type-imports': [
       'warn',
       {
         prefer: 'type-imports',
-        vars: 'all', 
-        args: 'after-used'
+        vars: 'all',
+        args: 'after-used',
       },
     ],
   },
   overrides: [
     {
-      files: ['packages/frontend/**/*.ts', 'packages/frontend/**/*.tsx', 'packages/backend/**/*.ts'],
+      files: [
+        'packages/frontend/**/*.ts',
+        'packages/frontend/**/*.tsx',
+      ],
       parserOptions: {
-        project: ['./packages/frontend/tsconfig.json', './packages/backend/tsconfig.json'],
+        project: ['./packages/frontend/tsconfig.json'],
+      },
+    },
+    {
+      files: ['backend/**/*.ts'],
+      parserOptions: {
+        project: ['./backend/tsconfig.json'],
       },
     },
   ],
