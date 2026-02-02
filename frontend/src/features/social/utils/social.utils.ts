@@ -33,3 +33,19 @@ export const parseSocialFlow = (queryParams: URLSearchParams): SocialFlowState =
 
   return { provider, mode };
 };
+
+export const getTelegramToken = (platform: SocialPlatform): Promise<string> => {
+  if (platform === 'telegram') {
+    return new Promise((resolve, reject) => {
+      // @ts-ignore
+      window.onTelegramAuth = (user: any) => {
+        if (user?.id && user?.hash) {
+          resolve(user.hash); // це твій "social token"
+        } else {
+          reject(new Error('Telegram login failed'));
+        }
+      };
+    });
+  }
+  throw new Error(`No token handler for ${platform}`);
+};

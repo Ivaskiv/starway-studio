@@ -2,20 +2,16 @@
 import { SOCIAL_PLATFORMS_METADATA } from '@/features/social/constants/social.constants';
 import type { SocialPlatform } from '@/features/social/types/social.types';
 import { Button, Icon } from '@/ui';
-import toast from 'react-hot-toast';
 
 interface Props {
   onAuth?: (platform: SocialPlatform) => void;
+  isLoading?: boolean;
 }
 
 // Масив платформ (можна розширити)
 const SOCIAL_PLATFORMS: SocialPlatform[] = ['telegram', 'google'];
 
-export function SocialAuthRow({ onAuth }: Props) {
-  const handleClick = (platform: SocialPlatform) => {
-    onAuth?.(platform);
-    toast(`Реєстрація через ${platform} — скоро`);
-  };
+export function SocialAuthRow({ onAuth, isLoading = false }: Props) {
 
   return (
     <div className="relative mt-2">
@@ -36,7 +32,8 @@ export function SocialAuthRow({ onAuth }: Props) {
               <Button
                 key={platform.id}
                 type="button"
-                onClick={() => handleClick(key)}
+                onClick={() => onAuth?.(key)}
+                disabled={isLoading}
                 className="
                   group relative shrink-0
                   w-14 h-14

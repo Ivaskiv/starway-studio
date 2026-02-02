@@ -1,3 +1,5 @@
+import { Button } from "@/ui";
+
 // src/features/auth/GoogleLoginButton.tsx
 export function GoogleLoginButton() {
   const login = () => {
@@ -13,5 +15,5 @@ export function GoogleLoginButton() {
       `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
   };
 
-  return <button onClick={login}>Увійти через Google</button>;
+  return <Button onClick={login}>Увійти через Google</Button>;
 }

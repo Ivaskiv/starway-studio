@@ -1,0 +1,158 @@
+// backend/src/modules/social/social.controller.ts
+import type { Request, Response } from 'express';
+import * as socialService from './social.service.js';
+import type { SocialResponse, ConnectSocialInput } from './social.types.js';
+import { serverError } from '../../utils/serverError.js';
+
+// ================= GET CONNECTIONS =================
+export async function getConnections(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'unauthorized' 
+      });
+    }
+
+    const connections = await socialService.getSocialConnections(userId);
+
+    const response: SocialResponse = { 
+      success: true, 
+      connections 
+    };
+    
+    res.json(response);
+  } catch (err) {
+    return serverError(res, 'GET /social/connections', err);
+  }
+}
+
+// ================= CONNECT SOCIAL =================
+export async function connect(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'unauthorized' 
+      });
+    }
+
+    const data: ConnectSocialInput = req.body;
+
+    // Валідація
+    if (!data.provider || !data.externalId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'provider_and_external_id_required' 
+      });
+    }
+
+    await socialService.connectSocial(userId, data);
+    
+    res.json({ 
+      success: true, 
+      message: `${data.provider}_connected` 
+    });
+  } catch (err: any) {
+    // Спеціальна обробка конфліктів
+    if (err.message === 'already_connected') {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'social_account_already_connected_to_another_user' 
+      });
+    }
+    
+    return serverError(res, 'POST /social/connect', err);
+  }
+}
+
+// ================= DISCONNECT SOCIAL =================
+export async function disconnect(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'unauthorized' 
+      });
+    }
+
+    const { provider } = req.body;
+
+    if (!provider) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'provider_required' 
+      });
+    }
+
+    await socialService.disconnectSocial(userId, provider);
+    
+    res.json({ 
+      success: true, 
+      message: `${provider}_disconnected` 
+    });
+  } catch (err) {
+    return serverError(res, 'POST /social/disconnect', err);
+  }
+}
+
+// ================= TELEGRAM LINK =================
+export async function telegramLink(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'unauthorized' 
+      });
+    }
+
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'StarwayMentorBot';
+    const { link, expiresIn } = await socialService.generateTelegramLink(userId, botUsername);
+
+    res.json({ 
+      success: true, 
+      link, 
+      expiresIn 
+    });
+  } catch (err) {
+    return serverError(res, 'GET /social/telegram/link', err);
+  }
+}
+
+// ================= VERIFY TELEGRAM CODE (для бота) =================
+export async function verifyTelegramCode(req: Request, res: Response) {
+  try {
+    const { code } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'code_required' 
+      });
+    }
+
+    const userId = await socialService.verifyTelegramLinkCode(code);
+
+    if (!userId) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'invalid_or_expired_code' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      userId 
+    });
+  } catch (err) {
+    return serverError(res, 'POST /social/telegram/verify', err);
+  }
+}

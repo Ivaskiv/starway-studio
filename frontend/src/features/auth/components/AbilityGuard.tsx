@@ -1,7 +1,7 @@
-// frontend/src/features/dashboard/layout/AbilityGuard.tsx
+// frontend/src/features/auth/components/AbilityGuard.tsx
 
 import { useAbility } from '@/features/auth/hooks/useAbility';
-import { Ability } from '@/shared/types/permissions';
+import { Ability } from '@/features/auth/permissions/abilities';
 import { Navigate, Outlet } from 'react-router-dom';
 
 interface AbilityGuardProps {

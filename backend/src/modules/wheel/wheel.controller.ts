@@ -2,12 +2,20 @@
 import { Request, Response } from 'express'
 import sql from '../../db/client.js'
 import { findUserById } from '../auth/auth.service.js'
-import { generateWheelAnalysis, WheelUserContext } from './wheel.ai.js'
 import { createWheelPDF } from './wheel.pdf.js'
-import { WheelScore } from '../mentor/types/mentor.types.js'
 import { User } from '../../types/types.js'
+import { WheelScore, WheelUserContext } from './wheel.types.js'
+import { analyzeWheel, findWeakest, findFocus } from './wheel.service.js'
 
-export function mapUserToWheelContext(user: User): WheelUserContext {
+function mapApiScores(scores: any[]): WheelScore[] {
+  return scores.map(s => ({
+    categoryId: s.category_id,
+    score: s.score,
+    comment: s.comment,
+  }))
+}
+
+function mapUserToContext(user: User): WheelUserContext {
   const name =
     user.first_name || user.last_name
       ? `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim()
@@ -24,169 +32,125 @@ export function mapUserToWheelContext(user: User): WheelUserContext {
   }
 }
 
+// === Створення нового колеса ===
 export async function createWheelAssessment(req: Request, res: Response) {
-  try {
-    const userId = req.user!.id
-    const { scores } = req.body
+  const userId = req.user!.id
+  const scores = mapApiScores(req.body.scores)
 
-    if (!Array.isArray(scores) || scores.length !== 8) {
-      return res.status(400).json({ error: 'invalid_scores' })
-    }
-
-    const user = await findUserById(userId)
-    if (!user) return res.status(404).json({ error: 'user_not_found' })
-
-    const scoresTyped = scores as WheelScore[]
-
-    const weakestSphere = scoresTyped.reduce((min, curr) =>
-      curr.score < min.score ? curr : min
-    )
-
-    const focusSphere =
-      scoresTyped.find(
-        (s) => s.sphere !== weakestSphere.sphere && s.score < 7
-      ) || weakestSphere
-
-    const wheelUser = mapUserToWheelContext(user)
-
-    const analysis = await generateWheelAnalysis(
-      scoresTyped,
-      wheelUser
-    )
-
-    const [result] = await sql`
-      INSERT INTO wheel_assessments (
-        user_id,
-        scores,
-        weakest_sphere,
-        focus_sphere,
-        analysis
-      )
-      VALUES (
-        ${userId},
-        ${JSON.stringify(scoresTyped)},
-        ${weakestSphere.sphere},
-        ${focusSphere.sphere},
-        ${analysis}
-      )
-      RETURNING *
-    `
-
-    res.json({
-      id: result.id,
-      userId: result.user_id,
-      scores: JSON.parse(result.scores),
-      weakestSphere: result.weakest_sphere,
-      focusSphere: result.focus_sphere,
-      analysis: result.analysis,
-      createdAt: result.created_at,
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'server_error' })
+  if (scores.length !== 8) {
+    return res.status(400).json({ error: 'invalid_scores' })
   }
+
+  const user = await findUserById(userId)
+  if (!user) return res.status(404).json({ error: 'user_not_found' })
+
+  const weakest = findWeakest(scores)
+  const focus = findFocus(scores, weakest)
+
+  const analysis = await analyzeWheel(scores, mapUserToContext(user))
+
+  const [result] = await sql`
+    INSERT INTO wheel_assessments (
+      user_id,
+      scores,
+      weakest_sphere,
+      focus_sphere,
+      analysis
+    )
+    VALUES (
+      ${userId},
+      ${JSON.stringify(scores)},
+      ${weakest.categoryId},
+      ${focus.categoryId},
+      ${analysis}
+    )
+    RETURNING *
+  `
+
+  res.json({
+    id: result.id,
+    scores,
+    weakestSphere: weakest.categoryId,
+    focusSphere: focus.categoryId,
+    analysis,
+    createdAt: result.created_at,
+  })
 }
 
+// === Історія останніх 10 коліс ===
 export async function getWheelHistory(req: Request, res: Response) {
-  try {
-    const userId = req.user!.id
+  const userId = req.user!.id
 
-    const results = await sql`
-      SELECT * FROM wheel_assessments
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT 10
-    `
+  const results = await sql`
+    SELECT * FROM wheel_assessments
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+    LIMIT 10
+  `
 
-    res.json(
-      results.map((r) => ({
-        id: r.id,
-        userId: r.user_id,
-        scores: JSON.parse(r.scores),
-        weakestSphere: r.weakest_sphere,
-        focusSphere: r.focus_sphere,
-        analysis: r.analysis,
-        createdAt: r.created_at,
-      }))
-    )
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'server_error' })
-  }
+  res.json(
+    results.map(r => ({
+      id: r.id,
+      scores: JSON.parse(r.scores),
+      weakestSphere: r.weakest_sphere,
+      focusSphere: r.focus_sphere,
+      analysis: r.analysis,
+      createdAt: r.created_at,
+    }))
+  )
 }
 
+// === Останнє колесо ===
 export async function getLatestWheel(req: Request, res: Response) {
-  try {
-    const userId = req.user!.id
+  const userId = req.user!.id
 
-    const [result] = await sql`
-      SELECT * FROM wheel_assessments
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT 1
-    `
+  const [result] = await sql`
+    SELECT * FROM wheel_assessments
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `
 
-    if (!result) return res.json(null)
+  if (!result) return res.json(null)
 
-    res.json({
-      id: result.id,
-      userId: result.user_id,
-      scores: JSON.parse(result.scores),
-      weakestSphere: result.weakest_sphere,
-      focusSphere: result.focus_sphere,
-      analysis: result.analysis,
-      createdAt: result.created_at,
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'server_error' })
-  }
+  res.json({
+    id: result.id,
+    scores: JSON.parse(result.scores),
+    weakestSphere: result.weakest_sphere,
+    focusSphere: result.focus_sphere,
+    analysis: result.analysis,
+    createdAt: result.created_at,
+  })
 }
 
+// === Генерація PDF ===
 export async function generateWheelPDF(req: Request, res: Response) {
-  try {
-    const userId = req.user!.id
-    const wheelId = req.params.id
+  const userId = req.user!.id
+  const wheelId = req.params.id
 
-    const [wheel] = await sql`
-      SELECT * FROM wheel_assessments
-      WHERE id = ${wheelId} AND user_id = ${userId}
-    `
+  const [wheel] = await sql`
+    SELECT * FROM wheel_assessments
+    WHERE id = ${wheelId} AND user_id = ${userId}
+  `
 
-    if (!wheel) {
-      return res.status(404).json({ error: 'wheel_not_found' })
-    }
+  if (!wheel) return res.status(404).json({ error: 'wheel_not_found' })
 
-    const user = await findUserById(userId)
+  const user = await findUserById(userId)
+  const userName = user?.email ?? 'Користувач'
 
-    let userName = 'Користувач'
-    let isEmail = false
+  const pdfBuffer = await createWheelPDF({
+    userName,
+    scores: JSON.parse(wheel.scores),
+    weakestSphere: wheel.weakest_sphere,
+    focusSphere: wheel.focus_sphere,
+    analysis: wheel.analysis,
+    createdAt: wheel.created_at,
+  })
 
-    if (user?.email) {
-      userName = user.email
-      isEmail = true
-    }
-
-    const pdfBuffer = await createWheelPDF({
-      id: wheel.id,
-      userId: wheel.user_id,
-      userName,
-      isEmail,
-      scores: JSON.parse(wheel.scores),
-      weakestSphere: wheel.weakest_sphere,
-      focusSphere: wheel.focus_sphere,
-      analysis: wheel.analysis,
-      createdAt: wheel.created_at,
-    })
-
-    res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="wheel-${wheelId}.pdf"`
-    )
-    res.send(pdfBuffer)
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'server_error' })
-  }
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="wheel-${wheelId}.pdf"`
+  )
+  res.send(pdfBuffer)
 }

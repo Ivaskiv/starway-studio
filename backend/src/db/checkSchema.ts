@@ -1,4 +1,4 @@
-import { sql } from './client'
+import { sql } from './client.js'
 
 export async function checkDatabaseSchema() {
   console.log('🧠 DB schema check (all public tables):')

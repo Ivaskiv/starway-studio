@@ -18,6 +18,7 @@ interface Props {
   onRegisterClick?: () => void;
   isLoading?: boolean;
   serverError?: string;
+  autoFillEmail?: string;
 }
 
 export function LoginForm({ onSubmit, onRegisterClick, isLoading = false, serverError }: Props) {

@@ -1,5 +1,11 @@
 // frontend/src/features/social/types/social.types.ts
-export type SocialPlatform = 'google' | 'telegram' | 'instagram';
+export type SocialPlatform =
+  | 'app'
+  | 'telegram' 
+  | 'instagram' 
+  | 'facebook' 
+  | 'google' 
+  | 'whatsapp'
 
 export interface SocialPlatformMetadata {
   id: SocialPlatform;

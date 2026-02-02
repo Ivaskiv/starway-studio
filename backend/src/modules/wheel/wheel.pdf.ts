@@ -1,34 +1,13 @@
 // backend/src/modules/wheel/wheel.pdf.ts
+import { SPHERE_LABELS, WheelPDFData } from '@/modules/wheel/wheel.types.js'
 import puppeteer from 'puppeteer'
 
-interface WheelPDFData {
-  id: string
-  userId: string
-  userName: string
-  isEmail?: boolean
-  scores: Array<{ sphere: string; score: number; comment: string }>
-  weakestSphere: string
-  focusSphere: string
-  analysis: string
-  createdAt: string
-}
-
-const SPHERE_LABELS: Record<string, string> = {
-  money: 'Гроші',
-  realization: 'Реалізація',
-  relationships: 'Відносини',
-  energy: 'Енергія/Тіло',
-  freedom: 'Свобода/Час',
-  inner_support: 'Внутрішня опора',
-  health: "Здоров'я",
-  growth: 'Розвиток',
-}
 
 export async function createWheelPDF(data: WheelPDFData): Promise<Buffer> {
   const browser = await puppeteer.launch({ headless: true })
   const page = await browser.newPage()
 
-  const userLabel = data.isEmail ? 'Користувач з email' : 'Користувач'
+  const userLabel = 'Користувач'
 
   const html = `
     <!DOCTYPE html>
@@ -58,13 +37,15 @@ export async function createWheelPDF(data: WheelPDFData): Promise<Buffer> {
         .map(
           (s) => `
         <div class="sphere">
-          <div class="sphere-name">${SPHERE_LABELS[s.sphere] || s.sphere}</div>
+          <div class="sphere-name">
+            ${SPHERE_LABELS[s.categoryId] || s.categoryId}
+          </div>
           <div class="sphere-score">${s.score}/10</div>
           ${s.comment ? `<div class="comment">"${s.comment}"</div>` : ''}
         </div>
       `
-        )
-        .join('')}
+  )
+      .join('')}
 
       <div class="analysis">
         <h3>📊 Аналіз AI:</h3>

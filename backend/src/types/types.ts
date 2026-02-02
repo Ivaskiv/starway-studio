@@ -1,14 +1,9 @@
 // backend/src/types/types.ts
 
+import { SocialPlatform } from "@/modules/social/social.types.js";
+
 // ======================= AUTH =======================
 
-export type SocialPlatform =
-  | 'app'
-  | 'telegram'
-  | 'whatsapp'
-  | 'instagram'
-  | 'facebook'
-  | 'tiktok'
 
   export type UserRole = 'super_admin' | 'admin' | 'user';
 

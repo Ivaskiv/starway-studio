@@ -1,5 +1,7 @@
+// frontend/src/features/auth/components/RegisterForm.tsx
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Mail, Sparkles, User } from 'lucide-react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -18,7 +20,7 @@ const registerSchema = z
       .regex(/[0-9]/, 'Має містити цифру'),
     confirmPassword: z.string(),
   })
-  .refine(data => data.password === data.confirmPassword, {
+  .refine((data) => data.password === data.confirmPassword, {
     path: ['confirmPassword'],
     message: 'Паролі не співпадають',
   });
@@ -26,26 +28,52 @@ const registerSchema = z
 export type RegisterFormData = z.infer<typeof registerSchema>;
 
 interface Props {
-  onSubmit: (data: Omit<RegisterFormData, 'confirmPassword'>) => Promise<void>;
+  onSubmit: (data: RegisterFormData) => Promise<void>;
   onLoginClick?: () => void;
   isLoading?: boolean;
   serverError?: string;
+  autoFillEmail?: string;
+  resetTrigger?: number; // новий пропс для примусового скидання форми
 }
 
-export function RegisterForm({ onSubmit, onLoginClick, isLoading = false, serverError }: Props) {
+export function RegisterForm({
+  onSubmit,
+  onLoginClick,
+  isLoading = false,
+  serverError,
+  autoFillEmail,
+  resetTrigger = 0,
+}: Props) {
   const {
     register,
     handleSubmit,
     watch,
+    reset, // додали reset з useForm
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
+    defaultValues: {
+      name: '',
+      email: autoFillEmail || '',
+      password: '',
+      confirmPassword: '',
+    },
   });
 
   const password = watch('password', '');
   const loading = isLoading || isSubmitting;
 
-  const submit = ({ confirmPassword, ...rest }: RegisterFormData) => onSubmit(rest);
+  // Скидання форми при зміні resetTrigger (з модалки)
+  useEffect(() => {
+    reset({
+      name: '',
+      email: autoFillEmail || '',
+      password: '',
+      confirmPassword: '',
+    });
+  }, [resetTrigger, autoFillEmail, reset]);
+
+  const submit = (data: RegisterFormData) => onSubmit(data);
 
   return (
     <FormLayout title="Реєстрація" subtitle="Створи акаунт за хвилину" error={serverError}>

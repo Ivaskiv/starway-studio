@@ -1,45 +1,17 @@
-// backend/src/modules/wheel/wheel.ai.ts
 import OpenAI from 'openai'
+import { WheelScore, WheelUserContext } from './wheel.types.js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 })
 
-export type WheelUserContext = {
-  name?: string | null
-  email?: string | null
-  phone?: string | null
-  gender?: string | null
-  age?: number | null
-}
-
-type WheelScore = {
-  sphere: string
-  score: number
-  comment?: string
-}
-
-const SPHERE_LABELS: Record<string, string> = {
-  money: 'Гроші',
-  realization: 'Реалізація',
-  relationships: 'Відносини',
-  energy: 'Енергія / Тіло',
-  freedom: 'Свобода / Час',
-  inner_support: 'Внутрішня опора',
-  health: "Здоровʼя",
-  growth: 'Розвиток',
-}
-
 export async function generateWheelAnalysis(
   scores: WheelScore[],
-  user: WheelUserContext
+  user: WheelUserContext,
 ): Promise<string> {
-  const spheresText = scores
-    .map(
-      (s) =>
-        `${SPHERE_LABELS[s.sphere] ?? s.sphere}: ${s.score}/10 (${s.comment ?? 'без коментаря'})`
-    )
-    .join('\n')
+  const weakest = scores.reduce((min, s) =>
+    s.score < min.score ? s : min,
+  )
 
   const userContext = `
 Імʼя: ${user.name ?? 'невідомо'}
@@ -50,20 +22,17 @@ Email: ${user.email ?? 'немає'}
 
   const prompt = `
 Ти AI-ментор. Аналізуй колесо балансу користувача.
+Без мотивації. Без підтримки. Тільки факти.
 
-Тон: жорстка ясність, без підтримки й мотивації.
-Без порад. Тільки факти.
-
-Користувач:
 ${userContext}
 
-Дані:
-${spheresText}
+Найслабша сфера: ${weakest.categoryId}
+Оцінка: ${weakest.score}/10
 
-Сформуй аналіз (2–3 речення):
-1. Найслабша сфера
-2. Ключовий перекіс
-3. Де реальний фокус
+Сформуй короткий аналіз (2–3 речення):
+1. Де перекіс
+2. Чому це критично
+3. Реальний фокус
 `
 
   const response = await openai.chat.completions.create({

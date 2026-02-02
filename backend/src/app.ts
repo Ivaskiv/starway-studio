@@ -1,20 +1,19 @@
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import 'dotenv/config';
 import express from 'express';
-import cors from 'cors';
 import morgan from 'morgan';
-import cookieParser from 'cookie-parser';
 
 // Routes
-import wheelRoutes from './modules/wheel/wheel.routes.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import mentorRoutes from './modules/mentor/mentor.routes.js';
 import funnelsRoutes from './modules/products/funnel.js';
 import productsRoutes from './modules/products/products.routes.js';
 import progressRoutes from './modules/progress/progress.routes.js';
+import socialRoutes from './modules/social/social.routes.js';
 import usersRoutes from './modules/users/users.js';
-import socialRoutes from './routes/social.js';
+import wheelRoutes from './modules/wheel/wheel.routes.js';
 import statsRoutes from './routes/stats.js';
-import systemRoutes from './routes/system.js';
 
 export function createApp() {
   const app = express();
@@ -22,20 +21,17 @@ export function createApp() {
   // ⚙️ MIDDLEWARE
   app.use(
     cors({
-      origin: [
-        'http://localhost:5173',
-        'https://starway-studio.vercel.app',
-      ],
+      origin: ['http://localhost:5173', 'https://starway-studio.vercel.app'],
       credentials: true,
-      methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
-    })
+    }),
   );
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cookieParser()); // секретар для cookie
-  app.use(morgan('dev'));  // фотограф для логів
+  app.use(morgan('dev')); // фотограф для логів
 
   if (process.env.NODE_ENV !== 'production') {
     app.use((req, _res, next) => {
@@ -64,7 +60,6 @@ export function createApp() {
   app.use('/api/wheel', wheelRoutes);
   app.use('/api/social', socialRoutes);
   app.use('/api/stats', statsRoutes);
-  app.use('/api/system', systemRoutes);
   app.use('/api/progress', progressRoutes);
 
   // ❌ 404

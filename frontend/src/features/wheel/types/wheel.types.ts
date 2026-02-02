@@ -107,3 +107,38 @@ export interface WheelDelta {
   relatedTaskId: string
   createdAt: string
 }
+export const SPHERE_LABELS = {
+  health: 'Здоровʼя',
+  energy: 'Енергія',
+  emotions: 'Емоційний стан',
+  mind: 'Мислення',
+  productivity: 'Продуктивність',
+  finance: 'Фінанси',
+  career: 'Карʼєра',
+  business: 'Бізнес',
+  relationships: 'Стосунки',
+  family: 'Сімʼя',
+  friends: 'Друзі',
+  love: 'Любов',
+  spirituality: 'Духовність',
+  selfDevelopment: 'Саморозвиток',
+  rest: 'Відпочинок',
+  hobbies: 'Хобі',
+} as const
+export type WheelSphere = keyof typeof SPHERE_LABELS
+
+export interface WheelPDFData {
+  id: string
+  userId: string
+  userName: string
+  isEmail?: boolean
+  scores: Array<{
+    sphere: string
+    score: number
+    comment: string
+  }>
+ weakestSphere: WheelSphere
+  focusSphere: WheelSphere
+    analysis: string
+  createdAt: string
+}

@@ -7,7 +7,7 @@ import { GlassCard } from '@/ui';
 import { parseSocialFlow } from '../utils/social.utils';
 import { useSocialCallbackMutation } from '../services/social.api';
 import { useAppDispatch } from '@/app/store/hooks';
-import { hydrateAuth } from '@/features/auth/services/auth.slice';
+import { setCredentials } from '@/features/auth/services/auth.slice'; // ← правильний імпорт
 import { normalizeSingleUser } from '@/shared/types/user.types';
 import { saveToken } from '@/services/api';
 
@@ -38,18 +38,19 @@ export default function OAuthCallbackPage() {
       try {
         toast.loading('Завершення авторизації...', { id: 'oauth' });
 
-        // Викликаємо бекенд для завершення OAuth (отримуємо токен + користувача)
         const response = await socialCallback({ code }).unwrap();
 
         // Зберігаємо токен
         saveToken(response.token);
 
-        // Хідратимо користувача в Redux
-        dispatch(hydrateAuth(normalizeSingleUser(response.user)));
+        // Оновлюємо Redux через setCredentials (саме той редюсер, який є)
+        dispatch(setCredentials({
+          user: normalizeSingleUser(response.user),
+          accessToken: response.token,
+        }));
 
         toast.success('Авторизація успішна!', { id: 'oauth' });
 
-        // Редірект після логіну
         navigate(mode === 'connect' ? '/settings/connections' : '/dashboard', { replace: true });
       } catch (err: any) {
         console.error('OAuth callback error:', err);

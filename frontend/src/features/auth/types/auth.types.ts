@@ -1,4 +1,5 @@
 // frontend/src/features/auth/types/auth.types.ts
+import { SocialPlatform } from '@/features/social/types/social.types'
 import { User } from '@/shared/types/user.types'
 
 export interface AuthTokens {
@@ -13,6 +14,9 @@ export interface AuthResponse {
   needsProfile?: boolean
   expiresIn?: number
   permissions?: string[]
+
+  isNewUser?: boolean
+  email?: string
 }
 
 export interface MeResponse {
@@ -32,7 +36,7 @@ export interface RegisterInput {
 }
 
 export interface SocialAuthInput {
-  provider: string
+  provider: SocialPlatform
   token: string
 }
 

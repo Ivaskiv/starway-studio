@@ -3,8 +3,9 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { sql } from '../../db/client.js';
-import type { SocialPlatform, User, UserRole } from '../../types/types.js';
+import type {User, UserRole } from '../../types/types.js';
 import { JwtPayload, SocialAuthInput } from '../auth/auth.types.js';
+import { SocialPlatform } from '@/modules/social/social.types.js';
 
 // ======================= CONFIG =======================
 
