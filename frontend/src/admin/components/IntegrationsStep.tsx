@@ -1,13 +1,13 @@
 // frontend/src/features/admin/components/IntegrationsStep.tsx
 
+import { SocialPlatform } from '@/frontend/srcshared/constants/socialPlatforms.constants';
+import { Icon } from '@/frontend/srcui';
+import { Button } from '@/frontend/srcui/Button';
+import { GlassCard } from '@/frontend/srcui/GlassCard';
+import { Input } from '@/frontend/srcui/Input';
+import { Label } from '@/frontend/srcui/Label';
+import { Check, Copy, ExternalLink, MessageCircle } from 'lucide-react';
 import React, { useState } from 'react';
-import { ExternalLink, Copy, Check, MessageCircle, Send } from 'lucide-react';
-import { GlassCard } from '@/ui/GlassCard';
-import { Button } from '@/ui/Button';
-import { Input } from '@/ui/Input';
-import { Icon } from '@/ui';
-import { Label } from '@/ui/Label';
-import { SocialPlatform } from '@/shared/constants/socialPlatforms.constants';
 
 interface IntegrationsStepProps {
   data: any;
@@ -25,9 +25,9 @@ export const IntegrationsStep: React.FC<IntegrationsStepProps> = ({ data, onChan
         ...data.integrations,
         [platform]: {
           ...data.integrations[platform],
-          [field]: value
-        }
-      }
+          [field]: value,
+        },
+      },
     });
   };
 
@@ -56,7 +56,7 @@ export const IntegrationsStep: React.FC<IntegrationsStepProps> = ({ data, onChan
             <Input
               type="checkbox"
               checked={data.integrations.telegram.enabled}
-              onChange={(e) => updateIntegration('telegram', 'enabled', e.target.checked)}
+              onChange={e => updateIntegration('telegram', 'enabled', e.target.checked)}
               className="sr-only peer"
             />
             <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
@@ -67,43 +67,31 @@ export const IntegrationsStep: React.FC<IntegrationsStepProps> = ({ data, onChan
           <div className="space-y-4 mt-4 pt-4 border-t border-white/10">
             {/* Bot Token */}
             <div>
-              <Label className="block text-sm font-medium text-gray-300 mb-2">
-                Bot Token *
-              </Label>
+              <Label className="block text-sm font-medium text-gray-300 mb-2">Bot Token *</Label>
               <Input
                 value={data.integrations.telegram.bot_token || ''}
-                onChange={(e) => updateIntegration('telegram', 'bot_token', e.target.value)}
+                onChange={e => updateIntegration('telegram', 'bot_token', e.target.value)}
                 placeholder="1234567890:AAHdqTcvbXYZ..."
                 type="password"
                 className="w-full"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Отримайте токен від @BotFather
-              </p>
+              <p className="text-xs text-gray-500 mt-1">Отримайте токен від @BotFather</p>
             </div>
 
             {/* Webhook URL */}
             <div>
-              <Label className="block text-sm font-medium text-gray-300 mb-2">
-                Webhook URL
-              </Label>
+              <Label className="block text-sm font-medium text-gray-300 mb-2">Webhook URL</Label>
               <div className="flex items-center gap-2">
                 <Input
                   value={`https://starway.studio/webhooks/telegram/${data.branding.name?.toLowerCase().replace(/\s+/g, '-') || 'your-product'}`}
                   readOnly
                   className="flex-1"
                 />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={copyWebhookUrl}
-                >
+                <Button variant="ghost" size="sm" onClick={copyWebhookUrl}>
                   {copiedWebhook ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Встановіть цей URL як webhook в Telegram
-              </p>
+              <p className="text-xs text-gray-500 mt-1">Встановіть цей URL як webhook в Telegram</p>
             </div>
 
             {/* Guide */}
@@ -124,7 +112,8 @@ export const IntegrationsStep: React.FC<IntegrationsStepProps> = ({ data, onChan
                   <li>Введіть назву бота (наприклад: Сила свідомості)</li>
                   <li>Введіть username (наприклад: syla_svidomosti_bot)</li>
                   <li>Скопіюйте отриманий токен і вставте вище</li>
-                  <li>Встановіть webhook командою:
+                  <li>
+                    Встановіть webhook командою:
                     <code className="block mt-1 p-2 bg-black/30 rounded text-xs">
                       /setwebhook https://starway.studio/webhooks/telegram/...
                     </code>
@@ -241,8 +230,8 @@ export const IntegrationsStep: React.FC<IntegrationsStepProps> = ({ data, onChan
       {/* Info */}
       <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
         <p className="text-sm text-yellow-200">
-          💡 <strong>Порада:</strong> Підключіть хоча б одну інтеграцію для комунікації з користувачами. 
-          Telegram найпопулярніший в Україні.
+          💡 <strong>Порада:</strong> Підключіть хоча б одну інтеграцію для комунікації з
+          користувачами. Telegram найпопулярніший в Україні.
         </p>
       </div>
     </div>

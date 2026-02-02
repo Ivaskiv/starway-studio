@@ -1,63 +1,55 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import type { User } from '@/shared/types/user.types'
-import { saveToken, removeToken, getToken } from '@/services/api'
+// frontend/src/features/auth/services/auth.slice.ts
+import { getToken, removeToken, saveToken } from '@/services/api';
+import type { User } from '@/shared/types/user.types';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface AuthState {
-  user: User | null
-  accessToken: string | null
-  isAuthenticated: boolean
-  isLoading: boolean
+  user: User | null;
+  accessToken: string | null;
+  status: 'idle' | 'loading' | 'authenticated' | 'unauthenticated';
 }
 
 const initialState: AuthState = {
   user: null,
   accessToken: getToken(),
-  isAuthenticated: false,
-  isLoading: true,
-}
+  status: 'idle',
+};
 
 const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
     setCredentials: (state, action: PayloadAction<{ user: User; accessToken: string }>) => {
-      state.user = action.payload.user
-      state.accessToken = action.payload.accessToken
-      state.isAuthenticated = true
-      state.isLoading = false
-      saveToken(action.payload.accessToken)
-      console.log('✅ [Auth] Credentials set:', action.payload.user.email)
+      state.user = action.payload.user;
+      state.accessToken = action.payload.accessToken;
+      state.status = 'authenticated';
+      saveToken(action.payload.accessToken);
+    },
+    hydrateAuth: (state, action: PayloadAction<User>) => {
+      state.user = action.payload;
+      state.status = 'authenticated';
     },
     updateUser: (state, action: PayloadAction<User>) => {
-      if (state.user) {
-        state.user = { ...state.user, ...action.payload }
-        console.log('✅ [Auth] User updated:', action.payload.email)
-      }
+      state.user = action.payload;
     },
-    clearAuth: (state) => {
-      state.user = null
-      state.accessToken = null
-      state.isAuthenticated = false
-      state.isLoading = false
-      removeToken()
-      console.log('🔓 [Auth] Cleared')
+    setLoading: state => {
+      state.status = 'loading';
     },
-    setLoading: (state, action: PayloadAction<boolean>) => {
-      state.isLoading = action.payload
-    },
-    hydrateAuth: (state, action: PayloadAction<{ user: User }>) => {
-      state.user = action.payload.user
-      state.isAuthenticated = true
-      state.isLoading = false
-      console.log('💧 [Auth] Hydrated:', action.payload.user.email)
+    clearAuth: state => {
+      state.user = null;
+      state.accessToken = null;
+      state.status = 'unauthenticated';
+      removeToken();
     },
   },
-})
+});
 
-export const { setCredentials, updateUser, clearAuth, setLoading, hydrateAuth } = authSlice.actions
-export default authSlice.reducer
+export const selectCurrentUser = (state: { auth: AuthState }) => state.auth.user;
+export const selectAccessToken = (state: { auth: AuthState }) => state.auth.accessToken;
+export const selectAuthStatus = (state: { auth: AuthState }) => state.auth.status;
+export const selectIsAuthenticated = (state: { auth: AuthState }) =>
+  state.auth.status === 'authenticated';
+export const selectIsLoading = (state: { auth: AuthState }) => state.auth.status === 'loading';
 
-export const selectCurrentUser = (state: { auth: AuthState }) => state.auth.user
-export const selectIsAuthenticated = (state: { auth: AuthState }) => state.auth.isAuthenticated
-export const selectIsLoading = (state: { auth: AuthState }) => state.auth.isLoading
-export const selectAccessToken = (state: { auth: AuthState }) => state.auth.accessToken
+export const { setCredentials, hydrateAuth, updateUser, setLoading, clearAuth } = authSlice.actions;
+export default authSlice.reducer;

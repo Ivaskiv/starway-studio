@@ -1,13 +1,13 @@
 // frontend/src/features/ai-generator/components/ProgressTracker.tsx
-import { GlassCard } from '@/ui'
-import { Check, Sparkles, Zap } from 'lucide-react'
-import { TOTAL_STEPS } from '../types/generator.types'
+import { Check, Sparkles, Zap } from 'lucide-react';
+import { TOTAL_STEPS } from '../../products/types/generator.types';
+import { GlassCard } from '@/ui';
 
 interface ProgressTrackerProps {
-  currentStep: number
-  completedSteps: number[]
-  remainingAttempts: number
-  totalAttemptsUsed: number
+  currentStep: number;
+  completedSteps: number[];
+  remainingAttempts: number;
+  totalAttemptsUsed: number;
 }
 
 export default function ProgressTracker({
@@ -16,8 +16,8 @@ export default function ProgressTracker({
   remainingAttempts,
   totalAttemptsUsed,
 }: ProgressTrackerProps) {
-  const progress = Math.round((completedSteps.length / TOTAL_STEPS) * 100)
-  const progressClass = `w-[${progress}%]`
+  const progress = Math.round((completedSteps.length / TOTAL_STEPS) * 100);
+  const progressClass = `w-[${progress}%]`;
 
   return (
     <GlassCard className="p-6" data-hover="lift">
@@ -35,9 +35,7 @@ export default function ProgressTracker({
         {totalAttemptsUsed > 0 && (
           <div className="text-right">
             <p className="text-sm text-slate-400">Використано</p>
-            <p className="text-lg font-semibold text-orange-400">
-              {totalAttemptsUsed}
-            </p>
+            <p className="text-lg font-semibold text-orange-400">{totalAttemptsUsed}</p>
           </div>
         )}
       </div>
@@ -50,15 +48,17 @@ export default function ProgressTracker({
           </span>
         </div>
         <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-          <div className={`h-full ${progressClass} bg-gradient-to-r from-orange-500 to-pink-500 transition-all duration-500`} />
+          <div
+            className={`h-full ${progressClass} bg-gradient-to-r from-orange-500 to-pink-500 transition-all duration-500`}
+          />
         </div>
       </div>
 
       <div className="grid grid-cols-11 gap-1">
         {Array.from({ length: TOTAL_STEPS }, (_, i) => {
-          const stepNum = i + 1
-          const isCompleted = completedSteps.includes(stepNum)
-          const isCurrent = currentStep === stepNum
+          const stepNum = i + 1;
+          const isCompleted = completedSteps.includes(stepNum);
+          const isCurrent = currentStep === stepNum;
 
           return (
             <div
@@ -68,13 +68,13 @@ export default function ProgressTracker({
                   isCompleted
                     ? 'bg-gradient-to-br from-green-500 to-emerald-500 text-white'
                     : isCurrent
-                    ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white ring-2 ring-orange-400'
-                    : 'bg-slate-800 text-slate-500'
+                      ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white ring-2 ring-orange-400'
+                      : 'bg-slate-800 text-slate-500'
                 }`}
             >
               {isCompleted ? <Check className="w-4 h-4" /> : stepNum}
             </div>
-          )
+          );
         })}
       </div>
 
@@ -87,5 +87,5 @@ export default function ProgressTracker({
         </div>
       )}
     </GlassCard>
-  )
+  );
 }

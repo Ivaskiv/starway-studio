@@ -1,4 +1,4 @@
-// frontend/src/features/products/components/ProductBuilder.tsx
+// /features/products/components/ProductBuilder.tsx
 
 import { useCreateProductMutation } from '@/services/admin.api';
 import {

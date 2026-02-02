@@ -1,70 +1,41 @@
 // frontend/src/ui/Icon.tsx
+import { forwardRef, SVGProps } from 'react'
 
-import * as LucideIcons from 'lucide-react';
-import { forwardRef } from 'react';
-import { ReactSVG } from 'react-svg';
-import { getIconPath } from '../shared/constants/socialPlatforms.constants';
-
-// ============ TYPES ============
-
-type LucideIconName = keyof typeof LucideIcons;
-
-export interface IconProps extends Omit<React.SVGAttributes<SVGElement>, 'name'> {
-  name: LucideIconName | string; // Lucide або назва SVG файлу
-  size?: number | string;
-  color?: string;
-  strokeWidth?: number;
+interface IconProps extends SVGProps<SVGSVGElement> {
+  name: string
+  size?: number
+  color?: string
+  strokeWidth?: number
+  className?: string
 }
 
-// ============ COMPONENT ============
+const getIconPath = (name: string): string => {
+  return `/icons/icons8-${name}.svg`
+}
 
-const Icon = forwardRef<SVGSVGElement, IconProps>(
-  ({ name, size = 24, color, strokeWidth = 2, className, ...props }, ref) => {
-    const LucideIcon = (LucideIcons as Record<string, any>)[name];
-
-    // ✅ Lucide іконка
-    if (LucideIcon) {
-      return (
-        <LucideIcon
-          ref={ref}
-          size={size}
-          color={color}
-          strokeWidth={strokeWidth}
-          className={className}
-          {...props}
-        />
-      );
-    }
-
-    // ✅ SVG файл з /public/icons/
-    const svgPath = getIconPath(name);
+export const Icon = forwardRef<SVGSVGElement, IconProps>(
+  ({ name, size = 24, color, strokeWidth = 2, className = '', ...props }, ref) => {
+    const svgPath = getIconPath(name)
 
     return (
-      <ReactSVG
-        src={svgPath}
-        beforeInjection={svg => {
-          svg.setAttribute('width', String(size));
-          svg.setAttribute('height', String(size));
+      <span className="inline-flex items-center justify-center">
+        <img
+          src={svgPath}
+          alt={name}
+          width={size}
+          height={size}
+          className={className}
+          style={{ 
+            filter: color ? `brightness(0) saturate(100%) invert(${color === 'white' ? '1' : '0'})` : undefined 
+          }}
+          onError={(e) => {
+            console.warn(`[Icon] "${name}" not found at ${svgPath}`)
+            e.currentTarget.style.display = 'none'
+          }}
+        />
+      </span>
+    )
+  }
+)
 
-          if (className) {
-            svg.classList.add(...className.split(' '));
-          }
-
-          if (color) {
-            svg.setAttribute('fill', color);
-            svg.style.color = color;
-          }
-        }}
-        wrapper="span"
-        className="inline-flex items-center justify-center"
-        fallback={() => {
-          console.warn(`[Icon] "${name}" not found at ${svgPath}`);
-          return null;
-        }}
-      />
-    );
-  },
-);
-
-Icon.displayName = 'Icon';
-export default Icon;
+Icon.displayName = 'Icon'

@@ -1,11 +1,11 @@
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { Mail, Sparkles, User } from 'lucide-react'
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Mail, Sparkles, User } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
-import { Input, Button } from '@/ui'
-import { PasswordStrength } from '@/ui/PasswordStrength'
-import { FormLayout } from './FormLayout'
+import { Button, Input } from '@/ui';
+import { PasswordStrength } from '@/ui/PasswordStrength';
+import { FormLayout } from './FormLayout';
 
 const registerSchema = z
   .object({
@@ -21,23 +21,18 @@ const registerSchema = z
   .refine(data => data.password === data.confirmPassword, {
     path: ['confirmPassword'],
     message: 'Паролі не співпадають',
-  })
+  });
 
-export type RegisterFormData = z.infer<typeof registerSchema>
+export type RegisterFormData = z.infer<typeof registerSchema>;
 
 interface Props {
-  onSubmit: (data: Omit<RegisterFormData, 'confirmPassword'>) => Promise<void>
-  onLoginClick?: () => void
-  isLoading?: boolean
-  serverError?: string
+  onSubmit: (data: Omit<RegisterFormData, 'confirmPassword'>) => Promise<void>;
+  onLoginClick?: () => void;
+  isLoading?: boolean;
+  serverError?: string;
 }
 
-export function RegisterForm({
-  onSubmit,
-  onLoginClick,
-  isLoading = false,
-  serverError,
-}: Props) {
+export function RegisterForm({ onSubmit, onLoginClick, isLoading = false, serverError }: Props) {
   const {
     register,
     handleSubmit,
@@ -45,20 +40,15 @@ export function RegisterForm({
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
-  })
+  });
 
-  const password = watch('password', '')
-  const loading = isLoading || isSubmitting
+  const password = watch('password', '');
+  const loading = isLoading || isSubmitting;
 
-  const submit = ({ confirmPassword, ...rest }: RegisterFormData) =>
-    onSubmit(rest)
+  const submit = ({ confirmPassword, ...rest }: RegisterFormData) => onSubmit(rest);
 
   return (
-    <FormLayout
-      title="Реєстрація"
-      subtitle="Створи акаунт за хвилину"
-      error={serverError}
-    >
+    <FormLayout title="Реєстрація" subtitle="Створи акаунт за хвилину" error={serverError}>
       <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-4 sm:gap-3">
         <Input
           {...register('name')}
@@ -128,5 +118,5 @@ export function RegisterForm({
         )}
       </form>
     </FormLayout>
-  )
+  );
 }

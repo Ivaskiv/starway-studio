@@ -1,37 +1,39 @@
 //Users/viravira/Documents/starway-studio/frontend/src/pages/admin/WhiteLabel.tsx
-import { Button, Input, Select } from '@/ui'
+import { Button, Input, Select } from '@/ui';
 import {
   Copy,
   DollarSign,
   Eye,
-  MoreVertical, Play,
-  Plus, Search,
+  MoreVertical,
+  Play,
+  Plus,
+  Search,
   Star,
   Target,
   Trash2,
-  TrendingUp
-} from 'lucide-react'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+  TrendingUp,
+} from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 interface Funnel {
-  id: string
-  name: string
-  status: 'active' | 'paused' | 'draft' | 'archived'
-  type: 'evergreen' | 'campaign' | 'webinar'
-  stages: number
-  visitors: number
-  conversions: number
-  revenue: number
-  conversion_rate: number
-  created_at: string
-  isFavorite: boolean
+  id: string;
+  name: string;
+  status: 'active' | 'paused' | 'draft' | 'archived';
+  type: 'evergreen' | 'campaign' | 'webinar';
+  stages: number;
+  visitors: number;
+  conversions: number;
+  revenue: number;
+  conversion_rate: number;
+  created_at: string;
+  isFavorite: boolean;
 }
 
 export default function FunnelManager() {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
 
   const [funnels, setFunnels] = useState<Funnel[]>([
     {
@@ -45,7 +47,7 @@ export default function FunnelManager() {
       revenue: 747600,
       conversion_rate: 21.9,
       created_at: '2024-01-15',
-      isFavorite: true
+      isFavorite: true,
     },
     {
       id: '2',
@@ -58,7 +60,7 @@ export default function FunnelManager() {
       revenue: 1030000,
       conversion_rate: 21.4,
       created_at: '2024-02-20',
-      isFavorite: true
+      isFavorite: true,
     },
     {
       id: '3',
@@ -71,7 +73,7 @@ export default function FunnelManager() {
       revenue: 229600,
       conversion_rate: 19.7,
       created_at: '2024-03-10',
-      isFavorite: false
+      isFavorite: false,
     },
     {
       id: '4',
@@ -84,41 +86,39 @@ export default function FunnelManager() {
       revenue: 246000,
       conversion_rate: 14.5,
       created_at: '2024-11-01',
-      isFavorite: false
-    }
-  ])
+      isFavorite: false,
+    },
+  ]);
 
   const statusOptions = [
     { value: 'all', label: 'Всі статуси' },
     { value: 'active', label: 'Активні' },
     { value: 'paused', label: 'Призупинені' },
     { value: 'draft', label: 'Чернетки' },
-    { value: 'archived', label: 'Архівовані' }
-  ]
+    { value: 'archived', label: 'Архівовані' },
+  ];
 
   const typeOptions = [
     { value: 'all', label: 'Всі типи' },
     { value: 'evergreen', label: 'Evergreen' },
     { value: 'campaign', label: 'Campaign' },
-    { value: 'webinar', label: 'Webinar' }
-  ]
+    { value: 'webinar', label: 'Webinar' },
+  ];
 
   const filteredFunnels = funnels.filter(funnel => {
-    if (statusFilter !== 'all' && funnel.status !== statusFilter) return false
-    if (typeFilter !== 'all' && funnel.type !== typeFilter) return false
-    if (searchQuery && !funnel.name.toLowerCase().includes(searchQuery.toLowerCase())) return false
-    return true
-  })
+    if (statusFilter !== 'all' && funnel.status !== statusFilter) return false;
+    if (typeFilter !== 'all' && funnel.type !== typeFilter) return false;
+    if (searchQuery && !funnel.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
 
   const toggleFavorite = (id: string) => {
-    setFunnels(funnels.map(f => 
-      f.id === id ? { ...f, isFavorite: !f.isFavorite } : f
-    ))
-  }
+    setFunnels(funnels.map(f => (f.id === id ? { ...f, isFavorite: !f.isFavorite } : f)));
+  };
 
   const duplicateFunnel = (id: string) => {
-    const funnel = funnels.find(f => f.id === id)
-    if (!funnel) return
+    const funnel = funnels.find(f => f.id === id);
+    if (!funnel) return;
 
     const newFunnel: Funnel = {
       ...funnel,
@@ -128,29 +128,29 @@ export default function FunnelManager() {
       visitors: 0,
       conversions: 0,
       revenue: 0,
-      conversion_rate: 0
-    }
-    setFunnels([...funnels, newFunnel])
-  }
+      conversion_rate: 0,
+    };
+    setFunnels([...funnels, newFunnel]);
+  };
 
   const deleteFunnel = (id: string) => {
     if (confirm('Видалити цю воронку?')) {
-      setFunnels(funnels.filter(f => f.id !== id))
+      setFunnels(funnels.filter(f => f.id !== id));
     }
-  }
+  };
 
   const stats = {
     total: funnels.length,
     active: funnels.filter(f => f.status === 'active').length,
     total_revenue: funnels.reduce((sum, f) => sum + f.revenue, 0),
-    avgConversion: funnels.length > 0 
-      ? funnels.reduce((sum, f) => sum + f.conversion_rate, 0) / funnels.length 
-      : 0
-  }
+    avgConversion:
+      funnels.length > 0
+        ? funnels.reduce((sum, f) => sum + f.conversion_rate, 0) / funnels.length
+        : 0,
+  };
 
   return (
     <div className="space-y-8">
-      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -217,7 +217,7 @@ export default function FunnelManager() {
             type="text"
             placeholder="Пошук воронок..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={e => setSearchQuery(e.target.value)}
             className="pl-12"
           />
         </div>
@@ -225,21 +225,21 @@ export default function FunnelManager() {
         <Select
           options={statusOptions}
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={e => setStatusFilter(e.target.value)}
           className="w-full sm:w-48"
         />
 
         <Select
           options={typeOptions}
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
+          onChange={e => setTypeFilter(e.target.value)}
           className="w-full sm:w-48"
         />
       </div>
 
       {/* Funnels Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filteredFunnels.map((funnel) => (
+        {filteredFunnels.map(funnel => (
           <div
             key={funnel.id}
             className={`
@@ -258,27 +258,37 @@ export default function FunnelManager() {
                     className="p-1"
                     aria-label={funnel.isFavorite ? 'Видалити з обраного' : 'Додати в обране'}
                   >
-                    <Star 
-                      size={16} 
-                      className={funnel.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}
+                    <Star
+                      size={16}
+                      className={
+                        funnel.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'
+                      }
                     />
                   </Button>
                 </div>
 
                 <div className="flex items-center gap-2 text-sm">
-                  <span className={`
+                  <span
+                    className={`
                     px-2 py-1 rounded-full text-xs font-medium
-                    ${funnel.status === 'active' ? 'bg-green-500/10 text-green-400' :
-                      funnel.status === 'paused' ? 'bg-yellow-500/10 text-yellow-400' :
-                      funnel.status === 'draft' ? 'bg-gray-500/10 text-gray-400' :
-                      'bg-blue-500/10 text-blue-400'
+                    ${
+                      funnel.status === 'active'
+                        ? 'bg-green-500/10 text-green-400'
+                        : funnel.status === 'paused'
+                          ? 'bg-yellow-500/10 text-yellow-400'
+                          : funnel.status === 'draft'
+                            ? 'bg-gray-500/10 text-gray-400'
+                            : 'bg-blue-500/10 text-blue-400'
                     }
-                  `}>
-                    {funnel.status === 'active' ? 'Активна' :
-                     funnel.status === 'paused' ? 'Призупинена' :
-                     funnel.status === 'draft' ? 'Чернетка' :
-                     'Архівована'
-                    }
+                  `}
+                  >
+                    {funnel.status === 'active'
+                      ? 'Активна'
+                      : funnel.status === 'paused'
+                        ? 'Призупинена'
+                        : funnel.status === 'draft'
+                          ? 'Чернетка'
+                          : 'Архівована'}
                   </span>
                   <span className="text-gray-500">•</span>
                   <span className="text-gray-400 capitalize">{funnel.type}</span>
@@ -291,10 +301,10 @@ export default function FunnelManager() {
                 <Button variant="ghost" className="p-2" aria-label="Більше опцій">
                   <MoreVertical size={20} />
                 </Button>
-                
+
                 {/* Dropdown menu */}
                 <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition z-10">
-                  <Link 
+                  <Link
                     to={`/admin/funnels/blueprint?id=${funnel.id}`}
                     className="flex items-center gap-2 px-4 py-3 hover:bg-gray-700 text-sm rounded-t-xl"
                   >
@@ -344,16 +354,14 @@ export default function FunnelManager() {
             {/* Actions */}
             <div className="flex gap-2">
               <Link to={`/admin/analytics?funnel=${funnel.id}`} className="flex-1">
-                <Button  className="w-full">
+                <Button className="w-full">
                   <TrendingUp size={16} />
                   Аналітика
                 </Button>
               </Link>
-              
+
               <Link to={`/admin/funnels/blueprint?id=${funnel.id}`} className="flex-1">
-                <Button  className="w-full">
-                  Редагувати
-                </Button>
+                <Button className="w-full">Редагувати</Button>
               </Link>
             </div>
           </div>
@@ -365,7 +373,7 @@ export default function FunnelManager() {
           <Target size={64} className="text-gray-600 mx-auto mb-4" />
           <p className="text-gray-400 mb-6">Воронок не знайдено</p>
           <Link to="/admin/funnels/generate">
-            <Button >
+            <Button>
               <Plus size={20} />
               Створити першу воронку
             </Button>
@@ -373,6 +381,5 @@ export default function FunnelManager() {
         </div>
       )}
     </div>
-  )
+  );
 }
-

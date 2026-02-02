@@ -3,7 +3,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { sql } from '../../db/client.js';
-import type { User, UserRole, SocialPlatform } from '../../types/types.js';
+import type { SocialPlatform, User, UserRole } from '../../types/types.js';
 import { JwtPayload, SocialAuthInput } from '../auth/auth.types.js';
 
 // ======================= CONFIG =======================
@@ -23,7 +23,6 @@ export function signToken(payload: Omit<JwtPayload, 'email'>): string {
 
 export function verifyToken(token: string): JwtPayload {
   return jwt.verify(token, JWT_SECRET) as JwtPayload;
-  
 }
 
 // ======================= USER QUERIES =======================
@@ -63,7 +62,7 @@ export async function createUserLocal(data: {
   name?: string;
 }): Promise<User> {
   const { email, password, name } = data;
-  
+
   const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const id = crypto.randomUUID();
   const role: UserRole = 'user';
@@ -90,7 +89,7 @@ export async function createUserLocal(data: {
 
 export async function validatePassword(
   plainPassword: string,
-  hashedPassword: string
+  hashedPassword: string,
 ): Promise<boolean> {
   return bcrypt.compare(plainPassword, hashedPassword);
 }
@@ -138,10 +137,7 @@ export async function findOrCreateSocialUser(data: SocialAuthInput): Promise<Use
   throw new Error(`Unsupported social provider: ${provider}`);
 }
 
-async function findSocialUser(
-  provider: SocialPlatform,
-  external_id: string
-): Promise<User | null> {
+async function findSocialUser(provider: SocialPlatform, external_id: string): Promise<User | null> {
   if (provider === 'telegram') {
     const [user] = await sql<User>`
       SELECT * FROM users WHERE telegram_id = ${external_id}

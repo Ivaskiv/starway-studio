@@ -1,8 +1,8 @@
 // frontend/src/features/admin/components/steps/ReviewStep.tsx
 
+import { GlassCard } from '@/frontend/srcui/GlassCard';
+import { AlertCircle, Check } from 'lucide-react';
 import React from 'react';
-import { GlassCard } from '@/ui/GlassCard';
-import { Check, AlertCircle } from 'lucide-react';
 
 interface ReviewStepProps {
   data: any;
@@ -26,12 +26,8 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ data, template }) => {
   return (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-white mb-2">
-          Останній крок!
-        </h2>
-        <p className="text-gray-400">
-          Перевірте всі налаштування перед створенням продукту
-        </p>
+        <h2 className="text-2xl font-bold text-white mb-2">Останній крок!</h2>
+        <p className="text-gray-400">Перевірте всі налаштування перед створенням продукту</p>
       </div>
 
       {/* Branding */}
@@ -52,11 +48,11 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ data, template }) => {
           <div className="flex items-center justify-between">
             <span className="text-gray-400">Кольори:</span>
             <div className="flex items-center gap-2">
-              <div 
+              <div
                 className="w-8 h-8 rounded-lg border border-white/20"
                 style={{ backgroundColor: data.branding.colors.primary }}
               />
-              <div 
+              <div
                 className="w-8 h-8 rounded-lg border border-white/20"
                 style={{ backgroundColor: data.branding.colors.secondary }}
               />
@@ -74,15 +70,19 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ data, template }) => {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-gray-400">Темплейт:</span>
-            <span className="text-white font-semibold">{template.name} v{template.version}</span>
+            <span className="text-white font-semibold">
+              {template.name} v{template.version}
+            </span>
           </div>
           <div>
-            <span className="text-gray-400 mb-2 block">Увімкнені модулі ({data.enabled_modules.length}):</span>
+            <span className="text-gray-400 mb-2 block">
+              Увімкнені модулі ({data.enabled_modules.length}):
+            </span>
             <div className="flex flex-wrap gap-2">
               {data.enabled_modules.map((moduleId: string) => {
                 const module = template.modules.find((m: any) => m.id === moduleId);
                 return (
-                  <span 
+                  <span
                     key={moduleId}
                     className="px-3 py-1 bg-purple-500/20 text-purple-400 text-sm rounded-full"
                   >
@@ -105,7 +105,13 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ data, template }) => {
           <div className="flex items-center justify-between">
             <span className="text-gray-400">Trial період:</span>
             <span className="text-white font-semibold">
-              {data.pricing.trial_days} {data.pricing.trial_days === 1 ? 'день' : data.pricing.trial_days < 5 ? 'дні' : 'днів'} безкоштовно
+              {data.pricing.trial_days}{' '}
+              {data.pricing.trial_days === 1
+                ? 'день'
+                : data.pricing.trial_days < 5
+                  ? 'дні'
+                  : 'днів'}{' '}
+              безкоштовно
             </span>
           </div>
           <div className="flex items-center justify-between">
@@ -144,7 +150,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ data, template }) => {
         </h3>
         {enabledIntegrations.length > 0 ? (
           <div className="space-y-2">
-            {enabledIntegrations.map((platform) => (
+            {enabledIntegrations.map(platform => (
               <div key={platform} className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-green-400" />
                 <span className="text-white capitalize">{platform}</span>
@@ -160,12 +166,11 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ data, template }) => {
 
       {/* Product URL Preview */}
       <GlassCard className="p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">
-          URL продукту
-        </h3>
+        <h3 className="text-lg font-semibold text-white mb-4">URL продукту</h3>
         <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
           <code className="text-purple-400">
-            https://starway.studio/products/{data.branding.name?.toLowerCase().replace(/\s+/g, '-') || 'your-product'}
+            https://starway.studio/products/
+            {data.branding.name?.toLowerCase().replace(/\s+/g, '-') || 'your-product'}
           </code>
         </div>
       </GlassCard>
@@ -189,9 +194,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ data, template }) => {
             <AlertCircle className="w-6 h-6 text-yellow-400 flex-shrink-0" />
             <div>
               <p className="text-yellow-400 font-semibold">Не всі поля заповнені</p>
-              <p className="text-sm text-gray-400">
-                Перевірте: назву, опис, модулі та ціни
-              </p>
+              <p className="text-sm text-gray-400">Перевірте: назву, опис, модулі та ціни</p>
             </div>
           </div>
         </div>

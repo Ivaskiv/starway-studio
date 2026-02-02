@@ -1,29 +1,38 @@
 // frontend/src/App.tsx
 
-import { Suspense, lazy } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { Loader } from 'lucide-react'
-import { Toaster } from 'react-hot-toast'
+import { Loader } from 'lucide-react';
+import { Suspense, lazy } from 'react';
+import { Toaster } from 'react-hot-toast';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
-import { GlassCard } from '@/ui'
-import DashboardLayout from '@/features/dashboard/layout/DashboardLayout'
-import PublicLayout from '@/layout/PublicLayout'
-import { AbilityGuard } from '@/features/dashboard/layout/AbilityGuard'
-import { ABILITIES } from '@/shared/types/permissions'
+import RedirectAfterAuth from '@/features/auth/components/RedirectAfterAuth';
+import { AbilityGuard } from '@/features/dashboard/layout/AbilityGuard';
+import DashboardLayout from '@/features/dashboard/layout/DashboardLayout';
+import MainLayout from '@/layout/MainLayout';
+import { ABILITIES } from '@/shared/types/permissions';
+import { GlassCard } from '@/ui';
+import AIMentorPage from '@/features/auth/pages/AuthPage';
 
-const HomePage = lazy(() => import('@/features/home/HomePage'))
-const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'))
-const UserProfilePage = lazy(() => import('@/features/auth/pages/UserProfilePage'))
-const OAuthCallbackPage = lazy(() => import('@/features/auth/pages/OAuthCallbackPage'))
-const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'))
-const ProgressPage = lazy(() => import('@/features/progress/pages/ProgressPage'))
-const WheelPage = lazy(() => import('@/features/wheel/pages/WheelPage'))
-const AIMentorPage = lazy(() => import('@/templates/ai-mentor/pages/AIMentorPage'))
-const ProductsPage = lazy(() => import('@/features/products/pages/ProductsPage'))
-const FunnelsPage = lazy(() => import('@/features/funnels/pages/FunnelsPage'))
-const FunnelEditPage = lazy(() => import('@/features/funnels/pages/FunnelEditPage'))
-const AIGeneratorPage = lazy(() => import('@/features/ai-generator/pages/AIGeneratorPage'))
+// === PUBLIC PAGES ===
+const HomePage = lazy(() => import('@/features/home/HomePage'));
+const OAuthCallbackPage = lazy(() => import('@/features/auth/pages/OAuthCallbackPage'));
 
+// === DASHBOARD PAGES ===
+const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
+const CoursesPage = lazy(() => import('@/features/courses/pages/CoursesPage'));
+const UserProfilePage = lazy(() => import('@/features/auth/pages/UserProfilePage'));
+const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'));
+const ProgressPage = lazy(() => import('@/features/progress/pages/ProgressPage'));
+const WheelPage = lazy(() => import('@/features/wheel/pages/WheelPage'));
+// const AIMentorPage = lazy(() => import('@/templatesfeatures/ai-mentor/pages/AIMentorPage'));
+const ProductsPage = lazy(() => import('@/features/products/pages/ProductsPage'));
+const FunnelsPage = lazy(() => import('@/features/funnels/pages/FunnelsPage'));
+const FunnelEditPage = lazy(() => import('@/features/funnels/pages/FunnelEditPage'));
+const AIGeneratorPage = lazy(() => import('@/features/ai-generator/pages/AIGeneratorPage'));
+
+// ===============================
+// 🔄 LOADING FALLBACK
+// ===============================
 function LoadingFallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-black">
@@ -32,20 +41,30 @@ function LoadingFallback() {
         <p className="text-white/60">Завантаження…</p>
       </GlassCard>
     </div>
-  )
+  );
 }
 
+// ===============================
+// 🔀 ROUTES
+// ===============================
 function AppRoutes() {
   return (
     <Suspense fallback={<LoadingFallback />}>
       <Routes>
-        <Route path="/" element={<PublicLayout />}>
+        {/* PUBLIC */}
+        <Route path="/" element={<MainLayout />}>
           <Route index element={<HomePage />} />
           <Route path="auth/callback/:provider" element={<OAuthCallbackPage />} />
+          <Route path="redirect" element={<RedirectAfterAuth />} />
         </Route>
 
+        {/* DASHBOARD */}
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardPage />} />
+
+          <Route element={<AbilityGuard allow={ABILITIES.DASHBOARD_VIEW} />}>
+            <Route path="courses" element={<CoursesPage />} />
+          </Route>
 
           <Route element={<AbilityGuard allow={ABILITIES.PROFILE_VIEW} />}>
             <Route path="profile" element={<UserProfilePage />} />
@@ -61,6 +80,7 @@ function AppRoutes() {
 
           <Route element={<AbilityGuard allow={ABILITIES.AI_USE} />}>
             <Route path="ai-mentor" element={<AIMentorPage />} />
+            <Route path="ai-generator" element={<AIGeneratorPage />} />
           </Route>
 
           <Route element={<AbilityGuard allow={ABILITIES.PRODUCTS_MANAGE} />}>
@@ -75,21 +95,21 @@ function AppRoutes() {
           <Route element={<AbilityGuard allow={ABILITIES.SETTINGS_MANAGE} />}>
             <Route path="settings" element={<SettingsPage />} />
           </Route>
-
-          <Route element={<AbilityGuard allow={ABILITIES.AI_USE} />}>
-            <Route path="ai-generator" element={<AIGeneratorPage />} />
-          </Route>
         </Route>
 
+        {/* 404 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
-  )
+  );
 }
 
+// ===============================
+// 🔝 MAIN APP
+// ===============================
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -103,5 +123,5 @@ export default function App() {
       />
       <AppRoutes />
     </BrowserRouter>
-  )
+  );
 }

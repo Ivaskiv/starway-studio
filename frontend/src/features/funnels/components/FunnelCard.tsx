@@ -1,41 +1,41 @@
 // features/funnels/components/FunnelCard.tsx
 
-import { Button, GlassCard } from '@/ui'
-import { Edit, MoreVertical, Pause, Play, Trash2, TrendingUp, Users } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import type { Funnel, FunnelStatus } from '../types/funnel.types'
+import { Button, GlassCard } from '@/frontend/srcui';
+import { Edit, MoreVertical, Pause, Play, Trash2, TrendingUp, Users } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import type { Funnel, FunnelStatus } from '../types/funnel.types';
 
 const STATUS_CONFIG: Record<FunnelStatus, { bg: string; text: string; label: string }> = {
   active: { bg: 'bg-green-500/20', text: 'text-green-400', label: 'Активна' },
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Чернетка' },
   paused: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'Призупинена' },
   archived: { bg: 'bg-red-500/20', text: 'text-red-400', label: 'Архівована' },
-}
+};
 
 interface Props {
-  funnel: Funnel
-  view: 'grid' | 'list'
-  onDelete: () => void
-  onToggleStatus: () => void
+  funnel: Funnel;
+  view: 'grid' | 'list';
+  onDelete: () => void;
+  onToggleStatus: () => void;
 }
 
 export function FunnelCard({ funnel, view, onDelete, onToggleStatus }: Props) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
+        setMenuOpen(false);
       }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
-  const status = STATUS_CONFIG[funnel.status]
-  const is_active = funnel.status === 'active'
+  const status = STATUS_CONFIG[funnel.status];
+  const is_active = funnel.status === 'active';
 
   if (view === 'list') {
     return (
@@ -45,11 +45,13 @@ export function FunnelCard({ funnel, view, onDelete, onToggleStatus }: Props) {
             <h3 className="text-white font-medium truncate">{funnel.name}</h3>
             <p className="text-slate-400 text-sm truncate">{funnel.description}</p>
           </div>
-          
-          <span className={`px-3 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
+
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}
+          >
             {status.label}
           </span>
-          
+
           <div className="flex items-center gap-6 text-sm">
             <div className="flex items-center gap-2 text-slate-400">
               <Users className="w-4 h-4" />
@@ -68,7 +70,7 @@ export function FunnelCard({ funnel, view, onDelete, onToggleStatus }: Props) {
           </Link>
         </div>
       </GlassCard>
-    )
+    );
   }
 
   return (
@@ -90,14 +92,20 @@ export function FunnelCard({ funnel, view, onDelete, onToggleStatus }: Props) {
             {menuOpen && (
               <div className="absolute right-0 mt-2 w-44 glass-card rounded-lg shadow-xl z-10 py-1">
                 <Button
-                  onClick={() => { setMenuOpen(false); onToggleStatus() }}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onToggleStatus();
+                  }}
                   className="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2"
                 >
                   {is_active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                   {is_active ? 'Призупинити' : 'Активувати'}
                 </Button>
                 <Button
-                  onClick={() => { setMenuOpen(false); onDelete() }}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onDelete();
+                  }}
                   className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10 flex items-center gap-2"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -109,7 +117,9 @@ export function FunnelCard({ funnel, view, onDelete, onToggleStatus }: Props) {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className={`px-3 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}
+          >
             {status.label}
           </span>
           <span className="text-xs text-slate-500">{funnel.steps?.length || 0} кроків</span>
@@ -146,5 +156,5 @@ export function FunnelCard({ funnel, view, onDelete, onToggleStatus }: Props) {
         </Link>
       </div>
     </GlassCard>
-  )
+  );
 }

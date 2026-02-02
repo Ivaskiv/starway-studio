@@ -1,20 +1,11 @@
 // frontend/src/features/courses/pages/CoursesPage.tsx
 
-import { useGetMeQuery } from '@/features/auth/services/auth.api'
-import { SubscriptionModal } from '@/templates/ai-mentor'
-import { Badge, Button, GlassCard, Progress } from '@/ui'
-import {
-  BookOpen,
-  ChevronRight,
-  Clock,
-  Crown,
-  Loader2,
-  Lock,
-  Play,
-  Sparkles,
-} from 'lucide-react'
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useGetMeQuery } from '@/frontend/srcfeatures/auth/services/auth.api';
+import { SubscriptionModal } from '@/frontend/srctemplates/ai-mentor';
+import { Badge, Button, GlassCard, Progress } from '@/frontend/srcui';
+import { BookOpen, ChevronRight, Clock, Crown, Loader2, Lock, Play, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 // Mock data
 const MOCK_COURSES = [
@@ -53,43 +44,48 @@ const MOCK_COURSES = [
     status: 'locked' as const,
     category: 'Трансформація',
   },
-]
+];
 
-type CourseStatus = 'active' | 'free' | 'locked'
+type CourseStatus = 'active' | 'free' | 'locked';
 
 interface Course {
-  id: string
-  title: string
-  description: string
-  image: string
-  duration: string
-  lessons: number
-  completedLessons: number
-  status: CourseStatus
-  freeAccessDays?: number
-  freeAccessEndsAt?: string
-  category: string
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  duration: string;
+  lessons: number;
+  completedLessons: number;
+  status: CourseStatus;
+  freeAccessDays?: number;
+  freeAccessEndsAt?: string;
+  category: string;
 }
 
 interface CourseCardProps {
-  course: Course
-  onSubscribe: () => void
+  course: Course;
+  onSubscribe: () => void;
 }
 
 const CourseCard = ({ course, onSubscribe }: CourseCardProps) => {
-  const [isVisible, setIsVisible] = useState(false)
-  
+  const [isVisible, setIsVisible] = useState(false);
+
   useEffect(() => {
-    setTimeout(() => setIsVisible(true), 10)
-  }, [])
+    setTimeout(() => setIsVisible(true), 10);
+  }, []);
 
-  const isLocked = course.status === 'locked'
-  const isFree = course.status === 'free'
-  const progress = course.lessons > 0 ? (course.completedLessons / course.lessons) * 100 : 0
+  const isLocked = course.status === 'locked';
+  const isFree = course.status === 'free';
+  const progress = course.lessons > 0 ? (course.completedLessons / course.lessons) * 100 : 0;
 
-  const daysLeft = course.freeAccessEndsAt 
-    ? Math.max(0, Math.ceil((new Date(course.freeAccessEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : 0
+  const daysLeft = course.freeAccessEndsAt
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(course.freeAccessEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+        ),
+      )
+    : 0;
 
   return (
     <div
@@ -107,7 +103,7 @@ const CourseCard = ({ course, onSubscribe }: CourseCardProps) => {
           <div className="absolute inset-0 flex items-center justify-center">
             <BookOpen className="w-16 h-16 text-white/20" />
           </div>
-          
+
           {/* Status Badge */}
           <div className="absolute top-3 left-3">
             {course.status === 'active' && (
@@ -158,7 +154,9 @@ const CourseCard = ({ course, onSubscribe }: CourseCardProps) => {
             <div className="mb-4">
               <div className="flex justify-between text-xs text-white/60 mb-1">
                 <span>Прогрес</span>
-                <span>{course.completedLessons}/{course.lessons}</span>
+                <span>
+                  {course.completedLessons}/{course.lessons}
+                </span>
               </div>
               <Progress value={progress} color="green" size="sm" />
             </div>
@@ -173,8 +171,8 @@ const CourseCard = ({ course, onSubscribe }: CourseCardProps) => {
           )}
 
           {isLocked ? (
-            <Button 
-              onClick={onSubscribe} 
+            <Button
+              onClick={onSubscribe}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white"
             >
               <Crown className="w-4 h-4 mr-2" />
@@ -191,35 +189,35 @@ const CourseCard = ({ course, onSubscribe }: CourseCardProps) => {
         </div>
       </GlassCard>
     </div>
-  )
-}
+  );
+};
 
 export default function CoursesPage() {
-  const { data } = useGetMeQuery()
-  const user = data?.user
-  
-  const courses = MOCK_COURSES
-  const isLoading = false
-  
-  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
-  const [filter, setFilter] = useState<'all' | 'active' | 'locked'>('all')
+  const { data } = useGetMeQuery();
+  const user = data?.user;
+
+  const courses = MOCK_COURSES;
+  const isLoading = false;
+
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'active' | 'locked'>('all');
 
   const filteredCourses = courses.filter(course => {
-    if (filter === 'all') return true
-    if (filter === 'active') return course.status === 'active' || course.status === 'free'
-    if (filter === 'locked') return course.status === 'locked'
-    return true
-  })
+    if (filter === 'all') return true;
+    if (filter === 'active') return course.status === 'active' || course.status === 'free';
+    if (filter === 'locked') return course.status === 'locked';
+    return true;
+  });
 
-  const activeCourses = courses.filter(c => c.status === 'active' || c.status === 'free')
-  const lockedCourses = courses.filter(c => c.status === 'locked')
+  const activeCourses = courses.filter(c => c.status === 'active' || c.status === 'free');
+  const lockedCourses = courses.filter(c => c.status === 'locked');
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-12 h-12 animate-spin text-purple-500" />
       </div>
-    )
+    );
   }
 
   return (
@@ -250,16 +248,17 @@ export default function CoursesPage() {
           { key: 'all', label: 'Всі', count: courses.length },
           { key: 'active', label: 'Активні', count: activeCourses.length },
           { key: 'locked', label: 'Доступні', count: lockedCourses.length },
-        ].map((f) => (
+        ].map(f => (
           <Button
             key={f.key}
             onClick={() => setFilter(f.key as typeof filter)}
             className={`
               px-4 py-2 rounded-xl text-sm font-medium 
               transition-all duration-200
-              ${filter === f.key
-                ? 'bg-purple-500 text-white'
-                : 'bg-white/5 text-white/60 hover:bg-white/10'
+              ${
+                filter === f.key
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-white/5 text-white/60 hover:bg-white/10'
               }
             `}
           >
@@ -270,7 +269,7 @@ export default function CoursesPage() {
 
       {/* Courses Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCourses.map((course) => (
+        {filteredCourses.map(course => (
           <CourseCard
             key={course.id}
             course={course}
@@ -291,5 +290,5 @@ export default function CoursesPage() {
         onClose={() => setShowSubscriptionModal(false)}
       />
     </div>
-  )
+  );
 }

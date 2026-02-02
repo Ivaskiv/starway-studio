@@ -1,10 +1,10 @@
 // frontend/src/features/admin/components/BrandingStep.tsx
 
-import React from 'react';
+import { Button, Textarea } from '@/frontend/srcui';
+import { Input } from '@/frontend/srcui/Input';
+import { Label } from '@/frontend/srcui/Label';
 import { Upload } from 'lucide-react';
-import { Input } from '@/ui/Input';
-import { Button, Textarea } from '@/ui';
-import { Label } from '@/ui/Label';
+import React from 'react';
 
 interface BrandingStepProps {
   data: any;
@@ -80,9 +80,7 @@ export const BrandingStep: React.FC<BrandingStepProps> = ({ data, onChange }) =>
       {/* Назва + опис */}
       {textFields.map(({ key, label, component: Component, hint, ...props }) => (
         <div key={key}>
-          <Label className="block text-sm font-medium text-gray-300 mb-2">
-            {label}
-          </Label>
+          <Label className="block text-sm font-medium text-gray-300 mb-2">{label}</Label>
           <Component
             value={data.branding[key]}
             onChange={(e: any) => updateBranding(key, e.target.value)}
@@ -95,9 +93,7 @@ export const BrandingStep: React.FC<BrandingStepProps> = ({ data, onChange }) =>
 
       {/* Logo */}
       <div>
-        <Label className="block text-sm font-medium text-gray-300 mb-2">
-          Логотип
-        </Label>
+        <Label className="block text-sm font-medium text-gray-300 mb-2">Логотип</Label>
         <div className="flex items-center gap-4">
           {data.branding.logo_url && (
             <img
@@ -115,28 +111,24 @@ export const BrandingStep: React.FC<BrandingStepProps> = ({ data, onChange }) =>
             Завантажити
           </Button>
         </div>
-        <p className="text-xs text-gray-500 mt-1">
-          PNG або JPG, рекомендовано 256x256px
-        </p>
+        <p className="text-xs text-gray-500 mt-1">PNG або JPG, рекомендовано 256x256px</p>
       </div>
 
       {/* Кольори */}
       <div className="grid grid-cols-2 gap-4">
         {colors.map(({ key, label, placeholder }) => (
           <div key={key}>
-            <Label className="block text-sm font-medium text-gray-300 mb-2">
-              {label}
-            </Label>
+            <Label className="block text-sm font-medium text-gray-300 mb-2">{label}</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="color"
                 value={data.branding.colors[key]}
-                onChange={(e) => updateColor(key, e.target.value)}
+                onChange={e => updateColor(key, e.target.value)}
                 className="w-12 h-12 rounded-lg cursor-pointer"
               />
               <Input
                 value={data.branding.colors[key]}
-                onChange={(e) => updateColor(key, e.target.value)}
+                onChange={e => updateColor(key, e.target.value)}
                 placeholder={placeholder}
                 className="flex-1"
               />
@@ -154,12 +146,8 @@ export const BrandingStep: React.FC<BrandingStepProps> = ({ data, onChange }) =>
             background: `linear-gradient(135deg, ${data.branding.colors.primary}, ${data.branding.colors.secondary})`,
           }}
         >
-          <h3 className="text-2xl font-bold mb-2">
-            {data.branding.name || 'Назва продукту'}
-          </h3>
-          <p className="text-white/80">
-            {data.branding.description || 'Опис продукту'}
-          </p>
+          <h3 className="text-2xl font-bold mb-2">{data.branding.name || 'Назва продукту'}</h3>
+          <p className="text-white/80">{data.branding.description || 'Опис продукту'}</p>
         </div>
       </div>
     </div>

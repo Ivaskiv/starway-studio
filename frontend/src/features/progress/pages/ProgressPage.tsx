@@ -1,7 +1,7 @@
-// frontend/src/features/progress/pages/ProgressPage.tsx
-import { GlassCard } from '@/ui'
-import { GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/ui/GlassCard'
-import { Activity, TrendingUp } from 'lucide-react'
+// /features/progress/pages/ProgressPage.tsx
+import { GlassCard } from '@/ui';
+import { GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/ui/GlassCard';
+import { Activity, TrendingUp } from 'lucide-react';
 // import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/ui'
 // import { BalanceWheel } from '@/features/wheel/components/BalanceWheel'
 import { BalanceWheel } from '@/features/wheel/components/BalanceWheel';
@@ -11,8 +11,8 @@ const mockData = {
   currentStreak: 5,
   bestStreak: 8,
   totalSessions: 42,
-  balanceScore: 6.5
-}
+  balanceScore: 6.5,
+};
 
 export default function ProgressPage() {
   return (
@@ -36,12 +36,8 @@ export default function ProgressPage() {
               <span className="text-white/60 text-sm">Поточна серія</span>
               <TrendingUp className="w-5 h-5 text-orange-500" />
             </div>
-            <div className="text-3xl font-bold text-white">
-              {mockData.currentStreak} днів
-            </div>
-            <div className="text-xs text-white/40 mt-2">
-              +{mockData.totalSessions} сесій
-            </div>
+            <div className="text-3xl font-bold text-white">{mockData.currentStreak} днів</div>
+            <div className="text-xs text-white/40 mt-2">+{mockData.totalSessions} сесій</div>
           </GlassCardContent>
         </GlassCard>
 
@@ -51,12 +47,8 @@ export default function ProgressPage() {
               <span className="text-white/60 text-sm">Найкраща серія</span>
               <span className="text-2xl">🏆</span>
             </div>
-            <div className="text-3xl font-bold text-white">
-              {mockData.bestStreak} днів
-            </div>
-            <div className="text-xs text-white/40 mt-2">
-              Досягнуто цього місяця
-            </div>
+            <div className="text-3xl font-bold text-white">{mockData.bestStreak} днів</div>
+            <div className="text-xs text-white/40 mt-2">Досягнуто цього місяця</div>
           </GlassCardContent>
         </GlassCard>
 
@@ -66,12 +58,8 @@ export default function ProgressPage() {
               <span className="text-white/60 text-sm">Ціль досягнуто</span>
               <span className="text-2xl">🎯</span>
             </div>
-            <div className="text-3xl font-bold text-white">
-              30 днів
-            </div>
-            <div className="text-xs text-white/40 mt-2">
-              Достроково
-            </div>
+            <div className="text-3xl font-bold text-white">30 днів</div>
+            <div className="text-xs text-white/40 mt-2">Достроково</div>
           </GlassCardContent>
         </GlassCard>
       </div>
@@ -88,7 +76,8 @@ export default function ProgressPage() {
           <BalanceWheel score={mockData.balanceScore} maxScore={10} />
           <div className="text-center mt-6">
             <p className="text-white/60 text-sm">
-              Середній бал: <span className="text-orange-500 font-semibold">{mockData.balanceScore} / 10</span>
+              Середній бал:{' '}
+              <span className="text-orange-500 font-semibold">{mockData.balanceScore} / 10</span>
             </p>
           </div>
         </GlassCardContent>
@@ -106,7 +95,7 @@ export default function ProgressPage() {
           <div className="flex items-end justify-between gap-2 h-32">
             {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'].map((day, i) => (
               <div key={day} className="flex-1 flex flex-col items-center gap-2">
-                <div 
+                <div
                   className="w-full rounded-t-lg bg-gradient-to-t from-orange-500 to-orange-600 transition-all hover:from-orange-400 hover:to-orange-500"
                   style={{ height: `${Math.random() * 100}%` }}
                 />
@@ -117,5 +106,5 @@ export default function ProgressPage() {
         </GlassCardContent>
       </GlassCard>
     </div>
-  )
+  );
 }

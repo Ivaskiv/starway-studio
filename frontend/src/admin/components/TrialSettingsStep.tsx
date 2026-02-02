@@ -1,7 +1,7 @@
-import React from 'react';
-import { GlassCard } from '@/ui/GlassCard';
+import { Input } from '@/frontend/srcui';
+import { GlassCard } from '@/frontend/srcui/GlassCard';
 import { Calendar, Clock } from 'lucide-react';
-import { Input } from '@/ui';
+import React from 'react';
 
 interface TrialSettingsStepProps {
   data: {
@@ -28,10 +28,10 @@ interface TrialSettingsStepProps {
   };
 }
 
-export const TrialSettingsStep: React.FC<TrialSettingsStepProps> = ({ 
-  data, 
-  onChange, 
-  template 
+export const TrialSettingsStep: React.FC<TrialSettingsStepProps> = ({
+  data,
+  onChange,
+  template,
 }) => {
   const trialDays = data.customizations.trial.duration_days;
   const onboardingHours = data.customizations.paid_onboarding.onboarding_hours;
@@ -41,12 +41,12 @@ export const TrialSettingsStep: React.FC<TrialSettingsStepProps> = ({
       ...data,
       customizations: {
         ...data.customizations,
-        trial: { duration_days: days }
+        trial: { duration_days: days },
       },
       pricing: {
         ...data.pricing,
-        trial_days: days
-      }
+        trial_days: days,
+      },
     });
   };
 
@@ -55,8 +55,8 @@ export const TrialSettingsStep: React.FC<TrialSettingsStepProps> = ({
       ...data,
       customizations: {
         ...data.customizations,
-        paid_onboarding: { onboarding_hours: hours }
-      }
+        paid_onboarding: { onboarding_hours: hours },
+      },
     });
   };
 
@@ -78,13 +78,13 @@ export const TrialSettingsStep: React.FC<TrialSettingsStepProps> = ({
             <span className="text-sm font-medium text-gray-300">Тривалість</span>
             <span className="text-2xl font-bold text-white">{trialDays} днів</span>
           </div>
-          
+
           <Input
             type="range"
             min={template.pricing.limits.trial_days_min || 3}
             max={template.pricing.limits.trial_days_max || 30}
             value={trialDays}
-            onChange={(e) => updateTrialDuration(Number(e.target.value))}
+            onChange={e => updateTrialDuration(Number(e.target.value))}
             className="w-full h-2 bg-white/10 rounded-lg cursor-pointer"
           />
         </div>
@@ -106,14 +106,14 @@ export const TrialSettingsStep: React.FC<TrialSettingsStepProps> = ({
             <span className="text-sm font-medium text-gray-300">Тривалість</span>
             <span className="text-2xl font-bold text-white">{onboardingHours} годин</span>
           </div>
-          
+
           <Input
             type="range"
             min={24}
             max={168}
             step={24}
             value={onboardingHours}
-            onChange={(e) => updatePaidOnboarding(Number(e.target.value))}
+            onChange={e => updatePaidOnboarding(Number(e.target.value))}
             className="w-full h-2 bg-white/10 rounded-lg cursor-pointer"
           />
         </div>

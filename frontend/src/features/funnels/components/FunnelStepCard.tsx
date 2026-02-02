@@ -1,18 +1,18 @@
 // features/funnels/components/FunnelStepCard.tsx
 
-import { Button, GlassCard, Textarea } from '@/ui'
-import { Check, RefreshCw, Sparkles } from 'lucide-react'
-import type { FunnelAttempt, FunnelStepDefinition } from '../types/funnel.types'
+import { Button, GlassCard, Textarea } from '@/ui';
+import { Check, RefreshCw, Sparkles } from 'lucide-react';
+import type { FunnelAttempt, FunnelStepDefinition } from '../types/funnel.types';
 
 interface Props {
-  step: FunnelStepDefinition
-  userInput: string
-  onInputChange: (value: string) => void
-  onGenerate: () => void
-  attempts: FunnelAttempt[]
-  remainingAttempts: number
-  onSelectVariant: (id: string) => void
-  isGenerating: boolean
+  step: FunnelStepDefinition;
+  userInput: string;
+  onInputChange: (value: string) => void;
+  onGenerate: () => void;
+  attempts: FunnelAttempt[];
+  remainingAttempts: number;
+  onSelectVariant: (id: string) => void;
+  isGenerating: boolean;
 }
 
 export function FunnelStepCard({
@@ -25,7 +25,7 @@ export function FunnelStepCard({
   onSelectVariant,
   isGenerating,
 }: Props) {
-  const can_generate = userInput.trim() && remainingAttempts > 0 && !isGenerating
+  const can_generate = userInput.trim() && remainingAttempts > 0 && !isGenerating;
 
   return (
     <GlassCard className="p-6 md:p-8">
@@ -48,7 +48,7 @@ export function FunnelStepCard({
       <div className="space-y-4 mb-6">
         {step.options ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {step.options.map((opt) => (
+            {step.options.map(opt => (
               <button
                 key={opt}
                 onClick={() => onInputChange(opt)}
@@ -59,9 +59,11 @@ export function FunnelStepCard({
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                    userInput === opt ? 'border-orange-500 bg-orange-500' : 'border-slate-600'
-                  }`}>
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      userInput === opt ? 'border-orange-500 bg-orange-500' : 'border-slate-600'
+                    }`}
+                  >
                     {userInput === opt && <Check className="w-3 h-3 text-white" />}
                   </div>
                   <span className="text-white text-sm">{opt}</span>
@@ -72,7 +74,7 @@ export function FunnelStepCard({
         ) : (
           <Textarea
             value={userInput}
-            onChange={(e) => onInputChange(e.target.value)}
+            onChange={e => onInputChange(e.target.value)}
             placeholder={step.placeholder || 'Введи відповідь...'}
             rows={4}
             className="w-full"
@@ -107,9 +109,9 @@ export function FunnelStepCard({
             <h3 className="text-sm font-semibold text-white">AI-варіанти</h3>
             <span className="text-xs text-slate-400">{attempts.length} згенеровано</span>
           </div>
-          
+
           <div className="space-y-3">
-            {attempts.map((attempt) => (
+            {attempts.map(attempt => (
               <Button
                 key={attempt.id}
                 onClick={() => onSelectVariant(attempt.id)}
@@ -120,9 +122,11 @@ export function FunnelStepCard({
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${
-                    attempt.isSelected ? 'border-green-500 bg-green-500' : 'border-slate-600'
-                  }`}>
+                  <div
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                      attempt.isSelected ? 'border-green-500 bg-green-500' : 'border-slate-600'
+                    }`}
+                  >
                     {attempt.isSelected && <Check className="w-4 h-4 text-white" />}
                   </div>
                   <p className="text-sm text-white leading-relaxed">{attempt.content}</p>
@@ -133,5 +137,5 @@ export function FunnelStepCard({
         </div>
       )}
     </GlassCard>
-  )
+  );
 }

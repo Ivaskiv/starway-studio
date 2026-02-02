@@ -1,4 +1,4 @@
-import { WheelScore } from "../../wheel"
+import { WheelScore } from "@/features/wheel/types/wheel.types"
 
 export interface Progress {
   streak_days: number

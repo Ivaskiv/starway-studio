@@ -1,11 +1,38 @@
-// features/funnels/types/funnel.types.ts
+// shared/types/funnel.types.ts
 
-export type FunnelStatus = 'draft' | 'active' | 'paused' | 'archived'
-export type FunnelTheme = 'orange' | 'green' | 'blue' | 'red' | 'purple' | 'yellow'
-export type StepType = 'message' | 'form' | 'payment' | 'condition' | 'delay' | 'webhook' | 'ai_mentor' | 'gamification' | 'email' | 'sms' | 'telegram'
+// ────────────────────────────────────────────────
+// Загальні типи
+// ────────────────────────────────────────────────
 
-export const TOTAL_STEPS = 8
-export const ATTEMPTS_PER_STEP = 3
+export type FunnelStatus = 'draft' | 'active' | 'paused' | 'archived';
+export type FunnelTheme = 'orange' | 'green' | 'blue' | 'red' | 'purple' | 'yellow';
+export type StepType =
+  | 'message'
+  | 'form'
+  | 'payment'
+  | 'condition'
+  | 'delay'
+  | 'webhook'
+  | 'ai_mentor'
+  | 'gamification'
+  | 'email'
+  | 'sms'
+  | 'telegram';
+
+export const TOTAL_STEPS = 8;
+export const ATTEMPTS_PER_STEP = 3;
+
+// ────────────────────────────────────────────────
+// Step definitions
+// ────────────────────────────────────────────────
+
+export interface FunnelStepDefinition {
+  order: number;
+  title: string;
+  description: string;
+  placeholder?: string;
+  options?: string[];
+}
 
 export const STEP_DEFINITIONS: FunnelStepDefinition[] = [
   { order: 1, title: 'Назва воронки', description: 'Коротка, продаюча назва', placeholder: 'AI-Аудит: Де ти втрачаєш гроші за 5 хвилин' },
@@ -16,82 +43,152 @@ export const STEP_DEFINITIONS: FunnelStepDefinition[] = [
   { order: 6, title: 'Формат продукту', description: 'Що ти будеш продавати', options: ['Консультація', 'Курс/шаблони', 'AI-супровід', 'Чат-бот', 'Підписка'] },
   { order: 7, title: 'Джерело трафіку', description: 'Звідки прийдуть ліди', options: ['Соцмережі', 'Реклама', 'Органіка', 'База', 'Партнери'] },
   { order: 8, title: 'Фінансова мета', description: 'Скільки хочеш заробляти', placeholder: '100000 грн/міс' },
-]
+];
 
-export interface FunnelStepDefinition {
-  order: number
-  title: string
-  description: string
-  placeholder?: string
-  options?: string[]
-}
+// ────────────────────────────────────────────────
+// Funnel
+// ────────────────────────────────────────────────
 
 export interface Funnel {
-  id: string
-  user_id: string
-  name: string
-  description?: string
-  theme: FunnelTheme
-  status: FunnelStatus
-  steps: FunnelStep[]
-  analytics?: FunnelAnalytics
-  created_at: string
-  updated_at: string
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  theme: FunnelTheme;
+  status: FunnelStatus;
+  steps: FunnelStep[];
+  analytics?: FunnelAnalytics;
+  created_at: string;
+  updated_at?: string;
 }
+
+// ────────────────────────────────────────────────
+// Funnel Step
+// ────────────────────────────────────────────────
 
 export interface FunnelStep {
-  id: string
-  type: StepType
-  name: string
-  order: number
-  config: StepConfig
-  is_active: boolean
+  id: string;
+  type: StepType;
+  name: string;
+  order: number;
+  config: StepConfig;
+  is_active: boolean;
 }
 
+// StepConfig – для різних типів блоків
 export interface StepConfig {
-  message?: { text: string; buttons?: StepButton[] }
-  form?: { fields: FormField[]; submitText: string }
-  payment?: { amount: number; currency: string; provider: string }
-  delay?: { duration: number; unit: 'minutes' | 'hours' | 'days' }
-  webhook?: { url: string; method: 'GET' | 'POST' }
-  aiMentor?: { type: string; questions: string[] }
-  gamification?: { type: string; reward: number }
+  message?: { text: string; buttons?: StepButton[] };
+  form?: { fields: FormField[]; submitText: string };
+  payment?: { amount: number; currency: string; provider: string };
+  delay?: { duration: number; unit: 'minutes' | 'hours' | 'days' };
+  webhook?: { url: string; method: 'GET' | 'POST' };
+  aiMentor?: { type: string; questions: string[] };
+  gamification?: { type: string; reward: number };
 }
+
+// ────────────────────────────────────────────────
+// Допоміжні типи
+// ────────────────────────────────────────────────
 
 export interface StepButton {
-  id: string
-  text: string
-  action: 'next' | 'url' | 'payment'
-  value?: string
+  id: string;
+  text: string;
+  action: 'next' | 'url' | 'payment';
+  value?: string;
 }
 
 export interface FormField {
-  id: string
-  name: string
-  type: string
-  label: string
-  required: boolean
+  id: string;
+  name: string;
+  type: string;
+  label: string;
+  required: boolean;
 }
 
 export interface FunnelAnalytics {
-  views: number
-  uniqueVisitors: number
-  conversions: number
-  revenue: number
+  views: number;
+  uniqueVisitors: number;
+  conversions: number;
+  revenue: number;
 }
 
+// ────────────────────────────────────────────────
+// AI Генерація
+// ────────────────────────────────────────────────
+
 export interface GenerateVariantsRequest {
-  stepNumber: number
-  userInput: string
-  context?: Record<string, string>
+  stepNumber: number;
+  userInput: string;
+  context?: Record<string, string>;
 }
 
 export interface GenerateVariantsResponse {
-  variants: string[]
+  variants: string[];
 }
 
 export interface FunnelAttempt {
-  id: string
-  content: string
-  isSelected: boolean
+  id: string;
+  content: string;
+  isSelected: boolean;
+}
+
+// ────────────────────────────────────────────────
+// Funnel Draft для чернеток
+// ────────────────────────────────────────────────
+
+export interface FunnelDraft {
+  id?: string;
+  name: string;
+  audience: string;
+  niche: string;
+  goal?: string;
+  productType?: string; // ProductType або string
+  blocks: FunnelBlock[];
+}
+
+// ────────────────────────────────────────────────
+// Funnel Blocks для конструктора
+// ────────────────────────────────────────────────
+
+export type BlockType =
+  | 'awareness'
+  | 'interest'
+  | 'decision'
+  | 'action'
+  | 'retention'
+  | 'landing'
+  | 'telegram'
+  | 'email'
+  | 'payment'
+  | 'ai-mentor'
+  | 'product'
+  | 'automation';
+
+export interface FunnelBlock {
+  id: string;
+  type: BlockType;
+  label: string;
+  description?: string;
+  data?: FunnelBlockData;
+  position?: { x: number; y: number };
+  next?: string[];
+}
+
+export interface FunnelBlockData {
+  channels?: string[]; // channelId можна тут замінити на string[]
+  product?: { name: string; price: number };
+  duration?: number;
+  aiConfig?: { type: string; questions: string[] };
+  [key: string]: unknown;
+}
+
+// ────────────────────────────────────────────────
+// Статистика
+// ────────────────────────────────────────────────
+
+export interface FunnelStats {
+  views: number;
+  conversions: number;
+  revenue: number;
+  activeUsers: number;
 }

@@ -1,50 +1,56 @@
 // features/funnels/pages/FunnelsPage.tsx
 
-import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, Grid, List } from 'lucide-react'
-import { useGetFunnelsQuery, useDeleteFunnelMutation, useUpdateFunnelMutation } from '../services/funnels.api'
-import { FunnelCard } from '../components/FunnelCard'
-import { Button, Input, GlassCard } from '@/ui'
-import type { FunnelStatus } from '../types/funnel.types'
+import { Button, GlassCard, Input } from '@/ui';
+import { Filter, Grid, List, Plus, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { FunnelCard } from '../components/FunnelCard';
+import {
+  useDeleteFunnelMutation,
+  useGetFunnelsQuery,
+  useUpdateFunnelMutation,
+} from '../services/funnels.api';
+import type { FunnelStatus } from '../types/funnel.types';
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Всі' },
   { value: 'active', label: 'Активні' },
   { value: 'draft', label: 'Чернетки' },
   { value: 'paused', label: 'Призупинені' },
-] as const
+] as const;
 
 export default function FunnelsPage() {
-  const { data: funnels = [], isLoading, error } = useGetFunnelsQuery()
-  const [deleteFunnel] = useDeleteFunnelMutation()
-  const [updateFunnel] = useUpdateFunnelMutation()
+  const { data: funnels = [], isLoading, error } = useGetFunnelsQuery();
+  const [deleteFunnel] = useDeleteFunnelMutation();
+  const [updateFunnel] = useUpdateFunnelMutation();
 
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<'all' | FunnelStatus>('all')
-  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<'all' | FunnelStatus>('all');
+  const [view, setView] = useState<'grid' | 'list'>('grid');
 
-  const filtered = useMemo(() =>
-    funnels.filter(f =>
-      (status === 'all' || f.status === status) &&
-      f.name.toLowerCase().includes(search.toLowerCase())
-    ),
-    [funnels, search, status]
-  )
+  const filtered = useMemo(
+    () =>
+      funnels.filter(
+        f =>
+          (status === 'all' || f.status === status) &&
+          f.name.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [funnels, search, status],
+  );
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Видалити воронку?')) return
-    await deleteFunnel(id)
-  }
+    if (!confirm('Видалити воронку?')) return;
+    await deleteFunnel(id);
+  };
 
   const handleToggleStatus = async (id: string, currentStatus: FunnelStatus) => {
     await updateFunnel({
       id,
       status: currentStatus === 'active' ? 'paused' : 'active',
-    })
-  }
+    });
+  };
 
-  if (error) return <div className="text-red-400">Помилка завантаження</div>
+  if (error) return <div className="text-red-400">Помилка завантаження</div>;
 
   return (
     <div className="space-y-6">
@@ -70,7 +76,7 @@ export default function FunnelsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <Input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={e => setSearch(e.target.value)}
                 placeholder="Пошук воронок..."
                 className="pl-10"
               />
@@ -91,10 +97,18 @@ export default function FunnelsPage() {
           </div>
 
           <div className="flex gap-1 ml-auto">
-            <Button onClick={() => setView('grid')} data-color={view === 'grid' ? 'orange' : 'ghost'} data-size="sm">
+            <Button
+              onClick={() => setView('grid')}
+              data-color={view === 'grid' ? 'orange' : 'ghost'}
+              data-size="sm"
+            >
               <Grid className="w-4 h-4" />
             </Button>
-            <Button onClick={() => setView('list')} data-color={view === 'list' ? 'orange' : 'ghost'} data-size="sm">
+            <Button
+              onClick={() => setView('list')}
+              data-color={view === 'list' ? 'orange' : 'ghost'}
+              data-size="sm"
+            >
               <List className="w-4 h-4" />
             </Button>
           </div>
@@ -119,7 +133,11 @@ export default function FunnelsPage() {
           </Link>
         </GlassCard>
       ) : (
-        <div className={view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
+        <div
+          className={
+            view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'
+          }
+        >
           {filtered.map(funnel => (
             <FunnelCard
               key={funnel.id}
@@ -132,5 +150,5 @@ export default function FunnelsPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

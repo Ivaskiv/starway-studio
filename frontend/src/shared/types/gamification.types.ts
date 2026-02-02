@@ -15,18 +15,35 @@ export interface Achievement {
   unlockedAt?: string;
   progress?: number;
 }
-
+// frontend/src/shared/types/gamification.types.ts
 export interface UserLevel {
-  currentLevel: number;
-  currentXP: number;
-  nextLevelXP: number;
-  totalXP: number;
-  rewards: {
-    level: number;
-    reward: string;
-    claimed: boolean;
-  }[];
+  id: string
+  level: number
+  experience: number
+  nextLevelExperience: number
+  createdAt: string
+  updatedAt: string
 }
+
+export interface UserAchievement {
+  id: string
+  title: string
+  description: string
+  isUnlocked: boolean
+  unlockedAt: string
+  createdAt: string
+}
+// export interface UserLevel {
+//   currentLevel: number;
+//   currentXP: number;
+//   nextLevelXP: number;
+//   totalXP: number;
+//   rewards: {
+//     level: number;
+//     reward: string;
+//     claimed: boolean;
+//   }[];
+// }
 
 export interface LeaderboardEntry {
   user_id: string;

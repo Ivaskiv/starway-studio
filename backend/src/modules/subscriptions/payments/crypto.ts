@@ -1,6 +1,6 @@
 // backend/src/payments/crypto.ts
 import crypto from 'crypto';
-import { PaymentCallbackData } from '../../../types/types';
+import { PaymentCallbackData } from '../../../types/types.js';
 
 const MERCHANT_ACCOUNT = process.env.WAYFORPAY_MERCHANT_ACCOUNT || '';
 const MERCHANT_SECRET = process.env.WAYFORPAY_SECRET_KEY || '';

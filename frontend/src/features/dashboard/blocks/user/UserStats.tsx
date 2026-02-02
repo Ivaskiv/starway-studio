@@ -1,4 +1,4 @@
-// /frontend/src/features/dashboard/blocks/user/UserStats.tsx
+// //features/dashboard/blocks/user/UserStats.tsx
 
 import { GlassCard } from '@/ui';
 

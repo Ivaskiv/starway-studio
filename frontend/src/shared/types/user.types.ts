@@ -1,122 +1,234 @@
-import { SocialPlatform } from '../constants/socialPlatforms.constants'
 
 /* ===== USER ===== */
 
-export type UserRole = 'user' | 'admin' | 'super_admin'
+import { withNormalizer } from "@/shared/utils/apiNormalizer";
 
+export type UserRole = 'user' | 'admin' | 'super_admin';
+
+export const normalizeUserRole = withNormalizer<any, UserRole>(api => {
+  if (api === 'admin' || api === 'super_admin') return api;
+  return 'user';
+});
 export type UserSettings = {
-  theme?: 'light' | 'dark'
-  language?: 'uk' | 'en'
-  notifications?: boolean
-}
+  theme?: 'light' | 'dark';
+  language?: 'uk' | 'en';
+  notifications?: boolean;
+};
+export const normalizeUserSettings = (api: any): UserSettings => ({
+  theme: api?.theme,
+  language: api?.language,
+  notifications: Boolean(api?.notifications),
+});
 
 export interface User {
-  id: string
-  email?: string
-  password_hash?: string
+  id: string;
+  email?: string;
 
-  firstName: string
-  lastName?: string
-  role: UserRole
-  createdAt: string
-  settings?: UserSettings
-  abilities?: string[]
-  trialEndsAt?: string
+  userName?: string;
+  firstName: string;
+  lastName?: string;
 
-  subscriptionStatus?: 'active' | 'inactive'
-  subscriptionPlan?: string
-  subscriptionsRole?: string[] 
+  role: UserRole;
+  createdAt: string;
 
-  isAdmin: boolean
+  settings?: UserSettings;
+  abilities?: string[];
+
+  trialEndsAt?: string;
+
+  subscriptionStatus?: 'active' | 'inactive';
+  subscriptionPlan?: string;
+  subscriptionsRole: string[];
+
+  isAdmin: boolean;
+
+  telegramId?: string;
+  telegramUsername?: string;
+
+  needsProfile?: boolean; 
+
+  subscriptionEndsAt?: string;
+  updatedAt?: string;
+  lastLoginAt?: string;
+
+  stats?: {
+    totalPosts: number;
+    totalComments: number;
+    totalLikes: number;
+    totalDislikes: number;
+  };
 }
+export const normalizeSingleUser = (api: any): User => ({
+  id: String(api.id),
+  email: api.email ?? undefined,
+  userName: api.user_name ?? api.userName,
+  firstName: api.first_name ?? api.firstName ?? '',
+  lastName: api.last_name ?? api.lastName,
+  role: normalizeUserRole(api.role) as UserRole,
+  createdAt: api.created_at ?? api.createdAt,
+  settings: api.settings ? normalizeUserSettings(api.settings) : undefined,
+  abilities: Array.isArray(api.abilities) ? api.abilities : [],
+  trialEndsAt: api.trial_ends_at ?? api.trialEndsAt,
+  subscriptionStatus: api.subscription_status,
+  subscriptionPlan: api.subscription_plan,
+  subscriptionsRole: Array.isArray(api.subscriptionsRole) ? api.subscriptionsRole : [],
+  isAdmin: Boolean(api.is_admin ?? api.isAdmin),
+  telegramId: api.telegram_id ?? api.telegramId,
+  telegramUsername: api.telegram_username ?? api.telegramUsername,
+  subscriptionEndsAt: api.subscription_ends_at,
+  updatedAt: api.updated_at,
+  lastLoginAt: api.last_login_at,
+  stats: api.stats
+    ? {
+        totalPosts: api.stats.totalPosts ?? 0,
+        totalComments: api.stats.totalComments ?? 0,
+        totalLikes: api.stats.totalLikes ?? 0,
+        totalDislikes: api.stats.totalDislikes ?? 0,
+      }
+    : undefined,
+});
+
+export const normalizeUser = withNormalizer<any, User>(api => ({
+  id: String(api.id),
+
+  email: api.email ?? undefined,
+
+  userName: api.user_name ?? api.userName,
+  firstName: api.first_name ?? api.firstName ?? '',
+  lastName: api.last_name ?? api.lastName,
+
+  role: normalizeUserRole(api.role) as UserRole,
+
+  createdAt: api.created_at ?? api.createdAt,
+
+  settings: api.settings ? normalizeUserSettings(api.settings) : undefined,
+
+  abilities: Array.isArray(api.abilities) ? api.abilities : [],
+
+  trialEndsAt: api.trial_ends_at ?? api.trialEndsAt,
+
+  subscriptionStatus: api.subscription_status,
+  subscriptionPlan: api.subscription_plan,
+  subscriptionsRole: Array.isArray(api.subscriptionsRole) ? api.subscriptionsRole : [],
+
+  isAdmin: Boolean(api.is_admin ?? api.isAdmin),
+
+  telegramId: api.telegram_id ?? api.telegramId,
+  telegramUsername: api.telegram_username ?? api.telegramUsername,
+
+  subscriptionEndsAt: api.subscription_ends_at,
+  updatedAt: api.updated_at,
+  lastLoginAt: api.last_login_at,
+
+  stats: api.stats
+    ? {
+        totalPosts: Number(api.stats.totalPosts ?? 0),
+        totalComments: Number(api.stats.totalComments ?? 0),
+        totalLikes: Number(api.stats.totalLikes ?? 0),
+        totalDislikes: Number(api.stats.totalDislikes ?? 0),
+      }
+    : undefined,
+}));
 
 /* ===== AUTH ===== */
-
-export interface AuthTokens {
-  accessToken: string
-  refreshToken?: string
-}
-
-export interface AuthResponse {
-  success: boolean
-  user: User
-  tokens: AuthTokens
-}
-
-export interface MeResponse {
-  success: boolean
-  user: User
-}
+// export interface UserAuth {
+//   id: string;
+//   email: string;
+//   password_hash: string;
+//   role: UserRole;
+// }
+// export interface AuthTokens {
+//   accessToken: string;
+//   refreshToken?: string;
+// }
+// export const normalizeAuthTokens = withNormalizer<any, AuthTokens>(api => ({
+//   accessToken: api.access_token ?? api.accessToken,
+//   refreshToken: api.refresh_token ?? api.refreshToken,
+// }));
+// export interface AuthResponse {
+//   success: boolean;
+//   user: User;
+//   tokens: AuthTokens;
+// }
+// export const normalizeAuthResponse = withNormalizer<any, AuthResponse>(api => ({
+//   success: Boolean(api.success),
+//   user: normalizeUser(api.user) as User,
+//   tokens: normalizeAuthTokens(api.tokens) as AuthTokens,
+// }));
+// export interface MeResponse {
+//   success: boolean;
+//   user: User;
+// }
+// export const normalizeMeResponse = withNormalizer<any, MeResponse>(api => ({
+//   success: Boolean(api.success),
+//   user: normalizeUser(api.user) as User,
+// }));
+// export const normalizeAuthCredentials = withNormalizer<any, AuthCredentials>(api => ({
+//   user: normalizeUser(api.user) as User,
+//   accessToken: api.accessToken ?? api.access_token,
+// }));
 
 /* ===== REQUESTS ===== */
 
 export interface LoginRequest {
-  email: string
-  password: string
+  email: string;
+  password: string;
 }
 
 export interface RegisterRequest {
-  name: string
-  email: string
-  password: string
-  role?: UserRole
+  name: string;
+  email: string;
+  password: string;
+  role?: UserRole;
 }
 
 export interface UpdateUserRequest {
-  id: string
-  firstName?: string
-  lastName?: string
-  settings?: Partial<UserSettings>
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  settings?: Partial<UserSettings>;
 }
 
 /* ===== AUTH STATE ===== */
 
-export type AuthStatus =
-  | 'idle'
-  | 'loading'
-  | 'authenticated'
-  | 'unauthenticated'
+export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated';
 
 export interface AuthState {
-  user: User | null
-  accessToken: string | null
-  status: AuthStatus
+  user: User | null;
+  accessToken: string | null;
+  status: AuthStatus;
 }
 
 export interface AuthModalProps {
-  isOpen: boolean
-  onClose: () => void
+  isOpen: boolean;
+  onClose: () => void;
 }
 /* ===== ERRORS ===== */
 
 export interface ApiError {
-  status: number
-  data: { message: string }
+  status: number;
+  data: { message: string };
 }
 
 export const isApiError = (e: unknown): e is ApiError => {
-  if (typeof e !== 'object' || e === null) return false
+  if (typeof e !== 'object' || e === null) return false;
 
-  const err = e as any
+  const err = e as any;
 
   return (
     typeof err.status === 'number' &&
     typeof err.data === 'object' &&
     err.data !== null &&
     typeof err.data.message === 'string'
-  )
-}
+  );
+};
 
 // /* ================= AUTH STATE ================= */
 
-export interface AuthCredentials {
-  user: User;
-  accessToken: string;
-}
-
-
-
-
+// export interface AuthCredentials {
+//   user: User;
+//   accessToken: string;
+// }
 
 // import z from 'zod';
 // import { SocialPlatform } from '../constants/socialPlatforms.constants';
@@ -263,7 +375,6 @@ export interface AuthCredentials {
 
 // export type LoginFormData = z.infer<typeof loginSchema>;
 // export type RegisterFormData = z.infer<typeof registerSchema>;
-
 
 // export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated';
 

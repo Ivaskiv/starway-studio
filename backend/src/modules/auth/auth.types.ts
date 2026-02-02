@@ -1,14 +1,20 @@
-// backend/src/modules/auth/auth.types.ts
-import type { User, UserRole, SocialPlatform } from '../../types/types'
+//backend/src/modules/auth/auth.types.ts
+import { User } from "../../types/types.js"
 
-// ================= JWT PAYLOAD =================
-export interface JwtPayload {
-  id: string
-  role: UserRole
-  email?: string | null
+export interface AuthResponse {
+  user: User
+  token: string
+  refreshToken?: string
+  needsProfile: boolean
+  expiresIn: number
 }
 
-// ================= INPUTS =====================
+export interface JwtPayload {
+  id: string
+  role: string
+  email?: string
+}
+
 export interface RegisterInput {
   email: string
   password: string
@@ -21,40 +27,9 @@ export interface LoginInput {
 }
 
 export interface SocialAuthInput {
-  provider: SocialPlatform
+  provider: 'telegram' | 'instagram'
   externalId: string
   username?: string
 }
 
-// ================= SAFE USER ==================
-// без password_hash
 export type SafeUser = Omit<User, 'password_hash'>
-
-// ================= AUTH RESPONSE ==============
-export interface AuthResponse {
-  // user: SafeUser           // без пароля
-  user: User
-  token: string            // JWT access token
-  refreshToken?: string    // optional, для refresh flow
-  needsProfile: boolean    // чи потрібно завершити профіль
-  expiresIn: number        // life of access token в секундах
-}
-
-// ================= GOOGLE OAUTH ===============
-export interface GoogleTokenResponse {
-  access_token: string
-  expires_in: number
-  refresh_token?: string
-  scope: string
-  token_type: string
-}
-
-export interface GoogleUserInfo {
-  id: string
-  email: string
-  verified_email: boolean
-  name: string
-  given_name: string
-  family_name: string
-  picture: string
-}

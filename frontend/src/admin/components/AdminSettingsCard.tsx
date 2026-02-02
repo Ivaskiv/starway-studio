@@ -1,19 +1,19 @@
 // frontend/src/admin/components/AdminSettingsCard.tsx
 
-import { Settings } from 'lucide-react'
-// import { AdminSettings } from '@/shared/types/profile.types'
-import { useGetAdminSettingsQuery, useUpdateAdminSettingsMutation } from '../services/admin.api'
-import { Button, GlassCard } from '../../ui'
+import { Settings } from 'lucide-react';
+// import { AdminSettings } from '@/frontend/srcshared/types/profile.types'
+import { Button, GlassCard } from '../../ui';
+import { useGetAdminSettingsQuery, useUpdateAdminSettingsMutation } from '../services/admin.api';
 
 interface Props {
-  adminId: string
+  adminId: string;
 }
 
 export default function AdminSettingsCard({ adminId }: Props) {
-  const { data: settings, isLoading } = useGetAdminSettingsQuery(adminId)
-  const [updateSettings] = useUpdateAdminSettingsMutation()
+  const { data: settings, isLoading } = useGetAdminSettingsQuery(adminId);
+  const [updateSettings] = useUpdateAdminSettingsMutation();
 
-  if (isLoading || !settings) return null
+  if (isLoading || !settings) return null;
 
   return (
     <GlassCard className="p-6">
@@ -23,11 +23,7 @@ export default function AdminSettingsCard({ adminId }: Props) {
       </h3>
 
       {/* Тут можна додати toggle чи input для adminSettings */}
-      <Button
-        onClick={() => updateSettings({ adminId, settings })}
-      >
-        Оновити налаштування
-      </Button>
+      <Button onClick={() => updateSettings({ adminId, settings })}>Оновити налаштування</Button>
     </GlassCard>
-  )
+  );
 }

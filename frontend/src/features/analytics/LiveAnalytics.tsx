@@ -1,38 +1,43 @@
 // src/pages/admin/LiveAnalytics.tsx
 
-import { useGetDashboardStatsQuery } from '@/services/stats.api'
-import { Button, Select } from '@/ui'
+import { useGetDashboardStatsQuery } from '@/services/stats.api';
+import { Button, Select } from '@/ui';
 import {
   Activity,
   ArrowUpRight,
   DollarSign,
-  Download, RefreshCw,
-  TrendingUp, Users
-} from 'lucide-react'
-import { useState } from 'react'
+  Download,
+  RefreshCw,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
+import { useState } from 'react';
 
 export default function LiveAnalytics() {
-  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d')
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
 
   const periods = [
     { value: '7d' as const, label: '7 днів' },
     { value: '30d' as const, label: '30 днів' },
-    { value: '90d' as const, label: '90 днів' }
-  ]
+    { value: '90d' as const, label: '90 днів' },
+  ];
 
   const {
     data: stats,
     isLoading,
     isFetching,
-    refetch
-  } = useGetDashboardStatsQuery({ period }, {
-    pollingInterval: 30000,
-    refetchOnMountOrArgChange: true,
-  })
+    refetch,
+  } = useGetDashboardStatsQuery(
+    { period },
+    {
+      pollingInterval: 30000,
+      refetchOnMountOrArgChange: true,
+    },
+  );
 
-  const isRefreshing = isFetching && !isLoading
+  const isRefreshing = isFetching && !isLoading;
 
-  const handleRefresh = () => refetch()
+  const handleRefresh = () => refetch();
 
   // Формуємо статистики для відображення
   const dashboardStats = [
@@ -42,7 +47,7 @@ export default function LiveAnalytics() {
       change: `+${stats?.new_users_this_month ?? 0}`,
       trend: 'up' as const,
       icon: Users,
-      color: 'blue'
+      color: 'blue',
     },
     {
       label: 'Активні воронки',
@@ -50,29 +55,31 @@ export default function LiveAnalytics() {
       change: `з ${stats?.total_funnels ?? 0} створених`,
       trend: 'up' as const,
       icon: Activity,
-      color: 'purple'
+      color: 'purple',
     },
     {
       label: 'Конверсія',
       value: stats?.conversion_rate ? `${stats.conversion_rate.toFixed(1)}%` : '—',
-      change: stats?.revenue_growth != null 
-        ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
-        : '0%',
-        trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : 'down',
+      change:
+        stats?.revenue_growth != null
+          ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
+          : '0%',
+      trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : 'down',
       icon: TrendingUp,
-      color: 'green'
+      color: 'green',
     },
     {
       label: 'Дохід за період',
       value: stats?.total_revenue ? `₴${stats.total_revenue.toLocaleString('uk-UA')}` : '₴—',
-      change: stats?.revenue_growth != null 
-            ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
-            : '0%',
-            trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : 'down',
+      change:
+        stats?.revenue_growth != null
+          ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
+          : '0%',
+      trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : 'down',
       icon: DollarSign,
-      color: 'orange'
-    }
-  ]
+      color: 'orange',
+    },
+  ];
 
   return (
     <div className="space-y-8">
@@ -87,20 +94,16 @@ export default function LiveAnalytics() {
           <Select
             options={periods}
             value={period}
-            onChange={(e) => setPeriod(e.target.value as typeof period)}
+            onChange={e => setPeriod(e.target.value as typeof period)}
             className="w-40"
             disabled={isLoading}
           />
 
-          <Button
-            variant="secondary"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-          >
+          <Button  onClick={handleRefresh} disabled={isRefreshing}>
             <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
           </Button>
 
-          <Button variant="secondary">
+          <Button >
             <Download size={16} />
           </Button>
         </div>
@@ -120,9 +123,9 @@ export default function LiveAnalytics() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {dashboardStats.map((stat) => {
-          const Icon = stat.icon
-          const isPositive = stat.trend === 'up'
+        {dashboardStats.map(stat => {
+          const Icon = stat.icon;
+          const isPositive = stat.trend === 'up';
 
           return (
             <div
@@ -134,10 +137,16 @@ export default function LiveAnalytics() {
                   <Icon size={24} className={`text-${stat.color}-400`} />
                 </div>
 
-                <div className={`flex items-center gap-1 text-sm ${
-                  isPositive ? 'text-green-400' : 'text-red-400'
-                }`}>
-                  {isPositive ? <ArrowUpRight size={16} /> : <ArrowUpRight size={16} className="rotate-180" />}
+                <div
+                  className={`flex items-center gap-1 text-sm ${
+                    isPositive ? 'text-green-400' : 'text-red-400'
+                  }`}
+                >
+                  {isPositive ? (
+                    <ArrowUpRight size={16} />
+                  ) : (
+                    <ArrowUpRight size={16} className="rotate-180" />
+                  )}
                   <span>{stat.change}</span>
                 </div>
               </div>
@@ -145,7 +154,7 @@ export default function LiveAnalytics() {
               <p className="text-sm text-gray-400 mb-1">{stat.label}</p>
               <p className="text-3xl font-bold">{stat.value}</p>
             </div>
-          )
+          );
         })}
       </div>
 
@@ -162,5 +171,5 @@ export default function LiveAnalytics() {
         </div>
       )}
     </div>
-  )
+  );
 }

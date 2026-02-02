@@ -1,4 +1,4 @@
-// frontend/src/features/progress/components/Achievements.tsx
+// /features/progress/components/Achievements.tsx
 
 import { GlassCard } from '@/ui';
 import { Award, Calendar, Target, TrendingUp, Trophy, Zap } from 'lucide-react';

@@ -1,18 +1,15 @@
-// frontend/src/features/modules/modules.api.ts
-import { Module } from "@/features/modules/module.types";
-import { api } from "@/services";
+// /features/modules/modules.api.ts
+import { Module } from '@/features/modules/module.types';
+import { api } from '@/services';
 
 export const modulesApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     getModules: builder.query<Module[], void>({
       query: () => '/modules',
       providesTags: ['Module'],
     }),
 
-    toggleModule: builder.mutation<
-      Module,
-      { moduleId: string; isLocked: boolean }
-    >({
+    toggleModule: builder.mutation<Module, { moduleId: string; isLocked: boolean }>({
       query: ({ moduleId, isLocked }) => ({
         url: `/modules/${moduleId}`,
         method: 'PATCH',
@@ -21,9 +18,6 @@ export const modulesApi = api.injectEndpoints({
       invalidatesTags: ['Module'],
     }),
   }),
-})
+});
 
-export const {
-  useGetModulesQuery,
-  useToggleModuleMutation,
-} = modulesApi
+export const { useGetModulesQuery, useToggleModuleMutation } = modulesApi;

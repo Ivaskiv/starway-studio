@@ -1,18 +1,18 @@
 // features/funnels/pages/FunnelCreatePage.tsx
 
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
-import toast from 'react-hot-toast'
-import { useFunnelWizard } from '../hooks/useFunnelWizard'
-import { useCreateFunnelMutation } from '../services/funnels.api'
-import { FunnelProgressBar } from '../components/FunnelProgressBar'
-import { FunnelStepCard } from '../components/FunnelStepCard'
-import { Button } from '@/ui'
+import { Button } from '@/ui';
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
+import { FunnelProgressBar } from '../components/FunnelProgressBar';
+import { FunnelStepCard } from '../components/FunnelStepCard';
+import { useFunnelWizard } from '../hooks/useFunnelWizard';
+import { useCreateFunnelMutation } from '../services/funnels.api';
 
 export default function FunnelCreatePage() {
-  const navigate = useNavigate()
-  const [createFunnel, { isLoading: isCreating }] = useCreateFunnelMutation()
-  
+  const navigate = useNavigate();
+  const [createFunnel, { isLoading: isCreating }] = useCreateFunnelMutation();
+
   const {
     currentStep,
     stepDefinition,
@@ -28,27 +28,27 @@ export default function FunnelCreatePage() {
     prevStep,
     getFunnelData,
     canProceed,
-  } = useFunnelWizard()
+  } = useFunnelWizard();
 
-  const isLastStep = currentStep === totalSteps
-  const progress = Math.round((completedSteps.length / totalSteps) * 100)
+  const isLastStep = currentStep === totalSteps;
+  const progress = Math.round((completedSteps.length / totalSteps) * 100);
 
   const handleFinish = async () => {
     try {
-      const data = getFunnelData()
+      const data = getFunnelData();
       const funnel = await createFunnel({
         name: data['Назва воронки'] || 'Нова воронка',
         description: data['Головна біль'],
         theme: 'orange',
         status: 'draft',
-      }).unwrap()
-      
-      toast.success('Воронку створено! 🎉')
-      navigate(`/dashboard/funnels/${funnel.id}/edit`)
+      }).unwrap();
+
+      toast.success('Воронку створено! 🎉');
+      navigate(`/dashboard/funnels/${funnel.id}/edit`);
     } catch {
-      toast.error('Помилка створення')
+      toast.error('Помилка створення');
     }
-  }
+  };
 
   return (
     <div className="min-h-screen pb-24">
@@ -59,7 +59,9 @@ export default function FunnelCreatePage() {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-white">Створення AI-воронки</h1>
-          <p className="text-slate-400">Крок {currentStep} з {totalSteps}</p>
+          <p className="text-slate-400">
+            Крок {currentStep} з {totalSteps}
+          </p>
         </div>
         <div className="text-right">
           <span className="text-2xl font-bold text-orange-400">{progress}%</span>
@@ -92,11 +94,7 @@ export default function FunnelCreatePage() {
       {/* Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur border-t border-white/10 p-4">
         <div className="max-w-3xl mx-auto flex justify-between items-center">
-          <Button
-            onClick={prevStep}
-            disabled={currentStep === 1}
-            data-color="ghost"
-          >
+          <Button onClick={prevStep} disabled={currentStep === 1} data-color="ghost">
             <ArrowLeft className="w-5 h-5 mr-2" />
             Назад
           </Button>
@@ -112,12 +110,10 @@ export default function FunnelCreatePage() {
           </div>
 
           {isLastStep ? (
-            <Button
-              onClick={handleFinish}
-              disabled={!canProceed || isCreating}
-              data-color="orange"
-            >
-              {isCreating ? 'Створення...' : (
+            <Button onClick={handleFinish} disabled={!canProceed || isCreating} data-color="orange">
+              {isCreating ? (
+                'Створення...'
+              ) : (
                 <>
                   <Check className="w-5 h-5 mr-2" />
                   Завершити
@@ -125,11 +121,7 @@ export default function FunnelCreatePage() {
               )}
             </Button>
           ) : (
-            <Button
-              onClick={nextStep}
-              disabled={!canProceed}
-              data-color="orange"
-            >
+            <Button onClick={nextStep} disabled={!canProceed} data-color="orange">
               Далі
               <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
@@ -137,5 +129,5 @@ export default function FunnelCreatePage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -16,6 +16,7 @@ export interface User {
   id: string;
   email?: string;
   password_hash?: string;
+  display_name?: string;
   first_name?: string;
   last_name?: string;
   role: UserRole;
@@ -145,14 +146,14 @@ export interface ChatMessage {
 
 // ======================= SESSIONS =======================
 
-export interface SessionContext {
-  wheel_scores?: Array<{ category_id: string; score: number }>;
-  streak_days?: number;
-  recent_wins?: string[];
-  recent_blocks?: string[];
-  focus_area?: string;
-  user_name?: string;
-}
+// export interface SessionContext {
+//   wheel_scores?: Array<{ category_id: string; score: number }>;
+//   streak_days?: number;
+//   recent_wins?: string[];
+//   recent_blocks?: string[];
+//   focus_area?: string;
+//   user_name?: string;
+// }
 
 export interface MorningResponse {
   affirmation: string;

@@ -1,41 +1,41 @@
 // features/ai-generator/services/ai-generator.api.ts
 
-import { api } from '@/services/api'
-import type { FunnelBlueprint } from '../types/generator.types'
+import { api } from '@/services/api';
+import type { FunnelBlueprint } from '../../products/types/generator.types';
 
 interface GenerateStepRequest {
-  stepNumber: number
-  userInput: string
-  context?: Record<string, string>
+  stepNumber: number;
+  userInput: string;
+  context?: Record<string, string>;
 }
 
 interface GenerateStepResponse {
-  success: boolean
-  variants: string[]
-  remainingAttempts: number
+  success: boolean;
+  variants: string[];
+  remainingAttempts: number;
 }
 
 interface GenerateBlueprintRequest {
   stepsData: {
-    number: number
-    userInput: string
-    selectedContent: string
-  }[]
+    number: number;
+    userInput: string;
+    selectedContent: string;
+  }[];
 }
 
 interface SaveFunnelRequest {
-  blueprint: FunnelBlueprint
+  blueprint: FunnelBlueprint;
 }
 
 interface SaveFunnelResponse {
-  success: boolean
-  funnelId: string
+  success: boolean;
+  funnelId: string;
 }
 
 export const aiGeneratorApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     generateStepVariants: builder.mutation<GenerateStepResponse, GenerateStepRequest>({
-      query: (data) => ({
+      query: data => ({
         url: '/ai/generator/step',
         method: 'POST',
         body: data,
@@ -43,7 +43,7 @@ export const aiGeneratorApi = api.injectEndpoints({
     }),
 
     generateFunnelBlueprint: builder.mutation<FunnelBlueprint, GenerateBlueprintRequest>({
-      query: (data) => ({
+      query: data => ({
         url: '/ai/generator/blueprint',
         method: 'POST',
         body: data,
@@ -51,7 +51,7 @@ export const aiGeneratorApi = api.injectEndpoints({
     }),
 
     saveFunnelFromBlueprint: builder.mutation<SaveFunnelResponse, SaveFunnelRequest>({
-      query: (data) => ({
+      query: data => ({
         url: '/ai/generator/save-funnel',
         method: 'POST',
         body: data,
@@ -60,10 +60,10 @@ export const aiGeneratorApi = api.injectEndpoints({
     }),
   }),
   overrideExisting: true,
-})
+});
 
 export const {
   useGenerateStepVariantsMutation,
   useGenerateFunnelBlueprintMutation,
   useSaveFunnelFromBlueprintMutation,
-} = aiGeneratorApi
+} = aiGeneratorApi;

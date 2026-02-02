@@ -1,17 +1,17 @@
 // frontend/src/features/wheel/components/WheelChart.tsx
 
-import { useMemo } from 'react'
-import { WHEEL_CATEGORIES, type WheelScore } from '../types/wheel.types'
+import { useMemo } from 'react';
+import { WHEEL_CATEGORIES, type WheelScore } from '../types/wheel.types';
 
 interface WheelChartProps {
-  scores: WheelScore[] | Record<string, number>
-  size?: number
-  interactive?: boolean
-  showEmoji?: boolean
-  showLabels?: boolean
-  animated?: boolean
-  glowIntensity?: 'low' | 'medium' | 'high'
-  onCategoryClick?: (category_id: string) => void
+  scores: WheelScore[] | Record<string, number>;
+  size?: number;
+  interactive?: boolean;
+  showEmoji?: boolean;
+  showLabels?: boolean;
+  animated?: boolean;
+  glowIntensity?: 'low' | 'medium' | 'high';
+  onCategoryClick?: (category_id: string) => void;
 }
 
 const PREMIUM_COLORS = {
@@ -28,7 +28,7 @@ const PREMIUM_COLORS = {
 
   gridLine: 'rgba(255, 255, 255, 0.08)',
   gridLineBright: 'rgba(255, 255, 255, 0.15)',
-}
+};
 
 export const WheelChart = ({
   scores,
@@ -40,22 +40,22 @@ export const WheelChart = ({
   onCategoryClick,
 }: WheelChartProps) => {
   const normalizedScores = useMemo(() => {
-    if (Array.isArray(scores)) return scores
+    if (Array.isArray(scores)) return scores;
     return Object.entries(scores).map(([category_id, score]) => ({
       category_id,
       score: Number(score),
-    }))
-  }, [scores])
+    }));
+  }, [scores]);
 
-  const center = size / 2
-  const emojiOffset = showEmoji ? 40 : 20
-  const maxRadius = size / 2 - emojiOffset
+  const center = size / 2;
+  const emojiOffset = showEmoji ? 40 : 20;
+  const maxRadius = size / 2 - emojiOffset;
 
   const points = useMemo(() => {
     return WHEEL_CATEGORIES.map((cat, i) => {
-      const angle = (Math.PI * 2 * i) / WHEEL_CATEGORIES.length - Math.PI / 2
-      const score = normalizedScores.find(s => s.category_id === cat.id)?.score ?? 0
-      const radius = (score / 10) * maxRadius
+      const angle = (Math.PI * 2 * i) / WHEEL_CATEGORIES.length - Math.PI / 2;
+      const score = normalizedScores.find(s => s.category_id === cat.id)?.score ?? 0;
+      const radius = (score / 10) * maxRadius;
 
       return {
         x: center + radius * Math.cos(angle),
@@ -66,18 +66,17 @@ export const WheelChart = ({
         emojiY: center + (maxRadius + 28) * Math.sin(angle),
         category: cat,
         score,
-      }
-    })
-  }, [normalizedScores, center, maxRadius])
+      };
+    });
+  }, [normalizedScores, center, maxRadius]);
 
-  const polygonPoints = points.map(p => `${p.x},${p.y}`).join(' ')
+  const polygonPoints = points.map(p => `${p.x},${p.y}`).join(' ');
 
-  const glowBlur =
-    glowIntensity === 'high' ? 25 : glowIntensity === 'medium' ? 15 : 8
+  const glowBlur = glowIntensity === 'high' ? 25 : glowIntensity === 'medium' ? 15 : 8;
 
   const handleClick = (id: string) => {
-    if (interactive && onCategoryClick) onCategoryClick(id)
-  }
+    if (interactive && onCategoryClick) onCategoryClick(id);
+  };
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
@@ -126,7 +125,7 @@ export const WheelChart = ({
         ))}
 
         {WHEEL_CATEGORIES.map((_, i) => {
-          const angle = (Math.PI * 2 * i) / WHEEL_CATEGORIES.length - Math.PI / 2
+          const angle = (Math.PI * 2 * i) / WHEEL_CATEGORIES.length - Math.PI / 2;
           return (
             <line
               key={i}
@@ -136,7 +135,7 @@ export const WheelChart = ({
               y2={center + maxRadius * Math.sin(angle)}
               stroke={PREMIUM_COLORS.gridLine}
             />
-          )
+          );
         })}
 
         <polygon
@@ -192,7 +191,7 @@ export const WheelChart = ({
           </div>
         ))}
     </div>
-  )
-}
+  );
+};
 
-export default WheelChart
+export default WheelChart;

@@ -1,120 +1,134 @@
-// frontend/src/features/products/components/AllProductsList.tsx
+// /features/products/components/AllProductsList.tsx
 
-import { Lock, Star, Users, Clock } from 'lucide-react'
-import { Button, GlassCard } from '@/ui'
-import { useAuth } from '@/features/auth/hooks/useAuth'
-import { Product } from '@/shared/types/product.types'
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import type { Product } from '@/shared/types/product.types';
+import { Button, GlassCard } from '@/ui';
+import { Clock, Lock, Star, Users } from 'lucide-react';
 
-// interface Product {
-//   id: string
-//   title: string
-//   description: string
-//   price: number
-//   isPremium: boolean
-//   creator: {
-//     id: string
-//     name: string
-//     avatar?: string
-//   }
-//   stats: {
-//     students: number
-//     rating: number
-//     duration: string
-//   }
-//   thumbnail?: string
-// }
-
-// Мок дані - потім замінити на API
+// Мок дані (типізовані)
 const MOCK_PRODUCTS: Product[] = [
   {
     id: '1',
+    name: 'osnovy-rozvytku',
     title: 'Основи особистісного розвитку',
     description: 'Базовий курс для тих, хто тільки починає свій шлях саморозвитку',
     price: 0,
+    currency: 'UAH',
+    type: 'course',
+    status: 'published',
     isPremium: false,
-    creator: {
-      id: 'admin1',
-      name: 'Олександр Іванов',
-    },
-    stats: {
-      students: 1234,
-      rating: 4.8,
-      duration: '8 годин',
-    },
+    creatorId: 'admin1',
+    creator: { id: 'admin1', name: 'Олександр Іванов' },
+    stats: { students: 1234, rating: 4.8, duration: '8 годин' },
+    includesTrial: false,
+    trialDays: 0,
+    includesMentorship: false,
+    format: 'web',
+    integration: 'web',
+    modules: [],
+    goals: [],
+    funnelId: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: '2',
+    name: 'time-management',
     title: 'Майстерність тайм-менеджменту',
     description: 'Навчіться ефективно керувати своїм часом та досягати більшого',
     price: 1499,
+    currency: 'UAH',
+    type: 'course',
+    status: 'published',
     isPremium: true,
-    creator: {
-      id: 'admin2',
-      name: 'Марія Коваленко',
-    },
-    stats: {
-      students: 856,
-      rating: 4.9,
-      duration: '12 годин',
-    },
+    creatorId: 'admin2',
+    creator: { id: 'admin2', name: 'Марія Коваленко' },
+    stats: { students: 856, rating: 4.9, duration: '12 годин' },
+    includesTrial: true,
+    trialDays: 7,
+    includesMentorship: true,
+    format: 'web',
+    integration: 'telegram',
+    modules: [],
+    goals: [],
+    funnelId: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: '3',
+    name: 'wheel-of-life',
     title: 'Колесо життєвого балансу',
     description: 'Знайдіть гармонію між різними сферами життя',
     price: 0,
+    currency: 'UAH',
+    type: 'course',
+    status: 'published',
     isPremium: false,
-    creator: {ф
-      id: 'admin1',
-      name: 'Олександр Іванов',
-    },
-    stats: {
-      students: 2145,
-      rating: 4.7,
-      duration: '6 годин',
-    },
+    creatorId: 'admin1',
+    creator: { id: 'admin1', name: 'Олександр Іванов' },
+    stats: { students: 2145, rating: 4.7, duration: '6 годин' },
+    includesTrial: false,
+    trialDays: 0,
+    includesMentorship: false,
+    format: 'web',
+    integration: 'web',
+    modules: [],
+    goals: [],
+    funnelId: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: '4',
+    name: 'emotional-intelligence',
     title: 'Емоційний інтелект: Практикум',
     description: 'Розвиток EQ для кращої комунікації та самопізнання',
     price: 2499,
+    currency: 'UAH',
+    type: 'course',
+    status: 'published',
     isPremium: true,
-    creator: {
-      id: 'admin3',
-      name: 'Ірина Петренко',
-    },
-    stats: {
-      students: 567,
-      rating: 5.0,
-      duration: '15 годин',
-    },
+    creatorId: 'admin3',
+    creator: { id: 'admin3', name: 'Ірина Петренко' },
+    stats: { students: 567, rating: 5.0, duration: '15 годин' },
+    includesTrial: true,
+    trialDays: 14,
+    includesMentorship: true,
+    format: 'mini_app',
+    integration: 'telegram',
+    modules: [],
+    goals: [],
+    funnelId: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
-]
+];
 
 export default function AllProductsList() {
-  const { user } = useAuth()
+  const { user } = useAuth();
 
-  // Перевірка, чи користувач має доступ до преміум контенту
-  const hasAccessToPremium = (product: Product) => {
-    if (!product.isPremium) return true
-    // TODO: перевірити subscriptionsRole користувача
-    // Якщо user.subscriptionsRole містить product.creator.id - є доступ
-    return false
-  }
+  // Перевірка доступу до преміум контенту
+  const hasAccessToPremium = (product: Product): boolean => {
+    if (!product.isPremium) return true;
+    if (!user?.subscriptionsRole) return false;
+
+    // subscriptionsRole — це масив ID креаторів, на яких є підписка
+    return user.subscriptionsRole.includes(product.creatorId);
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2">Усі курси</h1>
         <p className="text-white/60">
-          Обирайте курси для розвитку. Безкоштовні доступні одразу, преміум - після підписки.
+          Обирайте курси для розвитку. Безкоштовні доступні одразу, преміум — після підписки.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MOCK_PRODUCTS.map((product) => {
-          const hasAccess = hasAccessToPremium(product)
+        {MOCK_PRODUCTS.map((product: Product) => {
+          const hasAccess = hasAccessToPremium(product);
 
           return (
             <GlassCard
@@ -140,13 +154,8 @@ export default function AllProductsList() {
 
               {/* Content */}
               <div className="p-5 space-y-3">
-                <h3 className="text-xl font-bold text-white line-clamp-2">
-                  {product.title}
-                </h3>
-                
-                <p className="text-white/60 text-sm line-clamp-2">
-                  {product.description}
-                </p>
+                <h3 className="text-xl font-bold text-white line-clamp-2">{product.title}</h3>
+                <p className="text-white/60 text-sm line-clamp-2">{product.description}</p>
 
                 {/* Creator */}
                 <div className="flex items-center gap-2 text-sm text-white/60">
@@ -155,20 +164,22 @@ export default function AllProductsList() {
                 </div>
 
                 {/* Stats */}
-                <div className="flex items-center gap-4 text-xs text-white/40">
-                  <div className="flex items-center gap-1">
-                    <Users className="w-4 h-4" />
-                    <span>{product.stats.students}</span>
+                {product.stats && (
+                  <div className="flex items-center gap-4 text-xs text-white/40">
+                    <div className="flex items-center gap-1">
+                      <Users className="w-4 h-4" />
+                      <span>{product.stats.students}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                      <span>{product.stats.rating}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      <span>{product.stats.duration}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                    <span>{product.stats.rating}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-4 h-4" />
-                    <span>{product.stats.duration}</span>
-                  </div>
-                </div>
+                )}
 
                 {/* Price / Action */}
                 <div className="pt-3 border-t border-white/10">
@@ -178,9 +189,7 @@ export default function AllProductsList() {
                     </Button>
                   ) : (
                     <div className="flex items-center justify-between">
-                      <span className="text-2xl font-bold text-white">
-                        {product.price} ₴
-                      </span>
+                      <span className="text-2xl font-bold text-white">{product.price} ₴</span>
                       <Button className="px-6 py-2 rounded-lg bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors border border-white/20">
                         Підписатися
                       </Button>
@@ -189,9 +198,9 @@ export default function AllProductsList() {
                 </div>
               </div>
             </GlassCard>
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }

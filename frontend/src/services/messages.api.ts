@@ -1,10 +1,9 @@
 import api from '@/services/api';
-import { Conversation } from '../shared/types/notification.types';
 import { Message } from 'react-hook-form';
 
 export const messagesApi = api.injectEndpoints({
   endpoints: builder => ({
-    getConversations: builder.query<Conversation[], void>({
+    getConversations: builder.query<Conversations[], void>({
       query: () => '/messages/conversations',
       providesTags: ['Message'],
     }),

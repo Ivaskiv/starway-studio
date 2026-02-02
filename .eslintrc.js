@@ -48,7 +48,7 @@ module.exports = {
   },
   overrides: [
     {
-      files: ['frontend/**/*.ts', 'frontend/**/*.tsx'],
+files: ['frontend/src/**/*.{ts,tsx}'],
       parserOptions: {
         project: ['./frontend/tsconfig.json'],
       },

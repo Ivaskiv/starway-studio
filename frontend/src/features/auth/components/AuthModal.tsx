@@ -1,96 +1,102 @@
-import { X } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import toast from 'react-hot-toast'
-import { useDispatch } from 'react-redux'
-import { useNavigate } from 'react-router-dom'
+import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
+import { useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 
-import { Button } from '@/ui'
-import { useLoginMutation, useRegisterMutation } from '../services/auth.api'
-import { LoginForm, LoginFormData } from './LoginForm'
-import { RegisterForm, RegisterFormData } from './RegisterForm'
-import { SocialAuthRow } from './SocialAuthRow'
-import { SOCIAL_PLATFORM_METADATA } from '@/shared/constants/socialPlatforms.constants'
-import { SocialPlatform } from '@/shared/types/social.types'
-import { setCredentials } from '../services/auth.slice'
+import { SocialPlatform } from '@/features/social/types/social.types';
+import { Button } from '@/ui';
+import { useLoginMutation, useRegisterMutation } from '../services/auth.api';
+import { setCredentials } from '../services/auth.slice';
+import { LoginForm, LoginFormData } from './LoginForm';
+import { RegisterForm, RegisterFormData } from './RegisterForm';
+import { SocialAuthRow } from './SocialAuthRow';
+import { SOCIAL_PLATFORMS_METADATA } from '@/features/social/constants/social.constants';
 
 interface AuthModalProps {
-  isOpen: boolean
-  onClose: () => void
-  defaultMode?: 'login' | 'register'
+  isOpen: boolean;
+  onClose: () => void;
+  defaultMode?: 'login' | 'register';
 }
 
 // 👀 Беремо список соціальних платформ для кнопок
-const SOCIAL_PLATFORMS = Object.keys(SOCIAL_PLATFORM_METADATA) as SocialPlatform[]
+const SOCIAL_PLATFORMS = Object.keys(SOCIAL_PLATFORMS_METADATA) as SocialPlatform[];
 
 export function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalProps) {
-  const [mode, setMode] = useState<'login' | 'register'>(defaultMode)
-  const [serverError, setServerError] = useState<string>()
-  const dispatch = useDispatch()
-  const navigate = useNavigate()
+  const [mode, setMode] = useState<'login' | 'register'>(defaultMode);
+  const [serverError, setServerError] = useState<string>();
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
 
-  const [login, { isLoading: loginLoading }] = useLoginMutation()
-  const [register, { isLoading: registerLoading }] = useRegisterMutation()
+  const [login, { isLoading: loginLoading }] = useLoginMutation();
+  const [register, { isLoading: registerLoading }] = useRegisterMutation();
 
   // 👆 блокуємо скролл під час відкритої модалки
   useEffect(() => {
-    if (!isOpen) return
-    document.body.style.overflow = 'hidden'
+    if (!isOpen) return;
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = ''
-    }
-  }, [isOpen])
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   // ================== LOGIN ==================
   const handleLogin = async (data: LoginFormData) => {
-    setServerError(undefined)
+      console.log('[AuthModal] Login attempt:', { email: data.email })
+
+    setServerError(undefined);
     try {
       // unwrap() дає прямий результат без RTK Query об'єкта
-      const result = await login(data).unwrap()
+      const result = await login(data).unwrap();
+    console.log('[AuthModal] Login success:', result)
 
       // 🔑 зберігаємо юзера і токен у Redux
-      dispatch(setCredentials({ user: result.user, accessToken: result.token }))
+      dispatch(setCredentials({ user: result.user, accessToken: result.token }));
 
       // 🟢 повідомлення про успішний вхід
-      toast.success('Вхід успішний 👋')
+      toast.success('Вхід успішний 👋');
 
       // ✨ закриваємо модалку
-      onClose()
+      onClose();
 
       // 🚀 переходимо у кабінет
-      navigate('/dashboard')
+      navigate('/dashboard');
     } catch (err: any) {
       // ❌ показуємо серверну помилку
-      const message = err?.data?.message || 'Помилка входу'
-      setServerError(message)
-      toast.error(message)
+          console.error('[AuthModal] Login failed:', err)
+
+      const message = err?.data?.message || 'Помилка входу';
+      setServerError(message);
+      toast.error(message);
     }
-  }
+  };
 
   // ================== REGISTER ==================
   const handleRegister = async (data: Omit<RegisterFormData, 'confirmPassword'>) => {
-    setServerError(undefined)
+    setServerError(undefined);
     try {
-      const result = await register(data).unwrap()
-      dispatch(setCredentials({ user: result.user, accessToken: result.token }))
-      toast.success('Реєстрація успішна 🎉')
-      onClose()
-      navigate('/dashboard')
+      const result = await register(data).unwrap();
+      dispatch(setCredentials({ user: result.user, accessToken: result.token }));
+      toast.success('Реєстрація успішна 🎉');
+      onClose();
+      navigate('/dashboard');
     } catch (err: any) {
-      const message = err?.data?.message || 'Помилка реєстрації'
-      setServerError(message)
-      toast.error(message)
+      const message = err?.data?.message || 'Помилка реєстрації';
+      setServerError(message);
+      toast.error(message);
     }
-  }
+  };
 
   // ================== SOCIAL AUTH ==================
   const handleSocialAuth = (platform: SocialPlatform) => {
     // тут можна додати реальну соціальну авторизацію
- toast('Реєстрація через Telegram — скоро')
+    toast('Реєстрація через Telegram — скоро');
     // 🔹 Після успішної соц. авторизації теж:
-    onClose()
-    navigate('/dashboard')  }
+    onClose();
+    navigate('/dashboard');
+  };
 
   return (
     <div className="fixed inset-0 z-[9999]">
@@ -149,5 +155,5 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalP
         </div>
       </div>
     </div>
-  )
+  );
 }

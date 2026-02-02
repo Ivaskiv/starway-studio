@@ -1,4 +1,4 @@
-// frontend/src/features/dashboard/blocks/admin/FunnelsOverview.tsx
+// /features/dashboard/blocks/admin/FunnelsOverview.tsx
 import { Workflow } from 'lucide-react'
 import { GlassCard } from '../../../../ui'
 import { useGetFunnelsQuery } from '../../../funnels/services/funnels.api'

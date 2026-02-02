@@ -1,12 +1,12 @@
-// frontend/src/features/dashboard/blocks/admin/AdminStats.tsx
-import { useGetDashboardStatsQuery } from '@/services/stats.api'
-import { DollarSign, Users, Zap } from 'lucide-react'
-import { GlassCard } from '../../../../ui'
+// /features/dashboard/blocks/admin/AdminStats.tsx
+import { useGetDashboardStatsQuery } from '@/services/stats.api';
+import { DollarSign, Users, Zap } from 'lucide-react';
+import { GlassCard } from '../../../../ui';
 
 export default function AdminStats() {
-  const { data } = useGetDashboardStatsQuery({ period: '30d' })
+  const { data } = useGetDashboardStatsQuery({ period: '30d' });
 
-  if (!data) return null
+  if (!data) return null;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -28,5 +28,5 @@ export default function AdminStats() {
         <p className="text-white/40">Дохід</p>
       </GlassCard>
     </div>
-  )
+  );
 }

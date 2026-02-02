@@ -2,8 +2,8 @@
 // Універсальний роутер для всіх соцмереж
 
 import { Router } from 'express';
-import { sql } from '../db/client';
-import { authRequired } from '../middleware/auth';
+import { sql } from '../db/client.js';
+import { authRequired } from '../middleware/auth.js';
 
 const router = Router();
 

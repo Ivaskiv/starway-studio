@@ -1,5 +1,6 @@
-// frontend/src/features/admin/ABTesting.tsx
+// /features/admin/ABTesting.tsx
 
+import { ABTest } from '@/shared/types/abtest.types';
 import {
   BarChart3,
   CheckCircle,
@@ -12,7 +13,6 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../ui';
-import { ABTest } from '@/shared/types/abtest.types';
 
 export default function ABTesting() {
   const [tests, setTests] = useState<ABTest[]>([

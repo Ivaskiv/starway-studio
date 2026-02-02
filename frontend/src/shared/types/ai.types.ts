@@ -1,7 +1,7 @@
 // shared/types/ai.types.ts
 // # AIConfig, AIFieldFocus, GenerationsBalance, AIFunnelAssistantProps, AIFunnelAssistantState
 
-import { FunnelDraft } from "./funnel.types";
+import { FunnelDraft } from "@/features/funnels/types/funnel.types";
 
 /* ======================================================
   AI CONFIG
@@ -13,6 +13,13 @@ export interface AIConfig {
   maxTokens: number;
   systemPrompt?: string;
 }
+// export const normalizeAIConfig = withNormalizer<any, AIConfig>({
+//   model: 'model',
+//   temperature: 'temperature',
+//   maxTokens: 'maxTokens',
+//   systemPrompt: 'systemPrompt',
+
+// }); // # AIConfig
 
 // ═══════════════════════════════════════════════════════════════
 // AI FIELDS

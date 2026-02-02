@@ -1,65 +1,61 @@
 // frontend/src/features/wheel/components/BalanceWheel.tsx
+import React from 'react';
+import type { WheelScore, WheelCategory } from '@/features/wheel/types/wheel.types';
+import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types';
+
 interface BalanceWheelProps {
-  score: number // 0-10
-  maxScore?: number
+  scores: WheelScore[];           // масив оцінок користувача
+  maxScore?: number;              // макс. значення (0-10)
 }
 
-// Колесо балансу як полігон з емоджі
-export function BalanceWheel({ score, maxScore = 10 }: BalanceWheelProps) {
-  const emojis = ['💪', '🔥', '🎯', '⚡', '💰', '🏆', '❤️', '🧠']
-  const points = emojis.length
-  const radius = 100
-  const centerX = 120
-  const centerY = 120
-  
-  // Генерація точок полігону
-  const generatePoints = (value: number) => {
-    const ratio = value / maxScore
-    return emojis.map((_, i) => {
-      const angle = (i * 2 * Math.PI) / points - Math.PI / 2
-      const r = radius * ratio
+export const BalanceWheel: React.FC<BalanceWheelProps> = ({ scores, maxScore = 10 }) => {
+  const categories: WheelCategory[] = WHEEL_CATEGORIES;
+  const points = categories.length;
+  const radius = 100;
+  const centerX = 120;
+  const centerY = 120;
+
+  // Зіставляємо оцінки з категоріями
+  const getScoreForCategory = (id: string) => {
+    const found = scores.find(s => s.category_id === id);
+    return found?.score ?? 0;
+  };
+
+  // Генеруємо точки полігону
+  const generatePoints = (values: number[]) =>
+    values.map((score, i) => {
+      const ratio = score / maxScore;
+      const angle = (i * 2 * Math.PI) / points - Math.PI / 2;
+      const r = radius * ratio;
       return {
         x: centerX + r * Math.cos(angle),
-        y: centerY + r * Math.sin(angle)
-      }
-    })
-  }
+        y: centerY + r * Math.sin(angle),
+      };
+    });
 
-  // Позиції для емоджі (на максимальному радіусі)
-  const emojiPositions = emojis.map((_, i) => {
-    const angle = (i * 2 * Math.PI) / points - Math.PI / 2
-    const r = radius + 20
-    return {
-      x: centerX + r * Math.cos(angle),
-      y: centerY + r * Math.sin(angle)
-    }
-  })
-
-  const polygonPoints = generatePoints(score)
-  const maxPolygonPoints = generatePoints(maxScore)
+  const userScores = categories.map(c => getScoreForCategory(c.id));
+  const polygonPoints = generatePoints(userScores);
+  const maxPolygonPoints = generatePoints(Array(points).fill(maxScore));
 
   return (
-    <div className="relative w-64 h-64 mx-auto">
+    <div className="relative w-64 h-64 mx-auto p-4 rounded-2xl glassmorphism shadow-lg">
       <svg width="240" height="240" viewBox="0 0 240 240" className="absolute inset-0">
         <defs>
-          {/* Gradient для полігону */}
           <linearGradient id="polygonGradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#a855f7" stopOpacity="0.6" />
             <stop offset="50%" stopColor="#ec4899" stopOpacity="0.5" />
             <stop offset="100%" stopColor="#f97316" stopOpacity="0.4" />
           </linearGradient>
-          
-          {/* Glow ефект */}
           <filter id="glow">
-            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+            <feGaussianBlur stdDeviation="4" result="coloredBlur" />
             <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
 
-        {/* Фонова сітка (максимум) */}
+        {/* Сітка */}
         <polygon
           points={maxPolygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
           fill="none"
@@ -67,8 +63,6 @@ export function BalanceWheel({ score, maxScore = 10 }: BalanceWheelProps) {
           strokeWidth="2"
           strokeDasharray="5,5"
         />
-
-        {/* Лінії від центру до кожної точки */}
         {maxPolygonPoints.map((p, i) => (
           <line
             key={i}
@@ -81,7 +75,7 @@ export function BalanceWheel({ score, maxScore = 10 }: BalanceWheelProps) {
           />
         ))}
 
-        {/* Основний полігон (значення користувача) */}
+        {/* Основний полігон */}
         <polygon
           points={polygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
           fill="url(#polygonGradient)"
@@ -105,42 +99,42 @@ export function BalanceWheel({ score, maxScore = 10 }: BalanceWheelProps) {
           />
         ))}
 
-        {/* Центральна точка */}
-        <circle
-          cx={centerX}
-          cy={centerY}
-          r="6"
-          fill="#f97316"
-          filter="url(#glow)"
-        />
+        {/* Центр */}
+        <circle cx={centerX} cy={centerY} r="6" fill="#f97316" filter="url(#glow)" />
       </svg>
 
       {/* Емоджі навколо */}
-      {emojis.map((emoji, i) => (
-        <div
-          key={i}
-          className="absolute text-2xl transition-transform hover:scale-125"
-          style={{
-            left: emojiPositions[i].x - 16,
-            top: emojiPositions[i].y - 16,
-            width: 32,
-            height: 32,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          {emoji}
-        </div>
-      ))}
+      {categories.map((c, i) => {
+        const angle = (i * 2 * Math.PI) / points - Math.PI / 2;
+        const r = radius + 20;
+        return (
+          <div
+            key={c.id}
+            className="absolute text-2xl transition-transform hover:scale-125"
+            style={{
+              left: centerX + r * Math.cos(angle) - 16,
+              top: centerY + r * Math.sin(angle) - 16,
+              width: 32,
+              height: 32,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {c.emoji}
+          </div>
+        );
+      })}
 
       {/* Центральний скор */}
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="text-center">
-          <div className="text-4xl font-bold text-white">{score}</div>
-          <div className="text-xs text-white/60">/ {maxScore}</div>
+          <div className="text-4xl font-bold text-white">
+            {Math.round(userScores.reduce((a, b) => a + b, 0) / points)}
+          </div>
+          <div className="text-xs text-white/60">середній бал</div>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};

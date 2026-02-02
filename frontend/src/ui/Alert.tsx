@@ -1,58 +1,61 @@
-import { AlertCircle, Check, CheckCircle, Info, X } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { forwardRef, HTMLAttributes, ReactNode, useState } from 'react';
 import Button from '@/ui/Button';
+import { AlertCircle, Check, CheckCircle, Info, X } from 'lucide-react';
+import { forwardRef, HTMLAttributes, ReactNode, useState } from 'react';
+import { cn } from '../lib/utils';
 
 const variants = {
   error: { box: 'bg-red-500/10 border-red-500/20 text-red-300', icon: 'text-red-400' },
-  success: { box: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300', icon: 'text-emerald-400' },
+  success: {
+    box: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
+    icon: 'text-emerald-400',
+  },
 };
 
 // ===========================
 // ALERT - Сповіщення
 // ===========================
 interface AlertProps extends HTMLAttributes<HTMLDivElement> {
-  children: ReactNode
-  variant?: 'success' | 'warning' | 'error' | 'info'
-  closable?: boolean
-  onClose?: () => void
+  children: ReactNode;
+  variant?: 'success' | 'warning' | 'error' | 'info';
+  closable?: boolean;
+  onClose?: () => void;
 }
 
 export const Alert = forwardRef<HTMLDivElement, AlertProps>(
   ({ children, variant = 'info', closable = false, onClose, className, ...props }, ref) => {
-    const [visible, setVisible] = useState(true)
+    const [visible, setVisible] = useState(true);
 
     const handleClose = () => {
-      setVisible(false)
-      setTimeout(() => onClose?.(), 300)
-    }
+      setVisible(false);
+      setTimeout(() => onClose?.(), 300);
+    };
 
-    if (!visible) return null
+    if (!visible) return null;
 
     const variants = {
       success: {
         bg: 'bg-green-500/10 border-green-500/30',
         icon: <Check className="w-5 h-5 text-green-400" />,
-        text: 'text-green-400'
+        text: 'text-green-400',
       },
       warning: {
         bg: 'bg-amber-500/10 border-amber-500/30',
         icon: <AlertCircle className="w-5 h-5 text-amber-400" />,
-        text: 'text-amber-400'
+        text: 'text-amber-400',
       },
       error: {
         bg: 'bg-red-500/10 border-red-500/30',
         icon: <AlertCircle className="w-5 h-5 text-red-400" />,
-        text: 'text-red-400'
+        text: 'text-red-400',
       },
       info: {
         bg: 'bg-blue-500/10 border-blue-500/30',
         icon: <Info className="w-5 h-5 text-blue-400" />,
-        text: 'text-blue-400'
-      }
-    }
+        text: 'text-blue-400',
+      },
+    };
 
-    const config = variants[variant]
+    const config = variants[variant];
 
     return (
       <div
@@ -61,7 +64,7 @@ export const Alert = forwardRef<HTMLDivElement, AlertProps>(
           'flex items-start gap-3 p-4 rounded-xl border transition-all duration-300',
           config.bg,
           visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
-          className
+          className,
         )}
         {...props}
       >
@@ -76,16 +79,22 @@ export const Alert = forwardRef<HTMLDivElement, AlertProps>(
           </Button>
         )}
       </div>
-    )
-  }
-)
+    );
+  },
+);
 
-Alert.displayName = 'Alert'
+Alert.displayName = 'Alert';
 
 export function ErrorAlert({ message, className }: { message?: string; className?: string }) {
   if (!message) return null;
   return (
-    <div className={cn('flex gap-3 p-4 rounded-xl border backdrop-blur-sm animate-in fade-in', variants.error.box, className)}>
+    <div
+      className={cn(
+        'flex gap-3 p-4 rounded-xl border backdrop-blur-sm animate-in fade-in',
+        variants.error.box,
+        className,
+      )}
+    >
       <AlertCircle className={cn('w-5 h-5 flex-shrink-0 mt-0.5', variants.error.icon)} />
       <p className="text-sm">{message}</p>
     </div>
@@ -95,7 +104,13 @@ export function ErrorAlert({ message, className }: { message?: string; className
 export function SuccessAlert({ message, className }: { message?: string; className?: string }) {
   if (!message) return null;
   return (
-    <div className={cn('flex gap-3 p-4 rounded-xl border backdrop-blur-sm animate-in fade-in', variants.success.box, className)}>
+    <div
+      className={cn(
+        'flex gap-3 p-4 rounded-xl border backdrop-blur-sm animate-in fade-in',
+        variants.success.box,
+        className,
+      )}
+    >
       <CheckCircle className={cn('w-5 h-5 flex-shrink-0 mt-0.5', variants.success.icon)} />
       <p className="text-sm">{message}</p>
     </div>

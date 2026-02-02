@@ -1,23 +1,23 @@
-// /frontend/src/ui/FormFieldController.tsx
-import { FieldType } from '../shared/types/modules.types';
-import Icon, { IconProps } from './Icon';
-import { Input } from './Input';
-import Select, { SelectOption } from './Select';
-import { Textarea } from './Textarea';
+// frontend/src/ui/FormFieldController.tsx
+import { FieldType } from '../shared/types/modules.types'
+import { Input } from './Input'
+import Select, { SelectOption } from './Select'
+import { Textarea } from './Textarea'
+import { Icon } from './Icon'
 
 interface FormFieldControllerProps {
-  value?: any;
-  onChange?: (value: any) => void;
-  name?: string;
-  label?: string;
-  placeholder?: string;
-  type?: FieldType;
-  options?: SelectOption[];
-  iconName?: IconProps['name'];
-  iconPosition?: 'left' | 'right';
-  className?: string;
-  error?: string;
-  disabled?: boolean;
+  value?: any
+  onChange?: (value: any) => void
+  name?: string
+  label?: string
+  placeholder?: string
+  type?: FieldType
+  options?: SelectOption[]
+  iconName?: string
+  iconPosition?: 'left' | 'right'
+  className?: string
+  error?: string
+  disabled?: boolean
 }
 
 export function FormFieldController({
@@ -34,7 +34,6 @@ export function FormFieldController({
   error,
   disabled = false,
 }: FormFieldControllerProps) {
-  // textarea
   if (type === 'textarea') {
     return (
       <div className="space-y-2">
@@ -50,27 +49,18 @@ export function FormFieldController({
         />
         {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
       </div>
-    );
+    )
   }
 
-  // select
   if (type === 'select') {
     return (
       <div className="space-y-1">
         {label && <label className="text-white">{label}</label>}
-        <Select
-          value={value}
-          onChange={onChange}
-          options={options || []}
-          className={className}
-          error={error}
-          disabled={disabled}
-        />
+        <Select value={value} onChange={onChange} options={options || []} className={className} error={error} disabled={disabled} />
       </div>
-    );
+    )
   }
 
-  // input / email / number
   if (type === 'input' || type === 'email' || type === 'number') {
     return (
       <div className="space-y-1 relative">
@@ -94,24 +84,23 @@ export function FormFieldController({
 
         {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
       </div>
-    );
+    )
   }
 
-  // checkbox
   if (type === 'checkbox') {
     return (
       <div className="flex items-center gap-2">
         <Input
           type="checkbox"
           checked={!!value}
-          onChange={e => onChange?.(e.target.checked)}
+          onChange={(e) => onChange?.(e.target.checked)}
           disabled={disabled}
           className="w-4 h-4 accent-purple-500"
         />
         {label && <span className="text-white">{label}</span>}
       </div>
-    );
+    )
   }
 
-  return null;
+  return null
 }

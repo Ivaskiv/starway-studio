@@ -1,9 +1,20 @@
 // features/funnels/components/FunnelStepList.tsx
 
-import { Trash2, MessageCircle, Mail, CreditCard, Gift, Zap, Edit, Clock, GitBranch, Send } from 'lucide-react'
-import { Button } from '@/ui'
-import type { FunnelStep, StepType } from '../types/funnel.types'
-import type { LucideIcon } from 'lucide-react'
+import { Button } from '@/ui';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Clock,
+  CreditCard,
+  Edit,
+  Gift,
+  GitBranch,
+  Mail,
+  MessageCircle,
+  Send,
+  Trash2,
+  Zap,
+} from 'lucide-react';
+import type { FunnelStep, StepType } from '../types/funnel.types';
 
 const STEP_ICONS: Record<StepType, LucideIcon> = {
   message: MessageCircle,
@@ -17,7 +28,7 @@ const STEP_ICONS: Record<StepType, LucideIcon> = {
   email: Mail,
   sms: MessageCircle,
   telegram: Send,
-}
+};
 
 const STEP_LABELS: Record<StepType, string> = {
   message: 'Повідомлення',
@@ -31,13 +42,13 @@ const STEP_LABELS: Record<StepType, string> = {
   email: 'Email',
   sms: 'SMS',
   telegram: 'Telegram',
-}
+};
 
 interface Props {
-  steps: FunnelStep[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-  onDelete: (id: string) => void
+  steps: FunnelStep[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
 export function FunnelStepList({ steps, selectedId, onSelect, onDelete }: Props) {
@@ -50,14 +61,14 @@ export function FunnelStepList({ steps, selectedId, onSelect, onDelete }: Props)
         <h3 className="text-lg font-semibold text-white mb-2">Немає кроків</h3>
         <p className="text-slate-400 text-sm">Додайте перший крок</p>
       </div>
-    )
+    );
   }
 
   return (
     <div className="p-3 space-y-2">
       {steps.map((step, index) => {
-        const Icon = STEP_ICONS[step.type]
-        const isSelected = step.id === selectedId
+        const Icon = STEP_ICONS[step.type];
+        const isSelected = step.id === selectedId;
 
         return (
           <div
@@ -65,10 +76,7 @@ export function FunnelStepList({ steps, selectedId, onSelect, onDelete }: Props)
             onClick={() => onSelect(step.id)}
             className={`
               p-3 rounded-xl cursor-pointer transition-all group
-              ${isSelected
-                ? 'bg-orange-500/20 ring-1 ring-orange-500/50'
-                : 'hover:bg-slate-800/50'
-              }
+              ${isSelected ? 'bg-orange-500/20 ring-1 ring-orange-500/50' : 'hover:bg-slate-800/50'}
             `}
           >
             <div className="flex items-center gap-3">
@@ -88,7 +96,10 @@ export function FunnelStepList({ steps, selectedId, onSelect, onDelete }: Props)
               </div>
 
               <Button
-                onClick={(e) => { e.stopPropagation(); onDelete(step.id) }}
+                onClick={e => {
+                  e.stopPropagation();
+                  onDelete(step.id);
+                }}
                 data-color="ghost"
                 data-size="sm"
                 className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300"
@@ -97,8 +108,8 @@ export function FunnelStepList({ steps, selectedId, onSelect, onDelete }: Props)
               </Button>
             </div>
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }

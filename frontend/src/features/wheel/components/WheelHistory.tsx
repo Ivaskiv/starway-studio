@@ -1,126 +1,48 @@
-import { useGetWheelHistoryQuery } from '@/services'
-import { Calendar, Loader2, Minus, TrendingDown, TrendingUp } from 'lucide-react'
-import { WheelChart } from './WheelChart'
-import { WHEEL_CATEGORIES, type WheelAssessment } from '@/features/wheel/types/wheel.types'
-import { Button } from '@/ui'
+// frontend/src/features/wheel/components/WheelHistory.tsx
+import React from 'react';
+import type { WheelAssessment } from '@/features/wheel/types/wheel.types';
+import { format } from 'date-fns';
+import { useGetWheelAssessmentsQuery } from '@/features/wheel/services/wheel.api';
 
 interface WheelHistoryProps {
-  onSelect?: (assessment: WheelAssessment) => void
+  userId: string;
+  onSelect?: (assessment: WheelAssessment) => void;
 }
 
-export const WheelHistory = ({ onSelect }: WheelHistoryProps) => {
-  const { data: history, isLoading } = useGetWheelHistoryQuery({ limit: 6 })
+export const WheelHistory: React.FC<WheelHistoryProps> = ({ userId, onSelect }) => {
+  const { data: assessments, isLoading, isError } = useGetWheelAssessmentsQuery(userId);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
-      </div>
-    )
-  }
+  if (isLoading)
+    return <div className="p-4 text-center text-white/70">Завантаження...</div>;
 
-  if (!history || history.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-white/60">Поки немає історії оцінок</p>
-      </div>
-    )
-  }
+  if (isError)
+    return <div className="p-4 text-center text-red-500">Помилка завантаження</div>;
 
-  const comparison =
-    history.length >= 2
-      ? history[0].scores.map((curr) => {
-          const prev = history[1].scores.find(
-            (p) => p.category_id === curr.category_id
-          )
-
-          return {
-            category_id: curr.category_id,
-            delta: curr.score - (prev?.score ?? 0),
-          }
-        })
-      : null
+  if (!assessments || assessments.length === 0)
+    return <div className="p-4 text-center text-white/60">Немає історії оцінок</div>;
 
   return (
-    <div className="space-y-6">
-      {comparison && (
-        <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
-          <h3 className="text-sm font-semibold text-white/80 mb-3">
-            Порівняння з попереднім
-          </h3>
-
-          <div className="flex flex-wrap gap-2">
-            {comparison.map((change) => {
-              const cat = WHEEL_CATEGORIES.find(c => c.id === change.category_id)
-              if (!cat) return null
-
-              const Icon =
-                change.delta > 0
-                  ? TrendingUp
-                  : change.delta < 0
-                  ? TrendingDown
-                  : Minus
-
-              const color =
-                change.delta > 0
-                  ? 'text-green-400'
-                  : change.delta < 0
-                  ? 'text-red-400'
-                  : 'text-white/40'
-
-              return (
-                <div
-                  key={change.category_id}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 text-xs"
-                >
-                  <span>{cat.emoji}</span>
-                  <Icon className={`w-3 h-3 ${color}`} />
-                  <span className={color}>
-                    {change.delta > 0 ? '+' : ''}
-                    {change.delta}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {history.map((assessment) => (
-          <Button
-            key={assessment.id}
-            onClick={() => onSelect?.(assessment)}
-            className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-left"
+    <div className="p-4 rounded-2xl glassmorphism shadow-lg flex flex-col gap-3">
+      <h2 className="text-xl font-bold text-white">Історія Колеса Балансу</h2>
+      <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
+        {assessments.map(a => (
+          <div
+            key={a.id}
+            onClick={() => onSelect?.(a)}
+            className="cursor-pointer p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-colors flex justify-between items-center"
           >
-            <div className="flex items-center gap-2 mb-3 text-xs text-white/60">
-              <Calendar className="w-3 h-3" />
-              {new Date(assessment.created_at).toLocaleDateString('uk-UA', {
-                day: 'numeric',
-                month: 'short',
-              })}
+            <div>
+              <div className="text-sm text-white/80">
+                {format(new Date(a.completedAt), 'dd.MM.yyyy HH:mm')}
+              </div>
+              <div className="text-white font-medium">
+                Середній бал: {Math.round(a.averageScore)}
+              </div>
             </div>
-
-            <div className="flex justify-center mb-3">
-              <WheelChart
-                size={100}
-                animated={false}
-                showEmoji={false}
-                scores={assessment.scores}
-              />
-            </div>
-
-            <div className="text-center">
-              <span className="text-2xl font-bold text-white">
-                {assessment.average_score.toFixed(1)}
-              </span>
-              <span className="text-xs text-white/40 ml-1">/ 10</span>
-            </div>
-          </Button>
+            <div className="text-white/50 text-sm">{a.scores.length} сфер</div>
+          </div>
         ))}
       </div>
     </div>
-  )
-}
-
-export default WheelHistory
+  );
+};

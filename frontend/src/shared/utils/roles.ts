@@ -1,5 +1,5 @@
-// frontend/src/features/auth/utils/roles.ts
-import type { User } from '@/shared/types/user.types'
+// /features/auth/utils/roles.ts
+import type { User } from '@/shared/types/user.types';
 
 // 🔹 Коротка логіка ролей та підписок
 
@@ -7,26 +7,26 @@ import type { User } from '@/shared/types/user.types'
 export const upgradeToAdmin = (user: User): User => ({
   ...user,
   role: 'admin',
-})
+});
 
 // Перевірка чи користувач адмін
-export const isAdmin = (user?: User) => user?.role === 'admin'
+export const isAdmin = (user?: User) => user?.role === 'admin';
 
 // Фільтрація контенту для користувача
 export const filterContentForUser = (
   user: User | null,
-  content: Array<{ id: string; adminId: string; isPremium: boolean }>
+  content: Array<{ id: string; adminId: string; isPremium: boolean }>,
 ) => {
   if (!user) {
     // Неавторизовані бачать тільки безкоштовний
-    return content.map(c => ({ ...c, locked: c.isPremium }))
+    return content.map(c => ({ ...c, locked: c.isPremium }));
   }
 
   return content.map(c => {
-    const hasAccess = !c.isPremium || user.subscriptionsRole?.includes(c.adminId)
-    return { ...c, locked: !hasAccess }
-  })
-}
+    const hasAccess = !c.isPremium || user.subscriptionsRole?.includes(c.adminId);
+    return { ...c, locked: !hasAccess };
+  });
+};
 
 // 🔹 Приклад апгрейду та підписок
 export const exampleFlow = () => {
@@ -39,10 +39,10 @@ export const exampleFlow = () => {
     isAdmin: true,
     createdAt: new Date().toISOString(),
     subscriptionsRole: [],
-  }
+  };
 
   // користувач створює продукт → апгрейд до адміна
-  user = upgradeToAdmin(user)
+  user = upgradeToAdmin(user);
 
   // новий користувач підписується на цього адміна
   const subscriber: User = {
@@ -53,7 +53,7 @@ export const exampleFlow = () => {
     isAdmin: false,
     createdAt: new Date().toISOString(),
     subscriptionsRole: [user.id],
-  }
+  };
 
-  console.log(user, subscriber)
-}
+  console.log(user, subscriber);
+};

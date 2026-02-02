@@ -5,14 +5,13 @@ export async function checkDatabaseSchema() {
 
   try {
     // Беремо всі таблиці зі схеми public
-    const tables: { table_name: string }[] = await sql<{ table_name: string }[]>`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema = 'public'
-        AND table_type = 'BASE TABLE'
-      ORDER BY table_name
-    `
-
+const tables = await sql<{ table_name: string }>`
+  SELECT table_name
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
+    AND table_type = 'BASE TABLE'
+  ORDER BY table_name
+  `
     if (!tables.length) {
       console.log('  ❌ No tables found in public schema!')
       return

@@ -1,10 +1,9 @@
 // frontend/src/features/admin/pages/AdminDashboard.tsx
 
-import React from 'react';
+import { Button } from '@/frontend/srcui/Button';
+import { GlassCard } from '@/frontend/srcui/GlassCard';
+import { Brain, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Calendar, ClipboardList, Plus } from 'lucide-react';
-import { GlassCard } from '@/ui/GlassCard';
-import { Button } from '@/ui/Button';
 import { useGetAdminProductsQuery } from '../services/admin.api';
 
 export const AdminDashboard = () => {
@@ -15,12 +14,8 @@ export const AdminDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900 p-6">
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">
-          Мої продукти
-        </h1>
-        <p className="text-gray-400">
-          Керуйте своїми AI-продуктами
-        </p>
+        <h1 className="text-3xl font-bold text-white mb-2">Мої продукти</h1>
+        <p className="text-gray-400">Керуйте своїми AI-продуктами</p>
       </div>
 
       {/* Create Product Button */}
@@ -36,36 +31,35 @@ export const AdminDashboard = () => {
 
       {/* Products Grid */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {products?.map((product) => (
-          <GlassCard key={product.id} className="p-6 cursor-pointer hover:scale-105 transition-transform">
+        {products?.map(product => (
+          <GlassCard
+            key={product.id}
+            className="p-6 cursor-pointer hover:scale-105 transition-transform"
+          >
             <div className="flex items-start justify-between mb-4">
               <div className="p-3 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-lg">
                 <Brain className="w-6 h-6 text-purple-400" />
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs ${
-                product.status === 'published' 
-                  ? 'bg-green-500/20 text-green-400' 
-                  : 'bg-yellow-500/20 text-yellow-400'
-              }`}>
+              <span
+                className={`px-3 py-1 rounded-full text-xs ${
+                  product.status === 'published'
+                    ? 'bg-green-500/20 text-green-400'
+                    : 'bg-yellow-500/20 text-yellow-400'
+                }`}
+              >
                 {product.status === 'published' ? 'Опубліковано' : 'Чернетка'}
               </span>
             </div>
 
-            <h3 className="text-xl font-semibold text-white mb-2">
-              {product.branding.name}
-            </h3>
+            <h3 className="text-xl font-semibold text-white mb-2">{product.branding.name}</h3>
             <p className="text-gray-400 text-sm mb-4 line-clamp-2">
               {product.branding.description}
             </p>
 
             <div className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-4">
-                <span className="text-gray-400">
-                  👥 {product.total_users}
-                </span>
-                <span className="text-green-400">
-                  💰 {product.revenue}€
-                </span>
+                <span className="text-gray-400">👥 {product.total_users}</span>
+                <span className="text-green-400">💰 {product.revenue}€</span>
               </div>
             </div>
 
@@ -86,9 +80,7 @@ export const AdminDashboard = () => {
         {products?.length === 0 && (
           <div className="col-span-full text-center py-12">
             <Brain className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-4">
-              У вас ще немає продуктів
-            </p>
+            <p className="text-gray-400 mb-4">У вас ще немає продуктів</p>
             <Button onClick={() => navigate('/admin/products/create')}>
               Створити перший продукт
             </Button>

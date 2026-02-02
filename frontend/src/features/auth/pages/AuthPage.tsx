@@ -1,33 +1,33 @@
 // frontend/src/features/ai-mentor/pages/AIMentorPage.tsx
-import { useState, useEffect } from 'react'
-import { Bot, MessageCircle, Send } from 'lucide-react'
-import { GlassCard, Button, Input } from '@/ui'
-import { TelegramModal } from '@/features/integrations/components/TelegramModal'
+import { TelegramModal } from '@/features/integrations/components/TelegramModal';
+import { Button, GlassCard, Input } from '@/ui';
+import { Bot, MessageCircle, Send } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export default function AIMentorPage() {
-  const [showTelegramModal, setShowTelegramModal] = useState(false)
-  const [isTelegramConnected, setIsTelegramConnected] = useState(false)
-  const [message, setMessage] = useState('')
+  const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [isTelegramConnected, setIsTelegramConnected] = useState(false);
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
-    const hasSeenModal = localStorage.getItem('telegram_modal_seen')
+    const hasSeenModal = localStorage.getItem('telegram_modal_seen');
     if (!hasSeenModal && !isTelegramConnected) {
-      setShowTelegramModal(true)
-      localStorage.setItem('telegram_modal_seen', 'true')
+      setShowTelegramModal(true);
+      localStorage.setItem('telegram_modal_seen', 'true');
     }
-  }, [isTelegramConnected])
+  }, [isTelegramConnected]);
 
   const handleConnectTelegram = () => {
-    console.log('Connecting to Telegram...')
-    setIsTelegramConnected(true)
-    setShowTelegramModal(false)
-  }
+    console.log('Connecting to Telegram...');
+    setIsTelegramConnected(true);
+    setShowTelegramModal(false);
+  };
 
   const handleSendMessage = () => {
-    if (!message.trim()) return
-    console.log('Sending:', message)
-    setMessage('')
-  }
+    if (!message.trim()) return;
+    console.log('Sending:', message);
+    setMessage('');
+  };
 
   return (
     <>
@@ -42,7 +42,7 @@ export default function AIMentorPage() {
               <p className="text-white/60 text-sm">Твій персональний асистент</p>
             </div>
           </div>
-          
+
           <Button
             variant={isTelegramConnected ? 'glass' : 'solid'}
             // color={isTelegramConnected ? 'green' : 'orange'}
@@ -50,7 +50,7 @@ export default function AIMentorPage() {
             onClick={() => !isTelegramConnected && setShowTelegramModal(true)}
           >
             <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
             </svg>
             {isTelegramConnected ? 'Підключено' : 'Підключити'}
           </Button>
@@ -63,12 +63,10 @@ export default function AIMentorPage() {
                 <MessageCircle className="w-10 h-10 text-purple-400" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Привіт! Я твій AI ментор
-                </h3>
+                <h3 className="text-xl font-semibold text-white mb-2">Привіт! Я твій AI ментор</h3>
                 <p className="text-white/60 text-sm max-w-md">
-                  Задай мені питання або розкажи про свій день. 
-                  Я допоможу зі збалансованим розвитком та досягненням цілей.
+                  Задай мені питання або розкажи про свій день. Я допоможу зі збалансованим
+                  розвитком та досягненням цілей.
                 </p>
               </div>
             </div>
@@ -78,8 +76,8 @@ export default function AIMentorPage() {
             <div className="flex gap-2">
               <Input
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                onChange={e => setMessage(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && handleSendMessage()}
                 placeholder="Напиши своє питання..."
                 className="flex-1"
               />
@@ -99,13 +97,15 @@ export default function AIMentorPage() {
           {[
             { icon: '🎯', label: 'Постави ціль', color: 'from-orange-500 to-red-500' },
             { icon: '📊', label: 'Аналіз прогресу', color: 'from-blue-500 to-cyan-500' },
-            { icon: '💡', label: 'Отримай пораду', color: 'from-purple-500 to-pink-500' }
+            { icon: '💡', label: 'Отримай пораду', color: 'from-purple-500 to-pink-500' },
           ].map((action, i) => (
             <button
               key={i}
               className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all hover:scale-105"
             >
-              <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${action.color} flex items-center justify-center text-xl mb-2`}>
+              <div
+                className={`w-10 h-10 rounded-lg bg-gradient-to-br ${action.color} flex items-center justify-center text-xl mb-2`}
+              >
                 {action.icon}
               </div>
               <div className="text-sm text-white font-medium">{action.label}</div>
@@ -120,5 +120,5 @@ export default function AIMentorPage() {
         onConnect={handleConnectTelegram}
       />
     </>
-  )
+  );
 }

@@ -1,9 +1,9 @@
 // features/ai-generator/pages/AIGeneratorPage.tsx
 
-import { Button, GlassCard, Textarea } from '@/ui'
-import { ArrowLeft, ArrowRight, Check, Lightbulb, RefreshCw, Sparkles, Zap } from 'lucide-react'
-import { AIGeneratorProvider, useAIGenerator } from '../components/AIGeneratorProvider'
-import { GenerationAttempt, STEP_DEFINITIONS } from '../types/generator.types'
+import { Button, GlassCard, Textarea } from '@/ui';
+import { ArrowLeft, ArrowRight, Check, Lightbulb, RefreshCw, Sparkles, Zap } from 'lucide-react';
+import { GenerationAttempt, STEP_DEFINITIONS } from '../../products/types/generator.types';
+import { AIGeneratorProvider, useAIGenerator } from '../components/AIGeneratorProvider';
 
 function AIGeneratorContent() {
   const {
@@ -19,12 +19,12 @@ function AIGeneratorContent() {
     handlePreviousStep,
     handleSaveFunnel,
     resetGenerator,
-  } = useAIGenerator()
+  } = useAIGenerator();
 
-  const stepData = stepsData[currentStep - 1]
-  const stepDef = STEP_DEFINITIONS[currentStep - 1]
-  const completedSteps = stepsData.filter(s => s.selectedAttemptId).map(s => s.number)
-  const progress = Math.round((completedSteps.length / stepsData.length) * 100)
+  const stepData = stepsData[currentStep - 1];
+  const stepDef = STEP_DEFINITIONS[currentStep - 1];
+  const completedSteps = stepsData.filter(s => s.selectedAttemptId).map(s => s.number);
+  const progress = Math.round((completedSteps.length / stepsData.length) * 100);
 
   // Blueprint Preview
   if (generatedBlueprint) {
@@ -36,7 +36,7 @@ function AIGeneratorContent() {
           </div>
           <h2 className="text-3xl font-bold text-white mb-2">Воронку згенеровано! 🎉</h2>
           <p className="text-slate-400 mb-6">{generatedBlueprint.name}</p>
-          
+
           <div className="flex gap-4 justify-center">
             <Button onClick={handleSaveFunnel} className="gradient-button">
               <Sparkles className="w-5 h-5 mr-2" />
@@ -48,7 +48,7 @@ function AIGeneratorContent() {
           </div>
         </GlassCard>
       </div>
-    )
+    );
   }
 
   return (
@@ -57,7 +57,9 @@ function AIGeneratorContent() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">AI Генератор Воронок</h1>
-          <p className="text-slate-400 mt-1">Крок {currentStep} з {stepsData.length}</p>
+          <p className="text-slate-400 mt-1">
+            Крок {currentStep} з {stepsData.length}
+          </p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 backdrop-blur-sm">
           <Zap className="w-5 h-5 text-purple-400" />
@@ -70,7 +72,9 @@ function AIGeneratorContent() {
       <GlassCard className="p-4">
         <div className="flex items-center justify-between text-sm mb-2">
           <span className="text-slate-400">Прогрес воронки</span>
-          <span className="text-white font-medium">{completedSteps.length}/{stepsData.length}</span>
+          <span className="text-white font-medium">
+            {completedSteps.length}/{stepsData.length}
+          </span>
         </div>
         <div className="h-2 bg-slate-800/50 rounded-full overflow-hidden mb-4">
           <div
@@ -79,9 +83,9 @@ function AIGeneratorContent() {
           />
         </div>
         <div className="grid grid-cols-11 gap-1">
-          {stepsData.map((s) => {
-            const isCompleted = completedSteps.includes(s.number)
-            const isCurrent = currentStep === s.number
+          {stepsData.map(s => {
+            const isCompleted = completedSteps.includes(s.number);
+            const isCurrent = currentStep === s.number;
 
             return (
               <button
@@ -98,7 +102,7 @@ function AIGeneratorContent() {
               >
                 {isCompleted ? <Check className="w-3 h-3" /> : s.number}
               </button>
-            )
+            );
           })}
         </div>
       </GlassCard>
@@ -118,17 +122,19 @@ function AIGeneratorContent() {
               </div>
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/30">
                 <Sparkles className="w-4 h-4 text-orange-400" />
-                <span className="text-sm font-semibold text-orange-300">{stepData.remainingAttempts}</span>
+                <span className="text-sm font-semibold text-orange-300">
+                  {stepData.remainingAttempts}
+                </span>
               </div>
             </div>
 
             {/* Input */}
             <div className="space-y-4 mb-6">
               <label className="block text-sm font-medium text-slate-300">Твоя відповідь:</label>
-              
+
               {stepDef?.options ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {stepDef.options.map((opt) => (
+                  {stepDef.options.map(opt => (
                     <button
                       key={opt}
                       type="button"
@@ -140,9 +146,13 @@ function AIGeneratorContent() {
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                          stepData.userInput === opt ? 'border-orange-500 bg-orange-500' : 'border-slate-600'
-                        }`}>
+                        <div
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                            stepData.userInput === opt
+                              ? 'border-orange-500 bg-orange-500'
+                              : 'border-slate-600'
+                          }`}
+                        >
                           {stepData.userInput === opt && <Check className="w-3 h-3 text-white" />}
                         </div>
                         <span className="text-white text-sm">{opt}</span>
@@ -153,7 +163,7 @@ function AIGeneratorContent() {
               ) : (
                 <Textarea
                   value={stepData.userInput}
-                  onChange={(e) => handleUserInput(currentStep, e.target.value)}
+                  onChange={e => handleUserInput(currentStep, e.target.value)}
                   placeholder={stepDef?.placeholder || 'Введи відповідь...'}
                   rows={4}
                   className="w-full glass-field"
@@ -164,7 +174,9 @@ function AIGeneratorContent() {
               <Button
                 type="button"
                 onClick={() => handleGenerate(currentStep)}
-                disabled={!stepData.userInput.trim() || stepData.remainingAttempts <= 0 || isGenerating}
+                disabled={
+                  !stepData.userInput.trim() || stepData.remainingAttempts <= 0 || isGenerating
+                }
                 className="w-full gradient-button"
               >
                 {isGenerating ? (
@@ -186,9 +198,11 @@ function AIGeneratorContent() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <h3 className="text-sm font-semibold text-white">AI-варіанти</h3>
-                  <span className="text-xs text-slate-400">{stepData.attempts.length} згенеровано</span>
+                  <span className="text-xs text-slate-400">
+                    {stepData.attempts.length} згенеровано
+                  </span>
                 </div>
-                
+
                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                   {stepData.attempts.map((attempt: GenerationAttempt) => (
                     <button
@@ -202,12 +216,18 @@ function AIGeneratorContent() {
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${
-                          attempt.isSelected ? 'border-green-500 bg-green-500' : 'border-slate-600'
-                        }`}>
+                        <div
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                            attempt.isSelected
+                              ? 'border-green-500 bg-green-500'
+                              : 'border-slate-600'
+                          }`}
+                        >
                           {attempt.isSelected && <Check className="w-4 h-4 text-white" />}
                         </div>
-                        <p className="text-sm text-white leading-relaxed whitespace-pre-wrap">{attempt.content}</p>
+                        <p className="text-sm text-white leading-relaxed whitespace-pre-wrap">
+                          {attempt.content}
+                        </p>
                       </div>
                     </button>
                   ))}
@@ -250,25 +270,35 @@ function AIGeneratorContent() {
             <h3 className="font-semibold text-white mb-4">Навігація</h3>
             <div className="space-y-2 mb-6">
               {STEP_DEFINITIONS.slice(0, 5).map((def, idx) => {
-                const stepNum = idx + 1
-                const isComplete = completedSteps.includes(stepNum)
-                const isCurrent = currentStep === stepNum
+                const stepNum = idx + 1;
+                const isComplete = completedSteps.includes(stepNum);
+                const isCurrent = currentStep === stepNum;
 
                 return (
                   <div
                     key={stepNum}
                     className={`flex items-center gap-3 p-2 rounded-lg text-sm transition-all ${
-                      isCurrent ? 'bg-orange-500/20 text-orange-400' : isComplete ? 'text-green-400' : 'text-slate-500'
+                      isCurrent
+                        ? 'bg-orange-500/20 text-orange-400'
+                        : isComplete
+                          ? 'text-green-400'
+                          : 'text-slate-500'
                     }`}
                   >
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                      isComplete ? 'bg-green-500/20' : isCurrent ? 'bg-orange-500/20' : 'bg-slate-800'
-                    }`}>
+                    <span
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        isComplete
+                          ? 'bg-green-500/20'
+                          : isCurrent
+                            ? 'bg-orange-500/20'
+                            : 'bg-slate-800'
+                      }`}
+                    >
                       {isComplete ? <Check className="w-3 h-3" /> : stepNum}
                     </span>
                     <span className="truncate">{def.title}</span>
                   </div>
-                )
+                );
               })}
               {STEP_DEFINITIONS.length > 5 && (
                 <p className="text-xs text-slate-500 pl-9">+{STEP_DEFINITIONS.length - 5} кроків</p>
@@ -301,7 +331,7 @@ function AIGeneratorContent() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export default function AIGeneratorPage() {
@@ -309,5 +339,5 @@ export default function AIGeneratorPage() {
     <AIGeneratorProvider>
       <AIGeneratorContent />
     </AIGeneratorProvider>
-  )
+  );
 }

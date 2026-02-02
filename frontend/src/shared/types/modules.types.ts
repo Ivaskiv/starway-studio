@@ -50,21 +50,6 @@ export interface TodayTasks {
   completed: number;
 }
 
-export interface DailySession {
-  id: string;
-  type: 'morning' | 'evening';
-  status: 'pending' | 'in_progress' | 'completed';
-  answers: Record<string, string>;
-  aiFeedback?: string;
-  xpEarned?: number;
-  created_at: string;
-  completed_at?: string;
-}
-
-export interface TodaySessions {
-  morning: DailySession | null;
-  evening: DailySession | null;
-}
 
 export interface YearlyGoal {
   id: string;
@@ -120,11 +105,11 @@ export interface PromptAnalysis {
 // User types
 // export type {
 //   AuthResponse, SignInRequest, SignUpRequest, Tokens, User
-// } from '@/features/auth/services/auth.api';
+// } from '@/frontend/srcfeatures/auth/services/auth.api';
 
 // AI types
 
 // export type {
 //   AIPromptHistory,
 //   AITemplate, AnalyzedPrompt
-// } from '@/features/ai/services/ai.api';
+// } from '@/frontend/srcfeatures/ai/services/ai.api';

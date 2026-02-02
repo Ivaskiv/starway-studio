@@ -1,5 +1,8 @@
 // frontend/src/components/chat/ChatWidget.tsx
-import { useGetMessagesQuery, useSendMessageMutation } from '@/features/chat/services/chat.api';
+import {
+  useGetMessagesQuery,
+  useSendMessageMutation,
+} from '@/frontend/srcfeatures/chat/services/chat.api';
 import { useState } from 'react';
 
 interface ChatWidgetProps {
@@ -21,7 +24,10 @@ export default function ChatWidget({ user_id }: ChatWidgetProps) {
     <div className="chat-widget glass-card p-4 flex flex-col fixed bottom-4 right-4 w-80 max-h-[400px]">
       <div className="messages flex-1 overflow-auto mb-2">
         {messages?.map(m => (
-          <div key={m.id} className={`message ${m.source === 'telegram' ? 'text-blue-400' : 'text-white'}`}>
+          <div
+            key={m.id}
+            className={`message ${m.source === 'telegram' ? 'text-blue-400' : 'text-white'}`}
+          >
             <p>{m.text}</p>
             {m.aiResponse && <p className="text-green-400 text-sm">{m.aiResponse}</p>}
           </div>

@@ -1,17 +1,16 @@
 // frontend/src/features/ai-generator/hooks/useAIGeneration.ts
-import { useGenerateStepVariantsMutation } from '@/features/ai-generator/services/ai-generator.api'
+import { useGenerateStepVariantsMutation } from '@/features/ai-generator/services/ai-generator.api';
 
 export function useAIGeneration() {
-  const [generateStepVariants, state] =
-    useGenerateStepVariantsMutation()
+  const [generateStepVariants, state] = useGenerateStepVariantsMutation();
 
   const generate = async (payload: any) => {
-    return generateStepVariants(payload).unwrap()
-  }
+    return generateStepVariants(payload).unwrap();
+  };
 
   return {
     generate,
     ...state,
-  }
+  };
 }
 export default useAIGeneration;

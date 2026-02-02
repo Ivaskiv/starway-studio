@@ -1,17 +1,17 @@
-import { Ability } from '@/shared/types/permissions'
-import { PERMISSIONS_MATRIX } from '@/shared/config/permissions.matrix'
-import { useAuth } from './useAuth'
-import { UserRole } from '@/shared/types/user.types'
+import { PERMISSIONS_MATRIX } from '@/shared/config/permissions.matrix';
+import { Ability } from '@/shared/types/permissions';
+import { UserRole } from '@/shared/types/user.types';
+import { useAuth } from './useAuth';
 
 export function useAbility() {
-  const { user } = useAuth()
+  const { user } = useAuth();
 
   return (ability: Ability): boolean => {
-    if (!user) return false
+    if (!user) return false;
 
-    const role = user.role as UserRole
-    const abilities = PERMISSIONS_MATRIX[role]
+    const role = user.role as UserRole;
+    const abilities = PERMISSIONS_MATRIX[role];
 
-    return abilities?.includes(ability) ?? false
-  }
+    return abilities?.includes(ability) ?? false;
+  };
 }

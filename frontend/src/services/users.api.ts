@@ -1,9 +1,9 @@
-// frontend/src/services/users.api.ts
-import api from './api'
-import type { User } from '@/shared/types/user.types'
+// /services/users.api.ts
+import type { User } from '@/shared/types/user.types';
+import api from './api';
 
 export const usersApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     subscribeToAdmin: builder.mutation<User, { adminId: string }>({
       query: ({ adminId }) => ({
         url: `/users/subscribe`,
@@ -13,6 +13,6 @@ export const usersApi = api.injectEndpoints({
       invalidatesTags: ['User'], // 🔹 оновлюємо кеш користувача після підписки
     }),
   }),
-})
+});
 
-export const { useSubscribeToAdminMutation } = usersApi
+export const { useSubscribeToAdminMutation } = usersApi;

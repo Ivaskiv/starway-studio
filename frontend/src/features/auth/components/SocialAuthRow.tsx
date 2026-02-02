@@ -1,22 +1,21 @@
 // frontend/src/features/auth/components/SocialAuthRow.tsx
-import toast from 'react-hot-toast'
-import { Button, Icon } from '@/ui'
-import { SOCIAL_PLATFORM_METADATA } from '@/shared/constants/socialPlatforms.constants'
-import type { SocialPlatform } from '@/shared/types/social.types'
+import { SOCIAL_PLATFORMS_METADATA } from '@/features/social/constants/social.constants';
+import type { SocialPlatform } from '@/features/social/types/social.types';
+import { Button, Icon } from '@/ui';
+import toast from 'react-hot-toast';
 
 interface Props {
-  onAuth?: (platform: SocialPlatform) => void
+  onAuth?: (platform: SocialPlatform) => void;
 }
 
-// 🔹 Відразу масив платформ, поки що тільки Telegram
-const SOCIAL_PLATFORMS: SocialPlatform[] = ['telegram']
+// Масив платформ (можна розширити)
+const SOCIAL_PLATFORMS: SocialPlatform[] = ['telegram', 'google'];
 
 export function SocialAuthRow({ onAuth }: Props) {
   const handleClick = (platform: SocialPlatform) => {
-    // 🔹 Викликаємо колбек з AuthModal
-    onAuth?.(platform)
-    toast(`Реєстрація через ${platform} — скоро`)
-  }
+    onAuth?.(platform);
+    toast(`Реєстрація через ${platform} — скоро`);
+  };
 
   return (
     <div className="relative mt-2">
@@ -27,13 +26,11 @@ export function SocialAuthRow({ onAuth }: Props) {
 
       <div className="flex justify-center">
         <div className="flex gap-4 px-3 py-2 overflow-x-auto scrollbar-none">
-          {SOCIAL_PLATFORMS.map((key) => {
-            // 🔹 TypeScript знає, що ключ точно існує
-            const platform = SOCIAL_PLATFORM_METADATA[key] as {
-              id: string
-              iconName: string
-              gradient?: string[]
-            }
+          {SOCIAL_PLATFORMS.map(key => {
+            const platform = SOCIAL_PLATFORMS_METADATA[key]; // тип точно SocialPlatformMetadata
+
+            // Перевірка на існування (хоча з as const це не потрібно, але для безпеки)
+            if (!platform) return null;
 
             return (
               <Button
@@ -55,11 +52,8 @@ export function SocialAuthRow({ onAuth }: Props) {
                   animate-scale-in
                 "
                 style={{
-                  // 🔹 Gradient безпечний: перевірка масиву
-                  background:
-                    Array.isArray(platform.gradient) && platform.gradient.length > 0
-                      ? `linear-gradient(135deg, ${platform.gradient.join(', ')})`
-                      : undefined,
+                  // gradient — завжди string або undefined
+                  background: platform.gradient || undefined,
                 }}
               >
                 {/* glow halo */}
@@ -77,10 +71,10 @@ export function SocialAuthRow({ onAuth }: Props) {
                   className="relative w-7 h-7 text-white drop-shadow"
                 />
               </Button>
-            )
+            );
           })}
         </div>
       </div>
     </div>
-  )
+  );
 }

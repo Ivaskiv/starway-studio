@@ -1,14 +1,14 @@
 // frontend/src/features/ai-generator/components/ResultsPreview.tsx
 
-import { Button, GlassCard } from '@/ui'
-import { Check, DollarSign, Sparkles, TrendingUp, Users, Zap } from 'lucide-react'
-import type { FunnelBlueprint } from '../types/generator.types'
+import { Button, GlassCard } from '@/ui';
+import { Check, DollarSign, Sparkles, TrendingUp, Users, Zap } from 'lucide-react';
+import type { FunnelBlueprint } from '../../products/types/generator.types';
 
 interface ResultsPreviewProps {
-  blueprint: FunnelBlueprint
-  onSave: () => void
-  onEdit: () => void
-  isSaving: boolean
+  blueprint: FunnelBlueprint;
+  onSave: () => void;
+  onEdit: () => void;
+  isSaving: boolean;
 }
 
 export default function ResultsPreview({
@@ -26,15 +26,15 @@ export default function ResultsPreview({
             <Check className="w-8 h-8 text-white" />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
-              {blueprint.name}
-            </h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">{blueprint.name}</h2>
             <p className="text-slate-300 mb-4">{blueprint.targetAudience}</p>
             <div className="flex flex-wrap gap-2">
               <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 text-sm font-semibold border border-green-500/30">
-                {blueprint.type === 'fast_cash' ? '⚡ Швидкий продаж' :
-                 blueprint.type === 'diagnostic' ? '🎯 Діагностика' :
-                 '♾️ Evergreen'}
+                {blueprint.type === 'fast_cash'
+                  ? '⚡ Швидкий продаж'
+                  : blueprint.type === 'diagnostic'
+                    ? '🎯 Діагностика'
+                    : '♾️ Evergreen'}
               </span>
               <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-sm font-semibold border border-blue-500/30">
                 {blueprint.coreOffer.format}
@@ -57,9 +57,7 @@ export default function ResultsPreview({
         <GlassCard className="p-6 text-center" data-hover="lift">
           <Users className="w-8 h-8 text-blue-400 mx-auto mb-2" />
           <p className="text-sm text-slate-400 mb-1">Потрібно продажів</p>
-          <p className="text-2xl font-bold text-white">
-            {blueprint.financialModel.requiredSales}
-          </p>
+          <p className="text-2xl font-bold text-white">{blueprint.financialModel.requiredSales}</p>
         </GlassCard>
 
         <GlassCard className="p-6 text-center" data-hover="lift">
@@ -143,7 +141,14 @@ export default function ResultsPreview({
                     {product.format}
                   </span>
                   <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm">
-                    {product.integration}
+                    {product.integrations.map((integration, i) => (
+                      <span
+                        key={i}
+                        className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm"
+                      >
+                        {integration}
+                      </span>
+                    ))}
                   </span>
                   {product.includesMentorship && (
                     <span className="px-3 py-1 rounded-full bg-orange-500/20 text-orange-400 text-sm">
@@ -168,10 +173,7 @@ export default function ResultsPreview({
         </h3>
         <div className="flex flex-wrap gap-2">
           {blueprint.automation.map((item, idx) => (
-            <span
-              key={idx}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-sm"
-            >
+            <span key={idx} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-sm">
               ✓ {item}
             </span>
           ))}
@@ -180,12 +182,7 @@ export default function ResultsPreview({
 
       {/* Actions */}
       <div className="flex gap-4">
-        <Button
-          onClick={onEdit}
-          data-variant="ghost"
-          data-size="lg"
-          className="flex-1"
-        >
+        <Button onClick={onEdit} data-variant="ghost" data-size="lg" className="flex-1">
           Редагувати
         </Button>
         <Button
@@ -199,5 +196,5 @@ export default function ResultsPreview({
         </Button>
       </div>
     </div>
-  )
+  );
 }

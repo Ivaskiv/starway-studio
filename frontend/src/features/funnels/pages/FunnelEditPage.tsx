@@ -1,89 +1,95 @@
 // features/funnels/pages/FunnelEditPage.tsx
 
-import { Button, GlassCard } from '@/ui'
-import { ArrowLeft, Cpu, FlaskConical, Play, Plus, Save, Sparkles, Trophy } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import toast from 'react-hot-toast'
-import { useNavigate, useParams } from 'react-router-dom'
-import { FunnelStepEditor } from '../components/FunnelStepEditor'
-import { FunnelStepList } from '../components/FunnelStepList'
-import { useGetFunnelByIdQuery, useUpdateFunnelMutation } from '../services/funnels.api'
-import type { FunnelStep, StepType } from '../types/funnel.types'
+import { Button, GlassCard } from '@/ui';
+import { ArrowLeft, Cpu, FlaskConical, Play, Plus, Save, Sparkles, Trophy } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
+import { useNavigate, useParams } from 'react-router-dom';
+import { FunnelStepEditor } from '../components/FunnelStepEditor';
+import { FunnelStepList } from '../components/FunnelStepList';
+import { useGetFunnelByIdQuery, useUpdateFunnelMutation } from '../services/funnels.api';
+import type { FunnelStep, StepType } from '../types/funnel.types';
 
-type Tab = 'builder' | 'optimizer' | 'testing' | 'achievements'
+type Tab = 'builder' | 'optimizer' | 'testing' | 'achievements';
 
 const TABS: { id: Tab; label: string; icon: typeof Sparkles }[] = [
   { id: 'builder', label: 'Конструктор', icon: Sparkles },
   { id: 'optimizer', label: 'AI Оптимізація', icon: Cpu },
   { id: 'testing', label: 'A/B Тести', icon: FlaskConical },
   { id: 'achievements', label: 'Досягнення', icon: Trophy },
-]
+];
 
 export default function FunnelEditPage() {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
-  const { data: funnel, isLoading, error } = useGetFunnelByIdQuery(id!, { skip: !id })
-  const [updateFunnel, { isLoading: isSaving }] = useUpdateFunnelMutation()
+  const { data: funnel, isLoading, error } = useGetFunnelByIdQuery(id!, { skip: !id });
+  const [updateFunnel, { isLoading: isSaving }] = useUpdateFunnelMutation();
 
-  const [activeTab, setActiveTab] = useState<Tab>('builder')
-  const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
-  const [localSteps, setLocalSteps] = useState<FunnelStep[]>([])
+  const [activeTab, setActiveTab] = useState<Tab>('builder');
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [localSteps, setLocalSteps] = useState<FunnelStep[]>([]);
 
   useEffect(() => {
     if (funnel?.steps) {
-      setLocalSteps(funnel.steps)
+      setLocalSteps(funnel.steps);
       if (funnel.steps.length && !selectedStepId) {
-        setSelectedStepId(funnel.steps[0].id)
+        setSelectedStepId(funnel.steps[0].id);
       }
     }
-  }, [funnel?.steps])
+  }, [funnel?.steps]);
 
-  const selectedStep = localSteps.find(s => s.id === selectedStepId)
+  const selectedStep = localSteps.find(s => s.id === selectedStepId);
 
   const handleSave = async () => {
-    if (!funnel) return
+    if (!funnel) return;
     try {
-      await updateFunnel({ id: funnel.id, steps: localSteps }).unwrap()
-      toast.success('Збережено!')
+      await updateFunnel({ id: funnel.id, steps: localSteps }).unwrap();
+      toast.success('Збережено!');
     } catch {
-      toast.error('Помилка збереження')
+      toast.error('Помилка збереження');
     }
-  }
+  };
 
-  const handleAddStep = useCallback((type: StepType = 'message') => {
-    const newStep: FunnelStep = {
-      id: `step_${Date.now()}`,
-      type,
-      name: `Крок ${localSteps.length + 1}`,
-      order: localSteps.length,
-      config: {},
-      is_active: true,
-    }
-    setLocalSteps(prev => [...prev, newStep])
-    setSelectedStepId(newStep.id)
-    toast.success('Крок додано')
-  }, [localSteps.length])
+  const handleAddStep = useCallback(
+    (type: StepType = 'message') => {
+      const newStep: FunnelStep = {
+        id: `step_${Date.now()}`,
+        type,
+        name: `Крок ${localSteps.length + 1}`,
+        order: localSteps.length,
+        config: {},
+        is_active: true,
+      };
+      setLocalSteps(prev => [...prev, newStep]);
+      setSelectedStepId(newStep.id);
+      toast.success('Крок додано');
+    },
+    [localSteps.length],
+  );
 
   const handleUpdateStep = useCallback((stepId: string, updates: Partial<FunnelStep>) => {
-    setLocalSteps(prev => prev.map(s => s.id === stepId ? { ...s, ...updates } : s))
-  }, [])
+    setLocalSteps(prev => prev.map(s => (s.id === stepId ? { ...s, ...updates } : s)));
+  }, []);
 
-  const handleDeleteStep = useCallback((stepId: string) => {
-    if (!confirm('Видалити крок?')) return
-    setLocalSteps(prev => prev.filter(s => s.id !== stepId))
-    if (selectedStepId === stepId) {
-      setSelectedStepId(localSteps[0]?.id || null)
-    }
-    toast.success('Крок видалено')
-  }, [selectedStepId, localSteps])
+  const handleDeleteStep = useCallback(
+    (stepId: string) => {
+      if (!confirm('Видалити крок?')) return;
+      setLocalSteps(prev => prev.filter(s => s.id !== stepId));
+      if (selectedStepId === stepId) {
+        setSelectedStepId(localSteps[0]?.id || null);
+      }
+      toast.success('Крок видалено');
+    },
+    [selectedStepId, localSteps],
+  );
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full" />
       </div>
-    )
+    );
   }
 
   if (error || !funnel) {
@@ -94,7 +100,7 @@ export default function FunnelEditPage() {
           Повернутися
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -103,12 +109,18 @@ export default function FunnelEditPage() {
       <header className="glass-card border-b border-white/10 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button onClick={() => navigate('/dashboard/funnels')} data-color="ghost" data-size="sm">
+            <Button
+              onClick={() => navigate('/dashboard/funnels')}
+              data-color="ghost"
+              data-size="sm"
+            >
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
               <h1 className="text-xl font-bold text-white">{funnel.name}</h1>
-              <p className="text-sm text-slate-400">{localSteps.length} кроків • {funnel.status}</p>
+              <p className="text-sm text-slate-400">
+                {localSteps.length} кроків • {funnel.status}
+              </p>
             </div>
           </div>
 
@@ -165,7 +177,7 @@ export default function FunnelEditPage() {
               {selectedStep ? (
                 <FunnelStepEditor
                   step={selectedStep}
-                  onUpdate={(updates) => handleUpdateStep(selectedStep.id, updates)}
+                  onUpdate={updates => handleUpdateStep(selectedStep.id, updates)}
                   onDelete={() => handleDeleteStep(selectedStep.id)}
                 />
               ) : (
@@ -209,7 +221,9 @@ export default function FunnelEditPage() {
                   <p className="text-sm text-slate-400">Перегляди</p>
                 </div>
                 <div className="glass-card p-4 rounded-xl">
-                  <p className="text-3xl font-bold text-white">{funnel.analytics?.conversions || 0}</p>
+                  <p className="text-3xl font-bold text-white">
+                    {funnel.analytics?.conversions || 0}
+                  </p>
                   <p className="text-sm text-slate-400">Конверсії</p>
                 </div>
               </div>
@@ -218,7 +232,7 @@ export default function FunnelEditPage() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
@@ -234,5 +248,5 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
         Додати крок
       </Button>
     </div>
-  )
+  );
 }

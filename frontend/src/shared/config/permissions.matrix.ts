@@ -1,15 +1,8 @@
-import { UserRole } from '@/shared/types/user.types'
-import { Ability } from '@/shared/types/permissions'
+import { Ability } from '@/shared/types/permissions';
+import { UserRole } from '@/shared/types/user.types';
 
 export const PERMISSIONS_MATRIX: Record<UserRole, Ability[]> = {
-
-  user: [
-    'dashboard.view',
-    'profile.view',
-    'profile.edit',
-    'progress.view',
-    'ai.use',
-  ],
+  user: ['dashboard.view', 'profile.view', 'profile.edit', 'progress.view', 'ai.use'],
 
   admin: [
     'dashboard.view',
@@ -29,4 +22,4 @@ export const PERMISSIONS_MATRIX: Record<UserRole, Ability[]> = {
     'settings.manage',
     'system.manage',
   ],
-}
+};

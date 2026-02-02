@@ -65,7 +65,16 @@ export interface AIAnalysis {
   }[];
   created_at: string;
 }
-
+export interface AIAnalysisResult {
+  state: string;
+  drain: string;
+  pattern?: string;
+  microTask?: {
+    title: string;
+    description: string;
+  };
+  supportMessage?: string;
+}
 export const aiApi = api.injectEndpoints({
   endpoints: (builder) => ({
     // Main AI Generation

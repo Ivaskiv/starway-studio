@@ -1,10 +1,21 @@
 // features/funnels/components/FunnelStepEditor.tsx
 
-import { Trash2, MessageCircle, Mail, CreditCard, Gift, Zap, Clock, GitBranch, Send, Edit } from 'lucide-react'
-import { Button, Input, Textarea, GlassCard, Select } from '@/ui'
-import type { FunnelStep, StepType } from '../types/funnel.types'
-import type { LucideIcon } from 'lucide-react'
-import { Label } from '@/ui/Label'
+import { Button, GlassCard, Input, Select, Textarea } from '@/ui';
+import { Label } from '@/ui/Label';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Clock,
+  CreditCard,
+  Edit,
+  Gift,
+  GitBranch,
+  Mail,
+  MessageCircle,
+  Send,
+  Trash2,
+  Zap,
+} from 'lucide-react';
+import type { FunnelStep, StepType } from '../types/funnel.types';
 
 const STEP_TYPES: { type: StepType; icon: LucideIcon; label: string }[] = [
   { type: 'message', icon: MessageCircle, label: 'Повідомлення' },
@@ -17,12 +28,12 @@ const STEP_TYPES: { type: StepType; icon: LucideIcon; label: string }[] = [
   { type: 'gamification', icon: Gift, label: 'Гейміфікація' },
   { type: 'email', icon: Mail, label: 'Email' },
   { type: 'telegram', icon: Send, label: 'Telegram' },
-]
+];
 
 interface Props {
-  step: FunnelStep
-  onUpdate: (updates: Partial<FunnelStep>) => void
-  onDelete: () => void
+  step: FunnelStep;
+  onUpdate: (updates: Partial<FunnelStep>) => void;
+  onDelete: () => void;
 }
 
 export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
@@ -36,7 +47,7 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
             <label className="block text-sm font-medium text-slate-300 mb-2">Назва кроку</label>
             <Input
               value={step.name}
-              onChange={(e) => onUpdate({ name: e.target.value })}
+              onChange={e => onUpdate({ name: e.target.value })}
               placeholder="Введіть назву..."
             />
           </div>
@@ -54,7 +65,9 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
                       : 'glass-card hover:bg-slate-800/50'
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${step.type === type ? 'text-orange-400' : 'text-slate-400'}`} />
+                  <Icon
+                    className={`w-5 h-5 ${step.type === type ? 'text-orange-400' : 'text-slate-400'}`}
+                  />
                   <span className="text-xs text-slate-300">{label}</span>
                 </button>
               ))}
@@ -70,10 +83,19 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
         {step.type === 'message' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Текст повідомлення</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Текст повідомлення
+              </label>
               <Textarea
                 value={step.config.message?.text || ''}
-                onChange={(e) => onUpdate({ config: { ...step.config, message: { ...step.config.message, text: e.target.value } } })}
+                onChange={e =>
+                  onUpdate({
+                    config: {
+                      ...step.config,
+                      message: { ...step.config.message, text: e.target.value },
+                    },
+                  })
+                }
                 rows={5}
                 placeholder="Введіть текст повідомлення..."
               />
@@ -88,7 +110,18 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
               <Input
                 type="number"
                 value={step.config.delay?.duration || 0}
-                onChange={(e) => onUpdate({ config: { ...step.config, delay: { ...step.config.delay, duration: +e.target.value, unit: step.config.delay?.unit || 'hours' } } })}
+                onChange={e =>
+                  onUpdate({
+                    config: {
+                      ...step.config,
+                      delay: {
+                        ...step.config.delay,
+                        duration: +e.target.value,
+                        unit: step.config.delay?.unit || 'hours',
+                      },
+                    },
+                  })
+                }
                 min={1}
               />
             </div>
@@ -96,7 +129,18 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
               <Label className="block text-sm font-medium text-slate-300 mb-2">Одиниця</Label>
               <Select
                 value={step.config.delay?.unit || 'hours'}
-                onChange={(e) => onUpdate({ config: { ...step.config, delay: { ...step.config.delay, duration: step.config.delay?.duration || 1, unit: e.target.value as 'minutes' | 'hours' | 'days' } } })}
+                onChange={e =>
+                  onUpdate({
+                    config: {
+                      ...step.config,
+                      delay: {
+                        ...step.config.delay,
+                        duration: step.config.delay?.duration || 1,
+                        unit: e.target.value as 'minutes' | 'hours' | 'days',
+                      },
+                    },
+                  })
+                }
                 className="w-full h-11 px-4 rounded-xl bg-slate-800 border border-white/10 text-white"
               >
                 <option value="minutes">Хвилини</option>
@@ -114,7 +158,19 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
               <Input
                 type="number"
                 value={step.config.payment?.amount || 0}
-                onChange={(e) => onUpdate({ config: { ...step.config, payment: { ...step.config.payment, amount: +e.target.value, currency: step.config.payment?.currency || 'UAH', provider: step.config.payment?.provider || 'wayforpay' } } })}
+                onChange={e =>
+                  onUpdate({
+                    config: {
+                      ...step.config,
+                      payment: {
+                        ...step.config.payment,
+                        amount: +e.target.value,
+                        currency: step.config.payment?.currency || 'UAH',
+                        provider: step.config.payment?.provider || 'wayforpay',
+                      },
+                    },
+                  })
+                }
                 min={0}
               />
             </div>
@@ -122,7 +178,19 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
               <Label className="block text-sm font-medium text-slate-300 mb-2">Валюта</Label>
               <Select
                 value={step.config.payment?.currency || 'UAH'}
-                onChange={(e) => onUpdate({ config: { ...step.config, payment: { ...step.config.payment, currency: e.target.value, amount: step.config.payment?.amount || 0, provider: step.config.payment?.provider || 'wayforpay' } } })}
+                onChange={e =>
+                  onUpdate({
+                    config: {
+                      ...step.config,
+                      payment: {
+                        ...step.config.payment,
+                        currency: e.target.value,
+                        amount: step.config.payment?.amount || 0,
+                        provider: step.config.payment?.provider || 'wayforpay',
+                      },
+                    },
+                  })
+                }
                 className="w-full h-11 px-4 rounded-xl bg-slate-800 border border-white/10 text-white"
               >
                 <option value="UAH">UAH</option>
@@ -133,7 +201,16 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
           </div>
         )}
 
-        {['form', 'condition', 'webhook', 'ai_mentor', 'gamification', 'email', 'sms', 'telegram'].includes(step.type) && (
+        {[
+          'form',
+          'condition',
+          'webhook',
+          'ai_mentor',
+          'gamification',
+          'email',
+          'sms',
+          'telegram',
+        ].includes(step.type) && (
           <p className="text-slate-400 text-sm">Конфігурація для цього типу в розробці</p>
         )}
       </GlassCard>
@@ -146,5 +223,5 @@ export function FunnelStepEditor({ step, onUpdate, onDelete }: Props) {
         </Button>
       </div>
     </div>
-  )
+  );
 }

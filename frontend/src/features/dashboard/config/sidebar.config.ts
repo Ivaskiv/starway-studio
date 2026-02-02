@@ -3,8 +3,7 @@
 //! sidebar декларує вимогу
 //! рішення приймає useAbility()
 
-
-import { Ability } from '@/shared/types/permissions'
+import { Ability } from '@/frontend/srcshared/types/permissions';
 
 /**
  * ЄДИНЕ джерело правди для dashboard-навігації
@@ -25,11 +24,11 @@ import { Ability } from '@/shared/types/permissions'
  */
 
 export interface SidebarItem {
-  label: string
-  path: string
-  ability: Ability
-  badge?: 'new' | 'pro'
-  icon?: string
+  label: string;
+  path: string;
+  ability: Ability;
+  badge?: 'new' | 'pro';
+  icon?: string;
 }
 
 export const SIDEBAR_ITEMS: SidebarItem[] = [
@@ -93,6 +92,4 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
     path: '/dashboard/ai-control',
     ability: 'ai.control',
   },
-]
-
-
+];

@@ -1,12 +1,12 @@
-// frontend/src/features/notifications/config/notifications.config.ts
+// /features/notifications/config/notifications.config.ts
 
-import { Ability } from '@/shared/types/permissions'
+import { Ability } from '@/shared/types/permissions';
 
 export interface NotificationItem {
-  key: string                  // унікальний ключ сповіщення
-  label: string                // назва
-  description: string          // підказка / текст
-  ability: Ability             // яка ability потрібна для цього notification
+  key: string; // унікальний ключ сповіщення
+  label: string; // назва
+  description: string; // підказка / текст
+  ability: Ability; // яка ability потрібна для цього notification
 }
 
 // Тут ти додаєш нові сповіщення
@@ -29,4 +29,4 @@ export const NOTIFICATIONS_CONFIG: NotificationItem[] = [
     description: 'Щотижневі сповіщення',
     ability: 'notifications.read',
   },
-]
+];

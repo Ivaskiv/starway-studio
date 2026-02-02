@@ -2,9 +2,9 @@
 
 import { randomUUID } from 'crypto';
 import { Router } from 'express';
-import { authRequired } from '../../middleware/auth';
-import sql from '../../db/client';
-import { Product, ProductWithEnrollment } from '../../types/types';
+import { authRequired } from '../../middleware/auth.js';
+import sql from '../../db/client.js';
+import { Product, ProductWithEnrollment } from '../../types/types.js';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 // backend/src/routes/payments.ts
 import { Router } from 'express';
-import { wayForPayCallback } from './payments/callback';
+import { wayForPayCallback } from './payments/callback.js';
 
 const router = Router();
 

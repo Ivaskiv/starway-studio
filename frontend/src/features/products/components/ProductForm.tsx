@@ -1,4 +1,4 @@
-// frontend/src/features/products/components/ProductForm.tsx
+// /features/products/components/ProductForm.tsx
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
@@ -8,8 +8,11 @@ import {
   useCreateProductMutation,
   useGetProductByIdQuery,
   useUpdateProductMutation,
-} from '@/features/products/services/products.api';
-import { CURRENCY_SYMBOLS, PRODUCT_TYPE_LABELS } from '@/features/products/types/product.labels';
+} from '@/services/admin.api';
+// import {
+//   CURRENCY_SYMBOLS,
+//   PRODUCT_TYPE_LABELS,
+// } from '@/types/product.labels';
 import {
   formToCreatePayload,
   formToUpdatePayload,

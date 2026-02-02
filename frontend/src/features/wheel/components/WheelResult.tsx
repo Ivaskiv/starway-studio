@@ -32,3 +32,4 @@ export const WheelResult = ({ wheel }: { wheel: any }) => {
     </div>
   )
 }
+export default WheelResult

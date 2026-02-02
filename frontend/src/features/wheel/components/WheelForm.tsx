@@ -1,69 +1,66 @@
-import { useState } from 'react'
-import toast from 'react-hot-toast'
-import { ChevronLeft, ChevronRight, Loader2, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import toast from 'react-hot-toast';
 
-import { useSaveWheelMutation } from '@/services'
-import { Button, Input } from '@/ui'
-import { WheelChart } from './WheelChart'
-import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
+import { useSaveWheelMutation } from '@/services';
+import { Button, Input } from '@/ui';
+import { WheelChart } from './WheelChart';
+import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types';
 
-const TOTAL_CATEGORIES = WHEEL_CATEGORIES.length
+const TOTAL_CATEGORIES = WHEEL_CATEGORIES.length;
 
 interface WheelFormProps {
-  onComplete?: (assessmentId: string) => void
-  onCancel?: () => void
+  onComplete?: (assessmentId: string) => void;
+  onCancel?: () => void;
 }
 
 export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
-  const [currentIndex, setCurrentIndex] = useState(0)
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [scores, setScores] = useState(
-    WHEEL_CATEGORIES.map((cat) => ({ category_id: cat.id, score: 5 }))
-  )
+    WHEEL_CATEGORIES.map(cat => ({ category_id: cat.id, score: 5 })),
+  );
 
-  const [saveWheel, { isLoading: isSubmitting }] = useSaveWheelMutation()
+  const [saveWheel, { isLoading: isSubmitting }] = useSaveWheelMutation();
 
-  const currentCategory = WHEEL_CATEGORIES[currentIndex]
-  const currentScore =
-    scores.find((s) => s.category_id === currentCategory.id)?.score ?? 5
+  const currentCategory = WHEEL_CATEGORIES[currentIndex];
+  const currentScore = scores.find(s => s.category_id === currentCategory.id)?.score ?? 5;
 
-  const progress = ((currentIndex + 1) / TOTAL_CATEGORIES) * 100
-  const isFirstStep = currentIndex === 0
-  const isLastStep = currentIndex === TOTAL_CATEGORIES - 1
+  const progress = ((currentIndex + 1) / TOTAL_CATEGORIES) * 100;
+  const isFirstStep = currentIndex === 0;
+  const isLastStep = currentIndex === TOTAL_CATEGORIES - 1;
 
   const setScore = (value: number) => {
-    setScores((prev) =>
-      prev.map((s) =>
-        s.category_id === currentCategory.id ? { ...s, score: value } : s
-      )
-    )
-  }
+    setScores(prev =>
+      prev.map(s => (s.category_id === currentCategory.id ? { ...s, score: value } : s)),
+    );
+  };
 
   const goToStep = (index: number) => {
-    if (index >= 0 && index < TOTAL_CATEGORIES) setCurrentIndex(index)
-  }
+    if (index >= 0 && index < TOTAL_CATEGORIES) setCurrentIndex(index);
+  };
 
   const nextStep = () => {
-    if (!isLastStep) setCurrentIndex((p) => p + 1)
-  }
+    if (!isLastStep) setCurrentIndex(p => p + 1);
+  };
 
   const prevStep = () => {
-    if (!isFirstStep) setCurrentIndex((p) => p - 1)
-  }
+    if (!isFirstStep) setCurrentIndex(p => p - 1);
+  };
 
   const handleSubmit = async () => {
     try {
-      const result = await saveWheel({ scores }).unwrap()
-      toast.success('Колесо балансу збережено! +100 XP 🎯')
-      onComplete?.(result.id)
+      const result = await saveWheel({ scores }).unwrap();
+      toast.success('Колесо балансу збережено! +100 XP 🎯');
+      onComplete?.(result.id);
     } catch {
-      toast.error('Помилка збереження')
+      toast.error('Помилка збереження');
     }
-  }
+  };
 
   const handleNext = () => {
-    if (isLastStep) handleSubmit()
-    else nextStep()
-  }
+    if (isLastStep) handleSubmit();
+    else nextStep();
+  };
 
   return (
     <div className="w-full max-w-3xl mx-auto">
@@ -77,9 +74,7 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
             {currentCategory.emoji}
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">
-              {currentCategory.name}
-            </h2>
+            <h2 className="text-xl font-bold text-white">{currentCategory.name}</h2>
             <p className="text-sm text-white/60">
               Крок {currentIndex + 1} з {TOTAL_CATEGORIES}
             </p>
@@ -101,14 +96,13 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
       {/* Category tabs */}
       <div className="flex gap-1 mb-6 overflow-x-auto pb-2 scrollbar-hide">
         {WHEEL_CATEGORIES.map((cat, i) => {
-          const score =
-            scores.find((s) => s.category_id === cat.id)?.score ?? 5
+          const score = scores.find(s => s.category_id === cat.id)?.score ?? 5;
 
-          const isActive = i === currentIndex
-          const isPast = i < currentIndex
+          const isActive = i === currentIndex;
+          const isPast = i < currentIndex;
 
           return (
-            <button
+            <Button
               key={cat.id}
               type="button"
               onClick={() => goToStep(i)}
@@ -118,32 +112,25 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
                   isActive
                     ? 'bg-white/20 text-white'
                     : isPast
-                    ? 'bg-white/5 text-white/60'
-                    : 'bg-white/5 text-white/40'
+                      ? 'bg-white/5 text-white/60'
+                      : 'bg-white/5 text-white/40'
                 }
               `}
             >
               <span className="mr-1">{cat.emoji}</span>
               <span className="font-medium">{score}</span>
-            </button>
-          )
+            </Button>
+          );
         })}
       </div>
 
       {/* Content */}
       <div className="grid md:grid-cols-2 gap-8">
         {/* Left */}
-        <div
-          key={currentIndex}
-          className="space-y-6 transition-opacity duration-200"
-        >
+        <div key={currentIndex} className="space-y-6 transition-opacity duration-200">
           <div>
-            <h3 className="text-lg font-semibold text-white mb-2">
-              Як ти оцінюєш цю сферу?
-            </h3>
-            <p className="text-sm text-white/60">
-              1 = Потребує уваги • 10 = Повністю задоволений
-            </p>
+            <h3 className="text-lg font-semibold text-white mb-2">Як ти оцінюєш цю сферу?</h3>
+            <p className="text-sm text-white/60">1 = Потребує уваги • 10 = Повністю задоволений</p>
           </div>
 
           {/* Score */}
@@ -164,7 +151,7 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
               min="1"
               max="10"
               value={currentScore}
-              onChange={(e) => setScore(Number(e.target.value))}
+              onChange={e => setScore(Number(e.target.value))}
               className="w-full h-2 rounded-lg appearance-none cursor-pointer"
               style={{
                 background: `linear-gradient(
@@ -178,14 +165,12 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
             />
 
             <div className="flex justify-between text-xs text-white/40">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                 <Button
                   key={n}
                   onClick={() => setScore(n)}
                   className={`w-6 h-6 rounded-full transition-all ${
-                    n === currentScore
-                      ? 'bg-white/20 text-white'
-                      : 'hover:bg-white/10'
+                    n === currentScore ? 'bg-white/20 text-white' : 'hover:bg-white/10'
                   }`}
                 >
                   {n}
@@ -201,9 +186,9 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
             scores={scores}
             size={280}
             interactive
-            onCategoryClick={(id) => {
-              const idx = WHEEL_CATEGORIES.findIndex((c) => c.id === id)
-              if (idx >= 0) goToStep(idx)
+            onCategoryClick={id => {
+              const idx = WHEEL_CATEGORIES.findIndex(c => c.id === id);
+              if (idx >= 0) goToStep(idx);
             }}
           />
         </div>
@@ -251,7 +236,7 @@ export const WheelForm = ({ onComplete, onCancel }: WheelFormProps) => {
         </Button>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default WheelForm
+export default WheelForm;
