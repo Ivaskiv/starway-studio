@@ -17,4 +17,5 @@ export const ABILITIES: Record<string, Ability> = {
   FUNNELS_MANAGE: 'funnels.manage',
   PROFILE_VIEW: 'profile.view',
   SETTINGS_MANAGE: 'settings.manage',
+  
 };

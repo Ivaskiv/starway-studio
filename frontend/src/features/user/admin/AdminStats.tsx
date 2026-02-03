@@ -1,7 +1,7 @@
 // /features/dashboard/blocks/admin/AdminStats.tsx
 import { useGetDashboardStatsQuery } from '@/services/stats.api';
 import { DollarSign, Users, Zap } from 'lucide-react';
-import { GlassCard } from '../../../../ui';
+import { GlassCard } from '../../../ui';
 
 export default function AdminStats() {
   const { data } = useGetDashboardStatsQuery({ period: '30d' });

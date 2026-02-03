@@ -4,14 +4,11 @@ import { toast } from 'react-hot-toast';
 
 import { Button, GlassCard } from '@/ui';
 
-import {
-  useGetMeQuery,
-  useUpdateUserSettingsMutation,
-} from '@/features/auth/services/auth.api';
+import { useGetMeQuery, useUpdateUserSettingsMutation } from '@/features/auth/services/auth.api';
 
+import type { ToggleProps } from '@/features/user/types/user.types';
 import { cn } from '@/lib/utils';
 import { useGetThemesQuery } from '@/services/settings.api';
-import type { ToggleProps } from '@/shared/types/user.types';
 import { GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/ui/GlassCard';
 
 function SettingsToggle({ label, icon, options, value, onChange, disabled }: ToggleProps) {

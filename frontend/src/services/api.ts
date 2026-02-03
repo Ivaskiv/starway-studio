@@ -92,18 +92,18 @@ export const api = createApi({
 })
 
 export const saveToken = (token: string): void => {
-  console.log('[API Token] Saving:', token.substring(0, 20) + '...')
+  // console.log('[API Token] Saving:', token.substring(0, 20) + '...')
   localStorage.setItem(TOKEN_KEY, token)
 }
 
 export const getToken = (): string | null => {
   const token = localStorage.getItem(TOKEN_KEY)
-  console.log('[API Token] Get:', token ? token.substring(0, 20) + '...' : 'NO TOKEN')
+  // console.log('[API Token] Get:', token ? token.substring(0, 20) + '...' : 'NO TOKEN')
   return token
 }
 
 export const removeToken = (): void => {
-  console.log('[API Token] Removing')
+  // console.log('[API Token] Removing')
   localStorage.removeItem(TOKEN_KEY)
 }
 

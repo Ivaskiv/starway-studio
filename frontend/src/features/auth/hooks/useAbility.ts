@@ -1,6 +1,6 @@
+import { UserRole } from '@/features/user/types/user.types';
 import { PERMISSIONS_MATRIX } from '@/shared/config/permissions.matrix';
 import { Ability } from '@/shared/types/permissions';
-import { UserRole } from '@/shared/types/user.types';
 import { useAuth } from './useAuth';
 
 export function useAbility() {

@@ -1,14 +1,14 @@
 // frontend/src/features/auth/pages/UserProfilePage.tsx
 // Оптимізована версія з glassmorphism стилями, RTK Query та Abilities
+import { UserSettings } from '@/features/user/types/user.types';
 import { cn } from '@/lib/utils';
 import { FormData } from '@/shared/types/profile.types';
-import { UserSettings } from '@/shared/types/user.types';
 import { Button, GlassCard, Input } from '@/ui';
 import { GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/ui/GlassCard';
 import { Globe, Moon, Save, Sun, User } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { useGetMeQuery, useUpdateUserSettingsMutation } from '../services/auth.api';
+import { useGetMeQuery, useUpdateUserSettingsMutation } from '../../auth/services/auth.api';
 
 function ProfileSkeleton() {
   return (

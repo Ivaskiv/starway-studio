@@ -1,5 +1,4 @@
 // frontend/src/features/ai-mentor/pages/AIMentorPage.tsx
-import { TelegramModal } from '@/features/integrations/components/TelegramModal';
 import { Button, GlassCard, Input } from '@/ui';
 import { Bot, MessageCircle, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -99,7 +98,7 @@ export default function AIMentorPage() {
             { icon: '📊', label: 'Аналіз прогресу', color: 'from-blue-500 to-cyan-500' },
             { icon: '💡', label: 'Отримай пораду', color: 'from-purple-500 to-pink-500' },
           ].map((action, i) => (
-            <button
+            <Button
               key={i}
               className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all hover:scale-105"
             >
@@ -109,16 +108,11 @@ export default function AIMentorPage() {
                 {action.icon}
               </div>
               <div className="text-sm text-white font-medium">{action.label}</div>
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
-      <TelegramModal
-        isOpen={showTelegramModal}
-        onClose={() => setShowTelegramModal(false)}
-        onConnect={handleConnectTelegram}
-      />
     </>
   );
 }

@@ -1,150 +1,41 @@
-// frontend/src/features/auth/components/RegisterForm.tsx
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, Sparkles, User } from 'lucide-react';
-import { useEffect } from 'react';
+// RegisterForm.tsx
 import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
-import { Button, Input } from '@/ui';
-import { PasswordStrength } from '@/ui/PasswordStrength';
-import { FormLayout } from './FormLayout';
+export default function RegisterForm({
+  email,
+  onSwitch,
+  onSuccess,
+}: {
+  email?: string;
+  onSwitch: () => void;
+  onSuccess: () => void;
+}) {
+  const { registerWithCredentials } = useAuth();
 
-const registerSchema = z
-  .object({
-    name: z.string().min(2, 'Мін. 2 символи'),
-    email: z.string().email('Невірний email'),
-    password: z
-      .string()
-      .min(8, 'Мін. 8 символів')
-      .regex(/[A-Za-z]/, 'Має містити літеру')
-      .regex(/[0-9]/, 'Має містити цифру'),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    path: ['confirmPassword'],
-    message: 'Паролі не співпадають',
-  });
-
-export type RegisterFormData = z.infer<typeof registerSchema>;
-
-interface Props {
-  onSubmit: (data: RegisterFormData) => Promise<void>;
-  onLoginClick?: () => void;
-  isLoading?: boolean;
-  serverError?: string;
-  autoFillEmail?: string;
-  resetTrigger?: number; // новий пропс для примусового скидання форми
-}
-
-export function RegisterForm({
-  onSubmit,
-  onLoginClick,
-  isLoading = false,
-  serverError,
-  autoFillEmail,
-  resetTrigger = 0,
-}: Props) {
-  const {
-    register,
-    handleSubmit,
-    watch,
-    reset, // додали reset з useForm
-    formState: { errors, isSubmitting },
-  } = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchema),
+  const form = useForm({
     defaultValues: {
-      name: '',
-      email: autoFillEmail || '',
+      email: email ?? '',
       password: '',
-      confirmPassword: '',
+      name: '',
     },
   });
 
-  const password = watch('password', '');
-  const loading = isLoading || isSubmitting;
-
-  // Скидання форми при зміні resetTrigger (з модалки)
-  useEffect(() => {
-    reset({
-      name: '',
-      email: autoFillEmail || '',
-      password: '',
-      confirmPassword: '',
-    });
-  }, [resetTrigger, autoFillEmail, reset]);
-
-  const submit = (data: RegisterFormData) => onSubmit(data);
+  const onSubmit = async (data: any) => {
+    await registerWithCredentials(data);
+    onSuccess();
+  };
 
   return (
-    <FormLayout title="Реєстрація" subtitle="Створи акаунт за хвилину" error={serverError}>
-      <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-4 sm:gap-3">
-        <Input
-          {...register('name')}
-          label="Імʼя"
-          placeholder="Надя"
-          icon={User}
-          error={errors.name?.message}
-          disabled={loading}
-        />
+    <form onSubmit={form.handleSubmit(onSubmit)}>
+      <input {...form.register('email')} />
+      <input {...form.register('password')} type="password" />
+      <input {...form.register('name')} />
 
-        <Input
-          {...register('email')}
-          label="Email"
-          type="email"
-          placeholder="your@email.com"
-          icon={Mail}
-          error={errors.email?.message}
-          disabled={loading}
-        />
-
-        <Input
-          {...register('password')}
-          label="Пароль"
-          type="password"
-          placeholder="••••••••"
-          showPasswordToggle
-          error={errors.password?.message}
-          disabled={loading}
-        />
-
-        <Input
-          {...register('confirmPassword')}
-          label="Підтвердження пароля"
-          type="password"
-          placeholder="••••••••"
-          error={errors.confirmPassword?.message}
-          disabled={loading}
-        />
-
-        <PasswordStrength password={password} />
-
-        <Button
-          type="submit"
-          color="orange"
-          size="lg"
-          fullWidth
-          isLoading={loading}
-          loadingText="Реєструємо..."
-        >
-          <Sparkles className="w-5 h-5" />
-          Зареєструватись
-        </Button>
-
-        {onLoginClick && (
-          <Button
-            type="button"
-            variant="ghost"
-            color="white"
-            size="md"
-            fullWidth
-            onClick={onLoginClick}
-            disabled={loading}
-          >
-            Вже маєш акаунт?
-            <span className="text-orange-400 ml-1">Увійти</span>
-          </Button>
-        )}
-      </form>
-    </FormLayout>
+      <button type="submit">Register</button>
+      <button type="button" onClick={onSwitch}>
+        Login
+      </button>
+    </form>
   );
 }

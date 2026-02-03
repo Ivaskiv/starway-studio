@@ -3,7 +3,8 @@
 //! sidebar декларує вимогу
 //! рішення приймає useAbility()
 
-import { Ability } from '@/frontend/srcshared/types/permissions';
+import { Ability } from "@/features/auth/permissions/abilities";
+
 
 /**
  * ЄДИНЕ джерело правди для dashboard-навігації
@@ -65,31 +66,31 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
     path: '/dashboard/products',
     ability: 'products.manage',
   },
-  {
-    label: 'Users',
-    path: '/dashboard/users',
-    ability: 'users.manage',
-  },
-  {
-    label: 'Funnels',
-    path: '/dashboard/funnels',
-    ability: 'funnels.manage',
-  },
-  {
-    label: 'Analytics',
-    path: '/dashboard/analytics',
-    ability: 'analytics.view',
-  },
+  // {
+  //   label: 'Users',
+  //   path: '/dashboard/users',
+  //   ability: 'users.manage',
+  // },
+  // {
+  //   label: 'Funnels',
+  //   path: '/dashboard/funnels',
+  //   ability: 'funnels.manage',
+  // },
+  // {
+  //   label: 'Analytics',
+  //   path: '/dashboard/analytics',
+  //   ability: 'analytics.view',
+  // },
   {
     label: 'Settings',
     path: '/dashboard/settings',
     ability: 'settings.manage',
   },
 
-  // super admin
-  {
-    label: 'AI Control',
-    path: '/dashboard/ai-control',
-    ability: 'ai.control',
-  },
+  // // super admin
+  // {
+  //   label: 'AI Control',
+  //   path: '/dashboard/ai-control',
+  //   ability: 'ai.control',
+  // },
 ];

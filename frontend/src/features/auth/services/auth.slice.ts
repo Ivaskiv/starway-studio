@@ -1,7 +1,7 @@
 // frontend/src/features/auth/services/auth.slice.ts
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import type { User } from '@/features/user/types/user.types';
 import { getToken, removeToken, saveToken } from '@/services/api';
-import type { User } from '@/shared/types/user.types';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface AuthState {
   user: User | null;
@@ -34,12 +34,12 @@ const authSlice = createSlice({
     },
 
     // Початок завантаження (якщо потрібен loading-стан)
-    setLoading: (state) => {
+    setLoading: state => {
       state.status = 'loading';
     },
 
     // Повне очищення авторизації
-    clearAuth: (state) => {
+    clearAuth: state => {
       state.user = null;
       state.accessToken = null;
       state.status = 'unauthenticated';

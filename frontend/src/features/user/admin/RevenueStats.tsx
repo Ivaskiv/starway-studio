@@ -1,7 +1,6 @@
 // /frontend/src/features/dashboard/blocks/admin/RevenueStats.tsx
 
-import React from 'react';
-import { GlassCard } from '../../../../ui';
+import { GlassCard } from '../../../ui';
 
 export default function RevenueStats() {
   return (

@@ -1,11 +1,11 @@
 // /features/dashboard/layout/DashboardLayout.tsx
 
-import { Navigate, Outlet } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
-import Sidebar from './Sidebar';
-import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useAbility } from '@/features/auth/hooks/useAbility';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { ABILITIES } from '@/features/auth/permissions/abilities';
+import { Loader2 } from 'lucide-react';
+import { Navigate, Outlet } from 'react-router-dom';
+import Sidebar from './Sidebar';
 
 export default function DashboardLayout() {
   const { user, isAuthenticated, isLoading } = useAuth();

@@ -1,8 +1,7 @@
 // features/dashboard/blocks/admin/QuickActions.tsx
 
-import React from 'react';
-import { GlassCard, Button } from '../../../../ui';
 import { PlusCircle, Settings } from 'lucide-react';
+import { Button, GlassCard } from '../../../ui';
 
 export default function QuickActions() {
   return (

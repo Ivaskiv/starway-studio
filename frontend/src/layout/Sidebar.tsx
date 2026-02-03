@@ -1,7 +1,7 @@
 // /features/dashboard/layout/Sidebar.tsx
 
 import { useAbility } from '@/features/auth/hooks/useAbility';
-import { ABILITIES, Ability } from '@/shared/types/permissions';
+import { ABILITIES, Ability } from '@/features/auth/permissions/abilities';
 import {
   BookOpen,
   GitBranch,

@@ -1,24 +1,24 @@
 // frontend/src/shared/types/profile.types.ts
 
-import { UserSettings } from './user.types'
+import { UserSettings } from '../../features/user/types/user.types';
 
 // ==========================
 // PROFILE TYPES
 // ==========================
 
 export interface FormData {
-  firstName: string
-  lastName: string
-  settings: UserSettings
+  firstName: string;
+  lastName: string;
+  settings: UserSettings;
 }
 
 export interface UserProfile {
-  id: string
-  email: string
-  firstName: string
-  lastName: string
-  role: 'user' | 'admin' | 'super_admin'
-  settings: UserSettings
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: 'user' | 'admin' | 'super_admin';
+  settings: UserSettings;
 }
 
 // ==========================
@@ -28,17 +28,17 @@ export interface UserProfile {
 // ==========================
 
 export interface AdminProductTemplate {
-  id: string
-  title: string
-  description: string
-  createdAt: string
-  updatedAt?: string
-  fields: Record<string, any> 
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string;
+  updatedAt?: string;
+  fields: Record<string, any>;
 }
 
 export interface AdminSettings {
-  manageUsers: boolean
-  manageProducts: boolean
+  manageUsers: boolean;
+  manageProducts: boolean;
   // canSendNotifications: boolean
 }
 

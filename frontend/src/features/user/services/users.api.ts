@@ -1,6 +1,6 @@
 // /services/users.api.ts
-import type { User } from '@/shared/types/user.types';
-import api from './api';
+import type { User } from '@/features/user/types/user.types';
+import api from '../../../services/api';
 
 export const usersApi = api.injectEndpoints({
   endpoints: builder => ({

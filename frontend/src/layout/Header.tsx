@@ -1,5 +1,5 @@
-import { AuthModal } from '@/features/auth/components/AuthModal';
-import { User } from '@/shared/types/user.types';
+import AuthModal from '@/features/auth/components/AuthModal';
+import { User } from '@/features/user/types/user.types';
 import { Button, GlassCard } from '@/ui';
 import { ChevronDown, Menu as MenuIcon, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';

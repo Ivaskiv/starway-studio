@@ -1,5 +1,5 @@
 // /features/auth/utils/roles.ts
-import type { User } from '@/shared/types/user.types';
+import type { User } from '@/features/user/types/user.types';
 
 // 🔹 Коротка логіка ролей та підписок
 

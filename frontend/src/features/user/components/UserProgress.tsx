@@ -1,7 +1,7 @@
 // frontend/src/features/dashboard/blocks/user/UserProgress.tsx
-import { GlassCard } from '../../../../ui';
-import { useAuth } from '../../../auth/hooks/useAuth';
-import { useGetProgressQuery } from '../../../progress/services/progress.api';
+import { GlassCard } from '../../../ui';
+import { useAuth } from '../../auth/hooks/useAuth';
+import { useGetProgressQuery } from '../../progress/services/progress.api';
 
 export default function UserProgress() {
   const { user } = useAuth();

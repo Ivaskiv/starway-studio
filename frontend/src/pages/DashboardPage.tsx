@@ -1,11 +1,11 @@
 // /features/dashboard/pages/DashboardPage.tsx
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import Recommendations from '@/features/mentor/components/Recommendations';
+import AllProductsList from '@/features/products/components/AllProductsList';
 import MentorStats from '@/features/questionsScheduler/components/MentorStats';
 import { SchedulerAdminPanel } from '@/features/questionsScheduler/components/SchedulerAdminPanel';
+import UserProgress from '@/features/user/components/UserProgress';
 import WheelBlock from '@/features/wheel/components/WheelBlock';
-import Recommendations from '@/features/mentor/components/Recommendations';
-import UserProgress from '@/features/dashboard/blocks/user/UserProgress';
-import AllProductsList from '@/features/products/components/AllProductsList';
-import { useAuth } from '@/features/auth/hooks/useAuth';
 
 export default function DashboardPage() {
   const { user } = useAuth();

@@ -1,48 +1,27 @@
-// frontend/src/App.tsx
-
-import { Loader } from 'lucide-react';
 import { Suspense, lazy } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
-import RedirectAfterAuth from '@/features/auth/components/RedirectAfterAuth';
 import { AbilityGuard } from '@/features/auth/components/AbilityGuard';
-import DashboardLayout from '@/features/dashboard/layout/DashboardLayout';
-import MainLayout from '@/layout/MainLayout';
-import { GlassCard } from '@/ui';
+import RedirectAfterAuth from '@/features/auth/components/RedirectAfterAuth';
 import AIMentorPage from '@/features/auth/pages/AuthPage';
 import { ABILITIES } from '@/features/auth/permissions/abilities';
+import DashboardLayout from '@/layout/DashboardLayout';
+import MainLayout from '@/layout/MainLayout';
+import LoadingFallback from '@/components/LoadingFallback';
 
 // === PUBLIC PAGES ===
-const HomePage = lazy(() => import('@/features/home/HomePage'));
+const HomePage = lazy(() => import('@/pages/HomePage'));
 const OAuthCallbackPage = lazy(() => import('@/features/social/pages/OAuthCallbackPage'));
 
 // === DASHBOARD PAGES ===
-const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
-// const CoursesPage = lazy(() => import('@/features/courses/pages/CoursesPage'));
-const UserProfilePage = lazy(() => import('@/features/auth/pages/UserProfilePage'));
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const UserProfilePage = lazy(() => import('@/features/user/components/UserProfilePage'));
 const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'));
 const ProgressPage = lazy(() => import('@/features/progress/pages/ProgressPage'));
 const WheelPage = lazy(() => import('@/features/wheel/pages/WheelPage'));
-// const AIMentorPage = lazy(() => import('@/templatesfeatures/ai-mentor/pages/AIMentorPage'));
 const ProductsPage = lazy(() => import('@/features/products/pages/ProductsPage'));
-// const FunnelsPage = lazy(() => import('@/features/funnels/pages/FunnelsPage'));
-// const FunnelEditPage = lazy(() => import('@/features/funnels/pages/FunnelEditPage'));
 const AIGeneratorPage = lazy(() => import('@/features/ai-generator/pages/AIGeneratorPage'));
-
-// ===============================
-// 🔄 LOADING FALLBACK
-// ===============================
-function LoadingFallback() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-black">
-      <GlassCard className="p-10 flex flex-col items-center gap-4">
-        <Loader className="w-10 h-10 animate-spin text-orange-500" />
-        <p className="text-white/60">Завантаження…</p>
-      </GlassCard>
-    </div>
-  );
-}
 
 // ===============================
 // 🔀 ROUTES
@@ -61,10 +40,6 @@ function AppRoutes() {
         {/* DASHBOARD */}
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardPage />} />
-
-          {/* <Route element={<AbilityGuard allow={ABILITIES.DASHBOARD_VIEW} />}>
-            <Route path="courses" element={<CoursesPage />} />
-          </Route> */}
 
           <Route element={<AbilityGuard allow={ABILITIES.PROFILE_VIEW} />}>
             <Route path="profile" element={<UserProfilePage />} />
@@ -87,11 +62,6 @@ function AppRoutes() {
             <Route path="products" element={<ProductsPage />} />
           </Route>
 
-          {/* <Route element={<AbilityGuard allow={ABILITIES.FUNNELS_MANAGE} />}>
-            <Route path="funnels" element={<FunnelsPage />} />
-            <Route path="funnels/:id" element={<FunnelEditPage />} />
-          </Route>
- */}
           <Route element={<AbilityGuard allow={ABILITIES.SETTINGS_MANAGE} />}>
             <Route path="settings" element={<SettingsPage />} />
           </Route>

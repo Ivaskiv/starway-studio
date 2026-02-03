@@ -1,10 +1,10 @@
 // /features/dashboard/blocks/admin/FunnelsOverview.tsx
-import { Workflow } from 'lucide-react'
-import { GlassCard } from '../../../../ui'
-import { useGetFunnelsQuery } from '../../../funnels/services/funnels.api'
+import { Workflow } from 'lucide-react';
+import { useGetFunnelsQuery } from '../../../funnels/services/funnels.api';
+import { GlassCard } from '../../../ui';
 
 export default function FunnelsOverview() {
-  const { data = [] } = useGetFunnelsQuery()
+  const { data = [] } = useGetFunnelsQuery();
 
   return (
     <GlassCard className="p-6">
@@ -20,5 +20,5 @@ export default function FunnelsOverview() {
         ))}
       </ul>
     </GlassCard>
-  )
+  );
 }

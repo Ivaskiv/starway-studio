@@ -1,15 +1,15 @@
 // frontend/src/features/social/pages/OAuthCallbackPage.tsx
-import { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import { Loader } from 'lucide-react';
-import { GlassCard } from '@/ui';
-import { parseSocialFlow } from '../utils/social.utils';
-import { useSocialCallbackMutation } from '../services/social.api';
 import { useAppDispatch } from '@/app/store/hooks';
 import { setCredentials } from '@/features/auth/services/auth.slice'; // ← правильний імпорт
-import { normalizeSingleUser } from '@/shared/types/user.types';
+import { normalizeSingleUser } from '@/features/user/types/user.types';
 import { saveToken } from '@/services/api';
+import { GlassCard } from '@/ui';
+import { Loader } from 'lucide-react';
+import { useEffect } from 'react';
+import toast from 'react-hot-toast';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSocialCallbackMutation } from '../services/social.api';
+import { parseSocialFlow } from '../utils/social.utils';
 
 export default function OAuthCallbackPage() {
   const navigate = useNavigate();
@@ -44,10 +44,12 @@ export default function OAuthCallbackPage() {
         saveToken(response.token);
 
         // Оновлюємо Redux через setCredentials (саме той редюсер, який є)
-        dispatch(setCredentials({
-          user: normalizeSingleUser(response.user),
-          accessToken: response.token,
-        }));
+        dispatch(
+          setCredentials({
+            user: normalizeSingleUser(response.user),
+            accessToken: response.token,
+          }),
+        );
 
         toast.success('Авторизація успішна!', { id: 'oauth' });
 

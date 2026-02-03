@@ -1,10 +1,13 @@
 // frontend/src/features/auth/services/auth.api.ts
+import {
+  LoginRequest,
+  RegisterRequest,
+  UpdateUserRequest,
+  User,
+} from '@/features/user/types/user.types';
 import { api, saveToken } from '@/services/api';
-import { LoginRequest, RegisterRequest, UpdateUserRequest, User } from '@/shared/types/user.types';
-import { clearAuth, setCredentials, updateUser } from './auth.slice';
 import { AuthResponse, MeResponse, SocialAuthInput } from '../types/auth.types';
-import { SocialPlatform } from '@/features/social/types/social.types';
-import { getToken } from '../../../services/api';
+import { clearAuth, setCredentials, updateUser } from './auth.slice';
 
 const ME_TAG = { type: 'User' as const, id: 'ME' };
 
