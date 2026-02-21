@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Sora:wght@500;700&display=swap');
+
+.ai-funnel-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 12% 10%, rgba(var(--liquid-glow-rgb), 0.16) 0%, transparent 55%),
+    radial-gradient(1200px 600px at 86% 90%, rgba(var(--liquid-glow-rgb), 0.12) 0%, transparent 62%),
+    linear-gradient(164deg, rgb(var(--liquid-base-rgb)) 0%, rgb(var(--liquid-depth-rgb)) 100%);
+  color: #f5f8ff;
+  font-family: 'Manrope', 'Inter', sans-serif;
+}
+
+.ai-funnel-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.glass-panel {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-radius: 24px;
+  padding: 1.1rem;
+}
+
+.liquid-hero h1,
+.liquid-h2,
+.glass-panel h3 {
+  font-family: 'Sora', 'Manrope', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.liquid-hero h1 {
+  margin-top: 0.5rem;
+  font-size: clamp(1.7rem, 3vw, 3rem);
+  line-height: 1.06;
+}
+
+.liquid-subtitle {
+  margin-top: 0.75rem;
+  color: rgba(232, 241, 255, 0.78);
+}
+
+.liquid-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  color: rgba(var(--liquid-glow-rgb), 0.92);
+}
+
+.liquid-bullets,
+.liquid-list {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.45rem;
+  color: rgba(236, 244, 255, 0.84);
+}
+
+.liquid-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.liquid-btn {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.liquid-btn-primary {
+  background: linear-gradient(135deg, rgba(var(--liquid-glow-rgb), 0.95), rgba(var(--liquid-glow-rgb), 0.65));
+  color: #03122d;
+}
+
+.liquid-btn-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8f1ff;
+}
+
+.liquid-grid-two {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.liquid-grid-cards {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.liquid-price {
+  margin: 0.7rem 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.liquid-price span {
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.liquid-price small {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+.liquid-ordered {
+  list-style: decimal;
+  padding-left: 1rem;
+}
+
+@media (min-width: 768px) {
+  .ai-funnel-wrap {
+    padding: 2.5rem 1.25rem 5rem;
+  }
+
+  .liquid-grid-two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liquid-grid-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,285 +1,246 @@
 // backend/src/modules/auth/auth.controller.ts
-import type { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import crypto from 'node:crypto';
-import { sql } from '../../db/client.js';
+import type { CookieOptions, Request, Response } from 'express'
+import type { AuthApiResponse, RegisterInput } from './auth.types.js'
 import {
-  findUserByEmail,
-  findUserById,
-  createUserLocal,
-  validatePassword,
-  signToken,
-  signRefreshToken,
+  createUserLocal, findUserByEmail, findUserById,
   findOrCreateSocialUser,
-} from './auth.service.js';
-import type { AuthResponse } from './auth.types.js';
-import { serverError } from '../../utils/serverError.js';
-import type { CookieOptions } from 'express';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'starway-secret-2024';
+  markUserLoggedIn,
+  requestPasswordReset,
+  resetPasswordByToken,
+  signRefreshToken, signToken, toSafeUser,
+  updateUserUiSettings,
+  validatePassword, verifyRefreshToken,
+} from './auth.service.js'
 
 const COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure:   process.env.NODE_ENV === 'production',
   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 днів
-};
-
-function isValidEmail(value: unknown): value is string {
-  return typeof value === 'string' && value.includes('@') && value.trim().length > 3;
+  maxAge:   30 * 24 * 60 * 60 * 1000,
 }
 
-function needsProfile(email?: string | null) {
-  return !email || email.trim().length === 0;
-}
+// ── REGISTER ──────────────────────────────────────────────────────────────────
 
-// ============================================
-// REGISTER (з sessions)
-// ============================================
 export async function register(req: Request, res: Response) {
   try {
-    const { email, password, name } = req.body;
-    if (!isValidEmail(email)) return res.status(400).json({ error: 'invalid_email' });
-    if (!password || password.length < 6) return res.status(400).json({ error: 'password_min_6_chars' });
+    const { email, password, name } = req.body
 
-    const exists = await findUserByEmail(email);
-    if (exists) return res.status(409).json({ error: 'email_already_registered' });
+    if (!email || !email.includes('@'))
+      return res.status(400).json({ error: 'invalid_email' })
+    if (!password || password.length < 8)
+      return res.status(400).json({ error: 'password_must_be_8_chars' })
 
-    const user = await createUserLocal({ email, password, name });
-    const token = signToken({ id: user.id, role: user.role, email: user.email });
-    const refreshToken = signRefreshToken({ id: user.id });
+    const user         = await createUserLocal({ email, password, name })
+    const accessToken  = signToken({ id: user.id, role: user.role, email: user.email })
+    const refreshToken = signRefreshToken({ id: user.id })
 
-    // 🔑 Зберегти refresh token в БД
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-    await sql`
-      INSERT INTO sessions (id, user_id, refresh_token_hash, expires_at)
-      VALUES (
-        ${crypto.randomUUID()},
-        ${user.id},
-        ${refreshTokenHash},
-        NOW() + INTERVAL '30 days'
-      )
-    `;
+    res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS)
 
-    // 🔑 Встановити в cookie
-    res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS);
-
-    const response: AuthResponse = { 
-      user, 
-      token, 
-      refreshToken, 
-      needsProfile: needsProfile(user.email), 
-      expiresIn: 15 * 60 
-    };
-    res.status(201).json(response);
+    return res.status(201).json({
+      user:        toSafeUser(user),
+      accessToken,
+      needsProfile: !user.name,
+      expiresIn:   15 * 60,
+    } satisfies Partial<AuthApiResponse>)
   } catch (err) {
-    return serverError(res, 'POST /auth/register', err);
+    console.error('❌ Register error:', err)
+    return res.status(500).json({ error: 'server_error', message: (err as Error).message })
   }
 }
 
-// ============================================
-// LOGIN (з sessions)
-// ============================================
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+
 export async function login(req: Request, res: Response) {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
+    const { email, password } = req.body
 
-    const user = await findUserByEmail(email);
-    if (!user || !user.password_hash) return res.status(401).json({ error: 'invalid_credentials' });
+    if (!email || !password)
+      return res.status(400).json({ error: 'email_and_password_required' })
 
-    const valid = await validatePassword(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'invalid_credentials' });
+    const user = await findUserByEmail(email, true)
+    if (!user || !user.passwordHash)
+      return res.status(401).json({ error: 'invalid_credentials' })
 
-    const token = signToken({ id: user.id, role: user.role, email: user.email });
-    const refreshToken = signRefreshToken({ id: user.id });
+    const valid = await validatePassword(password, user.passwordHash)
+    if (!valid)
+      return res.status(401).json({ error: 'invalid_credentials' })
 
-    // 🔑 Зберегти refresh token в БД
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-    await sql`
-      INSERT INTO sessions (id, user_id, refresh_token_hash, expires_at)
-      VALUES (
-        ${crypto.randomUUID()},
-        ${user.id},
-        ${refreshTokenHash},
-        NOW() + INTERVAL '30 days'
-      )
-    `;
+    await markUserLoggedIn(user.id)
+    const freshUser = await findUserById(user.id, true)
+    if (!freshUser)
+      return res.status(404).json({ error: 'user_not_found' })
 
-    // 🔑 Встановити в cookie
-    res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS);
+    const accessToken  = signToken({ id: freshUser.id, role: freshUser.role, email: freshUser.email })
+    const refreshToken = signRefreshToken({ id: user.id })
 
-    const response: AuthResponse = { 
-      user, 
-      token, 
-      refreshToken, 
-      needsProfile: needsProfile(user.email), 
-      expiresIn: 15 * 60 
-    };
-    res.json(response);
+    res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS)
+
+    return res.json({
+      user:        toSafeUser(freshUser),
+      accessToken,
+      needsProfile: !freshUser.name,
+      expiresIn:   15 * 60,
+    } satisfies Partial<AuthApiResponse>)
   } catch (err) {
-    return serverError(res, 'POST /auth/login', err);
+    console.error('❌ Login error:', err)
+    return res.status(500).json({ error: 'server_error', message: (err as Error).message })
   }
 }
 
-// ============================================
-// SOCIAL AUTH (Telegram/Instagram) - БЕЗ ЗМІН
-// ============================================
+// ── SOCIAL AUTH ──────────────────────────────────────────────────────────────
 export async function socialAuth(req: Request, res: Response) {
   try {
-    const { provider, external_id, username } = req.body;
-    if (!provider || !external_id) {
-      return res.status(400).json({ error: 'provider_and_external_id_required' });
+    const { provider, externalId, email, name, username } = req.body ?? {}
+
+    if (!provider || !externalId) {
+      return res.status(400).json({ error: 'provider_and_external_id_required' })
+    }
+    if (provider !== 'google' && provider !== 'telegram') {
+      return res.status(400).json({ error: 'unsupported_social_provider' })
     }
 
-    const user = await findOrCreateSocialUser({ 
-      provider, 
-      externalId: external_id, 
-      username 
-    });
-    
-    const token = signToken({ id: user.id, role: user.role, email: user.email ?? '' });
-    const refreshToken = signRefreshToken({ id: user.id });
+    const user = await findOrCreateSocialUser({
+      provider,
+      externalId,
+      email,
+      name,
+      username,
+    })
 
-    // 🔑 Зберегти refresh token в БД (додано для social auth)
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-    await sql`
-      INSERT INTO sessions (id, user_id, refresh_token_hash, expires_at)
-      VALUES (
-        ${crypto.randomUUID()},
-        ${user.id},
-        ${refreshTokenHash},
-        NOW() + INTERVAL '30 days'
-      )
-    `;
+    await markUserLoggedIn(user.id)
+    const freshUser = await findUserById(user.id, true)
+    if (!freshUser) {
+      return res.status(404).json({ error: 'user_not_found' })
+    }
 
-    res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS);
+    const accessToken = signToken({ id: freshUser.id, role: freshUser.role, email: freshUser.email })
+    const refreshToken = signRefreshToken({ id: freshUser.id })
 
-    const response: AuthResponse = { 
-      user, 
-      token, 
-      refreshToken, 
-      needsProfile: needsProfile(user.email), 
-      expiresIn: 15 * 60 
-    };
-    res.json(response);
+    res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS)
+
+    return res.json({
+      user: toSafeUser(freshUser),
+      accessToken,
+      needsProfile: !freshUser.name,
+      expiresIn: 15 * 60,
+    } satisfies Partial<AuthApiResponse>)
   } catch (err) {
-    return serverError(res, 'POST /auth/social', err);
+    console.error('❌ Social auth error:', err)
+    return res.status(500).json({ error: 'server_error', message: (err as Error).message })
   }
 }
 
-// ============================================
-// GET ME - БЕЗ ЗМІН
-// ============================================
+// ── GET ME ────────────────────────────────────────────────────────────────────
+
 export async function getMe(req: Request, res: Response) {
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+    if (!req.user) return res.status(401).json({ error: 'unauthorized' })
 
-    const user = await findUserById(userId);
-    if (!user) return res.status(404).json({ error: 'user_not_found' });
+    const user = await findUserById(req.user.id)
+    if (!user)   return res.status(404).json({ error: 'user_not_found' })
 
-    res.json({ user });
+    return res.json({ user: toSafeUser(user) })
   } catch (err) {
-    return serverError(res, 'GET /auth/me', err);
+    console.error('❌ GetMe error:', err)
+    return res.status(500).json({ error: 'server_error', message: (err as Error).message })
   }
 }
 
-// ============================================
-// REFRESH TOKEN (НОВИЙ)
-// ============================================
+// ── REFRESH ───────────────────────────────────────────────────────────────────
+
 export async function refresh(req: Request, res: Response) {
-  console.log('[Auth] POST /refresh');
-  
   try {
-    const refreshToken = req.cookies.refreshToken;
+    const token = req.cookies?.refreshToken || req.body?.refreshToken
+    if (!token) return res.status(401).json({ error: 'refresh_token_required' })
 
-    if (!refreshToken) {
-      return res.status(401).json({ error: 'refresh_token_required' });
-    }
+    const decoded = verifyRefreshToken(token)
+    const user    = await findUserById(decoded.id)
+    if (!user) return res.status(404).json({ error: 'user_not_found' })
 
-    // Верифікувати токен
-    const decoded = jwt.verify(refreshToken, JWT_SECRET) as { id: string };
-
-    // Перевірити в БД
-    const [session] = await sql`
-      SELECT refresh_token_hash, expires_at
-      FROM sessions
-      WHERE user_id = ${decoded.id}
-      AND expires_at > NOW()
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
-
-    if (!session) {
-      return res.status(401).json({ error: 'session_expired' });
-    }
-
-    // Перевірити hash
-    const valid = await bcrypt.compare(refreshToken, session.refresh_token_hash);
-    if (!valid) {
-      return res.status(401).json({ error: 'invalid_refresh_token' });
-    }
-
-    // Отримати user
-    const user = await findUserById(decoded.id);
-    if (!user) {
-      return res.status(404).json({ error: 'user_not_found' });
-    }
-
-    // Генерувати новий access token
-    const accessToken = signToken({
-      id: user.id,
-      role: user.role,
-      email: user.email,
-    });
-
-    console.log('[Auth] ✅ Token refreshed:', user.email);
-
-    res.json({
-      success: true,
-      token: accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        role: user.role,
-      },
-    });
-  } catch (err: any) {
-    console.error('[Auth] ❌ Refresh error:', err);
-    res.status(401).json({ error: 'invalid_refresh_token' });
+    const accessToken = signToken({ id: user.id, role: user.role, email: user.email })
+    return res.json({ accessToken, user: toSafeUser(user) })
+  } catch (err) {
+    console.error('❌ Refresh error:', err)
+    return res.status(401).json({ error: 'invalid_refresh_token' })
   }
 }
 
-// ============================================
-// LOGOUT (НОВИЙ)
-// ============================================
-export async function logout(req: Request, res: Response) {
-  console.log('[Auth] POST /logout');
-  
-  try {
-    const userId = req.user?.id;
+// ── LOGOUT ────────────────────────────────────────────────────────────────────
 
-    if (userId) {
-      // Видалити всі сесії користувача
-      await sql`DELETE FROM sessions WHERE user_id = ${userId}`;
+export async function logout(_req: Request, res: Response) {
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  })
+  return res.json({ success: true })
+}
+
+export async function forgotPassword(req: Request, res: Response) {
+  try {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim() : ''
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'invalid_email' })
     }
 
-    // Очистити cookie
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    });
+    const result = await requestPasswordReset(email)
 
-    console.log('[Auth] ✅ Logged out');
+    return res.json({
+      success: true,
+      // fix code_x: keep generic success message for security; in dev backend additionally returns token/url.
+      message: 'if_account_exists_reset_was_created',
+      emailSent: result.emailSent,
+      ...(('resetToken' in result && result.resetToken) ? { resetToken: result.resetToken } : {}),
+      ...(('resetUrl' in result && result.resetUrl) ? { resetUrl: result.resetUrl } : {}),
+    })
+  } catch (err) {
+    console.error('❌ Forgot password error:', err)
+    return res.status(500).json({ error: 'server_error', message: (err as Error).message })
+  }
+}
 
-    res.json({ success: true });
-  } catch (err: any) {
-    console.error('[Auth] ❌ Logout error:', err);
-    res.status(500).json({ error: 'server_error' });
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : ''
+    const password = typeof req.body?.password === 'string' ? req.body.password : ''
+
+    if (!token) {
+      return res.status(400).json({ error: 'reset_token_required' })
+    }
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'password_must_be_8_chars' })
+    }
+
+    await resetPasswordByToken(token, password)
+    return res.json({ success: true })
+  } catch (err) {
+    const message = (err as Error).message
+    if (message === 'invalid_or_expired_reset_token') {
+      return res.status(400).json({ error: message })
+    }
+    console.error('❌ Reset password error:', err)
+    return res.status(500).json({ error: 'server_error', message })
+  }
+}
+
+export async function updateSettings(req: Request, res: Response) {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'unauthorized' })
+
+    const { settings } = req.body ?? {}
+    const nextSettings = {
+      accentColor: typeof settings?.accentColor === 'string' ? settings.accentColor : undefined,
+      theme: typeof settings?.theme === 'string' ? settings.theme : undefined,
+      language: typeof settings?.language === 'string' ? settings.language : undefined,
+    }
+
+    const user = await updateUserUiSettings(req.user.id, nextSettings)
+    if (!user) return res.status(404).json({ error: 'user_not_found' })
+
+    // fix_code_x: return updated user immediately so frontend state stays synchronized.
+    return res.json({ user: toSafeUser(user) })
+  } catch (err) {
+    console.error('❌ Update settings error:', err)
+    return res.status(500).json({ error: 'server_error', message: (err as Error).message })
   }
 }

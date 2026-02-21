@@ -1,11 +1,11 @@
 // frontend/src/features/chat/services/chat.api.ts
-import { ChatMessage } from '@/frontend/srctypes/mentor.types';
+import { ChatMessage } from '@/shared/types/modules.types';
 import { api } from '../../../services/api';
 
 export const chatApi = api.injectEndpoints({
   endpoints: builder => ({
-    getMessages: builder.query<ChatMessage[], { user_id: string }>({
-      query: ({ user_id }) => `/chat/${user_id}`,
+    getMessages: builder.query<ChatMessage[], { userId: string }>({
+      query: ({ userId }) => `/chat/${userId}`,
       providesTags: result =>
         result
           ? [
@@ -14,8 +14,8 @@ export const chatApi = api.injectEndpoints({
             ]
           : [{ type: 'Chat' as const, id: 'LIST' }],
       async onCacheEntryAdded(arg, { updateCachedData, cacheDataLoaded, cacheEntryRemoved }) {
-        const wsUrl = process.env.VITE_WS_URL || 'ws://localhost:3001';
-        const ws = new WebSocket(`${wsUrl}/chat/${arg.user_id}`);
+        const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
+        const ws = new WebSocket(`${wsUrl}/chat/${arg.userId}`);
 
         ws.onmessage = event => {
           try {
@@ -43,9 +43,9 @@ export const chatApi = api.injectEndpoints({
       },
     }),
 
-    sendMessage: builder.mutation<void, { user_id: string; text: string }>({
-      query: ({ user_id, text }) => ({
-        url: `/chat/${user_id}/send`,
+    sendMessage: builder.mutation<void, { userId: string; text: string }>({
+      query: ({ userId, text }) => ({
+        url: `/chat/${userId}/send`,
         method: 'POST',
         body: { text },
       }),

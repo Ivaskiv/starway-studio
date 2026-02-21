@@ -1,49 +1,52 @@
-import { forwardRef, ButtonHTMLAttributes, ReactNode } from 'react'
-import { Loader2, LucideIcon } from 'lucide-react'
-import { cn } from '../lib/utils'
+// frontend/src/ui/Button.tsx
+import { forwardRef, ButtonHTMLAttributes, ReactNode } from 'react';
+import { Loader2, LucideIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-type Size = 'sm' | 'md' | 'lg'
-type Variant = 'solid' | 'outline' | 'ghost' | 'glass'
-type Color = 'orange' | 'purple' | 'white' | 'gray' | 'green' | 'blue' | 'red'
+type Size = 'sm' | 'md' | 'lg';
+type Variant = 'solid' | 'outline' | 'ghost' | 'glass';
+type Color = 'orange' | 'purple' | 'white' | 'gray' | 'green' | 'blue' | 'red';
 
-interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
-  children: ReactNode
-  variant?: Variant
-  color?: Color
-  size?: Size
-  isLoading?: boolean
-  loadingText?: string
-  leftIcon?: LucideIcon
-  rightIcon?: LucideIcon
-  fullWidth?: boolean
-  animate?: boolean
-  pulse?: boolean
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  children: ReactNode;
+  variant?: Variant;
+  color?: Color;
+  size?: Size;
+  loading?: boolean;               
+  loadingText?: string;
+  leftIcon?: LucideIcon;
+  rightIcon?: LucideIcon;
+  fullWidth?: boolean;
+  animate?: boolean;
+  pulse?: boolean;
 }
 
-const sizes: Record<Size, string> = { 
-  sm: 'h-8 px-3 text-sm gap-1.5', 
-  md: 'h-10 px-4 text-sm gap-2', 
-  lg: 'h-12 px-6 text-base gap-2.5' 
-}
+const sizes: Record<Size, string> = {
+  sm: 'h-8 px-3 text-sm gap-1.5',
+  md: 'h-10 px-4 text-base gap-2',
+  lg: 'h-12 px-6 text-lg gap-2.5',
+};
 
-const iconSizes: Record<Size, string> = { 
-  sm: 'w-3.5 h-3.5', 
-  md: 'w-4 h-4', 
-  lg: 'w-5 h-5' 
-}
+const iconSizes: Record<Size, string> = {
+  sm: 'w-3.5 h-3.5',
+  md: 'w-4 h-4',
+  lg: 'w-5 h-5',
+};
 
 const colors: Record<Color, Record<Variant, string>> = {
   orange: {
-    solid: 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40',
-    outline: 'border-2 border-orange-500 text-orange-500 hover:bg-orange-500/10',
-    ghost: 'text-orange-500 hover:bg-orange-500/10',
-    glass: 'bg-orange-500/10 backdrop-blur-md border border-orange-500/20 text-orange-400 hover:bg-orange-500/20',
+    // fix code_x: main "orange" palette now follows user-selected accent tokens globally.
+    solid: 'text-white border border-transparent bg-[image:var(--accent-gradient)] hover:brightness-110 shadow-lg',
+    outline: 'border-2 border-[color:rgba(var(--accent-rgb),0.6)] text-[var(--color-accent)] hover:bg-[color:rgba(var(--accent-rgb),0.1)]',
+    ghost: 'text-[var(--color-accent)] hover:bg-[color:rgba(var(--accent-rgb),0.1)]',
+    glass: 'bg-[color:rgba(var(--accent-rgb),0.12)] backdrop-blur-md border border-[color:rgba(var(--accent-rgb),0.35)] text-[var(--color-accent-soft)] hover:bg-[color:rgba(var(--accent-rgb),0.2)]',
   },
   purple: {
-    solid: 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40',
-    outline: 'border-2 border-purple-500 text-purple-500 hover:bg-purple-500/10',
-    ghost: 'text-purple-500 hover:bg-purple-500/10',
-    glass: 'bg-purple-500/10 backdrop-blur-md border border-purple-500/20 text-purple-400 hover:bg-purple-500/20',
+    // fix code_x: legacy "purple" buttons now follow selected accent to keep one coherent palette.
+    solid: 'text-white border border-transparent bg-[image:var(--accent-gradient)] hover:brightness-110 shadow-lg',
+    outline: 'border-2 border-[color:rgba(var(--accent-rgb),0.6)] text-[var(--color-accent)] hover:bg-[color:rgba(var(--accent-rgb),0.1)]',
+    ghost: 'text-[var(--color-accent)] hover:bg-[color:rgba(var(--accent-rgb),0.1)]',
+    glass: 'bg-[color:rgba(var(--accent-rgb),0.12)] backdrop-blur-md border border-[color:rgba(var(--accent-rgb),0.35)] text-[var(--color-accent-soft)] hover:bg-[color:rgba(var(--accent-rgb),0.2)]',
   },
   green: {
     solid: 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-500/25 hover:shadow-green-500/40',
@@ -75,20 +78,20 @@ const colors: Record<Color, Record<Variant, string>> = {
     ghost: 'text-gray-400 hover:bg-gray-500/10',
     glass: 'bg-gray-500/10 backdrop-blur-md border border-gray-500/20 text-gray-400 hover:bg-gray-500/20',
   },
-}
+};
 
-export const Button = forwardRef<HTMLButtonElement, Props>(
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
       children,
       variant = 'solid',
       color = 'orange',
       size = 'md',
-      isLoading,
-      loadingText,
-      leftIcon: Left,
-      rightIcon: Right,
-      fullWidth,
+      loading = false,
+      loadingText = 'Завантаження...',
+      leftIcon: LeftIcon,
+      rightIcon: RightIcon,
+      fullWidth = false,
       disabled,
       className,
       animate = false,
@@ -97,34 +100,33 @@ export const Button = forwardRef<HTMLButtonElement, Props>(
       ...props
     },
     ref
-  ) => (
-    <button
-      ref={ref}
-      type={type}
-      disabled={disabled || isLoading}
-      className={cn(
-        'inline-flex items-center justify-center gap-2 whitespace-nowrap',
-        'rounded-xl',
-        'transition-all duration-200',
-        'focus:outline-none focus:ring-2 focus:ring-orange-500/50',
-        'whitespace-nowrap',
-        sizes[size],
-        colors[color][variant],
-        fullWidth && 'w-full',
-        (disabled || isLoading) && 'opacity-50 cursor-not-allowed',
-        animate && 'hover:scale-105 active:scale-95',
-        pulse && 'animate-pulse',
-        className
-      )}
-      {...props}
-    >
-      {isLoading && <Loader2 className={cn(iconSizes[size], 'animate-spin')} />}
-      {!isLoading && Left && <Left className={iconSizes[size]} />}
-      <span>{isLoading && loadingText ? loadingText : children}</span>
-      {!isLoading && Right && <Right className={iconSizes[size]} />}
-    </button>
-  )
-)
+  ) => {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        disabled={disabled || loading}
+        className={cn(
+          'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.5)]',
+          sizes[size],
+          colors[color][variant],
+          fullWidth && 'w-full',
+          (disabled || loading) && 'opacity-60 cursor-not-allowed',
+          animate && 'hover:scale-105 active:scale-95',
+          pulse && 'animate-pulse',
+          className
+        )}
+        {...props}
+      >
+        {loading && <Loader2 className={cn(iconSizes[size], 'animate-spin')} />}
+        {!loading && LeftIcon && <LeftIcon className={cn(iconSizes[size], 'shrink-0')} />}
+        <span className="inline-block whitespace-nowrap">{loading && loadingText ? loadingText : children}</span>
+        {!loading && RightIcon && <RightIcon className={cn(iconSizes[size], 'shrink-0')} />}
+      </button>
+    );
+  }
+);
 
-Button.displayName = 'Button'
-export default Button
+Button.displayName = 'Button';
+
+export default Button;

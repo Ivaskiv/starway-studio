@@ -1,6 +1,7 @@
 // /features/notifications/config/notifications.config.ts
 
-import { Ability } from '@/shared/types/permissions';
+import { Ability } from "@/features/auth/permissions/abilities";
+
 
 export interface NotificationItem {
   key: string; // унікальний ключ сповіщення

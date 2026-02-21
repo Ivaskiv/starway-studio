@@ -1,19 +1,16 @@
 // frontend/src/features/wheel/hooks/useWheel.ts
-
-import { useGetWheelAssessmentQuery, useCreateWheelAssessmentMutation } from '@/features/wheel/services/wheel.api'
-import { WheelScore } from '@/features/wheel/types/wheel.types'
+import { useCreateWheelAssessmentMutation, useGetLatestWheelAssessmentQuery } from '@/features/wheel/api';
+import { WheelScore } from '../types/wheel.types';
 
 export const useWheel = (userId: string) => {
-  const { data: assessment, isLoading } = useGetWheelAssessmentQuery(userId)
-  const [createAssessment] = useCreateWheelAssessmentMutation()
+  const { data: latest, isLoading } = useGetLatestWheelAssessmentQuery(userId, {
+    skip: !userId,
+  });
+  const [createWheel] = useCreateWheelAssessmentMutation();
 
-  const submitScores = async (scores: WheelScore[]) => {
-    return await createAssessment({ userId, scores }).unwrap()
-  }
+  const submitWheel = async (scores: WheelScore[]) => {
+    return await createWheel({ userId, scores }).unwrap();
+  };
 
-  return {
-    assessment,
-    isLoading,
-    submitScores,
-  }
-}
+  return { latest, isLoading, submitWheel };
+};

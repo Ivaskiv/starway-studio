@@ -1,6 +1,6 @@
 // /features/modules/modules.api.ts
 import { Module } from '@/features/modules/module.types';
-import { api } from '@/services';
+import api from '@/services/api';
 
 export const modulesApi = api.injectEndpoints({
   endpoints: builder => ({

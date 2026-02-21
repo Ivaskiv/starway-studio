@@ -16,12 +16,21 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": false,
     "types": ["node"],
     "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "typeRoots": ["./node_modules/@types", "./src/types"]
+    "noUnusedParameters": false
+    // "typeRoots": ["./node_modules/@types", "./src/types"]
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*",
+    "test-db.ts",
+    "prisma/seed.ts",
+    "prisma/prismaDynamic.ts",
+    "../frontend/config",
+    "src/db/client.ts",
+    "src/db/index.ts"
+  ],
   "exclude": ["node_modules", "dist"],
   "ts-node": {
     "esm": true,

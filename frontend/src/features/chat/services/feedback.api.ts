@@ -3,10 +3,10 @@ import { api } from '../../../services/api';
 
 export interface Review {
   id: string;
-  product_id?: string;
+  productId?: string;
   funnelId?: string;
-  user_id: string;
-  user_name: string;
+  userId: string;
+  userName: string;
   userAvatar?: string;
   rating: number;
   title?: string;
@@ -17,19 +17,19 @@ export interface Review {
   helpful: number;
   notHelpful: number;
   replies?: ReviewReply[];
-  created_at: string;
-  updated_at?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ReviewReply {
   id: string;
   reviewId: string;
-  user_id: string;
-  user_name: string;
+  userId: string;
+  userName: string;
   userAvatar?: string;
   comment: string;
   isAuthor: boolean;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Rating {
@@ -54,8 +54,8 @@ export interface Comment {
   id: string;
   lessonId?: string;
   postId?: string;
-  user_id: string;
-  user_name: string;
+  userId: string;
+  userName: string;
   userAvatar?: string;
   content: string;
   likes: number;
@@ -63,36 +63,47 @@ export interface Comment {
   replies?: Comment[];
   isPinned: boolean;
   isEdited: boolean;
-  created_at: string;
-  updated_at?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Testimonial {
   id: string;
-  user_id: string;
-  user_name: string;
+  userId: string;
+  userName: string;
   userTitle?: string;
   userAvatar?: string;
   content: string;
   rating: number;
   isFeatured: boolean;
   isApproved: boolean;
-  product_id?: string;
-  created_at: string;
+  productId?: string;
+  createdAt: string;
 }
 
 export const feedbackApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     // Reviews
-    getReviews: builder.query<Review[], { product_id?: string; funnelId?: string; rating?: number }>({
-      query: ({ product_id, funnelId, rating }) => ({
-        url: '/feedback/reviews',
-        params: { product_id, funnelId, rating },
-      }),
-      providesTags: ['Review'],
-    }),
+    getReviews: builder.query<Review[], { productId?: string; funnelId?: string; rating?: number }>(
+      {
+        query: ({ productId, funnelId, rating }) => ({
+          url: '/feedback/reviews',
+          params: { productId, funnelId, rating },
+        }),
+        providesTags: ['Review'],
+      },
+    ),
 
-    createReview: builder.mutation<Review, { entityId: string; entityType: 'product' | 'funnel'; rating: number; comment: string; title?: string }>({
+    createReview: builder.mutation<
+      Review,
+      {
+        entityId: string;
+        entityType: 'product' | 'funnel';
+        rating: number;
+        comment: string;
+        title?: string;
+      }
+    >({
       query: ({ entityId, entityType, rating, comment, title }) => ({
         url: '/feedback/reviews',
         method: 'POST',
@@ -111,7 +122,7 @@ export const feedbackApi = api.injectEndpoints({
     }),
 
     deleteReview: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/feedback/reviews/${id}`,
         method: 'DELETE',
       }),
@@ -137,10 +148,10 @@ export const feedbackApi = api.injectEndpoints({
     }),
 
     // Ratings
-    getRating: builder.query<Rating, { product_id?: string; funnelId?: string }>({
-      query: ({ product_id, funnelId }) => ({
+    getRating: builder.query<Rating, { productId?: string; funnelId?: string }>({
+      query: ({ productId, funnelId }) => ({
         url: '/feedback/ratings',
-        params: { product_id, funnelId },
+        params: { productId, funnelId },
       }),
       providesTags: ['Rating'],
     }),
@@ -154,7 +165,10 @@ export const feedbackApi = api.injectEndpoints({
       providesTags: ['Comment'],
     }),
 
-    createComment: builder.mutation<Comment, { entityId: string; entityType: 'lesson' | 'post'; content: string; parentId?: string }>({
+    createComment: builder.mutation<
+      Comment,
+      { entityId: string; entityType: 'lesson' | 'post'; content: string; parentId?: string }
+    >({
       query: ({ entityId, entityType, content, parentId }) => ({
         url: '/feedback/comments',
         method: 'POST',
@@ -173,7 +187,7 @@ export const feedbackApi = api.injectEndpoints({
     }),
 
     deleteComment: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/feedback/comments/${id}`,
         method: 'DELETE',
       }),
@@ -190,7 +204,7 @@ export const feedbackApi = api.injectEndpoints({
     }),
 
     pinComment: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/feedback/comments/${id}/pin`,
         method: 'POST',
       }),
@@ -198,25 +212,28 @@ export const feedbackApi = api.injectEndpoints({
     }),
 
     // Testimonials
-    getTestimonials: builder.query<Testimonial[], { featured?: boolean; product_id?: string }>({
-      query: ({ featured, product_id }) => ({
+    getTestimonials: builder.query<Testimonial[], { featured?: boolean; productId?: string }>({
+      query: ({ featured, productId }) => ({
         url: '/feedback/testimonials',
-        params: { featured, product_id },
+        params: { featured, productId },
       }),
       providesTags: ['Review'],
     }),
 
-    createTestimonial: builder.mutation<Testimonial, { content: string; rating: number; product_id?: string }>({
-      query: ({ content, rating, product_id }) => ({
+    createTestimonial: builder.mutation<
+      Testimonial,
+      { content: string; rating: number; productId?: string }
+    >({
+      query: ({ content, rating, productId }) => ({
         url: '/feedback/testimonials',
         method: 'POST',
-        body: { content, rating, product_id },
+        body: { content, rating, productId },
       }),
       invalidatesTags: ['Review'],
     }),
 
     approveTestimonial: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/feedback/testimonials/${id}/approve`,
         method: 'POST',
       }),

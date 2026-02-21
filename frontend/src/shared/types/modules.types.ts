@@ -40,7 +40,7 @@ export interface DailyTask {
   scheduledTime?: string;
   category?: string;
   priority?: 'low' | 'medium' | 'high';
-  created_at: string;
+  createdAt: string;
   completed_at?: string;
 }
 
@@ -49,7 +49,6 @@ export interface TodayTasks {
   total: number;
   completed: number;
 }
-
 
 export interface YearlyGoal {
   id: string;
@@ -62,7 +61,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  created_at: string;
+  createdAt: string;
   messages?: ChatMessage[];
 }
 
@@ -99,17 +98,3 @@ export interface PromptAnalysis {
   platform: string; // платформа (web / telegram / mobile або комбінація)
   monetization: string; // модель монетизації (trial / subscription / freemium / course тощо)
 }
-
-// ============ BLOCK TYPES ============
-
-// User types
-// export type {
-//   AuthResponse, SignInRequest, SignUpRequest, Tokens, User
-// } from '@/frontend/srcfeatures/auth/services/auth.api';
-
-// AI types
-
-// export type {
-//   AIPromptHistory,
-//   AITemplate, AnalyzedPrompt
-// } from '@/frontend/srcfeatures/ai/services/ai.api';

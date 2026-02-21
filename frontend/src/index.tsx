@@ -2,12 +2,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Provider } from 'react-redux';
-import { PersistGate } from 'redux-persist/integration/react';
 // import { GoogleOAuthProvider } from '@react-oauth/google'
 import { Toaster } from 'react-hot-toast';
 
 import App from './App';
-import { persistor, store } from './app/store/store';
+import { store } from './app/store';
+import { applyAccentColor, loadAccentColor } from './shared/utils/accent.utils';
 import './styles/index.scss';
 
 // ==================== Google Client ID ====================
@@ -15,15 +15,16 @@ import './styles/index.scss';
 // if (!clientId) throw new Error('VITE_GOOGLE_CLIENT_ID not defined in .env')
 
 // ==================== Render App ====================
+// fix_code_x: apply persisted accent color before first paint to avoid "unstyled orange flash".
+applyAccentColor(loadAccentColor());
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     {/* <GoogleOAuthProvider clientId={clientId}> */}
-    <PersistGate loading={null} persistor={persistor}>
-      <Provider store={store}>
-        <Toaster position="top-right" />
-        <App />
-      </Provider>
-    </PersistGate>
+    <Provider store={store}>
+      <Toaster position="top-right" />
+      <App />
+    </Provider>
     {/* </GoogleOAuthProvider> */}
   </React.StrictMode>,
 );

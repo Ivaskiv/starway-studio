@@ -1,6 +1,6 @@
 // frontend/src/features/social/utils/social.utils.ts
-import { SOCIAL_PLATFORMS } from '../constants/social.constants';
-import type { SocialPlatform } from '../types/social.types';
+// import { SOCIAL_PLATFORMS } from '../constants/social.constants';
+import { SOCIAL_PLATFORMS_METADATA, type SocialPlatform } from '../types/social.types';
 
 export type SocialFlowMode = 'login' | 'connect';
 
@@ -24,7 +24,7 @@ export const parseSocialFlow = (queryParams: URLSearchParams): SocialFlowState =
   const stateParam = queryParams.get('state'); // string | null
 
   const provider: SocialPlatform | undefined =
-    providerParam && SOCIAL_PLATFORMS.includes(providerParam as SocialPlatform)
+    providerParam && SOCIAL_PLATFORMS_METADATA.includes(providerParam as SocialPlatform)
       ? (providerParam as SocialPlatform)
       : undefined;
 

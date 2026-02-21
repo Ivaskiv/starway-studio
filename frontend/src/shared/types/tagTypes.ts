@@ -2,7 +2,7 @@
 export const TAG_TYPES = [
   'User',
   'Funnel',
-  'Product',
+  'Product',   'Products',
   'Module',
   'Lesson',
   'Task',
@@ -52,11 +52,22 @@ export const TAG_TYPES = [
   'Answers',
 
   'AI',
+  'AIMentor',
   'MicroTasks',
   'AIPrompt',
   'AITemplate',
   'AIAnalysis',
-  
+  'Members',
+  'WheelCooldown',
+  'WheelAnalysis',
+  'Rating',
+  'Access',
+  'MentorAccess', 'Onboarding',
+  'Daily', 'Streak',
+  'Trial',
+  'Mirror',
+  'Consultation',
+  'Theme'
 
 ] as const
 

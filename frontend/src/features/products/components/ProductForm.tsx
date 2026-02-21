@@ -17,7 +17,7 @@ import {
   formToCreatePayload,
   formToUpdatePayload,
   productToForm,
-} from '@/features/products/types/product.mappers';
+} from '@/features/products/types/product.types';
 import type {
   Currency,
   ProductFormat,

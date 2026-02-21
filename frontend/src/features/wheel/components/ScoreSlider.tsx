@@ -1,61 +1,41 @@
-// features/wheel/components/ScoreSlider.tsx
+import React from 'react';
 
-import { Button, Input } from '@/ui';
-
-interface ScoreSliderProps {
+interface Props {
   value: number;
   onChange: (value: number) => void;
   color: string;
 }
 
-export const ScoreSlider = ({ value, onChange, color }: ScoreSliderProps) => {
+export const ScoreSlider = React.memo(({ value, onChange, color }: Props) => {
+  const pct = ((value - 1) / 9) * 100;
+
   return (
-    <div className="w-full space-y-4">
-      {/* Number buttons */}
-      <div className="flex justify-between gap-1">
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-          <Button
-            key={num}
-            type="button"
-            onClick={() => onChange(num)}
-            className={`
-              w-9 h-9 rounded-xl font-semibold text-sm 
-              transition-all duration-200    
-              hover:scale-110 active:scale-95
-              ${
-                value === num
-                  ? 'scale-110 shadow-lg text-white'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10'
-              }
-            `}
+    <div className="relative mt-2">
+      <div className="pointer-events-none absolute inset-0 flex items-center">
+        <div className="h-2.5 w-full rounded-full bg-white/10 border border-white/15 overflow-hidden">
+          {/* fix code_x: custom fill layer removes native white track tail and keeps glassmorphism transparency. */}
+          <div
+            className="h-full rounded-full transition-[width] duration-300 ease-out relative"
             style={{
-              backgroundColor: value === num ? color : undefined,
-              boxShadow: value === num ? `0 4px 20px ${color}50` : undefined,
+              width: `${pct}%`,
+              background: `linear-gradient(90deg, rgba(var(--accent-soft-rgb),0.88) 0%, ${color} 72%, rgba(255,255,255,0.92) 100%)`,
+              boxShadow: '0 0 16px rgba(var(--accent-rgb),0.42)',
             }}
           >
-            {num}
-          </Button>
-        ))}
+            <span className="absolute inset-0 wheel-slider-shimmer" />
+          </div>
+        </div>
       </div>
 
-      {/* Range slider */}
-      <Input
+      <input
         type="range"
-        min="1"
-        max="10"
+        min={1}
+        max={10}
         value={value}
         onChange={e => onChange(Number(e.target.value))}
-        className="w-full h-2 rounded-full appearance-none cursor-pointer"
-        style={{
-          background: `linear-gradient(to right, ${color} 0%, ${color} ${(value - 1) * 11.11}%, rgba(255,255,255,0.1) ${(value - 1) * 11.11}%, rgba(255,255,255,0.1) 100%)`,
-        }}
+        className="wheel-score-slider relative z-10 w-full cursor-pointer"
+        style={{ ['--thumb-color' as string]: color }}
       />
-
-      {/* Labels */}
-      <div className="flex justify-between text-xs text-white/40">
-        <span>Критично</span>
-        <span>Ідеально</span>
-      </div>
     </div>
   );
-};
+});

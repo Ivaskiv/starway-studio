@@ -1,7 +1,7 @@
 // shared/types/ai.types.ts
 // # AIConfig, AIFieldFocus, GenerationsBalance, AIFunnelAssistantProps, AIFunnelAssistantState
 
-import { FunnelDraft } from "@/features/funnels/types/funnel.types";
+import { FunnelDraft } from '@/features/funnels/types/funnel.types';
 
 /* ======================================================
   AI CONFIG
@@ -10,13 +10,13 @@ import { FunnelDraft } from "@/features/funnels/types/funnel.types";
 export interface AIConfig {
   model: 'gpt-4' | 'gpt-3.5-turbo';
   temperature: number;
-  maxTokens: number;
+  max_tokens: number;
   systemPrompt?: string;
 }
 // export const normalizeAIConfig = withNormalizer<any, AIConfig>({
 //   model: 'model',
 //   temperature: 'temperature',
-//   maxTokens: 'maxTokens',
+//   max_tokens : 'max_tokens ',
 //   systemPrompt: 'systemPrompt',
 
 // }); // # AIConfig

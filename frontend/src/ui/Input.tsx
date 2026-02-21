@@ -61,7 +61,7 @@ export const Input = forwardRef<HTMLInputElement, Props>(
               'bg-white/5 backdrop-blur-md border-white/10',
               'text-white placeholder:text-white/30',
               'transition-all duration-200',
-              'focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 focus:bg-white/10',
+              'focus:border-[color:rgba(var(--accent-rgb),0.55)] focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.2)] focus:bg-white/10',
               error &&
                 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20',
               disabled && 'opacity-50 cursor-not-allowed',

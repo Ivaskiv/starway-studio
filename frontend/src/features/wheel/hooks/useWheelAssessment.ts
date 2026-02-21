@@ -1,40 +1,54 @@
 // frontend/src/features/wheel/hooks/useWheelAssessment.ts
-import { useCallback } from 'react'
-import { useGetWheelAssessmentQuery, useCreateWheelAssessmentMutation } from '@/features/wheel/services/wheel.api'
-import { sendTelegramMessage } from '@/features/communicationFlow/telegram/telegram.service'
-import { WheelAssessment, WheelScore } from '@/features/wheel/types/wheel.types'
+import {
+  useCreateWheelAssessmentMutation,
+  useGetLatestWheelAssessmentQuery,
+} from '@/features/wheel/api';
+import { sendTelegramMessage } from '@/services/telegram.service';
+import { useCallback } from 'react';
+import type { WheelAssessment, WheelScore } from '../types/wheel.types';
 
 interface UseWheelAssessmentOptions {
-  userId: string
-  telegramChatId?: string
+  userId: string;
+  telegramChatId?: string;
 }
 
 export const useWheelAssessment = ({ userId, telegramChatId }: UseWheelAssessmentOptions) => {
-  // ✅ Отримати останню оцінку колеса
-  const { data: assessment, isLoading, isError, refetch } = useGetWheelAssessmentQuery(userId)
+  const {
+    data: assessment,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetLatestWheelAssessmentQuery(userId, {
+    skip: !userId,
+  });
 
-  // ✅ Мутація для створення нової оцінки
-  const [createAssessment, { isLoading: isCreating }] = useCreateWheelAssessmentMutation()
+  const [createAssessment, { isLoading: isCreating }] = useCreateWheelAssessmentMutation();
 
-  // Функція створення нового assessment
   const submitAssessment = useCallback(
     async (scores: WheelScore[]) => {
-      const created: WheelAssessment = await createAssessment({ userId, scores }).unwrap()
+      const created: WheelAssessment = await createAssessment({
+        userId,
+        scores,
+      }).unwrap();
 
-      // Telegram повідомлення
       if (telegramChatId) {
-        const avgScore = created.averageScore.toFixed(1)
         await sendTelegramMessage({
           chatId: telegramChatId,
-          text: `🌀 Колесо Балансу оновлено! Середній бал: ${avgScore}/10`,
+          text: `🌀 *Колесо балансу оновлено*\nСередній бал: *${created.averageScore.toFixed(
+            1,
+          )}/10*`,
           parseMode: 'MarkdownV2',
-        })
+          meta: {
+            source: 'wheel',
+            entityId: created.id,
+          },
+        });
       }
 
-      return created
+      return created;
     },
-    [createAssessment, userId, telegramChatId]
-  )
+    [createAssessment, userId, telegramChatId],
+  );
 
   return {
     assessment,
@@ -43,5 +57,5 @@ export const useWheelAssessment = ({ userId, telegramChatId }: UseWheelAssessmen
     refetch,
     submitAssessment,
     isCreating,
-  }
-}
+  };
+};

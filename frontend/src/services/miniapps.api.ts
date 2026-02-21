@@ -16,8 +16,8 @@ export interface MiniApp {
     logo?: string;
     features: string[];
   };
-  created_at: string;
-  updated_at?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface MiniAppAnalytics {
@@ -29,7 +29,7 @@ export interface MiniAppAnalytics {
 }
 
 export const miniappsApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     getMiniApps: builder.query<MiniApp[], { funnelId?: string }>({
       query: ({ funnelId }) => ({
         url: '/miniapps',
@@ -39,12 +39,12 @@ export const miniappsApi = api.injectEndpoints({
     }),
 
     getMiniAppById: builder.query<MiniApp, string>({
-      query: (id) => `/miniapps/${id}`,
+      query: id => `/miniapps/${id}`,
       providesTags: (result, error, id) => [{ type: 'MiniApp', id }],
     }),
 
     createMiniApp: builder.mutation<MiniApp, Partial<MiniApp>>({
-      query: (data) => ({
+      query: data => ({
         url: '/miniapps',
         method: 'POST',
         body: data,
@@ -62,7 +62,7 @@ export const miniappsApi = api.injectEndpoints({
     }),
 
     deleteMiniApp: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/miniapps/${id}`,
         method: 'DELETE',
       }),
@@ -70,12 +70,12 @@ export const miniappsApi = api.injectEndpoints({
     }),
 
     getMiniAppAnalytics: builder.query<MiniAppAnalytics, string>({
-      query: (appId) => `/miniapps/${appId}/analytics`,
+      query: appId => `/miniapps/${appId}/analytics`,
       providesTags: ['Analytics'],
     }),
 
     publishMiniApp: builder.mutation<MiniApp, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/miniapps/${id}/publish`,
         method: 'POST',
       }),

@@ -75,3 +75,5 @@ jest.config.json
 /eslint.config.js
 /.eslintignore
 /.prettierignore
+
+/generated/prisma

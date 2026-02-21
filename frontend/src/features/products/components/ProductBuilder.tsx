@@ -7,7 +7,7 @@ import {
   ProductIntegration,
   ProductType,
   formToCreatePayload,
-} from '@/shared/types/product.types';
+} from '@/features/products/types/product.types';
 import { Button } from '@/ui/Button';
 import { Input } from '@/ui/Input';
 import { Label } from '@/ui/Label';
@@ -41,6 +41,7 @@ const INTEGRATIONS: { label: string; value: ProductIntegration }[] = [
 const DEFAULT_FORM: ProductFormInputs = {
   name: '',
   description: '',
+  title: '',
   type: 'course',
   price: 0,
   currency: 'EUR',

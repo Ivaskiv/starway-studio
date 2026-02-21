@@ -1,59 +1,22 @@
-// /features/auth/utils/roles.ts
-import type { User } from '@/features/user/types/user.types';
+// frontend/src/shared/utils/roles.ts
+import type { User } from '@/features/user/types/user.types'
 
-// 🔹 Коротка логіка ролей та підписок
+export function hasContentAccess(content: any, user: User | null): boolean {
+  if (!content.isPremium) return true
+  if (!user) return false
 
-// Апгрейд користувача до адміна
-export const upgradeToAdmin = (user: User): User => ({
-  ...user,
-  role: 'admin',
-});
+  // ✅ через user.access — не через subscriptionStatus/trialEndsAt
+  return user.access.isPaid || user.access.isTrial
+}
 
-// Перевірка чи користувач адмін
-export const isAdmin = (user?: User) => user?.role === 'admin';
+export function filterContentByAccess(content: any[], user: User | null) {
+  return content.map(c => ({
+    ...c,
+    locked: !hasContentAccess(c, user),
+  }))
+}
 
-// Фільтрація контенту для користувача
-export const filterContentForUser = (
-  user: User | null,
-  content: Array<{ id: string; adminId: string; isPremium: boolean }>,
-) => {
-  if (!user) {
-    // Неавторизовані бачать тільки безкоштовний
-    return content.map(c => ({ ...c, locked: c.isPremium }));
-  }
-
-  return content.map(c => {
-    const hasAccess = !c.isPremium || user.subscriptionsRole?.includes(c.adminId);
-    return { ...c, locked: !hasAccess };
-  });
-};
-
-// 🔹 Приклад апгрейду та підписок
-export const exampleFlow = () => {
-  // користувач створюється як звичайний
-  let user: User = {
-    id: 'u1',
-    email: 'test@gmail.com',
-    firstName: 'Test',
-    role: 'user',
-    isAdmin: true,
-    createdAt: new Date().toISOString(),
-    subscriptionsRole: [],
-  };
-
-  // користувач створює продукт → апгрейд до адміна
-  user = upgradeToAdmin(user);
-
-  // новий користувач підписується на цього адміна
-  const subscriber: User = {
-    id: 'u2',
-    email: 'sub@gmail.com',
-    firstName: 'Sub',
-    role: 'user',
-    isAdmin: false,
-    createdAt: new Date().toISOString(),
-    subscriptionsRole: [user.id],
-  };
-
-  console.log(user, subscriber);
-};
+export function isContentOwner(contentCreatorId: string, user: User | null): boolean {
+  if (!user) return false
+  return contentCreatorId === user.id || user.isAdmin || user.isSuperAdmin
+}

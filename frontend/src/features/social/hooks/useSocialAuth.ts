@@ -1,11 +1,8 @@
 // frontend/src/features/social/hooks/useSocialAuth.ts
-import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import type { SocialPlatform } from '../types/social.types';
-import { getSocialPlatformMetadata } from '../constants/social.constants';
+import { getSocialPlatformMetadata, type SocialPlatform } from '../types/social.types';
 
 export function useSocialAuth() {
-  const navigate = useNavigate();
 
   const login = (provider: SocialPlatform) => {
     const metadata = getSocialPlatformMetadata(provider);

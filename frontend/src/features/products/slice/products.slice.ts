@@ -1,6 +1,6 @@
 // features/products/slice/products.slice.ts
 
-import type { Product } from '@/shared/types/product.types';
+import { Product } from '@/features/products/types/product.types';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface ProductsState {

@@ -80,3 +80,105 @@ export default defineConfig([
   },
 ]);
 ```
+# 🌟 Starway AI-Mentor - Full Stack Application
+
+AI-powered mentoring system with Ukrainian language support, built with modern tech stack.
+
+## 🚀 Tech Stack
+
+**Backend:**
+- Node.js + TypeScript
+- Express.js
+- Prisma ORM
+- PostgreSQL (Neon)
+- OpenAI API
+- Telegram Bot API
+
+**Frontend:**
+- React 18
+- TypeScript
+- Vite
+- Redux Toolkit + RTK Query
+- TailwindCSS
+- Glassmorphism UI
+
+## 📋 Prerequisites
+
+- Node.js 20+
+- PostgreSQL 16+
+- OpenAI API Key
+- Telegram Bot Token (optional)
+
+## 🛠️ Installation
+
+### Backend Setup
+```bash
+cd backend
+npm install
+```
+
+Create `.env`:
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/starway
+OPENAI_API_KEY=sk-...
+JWT_SECRET=your-secret
+TELEGRAM_BOT_TOKEN=your-token
+```
+
+Run migrations:
+```bash
+npm run prisma:migrate
+npm run prisma:generate
+```
+
+Start dev server:
+```bash
+npm run dev
+```
+
+### Frontend Setup
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## 🚀 Deployment
+
+### Railway (Backend)
+
+1. Create new project on Railway
+2. Add PostgreSQL service
+3. Add environment variables
+4. Connect GitHub repo
+5. Deploy!
+
+### Vercel (Frontend)
+
+1. Import project from GitHub
+2. Set build command: `npm run build`
+3. Set environment variable: `VITE_API_URL`
+4. Deploy!
+
+## 📊 Features
+
+- ✅ AI Mentor Chat (GPT-4)
+- ✅ Wheel of Life Balance
+- ✅ Daily Cycle Tracking
+- ✅ Vision & Goals Setting
+- ✅ Trial Mirrors (Day 4 & 7)
+- ✅ Mini-Courses Recommendations
+- ✅ Consultation Booking
+- ✅ Zoom Integration
+- ✅ Mentorship Program
+- ✅ Telegram Notifications
+
+## 🧪 Testing
+```bash
+npm test
+npm run test:coverage
+```
+
+## 📝 License
+
+MIT

@@ -1,11 +1,10 @@
 // /features/modules/module.types.ts
 
-import { BlockTypeId } from "@/shared/constants/funnel.constants";
-
+import { BlockTypeId } from '@/shared/constants/funnel.constants';
 
 export interface Module {
   id: string;
-  product_id: string;
+  productId: string;
   name: string;
   order: number;
   isLocked?: boolean;
@@ -23,7 +22,7 @@ export type ModuleCategory =
 
 export interface Module {
   id: string;
-  product_id: string;
+  productId: string;
   name: string;
   icon?: string; // для UI, emoji або іконка
   category: ModuleCategory;

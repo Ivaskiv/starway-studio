@@ -3,7 +3,7 @@ import { api } from './api';
 
 export interface Media {
   id: string;
-  user_id: string;
+  userId: string;
   type: 'image' | 'video' | 'audio' | 'document' | 'archive';
   name: string;
   url: string;
@@ -16,7 +16,7 @@ export interface Media {
   folder?: string;
   tags?: string[];
   is_public: boolean;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface UploadProgress {
@@ -31,11 +31,11 @@ export interface Folder {
   parentId?: string;
   filesCount: number;
   size: number;
-  created_at: string;
+  createdAt: string;
 }
 
 export const mediaApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     // Media Files
     getMediaFiles: builder.query<Media[], { folder?: string; type?: string; limit?: number }>({
       query: ({ folder, type, limit = 100 }) => ({
@@ -46,7 +46,7 @@ export const mediaApi = api.injectEndpoints({
     }),
 
     uploadMedia: builder.mutation<Media, FormData>({
-      query: (formData) => ({
+      query: formData => ({
         url: '/media/upload',
         method: 'POST',
         body: formData,
@@ -64,7 +64,7 @@ export const mediaApi = api.injectEndpoints({
     }),
 
     deleteMedia: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/media/files/${id}`,
         method: 'DELETE',
       }),
@@ -72,7 +72,7 @@ export const mediaApi = api.injectEndpoints({
     }),
 
     bulkDeleteMedia: builder.mutation<void, string[]>({
-      query: (ids) => ({
+      query: ids => ({
         url: '/media/files/bulk-delete',
         method: 'DELETE',
         body: { ids },
@@ -108,7 +108,7 @@ export const mediaApi = api.injectEndpoints({
     }),
 
     deleteFolder: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/media/folders/${id}`,
         method: 'DELETE',
       }),
@@ -117,7 +117,7 @@ export const mediaApi = api.injectEndpoints({
 
     // Avatars
     uploadAvatar: builder.mutation<{ url: string }, FormData>({
-      query: (formData) => ({
+      query: formData => ({
         url: '/media/avatar',
         method: 'POST',
         body: formData,

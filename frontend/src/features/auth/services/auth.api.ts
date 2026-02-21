@@ -1,126 +1,87 @@
 // frontend/src/features/auth/services/auth.api.ts
-import {
-  LoginRequest,
-  RegisterRequest,
-  UpdateUserRequest,
-  User,
-} from '@/features/user/types/user.types';
-import { api, saveToken } from '@/services/api';
-import { AuthResponse, MeResponse, SocialAuthInput } from '../types/auth.types';
+import { api } from '@/services/api';
+import type {
+  AuthApiResponse,
+  ForgotPasswordInput,
+  ForgotPasswordResponse,
+  LoginInput,
+  RegisterInput,
+  ResetPasswordInput,
+  ResetPasswordResponse,
+  SocialAuthApiInput,
+  UpdateUserSettingsInput,
+} from '../types/auth.types';
 import { clearAuth, setCredentials, updateUser } from './auth.slice';
-
-const ME_TAG = { type: 'User' as const, id: 'ME' };
 
 export const authApi = api.injectEndpoints({
   endpoints: builder => ({
-    login: builder.mutation<AuthResponse, LoginRequest>({
-      query: credentials => ({
-        url: '/auth/login',
-        method: 'POST',
-        body: credentials,
-      }),
-      invalidatesTags: [ME_TAG],
+    // ── LOGIN ──────────────────────────────────────────────────────────────
+    login: builder.mutation<AuthApiResponse, LoginInput>({
+      query: body => ({ url: '/auth/login', method: 'POST', body }),
+      invalidatesTags: ['User'],
+    }),
+
+    // ── REGISTER ───────────────────────────────────────────────────────────
+    register: builder.mutation<AuthApiResponse, RegisterInput>({
+      query: body => ({ url: '/auth/register', method: 'POST', body }),
+      invalidatesTags: ['User'],
+    }),
+
+    forgotPassword: builder.mutation<ForgotPasswordResponse, ForgotPasswordInput>({
+      query: body => ({ url: '/auth/forgot-password', method: 'POST', body }),
+    }),
+
+    resetPassword: builder.mutation<ResetPasswordResponse, ResetPasswordInput>({
+      query: body => ({ url: '/auth/reset-password', method: 'POST', body }),
+    }),
+
+    // ── SOCIAL AUTH ────────────────────────────────────────────────────────
+    socialAuth: builder.mutation<AuthApiResponse, SocialAuthApiInput>({
+      query: body => ({ url: '/auth/social', method: 'POST', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
-          dispatch(setCredentials({ user: data.user, accessToken: data.token }));
-          saveToken(data.token);
+          dispatch(setCredentials({ user: data.user, accessToken: data.accessToken }));
         } catch (err) {
-          dispatch(clearAuth());
+          console.error('[auth.api] ❌ socialAuth failed:', err);
         }
       },
+      invalidatesTags: ['User'],
     }),
 
-    register: builder.mutation<AuthResponse, Omit<RegisterRequest, 'role'>>({
-      query: data => ({
-        url: '/auth/register',
-        method: 'POST',
-        body: data,
-      }),
-      invalidatesTags: [ME_TAG],
-      async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        try {
-          const { data } = await queryFulfilled;
-          dispatch(setCredentials({ user: data.user, accessToken: data.token }));
-          saveToken(data.token);
-        } catch (err) {}
-      },
-    }),
-
-    socialAuth: builder.mutation<AuthResponse, SocialAuthInput>({
-      query: ({ provider, token }) => ({
-        url: '/auth/social',
-        method: 'POST',
-        body: { provider, token },
-      }),
-      invalidatesTags: [ME_TAG],
-      async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        try {
-          const { data } = await queryFulfilled;
-          dispatch(setCredentials({ user: data.user, accessToken: data.token }));
-          saveToken(data.token);
-        } catch (error) {}
-      },
-    }),
-
-    getMe: builder.query<MeResponse, void>({
+    // ── GET ME ─────────────────────────────────────────────────────────────
+    getMe: builder.query<{ user: AuthApiResponse['user'] }, void>({
       query: () => '/auth/me',
-      providesTags: [ME_TAG],
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
           dispatch(updateUser(data.user));
         } catch (err) {
+          console.error('[auth.api] ❌ getMe failed:', err);
           dispatch(clearAuth());
         }
       },
+      providesTags: ['User'],
     }),
 
-    refreshToken: builder.mutation<AuthResponse, void>({
-      query: () => ({
-        url: '/auth/refresh',
-        method: 'POST',
-      }),
-      async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        try {
-          const { data } = await queryFulfilled;
-          dispatch(setCredentials({ user: data.user, accessToken: data.token }));
-          saveToken(data.token);
-        } catch (err) {
-          dispatch(clearAuth());
-        }
-      },
-    }),
-
+    // ── LOGOUT ─────────────────────────────────────────────────────────────
     logout: builder.mutation<void, void>({
-      query: () => ({
-        url: '/auth/logout',
-        method: 'POST',
-      }),
-      async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        try {
-          await queryFulfilled;
-        } catch {}
-        dispatch(clearAuth());
-        dispatch(api.util.resetApiState());
-      },
-      invalidatesTags: [ME_TAG],
+      query: () => ({ url: '/auth/logout', method: 'POST' }),
+      invalidatesTags: ['User'],
     }),
 
-    updateUserSettings: builder.mutation<User, UpdateUserRequest>({
-      query: ({ id, ...body }) => ({
-        url: `/users/${id}`,
-        method: 'PATCH',
-        body,
-      }),
-      transformResponse: (response: { user: User }) => response.user,
-      invalidatesTags: [ME_TAG],
+    // ── UPDATE SETTINGS ────────────────────────────────────────────────────
+    updateUserSettings: builder.mutation<{ user: AuthApiResponse['user'] }, UpdateUserSettingsInput>({
+      query: body => ({ url: '/auth/settings', method: 'PATCH', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
-          dispatch(updateUser(data));
-        } catch (err) {}
+          dispatch(updateUser(data.user));
+        } catch (err) {
+          console.error('[auth.api] ❌ updateUserSettings failed:', err);
+        }
       },
+      invalidatesTags: ['User'],
     }),
   }),
 });
@@ -128,10 +89,10 @@ export const authApi = api.injectEndpoints({
 export const {
   useLoginMutation,
   useRegisterMutation,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
   useSocialAuthMutation,
   useGetMeQuery,
-  useLazyGetMeQuery,
-  useRefreshTokenMutation,
   useLogoutMutation,
   useUpdateUserSettingsMutation,
 } = authApi;

@@ -40,10 +40,10 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
     },
     products: [
       {
-        id: 'audit-basic',
+        id: 'audit_basic',
         name: 'AI-Аудит (основний)',
         title: 'AI-аудит',
-        type: 'one-time',
+        type: 'one_time',
         price: 99,
         format: 'web',
         integrations: ['other'],
@@ -52,10 +52,10 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         purpose: 'збір потенційних клієнтів',
       },
       {
-        id: 'audit-upsell',
+        id: 'audit_upsell',
         name: 'Повна AI-воронка під ключ',
         title: 'AI-воронка',
-        type: 'one-time',
+        type: 'one_time',
         price: 299,
         format: 'mini-app',
         integrations: ['telegram'],
@@ -103,10 +103,10 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
     },
     products: [
       {
-        id: 'diagnostic-strategy',
+        id: 'diagnostic_strategy',
         name: 'AI-Стратегія росту',
         title: 'AI-аналіз бізнес-моделі',
-        type: 'one-time',
+        type: 'one_time',
         price: 399,
         format: 'web',
         integrations: ['other'],
@@ -115,10 +115,10 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         purpose: 'продаж повного пакету',
       },
       {
-        id: 'diagnostic-full-funnel',
+        id: 'diagnostic_full_funnel',
         name: 'Повна воронка під ключ',
         title: 'AI-аналіз бізнес-моделі',
-        type: 'one-time',
+        type: 'one_time',
         price: 999,
         format: 'mini-app',
         integrations: ['telegram'],
@@ -130,7 +130,7 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
   },
 
   {
-    id: 'ai-mentorship',
+    id: 'ai_mentorship',
     name: 'AI: Досвід → Продажі',
     type: 'evergreen',
     targetAudience: 'Контент-кріейтори, блогери, експерти з аудиторією',
@@ -166,10 +166,10 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
     },
     products: [
       {
-        id: 'content-plan',
+        id: 'content_plan',
         name: 'AI-Контент план на 14 днів',
         title: 'AI-Контент план на 14 днів',
-        type: 'one-time',
+        type: 'one_time',
         price: 79,
         format: 'web',
         integrations: ['other'],
@@ -178,7 +178,7 @@ export const DEMO_TEMPLATES: FunnelBlueprint[] = [
         purpose: 'збір потенційних клієнтів',
       },
       {
-        id: 'content-subscription',
+        id: 'content_subscription',
         name: 'AI-Контент машина (підписка)',
         title: 'AI-Контент машина (підписка)',
         type: 'subscription',

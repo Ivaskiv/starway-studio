@@ -23,7 +23,7 @@ export interface AIPromptHistory {
   id: string;
   prompt: string;
   analysis: AnalyzedPrompt;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface AITemplate {
@@ -40,7 +40,7 @@ export interface AITemplate {
   }[];
   is_public: boolean;
   usageCount: number;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface AIContentGeneration {
@@ -50,7 +50,7 @@ export interface AIContentGeneration {
   output: string;
   model: 'gpt-4' | 'gpt-3.5-turbo';
   tokens: number;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface AIAnalysis {
@@ -63,7 +63,7 @@ export interface AIAnalysis {
     score: number;
     recommendation: string;
   }[];
-  created_at: string;
+  createdAt: string;
 }
 export interface AIAnalysisResult {
   state: string;
@@ -76,10 +76,10 @@ export interface AIAnalysisResult {
   supportMessage?: string;
 }
 export const aiApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     // Main AI Generation
     analyzePrompt: builder.mutation<AnalyzedPrompt, string>({
-      query: (prompt) => ({
+      query: prompt => ({
         url: '/ai/analyze-prompt',
         method: 'POST',
         body: { prompt },
@@ -92,7 +92,7 @@ export const aiApi = api.injectEndpoints({
     }),
 
     generateStepVariants: builder.mutation<string[], GenerateStepVariantsRequest>({
-      query: (data) => ({
+      query: data => ({
         url: '/ai/generate-step',
         method: 'POST',
         body: data,
@@ -162,7 +162,7 @@ export const aiApi = api.injectEndpoints({
     }),
 
     savePrompt: builder.mutation<AIPromptHistory, { prompt: string; analysis: AnalyzedPrompt }>({
-      query: (data) => ({
+      query: data => ({
         url: '/ai/prompts/save',
         method: 'POST',
         body: data,
@@ -171,7 +171,7 @@ export const aiApi = api.injectEndpoints({
     }),
 
     deletePrompt: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/ai/prompts/${id}`,
         method: 'DELETE',
       }),
@@ -188,7 +188,7 @@ export const aiApi = api.injectEndpoints({
     }),
 
     createAITemplate: builder.mutation<AITemplate, Partial<AITemplate>>({
-      query: (data) => ({
+      query: data => ({
         url: '/ai/templates',
         method: 'POST',
         body: data,
@@ -196,17 +196,19 @@ export const aiApi = api.injectEndpoints({
       invalidatesTags: ['AITemplate'],
     }),
 
-    useAITemplate: builder.mutation<string, { templateId: string; variables: Record<string, any> }>({
-      query: ({ templateId, variables }) => ({
-        url: `/ai/templates/${templateId}/use`,
-        method: 'POST',
-        body: { variables },
-      }),
-      transformResponse: (response: { result: string }) => response.result,
-    }),
+    useAITemplate: builder.mutation<string, { templateId: string; variables: Record<string, any> }>(
+      {
+        query: ({ templateId, variables }) => ({
+          url: `/ai/templates/${templateId}/use`,
+          method: 'POST',
+          body: { variables },
+        }),
+        transformResponse: (response: { result: string }) => response.result,
+      },
+    ),
 
     deleteAITemplate: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/ai/templates/${id}`,
         method: 'DELETE',
       }),
@@ -232,7 +234,10 @@ export const aiApi = api.injectEndpoints({
     }),
 
     // AI Chat Assistant
-    chatWithAI: builder.mutation<{ response: string; suggestions?: string[] }, { message: string; context?: any }>({
+    chatWithAI: builder.mutation<
+      { response: string; suggestions?: string[] },
+      { message: string; context?: any }
+    >({
       query: ({ message, context }) => ({
         url: '/ai/chat',
         method: 'POST',
@@ -260,12 +265,15 @@ export const aiApi = api.injectEndpoints({
     }),
 
     // AI SEO Optimization
-    optimizeSEO: builder.mutation<{
-      title: string;
-      description: string;
-      keywords: string[];
-      suggestions: string[];
-    }, { content: string }>({
+    optimizeSEO: builder.mutation<
+      {
+        title: string;
+        description: string;
+        keywords: string[];
+        suggestions: string[];
+      },
+      { content: string }
+    >({
       query: ({ content }) => ({
         url: '/ai/optimize-seo',
         method: 'POST',

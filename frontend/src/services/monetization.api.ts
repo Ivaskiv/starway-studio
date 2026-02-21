@@ -3,7 +3,7 @@ import { api } from './api';
 
 export interface PricingPlan {
   id: string;
-  product_id?: string;
+  productId?: string;
   name: string;
   description?: string;
   price: number;
@@ -11,10 +11,10 @@ export interface PricingPlan {
   billingPeriod: 'once' | 'monthly' | 'quarterly' | 'yearly';
   features: string[];
   isPopular?: boolean;
-  is_active: boolean;
+  isActive: boolean;
   trialDays?: number;
   maxUsers?: number;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Coupon {
@@ -25,30 +25,30 @@ export interface Coupon {
   currency?: 'UAH' | 'USD' | 'EUR';
   maxUses?: number;
   usedCount: number;
-  expires_at?: string;
-  is_active: boolean;
+  expiresAt?: string;
+  isActive: boolean;
   applicableTo?: {
     type: 'all' | 'products' | 'plans';
     ids?: string[];
   };
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Subscription {
   id: string;
-  user_id: string;
+  userId: string;
   planId: string;
   status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired';
   currentPeriodStart: string;
   currentPeriodEnd: string;
   cancelAtPeriodEnd: boolean;
-  trial_end?: string;
-  created_at: string;
+  trialEnd?: string;
+  createdAt: string;
 }
 
 export interface Transaction {
   id: string;
-  user_id: string;
+  userId: string;
   type: 'payment' | 'refund' | 'subscription';
   amount: number;
   currency: 'UAH' | 'USD' | 'EUR';
@@ -56,12 +56,12 @@ export interface Transaction {
   paymentMethod: 'card' | 'paypal' | 'crypto' | 'bank_transfer';
   description?: string;
   metadata?: any;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Invoice {
   id: string;
-  user_id: string;
+  userId: string;
   subscriptionId?: string;
   number: string;
   amount: number;
@@ -76,7 +76,7 @@ export interface Invoice {
     total: number;
   }[];
   pdf?: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Refund {
@@ -86,22 +86,22 @@ export interface Refund {
   currency: 'UAH' | 'USD' | 'EUR';
   reason?: string;
   status: 'pending' | 'completed' | 'failed';
-  created_at: string;
+  createdAt: string;
 }
 
 export const monetizationApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     // Pricing Plans
-    getPricingPlans: builder.query<PricingPlan[], { product_id?: string }>({
-      query: ({ product_id }) => ({
+    getPricingPlans: builder.query<PricingPlan[], { productId?: string }>({
+      query: ({ productId }) => ({
         url: '/monetization/pricing',
-        params: { product_id },
+        params: { productId },
       }),
       providesTags: ['Pricing'],
     }),
 
     createPricingPlan: builder.mutation<PricingPlan, Partial<PricingPlan>>({
-      query: (data) => ({
+      query: data => ({
         url: '/monetization/pricing',
         method: 'POST',
         body: data,
@@ -119,7 +119,7 @@ export const monetizationApi = api.injectEndpoints({
     }),
 
     deletePricingPlan: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/monetization/pricing/${id}`,
         method: 'DELETE',
       }),
@@ -136,7 +136,7 @@ export const monetizationApi = api.injectEndpoints({
     }),
 
     createCoupon: builder.mutation<Coupon, Partial<Coupon>>({
-      query: (data) => ({
+      query: data => ({
         url: '/monetization/coupons',
         method: 'POST',
         body: data,
@@ -154,7 +154,7 @@ export const monetizationApi = api.injectEndpoints({
     }),
 
     validateCoupon: builder.mutation<{ valid: boolean; discount: number }, string>({
-      query: (code) => ({
+      query: code => ({
         url: '/monetization/coupons/validate',
         method: 'POST',
         body: { code },
@@ -162,7 +162,7 @@ export const monetizationApi = api.injectEndpoints({
     }),
 
     deleteCoupon: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/monetization/coupons/${id}`,
         method: 'DELETE',
       }),
@@ -194,7 +194,7 @@ export const monetizationApi = api.injectEndpoints({
     }),
 
     resumeSubscription: builder.mutation<Subscription, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/monetization/subscriptions/${id}/resume`,
         method: 'POST',
       }),
@@ -210,8 +210,11 @@ export const monetizationApi = api.injectEndpoints({
       providesTags: ['Transaction'],
     }),
 
-    createPayment: builder.mutation<Transaction, { planId: string; amount: number; currency: string; couponCode?: string }>({
-      query: (data) => ({
+    createPayment: builder.mutation<
+      Transaction,
+      { planId: string; amount: number; currency: string; couponCode?: string }
+    >({
+      query: data => ({
         url: '/monetization/payments',
         method: 'POST',
         body: data,
@@ -229,12 +232,12 @@ export const monetizationApi = api.injectEndpoints({
     }),
 
     getInvoiceById: builder.query<Invoice, string>({
-      query: (id) => `/monetization/invoices/${id}`,
+      query: id => `/monetization/invoices/${id}`,
       providesTags: (result, error, id) => [{ type: 'Invoice', id }],
     }),
 
     downloadInvoice: builder.mutation<{ url: string }, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/monetization/invoices/${id}/download`,
         method: 'GET',
       }),
@@ -246,7 +249,10 @@ export const monetizationApi = api.injectEndpoints({
       providesTags: ['Refund'],
     }),
 
-    createRefund: builder.mutation<Refund, { transactionId: string; amount?: number; reason?: string }>({
+    createRefund: builder.mutation<
+      Refund,
+      { transactionId: string; amount?: number; reason?: string }
+    >({
       query: ({ transactionId, amount, reason }) => ({
         url: '/monetization/refunds',
         method: 'POST',

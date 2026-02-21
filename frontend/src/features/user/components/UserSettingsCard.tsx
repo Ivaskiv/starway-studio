@@ -1,12 +1,25 @@
+// frontend/src/features/user/components/UserSettingsCard.tsx
 import {
   useGetMeQuery,
   useUpdateUserSettingsMutation,
 } from '@/features/auth/services/auth.api';
 import { cn } from '@/lib/utils';
-import { Button, GlassCard } from '@/ui';
-import { Globe, Moon, Sun, User } from 'lucide-react';
+import { applyAccentColor, saveAccentColor } from '@/shared/utils/accent.utils';
+import { applyUiTheme, normalizeUiTheme, saveUiTheme } from '@/shared/utils/theme.utils';
+import { Button, GlassCard, Input } from '@/ui';
+import { Globe, Moon, Palette, Sun, User } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
+
+function normalizeTheme(value?: string | null): 'light' | 'dark' {
+  return normalizeUiTheme(value);
+}
+
+function normalizeLanguage(value?: string | null): 'uk' | 'en' {
+  const v = String(value || '').toLowerCase();
+  if (v === 'en' || v === 'en-us' || v === 'en-gb') return 'en';
+  return 'uk';
+}
 
 // ==========================
 // Типи для Toggle
@@ -54,7 +67,7 @@ function SettingsToggle<T extends string>({
             className={cn(
               'px-3 py-1 rounded text-xs font-medium transition-all',
               value === opt.value
-                ? 'bg-orange-500 text-white'
+                ? 'text-white border border-[color:rgba(var(--accent-rgb),0.35)] bg-[color:rgba(var(--accent-rgb),0.85)]'
                 : 'text-white/60 hover:text-white hover:bg-white/5',
               disabled && 'opacity-50 cursor-not-allowed',
             )}
@@ -78,10 +91,15 @@ export default function UserSettingsCard({ userId }: Props) {
   const { data: meData } = useGetMeQuery();
   const [updateUser] = useUpdateUserSettingsMutation();
 
-  // Локальний state для теми і мови
-  const [formData, setFormData] = useState<{ theme: 'light' | 'dark'; language: 'uk' | 'en' }>({
+  // Локальний state для теми/мови/акценту
+  const [formData, setFormData] = useState<{
+    theme: 'light' | 'dark';
+    language: 'uk' | 'en';
+    accentColor: string;
+  }>({
     theme: 'dark',
     language: 'uk',
+    accentColor: '#f97316',
   });
 
   // ==========================
@@ -91,11 +109,13 @@ export default function UserSettingsCard({ userId }: Props) {
     const userSettings = userId ? undefined : meData?.user?.settings;
     if (userSettings) {
       setFormData({
-        theme: userSettings.theme || 'dark',
-        language: userSettings.language || 'uk',
+        // fix code_x: backend can return values like "glass-dark" / "en-US"; normalize to toggle domain.
+        theme: normalizeTheme(userSettings.theme),
+        language: normalizeLanguage(userSettings.language),
+        accentColor: userSettings.accentColor || '#f97316',
       });
     }
-  }, [meData?.user?.settings, userId]);
+  }, [meData?.user?.settings, meData?.user?.id, userId]);
 
   // ==========================
   // Збереження налаштувань
@@ -104,9 +124,10 @@ export default function UserSettingsCard({ userId }: Props) {
     if (!meData?.user) return;
     try {
       await updateUser({
-        id: meData.user.id,
         settings: formData, // правильні типи для TS
       }).unwrap();
+      saveAccentColor(formData.accentColor);
+      saveUiTheme(formData.theme);
       toast.success('Налаштування збережено!');
     } catch {
       toast.error('Не вдалося зберегти налаштування');
@@ -131,7 +152,10 @@ export default function UserSettingsCard({ userId }: Props) {
           { value: 'dark', label: '🌙 Темна' },
         ]}
         value={formData.theme}
-        onChange={v => setFormData(prev => ({ ...prev, theme: v }))}
+        onChange={v => {
+          setFormData(prev => ({ ...prev, theme: v }));
+          applyUiTheme(v);
+        }}
       />
 
       {/* Toggle для мови */}
@@ -145,6 +169,29 @@ export default function UserSettingsCard({ userId }: Props) {
         value={formData.language}
         onChange={v => setFormData(prev => ({ ...prev, language: v }))}
       />
+
+      <div className="py-3 border-b border-white/5 last:border-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-white/60">
+            <Palette className="w-4 h-4" />
+          </div>
+          <span className="text-sm text-white">Акцентний колір</span>
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          {/* fix code_x: only custom color picker, no duplicated preset ACCENTS list. */}
+          <Input
+            type="color"
+            value={formData.accentColor}
+            onChange={e => {
+              const hex = e.target.value;
+              setFormData(prev => ({ ...prev, accentColor: hex }));
+              applyAccentColor(hex);
+            }}
+            className="h-9 w-14 cursor-pointer rounded-lg border border-white/15 bg-transparent p-1"
+          />
+          <span className="text-xs text-white/60">{formData.accentColor}</span>
+        </div>
+      </div>
 
       <Button color="orange" size="sm" className="mt-4" onClick={handleSave}>
         Зберегти

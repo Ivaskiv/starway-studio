@@ -1,110 +1,114 @@
 // frontend/src/services/api.ts
-import { RootState } from '@/app/store'
-import { TAG_TYPES } from '@/shared/types/tagTypes'
-import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from '@reduxjs/toolkit/query/react'
+import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
+import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { RootState } from '@/app/store';
+import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice';
+import { TAG_TYPES } from '@/shared/types/tagTypes';
 
-const TOKEN_KEY = 'starway_auth_token'
 
+/* ===============================
+   API URL
+================================ */
 const getApiUrl = (): string => {
   if (import.meta.env.DEV) {
-    console.log('[API Config] Development mode - using proxy: /api')
-    return '/api'
+    console.log('[API Config] Development mode - using proxy: /api');
+    return '/api';
   }
-  const url = import.meta.env.VITE_API_URL || 'https://starway-backend.vercel.app/api'
-  console.log('[API Config] Production URL:', url)
-  return url
-}
+  const url = import.meta.env.VITE_API_URL || 'https://starway-backend.vercel.app/api';
+  console.log('[API Config] Production URL:', url);
+  return url;
+};
+/* ===============================
+   BASE QUERY
+================================ */
+const baseQuery = fetchBaseQuery({
+  baseUrl: getApiUrl(),
+  credentials: 'include', // refresh cookie
+  prepareHeaders: (headers, { getState }) => {
+    const state = getState() as RootState;
+    const token = state.auth.accessToken;
 
-const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extraOptions) => {
-  const baseQuery = fetchBaseQuery({
-    baseUrl: getApiUrl(),
-    prepareHeaders: (headers, { getState }) => {
-      const state = getState() as RootState
-      const tokenFromState = state.auth.accessToken
-      const tokenFromStorage = localStorage.getItem(TOKEN_KEY)
-      const token = tokenFromState || tokenFromStorage
-
-      const url = typeof args === 'string' ? args : args.url
-      const isAuthRoute = url.startsWith('/auth/login') || url.startsWith('/auth/register')
-      const isPdfRoute = url.includes('/pdf')
-
-      console.log('[API Request]', {
-        url,
-        hasToken: !!token,
-        tokenSource: tokenFromState ? 'Redux' : tokenFromStorage ? 'localStorage' : 'none',
-        isAuthRoute,
-        isPdfRoute,
-      })
-
-      if (token && !isAuthRoute) {
-        headers.set('Authorization', `Bearer ${token}`)
-        console.log('[API Headers] ✅ Authorization header set')
-      } else {
-        console.log('[API Headers] ⚠️ No auth header')
-      }
-
-      if (!isPdfRoute) {
-        headers.set('Content-Type', 'application/json')
-      }
-
-      return headers
-    },
-  })
-
-  const result = await baseQuery(args, api, extraOptions)
-
-  if (result.error) {
-    console.error('[API Error]', {
-      status: result.error.status,
-      url: typeof args === 'string' ? args : args.url,
-      error: result.error,
-    })
-
-    if (result.error?.status === 401 || result.error?.status === 403) {
-      console.log('[API Auth] 401/403 detected - clearing auth')
-      localStorage.removeItem(TOKEN_KEY)
-
-      try {
-        const { clearAuth } = await import('@/features/auth/services/auth.slice')
-        api.dispatch(clearAuth())
-        console.log('[API Auth] Redux auth cleared')
-      } catch (err) {
-        console.error('[API Auth] Failed to clear Redux:', err)
-      }
-
-      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
-        console.log('[API Auth] Redirecting to home')
-        window.location.href = '/'
-      }
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
     }
-  } else {
-    console.log('[API Success]', typeof args === 'string' ? args : args.url)
+
+    headers.set('Content-Type', 'application/json');
+    return headers;
+  },
+});
+
+/* ===============================
+   BASE QUERY WITH REAUTH
+================================ */
+let isRefreshing = false;
+export const baseQueryWithReauth: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  let result = await baseQuery(args, api, extraOptions);
+
+  // ── Якщо не 401 — повертаємо одразу ──────────────
+  if (result.error?.status !== 401) {
+    return result;
   }
 
-  return result
-}
+  // ── 401 отримано ─────────────────────────────────
+  const url         = typeof args === 'string' ? args : args.url;
+  if(
+    url.startsWith('/auth/login') || 
+    url.startsWith('/auth/register') || 
+    url.startsWith('/auth/refresh') ||
+    url.startsWith('/auth/forgot-password') ||
+    url.startsWith('/auth/reset-password')
+  ){
+    api.dispatch(clearAuth());
+    return result;
+  }
+  if (isRefreshing) {
+    return result;
+  }
 
+  isRefreshing = true; 
+  try {
+    const refreshResult = await baseQuery(
+      { url: '/auth/refresh', method: 'POST' },
+      api,
+      extraOptions,
+    );
+
+    if (refreshResult.data) {
+      // ✅ Refresh успішний
+      const { accessToken, user } = refreshResult.data as { 
+        accessToken: string; 
+        user: any };
+      console.log('[API] ✅ Refresh successful');
+      api.dispatch(setCredentials({ user, accessToken }));
+
+      // Повторюємо оригінальний запит з новим токеном
+      result = await baseQuery(args, api, extraOptions);
+      console.log('[API] ✅ Original request retried');
+
+    } else {
+      // Refresh провалився — logout
+      console.log('[API] ❌ Refresh failed — logging out');
+      api.dispatch(clearAuth());
+    }
+  } finally {
+    isRefreshing = false;
+  }
+
+  return result;
+};
+
+/* ===============================
+   RTK API
+================================ */
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithReauth,
   tagTypes: TAG_TYPES,
   endpoints: () => ({}),
-})
+});
 
-export const saveToken = (token: string): void => {
-  // console.log('[API Token] Saving:', token.substring(0, 20) + '...')
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-export const getToken = (): string | null => {
-  const token = localStorage.getItem(TOKEN_KEY)
-  // console.log('[API Token] Get:', token ? token.substring(0, 20) + '...' : 'NO TOKEN')
-  return token
-}
-
-export const removeToken = (): void => {
-  // console.log('[API Token] Removing')
-  localStorage.removeItem(TOKEN_KEY)
-}
-
-export default api
+export default api;

@@ -3,7 +3,7 @@ import { api } from './api';
 
 export interface SupportTicket {
   id: string;
-  user_id: string;
+  userId: string;
   subject: string;
   description: string;
   category: 'technical' | 'billing' | 'general' | 'bug' | 'feature';
@@ -16,23 +16,23 @@ export interface SupportTicket {
     url: string;
     size: number;
   }[];
-  created_at: string;
-  updated_at?: string;
+  createdAt: string;
+  updatedAt?: string;
   resolvedAt?: string;
 }
 
 export interface SupportMessage {
   id: string;
   ticketId: string;
-  user_id: string;
-  user_name: string;
+  userId: string;
+  userName: string;
   isStaff: boolean;
   content: string;
   attachments?: {
     name: string;
     url: string;
   }[];
-  created_at: string;
+  createdAt: string;
 }
 
 export interface FAQ {
@@ -46,8 +46,8 @@ export interface FAQ {
   notHelpful: number;
   order: number;
   isPublished: boolean;
-  created_at: string;
-  updated_at?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface FAQCategory {
@@ -75,12 +75,12 @@ export interface KnowledgeBaseArticle {
   helpful: number;
   relatedArticles?: string[];
   isPublished: boolean;
-  created_at: string;
-  updated_at?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export const supportApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     // Support Tickets
     getTickets: builder.query<SupportTicket[], { status?: string; category?: string }>({
       query: ({ status, category }) => ({
@@ -91,11 +91,14 @@ export const supportApi = api.injectEndpoints({
     }),
 
     getTicketById: builder.query<SupportTicket, string>({
-      query: (id) => `/support/tickets/${id}`,
+      query: id => `/support/tickets/${id}`,
       providesTags: (result, error, id) => [{ type: 'Support', id }],
     }),
 
-    createTicket: builder.mutation<SupportTicket, { subject: string; description: string; category: string; priority?: string }>({
+    createTicket: builder.mutation<
+      SupportTicket,
+      { subject: string; description: string; category: string; priority?: string }
+    >({
       query: ({ subject, description, category, priority = 'medium' }) => ({
         url: '/support/tickets',
         method: 'POST',
@@ -114,7 +117,7 @@ export const supportApi = api.injectEndpoints({
     }),
 
     closeTicket: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/support/tickets/${id}/close`,
         method: 'POST',
       }),
@@ -122,19 +125,22 @@ export const supportApi = api.injectEndpoints({
     }),
 
     reopenTicket: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/support/tickets/${id}/reopen`,
         method: 'POST',
       }),
       invalidatesTags: (result, error, id) => [{ type: 'Support', id }],
     }),
 
-    addTicketMessage: builder.mutation<SupportMessage, { ticketId: string; content: string; attachments?: File[] }>({
+    addTicketMessage: builder.mutation<
+      SupportMessage,
+      { ticketId: string; content: string; attachments?: File[] }
+    >({
       query: ({ ticketId, content, attachments }) => {
         const formData = new FormData();
         formData.append('content', content);
         if (attachments) {
-          attachments.forEach((file) => formData.append('attachments', file));
+          attachments.forEach(file => formData.append('attachments', file));
         }
         return {
           url: `/support/tickets/${ticketId}/messages`,
@@ -160,7 +166,7 @@ export const supportApi = api.injectEndpoints({
     }),
 
     getFAQById: builder.query<FAQ, string>({
-      query: (id) => `/support/faq/${id}`,
+      query: id => `/support/faq/${id}`,
       providesTags: (result, error, id) => [{ type: 'FAQ', id }],
     }),
 
@@ -174,7 +180,10 @@ export const supportApi = api.injectEndpoints({
     }),
 
     // Knowledge Base
-    getKnowledgeBaseArticles: builder.query<KnowledgeBaseArticle[], { category?: string; search?: string }>({
+    getKnowledgeBaseArticles: builder.query<
+      KnowledgeBaseArticle[],
+      { category?: string; search?: string }
+    >({
       query: ({ category, search }) => ({
         url: '/support/knowledge-base',
         params: { category, search },
@@ -183,24 +192,30 @@ export const supportApi = api.injectEndpoints({
     }),
 
     getArticleById: builder.query<KnowledgeBaseArticle, string>({
-      query: (id) => `/support/knowledge-base/${id}`,
+      query: id => `/support/knowledge-base/${id}`,
       providesTags: (result, error, id) => [{ type: 'Support', id }],
     }),
 
-    searchSupport: builder.query<{
-      tickets: SupportTicket[];
-      faqs: FAQ[];
-      articles: KnowledgeBaseArticle[];
-    }, string>({
-      query: (query) => ({
+    searchSupport: builder.query<
+      {
+        tickets: SupportTicket[];
+        faqs: FAQ[];
+        articles: KnowledgeBaseArticle[];
+      },
+      string
+    >({
+      query: query => ({
         url: '/support/search',
         params: { q: query },
       }),
     }),
 
     // Contact Support
-    contactSupport: builder.mutation<{ success: boolean; message: string }, { name: string; email: string; subject: string; message: string }>({
-      query: (data) => ({
+    contactSupport: builder.mutation<
+      { success: boolean; message: string },
+      { name: string; email: string; subject: string; message: string }
+    >({
+      query: data => ({
         url: '/support/contact',
         method: 'POST',
         body: data,

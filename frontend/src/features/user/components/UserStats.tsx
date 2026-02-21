@@ -1,16 +1,49 @@
-// //features/dashboard/blocks/user/UserStats.tsx
+//features/dashboard/blocks/user/UserStats.tsx
 
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useGetProgressQuery } from '@/features/progress/services/progress.api';
 import { GlassCard } from '@/ui';
+import { Activity, Flame, Target } from 'lucide-react';
 
 interface UserStatsProps {
-  user_id?: string;
+  userId?: string;
 }
 
-export default function UserStats({ user_id }: UserStatsProps) {
+export default function UserStats({ userId }: UserStatsProps) {
+  const { user } = useAuth();
+  const id = userId || user?.id;
+  const { data } = useGetProgressQuery(id || '', { skip: !id });
+
+  const streak = data?.streakDays ?? 0;
+  const goals = data?.completedGoals ?? user?.stats?.completedBlocks ?? 0;
+  const sessions = data?.totalSessions ?? 0;
+
   return (
     <GlassCard className="p-6">
-      <h3 className="text-lg font-semibold mb-2">Статистика користувача</h3>
-      <p className="text-gray-500">Прогрес і активності користувача {user_id}</p>
+      <h3 className="text-lg font-semibold mb-4 text-white">Статистика користувача</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+          <p className="text-xs text-white/50 flex items-center gap-1">
+            <Flame className="w-3.5 h-3.5 text-white/85" />
+            Streak
+          </p>
+          <p className="text-lg font-semibold text-white mt-1">{streak}</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+          <p className="text-xs text-white/50 flex items-center gap-1">
+            <Target className="w-3.5 h-3.5 text-white/85" />
+            Цілей
+          </p>
+          <p className="text-lg font-semibold text-white mt-1">{goals}</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+          <p className="text-xs text-white/50 flex items-center gap-1">
+            <Activity className="w-3.5 h-3.5 text-white/85" />
+            Сесій
+          </p>
+          <p className="text-lg font-semibold text-white mt-1">{sessions}</p>
+        </div>
+      </div>
     </GlassCard>
   );
 }

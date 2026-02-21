@@ -9,7 +9,7 @@ export interface Achievement {
   points: number;
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
   condition: {
-    type: 'lessons_completed' | 'streak_days' | 'points_earned' | 'quizzes_passed';
+    type: 'lessons_completed' | 'streakDays' | 'points_earned' | 'quizzes_passed';
     value: number;
   };
   unlockedAt?: string;
@@ -17,21 +17,21 @@ export interface Achievement {
 }
 // frontend/src/shared/types/gamification.types.ts
 export interface UserLevel {
-  id: string
-  level: number
-  experience: number
-  nextLevelExperience: number
-  createdAt: string
-  updatedAt: string
+  id: string;
+  level: number;
+  experience: number;
+  nextLevelExperience: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UserAchievement {
-  id: string
-  title: string
-  description: string
-  isUnlocked: boolean
-  unlockedAt: string
-  createdAt: string
+  id: string;
+  title: string;
+  description: string;
+  isUnlocked: boolean;
+  unlockedAt: string;
+  createdAt: string;
 }
 // export interface UserLevel {
 //   currentLevel: number;
@@ -46,8 +46,8 @@ export interface UserAchievement {
 // }
 
 export interface LeaderboardEntry {
-  user_id: string;
-  user_name: string;
+  userId: string;
+  userName: string;
   avatar?: string;
   points: number;
   level: number;
@@ -90,4 +90,3 @@ export interface Challenge {
   target: number;
   completed: boolean;
 }
-

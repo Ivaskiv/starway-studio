@@ -1,125 +1,171 @@
-import { Globe, Moon, Sun } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+// frontend/src/features/settings/pages/SettingsPage.tsx
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useUpdateUserSettingsMutation } from '@/features/auth/services/auth.api';
+import { cn } from '@/lib/utils';
+import { applyAccentColor, saveAccentColor } from '@/shared/utils/accent.utils';
+import { applyUiTheme, normalizeUiTheme, saveUiTheme, type UiTheme } from '@/shared/utils/theme.utils';
+import { GlassCard } from '@/ui';
+import { Globe, Moon, Palette, Save, Sun } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 
-import { Button, GlassCard } from '@/ui';
-
-import { useGetMeQuery, useUpdateUserSettingsMutation } from '@/features/auth/services/auth.api';
-
-import type { ToggleProps } from '@/features/user/types/user.types';
-import { cn } from '@/lib/utils';
-import { useGetThemesQuery } from '@/services/settings.api';
-import { GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/ui/GlassCard';
-
-function SettingsToggle({ label, icon, options, value, onChange, disabled }: ToggleProps) {
-  return (
-    <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-white/60">
-          {icon}
-        </div>
-        <span className="text-sm text-white">{label}</span>
-      </div>
-      <div className="flex gap-1 p-1 rounded-lg bg-white/5">
-        {options.map(opt => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onChange(opt.value)}
-            disabled={disabled}
-            className={cn(
-              'px-3 py-1 rounded text-xs font-medium transition-all',
-              value === opt.value
-                ? 'bg-orange-500 text-white'
-                : 'text-white/60 hover:text-white hover:bg-white/5',
-              disabled && 'opacity-50 cursor-not-allowed',
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function SettingsPage() {
-  const { data: userData } = useGetMeQuery();
+  // ✅ Беремо user з Redux через useAuth — не залежимо від useGetMeQuery
+  const { user } = useAuth();
   const [updateUserSettings, { isLoading }] = useUpdateUserSettingsMutation();
 
-  const { data: themes } = useGetThemesQuery();
+  const defaultAccent = user?.settings?.accentColor || '#f97316';
+  const defaultLang = (user?.settings?.language as 'uk' | 'en' | undefined) || 'uk';
+  const defaultTheme = normalizeUiTheme(user?.settings?.theme);
 
-  const [initialized, setInitialized] = useState(false);
-  const [formData, setFormData] = useState<{ theme: string; language: 'uk' | 'en' }>({
-    theme: '',
-    language: 'uk',
-  });
+  const [accentColor, setAccentColor] = useState(defaultAccent);
+  const [language, setLanguage] = useState<'uk' | 'en'>(defaultLang);
+  const [theme, setTheme] = useState<UiTheme>(defaultTheme);
 
-  // 🔹 Ініціалізація один раз, синхронізація з бекендом
+  // Синхронізуємо коли user завантажився
   useEffect(() => {
-    if (!userData?.user?.settings || initialized) return;
+    if (!user) return;
+    setAccentColor(user.settings?.accentColor || '#f97316');
+    setLanguage((user.settings?.language as 'uk' | 'en' | undefined) || 'uk');
+    setTheme(normalizeUiTheme(user.settings?.theme));
+  }, [user?.settings?.accentColor, user?.settings?.language, user?.settings?.theme]);
 
-    setFormData({
-      theme: userData.user.settings.theme || themes?.find(t => t.isDefault)?.id || 'dark',
-      language: userData.user.settings.language || 'uk',
-    });
-    setInitialized(true);
-  }, [userData?.user?.settings, themes, initialized]);
+  const hasUnsaved = useMemo(
+    () => accentColor !== defaultAccent || language !== defaultLang || theme !== defaultTheme,
+    [accentColor, language, theme, defaultAccent, defaultLang, defaultTheme],
+  );
 
-  const handleSave = useCallback(async () => {
-    if (!userData?.user) return;
+  const handleAccentChange = (hex: string) => {
+    setAccentColor(hex);
+    applyAccentColor(hex); // ✅ Одразу застосовуємо — live preview
+  };
+
+  const handleSave = async () => {
     try {
       await updateUserSettings({
-        id: userData.user.id,
-        // settings: formData,
-        // settings: {
-        //   theme: formData.theme,
-        //   language: formData.language,
-        // }
+        settings: { accentColor, language, theme },
       }).unwrap();
+      saveAccentColor(accentColor); // ✅ localStorage + applyAccentColor
+      saveUiTheme(theme);
       toast.success('Налаштування збережено');
-    } catch {
-      toast.error('Не вдалося зберегти налаштування');
+    } catch (err) {
+      console.error('settings save error', err);
+      toast.error('Не вдалося зберегти');
     }
-  }, [formData, updateUserSettings, userData?.user]);
+  };
 
-  if (!userData?.user) return null;
+  // ✅ Показуємо сторінку завжди — не блокуємо на null
+  if (!user)
+    return (
+      <div className="flex items-center justify-center h-48 text-white/40 text-sm">
+        Завантаження...
+      </div>
+    );
 
   return (
-    <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-6">
-      <GlassCard blur="lg">
-        <GlassCardHeader>
-          <GlassCardTitle className="text-lg">Налаштування</GlassCardTitle>
-        </GlassCardHeader>
-        <GlassCardContent>
-          <SettingsToggle
-            label="Тема"
-            icon={
-              formData.theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />
-            }
-            options={themes?.map(t => ({ value: t.id, label: t.name })) || []}
-            value={formData.theme}
-            onChange={v => setFormData(prev => ({ ...prev, theme: v }))}
-            disabled={isLoading}
-          />
+    <div className="mx-auto max-w-2xl space-y-4 p-4 md:p-6">
+      {/* ── Accent color ─────────────────────────────────── */}
+      <GlassCard className="p-6 space-y-5 border-white/10 bg-white/4 backdrop-blur-2xl">
+        <div>
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Palette className="w-5 h-5 text-white/50" />
+            Акцентний колір
+          </h2>
+          <p className="text-xs text-white/40 mt-1">
+            Обраний колір застосовується до всього інтерфейсу
+          </p>
+        </div>
 
-          <SettingsToggle
-            label="Мова"
-            icon={<Globe className="w-4 h-4" />}
-            options={[
-              { value: 'uk', label: '🇺🇦 UA' },
-              { value: 'en', label: '🇬🇧 EN' },
-            ]}
-            value={formData.language}
-            onChange={v => setFormData(prev => ({ ...prev, language: v as 'uk' | 'en' }))}
-            disabled={isLoading}
-          />
-        </GlassCardContent>
+        <div className="flex flex-wrap gap-3 p-4 rounded-2xl bg-black/20 border border-white/8">
+          {/* fix code_x: single custom accent picker without duplicated preset arrays. */}
+          <label className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer transition-colors">
+            <span className="text-xs text-white/60">Своє</span>
+            <input
+              type="color"
+              value={accentColor}
+              onChange={e => handleAccentChange(e.target.value)}
+              className="w-7 h-7 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+            />
+          </label>
+        </div>
+
+        {/* Live preview */}
+        <div
+          className="h-1.5 rounded-full transition-all duration-300"
+          style={{ background: accentColor }}
+        />
       </GlassCard>
 
-      <Button color="orange" size="sm" onClick={handleSave} disabled={isLoading}>
-        Зберегти
-      </Button>
+      {/* ── Language ─────────────────────────────────────── */}
+      <GlassCard className="p-6 space-y-4 border-white/10 bg-white/4 backdrop-blur-2xl">
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Globe className="w-5 h-5 text-white/50" />
+          Мова інтерфейсу
+        </h2>
+
+        <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-1">
+          {(['uk', 'en'] as const).map(lang => (
+            <button
+              key={lang}
+              type="button"
+              onClick={() => setLanguage(lang)}
+              className={cn(
+                'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                language === lang
+                  ? 'bg-white/15 text-white shadow-sm'
+                  : 'text-white/50 hover:text-white hover:bg-white/8',
+              )}
+            >
+              {lang === 'uk' ? '🇺🇦 Українська' : '🇬🇧 English'}
+            </button>
+          ))}
+        </div>
+      </GlassCard>
+
+      <GlassCard className="p-6 space-y-4 border-white/10 bg-white/4 backdrop-blur-2xl">
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          {theme === 'dark' ? <Moon className="w-5 h-5 text-white/50" /> : <Sun className="w-5 h-5 text-white/50" />}
+          Тема
+        </h2>
+        <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-1">
+          {(['dark', 'light'] as const).map(mode => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => {
+                setTheme(mode);
+                applyUiTheme(mode);
+              }}
+              className={cn(
+                'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                theme === mode
+                  ? 'bg-white/15 text-white shadow-sm'
+                  : 'text-white/50 hover:text-white hover:bg-white/8',
+              )}
+            >
+              {mode === 'dark' ? '🌑 Темна' : '☀️ Світла'}
+            </button>
+          ))}
+        </div>
+      </GlassCard>
+
+      {/* ── Save ─────────────────────────────────────────── */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={!hasUnsaved || isLoading}
+          className={cn(
+            'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150',
+            hasUnsaved && !isLoading
+              ? 'bg-white/10 hover:bg-white/15 text-white border border-white/20 hover:border-white/40'
+              : 'opacity-30 cursor-not-allowed text-white/50 border border-white/10',
+          )}
+          style={hasUnsaved ? { boxShadow: `0 0 20px ${accentColor}30` } : {}}
+        >
+          <Save className="w-4 h-4" />
+          {isLoading ? 'Збереження...' : 'Зберегти зміни'}
+        </button>
+      </div>
     </div>
   );
 }

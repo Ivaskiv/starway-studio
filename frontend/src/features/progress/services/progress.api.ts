@@ -1,13 +1,12 @@
 // frontend/src/features/progress/services/progress.api.ts
-import { api } from '../../../services/api'
-import type { Progress } from '../types/progress.types'
-
+import { api } from '../../../services/api';
+import type { Progress } from '../types/progress.types';
 
 export const progressApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     // 1️ Прогрес конкретного користувача
     getProgress: builder.query<Progress, string>({
-      query: (user_id) => `/progress/${user_id}`, // user_id передається в URL
+      query: userId => `/progress/${userId}`, // userId передається в URL
       providesTags: ['UserProgress'],
     }),
 
@@ -24,18 +23,18 @@ export const progressApi = api.injectEndpoints({
     }),
 
     // 4️ Прогрес за певною датою
-    getProgressByDate: builder.query<Progress[], { user_id: string; date: string }>({
-      query: ({ user_id, date }) => `/progress/${user_id}/date?date=${date}`,
+    getProgressByDate: builder.query<Progress[], { userId: string; date: string }>({
+      query: ({ userId, date }) => `/progress/${userId}/date?date=${date}`,
       providesTags: ['UserProgress'],
     }),
 
     // 5️ Щотижневі активності
-    getWeeklyActivity: builder.query<Progress[], { user_id: string }>({
-      query: ({ user_id }) => `/progress/${user_id}/weekly`,
+    getWeeklyActivity: builder.query<Progress[], { userId: string }>({
+      query: ({ userId }) => `/progress/${userId}/weekly`,
       providesTags: ['UserProgress'],
     }),
   }),
-})
+});
 
 export const {
   useGetProgressQuery,
@@ -43,4 +42,4 @@ export const {
   useGetProgressOverviewQuery,
   useGetProgressByDateQuery,
   useGetWeeklyActivityQuery,
-} = progressApi
+} = progressApi;

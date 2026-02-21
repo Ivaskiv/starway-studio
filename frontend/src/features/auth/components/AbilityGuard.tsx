@@ -1,27 +1,29 @@
 // frontend/src/features/auth/components/AbilityGuard.tsx
-
 import { useAbility } from '@/features/auth/hooks/useAbility';
-import { Ability } from '@/features/auth/permissions/abilities';
+import { Ability } from '@/features/auth/utils/abilities';
 import { Navigate, Outlet } from 'react-router-dom';
 
 interface AbilityGuardProps {
   allow: Ability | Ability[];
+  redirectTo?: string;
+  children?: React.ReactNode;
 }
 
-/**
- * AbilityGuard - перевіряє permissions для роутів
- * Використовується в App.tsx для захисту сторінок
- */
-export function AbilityGuard({ allow }: AbilityGuardProps) {
-  const can = useAbility();
+export function AbilityGuard({
+  allow,
+  redirectTo = '/dashboard',
+  children,
+}: AbilityGuardProps) {
+  const { can, isLoading } = useAbility();
   const abilities = Array.isArray(allow) ? allow : [allow];
 
-  // Перевіряємо, чи є хоча б одна з необхідних abilities
-  const isAllowed = abilities.some(ability => can(ability));
+  if (isLoading) return null;
+
+  const isAllowed = abilities.some(a => can(a));
 
   if (!isAllowed) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={redirectTo} replace />;
   }
 
-  return <Outlet />;
+  return children ? <>{children}</> : <Outlet />;
 }

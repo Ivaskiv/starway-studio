@@ -1,22 +1,20 @@
 // useWheelStatus.ts
+import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/api';
 import { useMemo } from 'react';
 
-export const useWheelStatus = (user_id: string) => {
-  const { data: wheel, isLoading, error } = useGetLatestWheelAssessmentQuery(user_id);
+export const useWheelStatus = (userId: string) => {
+  const { data: wheel, isLoading, error } = useGetLatestWheelAssessmentQuery(userId);
 
   const status = useMemo(() => {
     if (!wheel) {
       return { needsWheel: true, reason: 'never' as const, daysSince: null };
     }
 
-    const created_at = new Date(wheel.created_at);
+    const createdAt = new Date(wheel.createdAt);
     const now = new Date();
-    const daysSince = Math.floor((now.getTime() - created_at.getTime()) / 86400000);
+    const daysSince = Math.floor((now.getTime() - createdAt.getTime()) / 86400000);
 
-    if (
-      created_at.getMonth() !== now.getMonth() ||
-      created_at.getFullYear() !== now.getFullYear()
-    ) {
+    if (createdAt.getMonth() !== now.getMonth() || createdAt.getFullYear() !== now.getFullYear()) {
       return { needsWheel: true, reason: 'monthly' as const, daysSince };
     }
 

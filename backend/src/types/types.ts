@@ -1,81 +1,19 @@
 // backend/src/types/types.ts
 
-import { SocialPlatform } from "@/modules/social/social.types.js";
+import { Product } from '@/modules/products/types.js';
+import { SocialPlatform } from '@/modules/social/types.js';
 
 // ======================= AUTH =======================
 
 
-  export type UserRole = 'super_admin' | 'admin' | 'user';
-
-export interface User {
-  id: string;
-  email?: string;
-  password_hash?: string;
-  display_name?: string;
-  first_name?: string;
-  last_name?: string;
-  role: UserRole;
-  avatar?: string;
-  is_active?: boolean;
-  auth_provider?: SocialPlatform;
-  telegram_id?: string;
-  telegram_username?: string;
-  instagram_id?: string;
-  instagram_username?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
 export interface UserSocialData {
-  auth_provider?: SocialPlatform;
-  telegram_id?: string;
-  telegram_username?: string;
-  instagram_id?: string;
-  instagram_username?: string;
+  authProvider?: SocialPlatform;
+  telegramId?: string;
+  telegramUserName?: string;
+  instagramId?: string;
+  instagramUserName?: string;
   whatsapp_id?: string;
   facebook_id?: string;
-}
-
-// ======================= PRODUCTS =======================
-
-export interface Product {
-  id: string;
-  title: string;
-  slug: string;
-  description: string | null;
-  price: number;
-  type: string;
-  modules: string[];
-  free: boolean;
-  trial: boolean;
-  upsell: boolean;
-  published: boolean;
-  author_id: string;
-  created_at: string;
-  updated_at: string;
-  category: string;
-  duration_days: number;
-  access_type: string;
-}
-
-// Для сумісності зі старим кодом
-export type Products = Product;
-
-export interface ProductWithEnrollment extends Product {
-  enrollment_id: string | null;
-  enrolled_at: string | null;
-}
-
-// ======================= ENROLLMENTS =======================
-
-export interface Enrollment {
-  id: string;
-  user_id: string;
-  product_id: string;
-  purchased: boolean;
-  trial_start: string | null;
-  trial_end: string | null;
-  created_at: string;
 }
 
 // ======================= PAYMENTS =======================
@@ -88,8 +26,8 @@ export interface PaymentCallbackData {
   product_price: number[];
   product_count: number[];
   client_email: string;
-  client_first_name: string;
-  client_last_name: string;
+  client_firstName: string;
+  client_lastName: string;
   merchant_signature: string;
   transaction_status: 'Approved' | 'Declined' | 'Pending';
   reason_code?: string;
@@ -97,7 +35,7 @@ export interface PaymentCallbackData {
 
 export interface PaymentResult {
   status: 'approved' | 'failed';
-  user_id: string;
+  userId: string;
   product: Product;
 }
 
@@ -109,8 +47,8 @@ export interface PaymentData {
   product_price: number[];
   product_count: number[];
   client_email: string;
-  client_first_name: string;
-  client_last_name: string;
+  client_firstName: string;
+  client_lastName: string;
 }
 
 // ======================= AI / CHAT =======================
@@ -120,7 +58,7 @@ export interface AIRequest {
   user_prompt: string;
   model?: string;
   temperature?: number;
-  maxTokens?: number;
+  max_tokens?: number;
 }
 
 export interface PromptAnalysis {
@@ -142,12 +80,12 @@ export interface ChatMessage {
 // ======================= SESSIONS =======================
 
 // export interface SessionContext {
-//   wheel_scores?: Array<{ category_id: string; score: number }>;
-//   streak_days?: number;
-//   recent_wins?: string[];
+//   wheelScores?: Array<{ categoryId: string; score: number }>;
+//   streakDays?: number;
+//   recentWins?: string[];
 //   recent_blocks?: string[];
-//   focus_area?: string;
-//   user_name?: string;
+//   focusArea?: string;
+//   userName?: string;
 // }
 
 export interface MorningResponse {
@@ -165,5 +103,5 @@ export interface EveningResponse {
   reflection: string;
   wins: string[];
   lessons: string;
-  tomorrow_focus: string;
+  tomorrowFocus: string;
 }

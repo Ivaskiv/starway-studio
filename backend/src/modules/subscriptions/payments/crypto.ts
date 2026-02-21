@@ -1,12 +1,12 @@
-// backend/src/payments/crypto.ts
+// backend/src/modules/subscriptions/payments/crypto.ts
 import crypto from 'crypto';
-import { PaymentCallbackData } from '../../../types/types.js';
+import type { PaymentCallbackData } from '../types.js';
 
 const MERCHANT_ACCOUNT = process.env.WAYFORPAY_MERCHANT_ACCOUNT || '';
 const MERCHANT_SECRET = process.env.WAYFORPAY_SECRET_KEY || '';
 
 export function generateSignature(data: PaymentCallbackData): string {
-  const signatureString = [
+  const str = [
     MERCHANT_ACCOUNT,
     data.order_reference,
     data.amount.toString(),
@@ -15,11 +15,9 @@ export function generateSignature(data: PaymentCallbackData): string {
     ...(data.product_count || []).map(String),
     ...(data.product_price || []).map(String),
   ].join(';');
-
-  return crypto.createHmac('md5', MERCHANT_SECRET).update(signatureString).digest('hex');
+  return crypto.createHmac('md5', MERCHANT_SECRET).update(str).digest('hex');
 }
 
 export function verifySignature(data: PaymentCallbackData): boolean {
-  const calculated = generateSignature(data);
-  return calculated === data.merchant_signature;
+  return generateSignature(data) === data.merchant_signature;
 }

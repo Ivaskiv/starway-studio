@@ -3,7 +3,8 @@
 //! sidebar декларує вимогу
 //! рішення приймає useAbility()
 
-import { Ability } from "@/features/auth/permissions/abilities";
+import { Ability } from "@/features/auth/utils/abilities";
+
 
 
 /**
@@ -29,7 +30,8 @@ export interface SidebarItem {
   path: string;
   ability: Ability;
   badge?: 'new' | 'pro';
-  icon?: string;
+  icon?: any;
+  // icon?: string;
 }
 
 export const SIDEBAR_ITEMS: SidebarItem[] = [

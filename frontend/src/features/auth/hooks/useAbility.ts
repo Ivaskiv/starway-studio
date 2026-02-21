@@ -1,17 +1,20 @@
-import { UserRole } from '@/features/user/types/user.types';
-import { PERMISSIONS_MATRIX } from '@/shared/config/permissions.matrix';
-import { Ability } from '@/shared/types/permissions';
-import { useAuth } from './useAuth';
+// frontend/src/features/auth/hooks/useAbility.ts
+import { useAppSelector } from '@/app/hooks'
+import type { Ability } from '@/features/auth/utils/abilities'
+import { useMemo } from 'react'
 
 export function useAbility() {
-  const { user } = useAuth();
+  const user = useAppSelector(s => s.auth.user)
 
-  return (ability: Ability): boolean => {
-    if (!user) return false;
+  const abilities = useMemo(
+    () => user?.abilities ?? [],
+    [user?.abilities]
+  )
 
-    const role = user.role as UserRole;
-    const abilities = PERMISSIONS_MATRIX[role];
+  const can = (ability: Ability | string): boolean => {
+    if (!user) return false
+    return abilities.includes(ability as Ability)
+  }
 
-    return abilities?.includes(ability) ?? false;
-  };
+  return { can, abilities, isLoading: false }
 }

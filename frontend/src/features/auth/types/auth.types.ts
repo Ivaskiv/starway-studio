@@ -1,46 +1,128 @@
 // frontend/src/features/auth/types/auth.types.ts
-import { SocialPlatform } from '@/features/social/types/social.types';
-import { User } from '@/features/user/types/user.types';
-
-export interface AuthTokens {
-  accessToken: string;
-  refreshToken?: string;
-}
-
-export interface AuthResponse {
-  user: User;
-  token: string;
-  refreshToken?: string;
-  needsProfile?: boolean;
-  expiresIn?: number;
-  permissions?: string[];
-
-  isNewUser?: boolean; //is_new_user
-  email?: string;
-}
-
-export interface MeResponse {
-  user: User;
-  permissions?: string[];
-}
+import type { User, UserRole } from '@/features/user/types/user.types'
 
 export interface LoginInput {
-  email: string;
-  password: string;
+  email: string
+  password: string
 }
 
 export interface RegisterInput {
-  email: string;
-  password: string;
-  name?: string;
+  email: string
+  password: string
+  name?: string
+  role?: UserRole
 }
 
-export interface SocialAuthInput {
-  provider: SocialPlatform;
-  token: string;
+export interface ForgotPasswordInput {
+  email: string
 }
 
-export interface AuthCredentials {
-  user: User;
-  accessToken: string;
+export interface ResetPasswordInput {
+  token: string
+  password: string
+}
+
+export interface SocialAuthApiInput {
+  provider: 'google' | 'telegram'
+  externalId: string
+  email?: string
+  name?: string
+  username?: string
+}
+
+export interface UpdateUserSettingsInput {
+  firstName?: string
+  lastName?: string
+  settings?: {
+    accentColor?: string
+    theme?: string
+    language?: string
+  }
+}
+
+export interface AuthApiResponse {
+  user: User
+  accessToken: string
+  refreshToken?: string
+  needsProfile?: boolean
+  expiresIn?: number
+  isNewUser?: boolean
+  needsCompletion?: boolean
+}
+
+export interface ForgotPasswordResponse {
+  success: boolean
+  message: string
+  emailSent?: boolean
+  resetToken?: string
+  resetUrl?: string
+}
+
+export interface ResetPasswordResponse {
+  success: boolean
+}
+
+export interface SocialAuthResult {
+  provider: string
+  isNewUser: boolean
+  needsCompletion: boolean
+  name?: string
+  email?: string
+}
+
+export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated'
+
+export interface AuthState {
+  user: User | null
+  role: UserRole | null
+  accessToken: string | null
+  status: AuthStatus
+}
+
+export type AccessKey =
+  | 'mentor.core'
+  | 'mentor.daily'
+  | 'mentor.decisions'
+  | 'mentor.wheel'
+  | 'mentor.vision'
+  | 'mentor.goals'
+  | 'mentor.actions'
+  | 'mentor.zoom'
+  | 'mentor.mentorship'
+  | 'ai.basic'
+  | 'ai.deep'
+  | 'ai.pdf'
+  | 'ai.export'
+  | 'dashboard.view'
+  | 'profile.view'
+  | 'wheel.view'
+  | 'progress.view'
+  | 'products.manage'
+  | 'settings.manage'
+  | 'dashboard'
+  | 'mentor'
+  | 'vision'
+  | 'goal'
+  | 'actions'
+  | 'wheel'
+  | 'progress'
+  | 'ai-generator'
+  | 'products'
+  | 'profile'
+  | 'settings'
+
+export interface AccessItem {
+  key: string
+  source: 'trial' | 'purchase' | 'free' | 'admin'
+  expiresAt: string | null
+  productId?: string
+  enrollmentId?: string
+}
+
+export interface UserAccessResult {
+  abilities: Record<string, boolean>
+  items: AccessItem[]
+  plan: 'free' | 'trial' | 'paid'
+  role: string
+  trialEnd: string | null
 }

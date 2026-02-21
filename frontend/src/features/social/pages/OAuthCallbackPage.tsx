@@ -1,8 +1,7 @@
 // frontend/src/features/social/pages/OAuthCallbackPage.tsx
-import { useAppDispatch } from '@/app/store/hooks';
-import { setCredentials } from '@/features/auth/services/auth.slice'; // ← правильний імпорт
-import { normalizeSingleUser } from '@/features/user/types/user.types';
-import { saveToken } from '@/services/api';
+import { useAppDispatch } from '@/app/hooks';
+import { setCredentials } from '@/features/auth/services/auth.slice';
+import { saveToken } from '@/features/auth/services/token';
 import { GlassCard } from '@/ui';
 import { Loader } from 'lucide-react';
 import { useEffect } from 'react';
@@ -41,13 +40,13 @@ export default function OAuthCallbackPage() {
         const response = await socialCallback({ code }).unwrap();
 
         // Зберігаємо токен
-        saveToken(response.token);
+        saveToken(response.accessToken);
 
         // Оновлюємо Redux через setCredentials (саме той редюсер, який є)
         dispatch(
           setCredentials({
-            user: normalizeSingleUser(response.user),
-            accessToken: response.token,
+            user: response.user,
+            accessToken: response.accessToken,
           }),
         );
 

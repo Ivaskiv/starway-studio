@@ -1,11 +1,30 @@
 // frontend/src/features/social/services/social.api.ts
 import { api } from '@/services/api';
-import type { AuthResponse } from '@/features/auth/types/auth.types';
 import type { SocialPlatform } from '../types/social.types';
+import { AuthApiResponse } from '@/features/auth/types/auth.types';
 
 export const socialApi = api.injectEndpoints({
   endpoints: (builder) => ({
-    socialCallback: builder.mutation<AuthResponse, { code: string; state?: string }>({
+    getConnections: builder.query<
+      { success: boolean; connections: Array<{ provider: string; externalId?: string; username?: string }> },
+      void
+    >({
+      query: () => ({
+        url: '/social/connections',
+        method: 'GET',
+      }),
+      providesTags: ['Social'],
+    }),
+
+    generateTelegramLink: builder.mutation<{ success: boolean; link: string; expiresIn: number }, void>({
+      query: () => ({
+        url: '/social/telegram/link',
+        method: 'GET',
+      }),
+      invalidatesTags: ['Social'],
+    }),
+
+    socialCallback: builder.mutation<AuthApiResponse, { code: string; state?: string }>({
       query: (body) => ({
         url: '/auth/callback',
         method: 'POST',
@@ -14,7 +33,7 @@ export const socialApi = api.injectEndpoints({
       invalidatesTags: ['User'],
     }),
 
-    socialLogin: builder.mutation<AuthResponse, { provider: SocialPlatform; code: string }>({
+    socialLogin: builder.mutation<AuthApiResponse, { provider: SocialPlatform; code: string }>({
       query: (body) => ({
         url: '/social/login',
         method: 'POST',
@@ -26,6 +45,8 @@ export const socialApi = api.injectEndpoints({
 });
 
 export const {
+  useGetConnectionsQuery,
+  useGenerateTelegramLinkMutation,
   useSocialCallbackMutation,
   useSocialLoginMutation,
 } = socialApi;

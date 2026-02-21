@@ -1,48 +1,73 @@
-// frontend/src/features/wheel/components/WheelHistory.tsx
-import React from 'react';
-import type { WheelAssessment } from '@/features/wheel/types/wheel.types';
-import { format } from 'date-fns';
-import { useGetWheelAssessmentsQuery } from '@/features/wheel/services/wheel.api';
+import { ROUTES } from '@/config/routes';
+import { useAppSelector } from '@/app/hooks';
+import { useGetWheelHistoryQuery } from '@/features/wheel/api';
+import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types';
+import { Button, GlassCard } from '@/ui';
+import { CalendarClock, History } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface WheelHistoryProps {
   userId: string;
-  onSelect?: (assessment: WheelAssessment) => void;
 }
 
-export const WheelHistory: React.FC<WheelHistoryProps> = ({ userId, onSelect }) => {
-  const { data: assessments, isLoading, isError } = useGetWheelAssessmentsQuery(userId);
+// fix code_x: lightweight fallback history component while legacy history API is absent.
+export function WheelHistory({ userId }: WheelHistoryProps) {
+  const navigate = useNavigate();
+  const me = useAppSelector(s => s.auth.user);
+  const { data: history = [], isLoading, isError } = useGetWheelHistoryQuery({ userId, limit: 12 });
+  const userName =
+    me?.firstName?.trim() || me?.name?.trim() || me?.email?.split('@')[0] || 'користувача';
 
-  if (isLoading)
-    return <div className="p-4 text-center text-white/70">Завантаження...</div>;
-
-  if (isError)
-    return <div className="p-4 text-center text-red-500">Помилка завантаження</div>;
-
-  if (!assessments || assessments.length === 0)
-    return <div className="p-4 text-center text-white/60">Немає історії оцінок</div>;
+  const labelById = new Map(WHEEL_CATEGORIES.map(i => [i.id, i.nameUk]));
 
   return (
-    <div className="p-4 rounded-2xl glassmorphism shadow-lg flex flex-col gap-3">
-      <h2 className="text-xl font-bold text-white">Історія Колеса Балансу</h2>
-      <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
-        {assessments.map(a => (
-          <div
-            key={a.id}
-            onClick={() => onSelect?.(a)}
-            className="cursor-pointer p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-colors flex justify-between items-center"
-          >
-            <div>
-              <div className="text-sm text-white/80">
-                {format(new Date(a.completedAt), 'dd.MM.yyyy HH:mm')}
-              </div>
-              <div className="text-white font-medium">
-                Середній бал: {Math.round(a.averageScore)}
-              </div>
-            </div>
-            <div className="text-white/50 text-sm">{a.scores.length} сфер</div>
-          </div>
-        ))}
+    <GlassCard className="p-6">
+      <div className="flex items-center gap-2 mb-3">
+        <History className="w-5 h-5 text-orange-400" />
+        <h2 className="text-lg font-semibold text-white">Історія колеса</h2>
       </div>
-    </div>
+
+      {isLoading && <p className="text-sm text-white/60">Завантаження історії...</p>}
+      {isError && (
+        <p className="text-sm text-rose-300/90">
+          Не вдалося завантажити історію. Спробуйте ще раз трохи пізніше.
+        </p>
+      )}
+
+      {!isLoading && !isError && history.length === 0 && (
+        <p className="text-sm text-white/60">
+          Для <span className="text-white/80">{userName}</span> ще немає збережених оцінок колеса.
+        </p>
+      )}
+
+      {!isLoading && !isError && history.length > 0 && (
+        <div className="space-y-2">
+          {history.map(item => (
+            <div key={item.id} className="rounded-xl border border-white/12 bg-white/[0.04] p-3">
+              <p className="text-sm text-white">
+                {new Date(item.createdAt).toLocaleDateString('uk-UA')} •{' '}
+                <span className="text-white/75">середній бал {item.averageScore.toFixed(1)}</span>
+              </p>
+              <p className="mt-1 text-xs text-white/60">
+                Слабка сфера: {labelById.get(item.gaps?.[0] || '') || item.gaps?.[0] || '—'} • Фокус:{' '}
+                {labelById.get(item.strengths?.[0] || '') || item.strengths?.[0] || '—'}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 flex items-center gap-3">
+        <Button
+          onClick={() => navigate(ROUTES.PROGRESS)}
+          className="inline-flex items-center gap-2 bg-white/10 text-white hover:bg-white/20"
+        >
+          <CalendarClock className="w-4 h-4" />
+          Перейти до прогресу
+        </Button>
+      </div>
+    </GlassCard>
   );
-};
+}
+
+export default WheelHistory;

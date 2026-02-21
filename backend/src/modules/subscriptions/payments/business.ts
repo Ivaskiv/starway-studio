@@ -1,29 +1,26 @@
-// backend/src/payments/business.ts
+// backend/src/modules/subscriptions/payments/business.ts
 import { randomUUID } from 'crypto';
-import { sql } from '../../../db/client.js';
+import { prisma } from '@/db/client.js';
 
-export async function processPayment(paymentData: any) {
-  const { user_id, product_id, amount, pay_ref } = paymentData;
+export type PaymentData = {
+  userId: string;
+  productId: string;
+  amount: number;
+  payRef: string;
+};
 
-  // 1️⃣ Створюємо або оновлюємо enrollment
-  const [enrollment] = await sql`
-    INSERT INTO enrollments (id, user_id, product_id, pay_ref, amount)
-    VALUES (${randomUUID()}, ${user_id}, ${product_id}, ${pay_ref}, ${amount})
-    ON CONFLICT (user_id, product_id) DO UPDATE
-    SET pay_ref = ${pay_ref}, amount = ${amount}, updated_at = NOW()
-    RETURNING *
-  `;
+export async function processPayment({ userId, productId, amount, payRef }: PaymentData) {
+  console.log('💰 Payment start', { userId, productId, amount, payRef });
 
-  // 2️⃣ Отримуємо сам продукт
-  const [product] = await sql`
-    SELECT * FROM products WHERE id = ${product_id}
-  `;
+  const enrollment = await prisma.enrollment.upsert({
+    where: { userId_productId: { userId, productId } },
+    update: { payRef, amount, updatedAt: new Date() },
+    create: { id: randomUUID(), userId, productId, payRef, amount },
+  });
 
-  // 3️⃣ Повертаємо статус (припустимо, якщо enrollment є — approved)
-  return {
-    status: enrollment ? 'approved' : 'failed',
-    user_id,
-    product,
-    enrollment,
-  };
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) return { status: 'failed', reason: 'PRODUCT_NOT_FOUND', userId };
+
+  console.log('✅ Enrollment & product OK', enrollment.id, product.id);
+  return { status: 'approved', userId, product, enrollment };
 }

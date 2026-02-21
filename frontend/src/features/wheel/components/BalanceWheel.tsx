@@ -1,140 +1,190 @@
-// frontend/src/features/wheel/components/BalanceWheel.tsx
-import React from 'react';
-import type { WheelScore, WheelCategory } from '@/features/wheel/types/wheel.types';
-import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types';
+import { WheelScore, WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types';
+import React, { memo, useMemo } from 'react';
 
 interface BalanceWheelProps {
-  scores: WheelScore[];           // масив оцінок користувача
-  maxScore?: number;              // макс. значення (0-10)
+  scores: WheelScore[];
+  size?: number;
+  interactive?: boolean;
+  onCategoryClick?: (id: string) => void;
 }
 
-export const BalanceWheel: React.FC<BalanceWheelProps> = ({ scores, maxScore = 10 }) => {
-  const categories: WheelCategory[] = WHEEL_CATEGORIES;
-  const points = categories.length;
-  const radius = 100;
-  const centerX = 120;
-  const centerY = 120;
+export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
+  ({ scores, size = 300, interactive = false, onCategoryClick }) => {
+    const center = size / 2;
+    const outerRadius = size * 0.42;
+    const emojiRadius = outerRadius + 28;
+    const rings = 5;
+    const numPoints = scores.length;
+    const angleStep = (2 * Math.PI) / numPoints;
+    const avgScore = useMemo(
+      () => (scores.length ? scores.reduce((sum, s) => sum + s.score, 0) / scores.length : 0),
+      [scores],
+    );
 
-  // Зіставляємо оцінки з категоріями
-  const getScoreForCategory = (id: string) => {
-    const found = scores.find(s => s.category_id === id);
-    return found?.score ?? 0;
-  };
+    const categoryMeta = useMemo(
+      () =>
+        new Map(
+          WHEEL_CATEGORIES.map((c) => [
+            c.id,
+            {
+              emoji: c.emoji,
+              color: c.color,
+            },
+          ]),
+        ),
+      [],
+    );
 
-  // Генеруємо точки полігону
-  const generatePoints = (values: number[]) =>
-    values.map((score, i) => {
-      const ratio = score / maxScore;
-      const angle = (i * 2 * Math.PI) / points - Math.PI / 2;
-      const r = radius * ratio;
+    const scoreToColor = (score: number) => {
+      // 1..10 => warm to cool
+      const hue = 8 + ((Math.max(1, Math.min(10, score)) - 1) / 9) * 190;
+      return `hsl(${hue} 90% 60%)`;
+    };
+
+    const axisPoints = scores.map((_, i) => {
+      const angle = i * angleStep - Math.PI / 2; // початок зверху
       return {
-        x: centerX + r * Math.cos(angle),
-        y: centerY + r * Math.sin(angle),
+        angle,
+        x: center + outerRadius * Math.cos(angle),
+        y: center + outerRadius * Math.sin(angle),
       };
     });
 
-  const userScores = categories.map(c => getScoreForCategory(c.id));
-  const polygonPoints = generatePoints(userScores);
-  const maxPolygonPoints = generatePoints(Array(points).fill(maxScore));
+    const scorePoints = scores.map((s, i) => {
+      const angle = i * angleStep - Math.PI / 2;
+      const r = (s.score / 10) * outerRadius;
+      return {
+        categoryId: s.categoryId,
+        score: s.score,
+        angle,
+        x: center + r * Math.cos(angle),
+        y: center + r * Math.sin(angle),
+      };
+    });
 
-  return (
-    <div className="relative w-64 h-64 mx-auto p-4 rounded-2xl glassmorphism shadow-lg">
-      <svg width="240" height="240" viewBox="0 0 240 240" className="absolute inset-0">
-        <defs>
-          <linearGradient id="polygonGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#a855f7" stopOpacity="0.6" />
-            <stop offset="50%" stopColor="#ec4899" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#f97316" stopOpacity="0.4" />
-          </linearGradient>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="4" result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
+    const polygonPoints = scorePoints.map((p) => `${p.x},${p.y}`).join(' ');
 
-        {/* Сітка */}
-        <polygon
-          points={maxPolygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
-          fill="none"
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth="2"
-          strokeDasharray="5,5"
-        />
-        {maxPolygonPoints.map((p, i) => (
-          <line
-            key={i}
-            x1={centerX}
-            y1={centerY}
-            x2={p.x}
-            y2={p.y}
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth="1"
-          />
-        ))}
+    const fillHue = 8 + ((Math.max(1, Math.min(10, avgScore)) - 1) / 9) * 190;
+    const polygonFillA = `hsla(${fillHue} 90% 62% / 0.42)`;
+    const polygonFillB = `hsla(${fillHue + 30} 88% 56% / 0.18)`;
+    const polygonStroke = `hsla(${fillHue} 94% 74% / 0.92)`;
+    const gradientId = `wheel-gradient-${size}-${Math.round(avgScore * 10)}`;
+    const glowId = `wheel-glow-${size}-${Math.round(avgScore * 10)}`;
 
-        {/* Основний полігон */}
-        <polygon
-          points={polygonPoints.map(p => `${p.x},${p.y}`).join(' ')}
-          fill="url(#polygonGradient)"
-          stroke="#a855f7"
-          strokeWidth="3"
-          filter="url(#glow)"
-          className="transition-all duration-700"
-        />
+    return (
+      <div className="relative flex items-center justify-center">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
+          <defs>
+            <radialGradient id={gradientId} cx="50%" cy="45%" r="58%">
+              <stop offset="0%" stopColor={polygonFillA} />
+              <stop offset="100%" stopColor={polygonFillB} />
+            </radialGradient>
+            <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="7" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
 
-        {/* Точки на вершинах */}
-        {polygonPoints.map((p, i) => (
+          {/* base glow */}
           <circle
-            key={i}
-            cx={p.x}
-            cy={p.y}
-            r="4"
-            fill="#ffffff"
-            stroke="#a855f7"
-            strokeWidth="2"
-            className="transition-all duration-700"
+            cx={center}
+            cy={center}
+            r={outerRadius + 8}
+            fill="none"
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth={1}
           />
-        ))}
 
-        {/* Центр */}
-        <circle cx={centerX} cy={centerY} r="6" fill="#f97316" filter="url(#glow)" />
-      </svg>
+          {/* concentric rings */}
+          {Array.from({ length: rings }).map((_, ring) => {
+            const r = (outerRadius / rings) * (ring + 1);
+            return (
+              <circle
+                key={`ring-${ring}`}
+                cx={center}
+                cy={center}
+                r={r}
+                fill="none"
+                stroke={ring === rings - 1 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.14)'}
+                strokeWidth={ring === rings - 1 ? 1.2 : 1}
+              />
+            );
+          })}
 
-      {/* Емоджі навколо */}
-      {categories.map((c, i) => {
-        const angle = (i * 2 * Math.PI) / points - Math.PI / 2;
-        const r = radius + 20;
-        return (
-          <div
-            key={c.id}
-            className="absolute text-2xl transition-transform hover:scale-125"
-            style={{
-              left: centerX + r * Math.cos(angle) - 16,
-              top: centerY + r * Math.sin(angle) - 16,
-              width: 32,
-              height: 32,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {c.emoji}
-          </div>
-        );
-      })}
+          {/* axis lines */}
+          {axisPoints.map((ap, i) => (
+            <line
+              key={`axis-${i}`}
+              x1={center}
+              y1={center}
+              x2={ap.x}
+              y2={ap.y}
+              stroke="rgba(255,255,255,0.18)"
+              strokeWidth={1}
+            />
+          ))}
 
-      {/* Центральний скор */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-white">
-            {Math.round(userScores.reduce((a, b) => a + b, 0) / points)}
-          </div>
-          <div className="text-xs text-white/60">середній бал</div>
-        </div>
+          {/* tiny dots on outer boundary */}
+          {axisPoints.map((ap, i) => (
+            <circle key={`axis-dot-${i}`} cx={ap.x} cy={ap.y} r={2.8} fill="rgba(255,255,255,0.72)" />
+          ))}
+
+          {/* data polygon */}
+          <polygon
+            points={polygonPoints}
+            fill={`url(#${gradientId})`}
+            stroke={polygonStroke}
+            strokeWidth={2.2}
+            filter={`url(#${glowId})`}
+          />
+
+          {/* data points */}
+          {scorePoints.map((p, i) => {
+            const c = scoreToColor(p.score);
+            return (
+              <g
+                key={`point-${i}`}
+                style={{ cursor: interactive ? 'pointer' : 'default' }}
+                onClick={() => interactive && onCategoryClick?.(p.categoryId)}
+              >
+                <circle cx={p.x} cy={p.y} r={7} fill={c} stroke="white" strokeWidth={2} />
+                <circle cx={p.x} cy={p.y} r={13} fill="none" stroke={`${c}80`} strokeWidth={1.6} />
+              </g>
+            );
+          })}
+
+          {/* center orb */}
+          <circle cx={center} cy={center} r={17} fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.45)" />
+          <circle cx={center} cy={center} r={5.5} fill="rgba(255,255,255,0.92)" />
+
+          {/* emoji boundary markers */}
+          {scores.map((s, i) => {
+            const angle = i * angleStep - Math.PI / 2;
+            const x = center + emojiRadius * Math.cos(angle);
+            const y = center + emojiRadius * Math.sin(angle);
+            const category = s.categoryId;
+            const emoji = categoryMeta.get(category)?.emoji ?? s.emoji ?? '✨';
+
+            return (
+              <g
+                key={`emoji-${category}-${i}`}
+                style={{ cursor: interactive ? 'pointer' : 'default' }}
+                onClick={() => interactive && onCategoryClick?.(category)}
+              >
+                <circle cx={x} cy={y} r={16} fill="rgba(6,10,16,0.55)" stroke="rgba(255,255,255,0.32)" />
+                <text x={x} y={y + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={16}>
+                  {emoji}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
       </div>
-    </div>
-  );
-};
+    );
+  },
+);
+
+BalanceWheel.displayName = 'BalanceWheel';

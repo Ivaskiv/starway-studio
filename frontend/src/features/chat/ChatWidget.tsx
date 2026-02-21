@@ -6,17 +6,17 @@ import {
 import { useState } from 'react';
 
 interface ChatWidgetProps {
-  user_id: string;
+  userId: string;
 }
 
-export default function ChatWidget({ user_id }: ChatWidgetProps) {
-  const { data: messages } = useGetMessagesQuery({ user_id });
+export default function ChatWidget({ userId }: ChatWidgetProps) {
+  const { data: messages } = useGetMessagesQuery({ userId });
   const [sendMessage] = useSendMessageMutation();
   const [input, setInput] = useState('');
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    await sendMessage({ user_id, text: input });
+    await sendMessage({ userId, text: input });
     setInput('');
   };
 

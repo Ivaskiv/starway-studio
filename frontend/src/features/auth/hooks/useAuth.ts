@@ -1,52 +1,120 @@
 // frontend/src/features/auth/hooks/useAuth.ts
-import { useSelector } from 'react-redux';
 import {
-  selectCurrentUser,
-  selectIsAuthenticated,
-  selectIsLoading,
-} from '@/features/auth/services/auth.slice';
-import {
+  useGetMeQuery,
   useLoginMutation,
+  useLogoutMutation,
   useRegisterMutation,
   useSocialAuthMutation,
 } from '@/features/auth/services/auth.api';
+import {
+  clearAuth,
+  selectCurrentUser,
+  selectIsAuthenticated,
+  selectIsLoading,
+  setCredentials,
+} from '@/features/auth/services/auth.slice';
+import { getToken, removeToken } from '@/features/auth/services/token';
+import type { SocialAuthApiInput, SocialAuthResult } from '@/features/auth/types/auth.types';
+import type { SocialPlatform } from '@/features/social/types/social.types';
+import type { RegisterRequest } from '@/features/user/types/user.types';
+import { applyAccentColor, saveAccentColor } from '@/shared/utils/accent.utils';
+import { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 
 export function useAuth() {
+  const dispatch = useDispatch();
   const user = useSelector(selectCurrentUser);
-  const isAuthenticated = useSelector(selectIsAuthenticated);
   const isLoading = useSelector(selectIsLoading);
+  const isAuthenticated = useSelector(selectIsAuthenticated);
 
-  const [login] = useLoginMutation();
-  const [register] = useRegisterMutation();
+  const [loginMutation] = useLoginMutation();
+  const [registerMutation] = useRegisterMutation();
   const [socialAuth] = useSocialAuthMutation();
+  const [logoutMutation] = useLogoutMutation();
 
-  const loginWithCredentials = (data: { email: string; password: string }) => login(data).unwrap();
+  const hasToken = !!getToken();
 
-  const registerWithCredentials = (data: {
-    name?: string;
-    email: string;
-    password: string;
-    confirmPassword?: string;
-  }) => {
-    // API чекає тільки name/email/password
-    const payload = {
-      name: data.name,
-      email: data.email,
-      password: data.password,
-    };
+  // ── Відновлення сесії через /me ──────────────────────────────────────────
+  const {
+    data: meData,
+    isError: meError,
+    error: meRawError,
+  } = useGetMeQuery(undefined, {
+    skip: !hasToken || isAuthenticated,
+  });
 
-    return register(payload).unwrap();
+  useEffect(() => {
+
+    if (meData?.user) {
+      const token = getToken();
+      if (token) dispatch(setCredentials({ user: meData.user, accessToken: token }));
+      if (meData.user.settings?.accentColor) {
+        // fix_code_x: keep UI accent synchronized with persisted user settings after session restore.
+        saveAccentColor(meData.user.settings.accentColor);
+        applyAccentColor(meData.user.settings.accentColor);
+      }
+      return;
+    }
+    if (meError) {
+      const status = (meRawError as any)?.status;
+      // 401 → api.ts вже обробив refresh. Очищаємо тільки при інших помилках.
+      if (status !== 401) {
+        dispatch(clearAuth());
+        removeToken();
+      }
+    }
+  }, [meData?.user, meError, meRawError, dispatch]);
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+
+  const loginWithCredentials = async (data: { email: string; password: string }) => {
+    const res = await loginMutation(data).unwrap();
+    dispatch(setCredentials({ user: res.user, accessToken: res.accessToken }));
+    if (res.user.settings?.accentColor) applyAccentColor(res.user.settings.accentColor);
+    return res;
   };
 
-  const loginWithSocial = async (
-    provider: 'google' | 'telegram'
-  ): Promise<{ isNewUser: boolean; email?: string }> => {
-    const res = await socialAuth({ provider }).unwrap();
+  // ✅ RegisterRequest = { name?: string; email: string; password: string; role?: UserRole }
+  const registerWithCredentials = async (data: RegisterRequest) => {
+    const res = await registerMutation(data).unwrap();
+    dispatch(setCredentials({ user: res.user, accessToken: res.accessToken }));
+    if (res.user.settings?.accentColor) applyAccentColor(res.user.settings.accentColor);
+    return res;
+  };
+
+  const loginWithSocial = async (provider: SocialPlatform): Promise<SocialAuthResult> => {
+    let payload: SocialAuthApiInput;
+
+    if (provider === 'telegram') {
+      const tg = await getTelegramAuthData();
+      payload = { provider: 'telegram', externalId: tg.id, username: tg.username };
+    } else if (provider === 'google') {
+      const g = await getGoogleAuthData();
+      payload = { provider: 'google', externalId: g.id, email: g.email, name: g.name };
+    } else {
+      throw new Error(`Unsupported provider: ${provider}`);
+    }
+
+    const res = await socialAuth(payload).unwrap();
+    dispatch(setCredentials({ user: res.user, accessToken: res.accessToken }));
+    if (res.user.settings?.accentColor) applyAccentColor(res.user.settings.accentColor);
 
     return {
-      isNewUser: res.is_new_user,
-      email: res.user?.email,
+      provider,
+      isNewUser: res.isNewUser ?? false,
+      needsCompletion: res.needsCompletion ?? false,
+      name: res.user.name ?? payload.username ?? payload.name,
+      email: res.user.email ?? payload.email,
     };
+  };
+
+  const logout = async () => {
+    try {
+      await logoutMutation().unwrap();
+    } finally {
+      dispatch(clearAuth());
+      removeToken();
+    }
   };
 
   return {
@@ -56,5 +124,71 @@ export function useAuth() {
     loginWithCredentials,
     registerWithCredentials,
     loginWithSocial,
+    logout,
   };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function getTelegramAuthData(): Promise<{ id: string; username?: string }> {
+  const tg = (window as any)?.Telegram?.WebApp;
+  const user = tg?.initDataUnsafe?.user;
+  if (user) {
+    return { id: String(user.id), username: user.username };
+  }
+
+  // fix code_x: web fallback for Telegram auth when app is opened outside miniapp.
+  const typed = window.prompt('Вкажіть ваш Telegram username (без @)');
+  const username = typed?.trim().replace('@', '');
+  if (!username) throw new Error('Telegram username required');
+  return { id: username, username };
+}
+
+async function getGoogleAuthData(): Promise<{ id: string; email: string; name: string }> {
+  await loadGoogleIdentityScript();
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    throw new Error('VITE_GOOGLE_CLIENT_ID not configured');
+  }
+
+  return new Promise((resolve, reject) => {
+    const google = (window as any)?.google;
+    if (!google) return reject(new Error('Google API not loaded'));
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (r: any) => {
+        const d = parseJwt(r.credential);
+        resolve({ id: d.sub, email: d.email, name: d.name });
+      },
+    });
+    google.accounts.id.prompt();
+  });
+}
+
+function parseJwt(token: string) {
+  return JSON.parse(atob(token.split('.')[1]));
+}
+
+async function loadGoogleIdentityScript() {
+  if ((window as any)?.google?.accounts?.id) return;
+
+  await new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-google-identity="true"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Failed to load Google script')), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = 'true';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google script'));
+    document.head.appendChild(script);
+  });
 }

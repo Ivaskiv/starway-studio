@@ -1,5 +1,5 @@
 // features/social/utils/socialFlow.ts
-import type { SocialPlatform } from '../types/social.types';
+import { ENABLED_SOCIAL_PLATFORMS, type SocialPlatform } from '../types/social.types';
 
 export type SocialFlowMode = 'login' | 'connect';
 
@@ -29,7 +29,7 @@ export const parseSocialFlow = (queryParams: URLSearchParams): SocialFlowState =
   const providerParam = queryParams.get('provider');
   const stateParam = queryParams.get('state');
 
-const provider: SocialPlatform | undefined = providerParam && SOCIAL_PLATFORMS.includes(providerParam as any)
+const provider: SocialPlatform | undefined = providerParam && ENABLED_SOCIAL_PLATFORMS.includes(providerParam as any)
   ? providerParam as SocialPlatform
   : undefined;
 
@@ -37,5 +37,3 @@ const mode = resolveSocialFlow(stateParam !== null ? stateParam : undefined);
   return { provider, mode };
 };
 
-// 🔹 якщо треба, експортуємо масив платформ для валідації
-import { SOCIAL_PLATFORMS } from '../constants/social.constants';

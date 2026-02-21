@@ -1,7 +1,6 @@
 // frontend/src/services/settings.api.ts
 import { api } from './api';
 
-
 export interface Theme {
   id: string;
   name: string;
@@ -25,7 +24,7 @@ export interface Template {
   structure: any;
   is_public: boolean;
   usageCount: number;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Blueprint {
@@ -39,7 +38,7 @@ export interface Blueprint {
   isPremium: boolean;
   rating?: number;
   reviews?: number;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface WhiteLabelConfig {
@@ -55,18 +54,18 @@ export interface WhiteLabelConfig {
   customCSS?: string;
   footerText?: string;
   supportEmail?: string;
-  is_active: boolean;
+  isActive: boolean;
 }
 
 export const settingsApi = api.injectEndpoints({
-  endpoints: (builder) => ({
+  endpoints: builder => ({
     getThemes: builder.query<Theme[], void>({
       query: () => '/settings/themes',
       providesTags: ['Theme'],
     }),
 
     createTheme: builder.mutation<Theme, Partial<Theme>>({
-      query: (data) => ({
+      query: data => ({
         url: '/settings/themes',
         method: 'POST',
         body: data,
@@ -84,7 +83,7 @@ export const settingsApi = api.injectEndpoints({
     }),
 
     deleteTheme: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/settings/themes/${id}`,
         method: 'DELETE',
       }),
@@ -101,7 +100,7 @@ export const settingsApi = api.injectEndpoints({
     }),
 
     createTemplate: builder.mutation<Template, Partial<Template>>({
-      query: (data) => ({
+      query: data => ({
         url: '/settings/templates',
         method: 'POST',
         body: data,
@@ -110,7 +109,7 @@ export const settingsApi = api.injectEndpoints({
     }),
 
     useTemplate: builder.mutation<{ funnelId: string }, string>({
-      query: (templateId) => ({
+      query: templateId => ({
         url: `/settings/templates/${templateId}/use`,
         method: 'POST',
       }),
@@ -118,7 +117,7 @@ export const settingsApi = api.injectEndpoints({
     }),
 
     deleteTemplate: builder.mutation<void, string>({
-      query: (id) => ({
+      query: id => ({
         url: `/settings/templates/${id}`,
         method: 'DELETE',
       }),
@@ -135,12 +134,12 @@ export const settingsApi = api.injectEndpoints({
     }),
 
     getBlueprintById: builder.query<Blueprint, string>({
-      query: (id) => `/settings/blueprints/${id}`,
+      query: id => `/settings/blueprints/${id}`,
       providesTags: (result, error, id) => [{ type: 'Blueprint', id }],
     }),
 
-    purchaseBlueprint: builder.mutation<{ funnelId: string; product_id: string }, string>({
-      query: (blueprintId) => ({
+    purchaseBlueprint: builder.mutation<{ funnelId: string; productId: string }, string>({
+      query: blueprintId => ({
         url: `/settings/blueprints/${blueprintId}/purchase`,
         method: 'POST',
       }),
@@ -154,7 +153,7 @@ export const settingsApi = api.injectEndpoints({
     }),
 
     updateWhiteLabelConfig: builder.mutation<WhiteLabelConfig, Partial<WhiteLabelConfig>>({
-      query: (data) => ({
+      query: data => ({
         url: '/settings/white-label',
         method: 'PUT',
         body: data,
@@ -162,7 +161,10 @@ export const settingsApi = api.injectEndpoints({
       invalidatesTags: ['WhiteLabel'],
     }),
 
-    uploadWhiteLabelAsset: builder.mutation<{ url: string }, { type: 'logo' | 'favicon'; file: FormData }>({
+    uploadWhiteLabelAsset: builder.mutation<
+      { url: string },
+      { type: 'logo' | 'favicon'; file: FormData }
+    >({
       query: ({ type, file }) => ({
         url: `/settings/white-label/${type}`,
         method: 'POST',

@@ -1,71 +1,21 @@
 // frontend/src/features/wheel/hooks/useWheelAnalysis.ts
-import { useCallback } from 'react'
-import { useGetWheelAnalysisQuery } from '@/features/wheel/services/wheel.api'
-import { sendTelegramMessage } from '@/features/communicationFlow/telegram/telegram.service'
-import { WheelAnalysis, WheelCategory } from '@/features/wheel/types/wheel.types'
 
-interface UseWheelAnalysisOptions {
-  userId: string
-  telegramChatId?: string
-}
+import { useGetWheelAnalysisQuery } from '@/features/wheel/api';
 
-export const useWheelAnalysis = ({ userId, telegramChatId }: UseWheelAnalysisOptions) => {
-  const { data, isLoading, isError, refetch } = useGetWheelAnalysisQuery(userId)
+export const useWheelAnalysis = (userId: string) => {
+  const { data, isLoading } = useGetWheelAnalysisQuery(userId);
 
-  // Фокусна сфера, сильні сторони, прогалини
-  const analysis: WheelAnalysis | null = data ?? null
-
-  // Відправка підтримки або upsell в Telegram
-  const notifyUser = useCallback(
-    async (analysis: WheelAnalysis) => {
-      if (!telegramChatId || !analysis) return
-
-      const { focusArea, recommendations, balanceScore } = analysis
-
-      let text = `✨ Колесо Балансу оновлено!\nСфокусуйся на: ${focusArea.nameUk} ${focusArea.emoji}\nБаланс: ${balanceScore}/10`
-
-      if (recommendations.length) {
-        text += `\n\nРекомендації:\n- ${recommendations.join('\n- ')}`
-      }
-
-      await sendTelegramMessage({
-        chatId: telegramChatId,
-        text,
-        parseMode: 'MarkdownV2',
-      })
-    },
-    [telegramChatId]
-  )
-
-  // Мікро-завдання для прогалин
-  const generateMicroTasks = useCallback(() => {
-    if (!analysis) return []
-
-    return analysis.gaps.map((gap: WheelCategory) => ({
+  const generateMicroTasks = () => {
+    if (!data) return [];
+    return data.gaps.map(gap => ({
       title: `Працюй над ${gap.nameUk}`,
-      description: `Сфокусуйся на покращенні сфери "${gap.nameUk}"`,
-      type: 'actionable' as const,
-      persist: true,
-      source: 'wheel' as const,
-      reason: 'wheel_gap' as const,
-      wheelImpact: {
-        area: gap.id as any, // WheelArea
-        delta: +2,
-      },
-      relatedEntity: {
-        type: 'wheel' as const,
-        id: gap.id,
-      },
-      status: 'pending' as const,
-    }))
-  }, [analysis])
+      description: `Покращуй сферу ${gap.nameUk}`,
+      type: 'actionable',
+      source: 'wheel',
+      status: 'pending',
+      relatedEntity: { type: 'wheel', id: gap.id },
+    }));
+  };
 
-  return {
-    analysis,
-    isLoading,
-    isError,
-    refetch,
-    notifyUser,
-    generateMicroTasks,
-  }
-}
+  return { analysis: data, isLoading, generateMicroTasks };
+};

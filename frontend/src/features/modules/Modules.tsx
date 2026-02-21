@@ -125,7 +125,7 @@ function StatCard({
   value,
   color,
 }: {
-  icon: JSX.Element;
+  icon: React.ReactNode;
   title: string;
   value: number;
   color: string;

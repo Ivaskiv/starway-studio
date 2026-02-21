@@ -1,7 +1,10 @@
 // features/ai-generator/services/ai-generator.api.ts
 
 import { api } from '@/services/api';
-import type { FunnelBlueprint } from '../../products/types/generator.types';
+import type {
+  FunnelBlueprint,
+  OwnerOnboardingProfile,
+} from '../../products/types/generator.types';
 
 interface GenerateStepRequest {
   stepNumber: number;
@@ -19,12 +22,14 @@ interface GenerateBlueprintRequest {
   stepsData: {
     number: number;
     userInput: string;
+    communityPrompt?: string;
     selectedContent: string;
   }[];
 }
 
 interface SaveFunnelRequest {
   blueprint: FunnelBlueprint;
+  onboarding?: OwnerOnboardingProfile;
 }
 
 interface SaveFunnelResponse {
@@ -32,8 +37,36 @@ interface SaveFunnelResponse {
   funnelId: string;
 }
 
+interface WorkflowPayload {
+  currentStep: number;
+  stepsData: {
+    number: number;
+    userInput: string;
+    selectedContent: string;
+  }[];
+  totalRemainingAttempts: number;
+  generatedBlueprint: FunnelBlueprint | null;
+  onboarding: OwnerOnboardingProfile;
+  updatedAt?: string;
+}
+
 export const aiGeneratorApi = api.injectEndpoints({
   endpoints: builder => ({
+    getWorkflow: builder.query<{ success: boolean; workflow: WorkflowPayload | null }, void>({
+      query: () => ({
+        url: '/ai/generator/workflow',
+        method: 'GET',
+      }),
+    }),
+
+    saveWorkflow: builder.mutation<{ success: boolean; updatedAt: string }, { workflow: WorkflowPayload }>({
+      query: (body) => ({
+        url: '/ai/generator/workflow',
+        method: 'PUT',
+        body,
+      }),
+    }),
+
     generateStepVariants: builder.mutation<GenerateStepResponse, GenerateStepRequest>({
       query: data => ({
         url: '/ai/generator/step',
@@ -63,7 +96,9 @@ export const aiGeneratorApi = api.injectEndpoints({
 });
 
 export const {
+  useGetWorkflowQuery,
   useGenerateStepVariantsMutation,
   useGenerateFunnelBlueprintMutation,
+  useSaveWorkflowMutation,
   useSaveFunnelFromBlueprintMutation,
 } = aiGeneratorApi;

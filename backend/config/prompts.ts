@@ -44,7 +44,8 @@ export const AI_MENTOR_PROMPTS = {
       "time": "10:00",
       "duration_min": 25,
       "result": "Вимірюваний результат"
-    }
+}
+
   ],
   "reminder": {
     "action_index": 0,
@@ -105,10 +106,10 @@ export const AI_MENTOR_PROMPTS = {
 {planned_actions}
 
 ВИКОНАНО:
-{completed_actions}
+{completedActions}
 
 НЕ ВИКОНАНО:
-{uncompleted_actions}
+{uncompletedActions}
 
 ПЕРЕМОГА ДНЯ: {main_win}
 
@@ -200,7 +201,7 @@ export const AI_MENTOR_PROMPTS = {
 • Остання сесія: {last_session}
 • Фокус дня: {daily_focus}
 
-ПОВІДОМЛЕННЯ: {user_message}
+ПОВІДОМЛЕННЯ: {userMessage}
 
 Дай корисну відповідь з конкретною дією.`,
   },
@@ -243,7 +244,7 @@ export const AI_MENTOR_PROMPTS = {
   "report_text": "Звіт до 120 слів",
   "wins": ["Перемога 1", "Перемога 2", "Перемога 3"],
   "challenges": ["Виклик + рішення"],
-  "completion_rate": 75,
+  "completionRate": 75,
   "next_week_actions": [
     {"action": "Дія", "day": "Mon", "time": "10:00", "duration_min": 25}
   ],
@@ -304,53 +305,95 @@ export const AI_MENTOR_PROMPTS = {
     GOAL_COMPLETE: `🏆 Ціль "{goal}" досягнута!
 +50 XP • Так тримати!`,
   },
-}
+};
+
+// fix code_x: AI Producer system architecture prompt (6-phase decision flow, controlled generations).
+export const AI_PRODUCER_SYSTEM_PROMPT = `Ти — AI-Продюсер онлайн-програм та AI-воронок.
+Твоя задача: конструювати готові воронки та продуктові лінійки для власників продуктів через 6 фаз.
+
+ГОЛОВНИЙ ПРИНЦИП:
+- Не генеруй все одразу.
+- Рухайся послідовно фазами.
+- На кожній фазі дай один фінальний вихід (без 20 варіантів).
+
+ФАЗА 1 — ДІАГНОСТИКА ЕКСПЕРТА:
+- Проблема, ЦА, точка А, точка Б, результат, термін, унікальність, досвід.
+- Не переходь далі без чітких точок А і Б.
+- Вихід: формула трансформації + positioning statement + рівень ринку.
+
+ФАЗА 2 — ВАЛІДАЦІЯ ПРОДУКТУ:
+- Формат продукту, ресурс, команда, автоматизація, чек.
+- Вихід: тип продукту + рівень ціни + формат участі.
+
+ФАЗА 3 — АНАЛІЗ АУДИТОРІЇ:
+- Портрет ЦА, страхи, тригери, болі, прихована вигода не змінюватися.
+- Вихід: портрет ЦА + 3 болі + 3 тригери.
+
+ФАЗА 4 — МОНЕТИЗАЦІЯ:
+- Обери одну модель: Low-ticket+Upsell | Діагностика→High-ticket | Підписка | Вебінар | Контент→Заявка.
+- Вихід: одна модель + логіка апселів.
+
+ФАЗА 5 — ПРОДУКТОВА АРХІТЕКТУРА:
+- Побудуй лінійку: вхідний продукт → основний → upsell → довгостроковий.
+- Вихід: архітектура продуктів + CTA між етапами.
+
+ФАЗА 6 — AI-ВОРОНКА:
+- Побудуй послідовність: вхід → тригер → AI-діагностика → персоналізований розбір → малий результат → CTA.
+- Додай блоки дотиску та умови переходу в підписку / upsell / наставництво.
+- Вихід: готова funnel-схема з діями користувача і CTA для кожного кроку.
+
+ОБМЕЖЕННЯ:
+- 1 фінальний вихід на фазу.
+- Коротко, чітко, без зайвого контенту.
+- Не змінюй ядро трансформації між фазами.
+`;
 
 // ============ HELPER FUNCTIONS ============
 
 export const buildMorningPrompt = (data: {
-  dailyFocus: string
-  whoToday: string
-  qualities: string
- current_state: string
-  actions: string[]
-  yearlyGoals: string[]
+  dailyFocus: string;
+  whoToday: string;
+  qualities: string;
+  current_state: string;
+  actions: string[];
+  yearlyGoals: string[];
 }) => {
-  return AI_MENTOR_PROMPTS.MORNING.USER_TEMPLATE
-    .replace('{daily_focus}', data.dailyFocus || '-')
+  return AI_MENTOR_PROMPTS.MORNING.USER_TEMPLATE.replace('{daily_focus}', data.dailyFocus || '-')
     .replace('{who_today}', data.whoToday || '-')
     .replace('{qualities}', data.qualities || '-')
     .replace('{current_state}', data.current_state || '-')
     .replace('{action_1}', data.actions[0] || '-')
     .replace('{action_2}', data.actions[1] || '-')
     .replace('{action_3}', data.actions[2] || '-')
-    .replace('{yearly_goals}', data.yearlyGoals.map((g, i) => `${i + 1}. ${g}`).join('\n'))
-}
+    .replace('{yearly_goals}', data.yearlyGoals.map((g, i) => `${i + 1}. ${g}`).join('\n'));
+};
 
 export const buildEveningPrompt = (data: {
-  energySources: string
-  energyDrains: string
-  mentalProgram: string
-  strengthOrFear: string
-  plannedActions: string[]
-  completed_actions: string[]
-  uncompleted_actions: string[]
-  mainWin: string
+  energySources: string;
+  energyDrains: string;
+  mentalProgram: string;
+  strengthOrFear: string;
+  plannedActions: string[];
+  completedActions: string[];
+  uncompletedActions: string[];
+  mainWin: string;
 }) => {
-  return AI_MENTOR_PROMPTS.EVENING.USER_TEMPLATE
-    .replace('{energy_sources}', data.energySources || '-')
+  return AI_MENTOR_PROMPTS.EVENING.USER_TEMPLATE.replace(
+    '{energy_sources}',
+    data.energySources || '-',
+  )
     .replace('{energy_drains}', data.energyDrains || '-')
     .replace('{mental_program}', data.mentalProgram || '-')
     .replace('{strength_or_fear}', data.strengthOrFear || '-')
     .replace('{planned_actions}', data.plannedActions.join('\n') || '-')
-    .replace('{completed_actions}', data.completed_actions.join('\n') || 'Немає')
-    .replace('{uncompleted_actions}', data.uncompleted_actions.join('\n') || 'Немає')
-    .replace('{main_win}', data.mainWin || '-')
-}
+    .replace('{completedActions}', data.completedActions.join('\n') || 'Немає')
+    .replace('{uncompletedActions}', data.uncompletedActions.join('\n') || 'Немає')
+    .replace('{main_win}', data.mainWin || '-');
+};
 
 export const buildWheelPrompt = (data: {
-  scores: Record<string, number>
-  notes: Record<string, string>
+  scores: Record<string, number>;
+  notes: Record<string, string>;
 }) => {
   const sphereNames: Record<string, string> = {
     health: "Здоров'я",
@@ -361,44 +404,43 @@ export const buildWheelPrompt = (data: {
     leisure: 'Дозвілля',
     spirituality: 'Духовність',
     housing: 'Побут',
-  }
+  };
 
-  const scoresArray = Object.values(data.scores)
-  const average = scoresArray.reduce((a, b) => a + b, 0) / scoresArray.length
+  const scoresArray = Object.values(data.scores);
+  const average = scoresArray.reduce((a, b) => a + b, 0) / scoresArray.length;
 
   const scoresFormatted = Object.entries(data.scores)
     .map(([key, value]) => `• ${sphereNames[key] || key}: ${value}/10`)
-    .join('\n')
+    .join('\n');
 
-  const notesFormatted = Object.entries(data.notes)
-    .filter(([, v]) => v)
-    .map(([key, value]) => `• ${sphereNames[key] || key}: ${value}`)
-    .join('\n') || 'Немає нотаток'
+  const notesFormatted =
+    Object.entries(data.notes)
+      .filter(([, v]) => v)
+      .map(([key, value]) => `• ${sphereNames[key] || key}: ${value}`)
+      .join('\n') || 'Немає нотаток';
 
-  const strongCount = scoresArray.filter(s => s >= 8).length
-  const weakCount = scoresArray.filter(s => s <= 5).length
+  const strongCount = scoresArray.filter(s => s >= 8).length;
+  const weakCount = scoresArray.filter(s => s <= 5).length;
 
-  return AI_MENTOR_PROMPTS.WHEEL.USER_TEMPLATE
-    .replace('{scores_formatted}', scoresFormatted)
+  return AI_MENTOR_PROMPTS.WHEEL.USER_TEMPLATE.replace('{scores_formatted}', scoresFormatted)
     .replace('{notes_formatted}', notesFormatted)
     .replace('{average}', average.toFixed(1))
     .replace('{strong_count}', String(strongCount))
-    .replace('{weak_count}', String(weakCount))
-}
+    .replace('{weak_count}', String(weakCount));
+};
 
 export const buildChatPrompt = (data: {
-  streak: number
-  level: number
-  lastSession: string
-  dailyFocus: string
-  user_message: string
+  streak: number;
+  level: number;
+  lastSession: string;
+  dailyFocus: string;
+  userMessage: string;
 }) => {
-  return AI_MENTOR_PROMPTS.CHAT.CONTEXT_TEMPLATE
-    .replace('{streak}', String(data.streak))
+  return AI_MENTOR_PROMPTS.CHAT.CONTEXT_TEMPLATE.replace('{streak}', String(data.streak))
     .replace('{level}', String(data.level))
     .replace('{last_session}', data.lastSession || 'Немає')
     .replace('{daily_focus}', data.dailyFocus || 'Не встановлено')
-    .replace('{user_message}', data.user_message)
-}
+    .replace('{userMessage}', data.userMessage);
+};
 
-export default AI_MENTOR_PROMPTS
+export default AI_MENTOR_PROMPTS;
