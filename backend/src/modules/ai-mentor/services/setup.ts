@@ -5,9 +5,11 @@
  */
 
 import { prisma } from '@/db/client.js';
-import { WheelScore } from '@/modules/wheel/types.js';
-import { generateWheelAnalysis } from '@/modules/wheel/ai.js';
+import type { Prisma } from '@/db/generated/prisma/client.js';
 import { openai } from '@/lib/openai.js';
+import { ensureMentor } from './context.js';
+import { generateWheelAnalysis } from '@/modules/wheel/ai.js';
+import { WheelScore } from '@/modules/wheel/types.js';
 
 // ==========================================
 // TYPES
@@ -49,8 +51,8 @@ export async function getSetupProgress(userId: string): Promise<SetupProgress> {
     where: { userId },
     select: {
       meta: true,
-      rules: true
-    }
+      rules: true,
+    },
   });
 
   if (!mentor) {
@@ -58,18 +60,18 @@ export async function getSetupProgress(userId: string): Promise<SetupProgress> {
       userId,
       wheelCompleted: false,
       questionsConfigured: false,
-      currentStep: 'wheel'
+      currentStep: 'wheel',
     };
   }
 
-  const meta = mentor.meta as any || {};
-  const rules = mentor.rules as any || {};
+  const meta = (mentor.meta as any) || {};
+  const rules = (mentor.rules as any) || {};
 
   const wheelCompleted = meta.wheelCompleted === true;
-  const questionsConfigured = 
-    (rules.morningQuestions?.length > 0) || 
-    (rules.eveningQuestions?.length > 0) ||
-    (rules.dailyQuestions?.length > 0);
+  const questionsConfigured =
+    rules.morningQuestions?.length > 0 ||
+    rules.eveningQuestions?.length > 0 ||
+    rules.dailyQuestions?.length > 0;
 
   const setupCompletedAt = meta.setupCompletedAt ? new Date(meta.setupCompletedAt) : undefined;
 
@@ -78,11 +80,7 @@ export async function getSetupProgress(userId: string): Promise<SetupProgress> {
     wheelCompleted,
     questionsConfigured,
     setupCompletedAt,
-    currentStep: !wheelCompleted 
-      ? 'wheel' 
-      : !questionsConfigured 
-        ? 'questions' 
-        : 'complete'
+    currentStep: !wheelCompleted ? 'wheel' : !questionsConfigured ? 'questions' : 'complete',
   };
 }
 
@@ -95,48 +93,46 @@ export async function getSetupProgress(userId: string): Promise<SetupProgress> {
  */
 export async function configureWheel(
   userId: string,
-  scores: WheelScore[]
+  scores: WheelScore[],
 ): Promise<{ wheelId: string; nextStep: string }> {
   // Generate AI analysis
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, firstName: true, email: true }
+    select: { name: true, firstName: true, email: true },
   });
 
   const analysis = await generateWheelAnalysis(scores, {
     name: user?.name || user?.firstName || 'Користувач',
-    email: user?.email || undefined
+    email: user?.email || null,
+    phone: null,
+    gender: null,
+    age: null,
   });
 
   // Save wheel assessment
   const wheel = await prisma.wheelAssessment.create({
     data: {
       userId,
-      scores,
+      scores: scores as unknown as Prisma.InputJsonValue,
+      weakestSphere: scores[0]?.categoryId ?? 'focus',
+      focusSphere: scores[0]?.categoryId ?? 'focus',
       analysis,
-      createdAt: new Date()
-    }
+      createdAt: new Date(),
+    },
   });
 
   // Update mentor meta
-  await prisma.mentor.upsert({
+  await ensureMentor(userId);
+
+  await prisma.mentor.update({
     where: { userId },
-    create: {
-      userId,
-      rules: {},
-      summary: {},
+    data: {
       meta: {
         wheelCompleted: true,
         wheelId: wheel.id,
-        setupStarted: new Date()
-      }
+        setupStarted: new Date(),
+      },
     },
-    update: {
-      meta: {
-        wheelCompleted: true,
-        wheelId: wheel.id
-      }
-    }
   });
 
   return { wheelId: wheel.id, nextStep: 'questions' };
@@ -151,7 +147,7 @@ export async function configureWheel(
  */
 export async function configureQuestions(
   userId: string,
-  config: QuestionsConfig
+  config: QuestionsConfig,
 ): Promise<{ setupComplete: boolean }> {
   const rules: any = {};
 
@@ -163,7 +159,7 @@ export async function configureQuestions(
     rules.morningQuestions = config.morningQuestions || [
       'Який мій головний фокус сьогодні?',
       'Яка моя енергія (1-10)?',
-      'Що може завадити мені сьогодні?'
+      'Що може завадити мені сьогодні?',
     ];
   }
 
@@ -171,7 +167,7 @@ export async function configureQuestions(
     rules.eveningQuestions = config.eveningQuestions || [
       'Що я завершила сьогодні?',
       'Які були перемоги?',
-      'Що навчила мене ця доба?'
+      'Що навчила мене ця доба?',
     ];
   }
 
@@ -179,7 +175,7 @@ export async function configureQuestions(
     rules.dailyQuestions = config.dailyQuestions || [
       'Як я себе почуваю?',
       'Що важливе сьогодні?',
-      'Яка дія наблизить мене до цілі?'
+      'Яка дія наблизить мене до цілі?',
     ];
   }
 
@@ -189,14 +185,16 @@ export async function configureQuestions(
   }
 
   // fix code_x: setup flow requires telegram contact for reminders/reports delivery.
-  const telegramRaw = String(config.telegramContact || '').trim().replace(/^@/, '');
+  const telegramRaw = String(config.telegramContact || '')
+    .trim()
+    .replace(/^@/, '');
   if (telegramRaw) {
     const isChatId = /^-?\d+$/.test(telegramRaw);
     await prisma.user.update({
       where: { id: userId },
       data: {
-        telegramUserName: isChatId ? undefined : telegramRaw,
-        telegramChatId: isChatId ? telegramRaw : undefined,
+        telegramUserName: isChatId ? null : telegramRaw,
+        telegramChatId: isChatId ? telegramRaw : null,
       },
     });
     rules.telegramContact = telegramRaw;
@@ -209,22 +207,20 @@ export async function configureQuestions(
       rules,
       meta: {
         questionsConfigured: true,
-        setupCompletedAt: new Date()
-      }
-    }
+        setupCompletedAt: new Date(),
+      },
+    },
   });
 
   return { setupComplete: true };
 }
 
-export async function generateQuestionsVariants(
-  input: {
-    frequency: QuestionsConfig['frequency'];
-    goal?: string;
-    audience?: string;
-    tone?: string;
-  },
-): Promise<GeneratedQuestionsVariant[]> {
+export async function generateQuestionsVariants(input: {
+  frequency: QuestionsConfig['frequency'];
+  goal?: string;
+  audience?: string;
+  tone?: string;
+}): Promise<GeneratedQuestionsVariant[]> {
   const fallback: GeneratedQuestionsVariant[] = [
     {
       id: 'default-focus',
@@ -338,8 +334,8 @@ export async function completeSetup(userId: string): Promise<{ success: boolean 
     where: { id: userId },
     data: {
       onboardingStage: 'ENTRY',
-      onboardingStartedAt: new Date()
-    }
+      onboardingStartedAt: new Date(),
+    },
   });
 
   return { success: true };

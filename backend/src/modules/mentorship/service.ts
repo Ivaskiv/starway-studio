@@ -1,104 +1,110 @@
 // backend/src/modules/mentorship/service.ts
-/**
- * Mentorship Service
- */
-
 import { prisma } from '@/db/client.js';
-import { MentorshipStatus, Mentorship, MentorshipOffer } from './types.js';
+import type { Mentorship, MentorshipOffer } from './types.ts';
+import { MentorshipStatus } from '@/db/generated/prisma/client.js';
 
-/**
- * Check if user qualifies for mentorship (30+ days stability)
- */
-export async function checkMentorshipEligibility(userId: string): Promise<boolean> {
-  const streak = await prisma.streak.findUnique({
-    where: { userId },
-    select: { stabilityDays: true },
-  });
-
-  return (streak?.stabilityDays || 0) >= 30;
-}
-
-/**
- * Create mentorship offer
- */
+// ── CREATE MENTORSHIP OFFER ─────────────────────────────────────────────
 export async function createMentorshipOffer(
   userId: string,
-  reason: string,
+  expertId: string,
   stabilityDays: number
 ): Promise<MentorshipOffer> {
   const offer = await prisma.mentorshipOffer.create({
     data: {
       userId,
-      reason,
-      stabilityDays,
-      createdAt: new Date(),
+      expertId,
+      status: MentorshipStatus.PENDING,
+      offerDetails: { stabilityDays },
     },
   });
 
-  return offer as MentorshipOffer;
+  return {
+    id: offer.id,
+    userId: offer.userId,
+    expertId: offer.expertId,
+    status: offer.status,
+    offerDetails: offer.offerDetails,
+    createdAt: offer.createdAt,
+  };
 }
 
-/**
- * Activate mentorship
- * Статус при активації ставимо 'accepted' (бо 'ACTIVE' немає)
- */
-export async function activateMentorship(
-  userId: string,
-  mentorId: string
-): Promise<Mentorship> {
-  const mentorship = await prisma.mentorship.create({
-    data: {
-      userId,
-      mentorId,
-      status: 'accepted', // тут тільки допустимі статуси
-      startedAt: new Date(),
-      createdAt: new Date(),
-    },
-  });
-
-  return mentorship as Mentorship;
-}
-
-/**
- * Get user's mentorship
- */
-export async function getMentorship(userId: string): Promise<Mentorship | null> {
+// ── ACTIVATE MENTORSHIP ────────────────────────────────────────────────
+export async function activateMentorship(userId: string): Promise<Mentorship> {
   const mentorship = await prisma.mentorship.findFirst({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
+    where: { userId, status: MentorshipStatus.PENDING },
   });
 
-  return mentorship as Mentorship | null;
+  if (!mentorship) throw new Error('No pending mentorship found');
+
+  const updated = await prisma.mentorship.update({
+    where: { id: mentorship.id },
+    data: { status: MentorshipStatus.ACTIVE, startsAt: new Date() },
+  });
+
+  return {
+    id: updated.id,
+    userId: updated.userId,
+    mentorId: updated.mentorId,
+    status: updated.status,
+    startsAt: updated.startsAt,
+  };
 }
 
-/**
- * Get mentorship offer
- */
+// ── CHECK ELIGIBILITY ─────────────────────────────────────────────────
+export async function checkMentorshipEligibility(userId: string): Promise<boolean> {
+  const activeMentorship = await prisma.mentorship.findFirst({
+    where: { userId, status: MentorshipStatus.ACTIVE },
+  });
+  return !activeMentorship;
+}
+
+// ── GET MY MENTORSHIP ────────────────────────────────────────────────
+export async function getMentorship(userId: string): Promise<Mentorship | null> {
+  const mentorship = await prisma.mentorship.findFirst({ where: { userId } });
+  if (!mentorship) return null;
+
+  return {
+    id: mentorship.id,
+    userId: mentorship.userId,
+    mentorId: mentorship.mentorId,
+    status: mentorship.status,
+    startsAt: mentorship.startsAt,
+  };
+}
+
+// ── GET MY OFFER ─────────────────────────────────────────────────────
 export async function getMentorshipOffer(userId: string): Promise<MentorshipOffer | null> {
   const offer = await prisma.mentorshipOffer.findFirst({
     where: { userId },
     orderBy: { createdAt: 'desc' },
   });
+  if (!offer) return null;
 
-  return offer as MentorshipOffer | null;
+  return {
+    id: offer.id,
+    userId: offer.userId,
+    expertId: offer.expertId,
+    status: offer.status,
+    offerDetails: offer.offerDetails,
+    createdAt: offer.createdAt,
+  };
 }
 
-/**
- * Update mentorship status
- */
+// ── UPDATE MENTORSHIP STATUS ─────────────────────────────────────────
 export async function updateMentorshipStatus(
   id: string,
-  status: MentorshipStatus,
-  notes?: string
+  status: MentorshipStatus
 ): Promise<Mentorship> {
-  const mentorship = await prisma.mentorship.update({
+  const updated = await prisma.mentorship.update({
     where: { id },
-    data: {
-      status,
-      notes,
-      ...(status === 'completed' && { endsAt: new Date() }),
-    },
+    data: { status },
   });
 
-  return mentorship as Mentorship;
+  return {
+    id: updated.id,
+    userId: updated.userId,
+    mentorId: updated.mentorId,
+    status: updated.status,
+    startsAt: updated.startsAt,
+  };
 }

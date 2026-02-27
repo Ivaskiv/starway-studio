@@ -214,7 +214,7 @@ class AIService {
       contextAddition += `\nTrial день: ${context.trialDay}/7`;
     }
 
-    if (context.onboardingStage && context.onboardingStage !== 'completed') {
+    if (context.onboardingStage && context.onboardingStage !== 'COMPLETED') {
       contextAddition += `\nOnboarding етап: ${context.onboardingStage}`;
     }
 

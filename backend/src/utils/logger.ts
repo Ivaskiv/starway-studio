@@ -73,3 +73,18 @@ export const logDebug = (message: string, meta?: Record<string, any>) => {
 export const logHttp = (message: string, meta?: Record<string, any>) => {
   logger.http(message, meta);
 };
+
+export const logSuperAdminAudit = (
+  action: string,
+  meta: {
+    actorId?: string;
+    actorEmail?: string;
+    resource?: string;
+    resourceId?: string;
+    targetExpertId?: string | null;
+    method?: string;
+    path?: string;
+  },
+) => {
+  logger.info(`[SUPERADMIN_AUDIT] ${action}`, meta);
+};

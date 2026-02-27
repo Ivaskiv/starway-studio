@@ -7,3 +7,11 @@ export function isSuperAdminEmail(email?: string | null): boolean {
     .filter(Boolean)
   return list.includes(normalized)
 }
+
+/**
+ * Перевіряє, чи є запит від супер-адміна.
+ * Очікує, що req.user.email доступний (наприклад після auth middleware)
+ */
+export function isSuperAdminRequest(req: { user?: { email?: string | null } }): boolean {
+  return isSuperAdminEmail(req.user?.email ?? null)
+}

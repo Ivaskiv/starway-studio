@@ -1,214 +1,170 @@
-// backend/src/modules/products/service.ts
-/**
- * Products Service - PROPER TYPES
- */
-
 import { prisma } from '@/db/client.js';
 import type {
-  Product,
-  ProductMember,
-  ProductWithEnrollment,
   CreateProductInput,
   UpdateProductInput,
-  EnrollUserInput
+  Product,
+  ProductWithEnrollment,
+  EnrollUserInput,
 } from './types.js';
+import { Prisma } from '@/db/generated/prisma/client.js';
 
-/**
- * Get all products
- */
-export async function getAllProducts(): Promise<Product[]> {
-  return prisma.product.findMany({
-    orderBy: { createdAt: 'desc' }
+/** Graceful catch для відсутньої таблиці Product (P2021) */
+function isMissingProductsTableError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: string; message?: string; meta?: { table?: string } };
+  if (e.code !== 'P2021') return false;
+  const msg   = (e.message ?? '').toLowerCase();
+  const table = (e.meta?.table ?? '').toLowerCase();
+  return table.includes('product') || msg.includes('product');
+}
+
+// ── Queries ───────────────────────────────────────────────
+
+export async function getAllProducts(ownerId?: string): Promise<Product[]> {
+  try {
+    return await prisma.product.findMany({
+      where:   ownerId ? { ownerId } : undefined,
+      orderBy: { createdAt: 'desc' },
+    });
+  } catch (err) {
+    if (isMissingProductsTableError(err)) return [];
+    throw err;
+  }
+}
+
+export async function getProductById(productId: string, ownerId?: string): Promise<Product | null> {
+  return prisma.product.findFirst({
+    where: { id: productId, ...(ownerId ? { ownerId } : {}) },
   });
 }
 
-/**
- * Get product by ID
- */
-export async function getProductById(productId: string): Promise<Product | null> {
-  return prisma.product.findUnique({
-    where: { id: productId }
+export async function getProductByCode(code: string, ownerId?: string): Promise<Product | null> {
+  return prisma.product.findFirst({
+    where: { code, ...(ownerId ? { ownerId } : {}) },
   });
 }
 
-/**
- * Get product by code
- */
-export async function getProductByCode(code: string): Promise<Product | null> {
-  return prisma.product.findUnique({
-    where: { code }
-  });
-}
+// ── Mutations ─────────────────────────────────────────────
 
-/**
- * Create product
- */
 export async function createProduct(input: CreateProductInput): Promise<Product> {
   return prisma.product.create({
     data: {
-      code: input.code,
-      name: input.name,
-      description: input.description ?? null,
-      ownerId: input.ownerId,
-      priceCents: input.priceCents ?? 0,
-      currency: input.currency ?? 'EUR',
-      durationDays: input.durationDays ?? null,
-      features: input.features ?? {},
-      limits: input.limits ?? {}
-      // ✅ createdAt/updatedAt - automatic
-    }
+      code:         input.code,
+      name:         input.name,
+      description:  input.description ?? null,
+      ownerId:      input.ownerId,
+      priceCents:   input.priceCents ?? 0,
+      currency:     input.currency ?? 'EUR',
+      durationDays: input.durationDays ?? 30,
+      features:     (input.features ?? {}) as Prisma.InputJsonValue,
+      limits:       (input.limits ?? {}) as Prisma.InputJsonValue,
+    },
   });
 }
 
-/**
- * Update product
- */
 export async function updateProduct(
   productId: string,
-  input: UpdateProductInput
+  input: UpdateProductInput,
+  ownerId?: string,
 ): Promise<Product> {
-  const updateData: any = {};
+  if (ownerId) {
+    const existing = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { ownerId: true },
+    });
+    if (!existing || existing.ownerId !== ownerId) {
+      throw new Error('product_not_found');
+    }
+  }
 
-  // ✅ FIXED: !== undefined замість && (щоб пропускати порожні рядки)
-  if (input.name !== undefined) updateData.name = input.name;
-  if (input.description !== undefined) updateData.description = input.description;
-  if (input.priceCents !== undefined) updateData.priceCents = input.priceCents;
-  if (input.currency !== undefined) updateData.currency = input.currency;
+  const updateData: Prisma.ProductUpdateInput = {};
+  if (input.name !== undefined)         updateData.name         = input.name;
+  if (input.description !== undefined)  updateData.description  = input.description;
+  if (input.priceCents !== undefined)   updateData.priceCents   = input.priceCents;
+  if (input.currency !== undefined)     updateData.currency     = input.currency;
   if (input.durationDays !== undefined) updateData.durationDays = input.durationDays;
-  if (input.features !== undefined) updateData.features = input.features;
-  if (input.limits !== undefined) updateData.limits = input.limits;
+  if (input.features !== undefined)     updateData.features     = input.features as Prisma.InputJsonValue;
+  if (input.limits !== undefined)       updateData.limits       = input.limits as Prisma.InputJsonValue;
 
   return prisma.product.update({
     where: { id: productId },
-    data: updateData
-    // ✅ updatedAt - automatic via @updatedAt
+    data: updateData,
   });
 }
 
-/**
- * Delete product
- */
-export async function deleteProduct(productId: string): Promise<void> {
-  await prisma.product.delete({
-    where: { id: productId }
-  });
+export async function deleteProduct(productId: string, ownerId?: string): Promise<void> {
+  if (ownerId) {
+    const existing = await prisma.product.findUnique({
+      where:  { id: productId },
+      select: { ownerId: true },
+    });
+    if (!existing || existing.ownerId !== ownerId) throw new Error('product_not_found');
+  }
+  await prisma.product.delete({ where: { id: productId } });
 }
 
-/**
- * Get user's products with enrollment status
- */
+// ── User products + enrollment ─────────────────────────────
+
 export async function getUserProducts(userId: string): Promise<ProductWithEnrollment[]> {
   const products = await prisma.product.findMany({
-    include: {
-      members: {
-        where: { userId },
-        take: 1
-      }
-    },
-    orderBy: { createdAt: 'desc' }
+    include: { enrollments: { where: { userId }, take: 1 } },
+    orderBy: { createdAt: 'desc' },
   });
 
-  return products.map(product => {
-    const member = product.members[0] || null;
-
+  return products.map(p => {
+    const e = p.enrollments[0] ?? null;
     return {
-      ...product,
-      enrollment: member
+      ...p,
+      enrollment: e
         ? {
-            id: member.id,
-            enrolledAt: member.enrolledAt,
-            expiresAt: member.expiresAt,
-            trialEnd: member.trialEnd,
-            purchased: member.purchased
+            id:         e.id,
+            enrolledAt: e.enrolledAt,
+            trialEnd:   e.trialEnd,
+            purchased:  e.purchased,
           }
-        : null
+        : null,
     };
   });
 }
 
-/**
- * Enroll user in product
- */
-export async function enrollUser(input: EnrollUserInput): Promise<ProductMember> {
+export async function enrollUser(input: EnrollUserInput) {
   const { userId, productId, purchased = false, trialDays = 0 } = input;
 
-  // Check if already enrolled
-  const existing = await prisma.productMember.findUnique({
-    where: {
-      userId_productId: { userId, productId }
-    }
+  const existing = await prisma.enrollment.findUnique({
+    where: { userId_productId: { userId, productId } },
   });
+  if (existing) throw new Error('already_enrolled');
 
-  if (existing) {
-    throw new Error('User already enrolled in this product');
-  }
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) throw new Error('product_not_found');
 
-  // Get product
-  const product = await prisma.product.findUnique({
-    where: { id: productId }
-  });
+  const trialEnd: Date | null =
+    trialDays > 0 ? new Date(Date.now() + trialDays * 86400000) : null;
 
-  if (!product) {
-    throw new Error('Product not found');
-  }
-
-  // ✅ SIMPLIFIED: Calculate expiration
-  const now = new Date();
-  let expiresAt: Date | null = null;
-  let trialEnd: Date | null = null;
-
-  if (trialDays > 0) {
-    // Trial period
-    trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
-    expiresAt = trialEnd;
-  } else if (purchased && product.durationDays) {
-    // Purchased with duration
-    expiresAt = new Date(now.getTime() + product.durationDays * 24 * 60 * 60 * 1000);
-  }
-  // else: permanent access (expiresAt = null)
-
-  // Create enrollment
-  return prisma.productMember.create({
+  return prisma.enrollment.create({
     data: {
       userId,
       productId,
-      expiresAt,
+      purchased,
       trialEnd,
-      purchased
-      // ✅ enrolledAt - automatic via @default(now())
-    }
+    },
   });
 }
 
-/**
- * Check if user has access to product
- */
-export async function checkProductAccess(
-  userId: string,
-  productId: string
-): Promise<boolean> {
-  const member = await prisma.productMember.findUnique({
-    where: {
-      userId_productId: { userId, productId }
-    }
+export async function checkProductAccess(userId: string, productId: string): Promise<boolean> {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { userId_productId: { userId, productId } },
   });
-
-  if (!member) return false;
-
-  // Permanent access
-  if (!member.expiresAt) return true;
-
-  // Check expiration
-  return member.expiresAt > new Date();
+  if (!enrollment) return false;
+  if (enrollment.purchased) return true;
+  if (enrollment.trialEnd) return enrollment.trialEnd > new Date();
+  return false;
 }
 
-/**
- * Get user's active enrollments
- */
-export async function getUserEnrollments(userId: string): Promise<ProductMember[]> {
-  return prisma.productMember.findMany({
-    where: { userId },
+export async function getUserEnrollments(userId: string) {
+  return prisma.enrollment.findMany({
+    where:   { userId },
     include: { product: true },
-    orderBy: { enrolledAt: 'desc' }
+    orderBy: { enrolledAt: 'desc' },
   });
 }

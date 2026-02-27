@@ -3,7 +3,7 @@
 import { DecisionSource } from '@/features/ai-engine/decisions/types/decisions.types';
 import { WheelArea } from '@/features/wheel/types/wheel.types';
 
-export type MicroTaskStatus = 'pending' | 'completed' | 'skipped';
+export type MicroTaskStatus = 'PENDING' | 'COMPLETED' | 'skipped';
 
 export type MicroTaskSource = (typeof MICRO_TASK_SOURCES)[number];
 

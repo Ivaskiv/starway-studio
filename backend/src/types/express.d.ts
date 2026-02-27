@@ -1,12 +1,13 @@
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        role: string;
-        email: string;
-      };
-      body?: any;
-    }
+import type { AuthUser } from '@/types/globalTypes.js';
+
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: AuthUser;
+    tenant?: {
+      expertId: string;
+    };
+    body?: any;
   }
 }
+
+export {};

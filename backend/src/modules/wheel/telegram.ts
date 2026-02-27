@@ -1,244 +1,193 @@
-// backend/src/modules/wheel/wheel.telegram.ts
-import { prisma } from '@/db/client.js';
-import { Context, Telegraf } from 'telegraf';
-import { verifyTelegramLinkCode } from '@/modules/social/service.js';
-import { createWheelPDF } from './pdf.js';
-import type { WheelPDFData, WheelScore } from './types.js';
+// backend/src/modules/wheel/telegram.ts
+// Telegraf bot: /start linking, callback wheel_pdf_*, sendWheelNotification
+// Синхронізовано зі схемою: telegramUserId/telegramUserName (не telegramChatId/telegramUserName)
 
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN || '');
+import { prisma } from '@/db/client.js';
+import { verifyTelegramLinkCode } from '@/modules/social/service.js';
+import { Context, Telegraf } from 'telegraf';
+import { createWheelPDF } from './pdf.js';
+import { findFocus, findWeakest, scoresFromMap } from './service.js';
+import type { WheelPDFData } from './types.js';
+
+export const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN ?? '');
 
 type TelegramSendResult =
   | { ok: true }
-  | {
-      ok: false;
-      reason: string;
-      code?: string;
-      action?: 'set_telegram_profile' | 'open_telegram_bot';
-      botLink?: string;
-    };
+  | { ok: false; reason: string; code?: string; action?: 'set_telegram_profile' | 'open_telegram_bot'; botLink?: string };
 
-const getBotLink = () => {
-  // fix code_x: requested default bot handle for onboarding flow.
-  const username = process.env.TELEGRAM_BOT_USERNAME || 'Starway_byNadya_Bot';
-  return `https://t.me/${username}`;
-};
+const getBotLink = () => `https://t.me/${process.env.TELEGRAM_BOT_USERNAME ?? 'Starway_byNadya_Bot'}`;
+const getAppUrl  = () => process.env.FRONTEND_URL ?? 'http://localhost:5173';
 
-const getAppUrl = () => process.env.FRONTEND_URL || 'http://localhost:5173';
+// ── Welcome message ───────────────────────────────────────────────────────────
 
-async function sendWelcomeMessage(chatId: string) {
-  const appUrl = getAppUrl();
-
+async function sendWelcomeMessage(telegramUserId: string) {
+  const url = getAppUrl();
   await bot.telegram.sendMessage(
-    chatId,
+    telegramUserId,
     [
       'Привіт. Це Starway Mentor Bot.',
-      'Ти тут, щоб щодня рухатись по системі: Стан -> Ціль -> Вибір -> Рішення -> Дія.',
+      'Система: Стан → Ціль → Вибір → Рішення → Дія.',
       '',
-      'Що буде далі:',
-      '1) Починаємо з Колеса балансу.',
-      '2) Щодня: ранкове та вечірнє питання.',
-      '3) Щотижневі/місячні звіти, нагадування, мініапка, підтримка.',
-      '',
-      'Що доступно прямо зараз у меню нижче:',
-      '- Кабінет',
-      '- Колесо балансу',
-      '- Звіти PDF',
-      '- Підписки',
-      '- AI Ментор',
-      '- Статистика',
-      '',
-      'Бонус: найближчим часом додамо розширені сценарії воронок, Zoom-сесії та менторські пакети.',
+      'Доступно зараз:',
+      '• Кабінет  • Колесо балансу  • Звіти PDF',
+      '• Підписки  • AI Ментор  • Статистика',
     ].join('\n'),
     {
       reply_markup: {
         inline_keyboard: [
-          [
-            { text: 'ВІДКРИТИ', url: `${appUrl}/dashboard` },
-          ],
-          [
-            { text: 'Кабінет', url: `${appUrl}/dashboard/profile` },
-            { text: 'Колесо', url: `${appUrl}/dashboard/wheel` },
-          ],
-          [
-            { text: 'Звіти PDF', url: `${appUrl}/dashboard/wheel` },
-            { text: 'Підписки', url: `${appUrl}/dashboard/subscription` },
-          ],
-          [
-            { text: 'AI Ментор', url: `${appUrl}/dashboard/ai-mentor` },
-            { text: 'Статистика', url: `${appUrl}/dashboard/progress` },
-          ],
+          [{ text: 'ВІДКРИТИ', url: `${url}/dashboard` }],
+          [{ text: 'Колесо', url: `${url}/dashboard/wheel` }, { text: 'AI Ментор', url: `${url}/dashboard/ai-mentor` }],
+          [{ text: 'Звіти PDF', url: `${url}/dashboard/wheel` }, { text: 'Підписки', url: `${url}/dashboard/subscription` }],
         ],
       },
     },
   );
 }
 
-// ========== SEND WHEEL NOTIFICATION ==========
-export async function sendWheelNotification(
-  userId: string,
-  wheelId: string,
-): Promise<TelegramSendResult> {
-  try {
-    if (!process.env.TELEGRAM_BOT_TOKEN) {
-      return { ok: false, reason: 'TELEGRAM_BOT_TOKEN is not configured' };
+// ── sendWheelNotification ─────────────────────────────────────────────────────
+
+/** Надсилає Telegram-сповіщення після збереження колеса */
+export async function sendWheelNotification(userId: string, entryId: string): Promise<TelegramSendResult> {
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    return { ok: false, reason: 'TELEGRAM_BOT_TOKEN not configured' };
+  }
+
+  // fix: telegramUserId/telegramUserName — реальні поля схеми
+  const user = await prisma.user.findUnique({
+    where:  { id: userId },
+    select: { telegramUserId: true, telegramUserName: true },
+  });
+
+  if (!user?.telegramUserId) {
+    if (!user?.telegramUserName) {
+      return {
+        ok:      false,
+        code:    'telegram_username_missing',
+        reason:  'Telegram ще не підключено. Збережіть @username у профілі.',
+        action:  'set_telegram_profile',
+        botLink: getBotLink(),
+      };
     }
+    return {
+      ok:      false,
+      code:    'telegram_chat_not_linked',
+      reason:  'Username збережено, але чат не підтверджено. Відкрийте бота і натисніть Start.',
+      action:  'open_telegram_bot',
+      botLink: getBotLink(),
+    };
+  }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        telegramChatId: true,
-        telegramUserName: true,
-      },
-    });
-
-    if (!user?.telegramChatId) {
-      if (!user?.telegramUserName) {
-        return {
-          ok: false,
-          code: 'telegram_username_missing',
-          reason: 'Telegram ще не підключено. Вкажіть username, відкрийте @Starway_byNadya_Bot і натисніть Start.',
-          action: 'set_telegram_profile',
-          botLink: getBotLink(),
-        };
-      }
-
-        return {
-          ok: false,
-          code: 'telegram_chat_not_linked',
-          reason: 'Telegram username збережено, але чат ще не підтверджено. Відкрийте @Starway_byNadya_Bot і натисніть Start.',
-          action: 'open_telegram_bot',
-          botLink: getBotLink(),
-        };
-      }
-
+  try {
     await bot.telegram.sendMessage(
-      user.telegramChatId,
-      '🎡 Твоє колесо балансу готове!\n\nНатисни кнопку, щоб отримати PDF-звіт з аналізом.',
+      user.telegramUserId,
+      '🎡 Колесо балансу збережено!\n\nНатисни для PDF-звіту:',
       {
         reply_markup: {
-          inline_keyboard: [[{ text: '📄 Отримати PDF', callback_data: `wheel_pdf_${wheelId}` }]],
+          inline_keyboard: [[{ text: '📄 Отримати PDF', callback_data: `wheel_pdf_${entryId}` }]],
         },
       },
     );
-
-    console.log('✅ Telegram notification sent:', user.telegramChatId);
     return { ok: true };
-  } catch (error) {
-    console.error('❌ Telegram notification error:', error);
-    return {
-      ok: false,
-      reason: error instanceof Error ? error.message : 'Unknown telegram error',
-    };
+  } catch (err) {
+    console.error('❌ Telegram sendMessage error', err);
+    return { ok: false, reason: err instanceof Error ? err.message : 'Unknown error' };
   }
 }
 
-// ========== /START HANDLER ==========
+// ── /start ────────────────────────────────────────────────────────────────────
+
 bot.start(async (ctx: Context) => {
   try {
     if (!ctx.from || !ctx.chat) return;
 
-    const telegramChatId = String(ctx.chat.id);
+    const telegramUserId  = String(ctx.chat.id);
     const telegramUserName = ctx.from.username ?? null;
-    const payload = 'payload' in ctx ? String((ctx as any).payload || '') : '';
+    const payload          = 'payload' in ctx ? String((ctx as any).payload ?? '') : '';
 
     let userId: string | null = null;
 
-    // fix code_x: first trigger from any flow can link user by one-time code.
+    // Спочатку — one-time link код
     if (payload.startsWith('link_')) {
       userId = await verifyTelegramLinkCode(payload);
     }
 
+    // Потім — пошук по username
     if (!userId && telegramUserName) {
-      const userByUsername = await prisma.user.findFirst({
-        where: { telegramUserName },
+      const found = await prisma.user.findFirst({
+        where:  { OR: [
+      { telegramUserName: telegramUserName ?? undefined },
+      { telegramUserId: telegramUserId ?? undefined },
+    ],
+   },
         select: { id: true },
       });
-      userId = userByUsername?.id || null;
+      userId = found?.id ?? null;
     }
 
     if (!userId) {
       await ctx.reply(
-        [
-          'Щоб підключити Telegram, спочатку відкрий @Starway_byNadya_Bot і натисни Start.',
-          'Потім повернись у кабінет та збережи свій @username у профілі.',
-        ].join('\n'),
-        {
-          reply_markup: {
-            inline_keyboard: [[{ text: 'ВІДКРИТИ', url: `${getAppUrl()}/dashboard` }]],
-          },
-        },
+        'Щоб підключити Telegram — збережи @username у профілі та натисни Start знову.',
+        { reply_markup: { inline_keyboard: [[{ text: 'ВІДКРИТИ', url: `${getAppUrl()}/dashboard` }]] } },
       );
       return;
     }
 
+    // fix: зберігаємо telegramUserId/telegramUserName
     await prisma.user.update({
       where: { id: userId },
       data: {
-        telegramChatId,
+        telegramUserId: telegramUserId,
         ...(telegramUserName ? { telegramUserName } : {}),
       },
     });
 
-    await sendWelcomeMessage(telegramChatId);
-  } catch (error) {
-    console.error('❌ Telegram /start error:', error);
-    await ctx.reply('Не вдалося завершити підключення Telegram. Спробуйте ще раз.');
+    await sendWelcomeMessage(telegramUserId);
+  } catch (err) {
+    console.error('❌ Telegram /start error', err);
+    await ctx.reply('Не вдалося підключити Telegram. Спробуй ще раз.');
   }
 });
 
-// ========== CALLBACK HANDLER ==========
+// ── callback_query (wheel PDF) ────────────────────────────────────────────────
+
 bot.on('callback_query', async (ctx: Context) => {
   try {
-    const callbackQuery = ctx.callbackQuery;
-    if (!callbackQuery || !('data' in callbackQuery)) return;
+    const cq = ctx.callbackQuery;
+    if (!cq || !('data' in cq) || !cq.data.startsWith('wheel_pdf_')) return;
 
-    const data = callbackQuery.data;
-    if (!data.startsWith('wheel_pdf_')) return;
+    const entryId = cq.data.replace('wheel_pdf_', '');
 
-    const wheelId = data.replace('wheel_pdf_', '');
-
-    const wheel = await prisma.wheelAssessment.findUnique({
-      where: { id: wheelId },
+    const entry = await prisma.userBalanceEntry.findUnique({
+      where:   { id: entryId },
       include: { user: true },
     });
 
-    if (!wheel) {
-      await ctx.answerCbQuery('❌ Колесо не знайдено');
-      return;
-    }
+    if (!entry) { await ctx.answerCbQuery('❌ Не знайдено'); return; }
 
-    // Parse scores
-    let scores: WheelScore[] = [];
-    if (Array.isArray(wheel.scores)) {
-      scores = wheel.scores.map((s: any) => ({
-        categoryId: s.categoryId,
-        score: s.score,
-        comment: s.comment ?? null,
-      }));
-    }
+    const scores = scoresFromMap(entry.scores);
+    const weakest = findWeakest(scores);
+    const focus   = findFocus(scores, weakest);
 
     const pdfData: WheelPDFData = {
-      userName: wheel.user.firstName || wheel.user.name || wheel.user.email || 'Користувач',
-      scores,
-      weakestSphere: wheel.weakestSphere,
-      focusSphere: wheel.focusSphere,
-      analysis: wheel.analysis,
-      createdAt: wheel.createdAt.toISOString(),
+      userName: entry.user?.firstName ?? entry.user?.email ?? 'Користувач',
+      scores: scoresFromMap(entry.scores), 
+      weakestSphere: weakest?.categoryId ?? '',
+      focusSphere:   focus?.categoryId ?? weakest?.categoryId ?? '',
+      analysis:      entry.note ?? '',
+      createdAt:    entry.createdAt.toISOString(),
     };
 
-    const pdfBuffer = await createWheelPDF(pdfData);
+const buffer = await createWheelPDF(pdfData);
 
     await ctx.telegram.sendDocument(
       ctx.from!.id,
-      { source: pdfBuffer, filename: `wheel-${wheel.id}.pdf` },
-      { caption: '🎡 Твоє колесо балансу!\n\n📊 Використовуй цей аналіз для планування.' },
+      { source: buffer, filename: `wheel-${entryId}.pdf` },
+      { caption: '🎡 Колесо балансу — PDF звіт' },
     );
 
     await ctx.answerCbQuery('✅ PDF надіслано!');
-  } catch (error) {
-    console.error('❌ Telegram callback error:', error);
-    await ctx.answerCbQuery('❌ Помилка генерації PDF');
+  } catch (err) {
+    console.error('❌ Telegram callback error', err);
+    await ctx.answerCbQuery('❌ Помилка');
   }
 });
-
-export { bot };

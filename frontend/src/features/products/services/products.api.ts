@@ -5,8 +5,11 @@ import { AddProductMemberRequest } from '@/features/user/types/user.types';
 export const productsApi = api.injectEndpoints({
   endpoints: builder => ({
     // ================== PRODUCTS ==================
-    getAllProducts: builder.query<Product[], void>({
-      query: () => '/products',
+    getAllProducts: builder.query<Product[], { includeAll?: boolean } | void>({
+      query: (args) => ({
+        url: '/products',
+        params: args?.includeAll ? { includeAll: 1 } : undefined,
+      }),
       providesTags: result =>
         result
           ? [...result.map(p => ({ type: 'Products' as const, id: p.id })), { type: 'Products', id: 'LIST' }]
@@ -27,7 +30,7 @@ createProduct: builder.mutation<Product, ProductFormInputs>({
     method: 'POST',
     body,
   }),
-  invalidatesTags: ['Products'],
+  invalidatesTags: ['Products', 'Access'],
 }),
     // ================== MEMBERS ==================
     getProductMembers: builder.query<ProductMember[], string>({
@@ -41,7 +44,7 @@ createProduct: builder.mutation<Product, ProductFormInputs>({
         method: 'POST',
         body: { userId, role },
       }),
-  invalidatesTags: ['Members'],
+  invalidatesTags: ['Members', 'Access', 'Products'],
     }),
 
     // ================== AI MENTOR ==================

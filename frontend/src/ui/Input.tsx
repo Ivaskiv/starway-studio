@@ -58,8 +58,8 @@ export const Input = forwardRef<HTMLInputElement, Props>(
             disabled={disabled}
             className={cn(
               'w-full h-11 rounded-xl border outline-none',
-              'bg-white/5 backdrop-blur-md border-white/10',
-              'text-white placeholder:text-white/30',
+              'bg-[color:rgba(var(--ambient-rgb-2),0.3)] backdrop-blur-md border-[color:rgba(var(--glass-border-rgb),0.22)]',
+              'text-[color:var(--color-text)] placeholder:text-white/30',
               'transition-all duration-200',
               'focus:border-[color:rgba(var(--accent-rgb),0.55)] focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.2)] focus:bg-white/10',
               error &&

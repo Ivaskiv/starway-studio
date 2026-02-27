@@ -26,7 +26,7 @@ export default function AudienceModeSection({ onAuthRequired }: AudienceModeSect
   const { navigateTo } = useSmartNavigation();
   const [audience, setAudience] = useState<Audience>('user');
 
-  const isOwner = user?.isAdmin || user?.isSuperAdmin || user?.role === 'mentor';
+  const isOwner = user?.isAdmin || user?.isSuperAdmin || user?.role === 'EXPERT';
   const isSuperAdmin = user?.isSuperAdmin === true;
 
   const headline = useMemo(() => {

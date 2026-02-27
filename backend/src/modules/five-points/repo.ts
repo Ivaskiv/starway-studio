@@ -1,58 +1,91 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/db/client.js';
+import type { FivePointsEnrollment, FivePointsProgress } from './types.js';
+import { Prisma } from '@/db/generated/prisma/client.js';
 
-export const fivePointsRepo = (prisma: PrismaClient) => {
-  const MODULE_ID = 'five-points-core';
 
+
+export function fivePointsRepo() {
   return {
-    // ===== MODULE =====
-    getModule: () =>
-      prisma.fivePointsModule.findUnique({
-        where: { id: MODULE_ID },
-      }),
+    async getEnrollment(userId: string): Promise<FivePointsEnrollment | null> {
+      const record = await prisma.fivePointsEnrollment.findFirst({
+        where: { userId },
+        include: { module: true }
+      });
 
-    // ===== ENROLLMENT =====
-    getEnrollment: (userId: string) =>
-      prisma.fivePointsEnrollment.findUnique({
-        where: {
-          userId_moduleId: {
-            userId,
-            moduleId: MODULE_ID,
-          },
-        },
-        include: { progress: true },
-      }),
+      if (!record) return null;
 
-    createEnrollment: (userId: string) =>
-      prisma.fivePointsEnrollment.create({
+      const progress = record.progress as FivePointsProgress;
+
+      return {
+        id: record.id,
+        userId: record.userId,
+        moduleId: record.moduleId,
+        progress,
+        enrolledAt: record.enrolledAt,
+        completedAt: record.completedAt,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        module: record.module
+      };
+    },
+
+    async createEnrollment(
+      userId: string,
+      moduleId: string,
+      progress?: FivePointsProgress
+    ): Promise<FivePointsEnrollment> {
+      const defaultProgress: FivePointsProgress = {
+        steps: [],
+        completed: false,
+        completedLessons: 0,
+        totalPoints: 0
+      };
+
+      const record = await prisma.fivePointsEnrollment.create({
         data: {
           userId,
-          moduleId: MODULE_ID,
+          moduleId,
+          progress: (progress || defaultProgress) as Prisma.InputJsonValue
         },
-      }),
+        include: { module: true }
+      });
 
-    // ===== PROGRESS =====
-    createProgress: (enrollmentId: string) =>
-      prisma.fivePointsProgress.create({
-        data: { enrollmentId },
-      }),
+      const progressObj = record.progress as FivePointsProgress;
 
-    updateProgress: (
+      return {
+        id: record.id,
+        userId: record.userId,
+        moduleId: record.moduleId,
+        progress: progressObj,
+        enrolledAt: record.enrolledAt,
+        completedAt: record.completedAt,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        module: record.module
+      };
+    },
+
+    async updateProgress(
       enrollmentId: string,
-      data: { completedLessons?: number; totalPoints?: number }
-    ) =>
-      prisma.fivePointsProgress.update({
-        where: { enrollmentId },
-        data,
-      }),
+      progress: FivePointsProgress
+    ): Promise<{ progress: FivePointsProgress }> {
+      const record = await prisma.fivePointsEnrollment.update({
+        where: { id: enrollmentId },
+        data: { progress: progress as Prisma.InputJsonValue },
+        select: { progress: true }
+      });
 
-    // ===== ADMIN =====
-    getAllProgress: () =>
-      prisma.fivePointsProgress.findMany({
-        include: {
-          enrollment: {
-            include: { user: true },
-          },
-        },
-      }),
+      const progressObj = record.progress as FivePointsProgress;
+
+      return { progress: progressObj };
+    },
+
+    async getAllProgress(): Promise<FivePointsProgress[]> {
+      const records = await prisma.fivePointsEnrollment.findMany({
+        select: { progress: true }
+      });
+
+      return records.map(r => r.progress as FivePointsProgress);
+    }
   };
-};
+}

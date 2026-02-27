@@ -278,6 +278,11 @@ export const WheelPage = () => {
           <Sparkles className="w-7 h-7 text-[var(--color-accent-soft)]" />
           Колесо балансу
         </h1>
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/75">
+          <p>Що робить користувач: ставить оцінки 1–10 по 8 сферах.</p>
+          <p>Що фіксує система: слабку сферу, фокус-сферу, динаміку за періоди.</p>
+          <p>Що система НЕ робить: не дає порад, не мотивує, не призначає рекомендації.</p>
+        </div>
       </div>
 
       {/* Tabs + quick actions in one block */}

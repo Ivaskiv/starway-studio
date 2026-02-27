@@ -1,108 +1,152 @@
-// backend/src/modules/daily-cycle/daily.controller.ts
-import { User } from '@prisma/client';
-import type { Request, Response } from 'express';
-import * as dailyService from './service.js';
-import { checkDailyAccess } from './subscription.js';
-import type { CreateDailyEntryInput } from './types.js';
+import { Response } from 'express';
+import type { AuthenticatedRequest } from '@/types/globalTypes.js';
+import type { DailyEntryInput, UpsertDailyEntryInput } from './types.js';
 
-// ==========================
-// GET TODAY ENTRY
-// ==========================
-export async function getTodayEntry(req: Request, res: Response) {
+import {
+  getOrCreateTodayEntry,
+  upsertDailyEntry,
+  getMicroTasks,
+  completeMicroTask,
+  getDailyEntryHistory,
+} from './service.js';
+
+// =====================================================
+// GET TODAY'S ENTRY
+// =====================================================
+export async function getToday(req: AuthenticatedRequest, res: Response) {
   try {
-    const user = req.user as User;
-    const entry = await dailyService.getTodayEntry(user.id);
-    res.json(entry ?? null);
-  } catch (error) {
-    console.error('❌ getTodayEntry error:', error);
-    res.status(500).json({ error: 'server_error' });
-  }
-}
-
-// ==========================
-// UPSERT DAILY ENTRY
-// ==========================
-export async function upsertEntry(req: Request<CreateDailyEntryInput>, res: Response) {
-  try {
-    const user = req.user as User;
-    const access = checkDailyAccess(user);
-
-    if (!access.canCreateEntry) {
-      return res.status(403).json({ error: 'access_denied', message: 'Підписка не активна' });
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const input: CreateDailyEntryInput = {
-      state: req.body.state,
-      drain: req.body.drain ?? null,
-      choice: req.body.choice,
-      dayFact: req.body.dayFact ?? '',
-      answers: req.body.answers ?? [],
-      microSupport: req.body.microSupport ?? [],
+    // ⚠️ service очікує userId + expertId
+    // якщо в тебе немає окремого expertId — тимчасово передаємо user.id
+    const expertId = user.expertId ?? user.id;
+    const entry = await getOrCreateTodayEntry(user.id, expertId);
+
+    res.json(entry);
+  } catch (err) {
+    console.error('getToday error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
+// =====================================================
+// UPSERT DAILY ENTRY
+// =====================================================
+export async function upsertEntry(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const payload = req.body as DailyEntryInput;
+
+    // ⚠️ service тепер приймає (entryId, input)
+    // тому очікуємо entryId в body
+    if (!payload.id) {
+      return res.status(400).json({ error: 'Entry ID missing' });
+    }
+
+    const expertId = user.expertId ?? user.id;
+
+    const entryInput: UpsertDailyEntryInput = {
+      ...payload,
+      entryId: payload.id,
+      userId: user.id,
+      expertId,
+      date: payload.date ? new Date(payload.date) : new Date(),
     };
 
-    const entry = await dailyService.upsertDailyEntry(user.id, input);
-    const aiAnalysis = await dailyService.generateAiAnalysis(entry.id);
+    const entry = await upsertDailyEntry(entryInput);
 
-    res.json({ entry, aiAnalysis });
-  } catch (error) {
-    console.error('❌ upsertEntry error:', error);
-    res.status(500).json({ error: 'server_error' });
+    res.json(entry);
+  } catch (err) {
+    console.error('upsertEntry error', err);
+    res.status(500).json({ error: 'Server error' });
   }
 }
 
-// ==========================
-// GET HISTORY
-// ==========================
-export async function getHistory(req: Request, res: Response) {
-  try {
-    const user = req.user as User;
-    const access = checkDailyAccess(user);
-    const limit = access.historyLimit ?? 30;
-
-    const history = await dailyService.getHistory(user.id, limit);
-    res.json({ history, limit });
-  } catch (error) {
-    console.error('❌ getHistory error:', error);
-    res.status(500).json({ error: 'server_error' });
-  }
-}
-
-// ==========================
+// =====================================================
 // GET MICRO TASKS
-// ==========================
-export async function getMicroTasks(req: Request, res: Response) {
+// =====================================================
+export async function getTasks(req: AuthenticatedRequest, res: Response) {
   try {
-    const user = req.user as User;
-    const tasks = await dailyService.getUserMicroTasks(user.id);
-    res.json({ tasks });
-  } catch (error) {
-    console.error('❌ getMicroTasks error:', error);
-    res.status(500).json({ error: 'server_error' });
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // ⚠️ тепер micro tasks прив’язані до entryId
+    const entryId = req.query.entryId as string;
+
+    if (!entryId) {
+      return res.status(400).json({ error: 'Entry ID missing' });
+    }
+
+    const tasks = await getMicroTasks(entryId);
+
+    res.json(tasks);
+  } catch (err) {
+    console.error('getTasks error', err);
+    res.status(500).json({ error: 'Server error' });
   }
 }
 
-// ==========================
+// =====================================================
 // COMPLETE MICRO TASK
-// ==========================
-export interface CompleteTaskParams {
-  taskId: string;
+// =====================================================
+export async function completeTask(req: AuthenticatedRequest, res: Response) {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const entryId = req.query.entryId as string;
+    const taskId = req.params.taskId;
+
+    if (!entryId) {
+      return res.status(400).json({ error: 'Entry ID missing' });
+    }
+
+    if (!taskId) {
+      return res.status(400).json({ error: 'Task ID missing' });
+    }
+
+    const updated = await completeMicroTask(entryId, taskId);
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error('completeTask error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 }
 
-export async function completeMicroTask(
-  req: Request<undefined, CompleteTaskParams>,
-  res: Response,
+// ============================================
+// HISTORY
+// ============================================
+
+export async function getHistoryController(
+  req: AuthenticatedRequest,
+  res: Response
 ) {
   try {
-    const user = req.user as User;
-    const taskId = req.params;
-    if (!taskId) return res.status(400).json({ error: 'missing_taskId' });
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-    const updatedTask = await dailyService.completeMicroTask(user.id, taskId);
-    if (!updatedTask) return res.status(404).json({ error: 'task_not_found' });
-
-    res.json({ task: updatedTask });
-  } catch (error) {
-    console.error('❌ completeMicroTask error:', error);
-    res.status(500).json({ error: 'server_error' });
+    const history = await getDailyEntryHistory(user.id);
+    res.json(history);
+  } catch (err) {
+    console.error('getHistoryController error', err);
+    res.status(500).json({ error: 'Server error' });
   }
 }

@@ -29,7 +29,8 @@ export function useAccess() {
     return false;
   };
   const plan = data?.plan ?? 'free';
-  const isAdmin = data?.role === 'ADMIN' || data?.role === 'admin';
+  const normalizedRole = data?.role?.toUpperCase();
+  const isAdmin = normalizedRole === 'ADMIN' || normalizedRole === 'SUPERADMIN';
   const isPaid = plan === 'paid' || isAdmin;
   const isTrial = plan === 'trial';
   const isFree = plan === 'free' && !isAdmin;

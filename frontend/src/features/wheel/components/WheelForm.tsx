@@ -1,121 +1,181 @@
-import { useCallback, useMemo, useState } from 'react';
-import { toast } from 'react-hot-toast';
+import { useCallback, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 
+import { useAppSelector } from '@/app/hooks';
 import { useCreateWheelAssessmentMutation } from '@/features/wheel/api';
 import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types';
-import { BalanceWheel } from './BalanceWheel';
-import { ScoreSlider } from './ScoreSlider';
-import { WheelFooter } from './WheelFooter';
-import { WheelTabs } from './WheelTabs';
+import { Button } from '@/ui/Button';
+
+import { ResultView } from './ResultView';
+import { SphereSlider } from './SphereSlider';
+import { StepCard } from './StepCard';
+import { wheelToast } from './Toast';
+import { WheelChart } from './WheelChart';
+import { useWheelFlowState } from '../hooks/useWheelFlowState';
 
 interface WheelFormProps {
-  userId: string;
+  userId?: string;
   onComplete?: (assessmentId: string) => void;
   onCancel?: () => void;
 }
 
 export const WheelForm = ({ userId, onComplete, onCancel }: WheelFormProps) => {
-  const [index, setIndex] = useState(0);
-  const [scores, setScores] = useState(() =>
-    WHEEL_CATEGORIES.map(cat => ({ categoryId: cat.id, score: 5 })),
-  );
+  const authUserId = useAppSelector((state) => state.auth.user?.id);
+  const resolvedUserId = userId || authUserId || '';
+  const MAX_GENERATIONS = 3;
 
-  // fix code_x: runtime crash fix — use existing mutation hook and pass required userId.
+  const {
+    step,
+    setStep,
+    spheres,
+    activeSphere,
+    activeSphereIndex,
+    generationsUsed,
+    setGenerationsUsed,
+    isResultStep,
+    isIntroStep,
+    canProceed,
+    setScore,
+    setComment,
+    restart,
+  } = useWheelFlowState();
+
   const [saveWheel, { isLoading }] = useCreateWheelAssessmentMutation();
 
-  const currentScore = scores[index].score;
-  const currentComment = scores[index].comment ?? '';
-  const category = WHEEL_CATEGORIES[index];
+  const stepLabel = useMemo(() => {
+    if (step === 0) return 'Крок 0 із 9';
+    if (step === 9) return 'Крок 9 із 9';
+    return `Крок ${step} із 9`;
+  }, [step]);
 
-  const handleScoreChange = useCallback(
-    (val: number) =>
-      setScores(prev => prev.map((s, i) => (i === index ? { ...s, score: val } : s))),
-    [index],
-  );
-
-  const handleNext = useCallback(async () => {
-    if (index < scores.length - 1) {
-      setIndex(i => i + 1);
+  const handleNext = useCallback(() => {
+    if (!canProceed) {
+      wheelToast.error('scoreRequired');
       return;
     }
-    try {
-      const result = await saveWheel({ userId, scores }).unwrap();
-      toast.success('Збережено!');
-      onComplete?.(result.id); // assessmentId тепер строго string
-    } catch (error: any) {
-      const apiMessage =
-        error?.data?.error || error?.error || 'Не вдалося зберегти колесо. Спробуйте ще раз.';
-      // fix code_x: show backend reason (e.g. cooldown / validation), not generic failure.
-      toast.error(String(apiMessage));
-    }
-  }, [index, saveWheel, scores, onComplete, userId]);
+    setStep((prev) => Math.min(9, prev + 1));
+  }, [canProceed, setStep]);
 
   const handlePrev = useCallback(() => {
-    if (index > 0) setIndex(i => i - 1);
-  }, [index]);
+    if (step === 0) {
+      onCancel?.();
+      return;
+    }
+    setStep((prev) => Math.max(0, prev - 1));
+  }, [onCancel, setStep, step]);
 
-  const handleCommentChange = useCallback(
-    (value: string) =>
-      setScores(prev => prev.map((s, i) => (i === index ? { ...s, comment: value } : s))),
-    [index],
-  );
+  const handleGenerate = useCallback(async () => {
+    if (!resolvedUserId) {
+      wheelToast.error('missingUser');
+      return;
+    }
+    if (generationsUsed >= MAX_GENERATIONS) {
+      wheelToast.error('limitReached');
+      return;
+    }
 
-  const scoreList = useMemo(() => scores.map(s => s.score), [scores]);
-  const averageScore = useMemo(
-    () => (scores.length ? scores.reduce((sum, item) => sum + item.score, 0) / scores.length : 0),
-    [scores],
-  );
+    try {
+      const result = await saveWheel({
+        userId: resolvedUserId,
+        scores: spheres.map((item) => ({
+          categoryId: item.categoryId,
+          score: item.score ?? 1,
+          comment: item.comment || undefined,
+        })),
+      }).unwrap();
 
-  const caption = useMemo(() => {
-    if (averageScore >= 8.5) return 'Сильний темп: ви вже тримаєте баланс на високому рівні.'
-    if (averageScore >= 6.5) return 'Добра база: кілька точних кроків і картина стане значно гармонійнішою.'
-    if (averageScore >= 4.5) return 'Зараз точка росту: чесна оцінка вже запускає реальні зміни.'
-    return 'Початок шляху: невеликі щоденні дії швидко вирівняють ваш внутрішній ритм.'
-  }, [averageScore]);
+      setGenerationsUsed((prev) => prev + 1);
+      wheelToast.success('saved');
+      onComplete?.(result.id);
+    } catch (error: any) {
+      const apiMessage = error?.data?.error || error?.error;
+      wheelToast.error('saveError', apiMessage ? String(apiMessage) : undefined);
+    }
+  }, [resolvedUserId, generationsUsed, saveWheel, spheres, setGenerationsUsed, onComplete]);
 
   return (
-    <div className="max-w-3xl mx-auto p-4">
-      <WheelTabs scores={scoreList} activeIndex={index} onSelect={setIndex} />
+    <div className="mx-auto max-w-[440px] space-y-4 p-4">
+      <p className="text-center text-xs uppercase tracking-[0.16em] text-white/45">{stepLabel}</p>
 
-      <BalanceWheel scores={scores} size={300} />
+      <StepCard
+        key={step}
+        title={isIntroStep ? 'Колесо балансу' : isResultStep ? 'Результат' : WHEEL_CATEGORIES[activeSphereIndex]?.nameUk || 'Сфера'}
+        subtitle={isIntroStep ? '8 сфер життя • оцінка від 1 до 10 • короткий контекст' : undefined}
+      >
+        {isIntroStep ? (
+          <div className="space-y-4">
+            <WheelChart scores={spheres} size={280} />
+            <p className="text-sm text-white/75">
+              Пройдіть 8 сфер по черзі. Для кожної сфери поставте оцінку та коротко опишіть причину.
+            </p>
+            <Button onClick={handleNext} fullWidth>
+              Почати
+            </Button>
+          </div>
+        ) : null}
 
-      <div className="p-4">
-        <h3 className="text-xl font-semibold text-white">{category.nameUk}</h3>
-        <p className="text-sm text-white/60">1 = Потребує увагу • 10 = Ідеально</p>
-
-        <div className="text-center text-5xl font-bold my-4" style={{ color: category.color }}>
-          {currentScore}
-        </div>
-
-        <ScoreSlider value={currentScore} onChange={handleScoreChange} color={category.color} />
-
-        <p className="mt-4 text-sm text-white/80 text-center">
-          {caption}
-        </p>
-
-        <div className="mt-5">
-          <label className="block text-sm text-white/70 mb-2">
-            Коротко: чому така оцінка? <span className="text-white/40">(необовʼязково)</span>
-          </label>
-          {/* fix code_x: optional reason input per category to enrich wheel context and future recommendations. */}
-          <textarea
-            value={currentComment}
-            onChange={(e) => handleCommentChange(e.target.value)}
-            placeholder="Наприклад: зараз мало енергії через перевтому..."
-            rows={3}
-            className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none focus:border-[color:rgba(var(--accent-rgb),0.55)] focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.2)]"
+        {!isIntroStep && !isResultStep && activeSphere ? (
+          <SphereSlider
+            title={WHEEL_CATEGORIES[activeSphereIndex]?.nameUk || 'Сфера'}
+            description="1 = потребує уваги • 10 = стабільно"
+            score={activeSphere.score}
+            comment={activeSphere.comment}
+            onScoreChange={(value) => setScore(activeSphereIndex, value)}
+            onCommentChange={(value) => setComment(activeSphereIndex, value)}
           />
-        </div>
+        ) : null}
+
+        {isResultStep ? (
+          <ResultView
+            scores={spheres}
+            generationsUsed={generationsUsed}
+            maxGenerations={MAX_GENERATIONS}
+            isSubmitting={isLoading}
+            onGenerate={handleGenerate}
+          />
+        ) : null}
+      </StepCard>
+
+      <div className="flex items-center justify-between gap-2">
+        <Button onClick={handlePrev} variant="ghost" className="border border-white/15">
+          <span className="inline-flex items-center gap-2">
+            <ChevronLeft className="h-4 w-4" />
+            {isIntroStep ? 'Скасувати' : 'Назад'}
+          </span>
+        </Button>
+
+        {isIntroStep ? (
+          <Button onClick={handleNext}>
+            <span className="inline-flex items-center gap-2">
+              Почати
+              <ChevronRight className="h-4 w-4" />
+            </span>
+          </Button>
+        ) : !isResultStep ? (
+          <Button onClick={handleNext}>
+            <span className="inline-flex items-center gap-2">
+              Далі
+              <ChevronRight className="h-4 w-4" />
+            </span>
+          </Button>
+        ) : (
+          <Button onClick={handleRestart} variant="outline">
+            <span className="inline-flex items-center gap-2">
+              <RotateCcw className="h-4 w-4" />
+              Почати заново
+            </span>
+          </Button>
+        )}
       </div>
 
-      <WheelFooter
-        isFirst={index === 0}
-        isLast={index === scores.length - 1}
-        isSubmitting={isLoading}
-        onPrev={handlePrev}
-        onNext={handleNext}
-        onCancel={onCancel}
-      />
+      {isResultStep ? (
+        <div className="text-center text-xs text-white/55">
+          Після 3 генерацій доступ до повторної генерації буде обмежено.
+        </div>
+      ) : null}
     </div>
   );
 };
+  const handleRestart = useCallback(() => {
+    restart();
+  }, [restart]);

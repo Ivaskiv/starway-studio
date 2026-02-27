@@ -47,7 +47,7 @@ export type OnboardingStage =
   | 'goal' // 12-24 год
   | 'choice' // 24-48 год
   | 'actions' // 48-72 год
-  | 'completed';
+  | 'COMPLETED';
 
 export interface OnboardingProgress {
   stage: OnboardingStage;
@@ -343,7 +343,7 @@ export interface Consultation {
   userId: string;
   scheduledAt: string;
   triggeredBy: ConsultationTrigger;
-  status: 'scheduled' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'COMPLETED' | 'cancelled';
   notes?: string;
 }
 
@@ -367,7 +367,7 @@ export interface ZoomSession {
     decisions: string[];
     aiSummary: string;
   };
-  status: 'scheduled' | 'completed';
+  status: 'scheduled' | 'COMPLETED';
 }
 
 // ============================================================================

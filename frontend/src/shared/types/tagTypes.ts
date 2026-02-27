@@ -67,7 +67,8 @@ export const TAG_TYPES = [
   'Trial',
   'Mirror',
   'Consultation',
-  'Theme'
+  'Theme',
+  'Avatar'
 
 ] as const
 

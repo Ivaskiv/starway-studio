@@ -1,330 +1,379 @@
-import 'dotenv/config';
 import { PrismaNeon } from '@prisma/adapter-neon';
 import bcrypt from 'bcryptjs';
+import 'dotenv/config';
 import jwt from 'jsonwebtoken';
 import {
+  DailyChoice,
+  DailyState,
+  MicroTaskStatus,
+  NotificationChannel,
+  NotificationStatus,
+  PaymentStatus,
+  Prisma,
   PrismaClient,
-  UserRole,
-  SubscriptionPlan,
+  Role,
   SubscriptionStatus,
-} from '../src/db/generated/client.js';
+  User,
+} from '../src/db/generated/prisma/client.js';
 
-const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! });
+type SeedUserInput = {
+  key: string;
+  email: string;
+  firstName: string;
+  lastName?: string;
+  role: Role;
+  telegramUserId?: string;
+  telegramUserName?: string;
+  subscriptionStatus: SubscriptionStatus;
+  trialDays?: number;
+};
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL is required for seed');
+
+const adapter = new PrismaNeon({ connectionString: databaseUrl });
 const prisma = new PrismaClient({ adapter });
+
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 async function main() {
-  console.log('🌱 Seeding...\n');
+  console.log('🌱 Seeding AI-only SaaS schema...\n');
 
-  const hash = await bcrypt.hash('password123', 10);
-  const users: Record<string, any> = {};
+  const passwordHash = await bcrypt.hash('password123', 10);
 
-  // ======================
-  // USERS
-  // ======================
-  const usersData = [
+  // 1. SuperAdmin
+  const superAdmin = await prisma.superAdmin.upsert({
+    where: { email: 'admin@starway.com' },
+    update: { name: 'Platform Admin' },
+    create: { email: 'admin@starway.com', name: 'Platform Admin' },
+  });
+  console.log(`✅ SuperAdmin: ${superAdmin.email}`);
+
+  // 2. Expert
+  const expert = await prisma.expert.upsert({
+    where: { email: 'expert@starway.com' },
+    update: { displayName: 'Starway Expert', timezone: 'Europe/Kyiv', isActive: true },
+    create: {
+      email: 'expert@starway.com',
+      displayName: 'Starway Expert',
+      timezone: 'Europe/Kyiv',
+      telegramBotName: 'starway_test_bot',
+    },
+  });
+  console.log(`✅ Expert: ${expert.email}`);
+
+  // 3. Користувачі
+  const usersData: SeedUserInput[] = [
     {
+      key: 'trial',
       email: 'trial@starway.com',
       firstName: 'Trial',
-      role: UserRole.USER,
+      role: Role.USER,
+      telegramUserId: '10000001',
+      telegramUserName: 'trial_user',
       subscriptionStatus: SubscriptionStatus.TRIAL,
-      subscriptionPlan: SubscriptionPlan.TRIAL,
       trialDays: 7,
     },
     {
+      key: 'paid',
       email: 'paid@starway.com',
       firstName: 'Paid',
-      role: UserRole.USER,
+      role: Role.USER,
+      telegramUserId: '10000002',
+      telegramUserName: 'paid_user',
       subscriptionStatus: SubscriptionStatus.ACTIVE,
-      subscriptionPlan: SubscriptionPlan.MONTHLY,
     },
     {
-      email: 'admin@starway.com',
-      firstName: 'Admin',
-      role: UserRole.ADMIN,
+      key: 'mentor',
+      email: 'mentor@starway.com',
+      firstName: 'Mentor',
+      role: Role.EXPERT,
       subscriptionStatus: SubscriptionStatus.ACTIVE,
-      subscriptionPlan: SubscriptionPlan.MONTHLY,
-    },
-    {
-      email: 'nadyastarway@gmail.com',
-      firstName: 'Nadya',
-      role: UserRole.USER,
-      subscriptionStatus: SubscriptionStatus.ACTIVE,
-      subscriptionPlan: SubscriptionPlan.MONTHLY,
     },
   ];
 
-  for (const u of usersData) {
-    const trialStarted = u.trialDays ? new Date() : null;
-    const trialEnds = u.trialDays ? new Date(Date.now() + u.trialDays * 24 * 60 * 60 * 1000) : null;
+  const users = new Map<string, User>();
 
+  // Upsert користувачів
+  for (const item of usersData) {
     const user = await prisma.user.upsert({
-      where: { email: u.email },
-      update: {},
+      where: { email: item.email },
+      update: {
+        firstName: item.firstName,
+        lastName: item.lastName ?? null,
+        telegramUserId: item.telegramUserId ?? null,
+        telegramUserName: item.telegramUserName ?? null,
+      },
       create: {
-        email: u.email,
-        passwordHash: hash,
-        firstName: u.firstName,
-        role: u.role,
-        subscriptionStatus: u.subscriptionStatus,
-        subscriptionPlan: u.subscriptionPlan,
-        trialStartedAt: trialStarted,
-        trialEndsAt: trialEnds,
+        email: item.email,
+        firstName: item.firstName,
+        lastName: item.lastName ?? null,
+        telegramUserId: item.telegramUserId ?? null,
+        telegramUserName: item.telegramUserName ?? null,
+        role: item.role,
+        passwordHash: item.role === Role.USER ? passwordHash : null,
+        expertId: expert.id,
+        progress: {
+          create: {
+            totalPoints: 0,
+            completedBlocks: 0,
+            level: 1,
+          },
+        },
       },
     });
 
-    const accessToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
-      expiresIn: '7d',
-    });
-    users[u.email] = { ...user, accessToken };
-    console.log(`✅ User created: ${user.email}`);
+    users.set(item.key, user);
+    console.log(`✅ User: ${item.email}`);
+
+    // Subscription (створюємо тільки якщо нема)
+    const existingSub = await prisma.subscription.findFirst({ where: { userId: user.id } });
+    if (!existingSub) {
+      await prisma.subscription.create({
+        data: {
+          userId: user.id,
+          expertId: expert.id,
+          status: item.subscriptionStatus,
+          planCode: item.subscriptionStatus === SubscriptionStatus.TRIAL ? 'TRIAL' : 'MONTHLY_BASIC',
+          trialEndsAt:
+            item.subscriptionStatus === SubscriptionStatus.TRIAL
+              ? new Date(Date.now() + (item.trialDays ?? 7) * 24 * 60 * 60 * 1000)
+              : null,
+          currentPeriodEnd:
+            item.subscriptionStatus === SubscriptionStatus.ACTIVE
+              ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+              : null,
+          autoRenew: true,
+        },
+      });
+      console.log(`   └─ Subscription: ${item.subscriptionStatus}`);
+    }
   }
 
-  // ======================
-  // PRODUCTS
-  // ======================
-  const productsData = [
-    {
-      code: 'daily_trial_7',
-      name: 'Trial 7 Days',
-      description: 'Безкоштовний доступ на 7 днів',
-      priceCents: 0,
-      features: { daily: true, microTasks: true },
-      limits: { dailyPerDay: 1, historyDays: 7 },
-      ownerId: users['trial@starway.com'].id,
-    },
-    {
-      code: 'daily_basic',
-      name: 'Basic Plan',
-      description: 'Преміум доступ для щоденних практик',
-      priceCents: 500,
-      features: { daily: true, microTasks: true, aiAnalysis: true },
-      limits: { dailyPerDay: 2, microTasksActive: 5 },
-      ownerId: users['paid@starway.com'].id,
-    },
-    {
-      code: 'daily_pro',
-      name: 'Pro Plan',
-      description: 'Розширені курси та AI ментор',
-      priceCents: 1200,
-      features: { daily: true, microTasks: true, aiAnalysis: true, wheel: true },
-      limits: { dailyPerDay: 5, microTasksActive: 10 },
-      ownerId: users['admin@starway.com'].id,
-    },
-    {
-      code: 'daily_nadya',
-      name: 'Nadya Special',
-      description: 'Тестовий продукт для Nadya',
-      priceCents: 700,
-      features: { daily: true, microTasks: true },
-      limits: { dailyPerDay: 3, microTasksActive: 5 },
-      ownerId: users['nadyastarway@gmail.com'].id,
-    },
-  ];
+  const trialUser = users.get('trial')!;
+  const paidUser = users.get('paid')!;
 
-  const products = [];
-  for (const p of productsData) {
-    const product = await prisma.product.upsert({ where: { code: p.code }, update: {}, create: p });
-    products.push(product);
-  }
-  console.log('✅ Products created');
-
-  // ======================
-  // VIDEO SERIES
-  // ======================
-  const videoSeriesData = [
-    {
-      code: 'video_1',
-      title: 'АЛГОРИТМ ВИХОДУ ІЗ ЗАСТОЮ',
-      messages: ['Ти побачиш, чому роки спроб не дають зрушення'],
-      nextVideo: 'video_2',
-      reminders: [1, 3, 5],
-      contentUrl: 'https://youtu.be/example1',
-      description: 'Тут ти зрозумієш, чому роки спроб не дають зрушення',
-    },
-    {
-      code: 'video_2',
-      title: 'ФУНДАМЕНТ',
-      messages: ['Тут ти зрозумієш, що внутрішня робота — це стратегія'],
-      nextVideo: 'video_3',
-      reminders: [1, 3, 5],
-      contentUrl: 'https://youtu.be/example2',
-      description: 'Тут ти зрозумієш, що внутрішня робота — це стратегія',
-    },
-    {
-      code: 'video_3',
-      title: 'ГОЛОВНА ПАСТКА',
-      messages: ['Це момент прозріння. Те, що тримає роками, видно саме тут'],
-      nextVideo: 'video_4',
-      reminders: [1, 3, 5],
-      contentUrl: 'https://youtu.be/example3',
-      description: 'Це момент прозріння. Те, що тримає роками, видно саме тут',
-    },
-    {
-      code: 'video_4',
-      title: 'ДРУГА ПАСТКА',
-      messages: ['Вона маскується під логіку, планування, “я ще подумаю”'],
-      nextVideo: 'video_5',
-      reminders: [1, 3, 5],
-      contentUrl: 'https://youtu.be/example4',
-      description: 'Вона маскується під логіку, планування, “я ще подумаю”',
-    },
-    {
-      code: 'video_5',
-      title: 'ВИБІР / ПРОДУКТ',
-      messages: ['Ти побачиш повну картину'],
-      nextVideo: null,
-      reminders: [1, 3, 5],
-      contentUrl: 'https://youtu.be/example5',
-      description: 'Ти побачиш повну картину',
-    },
-    {
-      code: 'bonus',
-      title: 'БОНУС',
-      messages: ['Відчуй, як повертається сила'],
-      nextVideo: null,
-      reminders: [],
-      contentUrl: 'https://youtu.be/bonus',
-      description: 'Відчуй, як повертається сила',
-    },
-  ];
-
-  for (const v of videoSeriesData) {
-const existing = await prisma.video.findUnique({
-    where: { code: v.code }, 
-  });
-
-  if (!existing) {
-await prisma.video.upsert({
-  where: { code: v.code },
-  update: {},
-  create: {
-    code: v.code,
-    title: v.title,
-    description: v.description || '',
-    messages: v.messages,
-    nextVideo: v.nextVideo,
-    reminders: v.reminders,
-    contentUrl: v.contentUrl,
-    userId: users['trial@starway.com'].id,
-  },
-});  }
-}  console.log('✅ Video series seeded');
-
-  // ======================
-  // ENROLLMENTS
-  // ======================
-
-const enrollmentsData = [
-    {
-      userId: users['trial@starway.com'].id,
-      productId: products[0].id,
-      trialEnd: users['trial@starway.com'].trialEndsAt,
-    },
-    { userId: users['paid@starway.com'].id, productId: products[1].id, purchased: true },
-    { userId: users['nadyastarway@gmail.com'].id, productId: products[3].id, purchased: true },
-  ];
-
-  for (const e of enrollmentsData) {
-    await prisma.enrollment.upsert({
-      where: { userId_productId: { userId: e.userId, productId: e.productId } },
-      update: {},
-      create: e,
-    });
-  }
-  console.log('✅ Enrollments created');
-
-  // ======================
-  // FIVE POINTS MODULE
-  // ======================
-  const module5 = await prisma.fivePointsModule.upsert({
-    where: { code: 'five_points' },
-    update: {},
+  // 4. Funnel
+  const funnel = await prisma.funnel.upsert({
+    where: { expertId_slug: { expertId: expert.id, slug: 'balance-trial-subscription' } },
+    update: { name: 'Balance → Trial → Subscription', isActive: true, status: 'draft' },
     create: {
-      code: 'five_points',
-      name: '5 точок опори',
-      description: 'Модуль для прокачки стабільності',
-      category: 'stability',
-      isPremium: true,
-      enabled: true,
-      order: 1,
+      expertId: expert.id,
+      slug: 'balance-trial-subscription',
+      name: 'Balance → Trial → Subscription',
+      ownerId: paidUser.id,
+      code: 'balance-trial',
+      definition: { steps: ['balance', 'trial', 'subscription', 'upsell'] },
+      status: 'draft',
+      isActive: true,
     },
   });
+  console.log(`✅ Funnel: ${funnel.slug}`);
 
-const existingEnrollment = await prisma.fivePointsEnrollment.findUnique({
-  where: {
-    userId_moduleId: {
-      userId: users['trial@starway.com'].id,
-      moduleId: module5.id,
-    },
-  },
-});
-
-if (!existingEnrollment) {
-  // 1️⃣ Створюємо прогрес
-  const progress = await prisma.fivePointsProgress.create({
-    data: {
-      completedLessons: 0,
-      totalPoints: 0,
-    },
-  });
-
-  // 2️⃣ Створюємо enrollment і прив’язуємо progressId
-  await prisma.fivePointsEnrollment.create({
-    data: {
-      userId: users['trial@starway.com'].id,
-      moduleId: module5.id,
-      progressId: progress.id,
+  // 5. Product
+  const product = await prisma.product.upsert({
+    where: { code: 'starter-product' },
+    update: { name: 'Starter Product', priceCents: 4990 },
+    create: {
+      code: 'starter-product',
+      ownerId: paidUser.id,
+      expertId: expert.id,
+      name: 'Starter Product',
+      description: 'Seeded product for onboarding',
+      priceCents: 4990,
+      currency: 'EUR',
+      durationDays: 30,
+      features: { wheel: true },
+      limits: { wheel: 1 },
     },
   });
-}
+  console.log(`✅ Product: ${product.code}`);
 
-console.log('✅ Five Points module & progress seeded for trial');
-
-  // ======================
-  // AI MENTOR & WHEEL
-  // ======================
-  const existingMentor = await prisma.mentor.findUnique({
-    where: { userId: users['paid@starway.com'].id },
+  // 6. FunnelProduct
+  await prisma.funnelProduct.upsert({
+    where: { funnelId_productId: { funnelId: funnel.id, productId: product.id } },
+    update: {},
+    create: { funnelId: funnel.id, productId: product.id },
   });
-  if (!existingMentor) {
-    await prisma.mentor.create({
+  console.log(`   └─ Attached product to funnel`);
+
+  // 7. Course
+  const course = await prisma.course.upsert({
+    where: { code: 'balance-mini-course' },
+    update: { name: 'Balance Mini Course' },
+    create: { code: 'balance-mini-course', name: 'Balance Mini Course', description: 'Guided wheel of balance curriculum' },
+  });
+  console.log(`✅ Course: ${course.code}`);
+
+  // 8. AIMentor
+  const aiMentor = await prisma.aIMentor.upsert({
+    where: { expertId_slug: { expertId: expert.id, slug: 'daily-core-mentor' } },
+    update: { name: 'Daily Core Mentor', niche: 'Mindset & Productivity', isPublished: true },
+    create: {
+      expertId: expert.id,
+      slug: 'daily-core-mentor',
+      name: 'Daily Core Mentor',
+      niche: 'Mindset & Productivity',
+      isPublished: true,
+      generatorConfig: {
+        persona: { tone: 'supportive', style: 'pragmatic' },
+        stages: [{ key: 'intro', goal: 'daily check-in' }, { key: 'focus', goal: 'single next action' }],
+      },
+      runtimeConfig: { promptVersion: 1, rules: ['short actionable advice', 'no medical/legal claims'] },
+    },
+  });
+  console.log(`✅ AI Mentor: ${aiMentor.slug}`);
+
+  // 9. BalanceWheelConfig
+  let balanceConfig = await prisma.balanceWheelConfig.findFirst({
+    where: { expertId: expert.id, name: 'Default 8 Sphere Wheel', deletedAt: null },
+  });
+  if (!balanceConfig) {
+    balanceConfig = await prisma.balanceWheelConfig.create({
       data: {
-        userId: users['paid@starway.com'].id,
-        rules: {},
-        summary: {},
-        meta: {},
-        isActive: true,
+        expertId: expert.id,
+        name: 'Default 8 Sphere Wheel',
+        isDefault: true,
+        version: 1,
+        spheres: [
+          { key: 'health', label: 'Health' },
+          { key: 'career', label: 'Career' },
+          { key: 'finance', label: 'Finance' },
+          { key: 'relationships', label: 'Relationships' },
+          { key: 'family', label: 'Family' },
+          { key: 'growth', label: 'Growth' },
+          { key: 'recreation', label: 'Recreation' },
+          { key: 'purpose', label: 'Purpose' },
+        ],
+      },
+    });
+  }
+  console.log(`✅ Balance Config: ${balanceConfig.name}`);
+
+  // 10. Решта для кожного USER
+  for (const item of usersData.filter(u => u.role === Role.USER)) {
+    const user = users.get(item.key)!;
+
+    // UserMentorState
+    await prisma.userMentorState.upsert({
+      where: { expertId_userId_aiMentorId: { expertId: expert.id, userId: user.id, aiMentorId: aiMentor.id } },
+      update: { currentStep: 'intro', context: { seeded: true } },
+      create: { expertId: expert.id, userId: user.id, aiMentorId: aiMentor.id, currentStep: 'intro', context: { seeded: true } },
+    });
+
+    // BalanceEntry
+    const existingBalanceEntry = await prisma.userBalanceEntry.findFirst({
+      where: { expertId: expert.id, userId: user.id, balanceConfigId: balanceConfig.id },
+    });
+    if (!existingBalanceEntry) {
+      await prisma.userBalanceEntry.create({
+        data: {
+          expertId: expert.id,
+          userId: user.id,
+          aiMentorId: aiMentor.id,
+          balanceConfigId: balanceConfig.id,
+          scores: { health: 6, career: 7, finance: 5, relationships: 7, family: 8, growth: 6, recreation: 5, purpose: 7 },
+          note: 'Initial seeded balance snapshot',
+        },
+      });
+    }
+
+    // Enrollment
+    await prisma.enrollment.upsert({
+      where: { userId_productId: { userId: user.id, productId: product.id } },
+      update: { enrolledAt: new Date() },
+      create: {
+        userId: user.id,
+        productId: product.id,
+        enrolledAt: new Date(),
+        purchased: item.subscriptionStatus === SubscriptionStatus.ACTIVE,
+        trialEnd: item.subscriptionStatus === SubscriptionStatus.TRIAL ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null,
+      },
+    });
+
+    // CourseEnrollment
+    await prisma.courseEnrollment.upsert({
+      where: { userId_courseId: { userId: user.id, courseId: course.id } },
+      update: { completedAt: null },
+      create: { userId: user.id, courseId: course.id, completedAt: null },
+    });
+
+    // TelegramLink
+    await prisma.telegramLink.upsert({
+      where: { code: `seed-${user.id}` },
+      update: { code: `seed-${user.id}` },
+      create: { userId: user.id, code: `seed-${user.id}`, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+    });
+
+    // Streak
+    await prisma.streak.upsert({
+      where: { userId_ruleKey: { userId: user.id, ruleKey: 'daily_checkin' } },
+      update: { endAt: new Date() },
+      create: {
+        userId: user.id,
+        expertId: expert.id,
+        startAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        lastAt: new Date(),
+        endAt: null,
+        current: 5,
+        longest: 5,
+        totalDays: 5,
+        ruleKey: 'daily_checkin',
+        ruleVer: 1,
+      },
+    });
+
+    // DailyEntry
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    await prisma.dailyEntry.upsert({
+      where: { userId_date: { userId: user.id, date: today } },
+      update: { content: { mood: 'steady' } },
+      create: { userId: user.id, expertId: expert.id, content: { mood: 'steady', focus: 'balance' }, date: today, state: DailyState.NEUTRAL, choice: DailyChoice.PENDING },
+    });
+
+    // MicroTask
+    await prisma.microTask.upsert({
+      where: { id: `${user.id}-micro` },
+      update: { status: MicroTaskStatus.COMPLETED },
+      create: { id: `${user.id}-micro`, title: 'Seed micro task', userId: user.id, expertId: expert.id, taskDetails: { title: 'Seed task' } as Prisma.JsonObject, status: MicroTaskStatus.ACTIVE },
+    });
+
+    // PaymentLog
+    await prisma.paymentLog.upsert({
+      where: { id: `${user.id}-payment` },
+      update: { status: PaymentStatus.SUCCESS },
+      create: {
+        id: `${user.id}-payment`,
+        userId: user.id,
+        expertId: expert.id,
+        amountCents: 4990,
+        currency: 'EUR',
+        status: item.subscriptionStatus === SubscriptionStatus.TRIAL ? PaymentStatus.PENDING : PaymentStatus.SUCCESS,
+        metadata: { planCode: item.subscriptionStatus === SubscriptionStatus.TRIAL ? 'trial_7' : 'monthly_basic' },
       },
     });
   }
 
-  const existingWheel = await prisma.wheelAssessment.findFirst({
-    where: { userId: users['paid@starway.com'].id },
+  // Queued notification
+  const existingQueuedNotification = await prisma.notification.findFirst({
+    where: { expertId: expert.id, userId: trialUser.id, channel: NotificationChannel.TELEGRAM, templateKey: 'daily_nudge', status: NotificationStatus.PENDING },
   });
-  if (!existingWheel) {
-    await prisma.wheelAssessment.create({
-      data: {
-        userId: users['paid@starway.com'].id,
-        scores: {},
-        weakestSphere: '',
-        focusSphere: '',
-        analysis: 'Initial wheel assessment',
-      },
+  if (!existingQueuedNotification) {
+    await prisma.notification.create({
+      data: { expertId: expert.id, userId: trialUser.id, channel: NotificationChannel.TELEGRAM, templateKey: 'daily_nudge', payload: { text: 'Seed reminder: start your check-in.' }, status: NotificationStatus.PENDING, scheduledAt: new Date(Date.now() + 5 * 60 * 1000) },
     });
   }
-  console.log('✅ AI Mentor & Wheel seeded for paid');
 
-  // ======================
-  // JWT Tokens Output
-  // ======================
-  console.log('\n🎉 Seed completed! JWT tokens:');
-  for (const email in users) console.log(`${email} -> ${users[email].accessToken}`);
+  // JWT tokens
+  console.log('\n🎉 Seed completed. JWT tokens:');
+  for (const item of usersData) {
+    const user = users.get(item.key)!;
+    const accessToken = jwt.sign({ id: user.id, email: user.email, role: user.role, expertId: expert.id }, JWT_SECRET, { expiresIn: '7d' });
+    console.log(`${item.email} -> ${accessToken}`);
+  }
 }
 
 main()
-  .catch(e => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+  .catch(e => { console.error(e); process.exit(1); })
+  .finally(async () => { await prisma.$disconnect(); });

@@ -1,9 +1,20 @@
 // frontend/src/features/auth/types/auth.types.ts
+import type { AuthApiResponse } from '@/types/globalTypes'
 import type { User, UserRole } from '@/features/user/types/user.types'
 
 export interface LoginInput {
   email: string
   password: string
+  expertId?: string
+}
+
+export interface CheckUserExistsInput {
+  email: string
+  expertId?: string
+}
+
+export interface CheckUserExistsResponse {
+  exists: boolean
 }
 
 export interface RegisterInput {
@@ -11,6 +22,7 @@ export interface RegisterInput {
   password: string
   name?: string
   role?: UserRole
+  expertId?: string
 }
 
 export interface ForgotPasswordInput {
@@ -28,6 +40,7 @@ export interface SocialAuthApiInput {
   email?: string
   name?: string
   username?: string
+  expertId?: string
 }
 
 export interface UpdateUserSettingsInput {
@@ -40,15 +53,7 @@ export interface UpdateUserSettingsInput {
   }
 }
 
-export interface AuthApiResponse {
-  user: User
-  accessToken: string
-  refreshToken?: string
-  needsProfile?: boolean
-  expiresIn?: number
-  isNewUser?: boolean
-  needsCompletion?: boolean
-}
+export type { AuthApiResponse }
 
 export interface ForgotPasswordResponse {
   success: boolean

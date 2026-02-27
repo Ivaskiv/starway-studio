@@ -1,89 +1,69 @@
 // backend/src/modules/access/access.service.ts
 import { prisma } from '@/db/client.js'
-import type { AccessItem, UserAccessResult } from './types.js'
+import { Prisma } from '@/db/generated/prisma/client.js'
+import type { AccessItem, UserAccessResult, UserSystemState } from './types.js'
 import { getAllAbilities } from '@/modules/auth/abilities.js'
 import { isSuperAdminEmail } from '@/modules/auth/superadmin.js'
 
 type AccessUserSnapshot = {
   id: string
-  email: string
-  role: 'USER' | 'ADMIN' | 'MENTOR'
+  email: string | null
+  role: 'USER' | 'EXPERT' | 'SUPERADMIN'
   subscription: {
-    status: 'TRIAL' | 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'CANCELLED'
+    status: string
     trialEndsAt: Date | null
-    endsAt: Date | null
+    currentPeriodEnd: Date | null
+    createdAt: Date
   } | null
 }
 
 async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot | null> {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { subscription: true },
-    })
-    if (!user) return null
-    return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      subscription: user.subscription
-        ? {
-            status: user.subscription.status,
-            trialEndsAt: user.subscription.trialEndsAt,
-            endsAt: user.subscription.endsAt,
-          }
-        : null,
-    }
-  } catch (error: any) {
-    // fix code_x: tolerate legacy/partial schemas (missing columns/tables) and keep access endpoint alive.
-    if (error?.code !== 'P2022' && error?.code !== 'P2021') throw error
+  // fix1: PrismaClient → prisma (інстанс)
+  // fix2: subscriptions (plural, відповідає схемі) orderBy createdAt desc take 1
+  // fix3: Role enum: USER | EXPERT | SUPERADMIN (не ADMIN/MENTOR)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      subscriptions: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      },
+    },
+  })
 
-    // fix code_x: dynamic column fallback for legacy users table variants (role/user_role/etc).
-    const columns = await prisma.$queryRaw<Array<{ column_name: string }>>`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = 'users'
-    `
-    const names = new Set(columns.map((c) => c.column_name))
-    const roleCol = names.has('role') ? 'role' : names.has('user_role') ? 'user_role' : null
-    const selectRole = roleCol ? `"${roleCol}"` : `'USER'`
+  if (!user) return null
 
-    const rows = await prisma.$queryRawUnsafe<Array<{ id: string; role: string; email: string }>>(
-      `
-        SELECT id, email, ${selectRole} AS role
-        FROM users
-        WHERE id = $1
-        LIMIT 1
-      `,
-      userId,
-    )
+  const sub = user.subscriptions[0] ?? null
 
-    const row = rows[0]
-    if (!row) return null
-    const rawRole = String(row.role || 'USER').toUpperCase()
-    const role = (rawRole === 'ADMIN' || rawRole === 'MENTOR' ? rawRole : 'USER') as
-      | 'USER'
-      | 'ADMIN'
-      | 'MENTOR'
-    return { id: row.id, email: row.email, role, subscription: null }
+  return {
+    id:    user.id,
+    email: user.email,
+    role:  user.role as 'USER' | 'EXPERT' | 'SUPERADMIN',
+    subscription: sub
+      ? {
+          status:           sub.status,
+          trialEndsAt:      sub.trialEndsAt,
+          currentPeriodEnd: sub.currentPeriodEnd,
+          createdAt:        sub.createdAt,
+        }
+      : null,
   }
 }
 
 export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   const user = await getAccessUserSnapshot(userId)
-
   if (!user) throw new Error('User not found')
 
   const now          = new Date()
   const subscription = user.subscription
   const items: AccessItem[] = []
-  const isSuperAdmin = isSuperAdminEmail(user.email)
+  // fix4: isSuperAdminEmail може отримати null — додаємо fallback
+  const isSuperAdmin = isSuperAdminEmail(user.email ?? '')
 
-  // ── ADMIN ──────────────────────────────────────────────────────────────────
-  if (user.role === 'ADMIN' || isSuperAdmin) {
+  // ── SUPERADMIN ─────────────────────────────────────────────────────────────
+  if (user.role === 'SUPERADMIN' || isSuperAdmin) {
     return {
-      role:      user.role,
+      role:      'SUPERADMIN',
       plan:      'paid',
       trialEnd:  null,
       items:     [{ key: 'mentor.core', source: 'admin', expiresAt: null }],
@@ -92,32 +72,32 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   }
 
   // ── PAID ───────────────────────────────────────────────────────────────────
+  // fix5: endsAt → currentPeriodEnd (відповідає схемі)
   const isPaidActive =
     subscription?.status === 'ACTIVE' &&
-    (!subscription.endsAt || subscription.endsAt > now)
+    (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
 
   if (isPaidActive) {
-    const expiresAt = subscription!.endsAt ?? null
+    const expiresAt = subscription!.currentPeriodEnd ?? null
     items.push(
-      { key: 'mentor.core',        source: 'purchase', expiresAt },
-      { key: 'mentor.daily',       source: 'purchase', expiresAt },
-      { key: 'mentor.decisions',   source: 'purchase', expiresAt },
-      { key: 'mentor.wheel',       source: 'purchase', expiresAt },
-      { key: 'mentor.vision',      source: 'purchase', expiresAt },
-      { key: 'mentor.goals',       source: 'purchase', expiresAt },
-      { key: 'mentor.actions',     source: 'purchase', expiresAt },
-      { key: 'mentor.zoom',        source: 'purchase', expiresAt },
-      { key: 'mentor.mentorship',  source: 'purchase', expiresAt },
-      { key: 'ai.basic',           source: 'purchase', expiresAt },
-      { key: 'ai.deep',            source: 'purchase', expiresAt },
-      { key: 'ai.pdf',             source: 'purchase', expiresAt },
-      { key: 'ai.export',          source: 'purchase', expiresAt },
-      { key: 'products.manage',    source: 'purchase', expiresAt },
+      { key: 'mentor.core',       source: 'purchase', expiresAt },
+      { key: 'mentor.daily',      source: 'purchase', expiresAt },
+      { key: 'mentor.decisions',  source: 'purchase', expiresAt },
+      { key: 'mentor.wheel',      source: 'purchase', expiresAt },
+      { key: 'mentor.vision',     source: 'purchase', expiresAt },
+      { key: 'mentor.goals',      source: 'purchase', expiresAt },
+      { key: 'mentor.actions',    source: 'purchase', expiresAt },
+      { key: 'mentor.zoom',       source: 'purchase', expiresAt },
+      { key: 'mentor.mentorship', source: 'purchase', expiresAt },
+      { key: 'ai.basic',          source: 'purchase', expiresAt },
+      { key: 'ai.deep',           source: 'purchase', expiresAt },
+      { key: 'ai.pdf',            source: 'purchase', expiresAt },
+      { key: 'ai.export',         source: 'purchase', expiresAt },
+      { key: 'products.manage',   source: 'purchase', expiresAt },
     )
   }
 
   // ── TRIAL ──────────────────────────────────────────────────────────────────
-  // ✅ trialEndsAt тепер з subscription, не з user
   const isTrialActive =
     !isPaidActive &&
     subscription?.status === 'TRIAL' &&
@@ -126,68 +106,185 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
 
   if (isTrialActive) {
     const expiresAt = subscription!.trialEndsAt
-    // fix code_x: trial should expose full paid functionality for 7 days.
+    const trialDay = subscription?.createdAt
+      ? Math.floor((now.getTime() - subscription.createdAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      : null
+    const wheelAllowed = trialDay === 1
     items.push(
-      { key: 'mentor.core',      source: 'trial', expiresAt },
-      { key: 'mentor.daily',     source: 'trial', expiresAt },
-      { key: 'mentor.decisions', source: 'trial', expiresAt },
-      { key: 'mentor.wheel',     source: 'trial', expiresAt },
-      { key: 'mentor.vision',    source: 'trial', expiresAt },
-      { key: 'mentor.goals',     source: 'trial', expiresAt },
-      { key: 'mentor.actions',   source: 'trial', expiresAt },
-      { key: 'mentor.zoom',      source: 'trial', expiresAt },
-      { key: 'mentor.mentorship',source: 'trial', expiresAt },
-      { key: 'ai.basic',         source: 'trial', expiresAt },
-      { key: 'ai.deep',          source: 'trial', expiresAt },
-      { key: 'ai.pdf',           source: 'trial', expiresAt },
-      { key: 'ai.export',        source: 'trial', expiresAt },
-      { key: 'products.manage',  source: 'trial', expiresAt },
-      { key: 'wheel.view',       source: 'trial', expiresAt },
+      { key: 'mentor.daily',   source: 'trial', expiresAt },
+      { key: 'progress.view',  source: 'trial', expiresAt },
+      ...(wheelAllowed
+        ? [
+            { key: 'mentor.wheel', source: 'trial', expiresAt } as AccessItem,
+            { key: 'wheel.view',   source: 'trial', expiresAt } as AccessItem,
+          ]
+        : []),
     )
   }
 
-  // ── FREE — завжди ──────────────────────────────────────────────────────────
+  // ── FREE ───────────────────────────────────────────────────────────────────
   items.push(
     { key: 'dashboard.view',  source: 'free', expiresAt: null },
     { key: 'profile.view',    source: 'free', expiresAt: null },
-    { key: 'wheel.view',      source: 'free', expiresAt: null },
-    { key: 'progress.view',   source: 'free', expiresAt: null },
     { key: 'settings.manage', source: 'free', expiresAt: null },
   )
 
-  // ── ABILITIES MAP ──────────────────────────────────────────────────────────
+  // ── ABILITIES ──────────────────────────────────────────────────────────────
   const abilities = getAllAbilities(false)
   for (const item of items) {
     abilities[item.key] = true
   }
 
-  // Frontend compatibility aliases used by legacy route guards.
-  abilities.dashboard = abilities['dashboard.view'] === true
-  abilities.profile = abilities['profile.view'] === true
-  abilities.wheel = abilities['wheel.view'] === true
-  abilities.progress = abilities['progress.view'] === true
-  abilities.settings = abilities['settings.manage'] === true
-  abilities.products = abilities['products.manage'] === true
-  abilities.mentor = abilities['mentor.core'] === true
-  abilities.vision = abilities['mentor.vision'] === true
-  abilities.goal = abilities['mentor.goals'] === true
-  abilities.actions = abilities['mentor.actions'] === true
-  abilities['ai-generator'] = abilities['ai.basic'] === true
+  abilities.dashboard      = abilities['dashboard.view']  === true
+  abilities.profile        = abilities['profile.view']    === true
+  abilities.wheel          = abilities['wheel.view']      === true
+  abilities.progress       = abilities['progress.view']   === true
+  abilities.settings       = abilities['settings.manage'] === true
+  abilities.products       = abilities['products.manage'] === true
+  abilities.mentor         = abilities['mentor.core']     === true
+  abilities.vision         = abilities['mentor.vision']   === true
+  abilities.goal           = abilities['mentor.goals']    === true
+  abilities.actions        = abilities['mentor.actions']  === true
+  abilities['ai-generator']= abilities['ai.basic']        === true
 
-  // ── PLAN ───────────────────────────────────────────────────────────────────
   const plan: 'paid' | 'trial' | 'free' =
     isPaidActive ? 'paid' : isTrialActive ? 'trial' : 'free'
 
   return {
     role:     user.role,
     plan,
-    trialEnd: subscription?.trialEndsAt ?? null, 
+    trialEnd: subscription?.trialEndsAt ?? null,
     items,
     abilities,
   }
 }
 
 export function canAccessFeature(result: UserAccessResult, feature: string): boolean {
-  const abilities = result.abilities as Record<string, boolean>
-  return abilities[feature] === true
+  return (result.abilities as Record<string, boolean>)[feature] === true
+}
+
+const PRODUCT_TEMPLATES: UserSystemState['products']['templates'] = [
+  {
+    id:                'wheel-basic',
+    name:              'Колесо балансу',
+    result:            'Зафіксований дисбаланс і фокус сфера',
+    modules:           ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+    finalStateExample: 'Слабка сфера визначена, місячна динаміка доступна',
+    cta:               'TRY_7_DAYS',
+  },
+  {
+    id:                'ai-mentor-basic',
+    name:              'AI Ментор',
+    result:            'Структурований цикл станів і звітів',
+    modules:           ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+    finalStateExample: 'Щоденний цикл, дзеркала, місячний звіт',
+    cta:               'CREATE',
+  },
+]
+
+export async function getUserSystemState(userId: string): Promise<UserSystemState> {
+  const access      = await getUserAccess(userId)
+  const now         = new Date()
+  const isSuperAdmin = String(access.role).toUpperCase() === 'SUPERADMIN'
+
+  // fix6: prisma.product / prisma.enrollment — звертаємось через реальні моделі схеми
+  const ownedRaw = await prisma.product
+    .findMany({
+      where:   isSuperAdmin ? undefined : { ownerId: userId },
+      orderBy: { createdAt: 'desc' },
+      select:  { id: true, name: true },
+    })
+    .catch((err: any) => {
+      if (err?.code === 'P2021' || err?.code === 'P2022') return []
+      throw err
+    })
+
+  const subscribedRaw = await prisma.enrollment
+    .findMany({
+      where:   isSuperAdmin ? undefined : { userId },
+      include: { product: { select: { id: true, name: true } } },
+      orderBy: { enrolledAt: 'desc' },
+    })
+    .catch((err: any) => {
+      if (err?.code === 'P2021' || err?.code === 'P2022') return []
+      throw err
+    })
+
+  const subscribed = subscribedRaw.map((row) => {
+    const trialActive = !!row.trialEnd && new Date(row.trialEnd) > now
+    const paidActive  = row.purchased === true
+    return {
+      id:        row.product.id,
+      name:      row.product.name,
+      status:    paidActive ? 'paid' : trialActive ? 'trial' : 'locked',
+      expiresAt: row.trialEnd ?? null,
+    } as UserSystemState['products']['subscribed'][number]
+  })
+
+  const trialEnd = access.trialEnd
+  const trialDaysLeft =
+    trialEnd && trialEnd > now
+      ? Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      : 0
+
+  const modules: UserSystemState['aiModules'] = [
+    'WHEEL_OF_BALANCE',
+    'AI_MENTOR',
+    'AI_FUNNEL',
+    'AI_GENERATOR',
+  ].map((moduleId) => {
+    const paid        = access.plan === 'paid' || isSuperAdmin
+    const trial       = access.plan === 'trial' && !isSuperAdmin
+    const accessLevel = paid ? 'PAID' : trial ? 'TRIAL' : 'NONE'
+    const isLocked    = accessLevel === 'NONE'
+    const lockReason  = isLocked
+      ? trialEnd && trialEnd <= now ? 'TRIAL_EXPIRED' : 'NO_SUBSCRIPTION'
+      : null
+    return { moduleId, accessLevel, isLocked, lockReason }
+  })
+
+  const showMyProductsSection = ownedRaw.length > 0 || isSuperAdmin
+
+  return {
+    products: {
+      owned: ownedRaw.map((p) => ({
+        id:     p.id,
+        name:   p.name,
+        type:   null,
+        status: access.plan === 'paid' ? 'paid' : access.plan === 'trial' ? 'trial' : 'locked',
+      })),
+      subscribed,
+      templates: PRODUCT_TEMPLATES.map((tpl) => ({
+        ...tpl,
+        cta: access.plan === 'paid' || isSuperAdmin ? 'CREATE' : 'TRY_7_DAYS',
+      })),
+    },
+    aiModules: modules,
+    permissions: {
+      role:               isSuperAdmin ? 'SUPERADMIN' : 'USER',
+      canCreateProducts:  isSuperAdmin || access.abilities['products.manage'] === true,
+      canBypassTrial:     isSuperAdmin,
+      canSeeAdminTools:   isSuperAdmin,
+    },
+    trial: {
+      isActive: access.plan === 'trial',
+      daysLeft: trialDaysLeft,
+      endsAt:   trialEnd,
+    },
+    subscription: {
+      isActive:  access.plan === 'paid',
+      status:    access.plan === 'paid' ? 'ACTIVE' : access.plan === 'trial' ? 'TRIAL' : null,
+      expiresAt: trialEnd,
+    },
+    ui: {
+      showMyProductsSection,
+      showCreateProductCta: !showMyProductsSection,
+      showTemplatesSection:  true,
+      showAdminPanel:        isSuperAdmin,
+    },
+    meta: {
+      version:   1,
+      updatedAt: new Date().toISOString(),
+    },
+  }
 }

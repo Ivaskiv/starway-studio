@@ -12,7 +12,7 @@ export const useWheelAnalysis = (userId: string) => {
       description: `Покращуй сферу ${gap.nameUk}`,
       type: 'actionable',
       source: 'wheel',
-      status: 'pending',
+      status: 'PENDING',
       relatedEntity: { type: 'wheel', id: gap.id },
     }));
   };

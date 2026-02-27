@@ -3,11 +3,13 @@ import React from 'react';
 interface Props {
   value: number;
   onChange: (value: number) => void;
-  color: string;
+  color?: string;
 }
 
 export const ScoreSlider = React.memo(({ value, onChange, color }: Props) => {
-  const pct = ((value - 1) / 9) * 100;
+  const safeValue = Math.min(10, Math.max(1, value));
+  const pct = ((safeValue - 1) / 9) * 100;
+  const sliderColor = color ?? 'rgba(var(--accent-rgb),0.94)';
 
   return (
     <div className="relative mt-2">
@@ -18,7 +20,7 @@ export const ScoreSlider = React.memo(({ value, onChange, color }: Props) => {
             className="h-full rounded-full transition-[width] duration-300 ease-out relative"
             style={{
               width: `${pct}%`,
-              background: `linear-gradient(90deg, rgba(var(--accent-soft-rgb),0.88) 0%, ${color} 72%, rgba(255,255,255,0.92) 100%)`,
+              background: `linear-gradient(90deg, rgba(var(--accent-soft-rgb),0.88) 0%, ${sliderColor} 72%, rgba(var(--on-accent-rgb),0.9) 100%)`,
               boxShadow: '0 0 16px rgba(var(--accent-rgb),0.42)',
             }}
           >
@@ -31,11 +33,14 @@ export const ScoreSlider = React.memo(({ value, onChange, color }: Props) => {
         type="range"
         min={1}
         max={10}
-        value={value}
-        onChange={e => onChange(Number(e.target.value))}
+        value={safeValue}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label="Оцінка сфери від 1 до 10"
         className="wheel-score-slider relative z-10 w-full cursor-pointer"
-        style={{ ['--thumb-color' as string]: color }}
+        style={{ ['--thumb-color' as string]: sliderColor }}
       />
     </div>
   );
 });
+
+ScoreSlider.displayName = 'ScoreSlider';

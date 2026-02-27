@@ -1,70 +1,72 @@
-import { ROUTE_METADATA, type RoutePath } from '@/config/routes';
-import { ChevronRight, Home } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+// frontend/src/components/layout/Breadcrumbs.tsx
 
-type Crumb = {
-  to: string;
-  label: string;
-};
+import { ROUTE_METADATA, type RoutePath } from '@/config/routes';
+import { Link, useLocation } from 'react-router-dom';
 
 const toLabel = (path: string): string => {
   const meta = ROUTE_METADATA[path as RoutePath];
   if (meta?.title) return meta.title;
-
   const segment = path.split('/').filter(Boolean).pop() ?? '';
   return decodeURIComponent(segment)
     .replace(/-/g, ' ')
-    .replace(/\b\w/g, char => char.toUpperCase());
+    .replace(/\b\w/g, c => c.toUpperCase());
 };
 
-export default function Breadcrumbs() {
+interface BreadcrumbsProps { items?: string[] }
+
+export default function Breadcrumbs({ items }: BreadcrumbsProps) {
   const { pathname } = useLocation();
+
+  /* ── static items ── */
+  if (items?.length) {
+    return (
+      <nav className="flex items-center gap-2 py-2 text-[13px] text-white/38">
+        {items.map((label, i) => (
+          <span key={i} className="flex items-center gap-2">
+            <span className="cursor-pointer hover:text-white transition-colors">{label}</span>
+            {i < items.length - 1 && <span className="text-white/[0.15]">›</span>}
+          </span>
+        ))}
+      </nav>
+    );
+  }
 
   if (pathname === '/') return null;
 
-  const segments = pathname.split('/').filter(Boolean);
-  const crumbs: Crumb[] = [];
-
+  /* ── auto from route ── */
+  const crumbs: { to: string; label: string }[] = [];
   let acc = '';
-  for (const segment of segments) {
-    acc += `/${segment}`;
+  for (const seg of pathname.split('/').filter(Boolean)) {
+    acc += `/${seg}`;
     crumbs.push({ to: acc, label: toLabel(acc) });
   }
 
   return (
-    <div className="w-full py-2">
-      {/* fix code_x: global breadcrumbs directly under header for fast orientation on every page. */}
-      <nav
-        aria-label="Breadcrumbs"
-        className="flex items-center gap-1.5 text-xs sm:text-sm text-white/65 overflow-x-auto no-scrollbar"
-      >
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-white/80 transition-colors"
+    <div className="w-full py-2 overflow-x-auto">
+      <nav aria-label="Breadcrumbs" className="flex items-center gap-1.5 text-[13px] text-white/65">
+
+        {/* home */}
+        <Link to="/"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[7px] border border-white/[0.07] bg-white/[0.03] text-white/80 hover:bg-white/[0.06] transition-colors whitespace-nowrap no-underline"
         >
-          <Home className="w-3.5 h-3.5" />
-          {/* fix code_x: avoid duplicate "Головна" wording with dashboard main item; keep root breadcrumb neutral. */}
-          <span>Сайт</span>
+          🏠 Сайт
         </Link>
 
         {crumbs.map((crumb, idx) => {
           const isLast = idx === crumbs.length - 1;
           return (
-            <div key={crumb.to} className="inline-flex items-center gap-1.5 shrink-0">
-              <ChevronRight className="w-3.5 h-3.5 text-white/35" />
+            <span key={crumb.to} className="inline-flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-white/[0.20] text-[12px]">›</span>
               {isLast ? (
-                <span className="px-2.5 py-1 rounded-lg border border-[color:rgba(var(--accent-rgb),0.35)] bg-[color:rgba(var(--accent-rgb),0.14)] text-white">
+                <span className="px-2.5 py-1 rounded-[7px] border border-orange-500/35 bg-orange-500/[0.12] text-white font-semibold whitespace-nowrap">
                   {crumb.label}
                 </span>
               ) : (
-                <Link
-                  to={crumb.to}
-                  className="px-2.5 py-1 rounded-lg border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-white/75 transition-colors"
-                >
-                  {crumb.label}
-                </Link>
+                <Link to={crumb.to}
+                  className="px-2.5 py-1 rounded-[7px] border border-white/[0.07] bg-white/[0.03] text-white/75 hover:bg-white/[0.06] transition-colors whitespace-nowrap no-underline"
+                >{crumb.label}</Link>
               )}
-            </div>
+            </span>
           );
         })}
       </nav>

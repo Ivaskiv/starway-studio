@@ -1,21 +1,43 @@
-// backend/src/modules/five-points/types.ts
+import { FivePointsModule } from '@/db/generated/prisma/client.js';
+import { UserRole } from '@/types/globalTypes.js';
 
+export type FivePointsProgress = {
+  [key: string]: unknown;
+  steps: Array<{
+    id: string;
+    completed: boolean;
+    completedAt?: string;
+  }>;
+  completed: boolean;
+  completedLessons: number;
+  totalPoints: number;
+};
 
-import { UserRole } from '@prisma/client';
-
-export interface FivePointsModuleDTO {
-  id: string;
-  name: string;
-  description?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface FivePointsEnrollmentDTO {
+export interface FivePointsEnrollment {
   id: string;
   userId: string;
   moduleId: string;
-  progress?: FivePointsProgressDTO;
+  progress: FivePointsProgress;
+  enrolledAt: Date;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  module?: FivePointsModule;
+}
+
+export interface FivePointsCourse {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  modules: FivePointsModule[];
+}
+
+export interface FivePointsUserDTO {
+  id: string;
+  email: string;
+  name?: string;
+  role: UserRole;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,11 +50,11 @@ export interface FivePointsProgressDTO {
   updatedAt: Date;
 }
 
-export interface FivePointsUserDTO {
+export interface FivePointsEnrollmentDTO {
   id: string;
-  email: string;
-  name?: string;
-  role: UserRole;
+  userId: string;
+  moduleId: string;
+  progress: FivePointsProgressDTO;
   createdAt: Date;
   updatedAt: Date;
 }

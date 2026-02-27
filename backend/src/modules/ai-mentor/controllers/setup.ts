@@ -1,16 +1,17 @@
 // backend/src/modules/ai-mentor/controllers/setup.ts
 
 
-import { Request, Response, NextFunction } from 'express';
-import {
-  getSetupProgress,
-  configureWheel,
-  configureQuestions,
-  completeSetup,
-  QuestionsConfig,
-  generateQuestionsVariants,
-} from '../services/setup.js';
 import { WheelScore } from '@/modules/wheel/types.js';
+import { NextFunction, Request, Response } from 'express';
+import {
+  completeSetup,
+  configureQuestions,
+  configureWheel,
+  generateQuestionsVariants,
+  getSetupProgress,
+  QuestionsConfig,
+} from '../services/setup.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
 
 // ==========================================
 // SETUP ENDPOINTS
@@ -20,7 +21,7 @@ import { WheelScore } from '@/modules/wheel/types.js';
  * GET /api/mentor/setup/progress
  * Get current setup progress
  */
-export async function getProgress(req: Request, res: Response, next: NextFunction) {
+export async function getProgress(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -40,7 +41,7 @@ export async function getProgress(req: Request, res: Response, next: NextFunctio
  * POST /api/mentor/setup/wheel
  * Configure wheel balance
  */
-export async function setupWheel(req: Request, res: Response, next: NextFunction) {
+export async function setupWheel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -80,7 +81,7 @@ export async function setupWheel(req: Request, res: Response, next: NextFunction
  * POST /api/mentor/setup/questions
  * Configure daily questions
  */
-export async function setupQuestions(req: Request, res: Response, next: NextFunction) {
+export async function setupQuestions(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -117,7 +118,7 @@ export async function setupQuestions(req: Request, res: Response, next: NextFunc
  * POST /api/mentor/setup/questions/generate
  * Generate up to 3 suggested question sets for mentor setup.
  */
-export async function generateQuestions(req: Request, res: Response, next: NextFunction) {
+export async function generateQuestions(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -143,7 +144,7 @@ export async function generateQuestions(req: Request, res: Response, next: NextF
  * POST /api/mentor/setup/complete
  * Complete setup and activate mentor
  */
-export async function finishSetup(req: Request, res: Response, next: NextFunction) {
+export async function finishSetup(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) {

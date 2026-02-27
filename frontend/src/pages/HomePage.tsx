@@ -12,8 +12,8 @@ import {
   TrialBannerSection,
 } from '@/pages/sections';
 import { Star, TrendingUp, Users, Zap } from 'lucide-react';
-import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 const STATS = [
@@ -53,11 +53,25 @@ function StatsSection() {
 // ── HomePage ──────────────────────────────────────────────────────────────────
 export default function HomePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const howItWorksRef = useRef<HTMLElement | null>(null);
 
-  const openAuth = () => setAuthOpen(true);
+  const openAuth = (mode: 'login' | 'register' = 'register') => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  };
+
+  useEffect(() => {
+    const auth = searchParams.get('auth');
+    if (auth !== 'login') return;
+    openAuth('login');
+    const next = new URLSearchParams(searchParams);
+    next.delete('auth');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleGetStarted = () => {
     if (user) navigate(ROUTES.DASHBOARD ?? '/dashboard');
@@ -107,7 +121,7 @@ export default function HomePage() {
         <FinalCTASection onGetStarted={handleGetStarted} />
       </div>
 
-      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} defaultMode="register" />
+      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} defaultMode={authMode} />
     </>
   );
 }

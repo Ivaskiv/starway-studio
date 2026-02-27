@@ -1,216 +1,171 @@
-// frontend/src/layout/Header.tsx
-import { getMenuForLocation } from '@/config/menu';
-import AuthModal from '@/features/auth/components/AuthModal';
-import { useSmartNavigation } from '@/hooks/useSmartNavigation';
 import { UserMenu } from '@/components/UserMenu';
-import { Bell, Menu, Sparkles, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ROUTES } from '@/config/routes';
+import { useSmartNavigation } from '@/hooks/useSmartNavigation';
+import { useSystemState } from '@/shared/access/hooks/useSystemState';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
-// ─────────────────────────────────────────────────────────────────────────────
+const HEADER_LINKS = [
+  { id: 'products', label: 'Продукти', path: ROUTES.PRODUCTS },
+  { id: 'community', label: 'Спільнота', path: '/community' },
+  { id: 'schedule', label: 'Розклад', path: '/dashboard/schedule' },
+  { id: 'changelog', label: 'Що нового', path: '/changelog', badge: 'NEW' },
+] as const;
 
-export default function Header() {
-  // ✅ Один виклик хука — не два!
-  const { user, navigateTo, isActive, authModalOpen, openAuthModal, closeAuthModal } =
-    useSmartNavigation();
+const NOTIFICATIONS = [
+  { id: 1, icon: '🎯', text: 'Нова сесія заплановано', time: '5 хв', unread: true },
+  { id: 2, icon: '🤖', text: 'AI-звіт готовий', time: '1 год', unread: true },
+  { id: 3, icon: '🔥', text: 'Стрік 12 днів!', time: 'вчора', unread: false },
+];
 
-  const headerItems = getMenuForLocation('header');
-  const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+interface HeaderProps {
+  collapsed: boolean;
+  onToggle: () => void;
+}
 
-  // Blur on scroll
+export default function Header({ collapsed, onToggle }: HeaderProps) {
+  const { navigateTo } = useSmartNavigation();
+  const { state } = useSystemState();
+  const { pathname } = useLocation();
+
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const unread = NOTIFICATIONS.filter(n => n.unread).length;
+  const streak = (state as any)?.user?.streak ?? 0;
+
   useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 16);
-    window.addEventListener('scroll', handler, { passive: true });
-    return () => window.removeEventListener('scroll', handler);
+    const h = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  // Close mobile on route change
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [authModalOpen]);
-
   return (
-    <>
-      <header
-        className={`
-          fixed inset-x-0 top-0 z-50 transition-all duration-300
-          ${
-            scrolled
-              ? 'bg-black/70 backdrop-blur-2xl border-b border-white/8 shadow-[0_1px_40px_rgba(0,0,0,.5)]'
-              : 'bg-transparent'
-          }
-        `}
+    <header
+      className="sticky top-0 z-50 flex h-14 items-center border-b bg-[color:var(--bg)] text-[color:var(--text)]"
+      style={{ borderColor: 'rgba(var(--accent-rgb),0.2)' }}
+    >
+      {/* LEFT / SIDEBAR ZONE */}
+      <div
+        className={[
+          'relative flex h-full items-center border-r border-white/10 transition-all duration-300 ease-out',
+          collapsed ? 'w-[60px] justify-center px-0' : 'w-[260px] justify-between px-4',
+        ].join(' ')}
       >
-        <div className="max-w-7xl mx-auto px-5 sm:px-6 h-16 flex items-center justify-between gap-4">
-          {/* ── Logo ─────────────────────────────────────────── */}
-          <button
-            onClick={() => navigateTo('/')}
-            className="flex items-center gap-2.5 shrink-0 group select-none"
-          >
-            <div
-              className="
-              w-9 h-9 rounded-xl
-              bg-gradient-to-br from-orange-500 to-rose-600
-              flex items-center justify-center
-              shadow-lg shadow-orange-500/30
-              group-hover:scale-110 transition-transform duration-200
-            "
-            >
-              <Sparkles className="w-[18px] h-[18px] text-white" />
-            </div>
-            <span className="text-[17px] font-bold tracking-tight text-white">Starway</span>
-          </button>
-
-          {/* ── Desktop nav ───────────────────────────────────── */}
-          <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">
-            {headerItems.map(item => {
-              const active = isActive(item.path);
-              return (
-                <button
-                  key={item.path}
-                  onClick={() => navigateTo(item.path)}
-                  className={`
-                    relative px-4 py-2 rounded-xl text-sm font-medium
-                    transition-all duration-150
-                    ${
-                      active
-                        ? 'text-white bg-white/8'
-                        : 'text-white/55 hover:text-white hover:bg-white/5'
-                    }
-                  `}
-                >
-                  {item.label}
-                  {item.badge && (
-                    <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-orange-500/20 text-orange-400 rounded-md">
-                      {item.badge}
-                    </span>
-                  )}
-                  {active && (
-                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-orange-500" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* ── Right ────────────────────────────────────────── */}
-          <div className="flex items-center gap-2 shrink-0">
-            {!user ? (
-              <>
-                <button
-                  onClick={() => {
-                    setAuthMode('login');
-                    openAuthModal();
-                  }}
-                  className="hidden sm:block px-4 py-2 text-sm font-medium text-white/65 hover:text-white transition-colors"
-                >
-                  Увійти
-                </button>
-                <button
-                  onClick={() => {
-                    setAuthMode('register');
-                    openAuthModal();
-                  }}
-                  className="
-                    px-4 py-2 rounded-xl text-sm font-semibold
-                    bg-gradient-to-r from-orange-500 to-rose-500
-                    hover:from-orange-400 hover:to-rose-400
-                    text-white
-                    shadow-lg shadow-orange-500/20
-                    hover:scale-105 transition-all duration-150
-                  "
-                >
-                  Реєстрація
-                </button>
-              </>
-            ) : (
-              <>
-                {/* Notifications */}
-                <button className="relative p-2 rounded-xl hover:bg-white/8 transition-colors">
-                  {/* Glassmorphism кружечок з цифрою */}
-                  <div
-                    className="
-                    absolute -top-1.5 -right-1.5
-                    min-w-[20px] h-5 px-1.5
-                    rounded-full
-                    bg-orange-500/20 backdrop-blur-md
-                    border border-orange-500/40
-                    flex items-center justify-center
-                    shadow-[0_0_8px_rgba(249,115,22,0.4)]
-                    z-10
-                  "
-                  >
-                    <span className="text-[10px] font-bold text-orange-400 leading-none">3</span>
-                  </div>
-                  <Bell className="w-5 h-5 text-white/70" />
-                </button>
-                {/* User menu */}
-                <UserMenu variant="header" />
-              </>
-            )}
-
-            {/* Mobile burger */}
-            <button
-              onClick={() => setMobileOpen(v => !v)}
-              className="md:hidden p-2 rounded-xl hover:bg-white/8 transition-colors"
-              aria-label="Menu"
-            >
-              {mobileOpen ? (
-                <X className="w-5 h-5 text-white" />
-              ) : (
-                <Menu className="w-5 h-5 text-white" />
-              )}
-            </button>
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-500 text-sm font-bold shadow-md shadow-orange-500/40">
+            ✦
           </div>
+          {!collapsed && (
+            <span className="text-[15px] font-extrabold tracking-tight">
+              Starway
+            </span>
+          )}
         </div>
 
-        {/* ── Mobile menu ───────────────────────────────────── */}
-        {mobileOpen && (
-          <div className="md:hidden bg-black/95 backdrop-blur-2xl border-t border-white/8 px-5 pb-6">
-            <nav className="pt-4 space-y-1">
-              {headerItems.map(item => (
-                <button
-                  key={item.path}
-                  onClick={() => {
-                    navigateTo(item.path);
-                    setMobileOpen(false);
-                  }}
-                  className={`
-                    w-full text-left px-4 py-3 rounded-xl text-sm font-medium
-                    transition-all
-                    ${
-                      isActive(item.path)
-                        ? 'bg-orange-500/10 text-orange-400'
-                        : 'text-white/65 hover:text-white hover:bg-white/5'
-                    }
-                  `}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-            {!user && (
-              <button
-                onClick={() => {
-                  openAuthModal();
-                  setMobileOpen(false);
-                }}
-                className="
-                  mt-4 w-full py-3.5 rounded-xl
-                  bg-gradient-to-r from-orange-500 to-rose-500
-                  text-white font-semibold text-sm
-                "
-              >
-                Спробувати безкоштовно
-              </button>
-            )}
+        <button
+          onClick={onToggle}
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white/60 transition-all hover:border-orange-400/40 hover:bg-orange-400/10 hover:text-orange-400"
+          title={collapsed ? 'Розгорнути меню' : 'Згорнути меню'}
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="h-4 w-4" />
+          ) : (
+            <PanelLeftClose className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+
+      {/* NAV */}
+      <nav className="hidden flex-1 items-center gap-1 px-4 md:flex">
+        {HEADER_LINKS.map(link => {
+          const active =
+            pathname === link.path ||
+            pathname.startsWith(link.path + '/');
+
+          return (
+            <button
+              key={link.id}
+              onClick={() => navigateTo(link.path)}
+              className={[
+                'flex items-center gap-1 rounded-xl px-3 py-1.5 text-[13px] font-medium transition-colors',
+                active
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/60 hover:bg-white/5 hover:text-white',
+              ].join(' ')}
+            >
+              {link.label}
+              {'badge' in link && link.badge && (
+                <span className="rounded-full bg-[rgb(var(--accent-rgb))] px-1.5 py-0.5 text-[9px] font-bold text-white">
+                  {link.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* RIGHT */}
+      <div className="flex items-center gap-2 pr-4">
+        <div className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 lg:flex">
+          <span className="text-white/40">⌕</span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Пошук"
+            className="w-32 bg-transparent text-[12px] text-white placeholder:text-white/30 outline-none"
+          />
+        </div>
+
+        {streak > 0 && (
+          <div className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[12px] font-semibold text-red-400">
+            🔥 {streak}
           </div>
         )}
-      </header>
 
-      {/* Auth modal — рендеримо ПОЗА хедером щоб не було z-index конфлікту */}
-      <AuthModal isOpen={authModalOpen} onClose={closeAuthModal} defaultMode={authMode} />
-    </>
+        <div ref={notifRef} className="relative">
+          <button
+            onClick={() => setNotifOpen(o => !o)}
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl text-white hover:bg-white/5"
+          >
+            🔔
+            {unread > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-black">
+                {unread}
+              </span>
+            )}
+          </button>
+
+          {notifOpen && (
+            <div className="absolute right-0 top-[calc(100%+8px)] w-72 overflow-hidden rounded-2xl border border-white/10 bg-[#181b27] shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+              {NOTIFICATIONS.map(n => (
+                <div
+                  key={n.id}
+                  className="flex gap-3 px-4 py-3 text-[12px] text-white/80 hover:bg-white/5"
+                >
+                  <div>{n.icon}</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-white">
+                      {n.text}
+                    </div>
+                    <div className="text-[11px] text-white/40">
+                      {n.time}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <UserMenu variant="header" />
+      </div>
+    </header>
   );
 }

@@ -1,5 +1,8 @@
 import { Button, GlassCard } from '@/ui';
 import { ROUTES } from '@/config/routes';
+import { ModuleIntro } from '@/shared/components/ModuleIntro';
+import { ModuleUsageCounter } from '@/shared/components/ModuleUsageCounter';
+import { useSystemState } from '@/shared/access/hooks/useSystemState';
 import {
   useAttachFunnelProductMutation,
   useDetachFunnelProductMutation,
@@ -72,6 +75,11 @@ export default function FunnelEditorPage() {
     }
   };
 
+  const { state, counts, getModuleAccess } = useSystemState();
+  const aiFunnelAccess = getModuleAccess('AI_FUNNEL');
+  const sampleDataRequired =
+    counts.ownedProducts === 0 && counts.subscribedProducts === 0 && (data?.funnel?.products?.length ?? 0) === 0;
+
   if (isLoading) {
     return <div className="p-6 text-white/70">Завантаження воронки...</div>;
   }
@@ -92,8 +100,49 @@ export default function FunnelEditorPage() {
     );
   }
 
+  const introSteps = [
+    '1. Перевірте роль та доступ (SuperAdmin може бачити все, користувач — лише свої продукти).',
+    '2. Підключіть/відключіть продукти з урахуванням підписок по expertId.',
+    '3. Збережіть назву й статус, щоб активувати AI Funnel у потоках.',
+  ];
+  const moduleIntroSteps = [
+    `Рівень доступу: ${aiFunnelAccess.accessLevel} (${aiFunnelAccess.isLocked ? '🔒 замкнено' : 'розблоковано'})`,
+    `Поточна підписка: ${state?.subscription?.name ?? 'ТРІАЛ / Вільний доступ'}`,
+    `Шаблонів / продуктів: ${counts.templates} / ${counts.ownedProducts} / ${counts.subscribedProducts}`,
+  ];
+  const sampleFallback = (
+    <GlassCard className="p-4 border border-white/10 bg-white/[0.03]">
+      <p className="text-xs text-white/60 mb-2">Поки нічого не привʼязано</p>
+      <p className="text-sm text-white/70">Після створення продукту він зʼявиться у списку, а цей компонент стане репрезентативним.</p>
+    </GlassCard>
+  );
+
   return (
     <div className="space-y-6 p-4 md:p-6">
+      <ModuleIntro
+        title="AI Воронка"
+        description="Модуль працює строго по expertId, синхронізує підписки й шаблони, щоб ви бачили лише свої потоки."
+        steps={introSteps}
+      />
+      <ModuleIntro
+        title="Стан модулю"
+        description="Інформація береться з useSystemState: доступ, підписка, шаблони та лічильники генерується тут."
+        steps={moduleIntroSteps}
+      />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <ModuleUsageCounter
+          label="Підключені продукти"
+          used={data.funnel.products?.length ?? 0}
+          total={Math.max(1, (data.funnel.products?.length ?? 0) + (availableData?.products?.length ?? 0))}
+        />
+        <ModuleUsageCounter
+          label="Доступні продукти"
+          used={availableData?.products?.length ?? 0}
+          total={Math.max(1, (availableData?.products?.length ?? 0) + (data.funnel.products?.length ?? 0))}
+        />
+        <ModuleUsageCounter label="Шаблони" used={counts.templates} total={Math.max(1, counts.templates)} />
+      </div>
+
       <GlassCard className="p-6 md:p-8 space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -160,12 +209,16 @@ export default function FunnelEditorPage() {
                   </div>
                 </div>
               ))
-            ) : (
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/65">
-                Продукти поки не привʼязані.
-              </div>
-            )}
-          </div>
+          ) : (
+            (data.funnel.products?.length ?? 0) === 0 && sampleDataRequired
+              ? sampleFallback
+              : (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/65">
+                  Продукти поки не привʼязані.
+                </div>
+              )
+          )}
+        </div>
         </div>
 
         <div>

@@ -1,55 +1,81 @@
 // backend/src/modules/ai-mentor/initialize.ts
 import { prisma } from '@/db/client.js';
 import { QuestionsConfig } from '@/modules/ai-mentor/types.js';
-import { generateWheelAnalysis } from '@/modules/wheel/ai.js';
 import { WheelScore } from '@/modules/wheel/types.js';
 
-// backend/src/modules/ai-mentor-setup/service.ts
-export async function initializeMentor(userId: string) {
-  // Create mentor profile
-  const mentor = await prisma.mentor.create({
-    data: {
+// fix1: prisma.mentor → prisma.mentorConfig (модель в схемі)
+// fix2: prisma.wheelAssessment → prisma.userBalanceEntry (модель в схемі)
+
+export async function initializeMentor(expertId: string, userId: string) {
+  // fix3: MentorConfig має expertId + userId (обидва обов'язкові в схемі)
+  const mentorConfig = await prisma.mentorConfig.upsert({
+    where:  { userId },
+    update: { config: { setupStarted: new Date() } },
+    create: {
       userId,
-      rules: {},
-      summary: {},
-      meta: { setupStarted: new Date() },
+      config: { setupStarted: new Date() },
     },
   });
 
-  return { mentorId: mentor.id, nextStep: 'wheel' };
+  return { mentorConfigId: mentorConfig.userId, nextStep: 'wheel' };
 }
 
-export async function configureWheel(userId: string, scores: WheelScore[]) {
-  // Save wheel assessment
-  const wheel = await prisma.wheelAssessment.create({
+export async function configureWheel(
+  expertId: string,
+  userId: string,
+  mentorId: string,
+  balanceConfigId: string,
+  scores: WheelScore[],
+) {
+  // fix4: wheelAssessment → userBalanceEntry (реальна модель)
+  // fix5: scores — Json поле, передаємо як є
+  const scoresMap = Object.fromEntries(
+    scores.map(s => [s.categoryId ?? s.categoryId, s.score ?? 0])
+  );
+
+  const entry = await prisma.userBalanceEntry.create({
     data: {
+      expertId,
       userId,
-      scores,
-      analysis: await generateWheelAnalysis(scores, { name: '...' }),
+      mentorId,
+      balanceConfigId,
+      scores: scoresMap,
+      note: 'Initial wheel setup',
     },
   });
 
-  // Update setup progress
-  await prisma.mentor.update({
-    where: { userId },
-    data: {
-      meta: { wheelCompleted: true },
-    },
+  await prisma.mentorConfig.upsert({
+    where:  { userId },
+    update: { config: { wheelCompleted: true, lastBalanceEntryId: entry.id } },
+    create: { userId, config: { wheelCompleted: true } },
   });
 
-  return { wheelId: wheel.id, nextStep: 'questions' };
+  return { entryId: entry.id, nextStep: 'questions' };
 }
 
 export async function configureQuestions(userId: string, config: QuestionsConfig) {
-  await prisma.mentor.update({
-    where: { userId },
-    data: {
-      rules: {
-        morningQuestions: config.morningQuestions,
-        eveningQuestions: config.eveningQuestions,
-        frequency: config.frequency,
+  await prisma.mentorConfig.upsert({
+    where:  { userId },
+    update: {
+      config: {
+        morningQuestions:  config.customPrompts?.slice(0, 3) ?? [],
+        eveningQuestions:  config.customPrompts?.slice(3, 6) ?? [],
+        frequency:         config.frequency,
+        morningTime:       config.morningTime ?? '08:00',
+        eveningTime:       config.eveningTime ?? '20:00',
+        questionsConfigured: true,
       },
-      meta: { questionsConfigured: true },
+    },
+    create: {
+      userId,
+      config: {
+        morningQuestions:  config.customPrompts?.slice(0, 3) ?? [],
+        eveningQuestions:  config.customPrompts?.slice(3, 6) ?? [],
+        frequency:         config.frequency,
+        morningTime:       config.morningTime ?? '08:00',
+        eveningTime:       config.eveningTime ?? '20:00',
+        questionsConfigured: true,
+      },
     },
   });
 

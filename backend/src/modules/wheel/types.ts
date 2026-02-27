@@ -1,61 +1,102 @@
 // backend/src/modules/wheel/wheel.types.ts
+// Використовується в: service.ts, ai.ts, pdf.ts, telegram.ts, controller.ts
+// Prisma: UserBalanceEntry.scores (Json)
+
+/* ───────────────────────────
+ * Сфери
+ * ─────────────────────────── */
+
+export const FIXED_SPHERES = [
+  'money',
+  'realization',
+  'relationships',
+  'energy_body',
+  'freedom_time',
+  'inner_support',
+  'environment',
+  'meaning_direction',
+] as const;
+
+export type WheelSphereId = typeof FIXED_SPHERES[number];
+
+/* ───────────────────────────
+ * Конфіг колеса
+ * ─────────────────────────── */
 
 export interface WheelConfigItem {
-  id: string;
+  id: WheelSphereId;
   label: string;
   emoji: string;
   description: string;
 }
 
+export const WHEEL_CONFIG: WheelConfigItem[] = [
+  { id: 'money',             label: 'Гроші',            emoji: '💰', description: 'Фінансова стабільність' },
+  { id: 'realization',       label: 'Реалізація',        emoji: '🎯', description: 'Карʼєра та досягнення' },
+  { id: 'relationships',     label: 'Відносини',         emoji: '❤️', description: 'Сімʼя та близькі' },
+  { id: 'energy_body',       label: 'Енергія / Тіло',    emoji: '⚡', description: 'Фізичний стан та ресурс' },
+  { id: 'freedom_time',      label: 'Свобода / Час',     emoji: '🕊️', description: 'Час для себе' },
+  { id: 'inner_support',     label: 'Внутрішня опора',   emoji: '🧘', description: 'Спокій та впевненість' },
+  { id: 'environment',       label: 'Оточення',          emoji: '🌿', description: 'Люди та середовище' },
+  { id: 'meaning_direction', label: 'Сенс / Напрямок',   emoji: '✨', description: 'Ціль і вектор життя' },
+];
+
+export const SPHERE_LABELS: Record<WheelSphereId, string> =
+  Object.fromEntries(WHEEL_CONFIG.map(s => [s.id, s.label])) as Record<WheelSphereId, string>;
+
+/* ───────────────────────────
+ * Дані користувача
+ * ─────────────────────────── */
+
+export interface WheelUserContext {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  gender?: 'male' | 'female' | null;
+  age: number | null;
+}
+
+/* ───────────────────────────
+ * Scores (зберігається в Prisma Json)
+ * ─────────────────────────── */
+
 export interface WheelScore {
-  categoryId: string;
-  score: number;
+  categoryId: WheelSphereId;
+  score: number;            // 1–10
   comment?: string | null;
 }
 
-export interface WheelUserContext {
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  gender: string | null;
-  age: number | null;
+/**
+ * Формат збереження в БД:
+ * {
+ *   money: 6,
+ *   realization: 8,
+ *   ...
+ * }
+ */
+export type WheelScoresMap = Record<WheelSphereId, number>;
+
+/* ───────────────────────────
+ * Аналітика
+ * ─────────────────────────── */
+
+export interface WheelAnalytics {
+  totalAssessments: number;
+  averageScores: Record<WheelSphereId, number>;
+  mostCommonWeakest: WheelSphereId | '';
+  mostCommonFocus: WheelSphereId | '';
+  trend: 'improving' | 'declining' | 'stable';
 }
+
+/* ───────────────────────────
+ * PDF / Export
+ * ─────────────────────────── */
 
 export interface WheelPDFData {
   userName: string;
   scores: WheelScore[];
-  weakestSphere: string;
-  focusSphere: string;
+  weakestSphere: WheelSphereId;
+  focusSphere: WheelSphereId;
   analysis: string;
   createdAt: string;
 }
-
-export interface WheelAnalytics {
-  totalAssessments: number;
-  averageScores: Record<string, number>;
-  mostCommonWeakest: string;
-  mostCommonFocus: string;
-  trend: 'improving' | 'declining' | 'stable';
-}
-
-export const SPHERE_LABELS: Record<string, string> = {
-  money: 'Гроші',
-  realization: 'Реалізація',
-  relationships: 'Відносини',
-  energy: 'Енергія/Тіло',
-  freedom: 'Свобода/Час',
-  innerSupport: 'Внутрішня опора',
-  health: "Здоров'я",
-  growth: 'Розвиток',
-};
-
-export const WHEEL_CONFIG: WheelConfigItem[] = [
-  { id: 'money', label: 'Гроші', emoji: '💰', description: 'Фінансова стабільність' },
-  { id: 'realization', label: 'Реалізація', emoji: '🎯', description: 'Кар\'єра та досягнення' },
-  { id: 'relationships', label: 'Відносини', emoji: '❤️', description: 'Сім\'я та друзі' },
-  { id: 'energy', label: 'Енергія', emoji: '⚡', description: 'Фізична форма' },
-  { id: 'freedom', label: 'Свобода', emoji: '🕊️', description: 'Час для себе' },
-  { id: 'innerSupport', label: 'Внутрішня опора', emoji: '🧘', description: 'Спокій та впевненість' },
-  { id: 'health', label: 'Здоров\'я', emoji: '🏥', description: 'Фізичне здоров\'я' },
-  { id: 'growth', label: 'Розвиток', emoji: '📚', description: 'Навчання та зростання' },
-];

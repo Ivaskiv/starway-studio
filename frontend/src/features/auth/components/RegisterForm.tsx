@@ -1,6 +1,8 @@
 // frontend/src/features/auth/components/RegisterForm.tsx
 import { useForm } from '@tanstack/react-form'
 import { useRegisterMutation } from '../services/auth.api'
+import { useAuth } from '@/features/auth/hooks/useAuth'
+import { getToastMessage } from '@/shared/i18n/toast'
 import { Button, Input } from '@/ui'
 import { Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
@@ -34,6 +36,8 @@ export function RegisterForm({
   onSwitch,
   onSuccess,
 }: Props) {
+  const { user } = useAuth()
+  const lang = user?.settings?.language ?? 'uk'
   const [registerUser, { isLoading }] = useRegisterMutation()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
@@ -55,7 +59,7 @@ export function RegisterForm({
           name: value.name.trim(),
         }).unwrap()
 
-        toast.success('Реєстрація успішна!')
+        toast.success(getToastMessage('auth.registerSuccess', lang))
 
         if (response.accessToken) {
           onSuccess({ email: value.email, password: value.password })
@@ -65,10 +69,10 @@ export function RegisterForm({
       } catch (err: any) {
         const message =
           err?.data?.error === 'email_already_registered'
-            ? 'Цей email вже зареєстрований. Спробуйте увійти.'
-            : err?.data?.message || 'Помилка реєстрації'
+            ? getToastMessage('auth.registerEmailExists', lang)
+            : err?.data?.message || getToastMessage('auth.registerFailed', lang)
         toast.error(message)
-        throw new Error(message)
+        return
       }
     },
   })

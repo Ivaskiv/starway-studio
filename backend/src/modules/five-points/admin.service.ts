@@ -1,11 +1,20 @@
 // backend/src/modules/five-points/admin.service.ts
-export const fivePointsAdminService = (repo: ReturnType<any>) => {
+
+import { FivePointsProgress } from "@/modules/five-points/types.js";
+
+
+// Тип рядка прогресу, без implicit any
+type ProgressRow = Pick<FivePointsProgress, 'completedLessons' | 'totalPoints'>;
+
+export const fivePointsAdminService = (repo: { getAllProgress: () => Promise<ProgressRow[]> }) => {
   const getStats = async () => {
     const progress = await repo.getAllProgress();
-
     const totalUsers = progress.length;
-    const completed = progress.filter(p => p.completedLessons >= 5).length;
 
+    // користувачі, що завершили всі уроки (5)
+    const completed = progress.filter((p) => p.completedLessons >= 5).length;
+
+    // середнє число завершених уроків
     const avgLessonsCompleted =
       totalUsers === 0
         ? 0

@@ -1,4 +1,4 @@
-// backend/src/modules/funnel/funnel.ai.ts
+// backend/src/modules/funnel/ai.ts
 import { openai } from '@/lib/openai.js';
 import type { AIFunnelResult, GenerateAIFunnelInput } from './types.js';
 

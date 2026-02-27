@@ -3,10 +3,11 @@
  * Trial Controller
  */
 
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { startTrial, getTrialStatus, generateTrialMirror } from './service.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
 
-export async function startTrialHandler(req: Request, res: Response, next: NextFunction) {
+export async function startTrialHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -19,7 +20,7 @@ export async function startTrialHandler(req: Request, res: Response, next: NextF
   }
 }
 
-export async function getTrialStatusHandler(req: Request, res: Response, next: NextFunction) {
+export async function getTrialStatusHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -32,7 +33,7 @@ export async function getTrialStatusHandler(req: Request, res: Response, next: N
   }
 }
 
-export async function generateMirrorHandler(req: Request, res: Response, next: NextFunction) {
+export async function generateMirrorHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

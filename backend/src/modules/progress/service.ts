@@ -3,6 +3,16 @@ import { prisma } from '@/db/client.js';
 import type { ProgressUpdate, UserProgress } from './types.js';
 
 export async function getProgress(userId: string): Promise<UserProgress> {
+  const userRecord = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!userRecord) {
+    const error = new Error('user_not_found');
+    (error as any).code = 'P2025';
+    throw error;
+  }
+
   let progress = await prisma.userProgress.findUnique({
     where: { userId },
   });
@@ -26,6 +36,16 @@ export async function updateProgress(
   userId: string,
   data: ProgressUpdate
 ): Promise<UserProgress> {
+  const userRecord = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!userRecord) {
+    const error = new Error('user_not_found');
+    (error as any).code = 'P2025';
+    throw error;
+  }
+
   const progress = await prisma.userProgress.upsert({
     where: { userId },
     update: data,

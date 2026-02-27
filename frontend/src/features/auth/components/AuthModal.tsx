@@ -1,6 +1,7 @@
 // frontend/src/features/auth/components/AuthModal.tsx
 import { useAppDispatch } from '@/app/hooks';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { getToastMessage } from '@/shared/i18n/toast';
 import { saveToken } from '@/features/auth/services/token';
 import type { SocialPlatform } from '@/features/social/types/social.types';
 import { hasSavedAccentColor } from '@/shared/utils/accent.utils';
@@ -31,7 +32,8 @@ interface Props {
 export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Props) {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { loginWithSocial } = useAuth();
+  const { loginWithSocial, user } = useAuth();
+  const lang = user?.settings?.language ?? 'uk';
   const [loginMutation] = useLoginMutation();
 
   const [mode, setMode] = useState<Mode>(defaultMode);
@@ -65,7 +67,11 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
     if (!autoLoginData) return;
 
     try {
-      const response = await loginMutation(autoLoginData).unwrap();
+      const expertId = window.localStorage.getItem('expertId')?.trim() || import.meta.env.VITE_EXPERT_ID?.trim();
+      const response = await loginMutation({
+        ...autoLoginData,
+        ...(expertId ? { expertId } : {}),
+      }).unwrap();
 
       saveToken(response.accessToken);
       dispatch(
@@ -75,12 +81,12 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
         }),
       );
 
-      toast.success('Автоматичний вхід виконано!');
+      toast.success(getToastMessage('auth.autoLoginSuccess', lang));
       onClose();
       navigate('/dashboard', { replace: true });
     } catch (err) {
       console.error('Auto-login error:', err);
-      toast.error('Автоматичний вхід не вдався. Увійдіть вручну.');
+      toast.error(getToastMessage('auth.autoLoginFailed', lang));
       setMode('login');
     } finally {
       setAutoLoginData(null);
@@ -92,19 +98,23 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
 
     try {
       await loginWithSocial(provider);
-      toast.success('Авторизація успішна!');
+      toast.success(getToastMessage('auth.socialSuccess', lang));
       onClose();
       navigate('/dashboard', { replace: true });
     } catch (err) {
       console.error('Social auth error:', err);
-      toast.error('Помилка соціальної авторизації');
+      const message =
+        err instanceof Error && err.message === 'VITE_GOOGLE_CLIENT_ID not configured'
+          ? getToastMessage('auth.socialGoogleNotConfigured', lang)
+          : getToastMessage('auth.socialGenericError', lang);
+      toast.error(message);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleRegisterSuccess = (credentials?: { email: string; password: string }) => {
-    toast.success('Реєстрація успішна!');
+    toast.success(getToastMessage('auth.registerSuccess', lang));
 
     if (credentials) {
       // Якщо бекенд повернув дані для автологіну — запускаємо

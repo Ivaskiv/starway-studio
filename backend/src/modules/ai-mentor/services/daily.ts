@@ -6,7 +6,7 @@
 
 import { prisma } from '@/db/client.js';
 import { openai } from '@/lib/openai.js';
-import { DailyChoice, DailyDrain, DailyState } from '@prisma/client';
+import { DailyChoice, DailyDrain, DailyState } from '@/db/generated/prisma/client.js';
 import { getOrCreateSession, saveMessage, updateSessionActivity } from './session.js';
 import type { MentorSession } from '../types.js';
 
@@ -21,10 +21,15 @@ export async function dailyCycle(
   }
 ) {
   const session = await getOrCreateSession(userId);
-
+  const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { expertId: true },
+  })
+  if (!user?.expertId) throw new Error('No expert');
   const dailyEntry = await prisma.dailyEntry.create({
     data: {
       userId,
+      expertId: user.expertId,
       date: new Date(),
       state: payload.state,
       drain: payload.drain,

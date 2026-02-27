@@ -1,11 +1,12 @@
 // backend/src/modules/social/social.controller.ts
 import type { Request, Response } from 'express';
-import { serverError } from '../../utils/serverError.js';
-import * as socialService from './service.js';
 import type { ConnectSocialInput, SocialResponse } from './types.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { serverError } from '@/utils/serverError.js';
+import { socialService } from '@/modules/social/service.js';
 
 // ================= GET CONNECTIONS =================
-export async function getConnections(req: Request, res: Response) {
+export async function getConnections(req: AuthenticatedRequest, res: Response) {
   try {
     const userId = req.user?.id;
 
@@ -30,7 +31,7 @@ export async function getConnections(req: Request, res: Response) {
 }
 
 // ================= CONNECT SOCIAL =================
-export async function connect(req: Request, res: Response) {
+export async function connect(req: AuthenticatedRequest, res: Response) {
   try {
     const userId = req.user?.id;
 
@@ -87,7 +88,7 @@ export async function connect(req: Request, res: Response) {
 }
 
 // ================= DISCONNECT SOCIAL =================
-export async function disconnect(req: Request, res: Response) {
+export async function disconnect(req: AuthenticatedRequest, res: Response) {
   try {
     const userId = req.user?.id;
 
@@ -119,7 +120,7 @@ export async function disconnect(req: Request, res: Response) {
 }
 
 // ================= TELEGRAM LINK =================
-export async function telegramLink(req: Request, res: Response) {
+export async function telegramLink(req:AuthenticatedRequest, res: Response) {
   try {
     const userId = req.user?.id;
 

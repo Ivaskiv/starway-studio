@@ -36,7 +36,7 @@ export interface DailyTask {
   id: string;
   title: string;
   description?: string;
-  status: 'pending' | 'completed' | 'skipped';
+  status: 'PENDING' | 'COMPLETED' | 'skipped';
   scheduledTime?: string;
   category?: string;
   priority?: 'low' | 'medium' | 'high';

@@ -1,8 +1,8 @@
 // daily.telegram.ts
 import { openai } from '@/lib/openai.js';
-import { DailyEntry } from '@/modules/daily-cycle/types.js';
+import { DailyEntryForAi } from '@/modules/daily-cycle/types.js';
 
-export async function generateDailyAiAnalysis(entry: DailyEntry) {
+export async function generateDailyAiAnalysis(entry: DailyEntryForAi) {
   if (!entry.answers.length) return null;
 
   const prompt = `

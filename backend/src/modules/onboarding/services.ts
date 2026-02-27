@@ -8,6 +8,11 @@ import type {
   UpdateProgressDto,
 } from './types.js';
 
+function toDbOnboardingStage(stage: OnboardingStage) {
+  // fix code_x: Prisma enum has no SETUP; keep UX stage but persist as ENTRY.
+  return stage === 'SETUP' ? 'ENTRY' : stage;
+}
+
 // ==========================
 // GET PROGRESS
 // ==========================
@@ -79,7 +84,7 @@ export async function completeStage(dto: CompleteStageDto): Promise<OnboardingPr
   await prisma.user.update({
     where: { id: dto.userId },
     data: {
-      onboardingStage: nextStage,
+      onboardingStage: toDbOnboardingStage(nextStage),
       ...(nextStage === 'COMPLETED' && { onboardingCompletedAt: new Date() }),
     },
   });
@@ -94,7 +99,7 @@ export async function updateProgress(dto: UpdateProgressDto): Promise<Onboarding
   await prisma.user.update({
     where: { id: dto.userId },
     data: {
-      onboardingStage: dto.stage,
+      onboardingStage: toDbOnboardingStage(dto.stage),
       ...(dto.stage === 'COMPLETED' && { onboardingCompletedAt: new Date() }),
     },
   });

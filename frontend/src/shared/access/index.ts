@@ -1,4 +1,6 @@
-import type { User, UserRole } from '@/features/user/types/user.types';
+import type { AuthApiResponse } from '@/types/globalTypes';
+import type { User } from '@/features/user/types/user.types';
+import type { UserRole } from '@/types/globalTypes';
 import type { SocialPlatform } from '@/features/social/types/social.types';
 
 /**
@@ -69,18 +71,6 @@ export interface AccessItem {
   enrollmentId?: string;
 }
 
-/* ===== AUTH API ===== */
-export interface AuthApiResponse {
-  user: User;
-  accessToken: string;
-  refreshToken?: string;
-  isNewUser?: boolean;
-  needsCompletion?: boolean;
-  email?: string;
-  name?: string;
-  expiresIn: number;
-}
-
 export interface LoginInput {
   email: string;
   password: string;
@@ -147,49 +137,44 @@ export interface AuthState {
 }
 
 /* ===== ROLE ABILITIES ===== */
+const baseUserAbilities: AccessKey[] = [
+  'dashboard.view',
+  'profile.view',
+  'wheel.view',
+  'progress.view',
+  'dashboard',
+  'progress',
+  'profile',
+  'settings',
+]
+
+const mentorAbilities: AccessKey[] = [
+  ...baseUserAbilities,
+  'mentor.core',
+  'mentor.daily',
+  'mentor.decisions',
+  'mentor.wheel',
+  'mentor.vision',
+  'mentor.goals',
+  'mentor.actions',
+  'mentor.zoom',
+  'mentor.mentorship',
+  'ai.basic',
+  'ai.deep',
+
+  'ai.pdf',
+  'ai.export',
+]
+
+const adminAbilities: AccessKey[] = [
+  ...mentorAbilities,
+  'products.manage',
+  'settings.manage',
+]
+
 export const ROLE_ABILITIES: Record<UserRole, AccessKey[]> = {
-  user: [
-    'dashboard.view',
-    'profile.view',
-    'wheel.view',
-    'progress.view',
-    'dashboard',
-    'progress',
-    'profile',
-  ],
-  admin: [
-    'dashboard.view',
-    'profile.view',
-    'wheel.view',
-    'progress.view',
-    'mentor.core',
-    'ai.basic',
-    'products.manage',
-    'settings.manage',
-    'dashboard',
-    'mentor',
-    'goal',
-    'actions',
-    'progress',
-    'profile',
-    'settings',
-  ],
-  mentor: [
-    'dashboard.view',
-    'profile.view',
-    'wheel.view',
-    'progress.view',
-    'mentor.core',
-    'mentor.daily',
-    'mentor.decisions',
-    'mentor.actions',
-    'ai.basic',
-    'dashboard',
-    'mentor',
-    'goal',
-    'actions',
-    'progress',
-    'profile',
-    'settings',
-  ],
-};
+  USER: baseUserAbilities,
+  EXPERT: mentorAbilities,
+  ADMIN: adminAbilities,
+  SUPERADMIN: adminAbilities,
+}

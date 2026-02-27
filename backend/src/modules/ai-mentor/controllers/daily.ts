@@ -1,6 +1,6 @@
 // backend/src/modules/ai-mentor/controller/daily.controller.ts
 import { prisma } from '@/db/client.js';
-import { DailyChoice, DailyDrain, DailyState } from '@prisma/client';
+import { DailyChoice, DailyDrain, DailyState, Prisma } from '@/db/generated/prisma/client.js';
 import { NextFunction, Request, Response } from 'express';
 import {
   getDailyEntries,
@@ -9,18 +9,12 @@ import {
   hasTodayEntry,
 } from '../services/daily.js';
 import { getOrCreateSession } from '../services/session.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
 
 // ==========================================
 // HANDLERS
 // ==========================================
-type CreateDailyEntryPayload = {
-  state: DailyState;
-  drain?: DailyDrain;
-  choice: DailyChoice;
-  dayFact: string;
-  microSupport: any; // або Prisma.JsonValue
-};
-export async function submitDailyCycle(req: Request, res: Response, next: NextFunction) {
+export async function submitDailyCycle(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -34,7 +28,14 @@ export async function submitDailyCycle(req: Request, res: Response, next: NextFu
         error: 'Missing required fields: state, choice, dayFact',
       });
     }
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { expertId: true },
+    });
 
+    if (!user?.expertId) {
+      return res.status(400).json({ error: 'User has no expertId' });
+    }
     const dailyEntry = await prisma.dailyEntry.create({
       data: {
         userId,
@@ -42,7 +43,9 @@ export async function submitDailyCycle(req: Request, res: Response, next: NextFu
         drain,
         choice,
         dayFact,
-        microSupport: microSupport ?? {}, // 🔥 важливо
+        microSupport: microSupport ?? {},
+        expertId: user.expertId,
+        date: new Date(), 
       },
     });
 
@@ -53,7 +56,7 @@ export async function submitDailyCycle(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function submitDailyEntry(req: Request, res: Response, next: NextFunction) {
+export async function submitDailyEntry(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -76,7 +79,7 @@ export async function submitDailyEntry(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function getDailyEntriesHandler(req: Request, res: Response, next: NextFunction) {
+export async function getDailyEntriesHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -95,7 +98,7 @@ export async function getDailyEntriesHandler(req: Request, res: Response, next: 
   }
 }
 
-export async function getLatestDailyEntryHandler(req: Request, res: Response, next: NextFunction) {
+export async function getLatestDailyEntryHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -108,7 +111,7 @@ export async function getLatestDailyEntryHandler(req: Request, res: Response, ne
   }
 }
 
-export async function checkTodayEntry(req: Request, res: Response, next: NextFunction) {
+export async function checkTodayEntry(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

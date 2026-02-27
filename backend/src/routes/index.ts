@@ -1,9 +1,9 @@
 // backend/src/routes/index.ts
-import { Router } from 'express'
 import accessRoutes from '@/modules/access/routes.js'
 import authRoutes from '@/modules/auth/auth.routes.js'
 import progressRoutes from '@/modules/progress/routes.js'
 import wheelRoutes from '@/modules/wheel/routes.js'
+import { Router } from 'express'
 
 const router = Router()
 

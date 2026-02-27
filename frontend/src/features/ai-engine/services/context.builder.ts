@@ -205,7 +205,7 @@ export function buildPaidContext(
 ): AIContext {
   const builder = new AIContextBuilder(userId, 'paid').withDailyHistory(dailyEntries);
 
-  if (onboardingStage && onboardingStage !== 'completed') {
+  if (onboardingStage && onboardingStage !== 'COMPLETED') {
     builder.withOnboardingStage(onboardingStage);
   }
 

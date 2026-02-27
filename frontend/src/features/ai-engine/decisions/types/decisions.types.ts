@@ -87,7 +87,7 @@ export interface MicroTask {
     id?: string;
   };
 
-  status?: 'pending' | 'completed' | 'skipped';
+  status?: 'PENDING' | 'COMPLETED' | 'skipped';
   completedAt?: string;
 }
 

@@ -1,6 +1,7 @@
 // backend/src/modules/ai-mentor/controllers/affirmation.ts
 
-import { NextFunction, Request, Response } from 'express';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { NextFunction, Response } from 'express';
 
 /**
  * 🌅 AFFIRMATION CONTROLLER
@@ -11,7 +12,7 @@ import { NextFunction, Request, Response } from 'express';
  * POST /api/mentor/morning-session
  * Generate morning affirmation session
  */
-export async function generateMorningSession(req: Request, res: Response, next: NextFunction) {
+export async function generateMorningSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     
@@ -39,7 +40,7 @@ export async function generateMorningSession(req: Request, res: Response, next: 
  * POST /api/mentor/evening-session
  * Generate evening reflection session
  */
-export async function generateEveningSession(req: Request, res: Response, next: NextFunction) {
+export async function generateEveningSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     
@@ -67,7 +68,7 @@ export async function generateEveningSession(req: Request, res: Response, next: 
  * POST /api/mentor/affirmation
  * Generate daily affirmation
  */
-export async function generateAffirmation(req: Request, res: Response, next: NextFunction) {
+export async function generateAffirmation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     

@@ -1,19 +1,26 @@
-// backend/src/modules/ai-mentor/services/chat.ts
-
 /**
- * Chat Service - Main chat logic
+ * 📡 Chat Controller
  */
 
 import { prisma } from '@/db/client.js';
-import { generateResponse } from './ai.js';
-import { getOrCreateSession, saveMessage, updateSessionActivity } from './session.js';
-import { buildContext } from './context.js';
 import type { SendMessageDto, ChatResponse } from '../types.js';
+import { buildSessionContext } from '@/modules/ai-mentor/services/context.js';
+import { getOrCreateSession, saveMessage } from '@/modules/ai-mentor/services/session.js';
+import { generateResponse } from '@/modules/ai-mentor/services/ai.js';
+import type { Request, Response } from 'express';
 
-export async function sendMessage(dto: SendMessageDto): Promise<ChatResponse> {
+/**
+ * Надсилає повідомлення користувача та отримує відповідь ментора
+ */
+export async function sendMessage(req: Request, res: Response) {
+  const dto: SendMessageDto = req.body;
+
   const session = await getOrCreateSession(dto.userId, dto.sessionId);
 
-  const { context, systemPrompt } = await buildContext(dto.userId);
+  const user = await prisma.user.findUnique({ where: { id: dto.userId } });
+  const userName = user?.name ?? 'User';
+
+  const sessionContext = await buildSessionContext(dto.userId, userName);
 
   const userMessage = await saveMessage({
     sessionId: session.id,
@@ -25,7 +32,7 @@ export async function sendMessage(dto: SendMessageDto): Promise<ChatResponse> {
 
   const aiText = await generateResponse(
     [{ role: 'user', content: dto.message }],
-    systemPrompt
+    `Tone: ${sessionContext.tone}` // або інший system prompt, якщо є
   );
 
   const mentorMessage = await saveMessage({
@@ -35,11 +42,43 @@ export async function sendMessage(dto: SendMessageDto): Promise<ChatResponse> {
     text: aiText
   });
 
-  await updateSessionActivity(session.id);
-
-  return {
+  return res.json({
     session,
     userMessage,
     mentorMessage
-  };
+  } as ChatResponse);
+}
+
+/**
+ * Повертає дані сесії чату за sessionId
+ */
+export async function getSession(req: Request, res: Response) {
+  const sessionId = req.params.sessionId;
+
+  if (!sessionId) return res.status(400).json({ error: 'SessionId is required' });
+
+  const session = await prisma.mentorSession.findUnique({
+    where: { id: sessionId },
+    include: { messages: true }
+  });
+
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  return res.json(session);
+}
+
+/**
+ * Повертає історію повідомлень користувача
+ */
+export async function getChatHistory(req: Request, res: Response) {
+  const userId = req.query.userId as string;
+
+  if (!userId) return res.status(400).json({ error: 'UserId is required' });
+
+  const messages = await prisma.mentorMessage.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'asc' }
+  });
+
+  return res.json(messages);
 }

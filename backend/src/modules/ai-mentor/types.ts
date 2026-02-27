@@ -11,14 +11,16 @@
 
 export type OnboardingStage = 
   | 'ENTRY'
-  | 'CONTEXT'
+  | 'CHOICE'
+  | 'ACTIONS'
   | 'GOAL'
   | 'VISION'
   | 'COMPLETED';
 
 export const ONBOARDING_STAGES: OnboardingStage[] = [
   'ENTRY',
-  'CONTEXT',
+  'CHOICE',
+  'ACTIONS',
   'GOAL',
   'VISION',
   'COMPLETED'
@@ -40,12 +42,18 @@ export const STAGE_CONFIGS: Record<OnboardingStage, StageConfig> = {
     title: 'Вітання',
     description: 'Знайомство з AI Ментором',
     prompt: 'Привіт! Я твій AI Ментор. Готовий допомогти тобі досягти цілей.',
-    nextStage: 'CONTEXT'
+    nextStage: 'CHOICE'
   },
-  CONTEXT: {
-    title: 'Контекст',
-    description: 'Збір інформації про поточну ситуацію',
-    prompt: 'Розкажи про свою поточну ситуацію. Що зараз відбувається у твоєму житті?',
+  CHOICE: {
+    title: 'Вибір',
+    description: 'Уточнення поточних виборів і патернів',
+    prompt: 'Які повторювані вибори зараз найсильніше впливають на твій результат?',
+    nextStage: 'ACTIONS'
+  },
+  ACTIONS: {
+    title: 'Дії',
+    description: 'Фіксація перших кроків',
+    prompt: 'Які 1-2 конкретні дії ти готова зробити вже сьогодні?',
     nextStage: 'GOAL'
   },
   GOAL: {
@@ -86,6 +94,7 @@ export interface SessionContext {
   goals: string[];
   morningQuestions: string[];
   eveningQuestions: string[];
+  systemPrompt: string;
 }
 
 // ==========================================
@@ -144,6 +153,51 @@ export interface ChatSession {
   updatedAt: Date;
 }
 
+export interface MentorSession {
+  id: string;
+  userId: string;
+  startedAt: Date;
+  lastMessageAt: Date;
+  onboardingStage: OnboardingStage | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MentorMessage {
+  id: string;
+  mentorId: string;
+  sessionId: string | null;
+  userId: string;
+  role: 'USER' | 'MENTOR' | 'SYSTEM';
+  text: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: Date;
+}
+
+export interface SendMessageDto {
+  userId: string;
+  userName: string;
+  message: string;
+  sessionId?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface ChatResponse {
+  session: MentorSession;
+  userMessage: MentorMessage;
+  mentorMessage: MentorMessage;
+}
+
+export interface QuestionsConfig {
+  frequency: 'morning_evening' | 'daily' | 'custom';
+  morningTime?: string;
+  eveningTime?: string;
+  timezone?: string;
+  promptStyle?: 'soft' | 'direct' | 'supportive' | 'analytical';
+  customPrompts?: string[];
+}
+
 // ==========================================
 // AI GENERATION
 // ==========================================
@@ -197,30 +251,3 @@ export interface WheelAnalysis {
   imbalance: number;
 }
 
-// ==========================================
-// EXPORTS
-// ==========================================
-
-// export type {
-//   StageConfig,
-//   OnboardingStage,
-//   MentorContext,
-//   SessionContext,
-//   MentorRuleSet,
-//   OnboardingProgress,
-//   CompleteStageDto,
-//   UpdateProgressDto,
-//   ChatMessage,
-//   ChatSession,
-//   AIGenerationRequest,
-//   AIGenerationResponse,
-//   DailyCycleInput,
-//   DailyCycleResponse,
-//   WheelScore,
-//   WheelAnalysis
-// };
-
-// export {
-//   ONBOARDING_STAGES,
-//   STAGE_CONFIGS
-// };

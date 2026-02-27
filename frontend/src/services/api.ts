@@ -27,12 +27,15 @@ const baseQuery = fetchBaseQuery({
   prepareHeaders: (headers, { getState }) => {
     const state = getState() as RootState;
     const token = state.auth.accessToken;
+    const expertId = (state.auth.user as { expertId?: string } | null)?.expertId;
 
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
+    if (expertId) {
+      headers.set('x-expert-id', expertId);
+    }
 
-    headers.set('Content-Type', 'application/json');
     return headers;
   },
 });

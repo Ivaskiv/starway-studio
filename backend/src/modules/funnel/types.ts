@@ -1,46 +1,34 @@
 // backend/src/modules/funnel/types.ts
-import type { Product } from '@prisma/client';
 
-export type FunnelStatus = 'draft' | 'active' | 'archived';
 
-export interface FunnelInput {
-  name: string;
-  productIds: string[];
-  status?: FunnelStatus;
+// ================= INPUT =================
+
+
+export interface GenerateAIFunnelInput {
+  userPrompt: string
+  businessType?: string
+  targetAudience?: string
 }
 
-export interface FunnelWithProducts {
-  id: string;
-  code: string;
-  ownerId: string;
-  name: string;
-  status: string;
-  createdAt: Date;
-  updatedAt: Date;
-  products: Product[];
-}
+// ================= AI =================
 
-export interface AIFunnelStage {
-  name: string;
-  action: string;
-  headline: string;
-  cta: string;
-  emailSequence: string[];
+export interface AIFunnelStageInput {
+  name: string
+  action: string
+  headline: string
+  cta: string
+  emailSequence: string[]
 }
 
 export interface AIFunnelResult {
-  concept: string;
-  stages: AIFunnelStage[];
-  aiRecommendations: string[];
+  concept: string
+  stages: AIFunnelStageInput[]
+  aiRecommendations: string[]
   suggestedProducts: {
-    name: string;
-    description: string;
-    priceCents: number;
-  }[];
+    name: string
+    description: string
+    priceCents: number
+  }[]
 }
 
-export interface GenerateAIFunnelInput {
-  userPrompt: string;
-  businessType?: string;
-  targetAudience?: string;
-}
+

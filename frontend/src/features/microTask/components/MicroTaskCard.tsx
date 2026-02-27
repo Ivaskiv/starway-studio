@@ -1,9 +1,9 @@
-import React from 'react'
-import { MicroTask } from '../types/types'
+import React from 'react';
+import { MicroTask } from '../types/types';
 
 interface Props {
-  task: MicroTask
-  onComplete: () => void
+  task: MicroTask;
+  onComplete: () => void;
 }
 
 export const MicroTaskCard: React.FC<Props> = ({ task, onComplete }) => {
@@ -15,10 +15,10 @@ export const MicroTaskCard: React.FC<Props> = ({ task, onComplete }) => {
       <button
         className="mt-2 px-4 py-1 bg-green-500 text-white rounded"
         onClick={onComplete}
-        disabled={task.status === 'completed'}
+        disabled={task.status === 'COMPLETED'}
       >
-        {task.status === 'completed' ? 'Completed' : 'Complete'}
+        {task.status === 'COMPLETED' ? 'Completed' : 'Complete'}
       </button>
     </div>
-  )
-}
+  );
+};

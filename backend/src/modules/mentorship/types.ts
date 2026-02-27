@@ -1,26 +1,19 @@
 // backend/src/modules/mentorship/types.ts
-/**
- * Mentorship Types - FIXED
- */
-
-// ✅ NO ENUM! Use union type
-export type MentorshipStatus = 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+import { MentorshipStatus, Prisma } from "@/db/generated/prisma/client.js";
 
 export interface Mentorship {
   id: string;
   userId: string;
   mentorId: string;
   status: MentorshipStatus;
-  startedAt: Date;
-  endsAt?: Date;
-  notes?: string;
-  createdAt: Date;
+  startsAt: Date; 
 }
 
 export interface MentorshipOffer {
   id: string;
   userId: string;
-  reason: string;
-  stabilityDays: number;
+  expertId: string;
+  status: MentorshipStatus;
+  offerDetails: Prisma.JsonValue;
   createdAt: Date;
 }

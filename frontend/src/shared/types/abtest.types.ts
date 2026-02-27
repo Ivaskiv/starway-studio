@@ -1,11 +1,11 @@
-// /Users/viravira/Documents/starway-studio/shared/types/abtest.types.ts 
-// # ABTest, ABVariant, ABTestResults 
+// /Users/viravira/Documents/starway-studio/shared/types/abtest.types.ts
+// # ABTest, ABVariant, ABTestResults
 
 /* ======================================================
   AB TESTING
 ====================================================== */
 
-export type ABTestStatus = 'draft' | 'running' | 'paused' | 'completed';
+export type ABTestStatus = 'draft' | 'running' | 'paused' | 'COMPLETED';
 
 export interface ABTest {
   id: string;
@@ -34,4 +34,3 @@ export interface ABTestResults {
   confidence: number;
   improvement: number;
 }
-

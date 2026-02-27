@@ -1,4 +1,3 @@
-// backend/src/modules/social/social.service.ts
 import { prisma } from '@/db/client.js';
 import crypto from 'crypto';
 import type { SocialConnection, SocialProvider } from './types.js';
@@ -20,7 +19,7 @@ export async function getSocialConnections(userId: string): Promise<SocialConnec
     connections.push({
       provider: 'telegram',
       externalId: user.telegramChatId || '',
-      username: user.telegramUserName,
+      username: user.telegramUserName || null,
       connectedAt: new Date(),
     });
   }
@@ -35,7 +34,6 @@ export async function connectSocial(userId: string, data: SocialConnection): Pro
   const rawExternalId = (data.externalId || '').trim();
   const chatId = /^-?\d+$/.test(rawExternalId) ? rawExternalId : null;
 
-  // fix code_x: support initial Telegram setup via username only (chatId will be linked on bot /start).
   await prisma.user.update({
     where: { id: userId },
     data: {
@@ -59,11 +57,14 @@ export async function disconnectSocial(userId: string, provider: SocialProvider)
 
 export async function generateTelegramLink(userId: string, botUsername: string) {
   const code = crypto.randomBytes(16).toString('hex');
-  const expiresIn = 15 * 60; // 15 min
+  const expiresIn = 15 * 60; // 15 хв
   const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
+  // видаляємо старі посилання
   await prisma.telegramLink.deleteMany({ where: { userId } });
-  await prisma.telegramLink.create({
+
+  // створюємо нове посилання
+  const linkRecord = await prisma.telegramLink.create({
     data: {
       userId,
       code,
@@ -71,24 +72,36 @@ export async function generateTelegramLink(userId: string, botUsername: string) 
     },
   });
 
-  const link = `https://t.me/${botUsername}?start=link_${code}`;
+  const link = `https://t.me/${botUsername}?start=link_${linkRecord.code}`;
   return { link, expiresIn };
 }
 
 export async function verifyTelegramLinkCode(code: string): Promise<string | null> {
   const normalized = String(code || '').replace(/^link_/, '');
 
-  const link = await prisma.telegramLink.findUnique({
+  // findFirst, бо code не є унікальним полем
+  const link = await prisma.telegramLink.findFirst({
     where: { code: normalized },
-    select: { userId: true, expiresAt: true },
+    select: { id: true, userId: true, expiresAt: true },
   });
 
   if (!link) return null;
-  if (link.expiresAt.getTime() < Date.now()) {
-    await prisma.telegramLink.delete({ where: { code: normalized } }).catch(() => undefined);
+
+  const now = Date.now();
+  if (link.expiresAt.getTime() < now) {
+    // видаляємо по id
+    await prisma.telegramLink.delete({ where: { id: link.id } }).catch(() => undefined);
     return null;
   }
 
-  await prisma.telegramLink.delete({ where: { code: normalized } }).catch(() => undefined);
+  await prisma.telegramLink.delete({ where: { id: link.id } }).catch(() => undefined);
   return link.userId;
 }
+
+export const socialService = {
+  getSocialConnections,
+  connectSocial,
+  disconnectSocial,
+  generateTelegramLink,
+  verifyTelegramLinkCode,
+};

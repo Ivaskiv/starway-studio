@@ -1,5 +1,5 @@
-import { MicroTask } from '../types/types'
-import { v4 as uuid } from 'uuid'
+import { v4 as uuid } from 'uuid';
+import { MicroTask } from '../types/types';
 
 export const microTaskService = {
   create: (input: Partial<MicroTask> & { userId: string }): MicroTask => ({
@@ -7,10 +7,10 @@ export const microTaskService = {
     userId: input.userId,
     title: input.title || 'New MicroTask',
     description: input.description,
-    status: 'pending',
+    status: 'PENDING',
     source: input.source || 'manual',
     reason: input.reason,
     linkedQuestionId: input.linkedQuestionId,
     createdAt: new Date().toISOString(),
   }),
-}
+};

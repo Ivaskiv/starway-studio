@@ -1,133 +1,133 @@
-// backend/src/modules/funnel/services.ts
-// backend/src/modules/funnel/funnel.service.ts
+// backend/src/modules/funnel/service.ts
 import { prisma } from '@/db/client.js';
-import type {
-  FunnelInput,
-  FunnelWithProducts,
-  GenerateAIFunnelInput,
-  AIFunnelResult,
-} from './types.js';
-import { generateAIFunnel } from './ai.js';
+import type { FunnelBlueprint } from '@/modules/ai-generator/types.js';
+import { CourseWithProducts, generateProductFromCourse, getAllCourses } from '@/modules/mini-courses/servise.js';
+import { FunnelWithStagesAndProducts } from '@/types/globalTypes.js';
 
-// ========== HELPERS ==========
-function generateFunnelCode(length = 6): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let code = 'funnel_';
-  for (let i = 0; i < length; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
+// ────────────────────────────────────────────────
+// HELPERS
+// ────────────────────────────────────────────────
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 50);
 }
 
 async function generateUniqueCode(): Promise<string> {
-  let code = generateFunnelCode();
-  let attempts = 0;
-
-  while (attempts < 10) {
-    const existing = await prisma.funnel.findUnique({ where: { code } });
-    if (!existing) return code;
-    code = generateFunnelCode();
-    attempts++;
+  for (let i = 0; i < 10; i++) {
+    const code = `funnel_${Math.random().toString(36).slice(2, 8)}`;
+    const exists = await prisma.funnel.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+    if (!exists) return code;
   }
-
-  throw new Error('Failed to generate unique funnel code');
+  return `funnel_${Date.now().toString(36)}`;
 }
 
-// ========== GET FUNNELS ==========
-export async function getFunnels(ownerId: string): Promise<FunnelWithProducts[]> {
-  const funnels = await prisma.funnel.findMany({
-    where: { ownerId },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      products: {
-        include: { product: true },
-      },
-    },
-  });
-
-  return funnels.map(f => ({
-    id: f.id,
-    code: f.code,
-    ownerId: f.ownerId,
-    name: f.name,
-    status: f.status,
-    createdAt: f.createdAt,
-    updatedAt: f.updatedAt,
-    products: f.products.map(fp => fp.product),
-  }));
-}
-
-// ========== GET FUNNEL BY ID ==========
-export async function getFunnelById(id: string): Promise<FunnelWithProducts | null> {
-  const funnel = await prisma.funnel.findUnique({
-    where: { id },
-    include: {
-      products: {
-        include: { product: true },
-      },
-    },
-  });
-
-  if (!funnel) return null;
-
-  return {
-    id: funnel.id,
-    code: funnel.code,
-    ownerId: funnel.ownerId,
-    name: funnel.name,
-    status: funnel.status,
-    createdAt: funnel.createdAt,
-    updatedAt: funnel.updatedAt,
-    products: funnel.products.map(fp => fp.product),
-  };
-}
-
-// ========== CREATE FUNNEL ==========
-export async function createFunnel(
+// ────────────────────────────────────────────────
+// CREATE FUNNEL FROM BLUEPRINT
+// ────────────────────────────────────────────────
+export async function createFunnelFromBlueprint(
   ownerId: string,
-  input: FunnelInput
-): Promise<FunnelWithProducts> {
-  // Перевірка унікальності імені
-  const existing = await prisma.funnel.findUnique({
-    where: { name: input.name },
-  });
-
-  if (existing) {
-    throw new Error('Funnel name already exists');
-  }
-
-  // Генерація коду
+  blueprint: FunnelBlueprint
+): Promise<string> {
   const code = await generateUniqueCode();
+  const slug = generateSlug(blueprint.name);
 
-  // Створення funnel
   const funnel = await prisma.funnel.create({
     data: {
       ownerId,
-      name: input.name,
       code,
-      status: input.status || 'draft',
+      slug,
+      name: blueprint.name,
+      status: 'draft',
+      definition: {},
     },
   });
 
-  // Додавання продуктів
-  if (input.productIds.length > 0) {
-    await Promise.all(
-      input.productIds.map(productId =>
-        prisma.funnelProduct.create({
-          data: {
-            funnelId: funnel.id,
-            productId,
-          },
-        })
-      )
-    );
-  }
-
-  return getFunnelById(funnel.id) as Promise<FunnelWithProducts>;
+  return funnel.id;
 }
 
-// ========== UPDATE FUNNEL ==========
-export async function updateFunnel(id: string, input: Partial<FunnelInput>) {
+// ────────────────────────────────────────────────
+// GET FUNNELS
+// ────────────────────────────────────────────────
+export async function getFunnels(ownerId?: string): Promise<Array<FunnelWithStagesAndProducts>> {
+  const funnels = await prisma.funnel.findMany({
+    where: ownerId ? { ownerId } : undefined,
+    orderBy: { createdAt: 'desc' },
+    include: { products: { include: { product: true } }, stages: true },
+  });
+
+  return funnels.map((funnel) => ({
+    ...funnel,
+    products: funnel.products.map((fp) => fp.product), // TS сам виводить Product
+  }));
+}
+
+export async function getFunnelById(
+  id: string,
+  ownerId?: string
+): Promise<FunnelWithStagesAndProducts | null> {
+  const funnel = await prisma.funnel.findUnique({
+    where: { id },
+    include: { products: { include: { product: true } }, stages: true },
+  });
+
+  if (!funnel) return null;
+  if (ownerId && funnel.ownerId !== ownerId) return null;
+
+  return {
+    ...funnel,
+    products: funnel.products.map((fp) => fp.product), // без as
+  };
+}
+
+// ────────────────────────────────────────────────
+// CREATE FUNNEL
+// ────────────────────────────────────────────────
+export async function createFunnel(
+  ownerId: string,
+  input: { name: string; status?: string }
+) {
+  const code = await generateUniqueCode();
+  const slug = generateSlug(input.name);
+
+  const funnel = await prisma.funnel.create({
+    data: {
+      ownerId,
+      code,
+      slug,
+      name: input.name,
+      status: input.status || 'draft',
+      definition: {},
+    },
+  });
+
+  return getFunnelById(funnel.id);
+}
+
+// ────────────────────────────────────────────────
+// UPDATE FUNNEL
+// ────────────────────────────────────────────────
+export async function updateFunnel(
+  id: string,
+  input: { name?: string; status?: string },
+  ownerId?: string
+) {
+  if (ownerId) {
+    const existing = await prisma.funnel.findUnique({
+      where: { id },
+      select: { ownerId: true },
+    });
+    if (!existing || existing.ownerId !== ownerId) {
+      throw new Error('funnel_not_found');
+    }
+  }
+
   return prisma.funnel.update({
     where: { id },
     data: {
@@ -137,11 +137,17 @@ export async function updateFunnel(id: string, input: Partial<FunnelInput>) {
   });
 }
 
-// fix code_x: attach product to funnel editor flow.
-export async function attachProductToFunnel(funnelId: string, productId: string) {
+// ────────────────────────────────────────────────
+// ATTACH PRODUCT TO FUNNEL
+// ────────────────────────────────────────────────
+export async function attachProductToFunnel(
+  funnelId: string,
+  productId: string
+) {
   const existing = await prisma.funnelProduct.findUnique({
-    where: { funnelId_productId: { funnelId, productId } },
-    select: { funnelId: true },
+    where: {
+      funnelId_productId: { funnelId, productId },
+    },
   });
 
   if (existing) return existing;
@@ -154,25 +160,37 @@ export async function attachProductToFunnel(funnelId: string, productId: string)
   });
 }
 
-// fix code_x: detach product from funnel editor flow.
-export async function detachProductFromFunnel(funnelId: string, productId: string) {
+// ────────────────────────────────────────────────
+// DETACH PRODUCT FROM FUNNEL
+// ────────────────────────────────────────────────
+export async function detachProductFromFunnel(
+  funnelId: string,
+  productId: string
+) {
   return prisma.funnelProduct.delete({
-    where: { funnelId_productId: { funnelId, productId } },
+    where: {
+      funnelId_productId: { funnelId, productId },
+    },
   });
 }
 
+// ────────────────────────────────────────────────
+// GET ATTACHABLE PRODUCTS
+// ────────────────────────────────────────────────
 export async function getAttachableProductsForFunnel(funnelId: string) {
   const funnel = await prisma.funnel.findUnique({
     where: { id: funnelId },
     select: { ownerId: true },
   });
+
   if (!funnel) return null;
 
   const attached = await prisma.funnelProduct.findMany({
     where: { funnelId },
     select: { productId: true },
   });
-  const attachedIds = attached.map((item) => item.productId);
+
+  const attachedIds = attached.map(item => item.productId);
 
   return prisma.product.findMany({
     where: {
@@ -183,67 +201,158 @@ export async function getAttachableProductsForFunnel(funnelId: string) {
   });
 }
 
-// ========== DELETE FUNNEL ==========
-export async function deleteFunnel(id: string): Promise<void> {
+// ────────────────────────────────────────────────
+// DELETE FUNNEL
+// ────────────────────────────────────────────────
+export async function deleteFunnel(id: string, ownerId?: string) {
+  if (ownerId) {
+    const existing = await prisma.funnel.findUnique({
+      where: { id },
+      select: { ownerId: true },
+    });
+    if (!existing || existing.ownerId !== ownerId) {
+      throw new Error('funnel_not_found');
+    }
+  }
+
   await prisma.funnel.delete({
     where: { id },
   });
 }
 
-// ========== AI GENERATION ==========
+// ────────────────────────────────────────────────
+// GENERATE AND SAVE FUNNEL (AI)
+// ────────────────────────────────────────────────
 export async function generateAndSaveFunnel(
   ownerId: string,
-  input: GenerateAIFunnelInput
-): Promise<{ funnel: FunnelWithProducts; aiResult: AIFunnelResult }> {
-  // 1. Генерація AI funnel
-  const aiResult = await generateAIFunnel(input);
+  input: { concept: string; targetAudience: string }
+) {
+  // TODO: Implement AI generation
+  throw new Error('AI funnel generation not yet implemented');
+}
 
-  // 2. Створення products з AI рекомендацій
-  const createdProducts = await Promise.all(
-    aiResult.suggestedProducts.map(p =>
-      prisma.product.create({
-        data: {
-          code: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          name: p.name,
-          description: p.description,
-          ownerId,
-          priceCents: p.priceCents,
-          features: {},
-          limits: {},
-        },
-      })
-    )
-  );
+// ────────────────────────────────────────────────
+// WORKFLOW FUNCTIONS (переміщено з workflow.service.ts)
+// ────────────────────────────────────────────────
+export interface WorkflowInput {
+  funnelName: string;
+  ownerId: string;
+  expertId?: string | null;
+  stages: Array<{
+    name: string;
+    order: number;
+    courseIds: string[];
+  }>;
+}
 
-  // 3. Створення funnel
-  const funnelName = `AI: ${aiResult.concept.slice(0, 50)}`;
-  const code = await generateUniqueCode();
+export interface WorkflowResult {
+  funnelId: string;
+  stagesCreated: number;
+  productsCreated: number;
+  stages: Array<{
+    stageId: string;
+    stageName: string;
+    products: string[];
+  }>;
+}
 
-  const funnel = await prisma.funnel.create({
-    data: {
-      ownerId,
-      name: funnelName,
-      code,
-      status: 'draft',
-    },
+export async function createFullWorkflow(input: WorkflowInput): Promise<WorkflowResult> {
+  return prisma.$transaction(async (tx) => {
+    const funnel = await tx.funnel.create({
+      data: {
+        ownerId: input.ownerId,
+        expertId: input.expertId ?? null,
+        code: `funnel_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        slug: input.funnelName.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 50),
+        name: input.funnelName,
+        status: 'draft',
+        definition: {},
+      },
+    });
+
+    const stagesResult: Array<{
+      stageId: string;
+      stageName: string;
+      products: string[];
+    }> = [];
+
+    let totalProductsCreated = 0;
+
+    for (const stageInput of input.stages) {
+      const productIds: string[] = [];
+
+      for (const courseId of stageInput.courseIds) {
+        const productId = await generateProductFromCourse(courseId, input.ownerId);
+        productIds.push(productId);
+        totalProductsCreated++;
+      }
+
+      for (const productId of productIds) {
+        await tx.funnelProduct.create({
+          data: {
+            funnelId: funnel.id,
+            productId,
+          },
+        });
+      }
+
+      stagesResult.push({
+        stageId: `stage_${stageInput.order}`,
+        stageName: stageInput.name,
+        products: productIds,
+      });
+    }
+
+    return {
+      funnelId: funnel.id,
+      stagesCreated: input.stages.length,
+      productsCreated: totalProductsCreated,
+      stages: stagesResult,
+    };
   });
+}
 
-  // 4. Зв'язування products з funnel
-  await Promise.all(
-    createdProducts.map(product =>
-      prisma.funnelProduct.create({
-        data: {
-          funnelId: funnel.id,
-          productId: product.id,
-        },
-      })
-    )
+// ────────────────────────────────────────────────
+// CREATE WORKFLOW FROM ALL COURSES
+// ────────────────────────────────────────────────
+export async function createWorkflowFromAllCourses(
+  funnelName: string,
+  ownerId: string,
+  expertId?: string | null
+): Promise<WorkflowResult> {
+  const courses: CourseWithProducts[] = await getAllCourses(true);
+
+  if (courses.length === 0) {
+    throw new Error('No active courses available');
+  }
+
+  const coursesPerStage = 5;
+  const stages: WorkflowInput['stages'] = [];
+
+  for (let i = 0; i < courses.length; i += coursesPerStage) {
+    const stageCourses = courses.slice(i, i + coursesPerStage); // типізовано CourseWithProducts[]
+    stages.push({
+      name: `Stage ${Math.floor(i / coursesPerStage) + 1}`,
+      order: Math.floor(i / coursesPerStage) + 1,
+      courseIds: stageCourses.map((course) => course.id), // чисто, без any
+    });
+  }
+
+  return createFullWorkflow({
+    funnelName,
+    ownerId,
+    expertId,
+    stages,
+  });
+}
+
+export async function createQuickFunnel(
+  ownerId: string,
+  expertId?: string | null
+): Promise<WorkflowResult> {
+  return createWorkflowFromAllCourses(
+    `Auto Funnel ${new Date().toISOString().split('T')[0]}`,
+    ownerId,
+    expertId
   );
-
-  const fullFunnel = await getFunnelById(funnel.id);
-
-  return {
-    funnel: fullFunnel!,
-    aiResult,
-  };
 }

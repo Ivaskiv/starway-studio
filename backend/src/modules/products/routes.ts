@@ -25,9 +25,9 @@ router.get('/my/list', authRequired, getMyProducts);
 router.post('/:id/enroll', authRequired, enrollInProduct);
 router.get('/:id/access', authRequired, checkAccess);
 
-// Public routes
-router.get('/', getProducts);
-router.get('/:id', getProduct);
+// Scoped routes
+router.get('/', authRequired, getProducts);
+router.get('/:id', authRequired, getProduct);
 
 // Admin routes (auth required)
 router.post('/', authRequired, createProductHandler);

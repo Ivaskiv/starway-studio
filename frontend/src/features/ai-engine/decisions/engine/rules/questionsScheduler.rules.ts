@@ -28,7 +28,7 @@ export const questionsSchedulerRule = async (ctx: DecisionContext): Promise<Deci
           id: (ctx.payload as { questionId?: string })?.questionId,
           // якщо є
         },
-        status: 'pending',
+        status: 'PENDING',
       },
     ];
 

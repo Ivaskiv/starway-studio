@@ -2,11 +2,12 @@
 
 import LoadingFallback from '@/components/LoadingFallback';
 import ProtectedRoute from '@/features/auth/components/ProtectedRoute';
-import { restoreToken } from '@/features/auth/services/auth.slice';
-import { getToken } from '@/features/auth/services/token';
-import type { AccessKey } from '@/features/auth/types/auth.types';
 import DashboardLayout from '@/features/dashboard/layout/DashboardLayout';
 import MainLayout from '@/layout/MainLayout';
+import type { AccessKey } from '@/features/auth/types/auth.types';
+import { useFrontendReady } from '@/hooks/useFrontendReady';
+import { restoreToken } from '@/features/auth/services/auth.slice';
+import { getToken } from '@/features/auth/services/token';
 import { applyAccentColor, loadAccentColor } from '@/shared/utils/accent.utils';
 import { applyUiTheme, loadUiTheme } from '@/shared/utils/theme.utils';
 import { Suspense, lazy, useEffect, useState, type ReactElement, type ReactNode } from 'react';
@@ -31,7 +32,9 @@ const AIMentor = lazy(() => import('@/features/ai-mentor/pages/AIMentorPage'));
 const AIGenerator = lazy(() => import('@/features/ai-generator/pages/AIGeneratorPage'));
 const AIProducerConsole = lazy(() => import('@/features/ai-generator/pages/AIProducerConsolePage'));
 const Products = lazy(() => import('@/features/products/pages/ProductsPage'));
+const ProductCreation = lazy(() => import('@/features/product-creation/pages/ProductCreationPage'));
 const FunnelEditor = lazy(() => import('@/features/funnels/pages/FunnelEditorPage'));
+const AIFunnelBuilder = lazy(() => import('@/features/funnels/pages/AIFunnelBuilderPage'));
 const Profile = lazy(() => import('@/features/user/pages/UserProfilePage'));
 const InfoPage = lazy(() => import('@/pages/InfoPage'));
 const MentorLanding = lazy(() => import('@/features/ai-mentor/pages/MentorLanding'));
@@ -71,12 +74,12 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   { path: '/dashboard/courses', element: <Courses />, ability: 'products.manage', showDeniedScreen: true },
   { path: '/dashboard/ai-mentor', element: <AIMentor />, ability: 'mentor.core' },
   { path: '/dashboard/ai-generator', element: <AIGenerator />, ability: 'ai.basic' },
-  // fix code_x: dedicated AI funnel entry opens same builder in funnel mode for clearer IA.
-  { path: '/dashboard/ai-funnel', element: <AIGenerator />, ability: 'ai.basic' },
+  { path: '/dashboard/ai-funnel', element: <AIFunnelBuilder />, ability: 'ai.basic' },
   { path: '/dashboard/ai-producer-console', element: <AIProducerConsole />, ability: 'ai.basic' },
   { path: '/dashboard/funnels/:id/edit', element: <FunnelEditor />, ability: 'dashboard.view' },
   // fix code_x: products page stays accessible for all authenticated users with locked premium cards and subscribe CTA.
   { path: '/dashboard/products', element: <Products />, ability: 'dashboard.view' },
+  { path: '/dashboard/product-create', element: <ProductCreation />, ability: 'dashboard.view' },
   { path: '/dashboard/profile', element: <Profile />, ability: 'profile.view' },
   { path: '/dashboard/settings', element: <Settings />, ability: 'settings.manage' },
   { path: '/dashboard/subscription', element: <Subscription />, ability: 'dashboard.view' },
@@ -119,6 +122,12 @@ function withGuard(route: RouteConfig): ReactElement {
 }
 
 export default function App() {
+   const frontendReady = useFrontendReady();
+
+  if (!frontendReady) {
+    return <div>Фронтенд ще не запущено. Будь ласка, почекайте...</div>;
+  }
+
   return (
     <BrowserRouter>
       <AuthRestore>

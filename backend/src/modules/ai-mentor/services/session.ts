@@ -5,7 +5,41 @@
  */
 
 import { prisma } from '@/db/client.js';
-import type { MentorSession, MentorMessage } from '../types.js';
+import type { MentorMessage, MentorSession } from '../types.js';
+
+async function getOrCreateMentorId(userId: string): Promise<string> {
+  const existing = await prisma.mentor.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const expert = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { expertId: true },
+  });
+  const expertId = expert?.expertId ?? process.env.DEFAULT_AI_EXPERT_ID;
+  if (!expertId) {
+    throw new Error('Cannot create AI mentor: missing expertId');
+  }
+
+  const created = await prisma.mentor.create({
+    data: {
+      userId,
+      expertId,
+      name: 'AI Mentor',
+      slug: `ai-mentor-${userId}`,
+      onboardingStage: 'ENTRY',
+      rules: {},
+      summary: {},
+      meta: {},
+      isActive: true,
+    },
+    select: { id: true },
+  });
+
+  return created.id;
+}
 
 export async function getOrCreateSession(
   userId: string,
@@ -31,9 +65,12 @@ export async function getOrCreateSession(
   }
 
   // Create new session
+  const mentorId = await getOrCreateMentorId(userId);
   const session = await prisma.mentorSession.create({
     data: {
+      mentorId, 
       userId,
+      date: new Date(),
       startedAt: new Date(),
       lastMessageAt: new Date()
     }
@@ -87,8 +124,10 @@ export async function saveMessage(data: {
   text: string;
   metadata?: Record<string, any>;
 }): Promise<MentorMessage> {
+  const mentorId = await getOrCreateMentorId(data.userId);
   const message = await prisma.mentorMessage.create({
     data: {
+      mentorId,
       sessionId: data.sessionId,
       userId: data.userId,
       role: data.role.toUpperCase() as any,
@@ -103,11 +142,17 @@ export async function updateSessionActivity(
   sessionId: string,
   onboardingStage?: string
 ): Promise<void> {
+  const normalizedStage =
+    onboardingStage &&
+    ['ENTRY', 'VISION', 'GOAL', 'CHOICE', 'ACTIONS', 'COMPLETED'].includes(onboardingStage)
+      ? (onboardingStage as 'ENTRY' | 'VISION' | 'GOAL' | 'CHOICE' | 'ACTIONS' | 'COMPLETED')
+      : undefined;
+
   await prisma.mentorSession.update({
     where: { id: sessionId },
     data: {
       lastMessageAt: new Date(),
-      ...(onboardingStage && { onboardingStage })
+      ...(normalizedStage && { onboardingStage: normalizedStage })
     }
   });
 }

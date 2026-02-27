@@ -3,7 +3,7 @@
  * Mini-Courses Controller
  */
 
-import { Request, Response, NextFunction } from 'express';
+import {  Response, NextFunction } from 'express';
 import {
   getCourseRecommendations,
   getAllCourses,
@@ -11,8 +11,9 @@ import {
   enrollInCourse,
   getUserEnrollments
 } from '@/modules/mini-courses/servise.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
 
-export async function getRecommendations(req: Request, res: Response, next: NextFunction) {
+export async function getRecommendations(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -25,7 +26,7 @@ export async function getRecommendations(req: Request, res: Response, next: Next
   }
 }
 
-export async function getCourses(req: Request, res: Response, next: NextFunction) {
+export async function getCourses(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const courses = await getAllCourses();
     return res.status(200).json(courses);
@@ -35,7 +36,7 @@ export async function getCourses(req: Request, res: Response, next: NextFunction
   }
 }
 
-export async function getCourse(req: Request, res: Response, next: NextFunction) {
+export async function getCourse(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
     const course = await getCourseById(id);
@@ -51,7 +52,7 @@ export async function getCourse(req: Request, res: Response, next: NextFunction)
   }
 }
 
-export async function enroll(req: Request, res: Response, next: NextFunction) {
+export async function enroll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -70,7 +71,7 @@ export async function enroll(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export async function getMyEnrollments(req: Request, res: Response, next: NextFunction) {
+export async function getMyEnrollments(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

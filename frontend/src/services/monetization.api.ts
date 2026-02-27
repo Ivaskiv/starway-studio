@@ -52,7 +52,7 @@ export interface Transaction {
   type: 'payment' | 'refund' | 'subscription';
   amount: number;
   currency: 'UAH' | 'USD' | 'EUR';
-  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  status: 'PENDING' | 'COMPLETED' | 'failed' | 'refunded';
   paymentMethod: 'card' | 'paypal' | 'crypto' | 'bank_transfer';
   description?: string;
   metadata?: any;
@@ -85,7 +85,7 @@ export interface Refund {
   amount: number;
   currency: 'UAH' | 'USD' | 'EUR';
   reason?: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'PENDING' | 'COMPLETED' | 'failed';
   createdAt: string;
 }
 

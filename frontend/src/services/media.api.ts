@@ -1,4 +1,5 @@
 // frontend/src/services/media.api.ts
+import { useEffect, useState } from 'react';
 import { api } from './api';
 
 export interface Media {
@@ -22,7 +23,7 @@ export interface Media {
 export interface UploadProgress {
   id: string;
   progress: number;
-  status: 'uploading' | 'processing' | 'completed' | 'failed';
+  status: 'uploading' | 'processing' | 'COMPLETED' | 'failed';
 }
 
 export interface Folder {
@@ -154,3 +155,27 @@ export const {
   useDeleteAvatarMutation,
   useGetStorageStatsQuery,
 } = mediaApi;
+
+// Re-exported helper hook for responsive layout; placed here for shared usage.
+export function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia(query).matches;
+  });
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const handleChange = (event: MediaQueryListEvent) => setMatches(event.matches);
+    media.addEventListener
+      ? media.addEventListener('change', handleChange)
+      : media.addListener(handleChange);
+    setMatches(media.matches);
+    return () => {
+      media.removeEventListener
+        ? media.removeEventListener('change', handleChange)
+        : media.removeListener(handleChange);
+    };
+  }, [query]);
+
+  return matches;
+}

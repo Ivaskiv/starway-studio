@@ -5,20 +5,21 @@ import { cn } from '@/lib/utils';
 
 type Size = 'sm' | 'md' | 'lg';
 type Variant = 'solid' | 'outline' | 'ghost' | 'glass';
-type Color = 'orange' | 'purple' | 'white' | 'gray' | 'green' | 'blue' | 'red';
+type Color = 'accent' | 'muted' | 'white' | 'orange' | 'purple' | 'green' | 'blue' | 'red' | 'gray';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
   variant?: Variant;
   color?: Color;
   size?: Size;
-  loading?: boolean;               
+  loading?: boolean;
   loadingText?: string;
   leftIcon?: LucideIcon;
   rightIcon?: LucideIcon;
   fullWidth?: boolean;
   animate?: boolean;
   pulse?: boolean;
+  active?: boolean;
 }
 
 const sizes: Record<Size, string> = {
@@ -34,50 +35,37 @@ const iconSizes: Record<Size, string> = {
 };
 
 const colors: Record<Color, Record<Variant, string>> = {
-  orange: {
-    // fix code_x: main "orange" palette now follows user-selected accent tokens globally.
-    solid: 'text-white border border-transparent bg-[image:var(--accent-gradient)] hover:brightness-110 shadow-lg',
-    outline: 'border-2 border-[color:rgba(var(--accent-rgb),0.6)] text-[var(--color-accent)] hover:bg-[color:rgba(var(--accent-rgb),0.1)]',
-    ghost: 'text-[var(--color-accent)] hover:bg-[color:rgba(var(--accent-rgb),0.1)]',
-    glass: 'bg-[color:rgba(var(--accent-rgb),0.12)] backdrop-blur-md border border-[color:rgba(var(--accent-rgb),0.35)] text-[var(--color-accent-soft)] hover:bg-[color:rgba(var(--accent-rgb),0.2)]',
+  accent: {
+    solid:
+      'text-[var(--text)] border border-transparent bg-[color:var(--accent)] shadow-[0_20px_35px_rgba(var(--accent-rgb),0.35)] hover:shadow-[0_30px_45px_rgba(var(--accent-rgb),0.45)]',
+    outline: 'border border-[color:var(--accent)] text-[var(--accent)] bg-[color:rgba(var(--accent-rgb),0.08)]',
+    ghost: 'text-[var(--accent)] bg-transparent hover:bg-[color:rgba(var(--accent-rgb),0.12)]',
+    glass:
+      'bg-[color:var(--glass)] text-[var(--accent)] border border-[color:var(--glass-border)] backdrop-blur-2xl shadow-[0_10px_40px_rgba(var(--glass-accent-glow),0.25)]',
   },
-  purple: {
-    // fix code_x: legacy "purple" buttons now follow selected accent to keep one coherent palette.
-    solid: 'text-white border border-transparent bg-[image:var(--accent-gradient)] hover:brightness-110 shadow-lg',
-    outline: 'border-2 border-[color:rgba(var(--accent-rgb),0.6)] text-[var(--color-accent)] hover:bg-[color:rgba(var(--accent-rgb),0.1)]',
-    ghost: 'text-[var(--color-accent)] hover:bg-[color:rgba(var(--accent-rgb),0.1)]',
-    glass: 'bg-[color:rgba(var(--accent-rgb),0.12)] backdrop-blur-md border border-[color:rgba(var(--accent-rgb),0.35)] text-[var(--color-accent-soft)] hover:bg-[color:rgba(var(--accent-rgb),0.2)]',
-  },
-  green: {
-    solid: 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-500/25 hover:shadow-green-500/40',
-    outline: 'border-2 border-green-500 text-green-500 hover:bg-green-500/10',
-    ghost: 'text-green-500 hover:bg-green-500/10',
-    glass: 'bg-green-500/10 backdrop-blur-md border border-green-500/20 text-green-400 hover:bg-green-500/20',
-  },
-  blue: {
-    solid: 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40',
-    outline: 'border-2 border-blue-500 text-blue-500 hover:bg-blue-500/10',
-    ghost: 'text-blue-500 hover:bg-blue-500/10',
-    glass: 'bg-blue-500/10 backdrop-blur-md border border-blue-500/20 text-blue-400 hover:bg-blue-500/20',
-  },
-  red: {
-    solid: 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 shadow-lg shadow-red-500/25 hover:shadow-red-500/40',
-    outline: 'border-2 border-red-500 text-red-500 hover:bg-red-500/10',
-    ghost: 'text-red-500 hover:bg-red-500/10',
-    glass: 'bg-red-500/10 backdrop-blur-md border border-red-500/20 text-red-400 hover:bg-red-500/20',
+  muted: {
+    solid: 'bg-[color:var(--bg-soft)] text-[var(--text)] border border-transparent shadow-[0_15px_30px_rgba(0,0,0,0.25)]',
+    outline: 'border border-[color:var(--text)] text-[var(--text)] bg-transparent',
+    ghost: 'text-[var(--text-secondary)] bg-transparent hover:bg-[color:rgba(var(--text-rgb),0.08)]',
+    glass:
+      'bg-[color:var(--glass)] text-[var(--text-secondary)] border border-[color:rgba(var(--text-rgb),0.2)] backdrop-blur-2xl shadow-[0_6px_25px_rgba(var(--glass-rgb),0.25)]',
   },
   white: {
-    solid: 'bg-white text-gray-900 hover:bg-gray-100',
-    outline: 'border-2 border-white text-white hover:bg-white/10',
-    ghost: 'text-white hover:bg-white/10',
-    glass: 'bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20',
+    solid: 'bg-white text-gray-900 shadow-[0_15px_40px_rgba(255,255,255,0.15)]',
+    outline: 'border border-white text-white bg-transparent',
+    ghost: 'text-white bg-transparent hover:bg-white/10',
+    glass:
+      'bg-white/10 text-white border border-white/20 backdrop-blur-2xl shadow-[0_10px_30px_rgba(255,255,255,0.15)]',
   },
-  gray: {
-    solid: 'bg-gray-600 text-white hover:bg-gray-700',
-    outline: 'border-2 border-gray-500 text-gray-400 hover:bg-gray-500/10',
-    ghost: 'text-gray-400 hover:bg-gray-500/10',
-    glass: 'bg-gray-500/10 backdrop-blur-md border border-gray-500/20 text-gray-400 hover:bg-gray-500/20',
-  },
+};
+
+const aliasMap: Record<string, Color> = {
+  orange: 'accent',
+  purple: 'accent',
+  green: 'muted',
+  blue: 'muted',
+  red: 'muted',
+  gray: 'muted',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -96,11 +84,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       animate = false,
       pulse = false,
+      active = false,
       type = 'button',
       ...props
     },
     ref
   ) => {
+    const resolvedColor = colors[color] ? color : (aliasMap[color] as Color) || 'accent';
+    const activeClasses =
+      active && variant === 'solid'
+        ? 'border-[color:rgba(var(--accent-rgb),0.55)] bg-[color:rgba(var(--accent-rgb),0.22)] text-white shadow-[0_20px_35px_rgba(var(--accent-rgb),0.32)] hover:bg-[color:rgba(var(--accent-rgb),0.32)]'
+        : '';
+
     return (
       <button
         ref={ref}
@@ -109,11 +104,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.5)]',
           sizes[size],
-          colors[color][variant],
+          colors[resolvedColor][variant],
           fullWidth && 'w-full',
           (disabled || loading) && 'opacity-60 cursor-not-allowed',
           animate && 'hover:scale-105 active:scale-95',
           pulse && 'animate-pulse',
+          activeClasses,
           className
         )}
         {...props}

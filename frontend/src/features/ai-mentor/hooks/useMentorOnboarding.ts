@@ -3,19 +3,19 @@
  * Керування онбордингом для paid користувачів (72 години)
  */
 
+import type { RootState } from '@/app/store';
 import { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
-import type { RootState } from '@/app/store';
-import type { OnboardingStage, OnboardingProgress } from '../types/mentor.types';
 import {
-  ONBOARDING_STAGES,
   ONBOARDING_RULES,
+  ONBOARDING_STAGES,
+  calculateOnboardingProgress,
+  getNextOnboardingStage,
   getOnboardingStageByHours,
   isOnboardingStageAccessible,
-  getNextOnboardingStage,
-  calculateOnboardingProgress,
-  shouldShowOnboardingReminder
+  shouldShowOnboardingReminder,
 } from '../config/onboarding.config';
+import type { OnboardingProgress, OnboardingStage } from '../types/mentor.types';
 
 // ============================================================================
 // HOOK
@@ -25,7 +25,7 @@ export function useMentorOnboarding() {
   const user = useSelector((state: RootState) => state.auth.user);
   // fix code_x: onboarding payload can exist in runtime response even if local User type is narrower.
   const onboarding = useSelector((state: RootState) => (state.auth.user as any)?.onboarding);
-  
+
   const [showReminder, setShowReminder] = useState(false);
 
   // Розрахунок прогресу
@@ -44,8 +44,8 @@ export function useMentorOnboarding() {
       startedAt,
       completedStages,
       currentStageStartedAt: onboarding.currentStageStartedAt || startedAt,
-      isCompleted: currentStage === 'completed',
-      hoursElapsed
+      isCompleted: currentStage === 'COMPLETED',
+      hoursElapsed,
     };
   }, [onboarding, user]);
 
@@ -56,21 +56,14 @@ export function useMentorOnboarding() {
       return;
     }
 
-    const shouldShow = shouldShowOnboardingReminder(
-      progress.stage,
-      progress.currentStageStartedAt
-    );
+    const shouldShow = shouldShowOnboardingReminder(progress.stage, progress.currentStageStartedAt);
     setShowReminder(shouldShow);
   }, [progress]);
 
   // Методи
   const canAccessStage = (stage: OnboardingStage): boolean => {
     if (!progress) return false;
-    return isOnboardingStageAccessible(
-      progress.stage,
-      stage,
-      progress.hoursElapsed
-    );
+    return isOnboardingStageAccessible(progress.stage, stage, progress.hoursElapsed);
   };
 
   const getCurrentStageConfig = () => {
@@ -108,13 +101,13 @@ export function useMentorOnboarding() {
     const stageConfig = ONBOARDING_STAGES[progress.stage];
     const stageStartHour = stageConfig.timeWindow.startHour;
     const stageEndHour = stageConfig.timeWindow.endHour;
-    
+
     if (stageEndHour === Infinity) return null;
 
     const stageDurationHours = stageEndHour - stageStartHour;
     const hoursInStage = calculateHoursElapsed(progress.currentStageStartedAt);
     const remainingHours = Math.max(0, stageDurationHours - hoursInStage);
-    
+
     const hours = Math.floor(remainingHours);
     const minutes = Math.round((remainingHours - hours) * 60);
 
@@ -139,7 +132,7 @@ export function useMentorOnboarding() {
 
     // Конфіг
     stages: ONBOARDING_STAGES,
-    rules: ONBOARDING_RULES
+    rules: ONBOARDING_RULES,
   };
 }
 

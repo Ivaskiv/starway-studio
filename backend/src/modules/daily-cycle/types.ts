@@ -1,141 +1,88 @@
-// backend/src/modules/daily-cycle/daily.types.ts
-import { DailyChoice, DailyDrain, DailyState } from '@prisma/client';
+// backend/src/modules/daily-cycle/types.ts
+
+import type {
+  DailyChoice,
+  DailyDrain,
+  DailyState,
+  Prisma,
+} from '@/db/generated/prisma/client.js';
+
+// ======================================================
+// MICRO SUPPORT (зберігається в JSON колонці Prisma)
+// ======================================================
 
 export interface MicroSupportItem {
   id: string;
   action: string;
   durationDays: number;
+  completed?: boolean; // опціонально — відмітка виконання
 }
 
-export interface DailyAnswer {
-  id: string;
-  question: string;
-  answer: string;
-  createdAt: Date;
-}
+// ======================================================
+// ANSWERS
+// ======================================================
+
 export interface DailyAnswerInput {
   question: string;
   answer: string;
 }
+export interface DailyEntryForAi {
+  answers: {
+    question: string;
+    answer: string;
+  }[];
+}
+// ======================================================
+// DTO З ФРОНТА (БЕЗ userId, date, id)
+// ======================================================
 
-
-
-export interface CreateDailyEntryInput {
+export interface DailyEntryDTO {
   state: DailyState;
   drain?: DailyDrain | null;
   choice: DailyChoice;
-  dayFact?: string;
-  answers?: Partial<DailyAnswerInput>[];
+  dayFact: string;
   microSupport?: MicroSupportItem[];
+  answers?: DailyAnswerInput[];
 }
 
+// ======================================================
+// SERVICE INPUT (ТЕ ЩО ПОТРІБНО СЕРВІСУ)
+// ======================================================
 
-export interface DecisionCheck {
-  id: string;
-  choice: DailyChoice;
-  alignsWithGoal: boolean;
-  isBetrayingDecision: boolean;
-  aiExplanation: string;
-  createdAt: Date;
-}
-
-export interface DecisionCheckInput {
-  checkType: string;              // "goal_alignment", "fear_based", ...
-  result: 'pass' | 'fail';        // AI verdict
-  comment?: string;               // коротко
-  explanation?: string;           // розгорнуто
-  dueDate?: number | null;        // days
-}
-
-
-export interface MicroTask {
-  id: string;
-  userId: string;
-  title: string;
-  description: string | null;
-  source: string;
-  completed: boolean;
-  completedAt: Date | null;
-  dueDate: Date | null;
-  linkedDailyEntryId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface MicroTaskInput {
-  title: string;
-  description?: string;
-  durationDays?: number; 
-}
-
-
-export interface DailyEntry {
-  id: string;
-  userId: string;
-  date: Date;
+export type JsonMicroSupport = Prisma.InputJsonValue; // замість MicroSupportItem[] напряму
+export interface DailyEntryInput {
+  id?: string; // робимо опційним для запиту на створення
   state: DailyState;
-  drain: DailyDrain | null;
+  drain?: DailyDrain | null;
   choice: DailyChoice;
   dayFact: string;
-  microSupport: MicroSupportItem[];
-  aiAnalysis: string | null;
-  answers: DailyAnswer[];
-  decisionChecks: DecisionCheck[];
-  createdAt: Date;
-  updatedAt: Date;
+  microSupport?: JsonMicroSupport;
+  date?: string | Date; // щоб можна було передавати строку з фронта
 }
 
+export interface UpsertDailyEntryInput extends DailyEntryInput {
+  entryId: string;
+  userId: string;
+  expertId: string;
+  date: Date;
+}
+export interface DailyEntryInput {
+  state: DailyState;
+  drain?: DailyDrain | null;
+  choice: DailyChoice;
+  dayFact: string;
+  microSupport?: JsonMicroSupport;
+}
+// ======================================================
+// DAILY ACCESS
+// ======================================================
 
 export interface DailyAccess {
   canCreateEntry: boolean;
-  historyLimit: number | null;
-  microTaskLimit: number | null;
-  pdfAccess: boolean;
-  daysLeft?: number;
+  historyLimit: number;
 }
+// ======================================================
+// EXPORT ENUMS
+// ======================================================
 
-export interface AIAnalysisResult {
-  analysis: string;
-  microTasks?: MicroTaskInput[];
-}
-export interface AIAnalysisResult {
-  analysis: string;
-  microTasks?: MicroTaskInput[];
-  decisionChecks?: DecisionCheckInput[];
-}
-
-
-//==================
-
-export interface DailyEntry {
-  id: string;
-  userId: string;
-  date: Date;
-  state: DailyState;
-  drain: DailyDrain | null;
-  choice: DailyChoice;
-  dayFact: string;
-  microSupport: MicroSupportItem[];
-  aiAnalysis: string | null;
-  answers: DailyAnswer[];
-  decisionChecks: DecisionCheck[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-/**
- * Daily Cycle Types
- */
-
-
-export interface DailyCycleEntry {
-  id: string;
-  userId: string;
-  date: Date;
-  state: DailyState;
-  drain?: DailyDrain;
-  choice: DailyChoice;
-  dayFact: string;
-  microSupport?: any;
-  createdAt: Date;
-}
+export { DailyChoice, DailyDrain, DailyState };

@@ -1,21 +1,17 @@
 // backend/src/modules/zoom/types.ts
-/**
- * Zoom Types
- */
 
-export interface ZoomSession {
-  id: string;
-  scheduledAt: Date;
-  topic: string;
-  meetingUrl?: string;
-  createdAt: Date;
-}
+import type { ZoomSession, ZoomSessionAttendee, User } from '@/db/generated/prisma/client.js';
 
-export interface ZoomAttendee {
-  id: string;
-  userId: string;
-  sessionId: string;
-  requestTopic?: string;
-  decisionMade?: string;
-  createdAt: Date;
+// Re-export Prisma типів як є — не дублюємо вручну
+export type { ZoomSession, ZoomSessionAttendee };
+
+// Розширений тип для запиту з include: { user }
+export type ZoomAttendeeWithUser = ZoomSessionAttendee & {
+  user: Pick<User, 'id' | 'name' | 'email'>;
+};
+
+// DTO для створення сесії (те що приходить з body)
+export interface CreateZoomSessionDto {
+  scheduledAt: string | Date;
+  requests:    unknown;   // Json у схемі — масив тем/запитів від attendees
 }

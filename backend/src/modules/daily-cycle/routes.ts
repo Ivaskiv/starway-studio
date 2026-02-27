@@ -1,30 +1,30 @@
-// backend/src/modules/daily-cycle/daily.routes.ts
+import express from 'express';
+const router = express.Router();
+
 import { authRequired } from '@/modules/auth/middleware/auth.js';
 import {
-  completeMicroTask,
-  getHistory,
-  getMicroTasks,
-  getTodayEntry,
-  upsertEntry,
-} from '@/modules/daily-cycle/controller.js';
-import { Router } from 'express';
+  completeTask,
+  getHistoryController,
+  getTasks,
+  getToday,
+  upsertEntry
+} from './controller.js';
 
-const router = Router();
-
-// 🔐 Всі маршрути під авторизацією
 router.use(authRequired);
 
-// ==========================
-// Daily Entries
-// ==========================
-router.get('/today', getTodayEntry);
-router.post('/entry', upsertEntry);
-router.get('/history', getHistory);
+// GET today's entry
+router.get('/today', getToday);
 
-// ==========================
-// Micro Tasks
-// ==========================
-router.get('/tasks', getMicroTasks);
-router.post('/tasks/:taskId/complete', completeMicroTask);
+// UPSERT daily entry
+router.post('/entry', upsertEntry);
+
+// GET history
+router.get('/history', getHistoryController);
+
+// GET user micro tasks
+router.get('/tasks', getTasks);
+
+// COMPLETE micro task
+router.post('/tasks/:taskId/complete', completeTask);
 
 export default router;

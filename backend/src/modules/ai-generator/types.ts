@@ -1,5 +1,22 @@
-// backend/src/modules/ai-generator/types.ts
-// fix code_x: shared DTO contracts for AI Producer phase endpoints and save pipeline.
+/**
+ * AI Generator Types - COMPLETE
+ */
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+export type FunnelType = 'FAST_CASH' | 'DIAGNOSTIC' | 'EVERGREEN';
+
+export type ProductKind = 
+  | 'WHEEL'
+  | 'AI_MENTOR'
+  | 'VIDEO_REMINDER'
+  | 'UPSELL_5_POINTS';
+
+// ==========================================
+// STEP GENERATION
+// ==========================================
 
 export interface GenerateStepInput {
   stepNumber: number;
@@ -19,6 +36,10 @@ export interface BlueprintStepInput {
   selectedContent: string;
 }
 
+// ==========================================
+// ONBOARDING
+// ==========================================
+
 export interface OwnerOnboardingPayload {
   ownerEmail?: string;
   productName?: string;
@@ -35,27 +56,18 @@ export interface OwnerOnboardingPayload {
   initialProducts?: string;
 }
 
-export interface SaveBlueprintInput {
-  blueprint: FunnelBlueprint;
-  onboarding?: OwnerOnboardingPayload;
-}
-
-export interface AIGeneratorWorkflowState {
-  currentStep: number;
-  stepsData: BlueprintStepInput[];
-  totalRemainingAttempts: number;
-  generatedBlueprint: FunnelBlueprint | null;
-  onboarding: OwnerOnboardingPayload;
-  updatedAt?: string;
-}
+// ==========================================
+// BLUEPRINT
+// ==========================================
 
 export interface FunnelBlueprint {
   id?: string;
   name: string;
-  type: 'fast_cash' | 'diagnostic' | 'evergreen';
+  type: FunnelType;
   targetAudience: string;
   painPoint?: string;
   quickWin?: string;
+  
   steps: {
     hook: string;
     diagnostic: string;
@@ -63,24 +75,28 @@ export interface FunnelBlueprint {
     coreOffer: string;
     upsell: string;
   };
+  
   coreOffer: {
     name: string;
     price: number;
     format: string;
   };
+  
   upsell?: {
     name: string;
     price: number;
   } | null;
+  
   financialModel: {
     averageCheck: number;
     requiredSales: number;
     conversion_rate: number;
     targetRevenue: number;
   };
+  
   automation: string[];
+  
   products?: Array<{
-    // fix code_x: accept optional template product ids from frontend (audit_basic, audit_upsell, etc.).
     id?: string;
     name: string;
     title?: string;
@@ -93,3 +109,47 @@ export interface FunnelBlueprint {
     includesMentorship?: boolean;
   }>;
 }
+
+export interface ProductBlueprint {
+  kind: ProductKind;
+  name: string;
+  description?: string;
+  price: number;
+  currency: 'EUR';
+  config: Record<string, any>;
+}
+
+// ==========================================
+// WORKFLOW
+// ==========================================
+
+export interface AIGeneratorWorkflowState {
+  currentStep: number;
+  stepsData: BlueprintStepInput[];
+  totalRemainingAttempts: number;
+  generatedBlueprint: FunnelBlueprint | null;
+  onboarding: OwnerOnboardingPayload;
+  updatedAt?: string;
+  version?: number;
+}
+
+// ==========================================
+// SAVE BLUEPRINT
+// ==========================================
+
+export interface SaveBlueprintInput {
+  blueprint: FunnelBlueprint;
+  onboarding?: OwnerOnboardingPayload;
+}
+
+export interface SaveBlueprintResult {
+  funnelId: string;
+  productIds: string[];
+}
+
+// ==========================================
+// CONSTANTS
+// ==========================================
+
+export const TOTAL_PHASES = 11;
+export const AI_PRODUCER_WORKFLOW_KEY = 'aiProducerWorkflow';

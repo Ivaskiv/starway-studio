@@ -1,48 +1,46 @@
-// backend/src/modules/products/types.ts
-import type { Product as PrismaProduct, ProductMember as PrismaProductMember } from '@prisma/client';
+import type {
+  Product as PrismaProduct,
+  Enrollment as PrismaEnrollment,
+} from '@/db/generated/prisma/client.js';
 
-// ✅ Використовуємо Prisma types напряму
 export type Product = PrismaProduct;
+export type Enrollment = PrismaEnrollment;
 
-export type ProductMember = PrismaProductMember;
-
-// ✅ Product з інформацією про enrollment
+/** Product + enrollment для конкретного юзера */
 export interface ProductWithEnrollment extends Product {
   enrollment: {
-    id: string;
+    id:         string;
     enrolledAt: Date;
-    expiresAt: Date | null;
-    trialEnd: Date | null;
-    purchased: boolean;
+    trialEnd:   Date | null;   // тільки trialEnd, expiresAt немає
+    purchased:  boolean;
   } | null;
 }
 
-// ✅ Input types
 export interface CreateProductInput {
-  code: string;
-  name: string;
+  code:         string;
+  name:         string;
   description?: string;
-  ownerId: string;
-  priceCents?: number;
-  currency?: string;
+  ownerId:      string;        // Prisma схема: Product.ownerId
+  priceCents?:  number;
+  currency?:    string;
   durationDays?: number;
-  features?: Record<string, any>;
-  limits?: Record<string, any>;
+  features?:   Record<string, unknown>;
+  limits?:     Record<string, unknown>;
 }
 
 export interface UpdateProductInput {
-  name?: string;
-  description?: string;
-  priceCents?: number;
-  currency?: string;
+  name?:         string;
+  description?:  string;
+  priceCents?:   number;
+  currency?:     string;
   durationDays?: number;
-  features?: Record<string, any>;
-  limits?: Record<string, any>;
+  features?:    Record<string, unknown>;
+  limits?:      Record<string, unknown>;
 }
 
 export interface EnrollUserInput {
-  userId: string;
-  productId: string;
-  purchased?: boolean;
-  trialDays?: number;
+  userId:      string;
+  productId:   string;
+  purchased?:  boolean;
+  trialDays?:  number;
 }

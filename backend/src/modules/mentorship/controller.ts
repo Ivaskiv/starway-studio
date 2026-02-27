@@ -1,115 +1,108 @@
 // backend/src/modules/mentorship/controller.ts
-/**
- * Mentorship Controller
- */
-
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express'
+import type { Mentorship, MentorshipOffer } from './types.ts'
+import { MentorshipStatus } from '@/db/generated/prisma/client.js'
 import {
+  activateMentorship,
   checkMentorshipEligibility,
   createMentorshipOffer,
-  activateMentorship,
   getMentorship,
   getMentorshipOffer,
-  updateMentorshipStatus as updateMentorshipStatusService 
-} from './service.js';
-import { MentorshipStatus } from '@/modules/mentorship/types.js';
+  updateMentorshipStatus
+} from './service.js'
+import { AuthenticatedRequest } from '@/types/globalTypes.js'
 
-export const MENTORSHIP_STATUSES: MentorshipStatus[] = ['pending', 'accepted', 'rejected', 'completed'];
+// ✅ допустимі статуси для апдейту
+const MENTORSHIP_STATUSES: MentorshipStatus[] = [
+  MentorshipStatus.PENDING,
+  MentorshipStatus.ACTIVE,
+  MentorshipStatus.COMPLETED,
+  MentorshipStatus.CANCELLED,
+]
 
-export async function checkEligibility(req: Request, res: Response, next: NextFunction) {
+// ── CHECK ELIGIBILITY ───────────────────────────────────────────────
+export async function checkEligibility(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
-    const eligible = await checkMentorshipEligibility(userId);
-    return res.status(200).json({ eligible });
-  } catch (error: any) {
-    console.error('[MentorshipController] checkEligibility error:', error);
-    next(error);
+    const eligible = await checkMentorshipEligibility(userId)
+    return res.status(200).json({ eligible })
+  } catch (err) {
+    next(err)
   }
 }
 
-export async function createOffer(req: Request, res: Response, next: NextFunction) {
+// ── CREATE OFFER ───────────────────────────────────────────────────
+export async function createOffer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
-    const { reason, stabilityDays } = req.body;
-
-    if (!reason || typeof stabilityDays !== 'number') {
-      return res.status(400).json({ error: 'reason and stabilityDays required' });
+    const { expertId, stabilityDays } = req.body
+    if (!expertId || typeof stabilityDays !== 'number') {
+      return res.status(400).json({ error: 'expertId and stabilityDays required' })
     }
 
-    const offer = await createMentorshipOffer(userId, reason, stabilityDays);
-    return res.status(200).json(offer);
-  } catch (error: any) {
-    console.error('[MentorshipController] createOffer error:', error);
-    next(error);
+    const offer: MentorshipOffer = await createMentorshipOffer(userId, expertId, stabilityDays)
+    return res.status(201).json(offer)
+  } catch (err) {
+    next(err)
   }
 }
 
-export async function activate(req: Request, res: Response, next: NextFunction) {
+// ── ACTIVATE MENTORSHIP ───────────────────────────────────────────
+export async function activate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
-    const { mentorId } = req.body;
+    const mentorship: Mentorship = await activateMentorship(userId)
+    return res.status(201).json(mentorship)
+  } catch (err) {
+    next(err)
+  }
+}
 
-    if (!mentorId) {
-      return res.status(400).json({ error: 'mentorId required' });
+// ── GET MY MENTORSHIP ─────────────────────────────────────────────
+export async function getMyMentorship(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const mentorship: Mentorship | null = await getMentorship(userId)
+    return res.status(200).json(mentorship)
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ── GET MY OFFER ─────────────────────────────────────────────────
+export async function getMyOffer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const offer: MentorshipOffer | null = await getMentorshipOffer(userId)
+    return res.status(200).json(offer)
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ── UPDATE STATUS ────────────────────────────────────────────────
+export async function updateStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params
+    const { status } = req.body
+
+    if (!MENTORSHIP_STATUSES.includes(status as MentorshipStatus)) {
+      return res.status(400).json({ error: 'invalid_status' })
     }
 
-    const mentorship = await activateMentorship(userId, mentorId);
-    return res.status(200).json(mentorship);
-  } catch (error: any) {
-    console.error('[MentorshipController] activate error:', error);
-    next(error);
-  }
-}
-
-export async function getMyMentorship(req: Request, res: Response, next: NextFunction) {
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-    const mentorship = await getMentorship(userId);
-    return res.status(200).json(mentorship);
-  } catch (error: any) {
-    console.error('[MentorshipController] getMyMentorship error:', error);
-    next(error);
-  }
-}
-
-export async function getMyOffer(req: Request, res: Response, next: NextFunction) {
-  try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-    const offer = await getMentorshipOffer(userId);
-    return res.status(200).json(offer);
-  } catch (error: any) {
-    console.error('[MentorshipController] getMyOffer error:', error);
-    next(error);
-  }
-}
-
-export async function updateStatus(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { id } = req.params;
-    const { status, notes } = req.body;
-
-    // Перевірка статусу
-    if (typeof status !== 'string' || !MENTORSHIP_STATUSES.includes(status as MentorshipStatus)) {
-      return res.status(400).json({ error: 'invalid_status' });
-    }
-
-    // TS знає що це вже допустимий MentorshipStatus
-    const safeStatus = status as MentorshipStatus;
-
-    const mentorship = await updateMentorshipStatusService(id, safeStatus, notes);
-    return res.status(200).json(mentorship);
-  } catch (error: any) {
-    console.error('[MentorshipController] updateStatus error:', error);
-    next(error);
+    const mentorship: Mentorship = await updateMentorshipStatus(id, status as MentorshipStatus)
+    return res.status(200).json(mentorship)
+  } catch (err) {
+    next(err)
   }
 }

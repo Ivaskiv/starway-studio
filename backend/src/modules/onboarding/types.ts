@@ -13,6 +13,7 @@ export const ONBOARDING_STAGES = [
   'CHOICE',
   'ACTIONS',
   'COMPLETED',
+  'SETUP'
 ] as const;
 
 export type OnboardingStage = typeof ONBOARDING_STAGES[number];
@@ -101,5 +102,12 @@ export const STAGE_CONFIGS: Record<OnboardingStage, StageConfig> = {
     stage: 'COMPLETED',
     name: 'Завершено',
     prompt: 'Привітай з завершенням онбордингу.',
+  },
+  SETUP: {
+    stage: 'SETUP',
+    name: 'Підготовка',
+    prompt: 'Поясни, що буде на етапі налаштування і що він отримує.',
+    nextStage: 'ENTRY',
+    delayMinutes: 5,
   },
 };

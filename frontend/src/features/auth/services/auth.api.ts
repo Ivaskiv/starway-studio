@@ -1,7 +1,9 @@
 // frontend/src/features/auth/services/auth.api.ts
 import { api } from '@/services/api';
+import type { AuthApiResponse } from '@/types/globalTypes';
 import type {
-  AuthApiResponse,
+  CheckUserExistsInput,
+  CheckUserExistsResponse,
   ForgotPasswordInput,
   ForgotPasswordResponse,
   LoginInput,
@@ -15,6 +17,10 @@ import { clearAuth, setCredentials, updateUser } from './auth.slice';
 
 export const authApi = api.injectEndpoints({
   endpoints: builder => ({
+    checkUserExists: builder.mutation<CheckUserExistsResponse, CheckUserExistsInput>({
+      query: body => ({ url: '/auth/check-user', method: 'POST', body }),
+    }),
+
     // ── LOGIN ──────────────────────────────────────────────────────────────
     login: builder.mutation<AuthApiResponse, LoginInput>({
       query: body => ({ url: '/auth/login', method: 'POST', body }),
@@ -87,6 +93,7 @@ export const authApi = api.injectEndpoints({
 });
 
 export const {
+  useCheckUserExistsMutation,
   useLoginMutation,
   useRegisterMutation,
   useForgotPasswordMutation,

@@ -7,26 +7,53 @@ import { prisma } from '@/db/client.js';
 import { openai } from '@/lib/openai.js';
 import { VisionAnswers, VisionStatement } from './types.js';
 
+type QuestionnairePayload = {
+  idealLife: string;
+  noLongerNormal: string;
+  pointB: string;
+};
+
+function buildQuestionnaire(answers: VisionAnswers): QuestionnairePayload {
+  return {
+    idealLife: answers.idealLife,
+    noLongerNormal: answers.noLongerNormal,
+    pointB: answers.pointB,
+  };
+}
+
+function mapVision(vision: Awaited<ReturnType<typeof prisma.visionStatement.findFirst>>) {
+  if (!vision) return null;
+  const questionnaire = (vision.questionnaire ?? {}) as QuestionnairePayload;
+  return {
+    id: vision.id,
+    userId: vision.userId,
+    statement: vision.statement,
+    idealLife: questionnaire.idealLife || '',
+    noLongerNormal: questionnaire.noLongerNormal || '',
+    pointB: questionnaire.pointB || '',
+    createdAt: vision.createdAt,
+  };
+}
+
 export async function createVisionStatement(
   userId: string,
   answers: VisionAnswers
 ): Promise<VisionStatement> {
   const statement = await aiGenerateVision(answers);
+  const questionnaireData = buildQuestionnaire(answers);
 
-  // Store in questionnaire field (JsonValue)
-  const questionnaireData = {
-    idealLife: answers.idealLife,
-    noLongerNormal: answers.noLongerNormal,
-    pointB: answers.pointB
-  };
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!user) throw new Error('user_not_found');
 
   const vision = await prisma.visionStatement.create({
     data: {
       userId,
       statement,
-      questionnaire: questionnaireData, // ← FIX: Use questionnaire field
-      createdAt: new Date()
-    }
+      questionnaire: questionnaireData,
+    },
   });
 
   return {
@@ -36,29 +63,16 @@ export async function createVisionStatement(
     idealLife: answers.idealLife,
     noLongerNormal: answers.noLongerNormal,
     pointB: answers.pointB,
-    createdAt: vision.createdAt
+    createdAt: vision.createdAt,
   };
 }
 
 export async function getLatestVision(userId: string): Promise<VisionStatement | null> {
   const vision = await prisma.visionStatement.findFirst({
     where: { userId },
-    orderBy: { createdAt: 'desc' }
+    orderBy: { createdAt: 'desc' },
   });
-
-  if (!vision) return null;
-
-  const questionnaire = vision.questionnaire as any;
-
-  return {
-    id: vision.id,
-    userId: vision.userId,
-    statement: vision.statement,
-    idealLife: questionnaire?.idealLife || '',
-    noLongerNormal: questionnaire?.noLongerNormal || '',
-    pointB: questionnaire?.pointB || '',
-    createdAt: vision.createdAt
-  };
+  return mapVision(vision);
 }
 
 export async function updateVisionStatement(
@@ -66,19 +80,14 @@ export async function updateVisionStatement(
   answers: VisionAnswers
 ): Promise<VisionStatement> {
   const statement = await aiGenerateVision(answers);
-
-  const questionnaireData = {
-    idealLife: answers.idealLife,
-    noLongerNormal: answers.noLongerNormal,
-    pointB: answers.pointB
-  };
+  const questionnaireData = buildQuestionnaire(answers);
 
   const vision = await prisma.visionStatement.update({
     where: { id },
     data: {
       statement,
-      questionnaire: questionnaireData // ← FIX
-    }
+      questionnaire: questionnaireData,
+    },
   });
 
   return {
@@ -88,7 +97,7 @@ export async function updateVisionStatement(
     idealLife: answers.idealLife,
     noLongerNormal: answers.noLongerNormal,
     pointB: answers.pointB,
-    createdAt: vision.createdAt
+    createdAt: vision.createdAt,
   };
 }
 

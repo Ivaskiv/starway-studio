@@ -1,10 +1,11 @@
 import { prisma } from '@/db/client.js';
 import { isOnboardingStage, stageIndex } from '@/modules/onboarding/onboarding.utils.js';
 import type { OnboardingStage } from '@/modules/onboarding/types.js';
-import type { Request, Response, NextFunction } from 'express';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import type {  Response, NextFunction } from 'express';
 
 export function requireOnboardingStage(stage: OnboardingStage) {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.id;
       if (!userId) {

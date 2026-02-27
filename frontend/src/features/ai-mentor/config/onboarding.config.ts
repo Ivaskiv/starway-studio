@@ -30,7 +30,7 @@ export const ONBOARDING_STAGES: Record<OnboardingStage, OnboardingStageConfig> =
     timeWindow: { startHour: 0, endHour: 2 },
     required: true,
     nextStage: 'vision',
-    component: 'EntryStep'
+    component: 'EntryStep',
   },
   vision: {
     stage: 'vision',
@@ -39,7 +39,7 @@ export const ONBOARDING_STAGES: Record<OnboardingStage, OnboardingStageConfig> =
     timeWindow: { startHour: 2, endHour: 12 },
     required: true,
     nextStage: 'goal',
-    component: 'VisionStep'
+    component: 'VisionStep',
   },
   goal: {
     stage: 'goal',
@@ -48,7 +48,7 @@ export const ONBOARDING_STAGES: Record<OnboardingStage, OnboardingStageConfig> =
     timeWindow: { startHour: 12, endHour: 24 },
     required: true,
     nextStage: 'choice',
-    component: 'GoalStep'
+    component: 'GoalStep',
   },
   choice: {
     stage: 'choice',
@@ -57,7 +57,7 @@ export const ONBOARDING_STAGES: Record<OnboardingStage, OnboardingStageConfig> =
     timeWindow: { startHour: 24, endHour: 48 },
     required: true,
     nextStage: 'actions',
-    component: 'ChoiceStep'
+    component: 'ChoiceStep',
   },
   actions: {
     stage: 'actions',
@@ -65,18 +65,18 @@ export const ONBOARDING_STAGES: Record<OnboardingStage, OnboardingStageConfig> =
     description: '2-3 дії на 7 або 14 днів',
     timeWindow: { startHour: 48, endHour: 72 },
     required: true,
-    nextStage: 'completed',
-    component: 'ActionsStep'
+    nextStage: 'COMPLETED',
+    component: 'ActionsStep',
   },
   completed: {
-    stage: 'completed',
+    stage: 'COMPLETED',
     title: 'Завершено',
     description: 'Онбординг пройдено, доступ до всіх модулів',
     timeWindow: { startHour: 72, endHour: Infinity },
     required: false,
     nextStage: null,
-    component: 'CompletedStep'
-  }
+    component: 'CompletedStep',
+  },
 };
 
 // ============================================================================
@@ -86,21 +86,21 @@ export const ONBOARDING_STAGES: Record<OnboardingStage, OnboardingStageConfig> =
 export const ONBOARDING_RULES = {
   // Жорстка послідовність - не можна скіпати
   STRICT_SEQUENCE: true,
-  
+
   // Максимальний час на весь онбординг
   MAX_TOTAL_HOURS: 72,
-  
+
   // Автоматичний перехід між етапами
   AUTO_ADVANCE: false, // користувач сам переходить після завершення
-  
+
   // Нагадування якщо користувач застряг
   REMINDER_AFTER_HOURS: 6,
-  
+
   // Блокування доступу до інших модулів до завершення
   BLOCK_OTHER_MODULES: true,
-  
+
   // Допустимі модулі під час онбордингу
-  ALLOWED_MODULES_DURING_ONBOARDING: ['daily_cycle', 'wheel'] as const
+  ALLOWED_MODULES_DURING_ONBOARDING: ['daily_cycle', 'wheel'] as const,
 };
 
 // ============================================================================
@@ -109,38 +109,44 @@ export const ONBOARDING_RULES = {
 
 export const ONBOARDING_MESSAGES = {
   entry: {
-    welcome: 'Ти оплатила підписку. Тепер починається реальна робота. Жодної мотивації, жодних "ти молодець". Тільки система: СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.',
-    instruction: 'Наступні 72 години — критичні. Кожен етап відкривається у свій час. Не скіпається.',
-    cta: 'Почати'
+    welcome:
+      'Ти оплатила підписку. Тепер починається реальна робота. Жодної мотивації, жодних "ти молодець". Тільки система: СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.',
+    instruction:
+      'Наступні 72 години — критичні. Кожен етап відкривається у свій час. Не скіпається.',
+    cta: 'Почати',
   },
   vision: {
     intro: 'Час визначити бачення. Без фантазій, без "мрій". Тільки конкретика.',
     questions: [
       'Як ти хочеш жити? (не "хочу бути щасливою", а конкретно)',
       'Що більше не норма в твоєму житті?',
-      'Опиши точку Б — де ти хочеш бути через 6 місяців'
+      'Опиши точку Б — де ти хочеш бути через 6 місяців',
     ],
-    cta: 'Зберегти бачення'
+    cta: 'Зберегти бачення',
   },
   goal: {
     intro: 'Бачення є. Тепер — цілі. 5 конкретних цілей.',
-    instruction: 'Пиши не "хочу схуднути", а "схуднути на 5 кг до 01.06". Після цього оберешь 1 головну ціль.',
-    cta: 'Зберегти цілі'
+    instruction:
+      'Пиши не "хочу схуднути", а "схуднути на 5 кг до 01.06". Після цього оберешь 1 головну ціль.',
+    cta: 'Зберегти цілі',
   },
   choice: {
     intro: 'Кожен твій вибір або веде до головної цілі, або віддаляє від неї.',
-    instruction: 'AI буде фіксувати "зраду рішенню" щоразу, коли ти обиратимеш старе замість нового.',
-    cta: 'Зрозуміло'
+    instruction:
+      'AI буде фіксувати "зраду рішенню" щоразу, коли ти обиратимеш старе замість нового.',
+    cta: 'Зрозуміло',
   },
   actions: {
     intro: 'Час дій. 2-3 конкретні кроки.',
-    instruction: 'Термін: 7 або 14 днів. AI перевірятиме виконання. Без дій — все залишається на папері.',
-    cta: 'Встановити дії'
+    instruction:
+      'Термін: 7 або 14 днів. AI перевірятиме виконання. Без дій — все залишається на папері.',
+    cta: 'Встановити дії',
   },
   completed: {
-    message: 'Онбординг завершено. Тепер у тебе є: бачення, ціль, система рішень, дії. Щодня AI буде тримати тебе в рамках системи. Без поблажок.',
-    cta: 'Перейти до панелі'
-  }
+    message:
+      'Онбординг завершено. Тепер у тебе є: бачення, ціль, система рішень, дії. Щодня AI буде тримати тебе в рамках системи. Без поблажок.',
+    cta: 'Перейти до панелі',
+  },
 };
 
 // ============================================================================
@@ -149,32 +155,32 @@ export const ONBOARDING_MESSAGES = {
 
 export const ONBOARDING_VALIDATION = {
   entry: {
-    required: []
+    required: [],
   },
   vision: {
     required: ['howIWantToLive', 'whatIsNoLongerNormal', 'pointBDescription'],
     minLength: {
       howIWantToLive: 50,
       whatIsNoLongerNormal: 30,
-      pointBDescription: 50
-    }
+      pointBDescription: 50,
+    },
   },
   goal: {
     required: ['goals'],
     goalsCount: 5,
     minLength: 10,
-    mustHavePrimary: true
+    mustHavePrimary: true,
   },
   choice: {
     required: [], // ознайомлення, без вводу
-    acknowledgement: true
+    acknowledgement: true,
   },
   actions: {
     required: ['actions'],
     actionsCount: { min: 2, max: 3 },
     minLength: 10,
-    mustHaveDuration: true
-  }
+    mustHaveDuration: true,
+  },
 };
 
 // ============================================================================
@@ -187,21 +193,28 @@ export function getOnboardingStageByHours(hoursElapsed: number): OnboardingStage
   if (hoursElapsed < 24) return 'goal';
   if (hoursElapsed < 48) return 'choice';
   if (hoursElapsed < 72) return 'actions';
-  return 'completed';
+  return 'COMPLETED';
 }
 
 export function isOnboardingStageAccessible(
   currentStage: OnboardingStage,
   requestedStage: OnboardingStage,
-  hoursElapsed: number
+  hoursElapsed: number,
 ): boolean {
-  const stageOrder: OnboardingStage[] = ['entry', 'vision', 'goal', 'choice', 'actions', 'completed'];
+  const stageOrder: OnboardingStage[] = [
+    'entry',
+    'vision',
+    'goal',
+    'choice',
+    'actions',
+    'COMPLETED',
+  ];
   const currentIndex = stageOrder.indexOf(currentStage);
   const requestedIndex = stageOrder.indexOf(requestedStage);
-  
+
   // Можна тільки на поточний або попередні етапи
   if (requestedIndex > currentIndex) return false;
-  
+
   // Перевірка часового вікна
   const stageConfig = ONBOARDING_STAGES[requestedStage];
   return hoursElapsed >= stageConfig.timeWindow.startHour;
@@ -213,19 +226,19 @@ export function getNextOnboardingStage(currentStage: OnboardingStage): Onboardin
 
 export function calculateOnboardingProgress(
   startedAt: string,
-  completedStages: OnboardingStage[]
+  completedStages: OnboardingStage[],
 ): number {
-  const total = Object.keys(ONBOARDING_STAGES).length - 1; // мінус 'completed'
-  const completed = completedStages.filter(s => s !== 'completed').length;
+  const total = Object.keys(ONBOARDING_STAGES).length - 1; // мінус 'COMPLETED'
+  const completed = completedStages.filter(s => s !== 'COMPLETED').length;
   return Math.round((completed / total) * 100);
 }
 
 export function shouldShowOnboardingReminder(
   currentStage: OnboardingStage,
-  stageStartedAt: string
+  stageStartedAt: string,
 ): boolean {
-  if (currentStage === 'completed') return false;
-  
+  if (currentStage === 'COMPLETED') return false;
+
   const hoursInStage = (Date.now() - new Date(stageStartedAt).getTime()) / (1000 * 60 * 60);
   return hoursInStage >= ONBOARDING_RULES.REMINDER_AFTER_HOURS;
 }

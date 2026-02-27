@@ -10,7 +10,7 @@ export async function startTrial(userId: string) {
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
-      trialStartedAt: new Date(),
+      trialStartsAt: new Date(),
       trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     }
   });
@@ -22,12 +22,12 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      trialStartedAt: true,
+      trialStartsAt: true,
       trialEndsAt: true
     }
   });
 
-  if (!user || !user.trialStartedAt) {
+  if (!user || !user.trialStartsAt) {
     return {
       userId,
       isActive: false,
@@ -47,7 +47,7 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
     : 0;
 
   const currentDay = Math.floor(
-    (now.getTime() - user.trialStartedAt.getTime()) / (1000 * 60 * 60 * 24)
+    (now.getTime() - user.trialStartsAt.getTime()) / (1000 * 60 * 60 * 24)
   ) + 1;
 
   // Check mirrors
@@ -61,7 +61,7 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
   return {
     userId,
     isActive,
-    startedAt: user.trialStartedAt,
+    startedAt: user.trialStartsAt,
     endsAt: user.trialEndsAt,
     daysLeft,
     currentDay,

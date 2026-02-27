@@ -1,204 +1,402 @@
 // frontend/src/layout/Sidebar.tsx
-
-import { Lock } from 'lucide-react';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { ChevronDown } from 'lucide-react';
-import { Sparkles } from 'lucide-react';
-import { useAuth } from '@/features/auth/hooks/useAuth';
-import { useSmartNavigation } from '@/hooks/useSmartNavigation';
 import { ROUTES } from '@/config/routes';
-import { getMenuForLocation } from '@/config/menu';
-import { hasPaidAccess } from '@/features/user/types/user.types';
-import { useEffect, useMemo, useState } from 'react';
+import { useSmartNavigation } from '@/hooks/useSmartNavigation';
+import { useMediaQuery } from '@/services/media.api';
+import { useSystemState } from '@/shared/access/hooks/useSystemState';
+import { getToastMessage } from '@/shared/i18n/toast';
+import toast from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
+// ─────────────────────────────────────────────────────────────────────────────
+// NAVIGATION DATA
+// ─────────────────────────────────────────────────────────────────────────────
+const NAV_GROUPS = [
+  {
+    section: null,
+    items: [
+      {
+        id: 'progress',
+        label: 'Прогрес',
+        icon: '↗',
+        path: '/dashboard/progress',
+        locked: false,
+        badge: null,
+        highlight: false,
+      },
+      {
+        id: 'goals',
+        label: 'Цілі',
+        icon: '◎',
+        path: '/dashboard/goals',
+        locked: true,
+        badge: null,
+        highlight: false,
+      },
+      {
+        id: 'zoom',
+        label: 'Zoom-сесії',
+        icon: '▦',
+        path: '/dashboard/zoom',
+        locked: true,
+        badge: null,
+        highlight: false,
+      },
+    ],
+  },
+  {
+    section: 'Робота',
+    items: [
+      {
+        id: 'sessions',
+        label: 'Сесії',
+        icon: '◷',
+        path: '/dashboard/sessions',
+        locked: false,
+        badge: '3',
+        highlight: false,
+      },
+      {
+        id: 'clients',
+        label: 'Клієнти',
+        icon: '◈',
+        path: '/dashboard/clients',
+        locked: false,
+        badge: null,
+        highlight: false,
+      },
+      {
+        id: 'reports',
+        label: 'Звіти',
+        icon: '◻',
+        path: '/dashboard/reports',
+        locked: false,
+        badge: null,
+        highlight: false,
+      },
+      {
+        id: 'ai',
+        label: 'AI-аналіз',
+        icon: '✦',
+        path: '/dashboard/ai',
+        locked: false,
+        badge: '2/10',
+        highlight: true,
+      },
+    ],
+  },
+  {
+    section: 'Налаштування',
+    items: [
+      {
+        id: 'profile-s',
+        label: 'Профіль',
+        icon: '◉',
+        path: ROUTES.PROFILE,
+        locked: false,
+        badge: null,
+        highlight: false,
+      },
+      {
+        id: 'billing',
+        label: 'Підписка',
+        icon: '◈',
+        path: ROUTES.SUBSCRIPTION,
+        locked: false,
+        badge: null,
+        highlight: false,
+      },
+      {
+        id: 'help',
+        label: 'Підтримка',
+        icon: '💬',
+        path: '/dashboard/help',
+        locked: false,
+        badge: null,
+        highlight: false,
+      },
+    ],
+  },
+] as const;
 
+const NAV_CTA = [
+  { id: 'create', label: 'Create Product', path: ROUTES.PRODUCT_CREATION, moduleKey: null },
+  { id: 'ai-gen', label: 'AI Генератор', path: ROUTES.AI_GENERATOR, moduleKey: 'AI_GENERATOR' },
+  { id: 'funnel', label: 'AI Воронка', path: ROUTES.AI_FUNNEL_BUILDER, moduleKey: 'AI_FUNNEL' },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
 }
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
-  const { user } = useAuth();
-  const { navigateTo, isActive } = useSmartNavigation();
+  const { state, getModuleAccess } = useSystemState();
+  const { navigateTo, user } = useSmartNavigation();
   const { pathname } = useLocation();
+  const isMobile = useMediaQuery('(max-width:768px)');
 
-  const menuItems = getMenuForLocation('sidebar');
-  const hasPremium = user ? hasPaidAccess(user) : false;
-  const trialEnded =
-    !!user?.trialEndsAt &&
-    new Date(user.trialEndsAt).getTime() <= Date.now() &&
-    !hasPremium;
+  const hasPremium = Boolean(state?.subscription?.isActive);
+  const trialEnded = state?.trial?.endsAt
+    ? new Date(state.trial.endsAt).getTime() <= Date.now() && !state.subscription?.isActive
+    : false;
 
-  const autoExpandedPath = useMemo(() => {
-    // fix code_x: auto-expand only one relevant parent section based on current route.
-    const activeParent = menuItems.find(item => {
-      if (!item.children?.length) return false;
-      return item.children.some(child => pathname === child.path || pathname.startsWith(`${child.path}/`));
-    });
-    return activeParent?.path ?? '';
-  }, [menuItems, pathname]);
+  const handleNav = (path: string) => {
+    navigateTo(path, { requiresAuth: true });
+    if (isMobile) onToggle();
+  };
 
-  const [expandedPath, setExpandedPath] = useState<string>('');
+  const handleLocked = (path: string) => {
+    toast.error(getToastMessage('module.moduleLocked'));
+    navigateTo(`${ROUTES.SUBSCRIPTION}?from=${encodeURIComponent(path)}`, { requiresAuth: true });
+  };
 
-  useEffect(() => {
-    setExpandedPath(autoExpandedPath);
-  }, [autoExpandedPath]);
+  // ── avatar initial ──────────────────────────────────────────────────────────
+  const avatarLetter = (
+    (user as any)?.firstName?.[0] ??
+    user?.name?.[0] ??
+    user?.email?.[0] ??
+    'U'
+  ).toUpperCase();
+
+  const userName = (user as any)?.firstName
+    ? `${(user as any).firstName} ${(user as any).lastName ?? ''}`.trim()
+    : (user?.name ?? user?.email ?? '—');
+
+  const userLevel = (state as any)?.progress?.level ?? 1;
+  const userPoints = (state as any)?.progress?.points ?? 0;
 
   return (
     <aside
-      className={`${
-        collapsed ? 'w-56' : 'w-64'
-      } relative p-3 bg-slate-900/40 border-r border-white/10 h-[calc(100vh-4rem)] sticky top-16 overflow-y-hidden transition-[width] duration-300`}
+      className={[
+        collapsed ? 'w-[60px]' : 'w-[260px]',
+        'flex flex-col flex-shrink-0 bg-[#111318]',
+        'border-r border-white/[0.07] h-screen sticky top-0',
+        'transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden',
+      ].join(' ')}
     >
-      {/* fix code_x: floating toggle avoids pushing menu items downward. */}
+      {/* ── SCROLLABLE NAV ─────────────────────────────────────────────────── */}
       <div
-        className={`${
-          collapsed ? 'left-1/2 -translate-x-1/2' : '-right-4'
-        } absolute top-4 z-30`}
+        className={`flex-1 overflow-y-auto overflow-x-hidden ${collapsed ? 'px-1.5' : 'px-2.5'}`}
       >
-        <button
-          type="button"
-          onClick={onToggle}
-          className="inline-flex items-center justify-center h-8 w-8 rounded-full border border-white/15 bg-slate-900/85 text-white/80 hover:bg-slate-800 hover:text-white transition-colors shadow-[0_10px_24px_rgba(0,0,0,0.35)]"
-          aria-label={collapsed ? 'Відкрити меню' : 'Згорнути меню'}
-          title={collapsed ? 'Відкрити меню' : 'Згорнути меню'}
-        >
-          {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-        </button>
-      </div>
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={gi} className={gi < NAV_GROUPS.length - 1 ? 'mb-1' : ''}>
+            {/* section label */}
+            {group.section && !collapsed && (
+              <p className="text-[9px] font-bold tracking-[0.16em] uppercase text-white/[0.22] px-3 pt-3 pb-1.5">
+                {group.section}
+              </p>
+            )}
+            {group.section && collapsed && <div className="h-px bg-white/[0.07] mx-1 my-2" />}
 
-      <nav className="space-y-1 pt-1">
-        {menuItems.map(item => {
-          const locked = item.requiresPaid && !hasPremium;
-          const isParentActive = isActive(item.path);
-          const hasChildren = !!item.children?.length;
-          const isExpanded = hasChildren && expandedPath === item.path;
+            {/* items */}
+            {group.items.map(item => {
+              const isLocked = item.locked && !hasPremium;
+              const isItemActive = pathname.startsWith(item.path);
 
-          return (
-            <div key={item.path} className="space-y-1">
-              <div className="relative">
+              return (
                 <button
-                  title={item.label}
-                  onClick={() =>
-                    navigateTo(item.path, {
-                      ...item,
-                      requiresAuth: item.requiresAuth ?? true,
-                      onAccessDenied: () =>
-                        navigateTo(`${ROUTES.SUBSCRIPTION}?from=${encodeURIComponent(item.path)}`),
-                    })
-                  }
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded
-                    text-white/85
-                    justify-start
-                    ${isParentActive ? 'bg-[color:rgba(var(--accent-rgb),0.14)] border border-[color:rgba(var(--accent-rgb),0.35)]' : ''}
-                    ${locked ? 'opacity-55 border border-white/10' : 'hover:bg-white/5'}`}
+                  key={item.id}
+                  title={collapsed ? item.label : undefined}
+                  onClick={() => (isLocked ? handleLocked(item.path) : handleNav(item.path))}
+                  className={[
+                    'w-full flex items-center rounded-[10px] mb-0.5 transition-all duration-150 relative',
+                    collapsed ? 'justify-center px-0 py-[10px] gap-0' : 'px-3 py-[9px] gap-2.5',
+                    isItemActive
+                      ? item.highlight
+                        ? 'bg-[linear-gradient(90deg,rgba(var(--accent-rgb),0.14),rgba(var(--accent-rgb),0.04))] border border-[rgba(var(--accent-rgb),0.22)] font-semibold text-white'
+                        : 'bg-white/[0.08] font-semibold text-white'
+                      : isLocked
+                        ? 'text-white/35 opacity-50 cursor-default'
+                        : item.highlight
+                          ? 'text-white/60 hover:bg-[rgba(var(--accent-rgb),0.07)]'
+                          : 'text-white/[0.58] hover:bg-white/[0.04] hover:translate-x-0.5',
+                  ].join(' ')}
                 >
-                  {item.icon && <item.icon className="w-5 h-5 text-white/80 shrink-0" />}
-                  <span className="truncate">{item.label}</span>
-                  {locked && (
-                    <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-amber-300/90">
-                      <Lock className="w-4 h-4" />
-                      Premium
-                    </span>
+                  {/* active left bar */}
+                  {isItemActive && (
+                    <span
+                      className={[
+                        'absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[55%] rounded-r-sm',
+                        item.highlight
+                          ? 'bg-gradient-to-b from-amber-400 to-orange-500 shadow-[0_0_6px_rgba(var(--accent-rgb),0.65)]'
+                          : 'bg-[rgb(var(--accent-rgb))] shadow-[0_0_6px_rgba(var(--accent-rgb),0.5)]',
+                      ].join(' ')}
+                    />
+                  )}
+
+                  {/* symbol icon */}
+                  <span
+                    className={[
+                      'flex-shrink-0 text-center leading-none select-none w-5',
+                      collapsed ? 'text-[17px]' : 'text-[15px]',
+                      isItemActive
+                        ? item.highlight
+                          ? 'text-[rgb(var(--accent-rgb))]'
+                          : 'text-white'
+                        : isLocked
+                          ? 'text-white/25'
+                          : item.highlight
+                            ? 'text-[rgba(var(--accent-rgb),0.8)]'
+                            : 'text-white/38',
+                    ].join(' ')}
+                  >
+                    {item.icon}
+                  </span>
+
+                  {/* label + badges */}
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1 text-left text-[13.5px] truncate">{item.label}</span>
+
+                      {isLocked && (
+                        <span className="ml-auto inline-flex items-center gap-1 flex-shrink-0">
+                          <span className="text-[10px]">🔒</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[rgb(var(--accent-rgb))] text-white">
+                            Преміум
+                          </span>
+                        </span>
+                      )}
+
+                      {!isLocked && item.badge && (
+                        <span
+                          className={[
+                            'ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0',
+                            item.highlight
+                              ? 'bg-[rgba(var(--accent-rgb),0.2)] text-[rgb(var(--accent-rgb))] border border-[rgba(var(--accent-rgb),0.35)]'
+                              : 'bg-white/10 text-white/60 border border-white/10',
+                          ].join(' ')}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </>
                   )}
                 </button>
+              );
+            })}
 
-                {hasChildren && (
+            {gi < NAV_GROUPS.length - 1 && !collapsed && (
+              <div className="h-px bg-white/[0.07] mx-1 my-1.5" />
+            )}
+          </div>
+        ))}
+
+        {/* ── CTA buttons ── */}
+        {!collapsed && (
+          <>
+            <div className="h-px bg-white/[0.07] mx-1 my-2" />
+            <div className="flex flex-col gap-[7px] pb-3">
+              {NAV_CTA.map(btn => {
+                const access = btn.moduleKey ? getModuleAccess(btn.moduleKey as any) : null;
+                const locked = access?.isLocked ?? false;
+                return (
                   <button
-                    type="button"
-                    aria-label={isExpanded ? 'Згорнути підменю' : 'Розгорнути підменю'}
-                    onClick={e => {
-                      e.stopPropagation();
-                      setExpandedPath(prev => (prev === item.path ? '' : item.path));
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-md text-white/60 hover:text-white hover:bg-white/10"
+                    key={btn.id}
+                    onClick={() => (locked ? handleLocked(btn.path) : handleNav(btn.path))}
+                    className={[
+                      'flex items-center gap-2 px-3 py-[10px] rounded-[10px]',
+                      'text-[13px] font-medium text-left transition-all border whitespace-nowrap',
+                      locked
+                        ? 'bg-white/[0.02] border-white/[0.07] text-white/30'
+                        : 'bg-[rgba(var(--accent-rgb),0.08)] border-[rgba(var(--accent-rgb),0.2)] text-white/75',
+                      !locked &&
+                        'hover:bg-[rgba(var(--accent-rgb),0.15)] hover:border-[rgba(var(--accent-rgb),0.4)] hover:text-white',
+                    ].join(' ')}
                   >
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    <span
+                      className={
+                        locked
+                          ? 'text-white/20 text-[13px]'
+                          : 'text-[rgb(var(--accent-rgb))] text-[13px]'
+                      }
+                    >
+                      ✦
+                    </span>
+                    {btn.label}
+                    {locked && <span className="ml-auto text-[10px]">🔒</span>}
                   </button>
-                )}
-              </div>
-
-              {!!item.children?.length && isExpanded && (
-                <div className="ml-8 space-y-1 border-l border-white/10 pl-3">
-                  {item.children.map(child => {
-                    const childLocked = child.requiresPaid && !hasPremium;
-                    return (
-                      <button
-                        key={`${item.path}:${child.path}`}
-                        title={child.label}
-                        onClick={() =>
-                          navigateTo(child.path, {
-                            ...child,
-                            requiresAuth: child.requiresAuth ?? true,
-                            onAccessDenied: () =>
-                              navigateTo(`${ROUTES.SUBSCRIPTION}?from=${encodeURIComponent(child.path)}`),
-                          })
-                        }
-                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-sm text-white/75 text-left
-                          ${isActive(child.path) ? 'bg-[color:rgba(var(--accent-rgb),0.11)] border border-[color:rgba(var(--accent-rgb),0.3)]' : 'hover:bg-white/5'}
-                          ${childLocked ? 'opacity-55 border border-white/10' : ''}`}
-                      >
-                        {child.icon && <child.icon className="w-4 h-4 text-white/75 shrink-0" />}
-                        <span className="truncate">{child.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                );
+              })}
             </div>
-          );
-        })}
-      </nav>
+          </>
+        )}
 
-      <div className="mt-4 border-t border-white/10 pt-3 space-y-2">
-        {trialEnded && (
-          <div className="mb-3 rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2">
-            {/* fix code_x: after trial end keep data and show paywall CTA instead of hiding sections. */}
-            <p className="text-[11px] leading-relaxed text-amber-200/90">
-              Trial завершено. Дані збережені. Оберіть тариф, щоб розблокувати всі модулі.
+        {/* ── SuperAdmin ── */}
+        {state?.ui?.showAdminPanel && !collapsed && (
+          <div className="border-t border-white/[0.07] pt-3 mt-1 pb-2">
+            <p className="text-[9px] font-bold tracking-[0.16em] uppercase text-white/[0.22] px-3 pb-2">
+              SuperAdmin
+            </p>
+            {[
+              { label: 'Mentors', path: '/dashboard/ai-mentor' },
+              { label: 'Funnels', path: '/dashboard/ai-funnel' },
+              { label: 'Products', path: '/dashboard/products' },
+            ].map(btn => (
+              <button
+                key={btn.path}
+                onClick={() => handleNav(btn.path)}
+                className="w-full flex items-center px-3 py-[9px] rounded-[10px] mb-0.5 bg-white/[0.03] border border-white/[0.07] text-white/65 text-[13px] hover:bg-white/[0.06] transition-colors"
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Trial ended banner ── */}
+        {trialEnded && !collapsed && (
+          <div className="mx-0.5 my-3 p-3.5 rounded-xl border border-amber-400/35 bg-amber-500/10">
+            <p className="text-[11px] leading-relaxed text-amber-200/90 mb-2.5">
+              Trial завершено. Дані збережені. Оберіть тариф.
             </p>
             <button
-              type="button"
-              onClick={() => navigateTo(ROUTES.SUBSCRIPTION, { requiresAuth: true })}
-              className="mt-2 inline-flex w-full items-center justify-center rounded-lg border border-amber-400/45 bg-amber-500/20 px-2 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-500/30"
+              onClick={() => handleNav(ROUTES.SUBSCRIPTION)}
+              className="w-full py-1.5 rounded-[9px] border border-amber-400/45 bg-amber-500/20 text-amber-100 text-xs font-semibold hover:bg-amber-500/30 transition-colors"
             >
               Обрати тариф
             </button>
           </div>
         )}
+      </div>
 
-        {/* fix code_x: separate CTAs: AI Generator (mentor/wheel) vs AI Funnel (funnel-only flow). */}
-        <button
-          type="button"
-          onClick={() =>
-            navigateTo(`${ROUTES.AI_GENERATOR}?tab=mentor`, {
-              requiresAuth: true,
-              requiresPaid: true,
-              onAccessDenied: () =>
-                navigateTo(`${ROUTES.SUBSCRIPTION}?from=${encodeURIComponent(ROUTES.AI_GENERATOR)}`),
-            })
-          }
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[color:rgba(var(--accent-rgb),0.5)] bg-[color:rgba(var(--accent-rgb),0.2)] px-3 py-2 text-sm font-semibold text-white hover:bg-[color:rgba(var(--accent-rgb),0.3)] transition-colors whitespace-nowrap"
-        >
-          <Sparkles className="w-4 h-4 shrink-0" />
-          <span>AI Генератор</span>
-        </button>
+      {/* ── USER CARD — pinned bottom ───────────────────────────────────────── */}
+      <div
+        className={[
+          'sticky bottom-0 border-t border-white/[0.07] bg-black/20 flex-shrink-0 backdrop-blur-xl',
+          collapsed ? 'py-3 flex justify-center' : 'px-3.5 py-3 flex items-center gap-2.5',
+        ].join(' ')}
+      >
+        {/* avatar */}
+        <div className="relative flex-shrink-0">
+          <div className="w-[34px] h-[34px] rounded-[9px] bg-gradient-to-br from-[rgb(var(--accent-rgb))] to-[rgba(var(--accent-rgb),0.7)] flex items-center justify-center text-sm font-bold text-white">
+            {avatarLetter}
+          </div>
+          <div className="absolute -bottom-px -right-px w-2 h-2 rounded-full bg-emerald-400 border-[1.5px] border-[#111318]" />
+        </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            navigateTo(`${ROUTES.AI_FUNNEL_BUILDER}?tab=funnel`, {
-              requiresAuth: true,
-              requiresPaid: true,
-              onAccessDenied: () =>
-                navigateTo(`${ROUTES.SUBSCRIPTION}?from=${encodeURIComponent(ROUTES.AI_FUNNEL_BUILDER)}`),
-            })
-          }
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/15 transition-colors whitespace-nowrap"
-        >
-          <Sparkles className="w-4 h-4 shrink-0" />
-          <span>AI Воронка</span>
-        </button>
+        {/* name + level — only when expanded */}
+        {!collapsed && (
+          <>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-white truncate leading-tight">
+                {userName}
+              </p>
+              <p className="text-[10px] text-white/38 flex items-center gap-1 mt-0.5">
+                <span className="text-amber-400 font-semibold">▲ Lv.{userLevel}</span>
+                <span className="text-white/[0.18]">·</span>
+                <span>{userPoints.toLocaleString('uk-UA')} pts</span>
+              </p>
+            </div>
+            <button
+              title="Вийти"
+              className="flex-shrink-0 bg-transparent border-none cursor-pointer text-white/38 hover:text-red-400 text-base p-1 rounded-[7px] transition-colors"
+            >
+              ↩
+            </button>
+          </>
+        )}
       </div>
     </aside>
   );

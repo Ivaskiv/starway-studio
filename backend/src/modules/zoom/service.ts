@@ -1,81 +1,68 @@
-// backend/src/modules/zoom/srvices.ts
-/**
- * Zoom Service
- */
-
+// backend/src/modules/zoom/service.ts
 import { prisma } from '@/db/client.js';
-import { ZoomSession, ZoomAttendee } from './types.js';
+import { Prisma, ZoomStatus } from '@/db/generated/prisma/client.js';
+import type { ZoomAttendeeWithUser, ZoomSession, ZoomSessionAttendee } from './types.js';
 
 export async function createZoomSession(
+  expertId: string,
   scheduledAt: Date,
-  topic: string
+  topic: string,
+  requests: any[] = [],
 ): Promise<ZoomSession> {
-  const session = await prisma.zoomSession.create({
+  return prisma.zoomSession.create({
     data: {
+      expertId,  // ← прямий expertId (найпростіший і найшвидший спосіб)
       scheduledAt,
       topic,
-      createdAt: new Date()
-    }
+      requests: requests as Prisma.InputJsonValue,
+      status: ZoomStatus.SCHEDULED,
+    },
   });
-
-  return session as unknown as ZoomSession;
 }
 
 export async function getUpcomingZoom(): Promise<ZoomSession | null> {
-  const now = new Date();
-  
-  const session = await prisma.zoomSession.findFirst({
+  return prisma.zoomSession.findFirst({
     where: {
-      scheduledAt: { gte: now }
+      scheduledAt: { gte: new Date() },
+      status: ZoomStatus.SCHEDULED,
     },
-    orderBy: { scheduledAt: 'asc' }
+    orderBy: { scheduledAt: 'asc' },
   });
-
-  return session as unknown as ZoomSession | null;
 }
 
 export async function registerAttendee(
   userId: string,
   sessionId: string,
-  requestTopic?: string
-): Promise<ZoomAttendee> {
-  const attendee = await prisma.zoomSessionAttendee.create({
-    data: {
-      userId,
-      sessionId,
-      requestTopic,
-      createdAt: new Date()
-    }
+): Promise<ZoomSessionAttendee> {
+  return prisma.zoomSessionAttendee.create({
+    data: { userId, sessionId },
   });
-
-  return attendee as unknown as ZoomAttendee;
 }
 
-export async function saveZoomDecision(
+export async function markAttended(
   attendeeId: string,
-  decision: string
-): Promise<ZoomAttendee> {
-  const attendee = await prisma.zoomSessionAttendee.update({
+): Promise<ZoomSessionAttendee> {
+  return prisma.zoomSessionAttendee.update({
     where: { id: attendeeId },
-    data: { decisionMade: decision }
+    data: { attended: true },
   });
-
-  return attendee as unknown as ZoomAttendee;
 }
 
-export async function getSessionAttendees(sessionId: string): Promise<ZoomAttendee[]> {
-  const attendees = await prisma.zoomSessionAttendee.findMany({
-    where: { sessionId },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true
-        }
-      }
-    }
+export async function savePostSessionReport(
+  sessionId: string,
+  report: Prisma.InputJsonValue,
+): Promise<ZoomSession> {
+  return prisma.zoomSession.update({
+    where: { id: sessionId },
+    data: { postSessionReport: report, status: ZoomStatus.COMPLETED },
   });
+}
 
-  return attendees as unknown as ZoomAttendee[];
+export async function getSessionAttendees(
+  sessionId: string,
+): Promise<ZoomAttendeeWithUser[]> {
+  return prisma.zoomSessionAttendee.findMany({
+    where: { sessionId },
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
 }

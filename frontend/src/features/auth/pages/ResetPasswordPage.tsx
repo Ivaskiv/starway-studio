@@ -1,4 +1,6 @@
 import { useResetPasswordMutation } from '@/features/auth/services/auth.api';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { getToastMessage } from '@/shared/i18n/toast';
 import { Button, Input } from '@/ui';
 import { type FormEvent, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -8,6 +10,8 @@ export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [resetPassword, { isLoading }] = useResetPasswordMutation();
+  const { user } = useAuth();
+  const lang = user?.settings?.language ?? 'uk';
 
   const initialToken = searchParams.get('token') ?? '';
   const [token, setToken] = useState(initialToken);
@@ -18,27 +22,27 @@ export default function ResetPasswordPage() {
     e.preventDefault();
 
     if (!token.trim()) {
-      toast.error('Вкажіть токен скидання');
+      toast.error(getToastMessage('auth.resetNeedToken', lang));
       return;
     }
     if (password.length < 8) {
-      toast.error('Пароль має бути мінімум 8 символів');
+      toast.error(getToastMessage('auth.resetPasswordMinLen', lang));
       return;
     }
     if (password !== confirmPassword) {
-      toast.error('Паролі не співпадають');
+      toast.error(getToastMessage('auth.resetPasswordsMismatch', lang));
       return;
     }
 
     try {
       await resetPassword({ token: token.trim(), password }).unwrap();
-      toast.success('Пароль змінено. Увійдіть з новим паролем.');
-      navigate('/', { replace: true });
+      toast.success(getToastMessage('auth.resetSuccess', lang));
+      navigate('/?auth=login', { replace: true });
     } catch (err: any) {
       const message =
         err?.data?.error === 'invalid_or_expired_reset_token'
-          ? 'Токен недійсний або застарів'
-          : err?.data?.message || 'Не вдалося змінити пароль';
+          ? getToastMessage('auth.resetTokenInvalid', lang)
+          : err?.data?.message || getToastMessage('auth.resetFailed', lang);
       toast.error(message);
     }
   };

@@ -1,107 +1,116 @@
 // backend/src/modules/streak/service.ts
-/**
- * Streak Service - FIXED
- */
+// Управління streak: create / update / break
+// Без класів, тільки функції
+// ЦЕ РІШЕННЯ ТОП
+// ✅ динамічне — правила можна міняти
+// ✅ модульне — streak не знає, ХТО його тригерить
+// ✅ швидке — UI не рахує нічого
+// ✅ версійне — ruleVer дозволяє міграції без болю
+// ✅ telegram-ready — current / longest готові
+
+// backend/src/modules/streak/service.ts
+// Вся бізнес-логіка streak (ядро)
 
 import { prisma } from '@/db/client.js';
+import { STREAK_RULES, type StreakInfo, type StreakRuleKey } from './types.js';
 
-interface StreakData {
-  currentStreak: number;
-  longestStreak: number;
-  lastEntryDate: Date | null;
-  totalDays: number;
-  stabilityDays: number;
-  drainDays: number;
+function diffDays(a: Date, b: Date): number {
+  return Math.floor((a.getTime() - b.getTime()) / 86_400_000);
 }
 
-export async function getStreak(userId: string): Promise<StreakData> {
+/**
+ * Реєстрація активності у streak
+ * Викликається з wheel / daily / tasks / telegram
+ */
+export async function registerStreakActivity(
+  userId: string,
+  expertId: string,
+  ruleKey: StreakRuleKey,
+  at: Date = new Date(),
+) {
+  const rule = STREAK_RULES[ruleKey];
+  if (!rule) throw new Error('streak_rule_not_found');
+
   const streak = await prisma.streak.findUnique({
-    where: { userId }
+    where: {
+      userId_ruleKey: { userId, ruleKey }, // ✅ працює ТІЛЬКИ бо є @@unique
+    },
   });
 
+  // ── NEW ────────────────────────────────
   if (!streak) {
-    return {
-      currentStreak: 0,
-      longestStreak: 0,
-      lastEntryDate: null,
-      totalDays: 0,
-      stabilityDays: 0,
-      drainDays: 0
-    };
-  }
-
-  return {
-    currentStreak: streak.currentStreak,
-    longestStreak: streak.longestStreak,
-    lastEntryDate: streak.lastEntryDate,
-    totalDays: streak.totalDays,
-    stabilityDays: streak.stabilityDays,
-    drainDays: streak.drainDays
-  };
-}
-
-export async function updateStreak(userId: string, choice: string): Promise<StreakData> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const existing = await prisma.streak.findUnique({
-    where: { userId }
-  });
-
-  if (!existing) {
-    // Create new
-    const newStreak = await prisma.streak.create({
+    return prisma.streak.create({
       data: {
         userId,
-        currentStreak: 1,
-        longestStreak: 1,
-        lastEntryDate: today,
+        expertId,
+        ruleKey,
+        ruleVer: rule.version,
+        startAt: at,
+        lastAt: at,
+        current: 1,
+        longest: 1,
         totalDays: 1,
-        stabilityDays: choice === 'обрала нове' ? 1 : 0,
-        drainDays: choice === 'підтверджувала старе' ? 1 : 0
-      }
+      },
     });
-
-    return {
-      currentStreak: newStreak.currentStreak,
-      longestStreak: newStreak.longestStreak,
-      lastEntryDate: newStreak.lastEntryDate,
-      totalDays: newStreak.totalDays,
-      stabilityDays: newStreak.stabilityDays,
-      drainDays: newStreak.drainDays
-    };
   }
 
-  // Update existing
-  const lastDate = existing.lastEntryDate ? new Date(existing.lastEntryDate) : null;
-  const isConsecutive = lastDate
-    ? Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)) === 1
-    : false;
+  const gap = diffDays(at, streak.lastAt);
 
-  const newStreakCount = isConsecutive ? existing.currentStreak + 1 : 1;
+  // ── SAME DAY ───────────────────────────
+  if (gap === 0) return streak;
 
-  const updated = await prisma.streak.update({
-    where: { userId },
-    data: {
-      currentStreak: newStreakCount,
-      longestStreak: Math.max(newStreakCount, existing.longestStreak),
-      lastEntryDate: today,
-      totalDays: existing.totalDays + 1,
-      stabilityDays: choice === 'обрала нове' 
-        ? existing.stabilityDays + 1 
-        : existing.stabilityDays,
-      drainDays: choice === 'підтверджувала старе' 
-        ? existing.drainDays + 1 
-        : existing.drainDays
-    }
+  // ── CONTINUE ───────────────────────────
+  if (gap <= rule.maxGapDays) {
+    const current = streak.current + gap;
+
+    return prisma.streak.update({
+      where: { id: streak.id },
+      data: {
+        lastAt: at,
+        current,
+        longest: Math.max(streak.longest, current),
+        totalDays: streak.totalDays + gap,
+      },
+    });
+  }
+
+  // ── BREAK ──────────────────────────────
+  await prisma.streak.update({
+    where: { id: streak.id },
+    data: { endAt: at },
   });
 
-  return {
-    currentStreak: updated.currentStreak,
-    longestStreak: updated.longestStreak,
-    lastEntryDate: updated.lastEntryDate,
-    totalDays: updated.totalDays,
-    stabilityDays: updated.stabilityDays,
-    drainDays: updated.drainDays
-  };
+  return prisma.streak.create({
+    data: {
+      userId,
+      expertId,
+      ruleKey,
+      ruleVer: rule.version,
+      startAt: at,
+      lastAt: at,
+      current: 1,
+      longest: streak.longest,
+      totalDays: streak.totalDays + 1,
+    },
+  });
+}
+
+/**
+ * Отримати streak info для UI
+ */
+export async function getUserStreaks(
+  userId: string,
+): Promise<StreakInfo[]> {
+  const streaks = await prisma.streak.findMany({
+    where: { userId, endAt: null },
+  });
+
+  return streaks.map(s => ({
+    ruleKey: s.ruleKey as StreakRuleKey,
+    current: s.current,
+    longest: s.longest,
+    totalDays: s.totalDays,
+    lastAt: s.lastAt.toISOString(),
+    isActive: true,
+  }));
 }

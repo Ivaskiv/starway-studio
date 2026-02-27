@@ -37,3 +37,58 @@ export interface UserAccessResult {
   role: string;
   trialEnd: Date | null;
 }
+
+export type ModuleAccessLevel = 'TRIAL' | 'PAID' | 'NONE';
+export type ModuleLockReason = 'TRIAL_EXPIRED' | 'NO_SUBSCRIPTION' | null;
+
+export interface UserSystemState {
+  products: {
+    owned: Array<{ id: string; name: string; type?: string | null; status?: string | null }>;
+    subscribed: Array<{
+      id: string;
+      name: string;
+      status: 'trial' | 'paid' | 'locked';
+      expiresAt: Date | null;
+    }>;
+    templates: Array<{
+      id: string;
+      name: string;
+      result: string;
+      modules: string[];
+      finalStateExample: string;
+      cta: 'TRY_7_DAYS' | 'CREATE';
+    }>;
+  };
+  aiModules: Array<{
+    moduleId: string;
+    accessLevel: ModuleAccessLevel;
+    isLocked: boolean;
+    lockReason: ModuleLockReason;
+  }>;
+  permissions: {
+    role: 'USER' | 'SUPERADMIN';
+    canCreateProducts: boolean;
+    canBypassTrial: boolean;
+    canSeeAdminTools: boolean;
+  };
+  trial: {
+    isActive: boolean;
+    daysLeft: number;
+    endsAt: Date | null;
+  };
+  subscription: {
+    isActive: boolean;
+    status: string | null;
+    expiresAt: Date | null;
+  };
+  ui: {
+    showMyProductsSection: boolean;
+    showCreateProductCta: boolean;
+    showTemplatesSection: boolean;
+    showAdminPanel: boolean;
+  };
+  meta: {
+    version: number;
+    updatedAt: string;
+  };
+}

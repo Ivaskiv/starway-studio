@@ -7,6 +7,7 @@ import { Toaster } from 'react-hot-toast';
 
 import App from './App';
 import { store } from './app/store';
+import { TOASTER_CONFIG } from './shared/config/toaster';
 import { applyAccentColor, loadAccentColor } from './shared/utils/accent.utils';
 import './styles/index.scss';
 
@@ -22,7 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     {/* <GoogleOAuthProvider clientId={clientId}> */}
     <Provider store={store}>
-      <Toaster position="top-right" />
+      <Toaster {...TOASTER_CONFIG} />
       <App />
     </Provider>
     {/* </GoogleOAuthProvider> */}

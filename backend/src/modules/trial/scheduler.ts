@@ -16,16 +16,16 @@ export async function scheduleTrialMirror(userId: string, day: 4 | 7) {
 export async function runTrialMirrorCheck() {
   const users = await prisma.user.findMany({
     where: {
-      trialStartedAt: { not: null },
+      trialStartsAt: { not: null },
       trialEndsAt: { gte: new Date() }
     }
   });
 
   for (const user of users) {
-    if (!user.trialStartedAt) continue;
+    if (!user.trialStartsAt) continue;
 
     const daysPassed = Math.floor(
-      (Date.now() - user.trialStartedAt.getTime()) / (1000 * 60 * 60 * 24)
+      (Date.now() - user.trialStartsAt.getTime()) / (1000 * 60 * 60 * 24)
     );
 
     if (daysPassed === 4 || daysPassed === 7) {

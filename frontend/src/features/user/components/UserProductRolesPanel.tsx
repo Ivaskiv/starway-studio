@@ -18,7 +18,9 @@ export default function UserProductRolesPanel() {
   const userId = user?.id;
 
   const { data: myProducts = [], isLoading: myLoading } = useGetMyProductsQuery();
-  const { data: allProducts = [], isLoading: allLoading } = useGetAllProductsQuery();
+  const { data: allProducts = [], isLoading: allLoading } = useGetAllProductsQuery({
+    includeAll: Boolean(user?.isSuperAdmin),
+  });
   const { data: progress } = useGetProgressQuery(userId || '', { skip: !userId });
 
   if (!userId) return null;

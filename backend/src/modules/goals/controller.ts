@@ -3,10 +3,11 @@
  * Goals Controller
  */
 
-import { Request, Response, NextFunction } from 'express';
+import {Response, NextFunction } from 'express';
 import { setGoals, getLatestGoals, getPrimaryGoal, checkChoiceAlignment } from './service.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
 
-export async function createGoals(req: Request, res: Response, next: NextFunction) {
+export async function createGoals(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -29,7 +30,7 @@ export async function createGoals(req: Request, res: Response, next: NextFunctio
   }
 }
 
-export async function getGoals(req: Request, res: Response, next: NextFunction) {
+export async function getGoals(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -42,7 +43,7 @@ export async function getGoals(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export async function getPrimary(req: Request, res: Response, next: NextFunction) {
+export async function getPrimary(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -55,7 +56,7 @@ export async function getPrimary(req: Request, res: Response, next: NextFunction
   }
 }
 
-export async function checkAlignment(req: Request, res: Response, next: NextFunction) {
+export async function checkAlignment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

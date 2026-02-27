@@ -25,11 +25,12 @@ export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
     <div
       ref={ref}
       className={cn(
-        'relative rounded-2xl border p-5 shadow-xl shadow-black/10',
-        'bg-white/5 border-white/10',
+        'relative rounded-2xl border p-5',
+        'bg-[color:rgba(var(--ambient-rgb-2),0.36)] border-[color:rgba(var(--glass-border-rgb),0.24)]',
+        'shadow-[0_16px_40px_rgba(0,0,0,0.32),0_6px_24px_rgba(var(--glass-shadow-rgb),0.18)]',
         blurMap[blur],
-        hover && 'transition-all duration-300 hover:bg-white/10 hover:border-white/20 hover:-translate-y-0.5',
-        glow && 'before:absolute before:inset-0 before:rounded-2xl before:bg-gradient-to-r before:from-orange-500/20 before:via-purple-500/20 before:to-orange-500/20 before:blur-xl before:-z-10 before:opacity-50',
+        hover && 'transition-all duration-300 hover:bg-[color:rgba(var(--ambient-rgb-2),0.46)] hover:border-[color:rgba(var(--glass-border-rgb),0.42)] hover:-translate-y-0.5',
+        glow && 'before:absolute before:inset-0 before:rounded-2xl before:bg-[radial-gradient(circle_at_25%_20%,rgba(var(--accent-soft-rgb),0.26),transparent_62%)] before:blur-xl before:-z-10 before:opacity-80',
         className
       )}
       {...props}

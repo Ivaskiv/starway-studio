@@ -1,11 +1,12 @@
 // backend/src/modules/stats/routes.ts
 import { prisma } from '@/db/client.js';
 import { authRequired } from '@/modules/auth/middleware/auth.js';
-import { Router } from 'express';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { Response, Router } from 'express';
 
 const router = Router();
 
-router.get('/dashboard', authRequired, async (req, res) => {
+router.get('/dashboard', authRequired, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
 
@@ -18,7 +19,7 @@ router.get('/dashboard', authRequired, async (req, res) => {
     });
 
     const completedTasks = await prisma.microTask.count({
-      where: { userId, completed: true },
+      where: { userId, completedAt: { not: null } },
     });
 
     res.json({

@@ -12,15 +12,14 @@ import {
 } from 'lucide-react';
 
 export type WheelArea =
-  | 'health'
-  | 'career'
-  | 'finance'
+  | 'money'
+  | 'realization'
   | 'relationships'
-  | 'personal_growth'
-  | 'fun'
+  | 'energy_body'
+  | 'freedom_time'
+  | 'inner_support'
   | 'environment'
-  | 'innerSupport'
-  | 'spirituality';
+  | 'meaning_direction';
 
 export interface WheelCategory {
   id: string;
@@ -85,28 +84,20 @@ export const normalizeWheelCategory = withNormalizer<any, WheelCategory>(api => 
 // ==============================
 export const WHEEL_CATEGORIES: WheelCategory[] = [
   {
-    id: 'health',
-    name: 'Health',
-    nameUk: "Здоров'я",
-    emoji: '💪',
-    color: '#10B981',
-    description: 'Енергія, сон, харчування',
-  },
-  {
-    id: 'career',
-    name: 'Career',
-    nameUk: "Кар'єра",
-    emoji: '💼',
-    color: '#3B82F6',
-    description: 'Навчання, навички',
-  },
-  {
-    id: 'finance',
-    name: 'Finance',
-    nameUk: 'Фінанси',
+    id: 'money',
+    name: 'Money',
+    nameUk: 'Гроші',
     emoji: '💰',
     color: '#F59E0B',
-    description: 'Дохід, стабільність',
+    description: 'Доходи, фінансова стабільність',
+  },
+  {
+    id: 'realization',
+    name: 'Realization',
+    nameUk: 'Реалізація',
+    emoji: '💼',
+    color: '#3B82F6',
+    description: 'Справи, результат, самореалізація',
   },
   {
     id: 'relationships',
@@ -117,36 +108,44 @@ export const WHEEL_CATEGORIES: WheelCategory[] = [
     description: 'Сім’я, друзі, робота',
   },
   {
-    id: 'personal_growth',
-    name: 'Personal Growth',
-    nameUk: 'Особистий ріст',
-    emoji: '🌱',
+    id: 'energy_body',
+    name: 'Energy / Body',
+    nameUk: 'Енергія / тіло',
+    emoji: '⚡',
     color: '#8B5CF6',
-    description: 'Навички, розвиток',
+    description: 'Ресурс, сон, фізичний стан',
   },
   {
-    id: 'fun',
-    name: 'Fun & Recreation',
-    nameUk: 'Відпочинок',
-    emoji: '🎉',
+    id: 'freedom_time',
+    name: 'Freedom / Time',
+    nameUk: 'Свобода / час',
+    emoji: '🕒',
     color: '#EC4899',
-    description: 'Хобі, радість, розваги',
+    description: 'Контроль часу, простір для рішень',
   },
   {
     id: 'environment',
     name: 'Environment',
-    nameUk: 'Оточення',
+    nameUk: 'Середовище',
     emoji: '🏠',
     color: '#06B6D4',
-    description: 'Середовище, цінності',
+    description: 'Люди та умови навколо',
   },
   {
-    id: 'spirituality',
-    name: 'Spirituality',
-    nameUk: 'Духовність',
-    emoji: '✨',
+    id: 'inner_support',
+    name: 'Inner Support',
+    nameUk: 'Внутрішня опора',
+    emoji: '🧭',
     color: '#A855F7',
-    description: 'Внутрішня гармонія, медитація',
+    description: 'Стійкість, внутрішній стан',
+  },
+  {
+    id: 'meaning_direction',
+    name: 'Meaning / Direction',
+    nameUk: 'Сенс / напрям',
+    emoji: '🎯',
+    color: '#14B8A6',
+    description: 'Вектор та сенс руху',
   },
 ];
 
@@ -299,7 +298,3 @@ export type WheelCooldownKey =
 // PDF — ресурси
 // логіка trial не має ламатись
 
-export interface WheelScore {
-  id: string;
-  value: number;
-}

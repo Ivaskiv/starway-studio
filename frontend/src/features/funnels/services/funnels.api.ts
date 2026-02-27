@@ -21,6 +21,17 @@ export type FunnelEntity = {
 
 export const funnelsApi = api.injectEndpoints({
   endpoints: (builder) => ({
+    getFunnels: builder.query<FunnelEntity[], { includeAll?: boolean } | void>({
+      query: (args) => ({
+        url: '/funnels',
+        method: 'GET',
+        params: args?.includeAll ? { includeAll: 1 } : undefined,
+      }),
+      transformResponse: (response: { funnels: FunnelEntity[] } | FunnelEntity[]) =>
+        Array.isArray(response) ? response : response.funnels,
+      providesTags: ['Funnel'],
+    }),
+
     getFunnelById: builder.query<{ funnel: FunnelEntity }, string>({
       query: (id) => ({
         url: `/funnels/${id}`,
@@ -70,6 +81,7 @@ export const funnelsApi = api.injectEndpoints({
 });
 
 export const {
+  useGetFunnelsQuery,
   useGetFunnelByIdQuery,
   useUpdateFunnelMutation,
   useGetAttachableProductsQuery,

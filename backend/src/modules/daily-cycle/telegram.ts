@@ -1,24 +1,31 @@
-// backend/src/modules/daily-cycle/daily.telegram.ts
-import { Context } from 'telegraf';
-import { prisma } from '../../db/client.js';
-import { checkDailyAccess } from './subscription.js';
+// backend/src/modules/daily-cycle/telegram.ts
+/**
+ * Daily Cycle Telegram - FIXED
+ */
+
 import { bot as sharedTelegramBot } from '@/modules/wheel/telegram.js';
+import type { Context } from 'telegraf';
+import { prisma } from '@/db/client.js';
+import { checkDailyAccess } from './subscription.js';
+import type { DailyCheckUser } from './subscription.js'; // імпорт типу
 
 let dailyCommandsRegistered = false;
 
+// REGISTER COMMANDS
 export function registerDailyTelegramCommands() {
-  // fix code_x: prevent duplicate command registration on tsx hot-reload / restart.
   if (dailyCommandsRegistered) return;
   dailyCommandsRegistered = true;
 
-  /* ------------------------------------------------------------------ */
-  /* /daily — ручний виклик */
-  /* ------------------------------------------------------------------ */
   sharedTelegramBot.command('daily', async (ctx: Context) => {
-    if (!ctx.from || !ctx.chat) return;
+    if (!ctx.from) return;
 
     const user = await prisma.user.findFirst({
-      where: { telegramChatId: String(ctx.chat.id) },
+      where: { telegramUserId: ctx.from.id.toString() },
+      select: {
+        id: true,
+        subscriptionStatus: true,
+        trialEndsAt: true
+      }
     });
 
     if (!user) {
@@ -26,7 +33,13 @@ export function registerDailyTelegramCommands() {
       return;
     }
 
-    const access = checkDailyAccess(user);
+    // Перевірка доступу з типом DailyCheckUser
+    const checkUser: DailyCheckUser = {
+      subscriptionStatus: user.subscriptionStatus,
+      trialEndsAt: user.trialEndsAt
+    };
+
+    const access = checkDailyAccess(checkUser);
 
     if (!access.canCreateEntry) {
       await ctx.reply('⛔️ Доступ закінчився. Оформи підписку.');
@@ -34,64 +47,88 @@ export function registerDailyTelegramCommands() {
     }
 
     const appUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    await ctx.reply(
-      '📝 Заповни Daily у веб-додатку.',
-      {
-        reply_markup: {
-          inline_keyboard: [[{ text: 'ВІДКРИТИ', url: `${appUrl}/dashboard/cycle` }]],
-        },
-      },
-    );
+    await ctx.reply('📝 Заповни Daily у веб-додатку.', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'ВІДКРИТИ', url: `${appUrl}/dashboard/cycle` }]],
+      }
+    });
   });
 }
 
-/* ------------------------------------------------------------------ */
-/* РАНОК */
-/* ------------------------------------------------------------------ */
+// SEND MORNING QUESTION
 export async function sendMorningQuestion() {
   const users = await prisma.user.findMany({
-    where: { telegramChatId: { not: null } },
-    select: { id: true, telegramChatId: true, subscriptionStatus: true, trialEndsAt: true },
+    where: { telegramUserId: { not: null } },
+    select: {
+      id: true,
+      telegramUserId: true,
+      subscriptionStatus: true,
+      trialEndsAt: true
+    }
   });
 
-  for (const user of users) {
-    const access = checkDailyAccess(user as any);
-    if (!access.canCreateEntry) continue;
+  let sentCount = 0;
 
-    await sharedTelegramBot.telegram.sendMessage(
-      user.telegramChatId!,
-      `🌅 Ранкові питання готові!\nВідкрий /daily`,
-    );
+  for (const user of users) {
+    try {
+      const checkUser: DailyCheckUser = {
+        subscriptionStatus: user.subscriptionStatus,
+        trialEndsAt: user.trialEndsAt
+      };
+
+      const access = checkDailyAccess(checkUser);
+
+      if (!access.canCreateEntry) continue;
+
+      await sharedTelegramBot.telegram.sendMessage(
+        user.telegramUserId!,
+        `🌅 Ранкові питання готові!\nВідкрий /daily`
+      );
+
+      sentCount++;
+    } catch (error) {
+      console.error(`❌ Morning question error for user ${user.id}:`, error);
+    }
   }
+
+  console.log(`📬 Sent morning questions to ${sentCount} users`);
 }
 
-/* ------------------------------------------------------------------ */
-/* ВЕЧІР */
-/* ------------------------------------------------------------------ */
+// SEND EVENING QUESTION
 export async function sendEveningQuestion() {
   const users = await prisma.user.findMany({
-    where: { telegramChatId: { not: null } },
-    select: { id: true, telegramChatId: true, subscriptionStatus: true, trialEndsAt: true },
+    where: { telegramUserId: { not: null } },
+    select: {
+      id: true,
+      telegramUserId: true,
+      subscriptionStatus: true,
+      trialEndsAt: true
+    }
   });
 
+  let sentCount = 0;
+
   for (const user of users) {
-    const access = checkDailyAccess(user as any);
-    if (!access.canCreateEntry) continue;
+    try {
+      const checkUser: DailyCheckUser = {
+        subscriptionStatus: user.subscriptionStatus,
+        trialEndsAt: user.trialEndsAt
+      };
 
-    await sharedTelegramBot.telegram.sendMessage(
-      user.telegramChatId!,
-      `🌙 Вечірній чекін.\nНе забудь завершити Daily 👉 /daily`,
-    );
-  }
-}
+      const access = checkDailyAccess(checkUser);
 
-/* ------------------------------------------------------------------ */
-/* 🔔 Надсилаємо будь-яке повідомлення користувачу */
-/* ------------------------------------------------------------------ */
-export async function sendTelegramMessage(chatId: number | string, message: string) {
-  try {
-    await sharedTelegramBot.telegram.sendMessage(chatId, message);
-  } catch (error) {
-    console.error('Telegram send message error:', error);
+      if (!access.canCreateEntry) continue;
+
+      await sharedTelegramBot.telegram.sendMessage(
+        user.telegramUserId!,
+        `🌙 Вечірній чекін.\nНе забудь завершити Daily 👉 /daily`
+      );
+
+      sentCount++;
+    } catch (error) {
+      console.error(`❌ Evening question error for user ${user.id}:`, error);
+    }
   }
+
+  console.log(`📬 Sent evening questions to ${sentCount} users`);
 }

@@ -1,448 +1,754 @@
-// backend/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/db/generated/prisma"
+}
+
 datasource db {
   provider = "postgresql"
 }
 
-generator client {
-  provider = "prisma-client"
-  output   = "../src/db/generated/prisma"
+// ═══════════════════════════════════════════════════════════
+// CORE IDENTITY & ACCESS
+// ═══════════════════════════════════════════════════════════
+
+model SuperAdmin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-// ==========================
-// USERS & AUTH
-// ==========================
+model Expert {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  displayName      String
+  telegramBotToken String?
+  telegramBotName  String?
+  timezone         String    @default("UTC")
+  isActive         Boolean   @default(true)
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  users            User[]
+  aiMentors        AIMentor[]
+  products         Product[]
+  funnels          Funnel[]
+  subscriptions    Subscription[]
+  paymentLogs      PaymentLog[]
+  balanceConfigs   BalanceWheelConfig[]
+  miniCourses      MiniCourse[]
+  notifications    Notification[]
+  reports          Report[]
+  zoomSessions     ZoomSession[]
+  userStates       UserMentorState[]
+  balanceEntries   UserBalanceEntry[]
+  visionStatements VisionStatement[]
+  wheelAssessments WheelAssessment[]
+  mentorships      Mentorship[]
+  mentorshipOffers MentorshipOffer[]
+  microTasks       MicroTask[]
+  dailyEntries     DailyEntry[]
+  streaks          Streak[]
+
+  @@index([isActive, deletedAt])
+}
+
 model User {
-  id               String   @id @default(uuid())
-  email            String   @unique
-  passwordHash     String?
-  role             UserRole @default(USER)
+  id               String    @id @default(uuid())
+  expertId         String?
+  email            String?   @unique
   name             String?
   firstName        String?
   lastName         String?
-  telegramUserName String?
+  telegramUserId   String?   @unique
+  telegramUserName String?   @unique
   telegramChatId   String?
+  passwordHash     String?
+  role             Role      @default(USER)
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  // ===== Subscription & Trial =====
-  subscription                    Subscription? // один-до-одного
-  // ===== Onboarding =====
-  onboardingStage                 OnboardingStage? @default(ENTRY)
-  onboardingStartedAt             DateTime?
-  onboardingCompletedAt           DateTime?
-  onboardingCurrentStageStartedAt DateTime?
+  trialStartsAt         DateTime?
+  trialEndsAt           DateTime?
+  lastLoginAt           DateTime?
+  onboardingStage       String?
+  onboardingStartedAt   DateTime?
+  onboardingCompletedAt DateTime?
+  uiSettings            Json?
 
-  lastLoginAt DateTime?
+  expert               Expert?                @relation(fields: [expertId], references: [id])
+  subscriptions        Subscription[]
+  enrollments          Enrollment[]
+  mentorStates         UserMentorState[]
+  balanceEntries       UserBalanceEntry[]
+  payments             PaymentLog[]
+  progress             UserProgress?
+  funnels              Funnel[]
+  products             Product[]
+  miniCourses          MiniCourse[]
+  goalsSets            GoalsSet[]
+  courseEnrollments    CourseEnrollment[]
+  dailyEntries         DailyEntry[]
+  mentorships          Mentorship[]
+  mentorshipOffers     MentorshipOffer[]
+  microTasks           MicroTask[]
+  notifications        Notification[]
+  reports              Report[]
+  streaks              Streak[]
+  telegramLinks        TelegramLink[]
+  visionStatements     VisionStatement[]
+  wheelAssessments     WheelAssessment[]
+  zoomSessionAttendees ZoomSessionAttendee[]
+  fivePointsEnrollment FivePointsEnrollment[]
+  mentorConfig         MentorConfig?
 
-  // ===== Relations =====
-  mentor                Mentor?
-  enrollments           Enrollment[]
-  userProgress          UserProgress?
-  wheelAssessments      WheelAssessment[]
-  dailyEntries          DailyEntry[]
-  streaks               Streak[]
-  mirrors               Mirror[]
-  actionsSets           ActionsSet[]
-  decisionChecks        DecisionCheck[]
-  microTasks            MicroTask[]
-  consultations         Consultation[]
-  zoomSessions          ZoomSessionAttendee[]
-  mentorshipOffer       MentorshipOffer?
-  mentorship            Mentorship?
-  mentorConfigs         MentorConfig[]
-  mentorContexts        MentorContext[]
-  mentorMessages        MentorMessage[]
-  fivePointsEnrollments FivePointsEnrollment[]
-  funnels               Funnel[]
-  ownedProducts         Product[]
-  productMembers        ProductMember[]
-  videos                Video[]
-  mentorSessions        MentorSession[]
-  visionStatements      VisionStatement[]
-  goalsSets             GoalsSet[]
-  telegramLinks         TelegramLink[]
-  onboardingSessions    OnboardingSession[]
-  choiceBetrayal        ChoiceBetrayal[]
-
-  @@index([email])
-  @@map("users")
+  @@unique([expertId, telegramUserId])
+  @@index([expertId])
+  @@index([telegramUserName])
+  @@index([expertId, email])
+  @@index([expertId, deletedAt])
+  @@index([expertId, createdAt])
 }
 
-// ===== Composite Types =====
+// ═══════════════════════════════════════════════════════════
+// AI MENTOR SYSTEM
+// ═══════════════════════════════════════════════════════════
 
-model Enrollment {
-  id String @id @default(uuid())
+model AIMentor {
+  id          String  @id @default(uuid())
+  expertId    String
+  slug        String
+  name        String
+  description String?
+  niche       String?
+  isPublished Boolean @default(false)
 
-  userId    String
-  productId String
+  generatorConfig Json
+  runtimeConfig   Json
 
-  role LocalProductRole @default(viewer)
+  expert         Expert             @relation(fields: [expertId], references: [id])
+  mentorStates   UserMentorState[]
+  balanceEntries UserBalanceEntry[]
 
-  // payment
-  amount Int?
-  payRef String?
-
-  purchased Boolean   @default(false)
-  trialEnd  DateTime?
-
-  // lifecycle
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  // ======================
-  // RELATIONS
-  // ======================
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  // ======================
-  // CONSTRAINTS
-  // ======================
-  @@unique([userId, productId])
-  @@index([userId])
-  @@index([productId])
+  @@unique([expertId, slug])
 }
 
-model Subscription {
-  id     String @id @default(uuid())
-  userId String @unique
+model UserMentorState {
+  id                String   @id @default(uuid())
+  expertId          String
+  userId            String
+  aiMentorId        String
+  currentStep       String
+  context           Json     @default("{}")
+  lastInteractionAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  status SubscriptionStatus
-  plan   SubscriptionPlan?
+  expert   Expert   @relation(fields: [expertId], references: [id])
+  aiMentor AIMentor @relation(fields: [aiMentorId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  trialStartsAt DateTime?
-  trialEndsAt   DateTime?
+  @@unique([userId, aiMentorId])
+  @@unique([expertId, userId, aiMentorId])
+  @@index([expertId, lastInteractionAt])
+}
 
-  startsAt DateTime?
-  endsAt   DateTime?
-
-  autoRenew Boolean @default(false)
-
+model MentorConfig {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  config    Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRODUCTS & MONETIZATION
+// ═══════════════════════════════════════════════════════════
+
+model Product {
+  id           String       @id @default(uuid())
+  expertId     String?
+  ownerId      String
+  code         String       @unique
+  name         String
+  description  String?
+  priceCents   Int
+  currency     String       @default("EUR")
+  durationDays Int          @default(30)
+  kind         ProductKind?
+  features     Json?
+  limits       Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  expert        Expert?         @relation(fields: [expertId], references: [id])
+  owner         User            @relation(fields: [ownerId], references: [id])
+  enrollments   Enrollment[]
+  funnelLinks   FunnelProduct[]
+  subscriptions Subscription[]
+}
+
+model Enrollment {
+  id         String    @id @default(uuid())
+  userId     String
+  productId  String
+  enrolledAt DateTime  @default(now())
+  purchased  Boolean   @default(false)
+  trialEnd   DateTime?
+  expiresAt  DateTime?
+  payRef     String?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Subscription {
+  id               String             @id @default(uuid())
+  userId           String
+  expertId         String?
+  productId        String?
+  startsAt        DateTime?
+  status           SubscriptionStatus
+  planCode         String
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime?
+  autoRenew        Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expert  Expert?  @relation(fields: [expertId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([expertId, userId, status])
+}
+
+model PaymentLog {
+  id          String        @id @default(uuid())
+  userId      String
+  expertId    String
+  amountCents Int
+  currency    String        @default("EUR")
+  status      PaymentStatus
+  metadata    Json          @default("{}")
+  createdAt   DateTime      @default(now())
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expertId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// FUNNELS & COURSES
+// ═══════════════════════════════════════════════════════════
+
+model Funnel {
+  id         String      @id @default(uuid())
+  expertId   String?
+  ownerId    String
+  slug       String
+  name       String
+  code       String      @unique
+  definition Json        @default("{}")
+  blueprint  Json?
+  type       FunnelType?
+  status     String      @default("draft")
+  isActive   Boolean     @default(true)
+  deletedAt  DateTime?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  expert   Expert?         @relation(fields: [expertId], references: [id])
+  owner    User            @relation(fields: [ownerId], references: [id])
+  products FunnelProduct[]
+  stages   FunnelStage[]
+
+  @@unique([expertId, slug])
+  @@index([expertId, isActive])
+  @@index([expertId, deletedAt])
+}
+
+model FunnelProduct {
+  id        String  @id @default(uuid())
+  funnelId  String
+  productId String
+  funnel    Funnel  @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([funnelId, productId])
+}
+
+model FunnelStage {
+  id       String @id @default(cuid())
+  funnelId String
+  name     String
+
+  funnel Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+}
+
+model MiniCourse {
+  id           String    @id @default(cuid())
+  title        String
+  slug         String    @unique
+  description  String?
+  definition   Json
+  isActive     Boolean   @default(true)
+  ownerId      String
+  expertId     String?
+  priceCents   Int       @default(0)
+  durationDays Int       @default(30)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  owner  User    @relation(fields: [ownerId], references: [id])
+  expert Expert? @relation(fields: [expertId], references: [id])
+
+  @@index([ownerId])
+  @@index([expertId])
+}
+
+model Course {
+  id                String             @id @default(uuid())
+  code              String             @unique
+  name              String
+  description       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  courseEnrollments CourseEnrollment[]
+}
+
+model CourseEnrollment {
+  id          String    @id @default(uuid())
+  userId      String
+  courseId    String
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  course Course @relation(fields: [courseId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+}
+
+model FivePointsEnrollment {
+  id          String    @id @default(cuid())
+  userId      String
+  moduleId    String
+  progress    Json      @default("{}")
+  enrolledAt  DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module FivePointsModule @relation(fields: [moduleId], references: [id])
+
+  @@index([userId, moduleId])
+}
+
+model FivePointsModule {
+  id           String                 @id @default(uuid())
+  code         String                 @unique
+  title        String
+  description  String?
+  isActive     Boolean                @default(true)
+  priceCents   Int                    @default(0)
+  durationDays Int                    @default(0)
+  definition   Json                   @default("{}")
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  enrollments  FivePointsEnrollment[]
+}
+
+// ═══════════════════════════════════════════════════════════
+// USER PROGRESS & ACTIVITIES
+// ═══════════════════════════════════════════════════════════
+
+model UserProgress {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  totalPoints     Int      @default(0)
+  completedBlocks Int      @default(0)
+  level           Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DailyEntry {
+  id           String      @id @default(uuid())
+  userId       String
+  expertId     String
+  date         DateTime
+  content      Json        @default("{}")
+  state        DailyState  @default(NEUTRAL)
+  choice       DailyChoice @default(PENDING)
+  drain        DailyDrain?
+  dayFact      String?
+  aiAnalysis   String?
+  microSupport Json?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([expertId, userId])
+  @@index([userId, date])
+}
+
+model MicroTask {
+  id               String           @id @default(uuid())
+  userId           String
+  expertId         String?
+  title            String
+  description      String?
+  status           MicroTaskStatus  @default(ACTIVE)
+  reason           MicroTaskReason?
+  source           String?
+  linkedQuestionId String?
+  dueDate          DateTime?
+  completedAt      DateTime?
+  taskDetails      Json?
+  metadata         Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  expert Expert? @relation(fields: [expertId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expertId, userId])
+  @@index([userId, status])
+  @@index([dueDate])
+}
+
+model Streak {
+  id        String    @id @default(uuid())
+  userId    String
+  expertId  String
+  startAt   DateTime  @default(now())
+  endAt     DateTime?
+  current   Int       @default(1)
+  longest   Int       @default(1)
+  totalDays Int       @default(1)
+  lastAt    DateTime  @default(now())
+  ruleKey   String    @default("daily_checkin")
+  ruleVer   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ruleKey])
+  @@index([userId, expertId])
+}
+
+model GoalsSet {
+  id        String   @id @default(uuid())
+  userId    String
+  goals     Json
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// BALANCE WHEEL
+// ═══════════════════════════════════════════════════════════
+
+model BalanceWheelConfig {
+  id        String    @id @default(uuid())
+  expertId  String
+  name      String
+  spheres   Json      @default("[]")
+  version   Int       @default(1)
+  isDefault Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  expert         Expert             @relation(fields: [expertId], references: [id])
+  balanceEntries UserBalanceEntry[]
+
+  @@index([expertId, isDefault])
+  @@index([expertId, deletedAt])
+}
+
+model UserBalanceEntry {
+  id              String   @id @default(uuid())
+  expertId        String?
+  userId          String
+  aiMentorId      String?
+  balanceConfigId String
+  scores          Json     @default("{}")
+  note            String?
+  createdAt       DateTime @default(now())
+
+  balanceConfig BalanceWheelConfig @relation(fields: [balanceConfigId], references: [id])
+  aiMentor      AIMentor?          @relation(fields: [aiMentorId], references: [id])
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expert        Expert?            @relation(fields: [expertId], references: [id])
+
+  @@index([expertId, userId, createdAt])
+  @@index([expertId, userId, balanceConfigId, createdAt])
+  @@index([expertId, aiMentorId, createdAt])
+}
+
+model VisionStatement {
+  id            String   @id @default(uuid())
+  userId        String
+  expertId      String?
+  statement     String
+  questionnaire Json
+  title         String?
+  content       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  expert Expert? @relation(fields: [expertId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expertId, userId])
+}
+
+model WheelAssessment {
+  id            String   @id @default(uuid())
+  userId        String
+  expertId      String?
+  statement     String?
+  scores        Json
+  weakestSphere String?
+  focusSphere   String?
+  analysis      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  expert Expert? @relation(fields: [expertId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expertId, userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// MENTORSHIP (Legacy Support)
+// ═══════════════════════════════════════════════════════════
+
+model Mentorship {
+  id        String           @id @default(uuid())
+  expertId  String
+  userId    String
+  status    MentorshipStatus
+  startsAt  DateTime
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expertId, userId])
+}
+
+model MentorshipOffer {
+  id           String           @id @default(uuid())
+  expertId     String
+  userId       String
+  offerDetails Json             @default("{}")
+  status       MentorshipStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expertId, userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// COMMUNICATIONS & NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════
+
+model Notification {
+  id            String              @id @default(uuid())
+  expertId      String?
+  userId        String
+  channel       NotificationChannel
+  templateKey   String
+  payload       Json                @default("{}")
+  status        NotificationStatus  @default(PENDING)
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+  failureReason String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  expert Expert? @relation(fields: [expertId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expertId, status, scheduledAt])
+  @@index([templateKey, status])
+}
+
+model TelegramLink {
+  id        String   @id @default(uuid())
+  userId    String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime @default(dbgenerated("(now() + '7 days'::interval)"))
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// REPORTING & ANALYTICS
+// ═══════════════════════════════════════════════════════════
+
+model Report {
+  id          String   @id @default(uuid())
+  expertId    String
+  userId      String
+  periodStart DateTime
+  periodEnd   DateTime
+  content     Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expertId, userId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// ZOOM SESSIONS
+// ═══════════════════════════════════════════════════════════
+
+model ZoomSession {
+  id                String     @id @default(uuid())
+  expertId          String?
+  scheduledAt       DateTime
+  topic             String
+  status            ZoomStatus @default(SCHEDULED)
+  requests          Json       @default("[]")
+  postSessionReport Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  expert    Expert?               @relation(fields: [expertId], references: [id])
+  attendees ZoomSessionAttendee[]
+
+  @@index([expertId, status])
+  @@index([scheduledAt])
+}
+
+model ZoomSessionAttendee {
+  id        String   @id @default(uuid())
+  sessionId String
+  userId    String
+  attended  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  session ZoomSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════════════
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  EXPERT
+  USER
 }
 
 enum SubscriptionStatus {
   TRIAL
   ACTIVE
-  INACTIVE
+  PAST_DUE
+  CANCELED
   EXPIRED
-  CANCELLED
 }
 
-enum SubscriptionPlan {
-  FREE
-  BASIC
-  PRO
-  ENTERPRISE
-  MONTHLY
-  YEARLY
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
-enum LocalProductRole {
-  viewer // просто доступ
-  student // проходить курс
-  mentor // веде курс
-  owner // повний контроль над продуктом
+enum ProductKind {
+  WHEEL
+  AI_MENTOR
+  VIDEO_REMINDER
+  UPSELL_5_POINTS
 }
 
-// ==========================
-// USER PROGRESS
-// ==========================
-model UserProgress {
-  userId          String   @id
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  totalPoints     Int      @default(0)
-  completedBlocks Int      @default(0)
-  level           Int      @default(1)
-  updatedAt       DateTime @updatedAt
+enum FunnelType {
+  FAST_CASH
+  DIAGNOSTIC
+  EVERGREEN
 }
 
-// ==========================
-// MENTOR MODULE
-// ==========================
-model Mentor {
-  id              String          @id @default(uuid())
-  userId          String          @unique
-  onboardingStage OnboardingStage @default(ENTRY) @map("onboarding_stage")
-
-  rules   Json @default("{}")
-  summary Json @default("{}")
-  meta    Json @default("{}")
-
-  isActive Boolean @default(true)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // isActive Boolean @default(true)
-
-  messages MentorMessage[] // ← тепер Prisma знає звідки вони
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("mentors")
-}
-
-model MentorSession {
-  id              String           @id @default(uuid())
-  userId          String
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  startedAt       DateTime         @default(now())
-  lastMessageAt   DateTime         @default(now())
-  onboardingStage OnboardingStage?
-  metadata        Json?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @default(now())
-
-  messages MentorMessage[]
-
-  @@index([userId, lastMessageAt])
-  @@map("mentor_sessions")
-}
-
-model MentorMessage {
-  id String @id @default(uuid())
-
-  mentorId String
-  mentor   Mentor @relation(fields: [mentorId], references: [id], onDelete: Cascade)
-
-  sessionId String?
-  session   MentorSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  role     MentorRole
-  text     String     @db.Text
-  metadata Json?
-
-  createdAt DateTime @default(now())
-
-  @@index([mentorId, createdAt])
-  @@index([sessionId, createdAt])
-  @@index([userId, createdAt])
-  @@map("mentor_messages")
-}
-
-model MentorConfig {
-  userId    String   @id
-  config    Json
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("mentorConfigs")
-}
-
-model MentorContext {
-  id        String     @id @default(uuid())
-  userId    String
-  role      MentorRole
-  text      String     @db.Text
-  createdAt DateTime   @default(now())
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@map("mentorContext")
-}
-
-model ActionsSet {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  actions   Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-}
-
-// ==========================
-// CONSULTATIONS & ZOOM
-// ==========================
-model Consultation {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  scheduledAt DateTime
-  status      ConsultationStatus @default(PENDING)
-
-  trigger       Json?
-  triggerReason String?
-
-  notes String? @db.Text
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId, status])
-}
-
-model ZoomSession {
-  id          String     @id @default(uuid())
-  scheduledAt DateTime
-  status      ZoomStatus @default(SCHEDULED)
-
-  requests          Json
-  postSessionReport Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  attendees ZoomSessionAttendee[]
-}
-
-model ZoomSessionAttendee {
-  id        String @id @default(uuid())
-  sessionId String
-  userId    String
-
-  session ZoomSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  attended Boolean @default(false)
-
-  @@unique([sessionId, userId])
-  @@index([userId])
-}
-
-// ==========================
-// DAILY MODULE
-// ==========================
-model DailyEntry {
-  id             String          @id @default(uuid())
-  userId         String
-  user           User            @relation(fields: [userId], references: [id])
-  date           DateTime        @default(now())
-  state          DailyState
-  drain          DailyDrain?
-  choice         DailyChoice
-  dayFact        String          @db.Text
-  microSupport   Json
-  aiAnalysis     String?         @db.Text
-  answers        DailyAnswer[]
-  decisionChecks DecisionCheck[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-
-  @@unique([userId, date])
-  @@index([userId, date])
-}
-
-model DailyAnswer {
-  id           String     @id @default(uuid())
-  dailyEntryId String
-  dailyEntry   DailyEntry @relation(fields: [dailyEntryId], references: [id])
-  question     String     @db.Text
-  answer       String     @db.Text
-  createdAt    DateTime   @default(now())
-
-  @@index([dailyEntryId])
-}
-
-model DecisionCheck {
-  id                  String      @id @default(uuid())
-  userId              String
-  dailyEntryId        String
-  choice              DailyChoice
-  checkType           String
-  alignsWithGoal      Boolean
-  isBetrayingDecision Boolean
-  aiExplanation       String      @db.Text
-  comment             String?     @db.Text
-  followUpAt          DateTime?
-  createdAt           DateTime    @default(now())
-  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dailyEntry          DailyEntry  @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-}
-
-// ==========================
-// ENUMS
-// ==========================
-enum UserRole {
-  USER
-  ADMIN
-  MENTOR
-}
-
-enum OnboardingStage {
-  ENTRY
-  VISION
-  GOAL
-  CHOICE
-  ACTIONS
+enum MicroTaskStatus {
+  ACTIVE
   COMPLETED
+  EXPIRED
 }
 
-enum MentorRole {
-  USER
-  MENTOR
-  SYSTEM
+enum MicroTaskReason {
+  low_score
+  instability
+  growth
+  wheel_gap
+  stagnation
 }
 
 enum DailyState {
-  TENSION // напруга
-  FEAR // страх
-  STABILITY // стабільність
-  INNER_SUPPORT // внутрішня опора
-  CONFIDENCE // впевненість
-  JOY // радість
-  RELAXATION // розслаблення
-  SILENCE // тиша
-  INNER_PEACE // внутрішня спокій
-}
-
-enum DailyDrain {
-  DOUBT // сумнів
-  PROCRASTINATION // прокрастинація
-  EMOTIONAL_DRAIN // емоційний злив
-  EXTERNAL_PRESSURE // зовнішній тиск
-  PHYSICAL_DRAIN // фізичний злив
-  NEGATIVE_THOUGHTS // негативні думки
-  SELF_SABOTAGE // самознищення
-  ENVIRONMENTAL_PRESSURE // навколишнє тиск
+  NEUTRAL
+  HAPPY
+  SAD
+  ANXIOUS
 }
 
 enum DailyChoice {
-  CONFIRMED_OLD // підтверджувала старе
-  CHOSE_NEW // обрала нове
-  REJECTED_OLD // відмовилася від старого
-}
-
-enum MirrorType {
-  trialDay4
-  trialFinal
-  weekly
-  monthly
-}
-
-enum ConsultationStatus {
-  SCHEDULED
-  COMPLETED
-  CANCELLED
   PENDING
   CONFIRMED
+  SKIPPED
+  CONFIRMED_OLD
 }
 
-enum ZoomStatus {
-  SCHEDULED
-  COMPLETED
-}
-
-enum MessageRole {
-  user
-  mentor
-  system
-}
-
-enum OnboardingAnswerSource {
-  web
-  telegram
-  miniapp
-  ai
+enum DailyDrain {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 enum MentorshipStatus {
@@ -450,440 +756,24 @@ enum MentorshipStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+  ACCEPTED
 }
 
-enum MentorshipType {
-  ONE_ON_ONE
-  GROUP
+enum NotificationChannel {
+  TELEGRAM
+  IN_APP
+  EMAIL
 }
 
-enum MentorshipLevel {
-  BEGINNER
-  INTERMEDIATE
-  ADVANCED
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
 }
 
-enum MentorshipDuration {
-  MONTHLY
-  YEARLY
-}
-
-enum MentorshipFrequency {
-  WEEKLY
-  MONTHLY
-}
-
-enum MentorshipAvailability {
-  FULL_TIME
-  PART_TIME
-}
-
-enum MentorshipLanguage {
-  ENGLISH
-  RUSSIAN
-}
-
-enum MentorshipLocation {
-  ONLINE
-  OFFLINE
-}
-
-enum MentorshipSpecialty {
-  BUSINESS
-  CAREER
-  //PENDING = 'PENDING',
-  // ACTIVE = 'ACTIVE',
-  // COMPLETED = 'COMPLETED',
-  // CANCELLED = 'CANCELLED'
-}
-
-enum CourseType {
-  STATE_KEY
-  FIVE_POINTS
-  SYSTEM_21
-  EXIT_STAGNATION
-}
-
-// ==========================
-// FIVE POINTS MODULE
-// ==========================
-model FivePointsModule {
-  id          String  @id @default(uuid())
-  code        String  @unique
-  name        String
-  description String?
-  category    String
-
-  isPremium Boolean @default(true)
-  enabled   Boolean @default(true)
-  order     Int     @default(1)
-
-  lessons     FivePointsLesson[]
-  enrollments FivePointsEnrollment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("five_points_modules")
-}
-
-model FivePointsLesson {
-  id         String  @id @default(uuid())
-  moduleId   String
-  name       String
-  type       String // video | text | quiz | task | telegram_task
-  order      Int
-  duration   Int?
-  contentUrl String?
-
-  module FivePointsModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  tasks  FivePointsTask[]
-}
-
-model FivePointsTask {
-  id          String    @id @default(uuid())
-  lessonId    String
-  name        String
-  type        String
-  description String?
-  points      Int
-  deadline    DateTime?
-
-  lesson FivePointsLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-}
-
-model FivePointsEnrollment {
-  id       String @id @default(uuid())
-  userId   String
-  moduleId String
-
-  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module FivePointsModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-
-  progress   FivePointsProgress? @relation(fields: [progressId], references: [id], onDelete: Cascade)
-  progressId String?             @unique
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, moduleId])
-  @@map("five_points_enrollments")
-}
-
-model FivePointsProgress {
-  id               String   @id @default(uuid())
-  completedLessons Int      @default(0)
-  totalPoints      Int      @default(0)
-  updatedAt        DateTime @updatedAt
-
-  enrollment FivePointsEnrollment?
-
-  @@map("five_points_progress")
-}
-
-// ==========================
-// FUNNEL
-// ==========================
-model Funnel {
-  id      String @id @default(uuid())
-  code    String @unique
-  ownerId String
-  owner   User   @relation(fields: [ownerId], references: [id])
-
-  name   String @unique
-  status String @default("draft") // draft | active | archived
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  products FunnelProduct[]
-
-  @@index([ownerId])
-  @@map("funnels")
-}
-
-model FunnelProduct {
-  funnelId  String
-  productId String
-
-  funnel Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
-
-  @@id([funnelId, productId])
-  @@map("funnels_products")
-}
-
-// ==========================
-// MENTORSHIP (HUMAN)
-// ==========================
-model MentorshipOffer {
-  id     String @id @default(uuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  stabilityDays Int
-  qualifies     Boolean   @default(false)
-  offeredAt     DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Mentorship {
-  id     String @id @default(uuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  grantedAt DateTime @default(now())
-  isActive  Boolean  @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// ==========================
-// MICRO TASKS
-// ==========================
-model MicroTask {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title       String
-  description String? @db.Text
-  source      String  @default("ai") // ai | wheel | manual
-
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  dueDate     DateTime?
-
-  linkedDailyEntryId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId, completed])
-  @@index([userId, dueDate])
-}
-
-model OnboardingSession {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  stage       OnboardingStage @default(ENTRY)
-  isCompleted Boolean         @default(false)
-
-  startedAt   DateTime  @default(now())
-  completedAt DateTime?
-
-  answers OnboardingAnswer[]
-
-  @@index([userId, isCompleted])
-  @@map("onboarding_sessions")
-}
-
-model OnboardingAnswer {
-  id        String            @id @default(uuid())
-  sessionId String
-  session   OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  stage       OnboardingStage
-  questionKey String // 'vision_main', 'goal_1', etc
-  answer      Json
-
-  source    OnboardingAnswerSource
-  createdAt DateTime               @default(now())
-
-  @@index([sessionId, stage])
-  @@map("onboarding_answers")
-}
-
-model ChoiceBetrayal {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
-  choice      String
-  primaryGoal String   @map("primary_goal")
-  reason      String
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("choice_betrayals")
-}
-
-// ==========================
-// PAYMENTS
-// ==========================
-model PaymentLog {
-  id        String @id @default(uuid())
-  userId    String
-  productId String
-
-  amount Int
-  payRef String
-  status String
-
-  createdAt DateTime @default(now())
-}
-
-// ==========================
-// PRODUCTS & ENROLLMENTS
-// ==========================
-
-model Product {
-  id           String   @id @default(uuid())
-  code         String   @unique
-  name         String
-  description  String?
-  ownerId      String   @map("owner_id")
-  durationDays Int?     @map("duration_days")
-  features     Json     @default("{}")
-  limits       Json     @default("{}")
-  priceCents   Int      @default(0) @map("price_cents")
-  currency     String   @default("EUR")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  owner       User            @relation(fields: [ownerId], references: [id])
-  members     ProductMember[]
-  enrollments Enrollment[]
-
-  @@map("products")
-}
-
-model ProductMember {
-  id         String    @id @default(uuid())
-  userId     String    @map("user_id")
-  productId  String    @map("product_id")
-  enrolledAt DateTime  @default(now()) @map("enrolled_at")
-  expiresAt  DateTime? @map("expires_at")
-  trialEnd   DateTime? @map("trial_end")
-  purchased  Boolean   @default(false)
-  createdAt  DateTime  @default(now()) @map("created_at")
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, productId])
-  @@map("product_members")
-}
-
-// ==========================
-// STREAKS & MIRRORS
-// ==========================
-model Streak {
-  id     String @id @default(uuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  currentStreak Int      @default(0)
-  longestStreak Int      @default(0)
-  lastEntryDate DateTime
-  totalDays     Int      @default(0)
-  stabilityDays Int      @default(0)
-  drainDays     Int      @default(0)
-
-  totalStabilityDays Int @default(0)
-  totalDrainDays     Int @default(0)
-  drainRecoveryCount Int @default(0)
-
-  supportCompletionRate Int @default(0)
-
-  lastUpdated DateTime @updatedAt
-  createdAt   DateTime @default(now())
-}
-
-model Mirror {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type       MirrorType
-  periodFrom DateTime
-  periodTo   DateTime
-
-  analysis            Json
-  aiInsight           String  @db.Text
-  beforeAfterContrast String? @db.Text
-
-  createdAt DateTime @default(now())
-
-  @@index([userId, type])
-}
-
-// ==========================
-// TELEGRAM LINKS
-// ==========================
-model TelegramLink {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  userId    String
-  expiresAt DateTime
-  user      User     @relation(fields: [userId], references: [id])
-}
-
-// ==========================
-// VIDEO MODULE
-// ==========================
-model Video {
-  id          String  @id @default(uuid())
-  code        String  @unique
-  title       String
-  description String?
-  messages    Json
-
-  nextVideo  String?
-  reminders  Int[]
-  contentUrl String?
-
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("videos")
-}
-
-// ==========================
-// VISION & GOALS
-// ==========================
-model VisionStatement {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questionnaire Json
-  statement     String   @db.Text
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @default(now())
-}
-
-model GoalsSet {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  goals         Json
-  primaryGoalId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @default(now())
-}
-
-// ==========================
-// WHEEL MODULE
-// ==========================
-model WheelAssessment {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  scores        Json
-  weakestSphere String
-  focusSphere   String
-  analysis      String @db.Text
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId, createdAt])
+enum ZoomStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
 }

@@ -67,8 +67,12 @@ export function useAuth() {
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
-  const loginWithCredentials = async (data: { email: string; password: string }) => {
-    const res = await loginMutation(data).unwrap();
+  const loginWithCredentials = async (data: { email: string; password: string; expertId?: string }) => {
+    const expertId = data.expertId ?? resolveExpertId();
+    const res = await loginMutation({
+      ...data,
+      ...(expertId ? { expertId } : {}),
+    }).unwrap();
     dispatch(setCredentials({ user: res.user, accessToken: res.accessToken }));
     if (res.user.settings?.accentColor) applyAccentColor(res.user.settings.accentColor);
     return res;
@@ -76,7 +80,11 @@ export function useAuth() {
 
   // ✅ RegisterRequest = { name?: string; email: string; password: string; role?: UserRole }
   const registerWithCredentials = async (data: RegisterRequest) => {
-    const res = await registerMutation(data).unwrap();
+    const expertId = resolveExpertId();
+    const res = await registerMutation({
+      ...data,
+      ...(expertId ? { expertId } : {}),
+    }).unwrap();
     dispatch(setCredentials({ user: res.user, accessToken: res.accessToken }));
     if (res.user.settings?.accentColor) applyAccentColor(res.user.settings.accentColor);
     return res;
@@ -95,7 +103,11 @@ export function useAuth() {
       throw new Error(`Unsupported provider: ${provider}`);
     }
 
-    const res = await socialAuth(payload).unwrap();
+    const expertId = resolveExpertId();
+    const res = await socialAuth({
+      ...payload,
+      ...(expertId ? { expertId } : {}),
+    }).unwrap();
     dispatch(setCredentials({ user: res.user, accessToken: res.accessToken }));
     if (res.user.settings?.accentColor) applyAccentColor(res.user.settings.accentColor);
 
@@ -126,6 +138,20 @@ export function useAuth() {
     loginWithSocial,
     logout,
   };
+}
+
+function resolveExpertId(): string | undefined {
+  const search = new URLSearchParams(window.location.search);
+  const fromQuery = search.get('expertId')?.trim();
+  const fromStorage = window.localStorage.getItem('expertId')?.trim();
+  const fromEnv = import.meta.env.VITE_EXPERT_ID?.trim();
+  const resolved = fromQuery || fromStorage || fromEnv || undefined;
+
+  if (resolved && fromStorage !== resolved) {
+    window.localStorage.setItem('expertId', resolved);
+  }
+
+  return resolved;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

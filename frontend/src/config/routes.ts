@@ -61,6 +61,7 @@ export const ROUTES = {
   // PRODUCTS & MARKETPLACE
   // ==========================================
   PRODUCTS: '/dashboard/products',
+  PRODUCT_CREATION: '/dashboard/product-create',
   AI_GENERATOR: '/dashboard/ai-generator',
   AI_FUNNEL_BUILDER: '/dashboard/ai-funnel',
   AI_PRODUCER_CONSOLE: '/dashboard/ai-producer-console',
@@ -206,6 +207,11 @@ export const ROUTE_METADATA: Record<RoutePath, {
   },
   '/dashboard/products': {
     title: 'Продукти',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  '/dashboard/product-create': {
+    title: 'Створення продукту',
     requiresAuth: true,
     requiresPaid: false,
   },

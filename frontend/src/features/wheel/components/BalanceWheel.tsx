@@ -28,17 +28,15 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
             c.id,
             {
               emoji: c.emoji,
-              color: c.color,
             },
           ]),
         ),
       [],
     );
 
-    const scoreToColor = (score: number) => {
-      // 1..10 => warm to cool
-      const hue = 8 + ((Math.max(1, Math.min(10, score)) - 1) / 9) * 190;
-      return `hsl(${hue} 90% 60%)`;
+    const scoreToAccent = (score: number) => {
+      const alpha = 0.34 + (Math.max(1, Math.min(10, score)) - 1) * 0.06;
+      return `rgba(var(--accent-rgb),${alpha.toFixed(2)})`;
     };
 
     const axisPoints = scores.map((_, i) => {
@@ -64,10 +62,9 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
 
     const polygonPoints = scorePoints.map((p) => `${p.x},${p.y}`).join(' ');
 
-    const fillHue = 8 + ((Math.max(1, Math.min(10, avgScore)) - 1) / 9) * 190;
-    const polygonFillA = `hsla(${fillHue} 90% 62% / 0.42)`;
-    const polygonFillB = `hsla(${fillHue + 30} 88% 56% / 0.18)`;
-    const polygonStroke = `hsla(${fillHue} 94% 74% / 0.92)`;
+    const polygonFillA = `rgba(var(--accent-soft-rgb),0.44)`;
+    const polygonFillB = `rgba(var(--accent-rgb),0.16)`;
+    const polygonStroke = `rgba(var(--accent-rgb),0.92)`;
     const gradientId = `wheel-gradient-${size}-${Math.round(avgScore * 10)}`;
     const glowId = `wheel-glow-${size}-${Math.round(avgScore * 10)}`;
 
@@ -94,7 +91,7 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
             cy={center}
             r={outerRadius + 8}
             fill="none"
-            stroke="rgba(255,255,255,0.08)"
+            stroke="rgba(var(--accent-rgb),0.2)"
             strokeWidth={1}
           />
 
@@ -108,7 +105,7 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
                 cy={center}
                 r={r}
                 fill="none"
-                stroke={ring === rings - 1 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.14)'}
+                stroke={ring === rings - 1 ? 'rgba(var(--accent-soft-rgb),0.44)' : 'rgba(var(--accent-rgb),0.2)'}
                 strokeWidth={ring === rings - 1 ? 1.2 : 1}
               />
             );
@@ -122,14 +119,14 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
               y1={center}
               x2={ap.x}
               y2={ap.y}
-              stroke="rgba(255,255,255,0.18)"
+              stroke="rgba(var(--accent-rgb),0.28)"
               strokeWidth={1}
             />
           ))}
 
           {/* tiny dots on outer boundary */}
           {axisPoints.map((ap, i) => (
-            <circle key={`axis-dot-${i}`} cx={ap.x} cy={ap.y} r={2.8} fill="rgba(255,255,255,0.72)" />
+            <circle key={`axis-dot-${i}`} cx={ap.x} cy={ap.y} r={2.8} fill="rgba(var(--accent-soft-rgb),0.96)" />
           ))}
 
           {/* data polygon */}
@@ -143,22 +140,22 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
 
           {/* data points */}
           {scorePoints.map((p, i) => {
-            const c = scoreToColor(p.score);
+            const c = scoreToAccent(p.score);
             return (
               <g
                 key={`point-${i}`}
                 style={{ cursor: interactive ? 'pointer' : 'default' }}
                 onClick={() => interactive && onCategoryClick?.(p.categoryId)}
               >
-                <circle cx={p.x} cy={p.y} r={7} fill={c} stroke="white" strokeWidth={2} />
-                <circle cx={p.x} cy={p.y} r={13} fill="none" stroke={`${c}80`} strokeWidth={1.6} />
+                <circle cx={p.x} cy={p.y} r={7} fill={c} stroke="rgba(var(--on-accent-rgb),0.95)" strokeWidth={2} />
+                <circle cx={p.x} cy={p.y} r={13} fill="none" stroke={`rgba(var(--accent-rgb),${(0.32 + p.score * 0.05).toFixed(2)})`} strokeWidth={1.6} />
               </g>
             );
           })}
 
           {/* center orb */}
-          <circle cx={center} cy={center} r={17} fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.45)" />
-          <circle cx={center} cy={center} r={5.5} fill="rgba(255,255,255,0.92)" />
+          <circle cx={center} cy={center} r={17} fill="rgba(var(--accent-rgb),0.24)" stroke="rgba(var(--accent-soft-rgb),0.64)" />
+          <circle cx={center} cy={center} r={5.5} fill="rgba(var(--on-accent-rgb),0.95)" />
 
           {/* emoji boundary markers */}
           {scores.map((s, i) => {
@@ -174,7 +171,7 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
                 style={{ cursor: interactive ? 'pointer' : 'default' }}
                 onClick={() => interactive && onCategoryClick?.(category)}
               >
-                <circle cx={x} cy={y} r={16} fill="rgba(6,10,16,0.55)" stroke="rgba(255,255,255,0.32)" />
+                <circle cx={x} cy={y} r={16} fill="rgba(var(--ambient-rgb-2),0.72)" stroke="rgba(var(--accent-soft-rgb),0.56)" />
                 <text x={x} y={y + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={16}>
                   {emoji}
                 </text>

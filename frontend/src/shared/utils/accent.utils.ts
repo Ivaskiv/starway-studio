@@ -1,3 +1,4 @@
+// frontend/src/shared/utils/accent.utils.ts
 const ACCENT_STORAGE_KEY = 'starway_accent_color'
 const DEFAULT_ACCENT = '#f97316'
 
@@ -17,6 +18,18 @@ function clamp(value: number, min = 0, max = 255): number {
 function rgbToHex(r: number, g: number, b: number): string {
   const toHex = (v: number) => clamp(v).toString(16).padStart(2, '0')
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const normalize = (channel: number) => {
+    const value = channel / 255
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }
+
+  const rn = normalize(r)
+  const gn = normalize(g)
+  const bn = normalize(b)
+  return 0.2126 * rn + 0.7152 * gn + 0.0722 * bn
 }
 
 function shiftRgb(
@@ -88,6 +101,9 @@ export function applyAccentColor(accentHex?: string | null) {
 
   const darkerHex = rgbToHex(...strongRgb)
   const lighterHex = rgbToHex(...softRgb)
+  const accentLuminance = relativeLuminance(rgb)
+  const onAccentHex = accentLuminance > 0.42 ? '#071018' : '#f8fbff'
+  const onAccentRgb = hexToRgb(onAccentHex)
 
   // fix code_x: expose a full dynamic color system so accent integrates into layout/background/buttons.
   document.documentElement.style.setProperty('--color-accent', hex)
@@ -101,6 +117,11 @@ export function applyAccentColor(accentHex?: string | null) {
   document.documentElement.style.setProperty('--ambient-rgb', `${ambient1[0]}, ${ambient1[1]}, ${ambient1[2]}`)
   document.documentElement.style.setProperty('--ambient-rgb-2', `${ambient2[0]}, ${ambient2[1]}, ${ambient2[2]}`)
   document.documentElement.style.setProperty('--accent-gradient', `linear-gradient(135deg, ${lighterHex} 0%, ${hex} 50%, ${darkerHex} 100%)`)
+  document.documentElement.style.setProperty('--on-accent', onAccentHex)
+  document.documentElement.style.setProperty('--on-accent-rgb', `${onAccentRgb[0]}, ${onAccentRgb[1]}, ${onAccentRgb[2]}`)
+  document.documentElement.style.setProperty('--glass-border-rgb', `${softRgb[0]}, ${softRgb[1]}, ${softRgb[2]}`)
+  document.documentElement.style.setProperty('--glass-shadow-rgb', `${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}`)
+  document.documentElement.style.setProperty('--glass-highlight-rgb', `${onAccentRgb[0]}, ${onAccentRgb[1]}, ${onAccentRgb[2]}`)
   // fix code_x: centralized liquid-funnel token system derived from selected accent.
   document.documentElement.style.setProperty('--funnel-accent-rgb', `${r}, ${g}, ${b}`)
   document.documentElement.style.setProperty('--funnel-accent-soft-rgb', `${softRgb[0]}, ${softRgb[1]}, ${softRgb[2]}`)

@@ -1,5 +1,6 @@
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { useForgotPasswordMutation } from '@/features/auth/services/auth.api';
+import { useCheckUserExistsMutation, useForgotPasswordMutation } from '@/features/auth/services/auth.api';
+import { getToastMessage } from '@/shared/i18n/toast';
 import { Button, Checkbox, Input } from '@/ui';
 import { useForm, type AnyFieldApi } from '@tanstack/react-form';
 import { type FormEvent, useMemo, useState } from 'react';
@@ -26,9 +27,12 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
   const [mode, setMode] = useState<Mode>('login');
   const [isLoading, setIsLoading] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const { loginWithCredentials } = useAuth();
+  const { loginWithCredentials, user } = useAuth();
+  const lang = user?.settings?.language ?? 'uk';
+  const [checkUserExists] = useCheckUserExistsMutation();
   const [forgotPassword, { isLoading: isForgotLoading }] = useForgotPasswordMutation();
   const anyLoading = isLoading || isForgotLoading;
 
@@ -47,19 +51,36 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
     onSubmit: async ({ value }) => {
       try {
         setIsLoading(true);
+        setInlineMessage(null);
+
+        const expertId = resolveExpertId();
+        const existsResult = await checkUserExists({
+          email: value.email.trim(),
+          ...(expertId ? { expertId } : {}),
+        }).unwrap();
+
+        if (!existsResult.exists) {
+          const message = getToastMessage('auth.userNotRegistered', lang);
+          setInlineMessage(message);
+          toast.error(message);
+          onSwitch();
+          return;
+        }
+
         await loginWithCredentials({
-          email: value.email,
+          email: value.email.trim(),
           password: value.password,
+          ...(expertId ? { expertId } : {}),
         });
-        toast.success('Успішний вхід!');
+        toast.success(getToastMessage('auth.loginSuccess', lang));
         onSuccess();
       } catch (err: any) {
         const message =
           err?.data?.error === 'invalid_credentials'
-            ? 'Невірний email або пароль'
-            : err?.data?.message || 'Не вдалося увійти';
+            ? getToastMessage('auth.loginInvalidCredentials', lang)
+            : err?.data?.message || getToastMessage('auth.loginFailed', lang);
         toast.error(message);
-        throw new Error(message);
+        return;
       } finally {
         setIsLoading(false);
       }
@@ -69,23 +90,23 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
   const handleForgotSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!resetEmail || !resetEmail.includes('@')) {
-      toast.error('Вкажіть коректний email');
+      toast.error(getToastMessage('auth.forgotInvalidEmail', lang));
       return;
     }
 
     try {
       const response = await forgotPassword({ email: resetEmail }).unwrap();
       if (response.emailSent) {
-        toast.success('Лист відправлено. Перевірте пошту.');
+        toast.success(getToastMessage('auth.forgotEmailSent', lang));
       } else if (response.resetUrl) {
         // fix code_x: dev fallback when mail transport is not configured — no token field in UI.
-        toast.success('Поштова інтеграція не налаштована. Відкриваю сторінку скидання.');
+        toast.success(getToastMessage('auth.forgotNoMailProvider', lang));
         navigate(response.resetUrl.replace(window.location.origin, ''), { replace: true });
       } else {
-        toast('Якщо акаунт існує, лист для відновлення буде надіслано.');
+        toast(getToastMessage('auth.forgotGeneric', lang));
       }
     } catch (err: any) {
-      toast.error(err?.data?.message || 'Не вдалося створити запит на відновлення');
+      toast.error(err?.data?.message || getToastMessage('auth.forgotFailed', lang));
     }
   };
 
@@ -205,6 +226,12 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
         Забули пароль?
       </button>
 
+      {inlineMessage ? (
+        <p className="text-sm text-amber-300 bg-amber-500/10 border border-amber-400/20 rounded-xl px-3 py-2">
+          {inlineMessage}
+        </p>
+      ) : null}
+
       <form.Subscribe
         selector={s => [s.canSubmit, s.isSubmitting] as const}
         children={([canSubmit, isSubmitting]) => (
@@ -230,4 +257,13 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
       />
     </form>
   );
+}
+
+function resolveExpertId(): string | undefined {
+  const search = new URLSearchParams(window.location.search);
+  const fromQuery = search.get('expertId')?.trim();
+  const fromStorage = window.localStorage.getItem('expertId')?.trim();
+  const fromEnv = import.meta.env.VITE_EXPERT_ID?.trim();
+
+  return fromQuery || fromStorage || fromEnv || undefined;
 }

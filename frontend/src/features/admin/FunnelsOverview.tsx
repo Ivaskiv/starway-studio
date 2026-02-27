@@ -1,10 +1,14 @@
 // /features/dashboard/blocks/admin/FunnelsOverview.tsx
 import { Workflow } from 'lucide-react';
 import { useGetFunnelsQuery } from '../../../funnels/services/funnels.api';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { GlassCard } from '../../ui';
 
 export default function FunnelsOverview() {
-  const { data = [] } = useGetFunnelsQuery();
+  const { user } = useAuth();
+  const { data = [] } = useGetFunnelsQuery({
+    includeAll: Boolean(user?.isSuperAdmin),
+  });
 
   return (
     <GlassCard className="p-6">

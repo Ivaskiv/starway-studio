@@ -1,0 +1,778 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/db/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ═══════════════════════════════════════════════════════════
+// CORE IDENTITY & ACCESS
+// ═══════════════════════════════════════════════════════════
+
+model SuperAdmin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Expert {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  displayName      String
+  telegramBotToken String?
+  telegramBotName  String?
+  timezone         String    @default("UTC")
+  isActive         Boolean   @default(true)
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  users            User[]
+  aiMentors        AIMentor[]
+  products         Product[]
+  funnels          Funnel[]
+  subscriptions    Subscription[]
+  paymentLogs      PaymentLog[]
+  balanceConfigs   BalanceWheelConfig[]
+  miniCourses      MiniCourse[]
+  notifications    Notification[]
+  reports          Report[]
+  zoomSessions     ZoomSession[]
+  userStates       UserMentorState[]
+  balanceEntries   UserBalanceEntry[]
+  visionStatements VisionStatement[]
+  wheelAssessments WheelAssessment[]
+  mentorships      Mentorship[]
+  mentorshipOffers MentorshipOffer[]
+  microTasks       MicroTask[]
+  dailyEntries     DailyEntry[]
+  streaks          Streak[]
+
+  @@index([isActive, deletedAt])
+}
+
+model User {
+  id               String    @id @default(uuid())
+  expertId         String?
+  email            String?   @unique
+  name             String?
+  firstName        String?
+  lastName         String?
+  telegramUserId   String?   @unique
+  telegramUserName String?   @unique
+  telegramChatId   String?
+  passwordHash     String?
+  role             Role      @default(USER)
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  trialStartsAt         DateTime?
+  trialEndsAt           DateTime?
+  lastLoginAt           DateTime?
+  onboardingStage       String?
+  onboardingStartedAt   DateTime?
+  onboardingCompletedAt DateTime?
+  uiSettings            Json?
+
+  expert               Expert?                @relation(fields: [expertId], references: [id])
+  subscriptions        Subscription[]
+  enrollments          Enrollment[]
+  mentorStates         UserMentorState[]
+  balanceEntries       UserBalanceEntry[]
+  payments             PaymentLog[]
+  progress             UserProgress?
+  funnels              Funnel[]
+  products             Product[]
+  miniCourses          MiniCourse[]
+  goalsSets            GoalsSet[]
+  courseEnrollments    CourseEnrollment[]
+  dailyEntries         DailyEntry[]
+  mentorships          Mentorship[]
+  mentorshipOffers     MentorshipOffer[]
+  microTasks           MicroTask[]
+  notifications        Notification[]
+  reports              Report[]
+  streaks              Streak[]
+  telegramLinks        TelegramLink[]
+  visionStatements     VisionStatement[]
+  wheelAssessments     WheelAssessment[]
+  zoomSessionAttendees ZoomSessionAttendee[]
+  fivePointsEnrollment FivePointsEnrollment[]
+  mentorConfig         MentorConfig?
+
+  @@unique([expertId, telegramUserId])
+  @@index([expertId])
+  @@index([telegramUserName])
+  @@index([expertId, email])
+  @@index([expertId, deletedAt])
+  @@index([expertId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// AI MENTOR SYSTEM
+// ═══════════════════════════════════════════════════════════
+
+model AIMentor {
+  id          String  @id @default(uuid())
+  expertId    String
+  slug        String
+  name        String
+  description String?
+  niche       String?
+  isPublished Boolean @default(false)
+
+  generatorConfig Json
+  runtimeConfig   Json
+
+  expert         Expert             @relation(fields: [expertId], references: [id])
+  mentorStates   UserMentorState[]
+  balanceEntries UserBalanceEntry[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([expertId, slug])
+}
+
+model UserMentorState {
+  id                String   @id @default(uuid())
+  expertId          String
+  userId            String
+  aiMentorId        String
+  currentStep       String
+  context           Json     @default("{}")
+  lastInteractionAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  expert   Expert   @relation(fields: [expertId], references: [id])
+  aiMentor AIMentor @relation(fields: [aiMentorId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, aiMentorId])
+  @@unique([expertId, userId, aiMentorId])
+  @@index([expertId, lastInteractionAt])
+}
+
+model MentorConfig {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  config    Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRODUCTS & MONETIZATION
+// ═══════════════════════════════════════════════════════════
+
+model Product {
+  id           String       @id @default(uuid())
+  expertId     String?
+  ownerId      String
+  code         String       @unique
+  name         String
+  description  String?
+  priceCents   Int
+  currency     String       @default("EUR")
+  durationDays Int          @default(30)
+  kind         ProductKind?
+  features     Json?
+  limits       Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  expert        Expert?         @relation(fields: [expertId], references: [id])
+  owner         User            @relation(fields: [ownerId], references: [id])
+  enrollments   Enrollment[]
+  funnelLinks   FunnelProduct[]
+  subscriptions Subscription[]
+}
+
+model Enrollment {
+  id         String    @id @default(uuid())
+  userId     String
+  productId  String
+  enrolledAt DateTime  @default(now())
+  purchased  Boolean   @default(false)
+  trialEnd   DateTime?
+  expiresAt  DateTime?
+  payRef     String?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Subscription {
+  id               String             @id @default(uuid())
+  userId           String
+  expertId         String?
+  productId        String?
+  status           SubscriptionStatus
+  planCode         String
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime?
+  autoRenew        Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expert  Expert?  @relation(fields: [expertId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([expertId, userId, status])
+}
+
+model PaymentLog {
+  id          String        @id @default(uuid())
+  userId      String
+  expertId    String
+  amountCents Int
+  currency    String        @default("EUR")
+  status      PaymentStatus
+  metadata    Json          @default("{}")
+  createdAt   DateTime      @default(now())
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expertId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// FUNNELS & COURSES
+// ═══════════════════════════════════════════════════════════
+
+model Funnel {
+  id         String      @id @default(uuid())
+  expertId   String?
+  ownerId    String
+  slug       String
+  name       String
+  code       String      @unique
+  definition Json        @default("{}")
+  blueprint  Json?
+  type       FunnelType?
+  status     String      @default("draft")
+  isActive   Boolean     @default(true)
+  deletedAt  DateTime?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  expert   Expert?         @relation(fields: [expertId], references: [id])
+  owner    User            @relation(fields: [ownerId], references: [id])
+  products FunnelProduct[]
+  stages   FunnelStage[]
+
+  @@unique([expertId, slug])
+  @@index([expertId, isActive])
+  @@index([expertId, deletedAt])
+}
+
+model FunnelProduct {
+  id        String  @id @default(uuid())
+  funnelId  String
+  productId String
+  funnel    Funnel  @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([funnelId, productId])
+}
+
+model FunnelStage {
+  id       String @id @default(cuid())
+  funnelId String
+  name     String
+
+  funnel Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+}
+
+model MiniCourse {
+  id           String    @id @default(cuid())
+  title        String
+  slug         String    @unique
+  description  String?
+  definition   Json
+  isActive     Boolean   @default(true)
+  ownerId      String
+  expertId     String?
+  priceCents   Int       @default(0)
+  durationDays Int       @default(30)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  owner  User    @relation(fields: [ownerId], references: [id])
+  expert Expert? @relation(fields: [expertId], references: [id])
+
+  @@index([ownerId])
+  @@index([expertId])
+}
+
+model Course {
+  id                String             @id @default(uuid())
+  code              String             @unique
+  name              String
+  description       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  courseEnrollments CourseEnrollment[]
+}
+
+model CourseEnrollment {
+  id          String    @id @default(uuid())
+  userId      String
+  courseId    String
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  course Course @relation(fields: [courseId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+}
+
+model FivePointsEnrollment {
+  id          String    @id @default(cuid())
+  userId      String
+  moduleId    String
+  progress    Json      @default("{}")
+  enrolledAt  DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module FivePointsModule @relation(fields: [moduleId], references: [id])
+
+  @@index([userId, moduleId])
+}
+
+model FivePointsModule {
+  id           String                 @id @default(uuid())
+  code         String                 @unique
+  title        String
+  description  String?
+  isActive     Boolean                @default(true)
+  priceCents   Int                    @default(0)
+  durationDays Int                    @default(0)
+  definition   Json                   @default("{}")
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  enrollments  FivePointsEnrollment[]
+}
+
+// ═══════════════════════════════════════════════════════════
+// USER PROGRESS & ACTIVITIES
+// ═══════════════════════════════════════════════════════════
+
+model UserProgress {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  totalPoints     Int      @default(0)
+  completedBlocks Int      @default(0)
+  level           Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DailyEntry {
+  id           String      @id @default(uuid())
+  userId       String
+  expertId     String
+  date         DateTime
+  content      Json        @default("{}")
+  state        DailyState  @default(NEUTRAL)
+  choice       DailyChoice @default(PENDING)
+  drain        DailyDrain?
+  dayFact      String?
+  aiAnalysis   String?
+  microSupport Json?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([expertId, userId])
+  @@index([userId, date])
+}
+
+model MicroTask {
+  id               String           @id @default(uuid())
+  userId           String
+  expertId         String?
+  title            String
+  description      String?
+  status           MicroTaskStatus  @default(ACTIVE)
+  reason           MicroTaskReason?
+  source           String?
+  linkedQuestionId String?
+  dueDate          DateTime?
+  completedAt      DateTime?
+  taskDetails      Json?
+  metadata         Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  expert Expert? @relation(fields: [expertId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expertId, userId])
+  @@index([userId, status])
+  @@index([dueDate])
+}
+
+model Streak {
+  id        String    @id @default(uuid())
+  userId    String
+  expertId  String
+  startAt   DateTime  @default(now())
+  endAt     DateTime?
+  current   Int       @default(1)
+  longest   Int       @default(1)
+  totalDays Int       @default(1)
+  lastAt    DateTime  @default(now())
+  ruleKey   String    @default("daily_checkin")
+  ruleVer   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ruleKey])
+  @@index([userId, expertId])
+}
+
+model GoalsSet {
+  id        String   @id @default(uuid())
+  userId    String
+  goals     Json
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// BALANCE WHEEL
+// ═══════════════════════════════════════════════════════════
+
+model BalanceWheelConfig {
+  id        String    @id @default(uuid())
+  expertId  String
+  name      String
+  spheres   Json      @default("[]")
+  version   Int       @default(1)
+  isDefault Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  expert         Expert             @relation(fields: [expertId], references: [id])
+  balanceEntries UserBalanceEntry[]
+
+  @@index([expertId, isDefault])
+  @@index([expertId, deletedAt])
+}
+
+model UserBalanceEntry {
+  id              String   @id @default(uuid())
+  expertId        String?
+  userId          String
+  aiMentorId      String?
+  balanceConfigId String
+  scores          Json     @default("{}")
+  note            String?
+  createdAt       DateTime @default(now())
+
+  balanceConfig BalanceWheelConfig @relation(fields: [balanceConfigId], references: [id])
+  aiMentor      AIMentor?          @relation(fields: [aiMentorId], references: [id])
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expert        Expert?            @relation(fields: [expertId], references: [id])
+
+  @@index([expertId, userId, createdAt])
+  @@index([expertId, userId, balanceConfigId, createdAt])
+  @@index([expertId, aiMentorId, createdAt])
+}
+
+model VisionStatement {
+  id            String   @id @default(uuid())
+  userId        String
+  expertId      String?
+  statement     String
+  questionnaire Json
+  title         String?
+  content       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  expert Expert? @relation(fields: [expertId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expertId, userId])
+}
+
+model WheelAssessment {
+  id            String   @id @default(uuid())
+  userId        String
+  expertId      String?
+  statement     String?
+  scores        Json
+  weakestSphere String?
+  focusSphere   String?
+  analysis      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  expert Expert? @relation(fields: [expertId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expertId, userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// MENTORSHIP (Legacy Support)
+// ═══════════════════════════════════════════════════════════
+
+model Mentorship {
+  id        String           @id @default(uuid())
+  expertId  String
+  userId    String
+  status    MentorshipStatus
+  startsAt  DateTime
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expertId, userId])
+}
+
+model MentorshipOffer {
+  id           String           @id @default(uuid())
+  expertId     String
+  userId       String
+  offerDetails Json             @default("{}")
+  status       MentorshipStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expertId, userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// COMMUNICATIONS & NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════
+
+model Notification {
+  id            String              @id @default(uuid())
+  expertId      String?
+  userId        String
+  channel       NotificationChannel
+  templateKey   String
+  payload       Json                @default("{}")
+  status        NotificationStatus  @default(PENDING)
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+  failureReason String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  expert Expert? @relation(fields: [expertId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expertId, status, scheduledAt])
+  @@index([templateKey, status])
+}
+
+model TelegramLink {
+  id        String   @id @default(uuid())
+  userId    String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime @default(dbgenerated("(now() + '7 days'::interval)"))
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// REPORTING & ANALYTICS
+// ═══════════════════════════════════════════════════════════
+
+model Report {
+  id          String   @id @default(uuid())
+  expertId    String
+  userId      String
+  periodStart DateTime
+  periodEnd   DateTime
+  content     Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  expert Expert @relation(fields: [expertId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expertId, userId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════
+// ZOOM SESSIONS
+// ═══════════════════════════════════════════════════════════
+
+model ZoomSession {
+  id                String     @id @default(uuid())
+  expertId          String?
+  scheduledAt       DateTime
+  topic             String
+  status            ZoomStatus @default(SCHEDULED)
+  requests          Json       @default("[]")
+  postSessionReport Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  expert    Expert?               @relation(fields: [expertId], references: [id])
+  attendees ZoomSessionAttendee[]
+
+  @@index([expertId, status])
+  @@index([scheduledAt])
+}
+
+model ZoomSessionAttendee {
+  id        String   @id @default(uuid())
+  sessionId String
+  userId    String
+  attended  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  session ZoomSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════════════
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  EXPERT
+  USER
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum ProductKind {
+  WHEEL
+  AI_MENTOR
+  VIDEO_REMINDER
+  UPSELL_5_POINTS
+}
+
+enum FunnelType {
+  FAST_CASH
+  DIAGNOSTIC
+  EVERGREEN
+}
+
+enum MicroTaskStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+enum MicroTaskReason {
+  low_score
+  instability
+  growth
+  wheel_gap
+  stagnation
+}
+
+enum DailyState {
+  NEUTRAL
+  HAPPY
+  SAD
+  ANXIOUS
+}
+
+enum DailyChoice {
+  PENDING
+  CONFIRMED
+  SKIPPED
+  CONFIRMED_OLD
+}
+
+enum DailyDrain {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum MentorshipStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  ACCEPTED
+}
+
+enum NotificationChannel {
+  TELEGRAM
+  IN_APP
+  EMAIL
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum ZoomStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}

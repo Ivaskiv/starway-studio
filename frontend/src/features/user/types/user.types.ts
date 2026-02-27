@@ -1,8 +1,9 @@
 // frontend/src/features/user/types/user.types.ts
 import type { Ability } from '@/features/auth/utils/abilities'
 import type { ReactNode } from 'react'
+import type { UserRole as BackendUserRole, User as BackendUser } from '@/types/globalTypes'
 
-export type UserRole = 'admin' | 'user' | 'mentor'
+export type UserRole = BackendUserRole
 
 export interface ProductMember {
   userId: string
@@ -26,38 +27,10 @@ export interface UserStats {
   level: number
 }
 
-export interface User {
-  id: string
-  email: string
-
-  name?: string | null
-  firstName?: string | null
-  lastName?: string | null
+export interface User extends BackendUser {
   displayName?: string
   avatar?: string
-
-  role: UserRole
-  isAdmin: boolean
-  isSuperAdmin: boolean
-
   productRoles?: ProductMember[]
-
-  access: UserAccess
-  abilities: Ability[]
-  settings?: {
-    accentColor?: string | null
-    theme?: string | null
-    language?: string | null
-  }
-
-  subscriptionStatus?: string | null
-  subscriptionPlan?: string | null
-  trialEndsAt?: string | null
-  isTrialActive?: boolean
-
-  stats?: UserStats
-  createdAt?: string
-  lastLoginAt?: string | null
 }
 
 export interface LoginRequest {
@@ -84,7 +57,7 @@ export const canEditProduct = (user: User, productId: string): boolean => {
   if (user.isSuperAdmin || user.isAdmin) return true
   return (
     user.productRoles?.some(
-      (r) => r.productId === productId && r.role === 'admin',
+      (r) => r.productId === productId && r.role === 'ADMIN',
     ) ?? false
   )
 }

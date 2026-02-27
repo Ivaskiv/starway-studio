@@ -1,8 +1,9 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import * as onboardingService from './services.js';
 import type { OnboardingStage } from './types.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
 
-export async function getProgress(req: Request, res: Response, next: NextFunction) {
+export async function getProgress(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -16,7 +17,7 @@ export async function getProgress(req: Request, res: Response, next: NextFunctio
   }
 }
 
-export async function completeStage(req: Request, res: Response, next: NextFunction) {
+export async function completeStage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -33,7 +34,7 @@ export async function completeStage(req: Request, res: Response, next: NextFunct
   }
 }
 
-export async function updateProgress(req: Request, res: Response, next: NextFunction) {
+export async function updateProgress(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -49,7 +50,7 @@ export async function updateProgress(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function canAccessStage(req: Request, res: Response, next: NextFunction) {
+export async function canAccessStage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

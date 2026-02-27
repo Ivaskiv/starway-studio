@@ -13,9 +13,12 @@ import {
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
-import { GenerationAttempt, STEP_DEFINITIONS } from '../../products/types/generator.types';
+import { ATTEMPTS_PER_STEP, GenerationAttempt, STEP_DEFINITIONS } from '../../products/types/generator.types';
 import { AIGeneratorProvider, useAIGenerator } from '../components/AIGeneratorProvider';
 import OwnerOnboardingCard from '../components/OwnerOnboardingCard';
+import { ModuleIntro } from '@/shared/components/ModuleIntro';
+import { ModuleUsageCounter } from '@/shared/components/ModuleUsageCounter';
+import { useSystemState } from '@/shared/access/hooks/useSystemState';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
@@ -260,6 +263,7 @@ function LivePreview({
 function AIGeneratorContent() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { state, counts, getModuleAccess } = useSystemState();
   const requestedTab = normalizeTab(searchParams.get('tab'));
   const [activeTab, setActiveTab] = useState<BuilderTab>(requestedTab);
   const {
@@ -308,6 +312,40 @@ function AIGeneratorContent() {
     return map;
   }, [stepsData]);
 
+  const completedStepsCount = completedSteps.length;
+  const attemptBudget = stepsData.length * ATTEMPTS_PER_STEP;
+  const usedAttempts = Math.max(0, attemptBudget - totalRemainingAttempts);
+  const introSteps = [
+    'Крок за кроком створюйте контент: від діагностики до фінальної структури воронки.',
+    'Надавайте AI чіткі приклади, зосереджуючись на конкретних результатах і діях.',
+    'Обирайте варіанти, зберігайте крок та рухайтесь вперед, поки не вичерпаєте генерації.',
+  ];
+  const introBlock = (
+    <>
+      <ModuleIntro
+        title="AI Генератор"
+        description="На основі backend-даних (useSystemState) відстежуйте свої генерації, шаблони та прогрес."
+        steps={introSteps}
+      />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <ModuleUsageCounter label="Завершені кроки" used={completedStepsCount} total={stepsData.length} />
+        <ModuleUsageCounter label="Генерацій" used={usedAttempts} total={attemptBudget} />
+        <ModuleUsageCounter label="Шаблони" used={counts.templates} total={Math.max(1, counts.templates)} />
+      </div>
+    </>
+  );
+  const showSampleData = counts.ownedProducts === 0 && counts.subscribedProducts === 0;
+  const sampleDataCard = showSampleData && (
+    <GlassCard className="p-4 border border-white/10 bg-white/[0.03]">
+      <p className="text-xs text-white/60 mb-1">Тестові дані</p>
+      <p className="text-sm text-white/70">
+        У вас ще немає власних продуктів або підписок. Ми відобразимо реальні дані після першої
+        AI-генерації.
+      </p>
+    </GlassCard>
+  );
+  const aiGeneratorAccess = getModuleAccess('AI_GENERATOR');
+
   const generationLabel =
     availableForStep <= 0
       ? 'Ліміт кроку вичерпано'
@@ -332,6 +370,8 @@ function AIGeneratorContent() {
   if (generatedBlueprint) {
     return (
       <div className="max-w-5xl mx-auto space-y-6">
+        {introBlock}
+        {sampleDataCard}
         <GlassCard className="p-8 text-center">
           <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-green-500/25">
             <Check className="w-10 h-10 text-white" />
@@ -361,6 +401,38 @@ function AIGeneratorContent() {
 
   return (
     <div className="space-y-6">
+      {introBlock}
+      {sampleDataCard}
+      <ModuleIntro
+        title={TAB_CONFIG[activeTab].title}
+        description={TAB_CONFIG[activeTab].subtitle}
+        steps={[
+          '1. Заповніть поточний крок конкретними даними.',
+          '2. Згенеруйте варіанти та оберіть фінальний.',
+          '3. Збережіть крок і переходьте далі по workflow.',
+        ]}
+      />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <ModuleUsageCounter
+          label="Генерації"
+          used={Math.max(0, stepsData.length * ATTEMPTS_PER_STEP - totalRemainingAttempts)}
+          total={stepsData.length * ATTEMPTS_PER_STEP}
+        />
+        <ModuleUsageCounter
+          label="Завершені кроки"
+          used={completedSteps.length}
+          total={stepsData.length}
+        />
+      </div>
+
+      {aiGeneratorAccess.isLocked && (
+        <GlassCard className="p-4 border border-amber-300/30 bg-amber-500/10">
+          <p className="text-sm text-amber-100">
+            Модуль AI Генератор тимчасово недоступний. Оформіть підписку для продовження.
+          </p>
+        </GlassCard>
+      )}
+
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white">AI Producer</h1>
@@ -391,12 +463,11 @@ function AIGeneratorContent() {
             <span className="text-white font-medium">{completedSteps.length}/{stepsData.length}</span>
           </div>
 
-          <div className="h-2 bg-slate-800/50 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-orange-500 to-pink-500 transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          <progress
+            className="ai-generator-progress"
+            value={progress}
+            max={100}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
             {(Object.keys(TAB_CONFIG) as BuilderTab[]).map((tabKey) => {

@@ -14,8 +14,9 @@ import {
   getConsultations, 
   updateConsultationStatus 
 } from './service.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
 
-export async function checkTriggers(req: Request, res: Response, next: NextFunction) {
+export async function checkTriggers(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -28,7 +29,7 @@ export async function checkTriggers(req: Request, res: Response, next: NextFunct
   }
 }
 
-export async function bookConsultation(req: Request, res: Response, next: NextFunction) {
+export async function bookConsultation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -41,7 +42,7 @@ export async function bookConsultation(req: Request, res: Response, next: NextFu
 
     const consultation = await createConsultation(
       userId,
-      new Date(scheduledAt),
+      new Date(scheduledAt).toISOString(),
       triggerReason
     );
 
@@ -52,7 +53,7 @@ export async function bookConsultation(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function getMyConsultations(req: Request, res: Response, next: NextFunction) {
+export async function getMyConsultations(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -65,7 +66,7 @@ export async function getMyConsultations(req: Request, res: Response, next: Next
   }
 }
 
-export async function updateStatus(req: Request, res: Response, next: NextFunction) {
+export async function updateStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
     const { status, notes } = req.body;

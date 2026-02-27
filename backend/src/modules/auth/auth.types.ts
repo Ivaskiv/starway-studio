@@ -1,6 +1,9 @@
 // backend/src/modules/auth/auth.types.ts
+import { MentorConfig, Subscription, UserProgress } from '@/db/generated/prisma/client.js';
+import { toSafeUser } from '@/modules/user/types.js'
+import type { SafeUser, UserRole, UserWithSub } from '@/types/globalTypes.js'
 
-
+// ======================= API TYPES =======================
 export interface AuthApiResponse {
   user: SafeUser;
   accessToken: string;
@@ -11,14 +14,18 @@ export interface AuthApiResponse {
 
 export interface JwtPayload {
   id: string;
-  role: string;
-  email: string;
+  role: UserRole;
+  email: string | null;
 }
 
+// ======================= INPUTS =======================
 export interface RegisterInput {
   email: string;
   password: string;
   name?: string;
+  firstName?: string;
+  lastName?: string;
+  expertId?: string;
 }
 
 export interface LoginInput {
@@ -26,35 +33,50 @@ export interface LoginInput {
   password: string;
 }
 
-export interface SafeUser {
-  id: string;
-  email: string;
-  name: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  role: 'user' | 'admin' | 'mentor';
-  isAdmin: boolean;
-  isSuperAdmin: boolean;
-  abilities: string[];
-  access: {
-    plan: 'free' | 'trial' | 'paid';
-    isPaid: boolean;
-    isTrial: boolean;
-    trialEnd: string | null;
-  };
-  subscriptionStatus: string | null;
-  subscriptionPlan: string | null;
-  trialEndsAt: string | null;
-  isTrialActive: boolean;
-  stats: {
-    totalPoints: number;
-    completedBlocks: number;
-    level: number;
-  };
-  settings: {
-    accentColor: string | null;
-    theme: string | null;
-    language: string | null;
-  };
-  lastLoginAt: string | null;
+// ======================= HELPERS =======================
+
+/**
+ * Конвертує UserWithSub → SafeUser
+ */
+export function userToSafe(user: UserWithSub): SafeUser {
+  return toSafeUser(user);
+}
+
+export function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    lastLoginAt: user.lastLoginAt,
+    passwordHash: user.passwordHash,
+    telegramUserId: user.telegramUserId,
+    telegramUserName: user.telegramUserName,
+    telegramChatId: user.telegramChatId,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    subscription: user.subscriptions[0] ?? null,
+    userProgress: user.progress ?? null,
+    mentorConfigs: user.mentorConfig ? [{ config: user.mentorConfig.config }] : []
+  }
+}
+export interface PrismaUserWithRelations {
+  id: string
+  email: string | null
+  name: string | null
+  firstName: string | null
+  lastName: string | null
+  role: UserRole
+  passwordHash: string | null
+  lastLoginAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+  telegramUserId: string | null
+  telegramUserName: string | null
+  telegramChatId: string | null
+  subscriptions: Subscription[]
+  progress: UserProgress | null
+  mentorConfig: MentorConfig | null
 }

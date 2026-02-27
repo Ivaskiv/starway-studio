@@ -3,11 +3,12 @@
  * Vision Controller
  */
 
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { createVisionStatement, getLatestVision, updateVisionStatement } from './service.js';
 import { VisionAnswers } from './types.js';
+import { AuthenticatedRequest } from '@/types/globalTypes.js';
 
-export async function createVision(req: Request, res: Response, next: NextFunction) {
+export async function createVision(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -30,7 +31,7 @@ export async function createVision(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export async function getVision(req: Request, res: Response, next: NextFunction) {
+export async function getVision(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -43,7 +44,7 @@ export async function getVision(req: Request, res: Response, next: NextFunction)
   }
 }
 
-export async function updateVision(req: Request, res: Response, next: NextFunction) {
+export async function updateVision(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

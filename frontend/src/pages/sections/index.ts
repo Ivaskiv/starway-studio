@@ -1,11 +1,3 @@
-export { CoursesLegacySection } from '../legacySections/CoursesLegacySection';
-export { CreatePostLegacySection } from '../legacySections/CreatePostLegacySection';
-export { CtaLegacySection } from '../legacySections/CtaLegacySection';
-export { FeaturesLegacySection } from '../legacySections/FeaturesLegacySection';
-export { HeroLegacySection } from '../legacySections/HeroLegacySection';
-export { ModulesLegacySection } from '../legacySections/ModulesLegacySection';
-export { StatsLegacySection } from '../legacySections/StatsLegacySection';
-export { TrendingLegacySection } from '../legacySections/TrendingLegacySection';
 export { AIMentorModal } from './cards';
 export { RoleBridgeSection } from './RoleBridgeSection';
 export { TrialBannerSection } from './TrialBannerSection';

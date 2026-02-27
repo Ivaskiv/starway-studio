@@ -7,6 +7,7 @@
 
 import { prisma } from '@/db/client.js';
 import { calculateImbalance, findFocus, findWeakest } from '@/modules/wheel/service.js';
+import { WheelScore } from '@/modules/wheel/types.js';
 import { getOrCreateSession, saveMessage, updateSessionActivity } from './session.js';
 
 /**
@@ -14,7 +15,7 @@ import { getOrCreateSession, saveMessage, updateSessionActivity } from './sessio
  */
 export async function processWheel(
   userId: string,
-  scores: { categoryId: string; score: number }[],
+  scores: WheelScore[],
 ) {
   console.log('🎡 [Wheel] Processing wheel for user:', userId);
   console.log('📊 [Wheel] Scores:', scores);
@@ -154,7 +155,7 @@ async function addWheelMicroTasks(
         title: `Покращити сферу: ${weakest.categoryId}`,
         description: `Фокус на підвищенні балу з ${weakest.score} до ${weakest.score + 1}. Почни з малих дій!`,
         source: 'wheel',
-        completed: false,
+        completedAt: null,
       },
     });
 
