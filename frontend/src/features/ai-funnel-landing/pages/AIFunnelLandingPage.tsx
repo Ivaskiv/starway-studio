@@ -1,4 +1,3 @@
-import '../styles/liquid-landing.scss';
 import AuthModal from '@/features/auth/components/AuthModal';
 import { useSmartNavigation } from '@/hooks/useSmartNavigation';
 import { ROUTES } from '@/config/routes';
