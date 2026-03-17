@@ -16,7 +16,6 @@ import { ChoiceSection } from '../components/ChoiceSection';
 import { HeroSection } from '../components/HeroSection';
 import { PricingSection } from '../components/PricingSection';
 import { ProgramSection } from '../components/ProgramSection';
-import '../styles/liquid-landing.scss';
 
 export default function AIFunnelLandingPage() {
   const { navigateTo, authModalOpen, closeAuthModal } = useSmartNavigation();
