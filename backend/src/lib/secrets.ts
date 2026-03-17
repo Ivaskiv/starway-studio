@@ -10,7 +10,7 @@ const PREFIX = 'enc:v1';
 function deriveKey(): Buffer {
   const seed =
     process.env.SECRETS_ENCRYPTION_KEY ||
-    process.env.JWT_SECRET ||
+    process.env.JWT_ACCESS_SECRET ||
     process.env.JWT_REFRESH_SECRET ||
     '';
 
