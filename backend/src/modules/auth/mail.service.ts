@@ -1,5 +1,3 @@
-import type { Response as FetchResponse } from 'node-fetch'
-
 const RESEND_API_URL = 'https://api.resend.com/emails'
 
 type SendPasswordResetEmailInput = {
@@ -48,10 +46,9 @@ export async function sendPasswordResetEmail(input: SendPasswordResetEmailInput)
     }),
   })
 
-  const typedResponse = response as unknown as FetchResponse
-  if (!typedResponse.ok) {
-    const text = await typedResponse.text().catch(() => '')
-    console.error('❌ [Mail] Resend error:', typedResponse.status, text)
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    console.error('❌ [Mail] Resend error:', response.status, text)
     return false
   }
 

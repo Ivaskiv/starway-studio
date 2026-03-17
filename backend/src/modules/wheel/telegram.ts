@@ -2,6 +2,7 @@ import { prisma } from '../../db/client.js'
 import { bot } from '../../lib/telegram.js'
 import { SPHERE_LABELS } from './types.js'
 import type { WheelNotificationPayload } from './types.js'
+import type { Telegraf } from 'telegraf'
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? 'Starway_byNadya_Bot'
 
@@ -73,7 +74,7 @@ export async function sendWheelNotification(
   }
 }
 
-export async function registerMentorCommands(customBot = bot) {
+export async function registerMentorCommands(customBot: Telegraf = bot) {
   if (!process.env.TELEGRAM_BOT_TOKEN) return
   await customBot.telegram.setMyCommands([
     { command: 'wheel', description: 'Запуск Колеса балансу' },

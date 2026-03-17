@@ -1,7 +1,15 @@
 // backend/src/modules/telegram-mentor/keyboards.ts
-import type { InlineKeyboardMarkup, ReplyKeyboardMarkup } from '@telegraf/types'
 
-export const mainMenuKeyboard: ReplyKeyboardMarkup = {
+type ReplyKeyboard = {
+  keyboard: readonly (readonly string[])[]
+  resize_keyboard: true
+}
+
+type InlineKeyboard = {
+  inline_keyboard: readonly (readonly { text: string; callback_data: string })[]
+}
+
+export const mainMenuKeyboard: ReplyKeyboard = {
   keyboard: [
     ['🌅 Ранок', '🌙 Вечір'],
     ['✅ Завдання', '📊 Стан'],
@@ -10,12 +18,12 @@ export const mainMenuKeyboard: ReplyKeyboardMarkup = {
   resize_keyboard: true,
 } as const
 
-export const cancelKeyboard: ReplyKeyboardMarkup = {
+export const cancelKeyboard: ReplyKeyboard = {
   keyboard: [['❌ Скасувати']],
   resize_keyboard: true,
 } as const
 
-export const yesNoKeyboard: InlineKeyboardMarkup = {
+export const yesNoKeyboard: InlineKeyboard = {
   inline_keyboard: [
     [
       { text: '✅ Виконано', callback_data: 'task_done' },
@@ -24,7 +32,7 @@ export const yesNoKeyboard: InlineKeyboardMarkup = {
   ],
 } as const
 
-export function taskDoneKeyboard(taskId: string): InlineKeyboardMarkup {
+export function taskDoneKeyboard(taskId: string): InlineKeyboard {
   return {
     inline_keyboard: [[{ text: '✅ Зроблено', callback_data: `done_${taskId}` }]],
   } as const
@@ -36,6 +44,6 @@ const row = (start: number, end: number) =>
     return { text: `${value}`, callback_data: `wheel_score_${value}` }
   })
 
-export const wheelScoreKeyboard: InlineKeyboardMarkup = {
+export const wheelScoreKeyboard: InlineKeyboard = {
   inline_keyboard: [row(1, 5), row(6, 10)],
 } as const
