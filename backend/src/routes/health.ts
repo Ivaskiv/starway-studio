@@ -3,8 +3,7 @@
  */
 
 import { Router } from 'express';
-import { prisma } from '@/db/client.js';
-import { openai } from '@/lib/openai.js';
+import { prisma } from '../db/client.js';
 
 const router = Router();
 

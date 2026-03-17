@@ -1,5 +1,5 @@
 // backend/src/modules/funnel/policy.ts
-import type { UserRole } from '@/types/globalTypes.js';
+import type { UserRole } from '../../types/globalTypes.js';
 
 export interface AuthContext {
   id: string;

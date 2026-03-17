@@ -5,7 +5,7 @@
 
 import {Response, NextFunction } from 'express';
 import { setGoals, getLatestGoals, getPrimaryGoal, checkChoiceAlignment } from './service.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 export async function createGoals(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

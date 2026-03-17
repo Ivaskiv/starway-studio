@@ -1,5 +1,5 @@
 // frontend/src/features/chat/services/feedback.api.ts
-import { api } from '../../../services/api';
+import { api } from '@/services/api';
 
 export interface Review {
   id: string;

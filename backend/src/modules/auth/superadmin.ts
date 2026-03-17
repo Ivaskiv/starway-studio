@@ -1,11 +1,14 @@
-export function isSuperAdminEmail(email?: string | null): boolean {
-  if (!email) return false
-  const normalized = email.toLowerCase().trim()
-  const list = (process.env.SUPERADMIN_EMAILS || 'viraivaskiv@gmail.com')
+const RAW_SUPERADMIN_EMAILS = process.env.SUPERADMIN_EMAILS ?? 'viraivaskiv@gmail.com'
+const SUPERADMIN_EMAIL_SET = new Set(
+  RAW_SUPERADMIN_EMAILS
     .split(',')
     .map((item) => item.trim().toLowerCase())
-    .filter(Boolean)
-  return list.includes(normalized)
+    .filter(Boolean),
+)
+
+export function isSuperAdminEmail(email?: string | null): boolean {
+  if (!email) return false
+  return SUPERADMIN_EMAIL_SET.has(email.toLowerCase().trim())
 }
 
 /**

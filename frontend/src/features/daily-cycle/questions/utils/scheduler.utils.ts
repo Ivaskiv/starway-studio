@@ -3,13 +3,14 @@ import { Question } from '../types/questions.types';
 
 export const isQuestionDue = (question: Question, lastAnsweredAt?: string) => {
   const now = new Date();
-  const [hours, minutes] = question.time.split(':').map(Number);
+  const [hours = 0, minutes = 0] = (question.time?.split(':') ?? ['0', '0']).map(Number);
   const questionTime = new Date();
   questionTime.setHours(hours, minutes, 0, 0);
 
-  if (question.frequency === 'once') return !lastAnsweredAt;
-  if (question.frequency === 'daily') return !lastAnsweredAt || new Date(lastAnsweredAt).toDateString() !== now.toDateString();
-  if (question.frequency === 'weekly') {
+  const frequency = question.frequency ?? 'daily';
+  if (frequency === 'once') return !lastAnsweredAt;
+  if (frequency === 'daily') return !lastAnsweredAt || new Date(lastAnsweredAt).toDateString() !== now.toDateString();
+  if (frequency === 'weekly') {
     if (!lastAnsweredAt) return true;
     const last = new Date(lastAnsweredAt);
     const diff = (now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24);

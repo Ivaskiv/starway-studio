@@ -2,7 +2,7 @@
 // backend/src/modules/streak/types.ts
 // Типи для streak-модуля + фронт / бек повна синхронізація
 
-import type { Streak as PrismaStreak } from '@/db/generated/prisma/client.js';
+import type { Streak as PrismaStreak } from '../../db/generated/prisma/client.js';
 
 // Базовий streak з prisma
 export type Streak = PrismaStreak;

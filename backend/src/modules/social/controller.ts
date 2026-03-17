@@ -1,9 +1,9 @@
 // backend/src/modules/social/social.controller.ts
 import type { Request, Response } from 'express';
 import type { ConnectSocialInput, SocialResponse } from './types.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
-import { serverError } from '@/utils/serverError.js';
-import { socialService } from '@/modules/social/service.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
+import { serverError } from '../../utils/serverError.js';
+import { socialService } from '../../modules/social/service.js';
 
 // ================= GET CONNECTIONS =================
 export async function getConnections(req: AuthenticatedRequest, res: Response) {

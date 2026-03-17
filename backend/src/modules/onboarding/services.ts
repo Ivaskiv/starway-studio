@@ -1,5 +1,5 @@
 // backend/src/modules/onboarding/services/onboarding.ts
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../db/client.js';
 import { ONBOARDING_STAGES, STAGE_CONFIGS } from './types.js';
 import type {
   CompleteStageDto,
@@ -24,7 +24,6 @@ export async function getProgress(userId: string): Promise<OnboardingProgress> {
       id: true,
       onboardingStage: true,
       onboardingStartedAt: true,
-      onboardingCompletedAt: true,
       lastLoginAt: true,
     },
   });
@@ -62,7 +61,7 @@ export async function getProgress(userId: string): Promise<OnboardingProgress> {
     currentStage,
     completedStages,
     startedAt: user.onboardingStartedAt!,
-    completedAt: user.onboardingCompletedAt ?? null,
+    completedAt: null,
     lastActivityAt: user.lastLoginAt ?? null,
     isCompleted: currentStage === 'COMPLETED',
   };

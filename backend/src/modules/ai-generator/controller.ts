@@ -1,8 +1,16 @@
 // backend/src/modules/ai-generator/controller.ts
-import { buildBlueprintFromSteps, generateStepVariant, getWorkflowState, saveBlueprint, saveWorkflowState } from '@/modules/ai-generator/service.js';
-import { AIGeneratorWorkflowState, BlueprintStepInput, GenerateStepInput, SaveBlueprintInput } from '@/modules/ai-generator/types.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { buildBlueprintFromSteps, generateStepVariant, getWorkflowState, saveBlueprint, saveWorkflowState } from '../../modules/ai-generator/service.js';
+import { AIGeneratorWorkflowState, BlueprintStepInput, GenerateStepInput, SaveBlueprintInput } from '../../modules/ai-generator/types.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import type { Response } from 'express';
+
+// ── Новий імпорт ─────────────────────────────────────────────────────────────
+import {
+  generateHeroVariants,
+  generateAdTexts,
+  type HeroGenerateInput,
+  type AdTextsInput,
+} from './products-generator/producer.js';
 
 const TOTAL_PHASES = 11;
 
@@ -112,5 +120,53 @@ export async function saveWorkflowHandler(req: AuthenticatedRequest, res: Respon
   } catch (error) {
     console.error('❌ ai-generator save workflow error:', error);
     return res.status(500).json({ error: 'ai_generator_save_workflow_failed' });
+  }
+}
+
+// ── Hero Generation ──────────────────────────────────────────────────────────
+/**
+ * POST /api/ai-generator/hero
+ * Body: { niche, targetAudience, utp, tone?, language? }
+ * Response: { success: true, variants: HeroVariant[] }
+ */
+export async function heroGenerateHandler(req: AuthenticatedRequest, res: Response) {
+  try {
+    const requester = req.user;
+    if (!requester?.id) return res.status(401).json({ error: 'unauthorized' });
+
+    const input = req.body as HeroGenerateInput;
+    if (!input?.niche?.trim())          return res.status(400).json({ error: 'niche_required' });
+    if (!input?.targetAudience?.trim()) return res.status(400).json({ error: 'target_audience_required' });
+    if (!input?.utp?.trim())            return res.status(400).json({ error: 'utp_required' });
+
+    const variants = await generateHeroVariants(input);
+    return res.json({ success: true, variants });
+  } catch (error) {
+    console.error('❌ ai-generator hero error:', error);
+    return res.status(500).json({ error: 'ai_generator_hero_failed' });
+  }
+}
+
+// ── Ad Texts Generation ──────────────────────────────────────────────────────
+/**
+ * POST /api/ai-generator/ads
+ * Body: { niche, targetAudience, heroHeadline, language? }
+ * Response: { success: true, ads: AdTexts }
+ */
+export async function adTextsGenerateHandler(req: AuthenticatedRequest, res: Response) {
+  try {
+    const requester = req.user;
+    if (!requester?.id) return res.status(401).json({ error: 'unauthorized' });
+
+    const input = req.body as AdTextsInput;
+    if (!input?.niche?.trim())          return res.status(400).json({ error: 'niche_required' });
+    if (!input?.targetAudience?.trim()) return res.status(400).json({ error: 'target_audience_required' });
+    if (!input?.heroHeadline?.trim())   return res.status(400).json({ error: 'hero_headline_required' });
+
+    const ads = await generateAdTexts(input);
+    return res.json({ success: true, ads });
+  } catch (error) {
+    console.error('❌ ai-generator ads error:', error);
+    return res.status(500).json({ error: 'ai_generator_ads_failed' });
   }
 }

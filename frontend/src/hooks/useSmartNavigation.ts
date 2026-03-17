@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { ROUTES, ROUTE_METADATA } from '@/config/routes';
 import type { RoutePath } from '@/config/routes';
-import { hasPaidAccess } from '@/features/user/types/user.types';
+import { hasPaidAccess } from '@/shared/utils/access.utils';
 
 interface NavigationOptions {
   requiresAuth?: boolean;
@@ -40,7 +40,7 @@ export function useSmartNavigation() {
       }
 
       // PAID
-      if (requiresPaid && user && !hasPaidAccess(user)) {
+      if (requiresPaid && !hasPaidAccess(user)) {
         // fix code_x: blocked premium routes stay clickable and redirect to subscription/details instead of dead-end modal.
         if (options.onAccessDenied) {
           options.onAccessDenied();
@@ -75,6 +75,6 @@ export function useSmartNavigation() {
 
     user,
     isAuthenticated: !!user,
-    hasPremium: user ? hasPaidAccess(user) : false,
+    hasPremium: hasPaidAccess(user),
   };
 }

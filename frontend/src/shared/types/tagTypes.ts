@@ -1,6 +1,7 @@
 // frontend/src/shared/types/tagTypes.ts
 export const TAG_TYPES = [
   'User',
+  'Users',
   'Funnel',
   'Product',   'Products',
   'Module',
@@ -46,6 +47,9 @@ export const TAG_TYPES = [
   'Mentor',
   'Session',
   'Progress',
+  'Ownership',
+  'AssistantProgress',
+  'AdminProgress',
   'Recommendations',
 
   'Questions',
@@ -63,13 +67,35 @@ export const TAG_TYPES = [
   'Rating',
   'Access',
   'MentorAccess', 'Onboarding',
-  'Daily', 'Streak',
+  'AdminSettings',
+  'AdminProducts',
+  'Daily', 'DailyCycle', 'Streak',
   'Trial',
   'Mirror',
   'Consultation',
   'Theme',
-  'Avatar'
-
+  'Avatar',
+  'Pricing',
+  'Coupon',
+  'Transaction',
+  'Invoice',
+  'Refund',
+  'WhiteLabel',
+  'FAQ',
+  'Template',
+  'Blueprint',
+  'Reward', 'Points', 'GamificationProfile',
+  'Challenge',
+  'Leaderboard',
+  'AdminProducts',
+  'Comment',
+  'Quota',
+  'Generation',
+  'WeeklyReport',
+  'MentorProfile',
+  'MentorContext',
+'ZoomSession', 
+'ZoomAttendee', 
 ] as const
 
 export type TagType = (typeof TAG_TYPES)[number]

@@ -16,6 +16,7 @@ import {
   shouldShowOnboardingReminder,
 } from '../config/onboarding.config';
 import type { OnboardingProgress, OnboardingStage } from '../types/mentor.types';
+import { isTrialUser } from '@/shared/utils/access.utils';
 
 // ============================================================================
 // HOOK
@@ -30,7 +31,7 @@ export function useMentorOnboarding() {
 
   // Розрахунок прогресу
   const progress = useMemo((): OnboardingProgress | null => {
-    if (!onboarding || !user?.access || user.access.plan === 'trial') {
+    if (!onboarding || !user || isTrialUser(user)) {
       return null;
     }
 

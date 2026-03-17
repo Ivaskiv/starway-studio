@@ -1,5 +1,5 @@
 // frontend/src/features/progress/services/progress.api.ts
-import { api } from '../../../services/api';
+import { api } from '@/services/api';
 import type { Progress } from '../types/progress.types';
 
 export const progressApi = api.injectEndpoints({

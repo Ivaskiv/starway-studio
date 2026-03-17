@@ -1,0 +1,1052 @@
+// ═══════════════════════════════════════════════════════════════════════════
+//  header.scss · Liquid Glass · Starway Studio 2026
+//
+//  ❌ Без backdrop-filter → скло через gradient-шари + shadow-стек
+//  ❌ Без style={{}} в JSX → всі кольори і анімації тут
+//  ❌ Без SCSS-modules → глобальні класи, підключається через index.scss
+//  ✅ Tiffany Blue (rgb(var(--tf-rgb))) — єдиний акцентний колір хедера
+//  ✅ Заголовки панелей: uppercase, letter-spacing, без кольорового JSX
+//  ✅ Бургер-меню для tablet ≤ 900px і mobile ≤ 540px
+//  ✅ Outside-click логіка в TSX, тут — тільки transition max-height/opacity
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── CSS-токени (всі в :root, без !important) ─────────────────────────────────
+:root {
+  // Синя тема — фіксовані значення (не залежать від --accent-rgb)
+  --tf:     var(--accent);
+  --tf-rgb: var(--accent-rgb);
+  --tf-08:  rgba(var(--accent-rgb), 0.08);
+  --tf-12:  rgba(var(--accent-rgb), 0.12);
+  --tf-20:  rgba(var(--accent-rgb), 0.20);
+  --tf-36:  rgba(var(--accent-rgb), 0.36);
+
+  // Текст — холодні синьо-сірі відтінки
+  --ht1: var(--text-primary);          // primary
+  --ht2: var(--text-secondary);        // secondary
+  --ht3: var(--text-muted);            // muted/disabled
+
+  // Glass-шари фону хедера — глибокий темно-синій
+  --hbg-deep:     rgba(var(--accent-rgb), 0.04);
+  --hbg-mid:      rgba(var(--accent-rgb), 0.08);
+
+  // Висоти рядків
+  --hh-role: 28px;
+  --hh-main: 50px;
+  --hh-tab:  32px;
+
+  // Z-індекси
+  --hz-shell:  40;
+  --hz-drop:  300;
+  --hz-bmenu: 200;
+}
+
+// ── Breakpoints ───────────────────────────────────────────────────────────────
+$bp-md: 900px;   // tablet і менше → бургер
+$bp-sm: 540px;   // mobile
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SHELL
+// ═══════════════════════════════════════════════════════════════════════════
+
+.hdr {
+  position: sticky;
+  top:      0;
+  z-index:  var(--hz-shell);
+  overflow: visible;
+
+  // Liquid Glass: 3 градієнтні шари замість blur
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--accent-rgb), 0.16) 0%,
+      transparent 3px
+    ) top / 100% 100% no-repeat,
+    linear-gradient(
+      110deg,
+      rgba(var(--accent-rgb), 0.06) 0%,
+      transparent 44%
+    ),
+    linear-gradient(
+      180deg,
+      var(--hbg-mid)  0%,
+      var(--hbg-deep) 100%
+    );
+
+  // Shadow-стек замість blur
+  box-shadow:
+    0 1px 0   rgba(var(--tf-rgb), 0.18),   // верхня кристальна риска
+    0 2px 24px rgba(0, 0, 0, 0.55),        // основна тінь
+    0 8px 64px rgba(3, 15, 40, 0.40),      // глибока синя підсвітка
+    inset 0 1px 0 rgba(var(--tf-rgb), 0.08); // внутрішнє ребро
+
+  border-bottom: 1px solid rgba(var(--tf-rgb), 0.13);
+}
+
+// Кристальні відблиски — span замість ::before (без псевдо)
+.hdr-glint {
+  position:       absolute;
+  left:           0;
+  right:          0;
+  pointer-events: none;
+  z-index:        0;
+  display:        block;
+
+  &--top {
+    top:    0;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent      0%,
+      rgba(var(--tf-rgb), 0.22) 18%,
+      rgba(var(--tf-rgb), 0.55) 50%,
+      rgba(var(--tf-rgb), 0.22) 82%,
+      transparent      100%
+    );
+  }
+
+  &--bottom {
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(var(--tf-rgb), 0.11) 50%,
+      transparent
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SPLIT ROW — горизонтальна лінія КРІЗЬ кнопки
+//
+//  Техніка:
+//  .hdr-split-line → position:absolute, top:50%, height:1px
+//  Кнопки (.hdr-role-btn, .hdr-tab-btn) мають background = точно фон хедера
+//  → вони "перекривають" лінію всередині, але лінія видна з обох боків групи
+// ═══════════════════════════════════════════════════════════════════════════
+
+.hdr-split-row {
+  position:    relative;
+  z-index:     1;
+  display:     flex;
+  align-items: center;
+  padding:     0 14px;
+
+  &--roles { height: var(--hh-role); }
+  &--tabs  { height: var(--hh-tab);  }
+}
+
+.hdr-split-line {
+  position:       absolute;
+  left:           0;
+  right:          0;
+  top:            50%;
+  height:         1px;
+  transform:      translateY(-50%);
+  background:     rgba(255, 255, 255, 0.055);
+  pointer-events: none;
+  display:        block;
+}
+
+// ── Спільна база split-кнопок (mixin) ────────────────────────────────────────
+@mixin split-btn-base {
+  position:    relative;
+  display:     inline-flex;
+  align-items: center;
+  // Фон = фон хедера → "з'їдає" лінію
+  background:
+    linear-gradient(
+      180deg,
+      var(--bg-glass) 0%,
+      var(--bg-primary) 100%
+    );
+  border:      1px solid rgba(255, 255, 255, 0.06);
+  color:       var(--ht3);
+  font-weight: 700;
+  cursor:      pointer;
+  white-space: nowrap;
+  margin-right: -1px; // кнопки впритул (overlap)
+  transition:  color 0.14s, border-color 0.14s, box-shadow 0.14s;
+
+  &:hover {
+    color:        var(--ht2);
+    border-color: var(--tf-20);
+    z-index:      2;
+  }
+}
+
+// ── Ролі ─────────────────────────────────────────────────────────────────────
+.hdr-role-group {
+  position: relative;
+  z-index:  1;
+  display:  flex;
+}
+
+.hdr-role-btn {
+  @include split-btn-base;
+  height:    var(--hh-role);
+  padding:   0 11px;
+  gap:       5px;
+  font-size: 10px;
+
+  &:first-child { border-radius: 6px 0 0 6px; }
+  &:last-child  { border-radius: 0 6px 6px 0; margin-right: 0; }
+
+  &--on {
+    color:        var(--tf);
+    border-color: var(--tf-36);
+    background:   linear-gradient(
+      180deg,
+      rgba(var(--accent-rgb), 0.12) 0%,
+      var(--bg-primary) 100%
+    );
+    z-index:      3;
+    box-shadow:
+      0 0 10px rgba(var(--accent-rgb), 0.14),
+      inset 0 1px 0 rgba(var(--accent-rgb), 0.24);
+  }
+}
+
+.hdr-role-icon  { font-size: 11px; }
+.hdr-role-label { letter-spacing: 0.02em; }
+
+// ── Таби ─────────────────────────────────────────────────────────────────────
+.hdr-tab-group {
+  position: relative;
+  z-index:  1;
+  display:  flex;
+
+  // Ховаємо таби на планшеті/мобілці
+  @media (max-width: $bp-md) { display: none; }
+}
+
+.hdr-tab-btn {
+  @include split-btn-base;
+  height:         var(--hh-tab);
+  padding:        0 17px;
+  font-size:      11.5px;
+  letter-spacing: 0.025em;
+
+  &:first-child { border-radius: 8px 0 0 8px; }
+  &:last-child  { border-radius: 0 8px 8px 0; margin-right: 0; }
+
+  &--on {
+    color:        var(--tf);
+    border-color: var(--tf-36);
+    background:   linear-gradient(
+      180deg,
+      rgba(var(--accent-rgb), 0.12) 0%,
+      var(--bg-primary) 100%
+    );
+    z-index:      3;
+    box-shadow:
+      0 0 14px rgba(var(--accent-rgb), 0.16),
+      inset 0 1px 0 rgba(var(--accent-rgb), 0.26);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MAIN ROW
+// ═══════════════════════════════════════════════════════════════════════════
+
+.hdr-main {
+  position:    relative;
+  z-index:     1;
+  display:     flex;
+  align-items: center;
+  height:      var(--hh-main);
+  padding:     0 14px;
+  gap:         10px;
+}
+
+// ── Logo ──────────────────────────────────────────────────────────────────────
+.hdr-logo {
+  display:       flex;
+  align-items:   center;
+  gap:           7px;
+  margin-right:  4px;
+  flex-shrink:   0;
+  background:    transparent;
+  border:        none;
+  cursor:        pointer;
+  padding:       4px 6px;
+  border-radius: 8px;
+  transition:    background 0.12s;
+
+  &:hover { background: var(--tf-08); }
+}
+
+.hdr-logo-gem {
+  width:         28px;
+  height:        28px;
+  border-radius: 8px;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  font-size:     14px;
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.28) 0%, transparent 55%),
+    linear-gradient(225deg, rgba(var(--accent-rgb), 0.14) 0%, transparent 50%),
+    linear-gradient(135deg, #040c1e, #020810);
+  border:     1px solid rgba(var(--tf-rgb), 0.28);
+  box-shadow:
+    0 2px 10px rgba(var(--tf-rgb), 0.16),
+    inset 0 1px 0 rgba(var(--tf-rgb), 0.28);
+}
+
+.hdr-logo-text {
+  font-size:      16px;
+  font-weight:    900;
+  letter-spacing: -0.02em;
+  background: linear-gradient(
+    130deg,
+    #c8e8ff   0%,
+    var(--tf) 38%,
+    #9dd0ff   65%,
+    rgba(var(--accent-rgb), 0.85) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+// ── Desktop nav ───────────────────────────────────────────────────────────────
+.hdr-nav {
+  display:     flex;
+  align-items: center;
+  gap:         2px;
+  flex:        1;
+
+  @media (max-width: $bp-md) { display: none; }
+}
+
+.hdr-nb {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           4px;
+  padding:       5px 10px;
+  border-radius: 8px;
+  font-size:     13px;
+  font-weight:   600;
+  color:         var(--ht2);
+  background:    transparent;
+  border:        1px solid transparent;
+  cursor:        pointer;
+  transition:    color 0.12s, background 0.12s, border-color 0.12s;
+
+  &:hover {
+    color:        var(--ht1);
+    background:   var(--tf-08);
+    border-color: var(--tf-12);
+  }
+
+  &--open {
+    color:        var(--ht1);
+    background:   rgba(var(--tf-rgb), 0.09);
+    border-color: var(--tf-20);
+  }
+}
+
+.hdr-chev {
+  font-size:  8px;
+  color:      var(--ht3);
+  transition: transform 0.15s;
+
+  &--flip { transform: rotate(180deg); }
+}
+
+.hdr-drop-wrap { position: relative; }
+
+// ── Dropdown — Liquid Glass ────────────────────────────────────────────────────
+.hdr-drop {
+  position:      absolute;
+  top:           calc(100% + 10px);
+  left:          0;
+  z-index:       var(--hz-drop);
+  min-width:     240px;
+  border-radius: 16px;
+  overflow:      hidden;
+  padding:       8px;
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-primary) 100%);
+  border: 1px solid rgba(var(--tf-rgb), 0.16);
+  box-shadow:
+    0 4px 8px    rgba(0, 0, 0, 0.30),
+    0 20px 60px  rgba(0, 0, 0, 0.75),
+    0 4px 80px   rgba(var(--tf-rgb), 0.07),
+    inset 0 1px 0 rgba(var(--tf-rgb), 0.22);
+  animation: hdrIn 0.13s ease-out;
+}
+
+@keyframes hdrIn {
+  from { opacity: 0; transform: translateY(-5px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);      }
+}
+
+// Кристальна риска в дропдауні
+.hdr-drop-ridge {
+  display:       block;
+  height:        2px;
+  margin:        0 10px 8px;
+  border-radius: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--tf-rgb), 0.45) 28%,
+    rgba(var(--tf-rgb), 0.65) 50%,
+    rgba(var(--tf-rgb), 0.45) 72%,
+    transparent
+  );
+}
+
+.hdr-drop-group { margin-bottom: 2px; }
+
+// Заголовок групи — типографіка футерного стилю, Tiffany, без кольору в JSX
+.hdr-drop-gtitle {
+  font-size:      9px;
+  font-weight:    800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color:          var(--tf);
+  opacity:        0.65;
+  padding:        6px 8px 3px;
+  display:        block;
+}
+
+.hdr-drop-item {
+  display:       flex;
+  align-items:   flex-start;
+  gap:           8px;
+  width:         100%;
+  padding:       7px 8px;
+  border-radius: 10px;
+  border:        1px solid transparent;
+  background:    transparent;
+  cursor:        pointer;
+  text-align:    left;
+  transition:    background 0.10s, border-color 0.10s;
+
+  &:hover {
+    background:   var(--tf-08);
+    border-color: var(--tf-12);
+  }
+
+  &--on {
+    background:   var(--tf-12);
+    border-color: var(--tf-20);
+
+    .hdr-drop-label { color: var(--tf); }
+  }
+}
+
+.hdr-drop-icon {
+  font-size:      15px;
+  width:          24px;
+  flex-shrink:    0;
+  display:        flex;
+  align-items:    center;
+  justify-content: center;
+  margin-top:     1px;
+}
+
+.hdr-drop-body  { display: flex; flex-direction: column; gap: 1px; }
+
+.hdr-drop-label {
+  font-size:   12.5px;
+  font-weight: 600;
+  color:       var(--ht1);
+  display:     block;
+  line-height: 1.3;
+}
+
+.hdr-drop-desc {
+  font-size:   10.5px;
+  color:       var(--ht3);
+  display:     block;
+  line-height: 1.35;
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+.hdr-controls {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  flex-shrink: 0;
+}
+
+// Search — desktop
+.hdr-search {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       5px 12px;
+  border-radius: 10px;
+  background:    var(--tf-08);
+  border:        1px solid rgba(var(--tf-rgb), 0.09);
+  cursor:        text;
+  transition:    border-color 0.15s, background 0.15s;
+
+  @media (max-width: $bp-md) { display: none; }
+
+  &:focus-within {
+    border-color: var(--tf-36);
+    background:   rgba(var(--tf-rgb), 0.07);
+    box-shadow:   0 0 12px rgba(var(--tf-rgb), 0.07);
+  }
+}
+
+.hdr-search-ico   { color: var(--ht3); font-size: 15px; }
+
+.hdr-search-input {
+  background: none;
+  border:     none;
+  outline:    none;
+  font-size:  12px;
+  color:      var(--ht1);
+  width:      94px;
+
+  &::placeholder { color: var(--ht3); }
+}
+
+// Notifications
+.hdr-notif {
+  position:      relative;
+  width:         34px;
+  height:        34px;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  border-radius: 10px;
+  border:        1px solid rgba(var(--tf-rgb), 0.08);
+  background:    rgba(var(--tf-rgb), 0.03);
+  font-size:     16px;
+  cursor:        pointer;
+  transition:    background 0.12s, border-color 0.12s;
+
+  &:hover {
+    background:   var(--tf-08);
+    border-color: var(--tf-20);
+  }
+}
+
+.hdr-notif-dot {
+  position:      absolute;
+  top:           2px;
+  right:         2px;
+  width:         15px;
+  height:        15px;
+  border-radius: 50%;
+  background:    rgba(var(--accent-rgb), 1);
+  font-size:     8.5px;
+  font-weight:   800;
+  color:         #fff;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  box-shadow:    0 2px 6px rgba(var(--accent-rgb), 0.50);
+}
+
+// ── UserMenu ──────────────────────────────────────────────────────────────────
+.hdr-user-wrap { position: relative; }
+
+.hdr-ava-btn {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       4px 8px 4px 4px;
+  border-radius: 10px;
+  border:        1px solid rgba(var(--tf-rgb), 0.14);
+  background:    var(--tf-08);
+  cursor:        pointer;
+  transition:    border-color 0.14s, background 0.14s;
+
+  @media (max-width: $bp-md) { display: none; }
+
+  &:hover {
+    border-color: var(--tf-36);
+    background:   rgba(var(--tf-rgb), 0.10);
+  }
+}
+
+.hdr-ava {
+  width:         26px;
+  height:        26px;
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.32) 0%, transparent 55%),
+    linear-gradient(135deg, #040c1e, #020810);
+  border:    1px solid rgba(var(--tf-rgb), 0.32);
+  font-size: 11px;
+  font-weight: 800;
+  color:     var(--tf);
+  display:   flex;
+  align-items:   center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(var(--tf-rgb), 0.18);
+  // також використовується в бургері
+  flex-shrink: 0;
+}
+
+.hdr-ava-name { font-size: 12px; font-weight: 600; color: var(--ht1); }
+.hdr-ava-chev { font-size: 8px; color: var(--ht3); }
+
+// User dropdown
+.hdr-umenu {
+  position:      absolute;
+  right:         0;
+  top:           calc(100% + 8px);
+  width:         220px;
+  z-index:       var(--hz-drop);
+  border-radius: 16px;
+  overflow:      hidden;
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, var(--bg-glass) 0%, var(--bg-primary) 100%);
+  border: 1px solid rgba(var(--tf-rgb), 0.16);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.80),
+    0 4px  80px rgba(var(--tf-rgb), 0.07),
+    inset 0 1px 0 rgba(var(--tf-rgb), 0.22);
+  animation: hdrIn 0.13s ease-out;
+}
+
+.hdr-umenu-head {
+  padding:       14px 16px;
+  border-bottom: 1px solid rgba(var(--tf-rgb), 0.08);
+}
+
+.hdr-umenu-name {
+  font-size:   13px;
+  font-weight: 800;
+  color:       var(--ht1);
+  margin-bottom: 2px;
+}
+
+.hdr-umenu-email {
+  font-size:     11px;
+  color:         var(--ht3);
+  margin-bottom: 8px;
+}
+
+.hdr-umenu-role {
+  display:        inline-block;
+  font-size:      9px;
+  font-weight:    800;
+  letter-spacing: 0.06em;
+  padding:        3px 9px;
+  border-radius:  20px;
+  background:     var(--tf-08);
+  border:         1px solid var(--tf-20);
+  color:          var(--tf);
+}
+
+.hdr-umenu-list { padding: 6px; }
+
+.hdr-umenu-item {
+  display:       flex;
+  align-items:   center;
+  gap:           8px;
+  width:         100%;
+  padding:       8px 10px;
+  border-radius: 9px;
+  border:        none;
+  background:    transparent;
+  font-size:     12.5px;
+  color:         var(--ht2);
+  cursor:        pointer;
+  text-align:    left;
+  transition:    background 0.10s, color 0.10s;
+
+  &:hover {
+    background: var(--tf-08);
+    color:      var(--ht1);
+  }
+
+  &--exit {
+    color: rgba(239, 100, 100, 0.70);
+    &:hover { background: rgba(239, 68, 68, 0.08); color: #ef6464; }
+  }
+}
+
+.hdr-umenu-div {
+  display:    block;
+  height:     1px;
+  background: rgba(var(--tf-rgb), 0.07);
+  margin:     4px 6px;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  БУРГЕР — тільки ≤ $bp-md
+// ═══════════════════════════════════════════════════════════════════════════
+
+.hdr-burger {
+  display:        none; // прихований на desktop
+  flex-direction: column;
+  justify-content: center;
+  align-items:    center;
+  gap:            4.5px;
+  width:          36px;
+  height:         36px;
+  border-radius:  10px;
+  border:         1px solid rgba(var(--tf-rgb), 0.14);
+  background:     var(--tf-08);
+  cursor:         pointer;
+  padding:        0;
+  transition:     background 0.14s, border-color 0.14s;
+
+  @media (max-width: $bp-md) { display: flex; }
+
+  &:hover {
+    background:   rgba(var(--tf-rgb), 0.11);
+    border-color: var(--tf-36);
+  }
+
+  // Анімація "X" при відкриванні
+  &--open {
+    background:   rgba(var(--tf-rgb), 0.12);
+    border-color: var(--tf-36);
+
+    .hdr-bline:nth-child(1) {
+      transform:  translateY(9px) rotate(45deg);
+      background: var(--tf);
+    }
+    .hdr-bline:nth-child(2) {
+      opacity:    0;
+      transform:  scaleX(0);
+    }
+    .hdr-bline:nth-child(3) {
+      transform:  translateY(-9px) rotate(-45deg);
+      background: var(--tf);
+    }
+  }
+}
+
+.hdr-bline {
+  display:       block;
+  width:         18px;
+  height:        1.5px;
+  border-radius: 2px;
+  background:    var(--ht2);
+  transition:    transform 0.22s ease, opacity 0.15s, background 0.15s;
+}
+
+// ── Бургер-меню (повна панель) ────────────────────────────────────────────────
+.hdr-bmenu {
+  display:    none;  // desktop — прихований
+  overflow:   hidden;
+  max-height: 0;
+  opacity:    0;
+  transition: max-height 0.26s ease, opacity 0.18s ease;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--accent-rgb), 0.04) 0%,
+      transparent 16%
+    ),
+    linear-gradient(
+      180deg,
+      var(--bg-glass)  0%,
+      var(--bg-primary) 100%
+    );
+
+  border-bottom: 1px solid rgba(var(--tf-rgb), 0.10);
+  box-shadow:    0 8px 32px rgba(0, 0, 0, 0.45);
+
+  @media (max-width: $bp-md) { display: block; }
+
+  &--open {
+    max-height: 85vh;
+    opacity:    1;
+    overflow-y: auto;
+    // scrollbar Safari-safe: тільки webkit
+    &::-webkit-scrollbar       { width: 4px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+    &::-webkit-scrollbar-thumb { background: rgba(var(--tf-rgb), 0.18); border-radius: 2px; }
+  }
+}
+
+.hdr-bmenu-inner {
+  padding: 16px 20px 28px;
+}
+
+// Search в бургері
+.hdr-bmenu-search {
+  display:       flex;
+  align-items:   center;
+  gap:           8px;
+  width:         100%;
+  padding:       9px 14px;
+  border-radius: 12px;
+  border:        1px solid rgba(var(--tf-rgb), 0.12);
+  background:    var(--tf-08);
+  margin-bottom: 20px;
+  cursor:        text;
+  font-size:     14px;
+  color:         var(--ht3);
+  transition:    border-color 0.15s;
+
+  &:focus-within { border-color: var(--tf-36); }
+
+  input {
+    flex:       1;
+    background: none;
+    border:     none;
+    outline:    none;
+    font-size:  13px;
+    color:      var(--ht1);
+
+    &::placeholder { color: var(--ht3); }
+  }
+}
+
+// Секція навігації в бургері
+.hdr-bmenu-sec { margin-bottom: 20px; }
+
+// Заголовок секції — та сама типографіка що в панелях і футері
+.hdr-bmenu-sec-title {
+  display:        block;
+  font-size:      9.5px;
+  font-weight:    900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color:          var(--tf);
+  opacity:        0.65;
+  padding-bottom: 8px;
+  margin-bottom:  4px;
+  position:       relative;
+
+  // Декоративний підкреслювач
+  &::after {
+    content:       "";
+    position:      absolute;
+    bottom:        0;
+    left:          0;
+    width:         16px;
+    height:        1px;
+    background:    var(--tf);
+    opacity:       0.35;
+    border-radius: 1px;
+  }
+}
+
+// Лінки в бургері
+.hdr-bmenu-link {
+  display:       flex;
+  align-items:   flex-start;
+  gap:           10px;
+  width:         100%;
+  padding:       9px 10px;
+  border-radius: 11px;
+  border:        1px solid transparent;
+  background:    transparent;
+  cursor:        pointer;
+  text-align:    left;
+  transition:    background 0.10s, color 0.10s, border-color 0.10s;
+
+  &:hover {
+    background:   var(--tf-08);
+    border-color: var(--tf-12);
+  }
+
+  &--on {
+    background:   var(--tf-12);
+    border-color: var(--tf-20);
+
+    .hdr-bmenu-link-label { color: var(--tf); font-weight: 700; }
+    .hdr-bmenu-link-ico   { opacity: 1; }
+  }
+
+  &--exit {
+    .hdr-bmenu-link-label { color: rgba(239, 100, 100, 0.75); }
+    &:hover .hdr-bmenu-link-label { color: #ef6464; }
+    &:hover { background: rgba(239, 68, 68, 0.07); }
+  }
+}
+
+.hdr-bmenu-link-ico {
+  font-size:    16px;
+  width:        24px;
+  flex-shrink:  0;
+  display:      flex;
+  align-items:  center;
+  justify-content: center;
+  opacity:      0.55;
+  padding-top:  1px;
+}
+
+.hdr-bmenu-link-body  { display: flex; flex-direction: column; gap: 1px; }
+
+.hdr-bmenu-link-label {
+  font-size:   13px;
+  font-weight: 500;
+  color:       var(--ht2);
+  display:     block;
+}
+
+.hdr-bmenu-link-desc {
+  font-size:   11px;
+  color:       var(--ht3);
+  display:     block;
+  line-height: 1.4;
+}
+
+.hdr-bmenu-div {
+  display:    block;
+  height:     1px;
+  background: rgba(var(--tf-rgb), 0.08);
+  margin:     8px 0 16px;
+}
+
+// User в бургері
+.hdr-bmenu-user {
+  display:       flex;
+  align-items:   center;
+  gap:           12px;
+  padding:       12px 10px;
+  border-radius: 12px;
+  background:    var(--tf-08);
+  border:        1px solid rgba(var(--tf-rgb), 0.12);
+  margin-bottom: 4px;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  TAB PANELS — "Навігація" і "Сторінки"
+//  Transition: max-height + opacity — логіка перемикання в TSX (.hdr-panel--open)
+//  Outside-click: в TSX встановлює panel = null
+// ═══════════════════════════════════════════════════════════════════════════
+
+.hdr-panel {
+  overflow:   hidden;
+  max-height: 0;
+  opacity:    0;
+  transition: max-height 0.22s ease, opacity 0.17s ease;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--accent-rgb), 0.04) 0%,
+      transparent 16%
+    ),
+    linear-gradient(
+      180deg,
+      var(--bg-primary) 0%,
+      var(--bg-primary) 100%
+    );
+
+  border-bottom: 1px solid rgba(var(--tf-rgb), 0.08);
+  box-shadow:    0 8px 32px rgba(0, 0, 0, 0.40);
+
+  // Панелі на планшеті не показуємо (там є бургер)
+  @media (max-width: $bp-md) { display: none; }
+
+  &--open {
+    max-height: 320px;
+    opacity:    1;
+  }
+}
+
+.hdr-pgrid {
+  display:    flex;
+  padding:    12px 16px 18px;
+  overflow-x: auto;
+  &::-webkit-scrollbar { display: none; }
+}
+
+.hdr-pcol {
+  flex-shrink:   0;
+  min-width:     110px;
+  padding-right: 22px;
+  margin-right:  22px;
+  border-right:  1px solid rgba(var(--tf-rgb), 0.07);
+
+  &:last-child {
+    border-right:  none;
+    padding-right: 0;
+    margin-right:  0;
+  }
+}
+
+// Заголовок секції/групи в панелі
+// ═══ ТІЛЬКИ SCSS, без кольору в JSX ═══
+// Типографіка: uppercase · letter-spacing 0.14em · weight 900 · Tiffany
+.hdr-psec {
+  display:        block;
+  font-size:      9.5px;
+  font-weight:    900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color:          var(--tf);
+  opacity:        0.65;
+  padding:        2px 0 7px;
+  position:       relative;
+  margin-bottom:  1px;
+
+  // Декоративний підкреслювач
+  &::after {
+    content:       "";
+    position:      absolute;
+    bottom:        0;
+    left:          0;
+    width:         14px;
+    height:        1px;
+    background:    var(--tf);
+    opacity:       0.35;
+    border-radius: 1px;
+  }
+}
+
+// Підзаголовок підгрупи (панель Навігація)
+.hdr-pgroup { margin-bottom: 8px; }
+
+.hdr-pgtitle {
+  display:        block;
+  font-size:      8.5px;
+  font-weight:    700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color:          var(--tf);
+  opacity:        0.40;
+  padding:        5px 0 2px;
+}
+
+// Пункти меню в панелях — типографіка як у футері
+.hdr-plink {
+  display:       flex;
+  align-items:   center;
+  gap:           5px;
+  width:         100%;
+  padding:       3px 7px;
+  border-radius: 7px;
+  border:        1px solid transparent;
+  background:    transparent;
+  font-size:     11.5px;
+  font-weight:   500;
+  color:         var(--ht3);
+  cursor:        pointer;
+  white-space:   nowrap;
+  text-align:    left;
+  transition:    background 0.10s, color 0.10s, border-color 0.10s;
+
+  &:hover {
+    background:   var(--tf-08);
+    color:        var(--ht1);
+    border-color: var(--tf-12);
+  }
+
+  &--on {
+    background:   var(--tf-12);
+    border-color: var(--tf-20);
+    color:        var(--tf);
+    font-weight:  700;
+
+    .hdr-plink-ico { opacity: 1; }
+  }
+}
+
+.hdr-plink-ico {
+  font-size:   12px;
+  opacity:     0.50;
+  flex-shrink: 0;
+}

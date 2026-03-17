@@ -1,12 +1,13 @@
 // frontend/src/shared/utils/roles.ts
 import type { User } from '@/features/user/types/user.types'
+import { hasPaidAccess } from '@/shared/utils/access.utils'
 
 export function hasContentAccess(content: any, user: User | null): boolean {
   if (!content.isPremium) return true
   if (!user) return false
 
   // ✅ через user.access — не через subscriptionStatus/trialEndsAt
-  return user.access.isPaid || user.access.isTrial
+  return hasPaidAccess(user)
 }
 
 export function filterContentByAccess(content: any[], user: User | null) {

@@ -1,5 +1,5 @@
-import { FivePointsModule } from '@/db/generated/prisma/client.js';
-import { UserRole } from '@/types/globalTypes.js';
+import { FivePointsModule } from '../../db/generated/prisma/client.js';
+import { UserRole } from '../../types/globalTypes.js';
 
 export type FivePointsProgress = {
   [key: string]: unknown;

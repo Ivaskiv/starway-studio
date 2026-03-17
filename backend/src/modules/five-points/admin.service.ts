@@ -1,6 +1,6 @@
 // backend/src/modules/five-points/admin.service.ts
 
-import { FivePointsProgress } from "@/modules/five-points/types.js";
+import { FivePointsProgress } from "../../modules/five-points/types.js";
 
 
 // Тип рядка прогресу, без implicit any

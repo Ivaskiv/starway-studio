@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import type { AuthenticatedRequest } from '@/types/globalTypes.js';
+import type { AuthenticatedRequest } from '../../types/globalTypes.js';
 import type { DailyEntryInput, UpsertDailyEntryInput } from './types.js';
 
 import {
@@ -9,6 +9,7 @@ import {
   completeMicroTask,
   getDailyEntryHistory,
 } from './service.js';
+import { rewardEngine } from '../gamification/reward.engine.js';
 
 // =====================================================
 // GET TODAY'S ENTRY
@@ -61,6 +62,7 @@ export async function upsertEntry(req: AuthenticatedRequest, res: Response) {
     };
 
     const entry = await upsertDailyEntry(entryInput);
+    await rewardEngine.onDailyEntryCreated(user.id);
 
     res.json(entry);
   } catch (err) {

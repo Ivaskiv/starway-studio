@@ -1,27 +1,29 @@
 // backend/src/modules/mentorship/routes.ts
-/**
- * Mentorship Routes
- */
-
-import { authRequired } from '@/modules/auth/middleware/auth.js';
-import { Router } from 'express';
+import { authRequired } from '../../modules/auth/middleware/auth.js'
+import { Router } from 'express'
 import {
+  create,
   activate,
+  pause,
+  resume,
+  complete,
+  cancel,
   checkEligibility,
-  createOffer,
   getMyMentorship,
-  getMyOffer,
-  updateStatus,
-} from './controller.js';
+} from './controller.js'
 
-const router = Router();
-router.use(authRequired);
+const router = Router()
+router.use(authRequired)
 
-router.get('/eligible', checkEligibility);
-router.post('/offer', createOffer);
-router.post('/activate', activate);
-router.get('/my', getMyMentorship);
-router.get('/offer', getMyOffer);
-router.patch('/:id/status', updateStatus);
+router.get('/access', checkEligibility)
+router.get('/active', getMyMentorship)
 
-export default router;
+router.post('/', create)
+router.post('/activate', activate)
+
+router.patch('/:id/pause', pause)
+router.patch('/:id/resume', resume)
+router.patch('/:id/complete', complete)
+router.patch('/:id/cancel', cancel)
+
+export default router

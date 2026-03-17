@@ -2,7 +2,7 @@
 import type {  Response } from 'express';
 import { fivePointsService } from './service.js';
 import { fivePointsRepo } from './repo.js';
-import type { AuthenticatedRequest } from '@/types/globalTypes.js';
+import type { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 const repo = fivePointsRepo();
 const service = fivePointsService(repo);

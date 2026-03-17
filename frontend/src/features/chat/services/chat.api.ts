@@ -1,6 +1,6 @@
 // frontend/src/features/chat/services/chat.api.ts
 import { ChatMessage } from '@/shared/types/modules.types';
-import { api } from '../../../services/api';
+import { api } from '@/services/api';
 
 export const chatApi = api.injectEndpoints({
   endpoints: builder => ({

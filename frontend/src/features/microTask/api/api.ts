@@ -1,6 +1,6 @@
 // frontend/src/features/microTask/api/api.ts
-import api from '@/services/api'
-import { MicroTask } from '../types/types'
+import api from '@/services/api';
+import { MicroTask } from '../types/types';
 
 export const microTaskApi = api.injectEndpoints({
   endpoints: (builder) => ({

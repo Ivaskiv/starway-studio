@@ -1,10 +1,10 @@
 // backend/src/modules/funnel/controller.ts
 
 import type { Response } from 'express';
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../db/client.js';
 import * as funnelService from './service.js';
 import { canOverrideFunnelOwner } from './policy.js';
-import type { AuthenticatedRequest, FunnelInput } from '@/types/globalTypes.js';
+import type { AuthenticatedRequest, FunnelInput } from '../../types/globalTypes.js';
 
 
 // ────────────────────────────────────────────────

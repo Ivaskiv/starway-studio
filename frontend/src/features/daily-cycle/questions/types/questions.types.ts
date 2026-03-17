@@ -15,6 +15,9 @@ export type QuestionType = 'text' | 'scale' | 'choice';
 export interface Question {
   id: string; // questions.id
   text: string; // questions.text
+  title?: string
+  description?: string
+  answerText?: string
   context: QuestionContext; // questions.context
   contextId?: string; // questions.context_id
   type: QuestionType; // questions.type
@@ -25,6 +28,9 @@ export interface Question {
   priority: number; // questions.priority
   triggerType?: QuestionContext; // questions.trigger_type
   triggerMeta?: Record<string, any>; // questions.trigger_meta
+  // scheduler metadata
+  time?: string;
+  frequency?: 'once' | 'daily' | 'weekly';
 }
 
 export interface UseQuestionsOptions {
@@ -68,7 +74,7 @@ export interface Answer {
 ========================= */
 
 // Decision
-export type DecisionType = 'support' | 'upsell' | 'task' | 'redirect' | 'block';
+export type DecisionType = 'support' | 'upsell' | 'task' | 'redirect' | 'block' | 'pdf';
 
 // DB: decisions
 export interface Decision {
@@ -95,6 +101,8 @@ export interface Decision {
   // звʼязки
   questionId: string; // decisions.question_id
   answerId: string; // decisions.answer_id
+
+  generateReport?: boolean;
 
   createdAt: string;
 }
@@ -148,6 +156,13 @@ export interface SubmitAnswersResponseExtended {
   decisions: Decision[];
   totalProcessed: number; // скільки відповідей оброблено
   timestamp: string; // коли оброблено
+}
+
+export interface UserAnswer {
+  questionId: string;
+  questionText: string;
+  value: string | number | boolean;
+  answeredAt: string;
 }
 
 /* =========================

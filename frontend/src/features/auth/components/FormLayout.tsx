@@ -1,13 +1,12 @@
-// /features/auth/components/FormLayout.tsx
-
-import { cn } from '@/lib/utils';
-import { ReactNode } from 'react';
+// frontend/src/features/auth/components/FormLayout.tsx
+import { cn } from '@/lib/utils'
+import { ReactNode } from 'react'
 
 interface Props {
-  title: string;
-  subtitle?: string;
-  error?: string;
-  children: ReactNode;
+  title: string
+  subtitle?: string
+  error?: string
+  children: ReactNode
 }
 
 export function FormLayout({ title, subtitle, error, children }: Props) {
@@ -27,15 +26,7 @@ export function FormLayout({ title, subtitle, error, children }: Props) {
       )}
 
       {/* Form content */}
-      <div
-        className={cn(
-          'flex flex-col',
-          // гумовий принцип
-          'gap-4 sm:gap-3',
-        )}
-      >
-        {children}
-      </div>
+      <div className={cn('flex flex-col gap-4 sm:gap-3')}>{children}</div>
     </div>
-  );
+  )
 }

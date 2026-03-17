@@ -1,4 +1,4 @@
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../../db/client.js';
 import type { PaymentData, PaymentResult } from '../types.js';
 
 /** Upsert enrollment + активація підписки після підтвердження платежу */

@@ -1,30 +1,36 @@
-import { selectVisibleNotifications } from '@/app/store/selectVisibleNotifications';
-import { useGetMeQuery } from '@/features/auth/services/auth.api';
-import NotificationsCard from '@/features/notifications/components/NotificationsCard';
+// frontend/src/features/notifications/pages/Notifications.tsx
+// FIX: useGetMeQuery → useAppSelector(selectCurrentUser)
+// userId береться з store — без додаткового мережевого запиту
+
+import { useAppSelector }    from '@/app/hooks'
+import { selectCurrentUser } from '@/features/auth/services/auth.slice'
+import NotificationsCard     from '@/features/notifications/components/NotificationsCard'
 import {
   useGetNotificationsQuery,
   useMarkNotificationReadMutation,
-} from '@/services/notifications.api';
-import { useSelector } from 'react-redux';
+} from '@/features/notifications/services/notifications.api'
 
 export default function Notifications() {
-  const { data: meData } = useGetMeQuery();
-  const userId = meData?.user?.id ?? '';
+  // ── ВИПРАВЛЕНО: userId з Redux store ─────────────────────────────────────
+  const user   = useAppSelector(selectCurrentUser)
+  const userId = user?.id ?? ''
 
-  const { data: notificationsData } = useGetNotificationsQuery({ userId }, { skip: !userId });
+  const { data: notificationsData } = useGetNotificationsQuery(
+    { userId },
+    { skip: !userId },
+  )
 
-  const notifications = useSelector(selectVisibleNotifications);
-  const [markRead] = useMarkNotificationReadMutation();
+  const [markRead] = useMarkNotificationReadMutation()
 
-  if (!userId) return null;
+  if (!userId) return null
 
   return (
     <div className="max-w-xl mx-auto">
       <NotificationsCard
         userId={userId}
-        notifications={notifications ?? []}
+        notifications={notificationsData ?? []}
         markRead={id => markRead(id)}
       />
     </div>
-  );
+  )
 }

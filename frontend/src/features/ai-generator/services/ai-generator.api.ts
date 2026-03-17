@@ -1,10 +1,7 @@
 // features/ai-generator/services/ai-generator.api.ts
 
+import { FunnelBlueprint, OwnerOnboardingProfile } from '@/features/ai-generator/types/wizard.types';
 import { api } from '@/services/api';
-import type {
-  FunnelBlueprint,
-  OwnerOnboardingProfile,
-} from '../../products/types/generator.types';
 
 interface GenerateStepRequest {
   stepNumber: number;
@@ -54,14 +51,14 @@ export const aiGeneratorApi = api.injectEndpoints({
   endpoints: builder => ({
     getWorkflow: builder.query<{ success: boolean; workflow: WorkflowPayload | null }, void>({
       query: () => ({
-        url: '/ai/generator/workflow',
+        url: '/ai-generator/workflow',
         method: 'GET',
       }),
     }),
 
     saveWorkflow: builder.mutation<{ success: boolean; updatedAt: string }, { workflow: WorkflowPayload }>({
       query: (body) => ({
-        url: '/ai/generator/workflow',
+        url: '/ai-generator/workflow',
         method: 'PUT',
         body,
       }),

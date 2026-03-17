@@ -1,37 +1,43 @@
 // frontend/src/features/reportsPdf/services/pdfClient.ts
+import { PDFDocument } from 'pdf-lib'
+import type { TDocumentDefinitions } from 'pdfmake/interfaces'
 
-import { PDFDocument } from 'pdf-lib';
+async function getPdfMake() {
+  const pdfMakeModule = await import('pdfmake/build/pdfmake')
+  const pdfFontsModule = await import('pdfmake/build/vfs_fonts')
+  const pdfMake = (pdfMakeModule as any).default ?? pdfMakeModule
+  const vfs = (pdfFontsModule as any).default?.vfs ?? (pdfFontsModule as any).vfs ?? {}
+  pdfMake.vfs = vfs
+  return pdfMake as {
+    createPdf(docDefinition: TDocumentDefinitions): {
+      getBlob: (cb: (blob: Blob) => void) => void
+    }
+  }
+}
 
-/**
- * 📄 Завантажити PDF з URL
- */
-export const loadPdfFromUrl = async (url: string): Promise<PDFDocument> => {
-  const response = await fetch(url);
-  const arrayBuffer = await response.arrayBuffer();
-  const doc = await PDFDocument.load(arrayBuffer);
-  return doc;
-};
+export const getPdfAsBlob = async (docDefinition: TDocumentDefinitions): Promise<Blob> => {
+  const pdfMake = await getPdfMake()
+  return new Promise((resolve, reject) => {
+    try {
+      pdfMake.createPdf(docDefinition).getBlob(blob => resolve(blob))
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
 
-/**
- * 📄 Створити порожній PDF
- */
-export const createEmptyPdf = async (): Promise<PDFDocument> => {
-  const doc = await PDFDocument.create();
-  return doc;
-};
+export async function loadPdfFromUrl(url: string): Promise<PDFDocument> {
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`Failed to load PDF template: ${res.status} ${res.statusText}`)
+  }
+  const bytes = await res.arrayBuffer()
+  return PDFDocument.load(bytes)
+}
 
-/**
- * 💾 Зберегти PDF у байти
- */
-export const savePdf = async (doc: PDFDocument): Promise<Uint8Array> => {
-  const bytes = await doc.save();
-  return bytes;
-};
-
-/**
- * 📥 Зберегти PDF у Blob
- */
 export const savePdfAsBlob = async (doc: PDFDocument): Promise<Blob> => {
-  const bytes = await doc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
-};
+  const bytes = await doc.save()
+  const normalized = new Uint8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+  const buffer = normalized.buffer as ArrayBuffer
+  return new Blob([buffer], { type: 'application/pdf' })
+}

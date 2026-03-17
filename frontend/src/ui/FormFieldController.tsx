@@ -1,29 +1,29 @@
-// frontend/src/ui/FormFieldController.tsx
-import { FieldType } from '../shared/types/modules.types'
-import { Input } from './Input'
-import Select, { SelectOption } from './Select'
-import { Textarea } from './Textarea'
-import { Icon } from './Icon'
+// fix style $100k — controlled form field wrapper tuned to liquid-glass system
+import { ChangeEvent } from 'react';
+import { Input } from './Input';
+import Select, { SelectOption } from './Select';
+import { Textarea } from './Textarea';
+import { Icon } from './Icon';
+import { cn } from '../lib/utils';
 
 interface FormFieldControllerProps {
-  value?: any
-  onChange?: (value: any) => void
-  name?: string
-  label?: string
-  placeholder?: string
-  type?: FieldType
-  options?: SelectOption[]
-  iconName?: string
-  iconPosition?: 'left' | 'right'
-  className?: string
-  error?: string
-  disabled?: boolean
+  value?: any;
+  onChange?: (value: any) => void;
+  name?: string;
+  label?: string;
+  placeholder?: string;
+  type?: 'input' | 'textarea' | 'select' | 'email' | 'number' | 'checkbox';
+  options?: SelectOption[];
+  iconName?: string;
+  iconPosition?: 'left' | 'right';
+  className?: string;
+  error?: string;
+  disabled?: boolean;
 }
 
 export function FormFieldController({
   value,
   onChange,
-  name,
   label,
   placeholder,
   type = 'input',
@@ -34,73 +34,84 @@ export function FormFieldController({
   error,
   disabled = false,
 }: FormFieldControllerProps) {
+  const baseLabel = 'text-sm font-semibold text-[var(--text-muted)]';
+
   if (type === 'textarea') {
     return (
-      <div className="space-y-2">
-        {label && <label className="block text-sm font-medium text-slate-300">{label}</label>}
+      <label className={cn('space-y-2', className)}>
+        {label && <span className={baseLabel}>{label}</span>}
         <Textarea
           value={value}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onChange?.(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => onChange?.(e.target.value)}
           placeholder={placeholder}
           rows={5}
-          className={`glass-field w-full resize-none ${className || ''}`}
+          className="w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] text-[var(--text-primary)] px-3 py-2"
           aria-invalid={!!error}
           disabled={disabled}
         />
-        {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
-      </div>
-    )
+        {error && <p className="text-xs text-[var(--accent)]">{error}</p>}
+      </label>
+    );
   }
 
   if (type === 'select') {
     return (
-      <div className="space-y-1">
-        {label && <label className="text-white">{label}</label>}
-        <Select value={value} onChange={onChange} options={options || []} className={className} error={error} disabled={disabled} />
-      </div>
-    )
+      <label className={cn('space-y-2', className)}>
+        {label && <span className={baseLabel}>{label}</span>}
+        <Select
+          value={value}
+          onChange={onChange}
+          options={options || []}
+          className="glass-field w-full"
+          error={error}
+          disabled={disabled}
+        />
+      </label>
+    );
   }
 
   if (type === 'input' || type === 'email' || type === 'number') {
+    const typeValue = type === 'email' ? 'email' : type === 'number' ? 'number' : 'text';
     return (
-      <div className="space-y-1 relative">
-        {label && <label className="text-white">{label}</label>}
-
+      <div className={cn('space-y-2 relative', className)}>
+        {label && <span className={baseLabel}>{label}</span>}
         {iconName && iconPosition === 'left' && (
-          <Icon name={iconName} size={20} className="absolute left-3 top-3 text-text-muted z-10" />
+          <Icon name={iconName} size={20} className="absolute left-3 top-3 text-[var(--text-muted)]" />
         )}
         {iconName && iconPosition === 'right' && (
-          <Icon name={iconName} size={20} className="absolute right-3 top-3 text-text-muted z-10" />
+          <Icon name={iconName} size={20} className="absolute right-3 top-3 text-[var(--text-muted)]" />
         )}
-
         <Input
           value={value}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange?.(e.target.value)}
-          type={type === 'email' ? 'email' : type === 'number' ? 'number' : 'text'}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => onChange?.(e.target.value)}
+          type={typeValue}
           placeholder={placeholder}
-          className={`${iconName ? (iconPosition === 'left' ? 'pl-11' : 'pr-11') : ''} ${className || ''}`}
+          className={cn(
+            'glass-field w-full border border-[var(--border-primary)] bg-[var(--glass-bg)]',
+            iconName ? (iconPosition === 'left' ? 'pl-11' : 'pr-11') : '',
+            className,
+          )}
           disabled={disabled}
         />
-
-        {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+        {error && <p className="text-xs text-[var(--accent)]">{error}</p>}
       </div>
-    )
+    );
   }
 
   if (type === 'checkbox') {
     return (
-      <div className="flex items-center gap-2">
+      <label className={cn('flex items-center gap-2 text-[var(--text-primary)]', className)}>
         <Input
           type="checkbox"
           checked={!!value}
-          onChange={(e) => onChange?.(e.target.checked)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => onChange?.(e.target.checked)}
           disabled={disabled}
-          className="w-4 h-4 accent-purple-500"
+          className="glass-field w-5 h-5 rounded-xl border-[var(--border-accent)]"
         />
-        {label && <span className="text-white">{label}</span>}
-      </div>
-    )
+        {label && <span className="text-sm font-medium">{label}</span>}
+      </label>
+    );
   }
 
-  return null
+  return null;
 }

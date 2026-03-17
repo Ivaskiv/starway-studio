@@ -1,5 +1,5 @@
 // import { userRole } from "@/features/auth/types/auth.types";
-// import { Ability } from "@/features/auth/utils/abilities";
+// import { Ability } from "@/features/auth/permissions/abilities";
 
 // export const PERMISSIONS_MATRIX: Record<userRole, Ability[]> = {
 //   // user: ['dashboard.view', 'profile.view', 'profile.edit', 'progress.view', 'ai.use'],

@@ -1,14 +1,16 @@
 // /features/modules/module.types.ts
 
-import { BlockTypeId } from '@/shared/constants/funnel.constants';
+export type BlockTypeId = string | 'theory' | 'exercise' | 'quiz' | 'reflection';
 
-export interface Module {
+export interface Lesson {
   id: string;
-  productId: string;
+  moduleId: string;
   name: string;
+  type: 'video' | 'text' | 'quiz' | 'task' | 'live' | 'telegram_task';
   order: number;
-  isLocked?: boolean;
-  lessons: Lesson[];
+  duration?: number;
+  contentUrl?: string;
+  blocks: BlockTypeId[];
 }
 
 export type ModuleCategory =
@@ -34,17 +36,6 @@ export interface Module {
   isLocked?: boolean;
   dependencies?: string[]; // інші модулі
   lessons: Lesson[];
-}
-
-export interface Lesson {
-  id: string;
-  moduleId: string;
-  name: string;
-  type: 'video' | 'text' | 'quiz' | 'task' | 'live' | 'telegram_task';
-  order: number;
-  duration?: number;
-  contentUrl?: string;
-  blocks: BlockTypeId[];
 }
 
 export interface Quiz {

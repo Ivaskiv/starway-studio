@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 
+import { selectCurrentUser } from '@/features/auth/services/auth.slice';
 import {
-  useGetWorkflowQuery,
   useGenerateFunnelBlueprintMutation,
   useGenerateStepVariantsMutation,
+  useGetWorkflowQuery,
   useSaveFunnelFromBlueprintMutation,
   useSaveWorkflowMutation,
 } from '../services/ai-generator.api';
-import { selectCurrentUser } from '@/features/auth/services/auth.slice';
 
 import {
   ATTEMPTS_PER_STEP,
@@ -20,7 +20,7 @@ import {
   type GenerationAttempt,
   type OwnerOnboardingProfile,
   type StepData,
-} from '../../products/types/generator.types';
+} from '@/features/ai-generator/types/wizard.types';
 interface GenerateStepResponse {
   variants: string[];
 }

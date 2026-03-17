@@ -1,3 +1,4 @@
+// fix style $100k — premium form fields using glass surfaces
 import { ChangeEvent } from 'react';
 import { cn } from '../lib/utils';
 import { Mail, User, Phone, MapPin } from 'lucide-react';
@@ -20,6 +21,8 @@ const ICONS = {
   map: MapPin,
 };
 
+const fieldClass = 'w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-3 py-2 transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.2)] appearance-none';
+
 const FormField: React.FC<FormFieldProps> = ({
   label,
   value,
@@ -34,41 +37,41 @@ const FormField: React.FC<FormFieldProps> = ({
 
   if (readOnly) {
     return (
-      <div className={cn('glass-field flex items-center gap-3 p-3 rounded-xl', className)}>
-        {Icon && <Icon className="w-4 h-4 text-slate-400" />}
-        <span className="text-white">{value || 'Не вказано'}</span>
+      <div className={cn('liquid-glass surface glass-noise flex items-center gap-3 p-3 rounded-[18px]', className)}>
+        {Icon && <Icon className="w-4 h-4 text-[var(--text-muted)]" />}
+        <span className="text-[var(--text-primary)]">{value || 'Не вказано'}</span>
       </div>
     );
   }
 
   if (textarea) {
     return (
-      <div className={className}>
-        <label className="block text-sm font-medium text-slate-400 mb-2">{label}</label>
+      <label className={cn('block space-y-2', className)}>
+        <span className="text-sm font-medium text-[var(--text-muted)]">{label}</span>
         <textarea
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className="glass-field w-full min-h-[100px] resize-none px-3 py-2 rounded-md bg-slate-800 text-white"
+          className={cn(fieldClass, 'min-h-[120px] resize-none')}
         />
-      </div>
+      </label>
     );
   }
 
   return (
-    <div className={className}>
-      <label className="block text-sm font-medium text-slate-400 mb-2">{label}</label>
+    <label className={cn('block space-y-2', className)}>
+      <span className="text-sm font-medium text-[var(--text-muted)]">{label}</span>
       <div className="flex items-center gap-3">
-        {Icon && <Icon className="w-4 h-4 text-slate-400" />}
+        {Icon && <Icon className="w-4 h-4 text-[var(--text-muted)]" />}
         <input
           type="text"
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className="glass-field w-full px-3 py-2 rounded-md bg-slate-800 text-white"
+          className={cn(fieldClass, 'flex-1')}
         />
       </div>
-    </div>
+    </label>
   );
 };
 

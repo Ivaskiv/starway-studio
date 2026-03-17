@@ -1,6 +1,6 @@
 // backend/src/modules/five-points/routes.ts
 import { Router } from 'express';
-import { authRequired } from '@/modules/auth/middleware/auth.js';
+import { authRequired } from '../../modules/auth/middleware/auth.js';
 import { getEnrollmentHandler, enrollHandler, progressHandler } from './controller.js';
 
 const router = Router();

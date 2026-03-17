@@ -2,6 +2,7 @@ import { ROUTES } from '@/config/routes';
 import { GlassCard } from '@/ui';
 import { ArrowRight, CheckCircle2, Clock3, HeartPulse } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import GamificationWidget from '@/features/gamification/components/GamificationWidget';
 
 const STEPS = [
   {
@@ -32,6 +33,8 @@ export default function DailyCyclePage() {
           Коротка щоденна практика для стабільного прогресу і чистих рішень.
         </p>
       </div>
+
+      <GamificationWidget />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {STEPS.map((step) => (

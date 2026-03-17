@@ -1,73 +1,60 @@
-// src/pages/admin/LiveAnalytics.tsx
-import { useGetDashboardStatsQuery } from '@/services/stats.api'
+// features/analytics/components/LiveAnalytics.tsx
+
+import { useGetAdminStatsQuery } from '@/features/analytics/services/analytics.api'
 import { Button, Select } from '@/ui'
-import {
-  Activity,
-  ArrowUpRight,
-  DollarSign,
-  Download,
-  RefreshCw,
-  TrendingUp,
-  Users,
-} from 'lucide-react'
+import { Activity, ArrowUpRight, DollarSign, Download, RefreshCw, TrendingUp, Users } from 'lucide-react'
 import { useState } from 'react'
 
 export default function LiveAnalytics() {
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d')
 
   const periods = [
-    { value: '7d' as const, label: '7 днів' },
+    { value: '7d'  as const, label: '7 днів'  },
     { value: '30d' as const, label: '30 днів' },
     { value: '90d' as const, label: '90 днів' },
   ]
 
-  const { data: stats, isLoading, isFetching, refetch } = useGetDashboardStatsQuery(
+  const { data: stats, isLoading, isFetching, refetch } = useGetAdminStatsQuery(
     { period },
-    { pollingInterval: 30000, refetchOnMountOrArgChange: true }
+    { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
   )
-
-  const isRefreshing = isFetching && !isLoading
-
-  const handleRefresh = () => refetch()
 
   const dashboardStats = [
     {
       label: 'Всього користувачів',
-      value: stats?.total_users ?? '—',
+      value:  stats?.total_users ?? '—',
       change: `+${stats?.new_users_this_month ?? 0}`,
-      trend: 'up' as const,
-      icon: Users,
-      color: 'blue',
+      trend:  'up' as const,
+      icon:   Users,
+      color:  'blue',
     },
     {
       label: 'Активні воронки',
-      value: stats?.active_funnels ?? '—',
+      value:  stats?.active_funnels ?? '—',
       change: `з ${stats?.total_funnels ?? 0} створених`,
-      trend: 'up' as const,
-      icon: Activity,
-      color: 'purple',
+      trend:  'up' as const,
+      icon:   Activity,
+      color:  'purple',
     },
     {
       label: 'Конверсія',
-      value: stats?.conversion_rate ? `${stats.conversion_rate.toFixed(1)}%` : '—',
-      change:
-        stats?.revenue_growth != null
-          ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
-          : '0%',
-      trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : 'down',
-      icon: TrendingUp,
-      color: 'green',
+      value:  stats?.conversion_rate != null ? `${stats.conversion_rate.toFixed(1)}%` : '—',
+      change: stats?.revenue_growth != null
+        ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
+        : '0%',
+      trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : ('down' as const),
+      icon:   TrendingUp,
+      color:  'green',
     },
     {
       label: 'Дохід за період',
-      value: stats?.total_revenue ? `₴${stats.total_revenue.toLocaleString('uk-UA')}` : '₴—',
-      change:
-        stats?.revenue_growth != null
-          ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
-          : '0%',
-      trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : 'down',
-      icon: DollarSign,
-      color: 'orange',
+      value:  stats?.total_revenue ? `₴${stats.total_revenue.toLocaleString('uk-UA')}` : '₴—',
+      change: stats?.revenue_growth != null
+        ? `${stats.revenue_growth >= 0 ? '+' : ''}${stats.revenue_growth.toFixed(1)}%`
+        : '0%',
+      trend: (stats?.revenue_growth ?? 0) >= 0 ? 'up' : ('down' as const),
+      icon:   DollarSign,
+      color:  'orange',
     },
   ]
 
@@ -79,31 +66,28 @@ export default function LiveAnalytics() {
           <h1 className="text-3xl font-bold mb-2">Live Аналітика</h1>
           <p className="text-gray-400">Дані оновлюються кожні 30 секунд</p>
         </div>
-
         <div className="flex gap-3">
           <Select
             options={periods}
             value={period}
             onChange={e => setPeriod(e.target.value as typeof period)}
-            className="w-40 glass-field"
+            className="w-40"
             disabled={isLoading}
           />
-
-          <Button onClick={handleRefresh} disabled={isRefreshing} className="btn">
-            <RefreshCw size={16} className={isRefreshing ? 'animate-spin-slow' : ''} />
+          <Button onClick={refetch} disabled={isFetching && !isLoading}>
+            <RefreshCw size={16} className={isFetching && !isLoading ? 'animate-spin' : ''} />
           </Button>
-
-          <Button className="btn">
+          <Button>
             <Download size={16} />
           </Button>
         </div>
       </div>
 
-      {/* Live Indicator */}
+      {/* Live indicator */}
       <div className="flex items-center gap-2 text-sm">
-        <div className="relative">
-          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-          <div className="absolute inset-0 w-3 h-3 bg-green-500 rounded-full animate-ping-slow" />
+        <div className="relative w-3 h-3">
+          <div className="absolute inset-0 bg-green-500 rounded-full animate-ping" />
+          <div className="relative w-3 h-3 bg-green-500 rounded-full" />
         </div>
         <span className="text-green-400 font-medium">Live</span>
         <span className="text-gray-500">
@@ -111,54 +95,39 @@ export default function LiveAnalytics() {
         </span>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {dashboardStats.map(stat => {
-          const Icon = stat.icon
-          const isPositive = stat.trend === 'up'
-
-          return (
-            <div
-              key={stat.label}
-              className="glass-card p-6 rounded-3xl hover:scale-105 transition-all duration-300"
-              data-blur="lg"
-              data-hover="lift"
-              data-gradient
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div
-                  className={`p-3 rounded-xl bg-${stat.color}-500/20 flex items-center justify-center`}
-                >
-                  <Icon size={24} className={`text-${stat.color}-400`} />
-                </div>
-
-                <div
-                  className={`flex items-center gap-1 text-sm ${
-                    isPositive ? 'text-green-400' : 'text-red-400'
-                  }`}
-                >
-                  <ArrowUpRight size={16} className={isPositive ? '' : 'rotate-180'} />
-                  <span>{stat.change}</span>
-                </div>
-              </div>
-
-              <p className="text-sm text-gray-400 mb-1">{stat.label}</p>
-              <p className="text-3xl font-bold">{stat.value}</p>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Повідомлення при завантаженні або відсутності даних */}
-      {isLoading && (
+      {/* Stats grid */}
+      {isLoading ? (
         <div className="text-center py-12">
           <p className="text-gray-400">Завантаження аналітики...</p>
         </div>
-      )}
-
-      {!isLoading && !stats && (
+      ) : !stats ? (
         <div className="text-center py-12">
           <p className="text-gray-400">Немає даних за обраний період</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {dashboardStats.map(stat => {
+            const Icon = stat.icon
+            const isPositive = stat.trend === 'up'
+            return (
+              <div
+                key={stat.label}
+                className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-gray-700 transition"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`p-3 rounded-xl bg-${stat.color}-500/10`}>
+                    <Icon size={24} className={`text-${stat.color}-400`} />
+                  </div>
+                  <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                    <ArrowUpRight size={16} className={isPositive ? '' : 'rotate-180'} />
+                    <span>{stat.change}</span>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-400 mb-1">{stat.label}</p>
+                <p className="text-3xl font-bold">{stat.value}</p>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

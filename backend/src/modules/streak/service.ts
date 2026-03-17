@@ -11,8 +11,9 @@
 // backend/src/modules/streak/service.ts
 // Вся бізнес-логіка streak (ядро)
 
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../db/client.js';
 import { STREAK_RULES, type StreakInfo, type StreakRuleKey } from './types.js';
+import { rewardEngine } from '../gamification/reward.engine.js';
 
 function diffDays(a: Date, b: Date): number {
   return Math.floor((a.getTime() - b.getTime()) / 86_400_000);
@@ -33,13 +34,13 @@ export async function registerStreakActivity(
 
   const streak = await prisma.streak.findUnique({
     where: {
-      userId_ruleKey: { userId, ruleKey }, // ✅ працює ТІЛЬКИ бо є @@unique
+      userId_ruleKey: { userId, ruleKey }, // ✅ працює ТІЛЬКИ бо є ../..../..unique
     },
   });
 
   // ── NEW ────────────────────────────────
   if (!streak) {
-    return prisma.streak.create({
+    const created = await prisma.streak.create({
       data: {
         userId,
         expertId,
@@ -52,6 +53,10 @@ export async function registerStreakActivity(
         totalDays: 1,
       },
     });
+    if (created.current === 7) {
+      await rewardEngine.onSevenDayStreak(userId);
+    }
+    return created;
   }
 
   const gap = diffDays(at, streak.lastAt);
@@ -63,7 +68,7 @@ export async function registerStreakActivity(
   if (gap <= rule.maxGapDays) {
     const current = streak.current + gap;
 
-    return prisma.streak.update({
+    const updated = await prisma.streak.update({
       where: { id: streak.id },
       data: {
         lastAt: at,
@@ -72,6 +77,10 @@ export async function registerStreakActivity(
         totalDays: streak.totalDays + gap,
       },
     });
+    if (updated.current === 7) {
+      await rewardEngine.onSevenDayStreak(userId);
+    }
+    return updated;
   }
 
   // ── BREAK ──────────────────────────────

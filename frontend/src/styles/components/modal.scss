@@ -1,0 +1,183 @@
+// src/styles/components/modal.scss
+// ══════════════════════════════════════════════════════════════
+// MODAL — Liquid Glass
+// ✗ backdrop-filter (Safari) → gradient layers + shadow stacking
+// ✗ inline styles
+// ✓ Tailwind + CSS vars через className
+// ✓ @keyframes modal-in (scale + fade)
+// ══════════════════════════════════════════════════════════════
+
+// ── Анімація ──────────────────────────────────────────────────
+@keyframes modal-in {
+  from {
+    opacity:   0;
+    transform: scale(.94) translateY(10px);
+  }
+  to {
+    opacity:   1;
+    transform: scale(1)   translateY(0);
+  }
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+// ── Overlay ───────────────────────────────────────────────────
+// Темний overlay БЕЗ backdrop-filter — multi-layer gradient
+.modal-overlay {
+  position: fixed;
+  inset:    0;
+  z-index:  50;
+
+  // Багатошаровий фон замість backdrop-blur
+  background:
+    radial-gradient(ellipse at 40% 30%, rgba(var(--accent-rgb), .06) 0%, transparent 55%),
+    radial-gradient(ellipse at 70% 70%, rgba(14, 11, 7, .55) 0%, transparent 60%),
+    rgba(5, 4, 3, .82);
+
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         1rem;
+
+  animation: overlay-in 180ms ease-out both;
+}
+
+// ── Glass frame ───────────────────────────────────────────────
+.modal-glass {
+  position:      relative;
+  width:         100%;
+  max-width:     28rem;   // max-w-md
+  border-radius: 1.5rem;  // rounded-3xl
+  overflow:      hidden;
+  z-index:       10;
+
+  // Liquid Glass: багатошаровий градієнт замість blur
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, .065) 0%,
+      rgba(255, 255, 255, .022) 40%,
+      rgba(255, 255, 255, .008) 100%
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(var(--accent-rgb), .07) 0%,
+      transparent 35%
+    ),
+    rgba(14, 11, 7, .92);
+
+  // Тонка рамка — optical edge
+  border: 1px solid rgba(255, 255, 255, .10);
+
+  // Тінь — глибина + accent-glow
+  box-shadow:
+    0  1px 0   rgba(255, 255, 255, .10) inset,   // top edge highlight
+    0 -1px 0   rgba(0,   0,   0,   .30) inset,   // bottom edge shadow
+    0  2px 32px rgba(0,   0,   0,   .60),         // ambient shadow
+    0 16px 64px rgba(0,   0,   0,   .50),         // depth shadow
+    0  0   40px rgba(var(--accent-rgb), .06);     // subtle accent glow
+
+  animation: modal-in 220ms cubic-bezier(.34, 1.56, .64, 1) both;
+
+  // Optical top-edge shimmer через ::before (без mask → Firefox safe)
+  &::before {
+    content:          '';
+    position:         absolute;
+    top:              0;
+    left:             5%;
+    right:            5%;
+    height:           1px;
+    background:       linear-gradient(
+                        to right,
+                        transparent,
+                        rgba(255, 255, 255, .22) 30%,
+                        rgba(255, 255, 255, .28) 50%,
+                        rgba(255, 255, 255, .22) 70%,
+                        transparent
+                      );
+    border-radius:    1px;
+    pointer-events:   none;
+    z-index:          1;
+  }
+
+  // Corner accent glow
+  &::after {
+    content:          '';
+    position:         absolute;
+    top:              -40px;
+    right:            -40px;
+    width:            120px;
+    height:           120px;
+    border-radius:    50%;
+    background:       radial-gradient(circle, rgba(var(--accent-rgb), .14) 0%, transparent 70%);
+    pointer-events:   none;
+    z-index:          0;
+  }
+}
+
+// ── Processing overlay (всередині modal-glass) ─────────────────
+.modal-processing {
+  position:        absolute;
+  inset:           0;
+  border-radius:   inherit;
+  z-index:         20;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  flex-direction:  column;
+  gap:             .75rem;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(14, 11, 7, .88) 0%,
+      rgba(14, 11, 7, .80) 100%
+    );
+}
+
+// ── Close button ───────────────────────────────────────────────
+.modal-close {
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  width:           2rem;
+  height:          2rem;
+  border-radius:   50%;
+  border:          1px solid rgba(255, 255, 255, .10);
+  background:      rgba(255, 255, 255, .05);
+  color:           rgba(255, 255, 255, .45);
+  cursor:          pointer;
+  transition:      background 150ms ease, color 150ms ease, border-color 150ms ease;
+
+  &:hover:not(:disabled) {
+    background:    rgba(255, 255, 255, .10);
+    border-color:  rgba(255, 255, 255, .20);
+    color:         rgba(255, 255, 255, .90);
+  }
+  &:disabled { opacity: .4; cursor: not-allowed; }
+}
+
+// ── Divider "або продовжити з" ─────────────────────────────────
+.modal-divider {
+  position: relative;
+  display:  flex;
+  align-items: center;
+
+  &::before,
+  &::after {
+    content:    '';
+    flex:       1;
+    height:     1px;
+    background: rgba(255, 255, 255, .08);
+  }
+
+  &__label {
+    padding:     0 .875rem;
+    font-size:   .75rem;
+    color:       rgba(255, 255, 255, .38);
+    white-space: nowrap;
+  }
+}

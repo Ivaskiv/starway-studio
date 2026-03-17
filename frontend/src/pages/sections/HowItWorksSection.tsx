@@ -1,7 +1,7 @@
 // frontend/src/features/landing/sections/HowItWorksSection.tsx
+import { GlassCard } from '@/ui/GlassCard';
 import type { LucideIcon } from 'lucide-react';
 import { ArrowRight, Play, Sparkles, Target } from 'lucide-react';
-import { GlassCard } from '@/ui/GlassCard';
 
 interface Step { n: string; icon: LucideIcon; title: string; desc: string; }
 
@@ -19,7 +19,8 @@ export function HowItWorksSection({ onGetStarted }: HowItWorksSectionProps) {
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-black mb-4 text-white">
-            Як це <span className="text-orange-500">працює</span>
+            Як це{' '}
+            <span className="text-[rgb(var(--accent-soft-rgb))]">працює</span>
           </h2>
           <p className="text-xl text-white/45">Три кроки до трансформації</p>
         </div>
@@ -28,33 +29,23 @@ export function HowItWorksSection({ onGetStarted }: HowItWorksSectionProps) {
         <div className="grid md:grid-cols-3 gap-6 mb-14">
           {STEPS.map((step, i) => (
             <div key={step.n} className="relative group">
-              {/* connector */}
               {i < STEPS.length - 1 && (
                 <div className="hidden md:block absolute top-9 left-[calc(100%+12px)] w-6 z-10">
-                  <ArrowRight className="w-5 h-5 text-white/15" />
+                  <ArrowRight className="w-5 h-5 text-white/50" />
                 </div>
               )}
 
-              <GlassCard className="p-7 h-full hover:scale-[1.03] hover:-translate-y-1 transition-all duration-300">
-                {/* number */}
-                <div className="
-                  w-10 h-10 rounded-xl mb-5
-                  bg-gradient-to-br from-orange-500 to-rose-500
-                  flex items-center justify-center
-                  text-xs font-black text-white
-                  shadow-lg shadow-orange-500/30
-                  group-hover:scale-110 transition-transform
-                ">
+              <GlassCard className="step-card">
+                <div className="step-card__badge gap-1 text-[rgb(var(--accent-soft-rgb))]">
                   {step.n}
+              
+
+                <div className="step-card__icon">
+                  <step.icon className="w-5 h-5 text-[rgb(var(--accent-soft-rgb))]" />
                 </div>
-                {/* icon */}
-                <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400 mb-4 group-hover:bg-orange-500/20 transition-colors">
-                  <step.icon className="w-5 h-5" />
-                </div>
-                <h3 className="text-lg font-bold text-white mb-2 group-hover:text-orange-400 transition-colors">
-                  {step.title}
-                </h3>
-                <p className="text-white/50 text-sm leading-relaxed">{step.desc}</p>
+  </div>
+                <h3 className="step-card-title">{step.title}</h3>
+                <p className="step-card-desc text-sm">{step.desc}</p>
               </GlassCard>
             </div>
           ))}
@@ -63,17 +54,9 @@ export function HowItWorksSection({ onGetStarted }: HowItWorksSectionProps) {
         <div className="text-center">
           <button
             onClick={onGetStarted}
-            className="
-              inline-flex items-center gap-2
-              px-8 py-4 rounded-2xl
-              bg-gradient-to-r from-orange-500 to-rose-500
-              hover:from-orange-400 hover:to-rose-400
-              text-white font-semibold
-              shadow-2xl shadow-orange-500/25
-              hover:scale-105 hover:-translate-y-0.5 transition-all
-            "
+            className="hero-cta-primary inline-flex items-center gap-2 px-8 py-4 rounded-2xl font-semibold"
           >
-            Почати зараз <ArrowRight className="w-4 h-4" />
+            Почати зараз <ArrowRight className="w-4 h-4 relative z-[1]" />
           </button>
         </div>
       </div>

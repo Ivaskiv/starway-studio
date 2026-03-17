@@ -1,7 +1,7 @@
 import type {
   Product as PrismaProduct,
   Enrollment as PrismaEnrollment,
-} from '@/db/generated/prisma/client.js';
+} from '../../db/generated/prisma/client.js';
 
 export type Product = PrismaProduct;
 export type Enrollment = PrismaEnrollment;
@@ -26,6 +26,8 @@ export interface CreateProductInput {
   durationDays?: number;
   features?:   Record<string, unknown>;
   limits?:     Record<string, unknown>;
+  systemPrompt?: string | null;
+  mentorConfig?: Record<string, unknown> | null;
 }
 
 export interface UpdateProductInput {

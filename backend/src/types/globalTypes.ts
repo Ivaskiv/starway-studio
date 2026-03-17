@@ -4,13 +4,11 @@ import type {
   MentorConfig,
   Subscription,
   UserProgress,
-} from '../db/generated/prisma/client.js'
+} from '../db/generated/prisma/client.js'; // ✅ ЗМІНЕНО: імпорт з Prisma client
 import type { Product } from '../modules/products/types.js'
 
-// ======================= ENUMS =======================
-export type UserRole = 'SUPERADMIN' | 'EXPERT' | 'USER' | 'ADMIN'
+export type UserRole = 'SUPERADMIN' | 'EXPERT' | 'USER' | 'ADMIN' | 'MENTOR' | 'PRODUCT_OWNER'
 
-// ======================= USER TYPES =======================
 export interface User {
   id: string
   email: string | null
@@ -25,6 +23,7 @@ export interface User {
   lastLoginAt: Date | null
   createdAt: Date
   updatedAt: Date
+  uiSettings?: Record<string, unknown> | null
 }
 
 export interface UserWithSub extends User {
@@ -39,7 +38,7 @@ export interface SafeUser {
   name: string | null
   firstName: string | null
   lastName: string | null
-  role: UserRole
+  role: UserRole // ✅ гарантовано сумісний з фронтендом
   isAdmin: boolean
   isSuperAdmin: boolean
   abilities: string[]
@@ -55,38 +54,31 @@ export interface SafeUser {
     level: number
   }
   settings: {
-    accentColor: string | null
+    accentColor: string | null // ✅ ЗМІНЕНО: null замість undefined
     theme: string | null
     language: string | null
   }
   lastLoginAt: string | null
-  subscriptionStatus: string
-  subscriptionPlan: string
+  subscriptionStatus: 'active' | 'canceled' | 'past_due' | 'incomplete' | null
+  subscriptionPlan: 'free' | 'trial' | 'paid' | null
   trialEndsAt: string | null
   isTrialActive: boolean
 }
 
-// ======================= AUTH TYPES =======================
-export interface AuthUser extends User {
-  id: string;
-  role: UserRole;
-  email: string | null;
-  expertId?: string | null;
-  // subscriptionStatus?: string | null;
-  // trialEndsAt?: Date | null;
+// ✅ Мінімальний тип для JWT
+export interface AuthUser {
+  id: string
+  role: UserRole
+  email: string | null
+    expertId?: string | null
+
 }
 
-export type AuthTokenPayload = {
-  id: string;
-  role: UserRole;
-  email: string | null;
-  expertId?: string | null;
-};
-
+// ✅ ВИДАЛЕНО: declare global для Request.user (створював конфлікт)
 export interface AuthenticatedRequest extends Request {
-  user?: AuthTokenPayload;
-}
+  user?: AuthUser
 
+}
 
 export interface AuthApiResponse {
   user: SafeUser
@@ -98,7 +90,6 @@ export interface AuthApiResponse {
   needsCompletion?: boolean
 }
 
-// ======================= FUNNEL TYPES =======================
 export interface FunnelInput {
   name: string
   status?: 'draft' | 'active' | 'archived'

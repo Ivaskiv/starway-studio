@@ -1,10 +1,8 @@
-// frontend/src/features/miniApp/hooks/useMiniAppDuplicator.ts
-import { useCreateMicroTaskMutation } from '@/features/daily-cycle/questions/services/questions.api';
 import { Question } from '@/features/daily-cycle/questions/types/questions.types';
 import { MicroTask } from '@/features/microTask/types/types';
+import { microTaskService } from '@/features/microTask/services/service';
 
 export const useMiniAppDuplicator = (userId: string) => {
-  const [createMicroTask] = useCreateMicroTaskMutation();
 
   /**
    * duplicate — дублює питання або мікрозадачу у MiniApp
@@ -17,18 +15,21 @@ export const useMiniAppDuplicator = (userId: string) => {
   ) => {
     try {
       if (type === 'microTask') {
-        await createMicroTask({
+        const payload = microTaskService.create({
           userId,
-          linkedQuestionId: item.questionId,
-          title: item.title ?? item.questionTitle,
+          linkedQuestionId: item.id ?? '',
+          title: item.title ?? item.text ?? 'Mini-task',
           description: item.description ?? '',
-          completed: false,
-          source: 'miniAppDuplicator',
-        }).unwrap();
+          reason: 'growth',
+          source: 'manual',
+          meta: { origin: 'miniAppDuplicator' },
+        });
+        console.log('// fix etap7: created microtask for mini-app', payload);
+        return payload;
       }
 
       if (type === 'question') {
-        console.log(`[MiniApp] Duplicating question for user ${userId}:`, item);
+        console.log('// fix etap7: question preview logged for duplicator', { userId, item });
       }
 
       return item;

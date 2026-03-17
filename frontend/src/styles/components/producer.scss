@@ -1,0 +1,217 @@
+// src/styles/components/producer.scss
+// AI Producer Console — всі стилі централізовано
+
+// ── Typing dots ──────────────────────────────────────────────
+@keyframes producerDot {
+  0%,80%,100% { opacity:.3; transform:scale(.8); }
+  40%         { opacity:1;  transform:scale(1.1); }
+}
+.producer-dot { animation: producerDot 1.2s ease-in-out infinite; }
+.producer-dot:nth-child(2) { animation-delay:.2s; }
+.producer-dot:nth-child(3) { animation-delay:.4s; }
+
+// ── Producer page background ──────────────────────────────────
+.producer-bg {
+  background:
+    radial-gradient(ellipse at 15% 10%, rgba(212,175,55,.06) 0%, transparent 40%),
+    radial-gradient(ellipse at 85% 90%, rgba(139,105,20,.05) 0%, transparent 40%),
+    var(--bg-primary);
+}
+
+
+// ── Gold accent helpers (producer-specific) ───────────────────
+.producer-border { border: 1px solid rgba(212,175,55,.18); }
+.producer-border-soft { border: 1px solid rgba(212,175,55,.09); }
+.producer-glow { box-shadow: 0 0 20px rgba(212,175,55,.25); }
+.producer-surface {
+  background: rgba(212,175,55,.05);
+  border: 1px solid rgba(212,175,55,.12);
+}
+.producer-surface-active {
+  background: linear-gradient(135deg, rgba(212,175,55,.14), rgba(139,105,20,.08));
+  border: 1px solid rgba(212,175,55,.28);
+}
+
+// ── Chat bubbles ──────────────────────────────────────────────
+.chat-bubble-user {
+  background: linear-gradient(135deg, rgba(212,175,55,.15), rgba(139,105,20,.08));
+  border: 1px solid rgba(212,175,55,.22);
+  border-radius: 1rem 1rem .25rem 1rem;
+}
+.chat-bubble-ai {
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 1rem 1rem 1rem .25rem;
+}
+
+// ── Quick question cards ──────────────────────────────────────
+.producer-quick-q {
+  background: rgba(212,175,55,.04);
+  border: 1px solid rgba(212,175,55,.13);
+  transition: all var(--duration-fast) var(--ease-spring);
+  &:hover { background: rgba(212,175,55,.09); border-color: rgba(212,175,55,.25); transform: translateY(-1px); }
+}
+
+// ── Step progress bar ─────────────────────────────────────────
+.producer-step-bar {
+  background: rgba(212,175,55,.12);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.producer-step-fill {
+  background: linear-gradient(90deg, var(--gold), var(--gold-dim));
+  height: 100%;
+  border-radius: 999px;
+  transition: width .5s var(--ease-spring);
+  width: var(--step-pct, 0%);  // задається через JS ref.style.setProperty
+}
+
+// ── Step card ─────────────────────────────────────────────────
+.producer-step-card {
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 1rem;
+  transition: all var(--duration-base) var(--ease-spring);
+  cursor: pointer;
+
+  &:hover { border-color: rgba(212,175,55,.25); background: rgba(212,175,55,.04); transform: translateY(-1px); }
+}
+.producer-step-card--active {
+  background: linear-gradient(135deg, rgba(212,175,55,.08), rgba(139,105,20,.04));
+  border: 1px solid rgba(212,175,55,.30);
+  box-shadow: 0 0 16px rgba(212,175,55,.12);
+}
+.producer-step-card--done {
+  background: rgba(74,222,128,.04);
+  border: 1px solid rgba(74,222,128,.18);
+}
+
+// ── Tab button ────────────────────────────────────────────────
+.producer-tab {
+  background: rgba(255,255,255,.07);
+  border: none;
+  color: var(--text-secondary);
+  transition: all var(--duration-fast) var(--ease-spring);
+  white-space: nowrap;
+  flex-shrink: 0;
+  &:hover { background: rgba(255,255,255,.11); color: var(--text-primary); }
+}
+.producer-tab--active {
+  background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+  color: #0a0808;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+// ── Avatar ────────────────────────────────────────────────────
+.producer-avatar {
+  background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+  box-shadow: 0 0 16px rgba(212,175,55,.30);
+}
+
+// ── Input area ───────────────────────────────────────────────
+.producer-input {
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(212,175,55,.16);
+  color: var(--text-primary);
+  &::placeholder { color: var(--text-muted); }
+  &:focus { border-color: rgba(212,175,55,.35); outline: none; box-shadow: 0 0 0 2px rgba(212,175,55,.10); }
+}
+.producer-send-btn {
+  background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+  color: #0a0808;
+  transition: all var(--duration-fast) var(--ease-spring);
+  &:hover { filter: brightness(1.1); transform: scale(1.05); }
+  &:disabled { background: rgba(212,175,55,.12); color: rgba(240,230,200,.2); cursor: not-allowed; transform: none; }
+}
+
+// ── Wizard modal helpers ─────────────────────────────────────
+.wizard-overlay {
+  background: rgba(0, 0, 0, 0.88);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.wizard-subtitle {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--wizard-accent, var(--accent));
+}
+.wizard-close-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.07);
+  transition: color var(--duration-fast) var(--ease-spring);
+  &:hover { color: #fff; }
+}
+.wizard-progress {
+  display: flex;
+}
+.wizard-progress-dot {
+  flex: 1;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+.wizard-progress-dot--current {
+  background: color-mix(in srgb, var(--wizard-accent, var(--accent)) 60%, rgba(255,255,255,0.2));
+}
+.wizard-progress-dot--done {
+  background: var(--wizard-accent, var(--accent));
+}
+.wizard-spinner-title {
+  color: var(--wizard-accent, var(--accent));
+}
+.wizard-result-badge {
+  background: rgba(74, 222, 128, 0.05);
+  border: 1px solid rgba(74, 222, 128, 0.18);
+}
+.wizard-plan-card {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.wizard-primary-btn {
+  background: linear-gradient(135deg, var(--wizard-accent, var(--accent)), var(--wizard-accent-soft, rgba(212,175,55,0.7)));
+  color: #0a0808;
+}
+
+@for $i from 0 through 100 {
+  .progress-fill[data-pct="#{$i}"] {
+    --w: #{$i * 1%};
+  }
+}
+
+.progress-track {
+  height:        0.75rem;   // h-3
+  background:    rgb(255 255 255 / 0.1);
+  border-radius: 9999px;
+  overflow:      hidden;
+}
+
+.progress-fill {
+  height:            100%;
+  width:             var(--w, 0%);
+  border-radius:     9999px;
+  transition:        width 500ms ease;
+
+  &--green {
+    background: linear-gradient(to right, #22c55e, #10b981);
+  }
+
+  &--orange {
+    background: linear-gradient(to right, var(--accent), var(--accent-strong));
+  }
+
+  &--purple {
+    background: linear-gradient(to right, #a855f7, #7c3aed);
+  }
+
+  &--blue {
+    background: linear-gradient(to right, #3b82f6, #06b6d4);
+  }
+}

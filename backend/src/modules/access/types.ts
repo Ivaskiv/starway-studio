@@ -81,6 +81,9 @@ export interface UserSystemState {
     status: string | null;
     expiresAt: Date | null;
   };
+  mentorship: {
+    isActive: boolean
+  };
   ui: {
     showMyProductsSection: boolean;
     showCreateProductCta: boolean;

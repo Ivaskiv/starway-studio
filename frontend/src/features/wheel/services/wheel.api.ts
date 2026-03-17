@@ -2,8 +2,10 @@ import {
   CreateWheelAssessmentInput,
   WheelAnalysis,
   WheelAssessment,
+  WHEEL_CATEGORIES,
 } from '@/features/wheel/types/wheel.types';
 import { api } from '@/services/api';
+import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 type WheelCooldown = {
   canFill: boolean;
@@ -16,21 +18,50 @@ type WheelHistoryResponse = {
   wheels: unknown[];
 };
 
-const safeScores = (value: unknown): Array<{ categoryId: string; score: number; comment?: string }> => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item: any) => ({
-      categoryId: String(item?.categoryId ?? ''),
-      score: Number(item?.score ?? 0),
-      comment: item?.comment ? String(item.comment) : undefined,
-    }))
-    .filter(item => item.categoryId && Number.isFinite(item.score));
+type WheelScoreMap = Record<string, { score: number; comment?: string }>;
+
+const buildScoreMap = (value: unknown): WheelScoreMap => {
+  const map: WheelScoreMap = {};
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const categoryId = String(item?.categoryId ?? '').trim();
+      if (!categoryId) continue;
+      const parsedScore = Number(item?.score ?? 0);
+      if (!Number.isFinite(parsedScore)) continue;
+      map[categoryId] = {
+        score: parsedScore,
+        comment: item?.comment ? String(item.comment) : undefined,
+      };
+    }
+  } else if (value && typeof value === 'object') {
+    for (const [key, rawScore] of Object.entries(value)) {
+      const score = Number(rawScore ?? 0);
+      if (!Number.isFinite(score)) continue;
+      map[key] = { score };
+    }
+  }
+  return map;
+};
+
+const findWeakest = (scores: WheelAssessment['scores']) =>
+  scores.reduce((min, current) => (current.score < min.score ? current : min), scores[0]);
+
+const findFocus = (scores: WheelAssessment['scores'], weakest: WheelAssessment['scores'][number]) => {
+  const candidates = scores.filter((score) => score.categoryId !== weakest.categoryId && score.score >= 7);
+  return candidates.sort((a, b) => b.score - a.score)[0] ?? weakest;
 };
 
 const normalizeWheel = (raw: any): WheelAssessment => {
-  const scores = safeScores(raw?.scores);
+  const scoreMap = buildScoreMap(raw?.scores);
+  const scores = WHEEL_CATEGORIES.map(category => ({
+    categoryId: category.id,
+    score: Math.max(0, Math.min(10, Number(scoreMap[category.id]?.score ?? 0))),
+    comment: scoreMap[category.id]?.comment,
+  }));
   const totalScore = scores.reduce((sum, item) => sum + item.score, 0);
   const averageScore = scores.length ? totalScore / scores.length : 0;
+  const weakest = scores.length ? findWeakest(scores) : null;
+  const focus = weakest && scores.length ? findFocus(scores, weakest) : null;
 
   return {
     id: String(raw?.id ?? ''),
@@ -38,9 +69,8 @@ const normalizeWheel = (raw: any): WheelAssessment => {
     scores,
     totalScore,
     averageScore,
-    // fix code_x: backend stores weakest/focus only; map to UI-friendly strengths/gaps.
-    strengths: raw?.focusSphere ? [String(raw.focusSphere)] : [],
-    gaps: raw?.weakestSphere ? [String(raw.weakestSphere)] : [],
+    strengths: focus ? [focus.categoryId] : [],
+    gaps: weakest ? [weakest.categoryId] : [],
     createdAt: String(raw?.createdAt ?? new Date().toISOString()),
     completedAt: raw?.updatedAt ? String(raw.updatedAt) : undefined,
     notes: raw?.analysis ? String(raw.analysis) : undefined,
@@ -59,7 +89,9 @@ export const wheelApi = api.injectEndpoints({
         if ('error' in result) {
           const status = (result.error as { status?: number }).status;
           if (status === 404) return { data: null };
-          return { error: result.error };
+        const error: FetchBaseQueryError =
+          result.error ?? ({ status: 'FETCH_ERROR', error: 'Fetch failed' });
+        return { error };
         }
 
         const payload = result.data as { wheel?: unknown | null };
@@ -118,14 +150,6 @@ export const wheelApi = api.injectEndpoints({
       providesTags: ['WheelAnalysis'],
     }),
 
-    getWheelPdf: builder.mutation<Blob, string>({
-      query: wheelId => ({
-        url: `/wheel/${wheelId}/pdf`,
-        method: 'GET',
-        responseHandler: async response => response.blob(),
-      }),
-    }),
-
     sendWheelTelegramReminder: builder.mutation<{ success: boolean; message?: string }, string>({
       query: wheelId => ({
         url: `/wheel/${wheelId}/remind-telegram`,
@@ -156,7 +180,6 @@ export const {
   useGetWheelHistoryQuery,
   useGetWheelCooldownQuery,
   useGetWheelAnalysisQuery,
-  useGetWheelPdfMutation,
   useSendWheelTelegramReminderMutation,
   useConnectTelegramProfileMutation,
 } = wheelApi;

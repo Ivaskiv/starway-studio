@@ -4,7 +4,7 @@
  */
 
 import { api } from '@/services/api';
-import { VisionStatement, VisionAnswers } from '../types/vision.types';
+import { VisionAnswers, VisionStatement } from '../types/vision.types';
 
 export const visionApi = api.injectEndpoints({
   endpoints: (builder) => ({

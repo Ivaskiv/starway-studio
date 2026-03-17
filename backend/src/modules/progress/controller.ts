@@ -1,7 +1,7 @@
 // backend/src/modules/progress/progress.controller.ts
 import type { Response } from 'express';
 import { getProgress, updateProgress, incrementPoints } from './service.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 export async function getMyProgress(req: AuthenticatedRequest, res: Response) {
   try {

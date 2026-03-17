@@ -1,4 +1,4 @@
-import { Ability } from '@/shared/types/permissions';
+import { Ability } from '@/features/auth/permissions/abilities';
 
 export interface Notification {
   id: string;

@@ -1,0 +1,67 @@
+// frontend/src/styles/tokens/motion.scss
+// ══════════════════════════════════════════════════════════════
+// KEYFRAMES + ANIMATION UTILITIES
+// Всі анімації проекту в одному місці
+// ══════════════════════════════════════════════════════════════
+
+// ── Enter animations ─────────────────────────────────────────
+@keyframes fadeIn       { from { opacity: 0; }                            to { opacity: 1; } }
+@keyframes fadeInUp     { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeInDown   { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scaleIn      { from { opacity: 0; transform: scale(.95); }    to { opacity: 1; transform: scale(1); } }
+@keyframes slideInRight { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes menuIn       { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes hdrIn        { from { opacity: 0; transform: translateY(-5px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes modalIn      { from { opacity: 0; transform: scale(.94) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes overlayIn    { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-up      { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+// ── Glow / pulse ─────────────────────────────────────────────
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0   0   rgba(var(--accent-rgb), .0); }
+  50%       { box-shadow: 0 0 20px 4px rgba(var(--accent-rgb), .25); }
+}
+@keyframes heroDotPulse {
+  0%, 100% { transform: scale(1);    opacity: 0.8; }
+  50%       { transform: scale(1.25); opacity: 1;   }
+}
+@keyframes heroProgress {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes cfSpin     { to { transform: rotate(360deg); } }
+@keyframes producerDot {
+  0%,80%,100% { opacity:.3; transform:scale(.8); }
+  40%         { opacity:1;  transform:scale(1.1); }
+}
+
+// ── Avatar / assistant ───────────────────────────────────────
+@keyframes ava-float    { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
+@keyframes ava-blink    { 0%,88%,100%{transform:scaleY(1);} 93%{transform:scaleY(.05);} 96%{transform:scaleY(.9);} }
+@keyframes ava-lash-drop { 0%,88%,100%{opacity:1;transform:translateY(0) scaleY(1);} 93%{opacity:.1;transform:translateY(3px) scaleY(.08);} 96%{opacity:.9;transform:translateY(0) scaleY(.9);} }
+@keyframes ava-shine    { 0%,100%{opacity:.1;} 50%{opacity:.5;} }
+@keyframes ava-orbit    { 0%,100%{opacity:.2;transform:scale(1);} 50%{opacity:.06;transform:scale(1.06);} }
+@keyframes ava-badge-pop { from{transform:scale(0);} to{transform:scale(1);} }
+@keyframes eye-blink    { 0%,88%,100%{transform:scaleY(1);} 93%{transform:scaleY(.05);} }
+@keyframes chip-glow    { 0%,100%{opacity:.3;} 50%{opacity:1;} }
+@keyframes online-pulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+@keyframes typing-bounce { 0%,80%,100%{transform:translateY(0);} 40%{transform:translateY(-5px);} }
+@keyframes arm-wave     { 0%,100%{transform:rotate(0deg);} 50%{transform:rotate(-20deg);} }
+@keyframes wave-appear  { 0%,100%{opacity:0;transform:scale(.9);} 50%{opacity:1;transform:scale(1);} }
+
+// ── Utility classes ──────────────────────────────────────────
+.animate-fade-in      { animation: fadeIn      var(--duration-base)      var(--ease-out) both; }
+.animate-fade-in-up   { animation: fadeInUp    var(--duration-base)      var(--ease-out) both; }
+.animate-fade-in-down { animation: fadeInDown  var(--duration-base)      var(--ease-out) both; }
+.animate-scale-in     { animation: scaleIn     var(--duration-fast)      var(--ease-spring) both; }
+.animate-modal-in     { animation: modalIn     180ms                     var(--ease-spring) both; }
+.animate-pulse-glow   { animation: pulse-glow  2.5s ease-in-out infinite; }
+
+.hero-progress-bar    { animation: heroProgress 8s linear forwards; }
+.hero-slider-dot--active { animation: heroDotPulse 1.8s ease-in-out infinite; }
+
+.producer-dot                   { animation: producerDot 1.2s ease-in-out infinite; }
+.producer-dot:nth-child(2)      { animation-delay: .2s; }
+.producer-dot:nth-child(3)      { animation-delay: .4s; }
+
+.dashboard-layout-main { flex:1; overflow-y:auto; animation: fade-up .35s var(--ease-out); }

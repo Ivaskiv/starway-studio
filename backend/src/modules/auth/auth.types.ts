@@ -1,7 +1,7 @@
 // backend/src/modules/auth/auth.types.ts
-import { MentorConfig, Subscription, UserProgress } from '@/db/generated/prisma/client.js';
-import { toSafeUser } from '@/modules/user/types.js'
-import type { SafeUser, UserRole, UserWithSub } from '@/types/globalTypes.js'
+import { MentorConfig, Subscription, UserProgress } from '../../db/generated/prisma/client.js';
+import { toSafeUser } from '../../modules/user/types.js'
+import type { SafeUser, UserRole, UserWithSub } from '../../types/globalTypes.js'
 
 // ======================= API TYPES =======================
 export interface AuthApiResponse {
@@ -31,6 +31,16 @@ export interface RegisterInput {
 export interface LoginInput {
   email: string;
   password: string;
+}
+
+export interface UpdateUserSettingsInput {
+  firstName?: string | null;
+  lastName?: string | null;
+  settings?: {
+    accentColor?: string | null;
+    theme?: string | null;
+    language?: string | null;
+  };
 }
 
 // ======================= HELPERS =======================

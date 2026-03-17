@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
-import { prisma } from '@/db/client.js';
-import { isSuperAdminEmail, isSuperAdminRequest } from '@/modules/auth/superadmin.js';
-import { logSuperAdminAudit } from '@/utils/logger.js';
+import { prisma } from '../../db/client.js';
+import { isSuperAdminEmail, isSuperAdminRequest } from '../../modules/auth/superadmin.js';
+import { logSuperAdminAudit } from '../../utils/logger.js';
 import {
   getAllProducts,
   getProductById,
@@ -14,7 +14,8 @@ import {
   checkProductAccess,
   getUserEnrollments,
 } from './service.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
+import { promoteUserToAdminIfNeeded } from '../auth/auth.service.js';
 
 interface AuthenticatedUser {
   id: string;
@@ -116,6 +117,8 @@ export async function createProductHandler(req: AuthenticatedRequest, res: Respo
       ownerId, priceCents, currency,
       durationDays, features, limits,
     });
+
+    await promoteUserToAdminIfNeeded(ownerId);
 
     return res.status(201).json(product);
   } catch (err) {

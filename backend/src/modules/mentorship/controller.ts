@@ -1,107 +1,151 @@
 // backend/src/modules/mentorship/controller.ts
 import { Response, NextFunction } from 'express'
-import type { Mentorship, MentorshipOffer } from './types.ts'
-import { MentorshipStatus } from '@/db/generated/prisma/client.js'
 import {
+  createMentorship,
   activateMentorship,
-  checkMentorshipEligibility,
-  createMentorshipOffer,
-  getMentorship,
-  getMentorshipOffer,
-  updateMentorshipStatus
+  pauseMentorship,
+  resumeMentorship,
+  completeMentorship,
+  cancelMentorship,
+  getActiveMentorship,
+  hasActiveMentorship,
 } from './service.js'
-import { AuthenticatedRequest } from '@/types/globalTypes.js'
+import { AuthenticatedRequest } from '../../types/globalTypes.js'
 
-// ✅ допустимі статуси для апдейту
-const MENTORSHIP_STATUSES: MentorshipStatus[] = [
-  MentorshipStatus.PENDING,
-  MentorshipStatus.ACTIVE,
-  MentorshipStatus.COMPLETED,
-  MentorshipStatus.CANCELLED,
-]
+function requireUserId(req: AuthenticatedRequest): string {
+  if (!req.user?.id) {
+    throw new Error('Unauthorized')
+  }
+  return req.user.id
+}
 
-// ── CHECK ELIGIBILITY ───────────────────────────────────────────────
-export async function checkEligibility(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+/* CHECK ACCESS FLAG */
+export async function checkEligibility(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
   try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
-
-    const eligible = await checkMentorshipEligibility(userId)
-    return res.status(200).json({ eligible })
+    const userId = requireUserId(req)
+    const hasAccess = await hasActiveMentorship(userId)
+    res.status(200).json({ hasMentorship: hasAccess })
   } catch (err) {
     next(err)
   }
 }
 
-// ── CREATE OFFER ───────────────────────────────────────────────────
-export async function createOffer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+/* CREATE PENDING CONTRACT */
+export async function create(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
   try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const userId = requireUserId(req)
+    const { expertId } = req.body
 
-    const { expertId, stabilityDays } = req.body
-    if (!expertId || typeof stabilityDays !== 'number') {
-      return res.status(400).json({ error: 'expertId and stabilityDays required' })
+    if (!expertId) {
+      return res.status(400).json({ error: 'expertId required' })
     }
 
-    const offer: MentorshipOffer = await createMentorshipOffer(userId, expertId, stabilityDays)
-    return res.status(201).json(offer)
+    const mentorship = await createMentorship(userId, expertId)
+    res.status(201).json(mentorship)
   } catch (err) {
     next(err)
   }
 }
 
-// ── ACTIVATE MENTORSHIP ───────────────────────────────────────────
-export async function activate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+/* ACTIVATE CONTRACT */
+export async function activate(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
   try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const userId = requireUserId(req)
+    const { expertId } = req.body
 
-    const mentorship: Mentorship = await activateMentorship(userId)
-    return res.status(201).json(mentorship)
+    if (!expertId) {
+      return res.status(400).json({ error: 'expertId required' })
+    }
+
+    const mentorship = await activateMentorship(userId, expertId)
+    res.status(200).json(mentorship)
   } catch (err) {
     next(err)
   }
 }
 
-// ── GET MY MENTORSHIP ─────────────────────────────────────────────
-export async function getMyMentorship(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
-
-    const mentorship: Mentorship | null = await getMentorship(userId)
-    return res.status(200).json(mentorship)
-  } catch (err) {
-    next(err)
-  }
-}
-
-// ── GET MY OFFER ─────────────────────────────────────────────────
-export async function getMyOffer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
-
-    const offer: MentorshipOffer | null = await getMentorshipOffer(userId)
-    return res.status(200).json(offer)
-  } catch (err) {
-    next(err)
-  }
-}
-
-// ── UPDATE STATUS ────────────────────────────────────────────────
-export async function updateStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+/* PAUSE */
+export async function pause(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
   try {
     const { id } = req.params
-    const { status } = req.body
+    const mentorship = await pauseMentorship(id)
+    res.status(200).json(mentorship)
+  } catch (err) {
+    next(err)
+  }
+}
 
-    if (!MENTORSHIP_STATUSES.includes(status as MentorshipStatus)) {
-      return res.status(400).json({ error: 'invalid_status' })
-    }
+/* RESUME */
+export async function resume(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const { id } = req.params
+    const mentorship = await resumeMentorship(id)
+    res.status(200).json(mentorship)
+  } catch (err) {
+    next(err)
+  }
+}
 
-    const mentorship: Mentorship = await updateMentorshipStatus(id, status as MentorshipStatus)
-    return res.status(200).json(mentorship)
+/* COMPLETE */
+export async function complete(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const { id } = req.params
+    const mentorship = await completeMentorship(id)
+    res.status(200).json(mentorship)
+  } catch (err) {
+    next(err)
+  }
+}
+
+/* CANCEL */
+export async function cancel(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const { id } = req.params
+    const mentorship = await cancelMentorship(id)
+    res.status(200).json(mentorship)
+  } catch (err) {
+    next(err)
+  }
+}
+
+/* GET ACTIVE */
+export async function getMyMentorship(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const userId = requireUserId(req)
+    const mentorship = await getActiveMentorship(userId)
+    res.status(200).json(mentorship)
   } catch (err) {
     next(err)
   }

@@ -1,7 +1,7 @@
-// frontend/src/features/ai-mentor/services/setup.api.ts
+// frontend/src/features/ai-aIMentor/services/setup.api.ts
 /**
  * Setup API
- * RTK Query endpoints for mentor setup wizard
+ * RTK Query endpoints for aIMentor setup wizard
  */
 
 import { api } from '@/services/api';

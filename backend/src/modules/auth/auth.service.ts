@@ -1,22 +1,247 @@
-// backend/src/modules/auth/auth.service.ts
-import { prisma } from '@/db/client.js'
-import type { SafeUser, UserRole, UserWithSub } from '@/types/globalTypes.js'
-import { toSafeUser } from '@/modules/user/types.js'
-import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { PrismaUserWithRelations } from '@/modules/auth/auth.types.js'
+import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+import { prisma } from '../../db/client.js'
+import type { AuthUser, SafeUser, UserWithSub } from '../../types/globalTypes.js'
+import type { Subscription, UserProgress, MentorConfig, User } from '../../db/generated/prisma/client.js'
+import { Prisma } from '../../db/generated/prisma/client.js'
+import { isSuperAdminEmail } from './superadmin.js'
+import { resolveUserAbilities, ABILITIES } from './abilities.js'
+import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'starway-secret-dev'
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'starway-refresh-secret-dev'
-const JWT_RESET_SECRET = process.env.JWT_RESET_SECRET || 'starway-reset-secret-dev'
+// ── Константи JWT ─────────────────────
+const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
+const REFRESH_SECRET = getEnv('JWT_REFRESH_SECRET')
+const ACCESS_EXPIRES = '15m'
+const REFRESH_EXPIRES = '30d'
 
-// ── TYPES ─────────────────────────────────────────────────────
+function getEnv(name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET'): string {
+  const value = process.env[name]
+  if (!value) throw new Error(`${name} is required`)
+  return value
+}
 
-interface JwtPayload { id: string; email: string | null; role: UserRole }
-interface RefreshPayload { id: string }
+// ── Хешування пароля ──────────────────
+export const hashPassword = (password: string) => bcrypt.hash(password, 12)
+export const comparePassword = (password: string, hash: string) =>
+  bcrypt.compare(password, hash)
 
+// ── Генерація та перевірка токенів ───
+export function generateAccessToken(payload: AuthUser) {
+  return jwt.sign(payload, ACCESS_SECRET, { expiresIn: ACCESS_EXPIRES })
+}
 
-export function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
+export function generateRefreshToken(userId: string) {
+  return jwt.sign({ id: userId, jti: crypto.randomUUID() }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES })
+}
+
+export function verifyAccessToken(token: string): AuthUser {
+  return jwt.verify(token, ACCESS_SECRET) as AuthUser
+}
+
+export function verifyRefreshToken(token: string) {
+  return jwt.verify(token, REFRESH_SECRET) as { id: string }
+}
+
+// ── Фолбек для refresh токенів, якщо таблиця відсутня ─
+const fallbackRefreshTokens = new Map<string, { userId: string; expiresAt: Date }>()
+let refreshTableAvailable: boolean | undefined
+
+async function checkRefreshTableAvailability() {
+  if (typeof refreshTableAvailable !== 'undefined') return refreshTableAvailable
+  try {
+    await prisma.$queryRaw`SELECT 1 FROM "RefreshToken" LIMIT 1`
+    refreshTableAvailable = true
+  } catch (err: any) {
+    if (err?.code === 'P2021') {
+      console.warn('[AuthService] RefreshToken table missing - falling back to in-memory store')
+      refreshTableAvailable = false
+    } else {
+      throw err
+    }
+  }
+  return refreshTableAvailable
+}
+
+// ── Зберігання refresh токена з циклом на P2002 ─
+export async function storeRefreshToken(userId: string, token: string) {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  if (!(await checkRefreshTableAvailability())) return null
+
+  let savedToken = null
+  let tries = 0
+
+  while (!savedToken && tries < 5) {
+    try {
+      savedToken = await prisma.refreshToken.create({
+        data: { token, userId, expiresAt },
+      })
+    } catch (err: unknown) {
+      // якщо помилка унікальності, генеруємо новий токен
+      if (err instanceof Error && 'code' in err && (err as any).code === 'P2002') {
+        token = generateRefreshToken(userId)
+        tries++
+      } else throw err
+    }
+  }
+
+  if (!savedToken) throw new Error('Не вдалося зберегти refresh token після 5 спроб')
+  return savedToken
+}
+
+export async function removeRefreshToken(token: string) {
+  if (await checkRefreshTableAvailability()) {
+    return prisma.refreshToken.deleteMany({ where: { token } })
+  }
+  fallbackRefreshTokens.delete(token)
+  return { count: 0 }
+}
+
+export async function findRefreshToken(token: string) {
+  if (await checkRefreshTableAvailability()) {
+    return prisma.refreshToken.findUnique({ where: { token } })
+  }
+  const data = fallbackRefreshTokens.get(token)
+  if (!data) return null
+  return { token, userId: data.userId, expiresAt: data.expiresAt }
+}
+
+// ── Явний тип для user з усіма include ───────────────
+interface PrismaUserWithRelations extends User {
+  subscriptions: Subscription[]
+  progress: UserProgress | null
+  mentorConfig: MentorConfig | null
+}
+
+async function ensureSuperAdminRoleForRecord(user: PrismaUserWithRelations): Promise<PrismaUserWithRelations> {
+  if (!isSuperAdminEmail(user.email) || user.role === 'SUPERADMIN') return user
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { role: 'SUPERADMIN' },
+  })
+  return { ...user, role: 'SUPERADMIN' }
+}
+
+// ── Пошук користувача за ID ───────────────
+export async function findUserById(id: string): Promise<UserWithSub | null> {
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },
+      progress: true,
+      mentorConfig: true,
+    },
+  })
+
+  if (!user) return null
+  const normalizedUser = await ensureSuperAdminRoleForRecord(user)
+  return toUserWithSub(normalizedUser)
+}
+
+// ── Пошук користувача за email ─────────────
+export async function findUserByEmail(email: string): Promise<UserWithSub | null> {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: {
+      subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },
+      progress: true,
+      mentorConfig: true,
+    },
+  })
+
+  if (!user) return null
+  const normalizedUser = await ensureSuperAdminRoleForRecord(user)
+  return toUserWithSub(normalizedUser)
+}
+
+export type UpdateUserSettingsPayload = {
+  firstName?: string | null
+  lastName?: string | null
+  settings?: {
+    accentColor?: string | null
+    theme?: string | null
+    language?: string | null
+  }
+}
+
+export async function updateUserSettings(userId: string, payload: UpdateUserSettingsPayload): Promise<UserWithSub> {
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { uiSettings: true },
+  })
+  const currentSettings = existing?.uiSettings && typeof existing.uiSettings === 'object' && !Array.isArray(existing.uiSettings)
+    ? (existing.uiSettings as Record<string, unknown>)
+    : {}
+  const mergedSettings: Prisma.JsonValue = payload.settings && Object.keys(payload.settings).length
+    ? ({ ...currentSettings, ...payload.settings } as Prisma.JsonValue)
+    : (currentSettings as Prisma.JsonValue)
+
+  const shouldPersistSettings =
+    typeof mergedSettings === 'object' &&
+    !Array.isArray(mergedSettings) &&
+    Object.keys(mergedSettings as Record<string, unknown>).length > 0
+  const uiPayload: Prisma.JsonValue | undefined = shouldPersistSettings ? (mergedSettings as Prisma.JsonObject) : undefined
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      firstName: payload.firstName ?? undefined,
+      lastName: payload.lastName ?? undefined,
+      uiSettings: uiPayload,
+    },
+  })
+
+  const updated = await findUserById(userId)
+  if (!updated) throw new Error('user_not_found_after_update')
+  return updated
+}
+
+// ── Конвертація Prisma user → UserWithSub ─────────────
+function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
+  const { uiSettings, ...rest } = user as PrismaUserWithRelations & { uiSettings?: unknown }
+  const sanitizedSettings = uiSettings && typeof uiSettings === 'object' && !Array.isArray(uiSettings)
+    ? (uiSettings as Record<string, unknown>)
+    : null
+  return {
+    ...rest,
+    uiSettings: sanitizedSettings,
+    subscription: user.subscriptions[0] ?? null,
+    userProgress: user.progress
+      ? {
+          level: user.progress.level,
+          totalPoints: user.progress.totalPoints,
+          completedBlocks: user.progress.completedBlocks,
+        }
+      : null,
+    mentorConfigs: user.mentorConfig ? [user.mentorConfig] : [], // ✅ завжди масив
+  }
+}
+
+// ── Конвертація UserWithSub → SafeUser ─────────────
+export function toSafeUser(user: UserWithSub): SafeUser {
+  const sub = user.subscription
+  const now = new Date()
+  const isSuperAdmin = user.email ? isSuperAdminEmail(user.email) : false
+
+  const isPaid = sub?.status === 'ACTIVE' && (!sub.currentPeriodEnd || sub.currentPeriodEnd > now)
+  const isTrial = sub?.status === 'TRIAL' && !!sub.trialEndsAt && sub.trialEndsAt > now
+
+  const abilities = isSuperAdmin
+    ? Object.values(ABILITIES)
+    : resolveUserAbilities({ role: user.role })
+
+  const rawConfig = user.mentorConfigs?.[0]?.config
+  const configObject = rawConfig && typeof rawConfig === 'object' && !Array.isArray(rawConfig)
+    ? rawConfig as Record<string, unknown>
+    : {}
+  const mentorUi = configObject.ui && typeof configObject.ui === 'object' && !Array.isArray(configObject.ui)
+    ? configObject.ui as Record<string, unknown>
+    : {}
+  const fallbackUiSettings = user.uiSettings && typeof user.uiSettings === 'object' && !Array.isArray(user.uiSettings)
+    ? user.uiSettings as Record<string, unknown>
+    : {}
+  const resolvedUi = { ...mentorUi, ...fallbackUiSettings }
+
   return {
     id: user.id,
     email: user.email,
@@ -24,132 +249,49 @@ export function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
-    lastLoginAt: user.lastLoginAt,
-    passwordHash: user.passwordHash,
-    telegramUserId: user.telegramUserId,
-    telegramUserName: user.telegramUserName,
-    telegramChatId: user.telegramChatId,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-    subscription: user.subscriptions?.[0] ?? null,
-    userProgress: user.progress ?? null,
-    mentorConfigs: user.mentorConfig ? [{ config: user.mentorConfig.config }] : []
+    isAdmin: user.role === 'SUPERADMIN' || isSuperAdmin,
+    isSuperAdmin,
+    abilities,
+    access: {
+      plan: isPaid ? 'paid' : isTrial ? 'trial' : 'free',
+      isPaid,
+      isTrial,
+      trialEnd: sub?.trialEndsAt?.toISOString() ?? null,
+    },
+    stats: {
+      totalPoints: user.userProgress?.totalPoints ?? 0,
+      completedBlocks: user.userProgress?.completedBlocks ?? 0,
+      level: user.userProgress?.level ?? 1,
+    },
+    settings: {
+      accentColor: typeof resolvedUi.accentColor === 'string' ? resolvedUi.accentColor : null,
+      theme: typeof resolvedUi.theme === 'string' ? resolvedUi.theme : null,
+      language: typeof resolvedUi.language === 'string' ? resolvedUi.language : null,
+    },
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+    subscriptionStatus: normalizeSubscriptionStatus(sub?.status ?? null),
+    subscriptionPlan: normalizeSubscriptionPlan(sub?.planCode ?? null),
+    trialEndsAt: sub?.trialEndsAt?.toISOString() ?? null,
+    isTrialActive: isTrial,
   }
 }
 
-export function toSafeUserService(user: UserWithSub): SafeUser {
-  return toSafeUser(user)
-}
-
-// ── PASSWORD ──────────────────────────────────────────────────
-
-export const validatePassword = (password: string, hash: string): Promise<boolean> =>
-  bcrypt.compare(password, hash)
-
-export const hashPassword = (password: string): Promise<string> =>
-  bcrypt.hash(password, 10)
-
-// ── JWT ───────────────────────────────────────────────────────
-
-export const signToken = (payload: JwtPayload): string =>
-  jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' })
-
-export const signRefreshToken = (payload: RefreshPayload): string =>
-  jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: '30d' })
-
-export const verifyToken = (token: string): JwtPayload =>
-  jwt.verify(token, JWT_SECRET) as JwtPayload
-
-export const verifyRefreshToken = (token: string): RefreshPayload =>
-  jwt.verify(token, JWT_REFRESH_SECRET) as RefreshPayload
-
-// ── USER CRUD ─────────────────────────────────────────────────
-
-export async function createUserLocal(params: { email: string; password: string; name: string }): Promise<UserWithSub> {
-  const passwordHash = await hashPassword(params.password)
-  const user = await prisma.user.create({
-    data: { email: params.email, passwordHash, name: params.name, role: 'USER' },
-    include: { subscriptions: true, progress: true, mentorConfig: true }
-  })
-  return toUserWithSub(user)
-}
-
-export async function findUserByEmail(email: string, includePassword = false): Promise<UserWithSub | null> {
-  const user = await prisma.user.findFirst({
-    where: { email: email.toLowerCase().trim() },
-    include: { subscriptions: true, progress: true, mentorConfig: true }
-  })
-  if (!user) return null
-  return toUserWithSub({ ...user, passwordHash: includePassword ? user.passwordHash : null })
-}
-
-export async function findUserById(id: string, includePassword = false): Promise<UserWithSub | null> {
-  const user = await prisma.user.findUnique({
-    where: { id },
-    include: { subscriptions: true, progress: true, mentorConfig: true }
-  })
-  if (!user) return null
-  return toUserWithSub({ ...user, passwordHash: includePassword ? user.passwordHash : null })
-}
-
-export async function markUserLoggedIn(userId: string): Promise<void> {
-  await prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } })
-}
-
-// ── PASSWORD RESET ─────────────────────────────────────────────
-
-export async function requestPasswordReset(email: string): Promise<{ emailSent: boolean; resetToken?: string; resetUrl?: string }> {
-  const user = await prisma.user.findUnique({ where: { email } })
-  if (!user) return { emailSent: false }
-  const resetToken = jwt.sign({ id: user.id }, JWT_RESET_SECRET, { expiresIn: '1h' })
-  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`
-  return { emailSent: true, resetToken, resetUrl }
-}
-
-export async function resetPasswordByToken(token: string, newPassword: string): Promise<void> {
-  const decoded = jwt.verify(token, JWT_RESET_SECRET) as RefreshPayload
-  const passwordHash = await hashPassword(newPassword)
-  await prisma.user.update({ where: { id: decoded.id }, data: { passwordHash } })
-}
-
-// ── SOCIAL AUTH ───────────────────────────────────────────────
-
-export async function findOrCreateSocialUser(params: { provider: 'google' | 'telegram'; externalId: string; email?: string; name?: string }): Promise<UserWithSub> {
-  let user = null
-
-  if (params.provider === 'telegram') {
-  user = await prisma.user.findFirst({ where: { telegramUserId: params.externalId }, include: { subscriptions: true, progress: true, mentorConfig: true } })
-    if (!user) {
-      user = await prisma.user.create({
-        data: { telegramUserId: params.externalId, email: params.email ?? null, name: params.name ?? null, role: 'USER' },
-        include: { subscriptions: true, progress: true, mentorConfig: true }
-      })
-    }
-    return toUserWithSub(user)
-  }
-
-  // Google
-      user = await prisma.user.findFirst({ where: { email: params.email }, include: { subscriptions: true, progress: true, mentorConfig: true } })
-  if (!user) {
-    user = await prisma.user.create({
-      data: { email: params.email ?? null, name: params.name ?? null, role: 'USER' },
-      include: { subscriptions: true, progress: true, mentorConfig: true }
-    })
-  }
-  return toUserWithSub(user)
-}
-
-// ── UI SETTINGS ───────────────────────────────────────────────
-
-type UISettings = { accentColor?: string | null; theme?: string | null; language?: string | null }
-
-export async function updateUserUiSettings(userId: string, settings: UISettings): Promise<UserWithSub> {
-  const user = await prisma.user.update({
+export async function promoteUserToAdminIfNeeded(userId: string): Promise<void> {
+  const existing = await prisma.user.findUnique({
     where: { id: userId },
-    data: { uiSettings: settings },
-    include: { subscriptions: true, progress: true, mentorConfig: true }
+    select: { role: true },
   })
-  return toUserWithSub(user)
+  if (!existing || existing.role === 'SUPERADMIN' || existing.role === 'ADMIN') return
+  await prisma.user.update({
+    where: { id: userId },
+    data: { role: 'ADMIN' },
+  })
 }
 
-export { toSafeUserService as toSafeUser }
+// ── Оновлення lastLoginAt ─────────────────
+export async function markUserLoggedIn(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastLoginAt: new Date() },
+  })
+}

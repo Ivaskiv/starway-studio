@@ -5,7 +5,7 @@
 
 import { Response, NextFunction } from 'express';
 import { startTrial, getTrialStatus, generateTrialMirror } from './service.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 export async function startTrialHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

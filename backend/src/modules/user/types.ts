@@ -1,4 +1,5 @@
-import type { SafeUser, UserRole, UserWithSub } from '@/types/globalTypes.js'
+import type { SafeUser, UserRole, UserWithSub } from '../../types/globalTypes.js'
+import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
 
 export type { UserRole }
 export function toSafeUser(user: UserWithSub): SafeUser {
@@ -31,8 +32,8 @@ export function toSafeUser(user: UserWithSub): SafeUser {
       language: null,
     },
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
-    subscriptionStatus: user.subscription?.status ?? 'NONE',
-    subscriptionPlan: user.subscription?.planCode ?? 'free',
+    subscriptionStatus: normalizeSubscriptionStatus(user.subscription?.status ?? null),
+    subscriptionPlan: normalizeSubscriptionPlan(user.subscription?.planCode ?? null),
     trialEndsAt: user.subscription?.trialEndsAt?.toISOString() ?? null,
     isTrialActive: false,
   }

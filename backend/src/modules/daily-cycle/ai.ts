@@ -1,6 +1,7 @@
 // daily.telegram.ts
-import { openai } from '@/lib/openai.js';
-import { DailyEntryForAi } from '@/modules/daily-cycle/types.js';
+import { prisma } from '../../db/client.js';
+import { openai } from '../../lib/openai.js';
+import { DailyEntryForAi } from '../../modules/daily-cycle/types.js';
 
 export async function generateDailyAiAnalysis(entry: DailyEntryForAi) {
   if (!entry.answers.length) return null;
@@ -31,4 +32,11 @@ ${entry.answers.map(a => `Q: ${a.question}\nA: ${a.answer}`).join('\n\n')}
     console.error('❌ generateDailyAiAnalysis error:', err);
     return null;
   }
+}
+
+export async function saveMemory(userId:string,type:string,content:string){
+
+ return prisma.assistantMemory.create({
+  data:{userId,type,content}
+ })
 }

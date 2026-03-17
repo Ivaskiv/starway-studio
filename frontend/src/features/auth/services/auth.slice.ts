@@ -1,66 +1,65 @@
 // frontend/src/features/auth/services/auth.slice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { getToken, removeToken, saveToken } from '@/features/auth/services/token';
-import { AuthState } from '@/features/auth/types/auth.types';
 import type { User, UserRole } from '@/features/user/types/user.types';
+import type { AuthState } from '@/features/auth/types/auth.types';
+import { getToken, saveToken, removeToken } from './token';
 
+const token = getToken();
 const initialState: AuthState = {
   user: null,
   role: null,
-  accessToken: getToken(),
-  status: getToken() ? 'loading' : 'idle',
+  accessToken: token,
+  status: token ? 'loading' : 'guest',
 };
 
 const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
-    // Повна установка після логіну / реєстрації
-    setCredentials: (state, action: PayloadAction<{ user: User; accessToken: string }>) => {
-      state.user = action.payload.user;
-      state.accessToken = action.payload.accessToken;
-      state.status = 'authenticated';
-      state.role = action.payload.user.role;
-      saveToken(action.payload.accessToken);
+    // Після логіну / restore — повний об'єкт
+    setCredentials: (state, { payload }: PayloadAction<{ user: User; accessToken: string }>) => {
+      state.user        = payload.user;
+      state.role        = payload.user.role;
+      state.accessToken = payload.accessToken;
+      state.status      = 'authenticated';
+      saveToken(payload.accessToken);
     },
 
-    // Оновлення даних користувача (наприклад після /me або редагування профілю)
-    updateUser: (state, action: PayloadAction<User>) => {
-      if (state.user) {
-        state.user = { ...state.user, ...action.payload };
-      } else {
-        state.user = action.payload;
-      }
-      state.role = action.payload.role;
+    // Оновлення user без зміни токена (getMe, profile edit)
+    updateUser: (state, { payload }: PayloadAction<User>) => {
+      state.user   = { ...state.user, ...payload };
+      state.role   = payload.role ?? state.role;
       state.status = 'authenticated';
     },
 
-    // Зміна ролі (рідко використовується, але може бути корисно)
-    setUserRole: (state, action: PayloadAction<UserRole>) => {
-      if (state.user) {
-        state.user.role = action.payload;
-      }
-      state.role = action.payload;
+    // ✅ Оновлення тільки settings — НЕ торкається role/id/email
+    // Використовувати після PATCH /api/auth/settings
+    updateUserSettings: (
+      state,
+      { payload }: PayloadAction<{ accentColor?: string; language?: string; theme?: string }>,
+    ) => {
+      if (!state.user) return;
+      state.user.settings = { ...state.user?.settings, ...payload };
     },
 
-    // Початок завантаження (наприклад під час запиту /me)
-    setLoading: (state) => {
-      state.status = 'loading';
+    setUserRole: (state, { payload }: PayloadAction<UserRole>) => {
+      if (state.user) state.user.role = payload;
+      state.role = payload;
     },
 
-    // Очистка авторизації (вихід)
+    setLoading: (state) => { state.status = 'loading'; },
+
     clearAuth: (state) => {
-      state.user = null;
+      state.user        = null;
+      state.role        = null;
       state.accessToken = null;
-      state.role = null;
-      state.status = 'unauthenticated';
+      state.status      = 'guest';
       removeToken();
     },
 
-    // Відновлення тільки токена (для AuthRestore)
-    restoreToken: (state, action: PayloadAction<string>) => {
-      state.accessToken = action.payload;
-      state.status = 'loading';
+    restoreToken: (state, { payload }: PayloadAction<string>) => {
+      state.accessToken = payload;
+      state.status      = 'loading';
     },
   },
 });
@@ -68,6 +67,7 @@ const authSlice = createSlice({
 export const {
   setCredentials,
   updateUser,
+  updateUserSettings,
   setUserRole,
   setLoading,
   clearAuth,
@@ -76,13 +76,12 @@ export const {
 
 export default authSlice.reducer;
 
-// Selectors
-export const selectCurrentUser = (state: { auth: AuthState }) => state.auth.user;
-export const selectAccessToken = (state: { auth: AuthState }) => state.auth.accessToken;
-export const selectAuthStatus = (state: { auth: AuthState }) => state.auth.status;
-export const selectUserRole = (state: { auth: AuthState }) => state.auth.role;
-export const selectIsAuthenticated = (state: { auth: AuthState }) =>
-  state.auth.status === 'authenticated';
-export const selectIsLoading = (state: { auth: AuthState }) => state.auth.status === 'loading';
-export const selectIsUnauthenticated = (state: { auth: AuthState }) =>
-  state.auth.status === 'unauthenticated';
+// ── Selectors ──────────────────────────────────────────────────────────────────
+export const selectCurrentUser       = (s: { auth: AuthState }) => s.auth.user;
+export const selectAccessToken       = (s: { auth: AuthState }) => s.auth.accessToken;
+export const selectAuthStatus        = (s: { auth: AuthState }) => s.auth.status;
+export const selectUserRole          = (s: { auth: AuthState }) => s.auth.role;
+export const selectIsAuthenticated   = (s: { auth: AuthState }) => s.auth.status === 'authenticated';
+export const selectIsLoading         = (s: { auth: AuthState }) => s.auth.status === 'loading';
+export const selectIsGuest           = (s: { auth: AuthState }) => s.auth.status === 'guest';
+export const selectIsUnauthenticated = selectIsGuest;

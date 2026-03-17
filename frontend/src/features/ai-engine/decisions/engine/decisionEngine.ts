@@ -1,5 +1,6 @@
 // frontend/src/features/aiDecisionEngine/engine/decisionEngine.ts
 
+import { DecisionContext, DecisionResult, MicroTask } from '@/features/ai-engine/decisions/types/decisions.types';
 import { useGetQuestionsQuery, useSubmitAnswersMutation } from '@/features/daily-cycle/questions';
 import {
   AnswerInput,
@@ -7,7 +8,7 @@ import {
   UseQuestionsOptions,
 } from '@/features/daily-cycle/questions/types/questions.types';
 import { createMentorReportPdf } from '@/features/reportsPdf/services/createMentorReportPdf';
-import { sendTelegramMessage } from '@/services/telegram.service';
+import { sendTelegramMessage } from '@/features/social/services/telegram.service';
 import { useCallback } from 'react';
 
 /**
@@ -26,6 +27,42 @@ export const runDecisionEngine = (decisions: Decision[]): Decision[] => {
   filtered.sort((a, b) => b.priority - a.priority);
 
   return filtered;
+};
+
+export const evaluateDecisionContext = (ctx: DecisionContext): DecisionResult => {
+  const microTasks: MicroTask[] = [];
+
+  if (ctx.metrics.consistency < 50) {
+    microTasks.push({
+      title: 'Маленький крок',
+      description: 'Виконай просте завдання для регулярності',
+      type: 'actionable',
+      persist: true,
+      source: ctx.source,
+      reason: 'stagnation',
+      status: 'PENDING',
+    });
+  }
+
+  if (ctx.metrics.drains > 6) {
+    microTasks.push({
+      title: 'Відновлення енергії',
+      description: 'Зроби 5 хвилинні вправи для зняття напруги',
+      type: 'actionable',
+      persist: true,
+      source: ctx.source,
+      reason: 'instability',
+      status: 'PENDING',
+    });
+  }
+
+  const supportMessage = `Стійкість ${ctx.metrics.stability}/10, регулярність ${ctx.metrics.consistency}/10`;
+
+  return {
+    supportMessage,
+    microTasks: microTasks.length ? microTasks : undefined,
+    recommendations: ctx.metrics.stability < 4 ? { enabled: true, reason: 'Потрібна додаткова підтримка' } : { enabled: false },
+  };
 };
 
 export const useQuestions = (options: UseQuestionsOptions) => {

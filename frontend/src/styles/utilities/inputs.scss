@@ -1,0 +1,67 @@
+// src/styles/components/inputs.scss
+// Liquid Glass input — без backdrop-filter, без inline styles
+// ══════════════════════════════════════════════════════════════
+
+.input-glass {
+  // Liquid Glass base
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,.02) 100%),
+    rgba(255,255,255,.03);
+
+  border:        1px solid rgba(255,255,255,.10);
+  border-radius: 14px;
+  padding:       .625rem 1rem;           // py-2.5 px-4
+  font-size:     .875rem;
+  color:         var(--text-primary);
+  width:         100%;
+  outline:       none;
+  transition:    border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+
+  // Placeholder
+  &::placeholder { color: rgba(255,255,255,.28); }
+
+  // Focus — accent ring без outline
+  &:focus {
+    border-color: rgba(var(--accent-rgb), .55);
+    box-shadow:
+      0 0  0   3px rgba(var(--accent-rgb), .12),
+      0 4px 16px rgba(var(--accent-rgb), .08),
+      0 1px 0  rgba(255,255,255,.08) inset;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.03) 100%),
+      rgba(var(--accent-rgb), .04);
+  }
+
+  // Hover (не focus)
+  &:hover:not(:focus):not(:disabled) {
+    border-color: rgba(255,255,255,.18);
+    background:
+      linear-gradient(135deg, rgba(255,255,255,.07) 0%, rgba(255,255,255,.025) 100%),
+      rgba(255,255,255,.04);
+  }
+
+  // Error state
+  &--error {
+    border-color: rgba(239, 68, 68, .55);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, .10);
+    &:focus {
+      border-color: rgba(239, 68, 68, .75);
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, .15);
+    }
+  }
+
+  // Disabled
+  &:disabled {
+    opacity:        .5;
+    cursor:         not-allowed;
+    pointer-events: none;
+  }
+
+  // Color input (accent picker)
+  &[type="color"] {
+    padding:       .25rem;
+    height:        2.25rem;
+    cursor:        pointer;
+    border-radius: .5rem;
+  }
+}

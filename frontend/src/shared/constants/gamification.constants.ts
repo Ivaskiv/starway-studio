@@ -39,7 +39,7 @@ export const BADGES = {
   },
   TRANSFORMER: {
     key: 'transformer',
-    icon: '⭐',
+    icon: '✦',
     title: 'Перетворювач',
     description: '30 днів регулярності',
     points: 100,

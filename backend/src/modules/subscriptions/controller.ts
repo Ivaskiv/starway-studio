@@ -4,7 +4,7 @@
 
 import type {Response } from 'express';
 import { getUserSubscriptionInfo, getUserSubscriptions } from './service.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 /** GET /api/subscriptions/status — поточний стан підписки + cooldown */
 export async function getSubscriptionStatus(req: AuthenticatedRequest, res: Response) {

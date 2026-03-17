@@ -1,34 +1,10 @@
-// backend/src/modules/ai-mentor/types.ts
+import { DailyChoice, DailyDrain, DailyState } from "@/modules/daily-cycle/types.js";
 
 /**
- * 🎯 AI MENTOR TYPES
- * Centralized type definitions for AI Mentor module
+ * 📐 AI Mentor types
+ * Centralizes DTOs and domain models for trial/paid/onboarding/chat/daily/wheel flows.
  */
-
-// ==========================================
-// ONBOARDING STAGES
-// ==========================================
-
-export type OnboardingStage = 
-  | 'ENTRY'
-  | 'CHOICE'
-  | 'ACTIONS'
-  | 'GOAL'
-  | 'VISION'
-  | 'COMPLETED';
-
-export const ONBOARDING_STAGES: OnboardingStage[] = [
-  'ENTRY',
-  'CHOICE',
-  'ACTIONS',
-  'GOAL',
-  'VISION',
-  'COMPLETED'
-];
-
-// ==========================================
-// STAGE CONFIGS
-// ==========================================
+export type OnboardingStage = 'ENTRY' | 'CHOICE' | 'ACTIONS' | 'GOAL' | 'VISION' | 'COMPLETED';
 
 export interface StageConfig {
   title: string;
@@ -41,51 +17,53 @@ export const STAGE_CONFIGS: Record<OnboardingStage, StageConfig> = {
   ENTRY: {
     title: 'Вітання',
     description: 'Знайомство з AI Ментором',
-    prompt: 'Привіт! Я твій AI Ментор. Готовий допомогти тобі досягти цілей.',
-    nextStage: 'CHOICE'
+    prompt: 'Привіт! Я твій AI Ментор. Я скажу суворі правди, але тільки після запитання.',
+    nextStage: 'CHOICE',
   },
   CHOICE: {
     title: 'Вибір',
-    description: 'Уточнення поточних виборів і патернів',
-    prompt: 'Які повторювані вибори зараз найсильніше впливають на твій результат?',
-    nextStage: 'ACTIONS'
+    description: 'Розбираємо поточні вибори й патерни',
+    prompt: 'Який вибір ти вимушена повторювати, але не хочеш?',
+    nextStage: 'ACTIONS',
   },
   ACTIONS: {
     title: 'Дії',
-    description: 'Фіксація перших кроків',
-    prompt: 'Які 1-2 конкретні дії ти готова зробити вже сьогодні?',
-    nextStage: 'GOAL'
+    description: 'Блок дій для наступного прогресу',
+    prompt: 'Назви два конкретні кроки, які зробиш зараз.',
+    nextStage: 'GOAL',
   },
   GOAL: {
     title: 'Ціль',
-    description: 'Визначення головної цілі',
-    prompt: 'Яка твоя головна ціль на найближчий час? Що ти хочеш досягти?',
-    nextStage: 'VISION'
+    description: 'Фіксуємо головну ціль',
+    prompt: 'Що має статись, щоб ти сказала: «Я досягла»?',
+    nextStage: 'VISION',
   },
   VISION: {
     title: 'Бачення',
-    description: 'Формування довгострокового бачення',
-    prompt: 'Уяви своє ідеальне майбутнє через 5 років. Як виглядає твоє життя?',
-    nextStage: 'COMPLETED'
+    description: 'Формуємо довгострокове бачення',
+    prompt: 'Опиши себе після 5 років. Що ти бачиш?',
+    nextStage: 'COMPLETED',
   },
   COMPLETED: {
     title: 'Завершено',
-    description: 'Онбординг пройдено',
-    prompt: 'Чудово! Тепер ти готовий працювати з AI Ментором.',
-  }
+    description: 'Онбординг завершено, ментор активний',
+    prompt: 'Маєш 72 години. Що зробиш наступними?',
+  },
 };
 
-// ==========================================
-// MENTOR CONTEXT
-// ==========================================
+export interface MentorRuleSet {
+  tone?: 'friendly' | 'professional' | 'harsh';
+  goals?: string[];
+  morningQuestions?: string[];
+  eveningQuestions?: string[];
+}
 
 export interface MentorContext {
   userName?: string;
-  userGoal?: string;
-  userVision?: string;
   currentStage?: OnboardingStage;
   wheelScores?: Record<string, number>;
   recentActions?: string[];
+  
 }
 
 export interface SessionContext {
@@ -97,30 +75,108 @@ export interface SessionContext {
   systemPrompt: string;
 }
 
-// ==========================================
-// MENTOR RULES
-// ==========================================
-
-export interface MentorRuleSet {
-  tone?: 'friendly' | 'professional' | 'harsh' | 'supportive';
-  goals?: string[];
-  morningQuestions?: string[];
-  eveningQuestions?: string[];
-  focusAreas?: string[];
+export interface AIGenerationRequest {
+  prompt: string;
+  context?: string[];
 }
 
-// ==========================================
-// ONBOARDING PROGRESS
-// ==========================================
+export interface AIGenerationResponse {
+  text: string;
+  summary: string;
+  tone: string;
+}
 
-export interface OnboardingProgress {
+// Chat/admission
+export interface MentorSession {
+  id: string;
+  userMentorId: string;
+  createdAt: Date;
+  endedAt: Date | null;
+}
+
+export interface MentorMessage {
+  id: string;
+  sessionId: string;
+  role: string;
+  content: string;
+  createdAt: Date;
+}
+
+export interface SendMessageDto {
   userId: string;
-  currentStage: OnboardingStage;
-  completedStages: OnboardingStage[];
+  message: string;
+  sessionId?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface ChatResponse {
+  session: MentorSession;
+  userMessage: MentorMessage;
+  mentorMessage: MentorMessage;
+}
+
+export interface MentorChatContext {
+  lastState?: string;
+  focusSphere?: string;
+  wheelScore?: number;
+  primaryGoal?: string;
+  streakDays?: number;
+}
+
+// Daily cycle
+
+export interface DailyCycleInput {
+  userId: string;
+  expertId: string;
+  state: DailyState;
+  choice: DailyChoice;
+  drain?: DailyDrain;
+  dayFact: string;
+  microSupport?: MicroSupportItem[];
+  aiAnalysis?: string;
+}
+
+export interface DailyCycleResponse {
+  id: string;
+  userId: string;
+  expertId: string;
+  date: Date;
+  state: DailyState;
+  choice: DailyChoice;
+  drain?: DailyDrain | null;
+  dayFact: string | null;
+  aiAnalysis?: string | null;
+  microSupport: MicroSupportItem[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MicroSupportItem {
+  id: string;
+  action: string;
+  durationDays: number;
+  completed?: boolean;
+  note?: string;
+}
+
+// Wheel balance
+export interface WheelScore {
+  categoryId: string;
+  score: number;
+}
+
+export interface WheelAnalysis {
+  weakestSphere: string;
+  focusSphere: string;
+  imbalance: string;
+  scores: WheelScore[];
+}
+
+// Onboarding/trial
+export interface OnboardingTimer {
   startedAt: Date;
-  completedAt: Date | null;
-  lastActivityAt: Date | null;
-  isCompleted: boolean;
+  expiresAt: Date;
+  canSkip: boolean;
 }
 
 export interface CompleteStageDto {
@@ -133,121 +189,48 @@ export interface UpdateProgressDto {
   stage: OnboardingStage;
 }
 
-// ==========================================
-// CHAT & MESSAGES
-// ==========================================
+export type TrialState = 'ACTIVE' | 'COMPLETED' | 'EXPIRED';
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'mentor' | 'system';
-  text: string;
-  createdAt: Date;
-  metadata?: Record<string, any>;
+export interface TrialStatus {
+  state: TrialState;
+  daysLeft: number;
+  streak: number;
 }
 
-export interface ChatSession {
-  id: string;
+export interface PaidModule {
+  name: string;
+  enabled: boolean;
+  completedAt?: Date;
+}
+
+export interface PaidAccessStatus {
+  hasAccess: boolean;
+  modules: PaidModule[];
+}
+
+export type GenerationIntent = 'morning' | 'evening' | 'wheel' | 'weekly' | 'chat' | 'pdf';
+
+export interface GenerationRequest {
   userId: string;
-  messages: ChatMessage[];
-  createdAt: Date;
-  updatedAt: Date;
+  type: GenerationIntent;
+  productId?: string;
+  params?: Record<string, unknown>;
 }
 
-export interface MentorSession {
-  id: string;
-  userId: string;
-  startedAt: Date;
-  lastMessageAt: Date;
-  onboardingStage: OnboardingStage | null;
-  metadata?: Record<string, unknown> | null;
-  createdAt: Date;
-  updatedAt: Date;
+export interface GenerationResponse {
+  intent: GenerationIntent;
+  payload: Record<string, unknown> | string;
+  raw?: string;
 }
-
-export interface MentorMessage {
-  id: string;
-  mentorId: string;
-  sessionId: string | null;
-  userId: string;
-  role: 'USER' | 'MENTOR' | 'SYSTEM';
-  text: string;
-  metadata?: Record<string, unknown> | null;
-  createdAt: Date;
-}
-
-export interface SendMessageDto {
-  userId: string;
-  userName: string;
-  message: string;
-  sessionId?: string;
-  context?: Record<string, unknown>;
-}
-
-export interface ChatResponse {
-  session: MentorSession;
-  userMessage: MentorMessage;
-  mentorMessage: MentorMessage;
-}
-
-export interface QuestionsConfig {
-  frequency: 'morning_evening' | 'daily' | 'custom';
-  morningTime?: string;
-  eveningTime?: string;
-  timezone?: string;
-  promptStyle?: 'soft' | 'direct' | 'supportive' | 'analytical';
-  customPrompts?: string[];
-}
-
-// ==========================================
-// AI GENERATION
-// ==========================================
-
-export interface AIGenerationRequest {
-  prompt: string;
-  context?: MentorContext;
-  systemPrompt?: string;
-  temperature?: number;
-  maxTokens?: number;
-}
-
-export interface AIGenerationResponse {
-  text: string;
-  tokensUsed?: number;
-  model?: string;
-}
-
-// ==========================================
-// DAILY CYCLE
-// ==========================================
-
-export interface DailyCycleInput {
-  userId: string;
-  state: string;
-  drain?: string;
-  choice?: string;
-  fact?: string;
-  microAction?: string;
-}
-
-export interface DailyCycleResponse {
-  entry: any; // DailyEntry from Prisma
-  mentorResponse?: string;
-  microTasks?: any[];
-}
-
-// ==========================================
-// WHEEL BALANCE
-// ==========================================
 
 export interface WheelScore {
-  categoryId: string;
+  category: string;
   score: number;
 }
 
-export interface WheelAnalysis {
-  weakest: WheelScore;
-  strongest: WheelScore;
-  focus: WheelScore;
-  imbalance: number;
+// Affirmations / schedules
+export interface AffirmationDto {
+  text: string;
+  category: string;
+  generatedAt: Date;
 }
-

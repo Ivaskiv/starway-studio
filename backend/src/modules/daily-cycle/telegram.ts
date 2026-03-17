@@ -3,9 +3,9 @@
  * Daily Cycle Telegram - FIXED
  */
 
-import { bot as sharedTelegramBot } from '@/modules/wheel/telegram.js';
+import { bot as sharedTelegramBot } from '../../lib/telegram.js';
 import type { Context } from 'telegraf';
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../db/client.js';
 import { checkDailyAccess } from './subscription.js';
 import type { DailyCheckUser } from './subscription.js'; // імпорт типу
 
@@ -23,8 +23,13 @@ export function registerDailyTelegramCommands() {
       where: { telegramUserId: ctx.from.id.toString() },
       select: {
         id: true,
-        subscriptionStatus: true,
-        trialEndsAt: true
+        telegramUserId: true,
+        trialEndsAt: true,
+        subscriptions: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          select: { status: true }
+        }
       }
     });
 
@@ -35,7 +40,7 @@ export function registerDailyTelegramCommands() {
 
     // Перевірка доступу з типом DailyCheckUser
     const checkUser: DailyCheckUser = {
-      subscriptionStatus: user.subscriptionStatus,
+      subscriptionStatus: user.subscriptions?.[0]?.status ?? null,
       trialEndsAt: user.trialEndsAt
     };
 
@@ -62,8 +67,12 @@ export async function sendMorningQuestion() {
     select: {
       id: true,
       telegramUserId: true,
-      subscriptionStatus: true,
-      trialEndsAt: true
+      trialEndsAt: true,
+      subscriptions: {
+        take: 1,
+        orderBy: { createdAt: 'desc' },
+        select: { status: true }
+      }
     }
   });
 
@@ -72,7 +81,7 @@ export async function sendMorningQuestion() {
   for (const user of users) {
     try {
       const checkUser: DailyCheckUser = {
-        subscriptionStatus: user.subscriptionStatus,
+        subscriptionStatus: user.subscriptions?.[0]?.status ?? null,
         trialEndsAt: user.trialEndsAt
       };
 
@@ -101,8 +110,12 @@ export async function sendEveningQuestion() {
     select: {
       id: true,
       telegramUserId: true,
-      subscriptionStatus: true,
-      trialEndsAt: true
+      trialEndsAt: true,
+      subscriptions: {
+        take: 1,
+        orderBy: { createdAt: 'desc' },
+        select: { status: true }
+      }
     }
   });
 
@@ -111,7 +124,7 @@ export async function sendEveningQuestion() {
   for (const user of users) {
     try {
       const checkUser: DailyCheckUser = {
-        subscriptionStatus: user.subscriptionStatus,
+        subscriptionStatus: user.subscriptions?.[0]?.status ?? null,
         trialEndsAt: user.trialEndsAt
       };
 

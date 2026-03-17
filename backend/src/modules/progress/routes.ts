@@ -1,5 +1,5 @@
 // backend/src/modules/progress/progress.routes.ts
-import { authRequired } from '@/modules/auth/middleware/auth.js';
+import { authRequired } from '../../modules/auth/middleware/auth.js';
 import { Router } from 'express';
 import { addPoints, getMyProgress, getUserProgress, updateMyProgress } from './controller.js';
 

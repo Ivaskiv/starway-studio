@@ -1,4 +1,4 @@
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../db/client.js';
 import type {
   CreateProductInput,
   UpdateProductInput,
@@ -6,7 +6,7 @@ import type {
   ProductWithEnrollment,
   EnrollUserInput,
 } from './types.js';
-import { Prisma } from '@/db/generated/prisma/client.js';
+import { Prisma } from '../../db/generated/prisma/client.js';
 
 /** Graceful catch для відсутньої таблиці Product (P2021) */
 function isMissingProductsTableError(err: unknown): boolean {
@@ -58,6 +58,8 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
       durationDays: input.durationDays ?? 30,
       features:     (input.features ?? {}) as Prisma.InputJsonValue,
       limits:       (input.limits ?? {}) as Prisma.InputJsonValue,
+      systemPrompt: input.systemPrompt ?? null,
+      mentorConfig: input.mentorConfig ? (input.mentorConfig as Prisma.InputJsonValue) : Prisma.JsonNull,
     },
   });
 }

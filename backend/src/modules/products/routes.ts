@@ -3,7 +3,7 @@
  * Products Routes - FINAL
  */
 
-import { authRequired } from '@/modules/auth/middleware/auth.js';
+import { authRequired } from '../../modules/auth/middleware/auth.js';
 import { Router } from 'express';
 import {
   checkAccess,

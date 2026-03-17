@@ -1,5 +1,8 @@
 // features/ai-generator/pages/AIGeneratorPage.tsx
 
+import { useSystemState } from '@/shared/access/hooks/useSystemState';
+import { ModuleIntro } from '@/shared/components/ModuleIntro';
+import { ModuleUsageCounter } from '@/shared/components/ModuleUsageCounter';
 import { Button, GlassCard, Textarea } from '@/ui';
 import {
   ArrowLeft,
@@ -7,22 +10,25 @@ import {
   Bot,
   Check,
   Film,
-  Workflow,
   Gem,
   HelpCircle,
   RefreshCw,
   Sparkles,
+  Workflow,
 } from 'lucide-react';
-import { ATTEMPTS_PER_STEP, GenerationAttempt, STEP_DEFINITIONS } from '../../products/types/generator.types';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AIGeneratorProvider, useAIGenerator } from '../components/AIGeneratorProvider';
 import OwnerOnboardingCard from '../components/OwnerOnboardingCard';
-import { ModuleIntro } from '@/shared/components/ModuleIntro';
-import { ModuleUsageCounter } from '@/shared/components/ModuleUsageCounter';
-import { useSystemState } from '@/shared/access/hooks/useSystemState';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  ATTEMPTS_PER_STEP,
+  GenerationAttempt,
+  STEP_DEFINITIONS,
+  type OwnerOnboardingProfile,
+  type StepData,
+} from '@/features/ai-generator/types/wizard.types';
 
-type BuilderTab = 'funnel' | 'mentor' | 'marathon';
+type BuilderTab = 'funnel' | 'aIMentor' | 'marathon';
 
 type PreviewCard = {
   title: string;
@@ -50,14 +56,14 @@ const TAB_CONFIG: Record<
     steps: number[];
   }
 > = {
-  // fix code_x: split AI Producer into 3 product engines (funnel / mentor / marathon) without breaking 11-step core workflow.
+  // fix code_x: split AI Producer into 3 product engines (funnel / aIMentor / marathon) without breaking 11-step core workflow.
   funnel: {
     title: 'AI Воронка',
     subtitle: 'Архітектура funnel: вхід → trial → підписка → апсел',
     icon: <Workflow className="h-4 w-4" />,
     steps: [1, 2, 3, 4, 11],
   },
-  mentor: {
+  aIMentor: {
     title: 'AI Ментор',
     subtitle: 'Щоденна логіка, колесо балансу, звіти, Telegram, miniapp',
     icon: <Bot className="h-4 w-4" />,
@@ -72,9 +78,9 @@ const TAB_CONFIG: Record<
 };
 
 function normalizeTab(value: string | null | undefined): BuilderTab {
-  if (value === 'funnel' || value === 'mentor' || value === 'marathon') return value;
-  // fix code_x: default AI Generator flow opens mentor/wheel setup first.
-  return 'mentor';
+  if (value === 'funnel' || value === 'aIMentor' || value === 'marathon') return value;
+  // fix code_x: default AI Generator flow opens aIMentor/wheel setup first.
+  return 'aIMentor';
 }
 
 function extractShort(text: string | undefined, fallback: string) {
@@ -123,8 +129,8 @@ function LivePreview({
   const cards = useMemo<PreviewCard[]>(() => {
     const fallback = {
       funnelHook: 'Точка входу через контент/Telegram + діагностика',
-      mentorMorning: 'Ранок: фокус дня, енергія 1-10, 1 ключова дія',
-      mentorEvening: 'Вечір: підсумок дня, перешкоди, наступний крок',
+      aIMentorMorning: 'Ранок: фокус дня, енергія 1-10, 1 ключова дія',
+      aIMentorEvening: 'Вечір: підсумок дня, перешкоди, наступний крок',
       marathonFlow: '5 днів: відео + практична дія + AI-перевірка',
     };
 
@@ -145,7 +151,7 @@ function LivePreview({
       ];
     }
 
-    if (activeTab === 'mentor') {
+    if (activeTab === 'aIMentor') {
       return [
         {
           title: 'Preview: Картка AI-ментора',
@@ -153,7 +159,7 @@ function LivePreview({
           items: [
             `Колесо балансу: ${extractShort(selected[5], '8 сфер + AI аналіз')}`,
             `System prompt: ${extractShort(selected[6], 'Стан → Ціль → Вибір → Рішення → Дія')}`,
-            `Ранок/вечір: ${extractShort(selected[7], fallback.mentorMorning)}`,
+            `Ранок/вечір: ${extractShort(selected[7], fallback.aIMentorMorning)}`,
             `Звіти: ${extractShort(selected[8], 'Тижневий/місячний/загальний PDF')}`,
             `Telegram+miniapp: ${extractShort(selected[9], 'Нагадування, меню, синхронізація')}`,
             `Гейміфікація: ${extractShort(selected[10], 'Streak/XP/бейджі')}`,
@@ -190,10 +196,10 @@ function LivePreview({
         </p>
       </GlassCard>
 
-      {activeTab === 'mentor' && (
+      {activeTab === 'aIMentor' && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           <GlassCard className="p-4 border border-white/10 bg-white/[0.03]">
-            {/* fix code_x: balance wheel product preview block to show expected generated outcome for mentor engine. */}
+            {/* fix code_x: balance wheel product preview block to show expected generated outcome for aIMentor engine. */}
             <h3 className="text-sm font-semibold text-white mb-3">Preview: Колесо балансу (8 сфер)</h3>
             <div className="grid grid-cols-2 gap-2">
               {WHEEL_SPHERES_PREVIEW.map((sphere) => (
@@ -288,24 +294,31 @@ function AIGeneratorContent() {
     applyNadyaTemplate,
   } = useAIGenerator();
 
+  const handleOnboardingFieldChange = <K extends keyof OwnerOnboardingProfile>(
+    key: K,
+    value: OwnerOnboardingProfile[K],
+  ) => {
+    setOnboardingField(key, value);
+  };
+
   const stepData = stepsData[currentStep - 1];
   const stepDef = STEP_DEFINITIONS[currentStep - 1];
-  const completedSteps = stepsData.filter((s) => s.selectedAttemptId).map((s) => s.number);
+  const completedSteps = stepsData.filter((s: StepData) => s.selectedAttemptId).map((s: StepData) => s.number);
   const progress = Math.round((completedSteps.length / stepsData.length) * 100);
   const availableForStep = getAvailableGenerationsForStep(currentStep);
   const maxUnlockedStep = Math.min(
     stepsData.length,
     Math.max(
       1,
-      stepsData.reduce((max, step) => (step.selectedAttemptId ? Math.max(max, step.number + 1) : max), 1),
+      stepsData.reduce((max: number, step: StepData) => (step.selectedAttemptId ? Math.max(max, step.number + 1) : max), 1),
     ),
   );
 
   const visibleSteps = TAB_CONFIG[activeTab].steps;
   const selectedByStep = useMemo(() => {
     const map: Record<number, string> = {};
-    stepsData.forEach((step) => {
-      const selected = step.attempts.find((attempt) => attempt.id === step.selectedAttemptId);
+    stepsData.forEach((step: StepData) => {
+      const selected = step.attempts.find((attempt: GenerationAttempt) => attempt.id === step.selectedAttemptId);
       if (selected?.content) map[step.number] = selected.content;
       else if (step.userInput?.trim()) map[step.number] = step.userInput;
     });
@@ -362,7 +375,7 @@ function AIGeneratorContent() {
   useEffect(() => {
     if (!searchParams.get('tab')) {
       const next = new URLSearchParams(searchParams);
-      next.set('tab', 'mentor');
+      next.set('tab', 'aIMentor');
       setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams]);
@@ -392,7 +405,7 @@ function AIGeneratorContent() {
 
         <OwnerOnboardingCard
           value={onboarding}
-          onChange={setOnboardingField}
+          onChange={handleOnboardingFieldChange}
           onApplyNadyaTemplate={applyNadyaTemplate}
         />
       </div>
@@ -413,11 +426,11 @@ function AIGeneratorContent() {
         ]}
       />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <ModuleUsageCounter
+        {/* <ModuleUsageCounter
           label="Генерації"
           used={Math.max(0, stepsData.length * ATTEMPTS_PER_STEP - totalRemainingAttempts)}
           total={stepsData.length * ATTEMPTS_PER_STEP}
-        />
+        /> */}
         <ModuleUsageCounter
           label="Завершені кроки"
           used={completedSteps.length}

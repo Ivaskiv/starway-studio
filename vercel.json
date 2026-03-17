@@ -1,9 +1,25 @@
 {
-  "rootDirectory": "frontend",
-  "installCommand": "pnpm install",
-  "buildCommand": "pnpm build:frontend",
-  "outputDirectory": "dist",
+  "version": 3,
+  "projects": [
+    {
+      "name": "frontend",
+      "rootDirectory": "frontend",
+      "buildCommand": "pnpm build",
+      "outputDirectory": "dist"
+    },
+    {
+      "name": "backend",
+      "rootDirectory": "backend",
+      "buildCommand": "pnpm build",
+      "outputDirectory": ".vercel_build_output/functions",
+      "functions": {
+        "api/**/*.ts": {
+          "runtime": "nodejs18.x"
+        }
+      }
+    }
+  ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": "/backend/api/$1" }
   ]
 }

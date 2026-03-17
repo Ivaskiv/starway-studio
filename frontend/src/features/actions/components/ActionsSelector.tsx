@@ -1,7 +1,7 @@
 // frontend/src/features/actions/components/ActionsSelector.tsx
 // Селектор дій для конструктора воронки
+import { ActionCard } from '@/features/actions/components/ActionCard';
 import { ReactNode } from 'react';
-import ActionCard from './ActionCard';
 
 export type FunnelActionType =
   | 'ai_message'

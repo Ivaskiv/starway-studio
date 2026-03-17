@@ -1,3 +1,5 @@
+import type { Response as FetchResponse } from 'node-fetch'
+
 const RESEND_API_URL = 'https://api.resend.com/emails'
 
 type SendPasswordResetEmailInput = {
@@ -22,7 +24,7 @@ export async function sendPasswordResetEmail(input: SendPasswordResetEmailInput)
       </p>
       <a
         href="${input.resetUrl}"
-        style="display:inline-block;padding:12px 18px;border-radius:10px;background:#f97316;color:#fff;text-decoration:none;font-weight:600;"
+        style="display:inline-block;padding:12px 18px;border-radius:10px;background:#0a2446;color:#fff;text-decoration:none;font-weight:600;"
       >
         Встановити новий пароль
       </a>
@@ -46,9 +48,10 @@ export async function sendPasswordResetEmail(input: SendPasswordResetEmailInput)
     }),
   })
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    console.error('❌ [Mail] Resend error:', response.status, text)
+  const typedResponse = response as FetchResponse
+  if (!typedResponse.ok) {
+    const text = await typedResponse.text().catch(() => '')
+    console.error('❌ [Mail] Resend error:', typedResponse.status, text)
     return false
   }
 

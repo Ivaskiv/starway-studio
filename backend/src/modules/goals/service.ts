@@ -4,8 +4,8 @@
  * Goals Service - COMPLETE
  */
 
-import { prisma } from '@/db/client.js';
-import { openai } from '@/lib/openai.js';
+import { prisma } from '../../db/client.js';
+import { openai } from '../../lib/openai.js';
 import { Goal, GoalsSet } from './types.js';
 
 export async function setGoals(

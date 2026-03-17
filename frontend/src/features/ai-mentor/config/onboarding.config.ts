@@ -68,7 +68,7 @@ export const ONBOARDING_STAGES: Record<OnboardingStage, OnboardingStageConfig> =
     nextStage: 'COMPLETED',
     component: 'ActionsStep',
   },
-  completed: {
+  COMPLETED: {
     stage: 'COMPLETED',
     title: 'Завершено',
     description: 'Онбординг пройдено, доступ до всіх модулів',

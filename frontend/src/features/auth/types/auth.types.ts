@@ -75,7 +75,7 @@ export interface SocialAuthResult {
   email?: string
 }
 
-export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated'
+export type AuthStatus = 'loading' | 'authenticated' | 'guest'
 
 export interface AuthState {
   user: User | null

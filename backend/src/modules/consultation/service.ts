@@ -1,5 +1,5 @@
 // backend/src/modules/consultation/service.ts
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../db/client.js';
 import type { ConsultationTrigger } from './types.js';
 
 

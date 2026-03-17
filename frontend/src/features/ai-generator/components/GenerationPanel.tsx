@@ -1,64 +1,123 @@
 // frontend/src/features/ai-generator/components/GenerationPanel.tsx
 import { Button } from '@/ui';
 import { useState } from 'react';
+// ✅ Розширено: підтримка Hero варіантів + режим hero/text
+import { HeroVariantsPicker } from './HeroVariantsPicker'
+import type { HeroVariant } from '../types/ai-generator.types'
 
-interface Props {
-  stepNumber: number;
-  userInput: string;
-  context: Record<string, string>;
-  onConfirm: (value: string) => void;
-  generate: (payload: {
-    stepNumber: number;
-    userInput: string;
-    context: Record<string, string>;
-  }) => Promise<{ variants: string[] }>;
+// ── Типи ─────────────────────────────────────────────────────────────────────
+
+interface TextGeneratePayload {
+  stepNumber: number
+  userInput:  string
+  context:    Record<string, string>
 }
 
-export function GenerationPanel({ stepNumber, userInput, context, onConfirm, generate }: Props) {
-  const [variants, setVariants] = useState<string[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+interface HeroGeneratePayload {
+  niche:          string
+  targetAudience: string
+  utp:            string
+  tone?:          'serious' | 'inspiring' | 'provocative' | 'soft'
+}
+
+interface TextModeProps {
+  mode:       'text'
+  stepNumber: number
+  userInput:  string
+  context:    Record<string, string>
+  onConfirm:  (value: string) => void
+  generate:   (payload: TextGeneratePayload) => Promise<{ variants: string[] }>
+}
+
+interface HeroModeProps {
+  mode:          'hero'
+  niche:          string
+  targetAudience: string
+  utp:            string
+  onConfirm:      (variant: HeroVariant) => void
+  generate:       (payload: HeroGeneratePayload) => Promise<{ variants: HeroVariant[] }>
+}
+
+type Props = TextModeProps | HeroModeProps
+
+// ── Компонент ─────────────────────────────────────────────────────────────────
+
+export function GenerationPanel(props: Props) {
+  const [textVariants, setTextVariants] = useState<string[]>([])
+  const [heroVariants, setHeroVariants] = useState<HeroVariant[]>([])
+  const [selectedIdx,  setSelectedIdx]  = useState<number | null>(null)
+  const [isLoading,    setIsLoading]    = useState(false)
 
   const handleGenerate = async () => {
-    const base = selectedIndex !== null ? variants[selectedIndex] : userInput;
+    setIsLoading(true)
+    try {
+      if (props.mode === 'text') {
+        const base = selectedIdx !== null ? textVariants[selectedIdx] : props.userInput
+        const res  = await props.generate({ stepNumber: props.stepNumber, userInput: base ?? '', context: props.context })
+        setTextVariants(prev => [...prev, ...res.variants])
+        setSelectedIdx(null)
+      } else {
+        const res = await props.generate({
+          niche:          props.niche,
+          targetAudience: props.targetAudience,
+          utp:            props.utp,
+        })
+        setHeroVariants(prev => [...prev, ...res.variants])
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-    const res = await generate({
-      stepNumber,
-      userInput: base,
-      context,
-    });
+  // ── Hero режим ─────────────────────────────────────────────────────────────
+  if (props.mode === 'hero') {
+    return (
+      <div className="space-y-4">
+        <HeroVariantsPicker
+          variants={heroVariants}
+          onSelect={props.onConfirm}
+          isLoading={isLoading && heroVariants.length === 0}
+        />
+        <Button
+          onClick={handleGenerate}
+          disabled={isLoading}
+          className="w-full"
+        >
+          {isLoading ? 'Генеруємо...' : heroVariants.length ? 'Ще варіанти' : '⚡ Згенерувати Hero'}
+        </Button>
+      </div>
+    )
+  }
 
-    setVariants(prev => [...prev, ...res.variants]);
-    setSelectedIndex(null);
-  };
-
+  // ── Text режим (оригінальний) ──────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      {variants.map((v, i) => (
+      {textVariants.map((v, i) => (
         <div
           key={i}
-          onClick={() => setSelectedIndex(i)}
-          className={`cursor-pointer rounded-xl border p-4 transition
-            ${
-              selectedIndex === i
-                ? 'border-purple-500 bg-purple-500/10'
-                : 'border-slate-700 hover:border-slate-500'
-            }
-          `}
+          onClick={() => setSelectedIdx(i)}
+          className="cursor-pointer rounded-xl border p-4 transition"
         >
           {v}
         </div>
       ))}
 
       <div className="flex gap-2">
-        <Button onClick={handleGenerate}>Згенерувати ще</Button>
+        <Button onClick={handleGenerate} disabled={isLoading}>
+          {isLoading ? 'Генеруємо...' : 'Згенерувати ще'}
+        </Button>
 
         <Button
-          disabled={selectedIndex === null}
-          onClick={() => onConfirm(variants[selectedIndex!])}
+          disabled={selectedIdx === null || props.mode !== 'text'}
+          onClick={() => {
+            if (props.mode === 'text' && selectedIdx !== null) {
+              props.onConfirm(textVariants[selectedIdx]!)
+            }
+          }}
         >
           Далі
         </Button>
       </div>
     </div>
-  );
+  )
 }

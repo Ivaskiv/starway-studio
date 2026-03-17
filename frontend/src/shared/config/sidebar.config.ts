@@ -3,7 +3,7 @@
 //! sidebar декларує вимогу
 //! рішення приймає useAbility()
 
-import { Ability } from "@/features/auth/utils/abilities";
+import { Ability } from "@/features/auth/permissions/abilities";
 
 
 

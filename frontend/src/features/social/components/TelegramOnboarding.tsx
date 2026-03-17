@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/ui';
-import { useTelegramAccess } from '../hooks/useTelegramAccess';
+import { useTelegramAccess } from '../hooks/useSocialAccess';
 
 export default function TelegramOnboarding() {
   const { link, generateLink, verifyCode, isVerified, expiresIn } = useTelegramAccess();

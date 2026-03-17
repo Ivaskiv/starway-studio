@@ -1,8 +1,8 @@
 // backend/src/db/client.ts
 import 'dotenv/config';
 
+import { PrismaClient } from '../db/generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@/db/generated/prisma/client.js';
 
 function normalizeDatabaseUrl(rawUrl?: string): string {
   if (!rawUrl) {

@@ -1,7 +1,7 @@
 import { ROUTES } from '@/config/routes';
+import { DEMO_TEMPLATES } from '@/features/ai-generator/utils/templates';
 import { useAccess } from '@/features/auth/hooks/useAccess';
 import { useGetMyProductsQuery } from '@/features/products/services/products.api';
-import { DEMO_TEMPLATES } from '@/features/ai-generator/utils/templates';
 import { useSystemState } from '@/shared/access/hooks/useSystemState';
 import { ModuleIntro } from '@/shared/components/ModuleIntro';
 import { ModuleUsageCounter } from '@/shared/components/ModuleUsageCounter';

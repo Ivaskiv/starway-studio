@@ -1,8 +1,8 @@
 // backend/src/modules/funnel/service.ts
-import { prisma } from '@/db/client.js';
-import type { FunnelBlueprint } from '@/modules/ai-generator/types.js';
-import { CourseWithProducts, generateProductFromCourse, getAllCourses } from '@/modules/mini-courses/servise.js';
-import { FunnelWithStagesAndProducts } from '@/types/globalTypes.js';
+import { prisma } from '../../db/client.js';
+import type { FunnelBlueprint } from '../../modules/ai-generator/types.js';
+import { CourseWithProducts, generateProductFromCourse, getAllCourses } from '../../modules/mini-courses/servise.js';
+import { FunnelWithStagesAndProducts } from '../../types/globalTypes.js';
 
 // ────────────────────────────────────────────────
 // HELPERS

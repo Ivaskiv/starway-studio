@@ -1,102 +1,152 @@
-// backend/src/modules/wheel/wheel.types.ts
-// Використовується в: service.ts, ai.ts, pdf.ts, telegram.ts, controller.ts
-// Prisma: UserBalanceEntry.scores (Json)
+export type WheelSphereId =
+  | 'money'
+  | 'realization'
+  | 'relationships'
+  | 'energy'
+  | 'freedom'
+  | 'innerSupport'
+  | 'health'
+  | 'growth'
 
-/* ───────────────────────────
- * Сфери
- * ─────────────────────────── */
-
-export const FIXED_SPHERES = [
+export const WHEEL_SPHERES: WheelSphereId[] = [
   'money',
   'realization',
   'relationships',
-  'energy_body',
-  'freedom_time',
-  'inner_support',
-  'environment',
-  'meaning_direction',
-] as const;
+  'energy',
+  'freedom',
+  'innerSupport',
+  'health',
+  'growth',
+]
 
-export type WheelSphereId = typeof FIXED_SPHERES[number];
+export const FIXED_SPHERES = [...WHEEL_SPHERES]
 
-/* ───────────────────────────
- * Конфіг колеса
- * ─────────────────────────── */
+export const SPHERE_LABELS: Record<WheelSphereId, string> = {
+  money: 'Гроші',
+  realization: 'Реалізація',
+  relationships: 'Відносини',
+  energy: 'Енергія/Тіло',
+  freedom: 'Свобода/Час',
+  innerSupport: 'Внутрішня опора',
+  health: "Здоров'я",
+  growth: 'Розвиток',
+}
 
 export interface WheelConfigItem {
-  id: WheelSphereId;
-  label: string;
-  emoji: string;
-  description: string;
+  id: WheelSphereId
+  label: string
+  emoji: string
+  description: string
 }
 
 export const WHEEL_CONFIG: WheelConfigItem[] = [
-  { id: 'money',             label: 'Гроші',            emoji: '💰', description: 'Фінансова стабільність' },
-  { id: 'realization',       label: 'Реалізація',        emoji: '🎯', description: 'Карʼєра та досягнення' },
-  { id: 'relationships',     label: 'Відносини',         emoji: '❤️', description: 'Сімʼя та близькі' },
-  { id: 'energy_body',       label: 'Енергія / Тіло',    emoji: '⚡', description: 'Фізичний стан та ресурс' },
-  { id: 'freedom_time',      label: 'Свобода / Час',     emoji: '🕊️', description: 'Час для себе' },
-  { id: 'inner_support',     label: 'Внутрішня опора',   emoji: '🧘', description: 'Спокій та впевненість' },
-  { id: 'environment',       label: 'Оточення',          emoji: '🌿', description: 'Люди та середовище' },
-  { id: 'meaning_direction', label: 'Сенс / Напрямок',   emoji: '✨', description: 'Ціль і вектор життя' },
-];
-
-export const SPHERE_LABELS: Record<WheelSphereId, string> =
-  Object.fromEntries(WHEEL_CONFIG.map(s => [s.id, s.label])) as Record<WheelSphereId, string>;
-
-/* ───────────────────────────
- * Дані користувача
- * ─────────────────────────── */
-
-export interface WheelUserContext {
-  name: string;
-  email: string | null;
-  phone: string | null;
-  gender?: 'male' | 'female' | null;
-  age: number | null;
-}
-
-/* ───────────────────────────
- * Scores (зберігається в Prisma Json)
- * ─────────────────────────── */
+  { id: 'money', label: 'Гроші', emoji: '💰', description: 'Фінансова стабільність' },
+  { id: 'realization', label: 'Реалізація', emoji: '🎯', description: "Кар'єра та досягнення" },
+  { id: 'relationships', label: 'Відносини', emoji: '❤️', description: "Сім'я та друзі" },
+  { id: 'energy', label: 'Енергія', emoji: '⚡', description: 'Фізична форма' },
+  { id: 'freedom', label: 'Свобода', emoji: '🕊️', description: 'Час для себе' },
+  { id: 'innerSupport', label: 'Внутрішня опора', emoji: '🧘', description: 'Спокій та впевненість' },
+  { id: 'health', label: "Здоров'я", emoji: '🏥', description: "Фізичне здоров'я" },
+  { id: 'growth', label: 'Розвиток', emoji: '📚', description: 'Навчання та зростання' },
+]
 
 export interface WheelScore {
-  categoryId: WheelSphereId;
-  score: number;            // 1–10
-  comment?: string | null;
+  categoryId: WheelSphereId
+  score: number
+  comment?: string | null
 }
 
-/**
- * Формат збереження в БД:
- * {
- *   money: 6,
- *   realization: 8,
- *   ...
- * }
- */
-export type WheelScoresMap = Record<WheelSphereId, number>;
+export type WheelScoreMap = Record<WheelSphereId, number>
 
-/* ───────────────────────────
- * Аналітика
- * ─────────────────────────── */
-
-export interface WheelAnalytics {
-  totalAssessments: number;
-  averageScores: Record<WheelSphereId, number>;
-  mostCommonWeakest: WheelSphereId | '';
-  mostCommonFocus: WheelSphereId | '';
-  trend: 'improving' | 'declining' | 'stable';
+export interface WheelUserContext {
+  name: string
+  email?: string | null
+  phone?: string | null
+  age?: number | null
 }
 
-/* ───────────────────────────
- * PDF / Export
- * ─────────────────────────── */
+export interface PersonalityProfile {
+  decisionStyle: string
+  motivationType: string
+  stressPattern: string
+  growthDriver: string
+}
+
+export interface TrajectoryPrediction {
+  riskAreas: string[]
+  growthPotential: string[]
+  predictionSummary: string
+}
+
+export interface ActionPlanItem {
+  day: number
+  action: string
+}
+
+export interface AdaptiveMission {
+  mission: string
+  rationale: string
+}
+
+export interface WheelInsights {
+  analysis: string
+  diagnosis: string
+  personalityProfile: PersonalityProfile
+  trajectoryPrediction: TrajectoryPrediction
+  actionPlan: ActionPlanItem[]
+  adaptiveMissions: AdaptiveMission[]
+}
+
+export interface WheelGamificationSnapshot {
+  bitMind: number
+  mindXP: number
+  neuroGems: number
+  level: number
+  levelTitle: string
+  xpToNextLevel: number
+  currentStreakDays: number | undefined
+  streak: Record<string, number>
+}
 
 export interface WheelPDFData {
-  userName: string;
-  scores: WheelScore[];
-  weakestSphere: WheelSphereId;
-  focusSphere: WheelSphereId;
-  analysis: string;
-  createdAt: string;
+  userName: string
+  createdAt: string
+  scores: WheelScore[]
+  weakestSphere: WheelSphereId
+  focusSphere: WheelSphereId
+  insights: WheelInsights
+  gamification?: WheelGamificationSnapshot
+}
+
+export interface WheelAnalytics {
+  totalAssessments: number
+  averageScores: Record<WheelSphereId, number>
+  balanceIndex: number
+  trend: 'improving' | 'stable' | 'declining'
+  weakestHistory: WheelSphereId[]
+  mostCommonWeakest?: WheelSphereId
+  mostCommonFocus?: WheelSphereId
+}
+
+export interface WheelNotificationPayload {
+  insights: WheelInsights
+  weakestSphere: WheelSphereId
+  focusSphere: WheelSphereId
+  scores: WheelScore[]
+  pdfUrl: string
+  gamification?: WheelGamificationSnapshot
+}
+
+export interface WheelCooldownStatus {
+  active: boolean
+  remainingMs: number
+}
+
+export interface WheelResponsePayload {
+  success: true
+  wheel: { id: string }
+  insights: WheelInsights
+  analytics: WheelAnalytics
+  pdfUrl: string
+  gamification?: WheelGamificationSnapshot
 }

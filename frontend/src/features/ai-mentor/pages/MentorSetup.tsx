@@ -1,7 +1,7 @@
-// frontend/src/features/ai-mentor/pages/MentorSetup.tsx
+// frontend/src/features/ai-aIMentor/pages/MentorSetup.tsx
 /**
  * MentorSetup Page
- * 2-step wizard for mentor initialization
+ * 2-step wizard for aIMentor initialization
  */
 
 import { SetupWizard } from '../components/SetupWizard';

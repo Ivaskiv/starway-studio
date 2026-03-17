@@ -14,7 +14,7 @@ import {
   getConsultations, 
   updateConsultationStatus 
 } from './service.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 export async function checkTriggers(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

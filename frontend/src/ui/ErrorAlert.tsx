@@ -1,18 +1,17 @@
-// /Users/viravira/Documents/starway-studio/frontend/src/ui/ErrorAlert.tsx
-
+// fix style $100k — error alert aligned with liquid-glass system
 import { AlertCircle } from 'lucide-react';
 
-interface ErrorAlert {
+interface ErrorAlertProps {
   message: string;
 }
 
-export function ErrorAlert({ message }: ErrorAlert) {
+export function ErrorAlert({ message }: ErrorAlertProps) {
   if (!message) return null;
 
   return (
-    <div className="p-3 rounded-lg bg-danger/10 border border-danger/20 flex items-start gap-2 animate-slide-up">
-      <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
-      <p className="text-sm text-danger">{message}</p>
+    <div className="liquid-glass surface glass-noise flex items-center gap-3 rounded-[16px] border border-[var(--accent-error-border)] bg-[var(--accent-error-bg)] text-[var(--accent-error-text)] shadow-[0_30px_55px_rgba(var(--accent-rgb),0.25)]">
+      <AlertCircle className="w-5 h-5 text-[var(--accent-error-icon)]" />
+      <p className="text-sm leading-relaxed">{message}</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // /features/questionsScheduler/pages/SchedulerPage.tsx
 import { Button, GlassCard } from '@/ui';
 import { QuestionList } from '../components/QuestionList';
-import { useQuestionsScheduler } from '../hooks/useQuestion';
+import { useQuestionsScheduler } from '../hooks/useQuestionsScheduler';
 
 export const SchedulerPage = ({
   userId,
@@ -10,7 +10,16 @@ export const SchedulerPage = ({
   userId: string;
   telegramChatId?: string;
 }) => {
-  const { questions, answer, create } = useQuestionsScheduler(userId, telegramChatId);
+  const { questions, submit, readyToAsk } = useQuestionsScheduler({
+    userId,
+    context: 'questions',
+    telegramChatId,
+    schedule: 'once',
+  });
+
+  const handleAnswer = (question: typeof questions[number], answer: string) => {
+    submit([{ questionId: question.id, value: answer }]);
+  };
 
   if (!questions.length) return <p className="text-white/50">Немає запланованих питань</p>;
 
@@ -19,7 +28,7 @@ export const SchedulerPage = ({
       <GlassCard className="p-6 flex justify-end">
         <Button onClick={() => alert('PDF-генерація тут')}>Завантажити PDF-звіт</Button>
       </GlassCard>
-      <QuestionList questions={questions} onAnswer={answer} />
+      <QuestionList questions={questions} onAnswer={handleAnswer} />
     </div>
   );
 };

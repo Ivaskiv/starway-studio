@@ -3,8 +3,8 @@
  * Vision Service 
  */
 
-import { prisma } from '@/db/client.js';
-import { openai } from '@/lib/openai.js';
+import { prisma } from '../../db/client.js';
+import { openai } from '../../lib/openai.js';
 import { VisionAnswers, VisionStatement } from './types.js';
 
 type QuestionnairePayload = {

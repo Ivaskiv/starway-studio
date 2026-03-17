@@ -1,0 +1,106 @@
+// frontend/src/styles/tokens/design-tokens.scss
+// ══════════════════════════════════════════════════════════════
+// ЄДИНЕ ДЖЕРЕЛО CSS-ТОКЕНІВ
+// motion.scss + elevation + surface + glow + header vars
+// ══════════════════════════════════════════════════════════════
+
+:root {
+  // ── Motion ──────────────────────────────────────────────────
+  --duration-fast:    120ms;
+  --duration-base:    200ms;
+  --duration-slow:    350ms;
+  --duration-xslow:   500ms;
+
+  --ease-standard:    cubic-bezier(.4, 0, .2, 1);
+  --ease-in:          cubic-bezier(.4, 0, 1, 1);
+  --ease-out:         cubic-bezier(0, 0, .2, 1);
+  --ease-spring:      cubic-bezier(.34, 1.56, .64, 1);
+
+  // legacy aliases (не видаляти — використовуються в компонентах)
+  --motion-speed-fast:  var(--duration-fast);
+  --motion-speed:       var(--duration-base);
+  --motion-speed-slow:  var(--duration-slow);
+  --motion-speed-xslow: var(--duration-xslow);
+  --motion-ease:        var(--ease-standard);
+  --motion-ease-in:     var(--ease-in);
+  --motion-ease-out:    var(--ease-out);
+  --motion-ease-spring: var(--ease-spring);
+
+  --motion-delay-sm:  50ms;
+  --motion-delay-md:  100ms;
+  --motion-delay-lg:  200ms;
+
+  // ── Elevation / shadow ───────────────────────────────────────
+  --shadow-sm:    0 1px 3px rgba(0,0,0,.35);
+  --shadow-md:    0 4px 16px rgba(0,0,0,.40);
+  --shadow-lg:    0 16px 48px rgba(0,0,0,.55);
+  --shadow-xl:    0 32px 80px rgba(0,0,0,.65);
+  --shadow-glow:  0 0 24px rgba(var(--accent-rgb), .30);
+  --shadow-glow-sm: 0 0 12px rgba(var(--accent-rgb), .22);
+
+  // ── Border radius ────────────────────────────────────────────
+  --btn-radius:   10px;
+  --card-radius:  16px;
+  --card-radius-lg: 24px;
+
+  // ── Border tokens ────────────────────────────────────────────
+  --border-primary:  rgba(255,255,255,0.07);
+  --border-accent:   rgba(var(--accent-rgb), 0.30);
+  --border-subtle:   rgba(255,255,255,0.04);
+
+  // ── Glass backgrounds ────────────────────────────────────────
+  --glass-bg:         rgba(255,255,255,0.04);
+  --glass-bg-hover:   rgba(255,255,255,0.07);
+  --glass-border:     rgba(255,255,255,0.08);
+  --bg-secondary:     rgba(255,255,255,0.03);
+
+  // ── Header-specific ──────────────────────────────────────────
+  --header-height: 56px;
+  --tf:     var(--accent);
+  --tf-rgb: var(--accent-rgb);
+  --tf-08:  rgba(var(--accent-rgb), 0.08);
+  --tf-12:  rgba(var(--accent-rgb), 0.12);
+  --tf-20:  rgba(var(--accent-rgb), 0.20);
+  --tf-36:  rgba(var(--accent-rgb), 0.36);
+  --ht1:    var(--text-primary);
+  --ht2:    var(--text-secondary);
+  --ht3:    var(--text-muted);
+  --hbg-deep: rgba(var(--accent-rgb), 0.04);
+  --hbg-mid:  rgba(var(--accent-rgb), 0.08);
+  --hh-role:  28px;
+  --hh-main:  50px;
+  --hh-tab:   32px;
+  --hz-shell: 40;
+  --hz-drop:  300;
+  --hz-bmenu: 200;
+
+  // ── Sidebar ──────────────────────────────────────────────────
+  --sidebar-width:     270px;
+  --sidebar-collapsed: 82px;
+
+  // ── Accent fallback (overridden by applyAccentColor) ─────────
+  --accent:            #1a56db;
+  --accent-rgb:        26, 86, 219;
+  --accent-soft:       #4d7fe8;
+  --accent-soft-rgb:   77, 127, 232;
+  --accent-strong:     #0f3ba8;
+  --accent-strong-rgb: 15, 59, 168;
+  --accent-muted:      #2d5fc4;
+  --accent-muted-rgb:  45, 95, 196;
+  --on-accent:         #f0f6ff;
+
+  --bg-primary:  #03050d;
+  --bg-glass:    #060a18;
+
+  --text-primary:   #eef2ff;
+  --text-secondary: #8fa3c0;
+  --text-muted:     #3d4f65;
+  --text-subtle:    #2a3a4f;
+
+  --surface:     #070b15;
+  --card:        #090f19;
+  --ambient-rgb: 3, 5, 13;
+  --shadow-base: rgba(3,5,13,0.85);
+
+  --accent-gradient: linear-gradient(135deg, var(--accent-soft) 0%, var(--accent) 50%, var(--accent-strong) 100%);
+}

@@ -1,25 +1,34 @@
-import Button from '@/ui/Button';
-import { AlertCircle, Check, CheckCircle, Info, X } from 'lucide-react';
+// fix style $100k — premium alert surfaces using the new glass system
 import { forwardRef, HTMLAttributes, ReactNode, useState } from 'react';
+import { AlertCircle, Check, CheckCircle, Info, X } from 'lucide-react';
+import Button from '@/ui/Button';
 import { cn } from '../lib/utils';
 
-const variants = {
-  error: { box: 'bg-red-500/10 border-red-500/20 text-red-300', icon: 'text-red-400' },
-  success: {
-    box: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
-    icon: 'text-emerald-400',
-  },
-};
-
-// ===========================
-// ALERT - Сповіщення
-// ===========================
 interface AlertProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   variant?: 'success' | 'warning' | 'error' | 'info';
   closable?: boolean;
   onClose?: () => void;
 }
+
+const variantConfig: Record<Required<Pick<AlertProps, 'variant'>>['variant'], { text: string; icon: ReactNode }> = {
+  success: {
+    text: 'text-[var(--accent)]',
+    icon: <Check className="w-5 h-5 text-[var(--accent)]" />,
+  },
+  warning: {
+    text: 'text-[var(--accent)]',
+    icon: <AlertCircle className="w-5 h-5 text-[var(--accent)]" />,
+  },
+  error: {
+    text: 'text-[var(--accent)]',
+    icon: <AlertCircle className="w-5 h-5 text-[var(--accent)]" />,
+  },
+  info: {
+    text: 'text-[var(--text-primary)]',
+    icon: <Info className="w-5 h-5 text-[var(--accent)]" />,
+  },
+};
 
 export const Alert = forwardRef<HTMLDivElement, AlertProps>(
   ({ children, variant = 'info', closable = false, onClose, className, ...props }, ref) => {
@@ -32,48 +41,29 @@ export const Alert = forwardRef<HTMLDivElement, AlertProps>(
 
     if (!visible) return null;
 
-    const variants = {
-      success: {
-        bg: 'bg-green-500/10 border-green-500/30',
-        icon: <Check className="w-5 h-5 text-green-400" />,
-        text: 'text-green-400',
-      },
-      warning: {
-        bg: 'bg-amber-500/10 border-amber-500/30',
-        icon: <AlertCircle className="w-5 h-5 text-amber-400" />,
-        text: 'text-amber-400',
-      },
-      error: {
-        bg: 'bg-red-500/10 border-red-500/30',
-        icon: <AlertCircle className="w-5 h-5 text-red-400" />,
-        text: 'text-red-400',
-      },
-      info: {
-        bg: 'bg-blue-500/10 border-blue-500/30',
-        icon: <Info className="w-5 h-5 text-blue-400" />,
-        text: 'text-blue-400',
-      },
-    };
-
-    const config = variants[variant];
+    const config = variantConfig[variant];
 
     return (
       <div
         ref={ref}
         className={cn(
-          'flex items-start gap-3 p-4 rounded-xl border transition-all duration-300',
-          config.bg,
+          'liquid-glass surface glass-noise flex items-start gap-3 p-4 rounded-[18px] text-sm font-medium transition-all duration-300 shadow-[0_30px_60px_rgba(var(--accent-rgb),0.25)]',
+          'border border-[var(--border-accent)]',
           visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
+          config.text,
           className,
         )}
         {...props}
       >
         {config.icon}
-        <div className={cn('flex-1', config.text)}>{children}</div>
+        <div className="flex-1 leading-relaxed">{children}</div>
         {closable && (
           <Button
             onClick={handleClose}
-            className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+            variant="ghost"
+            size="sm"
+            color="muted"
+            className="p-1 rounded-lg"
           >
             <X className="w-4 h-4" />
           </Button>
@@ -85,18 +75,20 @@ export const Alert = forwardRef<HTMLDivElement, AlertProps>(
 
 Alert.displayName = 'Alert';
 
+const baseMessageClasses = 'flex gap-3 p-4 rounded-[18px] border transition-all duration-300 liquid-glass surface glass-noise text-sm';
+
 export function ErrorAlert({ message, className }: { message?: string; className?: string }) {
   if (!message) return null;
   return (
     <div
       className={cn(
-        'flex gap-3 p-4 rounded-xl border backdrop-blur-sm animate-in fade-in',
-        variants.error.box,
+        baseMessageClasses,
+        'border-[var(--accent-error-border)] bg-[var(--accent-error-bg)] text-[var(--accent-error-text)]',
         className,
       )}
     >
-      <AlertCircle className={cn('w-5 h-5 flex-shrink-0 mt-0.5', variants.error.icon)} />
-      <p className="text-sm">{message}</p>
+      <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-[var(--accent-error-icon)]" />
+      <p className="leading-relaxed">{message}</p>
     </div>
   );
 }
@@ -106,13 +98,13 @@ export function SuccessAlert({ message, className }: { message?: string; classNa
   return (
     <div
       className={cn(
-        'flex gap-3 p-4 rounded-xl border backdrop-blur-sm animate-in fade-in',
-        variants.success.box,
+        baseMessageClasses,
+        'border-[var(--accent-success-border)] bg-[var(--accent-success-bg)] text-[var(--accent-success-text)]',
         className,
       )}
     >
-      <CheckCircle className={cn('w-5 h-5 flex-shrink-0 mt-0.5', variants.success.icon)} />
-      <p className="text-sm">{message}</p>
+      <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-[var(--accent-success-icon)]" />
+      <p className="leading-relaxed">{message}</p>
     </div>
   );
 }

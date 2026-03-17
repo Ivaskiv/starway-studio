@@ -1,48 +1,119 @@
-// backend/src/modules/users/users.routes.ts
+import { Router, type Response } from 'express'
+import { prisma } from '../../db/client.js'
+import { Role } from '../../db/generated/prisma/index.js'
+import type { AuthenticatedRequest } from '../../types/globalTypes.js'
+import { authRequired } from '../auth/middleware/auth.js'
 
-import { Router, type Response } from 'express';
-import type { AuthenticatedRequest } from '@/types/globalTypes.js';
+const router = Router()
 
-import { prisma } from '@/db/client.js';
-import { authRequired } from '@/modules/auth/middleware/auth.js';
+/* -------------------------------------------------- */
+/* utils */
+/* -------------------------------------------------- */
 
-const router = Router();
+const isAdmin = (role?: string) =>
+  role === Role.SUPERADMIN || role === Role.ADMIN
 
-router.patch(
-  '/:id/role',
-  authRequired,
-  async (req: AuthenticatedRequest, res: Response) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: 'not_authenticated' });
-      }
+const guardAdmin = (req: AuthenticatedRequest, res: Response): boolean => {
 
-      // ⚠ Якщо у тебе Prisma enum — ролі зазвичай великі
-      if (req.user.role !== 'ADMIN') {
-        return res.status(403).json({ error: 'forbidden' });
-      }
+  if (!req.user) {
+    res.status(401).json({ error: 'unauthorized' })
+    return true
+  }
 
-      const { id } = req.params;
-      const { role } = req.body;
+  if (!isAdmin(req.user.role)) {
+    res.status(403).json({ error: 'forbidden' })
+    return true
+  }
 
-      const validRoles = ['USER', 'ADMIN', 'MENTOR'] as const;
+  return false
+}
 
-      if (!validRoles.includes(role)) {
-        return res.status(400).json({ error: 'invalid_role' });
-      }
+/* -------------------------------------------------- */
+/* GET /api/users */
+/* -------------------------------------------------- */
 
-      const user = await prisma.user.update({
-        where: { id },
-        data: { role },
-        select: { id: true, email: true, role: true },
-      });
+router.get('/', authRequired, async (req: AuthenticatedRequest, res: Response) => {
 
-      return res.json({ message: 'Role updated', user });
-    } catch (error) {
-      console.error('❌ Update role error:', error);
-      return res.status(500).json({ error: 'server_error' });
-    }
-  },
-);
+  if (guardAdmin(req, res)) return
 
-export default router;
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return res.json(users)
+})
+
+/* -------------------------------------------------- */
+/* PATCH /api/users/:id/role */
+/* -------------------------------------------------- */
+
+const VALID_ROLES: Role[] = [Role.USER, Role.ADMIN, Role.MENTOR]
+
+router.patch('/:id/role', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+
+  if (guardAdmin(req, res)) return
+
+  const { role } = req.body as { role: Role }
+
+  if (!VALID_ROLES.includes(role)) {
+    return res.status(400).json({ error: 'invalid_role' })
+  }
+
+  const user = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { role },
+    select: { id: true, email: true, role: true },
+  })
+
+  return res.json({
+    message: 'Role updated',
+    user,
+  })
+})
+
+/* -------------------------------------------------- */
+/* GET /api/users/:id/settings  (ADMIN) */
+/* -------------------------------------------------- */
+
+router.get('/:id/settings', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+
+  if (guardAdmin(req, res)) return
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { settings: true },
+  })
+
+  if (!user) {
+    return res.status(404).json({ error: 'user_not_found' })
+  }
+
+  return res.json(user.settings ?? {})
+})
+
+/* -------------------------------------------------- */
+/* PUT /api/users/:id/settings  (ADMIN) */
+/* -------------------------------------------------- */
+
+router.put('/:id/settings', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+
+  if (guardAdmin(req, res)) return
+
+  const updated = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { settings: req.body },
+    select: { settings: true },
+  })
+
+  return res.json(updated.settings)
+})
+
+export default router

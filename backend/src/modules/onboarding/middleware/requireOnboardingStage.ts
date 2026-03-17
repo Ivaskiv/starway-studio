@@ -1,8 +1,8 @@
-import { prisma } from '@/db/client.js';
-import { isOnboardingStage, stageIndex } from '@/modules/onboarding/onboarding.utils.js';
-import type { OnboardingStage } from '@/modules/onboarding/types.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
-import type {  Response, NextFunction } from 'express';
+import { prisma } from '../../../db/client.js';
+import { isOnboardingStage, stageIndex } from '../../../modules/onboarding/onboarding.utils.js';
+import type { OnboardingStage } from '../../../modules/onboarding/types.js';
+import { AuthenticatedRequest } from '../../../types/globalTypes.js';
+import type { NextFunction, Response } from 'express';
 
 export function requireOnboardingStage(stage: OnboardingStage) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

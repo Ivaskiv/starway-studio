@@ -1,7 +1,7 @@
 // frontend/src/features/ai-generator/components/ProgressTracker.tsx
-import { Check, Sparkles, Zap } from 'lucide-react';
-import { TOTAL_STEPS } from '../../products/types/generator.types';
 import { GlassCard } from '@/ui';
+import { Check, Sparkles, Zap } from 'lucide-react';
+import { TOTAL_STEPS } from '@/features/ai-generator/types/wizard.types';
 
 interface ProgressTrackerProps {
   currentStep: number;

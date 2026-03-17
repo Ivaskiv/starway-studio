@@ -1,7 +1,7 @@
 // backend/src/modules/zoom/routes.ts
 
 import { Router }        from 'express';
-import { authRequired }  from '@/modules/auth/middleware/auth.js';
+import { authRequired }  from '../../modules/auth/middleware/auth.js';
 import {
   createSession,
   getUpcoming,
@@ -9,6 +9,7 @@ import {
   markAttendedHandler,
   postSessionReport,
   getAttendees,
+  getMySessions,
 } from './controller.js';
 
 const router = Router();
@@ -19,5 +20,5 @@ router.post('/register',                       authRequired, register);
 router.patch('/attendee/attended',             authRequired, markAttendedHandler);
 router.patch('/session/:sessionId/report',     authRequired, postSessionReport);
 router.get('/session/:sessionId/attendees',    authRequired, getAttendees);
-
+router.get('/my', authRequired, getMySessions);
 export default router;

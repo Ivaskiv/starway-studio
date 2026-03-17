@@ -1,7 +1,7 @@
 import express from 'express';
 const router = express.Router();
 
-import { authRequired } from '@/modules/auth/middleware/auth.js';
+import { authRequired } from '../../modules/auth/middleware/auth.js';
 import {
   completeTask,
   getHistoryController,

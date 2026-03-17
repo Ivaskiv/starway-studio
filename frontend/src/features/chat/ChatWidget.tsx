@@ -1,8 +1,5 @@
 // frontend/src/components/chat/ChatWidget.tsx
-import {
-  useGetMessagesQuery,
-  useSendMessageMutation,
-} from '@/frontend/srcfeatures/chat/services/chat.api';
+import { useGetMessagesQuery, useSendMessageMutation } from '@/features/chat/services/chat.api';
 import { useState } from 'react';
 
 interface ChatWidgetProps {
@@ -28,7 +25,7 @@ export default function ChatWidget({ userId }: ChatWidgetProps) {
             key={m.id}
             className={`message ${m.source === 'telegram' ? 'text-blue-400' : 'text-white'}`}
           >
-            <p>{m.text}</p>
+            <p>{m.content}</p>
             {m.aiResponse && <p className="text-green-400 text-sm">{m.aiResponse}</p>}
           </div>
         ))}

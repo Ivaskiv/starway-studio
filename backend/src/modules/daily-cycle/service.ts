@@ -1,179 +1,290 @@
+// backend/src/modules/daily-cycle/service.ts
+
+import { prisma } from '../../db/client.js'
 import {
   DailyChoice,
+  DailyDrain,
   DailyState,
-} from '@/db/generated/prisma/client.js';
+  Prisma,
+  ReminderType,
+} from '../../db/generated/prisma/client.js'
+import { scheduleReminder } from '../notifications/reminder.service.js'
+import type { DailyEntryDTO, DailyStats, UpsertDailyEntryInput } from './types.js'
 
-import type { Prisma } from '@/db/generated/prisma/client.js';
-
-import { prisma } from '@/db/client.js';
-import type {
-  MicroSupportItem,
-  UpsertDailyEntryInput,
-} from './types.js';
-
-// ============================================
-// TYPE GUARD
-// ============================================
-
-function isMicroSupportArray(
-  value: unknown
-): value is MicroSupportItem[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'id' in item &&
-        'action' in item &&
-        'durationDays' in item
-    )
-  );
+const todayRange = () => {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { start, end }
 }
 
-// ============================================
-// GET OR CREATE
-// ============================================
+const toPrismaJson = (value: unknown): Prisma.InputJsonValue =>
+  JSON.parse(JSON.stringify(value))
 
-export async function getOrCreateTodayEntry(
-  userId: string,
+interface DailyEntryRow {
+  id: string
+  userId: string
   expertId: string
-) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  date: Date
+  state: DailyState
+  choice: DailyChoice
+  drain: DailyDrain | null
+  dayFact: string | null
+  aiAnalysis: string | null
+  content: Prisma.JsonValue
+  microSupport: Prisma.JsonValue | null
+  createdAt: Date
+  updatedAt: Date
+}
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   0. DailyService — CRUD для dailyEntry (legacy helpers preserved)
+════════════════════════════════════════════════════════════════════════════ */
+export class DailyService {
+  static async createEntry(userId: string, dto: DailyEntryDTO): Promise<DailyEntryRow> {
+    const expertId = dto.expertId ?? userId
+    const today = new Date(new Date().toDateString())
+
+    return prisma.dailyEntry.create({
+      data: {
+        userId,
+        expertId,
+        date: today,
+        state: dto.state,
+        choice: dto.choice,
+        drain: dto.drain ?? null,
+        dayFact: dto.dayFact ?? null,
+        microSupport:
+          dto.microSupport && dto.microSupport.length > 0
+            ? toPrismaJson(dto.microSupport)
+            : Prisma.JsonNull,
+        content:
+          dto.answers && dto.answers.length > 0
+            ? toPrismaJson({ answers: dto.answers })
+            : Prisma.JsonNull,
+      },
+    })
+  }
+
+  static async getMyEntries(userId: string): Promise<DailyEntryRow[]> {
+    return prisma.dailyEntry.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })
+  }
+
+  static async getLastEntry(userId: string): Promise<DailyEntryRow | null> {
+    return prisma.dailyEntry.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } })
+  }
+
+  static async getStats(userId: string): Promise<DailyStats> {
+    const entries = await prisma.dailyEntry.findMany({ where: { userId } })
+    if (!entries.length) return { totalDays: 0, stabilityRate: 0, topDrain: null }
+
+    const stabilityDays = entries.filter((entry) => !entry.drain).length
+    const drainCount: Record<string, number> = {}
+
+    entries.forEach((entry) => {
+      if (entry.drain) {
+        drainCount[entry.drain] = (drainCount[entry.drain] || 0) + 1
+      }
+    })
+
+    const topDrain = Object.entries(drainCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
+    return {
+      totalDays: entries.length,
+      stabilityRate: Math.round((stabilityDays / entries.length) * 100),
+      topDrain,
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. Daily entry helpers used by controllers
+════════════════════════════════════════════════════════════════════════════ */
+export async function getOrCreateTodayEntry(userId: string, expertId: string): Promise<DailyEntryRow> {
+  const { start, end } = todayRange()
   const existing = await prisma.dailyEntry.findFirst({
-    where: { userId, date: today },
-  });
-
-  if (existing) return existing;
+    where: {
+      userId,
+      date: { gte: start, lt: end },
+    },
+  })
+  if (existing) return existing
 
   return prisma.dailyEntry.create({
     data: {
       userId,
       expertId,
-      date: today,
+      date: start,
       state: DailyState.NEUTRAL,
-      choice: DailyChoice.CONFIRMED_OLD,
+      choice: DailyChoice.PENDING,
       drain: null,
-      dayFact: '',
+      dayFact: null,
       aiAnalysis: null,
-      microSupport: [] as unknown as Prisma.InputJsonValue,
+      microSupport: Prisma.JsonNull,
+      content: Prisma.JsonNull,
     },
-  });
+  })
 }
 
-// ============================================
-// UPSERT
-// ============================================
+export async function upsertDailyEntry(input: UpsertDailyEntryInput): Promise<DailyEntryRow> {
+  const { entryId, userId, expertId, microSupport, state, choice, drain, dayFact } = input
+  const entryDate = input.date ? new Date(input.date) : new Date()
 
-export async function upsertDailyEntry(
-  input: UpsertDailyEntryInput
-) {
-  const {
-    entryId,
+  const upsertData = {
     userId,
     expertId,
-    date,
+    date: entryDate,
     state,
     choice,
-    drain,
-    dayFact,
-    microSupport,
-  } = input;
-
-  const jsonMicroSupport: Prisma.InputJsonValue =
-    (microSupport ?? []) as unknown as Prisma.InputJsonValue;
+    drain: drain ?? null,
+    dayFact: dayFact ?? null,
+    microSupport: microSupport ?? Prisma.JsonNull,
+    content: Prisma.JsonNull,
+  }
 
   return prisma.dailyEntry.upsert({
     where: { id: entryId },
-    update: {
-      state,
-      choice,
-      drain,
-      dayFact,
-      microSupport: jsonMicroSupport,
-    },
-    create: {
-      id: entryId,
+    create: { id: entryId, ...upsertData },
+    update: upsertData,
+  })
+}
+
+async function resolveEntryUserId(entryId: string): Promise<string | null> {
+  const entry = await prisma.dailyEntry.findUnique({
+    where: { id: entryId },
+    select: { userId: true },
+  })
+  return entry?.userId ?? null
+}
+
+export async function getMicroTasks(entryId: string) {
+  const userId = await resolveEntryUserId(entryId)
+  if (!userId) return []
+
+  return prisma.microTask.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
+export async function completeMicroTask(entryId: string, taskId: string) {
+  const userId = await resolveEntryUserId(entryId)
+  if (!userId) return null
+
+  const result = await prisma.microTask.updateMany({
+    where: {
+      id: taskId,
       userId,
-      expertId,
-      date,
-      state,
-      choice,
-      drain,
-      dayFact,
-      microSupport: jsonMicroSupport,
-      aiAnalysis: null,
     },
-  });
-}
-
-// ============================================
-// GET MICRO TASKS
-// ============================================
-
-export async function getMicroTasks(
-  entryId: string
-): Promise<MicroSupportItem[]> {
-  const entry = await prisma.dailyEntry.findUnique({
-    where: { id: entryId },
-    select: { microSupport: true },
-  });
-
-  if (!entry) return [];
-
-  if (!isMicroSupportArray(entry.microSupport)) {
-    return [];
-  }
-
-  return entry.microSupport;
-}
-
-// ============================================
-// COMPLETE TASK
-// ============================================
-
-export async function completeMicroTask(
-  entryId: string,
-  taskId: string
-) {
-  const entry = await prisma.dailyEntry.findUnique({
-    where: { id: entryId },
-    select: { microSupport: true },
-  });
-
-  if (!entry) return null;
-
-  if (!isMicroSupportArray(entry.microSupport)) {
-    return null;
-  }
-
-  const updated = entry.microSupport.map((task) =>
-    task.id === taskId
-      ? { ...task, completed: true }
-      : task
-  );
-
-  return prisma.dailyEntry.update({
-    where: { id: entryId },
     data: {
-      microSupport: updated as unknown as Prisma.InputJsonValue,
+      isCompleted: true,
+      completedAt: new Date(),
     },
-  });
+  })
+
+  if (!result.count) return null
+  return prisma.microTask.findUnique({ where: { id: taskId } })
 }
 
-// ============================================
-// HISTORY
-// ============================================
-
-export async function getDailyEntryHistory(
-  userId: string,
-  limit = 30
-) {
+export async function getDailyEntryHistory(userId: string) {
   return prisma.dailyEntry.findMany({
     where: { userId },
     orderBy: { date: 'desc' },
-    take: limit,
-  });
+  })
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. Reminder + support helpers
+════════════════════════════════════════════════════════════════════════════ */
+export async function logDailyCycle(
+  userId: string,
+  payload: {
+    state: DailyState
+    choice: DailyChoice
+    drain?: DailyDrain | null
+    dayFact?: string
+    aiSummary?: string
+  },
+) {
+  const today = new Date(new Date().toDateString())
+
+  const entry = await prisma.dailyCycleLog.upsert({
+    where: { userId_date: { userId, date: today } },
+    create: { userId, date: today, ...payload },
+    update: { ...payload },
+  })
+
+  await scheduleReminder({
+    userId,
+    type: ReminderType.DAILY,
+    nextReminderAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  })
+
+  return entry
+}
+
+export async function recordMicroSupport(
+  userId: string,
+  action: string,
+  metadata?: Record<string, unknown>,
+) {
+  return prisma.microSupportItem.create({
+    data: {
+      userId,
+      action,
+      metadata:
+        metadata && Object.keys(metadata).length > 0
+          ? (metadata as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+    },
+  })
+}
+
+export async function calculateStreak(userId: string) {
+  const logs = await prisma.dailyCycleLog.findMany({
+    where: { userId },
+    orderBy: { date: 'desc' },
+    take: 14,
+  })
+
+  const daysStable = logs.filter((log) => !log.drain).length
+  const drainsCount = logs.filter((log) => Boolean(log.drain)).length
+  const recoveryAfterDrain = logs.reduce<number>((acc, log, idx, arr) => {
+    if (
+      log.drain &&
+      idx < arr.length - 1 &&
+      !arr[idx + 1].drain
+    ) {
+      return acc + 1
+    }
+    return acc
+  }, 0)
+
+  return prisma.cycleStreakMetric.upsert({
+    where: { userId },
+    create: { userId, daysStable, drainsCount, recoveryAfterDrain },
+    update: { daysStable, drainsCount, recoveryAfterDrain },
+  })
+}
+
+export async function triggerAICheckIn(userId: string) {
+  const [log, streak] = await Promise.all([
+    prisma.dailyCycleLog.findFirst({ where: { userId }, orderBy: { date: 'desc' } }),
+    prisma.cycleStreakMetric.findUnique({ where: { userId } }),
+  ])
+
+  if (!log || !streak) return null
+
+  if (log.drain || streak.drainsCount > 0) {
+    await scheduleReminder({
+      userId,
+      type: ReminderType.AI_CHECKIN,
+      nextReminderAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      metadata: { state: log.state, drains: streak.drainsCount },
+    })
+    return { log, streak }
+  }
+
+  return null
 }

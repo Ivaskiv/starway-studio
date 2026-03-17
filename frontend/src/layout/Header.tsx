@@ -1,171 +1,349 @@
-import { UserMenu } from '@/components/UserMenu';
-import { ROUTES } from '@/config/routes';
-import { useSmartNavigation } from '@/hooks/useSmartNavigation';
-import { useSystemState } from '@/shared/access/hooks/useSystemState';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+// frontend/src/layout/Header.tsx
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
+import { NAVIGATION, type NavMenu } from '@/core/navigation/navigation.registry'
+import { UserMenu } from '@/features/user/userMenu/UserMenu'
+import { selectIsAuthenticated } from '@/features/auth/services/auth.slice'
+import type { LayoutSharedProps } from '@/layout/types/layout.types'
 
-const HEADER_LINKS = [
-  { id: 'products', label: 'Продукти', path: ROUTES.PRODUCTS },
-  { id: 'community', label: 'Спільнота', path: '/community' },
-  { id: 'schedule', label: 'Розклад', path: '/dashboard/schedule' },
-  { id: 'changelog', label: 'Що нового', path: '/changelog', badge: 'NEW' },
-] as const;
+// ── Ролі ─────────────────────────────────────────────────────────────────────
+type ViewRole = 'user' | 'expert' | 'superadmin'
 
-const NOTIFICATIONS = [
-  { id: 1, icon: '🎯', text: 'Нова сесія заплановано', time: '5 хв', unread: true },
-  { id: 2, icon: '🤖', text: 'AI-звіт готовий', time: '1 год', unread: true },
-  { id: 3, icon: '🔥', text: 'Стрік 12 днів!', time: 'вчора', unread: false },
-];
+const ROLE_TABS = [
+  { id: 'user'       as ViewRole, icon: '👤', label: 'User'       },
+  { id: 'expert'     as ViewRole, icon: '🎬', label: 'Expert'     },
+  { id: 'superadmin' as ViewRole, icon: '⭐', label: 'SuperAdmin' },
+] as const
 
-interface HeaderProps {
-  collapsed: boolean;
-  onToggle: () => void;
+const ROLE_NAV: Record<ViewRole, string[]> = {
+  superadmin: NAVIGATION.map(m => m.id),
+  expert:     ['platform', 'programs', 'learning'],
+  user:       ['programs', 'learning'],
 }
 
-export default function Header({ collapsed, onToggle }: HeaderProps) {
-  const { navigateTo } = useSmartNavigation();
-  const { state } = useSystemState();
-  const { pathname } = useLocation();
+const PANEL_TABS = [
+  { id: 'nav',   label: 'Навігація' },
+  { id: 'pages', label: 'Сторінки'  },
+] as const
+type PanelTab = typeof PANEL_TABS[number]['id']
 
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const notifRef = useRef<HTMLDivElement>(null);
+// ── ВИПРАВЛЕНО: додано onLoginClick та onRegisterClick ────────────────────────
+interface HeaderProps extends LayoutSharedProps {
+  onLoginClick?:    () => void
+  onRegisterClick?: () => void
+}
 
-  const unread = NOTIFICATIONS.filter(n => n.unread).length;
-  const streak = (state as any)?.user?.streak ?? 0;
+export default function Header({
+  view,
+  onViewChange,
+  previewRole,
+  onRoleChange,
+  onLoginClick,
+  onRegisterClick,
+}: HeaderProps) {
+  const navigate  = useNavigate()
+  const location  = useLocation()
+  const headerRef = useRef<HTMLElement>(null)
+
+  // ── ВИПРАВЛЕНО: isAuthenticated з Redux store ─────────────────────────────
+  const isAuthenticated = useSelector(selectIsAuthenticated)
+
+  const viewRole = previewRole
+  const [openDrop,    setOpenDrop]    = useState<string | null>(null)
+  const [activePanel, setActivePanel] = useState<PanelTab | null>(null)
+  const [mobileOpen,  setMobileOpen]  = useState(false)
+
+  const go = useCallback((p: string) => navigate(p), [navigate])
+
+  const filteredNav = useMemo<NavMenu[]>(() => {
+    const allowed = ROLE_NAV[viewRole]
+    return NAVIGATION.filter(m => allowed.includes(m.id))
+  }, [viewRole])
+
+  const allPages = useMemo(
+    () => filteredNav.flatMap(m => m.groups?.flatMap(g => g.pages) ?? []),
+    [filteredNav],
+  )
 
   useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setNotifOpen(false);
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpenDrop(null)
+      setActivePanel(null)
+      setMobileOpen(false)
+    }
+    document.addEventListener('keydown', onEsc)
+    return () => document.removeEventListener('keydown', onEsc)
+  }, [])
+
+  useEffect(() => {
+    setOpenDrop(null)
+    setActivePanel(null)
+    setMobileOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (!headerRef.current?.contains(e.target as Node)) {
+        setOpenDrop(null)
+        setActivePanel(null)
       }
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  const togglePanel = (tab: PanelTab) =>
+    setActivePanel(prev => {
+      const next = prev === tab ? null : tab
+      onViewChange(next === 'pages' ? 'pages' : 'navigation')
+      return next
+    })
+
+  useEffect(() => {
+    if (view === 'pages' && activePanel !== 'pages') {
+      setActivePanel('pages')
+      return
+    }
+    if (view === 'navigation' && activePanel === 'pages') {
+      setActivePanel(null)
+    }
+  }, [view, activePanel])
 
   return (
-    <header
-      className="sticky top-0 z-50 flex h-14 items-center border-b bg-[color:var(--bg)] text-[color:var(--text)]"
-      style={{ borderColor: 'rgba(var(--accent-rgb),0.2)' }}
-    >
-      {/* LEFT / SIDEBAR ZONE */}
-      <div
-        className={[
-          'relative flex h-full items-center border-r border-white/10 transition-all duration-300 ease-out',
-          collapsed ? 'w-[60px] justify-center px-0' : 'w-[260px] justify-between px-4',
-        ].join(' ')}
-      >
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-500 text-sm font-bold shadow-md shadow-orange-500/40">
-            ✦
-          </div>
-          {!collapsed && (
-            <span className="text-[15px] font-extrabold tracking-tight">
-              Starway
-            </span>
-          )}
-        </div>
+    <header ref={headerRef} className="hdr" role="banner">
 
-        <button
-          onClick={onToggle}
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white/60 transition-all hover:border-orange-400/40 hover:bg-orange-400/10 hover:text-orange-400"
-          title={collapsed ? 'Розгорнути меню' : 'Згорнути меню'}
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="h-4 w-4" />
-          ) : (
-            <PanelLeftClose className="h-4 w-4" />
-          )}
-        </button>
+      {/* ══ РЯДОК 1: Role switcher ════════════════════════════════════════════ */}
+      <div className="hdr-split-row hdr-split-row--roles">
+        <span className="hdr-split-line" aria-hidden="true" />
+        <div className="hdr-role-group" role="tablist" aria-label="Перемикання ролей">
+          {ROLE_TABS.map((tab, i) => (
+            <button
+              key={tab.id}
+              role="tab"
+              id={`hdr-tab-${tab.id}`}
+              tabIndex={viewRole === tab.id ? 0 : -1}
+              className={`hdr-role-btn${viewRole === tab.id ? ' hdr-role-btn--on' : ''}`}
+              onClick={() => onRoleChange(tab.id)}
+              onKeyDown={e => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+                e.preventDefault()
+                const tabs = headerRef.current?.querySelectorAll<HTMLButtonElement>('.hdr-role-btn')
+                if (!tabs?.length) return
+                const next = e.key === 'ArrowRight'
+                  ? (i + 1) % tabs.length
+                  : (i - 1 + tabs.length) % tabs.length
+                tabs[next]?.focus()
+              }}
+              ref={el => {
+                if (el) el.setAttribute('aria-selected', viewRole === tab.id ? 'true' : 'false')
+              }}
+            >
+              <span className="hdr-role-icon" aria-hidden="true">{tab.icon}</span>
+              <span className="hdr-role-label">{tab.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* NAV */}
-      <nav className="hidden flex-1 items-center gap-1 px-4 md:flex">
-        {HEADER_LINKS.map(link => {
-          const active =
-            pathname === link.path ||
-            pathname.startsWith(link.path + '/');
+      {/* ══ РЯДОК 2: Main row ════════════════════════════════════════════════ */}
+      <div className="hdr-main">
 
-          return (
-            <button
-              key={link.id}
-              onClick={() => navigateTo(link.path)}
-              className={[
-                'flex items-center gap-1 rounded-xl px-3 py-1.5 text-[13px] font-medium transition-colors',
-                active
-                  ? 'bg-white/10 text-white'
-                  : 'text-white/60 hover:bg-white/5 hover:text-white',
-              ].join(' ')}
-            >
-              {link.label}
-              {'badge' in link && link.badge && (
-                <span className="rounded-full bg-[rgb(var(--accent-rgb))] px-1.5 py-0.5 text-[9px] font-bold text-white">
-                  {link.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
+        {/* Логотип */}
+        <button
+          className="hdr-logo"
+          onClick={() => go('/')}
+          aria-label="Перейти на головну сторінку"
+        >
+          <span className="hdr-logo-gem" aria-hidden="true">⭐</span>
+          <span >Starway</span>
+        </button>
 
-      {/* RIGHT */}
-      <div className="flex items-center gap-2 pr-4">
-        <div className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 lg:flex">
-          <span className="text-white/40">⌕</span>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Пошук"
-            className="w-32 bg-transparent text-[12px] text-white placeholder:text-white/30 outline-none"
-          />
-        </div>
-
-        {streak > 0 && (
-          <div className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[12px] font-semibold text-red-400">
-            🔥 {streak}
-          </div>
-        )}
-
-        <div ref={notifRef} className="relative">
-          <button
-            onClick={() => setNotifOpen(o => !o)}
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl text-white hover:bg-white/5"
-          >
-            🔔
-            {unread > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-black">
-                {unread}
-              </span>
-            )}
-          </button>
-
-          {notifOpen && (
-            <div className="absolute right-0 top-[calc(100%+8px)] w-72 overflow-hidden rounded-2xl border border-white/10 bg-[#181b27] shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
-              {NOTIFICATIONS.map(n => (
-                <div
-                  key={n.id}
-                  className="flex gap-3 px-4 py-3 text-[12px] text-white/80 hover:bg-white/5"
+        {/* Desktop nav */}
+        <nav className="hdr-nav" aria-label="Головна навігація">
+          {filteredNav.map(menu => {
+            if (menu.path) {
+              return (
+                <Link key={menu.id} className="hdr-nb" to={menu.path}>
+                  {menu.label}
+                </Link>
+              )
+            }
+            const isOpen = openDrop === menu.id
+            return (
+              <div key={menu.id} className="hdr-drop-wrap">
+                <button
+                  className={`hdr-nb${isOpen ? ' hdr-nb--open' : ''}`}
+                  onClick={() => setOpenDrop(isOpen ? null : menu.id)}
+                  ref={el => {
+                    if (el) el.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
+                  }}
                 >
-                  <div>{n.icon}</div>
-                  <div className="flex-1">
-                    <div className="font-medium text-white">
-                      {n.text}
-                    </div>
-                    <div className="text-[11px] text-white/40">
-                      {n.time}
-                    </div>
+                  {menu.label}
+                  <span className={`hdr-chev${isOpen ? ' hdr-chev--flip' : ''}`} aria-hidden="true">▾</span>
+                </button>
+                {isOpen && (
+                  <div className="hdr-drop" role="dialog" aria-label={menu.label}>
+                    <span className="hdr-drop-ridge" aria-hidden="true" />
+                    {menu.groups?.map(group => (
+                      <div key={group.id} className="hdr-drop-group">
+                        <span className="hdr-drop-gtitle">{group.title}</span>
+                        {group.pages.map(page => (
+                          <Link
+                            key={page.id}
+                            className={`hdr-drop-item${location.pathname === page.path ? ' hdr-drop-item--on' : ''}`}
+                            to={page.path}
+                            onClick={() => setOpenDrop(null)}
+                          >
+                            {page.icon && (
+                              <span className="hdr-drop-icon" aria-hidden="true">{page.icon}</span>
+                            )}
+                            <span className="hdr-drop-body">
+                              <span className="hdr-drop-label">{page.label}</span>
+                              {page.description && (
+                                <span className="hdr-drop-desc">{page.description}</span>
+                              )}
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ))}
+                )}
+              </div>
+            )
+          })}
+        </nav>
+
+        {/* Controls */}
+        <div className="hdr-controls">
+          {/* Search */}
+          <div className="hdr-search">
+            <span className="hdr-search-ico" aria-hidden="true">🔍</span>
+            <input
+              className="hdr-search-input"
+              type="search"
+              placeholder="Пошук"
+              aria-label="Поле пошуку"
+            />
+          </div>
+
+          {/* ── ВИПРАВЛЕНО: умовний рендер залогінений/гість ─────────────── */}
+          {isAuthenticated ? (
+            <>
+              <button className="hdr-notif" aria-label="Сповіщення">
+                🔔
+                <span className="hdr-notif-dot" aria-label="2 непрочитані">2</span>
+              </button>
+              <UserMenu variant="header" />
+            </>
+          ) : (
+            <>
+              <button
+                className="hdr-btn-ghost"
+                onClick={onLoginClick}
+                aria-label="Увійти"
+              >
+                Увійти
+              </button>
+              <button
+                className="hdr-btn-accent"
+                onClick={onRegisterClick}
+                aria-label="Реєстрація"
+              >
+                Старт →
+              </button>
+            </>
+          )}
+
+          {/* Burger */}
+          <button
+            className={`hdr-burger${mobileOpen ? ' hdr-burger--open' : ''}`}
+            aria-label={mobileOpen ? 'Закрити меню' : 'Відкрити меню'}
+            aria-controls="hdr-bmenu"
+            ref={el => {
+              if (el) el.setAttribute('aria-expanded', mobileOpen ? 'true' : 'false')
+            }}
+            onClick={() => setMobileOpen(v => !v)}
+          >
+            <span className="hdr-bline" aria-hidden="true" />
+            <span className="hdr-bline" aria-hidden="true" />
+            <span className="hdr-bline" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      {/* ══ БУРГЕР МЕНЮ ══════════════════════════════════════════════════════ */}
+      <div
+        id="hdr-bmenu"
+        className={`hdr-bmenu${mobileOpen ? ' hdr-bmenu--open' : ''}`}
+        ref={el => {
+          if (el) el.setAttribute('aria-hidden', mobileOpen ? 'false' : 'true')
+        }}
+      >
+        <div className="hdr-bmenu-inner">
+          <div className="hdr-bmenu-search">
+            <span aria-hidden="true">🔍</span>
+            <input type="search" placeholder="Пошук" aria-label="Пошук у меню" />
+          </div>
+          {filteredNav.map(menu =>
+            menu.groups?.map(group => (
+              <div key={group.id} className="hdr-bmenu-sec">
+                <span className="hdr-bmenu-sec-title">{group.title}</span>
+                {group.pages.map(page => (
+                  <button
+                    key={page.id}
+                    className={`hdr-bmenu-link${location.pathname === page.path ? ' hdr-bmenu-link--on' : ''}`}
+                    onClick={() => { go(page.path); setMobileOpen(false) }}
+                  >
+                    {page.icon && (
+                      <span className="hdr-bmenu-link-ico" aria-hidden="true">{page.icon}</span>
+                    )}
+                    <span className="hdr-bmenu-link-body">
+                      <span className="hdr-bmenu-link-label">{page.label}</span>
+                      {page.description && (
+                        <span className="hdr-bmenu-link-desc">{page.description}</span>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ))
+          )}
+
+          {/* Гостьові кнопки в бургері */}
+          {!isAuthenticated && (
+            <div className="hdr-bmenu-auth">
+              <button
+                className="hdr-btn-ghost"
+                onClick={() => { onLoginClick?.(); setMobileOpen(false) }}
+              >
+                Увійти
+              </button>
+              <button
+                className="hdr-btn-accent"
+                onClick={() => { onRegisterClick?.(); setMobileOpen(false) }}
+              >
+                Старт →
+              </button>
             </div>
           )}
         </div>
-
-        <UserMenu variant="header" />
       </div>
+
+      {/* Tabpanels для role-tabs (WAI-ARIA вимога) */}
+      {ROLE_TABS.map(tab => (
+        <div
+          key={`tabpanel-${tab.id}`}
+          id={`hdr-tabpanel-${tab.id}`}
+          role="tabpanel"
+          aria-labelledby={`hdr-tab-${tab.id}`}
+          hidden={viewRole !== tab.id}
+          className="hdr-tabpanel"
+        />
+      ))}
+
     </header>
-  );
+  )
 }

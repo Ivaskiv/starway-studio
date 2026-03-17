@@ -1,31 +1,50 @@
 // frontend/src/features/auth/hooks/useAccess.ts
+// хук для перевірки прав доступу через API /access/me. 
+// Повертає can('wheel.view'), isPaid, isTrial, plan, daysLeft. 
+// Робить мережевий запит — використовуй 
+// там де потрібна актуальна інформація про підписку.
+import { useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import { useGetMyAccessQuery } from '@/shared/access/accessApi';
+import { selectIsAuthenticated } from '@/features/auth/services/auth.slice';
 import type { AccessKey }     from '@/features/auth/types/auth.types';
 
 /**
  * Доступ і план поточного користувача.
  * Вся логіка підписок — в resolvePlan() (shared/subscription.utils).
  */
-export function useAccess() {
-  const { data, isLoading, isError } = useGetMyAccessQuery();
+export function useAccess(options?: { enabled?: boolean }) {
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const enabled = options?.enabled ?? true;
+  const shouldFetchAccess = enabled && isAuthenticated;
 
-  // fix code_x: degrade gracefully when /access/me fails to avoid blank dashboard due guard redirects.
-  const fallbackFreeAbilities: Record<string, boolean> = {
-    'dashboard.view': true,
-    'profile.view': true,
-    'wheel.view': true,
-    'progress.view': true,
-    'settings.manage': true,
-    dashboard: true,
-    profile: true,
-    wheel: true,
-    progress: true,
-    settings: true,
-  };
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isError,
+    isSuccess,
+  } = useGetMyAccessQuery(undefined, { skip: !shouldFetchAccess });
+
+  const fallbackFreeAbilities: Record<string, boolean> = useMemo(
+    () => ({
+      'dashboard.view': true,
+      'profile.view': true,
+      'wheel.view': true,
+      'progress.view': true,
+      'settings.manage': true,
+      dashboard: true,
+      profile: true,
+      wheel: true,
+      progress: true,
+      settings: true,
+    }),
+    [],
+  );
 
   const can = (key: AccessKey): boolean => {
     if (data?.abilities) return data.abilities[key] === true;
-    if (isError) return fallbackFreeAbilities[key] === true;
+    if (isError || !shouldFetchAccess) return fallbackFreeAbilities[key] === true;
     return false;
   };
   const plan = data?.plan ?? 'free';
@@ -51,7 +70,10 @@ export function useAccess() {
     daysLeft,
     trialEnd,
     label,
-    isLoading,
+    isLoading: isLoading || isFetching,
     isError,
+    isAccessReady: !shouldFetchAccess ? true : isSuccess || isError,
+    isAccessEnabled: shouldFetchAccess,
+    isAuthenticated,
   };
 }

@@ -1,40 +1,74 @@
-// backend/src/modules/microTask/service.ts
-import { MicroTask, MicroTaskResponse } from '@/modules/microTask/types.js';
+import { prisma } from '../../db/client.js'
+import { rewardEngine } from '../gamification/reward.engine.js'
+import type { MicroTaskResponse } from './types.js'
 
-const microTaskDB: MicroTask[] = [];
-const microTaskResponseDB: MicroTaskResponse[] = [];
+const responses: MicroTaskResponse[] = []
 
-export const microTaskService = {
-  async create(task: MicroTask) {
-    microTaskDB.push(task);
-    return task;
-  },
+export interface CreateMicroTaskInput {
+  userId: string
+  title: string
+  description?: string
+  source?: 'wheel' | 'daily' | 'mentor' | string
+  linkedQuestionId?: string
+  dueDate?: Date
+}
 
-  async getActiveByUser(userId: string) {
-    return microTaskDB.filter(task => task.userId === userId && task.status === 'active');
-  },
+export async function createMicroTask(input: CreateMicroTaskInput) {
+  return prisma.microTask.create({
+    data: {
+      userId: input.userId,
+      title: input.title,
+      description: input.description,
+      sphere: input.source ?? null,
+      dueAt: input.dueDate,
+    },
+  })
+}
 
-  async markCompleted(taskId: string) {
-    const task = microTaskDB.find(t => t.id === taskId);
-    if (task) task.status = 'COMPLETED';
-    return task;
-  },
+export async function getUserMicroTasks(userId: string) {
+  return prisma.microTask.findMany({
+    where: { userId, isCompleted: false },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  })
+}
 
-  async createResponse(response: MicroTaskResponse) {
-    microTaskResponseDB.push(response);
-    return response;
-  },
+export async function completeMicroTask(taskId: string, userId?: string) {
+  const task = await prisma.microTask.findUnique({ where: { id: taskId }, select: { userId: true } })
+  if (!task || (userId && task.userId !== userId)) {
+    return null
+  }
+  const updated = await prisma.microTask.update({
+    where: { id: taskId },
+    data: { isCompleted: true, completedAt: new Date() },
+    select: { userId: true },
+  })
+  await rewardEngine.onMicroTaskCompleted(task.userId)
+  return updated
+}
 
-  async getResponsesByUser(userId: string) {
-    return microTaskResponseDB.filter(r => r.userId === userId);
-  },
+export async function getMicroTaskStats(userId: string) {
+  const [total, completed] = await Promise.all([
+    prisma.microTask.count({ where: { userId } }),
+    prisma.microTask.count({ where: { userId, isCompleted: true } }),
+  ])
+  return { total, completed, pending: total - completed }
+}
 
-  async completeResponse(responseId: string, reflection?: string) {
-    const response = microTaskResponseDB.find(r => r.id === responseId);
-    if (response) {
-      response.completed = true;
-      if (reflection) response.reflection = reflection;
-    }
-    return response;
-  },
-};
+export async function createResponse(response: MicroTaskResponse) {
+  responses.push(response)
+  return response
+}
+
+export async function getResponsesByUser(userId: string) {
+  return responses.filter(r => r.userId === userId)
+}
+
+export async function completeResponse(responseId: string, reflection?: string) {
+  const existing = responses.find(r => r.id === responseId)
+  if (existing) {
+    existing.completed = true
+    if (reflection) existing.reflection = reflection
+  }
+  return existing
+}

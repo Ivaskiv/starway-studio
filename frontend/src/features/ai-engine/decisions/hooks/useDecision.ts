@@ -1,9 +1,6 @@
 // frontend/src/features/aiDecisionEngine/hooks/useDecision.ts
-import { runDecisionEngine } from '@/features/ai-engine/decisions/engine/decisionEngine';
-import {
-  DecisionContext,
-  DecisionResult,
-} from '@/features/ai-engine/decisions/types/decisions.types';
+import { DecisionContext, DecisionResult } from '@/features/ai-engine/decisions/types/decisions.types';
+import { evaluateDecisionContext } from '@/features/ai-engine/decisions/engine/decisionEngine';
 import { useState } from 'react';
 
 export const useDecision = (ctx: Omit<DecisionContext, 'userId'> & { userId: string }) => {
@@ -15,7 +12,7 @@ export const useDecision = (ctx: Omit<DecisionContext, 'userId'> & { userId: str
     setLoading(true);
     setError(null);
     try {
-      const decision = await runDecisionEngine({ ...ctx, ...overrideCtx });
+      const decision = evaluateDecisionContext({ ...ctx, ...overrideCtx });
       setResult(decision);
       return decision;
     } catch (err: any) {

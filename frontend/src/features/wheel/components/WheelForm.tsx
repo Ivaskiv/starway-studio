@@ -1,28 +1,62 @@
-import { useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+// frontend/src/features/wheel/components/WheelForm.tsx
+// ─────────────────────────────────────────────────────────
+// Переписано: використання централізованих стилів системи
+// liquid-glass, glass-button, card-surface, hero-h1
+// Tailwind utility хаос прибраний — тепер UI консистентний
+// ─────────────────────────────────────────────────────────
 
-import { useAppSelector } from '@/app/hooks';
-import { useCreateWheelAssessmentMutation } from '@/features/wheel/api';
-import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types';
-import { Button } from '@/ui/Button';
+import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { toast } from 'react-hot-toast'
 
-import { ResultView } from './ResultView';
-import { SphereSlider } from './SphereSlider';
-import { StepCard } from './StepCard';
-import { wheelToast } from './Toast';
-import { WheelChart } from './WheelChart';
-import { useWheelFlowState } from '../hooks/useWheelFlowState';
+import { useAppSelector } from '@/app/hooks'
+import { useCreateWheelAssessmentMutation } from '@/features/wheel/services/wheel.api'
+import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
+import { Button } from '@/ui/Button'
 
-interface WheelFormProps {
-  userId?: string;
-  onComplete?: (assessmentId: string) => void;
-  onCancel?: () => void;
+import { useWheelFlowState } from '../hooks/useWheelFlowState'
+import { ResultView } from './ResultView'
+import { SphereSlider } from './SphereSlider'
+import { StepCard } from './StepCard'
+import { WheelChart } from './WheelChart'
+
+// ─────────────────────────────────────────────────────────
+// Toast helpers
+// ─────────────────────────────────────────────────────────
+const wt = {
+  error: (key: string, msg?: string) => {
+    const messages: Record<string, string> = {
+      scoreRequired: 'Спочатку поставте оцінку',
+      missingUser: 'Користувач не визначений',
+      limitReached: 'Досягнуто ліміт генерацій (3)',
+      saveError: msg ?? 'Помилка збереження',
+    }
+    toast.error(messages[key] ?? key)
+  },
+  success: (key: string) => {
+    const messages: Record<string, string> = {
+      saved: 'Колесо збережено ✓',
+    }
+    toast.success(messages[key] ?? key)
+  },
 }
 
-export const WheelForm = ({ userId, onComplete, onCancel }: WheelFormProps) => {
-  const authUserId = useAppSelector((state) => state.auth.user?.id);
-  const resolvedUserId = userId || authUserId || '';
-  const MAX_GENERATIONS = 3;
+// ─────────────────────────────────────────────────────────
+// Props
+// ─────────────────────────────────────────────────────────
+interface WheelFormProps {
+  userId?: string
+  onComplete?: (assessmentId: string) => void
+  onCancel?: () => void
+  nextWheelAvailable?: Date
+}
+
+// ═════════════════════════════════════════════════════════
+export const WheelForm = ({ userId, onComplete, onCancel, nextWheelAvailable }: WheelFormProps) => {
+  const authUserId = useAppSelector(s => s.auth.user?.id)
+  const resolvedUserId = userId || authUserId || ''
+
+  const MAX_GENERATIONS = 3
 
   const {
     step,
@@ -38,144 +72,264 @@ export const WheelForm = ({ userId, onComplete, onCancel }: WheelFormProps) => {
     setScore,
     setComment,
     restart,
-  } = useWheelFlowState();
+    clearDraft,
+  } = useWheelFlowState()
 
-  const [saveWheel, { isLoading }] = useCreateWheelAssessmentMutation();
+  const [saveWheel, { isLoading }] = useCreateWheelAssessmentMutation()
 
+  // ─────────────────────────────────────────────────────────
+  // Step label
+  // ─────────────────────────────────────────────────────────
   const stepLabel = useMemo(() => {
-    if (step === 0) return 'Крок 0 із 9';
-    if (step === 9) return 'Крок 9 із 9';
-    return `Крок ${step} із 9`;
-  }, [step]);
+    if (isIntroStep) return 'Вступ'
+    if (isResultStep) return `Крок ${WHEEL_CATEGORIES.length} із ${WHEEL_CATEGORIES.length}`
+    return `Крок ${step} із ${WHEEL_CATEGORIES.length}`
+  }, [step, isIntroStep, isResultStep])
 
+  // ─────────────────────────────────────────────────────────
+  // Navigation handlers
+  // ─────────────────────────────────────────────────────────
   const handleNext = useCallback(() => {
     if (!canProceed) {
-      wheelToast.error('scoreRequired');
-      return;
+      wt.error('scoreRequired')
+      return
     }
-    setStep((prev) => Math.min(9, prev + 1));
-  }, [canProceed, setStep]);
+
+    setStep(prev => Math.min(WHEEL_CATEGORIES.length + 1, prev + 1))
+  }, [canProceed, setStep])
 
   const handlePrev = useCallback(() => {
     if (step === 0) {
-      onCancel?.();
-      return;
+      onCancel?.()
+      return
     }
-    setStep((prev) => Math.max(0, prev - 1));
-  }, [onCancel, setStep, step]);
 
+    setStep(prev => Math.max(0, prev - 1))
+  }, [step, onCancel, setStep])
+
+  // ─────────────────────────────────────────────────────────
+  // Save assessment
+  // ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!resolvedUserId) {
-      wheelToast.error('missingUser');
-      return;
+      wt.error('missingUser')
+      return
     }
+
     if (generationsUsed >= MAX_GENERATIONS) {
-      wheelToast.error('limitReached');
-      return;
+      wt.error('limitReached')
+      return
     }
 
     try {
       const result = await saveWheel({
         userId: resolvedUserId,
-        scores: spheres.map((item) => ({
-          categoryId: item.categoryId,
-          score: item.score ?? 1,
-          comment: item.comment || undefined,
+        scores: spheres.map(s => ({
+          categoryId: s.categoryId,
+          score: s.score ?? 1,
+          comment: s.comment || undefined,
         })),
-      }).unwrap();
+      }).unwrap()
 
-      setGenerationsUsed((prev) => prev + 1);
-      wheelToast.success('saved');
-      onComplete?.(result.id);
-    } catch (error: any) {
-      const apiMessage = error?.data?.error || error?.error;
-      wheelToast.error('saveError', apiMessage ? String(apiMessage) : undefined);
+      setGenerationsUsed(prev => prev + 1)
+
+      wt.success('saved')
+
+      clearDraft()
+
+      onComplete?.(result.id)
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.error
+      wt.error('saveError', msg ? String(msg) : undefined)
     }
-  }, [resolvedUserId, generationsUsed, saveWheel, spheres, setGenerationsUsed, onComplete]);
+  }, [
+    resolvedUserId,
+    generationsUsed,
+    saveWheel,
+    spheres,
+    setGenerationsUsed,
+    onComplete,
+    clearDraft,
+  ])
+
+  // ─────────────────────────────────────────────────────────
+  // Progress
+  // ─────────────────────────────────────────────────────────
+  const progressPct = isIntroStep
+    ? 0
+    : isResultStep
+    ? 100
+    : Math.round((step / WHEEL_CATEGORIES.length) * 100)
+
+  const progressRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!progressRef.current) return
+
+    progressRef.current.style.width = `${progressPct}%`
+    // progressRef.current.style.background =
+    //   'linear-gradient(90deg,rgba(var(--accent-soft-rgb),0.7),rgba(var(--accent-rgb),1))'
+  }, [progressPct])
+
+  // ─────────────────────────────────────────────────────────
+  // Active sphere title
+  // ─────────────────────────────────────────────────────────
+  const cardTitle = isIntroStep
+    ? 'Колесо балансу'
+    : isResultStep
+    ? 'Результат'
+    : WHEEL_CATEGORIES[activeSphereIndex]?.nameUk ?? 'Сфера'
+
+  const cardSubtitle = isIntroStep
+    ? `${WHEEL_CATEGORIES.length} сфер · оцінка 1–10`
+    : !isResultStep
+    ? `${WHEEL_CATEGORIES[activeSphereIndex]?.emoji ?? ''}`
+    : undefined
 
   return (
-    <div className="mx-auto max-w-[440px] space-y-4 p-4">
-      <p className="text-center text-xs uppercase tracking-[0.16em] text-white/45">{stepLabel}</p>
+    <div className="mx-auto max-w-[480px] space-y-1 py-1">
 
-      <StepCard
-        key={step}
-        title={isIntroStep ? 'Колесо балансу' : isResultStep ? 'Результат' : WHEEL_CATEGORIES[activeSphereIndex]?.nameUk || 'Сфера'}
-        subtitle={isIntroStep ? '8 сфер життя • оцінка від 1 до 10 • короткий контекст' : undefined}
-      >
-        {isIntroStep ? (
-          <div className="space-y-4">
-            <WheelChart scores={spheres} size={280} />
-            <p className="text-sm text-white/75">
-              Пройдіть 8 сфер по черзі. Для кожної сфери поставте оцінку та коротко опишіть причину.
-            </p>
-            <Button onClick={handleNext} fullWidth>
-              Почати
-            </Button>
+      {/* ───────────────────────────────────────── */}
+      {/* Step label + progress */}
+      {/* ───────────────────────────────────────── */}
+
+      <div className="space-y-2">
+
+        <div className="flex items-center justify-between text-xs text-white/40">
+          <p>{stepLabel}</p>
+
+          {!isIntroStep && (
+            <p className="tabular-nums">{progressPct}%</p>
+          )}
+        </div>
+
+        {!isIntroStep && (
+          <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+            <div
+              ref={progressRef}
+              className="h-full transition-[width] duration-500 ease-out"
+            />
           </div>
-        ) : null}
+        )}
 
-        {!isIntroStep && !isResultStep && activeSphere ? (
-          <SphereSlider
-            title={WHEEL_CATEGORIES[activeSphereIndex]?.nameUk || 'Сфера'}
-            description="1 = потребує уваги • 10 = стабільно"
-            score={activeSphere.score}
-            comment={activeSphere.comment}
-            onScoreChange={(value) => setScore(activeSphereIndex, value)}
-            onCommentChange={(value) => setComment(activeSphereIndex, value)}
-          />
-        ) : null}
+      </div>
 
-        {isResultStep ? (
-          <ResultView
-            scores={spheres}
-            generationsUsed={generationsUsed}
-            maxGenerations={MAX_GENERATIONS}
-            isSubmitting={isLoading}
-            onGenerate={handleGenerate}
-          />
-        ) : null}
-      </StepCard>
+      {/* ───────────────────────────────────────── */}
+      {/* Main card */}
+      {/* ───────────────────────────────────────── */}
 
-      <div className="flex items-center justify-between gap-2">
-        <Button onClick={handlePrev} variant="ghost" className="border border-white/15">
-          <span className="inline-flex items-center gap-2">
-            <ChevronLeft className="h-4 w-4" />
+      <div className="card-surface liquid-glass">
+
+        <StepCard
+          key={step}
+          title={cardTitle}
+          subtitle={cardSubtitle}
+        >
+
+          {/* Intro */}
+          {isIntroStep && (
+            <div className="space-y-6">
+
+              <WheelChart
+                scores={spheres}
+                size={260}
+              />
+
+              <div className="mt-10 space-y-2 text-sm text-white/60">
+
+                <p>• Оцініть кожну з {WHEEL_CATEGORIES.length} сфер</p>
+
+                <p>• Шкала від 1 до 10</p>
+
+                <p>• Додайте короткий коментар</p>
+
+              </div>
+
+
+            </div>
+          )}
+
+          {/* Sphere slider */}
+          {!isIntroStep && !isResultStep && activeSphere && (
+            <SphereSlider
+              title={WHEEL_CATEGORIES[activeSphereIndex]?.nameUk ?? 'Сфера'}
+              description="1 = потребує уваги · 10 = стабільно"
+              score={activeSphere.score}
+              comment={activeSphere.comment}
+              onScoreChange={v => setScore(activeSphereIndex, v)}
+              onCommentChange={v => setComment(activeSphereIndex, v)}
+            />
+          )}
+
+          {/* Result */}
+          {isResultStep && (
+            <ResultView
+              scores={spheres}
+              generationsUsed={generationsUsed}
+              maxGenerations={MAX_GENERATIONS}
+              isSubmitting={isLoading}
+              onGenerate={handleGenerate}
+              nextWheelAvailable={nextWheelAvailable}
+            />
+          )}
+
+        </StepCard>
+
+      </div>
+
+      {/* ───────────────────────────────────────── */}
+      {/* Navigation */}
+      {/* ───────────────────────────────────────── */}
+
+      <div className="flex items-center justify-between">
+
+        <Button
+          onClick={handlePrev}
+          variant="ghost"
+          className="glass-button"
+        >
+          <span className="flex items-center gap-2 text-white/75">
+            <ChevronLeft size={16} />
             {isIntroStep ? 'Скасувати' : 'Назад'}
           </span>
         </Button>
 
-        {isIntroStep ? (
-          <Button onClick={handleNext}>
-            <span className="inline-flex items-center gap-2">
-              Почати
-              <ChevronRight className="h-4 w-4" />
-            </span>
-          </Button>
-        ) : !isResultStep ? (
-          <Button onClick={handleNext}>
-            <span className="inline-flex items-center gap-2">
-              Далі
-              <ChevronRight className="h-4 w-4" />
-            </span>
-          </Button>
-        ) : (
-          <Button onClick={handleRestart} variant="outline">
-            <span className="inline-flex items-center gap-2">
-              <RotateCcw className="h-4 w-4" />
+        {isResultStep ? (
+
+          <Button
+            onClick={restart}
+            className="hero-cta-secondary"
+          >
+            <span className="flex items-center gap-2">
+              <RotateCcw size={16} />
               Почати заново
             </span>
           </Button>
+
+        ) : (
+
+          <button
+            onClick={handleNext}
+            className="hero-cta-primary hero-plan-btn flex items-center gap-2"
+          >
+            {isIntroStep ? 'Почати' : 'Далі'}
+            <ChevronRight size={16} />
+          </button>
+
         )}
+
       </div>
 
-      {isResultStep ? (
-        <div className="text-center text-xs text-white/55">
-          Після 3 генерацій доступ до повторної генерації буде обмежено.
-        </div>
-      ) : null}
+      {/* ───────────────────────────────────────── */}
+      {/* Generation note */}
+      {/* ───────────────────────────────────────── */}
+
+      {isResultStep && (
+        <p className="text-center text-xs text-white/35">
+          Використано {generationsUsed} із {MAX_GENERATIONS} генерацій
+        </p>
+      )}
+
     </div>
-  );
-};
-  const handleRestart = useCallback(() => {
-    restart();
-  }, [restart]);
+  )
+}

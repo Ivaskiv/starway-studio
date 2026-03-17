@@ -1,7 +1,7 @@
 // /features/questionsScheduler/components/SchedulerAdminPanel.tsx
 import { Button, GlassCard, Input, Label, Select } from '@/ui';
 import { useState } from 'react';
-import { useQuestionsScheduler } from '../hooks/useQuestion';
+import { useQuestionsScheduler } from '../hooks/useQuestionsScheduler';
 import { Question } from '../types/questions.types';
 
 export interface SchedulerAdminPanelProps {
@@ -10,7 +10,12 @@ export interface SchedulerAdminPanelProps {
 }
 
 export const SchedulerAdminPanel = ({ userId, telegramChatId }: SchedulerAdminPanelProps) => {
-  const { create } = useQuestionsScheduler(userId, telegramChatId);
+  const { create } = useQuestionsScheduler({
+    userId,
+    context: 'questions',
+    telegramChatId,
+    schedule: 'once',
+  });
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

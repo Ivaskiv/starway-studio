@@ -24,12 +24,12 @@ exports.Prisma = Prisma
 exports.$Enums = {}
 
 /**
- * Prisma Client JS version: 7.4.1
- * Query Engine version: 55ae170b1ced7fc6ed07a15f110549408c501bb3
+ * Prisma Client JS version: 7.4.2
+ * Query Engine version: 94a226be1cf2967af2541cca5529f0f7ba866919
  */
 Prisma.prismaVersion = {
-  client: "7.4.1",
-  engine: "55ae170b1ced7fc6ed07a15f110549408c501bb3"
+  client: "7.4.2",
+  engine: "94a226be1cf2967af2541cca5529f0f7ba866919"
 }
 
 Prisma.PrismaClientKnownRequestError = () => {
@@ -152,17 +152,43 @@ exports.Prisma.UserScalarFieldEnum = {
   telegramUserName: 'telegramUserName',
   telegramChatId: 'telegramChatId',
   passwordHash: 'passwordHash',
-  role: 'role',
-  deletedAt: 'deletedAt',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt',
-  trialStartsAt: 'trialStartsAt',
-  trialEndsAt: 'trialEndsAt',
+  uiSettings: 'uiSettings',
+  settings: 'settings',
   lastLoginAt: 'lastLoginAt',
   onboardingStage: 'onboardingStage',
   onboardingStartedAt: 'onboardingStartedAt',
-  onboardingCompletedAt: 'onboardingCompletedAt',
-  uiSettings: 'uiSettings'
+  trialStartsAt: 'trialStartsAt',
+  trialEndsAt: 'trialEndsAt',
+  role: 'role',
+  deletedAt: 'deletedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ExpertProfileScalarFieldEnum = {
+  id: 'id',
+  expertId: 'expertId',
+  displayName: 'displayName',
+  bio: 'bio',
+  avatarUrl: 'avatarUrl',
+  specialty: 'specialty',
+  isPublic: 'isPublic'
+};
+
+exports.Prisma.UserMentorConfigScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  config: 'config',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.RefreshTokenScalarFieldEnum = {
+  id: 'id',
+  token: 'token',
+  userId: 'userId',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.AIMentorScalarFieldEnum = {
@@ -175,6 +201,50 @@ exports.Prisma.AIMentorScalarFieldEnum = {
   isPublished: 'isPublished',
   generatorConfig: 'generatorConfig',
   runtimeConfig: 'runtimeConfig',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.UserAIMentorScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  aiMentorId: 'aiMentorId',
+  state: 'state',
+  meta: 'meta',
+  currentStep: 'currentStep',
+  context: 'context',
+  lastInteractionAt: 'lastInteractionAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.AIMentorSessionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  chatId: 'chatId',
+  userMentorId: 'userMentorId',
+  state: 'state',
+  step: 'step',
+  data: 'data',
+  createdAt: 'createdAt',
+  endedAt: 'endedAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MentorQuestionSetScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  isActive: 'isActive',
+  morning: 'morning',
+  evening: 'evening',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.AIMentorMessageScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  role: 'role',
+  content: 'content',
   createdAt: 'createdAt'
 };
 
@@ -212,6 +282,20 @@ exports.Prisma.ProductScalarFieldEnum = {
   features: 'features',
   limits: 'limits',
   createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  systemPrompt: 'systemPrompt',
+  mentorConfig: 'mentorConfig'
+};
+
+exports.Prisma.ExpertBotConfigScalarFieldEnum = {
+  id: 'id',
+  expertId: 'expertId',
+  productId: 'productId',
+  botToken: 'botToken',
+  botUsername: 'botUsername',
+  botName: 'botName',
+  isActive: 'isActive',
+  createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
 
@@ -231,11 +315,52 @@ exports.Prisma.SubscriptionScalarFieldEnum = {
   userId: 'userId',
   expertId: 'expertId',
   productId: 'productId',
+  startsAt: 'startsAt',
   status: 'status',
   planCode: 'planCode',
   trialEndsAt: 'trialEndsAt',
   currentPeriodEnd: 'currentPeriodEnd',
   autoRenew: 'autoRenew',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ProductSubscriptionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  productId: 'productId',
+  status: 'status',
+  trialEndsAt: 'trialEndsAt',
+  expiresAt: 'expiresAt',
+  paidAt: 'paidAt',
+  amount: 'amount',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.AIRecommendationScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  moduleId: 'moduleId',
+  moduleType: 'moduleType',
+  reason: 'reason',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.CTAInteractionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  type: 'type',
+  moduleId: 'moduleId',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ReminderScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  type: 'type',
+  nextReminderAt: 'nextReminderAt',
+  metadata: 'metadata',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -247,6 +372,19 @@ exports.Prisma.PaymentLogScalarFieldEnum = {
   amountCents: 'amountCents',
   currency: 'currency',
   status: 'status',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.PurchaseHistoryScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  expertId: 'expertId',
+  productId: 'productId',
+  funnelId: 'funnelId',
+  miniCourseId: 'miniCourseId',
+  amountCents: 'amountCents',
+  currency: 'currency',
   metadata: 'metadata',
   createdAt: 'createdAt'
 };
@@ -280,6 +418,57 @@ exports.Prisma.FunnelStageScalarFieldEnum = {
   name: 'name'
 };
 
+exports.Prisma.VideoModuleScalarFieldEnum = {
+  id: 'id',
+  expertId: 'expertId',
+  title: 'title',
+  slug: 'slug',
+  duration: 'duration',
+  definition: 'definition',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.VideoStageScalarFieldEnum = {
+  id: 'id',
+  videoId: 'videoId',
+  title: 'title',
+  order: 'order'
+};
+
+exports.Prisma.UserFunnelStageProgressScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  funnelStageId: 'funnelStageId',
+  status: 'status',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt',
+  stageIndex: 'stageIndex',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.UserVideoStageProgressScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  videoStageId: 'videoStageId',
+  status: 'status',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt',
+  stageIndex: 'stageIndex',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.UserMiniCourseStageProgressScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  miniCourseStageId: 'miniCourseStageId',
+  status: 'status',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt',
+  stageIndex: 'stageIndex',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.MiniCourseScalarFieldEnum = {
   id: 'id',
   title: 'title',
@@ -294,6 +483,13 @@ exports.Prisma.MiniCourseScalarFieldEnum = {
   deletedAt: 'deletedAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MiniCourseStageScalarFieldEnum = {
+  id: 'id',
+  miniCourseId: 'miniCourseId',
+  title: 'title',
+  order: 'order'
 };
 
 exports.Prisma.CourseScalarFieldEnum = {
@@ -369,14 +565,63 @@ exports.Prisma.MicroTaskScalarFieldEnum = {
   expertId: 'expertId',
   title: 'title',
   description: 'description',
-  status: 'status',
-  reason: 'reason',
-  source: 'source',
-  linkedQuestionId: 'linkedQuestionId',
-  dueDate: 'dueDate',
+  sphere: 'sphere',
+  isCompleted: 'isCompleted',
   completedAt: 'completedAt',
-  taskDetails: 'taskDetails',
+  dueAt: 'dueAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.DailyCycleLogScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  date: 'date',
+  state: 'state',
+  choice: 'choice',
+  drain: 'drain',
+  dayFact: 'dayFact',
+  aiSummary: 'aiSummary',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.TrialMirrorScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  day: 'day',
+  analysis: 'analysis',
+  entries: 'entries',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MicroSupportItemScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  action: 'action',
+  source: 'source',
   metadata: 'metadata',
+  completedAt: 'completedAt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.CycleStreakMetricScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  daysStable: 'daysStable',
+  drainsCount: 'drainsCount',
+  recoveryAfterDrain: 'recoveryAfterDrain',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GamificationProfileScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  bitMind: 'bitMind',
+  mindXP: 'mindXP',
+  neuroGems: 'neuroGems',
+  level: 'level',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -458,6 +703,8 @@ exports.Prisma.MentorshipScalarFieldEnum = {
   userId: 'userId',
   status: 'status',
   startsAt: 'startsAt',
+  endsAt: 'endsAt',
+  pausedAt: 'pausedAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -491,8 +738,13 @@ exports.Prisma.TelegramLinkScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
   code: 'code',
+  chatId: 'chatId',
   createdAt: 'createdAt',
-  expiresAt: 'expiresAt'
+  expiresAt: 'expiresAt',
+  username: 'username',
+  firstName: 'firstName',
+  isActive: 'isActive',
+  updatedAt: 'updatedAt'
 };
 
 exports.Prisma.ReportScalarFieldEnum = {
@@ -523,6 +775,232 @@ exports.Prisma.ZoomSessionAttendeeScalarFieldEnum = {
   userId: 'userId',
   attended: 'attended',
   createdAt: 'createdAt'
+};
+
+exports.Prisma.GenerationQuotaScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  periodStart: 'periodStart',
+  used: 'used',
+  baseLimit: 'baseLimit',
+  purchased: 'purchased',
+  totalTokensInput: 'totalTokensInput',
+  totalTokensOutput: 'totalTokensOutput',
+  totalCostUsd: 'totalCostUsd',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GenerationLogScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  productId: 'productId',
+  type: 'type',
+  model: 'model',
+  tokensInput: 'tokensInput',
+  tokensOutput: 'tokensOutput',
+  costUsd: 'costUsd',
+  taskPrompt: 'taskPrompt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ProducerConfigScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  niche: 'niche',
+  targetAudience: 'targetAudience',
+  utp: 'utp',
+  tone: 'tone',
+  brandColors: 'brandColors',
+  modules: 'modules',
+  lastHeroGenAt: 'lastHeroGenAt',
+  lastSeoGenAt: 'lastSeoGenAt',
+  lastReportGenAt: 'lastReportGenAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.WeeklyReportScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  userId: 'userId',
+  weekStart: 'weekStart',
+  weekEnd: 'weekEnd',
+  overallScore: 'overallScore',
+  completionRate: 'completionRate',
+  streakDays: 'streakDays',
+  topInsights: 'topInsights',
+  growthAreas: 'growthAreas',
+  struggleAreas: 'struggleAreas',
+  wheelDelta: 'wheelDelta',
+  summaryText: 'summaryText',
+  motivationText: 'motivationText',
+  nextWeekFocus: 'nextWeekFocus',
+  nextWeekTasks: 'nextWeekTasks',
+  pdfUrl: 'pdfUrl',
+  metrics: 'metrics',
+  analysis: 'analysis',
+  heroVariants: 'heroVariants',
+  adTexts: 'adTexts',
+  isRead: 'isRead',
+  createdAt: 'createdAt',
+  pdfSentAt: 'pdfSentAt'
+};
+
+exports.Prisma.MentorWeeklyProfileScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  weekStart: 'weekStart',
+  createdAt: 'createdAt',
+  behaviorPattern: 'behaviorPattern',
+  engagementRhythm: 'engagementRhythm',
+  mainPainThisWeek: 'mainPainThisWeek',
+  emotionalTone: 'emotionalTone',
+  retentionRisk: 'retentionRisk',
+  retentionFactors: 'retentionFactors',
+  churnSignals: 'churnSignals',
+  upsellReady: 'upsellReady',
+  upsellProduct: 'upsellProduct',
+  upsellTiming: 'upsellTiming',
+  upsellReasoning: 'upsellReasoning',
+  offerShownAt: 'offerShownAt',
+  nextMessageTone: 'nextMessageTone',
+  triggerForContact: 'triggerForContact',
+  recommendedOffer: 'recommendedOffer',
+  systemNotes: 'systemNotes'
+};
+
+exports.Prisma.ContentVariantScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  type: 'type',
+  variant: 'variant',
+  content: 'content',
+  impressions: 'impressions',
+  clicks: 'clicks',
+  conversions: 'conversions',
+  isActive: 'isActive',
+  generatedAt: 'generatedAt'
+};
+
+exports.Prisma.AssistantSessionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  startedAt: 'startedAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.AssistantMessageScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  role: 'role',
+  content: 'content',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AssistantMemoryScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  type: 'type',
+  content: 'content',
+  embedding: 'embedding',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ProductScoreScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  score: 'score',
+  salesCount: 'salesCount',
+  rating: 'rating',
+  subscribers: 'subscribers',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MarketplaceProductScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  status: 'status',
+  category: 'category',
+  tags: 'tags',
+  featured: 'featured',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AffiliateLinkScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  userId: 'userId',
+  code: 'code',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AdCampaignScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  platform: 'platform',
+  status: 'status',
+  budget: 'budget',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AIConversationScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  title: 'title',
+  context: 'context',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.AIMessageScalarFieldEnum = {
+  id: 'id',
+  conversationId: 'conversationId',
+  role: 'role',
+  content: 'content',
+  tokens: 'tokens',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AIMemoryScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  key: 'key',
+  value: 'value',
+  source: 'source',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PromptVersionScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  version: 'version',
+  content: 'content',
+  isActive: 'isActive',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ContentItemScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  type: 'type',
+  topic: 'topic',
+  content: 'content',
+  platform: 'platform',
+  status: 'status',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.FunnelLeadScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  source: 'source',
+  status: 'status',
+  convertedAt: 'convertedAt',
+  notes: 'notes',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -558,7 +1036,9 @@ exports.Role = exports.$Enums.Role = {
   SUPERADMIN: 'SUPERADMIN',
   ADMIN: 'ADMIN',
   EXPERT: 'EXPERT',
-  USER: 'USER'
+  PRODUCT_OWNER: 'PRODUCT_OWNER',
+  USER: 'USER',
+  MENTOR: 'MENTOR'
 };
 
 exports.ProductKind = exports.$Enums.ProductKind = {
@@ -576,6 +1056,23 @@ exports.SubscriptionStatus = exports.$Enums.SubscriptionStatus = {
   EXPIRED: 'EXPIRED'
 };
 
+exports.StageType = exports.$Enums.StageType = {
+  FUNNEL: 'FUNNEL',
+  VIDEO: 'VIDEO',
+  MINI_COURSE: 'MINI_COURSE'
+};
+
+exports.CTAType = exports.$Enums.CTAType = {
+  TELEGRAM: 'TELEGRAM',
+  MINI_APP: 'MINI_APP'
+};
+
+exports.ReminderType = exports.$Enums.ReminderType = {
+  DAILY: 'DAILY',
+  AI_CHECKIN: 'AI_CHECKIN',
+  FUNNEL: 'FUNNEL'
+};
+
 exports.PaymentStatus = exports.$Enums.PaymentStatus = {
   PENDING: 'PENDING',
   SUCCESS: 'SUCCESS',
@@ -588,38 +1085,31 @@ exports.FunnelType = exports.$Enums.FunnelType = {
   EVERGREEN: 'EVERGREEN'
 };
 
+exports.StageStatus = exports.$Enums.StageStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED'
+};
+
 exports.DailyState = exports.$Enums.DailyState = {
-  NEUTRAL: 'NEUTRAL',
-  HAPPY: 'HAPPY',
-  SAD: 'SAD',
-  ANXIOUS: 'ANXIOUS'
+  TENSION: 'TENSION',
+  FEAR: 'FEAR',
+  STABILITY: 'STABILITY',
+  INNER_SUPPORT: 'INNER_SUPPORT',
+  NEUTRAL: 'NEUTRAL'
 };
 
 exports.DailyChoice = exports.$Enums.DailyChoice = {
-  PENDING: 'PENDING',
-  CONFIRMED: 'CONFIRMED',
-  SKIPPED: 'SKIPPED',
-  CONFIRMED_OLD: 'CONFIRMED_OLD'
+  CONFIRMED_OLD: 'CONFIRMED_OLD',
+  CHOSE_NEW: 'CHOSE_NEW',
+  PENDING: 'PENDING'
 };
 
 exports.DailyDrain = exports.$Enums.DailyDrain = {
-  LOW: 'LOW',
-  MEDIUM: 'MEDIUM',
-  HIGH: 'HIGH'
-};
-
-exports.MicroTaskStatus = exports.$Enums.MicroTaskStatus = {
-  ACTIVE: 'ACTIVE',
-  COMPLETED: 'COMPLETED',
-  EXPIRED: 'EXPIRED'
-};
-
-exports.MicroTaskReason = exports.$Enums.MicroTaskReason = {
-  low_score: 'low_score',
-  instability: 'instability',
-  growth: 'growth',
-  wheel_gap: 'wheel_gap',
-  stagnation: 'stagnation'
+  DOUBT: 'DOUBT',
+  PROCRASTINATION: 'PROCRASTINATION',
+  EMOTIONAL_DRAIN: 'EMOTIONAL_DRAIN',
+  EXTERNAL_PRESSURE: 'EXTERNAL_PRESSURE'
 };
 
 exports.MentorshipStatus = exports.$Enums.MentorshipStatus = {
@@ -627,7 +1117,8 @@ exports.MentorshipStatus = exports.$Enums.MentorshipStatus = {
   ACTIVE: 'ACTIVE',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
-  ACCEPTED: 'ACCEPTED'
+  ACCEPTED: 'ACCEPTED',
+  PAUSED: 'PAUSED'
 };
 
 exports.NotificationChannel = exports.$Enums.NotificationChannel = {
@@ -649,21 +1140,75 @@ exports.ZoomStatus = exports.$Enums.ZoomStatus = {
   CANCELLED: 'CANCELLED'
 };
 
+exports.GenerationType = exports.$Enums.GenerationType = {
+  MORNING_SESSION: 'MORNING_SESSION',
+  EVENING_SESSION: 'EVENING_SESSION',
+  WHEEL_ANALYSIS: 'WHEEL_ANALYSIS',
+  WEEKLY_ANALYSIS: 'WEEKLY_ANALYSIS',
+  AFFIRMATION: 'AFFIRMATION',
+  MICRO_TASK: 'MICRO_TASK',
+  CHAT: 'CHAT',
+  PDF_REPORT: 'PDF_REPORT'
+};
+
+exports.ContentType = exports.$Enums.ContentType = {
+  HERO: 'HERO',
+  AD_FACEBOOK: 'AD_FACEBOOK',
+  AD_INSTAGRAM: 'AD_INSTAGRAM',
+  AD_TIKTOK: 'AD_TIKTOK',
+  AD_STORIES: 'AD_STORIES',
+  EMAIL_SUBJECT: 'EMAIL_SUBJECT',
+  SEO_TITLE: 'SEO_TITLE',
+  LANDING_SECTION: 'LANDING_SECTION'
+};
+
+exports.AIMessageRole = exports.$Enums.AIMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+  system: 'system'
+};
+
+exports.FunnelStatus = exports.$Enums.FunnelStatus = {
+  LEAD: 'LEAD',
+  TRIAL: 'TRIAL',
+  CONVERTED: 'CONVERTED',
+  CHURNED: 'CHURNED'
+};
+
 exports.Prisma.ModelName = {
   SuperAdmin: 'SuperAdmin',
   Expert: 'Expert',
   User: 'User',
+  ExpertProfile: 'ExpertProfile',
+  UserMentorConfig: 'UserMentorConfig',
+  RefreshToken: 'RefreshToken',
   AIMentor: 'AIMentor',
+  UserAIMentor: 'UserAIMentor',
+  AIMentorSession: 'AIMentorSession',
+  MentorQuestionSet: 'MentorQuestionSet',
+  AIMentorMessage: 'AIMentorMessage',
   UserMentorState: 'UserMentorState',
   MentorConfig: 'MentorConfig',
   Product: 'Product',
+  ExpertBotConfig: 'ExpertBotConfig',
   Enrollment: 'Enrollment',
   Subscription: 'Subscription',
+  ProductSubscription: 'ProductSubscription',
+  AIRecommendation: 'AIRecommendation',
+  CTAInteraction: 'CTAInteraction',
+  Reminder: 'Reminder',
   PaymentLog: 'PaymentLog',
+  PurchaseHistory: 'PurchaseHistory',
   Funnel: 'Funnel',
   FunnelProduct: 'FunnelProduct',
   FunnelStage: 'FunnelStage',
+  VideoModule: 'VideoModule',
+  VideoStage: 'VideoStage',
+  UserFunnelStageProgress: 'UserFunnelStageProgress',
+  UserVideoStageProgress: 'UserVideoStageProgress',
+  UserMiniCourseStageProgress: 'UserMiniCourseStageProgress',
   MiniCourse: 'MiniCourse',
+  MiniCourseStage: 'MiniCourseStage',
   Course: 'Course',
   CourseEnrollment: 'CourseEnrollment',
   FivePointsEnrollment: 'FivePointsEnrollment',
@@ -671,6 +1216,11 @@ exports.Prisma.ModelName = {
   UserProgress: 'UserProgress',
   DailyEntry: 'DailyEntry',
   MicroTask: 'MicroTask',
+  DailyCycleLog: 'DailyCycleLog',
+  TrialMirror: 'TrialMirror',
+  MicroSupportItem: 'MicroSupportItem',
+  CycleStreakMetric: 'CycleStreakMetric',
+  GamificationProfile: 'GamificationProfile',
   Streak: 'Streak',
   GoalsSet: 'GoalsSet',
   BalanceWheelConfig: 'BalanceWheelConfig',
@@ -683,7 +1233,26 @@ exports.Prisma.ModelName = {
   TelegramLink: 'TelegramLink',
   Report: 'Report',
   ZoomSession: 'ZoomSession',
-  ZoomSessionAttendee: 'ZoomSessionAttendee'
+  ZoomSessionAttendee: 'ZoomSessionAttendee',
+  GenerationQuota: 'GenerationQuota',
+  GenerationLog: 'GenerationLog',
+  ProducerConfig: 'ProducerConfig',
+  WeeklyReport: 'WeeklyReport',
+  MentorWeeklyProfile: 'MentorWeeklyProfile',
+  ContentVariant: 'ContentVariant',
+  AssistantSession: 'AssistantSession',
+  AssistantMessage: 'AssistantMessage',
+  AssistantMemory: 'AssistantMemory',
+  ProductScore: 'ProductScore',
+  MarketplaceProduct: 'MarketplaceProduct',
+  AffiliateLink: 'AffiliateLink',
+  AdCampaign: 'AdCampaign',
+  AIConversation: 'AIConversation',
+  AIMessage: 'AIMessage',
+  AIMemory: 'AIMemory',
+  PromptVersion: 'PromptVersion',
+  ContentItem: 'ContentItem',
+  FunnelLead: 'FunnelLead'
 };
 
 /**

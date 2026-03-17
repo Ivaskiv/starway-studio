@@ -1,260 +1,194 @@
 // frontend/src/features/landing/sections/HeroSection.tsx
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight, Play, Sparkles, Star, Users } from 'lucide-react';
-
-// ─── Slide data ───────────────────────────────────────────────────────────────
+// ✅ ZERO inline style={{}} — назавжди
+// ✅ fontFamily через CSS клас .hero-h1
+// ✅ progress animation через CSS клас .hero-progress-bar
+// ✅ accent color — var(--accent-rgb) скрізь
+import { ArrowRight, ChevronLeft, ChevronRight, Play, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const SLIDES = [
   {
-    id:       1,
-    eyebrow:  'AI-екосистема для трансформації',
-    h1a:      'Досягай цілей з',
-    h1b:      'AI‑Ментором',
-    sub:      'Автоматизована система: СТАН → ЦІЛЬ → ВИБІР → ДІЯ. Результат за 21 день.',
-    cta:      'Спробувати безкоштовно',
-    orb1:     'bg-orange-500/20',
-    orb2:     'bg-rose-500/15',
-    accent:   'from-orange-400 via-rose-400 to-pink-500',
+    eyebrow: 'AI-екосистема · Starway Studio',
+    h1a: 'Вийди із застою.',
+    h1b: 'Побудуй систему.',
+    h1c: 'Живи результат.',
+    sub: 'Від 5 відео до AI‑Ментора 24/7. Система: СТАН → ЦІЛЬ → ВИБІР → ДІЯ.',
+    cta: 'Почати безкоштовно',
+    note: 'Без карти · Відразу',
   },
   {
-    id:       2,
-    eyebrow:  'Колесо балансу',
-    h1a:      'Знайди куди',
-    h1b:      'зникає енергія',
-    sub:      'Оціни 8 сфер життя за 5 хвилин. AI проаналізує слабкі місця та напише персональний план.',
-    cta:      'Пройти колесо балансу',
-    orb1:     'bg-violet-500/20',
-    orb2:     'bg-orange-500/15',
-    accent:   'from-violet-400 via-purple-400 to-pink-400',
+    eyebrow: 'Колесо балансу · 8 сфер',
+    h1a: 'Знайди куди',
+    h1b: 'зникає енергія.',
+    h1c: 'AI покаже точно.',
+    sub: 'Оціни 8 сфер за 5 хвилин. AI проаналізує дисбаланс і напише персональний план дій.',
+    cta: 'Пройти колесо балансу',
+    note: 'Безкоштовно · 1 колесо',
   },
   {
-    id:       3,
-    eyebrow:  'Аналітика прогресу',
-    h1a:      'Відстежуй своє',
-    h1b:      'зростання щодня',
-    sub:      'Streak, стабільність, зливи — все в одному дашборді. Кожен крок залишає слід.',
-    cta:      'Почати безкоштовно',
-    orb1:     'bg-emerald-500/20',
-    orb2:     'bg-blue-500/15',
-    accent:   'from-emerald-400 via-cyan-400 to-blue-400',
+    eyebrow: 'Аналітика прогресу · Стрік',
+    h1a: 'Кожен крок',
+    h1b: 'залишає слід.',
+    h1c: 'Нічого не губиться.',
+    sub: 'Streak, стабільність, зливи — все в одному дашборді. Тижневий PDF-звіт від AI.',
+    cta: 'Спробувати 7 днів',
+    note: '3 місяці — середній результат',
   },
-] as const;
+] as const
 
 const PROOF = [
-  { icon: Users, label: '1,247+', sub: 'активних користувачів' },
-  { icon: Star,  label: '4.9/5',  sub: 'рейтинг платформи',    fill: true },
-] as const;
-
-// ─── Props ────────────────────────────────────────────────────────────────────
+  { val: '2,400+', label: 'пройшли шлях' },
+  { val: '89%',    label: 'бачать зміни за 21 день' },
+  { val: '4.9/5',  label: 'рейтинг' },
+] as const
 
 interface HeroSectionProps {
-  onGetStarted: () => void;
-  onLearnMore:  () => void;
+  onGetStarted: () => void
+  onLearnMore:  () => void
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export function HeroSection({ onGetStarted, onLearnMore }: HeroSectionProps) {
-  const [active,  setActive]  = useState(0);
-  const [fading,  setFading]  = useState(false);
-  const timerRef              = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [active, setActive] = useState(0)
+  const [fading, setFading] = useState(false)
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // ── helpers ──────────────────────────────────────────────────────────────────
-  const stopTimer  = () => { if (timerRef.current) clearInterval(timerRef.current); };
-  const startTimer = useCallback(() => {
-    stopTimer();
-    timerRef.current = setInterval(() => slide(1), 5000);
-  }, []);                                                   // eslint-disable-line
+  const stop  = () => { if (timer.current) clearInterval(timer.current) }
+  const start = useCallback(() => {
+    stop()
+    timer.current = setInterval(() => go(1), 8000)
+  }, []) // eslint-disable-line
 
-  const slide = useCallback((dir: 1 | -1) => {
-    setFading(true);
+  const go = useCallback((dir: 1 | -1) => {
+    setFading(true)
     setTimeout(() => {
-      setActive(prev => (prev + dir + SLIDES.length) % SLIDES.length);
-      setFading(false);
-    }, 280);
-  }, []);
+      setActive(p => (p + dir + SLIDES.length) % SLIDES.length)
+      setFading(false)
+    }, 260)
+  }, [])
 
-  const goTo = (idx: number) => {
-    if (idx === active) return;
-    setFading(true);
-    setTimeout(() => { setActive(idx); setFading(false); }, 280);
-    startTimer();
-  };
+  const goTo = (i: number) => {
+    if (i === active) return
+    setFading(true)
+    setTimeout(() => { setActive(i); setFading(false) }, 260)
+    start()
+  }
 
-  useEffect(() => { startTimer(); return stopTimer; }, [startTimer]);
+  useEffect(() => { start(); return stop }, [start])
 
-  const s = SLIDES[active];
+  const s = SLIDES[active]
 
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden pt-16">
+    <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden pt-16 px-5 sm:px-8 text-center">
 
-      {/* ── Animated orbs ──────────────────────────────────────────────────── */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className={`
-          absolute -top-[20%] -left-[10%]
-          w-[min(700px,90vw)] h-[min(700px,90vw)]
-          rounded-full blur-[120px] transition-all duration-1000
-          ${s.orb1}
-        `} />
-        <div className={`
-          absolute -bottom-[10%] -right-[10%]
-          w-[min(600px,80vw)] h-[min(600px,80vw)]
-          rounded-full blur-[100px] transition-all duration-1000
-          ${s.orb2}
-        `} />
-        {/* grid texture */}
-        <div
-          className="absolute inset-0 opacity-[0.025]"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.3) 1px, transparent 1px)',
-            backgroundSize: '60px 60px',
-          }}
-        />
+      {/* ── Background ───────────────────────────────────────── */}
+      <div className="hero-background" aria-hidden>
+        <div className="hero-background__gradient" />
+        <div className="hero-background__halo hero-background__halo--top" />
+        <div className="hero-background__halo hero-background__halo--bottom" />
+        <div className="hero-background__grid" />
+        <div className="hero-background__beam" />
+        <div className="hero-background__spot" />
       </div>
 
-      {/* ── Content ────────────────────────────────────────────────────────── */}
-      <div
-        className={`
-          relative z-10 w-full max-w-5xl mx-auto px-5 sm:px-8
-          text-center
-          transition-all duration-300
-          ${fading ? 'opacity-0 translate-y-3' : 'opacity-100 translate-y-0'}
-        `}
-      >
-        {/* Eyebrow badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-2 mb-8 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm text-sm font-medium text-white/80">
-          <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+      {/* ── Контент ───────────────────────────────────────────── */}
+      <div className={`relative z-10 w-full max-w-4xl mx-auto transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
+
+        {/* Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 mb-8 rounded-full border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.08)] text-[rgb(var(--accent-soft-rgb))] text-[11px] font-bold tracking-[.14em] uppercase">
+          <span className="w-[6px] h-[6px] rounded-full bg-[rgb(var(--accent-soft-rgb))] shadow-[0_0_7px_rgb(var(--accent-soft-rgb))] animate-pulse" />
+          <Sparkles className="w-3 h-3" />
           {s.eyebrow}
         </div>
 
-        {/* Headline */}
-        <h1 className="text-5xl sm:text-6xl md:text-[78px] font-black leading-[1.08] tracking-tight mb-6 text-white">
-          {s.h1a}
-          <br />
-          <span className={`bg-gradient-to-r ${s.accent} bg-clip-text text-transparent`}>
-            {s.h1b}
-          </span>
+        {/* H1 */}
+        <h1 className="hero-h1 font-black leading-[1.05] tracking-tight text-[clamp(2.4rem,5.5vw,4rem)] mb-5">
+          <span className="block text-white">{s.h1a}</span>
+          <span className="block text-[rgb(var(--accent-soft-rgb))]">{s.h1b}</span>
+          <span className="block italic text-[.9em] text-[color:var(--text-muted)]">{s.h1c}</span>
         </h1>
 
         {/* Sub */}
-        <p className="text-lg sm:text-xl md:text-2xl text-white/55 mb-12 max-w-2xl mx-auto leading-relaxed">
+        <p className="text-[clamp(15px,2.2vw,19px)] leading-[1.68] text-[color:var(--text-secondary)] max-w-[540px] mx-auto mb-2">
           {s.sub}
         </p>
+        <p className="text-[13px] text-[color:var(--text-muted)] mb-9">{s.note}</p>
 
-        {/* CTAs */}
-        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-14">
+        {/* CTA */}
+        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-10">
           <button
             onClick={onGetStarted}
-            className="
-              inline-flex items-center justify-center gap-2
-              px-8 py-4 rounded-2xl
-              bg-gradient-to-r from-orange-500 to-rose-500
-              hover:from-orange-400 hover:to-rose-400
-              text-white font-semibold text-base
-              shadow-2xl shadow-orange-500/30
-              hover:scale-105 hover:-translate-y-0.5
-              transition-all duration-200
-            "
+            className="hero-cta-primary inline-flex items-center justify-center gap-2"
           >
-            <Play className="w-5 h-5" />
+            <Play className="w-4 h-4" />
             {s.cta}
           </button>
+
           <button
             onClick={onLearnMore}
-            className="
-              inline-flex items-center justify-center gap-2
-              px-8 py-4 rounded-2xl
-              border border-white/12 bg-white/5 backdrop-blur-sm
-              text-white/80 font-medium text-base
-              hover:bg-white/10 hover:text-white
-              hover:scale-105 hover:-translate-y-0.5
-              transition-all duration-200
-            "
+            className="hero-cta-secondary inline-flex items-center justify-center gap-2"
           >
-            Як це працює
-            <ArrowRight className="w-4 h-4" />
+            Як це працює <ArrowRight className="w-4 h-4" />
           </button>
         </div>
 
         {/* Social proof */}
-        <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
-          {PROOF.map(p => (
-            <div key={p.label} className="flex items-center gap-2 text-sm text-white/50">
-              <p.icon
-                className="w-4 h-4 text-orange-400"
-                {...('fill' in p && p.fill ? { fill: 'currentColor' } : {})}
-              />
-              <strong className="text-white font-semibold">{p.label}</strong>
-              {p.sub}
-            </div>
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-8">
+          {PROOF.map((p, i) => (
+            <span key={p.val} className="flex items-center gap-2 text-[13px] text-[color:var(--text-muted)]">
+              {i > 0 && <span className="hidden sm:inline text-[rgba(255,255,255,0.1)]">·</span>}
+              <strong className="text-[color:var(--text-secondary)] font-semibold">{p.val}</strong> {p.label}
+            </span>
           ))}
         </div>
       </div>
 
-      {/* ── Slider controls ─────────────────────────────────────────────────── */}
-      <div className="relative z-10 mt-16 flex items-center gap-5">
-        {/* Prev */}
+      {/* Slider controls */}
+      <div className="relative z-10 mt-14 flex items-center gap-5">
         <button
-          onClick={() => { slide(-1); startTimer(); }}
-          className="p-2.5 rounded-xl border border-white/10 bg-white/5 text-white/50 hover:text-white hover:bg-white/10 transition-all hover:scale-110"
+          onClick={() => { go(-1); start() }}
           aria-label="Попередній"
+          className="hero-slider-control"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
 
-        {/* Dots */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-[12px]">
           {SLIDES.map((_, i) => (
             <button
               key={i}
               onClick={() => goTo(i)}
               aria-label={`Слайд ${i + 1}`}
-              className={`
-                rounded-full transition-all duration-300
-                ${i === active
-                  ? 'w-8 h-2.5 bg-orange-500 shadow-md shadow-orange-500/40'
-                  : 'w-2.5 h-2.5 bg-white/20 hover:bg-white/40'}
-              `}
+              className={`hero-slider-dot ${i === active ? 'hero-slider-dot--active' : ''}`}
             />
           ))}
         </div>
 
-        {/* Next */}
         <button
-          onClick={() => { slide(1); startTimer(); }}
-          className="p-2.5 rounded-xl border border-white/10 bg-white/5 text-white/50 hover:text-white hover:bg-white/10 transition-all hover:scale-110"
+          onClick={() => { go(1); start() }}
           aria-label="Наступний"
+          className="hero-slider-control"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
       </div>
 
-      {/* ── Progress bar ────────────────────────────────────────────────────── */}
-      <div className="relative z-10 mt-6 flex gap-1.5">
+      {/* Progress bars */}
+      <div className="relative z-10 mt-5 flex gap-[6px]">
         {SLIDES.map((_, i) => (
-          <div key={i} className="h-0.5 w-12 rounded-full bg-white/10 overflow-hidden">
-            <div
-              className={`h-full bg-orange-500 origin-left transition-none ${i === active ? 'animate-progress-bar' : 'scale-x-0'}`}
-              style={i === active ? { animation: 'progressBar 5s linear forwards' } : {}}
-            />
+          <div
+            key={i}
+            className="h-px w-12 rounded-full bg-[rgba(var(--accent-rgb),0.15)] overflow-hidden"
+          >
+            {i === active && (
+              <div
+                key={active}
+                className="hero-progress-bar h-full bg-[rgb(var(--accent-soft-rgb))] rounded-full origin-left"
+              />
+            )}
           </div>
         ))}
       </div>
 
-      {/* ── Scroll indicator ────────────────────────────────────────────────── */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 opacity-30 animate-bounce">
-        <div className="w-px h-8 bg-white/40 rounded-full" />
-        <div className="w-1.5 h-1.5 rounded-full bg-white/60" />
-      </div>
-
-      {/* ── CSS keyframe ────────────────────────────────────────────────────── */}
-      <style>{`
-        @keyframes progressBar {
-          from { transform: scaleX(0); }
-          to   { transform: scaleX(1); }
-        }
-      `}</style>
     </section>
-  );
+  )
 }

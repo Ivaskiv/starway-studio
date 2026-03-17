@@ -1,3 +1,4 @@
+import plugin from 'tailwindcss/plugin';
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
@@ -39,7 +40,21 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+plugins: [
+    plugin(function({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-none': {
+          /* Firefox */
+          'scrollbar-width': 'none',
+          /* IE 10+ / Edge */
+          '-ms-overflow-style': 'none',
+        },
+        '.scrollbar-none::-webkit-scrollbar': {
+          display: 'none', /* Chrome, Safari, Opera */
+        },
+      })
+    })
+  ],
 };
 
 export default config;

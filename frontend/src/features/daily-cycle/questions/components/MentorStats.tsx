@@ -2,12 +2,16 @@
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { Button } from '@/ui';
 import { FC } from 'react';
-import { useQuestionsScheduler } from '../hooks/useQuestion';
+import { useQuestionsScheduler } from '../hooks/useQuestionsScheduler';
 
 const MentorStats: FC = () => {
   const { user } = useAuth();
   const userId = user?.id ?? '';
-  const { questions, isLoading, exportPDF } = useQuestionsScheduler(userId);
+  const { questions, isLoading, exportPDF } = useQuestionsScheduler({
+    userId,
+    context: 'questions',
+    schedule: 'once',
+  });
 
   if (!user) return null;
   if (isLoading) return <p>Завантаження статистики ментора...</p>;

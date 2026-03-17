@@ -1,6 +1,6 @@
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../db/client.js';
 import type { FivePointsEnrollment, FivePointsProgress } from './types.js';
-import { Prisma } from '@/db/generated/prisma/client.js';
+import { Prisma } from '../../db/generated/prisma/client.js';
 
 
 

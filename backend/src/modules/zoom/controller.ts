@@ -1,15 +1,16 @@
 // backend/src/modules/zoom/controller.ts
-import { Request, Response, NextFunction } from 'express';
-import { prisma } from '@/db/client.js';
+import { NextFunction, Request, Response } from 'express';
+import { prisma } from '../../db/client.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import {
   createZoomSession,
-  getUpcomingZoom,
-  registerAttendee,
-  markAttended,
-  savePostSessionReport,
   getSessionAttendees,
+  getUpcomingZoom,
+  markAttended,
+  registerAttendee,
+  savePostSessionReport,
 } from './service.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { ZoomSessionWithAttendance } from './types.js';
 
 // Отримуємо expertId з бази по userId (найнадійніше)
 const getCurrentExpertId = async (userId: string | undefined): Promise<string> => {
@@ -115,6 +116,34 @@ export async function getAttendees(req: AuthenticatedRequest, res: Response, nex
     const { sessionId } = req.params;
     const attendees = await getSessionAttendees(sessionId);
     return res.status(200).json(attendees);
+  } catch (err) {
+    next(err);
+  }
+}
+export async function getMySessions(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Знаходимо всі attendee записи юзера
+    const attendees = await prisma.zoomSessionAttendee.findMany({
+      where:   { userId },
+      include: { session: true },
+      orderBy: { session: { scheduledAt: 'desc' } },
+    });
+
+    const result: ZoomSessionWithAttendance[] = attendees.map(a => ({
+      ...a.session,
+      scheduledAt:        a.session.scheduledAt.toISOString(),
+      createdAt:          a.session.createdAt.toISOString(),
+      updatedAt:          a.session.updatedAt.toISOString(),
+      requests:           (a.session.requests as any[]) ?? [],
+      postSessionReport:  a.session.postSessionReport as any ?? null,
+      isRegistered:       true,
+      attendeeId:         a.id,
+    }));
+
+    return res.status(200).json(result);
   } catch (err) {
     next(err);
   }

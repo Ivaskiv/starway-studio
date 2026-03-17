@@ -1,4 +1,5 @@
-// /Users/viravira/Documents/starway-studio/frontend/src/ui/Select.tsx
+// fix style $100k — premium select using glass surfaces and accent outlines
+import { cn } from '@/lib/utils';
 import { forwardRef } from 'react';
 
 export interface SelectOption {
@@ -6,39 +7,42 @@ export interface SelectOption {
   label: string;
 }
 
-export interface SelectProps
-  extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
+export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
   options?: SelectOption[];
   label?: string;
   error?: string;
-  color?: 'green' | 'olive' | 'red' | 'yellow' | 'orange';
   size?: 'sm' | 'md' | 'lg';
 }
 
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ options, color = 'orange', size = 'md', disabled, label, className, ...props }, ref) => {
-    return (
-      <div className="w-full">
-        {label && <label className="block text-sm font-medium mb-2">{label}</label>}
-        <select
-          ref={ref}
-          disabled={disabled}
-          data-color={color}
-          data-size={size}
-          className={`glass-field select ${disabled ? 'disabled' : ''} ${className || ''}`}
-          {...props}
-        >
-          {options?.map(option => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    );
-  }
-);
+const heights = {
+  sm: 'h-9',
+  md: 'h-11',
+  lg: 'h-12',
+} as const;
+
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(({ options, size = 'md', disabled, label, className, error, ...props }, ref) => (
+  <div className={cn('w-full space-y-2', className)}>
+    {label && <label className="text-sm font-semibold text-[var(--text-muted)]">{label}</label>}
+    <select
+      ref={ref}
+      disabled={disabled}
+      className={cn(
+        'glass-field w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] px-3 py-2 text-[var(--text-primary)] shadow-[0_10px_30px_rgba(var(--accent-rgb),0.2)] transition duration-200',
+        heights[size],
+        error ? 'border-[var(--accent)]' : '',
+        disabled && 'opacity-60 cursor-not-allowed',
+      )}
+      {...props}
+    >
+      {options?.map((option) => (
+        <option key={option.value} value={option.value} className="bg-[var(--glass-bg)] text-[var(--text-primary)]">
+          {option.label}
+        </option>
+      ))}
+    </select>
+    {error && <p className="text-xs text-[var(--accent)]">{error}</p>}
+  </div>
+));
 
 Select.displayName = 'Select';
-
 export default Select;

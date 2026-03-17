@@ -29,17 +29,17 @@ winston.addColors(logColors);
 const format = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.colorize({ all: true }),
-  winston.format.printf((info) => {
+  winston.format.printf((info: winston.Logform.TransformableInfo) => {
     return `${info.timestamp} [${info.level}]: ${info.message}`;
   })
 );
 
+type FileTransportOptionsWithLevel = winston.transports.FileTransportOptions & { level?: string };
+const errorTransport = new winston.transports.File({ filename: 'logs/error.log', level: 'error' } as FileTransportOptionsWithLevel);
+
 const transports = [
   new winston.transports.Console(),
-  new winston.transports.File({
-    filename: 'logs/error.log',
-    level: 'error'
-  }),
+  errorTransport,
   new winston.transports.File({ filename: 'logs/all.log' })
 ];
 

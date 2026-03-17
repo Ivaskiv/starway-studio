@@ -107,7 +107,7 @@ export default function FunnelEditorPage() {
   ];
   const moduleIntroSteps = [
     `Рівень доступу: ${aiFunnelAccess.accessLevel} (${aiFunnelAccess.isLocked ? '🔒 замкнено' : 'розблоковано'})`,
-    `Поточна підписка: ${state?.subscription?.name ?? 'ТРІАЛ / Вільний доступ'}`,
+    `Поточна підписка: ${state?.subscription?.status ?? 'ТРІАЛ / Вільний доступ'}`,
     `Шаблонів / продуктів: ${counts.templates} / ${counts.ownedProducts} / ${counts.subscribedProducts}`,
   ];
   const sampleFallback = (

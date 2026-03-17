@@ -1,8 +1,8 @@
 //
 import { Button } from '@/ui';
-import { generatePDFReport } from '../services/analytics.api';
 import { downloadBlobAsFile } from '../utils/pdf.utils';
 import { UserAnswer } from '../types/questions.types';
+import { generatePDFReport } from '@/features/reportsPdf/services/pdf.service';
 
 interface Props {
   userId: string;

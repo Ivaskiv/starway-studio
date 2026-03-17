@@ -1,116 +1,158 @@
 // backend/src/index.ts
-import 'dotenv/config';
-import { createApp } from './app.js';
-import { prisma } from './db/client.js';
-import { startDailyScheduler } from './modules/daily-cycle/scheduler.js';
-import { registerDailyTelegramCommands } from './modules/daily-cycle/telegram.js';
-import { bot as wheelBot } from './modules/wheel/telegram.js';
 
-const PORT = process.env.PORT || 3001;
+import 'dotenv/config'
+import { type Request, type Response } from 'express'
+import { createApp }                                           from './app.js'
+import { prisma }                                              from './db/client.js'
+import { startDailyScheduler }                                 from './modules/daily-cycle/scheduler.js'
+import { registerDailyTelegramCommands }                       from './modules/daily-cycle/telegram.js'
+import { bot }                                                 from './lib/telegram.js'
+import { registerMentorCommands }                              from './modules/wheel/telegram.js'
+import { registerMentorBot }              from './modules/telegram-mentor/index.js'
+import { startScheduler } from './scheduler.js'
 
-const app = createApp();
+const PORT = Number(process.env.PORT) || 3001
 
-// let telegramStarted = false;
-// const REQUIRED_TABLES = ['User'] as const;
+const app = createApp()
+let server: ReturnType<typeof app.listen> | null = null
 
-// async function assertCoreTablesExist() {
-//   const missing: string[] = [];
+// ─────────────────────────────────────────────
+// TELEGRAM WEBHOOK ROUTE
+// Telegraf v4 — handleUpdate замість webhookCallback
+// Telegram надсилає POST сюди замість polling
+// ─────────────────────────────────────────────
+if (process.env.TELEGRAM_BOT_TOKEN) {
+  app.use('/api/telegram/webhook', (req: Request, res: Response) => {
+    bot.handleUpdate(req.body, res)
+  })
+  console.log('🔗 Telegram webhook route: POST /api/telegram/webhook')
+}
 
-//   for (const table of REQUIRED_TABLES) {
-//     const rows = await prisma.$queryRawUnsafe<Array<{ regclassText: string | null }>>(
-//       `SELECT to_regclass('public."${table}"')::text AS "regclassText"`,
-//     );
+// ─────────────────────────────────────────────
+// TELEGRAM
+// ─────────────────────────────────────────────
+async function startTelegramBot() {
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    console.log('🤖 Telegram skipped (no token)')
+    return
+  }
 
-//     if (!rows[0]?.regclassText) {
-//       missing.push(table);
-//     }
-//   }
+    try {
+      // Реєструємо всі команди бота
+      registerDailyTelegramCommands()
+      registerMentorCommands(bot)   // /mentor, /goal, /streak, /report, /wheel
+      registerMentorBot()
 
-//   if (missing.length > 0) {
-//     throw new Error(`missing_required_tables:${missing.join(',')}`);
-//   }
-// }
+    // ❌ wheelBot.launch() — НЕ викликаємо (polling конфліктує з webhook)
+    // ✅ Updates приходять через POST /api/telegram/webhook
 
-const startTelegramBot = async () => {
-  if (!process.env.TELEGRAM_BOT_TOKEN) return;
-  try {
-    // fix code_x: register daily commands on shared bot before launch.
-    registerDailyTelegramCommands();
-    await wheelBot.launch();
-    // telegramStarted = true;
-    console.log('🤖 Telegram bot started');
+    console.log('🤖 Telegram bot ready (webhook mode)')
   } catch (error) {
-    console.error('⚠️ Telegram bot launch failed:', error);
+    console.error('⚠️ Telegram bot setup failed:', error)
   }
-};
+}
 
-// ══════════════════════════════════════════════════════
-// START SERVER
-// ══════════════════════════════════════════════════════
-const server = app.listen(PORT, async () => {
+// ─────────────────────────────────────────────
+// BOOTSTRAP
+// ─────────────────────────────────────────────
+async function bootstrap() {
   try {
-    await prisma.$connect();
-    // await assertCoreTablesExist();
-    const result = await prisma.$queryRaw`SELECT 1`;
-    // fix code_x: initialize daily cron jobs (morning/evening reminders + overdue checks).
-    startDailyScheduler();
-    await startTelegramBot();
-    console.log('🧪 [PRISMA] Boot check...');
-    console.log('✅ [PRISMA] Database connected | Test query result:', result);
-    console.log('\n🚀 Starway Studio Backend');
-    console.log(`🌐 Server: http://localhost:${PORT}`);
-    console.log(`📍 Health: http://localhost:${PORT}/health`);
-    console.log(`🔐 Auth: http://localhost:${PORT}/api/auth`);
-    console.log(`🎯 Access: http://localhost:${PORT}/api/access`);
-    console.log(`🤖 Mentor: http://localhost:${PORT}/api/mentor\n`);
+    console.log('🧪 [BOOT] Connecting to database...')
+    await prisma.$connect()
+
+    const result = await prisma.$queryRaw`SELECT 1`
+    console.log('✅ [PRISMA] Database connected | Test query result:', result)
+
+    server = app.listen(PORT, () => {
+      console.log('\n🚀 Starway Studio Backend')
+      console.log(`🌐 Server: http://localhost:${PORT}`)
+      console.log(`📍 Health: http://localhost:${PORT}/health`)
+      console.log(`🔐 Auth: http://localhost:${PORT}/api/auth`)
+      console.log(`🎯 Access: http://localhost:${PORT}/api/access`)
+      console.log(`🤖 Mentor: http://localhost:${PORT}/api/mentor\n`)
+    })
+
+    server.on('error', (error: any) => {
+      if (error?.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use. Stop existing process or change PORT.`)
+        process.exit(1)
+      }
+      console.error('❌ Server error:', error)
+      process.exit(1)
+    })
+
+    // Запуск у фоні — не блокує сервер
+    startDailyScheduler()
+    startTelegramBot().catch((err: any) => console.error('⚠️ Telegram async error:', err))
+    startScheduler()
+
   } catch (err: any) {
-    console.error('❌ [PRISMA ERROR]', err.message);
+    console.error('❌ [BOOT ERROR]', err)
+    process.exit(1)
   }
-});
+}
 
-// fix code_x: explicit handler for occupied port to avoid opaque crash during local dev.
-server.on('error', (error: any) => {
-  if (error?.code === 'EADDRINUSE') {
-    console.error(
-      `❌ Port ${PORT} is already in use. Stop existing process or set PORT to another value.`,
-    );
-    process.exit(1);
-  }
-  console.error('❌ Server error:', error);
-  process.exit(1);
-});
+bootstrap()
 
-// ══════════════════════════════════════════════════════
+// ─────────────────────────────────────────────
 // GRACEFUL SHUTDOWN
-// ══════════════════════════════════════════════════════
-const shutdown = async (signal: string) => {
-  console.log(`\n👋 ${signal} received. Shutting down gracefully...`);
-  // if (telegramStarted) {
-  //   try {
-  //     wheelBot.stop(signal);
-  //     console.log('🤖 Telegram bot stopped');
-  //   } catch (error) {
-  //     console.error('⚠️ Telegram bot stop error:', error);
-  //   }
-  // }
-  server.close(async () => {
-    console.log('🔌 HTTP server closed');
-    await prisma.$disconnect();
-    console.log('🔌 Database disconnected');
-    console.log('✅ Shutdown complete');
-    process.exit(0);
-  });
-  setTimeout(() => {
-    console.error('⚠️ Forced shutdown after timeout');
-    process.exit(1);
-  }, 10_000);
-};
+// ─────────────────────────────────────────────
+const connections = new Set<any>()
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+function trackConnections() {
+  server?.on('connection', socket => {
+    connections.add(socket)
+    socket.once('close', () => connections.delete(socket))
+  })
+}
+
+async function shutdown(signal: string) {
+  console.log(`\n👋 ${signal} received. Shutting down...`)
+
+  const forceKill = setTimeout(() => {
+    console.error('⚠️ Forced shutdown after timeout')
+    process.exit(1)
+  }, 5_000).unref()
+
+  try {
+    connections.forEach(s => s.destroy())
+    connections.clear()
+
+    if (server) {
+      await new Promise<void>((resolve, reject) =>
+        server!.close(err => err ? reject(err) : resolve())
+      )
+      console.log('🔌 HTTP server closed')
+    }
+
+    await prisma.$disconnect()
+    console.log('🔌 Database disconnected\n✅ Shutdown complete')
+
+    clearTimeout(forceKill)
+    process.exit(0)
+  } catch (error) {
+    console.error('⚠️ Shutdown error:', error)
+    process.exit(1)
+  }
+}
+
+
+
+process.on('SIGINT', async () => {
+  console.log('Shutting down...')
+  await prisma.$disconnect()
+  process.exit(0)
+})
+
+process.on('SIGTERM', async () => {
+  console.log('Shutting down...')
+  await prisma.$disconnect()
+  process.exit(0)
+})
+
 process.on('unhandledRejection', reason => {
-  console.error('❌ Unhandled Rejection:', reason);
-  if (process.env.NODE_ENV !== 'production') process.exit(1);
-});
+  console.error('❌ Unhandled Rejection:', reason)
+  if (process.env.NODE_ENV !== 'production') process.exit(1)
+})
 
-export default app;
+export default app

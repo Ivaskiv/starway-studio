@@ -1,6 +1,6 @@
 // backend/src/modules/zoom/service.ts
-import { prisma } from '@/db/client.js';
-import { Prisma, ZoomStatus } from '@/db/generated/prisma/client.js';
+import { prisma } from '../../db/client.js';
+import { Prisma, ZoomStatus } from '../../db/generated/prisma/client.js';
 import type { ZoomAttendeeWithUser, ZoomSession, ZoomSessionAttendee } from './types.js';
 
 export async function createZoomSession(

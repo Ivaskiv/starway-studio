@@ -1,0 +1,105 @@
+// shared/types/types.ts
+// Переконайся що інтерфейс Streak містить ВСІ ці поля.
+// Якщо чогось бракує — додай до існуючого інтерфейсу:
+
+export interface Streak {
+  currentStreak:  number
+  longestStreak:  number
+  lastEntryDate:  string | null
+  totalDays:      number
+  stabilityDays:  number        
+  drainDays:      number        
+}
+
+// /frontend/src/types/gamification.types.ts
+// # Achievement, Streak, Leaderboard, Reward, Challenge
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  points: number;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  condition: {
+    type: 'lessons_completed' | 'streakDays' | 'points_earned' | 'quizzes_passed';
+    value: number;
+  };
+  unlockedAt?: string;
+  progress?: number;
+}
+// frontend/src/shared/types/gamification.types.ts
+export interface UserLevel {
+  id: string;
+  level: number;
+  experience: number;
+  nextLevelExperience: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserAchievement {
+  id: string;
+  title: string;
+  description: string;
+  isUnlocked: boolean;
+  unlockedAt: string;
+  createdAt: string;
+}
+// export interface UserLevel {
+//   currentLevel: number;
+//   currentXP: number;
+//   nextLevelXP: number;
+//   totalXP: number;
+//   rewards: {
+//     level: number;
+//     reward: string;
+//     claimed: boolean;
+//   }[];
+// }
+
+export interface LeaderboardEntry {
+  userId: string;
+  userName: string;
+  avatar?: string;
+  points: number;
+  level: number;
+  rank: number;
+}
+
+export interface Streak {
+  currentStreak: number;
+  longestStreak: number;
+  lastActiveDate: string;
+  streakMilestones: {
+    days: number;
+    reward: string;
+    claimed: boolean;
+  }[];
+}
+
+export interface Reward {
+  id: string;
+  name: string;
+  description: string;
+  type: 'points' | 'unlock' | 'badge' | 'discount';
+  value: any;
+  cost: number;
+  claimed: boolean;
+}
+
+export interface Challenge {
+  id: string;
+  name: string;
+  description: string;
+  type: 'daily' | 'weekly' | 'monthly';
+  startDate: string;
+  endDate: string;
+  reward: {
+    points: number;
+    achievement?: string;
+  };
+  progress: number;
+  target: number;
+  completed: boolean;
+}

@@ -30,7 +30,7 @@ export function useMentorAccess(): MentorAccess {
     };
   }
 
-  if (!user?.subscription) {
+  if (!user?.subscriptionPlan) {
     return {
       level: 'none',
       isPaid: false,
@@ -40,7 +40,7 @@ export function useMentorAccess(): MentorAccess {
     };
   }
 
-  const { plan } = user.subscription;
+  const plan = user.subscriptionPlan;
 
   // =========================
   // PAID

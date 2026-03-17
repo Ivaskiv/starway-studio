@@ -1,6 +1,6 @@
 // /features/notifications/config/notifications.config.ts
 
-import { Ability } from "@/features/auth/permissions/abilities";
+import { ABILITIES, Ability } from "@/features/auth/permissions/abilities";
 
 
 export interface NotificationItem {
@@ -16,18 +16,18 @@ export const NOTIFICATIONS_CONFIG: NotificationItem[] = [
     key: 'morning',
     label: 'Ранкові питання',
     description: 'Щоденні сповіщення о 9:00',
-    ability: 'notifications.read',
+ability: ABILITIES.NOTIFICATIONS_READ,
   },
   {
     key: 'evening',
     label: 'Вечірні питання',
     description: 'Щоденні сповіщення о 21:00',
-    ability: 'notifications.read',
+ability: ABILITIES.NOTIFICATIONS_READ,
   },
   {
     key: 'wheel',
     label: 'Колесо балансу',
     description: 'Щотижневі сповіщення',
-    ability: 'notifications.read',
+ability: ABILITIES.NOTIFICATIONS_READ,
   },
 ];

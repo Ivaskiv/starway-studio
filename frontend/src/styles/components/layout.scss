@@ -1,0 +1,452 @@
+// src/styles/components/layout.scss
+// ══════════════════════════════════════════════════════════════
+// ЦЕНТРАЛІЗОВАНІ СТИЛІ LAYOUT
+// Все в одному місці: MainLayout · Header · Sidebar · Footer
+// ══════════════════════════════════════════════════════════════
+
+// ── Анімація входу (спільна) ──────────────────────────────────
+@keyframes menuIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD LAYOUT
+// ══════════════════════════════════════════════════════════════
+
+.dashboard-root {
+  display:    flex;
+  height:     100vh;
+  overflow:   hidden;
+  background: var(--bg-primary);
+}
+
+@media (max-width: 900px) {
+  .dashboard-root > aside {
+    display: none;
+  }
+
+  .dashboard-root {
+    flex-direction: column;
+  }
+
+  .dashboard-column {
+    width: 100%;
+  }
+}
+
+.dashboard-column {
+  display:        flex;
+  flex:           1 1 0%;
+  flex-direction: column;
+  min-width:      0;
+}
+
+.dashboard-scroll {
+  flex:       1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dashboard-scroll__inner {
+  display:        flex;
+  flex-direction: column;
+  min-height:     100%;
+}
+
+.dashboard-content {
+  flex:    1 1 auto;
+  padding: 1rem;
+
+  @media (min-width: 640px)  { padding: 1.25rem 1.5rem; }
+  @media (min-width: 1024px) { padding: 1.5rem 2rem;    }
+}
+
+// ══════════════════════════════════════════════════════════════
+// HEADER
+// ══════════════════════════════════════════════════════════════
+
+.app-header {
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(14,11,7,.97) 0%,
+      rgba(14,11,7,.88) 100%
+    );
+  box-shadow:  0 1px 0 rgba(255,255,255,.05);
+  flex-shrink: 0;
+}
+
+.dashboard-sidebar {
+  --sidebar-width: 270px;
+  --sidebar-collapsed: 82px;
+}
+
+.dashboard-header,
+.dashboard-header--expanded,
+.dashboard-header--collapsed {
+  height:         var(--header-height);
+  border-bottom: 1px solid var(--border-glass);
+  background:     rgba(7,7,7,0.35);
+  top:            0;
+  z-index:        50;
+  display:        flex;
+  align-items:    center;
+  transition:     left .3s ease, width .3s ease;
+}
+
+.dashboard-header {
+  position: fixed;
+  left:     var(--sidebar-width);
+  width:    calc(100% - var(--sidebar-width));
+}
+
+.dashboard-header--expanded {
+  left:  var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
+}
+
+.dashboard-header--collapsed {
+  left:  var(--sidebar-collapsed);
+  width: calc(100% - var(--sidebar-collapsed));
+}
+
+@media (max-width: 768px) {
+  .dashboard-header,
+  .dashboard-header--expanded,
+  .dashboard-header--collapsed {
+    left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+// ── Nav links ─────────────────────────────────────────────────
+
+.header-menu-link {
+  display:     inline-flex;
+  align-items: center;
+  gap:         .375rem;
+  padding:     .375rem .5rem;
+  border:      none;
+  background:  none;
+  font-size:   .8125rem;
+  font-weight: 500;
+  color:       var(--text-secondary);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor:      pointer;
+  line-height: 1;
+  transition:  color 120ms ease;
+  position:    relative;
+
+  &::after {
+    content:    '';
+    position:   absolute;
+    bottom:     -2px;
+    left:       .5rem;
+    right:      .5rem;
+    height:     1px;
+    background: var(--accent);
+    opacity:    0;
+    transition: opacity 120ms ease;
+  }
+
+  &:hover {
+    color: var(--text-primary);
+    &::after { opacity: .5; }
+  }
+
+  &__icon  { width: .875rem; height: .875rem; flex-shrink: 0; }
+  &__label { line-height: 1; }
+}
+
+.header-menu-link--active {
+  color:       var(--text-primary);
+  font-weight: 600;
+  &::after { opacity: 1; }
+}
+
+// ── Header nav ────────────────────────────────────────────────
+
+.header-nav {
+  display:          flex;
+  align-items:      center;
+  gap:              .25rem;
+  flex:             1 1 0%;
+  min-width:        0;
+  overflow-x:       auto;
+  padding:          0 1rem;
+  justify-content:  flex-start;
+
+  // FIX: scrollbar-width — Firefox-only property (warning, не error)
+  // Додаємо -ms-overflow-style для IE/Edge legacy + ::-webkit-scrollbar для решти
+// scrollbar-width: thin; /* firefox */
+  -ms-overflow-style: none;          /* IE / Edge legacy */
+  &::-webkit-scrollbar { display: none; } /* Chrome · Safari · Samsung */
+
+  @media (min-width: 1280px) { gap: .5rem; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// NAV DROPDOWN
+// ══════════════════════════════════════════════════════════════
+
+.nav-dropdown {
+  position:      absolute;
+  top:           calc(100% + 6px);
+  left:          0;
+  z-index:       200;
+  min-width:     340px;
+  background:
+    linear-gradient(160deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,.01) 100%),
+    rgba(12,9,6,.98);
+  border:        1px solid rgba(255,255,255,.08);
+  border-radius: var(--card-radius, .75rem);
+  overflow:      hidden;
+  box-shadow:
+    0  1px 0 rgba(255,255,255,.07) inset,
+    0 24px 64px rgba(0,0,0,.72),
+    0  4px 20px rgba(0,0,0,.45);
+  animation: menuIn 130ms ease-out both;
+}
+
+.nav-dropdown-item {
+  display:         flex;
+  align-items:     flex-start;
+  gap:             .75rem;
+  padding:         .625rem .75rem;
+  border-radius:   .625rem;
+  border:          1px solid transparent;
+  text-decoration: none;
+  transition:      background 120ms ease, border-color 120ms ease;
+
+  &__icon-wrap {
+    width:           2rem;
+    height:          2rem;
+    border-radius:   .5rem;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    flex-shrink:     0;
+    background:      rgba(255,255,255,.06);
+    color:           var(--text-muted);
+    transition:      background 120ms ease, color 120ms ease;
+  }
+
+  &__label {
+    font-size:   .8125rem;
+    font-weight: 500;
+    color:       var(--text-secondary);
+    transition:  color 120ms ease;
+    line-height: 1.2;
+  }
+
+  &__desc {
+    font-size:  .7rem;
+    color:      var(--text-muted);
+    margin-top: .2rem;
+    line-height: 1.3;
+  }
+
+  &:hover {
+    background:   rgba(255,255,255,.05);
+    border-color: rgba(255,255,255,.08);
+    .nav-dropdown-item__icon-wrap { background: rgba(var(--accent-rgb),.12); color: var(--accent); }
+    .nav-dropdown-item__label     { color: var(--text-primary); }
+  }
+}
+
+.nav-dropdown-item--active {
+  background:   rgba(var(--accent-rgb),.08);
+  border-color: rgba(var(--accent-rgb),.20);
+  .nav-dropdown-item__icon-wrap { background: rgba(var(--accent-rgb),.15); color: var(--accent); }
+  .nav-dropdown-item__label     { color: var(--text-primary); font-weight: 600; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// USER MENU POPUP (portal-based)
+// ══════════════════════════════════════════════════════════════
+
+.user-menu-popup {
+  border-radius: var(--card-radius, .75rem);
+  min-width:     220px;
+  background:
+    linear-gradient(160deg, rgba(255,255,255,.055) 0%, rgba(255,255,255,.018) 100%),
+    rgba(14,11,7,.97);
+  border: 1px solid var(--border-primary);
+  box-shadow:
+    0  1px 0 rgba(255,255,255,.07) inset,
+    0 16px 48px rgba(0,0,0,.65),
+    0  4px 16px rgba(0,0,0,.40);
+  animation: menuIn 140ms ease-out both;
+
+  // Optical top edge — FIX: додано unprefixed mask для Firefox
+  &::before {
+    content:       "";
+    position:      absolute; inset: 0;
+    border-radius: inherit; padding: 1px;
+    background:    linear-gradient(180deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,.00) 60%);
+
+    // FIX: -webkit-mask без mask → Firefox не підтримує
+    // Тепер обидва: prefixed (Chrome/Safari) + unprefixed (Firefox 53+)
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+            mask-composite: exclude;
+
+    pointer-events: none;
+  }
+}
+
+// ── Profile Tabs indicator ────────────────────────────────────
+// Позиція через CSS custom properties (JS setProperty)
+
+// styles/components/_profile-tabs.scss
+// Фізичні вкладки папки: накладання, тінь знизу+справа, accent-лінія
+// Підключити: @use "./components/profile-tabs"; в index.scss
+
+// ── Контейнер вкладок ─────────────────────────────────────────
+.profile-tabs {
+  display:     flex;
+  align-items: flex-end;
+  gap:         0;
+  padding:     0 0 0 1rem;
+  position:    relative;
+
+  // Лінія під табами — верхня межа контенту
+  &::after {
+    content:    '';
+    position:   absolute;
+    bottom:     0;
+    left:       0;
+    right:      0;
+    height:     1px;
+    background: var(--border-primary);
+    z-index:    1;
+  }
+}
+
+// ── Одна вкладка ──────────────────────────────────────────────
+.profile-tab {
+  position:        relative;
+  display:         flex;
+  align-items:     center;
+  gap:             0.375rem;
+  padding:         0.625rem 1.25rem 0.75rem;
+  font-size:       0.8125rem;
+  font-weight:     500;
+  cursor:          pointer;
+  border:          1px solid transparent;
+  border-bottom:   none;
+  border-radius:   0.75rem 0.75rem 0 0;
+  margin-right:    -2px;          // накладання сусідніх вкладок
+  transition:      all 200ms ease;
+  white-space:     nowrap;
+  z-index:         2;
+
+  // Неактивна вкладка
+  color:           var(--text-muted);
+  background:      var(--bg-primary);
+  border-color:    transparent;
+
+  &:hover:not(.profile-tab--active) {
+    color:      var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+    border-color: var(--border-primary);
+    // Легка тінь справа при hover
+    box-shadow: 2px -1px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  // ── Активна вкладка ────────────────────────────────────────
+  &--active {
+    color:      var(--text-primary);
+    background: var(--bg-secondary);
+    border-color: var(--border-primary);
+    z-index:    10;              // над сусідніми
+
+    // Тінь знизу-справа — ефект підйому вкладки
+    box-shadow:
+      4px -2px 16px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+    // Перекриваємо лінію ::after контейнера під активною вкладкою
+    &::after {
+      content:    '';
+      position:   absolute;
+      bottom:     -1px;
+      left:       0;
+      right:      0;
+      height:     2px;
+      background: var(--bg-secondary);   // колір фону = "зливається" з контентом
+      z-index:    11;
+    }
+
+    // Accent-лінія зверху активної вкладки
+    &::before {
+      content:       '';
+      position:      absolute;
+      top:           0;
+      left:          0.5rem;
+      right:         0.5rem;
+      height:        2px;
+      border-radius: 0 0 2px 2px;
+      background:    linear-gradient(
+        90deg,
+        transparent,
+        var(--accent) 30%,
+        var(--accent-soft) 70%,
+        transparent
+      );
+      opacity: 0.9;
+    }
+  }
+}
+
+// ── Іконка / emoji в табі ─────────────────────────────────────
+.profile-tab__icon {
+  font-size:  0.9em;
+  opacity:    0.8;
+  flex-shrink: 0;
+
+  .profile-tab--active & {
+    opacity: 1;
+  }
+}
+
+// ── Бейдж (лічильник) ─────────────────────────────────────────
+.profile-tab__badge {
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  min-width:       1.125rem;
+  height:          1.125rem;
+  padding:         0 0.3rem;
+  border-radius:   9999px;
+  font-size:       0.625rem;
+  font-weight:     700;
+  background:      rgba(var(--accent-rgb), 0.15);
+  color:           var(--accent-soft);
+  border:          1px solid rgba(var(--accent-rgb), 0.25);
+
+  .profile-tab--active & {
+    background: rgba(var(--accent-rgb), 0.25);
+    border-color: rgba(var(--accent-rgb), 0.5);
+  }
+}
+
+// ── Контент під табами ────────────────────────────────────────
+.profile-tab-panel {
+  border:        1px solid var(--border-primary);
+  border-top:    none;
+  border-radius: 0 0.75rem 0.75rem 0.75rem;
+  background:    var(--bg-secondary);
+  // Тінь знизу-справа — продовження вкладки
+  box-shadow:
+    6px 6px 24px rgba(0, 0, 0, 0.35),
+    2px 2px 0 rgba(var(--accent-rgb), 0.04);
+}

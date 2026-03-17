@@ -1,35 +1,40 @@
 // /features/products/components/ProductBuilder.tsx
 
-import { useCreateProductMutation } from '@/services/admin.api';
+import { useCreateProductMutation } from '@/features/products/services/products.api';
 import {
+  MentorPromptConfig,
   ProductFormInputs,
   ProductFormat,
-  ProductIntegration,
   ProductType,
   formToCreatePayload,
+  ProductIntegration,
 } from '@/features/products/types/product.types';
+import { Step4MentorConfig } from './Step4MentorConfig';
+import { Step5PromptPreview } from './Step5PromptPreview';
+import { Step6Publish } from './Step6Publish';
+import { generateSystemPrompt, DEFAULT_MENTOR_PROMPT_CONFIG } from '../utils/promptTemplate';
 import { Button } from '@/ui/Button';
 import { Input } from '@/ui/Input';
 import { Label } from '@/ui/Label';
 import { Select } from '@/ui/Select';
 import { Textarea } from '@/ui/Textarea';
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 // ===== Константи для селектів =====
 const PRODUCT_TYPES: { label: string; value: ProductType }[] = [
   { label: '📚 Курс', value: 'course' },
-  { label: '🎯 Практикум', value: 'coaching' },
-  { label: '🤖 AI-ментор', value: 'telegram_bot' },
-  { label: '📖 Електронна книга', value: 'ebook' },
-  { label: '🖥️ Вебінар', value: 'webinar' },
-  // Додавайте нові типи тут
+  { label: '🎯 Funnel/Практикум', value: 'funnel' },
+  { label: '🤝 Наставництво', value: 'mentorship' },
+  { label: '🤖 AI-ментор', value: 'mentor' },
 ];
 
 const FORMATS: { label: string; value: ProductFormat }[] = [
-  { label: 'Web', value: 'web' },
-  { label: 'Mini App', value: 'mini_app' },
-  { label: 'Telegram Task', value: 'telegram_task' },
+  { label: '🎬 Video', value: 'video' },
+  { label: '📄 Text', value: 'text' },
+  { label: '🔀 Mixed', value: 'mixed' },
+  { label: '🗂 Digital', value: 'digital' },
 ];
 
 const INTEGRATIONS: { label: string; value: ProductIntegration }[] = [
@@ -48,18 +53,24 @@ const DEFAULT_FORM: ProductFormInputs = {
   includesTrial: false,
   trialDays: 7,
   includesMentorship: false,
-  format: 'web',
+  format: 'video',
   integration: 'telegram',
   status: 'draft',
   thumbnailUrl: '',
   modules: [],
-  resolvedModules: [],
+  systemPrompt: generateSystemPrompt(DEFAULT_MENTOR_PROMPT_CONFIG),
+  mentorConfig: { ...DEFAULT_MENTOR_PROMPT_CONFIG },
 };
 
-export const ProductBuilder: React.FC = () => {
+const ProductBuilder: React.FC = () => {
+  const [mentorConfig, setMentorConfig] = useState<MentorPromptConfig>({
+    ...DEFAULT_MENTOR_PROMPT_CONFIG,
+  });
   const [productForm, setProductForm] = useState<ProductFormInputs>(DEFAULT_FORM);
   const [createProduct, { isLoading }] = useCreateProductMutation();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const systemPrompt = useMemo(() => generateSystemPrompt(mentorConfig), [mentorConfig]);
 
   const handleChange = <K extends keyof ProductFormInputs>(key: K, value: ProductFormInputs[K]) => {
     setProductForm(prev => ({ ...prev, [key]: value }));
@@ -67,13 +78,27 @@ export const ProductBuilder: React.FC = () => {
 
   const handleCreate = async () => {
     try {
-      const payload = formToCreatePayload(productForm);
+      if (!user?.id) {
+        throw new Error('User must be logged in to create a product');
+      }
+      const payload = formToCreatePayload(
+        { ...productForm, mentorConfig, systemPrompt },
+        user.id,
+      );
       const result = await createProduct(payload).unwrap();
       navigate(`/admin/products/${result.id}/edit`);
     } catch (error) {
       console.error('Error creating product:', error);
     }
   };
+
+  useEffect(() => {
+    setProductForm(prev => ({
+      ...prev,
+      mentorConfig,
+      systemPrompt,
+    }));
+  }, [mentorConfig, systemPrompt]);
 
   return (
     <div className="space-y-6 p-6 bg-gray-900 rounded-xl text-white">
@@ -94,7 +119,7 @@ export const ProductBuilder: React.FC = () => {
         <Label>Опис продукту</Label>
         <Textarea
           value={productForm.description}
-          onChange={e => handleChange('description', e.target.value)}
+          onChange={e => handleChange('description', e.target.value ?? '')}
           placeholder="Короткий опис продукту"
           rows={3}
         />
@@ -189,10 +214,9 @@ export const ProductBuilder: React.FC = () => {
         <Label htmlFor="mentorship">Має менторство</Label>
       </div>
 
-      {/* Кнопка створення */}
-      <Button onClick={handleCreate} disabled={isLoading} className="mt-4">
-        {isLoading ? 'Створюємо...' : 'Створити продукт'}
-      </Button>
+      <Step4MentorConfig value={mentorConfig} onChange={setMentorConfig} />
+      <Step5PromptPreview config={mentorConfig} />
+      <Step6Publish config={mentorConfig} loading={isLoading} onPublish={handleCreate} />
     </div>
   );
 };

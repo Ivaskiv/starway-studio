@@ -15,12 +15,14 @@ export interface TrialMirror {
 }
 
 export interface TrialStatus {
-  userId: string;
-  isActive: boolean;
-  startedAt: Date | null;
-  endsAt: Date | null;
-  daysLeft: number;
-  currentDay: number;
-  hasDay4Mirror: boolean;
-  hasDay7Mirror: boolean;
+userId:        string
+  isActive:      boolean
+  startedAt:     Date | null
+  endsAt:        Date | null
+  daysLeft:      number
+  currentDay:    number
+  progress:      number        // % прогресу (0–100)
+  status:        string | null // 'active' | 'expired' | 'completed' | null
+  hasDay4Mirror: boolean
+  hasDay7Mirror: boolean
 }

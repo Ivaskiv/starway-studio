@@ -1,5 +1,3 @@
-ignoredBuiltDependencies:
-  - '@parcel/watcher'
-  - esbuild
-  - puppeteer
-  - unrs-resolver
+packages:
+  - 'backend'
+  - 'frontend'

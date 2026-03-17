@@ -1,105 +1,140 @@
 // frontend/src/features/auth/services/auth.api.ts
-import { api } from '@/services/api';
-import type { AuthApiResponse } from '@/types/globalTypes';
 import type {
-  CheckUserExistsInput,
-  CheckUserExistsResponse,
+  AuthSuccessResponseDTO,
+  ForgotPasswordResponseDTO,
+  LogoutResponseDTO,
+  MeResponseDTO,
+  ResetPasswordResponseDTO,
+  SocialAuthResponseDTO,
+  UpdateSettingsResponseDTO,
+} from '@/contracts/api.contracts'
+import type { User } from '@/features/user/types/user.types'
+import { api } from '@/services/api'
+import type {
   ForgotPasswordInput,
-  ForgotPasswordResponse,
   LoginInput,
   RegisterInput,
   ResetPasswordInput,
-  ResetPasswordResponse,
   SocialAuthApiInput,
   UpdateUserSettingsInput,
-} from '../types/auth.types';
-import { clearAuth, setCredentials, updateUser } from './auth.slice';
+} from '../types/auth.types'
+import { clearAuth, setCredentials, updateUser, updateUserSettings } from './auth.slice'
+import { accessApi } from '@/shared/access/accessApi'
+import type { AppDispatch } from '@/app/store'
+
+const ACCESS_REFRESH_OPTIONS = {
+  forceRefetch: true,
+  subscribe: false,
+} as const
+
+async function refreshAccessState(dispatch: AppDispatch) {
+  try {
+    await dispatch(accessApi.endpoints.getMyAccess.initiate(undefined, ACCESS_REFRESH_OPTIONS)).unwrap()
+  } catch (error) {
+    console.warn('[auth.api] Failed to refresh access state', error)
+  }
+}
 
 export const authApi = api.injectEndpoints({
   endpoints: builder => ({
-    checkUserExists: builder.mutation<CheckUserExistsResponse, CheckUserExistsInput>({
-      query: body => ({ url: '/auth/check-user', method: 'POST', body }),
-    }),
 
-    // ── LOGIN ──────────────────────────────────────────────────────────────
-    login: builder.mutation<AuthApiResponse, LoginInput>({
+    login: builder.mutation<AuthSuccessResponseDTO, LoginInput>({
       query: body => ({ url: '/auth/login', method: 'POST', body }),
-      invalidatesTags: ['User'],
+      async onQueryStarted(_, { dispatch, queryFulfilled }) {
+        const { data } = await queryFulfilled
+        dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
+        await refreshAccessState(dispatch)
+      },
     }),
 
-    // ── REGISTER ───────────────────────────────────────────────────────────
-    register: builder.mutation<AuthApiResponse, RegisterInput>({
+    register: builder.mutation<AuthSuccessResponseDTO, RegisterInput>({
       query: body => ({ url: '/auth/register', method: 'POST', body }),
-      invalidatesTags: ['User'],
+      async onQueryStarted(_, { dispatch, queryFulfilled }) {
+        const { data } = await queryFulfilled
+        dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
+        await refreshAccessState(dispatch)
+      },
     }),
 
-    forgotPassword: builder.mutation<ForgotPasswordResponse, ForgotPasswordInput>({
-      query: body => ({ url: '/auth/forgot-password', method: 'POST', body }),
-    }),
-
-    resetPassword: builder.mutation<ResetPasswordResponse, ResetPasswordInput>({
-      query: body => ({ url: '/auth/reset-password', method: 'POST', body }),
-    }),
-
-    // ── SOCIAL AUTH ────────────────────────────────────────────────────────
-    socialAuth: builder.mutation<AuthApiResponse, SocialAuthApiInput>({
+    socialAuth: builder.mutation<SocialAuthResponseDTO, SocialAuthApiInput>({
       query: body => ({ url: '/auth/social', method: 'POST', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        try {
-          const { data } = await queryFulfilled;
-          dispatch(setCredentials({ user: data.user, accessToken: data.accessToken }));
-        } catch (err) {
-          console.error('[auth.api] ❌ socialAuth failed:', err);
-        }
+        const { data } = await queryFulfilled
+        dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
+        await refreshAccessState(dispatch)
       },
-      invalidatesTags: ['User'],
     }),
 
-    // ── GET ME ─────────────────────────────────────────────────────────────
-    getMe: builder.query<{ user: AuthApiResponse['user'] }, void>({
+    getMe: builder.query<MeResponseDTO, void>({
       query: () => '/auth/me',
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
-          const { data } = await queryFulfilled;
-          dispatch(updateUser(data.user));
-        } catch (err) {
-          console.error('[auth.api] ❌ getMe failed:', err);
-          dispatch(clearAuth());
+          const { data } = await queryFulfilled
+          dispatch(updateUser(data.user as unknown as User))
+        } catch {
+          // Не робимо clearAuth тут — api.ts interceptor сам обробляє 401 + refresh
+          // clearAuth тільки якщо refresh теж провалився (це окремо в api.ts)
         }
       },
-      providesTags: ['User'],
     }),
 
-    // ── LOGOUT ─────────────────────────────────────────────────────────────
-    logout: builder.mutation<void, void>({
+    getTelegramLinkUrl: builder.query<{ url: string; linked: boolean }, void>({
+      query: () => '/auth/telegram-link',
+    }),
+
+    logout: builder.mutation<LogoutResponseDTO, void>({
       query: () => ({ url: '/auth/logout', method: 'POST' }),
-      invalidatesTags: ['User'],
-    }),
-
-    // ── UPDATE SETTINGS ────────────────────────────────────────────────────
-    updateUserSettings: builder.mutation<{ user: AuthApiResponse['user'] }, UpdateUserSettingsInput>({
-      query: body => ({ url: '/auth/settings', method: 'PATCH', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
-          const { data } = await queryFulfilled;
-          dispatch(updateUser(data.user));
-        } catch (err) {
-          console.error('[auth.api] ❌ updateUserSettings failed:', err);
+          await queryFulfilled
+        } finally {
+          dispatch(clearAuth())
         }
       },
-      invalidatesTags: ['User'],
     }),
+
+    updateUserSettings: builder.mutation<UpdateSettingsResponseDTO, UpdateUserSettingsInput>({
+      query: body => ({ url: '/auth/settings', method: 'PATCH', body }),
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+
+          // Бекенд може повертати { user } або { settings } — обробляємо обидва варіанти
+          if (data?.user) {
+            // Повний user об'єкт — оновлюємо весь user (але НЕ clearAuth при помилці)
+            dispatch(updateUser(data.user as unknown as User))
+          } else {
+            // Бекенд повернув тільки { settings } або нічого корисного —
+            // оновлюємо тільки settings з того що відправили
+            dispatch(updateUserSettings(arg.settings ?? {}))
+          }
+        } catch (err) {
+          // ❌ НЕ робимо clearAuth — 401 обробляється refresh interceptором в api.ts
+          // Тут просто логуємо — компонент отримає помилку через .unwrap()
+          console.warn('[auth.api] updateUserSettings failed:', err)
+        }
+      },
+    }),
+
+    forgotPassword: builder.mutation<ForgotPasswordResponseDTO, ForgotPasswordInput>({
+      query: body => ({ url: '/auth/forgot-password', method: 'POST', body }),
+    }),
+
+    resetPassword: builder.mutation<ResetPasswordResponseDTO, ResetPasswordInput>({
+      query: body => ({ url: '/auth/reset-password', method: 'POST', body }),
+    }),
+
   }),
-});
+})
 
 export const {
-  useCheckUserExistsMutation,
   useLoginMutation,
   useRegisterMutation,
-  useForgotPasswordMutation,
-  useResetPasswordMutation,
   useSocialAuthMutation,
   useGetMeQuery,
+  useGetTelegramLinkUrlQuery,
   useLogoutMutation,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
   useUpdateUserSettingsMutation,
-} = authApi;
+} = authApi

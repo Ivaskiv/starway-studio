@@ -1,114 +1,330 @@
 // frontend/src/config/menu.ts
-import {
-  Award, Bell, Bot, Calendar, CreditCard,
-  HelpCircle, Home, LogOut, Package,
-  Settings, Target, TrendingUp, User,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { ROUTES } from '@/config/routes';
-import { resolvePlan, type SubscriptionSnapshot } from '@/shared/utils/subscription.utils';
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  АРХІТЕКТУРА НАВІГАЦІЇ                                           ║
+// ║                                                                  ║
+// ║  ХЕДЕР = платформна навігація (НЕ продукти!)                    ║
+// ║    · Що таке Starway (для всіх, включно незалогінених)          ║
+// ║    · "Кабінет" — тільки якщо user залогінений                   ║
+// ║    · Ціни · Навчання · Підтримка                                ║
+// ║                                                                  ║
+// ║  SIDEBAR = продукти та інструменти КОНКРЕТНОГО юзера            ║
+// ║    · Рендериться тільки в Dashboard layout                       ║
+// ║    · Backend знає які продукти куплені                           ║
+// ║    · Sidebar фільтрує за isPaid (локально)                      ║
+// ║                                                                  ║
+// ║  Тому AI Ментор, Колесо, Воронка — це НЕ пункти хедера,        ║
+// ║  а лише посилання на лендинг-секції для незалогінених.          ║
+// ╚══════════════════════════════════════════════════════════════════╝
 
-// ─────────────────────────────────────────────
+import type { LucideIcon } from 'lucide-react'
+import {
+  BarChart2, Bell, BookOpen, Bot, CircleDot,
+  CreditCard, Eye, Flame, HelpCircle,
+  Home, LayoutDashboard, LogOut,
+  Package, Settings, Sparkles, Star,
+  Target, TrendingUp, User, Video, Wand2, Zap,
+} from 'lucide-react'
+import { ROUTES } from '@/config/routes'
+import { resolvePlan, type SubscriptionSnapshot } from '@/features/subscription/utils/subscription'
+
+// ─────────────────────────────────────────────────────────────────
 // TYPES
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 
 export interface MenuItem {
-  path:           string;
-  label:          string;
-  icon?:          LucideIcon;
-  badge?:         string | number;
-  children?:      MenuItem[];
-  requiresPaid?:  boolean;
-  requiresAuth?:  boolean;
-  showInHeader?:  boolean;
-  showInSidebar?: boolean;
-  showInUserMenu?:boolean;
+  id:              string
+  path:            string
+  label:           string
+  description?:    string
+  icon?:           LucideIcon
+  badge?:          string | number
+  badgeVariant?:   'accent' | 'paid' | 'new' | 'hot'
+  children?:       MenuItem[]
+  requiresPaid?:   boolean
+  requiresAuth?:   boolean   // показувати тільки залогіненим
+  hideWhenAuth?:   boolean   // ховати якщо залогінений (напр. "Увійти")
+  dividerBefore?:  boolean
+  danger?:         boolean
+  showInHeader?:   boolean
+  showInSidebar?:  boolean
+  showInUserMenu?: boolean
 }
 
-// ─────────────────────────────────────────────
-// MENU CONFIG
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// HEADER MENU — платформна навігація
+// ─────────────────────────────────────────────────────────────────
 
-export const MAIN_MENU: MenuItem[] = [
-  // fix code_x: rename dashboard entry to avoid duplicate "Головна" semantics and keep sidebar taxonomy explicit.
-  { path: ROUTES.DASHBOARD, label: 'Кабінет користувача', icon: Home, showInHeader: true, showInSidebar: true },
-  { path: ROUTES.PRODUCTS,  label: 'Продукти', icon: Package, showInHeader: true, showInSidebar: true,
+export const HEADER_MENU: MenuItem[] = [
+
+  // ── Кабінет (тільки залогіненим) ─────────────────────────────
+  {
+    id:           'dashboard',
+    path:         ROUTES.DASHBOARD,
+    label:        'Кабінет',
+    icon:         LayoutDashboard,
+    showInHeader: true,
+    requiresAuth: true,
+  },
+
+  // ── Платформа — що входить (dropdown) ────────────────────────
+  {
+    id:           'platform',
+    path:         '/#platform',
+    label:        'Платформа',
+    icon:         Sparkles,
+    showInHeader: true,
     children: [
-      // fix code_x: requested IA - wheel and daily cycle are discoverable under products.
-      { path: ROUTES.WHEEL, label: 'Колесо балансу', icon: Target },
-      { path: ROUTES.CYCLE, label: 'Щоденний цикл', icon: Calendar },
+      {
+        id:          'platform-mentor',
+        path:        '/#ai-mentor',
+        label:       'AI Ментор',
+        description: 'Персональний ментор на базі GPT-4',
+        icon:        Bot,
+      },
+      {
+        id:          'platform-wheel',
+        path:        '/#wheel',
+        label:       'Колесо балансу',
+        description: 'Оцінка 8 сфер — основа методики',
+        icon:        CircleDot,
+      },
+      {
+        id:          'platform-cycle',
+        path:        '/#daily-cycle',
+        label:       'Щоденний цикл',
+        description: 'Стан → Ціль → Вибір → Дія',
+        icon:        Flame,
+      },
+      {
+        id:           'platform-funnel',
+        path:         ROUTES.AI_FUNNEL_LANDING,
+        label:        'AI Воронка',
+        description:  'Автоматичний 11-кроковий маркетинг',
+        icon:         Wand2,
+        badge:        'New',
+        badgeVariant: 'new',
+      },
     ],
   },
-  { path: ROUTES.AI_MENTOR, label: 'AI Ментор', icon: Bot, showInHeader: true, showInSidebar: true,
+
+  // ── Програми / тарифи (dropdown) ─────────────────────────────
+  {
+    id:           'programs',
+    path:         '/#programs',
+    label:        'Програми',
+    icon:         Star,
+    showInHeader: true,
     children: [
-      // fix code_x: requested IA - same quick-entry tools inside AI Mentor section.
-      { path: ROUTES.WHEEL, label: 'Колесо балансу', icon: Target },
-      { path: ROUTES.CYCLE, label: 'Щоденний цикл', icon: Calendar },
+      {
+        id:          'prog-free',
+        path:        '/#free',
+        label:       'Free',
+        description: 'Колесо балансу + щоденний цикл',
+        icon:        Zap,
+      },
+      {
+        id:           'prog-trial',
+        path:         '/#trial',
+        label:        'Trial 7 днів',
+        description:  'Всі функції — безкоштовно',
+        icon:         Flame,
+        badge:        'Безкоштовно',
+        badgeVariant: 'hot',
+      },
+      {
+        id:           'prog-premium',
+        path:         ROUTES.SUBSCRIPTION,
+        label:        'Premium',
+        description:  'AI Ментор · Цілі · Zoom · Курси',
+        icon:         Star,
+        badge:        'Pro',
+        badgeVariant: 'paid',
+      },
     ],
   },
-  { path: ROUTES.PROGRESS, label: 'Прогрес', icon: TrendingUp, showInHeader: true, showInSidebar: true },
-  { path: ROUTES.PROFILE, label: 'Профіль', icon: User, showInHeader: true, showInSidebar: false },
-];
+
+  // ── Навчання (dropdown) ───────────────────────────────────────
+  {
+    id:           'learn',
+    path:         '/#learn',
+    label:        'Навчання',
+    icon:         BookOpen,
+    showInHeader: true,
+    children: [
+      {
+        id:          'learn-courses',
+        path:        '/#courses',
+        label:       'Курси',
+        description: 'Структуровані програми розвитку',
+        icon:        BookOpen,
+      },
+      {
+        id:          'learn-blog',
+        path:        '/blog',
+        label:       'Блог',
+        description: 'Статті та кейси',
+        icon:        BookOpen,
+      },
+      {
+        id:          'learn-help',
+        path:        ROUTES.HELP,
+        label:       'Підтримка',
+        description: 'FAQ та документація',
+        icon:        HelpCircle,
+      },
+    ],
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────
+// SIDEBAR MENU — продукти та інструменти юзера
+// Рендериться тільки в Dashboard layout (залогінений user).
+// Sidebar.tsx сам вирішує що показати виходячи з isPaid.
+// ─────────────────────────────────────────────────────────────────
 
 export const SIDEBAR_MENU: MenuItem[] = [
-  // fix code_x: keep top-level sidebar concise as requested.
-  { path: ROUTES.GOALS, label: 'Цілі', icon: Award, showInSidebar: true, requiresPaid: true },
-  { path: ROUTES.ZOOM, label: 'Zoom-сесії', icon: Calendar, showInSidebar: true, requiresPaid: true, badge: 'Paid' },
-];
+
+  // ── Огляд ────────────────────────────────────────────────────
+  {
+    id: 'home', path: ROUTES.DASHBOARD,
+    label: 'Кабінет', icon: Home, showInSidebar: true,
+  },
+
+  // ── AI-інструменти ───────────────────────────────────────────
+  {
+    id: 'ai-mentor', path: ROUTES.AI_MENTOR,
+    label: 'AI Ментор', icon: Bot, showInSidebar: true,
+  },
+  {
+    id: 'ai-producer', path: ROUTES.AI_PRODUCER_CONSOLE,
+    label: 'AI Producer', icon: Sparkles, showInSidebar: true,
+    badge: 'New', badgeVariant: 'new',
+  },
+
+  // ── Free ─────────────────────────────────────────────────────
+  {
+    id: 'wheel', path: ROUTES.WHEEL,
+    label: 'Колесо балансу', icon: CircleDot, showInSidebar: true,
+  },
+  {
+    id: 'cycle', path: ROUTES.CYCLE,
+    label: 'Щоденний цикл', icon: Flame, showInSidebar: true,
+  },
+  {
+    id: 'progress', path: ROUTES.PROGRESS,
+    label: 'Прогрес', icon: TrendingUp, showInSidebar: true,
+  },
+
+  // ── Paid (видно, але locked якщо !isPaid) ────────────────────
+  {
+    id: 'vision', path: ROUTES.VISION,
+    label: 'Бачення', icon: Eye, showInSidebar: true,
+    requiresPaid: true, badge: 'Pro', badgeVariant: 'paid',
+  },
+  {
+    id: 'goals', path: ROUTES.GOALS,
+    label: 'Цілі', icon: Target, showInSidebar: true,
+    requiresPaid: true, badge: 'Pro', badgeVariant: 'paid',
+  },
+  {
+    id: 'actions', path: ROUTES.ACTIONS,
+    label: 'Дії', icon: BarChart2, showInSidebar: true,
+    requiresPaid: true, badge: 'Pro', badgeVariant: 'paid',
+  },
+  {
+    id: 'zoom', path: ROUTES.ZOOM,
+    label: 'Zoom-сесії', icon: Video, showInSidebar: true,
+    requiresPaid: true, badge: 'Pro', badgeVariant: 'paid',
+  },
+
+  // ── Продукти ─────────────────────────────────────────────────
+  {
+    id: 'products', path: ROUTES.PRODUCTS,
+    label: 'Продукти', icon: Package, showInSidebar: true,
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────
+// USER DROPDOWN
+// ─────────────────────────────────────────────────────────────────
 
 export const USER_MENU: MenuItem[] = [
-  { path: ROUTES.PROFILE, label: 'Мій профіль', icon: User, showInUserMenu: true },
-  { path: ROUTES.SUBSCRIPTION, label: 'Підписка', icon: CreditCard, showInUserMenu: true },
-  { path: ROUTES.PROFILE, label: 'Повідомлення', icon: Bell, showInUserMenu: true },
-  { path: ROUTES.SETTINGS, label: 'Налаштування', icon: Settings, showInUserMenu: true },
-  { path: '/logout',                 label: 'Вийти',         icon: LogOut,     showInUserMenu: true },
-];
+  { id: 'profile',       path: ROUTES.PROFILE,                  label: 'Мій профіль',   icon: User,        showInUserMenu: true },
+  { id: 'notifications', path: '/dashboard/notifications',      label: 'Повідомлення',  icon: Bell,        showInUserMenu: true, badge: 0 },
+  { id: 'subscription',  path: ROUTES.SUBSCRIPTION,             label: 'Підписка',      icon: CreditCard,  showInUserMenu: true },
+  { id: 'settings',      path: ROUTES.SETTINGS,                 label: 'Налаштування',  icon: Settings,    showInUserMenu: true },
+  { id: 'help',          path: ROUTES.HELP,                     label: 'Підтримка',     icon: HelpCircle,  showInUserMenu: true, dividerBefore: true },
+  { id: 'logout',        path: '/logout',                       label: 'Вийти',         icon: LogOut,      showInUserMenu: true, dividerBefore: true, danger: true },
+]
 
-// ─────────────────────────────────────────────
-// ACCESS — делегуємо в subscription.utils
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// GETTERS
+// ─────────────────────────────────────────────────────────────────
 
-/** Чи має user доступ до конкретного пункту меню */
-export function hasAccess(item: MenuItem, user: SubscriptionSnapshot | null): boolean {
-  if (!item.requiresPaid) return true;
-  return resolvePlan(user).isPaid;
+/** isAuth — з useAuth().user != null */
+export function getHeaderMenu(isAuth = false): MenuItem[] {
+  return HEADER_MENU.filter(i => {
+    if (!i.showInHeader)             return false
+    if (i.requiresAuth  && !isAuth)  return false  // "Кабінет" тільки залогінений
+    if (i.hideWhenAuth  &&  isAuth)  return false  // "Увійти" ховаємо залогіненому
+    return true
+  })
 }
 
-/** Чи має user будь-який premium доступ */
-export function hasPremiumAccess(user: SubscriptionSnapshot | null): boolean {
-  return resolvePlan(user).isPaid;
+export function getSidebarMenu(): MenuItem[] {
+  return SIDEBAR_MENU.filter(i => i.showInSidebar)
 }
 
-/** Дані для UI badge в Header/Sidebar */
-export function getSubscriptionStatus(user: SubscriptionSnapshot | null) {
-  const info = resolvePlan(user);
-  return {
-    label:     info.label,
-    isPremium: info.isPaid,
-    daysLeft:  info.daysLeft,
-  };
+export function getUserMenuItems(): MenuItem[] {
+  return USER_MENU.filter(i => i.showInUserMenu)
 }
 
-// ─────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────
-
+/** @deprecated */
 export function getMenuForLocation(loc: 'header' | 'sidebar' | 'user-menu'): MenuItem[] {
-  switch (loc) {
-    case 'header':    return MAIN_MENU.filter(i => i.showInHeader);
-    case 'sidebar':   return [...MAIN_MENU.filter(i => i.showInSidebar), ...SIDEBAR_MENU];
-    case 'user-menu': return USER_MENU;
-  }
+  if (loc === 'header')    return getHeaderMenu()
+  if (loc === 'sidebar')   return getSidebarMenu()
+  if (loc === 'user-menu') return getUserMenuItems()
+  return []
 }
 
-export function getActiveMenuItem(pathname: string, items: MenuItem[]): MenuItem | null {
+export function getActiveItem(pathname: string, items: MenuItem[]): MenuItem | null {
   for (const item of items) {
-    if (item.path === pathname) return item;
-    if (item.path !== '/' && pathname.startsWith(item.path)) return item;
+    if (item.path === pathname) return item
+    if (
+      item.path !== '/' &&
+      item.path !== '/logout' &&
+      !item.path.startsWith('/#') &&
+      pathname.startsWith(item.path)
+    ) return item
     if (item.children) {
-      const child = getActiveMenuItem(pathname, item.children);
-      if (child) return child;
+      const child = getActiveItem(pathname, item.children)
+      if (child) return child
     }
   }
-  return null;
+  return null
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ACCESS
+// ─────────────────────────────────────────────────────────────────
+
+export function hasMenuAccess(item: MenuItem, snap: SubscriptionSnapshot | null): boolean {
+  if (!item.requiresPaid) return true
+  return resolvePlan(snap).isPaid
+}
+
+export function getSubscriptionBadge(snap: SubscriptionSnapshot | null) {
+  const { isPaid, isTrial, label, daysLeft } = resolvePlan(snap)
+  return { label, isPaid, isTrial, daysLeft }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// BADGE STYLES
+// ─────────────────────────────────────────────────────────────────
+
+export const BADGE_CLASS: Record<NonNullable<MenuItem['badgeVariant']>, string> = {
+  accent: 'bg-[rgba(var(--accent-rgb),.15)] border-[var(--border-accent)] text-[var(--accent)]',
+  paid:   'bg-[rgba(var(--accent-rgb),.12)] border-[var(--border-accent)] text-[var(--accent)]',
+  new:    'bg-[rgba(74,222,128,.12)] border-[rgba(74,222,128,.30)] text-[#4ade80]',
+  hot:    'bg-[rgba(239,68,68,.12)]  border-[rgba(239,68,68,.30)]  text-[#f87171]',
 }

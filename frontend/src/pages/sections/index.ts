@@ -1,4 +1,4 @@
-export { AIMentorModal } from './cards';
+export { AIMentorModal } from './FeatureCard';
 export { RoleBridgeSection } from './RoleBridgeSection';
 export { TrialBannerSection } from './TrialBannerSection';
 

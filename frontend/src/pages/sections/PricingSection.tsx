@@ -35,7 +35,9 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-black mb-4 text-white">
-            Прозорі <span className="text-orange-500">ціни</span>
+            Прозорі{' '}
+            <span className="text-[rgb(var(--accent-soft-rgb))]">ціни</span>
+          
           </h2>
           <p className="text-xl text-white/45">Починай безкоштовно — оновись коли готовий</p>
         </div>
@@ -43,14 +45,26 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
         <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
           {PLANS.map(plan => (
             <div key={plan.name} className={`relative ${plan.popular ? 'md:-translate-y-3' : ''}`}>
+
               {plan.popular && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-orange-500 to-rose-500 text-xs font-bold text-white shadow-lg shadow-orange-500/30 z-10 whitespace-nowrap">
+                <div className="
+                  absolute -top-3.5 left-1/2 -translate-x-1/2 z-10
+                  px-4 py-1 rounded-full whitespace-nowrap
+                  text-xs font-bold
+                  bg-[rgba(var(--accent-rgb),0.20)]
+                  border border-[rgba(var(--accent-rgb),0.45)]
+                  text-[rgb(var(--accent-soft-rgb))]
+                  shadow-[0_4px_16px_rgba(var(--accent-rgb),0.25)]
+                ">
                   Найпопулярніший
                 </div>
               )}
+
               <GlassCard
                 className={`p-8 h-full transition-all duration-300 hover:scale-[1.02] ${
-                  plan.popular ? 'border-orange-500/40 shadow-2xl shadow-orange-500/10' : ''
+                  plan.popular
+                    ? 'border-[rgba(var(--accent-rgb),0.40)] shadow-[0_24px_60px_rgba(var(--accent-rgb),0.10)]'
+                    : ''
                 }`}
               >
                 <div className="text-center mb-8">
@@ -66,7 +80,7 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
                 <ul className="space-y-3 mb-8">
                   {plan.features.map(f => (
                     <li key={f} className="flex items-start gap-3 text-sm text-white/70">
-                      <CheckCircle2 className="w-4.5 h-4.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                       {f}
                     </li>
                   ))}
@@ -74,12 +88,11 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
 
                 <button
                   onClick={onSelectPlan}
-                  className={`
-                    w-full py-3.5 rounded-xl font-semibold text-sm transition-all hover:scale-105
-                    ${plan.popular
-                      ? 'bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-400 hover:to-rose-400 text-white shadow-lg shadow-orange-500/25'
-                      : 'border border-white/15 bg-white/5 text-white hover:bg-white/10'}
-                  `}
+                  className={
+                    plan.popular
+                      ? 'hero-cta-primary w-full py-3.5 rounded-xl font-semibold text-sm relative overflow-hidden'
+                      : 'w-full py-3.5 rounded-xl font-semibold text-sm transition-all hover:scale-105 border border-white/15 bg-white/5 text-white hover:bg-white/10'
+                  }
                 >
                   {plan.cta}
                 </button>

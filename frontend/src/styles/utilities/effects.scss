@@ -1,0 +1,14 @@
+.glow-accent {
+  box-shadow:
+    0 0 0 1px var(--border-accent),
+    0 0 40px rgba(var(--accent-rgb),0.25);
+}
+.glow-soft {
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.08),
+    0 0 30px rgba(var(--accent-rgb),0.1);
+}
+.glow-border {
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 0 20px rgba(var(--accent-rgb),0.12);
+}

@@ -1,84 +1,140 @@
 // frontend/src/features/user/types/user.types.ts
-import type { Ability } from '@/features/auth/utils/abilities'
+// ═══════════════════════════════════════════════════════════════
+//  ЄДИНЕ ДЖЕРЕЛО ПРАВДИ для User-домену
+//  Використовується: auth, profile, settings, products, progress
+// ═══════════════════════════════════════════════════════════════
+
+import type { Ability } from '@/features/auth/permissions/abilities'
 import type { ReactNode } from 'react'
-import type { UserRole as BackendUserRole, User as BackendUser } from '@/types/globalTypes'
 
-export type UserRole = BackendUserRole
+// ── Roles ──────────────────────────────────────────────────────
+export type UserRole = 'SUPERADMIN' | 'ADMIN' | 'EXPERT' | 'USER' | 'MENTOR' | 'PRODUCT_OWNER'
 
-export interface ProductMember {
-  userId: string
-  productId: string
-  role: UserRole
-  joinedAt: string
-}
-
+// ── Plan ───────────────────────────────────────────────────────
 export type PlanType = 'free' | 'trial' | 'paid'
 
+// ── Subscription ───────────────────────────────────────────────
+export type SubscriptionStatus =
+  | 'active' | 'canceled' | 'past_due' | 'incomplete'
+  | null
+
+// ── Settings ───────────────────────────────────────────────────
+export interface UserSettings {
+  accentColor?: string | null
+  theme?:       string | null
+  language?:    string | null
+  bgColor?:     string | null
+}
+
+// ── Access ─────────────────────────────────────────────────────
 export interface UserAccess {
-  plan: PlanType
-  isPaid: boolean
-  isTrial: boolean
+  plan:     PlanType
+  isPaid:   boolean
+  isTrial:  boolean
   trialEnd?: string | null
 }
 
+// ── Stats ──────────────────────────────────────────────────────
 export interface UserStats {
-  totalPoints: number
+  totalPoints:     number
   completedBlocks: number
-  level: number
+  level:           number
+  xp?:             number
+  streakDays?:     number
+  sessions?:       number
 }
 
-export interface User extends BackendUser {
-  displayName?: string
-  avatar?: string
+// ── Product membership ─────────────────────────────────────────
+export interface ProductMember {
+  userId:    string
+  productId: string
+  role:      UserRole
+  joinedAt:  string
+}
+
+// ── Core User ──────────────────────────────────────────────────
+export interface User {
+  id:        string
+  email:     string | null
+  name:      string | null
+  firstName: string | null
+  lastName:  string | null
+
+  role:        UserRole
+  isAdmin:     boolean
+  isSuperAdmin: boolean
+
+  abilities: Ability[]
+
+  access:    UserAccess
+  stats:     UserStats
+  settings?: UserSettings
+
+  lastLoginAt: string | null
+
+  // Backend може повертати string — залишаємо сумісним
+  subscriptionStatus?: SubscriptionStatus | string | null
+  subscriptionPlan?:   PlanType | string | null
+
   productRoles?: ProductMember[]
 }
 
+// ── Requests ───────────────────────────────────────────────────
 export interface LoginRequest {
-  email: string
+  email:    string
   password: string
 }
 
 export interface RegisterRequest {
-  email: string
-  password: string
-  name?: string
-  role?: UserRole
+  email:     string
+  password:  string
+  name?:     string
+  role?:     UserRole
 }
 
 export interface UpdateUserRequest {
-  id: string
+  id:         string
   firstName?: string
-  lastName?: string
-  name?: string
-  settings?: Record<string, unknown>
+  lastName?:  string
+  name?:      string
+  settings?:  Partial<UserSettings>
 }
 
+// ── Helpers ────────────────────────────────────────────────────
 export const canEditProduct = (user: User, productId: string): boolean => {
   if (user.isSuperAdmin || user.isAdmin) return true
-  return (
-    user.productRoles?.some(
-      (r) => r.productId === productId && r.role === 'ADMIN',
-    ) ?? false
-  )
+  return user.productRoles?.some(
+    r => r.productId === productId && r.role === 'ADMIN',
+  ) ?? false
 }
 
-export const hasPaidAccess = (user: User | null | undefined): boolean => {
+export const hasPaidAccess = (user: User | null): boolean => {
   if (!user) return false
-  if (!user.access) return false
-  return user.access.isPaid || user.access.isTrial
+  return user.access?.isPaid === true || user.subscriptionStatus === 'active'
 }
 
+// ── Profile tabs ───────────────────────────────────────────────
+export type ProfileTab = 'overview' | 'history' | 'badges' | 'settings'
+
+export const PROFILE_TABS: { id: ProfileTab; label: string }[] = [
+  { id: 'overview',  label: 'Огляд'         },
+  { id: 'history',   label: 'Активність'    },
+  { id: 'badges',    label: 'Досягнення'    },
+  { id: 'settings',  label: 'Налаштування'  },
+]
+
+// ── UI helpers ─────────────────────────────────────────────────
 export type ToggleOption<T = string> = {
-  label: string
-  value: T
+  label:     string
+  value:     T
   disabled?: boolean
 }
 
 export type ToggleProps<T = string> = {
-  label: string
-  icon?: ReactNode
-  options: ToggleOption<T>[]
-  value: T
-  onChange: (value: T) => void
+  label:     string
+  icon?:     ReactNode
+  options:   ToggleOption<T>[]
+  value:     T
+  onChange:  (value: T) => void
   disabled?: boolean
 }

@@ -1,6 +1,5 @@
 import type { AuthApiResponse } from '@/types/globalTypes';
-import type { User } from '@/features/user/types/user.types';
-import type { UserRole } from '@/types/globalTypes';
+import type { User, UserRole } from '@/features/user/types/user.types';
 import type { SocialPlatform } from '@/features/social/types/social.types';
 
 /**
@@ -53,12 +52,7 @@ export type UserPlan = 'free' | 'trial' | 'paid';
 /**
  * Результат доступів користувача
  */
-export interface UserAccessResult {
-  abilities: Record<AccessKey, boolean>;
-  plan: UserPlan;
-  role: UserRole;
-  trialEnd: Date | null;
-}
+export type { UserAccessResult } from '@/features/auth/types/auth.types';
 
 /**
  * Окремий елемент доступу
@@ -82,6 +76,7 @@ export interface RegisterInput {
   name?: string;
   role?: UserRole;
 }
+
 
 export interface SocialAuthApiInput {
   provider: SocialPlatform;
@@ -127,7 +122,7 @@ export interface UpdateUserSettingsInput {
 }
 
 /* ===== REDUX ===== */
-export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated';
+export type AuthStatus = 'loading' | 'authenticated' | 'guest';
 
 export interface AuthState {
   user: User | null;
@@ -177,4 +172,5 @@ export const ROLE_ABILITIES: Record<UserRole, AccessKey[]> = {
   EXPERT: mentorAbilities,
   ADMIN: adminAbilities,
   SUPERADMIN: adminAbilities,
+  MENTOR: mentorAbilities,
 }

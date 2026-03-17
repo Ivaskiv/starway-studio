@@ -1,292 +1,107 @@
+// frontend/src/styles/index.scss
+// ══════════════════════════════════════════════════════════════
+// MASTER ENTRY — порядок важливий:
+//   1. Токени (змінні, keyframes)
+//   2. Шрифти
+//   3. Tailwind
+//   4. Базові компоненти
+//   5. Layout-специфічні стилі
+//   6. Feature-специфічні стилі
+// ══════════════════════════════════════════════════════════════
+
+// ── 1. Токени ────────────────────────────────────────────────
+@use "./tokens/design-tokens";   // CSS vars: accent, motion, elevation, header
+@use "./tokens/motion";          // @keyframes + .animate-* classes
+
+// ── 2. Шрифти ────────────────────────────────────────────────
+
+// ── 3. Базові компоненти (без залежностей між собою) ─────────
+@use "./components/base";          // surface, glass, glow, glass-button, input-glass, badge-glow
+@use "./components/theme-helpers"; // theme-tab-*, presets, token-card, scrollbar
+@use "./components/hero";          // hero-h1, hero-cta-*, hero-slider-*, hero-plan-btn
+@use "./components/sections";      // section-grid, template-card, btn-responsive
+@use "./components/modal";         // modal-overlay, modal-glass, modal-close
+@use "./components/stats";         // stat-* (якщо є окремі стилі)
+@use "./components/badges";        // badge-* (якщо є окремі стилі)
+@use "./components/weeklyReportCard";
+
+// ── 4. Layout ────────────────────────────────────────────────
+@use "./components/layout";      // dashboard-root, dashboard-column, profile-tabs
+@use "./components/header";      // .hdr, .hdr-*, .hdr-login-btn
+@use "./components/breadcrumbs"; // breadcrumbs-*
+
+// ── 5. Feature-специфічні стилі ──────────────────────────────
+@use "./components/assistantBubble"; // .ava-bubble, .ap-*
+@use "./components/userMenu";    // .user-menu-*
+@use "./components/producer";         // producer-* (gold theme, AI producer)
+@use "./components/producer-console"; // producer-console-layout (placeholder)
+@use "./components/liquid-landing";     
+// ── 6. Utilities ─────────────────────────────────────────────
+@use "./utilities/effects";
+@use "./utilities/helpers"; // залишаємо тільки не-дублюючі утиліти
+
+// ── 7. Tailwind ──────────────────────────────────────────────
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-:root {
-  /* ========= Colors ========= */
-  --bg-primary: #0d1b2a;
-  --bg-secondary: #1b3a4b;
-  --bg-tertiary: #274c5e;
+// ══════════════════════════════════════════════════════════════
+// INLINE GLOBAL STYLES (не виносяться в окремі файли)
+// ══════════════════════════════════════════════════════════════
 
-  --accent-rgb: 249,115,22;
-  --accent-soft-rgb: 251,146,60;
-  --accent-strong-rgb: 234,88,12;
-
-  --ambient-rgb: 10,14,9;
-  --ambient-rgb-2: 18,26,16;
-
-  --icon-rgb: 240,246,255;
-  --icon-muted-rgb: 186,199,220;
-
-  --glass-blur: blur(34px) saturate(175%);
-}
-
-html[data-ui-theme='light'] {
-  --ambient-rgb: 244,247,252;
-  --ambient-rgb-2: 233,239,248;
-  --icon-rgb: 22,36,61;
-  --icon-muted-rgb: 64,83,118;
-  --glass-blur: blur(20px) saturate(140%);
-}
-
-* {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  @apply min-h-screen;
-  background: rgb(var(--ambient-rgb));
-  background-image:
-    radial-gradient(ellipse at 14% 12%, rgba(var(--accent-soft-rgb),0.13) 0%, transparent 44%),
-    radial-gradient(ellipse at 86% 88%, rgba(var(--accent-rgb),0.1) 0%, transparent 42%),
-    linear-gradient(165deg, rgb(var(--ambient-rgb)) 0%, rgb(var(--ambient-rgb-2)) 58%, rgb(var(--ambient-rgb)) 100%);
-  color: var(--icon-rgb);
-  font-family: 'Inter', system-ui, sans-serif;
-  overflow-x: hidden;
-}
-
-.container {
-  @apply max-w-7xl mx-auto px-4;
-}
-
-.flex-center {
-  @apply flex items-center justify-center;
-}
-
-/* ===========================
-   Glass Card
-=========================== */
-.glass-card {
-  @apply relative rounded-3xl transition-all duration-500;
-  background: linear-gradient(
-    140deg,
-    rgba(var(--ambient-rgb-2),0.42) 0%,
-    rgba(var(--ambient-rgb),0.28) 52%,
-    rgba(var(--accent-rgb),0.06) 100%
-  );
-  border: 1px solid rgba(var(--accent-soft-rgb),0.16);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-}
-
-.glass-card[data-hover='lift']:hover {
-  transform: translateY(-8px) scale(1.02);
-  border-color: rgba(var(--accent-soft-rgb),0.35);
-}
-
-.glass-card[data-gradient]::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(var(--accent-rgb),0.16) 0%, rgba(var(--accent-rgb),0.05) 100%);
-  opacity: 0;
-  transition: opacity 0.4s;
-}
-
-.glass-card[data-gradient]:hover::before {
-  opacity: 1;
-}
-
-/* ===========================
-   Glass Input
-=========================== */
-.glass-field {
-  @apply rounded-xl px-4 py-2 text-white placeholder-white/50 focus:outline-none focus:ring-1;
-  background: linear-gradient(135deg, rgba(var(--ambient-rgb-2),0.4) 0%, rgba(var(--ambient-rgb),0.26) 100%);
-  border: 1px solid rgba(var(--accent-soft-rgb),0.16);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-}
-
-.glass-field:focus {
-  border-color: rgb(var(--accent-rgb));
-}
-
-/* ===========================
-   Buttons
-=========================== */
-.btn {
-  @apply relative inline-flex items-center justify-center font-semibold text-white transition-all duration-300 whitespace-nowrap rounded-xl px-6 py-3;
-  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid rgba(255,255,255,0.2);
-}
-
-/* ===========================
-   Animations
-=========================== */
-@keyframes glow-pulse {
-  0%,100% { border-color: rgba(var(--accent-rgb),0.3); }
-  50% { border-color: rgba(var(--accent-rgb),0.65); }
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-//frontend/src/layout/DashboardLayout.css
-.dashboard-layout-root {
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  min-height: 100vh;
-  background-color: #0d0f1a;
-  color: #fff;
-  display: flex;
-  flex-direction: column;
-}
-
-.dashboard-layout-main {
-  flex: 1;
-  overflow-y: auto;
-  animation: fade-up 0.35s ease;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-::-webkit-scrollbar {
-  width: 3px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-}
-
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+@layer components {
+  // TG connect button (використовується в кількох місцях)
+  .tg-connected {
+    border:      1px solid var(--glass-border);
+    background:  rgba(255,255,255,.02);
+    color:       var(--accent);
+    padding:     .75rem 1rem;
+    border-radius: 1rem;
+    text-align:  center;
+    font-weight: 600;
+    font-size:   .95rem;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .tg-connect-btn {
+    display:         inline-flex;
+    align-items:     center;
+    justify-content: center;
+    gap:             .6rem;
+    padding:         .85rem 1.15rem;
+    border-radius:   999px;
+    border:          1px solid rgba(var(--accent-rgb),.4);
+    background:      linear-gradient(135deg, rgba(var(--accent-rgb),.15), rgba(var(--accent-rgb),.45));
+    color:           var(--text-primary);
+    font-weight:     600;
+    font-size:       .95rem;
+    text-decoration: none;
+    transition:      transform .2s ease, box-shadow .2s ease;
+
+    &:hover { transform:translateY(-1px); box-shadow:0 10px 20px rgba(var(--accent-rgb),.25); }
   }
-}
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
+  // Scrollbar .scrollbar-none utility
+/* Chrome, Safari, Opera */
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE та Edge */
+  // scrollbar-width: none;     /* Firefox */
+}
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
-  50% {
-    opacity: 0.4;
-  }
+
+
+// ── Light / Dark data-theme overrides ────────────────────────
+[data-theme="light"] {
+  --glass-bg:     rgba(0,0,0,.03);
+  --glass-border: rgba(0,0,0,.08);
+}
+[data-theme="dark"] {
+  --glass-bg:     rgba(255,255,255,.04);
+  --glass-border: rgba(255,255,255,.08);
 }
 
-input::placeholder {
-  color: rgba(255, 255, 255, 0.25);
-}
-//frontend/src/features/settings/components/ThemeColorsPanel.css
-.theme-colors-grid {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  max-height: 68vh;
-  overflow-y: auto;
-  padding-right: 0.5rem;
-}
-
-.theme-color-card {
-  display: grid;
-  grid-template-columns: 64px 1fr auto;
-  align-items: center;
-  gap: 1rem;
-  background-image: var(--card-gradient, linear-gradient(135deg, rgba(15, 23, 42, 0.65), rgba(15, 23, 42, 0.25)));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1.25rem;
-  padding: 0.75rem;
-
-  /* Safari + Chrome */
-  -webkit-backdrop-filter: blur(15px) saturate(175%);
-  backdrop-filter: blur(15px) saturate(175%);
-  background-color: rgba(15, 23, 42, 0.25); // прозорий фон для Safari
-
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
-  transition: transform 0.2s ease, border-color 0.2s ease;
-}
-
-.theme-color-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.18);
-}
-
-.theme-color-swatch {
-  width: 56px;
-  height: 56px;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--swatch-bg, rgba(255, 255, 255, 0.1));
-  box-shadow: var(--swatch-shadow, 0 5px 15px rgba(0, 0, 0, 0.25));
-}
-
-.theme-color-name {
-  font-size: 0.55rem;
-  letter-spacing: 0.4em;
-  color: var(--swatch-text, rgba(255, 255, 255, 0.8));
-}
-
-.theme-color-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.theme-color-input {
-  width: 44px;
-  height: 44px;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 0;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-  background: transparent;
-}
-
-.theme-color-input:focus {
-  border-color: var(--accent, #a855f7);
-  transform: scale(1.05);
-  outline: none;
-}
-//frontend/src/features/settings/pages/SettingsPage.css
-.settings-save-button {
-  box-shadow: 0 0 24px rgb(var(--accent-rgb) / 0.35);
-  transition: box-shadow 0.2s ease;
-}
-
-.settings-save-button:hover {
-  box-shadow: 0 0 32px rgb(var(--accent-rgb) / 0.45);
-}
-// frontend/src/features/ai-generator/pages/AIGeneratorPage.css
-/* Glassmorphic progress track for AI generator */
-.ai-generator-progress {
-  width: 100%;
-  height: 0.5rem;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.6);
-  overflow: hidden;
-}
-
-.ai-generator-progress::-webkit-progress-bar {
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 999px;
-}
-
-.ai-generator-progress::-webkit-progress-value {
-  background: linear-gradient(90deg, var(--accent) 0%, rgba(250, 139, 235, 0.8) 100%);
-  border-radius: 999px;
-}
-
-.ai-generator-progress::-moz-progress-bar {
-  background: linear-gradient(90deg, var(--accent) 0%, rgba(250, 139, 235, 0.8) 100%);
-  border-radius: 999px;
+// ── Page-level font ─────────────────────────────────────────
+.lm-page { font-family:'Unbounded','Montserrat',sans-serif; }
 }

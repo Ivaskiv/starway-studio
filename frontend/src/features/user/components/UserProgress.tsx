@@ -1,22 +1,20 @@
 // frontend/src/features/dashboard/blocks/user/UserProgress.tsx
-import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useAuth }             from '@/features/auth/hooks/useAuth';
 import { useGetProgressQuery } from '@/features/progress/services/progress.api';
-import { GlassCard } from '@/ui';
-import { Award, TrendingUp } from 'lucide-react';
+import { GlassCard }           from '@/ui';
+import { Award, TrendingUp }   from 'lucide-react';
 
 export default function UserProgress() {
   const { user } = useAuth();
-
   if (!user) return null;
 
   const { data } = useGetProgressQuery(user.id, { skip: !user.id });
 
-  const level = data?.level ?? user.stats?.level ?? 1;
-  const totalXp = data?.totalXp ?? user.stats?.totalPoints ?? 0;
+  const level       = data?.level       ?? user.stats?.level       ?? 1;
+  const totalXp     = data?.totalXp     ?? user.stats?.totalPoints ?? 0;
   const nextLevelXp = data?.nextLevelXp ?? Math.max(100, level * 100);
   const progressPct = Math.min(100, Math.round((totalXp / nextLevelXp) * 100));
 
-  // fix code_x: backend Progress has totalXp (not xp); keep UI resilient with fallbacks.
   return (
     <GlassCard className="p-6">
       <h2 className="text-white font-bold mb-4 flex items-center gap-2">
@@ -34,7 +32,10 @@ export default function UserProgress() {
 
       <div className="mt-4">
         <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-          <div className="h-full rounded-full bg-orange-500 transition-all" style={{ width: `${progressPct}%` }} />
+          <div
+            className="h-full rounded-full bg-orange-500 transition-[width] duration-500"
+            ref={el => el?.style.setProperty('width', `${progressPct}%`)}
+          />
         </div>
         <p className="text-xs text-white/50 mt-2">
           До наступного рівня: {Math.max(nextLevelXp - totalXp, 0)} XP

@@ -1,4 +1,4 @@
-// backend/src/modules/social/social.routes.ts
+// backend/src/modules/social/routes.ts
 import { Router } from 'express';
 import { authRequired } from '../auth/middleware/auth.js';
 import * as socialController from './controller.js';

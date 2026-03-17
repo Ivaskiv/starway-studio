@@ -1,7 +1,7 @@
-// frontend/src/features/ai-mentor/components/SetupWizard/SetupWizard.tsx
+// frontend/src/features/ai-aIMentor/components/SetupWizard/SetupWizard.tsx
 /**
  * Setup Wizard
- * 2-step mentor configuration
+ * 2-step aIMentor configuration
  */
 
 import { useState } from 'react';
@@ -38,7 +38,7 @@ export function SetupWizard({ embedded = false }: SetupWizardProps) {
   };
 
   const handleQuestionsComplete = () => {
-    navigate('/dashboard/mentor/workspace');
+    navigate('/dashboard/aIMentor/workspace');
   };
 
   return (

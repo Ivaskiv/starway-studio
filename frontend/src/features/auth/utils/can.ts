@@ -1,6 +1,6 @@
 // packages/frontend/src/features/auth/utils/can.ts
 import { RootState } from '@/app/store';
-import { Ability, ABILITIES } from './abilities';
+import { ABILITIES, Ability } from '@/features/auth/permissions/abilities';
 import { useSelector } from 'react-redux';
 
 /**

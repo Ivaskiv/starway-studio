@@ -23,7 +23,7 @@ export default function AIFunnelLandingPage() {
   const styleVars = useLandingTheme();
 
   return (
-    <main className="ai-funnel-page" style={styleVars}>
+    <main className="ai-funnel-page" >
       <div className="ai-funnel-wrap">
         <HeroSection
           content={heroContent}

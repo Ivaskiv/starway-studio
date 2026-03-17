@@ -55,6 +55,8 @@ export interface DecisionContext {
     drains: number; // 🔋 Виснаження (0-10)
     consistency: number; // 📊 Регулярність (0-10)
   };
+
+  payload?: Record<string, unknown>;
 }
 
 // =======================================

@@ -1,6 +1,11 @@
 import { api } from '@/services/api';
-import { AIMentorSettings, Product, ProductFormInputs, ProductMember } from '../types/product.types';
-import { AddProductMemberRequest } from '@/features/user/types/user.types';
+import {
+  AddProductMemberRequest,
+  AIMentorSettings,
+  Product,
+  ProductFormInputs,
+  ProductMember,
+} from '../types/product.types';
 
 export const productsApi = api.injectEndpoints({
   endpoints: builder => ({
@@ -24,14 +29,26 @@ export const productsApi = api.injectEndpoints({
           : [{ type: 'Products', id: 'LIST' }],
     }),
 
-createProduct: builder.mutation<Product, ProductFormInputs>({
-  query: body => ({
-    url: '/products',
-    method: 'POST',
-    body,
-  }),
-  invalidatesTags: ['Products', 'Access'],
-}),
+    createProduct: builder.mutation<Product, ProductFormInputs>({
+      query: body => ({
+        url: '/products',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Products', 'Access'],
+    }),
+    getProductById: builder.query<Product, string>({
+      query: productId => `/products/${productId}`,
+      providesTags: (result, error, id) => (id ? [{ type: 'Products', id }] : []),
+    }),
+    updateProduct: builder.mutation<Product, { id: string; data: ProductFormInputs }>({
+      query: ({ id, data }) => ({
+        url: `/products/${id}`,
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Products', id }],
+    }),
     // ================== MEMBERS ==================
     getProductMembers: builder.query<ProductMember[], string>({
       query: (productId) => `/products/${productId}/members`,
@@ -72,6 +89,8 @@ export const {
   useGetAllProductsQuery,
   useGetMyProductsQuery,
   useCreateProductMutation,
+  useGetProductByIdQuery,
+  useUpdateProductMutation,
   useGetProductMembersQuery,
   useAddProductMemberMutation,
   useGetAIMentorSettingsQuery,

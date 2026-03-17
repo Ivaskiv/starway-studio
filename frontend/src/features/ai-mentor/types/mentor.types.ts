@@ -91,6 +91,35 @@ export interface AIContext {
   recentPatterns?: PatternData;
 }
 
+export interface MentorChatContext {
+  lastState?: string;
+  focusSphere?: string;
+  wheelScore?: number;
+  primaryGoal?: string;
+  streakDays?: number;
+}
+export interface MentorContext {
+  userId:       string
+  lastState:    string | null
+  primaryGoal:  string | null
+  focusSphere:  string | null
+  wheelScore:   number | null
+  streakDays:   number
+  visionText:   string | null
+  recentDrains: string[]
+}
+
+export interface SendMentorPayload {
+  userId:   string
+  message:  string
+  history:  { role: 'user' | 'assistant'; content: string }[]
+  context?: MentorContext
+}
+
+export interface MentorReply {
+  reply:    string
+  savedAt?: string
+}
 export interface WheelContextData {
   scores: Record<WheelSphere, number>;
   weakestSphere: WheelSphere;

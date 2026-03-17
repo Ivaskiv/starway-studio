@@ -6,7 +6,7 @@
 import { Response, NextFunction } from 'express';
 import { createVisionStatement, getLatestVision, updateVisionStatement } from './service.js';
 import { VisionAnswers } from './types.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 export async function createVision(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

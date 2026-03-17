@@ -1,8 +1,5 @@
-// backend/src/utils/serverError.ts
+import type { Response } from 'express';
 
-import { Response } from 'express'; // імпорт Response для типізації res
-
-// структура відповіді на помилку
 export interface ErrorPayload {
   error: string;
   message: string;
@@ -11,9 +8,6 @@ export interface ErrorPayload {
 
 /**
  * 500 – внутрішня помилка сервера
- * @param res – Express Response
- * @param context – контекст логування
- * @param error – об’єкт помилки
  */
 export function serverError(
   res: Response,
@@ -27,21 +21,15 @@ export function serverError(
     message: 'Внутрішня помилка сервера',
   };
 
-  // додаємо деталі помилки тільки у development
   if (process.env.NODE_ENV === 'development') {
     payload.details = error instanceof Error ? error.message : String(error);
   }
 
-  return res.status(500).json(payload);
+  return res.status(500).send(payload); // ✅ send() повністю сумісний з Response
 }
 
 /**
  * Кастомна помилка з будь-яким статусом
- * @param res – Express Response
- * @param status – HTTP статус
- * @param errorCode – код помилки
- * @param message – повідомлення
- * @param details – додаткові дані (optional)
  */
 export function sendError(
   res: Response,
@@ -50,24 +38,19 @@ export function sendError(
   message: string,
   details?: unknown
 ): Response {
-  const payload: ErrorPayload = {
-    error: errorCode,
-    message,
-  };
+  const payload: ErrorPayload = { error: errorCode, message };
 
   if (details && process.env.NODE_ENV === 'development') {
     payload.details = details;
   }
 
-  return res.status(status).json(payload);
+  return res.status(status).send(payload); // ✅ замість json()
 }
 
 /**
- * Перетворення значення на число без помилок типізації
- * @param value – рядок або число
+ * Перетворення значення на число
  */
 export function toNumber(value: unknown): number {
-  // якщо рядок, парсимо як int, інакше просто Number(value)
   if (typeof value === 'string') return Number.parseInt(value, 10);
   return Number(value);
 }

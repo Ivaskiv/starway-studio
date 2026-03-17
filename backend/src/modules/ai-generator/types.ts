@@ -116,7 +116,7 @@ export interface ProductBlueprint {
   description?: string;
   price: number;
   currency: 'EUR';
-  config: Record<string, any>;
+  config: Record<string, unknown>; // ← unknown замість any (strict)
 }
 
 // ==========================================
@@ -153,3 +153,51 @@ export interface SaveBlueprintResult {
 
 export const TOTAL_PHASES = 11;
 export const AI_PRODUCER_WORKFLOW_KEY = 'aiProducerWorkflow';
+
+// ==========================================
+// HERO + ADS (додано) ─────────────────────
+// ==========================================
+
+export type HeroAngle = 'pain' | 'desire' | 'curiosity';
+export type HeroTone  = 'serious' | 'inspiring' | 'provocative' | 'soft';
+
+export interface HeroVariant {
+  headline:    string;
+  subline:     string;
+  cta:         string;
+  angle:       HeroAngle;
+  description: string; // пояснення чому цей кут
+}
+
+export interface AdTexts {
+  facebook:           string;
+  instagram_caption:  string;
+  tiktok_hook:        string;
+  stories:            string;
+  reels_script:       string;
+}
+
+export interface HeroGenerateInput {
+  niche:          string;
+  targetAudience: string;
+  utp:            string;
+  tone?:          HeroTone;
+  language?:      'uk' | 'en';
+}
+
+export interface AdTextsInput {
+  niche:          string;
+  targetAudience: string;
+  heroHeadline:   string;
+  language?:      'uk' | 'en';
+}
+
+export interface HeroGenerateResponse {
+  success:  true;
+  variants: HeroVariant[];
+}
+
+export interface AdTextsResponse {
+  success: true;
+  ads:     AdTexts;
+}

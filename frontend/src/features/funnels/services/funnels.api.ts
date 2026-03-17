@@ -76,6 +76,15 @@ export const funnelsApi = api.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, args) => [{ type: 'Funnel', id: args.id }, 'Funnel'],
     }),
+
+    generateFunnel: builder.mutation<{ funnel: string }, { answers: Record<string, string> }>({
+      query: (body) => ({
+        url: '/funnels/generate',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Funnel'],
+    }),
   }),
   overrideExisting: true,
 });
@@ -84,6 +93,7 @@ export const {
   useGetFunnelsQuery,
   useGetFunnelByIdQuery,
   useUpdateFunnelMutation,
+  useGenerateFunnelMutation,
   useGetAttachableProductsQuery,
   useAttachFunnelProductMutation,
   useDetachFunnelProductMutation,

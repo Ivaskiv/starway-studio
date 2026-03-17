@@ -1,7 +1,7 @@
 // frontend/src/features/analytics/components/DashboardStatsCard.tsx
-import { DashboardStat } from '../types/analytics.types'
 import { GlassCard } from '@/ui'
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { Minus, TrendingDown, TrendingUp } from 'lucide-react'
+import { DashboardStat } from '../types/types'
 
 interface Props {
   stat: DashboardStat

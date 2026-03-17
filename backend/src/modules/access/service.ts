@@ -1,9 +1,8 @@
 // backend/src/modules/access/access.service.ts
-import { prisma } from '@/db/client.js'
-import { Prisma } from '@/db/generated/prisma/client.js'
+import { prisma } from '../../db/client.js'
+import { getAllAbilities } from '../../modules/auth/abilities.js'
+import { isSuperAdminEmail } from '../../modules/auth/superadmin.js'
 import type { AccessItem, UserAccessResult, UserSystemState } from './types.js'
-import { getAllAbilities } from '@/modules/auth/abilities.js'
-import { isSuperAdminEmail } from '@/modules/auth/superadmin.js'
 
 type AccessUserSnapshot = {
   id: string
@@ -15,18 +14,40 @@ type AccessUserSnapshot = {
     currentPeriodEnd: Date | null
     createdAt: Date
   } | null
+  mentorship: {
+    status: string
+    endsAt: Date | null
+  } | null
 }
 
+
 async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot | null> {
-  // fix1: PrismaClient → prisma (інстанс)
-  // fix2: subscriptions (plural, відповідає схемі) orderBy createdAt desc take 1
-  // fix3: Role enum: USER | EXPERT | SUPERADMIN (не ADMIN/MENTOR)
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: {
+    select: {
+      id: true,
+      email: true,
+      role: true,
+
       subscriptions: {
         orderBy: { createdAt: 'desc' },
         take: 1,
+        select: {
+          status: true,
+          trialEndsAt: true,
+          currentPeriodEnd: true,
+          createdAt: true,
+        },
+      },
+
+      mentorships: {
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          status: true,
+          endsAt: true,
+        },
       },
     },
   })
@@ -34,17 +55,26 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
   if (!user) return null
 
   const sub = user.subscriptions[0] ?? null
+  const mentorship = user.mentorships[0] ?? null
 
   return {
-    id:    user.id,
+    id: user.id,
     email: user.email,
-    role:  user.role as 'USER' | 'EXPERT' | 'SUPERADMIN',
+    role: user.role as 'USER' | 'EXPERT' | 'SUPERADMIN',
+
     subscription: sub
       ? {
-          status:           sub.status,
-          trialEndsAt:      sub.trialEndsAt,
+          status: sub.status,
+          trialEndsAt: sub.trialEndsAt,
           currentPeriodEnd: sub.currentPeriodEnd,
-          createdAt:        sub.createdAt,
+          createdAt: sub.createdAt,
+        }
+      : null,
+
+    mentorship: mentorship
+      ? {
+          status: mentorship.status,
+          endsAt: mentorship.endsAt ?? null,
         }
       : null,
   }
@@ -57,7 +87,6 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   const now          = new Date()
   const subscription = user.subscription
   const items: AccessItem[] = []
-  // fix4: isSuperAdminEmail може отримати null — додаємо fallback
   const isSuperAdmin = isSuperAdminEmail(user.email ?? '')
 
   // ── SUPERADMIN ─────────────────────────────────────────────────────────────
@@ -72,7 +101,6 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   }
 
   // ── PAID ───────────────────────────────────────────────────────────────────
-  // fix5: endsAt → currentPeriodEnd (відповідає схемі)
   const isPaidActive =
     subscription?.status === 'ACTIVE' &&
     (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
@@ -88,7 +116,6 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
       { key: 'mentor.goals',      source: 'purchase', expiresAt },
       { key: 'mentor.actions',    source: 'purchase', expiresAt },
       { key: 'mentor.zoom',       source: 'purchase', expiresAt },
-      { key: 'mentor.mentorship', source: 'purchase', expiresAt },
       { key: 'ai.basic',          source: 'purchase', expiresAt },
       { key: 'ai.deep',           source: 'purchase', expiresAt },
       { key: 'ai.pdf',            source: 'purchase', expiresAt },
@@ -128,7 +155,19 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
     { key: 'profile.view',    source: 'free', expiresAt: null },
     { key: 'settings.manage', source: 'free', expiresAt: null },
   )
+// --- mentorship access ---
+const isMentorshipActive =
+  user.mentorship?.status === 'ACTIVE' &&
+  (!user.mentorship.endsAt || user.mentorship.endsAt > now)
 
+if (isMentorshipActive) {
+  const expiresAt = user.mentorship!.endsAt ?? null
+
+  items.push(
+    { key: 'mentor.mentorship', source: 'purchase', expiresAt },
+    { key: 'mentor.zoom', source: 'purchase', expiresAt },
+  )
+}
   // ── ABILITIES ──────────────────────────────────────────────────────────────
   const abilities = getAllAbilities(false)
   for (const item of items) {
@@ -276,6 +315,9 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
       status:    access.plan === 'paid' ? 'ACTIVE' : access.plan === 'trial' ? 'TRIAL' : null,
       expiresAt: trialEnd,
     },
+    mentorship: {
+  isActive: access.items.some(i => i.key === 'mentor.mentorship'),
+},
     ui: {
       showMyProductsSection,
       showCreateProductCta: !showMyProductsSection,

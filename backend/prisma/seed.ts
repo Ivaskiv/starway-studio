@@ -2,7 +2,14 @@ import { PrismaNeon } from '@prisma/adapter-neon';
 import bcrypt from 'bcryptjs';
 import 'dotenv/config';
 import jwt from 'jsonwebtoken';
-import {
+import pkg from '../src/db/generated/prisma/client.js';
+import type {
+  Role as RoleType,
+  SubscriptionStatus as SubscriptionStatusType,
+  User,
+} from '../src/db/generated/prisma/client.js';
+
+const {
   DailyChoice,
   DailyState,
   MicroTaskStatus,
@@ -13,18 +20,17 @@ import {
   PrismaClient,
   Role,
   SubscriptionStatus,
-  User,
-} from '../src/db/generated/prisma/client.js';
+} = pkg;
 
 type SeedUserInput = {
   key: string;
   email: string;
   firstName: string;
   lastName?: string;
-  role: Role;
+  role: RoleType;
   telegramUserId?: string;
   telegramUserName?: string;
-  subscriptionStatus: SubscriptionStatus;
+  subscriptionStatus: SubscriptionStatusType;
   trialDays?: number;
 };
 
@@ -42,28 +48,28 @@ async function main() {
   const passwordHash = await bcrypt.hash('password123', 10);
 
   // 1. SuperAdmin
-  const superAdmin = await prisma.superAdmin.upsert({
-    where: { email: 'admin@starway.com' },
+ const superAdmin = await prisma.superAdmin.upsert({
+    where: { email: 'viraivaskiv@gmail.com' },
     update: { name: 'Platform Admin' },
-    create: { email: 'admin@starway.com', name: 'Platform Admin' },
+    create: { email: 'viraivaskiv@gmail.com', name: 'Platform Admin' },
   });
   console.log(`✅ SuperAdmin: ${superAdmin.email}`);
 
   // 2. Expert
-  const expert = await prisma.expert.upsert({
-    where: { email: 'expert@starway.com' },
+const expert = await prisma.expert.upsert({
+    where: { email: 'nadyastarway@gmail.com' },
     update: { displayName: 'Starway Expert', timezone: 'Europe/Kyiv', isActive: true },
     create: {
-      email: 'expert@starway.com',
+      email: 'nadyastarway@gmail.com',
       displayName: 'Starway Expert',
       timezone: 'Europe/Kyiv',
-      telegramBotName: 'starway_test_bot',
+      telegramBotName: 'starway_expert_bot',
     },
   });
   console.log(`✅ Expert: ${expert.email}`);
 
   // 3. Користувачі
-  const usersData: SeedUserInput[] = [
+ const usersData: SeedUserInput[] = [
     {
       key: 'trial',
       email: 'trial@starway.com',
@@ -113,6 +119,11 @@ async function main() {
         role: item.role,
         passwordHash: item.role === Role.USER ? passwordHash : null,
         expertId: expert.id,
+        uiSettings: {
+          accentColor: '#0c1d32',
+          theme: 'dark',
+          language: 'uk',
+        },
         progress: {
           create: {
             totalPoints: 0,
@@ -126,8 +137,8 @@ async function main() {
     users.set(item.key, user);
     console.log(`✅ User: ${item.email}`);
 
-    // Subscription (створюємо тільки якщо нема)
-    const existingSub = await prisma.subscription.findFirst({ where: { userId: user.id } });
+// Subscription (створюємо тільки якщо нема)
+const existingSub = await prisma.subscription.findFirst({ where: { userId: user.id } });
     if (!existingSub) {
       await prisma.subscription.create({
         data: {
@@ -135,6 +146,7 @@ async function main() {
           expertId: expert.id,
           status: item.subscriptionStatus,
           planCode: item.subscriptionStatus === SubscriptionStatus.TRIAL ? 'TRIAL' : 'MONTHLY_BASIC',
+          startsAt: new Date(),
           trialEndsAt:
             item.subscriptionStatus === SubscriptionStatus.TRIAL
               ? new Date(Date.now() + (item.trialDays ?? 7) * 24 * 60 * 60 * 1000)
@@ -148,8 +160,7 @@ async function main() {
       });
       console.log(`   └─ Subscription: ${item.subscriptionStatus}`);
     }
-  }
-
+  }  
   const trialUser = users.get('trial')!;
   const paidUser = users.get('paid')!;
 
@@ -333,10 +344,34 @@ async function main() {
     });
 
     // MicroTask
+    await prisma.trialMirror.upsert({
+      where: { userId_day: { userId: user.id, day: 4 } },
+      update: { analysis: 'Seed mirror (day 4)', entries: 1 },
+      create: {
+        userId: user.id,
+        day: 4,
+        analysis: 'Seed mirror (day 4)',
+        entries: 1,
+      },
+    });
+
     await prisma.microTask.upsert({
       where: { id: `${user.id}-micro` },
-      update: { status: MicroTaskStatus.COMPLETED },
-      create: { id: `${user.id}-micro`, title: 'Seed micro task', userId: user.id, expertId: expert.id, taskDetails: { title: 'Seed task' } as Prisma.JsonObject, status: MicroTaskStatus.ACTIVE },
+      update: {
+        sphere: 'growth',
+        isCompleted: true,
+        completedAt: new Date(),
+      },
+      create: {
+        id: `${user.id}-micro`,
+        title: 'Seed micro task',
+        userId: user.id,
+        expertId: expert.id,
+        sphere: 'growth',
+        isCompleted: true,
+        completedAt: new Date(),
+        dueAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      },
     });
 
     // PaymentLog

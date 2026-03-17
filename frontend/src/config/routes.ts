@@ -17,6 +17,7 @@ export const ROUTES = {
   HOME: '/',
   AI_FUNNEL_LANDING: '/ai-funnel',
   HELP: '/help',
+  RESET_PASSWORD: '/reset-password',
   
   // ==========================================
   // DASHBOARD
@@ -65,7 +66,9 @@ export const ROUTES = {
   AI_GENERATOR: '/dashboard/ai-generator',
   AI_FUNNEL_BUILDER: '/dashboard/ai-funnel',
   AI_PRODUCER_CONSOLE: '/dashboard/ai-producer-console',
-  
+  AI_PRODUCER_ASSISTANT: '/producer/assistant',
+  DEV_ROUTES: '/dev/routes',
+
 } as const;
 
 /**
@@ -230,6 +233,21 @@ export const ROUTE_METADATA: Record<RoutePath, {
     requiresAuth: true,
     requiresPaid: false,
   },
+  '/producer/assistant': {
+    title: 'AI Producer Assistant',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  '/reset-password': {
+    title: 'Скидання пароля',
+    requiresAuth: false,
+    requiresPaid: false,
+  },
+  '/dev/routes': {
+    title: 'Routes QA',
+    requiresAuth: false,
+    requiresPaid: false,
+  },
 };
 
 /**
@@ -275,5 +293,6 @@ export const ROUTE_GROUPS = {
     ROUTES.AI_GENERATOR,
     ROUTES.AI_FUNNEL_BUILDER,
     ROUTES.AI_PRODUCER_CONSOLE,
+    ROUTES.AI_PRODUCER_ASSISTANT,
   ],
 } as const;

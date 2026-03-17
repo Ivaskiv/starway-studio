@@ -8,6 +8,8 @@ export interface Progress {
   totalXp: number;
   level: number;
   nextLevelXp: number;
+  totalPoints: number;
+  completedBlocks: number;
 }
 
 export interface WeeklyActivityDay {

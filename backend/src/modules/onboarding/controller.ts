@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import * as onboardingService from './services.js';
 import type { OnboardingStage } from './types.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 export async function getProgress(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

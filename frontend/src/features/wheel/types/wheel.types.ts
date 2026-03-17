@@ -83,71 +83,61 @@ export const normalizeWheelCategory = withNormalizer<any, WheelCategory>(api => 
 // WHEEL CATEGORIES CONSTANT
 // ==============================
 export const WHEEL_CATEGORIES: WheelCategory[] = [
+  { id: 'money', name: 'Money', nameUk: 'Гроші', emoji: '💰', color: '#F59E0B', description: 'Фінансова стабільність' },
+  { id: 'realization', name: 'Realization', nameUk: 'Реалізація', emoji: '🎯', color: '#3B82F6', description: 'Цілі, досягнення, кар’єра' },
+  { id: 'relationships', name: 'Relationships', nameUk: 'Відносини', emoji: '❤️', color: '#EF4444', description: 'Сім’я, друзі, підтримка' },
+  { id: 'energy', name: 'Energy', nameUk: 'Енергія', emoji: '⚡', color: '#8B5CF6', description: 'Стан тіла, відновлення, сон' },
+  { id: 'freedom', name: 'Freedom', nameUk: 'Свобода', emoji: '🕊️', color: '#EC4899', description: 'Час, простір, незалежність' },
+  { id: 'innerSupport', name: 'Inner Support', nameUk: 'Внутрішня опора', emoji: '🧘', color: '#A855F7', description: 'Стабільність, віра, спокій' },
+  { id: 'health', name: 'Health', nameUk: "Здоров'я", emoji: '🏥', color: '#022D4A', description: 'Фізичне та емоційне благополуччя' },
+  { id: 'growth', name: 'Growth', nameUk: 'Розвиток', emoji: '📚', color: '#14B8A6', description: 'Навчання, самовдосконалення' },
+];
+
+export const WHEEL_CATEGORY_FALLBACKS: WheelCategory[] = [
   {
-    id: 'money',
-    name: 'Money',
-    nameUk: 'Гроші',
-    emoji: '💰',
-    color: '#F59E0B',
-    description: 'Доходи, фінансова стабільність',
+    id: 'health',
+    name: 'Health',
+    nameUk: 'Здоровʼя',
+    emoji: '🏥',
+    color: '#0ea5e9',
+    description: 'Фізичне та емоційне благополуччя',
   },
   {
-    id: 'realization',
-    name: 'Realization',
-    nameUk: 'Реалізація',
-    emoji: '💼',
-    color: '#3B82F6',
-    description: 'Справи, результат, самореалізація',
+    id: 'career',
+    name: 'Career',
+    nameUk: 'Карʼєра',
+    emoji: '👔',
+    color: '#2563eb',
+    description: 'Енергія до роботи та цілі',
   },
   {
-    id: 'relationships',
-    name: 'Relationships',
-    nameUk: 'Стосунки',
-    emoji: '❤️',
-    color: '#EF4444',
-    description: 'Сім’я, друзі, робота',
+    id: 'finance',
+    name: 'Finance',
+    nameUk: 'Фінанси',
+    emoji: '💸',
+    color: '#ca8a04',
+    description: 'Стратегії доходу та витрат',
   },
   {
-    id: 'energy_body',
-    name: 'Energy / Body',
-    nameUk: 'Енергія / тіло',
-    emoji: '⚡',
-    color: '#8B5CF6',
-    description: 'Ресурс, сон, фізичний стан',
+    id: 'self',
+    name: 'Self',
+    nameUk: 'Я',
+    emoji: '🧠',
+    color: '#9333ea',
+    description: 'Ідентичність та внутрішній ресурс',
   },
   {
-    id: 'freedom_time',
-    name: 'Freedom / Time',
-    nameUk: 'Свобода / час',
-    emoji: '🕒',
-    color: '#EC4899',
-    description: 'Контроль часу, простір для рішень',
-  },
-  {
-    id: 'environment',
-    name: 'Environment',
-    nameUk: 'Середовище',
-    emoji: '🏠',
-    color: '#06B6D4',
-    description: 'Люди та умови навколо',
-  },
-  {
-    id: 'inner_support',
-    name: 'Inner Support',
-    nameUk: 'Внутрішня опора',
-    emoji: '🧭',
-    color: '#A855F7',
-    description: 'Стійкість, внутрішній стан',
-  },
-  {
-    id: 'meaning_direction',
-    name: 'Meaning / Direction',
-    nameUk: 'Сенс / напрям',
-    emoji: '🎯',
-    color: '#14B8A6',
-    description: 'Вектор та сенс руху',
+    id: 'fun',
+    name: 'Fun',
+    nameUk: 'Розвага',
+    emoji: '🎉',
+    color: '#ec4899',
+    description: 'Гра та відпочинок',
   },
 ];
+
+export const WHEEL_CATEGORY_META = [...WHEEL_CATEGORIES, ...WHEEL_CATEGORY_FALLBACKS];
+export const WHEEL_CATEGORY_MAP = new Map(WHEEL_CATEGORY_META.map((category) => [category.id, category]));
 
 export const normalizeWheelScore = withNormalizer<any, WheelScore>(api => ({
   categoryId: String(api.categoryId),
@@ -297,4 +287,3 @@ export type WheelCooldownKey =
 // AI коштує гроші
 // PDF — ресурси
 // логіка trial не має ламатись
-

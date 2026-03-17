@@ -3,7 +3,7 @@
 // Приклад: POST /api/subscriptions/payments/wayforpay/callback
 
 import type { Request, Response } from 'express';
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../../db/client.js';
 import type { PaymentCallbackData } from '../types.js';
 import { processPayment } from './business.js';
 import { verifySignature } from './crypto.js';

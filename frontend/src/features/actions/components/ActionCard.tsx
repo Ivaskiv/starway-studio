@@ -1,55 +1,116 @@
-// // frontend/src/features/actions/components/ActionCard.tsx
-// // Окремий крок у воронці
-// import { cn } from '@/lib/utils';
-// import { ReactNode } from 'react';
+// frontend/src/features/actions/components/ActionCard.tsx
+import { Button, GlassCard } from '@/ui';
+import { Lock } from 'lucide-react';
+import type { ReactNode } from 'react';
 
-// interface ActionCardProps {
-//   title: string;
-//   description?: string;
-//   icon?: ReactNode;
+interface ActionCardProps {
+  title: string;
+  description?: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  
+  locked?: boolean;
+  isActive?: boolean;
+  isDisabled?: boolean;
+  
+  progress?: number;
+  daysRemaining?: number;
+  status?: string;
+  
+  canCreate?: boolean;
+  isLoading?: boolean;
+  
+  onClick?: () => void;
+  onCreateClick?: () => void;
+}
 
-//   isActive?: boolean;
-//   isDisabled?: boolean;
+export function ActionCard({
+  title,
+  description,
+  subtitle,
+  icon,
+  locked = false,
+  isActive = false,
+  isDisabled = false,
+  progress,
+  daysRemaining,
+  status,
+  canCreate = false,
+  isLoading = false,
+  onClick,
+  onCreateClick,
+}: ActionCardProps) {
+  const iconContent = icon;
 
-//   onClick?: () => void;
-// }
+  return (
+    <GlassCard
+      className={`p-6 transition-all ${
+        isDisabled || locked ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-105 hover:border-orange-500/50'
+      } ${isActive ? 'border-orange-500' : ''}`}
+      onClick={!isDisabled && !locked ? onClick : undefined}
+    >
+      <div className="relative">
+        {/* Lock Icon */}
+        {locked && (
+          <Lock className="absolute top-0 right-0 w-5 h-5 text-orange-400" />
+        )}
 
-// export default function ActionCard({
-//   title,
-//   description,
-//   icon,
-//   isActive = false,
-//   isDisabled = false,
-//   onClick,
-// }: ActionCardProps) {
-//   return (
-//     <button
-//       type="button"
-//       disabled={isDisabled}
-//       onClick={onClick}
-//       className={cn(
-//         'w-full text-lft rounded-xl border p-4 transition',
-//         'bg-slate-900/70 border-white/10 hover:border-orange-500/40',
-//         isActive && 'border-orange-500 bg-orange-500/10',
-//         isDisabled && 'opacity-50 cursor-not-allowed hover:border-white/10',
-//       )}
-//     >
-//       <div className="flex items-start gap-3">
-//         {icon && (
-//           <div className="shrink-0 w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400">
-//             {icon}
-//           </div>
-//         )}
+        {/* Trial Badge */}
+        {daysRemaining && (
+          <div className="absolute top-0 right-0 px-2 py-1 rounded-full bg-amber-500/90 text-xs font-bold text-white">
+            Trial: {daysRemaining} днів
+          </div>
+        )}
 
-//         <div className="flex-1">
-//           <h4 className="text-sm font-semibold text-white">{title}</h4>
-//           {description && (
-//             <p className="mt-1 text-xs text-white/60 leading-relaxed">
-//               {description}
-//             </p>
-//           )}
-//         </div>
-//       </div>
-//     </button>
-//   );
-// }
+        {/* Icon */}
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500 to-pink-500 flex items-center justify-center mb-4 shadow-lg shadow-orange-500/30">
+            {iconContent}
+          </div>
+
+        {/* Title */}
+        <h3 className="text-lg font-bold text-white mb-1">{title}</h3>
+
+        {/* Description / Subtitle */}
+        {(description || subtitle) && (
+          <p className="text-sm text-white/60 mb-2">{description || subtitle}</p>
+        )}
+
+        {/* Status */}
+        {status && (
+          <p className="text-xs text-white/40">{status}</p>
+        )}
+
+        {/* Progress */}
+        {progress !== undefined && (
+          <div className="mt-3">
+            <div className="flex justify-between text-xs text-white/60 mb-1">
+              <span>Прогрес</span>
+              <span>{progress}%</span>
+            </div>
+            <progress
+              className="action-card-progress w-full h-2 rounded-full overflow-hidden bg-white/10"
+              value={progress}
+              max={100}
+            />
+          </div>
+        )}
+
+        {/* Create Button */}
+        {canCreate && onCreateClick && (
+          <Button
+            onClick={e => {
+              e.stopPropagation();
+              onCreateClick();
+            }}
+            data-color="orange"
+            data-size="sm"
+            className="mt-4 w-full"
+            disabled={isLoading}
+          >
+            {isLoading ? 'Створюємо...' : 'Створити продукт'}
+          </Button>
+        )}
+      </div>
+    </GlassCard>
+  );
+}

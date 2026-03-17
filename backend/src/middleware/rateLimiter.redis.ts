@@ -14,7 +14,7 @@ if (process.env.REDIS_URL) {
     url: process.env.REDIS_URL
   });
 
-  redisClient.connect().catch((err) => {
+  redisClient.connect().catch((err: unknown) => {
     console.error('Redis connection error:', err);
     redisClient = null;
   });

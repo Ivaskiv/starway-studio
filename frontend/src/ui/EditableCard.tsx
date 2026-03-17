@@ -1,5 +1,4 @@
-// /frontend/src/ui/EditableCard.tsx
-
+// fix style $100k — premium editable card using liquid-glass surfaces
 import { ReactNode, useState } from 'react';
 import { Button, GlassCard } from '../ui';
 
@@ -18,17 +17,20 @@ const EditableCard: React.FC<EditableCardProps> = ({ title, onSave, children }) 
   };
 
   return (
-    <GlassCard className="p-6 rounded-xl">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold text-white">{title}</h3>
+    <GlassCard className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xl font-semibold text-[var(--text-primary)]">{title}</h3>
         <Button
-          className="px-3 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white text-sm"
+          variant={isEditing ? 'solid' : 'outline'}
+          color="accent"
+          size="sm"
+          className="glass-button"
           onClick={isEditing ? handleSave : () => setIsEditing(true)}
         >
           {isEditing ? 'Зберегти' : 'Редагувати'}
         </Button>
       </div>
-      {children(isEditing)}
+      <div className="space-y-3">{children(isEditing)}</div>
     </GlassCard>
   );
 };

@@ -1,6 +1,6 @@
 // frontend/src/shared/types/profile.types.ts
 
-import { UserSettings } from '../../features/user/types/user.types';
+import type { User, UserSettings } from '@/features/user/types/user.types';
 
 // ==========================
 // PROFILE TYPES
@@ -12,14 +12,10 @@ export interface FormData {
   settings: UserSettings;
 }
 
-export interface UserProfile {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: 'user' | 'admin' | 'super_admin';
-  settings: UserSettings;
-}
+export type UserProfile = Pick<
+  User,
+  'id' | 'email' | 'firstName' | 'lastName' | 'role' | 'settings'
+>;
 
 // ==========================
 

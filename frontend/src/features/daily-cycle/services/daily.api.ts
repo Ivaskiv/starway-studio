@@ -1,39 +1,32 @@
-// daily.api.ts
-/**
- * Daily Cycle API
- */
+// frontend/src/features/daily-cycle/services/daily.api.ts
 
-import { DailyCycleEntry, DailyCycleInput } from '@/features/daily-cycle/types/daily.types';
-import { api } from '@/services/api';
+import { api } from '@/services/api'
+import type { DailyCycleEntry, DailyCycleInput } from '../types/daily.types'
 
-export const dailyApi = api.injectEndpoints({
-  endpoints: (builder) => ({
-    // Submit daily entry
-    submitDailyCycle: builder.mutation<DailyCycleEntry, DailyCycleInput>({
-      query: (body) => ({
-        url: '/mentor/daily-cycle',
+export interface SubmitDailyCycleInput extends DailyCycleInput {
+  id?: string   // ✅ optional — потрібен тільки при оновленні існуючого запису (PATCH)
+  date?: string
+}
+
+export const dailyCycleApi = api.injectEndpoints({
+  endpoints: builder => ({
+    submitDailyCycle: builder.mutation<DailyCycleEntry, SubmitDailyCycleInput>({
+      query: payload => ({
+        url: '/daily-cycle/entry',
         method: 'POST',
-        body
+        body: payload,
       }),
-      invalidatesTags: ['Daily', 'Streak']
+      invalidatesTags: [{ type: 'DailyCycle' as const, id: 'ENTRY' }],
     }),
 
-    // Get today's entry
-    getTodayEntry: builder.query<DailyCycleEntry | null, void>({
-      query: () => '/mentor/daily-entry/today',
-      providesTags: ['Daily']
+    getTodayEntry: builder.query<DailyCycleEntry, void>({
+      query: () => '/daily-cycle/today',
+      providesTags: [{ type: 'DailyCycle' as const, id: 'ENTRY' }],
     }),
-
-    // Get latest entry
-    getLatestEntry: builder.query<DailyCycleEntry | null, void>({
-      query: () => '/mentor/daily-entry/latest',
-      providesTags: ['Daily']
-    })
-  })
-});
+  }),
+})
 
 export const {
   useSubmitDailyCycleMutation,
   useGetTodayEntryQuery,
-  useGetLatestEntryQuery
-} = dailyApi;
+} = dailyCycleApi

@@ -1,44 +1,44 @@
-// frontend/src/ui/ThemeSelector.tsx
-
-import { Button } from "./Button";
+// fix style $100k — premium theme selector with glass swatches
+import { forwardRef } from 'react';
+import { Button } from './Button';
+import { cn } from '../lib/utils';
 
 export type UserTheme = 'blue' | 'emerald' | 'rose' | 'amber' | 'violet';
 
-export interface ThemeSelectorProps {
+interface ThemeSelectorProps {
   value: UserTheme;
   onChange: (theme: UserTheme) => void;
 }
 
-const THEMES: { value: UserTheme; label: string; colors: string[] }[] = [
-  { value: 'blue', label: 'Blue', colors: ['#3b82f6', '#60a5fa'] },
-  { value: 'emerald', label: 'Emerald', colors: ['#10b981', '#34d399'] },
-  { value: 'rose', label: 'Rose', colors: ['#f43f5e', '#fb7185'] },
-  { value: 'amber', label: 'Amber', colors: ['#f59e0b', '#fbbf24'] },
-  { value: 'violet', label: 'Violet', colors: ['#a855f7', '#c084fc'] },
-];
+const colors: Record<UserTheme, { label: string; gradient: string }> = {
+  blue: { label: 'Blue', gradient: 'linear-gradient(135deg, rgba(59,130,246,0.8), rgba(148,196,255,0.5))' },
+  emerald: { label: 'Emerald', gradient: 'linear-gradient(135deg, rgba(16,185,129,0.8), rgba(110,231,183,0.5))' },
+  rose: { label: 'Rose', gradient: 'linear-gradient(135deg, rgba(244,63,94,0.8), rgba(251,113,133,0.5))' },
+  amber: { label: 'Amber', gradient: 'linear-gradient(135deg, rgba(251,191,36,0.8), rgba(253,224,71,0.5))' },
+  violet: { label: 'Violet', gradient: 'linear-gradient(135deg, rgba(168,85,247,0.8), rgba(196,181,253,0.5))' },
+};
 
-export function ThemeSelector({ value, onChange }: ThemeSelectorProps) {
-  return (
-    <div className="flex gap-4 flex-wrap">
-      {THEMES.map(theme => (
-        <Button
-          key={theme.value}
-          onClick={() => onChange(theme.value)}
-          className={`flex flex-col items-center gap-2 p-4 rounded-xl transition-all ${
-            value === theme.value 
-              ? 'bg-white/20 ring-2 ring-white/50 scale-105' 
-              : 'bg-white/5 hover:bg-white/10'
-          }`}
-        >
-          <div 
-            className="w-16 h-16 rounded-xl"
-            style={{
-              background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]})`
-            }}
-          />
-          <span className="text-sm font-semibold text-white">{theme.label}</span>
-        </Button>
-      ))}
-    </div>
-  );
-}
+export const ThemeSelector = forwardRef<HTMLDivElement, ThemeSelectorProps>(({ value, onChange }, ref) => (
+  <div ref={ref} className="flex flex-wrap gap-4">
+    {(Object.keys(colors) as UserTheme[]).map((theme) => (
+      <Button
+        key={theme}
+        onClick={() => onChange(theme)}
+        variant="ghost"
+        color={value === theme ? 'accent' : 'white'}
+        className={cn(
+          'glass-button flex flex-col items-center gap-3 rounded-[18px] border-[var(--border-accent)] shadow-[0_25px_60px_rgba(var(--accent-rgb),0.25)]',
+          value === theme ? 'scale-105' : 'opacity-90'
+        )}
+      >
+        <div
+          className="w-16 h-16 rounded-[16px] border border-[var(--glass-border)] shadow-[inset_0_0_25px_rgba(0,0,0,0.35)]"
+          style={{ background: colors[theme].gradient }}
+        />
+        <span className="text-sm font-semibold text-[var(--text-primary)]">{colors[theme].label}</span>
+      </Button>
+    ))}
+  </div>
+));
+
+ThemeSelector.displayName = 'ThemeSelector';

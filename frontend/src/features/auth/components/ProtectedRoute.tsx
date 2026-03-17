@@ -1,10 +1,13 @@
 // frontend/src/features/auth/components/ProtectedRoute.tsx
+import LoadingFallback from '@/features/user/userMenu/LoadingFallback';
+import { Button } from '@/ui';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useSelector } from 'react-redux';
 import { Navigate, useNavigate } from 'react-router-dom';
-import LoadingFallback from '@/components/LoadingFallback';
-import { Button } from '@/ui';
+import { useAuthRestoreStatus } from '../context/AuthRestoreContext';
 import { useAccess } from '../hooks/useAccess';
+import { selectIsAuthenticated } from '../services/auth.slice';
 import type { AccessKey } from '../types/auth.types';
 
 const DEV_BYPASS = import.meta.env.VITE_AUTH_BYPASS === 'true';
@@ -66,14 +69,26 @@ export function ProtectedRoute({
   redirectTo = '/dashboard',
   showDeniedScreen = false,
 }: ProtectedRouteProps) {
-  const { can, isLoading } = useAccess();
+  const authStatus = useAuthRestoreStatus();
+  const isAuthReady = authStatus === 'ready';
+  const isAuthPending = authStatus === 'idle' || authStatus === 'restoring';
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const { can, isLoading, isAccessReady } = useAccess({ enabled: isAuthReady });
 
  // DEV MODE — бачиш ВСЕ
   if (DEV_BYPASS) {
     return <>{children}</>;
   }
 
-  if (isLoading) return <LoadingFallback />;
+  if (isAuthPending || !isAccessReady || isLoading) {
+    // Wait until auth + access resolve before making ability decisions
+    return <LoadingFallback />;
+  }
+
+  if (!isAuthenticated) {
+    // Guests should not reach protected routes
+    return <Navigate to="/" replace />;
+  }
 
   if (!can(ability)) {
     // fix code_x: prevent redirect loop when fallback redirect equals current protected route.

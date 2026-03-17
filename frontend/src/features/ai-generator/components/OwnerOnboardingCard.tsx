@@ -1,6 +1,6 @@
+import type { OwnerOnboardingProfile } from '@/features/ai-generator/types/wizard.types';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useGenerateTelegramLinkMutation } from '@/features/social/services/social.api';
-import type { OwnerOnboardingProfile } from '@/features/products/types/generator.types';
 import { BadgeCheck, Bot, Link, ShieldCheck } from 'lucide-react';
 import { useMemo } from 'react';
 

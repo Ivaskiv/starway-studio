@@ -1,4 +1,4 @@
-import type { UserRole } from '@/types/globalTypes.js'
+import type { UserRole } from '../../types/globalTypes.js'
 
 export const ABILITIES = {
   DASHBOARD_VIEW: 'dashboard.view',
@@ -19,6 +19,7 @@ export const ABILITIES = {
   MENTOR_ZOOM: 'mentor.zoom',
   AI_BASIC: 'ai.basic',
   AI_DEEP: 'ai.deep',
+  ADMIN_CLIENTS_VIEW: 'admin.clients.view',
 } as const;
 
 export type Ability = (typeof ABILITIES)[keyof typeof ABILITIES];
@@ -38,6 +39,7 @@ export function getAllAbilities(isSuperAdmin: boolean) {
   if (isSuperAdmin) {
     baseAbilities['mentor.core'] = true
     baseAbilities['products.manage'] = true
+    baseAbilities['admin.clients.view'] = true
   }
 
   return baseAbilities
@@ -60,6 +62,7 @@ export function resolveUserAbilities(user: { role: UserRole }): Ability[] {
   }
   if (user.role === 'SUPERADMIN') {
     abilities.push(ABILITIES.PRODUCTS_MANAGE)
+    abilities.push(ABILITIES.ADMIN_CLIENTS_VIEW)
   }
 
   return [...new Set(abilities)]

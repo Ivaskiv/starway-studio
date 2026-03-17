@@ -7,9 +7,19 @@
 import { api } from '@/services/api';
 import type {
   MentorAccess,
+  MentorChatContext,
+  MentorContext,
+  MentorReply,
   OnboardingProgress,
+  SendMentorPayload,
   TrialProgress
 } from '../types/mentor.types';
+
+interface MentorMessageRequest {
+  message: string;
+  history: { role: 'user' | 'assistant'; content: string }[];
+  context?: MentorChatContext;
+}
 
 // ============================================================================
 // TAGS
@@ -116,9 +126,35 @@ export const mentorApi = api.injectEndpoints({
         method: 'POST'
       }),
       invalidatesTags: [TAGS.TRIAL]
-    })
+    }),
+
+    // getMentorContext: builder.query<MentorChatContext, void>({
+    //   query: () => '/mentor/context',
+    //         providesTags: ['MentorContext'],
+
+    // }),
+
+    // sendMentorMessage: builder.mutation<ChatResponseDTO, MentorMessageRequest>({
+    //   query: (body) => ({
+    //     url: '/mentor/chat',
+    //     method: 'POST',
+    //     body,
+    //   }),
+ getMentorContext: builder.query<MentorContext, string>({
+      query: userId => `/ai-mentor/context/${userId}`,
+      providesTags: ['MentorContext'],
+    }),
+
+    sendMentorMessage: builder.mutation<MentorReply, SendMentorPayload>({
+      query: body => ({ url: '/ai-mentor/chat', method: 'POST', body }),
+      // зберігаємо повідомлення — інвалідуємо контекст після
+      invalidatesTags: ['MentorContext'],
+    }),
+
+  }),
+  
+  overrideExisting: false,
   })
-});
 
 // ============================================================================
 // EXPORT HOOKS
@@ -137,7 +173,9 @@ export const {
   // Trial
   useGetTrialProgressQuery,
   useStartTrialMutation,
-  useCompleteTrialDayMutation
+  useCompleteTrialDayMutation,
+  useGetMentorContextQuery,
+  useSendMentorMessageMutation
 } = mentorApi;
 
 export default mentorApi;

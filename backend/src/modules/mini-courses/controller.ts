@@ -10,8 +10,8 @@ import {
   getCourseById,
   enrollInCourse,
   getUserEnrollments
-} from '@/modules/mini-courses/servise.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+} from '../../modules/mini-courses/servise.js';
+import { AuthenticatedRequest } from '../../types/globalTypes.js';
 
 export async function getRecommendations(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

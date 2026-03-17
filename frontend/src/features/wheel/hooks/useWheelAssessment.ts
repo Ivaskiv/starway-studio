@@ -1,9 +1,9 @@
 // frontend/src/features/wheel/hooks/useWheelAssessment.ts
+import { sendTelegramMessage } from '@/features/social/services/telegram.service';
 import {
   useCreateWheelAssessmentMutation,
   useGetLatestWheelAssessmentQuery,
 } from '@/features/wheel/api';
-import { sendTelegramMessage } from '@/services/telegram.service';
 import { useCallback } from 'react';
 import type { WheelAssessment, WheelScore } from '../types/wheel.types';
 

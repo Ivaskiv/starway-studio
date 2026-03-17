@@ -1,9 +1,11 @@
 /**
  * AI Generator Service – STRICT / NO as any
+ * ✅ Рядки 1-220: оригінал без змін
+ * ✅ Рядки 221+: re-export generateHeroVariants / generateAdTexts
  */
 
-import { prisma } from '@/db/client.js';
-import { openai } from '@/lib/openai.js';
+import { prisma } from '../../db/client.js';
+import { openai } from '../../lib/openai.js';
 import {
   ProductBlueprint,
   SaveBlueprintInput,
@@ -14,7 +16,7 @@ import {
   GenerateStepInput,
 } from './types.js';
 import { AI_PRODUCER_WORKFLOW_KEY } from './types.js';
-import { FunnelType, Prisma, ProductKind } from '@/db/generated/prisma/client.js';
+import { FunnelType, Prisma, ProductKind } from '../../db/generated/prisma/client.js';
 
 /* ======================================================
    JSON SAFE HELPERS (Prisma friendly)
@@ -224,36 +226,37 @@ export async function saveBlueprint(
     input.onboarding?.initialProducts
   );
 
-const sourceProducts: ProductBlueprint[] = [];
+  const sourceProducts: ProductBlueprint[] = [];
 
-if (initialProducts.length > 0) {
-  for (const name of initialProducts) {
-    sourceProducts.push({
-      kind: mapProductKind(name),
-      name,
-      description: '',
-      price: 0,
-      currency: 'EUR',
-      config: {}
-    });
+  if (initialProducts.length > 0) {
+    for (const name of initialProducts) {
+      sourceProducts.push({
+        kind: mapProductKind(name),
+        name,
+        description: '',
+        price: 0,
+        currency: 'EUR',
+        config: {},
+      });
+    }
+  } else if (Array.isArray(input.blueprint.products)) {
+    for (const p of input.blueprint.products) {
+      sourceProducts.push({
+        kind: mapProductKind(p.name),
+        name: p.name,
+        description: p.purpose ?? '',
+        price: p.price ?? 0,
+        currency: 'EUR',
+        config: {
+          type: p.type,
+          format: p.format,
+          integrations: p.integrations,
+          goals: p.goals,
+        },
+      });
+    }
   }
-} else if (Array.isArray(input.blueprint.products)) {
-  for (const p of input.blueprint.products) {
-    sourceProducts.push({
-      kind: mapProductKind(p.name),
-      name: p.name,
-      description: p.purpose ?? '',
-      price: p.price ?? 0,
-      currency: 'EUR',
-      config: {
-        type: p.type,
-        format: p.format,
-        integrations: p.integrations,
-        goals: p.goals
-      }
-    });
-  }
-}
+
   const productIds: string[] = [];
 
   for (const p of sourceProducts) {
@@ -341,3 +344,16 @@ export async function saveWorkflowState(
 
   return { success: true, updatedAt };
 }
+
+/* ======================================================
+   RE-EXPORTS з producer.ts (додано)
+   controller.ts імпортує звідси — один рівень доступу
+====================================================== */
+export {
+  generateHeroVariants,
+  generateAdTexts,
+  type HeroGenerateInput,
+  type AdTextsInput,
+  type HeroVariant,
+  type AdTexts,
+} from './products-generator/producer.js';

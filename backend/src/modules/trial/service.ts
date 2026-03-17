@@ -1,88 +1,195 @@
 // backend/src/modules/trial/service.ts
-/**
- * Trial Service - COMPLETE
- */
 
-import { prisma } from '@/db/client.js';
-import { TrialStatus } from './types.js';
+import { prisma }                                                    from '../../db/client.js'
+import {
+  CTAType,
+  DailyChoice,
+  DailyDrain,
+  DailyState,
+  MicroTaskStatus,
+  Prisma,
+  ReminderType,
+  StageType,
+} from '../../db/generated/prisma/client.js'
+import { scheduleReminder }                                          from '../notifications/reminder.service.js'
+import type { TrialStatus }                                          from './types.js'
+
+// ─────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────
+
+const TRIAL_DAYS        = 7
+const MS_PER_DAY        = 1000 * 60 * 60 * 24
+const CTA_TRIGGER_PCT   = 80   // % прогресу тріалу для CTA
+const CTA_DELAY_MS      = 60 * 60 * 1000   // 1 год до нагадування
+
+// ─────────────────────────────────────────────
+// START TRIAL
+// ─────────────────────────────────────────────
 
 export async function startTrial(userId: string) {
-  const user = await prisma.user.update({
+  return prisma.user.update({
     where: { id: userId },
     data: {
       trialStartsAt: new Date(),
-      trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    }
-  });
-
-  return user;
+      trialEndsAt:   new Date(Date.now() + TRIAL_DAYS * MS_PER_DAY),
+    },
+  })
 }
 
-export async function getTrialStatus(userId: string): Promise<TrialStatus> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      trialStartsAt: true,
-      trialEndsAt: true
-    }
-  });
+// ─────────────────────────────────────────────
+// GET TRIAL STATUS (повний)
+// ─────────────────────────────────────────────
 
-  if (!user || !user.trialStartsAt) {
+export async function getTrialStatus(userId: string): Promise<TrialStatus> {
+  const [user, activeSub, mirrors] = await Promise.all([
+    prisma.user.findUnique({
+      where:  { id: userId },
+      select: { trialStartsAt: true, trialEndsAt: true },
+    }),
+    prisma.subscription.findFirst({
+      where:   { userId, status: { in: ['TRIAL', 'ACTIVE'] } },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.$queryRaw<{ day: number }[]>`
+      SELECT day FROM trial_mirrors WHERE user_id = ${userId}
+    `,
+  ])
+
+  const trialStart = user?.trialStartsAt
+  const trialEnd   = activeSub?.trialEndsAt ?? user?.trialEndsAt
+  const now        = new Date()
+
+  if (!trialStart) {
     return {
       userId,
-      isActive: false,
-      startedAt: null,
-      endsAt: null,
-      daysLeft: 0,
-      currentDay: 0,
+      isActive:      false,
+      startedAt:     null,
+      endsAt:        null,
+      daysLeft:      0,
+      currentDay:    0,
+      progress:      0,
+      status:        activeSub?.status ?? null,
       hasDay4Mirror: false,
-      hasDay7Mirror: false
-    };
+      hasDay7Mirror: false,
+    }
   }
 
-  const now = new Date();
-  const isActive = user.trialEndsAt ? user.trialEndsAt > now : false;
-  const daysLeft = user.trialEndsAt
-    ? Math.max(0, Math.ceil((user.trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-    : 0;
-
-  const currentDay = Math.floor(
-    (now.getTime() - user.trialStartsAt.getTime()) / (1000 * 60 * 60 * 24)
-  ) + 1;
-
-  // Check mirrors
-  const mirrors = await prisma.$queryRaw<any[]>`
-    SELECT day FROM trial_mirrors WHERE user_id = ${userId}
-  `;
-
-  const hasDay4Mirror = mirrors.some(m => m.day === 4);
-  const hasDay7Mirror = mirrors.some(m => m.day === 7);
+  const isActive  = trialEnd ? trialEnd > now : false
+  const daysLeft  = trialEnd ? Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / MS_PER_DAY)) : 0
+  const currentDay = Math.floor((now.getTime() - trialStart.getTime()) / MS_PER_DAY) + 1
+  const progress  = trialEnd
+    ? Math.min(100, Math.max(0, Math.round(
+        ((now.getTime() - trialStart.getTime()) / (trialEnd.getTime() - trialStart.getTime())) * 100
+      )))
+    : 0
 
   return {
     userId,
     isActive,
-    startedAt: user.trialStartsAt,
-    endsAt: user.trialEndsAt,
+    startedAt:     trialStart,
+    endsAt:        trialEnd ?? null,
     daysLeft,
     currentDay,
-    hasDay4Mirror,
-    hasDay7Mirror
-  };
+    progress,
+    status:        activeSub?.status ?? null,
+    hasDay4Mirror: mirrors.some(m => m.day === 4),
+    hasDay7Mirror: mirrors.some(m => m.day === 7),
+  }
 }
 
+// ─────────────────────────────────────────────
+// CHECK TRIAL STATUS (lightweight для CTA)
+// ─────────────────────────────────────────────
+
+export async function checkTrialStatus(userId: string) {
+  const status = await getTrialStatus(userId)
+  if (!status.isActive && status.status !== 'TRIAL') return null
+  return {
+    status:        status.status,
+    remainingDays: status.daysLeft,
+    progress:      status.progress,
+  }
+}
+
+// ─────────────────────────────────────────────
+// GENERATE TRIAL MIRROR (day 4 / day 7)
+// ─────────────────────────────────────────────
+
 export async function generateTrialMirror(userId: string, day: number) {
+  const since = new Date(Date.now() - (day <= 4 ? 3 : 6) * MS_PER_DAY)
+
   const entries = await prisma.dailyEntry.findMany({
-    where: {
+    where: { userId, date: { gte: since } },
+    orderBy: { date: 'asc' },
+  })
+
+  // TODO: замінити на реальний AI-виклик через openai
+  const analysis = `AI mirror for day ${day}: ${entries.length} entries analyzed`
+  return analysis
+}
+
+// ─────────────────────────────────────────────
+// TRIGGER PAID CTA (конверсія тріал → платна)
+// ─────────────────────────────────────────────
+
+export async function triggerPaidCTA(userId: string) {
+  const trial = await checkTrialStatus(userId)
+  if (!trial || trial.status !== 'TRIAL' || trial.progress < CTA_TRIGGER_PCT) return null
+
+  await Promise.all([
+    recordCTAInteraction(userId, CTAType.TELEGRAM, 'trial_conversion'),
+    scheduleReminder({
       userId,
-      date: {
-        gte: day === 4
-          ? new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-          : new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-      }
-    }
-  });
+      type:            ReminderType.FUNNEL,
+      nextReminderAt:  new Date(Date.now() + CTA_DELAY_MS),
+      metadata:        { reason: 'trial_conversion', progress: trial.progress },
+    }),
+  ])
 
-  const analysis = 'AI analysis placeholder'; // TODO: Add AI
+  return trial
+}
 
-  return analysis;
+// ─────────────────────────────────────────────
+// AI MINI-COURSE SUGGESTIONS
+// ─────────────────────────────────────────────
+
+export async function generateAIMiniCourseSuggestions(userId: string) {
+  const [supports, lastCycle] = await Promise.all([
+    prisma.microSupportItem.findMany({
+      where:   { userId },
+      orderBy: { createdAt: 'desc' },
+      take:    5,
+    }),
+    prisma.dailyCycleLog.findFirst({
+      where:   { userId },
+      orderBy: { date: 'desc' },
+    }),
+  ])
+
+  const state          = (lastCycle?.state ?? DailyState.NEUTRAL) as DailyState
+  const suggestedCourse = state === DailyState.FEAR ? 'resilience' : 'clarity'
+
+  return prisma.aIRecommendation.create({
+    data: {
+      userId,
+      moduleId:   suggestedCourse,
+      moduleType: StageType.MINI_COURSE,
+      reason:     `state:${state}, microSupport:${supports.length}`,
+    },
+  })
+}
+
+// ─────────────────────────────────────────────
+// RECORD CTA INTERACTION
+// ─────────────────────────────────────────────
+
+export async function recordCTAInteraction(
+  userId:   string,
+  type:     CTAType,
+  moduleId?: string,
+) {
+  return prisma.cTAInteraction.create({
+    data: { userId, type, moduleId },
+  })
 }

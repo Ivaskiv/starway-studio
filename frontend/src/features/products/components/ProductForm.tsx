@@ -4,27 +4,24 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import {
   useCreateProductMutation,
   useGetProductByIdQuery,
   useUpdateProductMutation,
-} from '@/services/admin.api';
-// import {
-//   CURRENCY_SYMBOLS,
-//   PRODUCT_TYPE_LABELS,
-// } from '@/types/product.labels';
+} from '@/features/products/services/products.api';
 import {
   formToCreatePayload,
   formToUpdatePayload,
   productToForm,
-} from '@/features/products/types/product.types';
-import type {
-  Currency,
-  ProductFormat,
   ProductFormInputs,
+  ProductFormat,
   ProductIntegration,
   ProductType,
-} from '@/shared/types/product.types';
+  PRODUCT_TYPE_LABELS,
+  CURRENCY_SYMBOLS,
+  Currency,
+} from '@/features/products/types/product.types';
 import { Button } from '@/ui';
 import { FormFieldController } from '@/ui/FormFieldController';
 
@@ -40,10 +37,10 @@ const currencyOptions = [
 ];
 
 const formatOptions = [
-  { value: 'web' as ProductFormat, label: 'Тільки веб-версія' },
-  { value: 'mini_app' as ProductFormat, label: 'Telegram Mini App' },
-  { value: 'telegram_task' as ProductFormat, label: 'Завдання в Telegram' },
-  { value: 'mixed' as ProductFormat, label: 'Web + Telegram' },
+  { value: 'video' as ProductFormat, label: '🎬 Video' },
+  { value: 'text' as ProductFormat, label: '📝 Text' },
+  { value: 'mixed' as ProductFormat, label: '🔀 Mixed' },
+  { value: 'digital' as ProductFormat, label: '🗂 Digital' },
 ];
 
 const integrationOptions = [
@@ -56,6 +53,7 @@ export default function ProductForm() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
+  const { user } = useAuth();
 
   const { data: product, isLoading: isLoadingProduct } = useGetProductByIdQuery(id!, {
     skip: !isEdit,
@@ -68,14 +66,15 @@ export default function ProductForm() {
   const { control, handleSubmit, reset } = useForm<ProductFormInputs>({
     defaultValues: {
       name: '',
+      title: '',
       description: '',
-      type: 'membership',
+      type: 'course',
+      format: 'video',
       price: 0,
       currency: 'EUR',
       includesTrial: false,
       trialDays: 7,
       includesMentorship: false,
-      format: 'mini_app',
       integration: 'telegram',
       status: 'draft',
       thumbnailUrl: '',
@@ -93,7 +92,10 @@ export default function ProductForm() {
         await updateProduct({ id, data: formToUpdatePayload(data) }).unwrap();
         toast.success('Продукт успішно оновлено!');
       } else {
-        await createProduct(formToCreatePayload(data)).unwrap();
+        if (!user?.id) {
+          throw new Error('Потрібно увійти, щоб створити продукт');
+        }
+        await createProduct(formToCreatePayload(data, user.id)).unwrap();
         toast.success('Продукт успішно створено!');
       }
       navigate('/products');
@@ -115,6 +117,7 @@ export default function ProductForm() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Текстові поля */}
         <FormFieldController name="name" label="Назва продукту" />
+        <FormFieldController name="title" label="Брендовий заголовок" />
         <FormFieldController
           name="type"
           label="Тип продукту"

@@ -5,7 +5,7 @@ import type {
   DailyDrain,
   DailyState,
   Prisma,
-} from '@/db/generated/prisma/client.js';
+} from '../../db/generated/prisma/client.js';
 
 // ======================================================
 // MICRO SUPPORT (зберігається в JSON колонці Prisma)
@@ -43,6 +43,7 @@ export interface DailyEntryDTO {
   dayFact: string;
   microSupport?: MicroSupportItem[];
   answers?: DailyAnswerInput[];
+  expertId?: string;
 }
 
 // ======================================================
@@ -66,12 +67,11 @@ export interface UpsertDailyEntryInput extends DailyEntryInput {
   expertId: string;
   date: Date;
 }
-export interface DailyEntryInput {
-  state: DailyState;
-  drain?: DailyDrain | null;
-  choice: DailyChoice;
-  dayFact: string;
-  microSupport?: JsonMicroSupport;
+
+export interface DailyStats {
+  totalDays: number;
+  stabilityRate: number;
+  topDrain: string | null;
 }
 // ======================================================
 // DAILY ACCESS

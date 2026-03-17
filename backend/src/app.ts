@@ -12,9 +12,11 @@ import morgan from 'morgan';
 
 // Routes
 import accessRoutes from './modules/access/routes.js';
+import analyticsRoutes from './modules/analytics/routes.js';
 import aiGeneratorRoutes from './modules/ai-generator/routes.js';
 import mentorRoutes from './modules/ai-mentor/routes.js';
 import authRoutes from './modules/auth/auth.routes.js';
+import expertsRoutes from './modules/experts/routes.js';
 import consultationRoutes from './modules/consultation/routes.js';
 import dailyRoutes from './modules/daily-cycle/routes.js';
 import funnelRoutes from './modules/funnel/routes.js';
@@ -23,12 +25,22 @@ import mentorshipRoutes from './modules/mentorship/routes.js';
 import miniCoursesRoutes from './modules/mini-courses/routes.js';
 import onboardingRoutes from './modules/onboarding/routes.js';
 import productsRoutes from './modules/products/routes.js';
+import producerRoutes from './modules/producer/routes.js';
 import progressRoutes from './modules/progress/routes.js';
 import socialRoutes from './modules/social/routes.js';
 import trialRoutes from './modules/trial/routes.js';
+import userRoutes from './modules/user/routes.js';
 import visionRoutes from './modules/vision/routes.js';
 import wheelRoutes from './modules/wheel/routes.js';
+import quotaRoutes from './modules/quota/routes.js';
 import zoomRoutes from './modules/zoom/routes.js';
+import landingRoutes from './modules/landing/routes.js';
+import assistantRoutes from './modules/assistant/routes.js'
+import affiliateRoutes from "./modules/affiliate/routes.js"
+import leadMagnetRoutes from './modules/lead-magnet/routes.js'
+import adminRoutes from './modules/admin/routes.js'
+import settingsRoutes from './modules/settings/routes.js'
+import gamificationRoutes from './modules/gamification/routes.js'
 
 export function createApp() {
   const app = express();
@@ -68,15 +80,23 @@ export function createApp() {
   // =====================
   app.use('/api/auth', authRoutes);
   app.use('/api/access', accessRoutes);
+  app.use('/api/analytics', analyticsRoutes);
+  app.use('/api/experts', expertsRoutes);
   app.use('/api/products', productsRoutes);
   app.use('/api/progress', progressRoutes);
 
-  app.use('/api/mentor', mentorRoutes);
+app.use('/api/mentor', mentorRoutes);
+app.use('/api/aIMentor', mentorRoutes);
   app.use('/api/onboarding', onboardingRoutes);
   app.use('/api/wheel', wheelRoutes);
   app.use('/api/vision', visionRoutes);
   app.use('/api/goals', goalsRoutes);
   app.use('/api/trial', trialRoutes);
+  app.use('/api/quota', quotaRoutes);
+app.use("/api/affiliate", affiliateRoutes)
+app.use('/api/lead-magnet', leadMagnetRoutes)
+app.use('/api/settings', settingsRoutes)
+app.use('/api/gamification', gamificationRoutes)
 
   app.use('/api/consultation', consultationRoutes);
   app.use('/api/zoom', zoomRoutes);
@@ -84,6 +104,11 @@ export function createApp() {
   app.use('/api/courses', miniCoursesRoutes);
   app.use('/api/social', socialRoutes);
   app.use('/api/funnels', funnelRoutes);
+  app.use('/api/producer', producerRoutes);
+  app.use('/api/landing', landingRoutes);
+  app.use('/api/assistant', assistantRoutes)
+  app.use('/api/users', userRoutes);
+  app.use('/api/admin', adminRoutes);
   app.use('/api/ai-generator', aiGeneratorRoutes);
   app.use('/api/daily', dailyRoutes);
 

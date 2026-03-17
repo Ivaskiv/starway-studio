@@ -45,7 +45,7 @@ export function PrimaryGoalSelector({ goals, selectedIndex, onChange }: PrimaryG
               </div>
               {selectedIndex === index && (
                 <div className="text-white/80 text-sm mt-1">
-                  ⭐ Це твоя головна ціль. AI буде перевіряти всі вибори відносно неї.
+                  ✦ Це твоя головна ціль. AI буде перевіряти всі вибори відносно неї.
                 </div>
               )}
             </div>

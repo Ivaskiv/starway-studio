@@ -1,103 +1,74 @@
-// frontend/src/features/questions/hooks/useQuestions.ts
+// frontend/src/features/daily-cycle/questions/hooks/useQuestion.ts
+// Головний хук + реекспорт scheduler — єдина точка входу для цієї папки
 
-import { useCallback } from 'react';
-import {
-  AnswerInput,
-  Decision,
-  UseQuestionsOptions,
-  normalizeDecisions,
-} from '../types/questions.types';
+import { runDecisionEngine } from '@/features/ai-engine/decisions/engine/decisionEngine'
+import { sendTelegramMessage } from '@/features/social/services/telegram.service'
+import { useCallback } from 'react'
 import {
   useGetQuestionsQuery,
   useSubmitAnswersMutation,
-} from '../services/questions.api';
-import { runDecisionEngine } from '@/features/aiDecisionEngine/engine/decisionEngine';
-import { sendTelegramMessage } from '@/services/telegram.service';
+} from '../services/questions.api'
+import {
+  type AnswerInput,
+  type Decision,
+  type UseQuestionsOptions,
+  normalizeDecisionsArray,
+} from '../types/questions.types'
 
-/**
- * 📤 Головний хук для роботи з питаннями → відповідями → рішеннями
- */
+// ── Головний хук питань → відповідей → рішень ────────────────────────────────
 export const useQuestions = ({
   userId,
   context,
   contextId,
   telegramChatId,
 }: UseQuestionsOptions) => {
-  // 1. Отримуємо список питань
   const { data: questions = [], isLoading, refetch } = useGetQuestionsQuery(
     { userId, context, contextId },
-    { skip: !userId }
-  );
+    { skip: !userId },
+  )
 
-  // 2. Мутація для відправки відповідей
-  const [submitAnswersMutation, { isLoading: isSubmitting }] = useSubmitAnswersMutation();
+  const [submitAnswersMutation, { isLoading: isSubmitting }] = useSubmitAnswersMutation()
 
-  /**
-   * 📤 Відправка відповідей → обробка на сервері → рішення
-   */
   const submitAnswers = useCallback(
     async (answers: AnswerInput[]): Promise<Decision[]> => {
-      // 1. Валідація
-      if (!answers?.length) {
-        throw new Error('Немає відповідей для обробки');
-      }
+      if (!answers?.length) throw new Error('Немає відповідей для обробки')
 
       try {
-        // 2. Формуємо мінімальний payload
-        const payload = {
-          userId,
-          context,
-          contextId,
-          answers,
-        };
+        const response = await submitAnswersMutation({ userId, context, contextId, answers }).unwrap()
+        const normalized = normalizeDecisionsArray(response?.decisions ?? [])
+        const filtered   = runDecisionEngine(normalized)
 
-        // 3. Відправляємо запит і отримуємо масив рішень
-        const rawDecisions = await submitAnswersMutation(payload).unwrap();
-
-        // 4. Нормалізуємо масив рішень
-        const normalizedDecisions = normalizeDecisions(rawDecisions);
-
-        // 5. Пропускаємо через Decision Engine
-        const filteredDecisions = runDecisionEngine(normalizedDecisions);
-
-        // 6. Відправка підтримки в Telegram
         if (telegramChatId) {
-          filteredDecisions.forEach(decision => {
-            if (decision.supportMessage) {
+          filtered.forEach(d => {
+            if (d.supportMessage) {
               sendTelegramMessage({
                 chatId: telegramChatId,
-                text: `*${decision.supportMessage}*`,
+                text: `*${d.supportMessage}*`,
                 parseMode: 'MarkdownV2',
-                meta: { source: context, entityId: decision.id },
-              });
+                meta: { source: context, entityId: d.id },
+              })
             }
-          });
+          })
         }
 
-        // 7. Повертаємо готовий результат
-        return filteredDecisions;
-      } catch (error: any) {
-        console.error('Помилка обробки відповідей:', error);
-
+        return filtered
+      } catch (error: unknown) {
+        console.error('[useQuestions] error:', error)
         if (telegramChatId) {
           sendTelegramMessage({
             chatId: telegramChatId,
             text: '⚠️ Щось пішло не так при обробці відповідей. Спробуй ще раз.',
             parseMode: 'MarkdownV2',
-          });
+          })
         }
-
-        throw error;
+        throw error
       }
     },
-    [userId, context, contextId, telegramChatId, submitAnswersMutation]
-  );
+    [userId, context, contextId, telegramChatId, submitAnswersMutation],
+  )
 
-  return {
-    questions,
-    isLoading,
-    submitAnswers,
-    isSubmitting,
-    refetch,
-  };
-};
+  return { questions, isLoading, submitAnswers, isSubmitting, refetch }
+}
+
+// ── Реекспорт scheduler — щоб компоненти могли імпортувати з одного місця ───
+export { useQuestionsScheduler } from './useQuestionsScheduler'

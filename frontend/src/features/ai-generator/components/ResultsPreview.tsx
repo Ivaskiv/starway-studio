@@ -2,7 +2,9 @@
 
 import { Button, GlassCard } from '@/ui';
 import { Check, DollarSign, Sparkles, TrendingUp, Users, Zap } from 'lucide-react';
-import type { FunnelBlueprint } from '../../products/types/generator.types';
+import type { FunnelBlueprint } from '@/features/ai-generator/types/wizard.types';
+
+type BlueprintProduct = NonNullable<FunnelBlueprint['products']>[number];
 
 interface ResultsPreviewProps {
   blueprint: FunnelBlueprint;
@@ -91,7 +93,7 @@ export default function ResultsPreview({
             { title: '⚡ Quick Win', content: blueprint.steps.quickWin },
             { title: '💎 Core Offer', content: blueprint.steps.coreOffer },
             { title: '🚀 Upsell', content: blueprint.steps.upsell },
-          ].map((step, idx) => (
+          ].map((step: { title: string; content: string }, idx: number) => (
             <div key={idx} className="glass-card bg-slate-800/50 p-4 rounded-lg">
               <h4 className="font-semibold text-white mb-2">{step.title}</h4>
               <p className="text-sm text-slate-300">{step.content}</p>
@@ -129,7 +131,7 @@ export default function ResultsPreview({
         <GlassCard className="p-6">
           <h4 className="font-bold text-white mb-4 text-lg">Продукти з Mini Apps та підписками</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {blueprint.products.map((product, idx) => (
+            {blueprint.products.map((product: BlueprintProduct, idx: number) => (
               <div key={idx} className="glass-card p-4 rounded-lg">
                 <p className="text-xl font-bold text-white mb-2">{product.name}</p>
                 <p className="text-2xl font-bold text-green-400 mb-2">
@@ -141,7 +143,7 @@ export default function ResultsPreview({
                     {product.format}
                   </span>
                   <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm">
-                    {product.integrations.map((integration, i) => (
+                    {product.integrations.map((integration: string, i: number) => (
                       <span
                         key={i}
                         className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm"
@@ -172,7 +174,7 @@ export default function ResultsPreview({
           Автоматизація
         </h3>
         <div className="flex flex-wrap gap-2">
-          {blueprint.automation.map((item, idx) => (
+          {blueprint.automation.map((item: string, idx: number) => (
             <span key={idx} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-sm">
               ✓ {item}
             </span>

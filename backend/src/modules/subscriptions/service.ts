@@ -2,7 +2,7 @@
 // Сервіс підписок: cooldown колеса, plan resolver, getUserSubscriptionInfo
 // Приклад: getUserSubscriptionInfo(userId) → { subscription, cooldown }
 
-import { prisma } from '@/db/client.js';
+import { prisma } from '../../db/client.js';
 import type { SubscriptionInfo } from './types.js';
 
 // ── Plan resolver ─────────────────────────────────────────────────────────────

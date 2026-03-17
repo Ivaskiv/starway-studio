@@ -1,16 +1,13 @@
-// backend/src/modules/access/routes.ts
-import express from 'express'; // <-- імпортуємо весь модуль
-import { authRequired } from '@/modules/auth/middleware/auth.js';
-import { checkFeatureAccess, getMyAccess, getMySystemState } from './controller.js';
+import { Router } from 'express'
+import { authRequired } from '../../modules/auth/middleware/auth.js'
+import { getMyAccess, getMySystemState } from './controller.js'
 
-const router = express.Router(); // <-- створюємо роутер через express.Router()
+const router = Router()
 
-// Використовуємо authRequired як middleware
-router.use(authRequired);
+// ✅ НОВИЙ: /access/me - abilities
+router.get('/me', authRequired, getMyAccess)
 
-// Маршрути
-router.get('/me', getMyAccess);
-router.get('/state', getMySystemState);
-router.get('/check/:feature', checkFeatureAccess);
+// ✅ НОВИЙ: /access/state - повний стан
+router.get('/state', authRequired, getMySystemState)
 
-export default router;
+export default router

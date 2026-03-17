@@ -1,222 +1,382 @@
-// backend/src/modules/wheel/controller.ts
-// Express handlers для колеса балансу — CRUD + PDF + Telegram нагадування
-// Приклад: POST /api/wheel → createWheelAssessment(req, res)
-
-import { prisma } from '@/db/client.js';
-import type { Response } from 'express';
-import { createWheelPDF } from './pdf.js';
+import { prisma } from '../../db/client.js'
+import type { Response } from 'express'
+import { createWheelPDF } from './pdf.js'
 import {
-  addWheelMicroTasks,
-  createWheelEntry as createWheel,
+  canFillWheel,
+  executeWheelWorkflow,
+  findFocus,
   findWeakest,
   getLatestWheel,
   getWheelAnalytics,
   getWheelHistory,
   scoresFromMap,
-  canFillWheel,
-  findFocus
-} from './service.js';
-import { sendWheelNotification } from './telegram.js';
-import type { WheelPDFData, WheelScore, WheelSphereId } from './types.js';
-import { AuthenticatedRequest } from '@/types/globalTypes.js';
+} from './service.js'
+import {
+  wheelAnalysis,
+  lifeDiagnosis,
+  personalityProfile,
+  trajectoryPrediction,
+  actionPlan,
+  adaptiveMissions,
+} from './ai.js'
+import { sendWheelNotification } from './telegram.js'
+import type { WheelPDFData, WheelScore, WheelNotificationPayload } from './types.js'
+import { AuthenticatedRequest } from '../../types/globalTypes.js'
+import { WHEEL_CONFIG } from './types.js'
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+const SYSTEM_EXPERT_EMAIL = process.env.SYSTEM_EXPERT_EMAIL ?? 'system@starway.ai'
 
-/** Отримує expertId + balanceConfigId для юзера з БД */
+async function findFallbackExpertId(): Promise<string | null> {
+  let expert = await prisma.expert.findFirst({
+    where: { deletedAt: null, isActive: true },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  })
+  if (expert?.id) return expert.id
+
+  expert = await prisma.expert.findFirst({
+    where: { deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  })
+  if (expert?.id) return expert.id
+
+  const existingSystem = await prisma.expert.findUnique({ where: { email: SYSTEM_EXPERT_EMAIL } })
+  if (existingSystem) return existingSystem.id
+
+  const created = await prisma.expert.create({
+    data: {
+      email: SYSTEM_EXPERT_EMAIL,
+      displayName: 'Starway System',
+    },
+  })
+  return created.id
+}
+
+async function ensureBalanceConfig(expertId: string) {
+  const existing = await prisma.balanceWheelConfig.findFirst({
+    where: { expertId, deletedAt: null },
+    orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+  })
+  if (existing) return existing
+
+  const spheres = WHEEL_CONFIG.map(s => ({ key: s.id, label: s.label }))
+  return prisma.balanceWheelConfig.create({
+    data: {
+      expertId,
+      name: 'Default 8 Sphere Wheel',
+      isDefault: true,
+      version: 1,
+      spheres,
+    },
+  })
+}
+
 async function resolveWheelContext(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } })
+
+  let expertId = user?.expertId ?? null
+  if (!expertId) expertId = await findFallbackExpertId()
+
+  if (!expertId) throw new Error('balance_config_not_found')
+
+  const config = await ensureBalanceConfig(expertId)
+  if (!config?.id) throw new Error('balance_config_not_found')
+
+  return { expertId, balanceConfigId: config.id }
+}
+
+const SCORE_ERROR_DETAILS = {
+  wheel_invalid_spheres_count: 'Потрібно 8 сфер з оцінками',
+  wheel_invalid_spheres_set: 'Склад сфер не співпадає з вимогами',
+  wheel_invalid_sphere_missing: 'Відсутній score або comment для сфери',
+} as const
+
+const summarizeScores = (scores: unknown) => {
+  if (!Array.isArray(scores)) return { count: 0 }
+  return {
+    count: scores.length,
+    categories: scores.map((item: any) => String(item?.categoryId ?? '')),
+  }
+}
+
+export async function createWheelAssessment(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id
+  const { scores } = (req.body as { scores?: WheelScore[] }) ?? {}
+  const payloadSummary = summarizeScores(scores)
+
+  if (!userId) {
+    return res.status(401).json({ error: 'unauthorized' })
+  }
+
+  if (!Array.isArray(scores) || scores.length !== 8) {
+    console.error('❌ createWheelAssessment invalid payload', payloadSummary)
+    return res.status(400).json({
+      error: 'wheel_invalid_spheres_count',
+      detail: SCORE_ERROR_DETAILS.wheel_invalid_spheres_count
+    })
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      expertId: true,
-      // Додаємо найближчий balanceWheelConfig через relation (якщо потрібно)
-      // Але простіше взяти expertId і знайти config окремо або через expert
-    },
-  });
+      firstName: true,
+      email: true,
+      role: true,
+      expertId: true
+    }
+  })
 
-  if (!user || !user.expertId) {
-    throw new Error('user_not_found_or_no_expert');
+  if (!user) {
+    return res.status(404).json({ error: 'user_not_found' })
   }
 
-  // Знаходимо дефолтний або останній balanceConfig через expertId
-  const config = await prisma.balanceWheelConfig.findFirst({
-    where: {
-      expertId: user.expertId,
-      deletedAt: null,
-    },
-    orderBy: { isDefault: 'desc' }, // спочатку дефолтний
-    select: { id: true },
-  });
-
-  if (!config) {
-    throw new Error('balance_config_not_found');
+  const userContext = {
+    name: user.firstName ?? user.email ?? 'Користувач',
+    email: user.email ?? null,
+    phone: null,
+    age: null,
   }
 
-  return {
-    expertId: user.expertId,
-    balanceConfigId: config.id,
-  };
-}
-
-// ── Handlers ──────────────────────────────────────────────────────────────────
-
-/** POST /api/wheel — створити нове колесо */
-export async function createWheelAssessment(req: AuthenticatedRequest, res: Response) {
   try {
-        // ── 1. Отримуємо id користувача з middleware авторизації
-    const userId = req.user!.id;
+    const { expertId, balanceConfigId } = await resolveWheelContext(userId)
 
-    // ── 2. Витягуємо scores з body і перевіряємо
-    const { scores } = req.body as { scores: WheelScore[] };
-    if (!Array.isArray(scores) || scores.length !== 8) {
-      return res.status(400).json({ error: 'Потрібно 8 сфер з оцінками' });
+    // ─────────────────────────────────────────
+    // ADMIN / EXPERT BYPASS
+    // ─────────────────────────────────────────
+
+    const isSuperAdmin = user.role === 'SUPERADMIN'
+    const isExpertOwner = user.expertId === expertId
+
+    const bypassCooldown = isSuperAdmin || isExpertOwner
+
+    if (!bypassCooldown) {
+      const cooldown = await canFillWheel(userId)
+
+      if (cooldown.active) {
+        const nextAvailableAt = new Date(Date.now() + cooldown.remainingMs)
+        return res.status(409).json({
+          error: 'wheel_cooldown_active',
+          message: 'Колесо балансу можна проходити лише 1 раз на 24 години',
+          detail: 'Щоб відстежувати реальні зміни у житті',
+          remainingMs: cooldown.remainingMs,
+          nextAvailableAt
+        })
+      }
     }
 
-        // ── 3. Отримуємо контекст колеса (expertId + balanceConfigId)
-    const { expertId, balanceConfigId } = await resolveWheelContext(userId);
+    // ─────────────────────────────────────────
+    // EXECUTE WORKFLOW
+    // ─────────────────────────────────────────
 
-        // ── 4. Створюємо запис у БД
-    const entry   = await createWheel({userId, balanceConfigId, scores});
-    
-        // ── 5. Знаходимо найслабшу сферу
-    const weakest = findWeakest(scores);
+    const result = await executeWheelWorkflow({
+      userId,
+      expertId,
+      balanceConfigId,
+      scores,
+      userContext
+    })
 
-    // ── 6. Паралельно надсилаємо Telegram і (якщо є) мікрозавдання
-    await Promise.allSettled([
-      addWheelMicroTasks(userId, weakest), // поки закоментовано, якщо функція відсутня
-      sendWheelNotification(userId, entry.id),
-    ]);
-    // ── 7. Повертаємо успішну відповідь
-    return res.status(201).json({ success: true, wheel: entry });
-  } catch (err: any) {
-        // ── 8. Обробка cooldown
-    if (err.message?.includes('Cooldown')) return res.status(429).json({ error: err.message });
-    if (err.message === 'balance_config_not_found') return res.status(400).json({ error: err.message });
-    // ── 9. Якщо немає balanceConfig
-    if (err.message === 'balance_config_not_found') {
-      return res.status(400).json({ error: err.message });
+    return res.status(201).json({
+      success: true,
+      wheel: { id: result.entry.id },
+      insights: result.insights,
+      analytics: result.analytics,
+      pdfUrl: result.pdfUrl,
+      gamification: result.gamification,
+      meta: {
+        cooldownApplied: !bypassCooldown
+      }
+    })
+
+  } catch (error: any) {
+    const message = error?.message
+
+    if (message === 'balance_config_not_found') {
+      console.error('❌ createWheelAssessment missing balance config', {
+        userId,
+        payload: payloadSummary
+      })
+
+      return res.status(400).json({
+        error: message,
+        detail: 'Неможливо знайти конфігурацію колеса'
+      })
+    }
+    if (message === 'wheel_cooldown_active') {
+      return res.status(409).json({
+        error: 'wheel_cooldown_active',
+        message: 'Колесо балансу можна проходити лише 1 раз на 24 години',
+        detail: 'Щоб відстежувати реальні зміни у житті',
+      })
     }
 
-    // ── 10. Інші помилки сервера
-    console.error('❌ createWheelAssessment', err);
-    return res.status(500).json({ error: 'server_error' });
+    if (message?.startsWith('wheel_invalid')) {
+      const detail =
+        SCORE_ERROR_DETAILS[message as keyof typeof SCORE_ERROR_DETAILS] ??
+        'Некоректні оцінки'
+
+      console.error('❌ createWheelAssessment validation failed', {
+        userId,
+        payload: payloadSummary,
+        message
+      })
+
+      return res.status(400).json({ error: message, detail })
+    }
+
+    console.error('❌ createWheelAssessment', error, {
+      userId,
+      payload: payloadSummary
+    })
+
+    return res.status(500).json({ error: 'server_error' })
   }
 }
 
-/** GET /api/wheel/cooldown */
 export async function getWheelCooldownHandler(req: AuthenticatedRequest, res: Response) {
   try {
-        const userId = req.user!.id; 
-    const cooldown = await canFillWheel(userId);
-    return res.json({ success: true, ...cooldown });
-  } catch (err) {
-    console.error('❌ getWheelCooldown', err);
-    return res.status(500).json({ error: 'server_error' });
+    const status = await canFillWheel(req.user!.id)
+    return res.json({ success: true, ...status })
+  } catch (error) {
+    console.error('❌ getWheelCooldown', error)
+    return res.status(500).json({ error: 'server_error' })
   }
 }
 
-/** GET /api/wheel/history?limit=10 */
 export async function getWheelHistoryHandler(req: AuthenticatedRequest, res: Response) {
   try {
-    const limit  = Math.min(parseInt(req.query.limit as string) || 10, 100);
-    const wheels = await getWheelHistory(req.user!.id, limit);
-    return res.json({ success: true, count: wheels.length, wheels });
-  } catch (err) {
-    console.error('❌ getWheelHistory', err);
-    return res.status(500).json({ error: 'server_error' });
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 100)
+    const wheels = await getWheelHistory(req.user!.id, limit)
+    return res.json({ success: true, count: wheels.length, wheels })
+  } catch (error) {
+    console.error('❌ getWheelHistory', error)
+    return res.status(500).json({ error: 'server_error' })
   }
 }
 
-/** GET /api/wheel/latest */
 export async function getLatestWheelHandler(req: AuthenticatedRequest, res: Response) {
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'unauthorized' });
-    const wheel = await getLatestWheel(userId);
-    return res.json({ success: true, wheel: wheel ?? null });
-  } catch (err) {
-    console.error('❌ getLatestWheel', err);
-    return res.json({ success: true, wheel: null }); // graceful fallback
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'unauthorized' })
+    const wheel = await getLatestWheel(userId)
+    return res.json({ success: true, wheel: wheel ?? null })
+  } catch (error) {
+    console.error('❌ getLatestWheel', error)
+    return res.json({ success: true, wheel: null })
   }
 }
 
-/** GET /api/wheel/analytics */
 export async function getWheelAnalyticsHandler(req: AuthenticatedRequest, res: Response) {
   try {
-    const analytics = await getWheelAnalytics(req.user!.id);
-    return res.json({ success: true, analytics });
-  } catch (err) {
-    console.error('❌ getWheelAnalytics', err);
-    return res.status(500).json({ error: 'server_error' });
+    const analytics = await getWheelAnalytics(req.user!.id)
+    return res.json({ success: true, analytics })
+  } catch (error) {
+    console.error('❌ getWheelAnalytics', error)
+    return res.status(500).json({ error: 'server_error' })
   }
 }
 
-/** GET /api/wheel/:id/pdf */
 export async function generateWheelPDFHandler(req: AuthenticatedRequest, res: Response) {
   try {
-    const userId = req.user!.id;
-    const { id } = req.params;
-
+    const userId = req.user!.id
+    const { id } = req.params
     const entry = await prisma.userBalanceEntry.findFirst({
       where: { id, userId },
       include: { user: true },
-    });
-    if (!entry) return res.status(404).json({ error: 'Колесо не знайдено' });
+    })
+    if (!entry) return res.status(404).json({ error: 'Колесо не знайдено' })
 
-    const scores = scoresFromMap(entry.scores);
+    const scores = scoresFromMap(entry.scores)
+    const weakest = findWeakest(scores)
+    const focus = findFocus(scores, weakest)
+    const [analysis, diagnosis, profile, trajectory, plan, missions] = await Promise.all([
+      wheelAnalysis(scores, weakest, focus),
+      lifeDiagnosis(weakest.categoryId, scores),
+      personalityProfile(scores),
+      trajectoryPrediction(scores),
+      actionPlan(weakest.categoryId),
+      adaptiveMissions(weakest.categoryId),
+    ])
 
-    // note зберігає аналіз
-    const analysis = entry.note ?? '';
+    const insights = {
+      analysis,
+      diagnosis,
+      personalityProfile: profile,
+      trajectoryPrediction: trajectory,
+      actionPlan: plan,
+      adaptiveMissions: missions,
+    }
 
-    // ── визначаємо найслабшу та фокусну сферу
-    const weakest = findWeakest(scores);
-    const focus   = findFocus(scores, weakest);
-
-    // ── формуємо дані для PDF
     const pdfData: WheelPDFData = {
-      userName:      entry.user.firstName ?? entry.user.email ?? 'Користувач',
+      userName: entry.user.firstName ?? entry.user.email ?? 'Користувач',
       scores,
       weakestSphere: weakest.categoryId,
-      focusSphere:   focus.categoryId,
-      analysis,
-      createdAt:     entry.createdAt.toISOString(),
-    };
+      focusSphere: focus.categoryId,
+      insights,
+      createdAt: entry.createdAt.toISOString(),
+    }
 
-    const buffer = await createWheelPDF(pdfData);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="wheel-${id}.pdf"`);
-    return res.send(buffer);
-  } catch (err) {
-    console.error('❌ generateWheelPDF', err);
-    return res.status(500).json({ error: 'server_error' });
+    const buffer = await createWheelPDF(pdfData)
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="wheel-${id}.pdf"`)
+    return res.send(buffer)
+  } catch (error) {
+    console.error('❌ generateWheelPDF', error)
+    return res.status(500).json({ error: 'server_error' })
   }
 }
 
-/** POST /api/wheel/:id/remind-telegram */
 export async function sendWheelTelegramReminderHandler(req: AuthenticatedRequest, res: Response) {
   try {
-    const userId = req.user!.id;
-    const { id } = req.params;
-
+    const userId = req.user!.id
+    const { id } = req.params
     const entry = await prisma.userBalanceEntry.findFirst({
-      where:  { id, userId },
-      select: { id: true },
-    });
-    if (!entry) return res.status(404).json({ error: 'Колесо не знайдено' });
+      where: { id, userId },
+    })
+    if (!entry) return res.status(404).json({ error: 'Колесо не знайдено' })
 
-    const result = await sendWheelNotification(userId, id);
-    if (!result.ok) {
-      const status = result.code?.startsWith('telegram_') ? 409 : 400;
-      return res.status(status).json({
-        error:   result.code ?? 'telegram_send_failed',
-        message: result.reason,
-        action:  result.action,
-        botLink: result.botLink,
-      });
+    const scores = scoresFromMap(entry.scores)
+    const weakest = findWeakest(scores)
+    const focus = findFocus(scores, weakest)
+    const [analysis, diagnosis, profile, trajectory, plan, missions] = await Promise.all([
+      wheelAnalysis(scores, weakest, focus),
+      lifeDiagnosis(weakest.categoryId, scores),
+      personalityProfile(scores),
+      trajectoryPrediction(scores),
+      actionPlan(weakest.categoryId),
+      adaptiveMissions(weakest.categoryId),
+    ])
+    const insights = {
+      analysis,
+      diagnosis,
+      personalityProfile: profile,
+      trajectoryPrediction: trajectory,
+      actionPlan: plan,
+      adaptiveMissions: missions,
     }
 
-    return res.json({ success: true, message: 'Нагадування надіслано' });
-  } catch (err) {
-    console.error('❌ sendWheelTelegramReminder', err);
-    return res.status(500).json({ error: 'server_error' });
+    const pdfUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/api/wheel/${id}/pdf`
+    const payload: WheelNotificationPayload = {
+      insights,
+      weakestSphere: weakest.categoryId,
+      focusSphere: focus.categoryId,
+      scores,
+      pdfUrl,
+    }
+    const result = await sendWheelNotification(userId, id, payload)
+    if (!result.ok) {
+      const status = result.code?.startsWith('telegram_') ? 409 : 400
+      return res.status(status).json({
+        error: result.code ?? 'telegram_send_failed',
+        message: result.reason,
+        action: result.action,
+        botLink: result.botLink,
+      })
+    }
+    return res.json({ success: true, message: 'Нагадування надіслано' })
+  } catch (error) {
+    console.error('❌ sendWheelTelegramReminder', error)
+    return res.status(500).json({ error: 'server_error' })
   }
 }
