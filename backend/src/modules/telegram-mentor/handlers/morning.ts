@@ -71,7 +71,7 @@ export async function handleMorningAnswer(ctx: Context, answer: string) {
     await clearSession(session.userId, chatId)
     await ctx.reply(
       `✅ *Ранковий чекін завершено!*\n\n${aiReply}`,
-      { parse_mode: 'Markdown', ...mainMenuKeyboard },
+      { parse_mode: 'Markdown', reply_markup: mainMenuKeyboard },
     )
   }
 }

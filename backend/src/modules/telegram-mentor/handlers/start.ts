@@ -62,7 +62,7 @@ export async function handleStart(ctx: Context) {
 
       await ctx.reply(
         `✅ *Акаунт прив'язано!*\n\nВітаю, ${user.name ?? firstName}!\n\nТепер ти отримуватимеш:\n🌅 Ранкові питання о 8:00\n🌙 Вечірні питання о 20:00\n✅ Нагадування про завдання\n\nНатисни кнопку нижче щоб почати 👇`,
-        { parse_mode: 'Markdown', ...mainMenuKeyboard },
+        { parse_mode: 'Markdown', reply_markup: mainMenuKeyboard },
       )
     } catch (err) {
       console.error('[TelegramMentor] start link error:', err)
@@ -76,7 +76,7 @@ export async function handleStart(ctx: Context) {
   if (existing) {
     await ctx.reply(
       `👋 З поверненням! Вибери дію:`,
-      mainMenuKeyboard,
+      { reply_markup: mainMenuKeyboard },
     )
   } else {
     await ctx.reply(

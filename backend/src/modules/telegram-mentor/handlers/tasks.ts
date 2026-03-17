@@ -15,7 +15,7 @@ export async function handleTasks(ctx: Context) {
 
   // ПЕРЕВІР назву моделі: grep -n "model Micro" backend/prisma/schema.prisma
   const tasks = await (prisma as any).microTask?.findMany({
-    where:   { userId, status: 'ACTIVE' },
+    where:   { userId, isCompleted: false },
     orderBy: { dueDate: 'asc' },
     take:    5,
   }) ?? []
@@ -23,7 +23,7 @@ export async function handleTasks(ctx: Context) {
   if (!tasks.length) {
     await ctx.reply(
       '✅ Активних завдань немає.\n\nПройди ранковий чекін /morning — отримаєш нові.',
-      mainMenuKeyboard,
+      { reply_markup: mainMenuKeyboard },
     )
     return
   }
@@ -34,7 +34,7 @@ export async function handleTasks(ctx: Context) {
     const due = task.dueDate
       ? `\n⏰ До: ${new Date(task.dueDate).toLocaleDateString('uk-UA')}`
       : ''
-    await ctx.reply(`▸ ${task.title}${due}`, taskDoneKeyboard(task.id))
+    await ctx.reply(`▸ ${task.title}${due}`, { reply_markup: taskDoneKeyboard(task.id) })
   }
 }
 
@@ -46,7 +46,7 @@ export async function handleTaskDone(ctx: Context, taskId: string) {
   try {
     await (prisma as any).microTask?.update({
       where: { id: taskId },
-      data:  { status: 'DONE', completedAt: new Date() },
+      data:  { isCompleted: true, completedAt: new Date() },
     })
     await ctx.answerCbQuery('✅ Завдання виконано!')
     await ctx.editMessageText('✅ Завдання виконано!')

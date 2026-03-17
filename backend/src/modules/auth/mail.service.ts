@@ -48,7 +48,7 @@ export async function sendPasswordResetEmail(input: SendPasswordResetEmailInput)
     }),
   })
 
-  const typedResponse = response as FetchResponse
+  const typedResponse = response as unknown as FetchResponse
   if (!typedResponse.ok) {
     const text = await typedResponse.text().catch(() => '')
     console.error('❌ [Mail] Resend error:', typedResponse.status, text)

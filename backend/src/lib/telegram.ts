@@ -1,13 +1,13 @@
 // backend/src/lib/telegram.ts
 // Єдиний shared Telegram bot instance для всього backend
 
-import { Telegraf, type Context } from 'telegraf'
+import { Telegraf } from 'telegraf'
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   console.warn('[Telegram] TELEGRAM_BOT_TOKEN not set — bot disabled')
 }
 
-export const bot: Telegraf<Context> = new Telegraf<Context>(process.env.TELEGRAM_BOT_TOKEN ?? 'disabled')
+export const bot: Telegraf = new Telegraf(process.env.TELEGRAM_BOT_TOKEN ?? 'disabled')
 
 const getBotLink = () =>
   `https://t.me/${process.env.TELEGRAM_BOT_USERNAME ?? 'Starway_byNadya_Bot'}`

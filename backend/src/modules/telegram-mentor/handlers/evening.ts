@@ -61,7 +61,7 @@ export async function handleEveningAnswer(ctx: Context, answer: string) {
     await clearSession(session.userId, chatId)
     await ctx.reply(
       `🌙 *Вечірня рефлексія завершена!*\n\n${aiReply}`,
-      { parse_mode: 'Markdown', ...mainMenuKeyboard },
+      { parse_mode: 'Markdown', reply_markup: mainMenuKeyboard },
     )
   }
 }

@@ -66,9 +66,9 @@ export async function handleChat(ctx: Context, message: string) {
     ].slice(-MAX_HISTORY)
 
     await updateSession(userId, chatId, 'chat', { ...session.data, chatHistory: newHistory })
-    await ctx.reply(reply, mainMenuKeyboard)
+    await ctx.reply(reply, { reply_markup: mainMenuKeyboard })
   } catch (err) {
     console.error('[TelegramMentor] chat error:', err)
-    await ctx.reply('⚠️ Помилка. Спробуй пізніше.', mainMenuKeyboard)
+    await ctx.reply('⚠️ Помилка. Спробуй пізніше.', { reply_markup: mainMenuKeyboard })
   }
 }

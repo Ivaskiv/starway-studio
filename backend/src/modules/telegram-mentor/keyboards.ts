@@ -1,30 +1,41 @@
 // backend/src/modules/telegram-mentor/keyboards.ts
-import { Markup } from 'telegraf'
+import type { InlineKeyboardMarkup, ReplyKeyboardMarkup } from '@telegraf/types'
 
-export const mainMenuKeyboard: ReturnType<typeof Markup.keyboard> = Markup.keyboard([
-  ['🌅 Ранок', '🌙 Вечір'],
-  ['✅ Завдання', '📊 Стан'],
-  ['🎯 Колесо', '💬 Ментор'],
-]).resize()
-
-export const cancelKeyboard: ReturnType<typeof Markup.keyboard> = Markup.keyboard([
-  ['❌ Скасувати'],
-]).resize()
-
-export const yesNoKeyboard: ReturnType<typeof Markup.inlineKeyboard> = Markup.inlineKeyboard([
-  [
-    Markup.button.callback('✅ Виконано', 'task_done'),
-    Markup.button.callback('⏭ Пропустити', 'task_skip'),
+export const mainMenuKeyboard: ReplyKeyboardMarkup = {
+  keyboard: [
+    ['🌅 Ранок', '🌙 Вечір'],
+    ['✅ Завдання', '📊 Стан'],
+    ['🎯 Колесо', '💬 Ментор'],
   ],
-])
+  resize_keyboard: true,
+} as const
 
-export function taskDoneKeyboard(taskId: string): ReturnType<typeof Markup.inlineKeyboard> {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback('✅ Зроблено', `done_${taskId}`)],
-  ])
+export const cancelKeyboard: ReplyKeyboardMarkup = {
+  keyboard: [['❌ Скасувати']],
+  resize_keyboard: true,
+} as const
+
+export const yesNoKeyboard: InlineKeyboardMarkup = {
+  inline_keyboard: [
+    [
+      { text: '✅ Виконано', callback_data: 'task_done' },
+      { text: '⏭ Пропустити', callback_data: 'task_skip' },
+    ],
+  ],
+} as const
+
+export function taskDoneKeyboard(taskId: string): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [[{ text: '✅ Зроблено', callback_data: `done_${taskId}` }]],
+  } as const
 }
 
-export const wheelScoreKeyboard: ReturnType<typeof Markup.inlineKeyboard> = Markup.inlineKeyboard([
-  [1, 2, 3, 4, 5].map(n => Markup.button.callback(`${n}`, `wheel_score_${n}`)),
-  [6, 7, 8, 9, 10].map(n => Markup.button.callback(`${n}`, `wheel_score_${n}`)),
-])
+const row = (start: number, end: number) =>
+  Array.from({ length: end - start + 1 }, (_, idx) => {
+    const value = start + idx
+    return { text: `${value}`, callback_data: `wheel_score_${value}` }
+  })
+
+export const wheelScoreKeyboard: InlineKeyboardMarkup = {
+  inline_keyboard: [row(1, 5), row(6, 10)],
+} as const

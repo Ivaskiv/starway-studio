@@ -48,6 +48,6 @@ export async function handleStatus(ctx: Context) {
         ? `🏆 Ціль: _${String(goalText).slice(0, 80)}_`
         : `🏆 Ціль: *не задана*`,
     ].join('\n'),
-    { parse_mode: 'Markdown', ...mainMenuKeyboard },
+    { parse_mode: 'Markdown', reply_markup: mainMenuKeyboard },
   )
 }
