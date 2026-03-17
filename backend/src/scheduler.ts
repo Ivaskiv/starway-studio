@@ -1,5 +1,6 @@
 import { prisma } from './db/client.js';
 import { generateWeeklyReport } from './modules/ai-mentor/services.js';
+import type { Telegraf } from 'telegraf';
 
 const THROTTLE_MS = 3000;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -39,8 +40,8 @@ export async function runWeeklyReports(): Promise<void> {
       const telegramId = owner.telegramUserId;
       if (telegramId && product.botConfig?.botToken) {
         try {
-          const { Telegraf } = await import('telegraf');
-          const bot = new Telegraf(product.botConfig.botToken);
+          const { Telegraf: TelegrafCtor } = await import('telegraf');
+          const bot: Telegraf = new TelegrafCtor(product.botConfig.botToken);
           await bot.telegram.sendMessage(
             telegramId,
             '✅ Твій щотижневий AI-звіт готовий → Dashboard / Content'

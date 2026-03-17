@@ -359,7 +359,7 @@ export async function createWheelPDF(data: WheelPDFData): Promise<Buffer> {
 
 // ── Telegram ─────────────────────────────────────────────────────────────────
 
-export const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN ?? '')
+export const bot: Telegraf<Context> = new Telegraf<Context>(process.env.TELEGRAM_BOT_TOKEN ?? '')
 
 export async function sendWheelNotification(userId: string, entryId: string) {
   const user = await prisma.user.findUnique({

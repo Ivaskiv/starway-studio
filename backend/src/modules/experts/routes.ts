@@ -81,7 +81,7 @@ router.post('/register-bot', authenticate, async (req: Request, res: Response) =
 
   try {
     // 1. Верифікуємо токен через Telegram
-    const testBot = new Telegraf(botToken)
+    const testBot: Telegraf = new Telegraf(botToken)
     const botInfo = await testBot.telegram.getMe().catch(() => null)
     if (!botInfo) {
       return res.status(400).json({

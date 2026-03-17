@@ -29,13 +29,13 @@ const getAppUrl = () => process.env.FRONTEND_URL ?? 'http://localhost:5173'
 // ─────────────────────────────────────────────────────────────
 // ГОЛОВНА КЛАВІАТУРА
 // ─────────────────────────────────────────────────────────────
-const mainKeyboard = Markup.keyboard([
+const mainKeyboard: ReturnType<typeof Markup.keyboard> = Markup.keyboard([
   ['🤖 AI-ментор',   '🎯 Моя ціль'],
   ['☯️ Колесо',      '🔥 Streak'],
   ['📊 Звіт тижня',  '⚙️ Налаштування'],
 ]).resize()
 
-const mentorKeyboard = Markup.keyboard([
+const mentorKeyboard: ReturnType<typeof Markup.keyboard> = Markup.keyboard([
   ['🌅 Ранок',  '🌙 Вечір'],
   ['✅ Завдання', '📊 Стан'],
   ['💬 Ментор', '❌ Скасувати'],
