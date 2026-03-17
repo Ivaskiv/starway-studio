@@ -12,11 +12,12 @@
     "strict": true,
     "jsx": "react-jsx",
     "types": ["vite/client"],
+    "baseUrl": ".",
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "paths": {
       "@/*": ["./src/*"],
-      "@/types/*": ["./types/*"]
+      "@/types/*": ["./src/types/*"]
     }
   },
   "include": [

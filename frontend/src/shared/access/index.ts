@@ -1,4 +1,3 @@
-import type { AuthApiResponse } from '@/types/globalTypes';
 import type { User, UserRole } from '@/features/user/types/user.types';
 import type { SocialPlatform } from '@/features/social/types/social.types';
 
@@ -172,5 +171,6 @@ export const ROLE_ABILITIES: Record<UserRole, AccessKey[]> = {
   EXPERT: mentorAbilities,
   ADMIN: adminAbilities,
   SUPERADMIN: adminAbilities,
+  PRODUCT_OWNER: mentorAbilities,
   MENTOR: mentorAbilities,
 }

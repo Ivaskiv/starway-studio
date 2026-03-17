@@ -1,7 +1,7 @@
 // frontend/src/features/social/services/social.api.ts
 import { api } from '@/services/api';
-import type { AuthApiResponse } from '@/types/globalTypes';
 import type { SocialPlatform } from '../types/social.types';
+import { AuthApiResponse } from '@/types/globalTypes';
 
 export const socialApi = api.injectEndpoints({
   endpoints: (builder) => ({
