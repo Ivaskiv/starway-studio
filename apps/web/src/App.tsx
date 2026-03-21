@@ -241,9 +241,6 @@ export default function App() {
     }
   }, [authRestoreStatus, isAuthenticated]);
 
-    return <div>Фронтенд ще не запущено. Будь ласка, почекайте...</div>;
-  }
-
   return (
     <BrowserRouter>
       <AuthRestoreProvider value={authRestoreStatus}>
