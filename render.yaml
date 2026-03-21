@@ -5,8 +5,8 @@ services:
     region: frankfurt
     plan: starter
     rootDir: backend
-    buildCommand: npm install && npx prisma generate && npm run build
-    startCommand: npm run start
+    buildCommand: npm install -g pnpm && pnpm install && npx prisma generate --schema=../packages/db/prisma/schema.prisma && pnpm run build
+    startCommand: pnpm run start
     envVars:
       - key: NODE_ENV
         value: production
