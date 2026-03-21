@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { GlassCard } from '@/ui';
-import { ArrowRight, Edit2, Eye } from 'lucide-react';
+import { Edit2, Eye } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export type LandingCard = {
@@ -9,7 +9,7 @@ export type LandingCard = {
   title: string;
   url: string;
   price: number;
-  productId?: string; // прив'язка до продукту / AI funnel
+  productId?: string;
 };
 
 type LandingCardsProps = {
@@ -17,24 +17,9 @@ type LandingCardsProps = {
 };
 
 const DEMO_CARDS: LandingCard[] = [
-  {
-    id: 'demo-hero',
-    title: 'Warm Welcome Page',
-    url: 'https://demo.ai/landing/hero',
-    price: 0,
-  },
-  {
-    id: 'demo-automation',
-    title: 'AI Funnel Builder',
-    url: 'https://demo.ai/landing/funnel',
-    price: 49,
-  },
-  {
-    id: 'demo-membership',
-    title: 'Premium Membership',
-    url: 'https://demo.ai/landing/premium',
-    price: 99,
-  },
+  { id: 'demo-hero', title: 'Warm Welcome Page', url: 'https://demo.ai/landing/hero', price: 0 },
+  { id: 'demo-automation', title: 'AI Funnel Builder', url: 'https://demo.ai/landing/funnel', price: 49 },
+  { id: 'demo-membership', title: 'Premium Membership', url: 'https://demo.ai/landing/premium', price: 99 },
 ];
 
 export default function LandingCards({ userId }: LandingCardsProps) {
@@ -45,7 +30,9 @@ export default function LandingCards({ userId }: LandingCardsProps) {
   const loadCards = async () => {
     try {
       const res = await axios.get(`/api/landing/cards?userId=${userId}`);
-      setCards(res.data.length ? res.data : DEMO_CARDS);
+      const raw = res.data;
+      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+      setCards(list.length ? list : DEMO_CARDS);
       setError(false);
     } catch (err) {
       console.error('Failed to load landing cards:', err);
@@ -65,7 +52,6 @@ export default function LandingCards({ userId }: LandingCardsProps) {
   };
 
   const handleEdit = (card: LandingCard) => {
-    // Тут можна відкрити modal або inline editor SaaS-style
     toast(`Редагування лендінгу: ${card.title}`);
   };
 
@@ -91,15 +77,15 @@ export default function LandingCards({ userId }: LandingCardsProps) {
           У вас ще немає лендінгів або не вдалося підвантажити ваші лендінги. Показано демо-версію.
         </p>
       )}
-
       {cards.map((card) => (
         <GlassCard key={card.id} className="p-4 flex flex-col justify-between">
           <div>
             <h3 className="font-semibold text-[var(--text-primary)] text-lg">{card.title}</h3>
-            <p className="text-xs text-[var(--text-muted-light)] mt-1">URL: <a href={card.url} target="_blank" rel="noreferrer" className="underline">{card.url}</a></p>
+            <p className="text-xs text-[var(--text-muted-light)] mt-1">
+              URL: <a href={card.url} target="_blank" rel="noreferrer" className="underline">{card.url}</a>
+            </p>
             <p className="text-sm mt-1">Ціна: €{card.price}</p>
           </div>
-
           <div className="flex justify-between mt-3">
             <button
               onClick={() => handleLivePreview(card.url)}
@@ -107,7 +93,6 @@ export default function LandingCards({ userId }: LandingCardsProps) {
             >
               Live Preview <Eye className="w-4 h-4" />
             </button>
-
             <button
               onClick={() => {
                 handleEdit(card);
