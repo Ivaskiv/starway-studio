@@ -1,4 +1,5 @@
 // daily.telegram.ts
+import type { AssistantMemory } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js';
 import { openai } from '../../lib/openai.js';
 import { DailyEntryForAi } from '../../modules/daily-cycle/types.js';
@@ -34,7 +35,11 @@ ${entry.answers.map(a => `Q: ${a.question}\nA: ${a.answer}`).join('\n\n')}
   }
 }
 
-export async function saveMemory(userId:string,type:string,content:string){
+export async function saveMemory(
+  userId: string,
+  type: string,
+  content: string,
+): Promise<AssistantMemory> {
 
  return prisma.assistantMemory.create({
   data:{userId,type,content}

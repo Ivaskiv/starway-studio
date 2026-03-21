@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js'
-import type { GenerationQuota, GenerationType } from '@prisma/client'
+import type { GenerationQuota, GenerationType } from '@starway/db/prisma-client'
 
 const BASE_LIMIT = 33
 

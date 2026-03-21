@@ -15,7 +15,7 @@ import type {
   ProducerMentorChatBody,
   AssistantProgressDTO,
 } from './types.js'
-import { ProductKind } from '@prisma/client'
+import { ProductKind } from '@starway/db/prisma-client'
 
 // ─── System промпт продюсера ──────────────────────────────────
 export const PRODUCER_SYSTEM = `Ти — AI-продюсер платформи Starway Studio.

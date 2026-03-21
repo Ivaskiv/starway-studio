@@ -9,7 +9,7 @@ import { prisma } from '../../../db/client.js'
 import { openai } from '../../../lib/openai.js'
 import { suggestNextProduct } from '../../assistant/service.js'
 import { logger } from '../../../utils/logger.js'
-import { SubscriptionStatus } from '@prisma/client'
+import { SubscriptionStatus } from '@starway/db/prisma-client'
 
 const extractAnswers = (value: unknown): string[] => {
   if (!value || typeof value !== 'object') return []

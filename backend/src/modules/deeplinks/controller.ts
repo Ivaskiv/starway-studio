@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@starway/db/prisma-client'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import {

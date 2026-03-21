@@ -3,7 +3,7 @@ import {
   DailyChoice,
   DailyState,
   Prisma,
-} from '@prisma/client'
+} from '@starway/db/prisma-client'
 import { openai } from '../../lib/openai.js'
 import { ensureMentor, ensureUserExpertId } from './helpers.js'
 

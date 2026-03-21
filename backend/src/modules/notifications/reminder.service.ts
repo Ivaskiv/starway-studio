@@ -1,7 +1,7 @@
 // backend/src/modules/notifications/reminder.service.ts
 // fix etap8: centralized reminder scheduling used by daily/trial modules
 import { prisma } from '../../db/client.js'
-import { Prisma, ReminderType } from '@prisma/client'
+import { Prisma, ReminderType } from '@starway/db/prisma-client'
 
 export interface ScheduleReminderInput {
   userId: string

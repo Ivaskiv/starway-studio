@@ -9,7 +9,7 @@ import {
   Prisma,
   ReminderType,
   StageType,
-} from '@prisma/client'
+} from '@starway/db/prisma-client'
 import { scheduleReminder }                                          from '../notifications/reminder.service.js'
 import type { TrialStatus }                                          from './types.js'
 

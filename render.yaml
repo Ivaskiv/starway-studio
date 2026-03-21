@@ -4,8 +4,13 @@ services:
     runtime: node
     region: frankfurt
     plan: starter
-    buildCommand: npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter @starway/db run build && pnpm --filter starway-backend run build
-    startCommand: pnpm --filter starway-backend run start
+buildCommand: |
+  npm install -g pnpm
+  pnpm install
+  pnpm --filter @starway/db exec prisma generate
+  pnpm --filter starway-backend build
+  
+  startCommand: pnpm --filter starway-backend run start
     envVars:
       - key: NODE_ENV
         value: production

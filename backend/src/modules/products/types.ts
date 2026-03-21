@@ -1,7 +1,7 @@
 import type {
   Product as PrismaProduct,
   Enrollment as PrismaEnrollment,
-} from '@prisma/client';
+} from '@starway/db/prisma-client';
 
 export type Product = PrismaProduct;
 export type Enrollment = PrismaEnrollment;

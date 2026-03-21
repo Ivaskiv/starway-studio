@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@starway/db/prisma-client'
 import { trackEvent } from './service.js'
 
 const ALLOWED_SOURCES = new Set(['telegram', 'web', 'miniapp'])

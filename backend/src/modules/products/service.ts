@@ -6,7 +6,7 @@ import type {
   ProductWithEnrollment,
   EnrollUserInput,
 } from './types.js';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@starway/db/prisma-client';
 
 /** Graceful catch для відсутньої таблиці Product (P2021) */
 function isMissingProductsTableError(err: unknown): boolean {

@@ -1,5 +1,5 @@
 // backend/src/modules/mentorship/types.ts
-import { MentorshipStatus } from '@prisma/client'
+import { MentorshipStatus } from '@starway/db/prisma-client'
 
 export interface Mentorship {
   id: string

@@ -1,4 +1,5 @@
 // backend/src/modules/funnel/service.ts
+import type { Funnel, Product } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js';
 import type { FunnelBlueprint } from '../../modules/ai-generator/types.js';
 import { CourseWithProducts, generateProductFromCourse, getAllCourses } from '../../modules/mini-courses/servise.js';
@@ -117,7 +118,7 @@ export async function updateFunnel(
   id: string,
   input: { name?: string; status?: string },
   ownerId?: string
-) {
+): Promise<Funnel> {
   if (ownerId) {
     const existing = await prisma.funnel.findUnique({
       where: { id },
@@ -177,7 +178,7 @@ export async function detachProductFromFunnel(
 // ────────────────────────────────────────────────
 // GET ATTACHABLE PRODUCTS
 // ────────────────────────────────────────────────
-export async function getAttachableProductsForFunnel(funnelId: string) {
+export async function getAttachableProductsForFunnel(funnelId: string): Promise<Product[] | null> {
   const funnel = await prisma.funnel.findUnique({
     where: { id: funnelId },
     select: { ownerId: true },

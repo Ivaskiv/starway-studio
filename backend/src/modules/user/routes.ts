@@ -1,6 +1,6 @@
 import { Router, type Response } from 'express'
 import { prisma } from '../../db/client.js'
-import { Role } from '@prisma/client'
+import { Role } from '@starway/db/prisma-client'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { authRequired } from '../auth/middleware/auth.js'
 

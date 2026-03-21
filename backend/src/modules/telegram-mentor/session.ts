@@ -1,6 +1,6 @@
 // backend/src/modules/telegram-mentor/session.ts
 
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import type { SessionState, SessionData, QuestionSet, Question } from './types.js'
 import { DEFAULT_QUESTION_SET } from './types.js'

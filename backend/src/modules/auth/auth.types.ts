@@ -1,5 +1,5 @@
 // backend/src/modules/auth/auth.types.ts
-import { MentorConfig, Subscription, UserProgress } from '@prisma/client';
+import { MentorConfig, Subscription, UserProgress } from '@starway/db/prisma-client';
 import { toSafeUser } from '../../modules/user/types.js'
 import type { SafeUser, UserRole, UserWithSub } from '../../types/globalTypes.js'
 

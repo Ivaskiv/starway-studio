@@ -2,7 +2,7 @@
 // Типи підписок, платежів WayForPay та callback-даних — синхронізовано з Prisma схемою
 // Використовується в: service.ts, payments/*, mapper.ts, controller.ts
 
-import type { SubscriptionStatus } from '@prisma/client';
+import type { SubscriptionStatus } from '@starway/db/prisma-client';
 
 // ── Subscription ──────────────────────────────────────────────────────────────
 

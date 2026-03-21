@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js'
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@starway/db/prisma-client'
 import { getPrimaryGoal } from '../goals/service.js'
 import type { GenerationIntent } from './types.js'
 

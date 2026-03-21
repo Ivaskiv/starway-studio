@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { getXpToNextLevel, resolveLevel } from './level.system.js'
 import type { RewardPayload, GamificationProfileView } from './types.js'

@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js'
-import { StageStatus, User } from '@prisma/client'
+import { StageStatus, User } from '@starway/db/prisma-client'
 
 // fix etap2: payload for first-login handling via web/telegram flows
 export interface FirstLoginPayload {

@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js'
-import type { UserAIMentor } from '@prisma/client'
+import type { UserAIMentor } from '@starway/db/prisma-client'
 
 const SYSTEM_EXPERT_EMAIL = process.env.SYSTEM_EXPERT_EMAIL ?? 'system@starway.ai'
 

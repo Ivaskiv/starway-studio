@@ -1,6 +1,6 @@
 // backend/src/modules/daily-cycle/subscription.ts
 
-import type { SubscriptionStatus } from '@prisma/client';
+import type { SubscriptionStatus } from '@starway/db/prisma-client';
 import type { DailyAccess } from './types.js';
 
 // Інтерфейс для перевірки юзера (витягується з Prisma)

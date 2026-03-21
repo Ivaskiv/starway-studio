@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import type { DeepLinkToken, Prisma } from '@prisma/client'
+import type { DeepLinkToken, Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { trackEvent } from '../events/service.js'
 import type {

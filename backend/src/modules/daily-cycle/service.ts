@@ -7,7 +7,7 @@ import {
   DailyState,
   Prisma,
   ReminderType,
-} from '@prisma/client'
+} from '@starway/db/prisma-client'
 import { updateUserState } from '../ai-mentor/state.service.js'
 import { scheduleReminder } from '../notifications/reminder.service.js'
 import type { DailyEntryDTO, DailyStats, UpsertDailyEntryInput } from './types.js'

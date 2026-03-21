@@ -1,4 +1,4 @@
-import type { Prisma, UserBalanceEntry } from '@prisma/client'
+import type { Prisma, UserBalanceEntry } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { createWheelPDF } from './pdf.js'
 import {
@@ -104,7 +104,7 @@ export async function canFillWheel(userId: string): Promise<WheelCooldownStatus>
   return { active: true, remainingMs: COOLDOWN_MS - elapsed }
 }
 
-export function getLatestWheel(userId: string) {
+export function getLatestWheel(userId: string): Promise<UserBalanceEntry | null> {
   return prisma.userBalanceEntry.findFirst({
     where: { userId },
     orderBy: { createdAt: 'desc' },

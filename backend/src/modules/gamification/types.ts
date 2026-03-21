@@ -1,4 +1,4 @@
-import type { GamificationProfile } from '@prisma/client'
+import type { GamificationProfile } from '@starway/db/prisma-client'
 
 export interface RewardPayload {
   xp?: number

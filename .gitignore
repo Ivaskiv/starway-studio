@@ -62,7 +62,12 @@ package-lock.json
 # Prisma generated
 backend/src/db/generated/
 **/prisma/generated/
+packages/db/generated/
 
 # Package locks (use pnpm-lock.yaml only)
 package-lock.json
 yarn.lock
+
+AGENTS.md
+APP_LOGIC.md
+ARCHITECTURE_MAP.md

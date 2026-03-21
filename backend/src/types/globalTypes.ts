@@ -4,7 +4,7 @@ import type {
   MentorConfig,
   Subscription,
   UserProgress,
-} from '@prisma/client'; 
+} from '@starway/db/prisma-client'; 
 import type { Product } from '../modules/products/types.js'
 
 export type UserRole = 'SUPERADMIN' | 'EXPERT' | 'USER' | 'ADMIN' | 'MENTOR' | 'PRODUCT_OWNER'

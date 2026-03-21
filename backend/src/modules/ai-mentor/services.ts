@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js';
-import type { DailyState, Prisma } from '@prisma/client';
+import type { DailyState, Prisma } from '@starway/db/prisma-client';
 import { openai } from '../../lib/openai.js';
 import { logDailyCycle, recordMicroSupport, calculateStreak, triggerAICheckIn } from '../daily-cycle/service.js';
 import { getPrimaryGoal } from '../goals/service.js';

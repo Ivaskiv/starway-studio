@@ -3,8 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "main": "./dist/client.js",
+  "types": "./dist/client.d.ts",
+  "exports": {
+    ".": "./dist/client.js",
+    "./prisma-client": "./generated/prisma/index.js"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "prisma:generate": "pnpm exec prisma generate --schema ./prisma/schema.prisma",
+    "prisma:migrate:deploy": "pnpm exec prisma migrate deploy --schema ./prisma/schema.prisma",
+    "build": "pnpm run prisma:generate && tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
@@ -14,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.1.0",
+    "prisma": "^5.22.0",
     "typescript": "^5.9.3"
   }
 }

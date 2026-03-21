@@ -11,12 +11,12 @@ import {
   PrismaClient,
   Role,
   SubscriptionStatus,
-} from '@prisma/client';
+} from '@starway/db/prisma-client';
 import type {
   Role as RoleType,
   SubscriptionStatus as SubscriptionStatusType,
   User,
-} from '@prisma/client';
+} from '@starway/db/prisma-client';
 
 type SeedUserInput = {
   key: string;

@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 
 type Period = '7d' | '30d' | '90d'

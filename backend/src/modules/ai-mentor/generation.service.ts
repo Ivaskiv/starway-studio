@@ -3,7 +3,7 @@ import { prisma } from '../../db/client.js'
 import { checkQuota, decrementQuota } from '../quota/service.js'
 import { buildSystemPrompt, buildContextPrompt, buildTaskPrompt, MentorConfigPayload } from './prompt.js'
 import { GenerationIntent, GenerationRequest, GenerationResponse } from './types.js'
-import { GenerationType } from '@prisma/client'
+import { GenerationType } from '@starway/db/prisma-client'
 
 const openAi = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'

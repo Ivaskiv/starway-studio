@@ -1,4 +1,4 @@
-import type { SubscriptionStatus } from '@prisma/client'
+import type { SubscriptionStatus } from '@starway/db/prisma-client'
 import type { SafeUser } from '../../types/globalTypes.js'
 
 const STATUS_MAP: Record<string, SafeUser['subscriptionStatus']> = {

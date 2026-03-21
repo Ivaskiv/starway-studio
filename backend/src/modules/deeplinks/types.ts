@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@starway/db/prisma-client'
 
 export type DeepLinkSource = 'telegram' | 'web' | 'miniapp'
 export type DeepLinkTarget = 'telegram' | 'web' | 'miniapp'

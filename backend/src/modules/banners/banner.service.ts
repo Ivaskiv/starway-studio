@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@starway/db/prisma-client'
 import { openai } from '../../lib/openai.js'
 import { prisma } from '../../db/client.js'
 

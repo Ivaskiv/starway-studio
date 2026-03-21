@@ -11,12 +11,12 @@ import {
   PrismaClient,
   Role,
   SubscriptionStatus,
-} from '@prisma/client';
+} from '../generated/prisma/index.js';
 import type {
   Role as RoleType,
   SubscriptionStatus as SubscriptionStatusType,
   User,
-} from '@prisma/client';
+} from '../generated/prisma/index.js';
 
 type SeedUserInput = {
   key: string;

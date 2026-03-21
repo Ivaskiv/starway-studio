@@ -1,6 +1,6 @@
 import { prisma } from '../../db/client.js';
 import type { FivePointsEnrollment, FivePointsProgress } from './types.js';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@starway/db/prisma-client';
 
 
 

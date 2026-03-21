@@ -2,7 +2,7 @@
 
 import type { Context } from 'telegraf'
 import { prisma } from '../../../db/client.js'
-import { DailyChoice, DailyState, Prisma } from '@prisma/client'
+import { DailyChoice, DailyState, Prisma } from '@starway/db/prisma-client'
 import { openai } from '../../../lib/openai.js'
 import { ensureUserExpertId } from '../../ai-mentor/helpers.js'
 import { updateUserState } from '../../ai-mentor/state.service.js'

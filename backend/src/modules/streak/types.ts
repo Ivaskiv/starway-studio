@@ -2,7 +2,7 @@
 // backend/src/modules/streak/types.ts
 // Типи для streak-модуля + фронт / бек повна синхронізація
 
-import type { Streak as PrismaStreak } from '@prisma/client';
+import type { Streak as PrismaStreak } from '@starway/db/prisma-client';
 
 // Базовий streak з prisma
 export type Streak = PrismaStreak;

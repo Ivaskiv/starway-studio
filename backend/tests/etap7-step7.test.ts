@@ -1,6 +1,6 @@
 // fix etap7: e2e-style vitest checks for STEP 7 automation flow
 import { beforeAll, afterAll, describe, expect, it } from 'vitest'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '@starway/db/prisma-client'
 import { checkTrialStatus, triggerPaidCTA, generateAIMiniCourseSuggestions, recordCTAInteraction } from '../modules/trial/trial.service.js'
 import { logDailyCycle, recordMicroSupport, triggerAICheckIn } from '../modules/dailyCycle/dailyCycle.service.js'
 import { scheduleReminder } from '../modules/notifications/reminder.service.js'

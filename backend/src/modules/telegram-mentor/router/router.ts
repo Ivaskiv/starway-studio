@@ -1,5 +1,5 @@
 import type { Context } from 'telegraf'
-import type { AIMessageRole } from '@prisma/client'
+import type { AIMessageRole } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { logAssistantRoutingMeta } from '../../ai-mentor/state.service.js'
 import { trackEvent, trackQuestionEvent } from '../../events/service.js'

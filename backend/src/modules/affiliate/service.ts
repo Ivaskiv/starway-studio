@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid"
+import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from "../../db/client.js"
 
 /*
@@ -34,7 +35,9 @@ export async function createAffiliateLink(
 отримати всі партнерські лінки користувача
 */
 
-export async function getUserAffiliateLinks(userId: string) {
+export async function getUserAffiliateLinks(
+  userId: string
+): Promise<Array<Prisma.AffiliateLinkGetPayload<{ include: { product: true } }>>> {
 
   return prisma.affiliateLink.findMany({
     where: {
@@ -52,7 +55,9 @@ export async function getUserAffiliateLinks(userId: string) {
 використовується при покупці
 */
 
-export async function getAffiliateByCode(code: string) {
+export async function getAffiliateByCode(
+  code: string
+): Promise<Prisma.AffiliateLinkGetPayload<{ include: { product: true; user: true } }> | null> {
 
   return prisma.affiliateLink.findUnique({
     where: {
