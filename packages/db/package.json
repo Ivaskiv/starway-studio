@@ -20,12 +20,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "5.22.0",
     "dotenv": "^16.6.1"
   },
   "devDependencies": {
     "@types/node": "^25.1.0",
-    "prisma": "^5.22.0",
+    "prisma": "5.22.0",
     "typescript": "^5.9.3"
   }
 }
