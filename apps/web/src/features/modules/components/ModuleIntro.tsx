@@ -1,5 +1,4 @@
 // frontend/src/features/modules/components/ModuleIntro.tsx
-// Liquid Glass / glassmorphism — Tailwind + CSS vars, без style={{}} і без CSS-модулів
 
 import { GlassCard } from '@/ui/GlassCard'
 
@@ -16,7 +15,6 @@ export function ModuleIntro({ title, description, steps }: ModuleIntroProps) {
       p-6 md:p-8
       border border-[color:rgba(var(--glass-border-rgb),0.22)]
       bg-[color:var(--glass-bg)]
-      backdrop-blur-xl
       rounded-2xl
       shadow-[0_8px_40px_rgba(var(--accent-glow-rgb),0.12)]
     ">

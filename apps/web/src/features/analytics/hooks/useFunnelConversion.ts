@@ -1,7 +1,7 @@
 // frontend/src/features/analytics/hooks/useFunnelConversion.ts
 // ✅ Виправлено: FunnelStats інтерфейс з явними полями
 
-import { calculateConversion } from '@/shared/utils/calculate'
+import { calculateConversion } from '@/lib/utils/calculate'
 
 export interface FunnelStats {
   visitors: number

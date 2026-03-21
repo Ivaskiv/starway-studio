@@ -1,7 +1,7 @@
 import { ROUTES } from '@/config/routes';
 import { useSystemState } from '@/features/auth/hooks/useSystemState';
-import { ModuleIntro } from '@/shared/components/ModuleIntro';
-import { ModuleUsageCounter } from '@/shared/components/ModuleUsageCounter';
+import { ModuleIntro } from '@/features/modules/components/ModuleIntro';
+import { ModuleUsageCounter } from '@/features/modules/components/ModuleUsageCounter';
 import { Button, GlassCard } from '@/ui';
 import { ArrowLeft, CheckCircle2, Link2, Save, Unlink } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';

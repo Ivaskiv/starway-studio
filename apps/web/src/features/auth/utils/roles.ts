@@ -1,6 +1,6 @@
-// frontend/src/shared/utils/roles.ts
+// frontend/src/features/auth/utils/roles.ts
 import type { User } from '@/features/user/types/user.types'
-import { hasPaidAccess } from '@/shared/utils/access.utils'
+import { hasPaidAccess } from '@/features/auth/utils/access.utils'
 
 export function hasContentAccess(content: any, user: User | null): boolean {
   if (!content.isPremium) return true

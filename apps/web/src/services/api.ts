@@ -10,7 +10,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { RootState } from '@/app/store';
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice';
 import type { User } from '@/features/user/types/user.types';
-import { TAG_TYPES } from '@/shared/types/tagTypes';
+import { TAG_TYPES } from '@/app/tagTypes';
 
 type ApiTagType = (typeof TAG_TYPES)[number];
 

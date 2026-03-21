@@ -234,6 +234,26 @@
   color:                   transparent;
 }
 
+.module-usage-progress {
+  appearance: none;
+  display: block;
+  background: rgba(255,255,255,0.1);
+}
+
+.module-usage-progress::-webkit-progress-bar {
+  background: rgba(255,255,255,0.1);
+}
+
+.module-usage-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--accent-gradient);
+}
+
+.module-usage-progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--accent-gradient);
+}
+
 // ══ 9. AMBIENT GRADIENT ══════════════════════════════════════
 
 .ambient-gradient {

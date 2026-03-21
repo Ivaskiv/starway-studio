@@ -1,4 +1,4 @@
-// frontend/src/shared/components/ModuleUsageCounter.tsx
+// frontend/src/features/modules/components/ModuleUsageCounter.tsx
 interface ModuleUsageCounterProps {
   label: string;
   used:  number;
@@ -14,12 +14,9 @@ export function ModuleUsageCounter({ label, used, total }: ModuleUsageCounterPro
         <span>{label}</span>
         <span className="text-white font-semibold">{used}/{total}</span>
       </div>
-      <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-[image:var(--accent-gradient)] transition-[width] duration-500 ease-out"
-          ref={el => el?.style.setProperty('width', `${ratio}%`)}
-        />
-      </div>
+      <progress className="module-usage-progress h-2 w-full overflow-hidden rounded-full" value={ratio} max={100}>
+        {ratio}%
+      </progress>
     </div>
   );
 }

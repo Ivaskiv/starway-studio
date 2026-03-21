@@ -10,7 +10,7 @@ import { LoginForm } from './LoginForm'
 import { RegisterForm } from './RegisterForm'
 import { useAuth } from '../hooks/useAuth'
 import { usePostAuthNavigation } from '../hooks/usePostAuthNavigation'
-import { getToastMessage, type ToastLang } from '@/shared/i18n/toast'
+import { getToastMessage, type ToastLang } from '@/features/notifications/i18n/toast'
 import toast from 'react-hot-toast'
 
 type Mode = 'login' | 'register'

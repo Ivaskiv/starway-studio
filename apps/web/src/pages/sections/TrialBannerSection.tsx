@@ -1,7 +1,7 @@
 // frontend/src/pages/sections/TrialBannerSection.tsx
-// ✓ getSubscriptionStatus з @/shared/utils/access.utils
+// ✓ getSubscriptionStatus з auth utils
 
-import { getSubscriptionStatus } from '@/shared/utils/access.utils'
+import { getSubscriptionStatus } from '@/features/auth/utils/access.utils'
 import type { User }             from '@/features/user/types/user.types'
 import { Sparkles, Zap }        from 'lucide-react'
 

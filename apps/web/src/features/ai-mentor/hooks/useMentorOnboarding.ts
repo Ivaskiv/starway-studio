@@ -16,7 +16,7 @@ import {
   shouldShowOnboardingReminder,
 } from '../config/onboarding.config';
 import type { OnboardingProgress, OnboardingStage } from '../types/mentor.types';
-import { isTrialUser } from '@/shared/utils/access.utils';
+import { isTrialUser } from '@/features/auth/utils/access.utils';
 
 // ============================================================================
 // HOOK

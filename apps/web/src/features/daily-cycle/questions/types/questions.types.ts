@@ -1,6 +1,6 @@
 // frontend/src/features/questions/types/questions.types.ts
 
-import { withNormalizer } from '@/shared/utils/apiNormalizer';
+import { withNormalizer } from '@/lib/api/apiNormalizer';
 
 // Типи для Questions → Answers → Decisions
 // DB: questions.id, answers.question_id, decisions.type

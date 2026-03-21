@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { ROUTES, ROUTE_METADATA } from '@/config/routes';
 import type { RoutePath } from '@/config/routes';
-import { hasPaidAccess } from '@/shared/utils/access.utils';
+import { hasPaidAccess } from '@/features/auth/utils/access.utils';
 
 interface NavigationOptions {
   requiresAuth?: boolean;

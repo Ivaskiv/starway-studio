@@ -1,7 +1,7 @@
 // frontend/src/pages/sections/FeatureCard.tsx
-// ✓ hasAccess з @/shared/utils/access.utils (не з @/config/menu)
+// ✓ hasAccess з auth utils (не з @/config/menu)
 
-import { hasAccess } from '@/shared/utils/access.utils'
+import { hasAccess } from '@/features/auth/utils/access.utils'
 import { GlassCard } from '@/ui/GlassCard'
 import { Lock, type LucideIcon, Users } from 'lucide-react'
 import { useState } from 'react'

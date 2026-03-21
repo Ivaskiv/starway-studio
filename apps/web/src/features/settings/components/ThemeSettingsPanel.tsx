@@ -11,7 +11,7 @@ import {
   generateShades,
   getContrastColor,
   lightenColor,
-} from '@/shared/utils/color.utils'
+} from '@/lib/theme/color.utils'
 
 import { ACCENT_PRESETS, type UiMode } from '@/theme/accent.utils'
 

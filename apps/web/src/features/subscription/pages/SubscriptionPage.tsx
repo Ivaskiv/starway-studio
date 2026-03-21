@@ -6,7 +6,7 @@
 import { useAppSelector }   from '@/app/hooks'
 import { useTrackFrontendEventMutation } from '@/features/analytics/services/events.api'
 import { selectCurrentUser } from '@/features/auth/services/auth.slice'
-import { hasPaidAccess }    from '@/shared/utils/access.utils'
+import { hasPaidAccess }    from '@/features/auth/utils/access.utils'
 import {
   ArrowRight, BookOpen, Brain,
   Check, Crown, MessageCircle, Users,

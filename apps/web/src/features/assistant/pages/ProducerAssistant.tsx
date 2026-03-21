@@ -1,5 +1,5 @@
 //frontend/src/features/producer/assistant/pages/AIProducerAssistantPage.tsx
-import { ModuleIntro } from '@/shared/components/ModuleIntro'
+import { ModuleIntro } from '@/features/modules/components/ModuleIntro'
 import { AssistantPanel } from '../components/AssistantPanel'
 import { AssistantStepCard } from '../components/AssistantStepCard'
 import { useProducerAssistant } from '../hooks/useProducerAssistant'

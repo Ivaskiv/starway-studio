@@ -8,8 +8,8 @@ import {
   type StepData,
 } from '@/features/ai-generator/types/wizard.types';
 import { useSystemState } from '@/features/auth/hooks/useSystemState';
-import { ModuleIntro } from '@/shared/components/ModuleIntro';
-import { ModuleUsageCounter } from '@/shared/components/ModuleUsageCounter';
+import { ModuleIntro } from '@/features/modules/components/ModuleIntro';
+import { ModuleUsageCounter } from '@/features/modules/components/ModuleUsageCounter';
 import { Button, GlassCard, Textarea } from '@/ui';
 import {
   ArrowLeft,

@@ -1,5 +1,5 @@
 import { api } from '@/services/api';
-import type { AdminSettings } from '@/shared/types/profile.types';
+import type { AdminSettings } from '@/features/user/types/profile.types';
 
 export interface AdminProduct {
   id: string;

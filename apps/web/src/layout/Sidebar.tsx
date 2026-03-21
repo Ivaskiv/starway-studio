@@ -11,8 +11,8 @@ import type { UserRole } from '@/features/user/types/user.types'
 import { UserMenu } from '@/features/user/userMenu/UserMenu'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
 import type { AppView, PreviewRole } from '@/layout/types/layout.types'
-import { getToastMessage } from '@/shared/i18n/toast'
-import { useMediaQuery } from '@/shared/services/media.api'
+import { getToastMessage } from '@/features/notifications/i18n/toast'
+import { useMediaQuery } from '@/features/media/services/media.api'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ТИПИ

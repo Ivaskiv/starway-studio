@@ -6,7 +6,7 @@ import {
   useLoginMutation,
   useForgotPasswordMutation,
 }                               from '@/features/auth/services/auth.api'
-import { getToastMessage, type ToastLang } from '@/shared/i18n/toast'
+import { getToastMessage, type ToastLang } from '@/features/notifications/i18n/toast'
 import { Button, Input }        from '@/ui'
 import { useForm, type AnyFieldApi } from '@tanstack/react-form'
 import { useMemo, type FormEvent } from 'react'

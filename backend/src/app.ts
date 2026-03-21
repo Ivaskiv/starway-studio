@@ -1,8 +1,8 @@
 // backend/src/app.ts
 import express, {
+  type NextFunction,
   type Request,
   type Response,
-  type NextFunction,
 } from 'express';
 
 import cookieParser from 'cookie-parser';
@@ -12,42 +12,42 @@ import morgan from 'morgan';
 
 // Routes
 import accessRoutes from './modules/access/routes.js';
-import analyticsRoutes from './modules/analytics/routes.js';
+import adminRoutes from './modules/admin/routes.js';
+import affiliateRoutes from "./modules/affiliate/routes.js";
 import aiGeneratorRoutes from './modules/ai-generator/routes.js';
 import mentorRoutes from './modules/ai-mentor/routes.js';
+import analyticsRoutes from './modules/analytics/routes.js';
+import assistantRoutes from './modules/assistant/routes.js';
 import authRoutes, { telegramRouter } from './modules/auth/auth.routes.js';
-import expertsRoutes from './modules/experts/routes.js';
-import eventsRoutes from './modules/events/routes.js';
-import fivePointsRoutes from './modules/five-points/routes.js';
 import consultationRoutes from './modules/consultation/routes.js';
 import dailyRoutes from './modules/daily-cycle/routes.js';
 import deeplinkRoutes from './modules/deeplinks/routes.js';
+import eventsRoutes from './modules/events/routes.js';
+import expertsRoutes from './modules/experts/routes.js';
+import fivePointsRoutes from './modules/five-points/routes.js';
 import funnelRoutes from './modules/funnel/routes.js';
+import gamificationRoutes from './modules/gamification/routes.js';
 import goalsRoutes from './modules/goals/routes.js';
+import landingRoutes from './modules/landing/routes.js';
+import leadMagnetRoutes from './modules/lead-magnet/routes.js';
 import mentorshipRoutes from './modules/mentorship/routes.js';
 import miniCoursesRoutes from './modules/mini-courses/routes.js';
 import onboardingRoutes from './modules/onboarding/routes.js';
-import productsRoutes from './modules/products/routes.js';
-import productMembersRoutes from './modules/product-members/routes.js';
 import producerRoutes from './modules/producer/routes.js';
+import productMembersRoutes from './modules/product-members/routes.js';
+import productsRoutes from './modules/products/routes.js';
 import progressRoutes from './modules/progress/routes.js';
+import quotaRoutes from './modules/quota/routes.js';
+import settingsRoutes from './modules/settings/routes.js';
 import socialRoutes from './modules/social/routes.js';
+import startFlowRoutes from './modules/start-flow/routes.js';
 import subscriptionsRoutes from './modules/subscriptions/routes.js';
 import trialRoutes from './modules/trial/routes.js';
 import userStateRoutes from './modules/user-state/routes.js';
 import userRoutes from './modules/user/routes.js';
 import visionRoutes from './modules/vision/routes.js';
 import wheelRoutes from './modules/wheel/routes.js';
-import quotaRoutes from './modules/quota/routes.js';
 import zoomRoutes from './modules/zoom/routes.js';
-import landingRoutes from './modules/landing/routes.js';
-import assistantRoutes from './modules/assistant/routes.js'
-import affiliateRoutes from "./modules/affiliate/routes.js"
-import leadMagnetRoutes from './modules/lead-magnet/routes.js'
-import adminRoutes from './modules/admin/routes.js'
-import settingsRoutes from './modules/settings/routes.js'
-import startFlowRoutes from './modules/start-flow/routes.js'
-import gamificationRoutes from './modules/gamification/routes.js'
 
 export function createApp() {
   const app = express();
@@ -57,7 +57,9 @@ export function createApp() {
   // =====================
   app.use(
     cors({
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      origin: process.env.FRONTEND_URL
+        ? process.env.FRONTEND_URL.split(',')
+        : ['http://localhost:5173', 'https://starway-frontend.vercel.app'],
       credentials: true,
     }),
   );

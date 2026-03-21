@@ -8,7 +8,7 @@ import { Toaster } from 'react-hot-toast';
 import { initTheme } from '@/theme/accent.utils';
 import App from './App';
 import { store } from './app/store';
-import { TOASTER_CONFIG } from './shared/config/toaster';
+import { TOASTER_CONFIG } from './app/config/toaster';
 import './styles/index.scss';
 import { ThemeProvider } from './theme/ThemeProvider';
 

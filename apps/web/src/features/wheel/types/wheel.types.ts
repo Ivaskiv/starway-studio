@@ -1,6 +1,6 @@
 // frontend/src/features/wheel/services/wheel.types.ts
 import { ABILITIES, Ability } from '@/features/auth/permissions/abilities';
-import { withNormalizer } from '@/shared/utils/apiNormalizer';
+import { withNormalizer } from '@/lib/api/apiNormalizer';
 import {
   LayoutDashboard,
   Package,

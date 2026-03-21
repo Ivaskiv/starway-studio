@@ -1,7 +1,7 @@
 // frontend/src/features/auth/pages/ResetPasswordPage.tsx
 import { useResetPasswordMutation } from '@/features/auth/services/auth.api'
 import { useAuth } from '@/features/auth/hooks/useAuth'
-import { getToastMessage } from '@/shared/i18n/toast'
+import { getToastMessage } from '@/features/notifications/i18n/toast'
 import { Button, Input } from '@/ui'
 import { type FormEvent, useState } from 'react'
 import toast from 'react-hot-toast'
