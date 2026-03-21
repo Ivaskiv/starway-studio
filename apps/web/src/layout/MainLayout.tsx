@@ -1,6 +1,6 @@
 // frontend/src/layout/MainLayout.tsx
 import { useEffect, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 
 import AuthModal from '@/features/auth/components/AuthModal'
 import { useAuth } from '@/features/auth/hooks/useAuth'
@@ -22,6 +22,7 @@ export default function MainLayout({
   showBreadcrumbs = true,
   dashboard = false,
 }: MainLayoutProps) {
+  const location = useLocation()
 
   const [collapsed,   setCollapsed]   = useState(false)
   const [view,        setView]        = useState<AppView>('navigation')
@@ -61,6 +62,7 @@ export default function MainLayout({
   }, [user, state])
 
   const shouldShowSidebar = dashboard || isAuthenticated
+  const isHomePage = location.pathname === '/'
 
   // ─────────────────────────────────────────────────────────────────────────
   // DASHBOARD + LOGGED-IN LAYOUT
@@ -81,14 +83,23 @@ export default function MainLayout({
           <Header {...layoutControls} {...authCallbacks} />
 
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-[1600px] mx-auto w-full px-6 py-6">
-              <div className="flex items-center justify-between gap-4 mb-6">
-                <div className="flex-1"><Breadcrumbs /></div>
-                <SettingsBreadcrumbAction />
+            {isHomePage ? (
+              <>
+                <main className="min-h-screen">
+                  <Outlet />
+                </main>
+                <Footer />
+              </>
+            ) : (
+              <div className="max-w-[1600px] mx-auto w-full px-6 py-6">
+                <div className="flex items-center justify-between gap-4 mb-6">
+                  <div className="flex-1"><Breadcrumbs /></div>
+                  <SettingsBreadcrumbAction />
+                </div>
+                <main className="min-h-[60vh]"><Outlet /></main>
+                <Footer />
               </div>
-              <main className="min-h-[60vh]"><Outlet /></main>
-              <Footer />
-            </div>
+            )}
           </div>
         </div>
 
@@ -111,11 +122,13 @@ export default function MainLayout({
       {/* ── ВИПРАВЛЕНО: передаємо authCallbacks ── */}
       <Header {...layoutControls} {...authCallbacks} />
 
-      <div className="max-w-7xl mx-auto w-full px-5 sm:px-6">
-        <Breadcrumbs />
-      </div>
+      {!isHomePage && (
+        <div className="max-w-7xl mx-auto w-full px-5 sm:px-6">
+          <Breadcrumbs />
+        </div>
+      )}
 
-      <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+      <main className={isHomePage ? 'flex-1' : 'flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8'}>
         <Outlet />
       </main>
 

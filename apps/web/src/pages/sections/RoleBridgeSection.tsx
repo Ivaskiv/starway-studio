@@ -21,8 +21,8 @@ export function RoleBridgeSection({ onAuthRequired }: { onAuthRequired: () => vo
   };
 
   return (
-    <section className="py-12 px-6">
-      <div className="max-w-7xl mx-auto">
+    <section className="py-8">
+      <div className="mx-auto max-w-[1600px] px-6">
         {/* fix code_x: new role bridge section split into two cards with bidirectional owner/user logic. */}
         <div className="grid md:grid-cols-2 gap-6">
           <article className="glass-card p-6 rounded-3xl border border-white/15">

@@ -71,11 +71,11 @@ export default function HomePage() {
 
   return (
     <>
-      <div className=" min-h-screen bg-[color:var(--bg-primary)] text-[color:var(--text-primary)]">
+      <div className="min-h-screen bg-[color:var(--bg-primary)] text-[color:var(--text-primary)]">
         {/* <TrialBannerSection user={user} /> */}
         <HeroSection onGetStarted={handleGetStarted} onLearnMore={handleLearnMore} />
         {!user && (
-          <div className="px-5 pb-6 sm:px-8">
+          <div className="mx-auto max-w-[1600px] px-6 pb-6">
             <LandingAuthActions onEmailLogin={() => openAuth('login')} />
           </div>
         )}

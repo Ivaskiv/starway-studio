@@ -28,8 +28,9 @@ export default function StatsSection() {
   const stats = data?.stats?.length ? data.stats.slice(0, 4).map(mapStats) : FALLBACK_STATS
 
   return (
-    <section className="py-14 border-y border-[color:var(--border-primary)]">
-      <div className="max-w-5xl mx-auto px-6">
+    <section className="py-8 border-y border-[color:var(--border-primary)]">
+      <div className="mx-auto max-w-[1600px] px-6">
+        <div className="max-w-5xl mx-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {stats.map(({ icon, value, label }) => (
             <div
@@ -50,6 +51,7 @@ export default function StatsSection() {
               <p className="text-xs text-[color:var(--text-muted)] mt-1 leading-snug">{label}</p>
             </div>
           ))}
+        </div>
         </div>
       </div>
     </section>

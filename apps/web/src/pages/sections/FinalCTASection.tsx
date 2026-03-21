@@ -5,8 +5,9 @@ interface FinalCTASectionProps { onGetStarted: () => void; }
 
 export function FinalCTASection({ onGetStarted }: FinalCTASectionProps) {
   return (
-    <section className="py-24 px-5 sm:px-8">
-      <div className="max-w-4xl mx-auto">
+    <section className="py-8">
+      <div className="mx-auto max-w-[1600px] px-6">
+        <div className="max-w-4xl mx-auto">
         <div className="
           relative overflow-hidden rounded-3xl
           border border-[rgba(var(--accent-rgb),0.20)]
@@ -56,6 +57,7 @@ export function FinalCTASection({ onGetStarted }: FinalCTASectionProps) {
               ))}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </section>

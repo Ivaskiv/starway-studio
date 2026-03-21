@@ -31,8 +31,9 @@ interface PricingSectionProps { onSelectPlan: () => void; }
 
 export function PricingSection({ onSelectPlan }: PricingSectionProps) {
   return (
-    <section className="py-24 px-5 sm:px-8 bg-gradient-to-b from-slate-950/20 to-transparent">
-      <div className="max-w-5xl mx-auto">
+    <section className="py-8">
+      <div className="mx-auto max-w-[1600px] px-6">
+        <div className="max-w-5xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-black mb-4 text-white">
             Прозорі{' '}
@@ -108,6 +109,7 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
         <p className="text-center mt-8 text-sm text-white/30">
           💳 Карта не потрібна для Free · ✨ 7 днів trial Premium без оплати
         </p>
+        </div>
       </div>
     </section>
   );

@@ -9,7 +9,7 @@
   inset: 0;
   background: radial-gradient(circle at 30% -20%, rgba(var(--accent-rgb), 0.35), transparent 60%),
     radial-gradient(circle at 60% 20%, rgba(var(--accent-rgb), 0.25), transparent 55%),
-    #030613;
+    var(--bg-primary);
   filter: saturate(1.1);
 }
 .hero-background__halo {
@@ -78,7 +78,6 @@
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
-  // backdrop-filter: blur(12px);
   box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
   color: var(--text-primary);
   transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
@@ -174,6 +173,23 @@
   color: rgba(255, 255, 255, 0.7);
   line-height: 1.4;
   min-height: 2.5rem;
+}
+.course-progress {
+  appearance: none;
+  display: block;
+  overflow: hidden;
+}
+.course-progress::-webkit-progress-bar {
+  background: transparent;
+}
+.course-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  transition: width 1s;
+}
+.course-progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
 }
 .step-card {
   padding: 1.5rem;

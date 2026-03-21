@@ -10,8 +10,8 @@ const TESTIMONIALS = [
 
 export function TestimonialsSection() {
   return (
-    <section className="py-24 px-5 sm:px-8">
-      <div className="max-w-7xl mx-auto">
+    <section className="py-8">
+      <div className="mx-auto max-w-[1600px] px-6">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-black mb-4 text-white">
             Що кажуть {' '}

@@ -121,8 +121,9 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   }
 
   return (
-    <section id="how-it-works" className=" sm:px-8">
-      <div className="mx-auto max-w-5xl">
+    <section id="how-it-works" className="py-8">
+      <div className="mx-auto max-w-[1600px] px-6">
+        <div className="mx-auto max-w-5xl">
         <div className="mb-16 text-center">
           <h2 className="mb-4 text-4xl font-black text-white md:text-5xl">
             Як це <span className="text-[rgb(var(--accent-soft-rgb))]">працює</span>
@@ -271,6 +272,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
+        </div>
         </div>
       </div>
     </section>

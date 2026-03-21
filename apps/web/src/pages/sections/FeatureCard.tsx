@@ -1,7 +1,5 @@
 // frontend/src/pages/sections/FeatureCard.tsx
 // ✓ hasAccess з @/shared/utils/access.utils (не з @/config/menu)
-// ✓ CourseCard: style={{width}} → ref + setProperty
-// ✗ backdrop-blur в AIMentorModal → прибрано
 
 import { hasAccess } from '@/shared/utils/access.utils'
 import { GlassCard } from '@/ui/GlassCard'
@@ -142,7 +140,6 @@ export function LeaderboardItem({ rank, name, points }: { rank: string; name: st
   )
 }
 
-// ── CourseCard — FIX: style={{width}} → ref+setProperty ───────
 export function CourseCard({
   icon, title, progress, students, rating,
 }: {
@@ -167,20 +164,18 @@ export function CourseCard({
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-slate-400">Прогрес</span>
-            <span className={`font-semibold ${ACCENT_TEXT}`}>{progress}%</span>
+          <span className={`font-semibold ${ACCENT_TEXT}`}>{progress}%</span>
         </div>
-        <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-          <div
-            className={`h-full ${ACCENT_FILL_GRADIENT} rounded-full transition-[width] duration-1000`}
-            ref={el => el?.style.setProperty('width', `${progress}%`)}
-          />
+        <div className="h-2 overflow-hidden rounded-full bg-white/5">
+          <progress className="course-progress h-full w-full" value={progress} max={100}>
+            {progress}%
+          </progress>
         </div>
       </div>
     </GlassCard>
   )
 }
 
-// ── AIMentorModal — FIX: backdrop-blur → прибрано ─────────────
 export function AIMentorModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [messages, setMessages] = useState([
     {
@@ -205,7 +200,6 @@ export function AIMentorModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
   if (!isOpen) return null
 
   return (
-    // Overlay: bg-black/90 без backdrop-blur (правило #2)
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90">
       <GlassCard className="w-full max-w-2xl max-h-[80vh] flex flex-col">
 

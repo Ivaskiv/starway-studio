@@ -12,26 +12,28 @@ export default function AffiliateTestSection() {
   const handleSale = async () => setResult(await recordSale({ code, amount: saleAmount }))
 
   return (
-    <section className="py-12 px-6 mt-6 border-t border-[color:var(--border-primary)]">
-      <h2 className="text-2xl font-bold mb-4">Affiliate Test</h2>
-      <div className="flex flex-col gap-3 max-w-md">
-        <button onClick={handleCreate} className="btn-responsive glass-button">Створити лінк</button>
-        <input
-          placeholder="Affiliate code"
-          value={code}
-          onChange={e => setCode(e.target.value)}
-          className="glass-input"
-        />
-        <button onClick={handleClick} className="btn-responsive glass-button">Трек клік</button>
-        <input
-          type="number"
-          placeholder="Сума продажу"
-          value={saleAmount}
-          onChange={e => setSaleAmount(+e.target.value)}
-          className="glass-input"
-        />
-        <button onClick={handleSale} className="btn-responsive glass-button">Записати продаж</button>
-        <pre className="text-xs bg-black/20 p-2 rounded">{JSON.stringify(result, null, 2)}</pre>
+    <section className="mt-6 border-t border-[color:var(--border-primary)] py-8">
+      <div className="mx-auto max-w-[1600px] px-6">
+        <h2 className="mb-4 text-2xl font-bold">Affiliate Test</h2>
+        <div className="flex max-w-md flex-col gap-3">
+          <button onClick={handleCreate} className="btn-responsive glass-button">Створити лінк</button>
+          <input
+            placeholder="Affiliate code"
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            className="glass-input"
+          />
+          <button onClick={handleClick} className="btn-responsive glass-button">Трек клік</button>
+          <input
+            type="number"
+            placeholder="Сума продажу"
+            value={saleAmount}
+            onChange={e => setSaleAmount(+e.target.value)}
+            className="glass-input"
+          />
+          <button onClick={handleSale} className="btn-responsive glass-button">Записати продаж</button>
+          <pre className="rounded bg-[color:var(--glass-bg)] p-2 text-xs">{JSON.stringify(result, null, 2)}</pre>
+        </div>
       </div>
     </section>
   )

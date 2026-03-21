@@ -1,5 +1,4 @@
 // frontend/src/pages/sections/TrialBannerSection.tsx
-// ✗ backdrop-blur → прибрано (правило #2, Safari incompatibility)
 // ✓ getSubscriptionStatus з @/shared/utils/access.utils
 
 import { getSubscriptionStatus } from '@/shared/utils/access.utils'
@@ -15,7 +14,6 @@ export function TrialBannerSection({ user }: { user: User | null }) {
   return (
     <div className="relative overflow-hidden border-b border-white/[0.08]">
 
-      {/* Background — gradient замість backdrop-blur */}
       <div className="absolute inset-0 bg-gradient-to-r from-[rgba(var(--accent-rgb),0.08)] via-[rgba(var(--accent-rgb),0.05)] to-transparent" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(var(--accent-rgb),0.12)_0%,transparent_60%)]" />
 
@@ -24,7 +22,7 @@ export function TrialBannerSection({ user }: { user: User | null }) {
         <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-transparent animate-pulse" />
       )}
 
-      <div className="relative max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-6">
+      <div className="relative mx-auto flex max-w-[1600px] items-center justify-between gap-6 px-6 py-3">
 
         {/* Left */}
         <div className="flex items-center gap-3">

@@ -1,8 +1,4 @@
 // frontend/src/features/landing/sections/HeroSection.tsx
-// ✅ ZERO inline style={{}} — назавжди
-// ✅ fontFamily через CSS клас .hero-h1
-// ✅ progress animation через CSS клас .hero-progress-bar
-// ✅ accent color — var(--accent-rgb) скрізь
 import { ArrowRight, ChevronLeft, ChevronRight, Play, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -78,7 +74,7 @@ export function HeroSection({ onGetStarted, onLearnMore }: HeroSectionProps) {
   const s = SLIDES[active]
 
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden  text-center">
+    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[color:var(--bg-primary)] py-8 text-center">
 
       {/* ── Background ───────────────────────────────────────── */}
       <div className="hero-background" aria-hidden>
@@ -91,7 +87,8 @@ export function HeroSection({ onGetStarted, onLearnMore }: HeroSectionProps) {
       </div>
 
       {/* ── Контент ───────────────────────────────────────────── */}
-      <div className={`relative z-10 w-full max-w-4xl mx-auto transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
+      <div className="relative z-10 mx-auto flex w-full max-w-[1600px] flex-col items-center px-6">
+        <div className={`w-full max-w-4xl transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
 
         {/* Badge */}
         <div className="inline-flex items-center gap-2 px-4 py-2 mb-8 rounded-full border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.08)] text-[rgb(var(--accent-soft-rgb))] text-[11px] font-bold tracking-[.14em] uppercase">
@@ -151,55 +148,55 @@ export function HeroSection({ onGetStarted, onLearnMore }: HeroSectionProps) {
             </span>
           ))}
         </div>
-      </div>
-
-      {/* Slider controls */}
-      <div className="relative z-10 mt-14 flex items-center gap-5">
-        <button
-          onClick={() => { go(-1); start() }}
-          aria-label="Попередній"
-          className="hero-slider-control"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-
-        <div className="flex items-center gap-[12px]">
-          {SLIDES.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => goTo(i)}
-              aria-label={`Слайд ${i + 1}`}
-              className={`hero-slider-dot ${i === active ? 'hero-slider-dot--active' : ''}`}
-            />
-          ))}
         </div>
 
-        <button
-          onClick={() => { go(1); start() }}
-          aria-label="Наступний"
-          className="hero-slider-control"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Progress bars */}
-      <div className="relative z-10 mt-5 flex gap-[6px]">
-        {SLIDES.map((_, i) => (
-          <div
-            key={i}
-            className="h-px w-12 rounded-full bg-[rgba(var(--accent-rgb),0.15)] overflow-hidden"
+        {/* Slider controls */}
+        <div className="mt-14 flex items-center gap-5">
+          <button
+            onClick={() => { go(-1); start() }}
+            aria-label="Попередній"
+            className="hero-slider-control"
           >
-            {i === active && (
-              <div
-                key={active}
-                className="hero-progress-bar h-full bg-[rgb(var(--accent-soft-rgb))] rounded-full origin-left"
-              />
-            )}
-          </div>
-        ))}
-      </div>
+            <ChevronLeft className="w-5 h-5" />
+          </button>
 
+          <div className="flex items-center gap-[12px]">
+            {SLIDES.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                aria-label={`Слайд ${i + 1}`}
+                className={`hero-slider-dot ${i === active ? 'hero-slider-dot--active' : ''}`}
+              />
+            ))}
+          </div>
+
+          <button
+            onClick={() => { go(1); start() }}
+            aria-label="Наступний"
+            className="hero-slider-control"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Progress bars */}
+        <div className="mt-5 flex gap-[6px]">
+          {SLIDES.map((_, i) => (
+            <div
+              key={i}
+              className="h-px w-12 overflow-hidden rounded-full bg-[rgba(var(--accent-rgb),0.15)]"
+            >
+              {i === active && (
+                <div
+                  key={active}
+                  className="hero-progress-bar h-full origin-left rounded-full bg-[rgb(var(--accent-soft-rgb))]"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   )
 }
