@@ -55,14 +55,24 @@ export function createApp() {
   // =====================
   // Middleware
   // =====================
-  app.use(
-    cors({
-      origin: process.env.FRONTEND_URL
-        ? process.env.FRONTEND_URL.split(',')
-        : ['http://localhost:5173', 'https://starway-frontend.vercel.app'],
-      credentials: true,
-    }),
-  );
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        'http://localhost:5173',
+        'https://starway-frontend.vercel.app',
+      ];
+
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS blocked'));
+      }
+    },
+    credentials: true,
+  }),
+);
+app.options('*', cors());
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
