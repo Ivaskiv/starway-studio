@@ -283,9 +283,6 @@ importers:
       '@neondatabase/serverless':
         specifier: ^0.9.0
         version: 0.9.5
-      '@prisma/adapter-pg':
-        specifier: ^7.5.0
-        version: 7.5.0
       '@starway/db':
         specifier: workspace:*
         version: link:../packages/db
@@ -347,6 +344,9 @@ importers:
         specifier: ^13.0.0
         version: 13.0.0
     devDependencies:
+      '@prisma/client':
+        specifier: 5.22.0
+        version: 5.22.0(prisma@5.22.0)
       '@telegraf/types':
         specifier: ^9.2.1
         version: 9.2.1
@@ -386,6 +386,9 @@ importers:
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
+      prisma:
+        specifier: 5.22.0
+        version: 5.22.0
       telegraf:
         specifier: ^4.16.3
         version: 4.16.3
@@ -408,7 +411,7 @@ importers:
   packages/db:
     dependencies:
       '@prisma/client':
-        specifier: ^5.22.0
+        specifier: 5.22.0
         version: 5.22.0(prisma@5.22.0)
       dotenv:
         specifier: ^16.6.1
@@ -418,7 +421,7 @@ importers:
         specifier: ^25.1.0
         version: 25.5.0
       prisma:
-        specifier: ^5.22.0
+        specifier: 5.22.0
         version: 5.22.0
       typescript:
         specifier: ^5.9.3
@@ -1480,7 +1483,6 @@ packages:
         optional: true
     dependencies:
       prisma: 5.22.0
-    dev: false
 
   /@prisma/debug@5.22.0:
     resolution: {integrity: sha512-AUt44v3YJeggO2ZU5BkXI7M4hu9BF2zzH2iF2V5pyXT/lRTyWiElZ7It+bRH1EshoMRxHgpYg4VB6rCM+mG5jQ==}
