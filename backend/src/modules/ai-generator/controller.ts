@@ -3,6 +3,8 @@ import { buildBlueprintFromSteps, generateStepVariant, getWorkflowState, saveBlu
 import { AIGeneratorWorkflowState, BlueprintStepInput, GenerateStepInput, SaveBlueprintInput } from '../../modules/ai-generator/types.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import type { Response } from 'express';
+import { trackEvent } from '../events/service.js';
+import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 
 // ── Новий імпорт ─────────────────────────────────────────────────────────────
 import {
@@ -17,6 +19,7 @@ const TOTAL_PHASES = 11;
 // ── Step Generation ─────────────────────────────────────────────────────────
 export async function generateStepHandler(req: AuthenticatedRequest, res: Response) {
   try {
+    const userId = req.user?.id ?? null;
     const input = req.body as GenerateStepInput;
 
     if (!input?.stepNumber || !input?.userInput) {
@@ -27,6 +30,16 @@ export async function generateStepHandler(req: AuthenticatedRequest, res: Respon
     }
 
     const variant = await generateStepVariant(input);
+    const state = userId ? await resolveUserState(userId).catch(() => null) : null;
+    await trackEvent({
+      userId,
+      type: 'web_ai_generator_step_generated',
+      source: 'web',
+      state,
+      payload: {
+        stepNumber: input.stepNumber,
+      },
+    });
     return res.json({ success: true, variants: [variant], remainingAttempts: 0 });
   } catch (error) {
     console.error('❌ ai-generator step error:', error);
@@ -37,6 +50,7 @@ export async function generateStepHandler(req: AuthenticatedRequest, res: Respon
 // ── Build Blueprint ─────────────────────────────────────────────────────────
 export async function buildBlueprintHandler(req: AuthenticatedRequest, res: Response) {
   try {
+    const userId = req.user?.id ?? null;
     const stepsData = req.body?.stepsData as BlueprintStepInput[];
     if (!Array.isArray(stepsData) || stepsData.length !== TOTAL_PHASES) {
       return res.status(400).json({ error: 'steps_data_invalid', expected: TOTAL_PHASES, received: stepsData?.length ?? 0 });
@@ -53,6 +67,16 @@ export async function buildBlueprintHandler(req: AuthenticatedRequest, res: Resp
     }
 
     const blueprint = await buildBlueprintFromSteps(stepsData);
+    const state = userId ? await resolveUserState(userId).catch(() => null) : null;
+    await trackEvent({
+      userId,
+      type: 'web_ai_generator_blueprint_built',
+      source: 'web',
+      state,
+      payload: {
+        stepsCount: stepsData.length,
+      },
+    });
     return res.json(blueprint);
   } catch (error) {
     console.error('❌ ai-generator blueprint error:', error);
@@ -79,6 +103,17 @@ export async function saveBlueprintHandler(req: AuthenticatedRequest, res: Respo
     }
 
     const result = await saveBlueprint({ id: requester.id, role: requester.role, email: requester.email ?? undefined }, input);
+    const state = await resolveUserState(requester.id).catch(() => null);
+    await trackEvent({
+      userId: requester.id,
+      type: 'web_ai_generator_funnel_saved',
+      source: 'web',
+      state,
+      payload: {
+        funnelId: result.funnelId,
+        blueprintName: input.blueprint.name,
+      },
+    });
     return res.json({ success: true, funnelId: result.funnelId });
   } catch (error) {
     console.error('❌ ai-generator save error:', error);
@@ -93,6 +128,14 @@ export async function getWorkflowHandler(req: AuthenticatedRequest, res: Respons
     if (!requester?.id) return res.status(401).json({ error: 'unauthorized' });
 
     const workflow = await getWorkflowState(requester.id);
+    const state = await resolveUserState(requester.id).catch(() => null);
+    await trackEvent({
+      userId: requester.id,
+      type: 'web_ai_generator_workflow_viewed',
+      source: 'web',
+      state,
+      payload: {},
+    });
     return res.json({ success: true, workflow });
   } catch (error) {
     console.error('❌ ai-generator get workflow error:', error);
@@ -116,6 +159,16 @@ export async function saveWorkflowHandler(req: AuthenticatedRequest, res: Respon
     }
 
     const result = await saveWorkflowState(requester.id, workflow);
+    const state = await resolveUserState(requester.id).catch(() => null);
+    await trackEvent({
+      userId: requester.id,
+      type: 'web_ai_generator_workflow_saved',
+      source: 'web',
+      state,
+      payload: {
+        currentStep: workflow.currentStep,
+      },
+    });
     return res.json({ success: true, updatedAt: result.updatedAt });
   } catch (error) {
     console.error('❌ ai-generator save workflow error:', error);
@@ -140,6 +193,16 @@ export async function heroGenerateHandler(req: AuthenticatedRequest, res: Respon
     if (!input?.utp?.trim())            return res.status(400).json({ error: 'utp_required' });
 
     const variants = await generateHeroVariants(input);
+    const state = await resolveUserState(requester.id).catch(() => null);
+    await trackEvent({
+      userId: requester.id,
+      type: 'web_ai_generator_hero_generated',
+      source: 'web',
+      state,
+      payload: {
+        niche: input.niche,
+      },
+    });
     return res.json({ success: true, variants });
   } catch (error) {
     console.error('❌ ai-generator hero error:', error);
@@ -164,6 +227,16 @@ export async function adTextsGenerateHandler(req: AuthenticatedRequest, res: Res
     if (!input?.heroHeadline?.trim())   return res.status(400).json({ error: 'hero_headline_required' });
 
     const ads = await generateAdTexts(input);
+    const state = await resolveUserState(requester.id).catch(() => null);
+    await trackEvent({
+      userId: requester.id,
+      type: 'web_ai_generator_ads_generated',
+      source: 'web',
+      state,
+      payload: {
+        niche: input.niche,
+      },
+    });
     return res.json({ success: true, ads });
   } catch (error) {
     console.error('❌ ai-generator ads error:', error);

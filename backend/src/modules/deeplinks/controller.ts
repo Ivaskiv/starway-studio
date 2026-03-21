@@ -1,0 +1,111 @@
+import type { Request, Response } from 'express'
+import type { Prisma } from '@prisma/client'
+import type { AuthenticatedRequest } from '../../types/globalTypes.js'
+import { resolveUserState } from '../telegram-mentor/handlers/start.js'
+import {
+  buildTelegramDeepLink,
+  buildWebDeepLink,
+  createTelegramBindingDeepLink,
+  generateDeepLink,
+  resolveDeepLinkToken,
+} from './service.js'
+import type { DeepLinkAction, DeepLinkSource, DeepLinkTarget } from './types.js'
+
+const ALLOWED_ACTIONS: ReadonlySet<DeepLinkAction> = new Set([
+  'bind_telegram',
+  'continue_flow',
+  'open_web',
+  'open_miniapp',
+  'resume_task',
+  'open_mentor',
+])
+
+const ALLOWED_SOURCES: ReadonlySet<DeepLinkSource> = new Set(['telegram', 'web', 'miniapp'])
+const ALLOWED_TARGETS: ReadonlySet<DeepLinkTarget> = new Set(['telegram', 'web', 'miniapp'])
+
+function isJsonObject(value: unknown): value is Prisma.JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+export async function generateDeepLinkHandler(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id
+  if (!userId) {
+    return res.status(401).json({ error: 'unauthorized' })
+  }
+
+  const body = req.body
+  const action = typeof body?.action === 'string' ? body.action : 'continue_flow'
+  const source = typeof body?.source === 'string' ? body.source : 'web'
+  const target = typeof body?.target === 'string' ? body.target : 'web'
+  const path = typeof body?.path === 'string' ? body.path : null
+  const payload = isJsonObject(body?.payload) ? body.payload : undefined
+
+  if (!ALLOWED_ACTIONS.has(action as DeepLinkAction)) {
+    return res.status(400).json({ error: 'invalid_action' })
+  }
+
+  if (!ALLOWED_SOURCES.has(source as DeepLinkSource)) {
+    return res.status(400).json({ error: 'invalid_source' })
+  }
+
+  if (!ALLOWED_TARGETS.has(target as DeepLinkTarget)) {
+    return res.status(400).json({ error: 'invalid_target' })
+  }
+
+  const generated = await generateDeepLink({
+    userId,
+    action: action as DeepLinkAction,
+    source: source as DeepLinkSource,
+    target: target as DeepLinkTarget,
+    path,
+    payload,
+  })
+
+  return res.json({
+    ok: true,
+    deepLink: generated,
+    telegramUrl: buildTelegramDeepLink(generated.token),
+    webUrl: buildWebDeepLink(generated.token, generated.path),
+  })
+}
+
+export async function resolveDeepLinkHandler(req: Request, res: Response) {
+  const body = req.body
+  const token = typeof body?.token === 'string' ? body.token : ''
+  const consume = typeof body?.consume === 'boolean' ? body.consume : true
+
+  if (!token) {
+    return res.status(400).json({ error: 'token_required' })
+  }
+
+  const resolved = await resolveDeepLinkToken({ token, consume })
+  if (!resolved) {
+    return res.status(404).json({ error: 'invalid_or_expired_token' })
+  }
+
+  const state = await resolveUserState(resolved.userId).catch(() => null)
+
+  return res.json({
+    ok: true,
+    link: resolved,
+    state,
+    telegramUrl: buildTelegramDeepLink(resolved.token),
+    webUrl: buildWebDeepLink(resolved.token, resolved.path),
+  })
+}
+
+export async function generateTelegramBindingHandler(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user?.id
+  if (!userId) {
+    return res.status(401).json({ error: 'unauthorized' })
+  }
+
+  const generated = await createTelegramBindingDeepLink(userId)
+
+  return res.json({
+    ok: true,
+    link: generated.link,
+    expiresIn: generated.expiresIn,
+    token: generated.token,
+  })
+}

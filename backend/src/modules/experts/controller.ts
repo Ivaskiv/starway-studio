@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express'
-import type { Prisma } from '../../db/generated/prisma/client.js'
+import type { Prisma } from '@prisma/client'
 import { createExpert } from './service.js'
 import type { ExpertRegistrationPayload } from './types.js'
 

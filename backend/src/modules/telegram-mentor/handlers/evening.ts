@@ -1,10 +1,14 @@
 // backend/src/modules/telegram-mentor/handlers/evening.ts
 
 import type { Context } from 'telegraf'
-import { prisma } from '../../../db/client.js'
 import { openai } from '../../../lib/openai.js'
+import { ensureUserExpertId } from '../../ai-mentor/helpers.js'
+import { trackEvent } from '../../events/service.js'
+import { updateUserState } from '../../ai-mentor/state.service.js'
 import { getSession, updateSession, clearSession } from '../session.js'
-import { cancelKeyboard, mainMenuKeyboard } from '../keyboards.js'
+import { cancelKeyboard } from '../keyboards.js'
+import { registerStreakActivity } from '../../streak/service.js'
+import { sendEntryOffer, sendStateMenu } from './start.js'
 
 const EVENING_QUESTIONS = [
   '🌙 *Вечірнє питання 1/3*\n\nЩо реально відбулось сьогодні?\n_(факт, без оцінки)_',
@@ -13,14 +17,38 @@ const EVENING_QUESTIONS = [
 ]
 
 export async function handleEvening(ctx: Context) {
-  const chatId  = String(ctx.chat?.id)
-  const session = await getSession(chatId)
-  if (!session) {
-    await ctx.reply('❌ Спочатку прив\'яжи акаунт. /start')
+  if (process.env.APP_MODE === 'LM_ONLY') {
+    // [LM_ONLY_MODE DISABLED]
+    // Original evening flow remains below for normal mode.
     return
   }
-  await updateSession(session.userId, chatId, 'evening_q1', {}, 0)
-  await ctx.reply(EVENING_QUESTIONS[0], { parse_mode: 'Markdown', ...cancelKeyboard })
+
+  try {
+    const chatId  = String(ctx.chat?.id)
+    const session = await getSession(chatId)
+    if (!session) {
+      await sendEntryOffer(ctx)
+      return
+    }
+    await trackEvent({
+      userId: session.userId,
+      type: 'telegram_evening_started',
+      source: 'telegram',
+      state: 'evening',
+    })
+    await updateSession(session.userId, chatId, 'evening_q1', {}, 0)
+    await ctx.reply(EVENING_QUESTIONS[0], { parse_mode: 'Markdown', reply_markup: cancelKeyboard.reply_markup })
+  } catch (error) {
+    console.error('[TelegramMentor] evening start error:', error)
+    const chatId = String(ctx.chat?.id)
+    const session = await getSession(chatId)
+    if (session?.userId) {
+      await sendStateMenu(ctx, session.userId)
+      return
+    }
+
+    await sendEntryOffer(ctx)
+  }
 }
 
 export async function handleEveningAnswer(ctx: Context, answer: string) {
@@ -31,37 +59,93 @@ export async function handleEveningAnswer(ctx: Context, answer: string) {
   const evening = session.data.evening ?? {}
 
   if (session.state === 'evening_q1') {
+    await trackEvent({
+      userId: session.userId,
+      type: 'telegram_evening_answered',
+      source: 'telegram',
+      state: 'evening',
+      payload: {
+        step: 'q1',
+        text: answer,
+      },
+    })
     evening.q1 = answer
     await updateSession(session.userId, chatId, 'evening_q2', { ...session.data, evening }, 1)
-    await ctx.reply(EVENING_QUESTIONS[1], { parse_mode: 'Markdown', ...cancelKeyboard })
+    await ctx.reply(EVENING_QUESTIONS[1], { parse_mode: 'Markdown', reply_markup: cancelKeyboard.reply_markup })
     return
   }
 
   if (session.state === 'evening_q2') {
+    await trackEvent({
+      userId: session.userId,
+      type: 'telegram_evening_answered',
+      source: 'telegram',
+      state: 'evening',
+      payload: {
+        step: 'q2',
+        text: answer,
+      },
+    })
     evening.q2 = answer
     await updateSession(session.userId, chatId, 'evening_q3', { ...session.data, evening }, 2)
-    await ctx.reply(EVENING_QUESTIONS[2], { parse_mode: 'Markdown', ...cancelKeyboard })
+    await ctx.reply(EVENING_QUESTIONS[2], { parse_mode: 'Markdown', reply_markup: cancelKeyboard.reply_markup })
     return
   }
 
   if (session.state === 'evening_q3') {
+    await trackEvent({
+      userId: session.userId,
+      type: 'telegram_evening_answered',
+      source: 'telegram',
+      state: 'evening',
+      payload: {
+        step: 'q3',
+        text: answer,
+      },
+    })
     evening.q3 = answer
 
     // Streak оновлення — використовуємо streak/service.ts або пряме оновлення
-    // ПЕРЕВІР: grep -n "export\|increment\|upsert" backend/src/modules/streak/service.ts | head -10
     try {
-      await (prisma as any).streak?.upsert({
-        where:  { userId: session.userId },
-        create: { userId: session.userId, current: 1, longest: 1, lastEntryDate: new Date() },
-        update: { current: { increment: 1 }, lastEntryDate: new Date() },
+      const expertId = await ensureUserExpertId(session.userId)
+      await registerStreakActivity(session.userId, expertId, 'daily_checkin')
+    } catch (error) {
+      console.error('[TelegramMentor] evening streak upsert failed', error)
+    }
+
+    try {
+      await updateUserState({
+        userId: session.userId,
+        source: 'evening',
+        answers: {
+          q1: evening.q1,
+          q2: evening.q2,
+          q3: evening.q3,
+        },
       })
-    } catch {}
+    } catch (error) {
+      console.error('[TelegramMentor] evening state normalization failed', error)
+    }
 
     const aiReply = await getEveningAI(evening)
     await clearSession(session.userId, chatId)
+    await trackEvent({
+      userId: session.userId,
+      type: 'telegram_evening_completed',
+      source: 'telegram',
+      state: 'day',
+    })
     await ctx.reply(
       `🌙 *Вечірня рефлексія завершена!*\n\n${aiReply}`,
-      { parse_mode: 'Markdown', reply_markup: mainMenuKeyboard },
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '📊 Мій стан', callback_data: 'open_status' }],
+            [{ text: '✨ Спробувати 7 днів', callback_data: 'start_trial' }],
+          ],
+        },
+      },
     )
   }
 }
@@ -84,7 +168,8 @@ async function getEveningAI(evening: { q1?: string; q2?: string; q3?: string }):
       ],
     })
     return completion.choices[0]?.message?.content ?? '✅ День зафіксовано.'
-  } catch {
+  } catch (error) {
+    console.error('[TelegramMentor] evening AI reply failed', error)
     return '✅ День зафіксовано. Гарного відпочинку!'
   }
 }

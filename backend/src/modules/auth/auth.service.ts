@@ -3,8 +3,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { prisma } from '../../db/client.js'
 import type { AuthUser, SafeUser, UserWithSub } from '../../types/globalTypes.js'
-import type { Subscription, UserProgress, MentorConfig, User } from '../../db/generated/prisma/client.js'
-import { Prisma } from '../../db/generated/prisma/client.js'
+import { Prisma } from '@prisma/client'
 import { isSuperAdminEmail } from './superadmin.js'
 import { resolveUserAbilities, ABILITIES } from './abilities.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
@@ -19,6 +18,86 @@ function getEnv(name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET'): string {
   const value = process.env[name]
   if (!value) throw new Error(`${name} is required`)
   return value
+}
+
+export class AuthServiceError extends Error {
+  status: number
+  code: string
+
+  constructor(code: string, status = 500, message?: string) {
+    super(message ?? code)
+    this.name = 'AuthServiceError'
+    this.status = status
+    this.code = code
+  }
+}
+
+function normalizeEmail(email: string): string {
+  return String(email ?? '').trim().toLowerCase()
+}
+
+function toAuthServiceError(error: unknown, fallbackCode = 'auth_internal_error'): AuthServiceError {
+  if (error instanceof AuthServiceError) return error
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2021') {
+      return new AuthServiceError('auth_schema_mismatch', 500, 'Auth table mismatch')
+    }
+    if (error.code === 'P2022') {
+      return new AuthServiceError('auth_schema_mismatch', 500, 'Auth schema mismatch')
+    }
+    if (error.code === 'P2002') {
+      return new AuthServiceError('email_exists', 400, 'Email already exists')
+    }
+  }
+
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return new AuthServiceError('auth_query_invalid', 500, 'Invalid auth query')
+  }
+
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return new AuthServiceError('auth_db_unavailable', 500, 'Database unavailable')
+  }
+
+  return new AuthServiceError(fallbackCode, 500)
+}
+
+function isMissingStructureError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === 'P2021' || error.code === 'P2022')
+  )
+}
+
+const USER_BASE_SELECT = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+  email: true,
+  name: true,
+  firstName: true,
+  lastName: true,
+  role: true,
+  passwordHash: true,
+  telegramUserId: true,
+  telegramUserName: true,
+  telegramChatId: true,
+  lastLoginAt: true,
+  createdAt: true,
+  updatedAt: true,
+  uiSettings: true,
+})
+
+type PrismaUserBase = Prisma.UserGetPayload<{
+  select: typeof USER_BASE_SELECT
+}>
+
+type UserDecorations = Pick<UserWithSub, 'subscription' | 'userProgress' | 'mentorConfigs'>
+
+export interface AuthTokensPayload {
+  user: SafeUser
+  accessToken: string
+  refreshToken: string
+  needsProfile: boolean
+  expiresIn: number
 }
 
 // ── Хешування пароля ──────────────────
@@ -66,7 +145,10 @@ async function checkRefreshTableAvailability() {
 // ── Зберігання refresh токена з циклом на P2002 ─
 export async function storeRefreshToken(userId: string, token: string) {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-  if (!(await checkRefreshTableAvailability())) return null
+  if (!(await checkRefreshTableAvailability())) {
+    fallbackRefreshTokens.set(token, { userId, expiresAt })
+    return { token, userId, expiresAt }
+  }
 
   let savedToken = null
   let tries = 0
@@ -90,71 +172,158 @@ export async function storeRefreshToken(userId: string, token: string) {
 }
 
 export async function removeRefreshToken(token: string) {
-  if (await checkRefreshTableAvailability()) {
-    return prisma.refreshToken.deleteMany({ where: { token } })
+  try {
+    if (await checkRefreshTableAvailability()) {
+      return await prisma.refreshToken.deleteMany({ where: { token } })
+    }
+    fallbackRefreshTokens.delete(token)
+    return { count: 0 }
+  } catch (error) {
+    throw toAuthServiceError(error, 'refresh_token_remove_failed')
   }
-  fallbackRefreshTokens.delete(token)
-  return { count: 0 }
 }
 
 export async function findRefreshToken(token: string) {
-  if (await checkRefreshTableAvailability()) {
-    return prisma.refreshToken.findUnique({ where: { token } })
+  try {
+    if (await checkRefreshTableAvailability()) {
+      return await prisma.refreshToken.findUnique({ where: { token } })
+    }
+    const data = fallbackRefreshTokens.get(token)
+    if (!data) return null
+    return { token, userId: data.userId, expiresAt: data.expiresAt }
+  } catch (error) {
+    throw toAuthServiceError(error, 'refresh_token_find_failed')
   }
-  const data = fallbackRefreshTokens.get(token)
-  if (!data) return null
-  return { token, userId: data.userId, expiresAt: data.expiresAt }
 }
 
-// ── Явний тип для user з усіма include ───────────────
-interface PrismaUserWithRelations extends User {
-  subscriptions: Subscription[]
-  progress: UserProgress | null
-  mentorConfig: MentorConfig | null
+async function loadUserDecorations(userId: string): Promise<UserDecorations> {
+  const fallback: UserDecorations = {
+    subscription: null,
+    userProgress: null,
+    mentorConfigs: [],
+  }
+
+  try {
+    const [subscription, progress, mentorConfig] = await Promise.all([
+      prisma.subscription.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.userProgress.findUnique({
+        where: { userId },
+      }),
+      prisma.mentorConfig.findUnique({
+        where: { userId },
+      }),
+    ])
+
+    return {
+      subscription,
+      userProgress: progress
+        ? {
+            level: progress.level,
+            totalPoints: progress.totalPoints,
+            completedBlocks: progress.completedBlocks,
+          }
+        : null,
+      mentorConfigs: mentorConfig ? [mentorConfig] : [],
+    }
+  } catch (error) {
+    if (isMissingStructureError(error)) {
+      console.warn('[AuthService] Optional auth relations unavailable, using degraded user payload')
+      return fallback
+    }
+    throw error
+  }
 }
 
-async function ensureSuperAdminRoleForRecord(user: PrismaUserWithRelations): Promise<PrismaUserWithRelations> {
-  if (!isSuperAdminEmail(user.email) || user.role === 'SUPERADMIN') return user
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { role: 'SUPERADMIN' },
+function toUserWithSub(baseUser: PrismaUserBase, decorations: UserDecorations): UserWithSub {
+  const sanitizedSettings = baseUser.uiSettings && typeof baseUser.uiSettings === 'object' && !Array.isArray(baseUser.uiSettings)
+    ? (baseUser.uiSettings as Record<string, unknown>)
+    : null
+
+  return {
+    id: baseUser.id,
+    email: baseUser.email,
+    name: baseUser.name,
+    firstName: baseUser.firstName,
+    lastName: baseUser.lastName,
+    role: baseUser.role,
+    passwordHash: baseUser.passwordHash,
+    telegramUserId: baseUser.telegramUserId,
+    telegramUserName: baseUser.telegramUserName,
+    telegramChatId: baseUser.telegramChatId,
+    lastLoginAt: baseUser.lastLoginAt,
+    createdAt: baseUser.createdAt,
+    updatedAt: baseUser.updatedAt,
+    uiSettings: sanitizedSettings,
+    subscription: decorations.subscription,
+    userProgress: decorations.userProgress,
+    mentorConfigs: decorations.mentorConfigs,
+  }
+}
+
+async function hydrateUser(baseUser: PrismaUserBase): Promise<UserWithSub> {
+  const decorations = await loadUserDecorations(baseUser.id)
+  return toUserWithSub(baseUser, decorations)
+}
+
+async function findRawUserById(id: string): Promise<PrismaUserBase | null> {
+  return prisma.user.findUnique({
+    where: { id },
+    select: USER_BASE_SELECT,
   })
-  return { ...user, role: 'SUPERADMIN' }
+}
+
+async function findRawUserByEmail(email: string): Promise<PrismaUserBase | null> {
+  return prisma.user.findUnique({
+    where: { email },
+    select: USER_BASE_SELECT,
+  })
+}
+
+async function ensureSuperAdminRoleForRecord(user: PrismaUserBase): Promise<PrismaUserBase> {
+  if (!isSuperAdminEmail(user.email) || user.role === 'SUPERADMIN') return user
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { role: 'SUPERADMIN' },
+    })
+    return { ...user, role: 'SUPERADMIN' }
+  } catch (error) {
+    throw toAuthServiceError(error, 'superadmin_role_update_failed')
+  }
 }
 
 // ── Пошук користувача за ID ───────────────
 export async function findUserById(id: string): Promise<UserWithSub | null> {
-  const user = await prisma.user.findUnique({
-    where: { id },
-    include: {
-      subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },
-      progress: true,
-      mentorConfig: true,
-    },
-  })
-
-  if (!user) return null
-  const normalizedUser = await ensureSuperAdminRoleForRecord(user)
-  return toUserWithSub(normalizedUser)
+  try {
+    const user = await findRawUserById(id)
+    if (!user) return null
+    const normalizedUser = await ensureSuperAdminRoleForRecord(user)
+    return hydrateUser(normalizedUser)
+  } catch (error) {
+    throw toAuthServiceError(error, 'find_user_by_id_failed')
+  }
 }
 
 // ── Пошук користувача за email ─────────────
 export async function findUserByEmail(email: string): Promise<UserWithSub | null> {
-  const user = await prisma.user.findUnique({
-    where: { email },
-    include: {
-      subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },
-      progress: true,
-      mentorConfig: true,
-    },
-  })
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail) return null
 
-  if (!user) return null
-  const normalizedUser = await ensureSuperAdminRoleForRecord(user)
-  return toUserWithSub(normalizedUser)
+  try {
+    const user = await findRawUserByEmail(normalizedEmail)
+    if (!user) return null
+    const normalizedUser = await ensureSuperAdminRoleForRecord(user)
+    return hydrateUser(normalizedUser)
+  } catch (error) {
+    throw toAuthServiceError(error, 'find_user_by_email_failed')
+  }
 }
 
 export type UpdateUserSettingsPayload = {
+  email?: string | null
   firstName?: string | null
   lastName?: string | null
   settings?: {
@@ -165,55 +334,54 @@ export type UpdateUserSettingsPayload = {
 }
 
 export async function updateUserSettings(userId: string, payload: UpdateUserSettingsPayload): Promise<UserWithSub> {
-  const existing = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { uiSettings: true },
-  })
-  const currentSettings = existing?.uiSettings && typeof existing.uiSettings === 'object' && !Array.isArray(existing.uiSettings)
-    ? (existing.uiSettings as Record<string, unknown>)
-    : {}
-  const mergedSettings: Prisma.JsonValue = payload.settings && Object.keys(payload.settings).length
-    ? ({ ...currentSettings, ...payload.settings } as Prisma.JsonValue)
-    : (currentSettings as Prisma.JsonValue)
+  try {
+    const normalizedEmail = payload.email ? normalizeEmail(payload.email) : null
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { uiSettings: true, email: true },
+    })
+    if (!existing) {
+      throw new AuthServiceError('user_not_found', 404)
+    }
 
-  const shouldPersistSettings =
-    typeof mergedSettings === 'object' &&
-    !Array.isArray(mergedSettings) &&
-    Object.keys(mergedSettings as Record<string, unknown>).length > 0
-  const uiPayload: Prisma.JsonValue | undefined = shouldPersistSettings ? (mergedSettings as Prisma.JsonObject) : undefined
+    if (normalizedEmail && normalizedEmail !== existing.email) {
+      const emailOwner = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      })
+      if (emailOwner && emailOwner.id !== userId) {
+        throw new AuthServiceError('email_exists', 400)
+      }
+    }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      firstName: payload.firstName ?? undefined,
-      lastName: payload.lastName ?? undefined,
-      uiSettings: uiPayload,
-    },
-  })
+    const currentSettings = existing?.uiSettings && typeof existing.uiSettings === 'object' && !Array.isArray(existing.uiSettings)
+      ? (existing.uiSettings as Record<string, unknown>)
+      : {}
+    const mergedSettings: Prisma.JsonValue = payload.settings && Object.keys(payload.settings).length
+      ? ({ ...currentSettings, ...payload.settings } as Prisma.JsonValue)
+      : (currentSettings as Prisma.JsonValue)
 
-  const updated = await findUserById(userId)
-  if (!updated) throw new Error('user_not_found_after_update')
-  return updated
-}
+    const shouldPersistSettings =
+      typeof mergedSettings === 'object' &&
+      !Array.isArray(mergedSettings) &&
+      Object.keys(mergedSettings as Record<string, unknown>).length > 0
+    const uiPayload: Prisma.JsonValue | undefined = shouldPersistSettings ? (mergedSettings as Prisma.JsonObject) : undefined
 
-// ── Конвертація Prisma user → UserWithSub ─────────────
-function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
-  const { uiSettings, ...rest } = user as PrismaUserWithRelations & { uiSettings?: unknown }
-  const sanitizedSettings = uiSettings && typeof uiSettings === 'object' && !Array.isArray(uiSettings)
-    ? (uiSettings as Record<string, unknown>)
-    : null
-  return {
-    ...rest,
-    uiSettings: sanitizedSettings,
-    subscription: user.subscriptions[0] ?? null,
-    userProgress: user.progress
-      ? {
-          level: user.progress.level,
-          totalPoints: user.progress.totalPoints,
-          completedBlocks: user.progress.completedBlocks,
-        }
-      : null,
-    mentorConfigs: user.mentorConfig ? [user.mentorConfig] : [], // ✅ завжди масив
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        email: normalizedEmail ?? undefined,
+        firstName: payload.firstName ?? undefined,
+        lastName: payload.lastName ?? undefined,
+        uiSettings: uiPayload,
+      },
+    })
+
+    const updated = await findUserById(userId)
+    if (!updated) throw new AuthServiceError('user_not_found_after_update', 404)
+    return updated
+  } catch (error) {
+    throw toAuthServiceError(error, 'update_user_settings_failed')
   }
 }
 
@@ -277,21 +445,161 @@ export function toSafeUser(user: UserWithSub): SafeUser {
 }
 
 export async function promoteUserToAdminIfNeeded(userId: string): Promise<void> {
-  const existing = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  })
-  if (!existing || existing.role === 'SUPERADMIN' || existing.role === 'ADMIN') return
-  await prisma.user.update({
-    where: { id: userId },
-    data: { role: 'ADMIN' },
-  })
+  try {
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    })
+    if (!existing || existing.role === 'SUPERADMIN' || existing.role === 'ADMIN') return
+    await prisma.user.update({
+      where: { id: userId },
+      data: { role: 'ADMIN' },
+    })
+  } catch (error) {
+    throw toAuthServiceError(error, 'promote_user_failed')
+  }
 }
 
 // ── Оновлення lastLoginAt ─────────────────
 export async function markUserLoggedIn(userId: string): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: { lastLoginAt: new Date() },
-  })
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() },
+    })
+  } catch (error) {
+    throw toAuthServiceError(error, 'mark_user_logged_in_failed')
+  }
+}
+
+export async function registerUser(input: {
+  email: string
+  password: string
+  name?: string | null
+}): Promise<AuthTokensPayload> {
+  const email = normalizeEmail(input.email)
+  const password = String(input.password ?? '')
+
+  if (!email || !password) {
+    throw new AuthServiceError('missing_fields', 400)
+  }
+
+  try {
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    })
+
+    if (existing) {
+      throw new AuthServiceError('email_exists', 400)
+    }
+
+    const passwordHash = await hashPassword(password)
+    const initialRole = isSuperAdminEmail(email) ? 'SUPERADMIN' : 'USER'
+
+    const createdUser = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        name: input.name?.trim() || null,
+        role: initialRole,
+      },
+      select: { id: true },
+    })
+
+    const user = await findUserById(createdUser.id)
+    if (!user) {
+      throw new AuthServiceError('user_creation_failed', 500)
+    }
+
+    const accessToken = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
+    const refreshToken = generateRefreshToken(user.id)
+    await storeRefreshToken(user.id, refreshToken)
+
+    return {
+      user: toSafeUser(user),
+      accessToken,
+      refreshToken,
+      needsProfile: !user.name,
+      expiresIn: 15 * 60,
+    }
+  } catch (error) {
+    throw toAuthServiceError(error, 'register_failed')
+  }
+}
+
+export async function loginUser(input: {
+  email: string
+  password: string
+}): Promise<AuthTokensPayload> {
+  const email = normalizeEmail(input.email)
+  const password = String(input.password ?? '')
+
+  if (!email || !password) {
+    throw new AuthServiceError('missing_fields', 400)
+  }
+
+  try {
+    const user = await findUserByEmail(email)
+
+    if (!user) {
+      throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
+    }
+
+    if (!user.passwordHash) {
+      throw new AuthServiceError('invalid_credentials', 401)
+    }
+
+    const isValid = await comparePassword(password, user.passwordHash)
+    if (!isValid) {
+      throw new AuthServiceError('invalid_credentials', 401)
+    }
+
+    await markUserLoggedIn(user.id)
+
+    const freshUser = await findUserById(user.id)
+    if (!freshUser) {
+      throw new AuthServiceError('user_not_found', 404)
+    }
+
+    const accessToken = generateAccessToken({ id: freshUser.id, role: freshUser.role, email: freshUser.email } as AuthUser)
+    const refreshToken = generateRefreshToken(freshUser.id)
+    await storeRefreshToken(freshUser.id, refreshToken)
+
+    return {
+      user: toSafeUser(freshUser),
+      accessToken,
+      refreshToken,
+      needsProfile: !freshUser.name,
+      expiresIn: 15 * 60,
+    }
+  } catch (error) {
+    throw toAuthServiceError(error, 'login_failed')
+  }
+}
+
+export async function getCurrentUser(params: {
+  userId?: string
+  email?: string | null
+}): Promise<UserWithSub> {
+  try {
+    const userId = params.userId?.trim()
+    const email = params.email ? normalizeEmail(params.email) : null
+
+    if (!userId && !email) {
+      throw new AuthServiceError('unauthorized', 401)
+    }
+
+    const user = userId
+      ? await findUserById(userId)
+      : await findUserByEmail(email!)
+
+    if (!user) {
+      throw new AuthServiceError('user_not_found', 404, 'Користувач ще не зареєстрований')
+    }
+
+    return user
+  } catch (error) {
+    throw toAuthServiceError(error, 'get_current_user_failed')
+  }
 }

@@ -4,9 +4,11 @@ import { Router, type Response } from 'express'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { prisma } from '../../db/client.js'
 import { authRequired } from '../auth/middleware/auth.js'
-import { Prisma, Role } from '../../db/generated/prisma/index.js'
+import { Prisma, Role } from '@prisma/client'
+import { trackEvent } from '../events/service.js'
 import { invalidateQuestionSetCache } from '../telegram-mentor/session.js'
-import { runWeeklyReports } from '../../scheduler.js'
+import { resolveUserState } from '../telegram-mentor/handlers/start.js'
+import { runWeeklyReports } from '../daily-cycle/scheduler.js'
 
 const router = Router()
 
@@ -146,6 +148,19 @@ router.post('/transfer-ownership', authRequired, async (req: AuthenticatedReques
     select: { id: true, email: true, firstName: true, role: true },
   })
 
+  const state = req.user?.id ? await resolveUserState(req.user.id).catch(() => null) : null
+  await trackEvent({
+    userId: req.user?.id ?? null,
+    type: 'admin_transfer_ownership_completed',
+    source: 'web',
+    state,
+    payload: {
+      targetUserId,
+      transferType,
+      updatedRole: updatedUser?.role ?? null,
+    },
+  })
+
   return res.json({ ok: true, user: updatedUser })
 })
 
@@ -154,7 +169,15 @@ router.post('/transfer-ownership', authRequired, async (req: AuthenticatedReques
 router.post('/trigger-weekly-reports', authRequired, async (req: AuthenticatedRequest, res: Response) => {
   if (superGuard(req, res)) return
 
-  runWeeklyReports().catch(err => console.error('[Manual trigger]', err))
+  runWeeklyReports().catch((err: unknown) => console.error('[Manual trigger]', err))
+  const state = req.user?.id ? await resolveUserState(req.user.id).catch(() => null) : null
+  await trackEvent({
+    userId: req.user?.id ?? null,
+    type: 'admin_weekly_reports_triggered',
+    source: 'web',
+    state,
+    payload: {},
+  })
   return res.json({ ok: true, message: 'Running in background' })
 })
 
@@ -176,6 +199,17 @@ router.post('/question-sets', authRequired, async (req: AuthenticatedRequest, re
       morning: morning ?? [],
       evening: evening ?? [],
       isActive: false,
+    },
+  })
+  const state = req.user?.id ? await resolveUserState(req.user.id).catch(() => null) : null
+  await trackEvent({
+    userId: req.user?.id ?? null,
+    type: 'admin_question_set_created',
+    source: 'web',
+    state,
+    payload: {
+      questionSetId: set.id,
+      name: set.name,
     },
   })
   return res.status(201).json(set)
@@ -205,6 +239,17 @@ router.put('/question-sets/:id', authRequired, async (req: AuthenticatedRequest,
       ...(evening !== undefined && { evening: normalizeJson(evening) }),
     },
   })
+  const state = req.user?.id ? await resolveUserState(req.user.id).catch(() => null) : null
+  await trackEvent({
+    userId: req.user?.id ?? null,
+    type: 'admin_question_set_updated',
+    source: 'web',
+    state,
+    payload: {
+      questionSetId: updated.id,
+      name: updated.name,
+    },
+  })
   return res.json(updated)
 })
 
@@ -222,6 +267,16 @@ router.put('/question-sets/:id/activate', authRequired, async (req: Authenticate
   ])
 
   invalidateQuestionSetCache()
+  const state = req.user?.id ? await resolveUserState(req.user.id).catch(() => null) : null
+  await trackEvent({
+    userId: req.user?.id ?? null,
+    type: 'admin_question_set_activated',
+    source: 'web',
+    state,
+    payload: {
+      questionSetId: req.params.id,
+    },
+  })
   return res.json({ ok: true, id: req.params.id })
 })
 
@@ -234,6 +289,17 @@ router.delete('/question-sets/:id', authRequired, async (req: AuthenticatedReque
   if (!existing) return res.status(404).json({ error: 'not_found' })
 
   await prisma.mentorQuestionSet.delete({ where: { id: req.params.id } })
+  const state = req.user?.id ? await resolveUserState(req.user.id).catch(() => null) : null
+  await trackEvent({
+    userId: req.user?.id ?? null,
+    type: 'admin_question_set_deleted',
+    source: 'web',
+    state,
+    payload: {
+      questionSetId: req.params.id,
+      name: existing.name,
+    },
+  })
   return res.json({ ok: true })
 })
 

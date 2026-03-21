@@ -144,6 +144,13 @@ export interface ProducerChatBody {
   stepFocus?:     string
 }
 
+export interface ProducerMentorChatBody {
+  message: string
+  history: ProducerChatMessage[]
+  stepContext?: string
+  context?: string
+}
+
 export type FunnelStage = 'not_started' | 'draft' | 'ready'
 export type MentorStage = 'locked' | 'active'
 export type ProductStage = 'none' | 'draft' | 'published'

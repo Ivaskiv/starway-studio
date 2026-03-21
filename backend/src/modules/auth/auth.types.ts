@@ -1,5 +1,5 @@
 // backend/src/modules/auth/auth.types.ts
-import { MentorConfig, Subscription, UserProgress } from '../../db/generated/prisma/client.js';
+import { MentorConfig, Subscription, UserProgress } from '@prisma/client';
 import { toSafeUser } from '../../modules/user/types.js'
 import type { SafeUser, UserRole, UserWithSub } from '../../types/globalTypes.js'
 
@@ -34,6 +34,7 @@ export interface LoginInput {
 }
 
 export interface UpdateUserSettingsInput {
+  email?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   settings?: {

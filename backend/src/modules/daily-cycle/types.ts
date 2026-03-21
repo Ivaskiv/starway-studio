@@ -5,7 +5,7 @@ import type {
   DailyDrain,
   DailyState,
   Prisma,
-} from '../../db/generated/prisma/client.js';
+} from '@prisma/client';
 
 // ======================================================
 // MICRO SUPPORT (зберігається в JSON колонці Prisma)

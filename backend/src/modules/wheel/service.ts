@@ -1,4 +1,4 @@
-import type { Prisma, UserBalanceEntry } from '../../db/generated/prisma/client.js'
+import type { Prisma, UserBalanceEntry } from '@prisma/client'
 import { prisma } from '../../db/client.js'
 import { createWheelPDF } from './pdf.js'
 import {
@@ -13,6 +13,7 @@ import { sendWheelNotification } from './telegram.js'
 import { rewardEngine } from '../gamification/reward.engine.js'
 import { getProfile, getStreakSummary, getLevelState } from '../gamification/service.js'
 import { registerStreakActivity } from '../streak/service.js'
+import { updateUserState } from '../ai-mentor/state.service.js'
 import type {
   WheelAnalytics,
   WheelGamificationSnapshot,
@@ -317,6 +318,16 @@ export async function executeWheelWorkflow(options: WheelWorkflowOptions): Promi
     addWheelMicroTasks(userId, weakest),
     registerStreakActivity(userId, expertId, 'wheel_activity'),
     rewardEngine.onWheelCompleted(userId),
+    updateUserState({
+      userId,
+      source: 'wheel',
+      answers: {
+        weakestSphere: weakest.categoryId,
+        focusSphere: focus.categoryId,
+        scores: JSON.stringify(scores),
+        analysis: JSON.stringify(analysis),
+      },
+    }),
   ])
   for (const sideEffect of sideEffects) {
     if (sideEffect.status === 'rejected') {

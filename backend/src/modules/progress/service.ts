@@ -1,8 +1,8 @@
 // backend/src/modules/progress/service.ts
 
 import { prisma }                           from '../../db/client.js'
-import { StageStatus }                      from '../../db/generated/prisma/index.js'
-import type { StageType as PrismaStageType } from '../../db/generated/prisma/index.js'
+import { StageStatus }                      from '@prisma/client'
+import type { StageType as PrismaStageType } from '@prisma/client'
 import type { ProgressUpdate, UserProgress } from './types.js'
 
 // ─────────────────────────────────────────────

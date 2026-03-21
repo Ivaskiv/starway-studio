@@ -1,0 +1,101 @@
+import { ROUTES } from '@/config/routes'
+import { useUserState } from '@/features/auth/hooks/useUserState'
+import { Button } from '@/ui'
+import { CheckCircle2 } from 'lucide-react'
+import { useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+
+function resolveFallbackRoute(step: string): string {
+  if (step === 'WHEEL') {
+    return ROUTES.WHEEL_START
+  }
+
+  if (step === 'DAILY_MORNING') {
+    return ROUTES.DASHBOARD
+  }
+
+  return ROUTES.HOME
+}
+
+export default function TelegramSuccessPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { step, isLoading, refetch, isAuthenticated } = useUserState()
+
+  useEffect(() => {
+    void refetch()
+  }, [refetch])
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) {
+      return
+    }
+
+    const token = new URLSearchParams(location.search).get('dl')
+    if (token) {
+      const timer = window.setTimeout(() => {
+        navigate(`${ROUTES.ONBOARDING_CONTINUE}?dl=${encodeURIComponent(token)}`, { replace: true })
+      }, 800)
+
+      return () => window.clearTimeout(timer)
+    }
+
+    if (step === 'WHEEL') {
+      const timer = window.setTimeout(() => {
+        navigate(ROUTES.WHEEL_START, { replace: true })
+      }, 1200)
+
+      return () => window.clearTimeout(timer)
+    }
+
+    if (step !== 'START_FLOW') {
+      const timer = window.setTimeout(() => {
+        navigate(resolveFallbackRoute(step), { replace: true })
+      }, 1200)
+
+      return () => window.clearTimeout(timer)
+    }
+  }, [isAuthenticated, isLoading, location.search, navigate, step])
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16">
+        <div className="card-surface liquid-glass p-8 text-center">
+          <p className="text-sm uppercase tracking-[0.24em] text-[rgb(var(--accent-soft-rgb))]">
+            Telegram
+          </p>
+          <h1 className="mt-4 text-3xl font-bold text-white">Синхронізація...</h1>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-16">
+      <div className="card-surface liquid-glass p-8 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.12)] text-[rgb(var(--accent-soft-rgb))]">
+          <CheckCircle2 className="h-7 w-7" />
+        </div>
+
+        <h1 className="mt-5 text-3xl font-bold text-white">Telegram підключено</h1>
+
+        {step === 'START_FLOW' ? (
+          <>
+            <p className="mt-3 text-white/65">
+              Перший крок готовий. Повертаємось у flow.
+            </p>
+            <div className="mt-6">
+              <Button onClick={() => navigate(ROUTES.ONBOARDING_START, { replace: true })}>
+                Продовжити
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className="mt-3 text-white/65">
+            Готово, повертаємось...
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -1,6 +1,9 @@
 import type { Response } from 'express';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import * as aiService from './services.js';
+import { trackEvent, trackQuestionEvent } from '../events/service.js';
+import { resolveUserState } from '../telegram-mentor/handlers/start.js';
+import type { StreamChatMessage } from './types.js';
 
 const requireUser = (req: AuthenticatedRequest, res: Response): string | null => {
   if (!req.user?.id) {
@@ -23,7 +26,26 @@ const safeHandler = (fn: (req: AuthenticatedRequest, res: Response) => Promise<v
 export const sendMessage = safeHandler(async (req, res) => {
   const userId = requireUser(req, res);
   if (!userId) return;
+  const state = await resolveUserState(userId).catch(() => null)
+  await trackQuestionEvent({
+    userId,
+    source: 'web',
+    state,
+    text: String(req.body.message ?? ''),
+    detectedIntent: 'general',
+    productContext: state?.startsWith('lm_') ? 'lead_magnet' : state === 'in_trial' ? 'trial' : state === 'subscribed' ? 'subscription' : 'general',
+    category: 'general',
+  })
   const result = await aiService.sendMessage({ userId, message: req.body.message, context: req.body.context });
+  await trackEvent({
+    userId,
+    type: 'web_ai_mentor_chat_completed',
+    source: 'web',
+    state,
+    payload: {
+      replyLength: result.mentorMessage.content.length,
+    },
+  })
   res.json(result);
 });
 
@@ -31,6 +53,16 @@ export const getSession = safeHandler(async (req, res) => {
   const userId = requireUser(req, res);
   if (!userId) return;
   const session = await aiService.getOrCreateSession(userId, String(req.query.sessionId || ''));
+  const state = await resolveUserState(userId).catch(() => null)
+  await trackEvent({
+    userId,
+    type: 'web_ai_mentor_session_opened',
+    source: 'web',
+    state,
+    payload: {
+      sessionId: session.id,
+    },
+  })
   res.json(session);
 });
 
@@ -45,8 +77,41 @@ export const getContext = safeHandler(async (req, res) => {
   const userId = requireUser(req, res);
   if (!userId) return;
   const context = await aiService.getMentorContext(userId);
+  const state = await resolveUserState(userId).catch(() => null)
+  await trackEvent({
+    userId,
+    type: 'web_ai_mentor_context_viewed',
+    source: 'web',
+    state,
+    payload: {
+      hasPrimaryGoal: Boolean(context.primaryGoal),
+      lastState: context.lastState,
+      streakDays: context.streakDays,
+    },
+  })
   res.json(context);
 });
+
+export const getContextByUserId = safeHandler(async (req, res) => {
+  const userId = String(req.params.userId ?? '')
+  if (!userId) {
+    res.status(400).json({ error: 'user_id_required' })
+    return
+  }
+
+  const context = await aiService.getMentorExtendedContext(userId)
+  await trackEvent({
+    userId,
+    type: 'web_ai_mentor_context_by_user_viewed',
+    source: 'web',
+    state: await resolveUserState(userId).catch(() => null),
+    payload: {
+      hasPrimaryGoal: Boolean(context.primaryGoal),
+      streakDays: context.streakDays,
+    },
+  })
+  res.json(context)
+})
 
 export const getOnboardingStage = safeHandler(async (req, res) => {
   const userId = requireUser(req, res);
@@ -123,13 +188,115 @@ export const generateAffirmation = safeHandler(async (req, res) => {
 export const morningSession = safeHandler(async (req, res) => {
   const userId = requireUser(req, res);
   if (!userId) return;
-  res.json(await aiService.createMorningSession(userId));
+  const result = await aiService.createMorningSession(userId)
+  const state = await resolveUserState(userId).catch(() => null)
+  await trackEvent({
+    userId,
+    type: 'web_ai_mentor_morning_started',
+    source: 'web',
+    state,
+    payload: {
+      hasSession: Boolean(result),
+    },
+  })
+  res.json(result);
 });
+
+export const streamChat = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = String(req.body.userId ?? '')
+    if (!userId) {
+      res.status(400).json({ error: 'user_id_required' })
+      return
+    }
+
+    const message = String(req.body.message ?? '')
+    const history = (Array.isArray(req.body.history) ? req.body.history : []) as StreamChatMessage[]
+    const context = req.body.context as import('./types.js').MentorExtendedContext | undefined
+    const state = await resolveUserState(userId).catch(() => null)
+
+    await trackQuestionEvent({
+      userId,
+      source: 'web',
+      state,
+      text: message,
+      detectedIntent: 'general',
+      productContext: state?.startsWith('lm_') ? 'lead_magnet' : state === 'in_trial' ? 'trial' : state === 'subscribed' ? 'subscription' : 'general',
+      category: 'general',
+    })
+
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.flushHeaders()
+
+    const stream = await aiService.createMentorChatStream({
+      userId,
+      message,
+      history,
+      context,
+    })
+
+    let aborted = false
+    let replyLength = 0
+
+    req.on('close', () => {
+      aborted = true
+    })
+
+    for await (const chunk of stream) {
+      if (aborted) {
+        break
+      }
+
+      const token = chunk.choices[0]?.delta?.content || ''
+      if (token) {
+        replyLength += token.length
+        res.write(`data: ${JSON.stringify({ token })}\n\n`)
+      }
+    }
+
+    await trackEvent({
+      userId,
+      type: 'web_ai_mentor_stream_completed',
+      source: 'web',
+      state,
+      payload: {
+        replyLength,
+        historySize: history.length,
+      },
+    })
+
+    if (!aborted) {
+      res.write('data: [DONE]\n\n')
+      res.end()
+    }
+  } catch (error) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'server_error', message: (error as Error).message })
+      return
+    }
+
+    res.write('data: [DONE]\n\n')
+    res.end()
+  }
+}
 
 export const eveningSession = safeHandler(async (req, res) => {
   const userId = requireUser(req, res);
   if (!userId) return;
-  res.json(await aiService.createEveningSession(userId));
+  const result = await aiService.createEveningSession(userId)
+  const state = await resolveUserState(userId).catch(() => null)
+  await trackEvent({
+    userId,
+    type: 'web_ai_mentor_evening_started',
+    source: 'web',
+    state,
+    payload: {
+      hasSession: Boolean(result),
+    },
+  })
+  res.json(result);
 });
 
 export const weeklySession = safeHandler(async (req, res) => {

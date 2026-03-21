@@ -16,7 +16,7 @@ import {
   GenerateStepInput,
 } from './types.js';
 import { AI_PRODUCER_WORKFLOW_KEY } from './types.js';
-import { FunnelType, Prisma, ProductKind } from '../../db/generated/prisma/client.js';
+import { FunnelType, Prisma, ProductKind } from '@prisma/client';
 
 /* ======================================================
    JSON SAFE HELPERS (Prisma friendly)

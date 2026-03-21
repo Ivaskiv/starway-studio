@@ -2,8 +2,10 @@
 
 import type { Response } from 'express'
 import { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { analyzeFunnel, generateSEO, generateTargeting, getAssistantProgress } from './service.js'
-import type { SEOInput } from './types.js'
+import { trackEvent, trackQuestionEvent } from '../events/service.js'
+import { resolveUserState } from '../telegram-mentor/handlers/start.js'
+import { analyzeFunnel, generateSEO, generateTargeting, getAssistantProgress, producerMentorChat } from './service.js'
+import type { ProducerMentorChatBody, SEOInput } from './types.js'
 
 const safeHandler = (
   fn: (req: AuthenticatedRequest, res: Response) => Promise<void | Response>,
@@ -70,4 +72,39 @@ export const assistantProgress = safeHandler(async (req, res) => {
 
   const progress = await getAssistantProgress(userId)
   res.json(progress)
+})
+
+export const producerMentorChatHandler = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const body = req.body as ProducerMentorChatBody
+  if (!body.message?.trim()) {
+    return res.status(400).json({ error: 'empty_message' })
+  }
+
+  const state = await resolveUserState(userId).catch(() => null)
+  await trackQuestionEvent({
+    userId,
+    source: 'web',
+    state,
+    text: body.message,
+    detectedIntent: 'general',
+    productContext: 'subscription',
+    category: 'general',
+  })
+
+  const result = await producerMentorChat(userId, body)
+  await trackEvent({
+    userId,
+    type: 'web_producer_mentor_chat_completed',
+    source: 'web',
+    state,
+    payload: {
+      replyLength: result.length,
+      hasStepContext: Boolean(body.stepContext),
+    },
+  })
+
+  res.json({ result })
 })

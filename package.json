@@ -2,19 +2,18 @@
   "name": "starway-studio",
   "version": "1.0.0",
   "private": true,
-  "workspaces": [
-    "backend",
-    "frontend"
-  ],
   "scripts": {
-    "dev": "concurrently -n backend,frontend \"pnpm --filter backend dev\" \"pnpm --filter frontend dev\"",
-    "build": "pnpm --filter backend build && pnpm --filter frontend build",
-    "start": "pnpm --filter backend start",
-    "clean": "pnpm --filter backend clean && pnpm --filter frontend clean",
-    "typecheck": "pnpm --filter backend typecheck && pnpm --filter frontend typecheck",
+    "dev": "concurrently -n backend,web \"pnpm --dir backend dev\" \"pnpm --dir apps/web dev\"",
+    "dev:bot": "pnpm --dir apps/bot dev",
+    "build": "pnpm --dir packages/shared build && pnpm --dir packages/db build && pnpm --dir backend build && pnpm --dir apps/web build && pnpm --dir apps/bot build",
+    "start": "pnpm --dir backend start",
+    "start:bot": "pnpm --dir apps/bot start",
+    "clean": "pnpm --dir packages/shared clean && pnpm --dir packages/db clean && pnpm --dir backend clean && pnpm --dir apps/web clean && pnpm --dir apps/bot clean",
+    "typecheck": "pnpm --dir packages/shared typecheck && pnpm --dir packages/db typecheck && pnpm --dir backend typecheck && pnpm --dir apps/web typecheck && pnpm --dir apps/bot typecheck",
     "vercel-build": "pnpm build"
   },
   "devDependencies": {
+    "@types/node": "^25.1.0",
     "concurrently": "^8.2.2",
     "typescript": "^5.3.3"
   },

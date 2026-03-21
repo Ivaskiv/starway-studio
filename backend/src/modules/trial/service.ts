@@ -6,11 +6,10 @@ import {
   DailyChoice,
   DailyDrain,
   DailyState,
-  MicroTaskStatus,
   Prisma,
   ReminderType,
   StageType,
-} from '../../db/generated/prisma/client.js'
+} from '@prisma/client'
 import { scheduleReminder }                                          from '../notifications/reminder.service.js'
 import type { TrialStatus }                                          from './types.js'
 

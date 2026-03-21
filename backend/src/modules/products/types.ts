@@ -1,7 +1,7 @@
 import type {
   Product as PrismaProduct,
   Enrollment as PrismaEnrollment,
-} from '../../db/generated/prisma/client.js';
+} from '@prisma/client';
 
 export type Product = PrismaProduct;
 export type Enrollment = PrismaEnrollment;

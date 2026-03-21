@@ -4,7 +4,7 @@ import type {
   MentorConfig,
   Subscription,
   UserProgress,
-} from '../db/generated/prisma/client.js'; 
+} from '@prisma/client'; 
 import type { Product } from '../modules/products/types.js'
 
 export type UserRole = 'SUPERADMIN' | 'EXPERT' | 'USER' | 'ADMIN' | 'MENTOR' | 'PRODUCT_OWNER'

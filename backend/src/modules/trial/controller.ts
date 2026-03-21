@@ -6,6 +6,8 @@
 import { Response, NextFunction } from 'express';
 import { startTrial, getTrialStatus, generateTrialMirror } from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
+import { trackEvent } from '../events/service.js';
+import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 
 export async function startTrialHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
@@ -13,6 +15,17 @@ export async function startTrialHandler(req: AuthenticatedRequest, res: Response
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const user = await startTrial(userId);
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_trial_started',
+      source: 'web',
+      state,
+      payload: {
+        currentState: user.currentState ?? null,
+        currentStep: user.currentStep ?? null,
+      },
+    })
     return res.status(200).json(user);
   } catch (error: any) {
     console.error('[TrialController] startTrial error:', error);
@@ -26,6 +39,17 @@ export async function getTrialStatusHandler(req: AuthenticatedRequest, res: Resp
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const status = await getTrialStatus(userId);
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_trial_status_viewed',
+      source: 'web',
+      state,
+      payload: {
+        active: status.isActive,
+        daysLeft: status.daysLeft,
+      },
+    })
     return res.status(200).json(status);
   } catch (error: any) {
     console.error('[TrialController] getStatus error:', error);
@@ -44,6 +68,16 @@ export async function generateMirrorHandler(req: AuthenticatedRequest, res: Resp
     }
 
     const analysis = await generateTrialMirror(userId, day);
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_trial_mirror_generated',
+      source: 'web',
+      state,
+      payload: {
+        day,
+      },
+    })
     return res.status(200).json({ analysis });
   } catch (error: any) {
     console.error('[TrialController] generateMirror error:', error);

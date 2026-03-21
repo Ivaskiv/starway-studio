@@ -2,6 +2,8 @@
 import type { Request, Response } from 'express';
 import type { ConnectSocialInput, SocialResponse } from './types.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
+import { trackEvent } from '../events/service.js';
+import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 import { serverError } from '../../utils/serverError.js';
 import { socialService } from '../../modules/social/service.js';
 
@@ -133,6 +135,18 @@ export async function telegramLink(req:AuthenticatedRequest, res: Response) {
 
     const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'StarwayMentorBot';
     const { link, expiresIn } = await socialService.generateTelegramLink(userId, botUsername);
+    const state = await resolveUserState(userId).catch(() => null)
+
+    await trackEvent({
+      userId,
+      type: 'web_telegram_link_opened',
+      source: 'web',
+      state,
+      payload: {
+        botUsername,
+        expiresIn,
+      },
+    })
 
     res.json({
       success: true,
@@ -164,6 +178,17 @@ export async function verifyTelegramCode(req: Request, res: Response) {
         message: 'invalid_or_expired_code',
       });
     }
+
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_telegram_link_verified',
+      source: 'web',
+      state,
+      payload: {
+        code,
+      },
+    })
 
     res.json({
       success: true,

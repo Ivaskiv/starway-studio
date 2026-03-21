@@ -1,0 +1,29 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "baseUrl": "../..",
+    "rootDir": "../..",
+    "outDir": "./dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["node"],
+    "typeRoots": ["../../node_modules/@types"],
+    "paths": {
+      "@/*": ["backend/src/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "../../backend/src/**/*.ts",
+    "../../backend/src/**/*.d.ts",
+    "../../backend/global.d.ts",
+    "../../packages/db/src/**/*.ts",
+    "../../packages/shared/src/**/*.ts"
+  ],
+  "exclude": ["dist", "node_modules"]
+}

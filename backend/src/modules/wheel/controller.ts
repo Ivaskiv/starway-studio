@@ -1,5 +1,7 @@
 import { prisma } from '../../db/client.js'
 import type { Response } from 'express'
+import { trackEvent } from '../events/service.js'
+import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import { createWheelPDF } from './pdf.js'
 import {
   canFillWheel,
@@ -177,6 +179,19 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
       userContext
     })
 
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_wheel_completed',
+      source: 'web',
+      state,
+      payload: {
+        wheelId: result.entry.id,
+        weakestSphere: result.analytics.mostCommonWeakest ?? null,
+        focusSphere: result.analytics.mostCommonFocus ?? null,
+      },
+    })
+
     return res.status(201).json({
       success: true,
       wheel: { id: result.entry.id },
@@ -236,7 +251,19 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
 
 export async function getWheelCooldownHandler(req: AuthenticatedRequest, res: Response) {
   try {
-    const status = await canFillWheel(req.user!.id)
+    const userId = req.user!.id
+    const status = await canFillWheel(userId)
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_wheel_cooldown_viewed',
+      source: 'web',
+      state,
+      payload: {
+        active: status.active,
+        remainingMs: status.remainingMs,
+      },
+    })
     return res.json({ success: true, ...status })
   } catch (error) {
     console.error('❌ getWheelCooldown', error)
@@ -246,8 +273,20 @@ export async function getWheelCooldownHandler(req: AuthenticatedRequest, res: Re
 
 export async function getWheelHistoryHandler(req: AuthenticatedRequest, res: Response) {
   try {
+    const userId = req.user!.id
     const limit = Math.min(parseInt(req.query.limit as string) || 10, 100)
-    const wheels = await getWheelHistory(req.user!.id, limit)
+    const wheels = await getWheelHistory(userId, limit)
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_wheel_history_viewed',
+      source: 'web',
+      state,
+      payload: {
+        limit,
+        count: wheels.length,
+      },
+    })
     return res.json({ success: true, count: wheels.length, wheels })
   } catch (error) {
     console.error('❌ getWheelHistory', error)
@@ -260,6 +299,16 @@ export async function getLatestWheelHandler(req: AuthenticatedRequest, res: Resp
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'unauthorized' })
     const wheel = await getLatestWheel(userId)
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_wheel_latest_viewed',
+      source: 'web',
+      state,
+      payload: {
+        hasWheel: Boolean(wheel),
+      },
+    })
     return res.json({ success: true, wheel: wheel ?? null })
   } catch (error) {
     console.error('❌ getLatestWheel', error)
@@ -269,7 +318,19 @@ export async function getLatestWheelHandler(req: AuthenticatedRequest, res: Resp
 
 export async function getWheelAnalyticsHandler(req: AuthenticatedRequest, res: Response) {
   try {
-    const analytics = await getWheelAnalytics(req.user!.id)
+    const userId = req.user!.id
+    const analytics = await getWheelAnalytics(userId)
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_wheel_analytics_viewed',
+      source: 'web',
+      state,
+      payload: {
+        balanceIndex: analytics.balanceIndex,
+        trend: analytics.trend,
+      },
+    })
     return res.json({ success: true, analytics })
   } catch (error) {
     console.error('❌ getWheelAnalytics', error)
@@ -318,6 +379,16 @@ export async function generateWheelPDFHandler(req: AuthenticatedRequest, res: Re
     }
 
     const buffer = await createWheelPDF(pdfData)
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_wheel_pdf_generated',
+      source: 'web',
+      state,
+      payload: {
+        wheelId: id,
+      },
+    })
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="wheel-${id}.pdf"`)
     return res.send(buffer)
@@ -374,6 +445,16 @@ export async function sendWheelTelegramReminderHandler(req: AuthenticatedRequest
         botLink: result.botLink,
       })
     }
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_wheel_telegram_reminder_sent',
+      source: 'web',
+      state,
+      payload: {
+        wheelId: id,
+      },
+    })
     return res.json({ success: true, message: 'Нагадування надіслано' })
   } catch (error) {
     console.error('❌ sendWheelTelegramReminder', error)

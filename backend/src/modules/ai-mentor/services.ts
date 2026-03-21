@@ -1,11 +1,17 @@
 import { prisma } from '../../db/client.js';
-import type { DailyState, Prisma } from '../../db/generated/prisma/client.js';
+import type { DailyState, Prisma } from '@prisma/client';
 import { openai } from '../../lib/openai.js';
 import { logDailyCycle, recordMicroSupport, calculateStreak, triggerAICheckIn } from '../daily-cycle/service.js';
 import { getPrimaryGoal } from '../goals/service.js';
 import { SPHERE_LABELS, type WheelSphereId } from '../wheel/types.js';
 import { generatePayload as generateMentorPayload } from './generation.service.js';
 import { ensureMentor } from './helpers.js';
+import { buildContextPrompt, buildSystemPrompt } from './prompt.js';
+import {
+  detectRegression as detectRegressionState,
+  generateMicroActions as generateMicroActionsState,
+  updateUserState,
+} from './state.service.js';
 import {
   SendMessageDto,
   ChatResponse,
@@ -25,6 +31,8 @@ import {
   AffirmationDto,
   MicroSupportItem,
   MentorChatContext,
+  MentorExtendedContext,
+  StreamChatInput,
 } from './types.js';
 import { rewardEngine } from '../gamification/reward.engine.js';
 
@@ -71,12 +79,18 @@ function pickFocusSphere(scores: Record<string, unknown> | null | undefined) {
 }
 
 async function aiGenerate(prompt: AIGenerationRequest): Promise<AIGenerationResponse> {
+  const contextPrompt = prompt.context?.join('\n') ?? ''
   const result = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     temperature: 0.35,
     messages: [
-      { role: 'system', content: 'Тон: жорстка ясність українською. Без мотивації.' },
-      { role: 'user', content: prompt.prompt },
+      { role: 'system', content: buildSystemPrompt() },
+      {
+        role: 'user',
+        content: contextPrompt
+          ? `КОНТЕКСТ:\n${contextPrompt}\n\nЗАПИТ:\n${prompt.prompt}`
+          : prompt.prompt,
+      },
     ],
     max_tokens: 400,
   });
@@ -144,7 +158,11 @@ export async function logMessage(payload: {
 export async function sendMessage(params: SendMessageDto): Promise<ChatResponse> {
   const session = await getOrCreateSession(params.userId, params.sessionId);
   const userMessage = await logMessage({ sessionId: session.id, role: 'USER', text: params.message });
-  const ai = await aiGenerate({ prompt: `Відповідь: ${params.message}` });
+  const contextPrompt = await buildContextPrompt(params.userId)
+  const ai = await aiGenerate({
+    prompt: `Прийми рішення по повідомленню користувача. Визнач розрив між станом і дією. Дай відповідь JSON: { "reply": "string", "actionables": ["string"] }. Повідомлення: ${params.message}`,
+    context: [contextPrompt],
+  });
   const mentorMessage = await logMessage({ sessionId: session.id, role: 'MENTOR', text: ai.text });
   await rewardEngine.onMentorSessionCompleted(params.userId);
   return { session, userMessage, mentorMessage };
@@ -192,6 +210,100 @@ export async function getMentorContext(userId: string): Promise<MentorChatContex
     primaryGoal: primaryGoal?.text ?? undefined,
     streakDays: streak?.current ?? undefined,
   };
+}
+
+export async function getMentorExtendedContext(userId: string): Promise<MentorExtendedContext> {
+  const [user, baseContext, vision, drains] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    }),
+    getMentorContext(userId),
+    prisma.visionStatement.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { content: true },
+    }),
+    prisma.dailyEntry.findMany({
+      where: {
+        userId,
+        createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+      },
+      select: { drain: true },
+    }),
+  ])
+
+  if (!user) {
+    throw new Error('user_not_found')
+  }
+
+  const recentDrains = [...new Set(
+    drains
+      .map((entry: { drain: string | null }) => entry.drain)
+      .filter((drain): drain is string => Boolean(drain)),
+  )]
+
+  return {
+    userId,
+    lastState: baseContext.lastState,
+    primaryGoal: baseContext.primaryGoal,
+    focusSphere: baseContext.focusSphere,
+    wheelScore: baseContext.wheelScore,
+    streakDays: baseContext.streakDays ?? 0,
+    visionText: vision?.content ?? null,
+    recentDrains,
+  }
+}
+
+export function buildStreamingSystemPrompt(ctx: MentorExtendedContext): string {
+  return `Ти — AI-ментор системи Starway.
+
+РОЛЬ: Ти не психолог і не мотиватор. Ти — керуючий модуль.
+Твоя єдина функція: вести людину по системі СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.
+
+СТИЛЬ:
+- Жорстка ясність. Без "ти молодець", без підтримки, без мотивації
+- Короткі речення. Максимум 3-4 речення за раз
+- Питання тільки одне — найважливіше
+- Якщо розмита відповідь — уточнюй конкретику
+- Мова: тільки українська
+
+КОНТЕКСТ КОРИСТУВАЧА:
+- Поточний стан: ${ctx.lastState ?? 'не визначено'}
+- Головна ціль: ${ctx.primaryGoal ?? 'не задана — потрібно з\'ясувати'}
+- Фокус-сфера: ${ctx.focusSphere ?? 'не визначена'}
+- Бал колеса: ${ctx.wheelScore != null ? `${ctx.wheelScore}/10` : 'не заповнено'}
+- Streak: ${ctx.streakDays} днів
+- Бачення: ${ctx.visionText ?? 'не задано'}
+- Дренажі тижня: ${ctx.recentDrains.join(', ') || 'немає даних'}
+
+ЛОГІКА:
+1. Якщо ціль не задана → веди до модулю E (5 цілей → 1 головна)
+2. Якщо є ціль → перевіряй чи кожен вибір веде до неї
+3. При дренажі → фіксуй "зраду рішенню", не жалій
+4. При streak < 3 → питай про перешкоди конкретно
+5. Ніколи не пропонуй курси або платні продукти — це робить система окремо`
+}
+
+export async function createMentorChatStream(input: StreamChatInput) {
+  const systemPrompt = input.context
+    ? buildStreamingSystemPrompt(input.context)
+    : 'Ти — AI-ментор системи Starway. Мова: українська. Жорстка ясність. СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.'
+
+  return openai.chat.completions.create({
+    model: 'gpt-4o',
+    temperature: 0.5,
+    max_tokens: 400,
+    stream: true,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...input.history.slice(-12).map(message => ({
+        role: message.role,
+        content: message.content,
+      })),
+      { role: 'user', content: input.message },
+    ],
+  })
 }
 
 export async function advanceOnboarding(userId: string): Promise<OnboardingStage> {
@@ -264,7 +376,11 @@ export async function submitDailyCycle(input: DailyCycleInput): Promise<DailyCyc
       date: new Date(),
     },
   });
-  const analysis = await aiGenerate({ prompt: `Аналіз циклу: ${JSON.stringify(input)}` });
+  const contextPrompt = await buildContextPrompt(input.userId)
+  const analysis = await aiGenerate({
+    prompt: `Аналіз циклу: ${JSON.stringify(input)}`,
+    context: [contextPrompt],
+  });
 
   // fix etap6: persist core cycle log for analytics and AI summaries
   await logDailyCycle(input.userId, {
@@ -282,6 +398,16 @@ export async function submitDailyCycle(input: DailyCycleInput): Promise<DailyCyc
       }),
     ),
   );
+  void updateUserState({
+    userId: input.userId,
+    source: 'daily',
+    answers: {
+      state: input.state,
+      choice: input.choice,
+      factOfDay: input.dayFact ?? '',
+      drain: input.drain ?? '',
+    },
+  }).catch(error => console.error('[updateUserState]', error))
   // fix etap6: recompute derived streak metrics and trigger AI check-in reminders
   await calculateStreak(input.userId);
   await triggerAICheckIn(input.userId);
@@ -376,6 +502,14 @@ export async function createEveningSession(userId: string) {
   const affirmation = await generateAffirmation('evening');
   await rewardEngine.onMentorSessionCompleted(userId);
   return affirmation;
+}
+
+export async function generateMicroActions(userId: string) {
+  return generateMicroActionsState(userId)
+}
+
+export async function detectRegression(userId: string) {
+  return detectRegressionState(userId)
 }
 
 export { aiGenerate, generateMentorPayload as generatePayload };

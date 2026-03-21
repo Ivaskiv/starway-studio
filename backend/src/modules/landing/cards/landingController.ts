@@ -1,6 +1,8 @@
 // backend/src/modules/landing/cards/landingController.ts
 import { Request, Response } from 'express';
 import { buildPaymentRequest } from '../../subscriptions/payments/wayforpay.js';
+import { trackEvent } from '../../events/service.js';
+import { resolveUserState } from '../../telegram-mentor/handlers/start.js';
 
 // Mock DB (замінити на Prisma/Neon)
 let landingDB: Array<{ id: string; userId: string; title: string; url: string; price: number }> = [
@@ -13,6 +15,16 @@ export async function getUserLandingCards(req: Request, res: Response) {
   if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
   const cards = landingDB.filter(l => l.userId === userId);
+  const state = await resolveUserState(userId).catch(() => null);
+  await trackEvent({
+    userId,
+    type: 'web_landing_cards_viewed',
+    source: 'web',
+    state,
+    payload: {
+      count: cards.length,
+    },
+  });
   res.json({ cards });
 }
 
@@ -23,17 +35,43 @@ export async function addLandingCard(req: Request, res: Response) {
   const id = `${Date.now()}`;
   const newCard = { id, userId, title, url: `/landing/${id}`, price };
   landingDB.push(newCard);
+  const state = await resolveUserState(userId).catch(() => null);
+  await trackEvent({
+    userId,
+    type: 'web_landing_card_created',
+    source: 'web',
+    state,
+    payload: {
+      landingId: id,
+      price,
+      title,
+    },
+  });
   res.json({ card: newCard });
 }
 
 export async function updateLandingCard(req: Request, res: Response) {
-  const { id, title, price } = req.body;
+  const { id, title, price, userId } = req.body;
   const card = landingDB.find(l => l.id === id);
   if (!card) return res.status(404).json({ error: 'Landing not found' });
 
   if (title) card.title = title;
   if (price) card.price = price;
 
+  const state = typeof userId === 'string'
+    ? await resolveUserState(userId).catch(() => null)
+    : null;
+  await trackEvent({
+    userId: typeof userId === 'string' ? userId : null,
+    type: 'web_landing_card_updated',
+    source: 'web',
+    state,
+    payload: {
+      landingId: card.id,
+      price: card.price,
+      title: card.title,
+    },
+  });
   res.json({ card });
 }
 
@@ -50,6 +88,21 @@ export async function initiateLandingPayment(req: Request, res: Response) {
     currency: 'EUR',
     payRef,
     product_name: [landing.title],
+  });
+
+  const state = typeof userId === 'string'
+    ? await resolveUserState(userId).catch(() => null)
+    : null;
+  await trackEvent({
+    userId: typeof userId === 'string' ? userId : null,
+    type: 'web_landing_payment_initiated',
+    source: 'web',
+    state,
+    payload: {
+      landingId: landing.id,
+      payRef,
+      amount: landing.price,
+    },
   });
 
   res.json({ payment: paymentData });

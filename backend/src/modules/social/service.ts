@@ -1,5 +1,6 @@
 import { prisma } from '../../db/client.js';
 import crypto from 'crypto';
+import { createTelegramBindingDeepLink } from '../deeplinks/service.js';
 import type { SocialConnection, SocialProvider } from './types.js';
 
 export async function getSocialConnections(userId: string): Promise<SocialConnection[]> {
@@ -56,28 +57,38 @@ export async function disconnectSocial(userId: string, provider: SocialProvider)
 }
 
 export async function generateTelegramLink(userId: string, botUsername: string) {
-  const code = crypto.randomBytes(16).toString('hex');
-  const expiresIn = 15 * 60; // 15 хв
-  const expiresAt = new Date(Date.now() + expiresIn * 1000);
+  try {
+    const { link, expiresIn } = await createTelegramBindingDeepLink(userId);
+    void botUsername
+    return { link, expiresIn };
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== 'DEEPLINK_TABLE_MISSING') {
+      throw error
+    }
 
-  // видаляємо старі посилання
-  await prisma.telegramLink.deleteMany({ where: { userId } });
+    const code = crypto.randomBytes(16).toString('hex');
+    const expiresIn = 15 * 60;
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-  // створюємо нове посилання
-  const linkRecord = await prisma.telegramLink.create({
-    data: {
-      userId,
-      code,
-      expiresAt,
-    },
-  });
+    await prisma.telegramLink.deleteMany({ where: { userId } });
 
-  const link = `https://t.me/${botUsername}?start=link_${linkRecord.code}`;
-  return { link, expiresIn };
+    const linkRecord = await prisma.telegramLink.create({
+      data: {
+        userId,
+        code,
+        expiresAt,
+      },
+    });
+
+    return {
+      link: `https://t.me/${botUsername}?start=starway_${linkRecord.code}`,
+      expiresIn,
+    };
+  }
 }
 
 export async function verifyTelegramLinkCode(code: string): Promise<string | null> {
-  const normalized = String(code || '').replace(/^link_/, '');
+  const normalized = String(code || '').replace(/^starway_/, '').replace(/^link_/, '');
 
   // findFirst, бо code не є унікальним полем
   const link = await prisma.telegramLink.findFirst({

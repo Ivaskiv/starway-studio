@@ -16,6 +16,8 @@ import {
 } from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { promoteUserToAdminIfNeeded } from '../auth/auth.service.js';
+import { trackEvent } from '../events/service.js';
+import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 
 interface AuthenticatedUser {
   id: string;
@@ -38,6 +40,16 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
     const isSuperAdmin = isSuperAdminRequest(req);
     const ownerId = isSuperAdmin ? undefined : req.user?.id;
     const products = await getAllProducts(ownerId);
+    const state = req.user?.id ? await resolveUserState(req.user.id).catch(() => null) : null
+    await trackEvent({
+      userId: req.user?.id ?? null,
+      type: 'web_products_catalog_viewed',
+      source: 'web',
+      state,
+      payload: {
+        count: products.length,
+      },
+    })
     return res.status(200).json(products);
   } catch (err) {
     next(err);
@@ -51,6 +63,16 @@ export async function getMyProducts(req: AuthenticatedRequest, res: Response, ne
     if (!user) return;
 
     const products = await getUserProducts(user.id);
+    const state = await resolveUserState(user.id).catch(() => null)
+    await trackEvent({
+      userId: user.id,
+      type: 'web_my_products_viewed',
+      source: 'web',
+      state,
+      payload: {
+        count: products.length,
+      },
+    })
     return res.status(200).json(products);
   } catch (err) {
     next(err);
@@ -66,6 +88,16 @@ export async function getProduct(req: AuthenticatedRequest, res: Response, next:
 
     const product = await getProductById(id, ownerId) ?? await getProductByCode(id, ownerId);
     if (!product) return res.status(404).json({ error: 'Product not found' });
+    const state = req.user?.id ? await resolveUserState(req.user.id).catch(() => null) : null
+    await trackEvent({
+      userId: req.user?.id ?? null,
+      type: 'web_product_viewed',
+      source: 'web',
+      state,
+      payload: {
+        productId: product.id,
+      },
+    })
     return res.status(200).json(product);
   } catch (err) {
     next(err);
@@ -119,6 +151,17 @@ export async function createProductHandler(req: AuthenticatedRequest, res: Respo
     });
 
     await promoteUserToAdminIfNeeded(ownerId);
+    const state = await resolveUserState(user.id).catch(() => null)
+    await trackEvent({
+      userId: user.id,
+      type: 'web_product_created',
+      source: 'web',
+      state,
+      payload: {
+        productId: product.id,
+        ownerId,
+      },
+    })
 
     return res.status(201).json(product);
   } catch (err) {
@@ -136,6 +179,16 @@ export async function updateProductHandler(req: AuthenticatedRequest, res: Respo
     const isSuperAdmin = isSuperAdminRequest(req);
 
     const product = await updateProduct(id, req.body, isSuperAdmin ? undefined : user.id);
+    const state = await resolveUserState(user.id).catch(() => null)
+    await trackEvent({
+      userId: user.id,
+      type: 'web_product_updated',
+      source: 'web',
+      state,
+      payload: {
+        productId: id,
+      },
+    })
 
     if (isSuperAdmin) {
       logSuperAdminAudit('UPDATE_PRODUCT', {
@@ -167,6 +220,16 @@ export async function deleteProductHandler(req: AuthenticatedRequest, res: Respo
     const isSuperAdmin = isSuperAdminRequest(req);
 
     await deleteProduct(id, isSuperAdmin ? undefined : user.id);
+    const state = await resolveUserState(user.id).catch(() => null)
+    await trackEvent({
+      userId: user.id,
+      type: 'web_product_deleted',
+      source: 'web',
+      state,
+      payload: {
+        productId: id,
+      },
+    })
 
     if (isSuperAdmin) {
       logSuperAdminAudit('DELETE_PRODUCT', {
@@ -198,6 +261,18 @@ export async function enrollInProduct(req: AuthenticatedRequest, res: Response, 
     const { purchased, trialDays } = req.body;
 
     const enrollment = await enrollUser({ userId: user.id, productId, purchased, trialDays });
+    const state = await resolveUserState(user.id).catch(() => null)
+    await trackEvent({
+      userId: user.id,
+      type: 'web_product_enrolled',
+      source: 'web',
+      state,
+      payload: {
+        productId,
+        purchased: Boolean(purchased),
+        trialDays: typeof trialDays === 'number' ? trialDays : null,
+      },
+    })
     return res.status(201).json(enrollment);
   } catch (err: any) {
     if (err.message.includes('already enrolled')) return res.status(409).json({ error: err.message });
@@ -214,6 +289,17 @@ export async function checkAccess(req: AuthenticatedRequest, res: Response, next
 
     const { id: productId } = req.params;
     const hasAccess = await checkProductAccess(user.id, productId);
+    const state = await resolveUserState(user.id).catch(() => null)
+    await trackEvent({
+      userId: user.id,
+      type: 'web_product_access_checked',
+      source: 'web',
+      state,
+      payload: {
+        productId,
+        hasAccess,
+      },
+    })
     return res.status(200).json({ hasAccess });
   } catch (err) {
     next(err);
@@ -227,6 +313,16 @@ export async function getMyEnrollments(req: AuthenticatedRequest, res: Response,
     if (!user) return;
 
     const enrollments = await getUserEnrollments(user.id);
+    const state = await resolveUserState(user.id).catch(() => null)
+    await trackEvent({
+      userId: user.id,
+      type: 'web_product_enrollments_viewed',
+      source: 'web',
+      state,
+      payload: {
+        count: enrollments.length,
+      },
+    })
     return res.status(200).json(enrollments);
   } catch (err) {
     next(err);

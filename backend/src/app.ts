@@ -15,20 +15,26 @@ import accessRoutes from './modules/access/routes.js';
 import analyticsRoutes from './modules/analytics/routes.js';
 import aiGeneratorRoutes from './modules/ai-generator/routes.js';
 import mentorRoutes from './modules/ai-mentor/routes.js';
-import authRoutes from './modules/auth/auth.routes.js';
+import authRoutes, { telegramRouter } from './modules/auth/auth.routes.js';
 import expertsRoutes from './modules/experts/routes.js';
+import eventsRoutes from './modules/events/routes.js';
+import fivePointsRoutes from './modules/five-points/routes.js';
 import consultationRoutes from './modules/consultation/routes.js';
 import dailyRoutes from './modules/daily-cycle/routes.js';
+import deeplinkRoutes from './modules/deeplinks/routes.js';
 import funnelRoutes from './modules/funnel/routes.js';
 import goalsRoutes from './modules/goals/routes.js';
 import mentorshipRoutes from './modules/mentorship/routes.js';
 import miniCoursesRoutes from './modules/mini-courses/routes.js';
 import onboardingRoutes from './modules/onboarding/routes.js';
 import productsRoutes from './modules/products/routes.js';
+import productMembersRoutes from './modules/product-members/routes.js';
 import producerRoutes from './modules/producer/routes.js';
 import progressRoutes from './modules/progress/routes.js';
 import socialRoutes from './modules/social/routes.js';
+import subscriptionsRoutes from './modules/subscriptions/routes.js';
 import trialRoutes from './modules/trial/routes.js';
+import userStateRoutes from './modules/user-state/routes.js';
 import userRoutes from './modules/user/routes.js';
 import visionRoutes from './modules/vision/routes.js';
 import wheelRoutes from './modules/wheel/routes.js';
@@ -40,6 +46,7 @@ import affiliateRoutes from "./modules/affiliate/routes.js"
 import leadMagnetRoutes from './modules/lead-magnet/routes.js'
 import adminRoutes from './modules/admin/routes.js'
 import settingsRoutes from './modules/settings/routes.js'
+import startFlowRoutes from './modules/start-flow/routes.js'
 import gamificationRoutes from './modules/gamification/routes.js'
 
 export function createApp() {
@@ -79,10 +86,15 @@ export function createApp() {
   // Routes
   // =====================
   app.use('/api/auth', authRoutes);
+  app.use('/api/telegram', telegramRouter);
   app.use('/api/access', accessRoutes);
   app.use('/api/analytics', analyticsRoutes);
+  app.use('/api/events', eventsRoutes);
+  app.use('/api/deeplinks', deeplinkRoutes);
   app.use('/api/experts', expertsRoutes);
+  app.use('/api/five-points', fivePointsRoutes);
   app.use('/api/products', productsRoutes);
+  app.use('/api/product-members', productMembersRoutes);
   app.use('/api/progress', progressRoutes);
 
 app.use('/api/mentor', mentorRoutes);
@@ -92,17 +104,20 @@ app.use('/api/aIMentor', mentorRoutes);
   app.use('/api/vision', visionRoutes);
   app.use('/api/goals', goalsRoutes);
   app.use('/api/trial', trialRoutes);
+  app.use('/api/user', userStateRoutes);
   app.use('/api/quota', quotaRoutes);
 app.use("/api/affiliate", affiliateRoutes)
 app.use('/api/lead-magnet', leadMagnetRoutes)
-app.use('/api/settings', settingsRoutes)
-app.use('/api/gamification', gamificationRoutes)
+  app.use('/api/settings', settingsRoutes)
+  app.use('/api/gamification', gamificationRoutes)
+  app.use('/api/start-flow', startFlowRoutes)
 
   app.use('/api/consultation', consultationRoutes);
   app.use('/api/zoom', zoomRoutes);
   app.use('/api/mentorship', mentorshipRoutes);
   app.use('/api/courses', miniCoursesRoutes);
   app.use('/api/social', socialRoutes);
+  app.use('/api/subscriptions', subscriptionsRoutes);
   app.use('/api/funnels', funnelRoutes);
   app.use('/api/producer', producerRoutes);
   app.use('/api/landing', landingRoutes);

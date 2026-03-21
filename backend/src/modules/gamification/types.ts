@@ -1,4 +1,4 @@
-import type { GamificationProfile } from '../../db/generated/prisma/client.js'
+import type { GamificationProfile } from '@prisma/client'
 
 export interface RewardPayload {
   xp?: number

@@ -3,6 +3,8 @@ import type { Response } from 'express'
 import { prisma } from '../../db/client.js'
 import { isSuperAdminEmail, isSuperAdminRequest } from '../../modules/auth/superadmin.js'
 import { findUserById, toSafeUser } from '../../modules/auth/auth.service.js'
+import { trackEvent } from '../events/service.js'
+import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 
 // ✅ НОВИЙ: endpoint для отримання abilities
 export async function getMyAccess(req: AuthenticatedRequest, res: Response) {
@@ -16,11 +18,23 @@ export async function getMyAccess(req: AuthenticatedRequest, res: Response) {
   }
 
   const safeUser = toSafeUser(user)
+  const state = await resolveUserState(req.user.id).catch(() => null)
 
   // Конвертуємо масив abilities в об'єкт
   const abilitiesMap: Record<string, boolean> = {}
   safeUser.abilities.forEach((ability) => {
     abilitiesMap[ability] = true
+  })
+
+  await trackEvent({
+    userId: req.user.id,
+    type: 'web_access_viewed',
+    source: 'web',
+    state,
+    payload: {
+      plan: safeUser.access.plan ?? null,
+      role: safeUser.role,
+    },
   })
 
   return res.json({
@@ -139,6 +153,20 @@ export async function getMySystemState(req: AuthenticatedRequest, res: Response)
     showAdminPanel: isAdmin,
   }
 
+  const state = await resolveUserState(req.user.id).catch(() => null)
+  await trackEvent({
+    userId: req.user.id,
+    type: 'web_system_state_viewed',
+    source: 'web',
+    state,
+    payload: {
+      trialActive: isTrialActive,
+      subscriptionActive: isSubscriptionActive,
+      ownedProducts: ownedProducts.length,
+      subscribedProducts: subscribedProducts.length,
+    },
+  })
+
   return res.json({
     products: {
       owned: ownedProducts,
@@ -188,6 +216,16 @@ export async function getAdminClients(req: AuthenticatedRequest, res: Response) 
       updatedAt: true,
     },
     orderBy: { createdAt: 'desc' },
+  })
+
+  await trackEvent({
+    userId: req.user.id,
+    type: 'web_admin_clients_viewed',
+    source: 'web',
+    state: 'admin',
+    payload: {
+      count: clients.length,
+    },
   })
 
   return res.json({ clients })

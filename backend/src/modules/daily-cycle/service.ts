@@ -7,7 +7,8 @@ import {
   DailyState,
   Prisma,
   ReminderType,
-} from '../../db/generated/prisma/client.js'
+} from '@prisma/client'
+import { updateUserState } from '../ai-mentor/state.service.js'
 import { scheduleReminder } from '../notifications/reminder.service.js'
 import type { DailyEntryDTO, DailyStats, UpsertDailyEntryInput } from './types.js'
 
@@ -21,6 +22,25 @@ const todayRange = () => {
 
 const toPrismaJson = (value: unknown): Prisma.InputJsonValue =>
   JSON.parse(JSON.stringify(value))
+
+function syncUserStateFromEntry(entry: {
+  userId: string
+  state: DailyState
+  choice: DailyChoice
+  dayFact: string | null
+  drain: DailyDrain | null
+}) {
+  void updateUserState({
+    userId: entry.userId,
+    source: 'daily',
+    answers: {
+      state: entry.state,
+      choice: entry.choice,
+      factOfDay: entry.dayFact ?? '',
+      drain: entry.drain ?? '',
+    },
+  }).catch(error => console.error('[updateUserState]', error))
+}
 
 interface DailyEntryRow {
   id: string
@@ -46,7 +66,7 @@ export class DailyService {
     const expertId = dto.expertId ?? userId
     const today = new Date(new Date().toDateString())
 
-    return prisma.dailyEntry.create({
+    const entry = await prisma.dailyEntry.create({
       data: {
         userId,
         expertId,
@@ -63,8 +83,11 @@ export class DailyService {
           dto.answers && dto.answers.length > 0
             ? toPrismaJson({ answers: dto.answers })
             : Prisma.JsonNull,
-      },
+        },
     })
+
+    syncUserStateFromEntry(entry)
+    return entry
   }
 
   static async getMyEntries(userId: string): Promise<DailyEntryRow[]> {
@@ -111,7 +134,7 @@ export async function getOrCreateTodayEntry(userId: string, expertId: string): P
   })
   if (existing) return existing
 
-  return prisma.dailyEntry.create({
+  const entry = await prisma.dailyEntry.create({
     data: {
       userId,
       expertId,
@@ -125,6 +148,8 @@ export async function getOrCreateTodayEntry(userId: string, expertId: string): P
       content: Prisma.JsonNull,
     },
   })
+  syncUserStateFromEntry(entry)
+  return entry
 }
 
 export async function upsertDailyEntry(input: UpsertDailyEntryInput): Promise<DailyEntryRow> {
@@ -143,11 +168,13 @@ export async function upsertDailyEntry(input: UpsertDailyEntryInput): Promise<Da
     content: Prisma.JsonNull,
   }
 
-  return prisma.dailyEntry.upsert({
+  const entry = await prisma.dailyEntry.upsert({
     where: { id: entryId },
     create: { id: entryId, ...upsertData },
     update: upsertData,
   })
+  syncUserStateFromEntry(entry)
+  return entry
 }
 
 async function resolveEntryUserId(entryId: string): Promise<string | null> {

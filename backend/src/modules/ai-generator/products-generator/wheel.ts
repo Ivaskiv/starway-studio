@@ -2,7 +2,8 @@
 
 import { prisma } from '../../../db/client.js'
 import { openai } from '../../../lib/openai.js'
-import { Context, Telegraf } from 'telegraf'
+import { Context } from 'telegraf'
+import { bot } from '../../../lib/telegram.js'
 import PdfPrinter from 'pdfmake'
 import type { TDocumentDefinitions, StyleDictionary } from 'pdfmake/interfaces'
 
@@ -359,7 +360,7 @@ export async function createWheelPDF(data: WheelPDFData): Promise<Buffer> {
 
 // ── Telegram ─────────────────────────────────────────────────────────────────
 
-export const bot: Telegraf<Context> = new Telegraf<Context>(process.env.TELEGRAM_BOT_TOKEN ?? '')
+let wheelPdfCallbackRegistered = false
 
 export async function sendWheelNotification(userId: string, entryId: string) {
   const user = await prisma.user.findUnique({
@@ -380,38 +381,42 @@ export async function sendWheelNotification(userId: string, entryId: string) {
   return { ok: true }
 }
 
-bot.on('callback_query', async (ctx: Context) => {
-  const cq = ctx.callbackQuery as { data?: string }
-  if (!cq?.data?.startsWith('wheel_pdf_')) return
+if (!wheelPdfCallbackRegistered) {
+  wheelPdfCallbackRegistered = true
 
-  const entryId = cq.data.replace('wheel_pdf_', '')
-  const entry   = await prisma.userBalanceEntry.findUnique({
-    where:   { id: entryId },
-    include: { user: true },
+  bot.on('callback_query', async (ctx: Context) => {
+    const cq = ctx.callbackQuery as { data?: string }
+    if (!cq?.data?.startsWith('wheel_pdf_')) return
+
+    const entryId = cq.data.replace('wheel_pdf_', '')
+    const entry   = await prisma.userBalanceEntry.findUnique({
+      where:   { id: entryId },
+      include: { user: true },
+    })
+
+    if (!entry) {
+      await ctx.answerCbQuery('❌ Не знайдено')
+      return
+    }
+
+    const scores  = scoresFromMap(entry.scores)
+    const weakest = findWeakest(scores)
+    const focus   = findFocus(scores, weakest)
+
+    const pdfData: WheelPDFData = {
+      userName:     entry.user?.firstName ?? entry.user?.email ?? 'Користувач',
+      scores,
+      weakestSphere: weakest.categoryId,
+      focusSphere:   focus.categoryId,
+      analysis:      entry.note ?? '',
+      createdAt:     entry.createdAt.toISOString(),
+    }
+
+    const buffer = await createWheelPDF(pdfData)
+    await ctx.telegram.sendDocument(
+      ctx.from!.id,
+      { source: buffer, filename: `wheel-${entryId}.pdf` },
+    )
+    await ctx.answerCbQuery('✅ PDF надіслано!')
   })
-
-  if (!entry) {
-    await ctx.answerCbQuery('❌ Не знайдено')
-    return
-  }
-
-  const scores  = scoresFromMap(entry.scores)
-  const weakest = findWeakest(scores)
-  const focus   = findFocus(scores, weakest)
-
-  const pdfData: WheelPDFData = {
-    userName:     entry.user?.firstName ?? entry.user?.email ?? 'Користувач',
-    scores,
-    weakestSphere: weakest.categoryId,
-    focusSphere:   focus.categoryId,
-    analysis:      entry.note ?? '',
-    createdAt:     entry.createdAt.toISOString(),
-  }
-
-  const buffer = await createWheelPDF(pdfData)
-  await ctx.telegram.sendDocument(
-    ctx.from!.id,
-    { source: buffer, filename: `wheel-${entryId}.pdf` },
-  )
-  await ctx.answerCbQuery('✅ PDF надіслано!')
-})
+}

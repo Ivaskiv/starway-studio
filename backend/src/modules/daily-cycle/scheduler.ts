@@ -8,16 +8,39 @@
 //   ✅ Duplicate scheduler guard
 // ═══════════════════════════════════════════════════════════════
 
-import cron                        from 'node-cron'
-import { prisma }                  from '../../db/client.js'
+import cron, { type ScheduledTask } from 'node-cron'
+import { prisma, withRetry }       from '../../db/client.js'
 import { sendEveningQuestion, sendMorningQuestion } from './telegram.js'
 import { generateTrialMirror }     from '../trial/service.js'
 import { bot }                     from '../../lib/telegram.js'
-import type { MicroTask }          from '../../db/generated/prisma/client.js'
-import { SubscriptionStatus }      from '../../db/generated/prisma/client.js'
+import type { MicroTask }          from '@prisma/client'
+import { SubscriptionStatus }      from '@prisma/client'
+import { generateWeeklyReport }    from '../ai-mentor/services.js'
 import { runWeeklyAnalysis }       from '../ai-mentor/weekly-analysis/service.js'
+import { generateBanners }         from '../banners/banner.service.js'
+import { getNudgeText, getStateMessage, resolveUserState } from '../telegram-mentor/handlers/start.js'
+import { logger }                  from '../../utils/logger.js'
+import type { Telegraf }           from 'telegraf'
 
 let schedulerStarted = false
+const scheduledTasks: ScheduledTask[] = []
+const reminderTimeouts = new Set<NodeJS.Timeout>()
+let weeklyReportTimeout: NodeJS.Timeout | null = null
+
+const WEEKLY_REPORT_THROTTLE_MS = 3000
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+function registerTask(task: ScheduledTask): ScheduledTask {
+  scheduledTasks.push(task)
+  return task
+}
+
+function registerReminderTimeout(timeout: NodeJS.Timeout): NodeJS.Timeout {
+  timeout.unref()
+  reminderTimeouts.add(timeout)
+  return timeout
+}
 
 async function runWithConcurrency<T>(
   items: T[],
@@ -54,89 +77,141 @@ export function startScheduler() {
   const tz = process.env.TZ || 'Europe/Kyiv'
   console.log(`🚀 Starting unified scheduler (tz: ${tz})...`)
 
-  cron.schedule('0 8 * * *', () => {
+  registerTask(cron.schedule('0 8 * * *', () => {
     console.log('🌅 Morning questions trigger')
     setImmediate(async () => {
       try { await sendMorningQuestion() }
       catch (e) { console.error('❌ Morning questions error:', e) }
     })
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 20 * * *', () => {
+  registerTask(cron.schedule('0 20 * * *', () => {
     console.log('🌙 Evening questions trigger')
     setImmediate(async () => {
       try { await sendEveningQuestion() }
       catch (e) { console.error('❌ Evening questions error:', e) }
     })
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 8 * * *', () => {
+  registerTask(cron.schedule('0 8 * * *', () => {
     setImmediate(() => sendMorningReminders().catch(console.error))
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 20 * * *', () => {
+  registerTask(cron.schedule('0 20 * * *', () => {
     setImmediate(() => sendEveningReminders().catch(console.error))
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 18 * * *', () => {
+  registerTask(cron.schedule('0 18 * * *', () => {
     setImmediate(() => sendTaskReminders().catch(console.error))
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('*/10 * * * *', () => {
+  registerTask(cron.schedule('*/10 * * * *', () => {
     setImmediate(async () => {
       try { await checkOverdueMicroTasks() }
       catch (e) { console.error('❌ Overdue tasks error:', e) }
     })
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 9 * * *', () => {
+  registerTask(cron.schedule('0 9 * * *', () => {
     console.log('🔍 Trial mirror check trigger')
     setImmediate(async () => {
       try { await runTrialMirrorCheck() }
       catch (e) { console.error('❌ Trial mirror error:', e) }
     })
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 8 * * 0', () => {
+  registerTask(cron.schedule('0 8 * * 0', () => {
     console.log('📊 Weekly analysis trigger')
     setImmediate(() => runWeeklyAnalysisForAll().catch(console.error))
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 10 * * 0', () => {
+  registerTask(cron.schedule('0 10 * * 0', () => {
     console.log('📨 Weekly PDF trigger')
     setImmediate(async () => {
       try { await sendWeeklyPdfReports() }
       catch (e) { console.error('❌ Weekly PDF error:', e) }
     })
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 9 1 * *', () => {
+  registerTask(cron.schedule('0 9 1 * *', () => {
     setImmediate(() => runWheelMonthlyReminder().catch(console.error))
-  }, { timezone: tz })
+  }, { timezone: tz }))
 
-  cron.schedule('0 22 28-31 * *', () => {
+  registerTask(cron.schedule('0 22 28-31 * *', () => {
     const now      = new Date()
     const tomorrow = new Date(now)
     tomorrow.setDate(now.getDate() + 1)
     if (tomorrow.getMonth() !== now.getMonth()) {
       setImmediate(() => runWheelMonthlyReport().catch(console.error))
     }
-  }, { timezone: tz })
+  }, { timezone: tz }))
+
+  registerTask(cron.schedule('0 10 * * *', () => {
+    setImmediate(() => sendMarketingNudges().catch(error => logger.error('[nudge-cron]', error)))
+  }, { timezone: 'Europe/Kyiv' }))
+
+  registerTask(cron.schedule('0 10 * * 5', () => {
+    setImmediate(async () => {
+      try {
+        await generateBanners('weekly')
+        console.log('[banners] weekly generated')
+      } catch (error) {
+        logger.error('[banners-weekly]', error)
+      }
+    })
+  }, { timezone: 'Europe/Kyiv' }))
+
+  registerTask(cron.schedule('0 10 1 * *', () => {
+    setImmediate(async () => {
+      try {
+        await generateBanners('monthly')
+        console.log('[banners] monthly generated')
+      } catch (error) {
+        logger.error('[banners-monthly]', error)
+      }
+    })
+  }, { timezone: 'Europe/Kyiv' }))
+
+  scheduleNextWeeklyReports()
 
   console.log('✅ Unified scheduler started')
 }
 
 export const startDailyScheduler = startScheduler
 
+export function stopScheduler() {
+  if (!schedulerStarted) return
+
+  for (const task of scheduledTasks.splice(0)) {
+    task.stop()
+    task.destroy()
+  }
+
+  for (const timeout of reminderTimeouts) {
+    clearTimeout(timeout)
+  }
+  reminderTimeouts.clear()
+
+  if (weeklyReportTimeout) {
+    clearTimeout(weeklyReportTimeout)
+    weeklyReportTimeout = null
+  }
+
+  schedulerStarted = false
+  console.log('🛑 Unified scheduler stopped')
+}
+
+export const stopDailyScheduler = stopScheduler
+
 // ═════════════════════════════════════════════════════════════
 // TELEGRAM REMINDERS
 // ═════════════════════════════════════════════════════════════
 
 export async function sendMorningReminders(): Promise<void> {
-  const links = await prisma.telegramLink.findMany({
+  const links = await withRetry(() => prisma.telegramLink.findMany({
     where:  { isActive: true, chatId: { not: null } },
     select: { chatId: true },
-  })
+  }))
   const chatIds = links.map(l => l.chatId!)
   console.log(`🌅 Morning reminders → ${chatIds.length} users`)
   await runWithConcurrency(chatIds, 10, chatId =>
@@ -145,10 +220,10 @@ export async function sendMorningReminders(): Promise<void> {
 }
 
 export async function sendEveningReminders(): Promise<void> {
-  const links = await prisma.telegramLink.findMany({
+  const links = await withRetry(() => prisma.telegramLink.findMany({
     where:  { isActive: true, chatId: { not: null } },
     select: { chatId: true },
-  })
+  }))
   const chatIds = links.map(l => l.chatId!)
   console.log(`🌙 Evening reminders → ${chatIds.length} users`)
   await runWithConcurrency(chatIds, 10, chatId =>
@@ -163,7 +238,7 @@ export async function sendEveningReminders(): Promise<void> {
 async function checkOverdueMicroTasks(): Promise<void> {
   const now = new Date()
 
-  const overdueTasks = await prisma.microTask.findMany({
+  const overdueTasks = await withRetry(() => prisma.microTask.findMany({
     where: {
       isCompleted: false, // fix: було completedAt: null — поле не існує в схемі
       dueAt: { lt: now }, // fix: було dueDate — правильна назва поля dueAt
@@ -174,7 +249,7 @@ async function checkOverdueMicroTasks(): Promise<void> {
       userId: true,
       user:   { select: { telegramChatId: true, telegramUserId: true } },
     },
-  })
+  }))
 
   if (overdueTasks.length === 0) return
 
@@ -197,7 +272,7 @@ async function checkOverdueMicroTasks(): Promise<void> {
 }
 
 async function sendTaskReminders(): Promise<void> {
-  const overdue = await prisma.microTask.findMany({
+  const overdue = await withRetry(() => prisma.microTask.findMany({
     where: {
       isCompleted: false,
       dueAt:       { lte: new Date() },
@@ -213,7 +288,7 @@ async function sendTaskReminders(): Promise<void> {
         },
       },
     },
-  })
+  }))
 
   const byUser = new Map<string, { chatId: string; count: number }>()
   for (const t of overdue) {
@@ -232,13 +307,13 @@ async function sendTaskReminders(): Promise<void> {
 }
 
 async function runTrialMirrorCheck(): Promise<void> {
-  const users = await prisma.user.findMany({
+  const users = await withRetry(() => prisma.user.findMany({
     where: {
       trialStartsAt: { not: null },
       trialEndsAt:   { gte: new Date() },
     },
     select: { id: true, trialStartsAt: true },
-  })
+  }))
 
   const targets = users.filter(u => {
     if (!u.trialStartsAt) return false
@@ -254,14 +329,14 @@ async function runTrialMirrorCheck(): Promise<void> {
 }
 
 async function runWeeklyAnalysisForAll(): Promise<void> {
-  const activeUsers = await prisma.user.findMany({
+  const activeUsers = await withRetry(() => prisma.user.findMany({
     where: {
       subscriptions: {
         some: { status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] } },
       },
     },
     select: { id: true },
-  })
+  }))
 
   console.log(`[WeeklyAnalysis] Processing ${activeUsers.length} users`)
 
@@ -282,7 +357,7 @@ async function runWeeklyAnalysisForAll(): Promise<void> {
 }
 
 async function sendWeeklyPdfReports(): Promise<void> {
-  const reports = await prisma.weeklyReport.findMany({
+  const reports = await withRetry(() => prisma.weeklyReport.findMany({
     where: {
       createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       pdfSentAt: null,
@@ -293,7 +368,7 @@ async function sendWeeklyPdfReports(): Promise<void> {
       motivationText: true,
       user: { select: { telegramChatId: true, telegramUserId: true } },
     },
-  })
+  }))
 
   await runWithConcurrency(reports, 10, async (report) => {
     const chatId = report.user?.telegramChatId ?? report.user?.telegramUserId
@@ -304,20 +379,20 @@ async function sendWeeklyPdfReports(): Promise<void> {
       : `📊 Твій тижневий звіт готовий!\n\n${report.motivationText}\n\nВідкрий додаток щоб переглянути.`
 
     await sendTg(chatId, msg)
-    await prisma.weeklyReport.update({
+    await withRetry(() => prisma.weeklyReport.update({
       where: { id: report.id },
       data:  { pdfSentAt: new Date() },
-    })
+    }))
   })
 
   console.log(`📬 Weekly PDF reports sent: ${reports.length}`)
 }
 
 async function runWheelMonthlyReminder(): Promise<void> {
-  const links = await prisma.telegramLink.findMany({
+  const links = await withRetry(() => prisma.telegramLink.findMany({
     where:  { isActive: true, chatId: { not: null } },
     select: { chatId: true },
-  })
+  }))
   const chatIds = links.map(l => l.chatId!)
   await runWithConcurrency(chatIds, 10, chatId =>
     sendTg(chatId, '📊 Час оновити своє колесо балансу! /wheel')
@@ -326,7 +401,7 @@ async function runWheelMonthlyReminder(): Promise<void> {
 }
 
 async function runWheelMonthlyReport(): Promise<void> {
-  const users = await prisma.user.findMany({
+  const users = await withRetry(() => prisma.user.findMany({
     where: {
       telegramLinks:  { some: { isActive: true, chatId: { not: null } } },
       balanceEntries: { some: {} },
@@ -335,7 +410,7 @@ async function runWheelMonthlyReport(): Promise<void> {
       id:            true,
       telegramLinks: { where: { isActive: true, chatId: { not: null } }, select: { chatId: true }, take: 1 },
     },
-  })
+  }))
 
   await runWithConcurrency(users, 10, async (user) => {
     const chatId = user.telegramLinks[0]?.chatId
@@ -344,6 +419,161 @@ async function runWheelMonthlyReport(): Promise<void> {
   })
 
   console.log(`📬 Monthly reports: ${users.length} users`)
+}
+
+async function sendMarketingNudges(): Promise<void> {
+  const candidates = await withRetry(() => prisma.user.findMany({
+    where: {
+      telegramLinks: {
+        some: {
+          chatId: { not: null },
+          isActive: true,
+        },
+      },
+    },
+    select: {
+      id: true,
+      telegramLinks: {
+        where: {
+          chatId: { not: null },
+          isActive: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+      funnelLeads: {
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          notes: true,
+        },
+      },
+    },
+  }))
+
+  for (const user of candidates) {
+    const chatId = user.telegramLinks[0]?.chatId
+    if (!chatId) continue
+
+    const nudgeCount = user.funnelLeads.filter(lead => lead.notes?.startsWith('NUDGE_SENT')).length
+    if (nudgeCount >= 3) continue
+
+    try {
+      const state = await resolveUserState(user.id)
+      if (!['lm_started', 'lm_engaged', 'lm_almost_done', 'lm_completed', 'lm_exited'].includes(state)) {
+        continue
+      }
+
+      const mentor = await withRetry(() => prisma.userAIMentor.findFirst({
+        where: { userId: user.id },
+        select: {
+          insight: true,
+          blocker: true,
+          stage: true,
+        },
+      }))
+
+      const message = getStateMessage(state, '', mentor, undefined, nudgeCount)
+      const textWithStage = getNudgeText(state, mentor, nudgeCount)
+
+      await bot.telegram.sendMessage(chatId, textWithStage, {
+        reply_markup: {
+          inline_keyboard: message.buttons,
+        },
+        parse_mode: 'HTML',
+      })
+
+      await withRetry(() => prisma.funnelLead.create({
+        data: {
+          userId: user.id,
+          source: 'scheduler',
+          status: 'LEAD',
+          notes: `NUDGE_SENT:${nudgeCount + 1}:${state}`,
+        },
+      }))
+    } catch (error) {
+      logger.error(`[nudge] userId=${user.id}`, error)
+    }
+  }
+}
+
+export async function runWeeklyReports(): Promise<void> {
+  console.log('[Scheduler] Starting weekly reports...')
+
+  const owners = await withRetry(() => prisma.user.findMany({
+    where: {
+      ownedProducts: {
+        some: {
+          botConfig: { isNot: null },
+        },
+      },
+    },
+    include: {
+      ownedProducts: {
+        where: { botConfig: { isNot: null } },
+        include: { botConfig: true },
+        take: 1,
+      },
+    },
+  }))
+
+  console.log(`[Scheduler] ${owners.length} owners to process`)
+  let success = 0
+  let failed = 0
+
+  for (const owner of owners) {
+    const product = owner.ownedProducts[0]
+    if (!product) continue
+
+    try {
+      await generateWeeklyReport(owner.id, product.id)
+      success += 1
+
+      const telegramId = owner.telegramUserId
+      if (telegramId && product.botConfig?.botToken) {
+        try {
+          const { Telegraf: TelegrafCtor } = await import('telegraf')
+          const ownerBot: Telegraf = new TelegrafCtor(product.botConfig.botToken)
+          await ownerBot.telegram.sendMessage(
+            telegramId,
+            '✅ Твій щотижневий AI-звіт готовий → Dashboard / Content',
+          )
+        } catch (telegramError) {
+          console.error(`[Scheduler] Telegram failed for ${owner.id}:`, telegramError)
+        }
+      }
+    } catch (error) {
+      failed += 1
+      console.error(`[Scheduler] Failed for owner ${owner.id}:`, error)
+    }
+
+    await sleep(WEEKLY_REPORT_THROTTLE_MS)
+  }
+
+  console.log(`[Scheduler] Done. success=${success} failed=${failed}`)
+}
+
+function msUntilNextMonday9am(): number {
+  const now = new Date()
+  const kyiv = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Kyiv' }))
+  const day = kyiv.getDay()
+  const daysUntilMonday = (1 - day + 7) % 7 || 7
+  const next = new Date(kyiv)
+  next.setDate(kyiv.getDate() + daysUntilMonday)
+  next.setHours(9, 0, 0, 0)
+  return next.getTime() - kyiv.getTime()
+}
+
+function scheduleNextWeeklyReports(): void {
+  const delay = msUntilNextMonday9am()
+  console.log(`[Scheduler] Next run in ${Math.round(delay / 1000 / 60)} min`)
+  weeklyReportTimeout = setTimeout(() => {
+    void runWeeklyReports()
+      .catch(error => console.error('[Scheduler] Error:', error))
+      .finally(scheduleNextWeeklyReports)
+  }, delay)
+  weeklyReportTimeout.unref()
+  console.log('[Scheduler] Registered: Mon 09:00 Kyiv')
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -361,14 +591,14 @@ export function scheduleMicroTaskReminder(task: MicroTask) {
 
   const sendReminder = async () => {
     try {
-      const t = await prisma.microTask.findUnique({
+      const t = await withRetry(() => prisma.microTask.findUnique({
         where:  { id: task.id },
         select: {
           title:       true,
           isCompleted: true, // fix: було `isCompleted: false` — в select потрібно true/false як boolean selector
           user: { select: { telegramChatId: true, telegramUserId: true } },
         },
-      })
+      }))
       if (!t || t.isCompleted) return
       const chatId = t.user?.telegramChatId ?? t.user?.telegramUserId
       if (chatId) await sendTg(chatId, `⏰ Нагадування: ${t.title ?? 'Без назви'}`)
@@ -378,8 +608,15 @@ export function scheduleMicroTaskReminder(task: MicroTask) {
   }
 
   if (msUntilDue > MAX_TIMEOUT) {
-    setTimeout(() => scheduleMicroTaskReminder(task), MAX_TIMEOUT)
+    const timeout = registerReminderTimeout(setTimeout(() => {
+      reminderTimeouts.delete(timeout)
+      scheduleMicroTaskReminder(task)
+    }, MAX_TIMEOUT))
+    return
   } else {
-    setTimeout(sendReminder, msUntilDue)
+    const timeout = registerReminderTimeout(setTimeout(async () => {
+      reminderTimeouts.delete(timeout)
+      await sendReminder()
+    }, msUntilDue))
   }
 }

@@ -4,24 +4,26 @@ import 'dotenv/config'
 import { type Request, type Response } from 'express'
 import { createApp }                                           from './app.js'
 import { prisma }                                              from './db/client.js'
-import { startDailyScheduler }                                 from './modules/daily-cycle/scheduler.js'
+import { startDailyScheduler, stopDailyScheduler }             from './modules/daily-cycle/scheduler.js'
 import { registerDailyTelegramCommands }                       from './modules/daily-cycle/telegram.js'
 import { bot }                                                 from './lib/telegram.js'
-import { registerMentorCommands }                              from './modules/wheel/telegram.js'
 import { registerMentorBot }              from './modules/telegram-mentor/index.js'
-import { startScheduler } from './scheduler.js'
 
 const PORT = Number(process.env.PORT) || 3001
+const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
+const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT !== 'false'
 
 const app = createApp()
 let server: ReturnType<typeof app.listen> | null = null
+let telegramRunningMode: 'webhook' | 'polling' | null = null
+let isShuttingDown = false
+let prismaKeepAliveInterval: NodeJS.Timeout | null = null
 
 // ─────────────────────────────────────────────
 // TELEGRAM WEBHOOK ROUTE
-// Telegraf v4 — handleUpdate замість webhookCallback
-// Telegram надсилає POST сюди замість polling
+// Реєструємо маршрут тільки якщо є публічний webhook URL.
 // ─────────────────────────────────────────────
-if (process.env.TELEGRAM_BOT_TOKEN) {
+if (START_TELEGRAM_BOT && process.env.TELEGRAM_BOT_TOKEN && TELEGRAM_WEBHOOK_URL) {
   app.use('/api/telegram/webhook', (req: Request, res: Response) => {
     bot.handleUpdate(req.body, res)
   })
@@ -32,6 +34,11 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 // TELEGRAM
 // ─────────────────────────────────────────────
 async function startTelegramBot() {
+  if (!START_TELEGRAM_BOT) {
+    console.log('🤖 Telegram skipped in backend (START_TELEGRAM_BOT=false)')
+    return
+  }
+
   if (!process.env.TELEGRAM_BOT_TOKEN) {
     console.log('🤖 Telegram skipped (no token)')
     return
@@ -40,13 +47,54 @@ async function startTelegramBot() {
     try {
       // Реєструємо всі команди бота
       registerDailyTelegramCommands()
-      registerMentorCommands(bot)   // /mentor, /goal, /streak, /report, /wheel
-      registerMentorBot()
+      await registerMentorBot()
 
-    // ❌ wheelBot.launch() — НЕ викликаємо (polling конфліктує з webhook)
-    // ✅ Updates приходять через POST /api/telegram/webhook
+      console.log('🤖 [Telegram] Checking bot identity...')
+      const me = await bot.telegram.getMe()
+      console.log(`🤖 [Telegram] Bot: @${me.username} (id: ${me.id})`)
 
-    console.log('🤖 Telegram bot ready (webhook mode)')
+      const webhookInfoBefore = await bot.telegram.getWebhookInfo()
+      console.log('🤖 [Telegram] Webhook before start:', {
+        url: webhookInfoBefore.url,
+        has_custom_certificate: webhookInfoBefore.has_custom_certificate,
+        pending_update_count: webhookInfoBefore.pending_update_count,
+        last_error_date: webhookInfoBefore.last_error_date,
+        last_error_message: webhookInfoBefore.last_error_message,
+      })
+
+      if (TELEGRAM_WEBHOOK_URL) {
+        const webhookEndpoint = `${TELEGRAM_WEBHOOK_URL.replace(/\/$/, '')}/api/telegram/webhook`
+        console.log(`🤖 [Telegram] Setting webhook: ${webhookEndpoint}`)
+        await bot.telegram.setWebhook(webhookEndpoint)
+        const webhookInfoAfter = await bot.telegram.getWebhookInfo()
+        console.log('🤖 [Telegram] Webhook after set:', {
+          url: webhookInfoAfter.url,
+          pending_update_count: webhookInfoAfter.pending_update_count,
+        })
+        telegramRunningMode = 'webhook'
+        console.log(`🤖 Telegram bot ready (webhook mode: ${webhookEndpoint})`)
+        return
+      }
+
+      // Local development fallback:
+      // Telegram cannot reach localhost webhook, so we switch to polling.
+      console.log('🤖 [Telegram] Switching to polling mode...')
+      console.log('🤖 [Telegram] Deleting webhook...')
+      await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
+      const webhookInfoAfterDelete = await bot.telegram.getWebhookInfo()
+      console.log('🤖 [Telegram] Webhook after delete:', {
+        url: webhookInfoAfterDelete.url,
+        pending_update_count: webhookInfoAfterDelete.pending_update_count,
+      })
+      console.log('🤖 [Telegram] Launching polling...')
+      telegramRunningMode = 'polling'
+      void bot.launch(
+        { dropPendingUpdates: false },
+        () => console.log('🤖 Telegram bot ready (polling mode for local development)'),
+      ).catch((error) => {
+        console.error('⚠️ [Telegram] Polling launch failed:', error)
+      })
+      console.log('🤖 [Telegram] Polling launch started')
   } catch (error) {
     console.error('⚠️ Telegram bot setup failed:', error)
   }
@@ -64,6 +112,7 @@ async function bootstrap() {
     console.log('✅ [PRISMA] Database connected | Test query result:', result)
 
     server = app.listen(PORT, () => {
+      trackConnections()
       console.log('\n🚀 Starway Studio Backend')
       console.log(`🌐 Server: http://localhost:${PORT}`)
       console.log(`📍 Health: http://localhost:${PORT}/health`)
@@ -72,8 +121,8 @@ async function bootstrap() {
       console.log(`🤖 Mentor: http://localhost:${PORT}/api/mentor\n`)
     })
 
-    server.on('error', (error: any) => {
-      if (error?.code === 'EADDRINUSE') {
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
         console.error(`❌ Port ${PORT} is already in use. Stop existing process or change PORT.`)
         process.exit(1)
       }
@@ -83,10 +132,18 @@ async function bootstrap() {
 
     // Запуск у фоні — не блокує сервер
     startDailyScheduler()
-    startTelegramBot().catch((err: any) => console.error('⚠️ Telegram async error:', err))
-    startScheduler()
+    startTelegramBot().catch((err: unknown) => console.error('⚠️ Telegram async error:', err))
 
-  } catch (err: any) {
+    prismaKeepAliveInterval = setInterval(async () => {
+      try {
+        await prisma.$queryRaw`SELECT 1`
+      } catch {
+        await prisma.$connect().catch(() => undefined)
+      }
+    }, 30 * 60 * 1000)
+    prismaKeepAliveInterval.unref()
+
+  } catch (err: unknown) {
     console.error('❌ [BOOT ERROR]', err)
     process.exit(1)
   }
@@ -97,7 +154,7 @@ bootstrap()
 // ─────────────────────────────────────────────
 // GRACEFUL SHUTDOWN
 // ─────────────────────────────────────────────
-const connections = new Set<any>()
+const connections = new Set<import('node:net').Socket>()
 
 function trackConnections() {
   server?.on('connection', socket => {
@@ -107,7 +164,13 @@ function trackConnections() {
 }
 
 async function shutdown(signal: string) {
-  console.log(`\n👋 ${signal} received. Shutting down...`)
+  if (isShuttingDown) {
+    console.log(`[shutdown] ${signal} received again, shutdown already in progress`)
+    return
+  }
+
+  isShuttingDown = true
+  console.log(`[shutdown] ${signal}`)
 
   const forceKill = setTimeout(() => {
     console.error('⚠️ Forced shutdown after timeout')
@@ -115,44 +178,64 @@ async function shutdown(signal: string) {
   }, 5_000).unref()
 
   try {
+    try {
+      if (START_TELEGRAM_BOT) {
+        bot.stop(signal)
+      }
+    } catch {
+      // silent
+    }
+
+    try {
+      stopDailyScheduler()
+    } catch {
+      // silent
+    }
+
+    if (prismaKeepAliveInterval) {
+      clearInterval(prismaKeepAliveInterval)
+      prismaKeepAliveInterval = null
+    }
+
     connections.forEach(s => s.destroy())
     connections.clear()
 
     if (server) {
+      server.closeIdleConnections?.()
+      server.closeAllConnections?.()
       await new Promise<void>((resolve, reject) =>
         server!.close(err => err ? reject(err) : resolve())
       )
       console.log('🔌 HTTP server closed')
     }
 
-    await prisma.$disconnect()
+    await prisma.$disconnect().catch(() => {})
     console.log('🔌 Database disconnected\n✅ Shutdown complete')
 
     clearTimeout(forceKill)
-    process.exit(0)
+    process.exitCode = 0
+    return
   } catch (error) {
     console.error('⚠️ Shutdown error:', error)
+    clearTimeout(forceKill)
     process.exit(1)
   }
 }
 
-
-
-process.on('SIGINT', async () => {
-  console.log('Shutting down...')
-  await prisma.$disconnect()
-  process.exit(0)
+process.once('exit', (code) => {
+  console.log('[shutdown] process exit, code:', code)
 })
 
-process.on('SIGTERM', async () => {
-  console.log('Shutting down...')
-  await prisma.$disconnect()
-  process.exit(0)
+process.once('SIGINT', () => {
+  void shutdown('SIGINT')
+})
+
+process.once('SIGTERM', () => {
+  void shutdown('SIGTERM')
 })
 
 process.on('unhandledRejection', reason => {
-  console.error('❌ Unhandled Rejection:', reason)
-  if (process.env.NODE_ENV !== 'production') process.exit(1)
+  console.error('[unhandled]', reason)
 })
 
 export default app

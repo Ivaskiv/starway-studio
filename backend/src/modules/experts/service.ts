@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js'
-import type { Expert } from '../../db/generated/prisma/client.js'
+import type { Expert } from '@prisma/client'
 import type { ExpertRegistrationPayload } from './types.js'
 
 export async function createExpert(payload: ExpertRegistrationPayload): Promise<Expert> {

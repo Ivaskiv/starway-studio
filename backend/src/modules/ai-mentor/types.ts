@@ -123,6 +123,24 @@ export interface MentorChatContext {
   streakDays?: number;
 }
 
+export interface MentorExtendedContext extends MentorChatContext {
+  userId: string
+  visionText?: string | null
+  recentDrains: string[]
+}
+
+export interface StreamChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface StreamChatInput {
+  userId: string
+  message: string
+  history: StreamChatMessage[]
+  context?: MentorExtendedContext
+}
+
 // Daily cycle
 
 export interface DailyCycleInput {

@@ -6,6 +6,8 @@
 import {Response, NextFunction } from 'express';
 import { setGoals, getLatestGoals, getPrimaryGoal, checkChoiceAlignment } from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
+import { trackEvent } from '../events/service.js';
+import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 
 export async function createGoals(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
@@ -23,6 +25,17 @@ export async function createGoals(req: AuthenticatedRequest, res: Response, next
     }
 
     const goalsSet = await setGoals(userId, goals, primaryIndex);
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_goals_created',
+      source: 'web',
+      state,
+      payload: {
+        goalsCount: goals.length,
+        primaryIndex,
+      },
+    })
     return res.status(200).json(goalsSet);
   } catch (error: any) {
     console.error('[GoalsController] createGoals error:', error);
@@ -36,6 +49,16 @@ export async function getGoals(req: AuthenticatedRequest, res: Response, next: N
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const goalsSet = await getLatestGoals(userId);
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_goals_viewed',
+      source: 'web',
+      state,
+      payload: {
+        hasGoals: Boolean(goalsSet),
+      },
+    })
     return res.status(200).json(goalsSet);
   } catch (error: any) {
     console.error('[GoalsController] getGoals error:', error);
@@ -49,6 +72,16 @@ export async function getPrimary(req: AuthenticatedRequest, res: Response, next:
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const goal = await getPrimaryGoal(userId);
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_primary_goal_viewed',
+      source: 'web',
+      state,
+      payload: {
+        hasGoal: Boolean(goal),
+      },
+    })
     return res.status(200).json(goal);
   } catch (error: any) {
     console.error('[GoalsController] getPrimary error:', error);
@@ -68,6 +101,16 @@ export async function checkAlignment(req: AuthenticatedRequest, res: Response, n
     }
 
     const alignment = await checkChoiceAlignment(userId, choice);
+    const state = await resolveUserState(userId).catch(() => null)
+    await trackEvent({
+      userId,
+      type: 'web_goal_alignment_checked',
+      source: 'web',
+      state,
+      payload: {
+        choice,
+      },
+    })
     return res.status(200).json(alignment);
   } catch (error: any) {
     console.error('[GoalsController] checkAlignment error:', error);

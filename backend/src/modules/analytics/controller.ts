@@ -1,5 +1,18 @@
 import type { Request, Response } from 'express'
 import { prisma } from '../../db/client.js'
+import { BANNER_SEGMENTS, generateBanners } from '../banners/banner.service.js'
+import {
+  getAIInsights,
+  getConversionRates,
+  getDropOffPoints,
+  getFunnelStats,
+  getLiveActivity,
+  getOverviewStats,
+  getRetentionStats,
+  getTopEvents,
+  getTopQuestions,
+  getUserJourney,
+} from './service.js'
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
@@ -124,5 +137,163 @@ export async function getDashboardStats(req: Request, res: Response) {
       })
     }
     return res.status(500).json({ error: 'analytics_stats_failed' })
+  }
+}
+
+type AnalyticsPeriod = '7d' | '30d' | '90d'
+
+function getRequestedPeriod(value: unknown): AnalyticsPeriod {
+  return value === '7d' || value === '90d' ? value : '30d'
+}
+
+function getRequestedLimit(value: unknown, fallback: number): number {
+  const parsed = Number(value)
+  if (Number.isNaN(parsed)) {
+    return fallback
+  }
+
+  return clamp(parsed, 1, 100)
+}
+
+export async function getOverview(req: Request, res: Response) {
+  try {
+    const period = getRequestedPeriod(req.query.period)
+    const [overview, topEvents] = await Promise.all([
+      getOverviewStats(period),
+      getTopEvents(period, 5),
+    ])
+
+    return res.json({
+      ...overview,
+      topEvents,
+    })
+  } catch (error) {
+    console.error('Analytics overview error', error)
+    return res.status(500).json({ error: 'analytics_overview_failed' })
+  }
+}
+
+export async function getFunnel(req: Request, res: Response) {
+  try {
+    const period = getRequestedPeriod(req.query.period)
+    const [funnel, conversions, dropOffs] = await Promise.all([
+      getFunnelStats(period),
+      getConversionRates(period),
+      getDropOffPoints(period),
+    ])
+
+    return res.json({
+      ...funnel,
+      conversions,
+      dropOffs,
+    })
+  } catch (error) {
+    console.error('Analytics funnel error', error)
+    return res.status(500).json({ error: 'analytics_funnel_failed' })
+  }
+}
+
+export async function getQuestions(req: Request, res: Response) {
+  try {
+    const period = getRequestedPeriod(req.query.period)
+    const limit = getRequestedLimit(req.query.limit, 20)
+    const questions = await getTopQuestions(period, limit)
+    return res.json({ questions })
+  } catch (error) {
+    console.error('Analytics questions error', error)
+    return res.status(500).json({ error: 'analytics_questions_failed' })
+  }
+}
+
+export async function getRetention(req: Request, res: Response) {
+  try {
+    const period = getRequestedPeriod(req.query.period)
+    const retention = await getRetentionStats(period)
+    return res.json(retention)
+  } catch (error) {
+    console.error('Analytics retention error', error)
+    return res.status(500).json({ error: 'analytics_retention_failed' })
+  }
+}
+
+export async function getInsights(req: Request, res: Response) {
+  try {
+    const period = getRequestedPeriod(req.query.period)
+    const limit = getRequestedLimit(req.query.limit, 8)
+    const insights = await getAIInsights(period, limit)
+    return res.json(insights)
+  } catch (error) {
+    console.error('Analytics insights error', error)
+    return res.status(500).json({ error: 'analytics_insights_failed' })
+  }
+}
+
+export async function getLive(req: Request, res: Response) {
+  try {
+    const limit = getRequestedLimit(req.query.limit, 20)
+    const events = await getLiveActivity(limit)
+    return res.json({ events })
+  } catch (error) {
+    console.error('Analytics live error', error)
+    return res.status(500).json({ error: 'analytics_live_failed' })
+  }
+}
+
+export async function getJourney(req: Request, res: Response) {
+  try {
+    const userId = String(req.params.userId ?? '')
+    if (!userId) {
+      return res.status(400).json({ error: 'user_id_required' })
+    }
+
+    const journey = await getUserJourney(userId)
+    return res.json({ journey })
+  } catch (error) {
+    console.error('Analytics journey error', error)
+    return res.status(500).json({ error: 'analytics_journey_failed' })
+  }
+}
+
+type ProductOwnerRequest = Request & {
+  productId?: string
+  user?: {
+    id: string
+  }
+}
+
+export async function getBannerGenerations(req: Request, res: Response) {
+  try {
+    const banners = await prisma.bannerGeneration.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 18,
+    })
+
+    const grouped = BANNER_SEGMENTS.reduce<Record<string, typeof banners>>((acc, segment) => {
+      acc[segment] = banners.filter(banner => banner.segment === segment)
+      return acc
+    }, {})
+
+    return res.json({ banners: grouped })
+  } catch (error) {
+    console.error('Analytics banners error', error)
+    return res.status(500).json({ error: 'analytics_banners_failed' })
+  }
+}
+
+export async function generateBannerGenerations(req: Request, res: Response) {
+  try {
+    const request = req as ProductOwnerRequest
+    void request.productId
+    void request.user
+
+    const period = req.body && typeof req.body === 'object' && 'period' in req.body && req.body.period === 'monthly'
+      ? 'monthly'
+      : 'weekly'
+
+    await generateBanners(period)
+    return res.json({ ok: true, period })
+  } catch (error) {
+    console.error('Analytics generate banners error', error)
+    return res.status(500).json({ error: 'analytics_generate_banners_failed' })
   }
 }

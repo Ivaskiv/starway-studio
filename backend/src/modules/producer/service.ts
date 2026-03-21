@@ -7,15 +7,18 @@
 
 import { prisma } from '../../db/client.js'
 import { openai } from '../../lib/openai.js'
+import { getPrimaryGoal } from '../goals/service.js'
 import type {
   MentorWizardInput,
   MentorPlanResult,
   ProducerChatInput,
+  ProducerMentorChatBody,
   AssistantProgressDTO,
 } from './types.js'
+import { ProductKind } from '@prisma/client'
 
 // ─── System промпт продюсера ──────────────────────────────────
-const PRODUCER_SYSTEM = `Ти — AI-продюсер платформи Starway Studio.
+export const PRODUCER_SYSTEM = `Ти — AI-продюсер платформи Starway Studio.
 Твоя спеціалізація: будувати повні AI-ментори для онлайн-бізнесів.
 
 СТИЛЬ ВІДПОВІДЕЙ:
@@ -180,6 +183,177 @@ export async function producerChat(input: ProducerChatInput): Promise<string> {
   })
 
   return completion.choices[0]?.message?.content ?? '⚠️ Порожня відповідь'
+}
+
+export async function producerMentorChat(userId: string, input: ProducerMentorChatBody): Promise<string> {
+  const { message, history = [], stepContext, context } = input
+
+  const [user, streak, lastEntry, wheel, goal, vision, subscription, products, microTasks, progress] =
+    await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          trialStartsAt: true,
+          trialEndsAt: true,
+          onboardingStage: true,
+        },
+      }),
+      prisma.streak.findFirst({ where: { userId }, orderBy: { updatedAt: 'desc' } }),
+      prisma.dailyEntry.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
+      prisma.wheelAssessment.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
+      getPrimaryGoal(userId),
+      prisma.visionStatement.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { content: true },
+      }),
+      prisma.subscription.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { status: true, planCode: true, trialEndsAt: true },
+      }),
+      prisma.product.findMany({
+        where: { ownerId: userId },
+        select: { id: true, name: true, kind: true },
+        take: 5,
+      }),
+      prisma.microTask.findMany({
+        where: { userId, isCompleted: false },
+        select: { title: true },
+        take: 3,
+      }),
+      prisma.userProgress.findUnique({
+        where: { userId },
+        select: { level: true, totalPoints: true },
+      }),
+    ])
+
+  const scoresMap = wheel?.scores as Record<string, number> | undefined
+  const avgScore = scoresMap && Object.keys(scoresMap).length > 0
+    ? Math.round(Object.values(scoresMap).reduce((left, right) => left + right, 0) / Object.values(scoresMap).length)
+    : null
+  const weakSphere = scoresMap
+    ? Object.entries(scoresMap).sort((left, right) => left[1] - right[1])[0]?.[0] ?? null
+    : null
+
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN' || user?.role === 'EXPERT'
+  const subStatus = subscription?.status ?? 'none'
+  const trialActive = subStatus === 'TRIAL'
+  const trialDaysLeft = subscription?.trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(subscription.trialEndsAt).getTime() - Date.now()) / 86400000))
+    : user?.trialEndsAt
+      ? Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / 86400000))
+      : 0
+  const hasPaid = subStatus === 'ACTIVE'
+  const currentState = lastEntry && typeof lastEntry.state === 'string'
+    ? lastEntry.state
+    : 'не визначено'
+  const productList = products.length
+    ? products.map((product: { name: string; kind: ProductKind | null }) => `${product.name} (${product.kind ?? 'без типу'})`).join(', ')
+    : 'немає'
+  const microTaskList = microTasks.length
+    ? microTasks.map((task: { title: string }) => task.title).join(', ')
+    : 'немає'
+
+  const systemPrompt = `Ти — AI-Ментор платформи Starway. Твоє ім'я — Starway Mentor.
+
+════ РОЛЬ ════
+Ти — не чатбот. Ти — керуючий модуль.
+Методологія: СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ
+Тон: жорстка ясність. Без «ти молодець», без мотивації заради мотивації.
+AI фіксує стан — не рятує. AI аналізує вибір — не схвалює.
+
+════ ВОРОНКА ПЛАТФОРМИ ════
+1. ЛІДМАГНІТ "5 точок опори" — 5-денний практикум (безкоштовно, /5-tochok)
+2. AI-МЕНТОР TRIAL — 7 днів безкоштовно
+3. ПІДПИСКА — місяць/рік (повний доступ)
+
+МОДУЛІ ЗА ТАРИФОМ:
+▸ Free / Лідмагніт: перегляд, без AI-функцій
+▸ Trial (7 днів):
+  • Колесо балансу (6 сфер: гроші, реалізація, відносини, енергія, свобода, внутрішня опора)
+  • Ранкові питання (3 хв, щоранку) → /dashboard/daily
+  • Вечірні питання + рефлексія → /dashboard/daily
+  • AI-аналіз відповідей
+  • Афірмації під поточний стан
+  • Мікрозавдання (конкретні дії 2-5 хв)
+  • Дзеркало тижня (день 4 і фінал)
+  • Чат з AI-ментором → /dashboard/sessions
+▸ Підписка Active:
+  • Все з trial + необмежено
+  • Бачення → /dashboard/vision
+  • Цілі (5 → 1 головна) → /dashboard/goals
+  • Модуль вибору і рішень
+  • PDF тижневі звіти → /dashboard/reports
+  • Zoom-сесії → /dashboard/zoom
+  • AI Генератор → /ai-generator
+  • AI Продюсер → /producer
+  • Пропозиція міні-курсів за патерном
+  • Шлях у наставництво (30+ днів стабільності)
+
+════ ПОТОЧНИЙ КОРИСТУВАЧ ════
+- Ім'я: ${user?.name ?? 'Користувач'}
+- Роль: ${isAdmin ? 'Адміністратор / Експерт' : 'Користувач'}
+- Підписка: ${hasPaid ? `Активна (${subscription?.planCode ?? 'paid'})` : trialActive ? `Trial (${trialDaysLeft} дн. залишилось)` : 'Без підписки (free)'}
+- Onboarding: ${user?.onboardingStage ?? 'не розпочато'}
+- Streak: ${streak?.current ?? 0} днів | Рекорд: ${streak?.longest ?? 0}
+- Рівень: ${progress?.level ?? 1} | XP: ${progress?.totalPoints ?? 0}
+- Колесо балансу: ${avgScore != null ? `${avgScore}/10` : 'не заповнено'}
+- Слабка сфера: ${weakSphere ?? 'невідомо'}
+- Поточний стан: ${currentState}
+- Головна ціль: ${goal?.text ?? 'не задана'}
+- Бачення: ${vision?.content ? `${vision.content.slice(0, 100)}...` : 'не задано'}
+- Активні мікрозавдання: ${microTaskList}
+- Продукти: ${productList}
+${stepContext ? `▸ Контекст кроку: ${stepContext}` : ''}
+${context ? `▸ Додатковий контекст: ${context}` : ''}
+
+════ ЛОГІКА ПРОПОЗИЦІЙ (ЖОРСТКО) ════
+- Колесо НЕ заповнено → перший крок: /dashboard/wheel
+- Ціль не задана → другий крок: /dashboard/goals
+- Trial закінчується (≤ 2 дні) → нагадай про підписку 1 раз, конкретно
+- Патерн зливу 5+ днів → запропонуй відповідний міні-курс (1 раз за розмову)
+- Стабільність 30+ днів → запропонуй наставництво
+- Free без підписки → м'яко веди до trial: поясни що отримає
+- НЕ пропонуй платне без тригера
+- НЕ повторюй пропозицію в тій самій розмові двічі
+
+════ ТВОЯ РОЛЬ ════
+${isAdmin
+  ? 'Адміністратор/Експерт. Допомагай з технічними аспектами платформи, налаштуванням продуктів, воронок, аналітикою.'
+  : !trialActive && !hasPaid
+    ? 'Без підписки. М\'яко веди до trial: /dashboard або /5-tochok для старту.'
+    : avgScore === null
+      ? 'Колесо не заповнено — це перший пріоритет. Запропонуй /dashboard/wheel.'
+      : !goal?.text
+        ? 'Ціль не задана — другий пріоритет. Запропонуй /dashboard/goals.'
+        : 'Допомагай з поточними задачами відповідно до стану і цілей.'
+}
+
+════ СТИЛЬ ════
+- Мова: ТІЛЬКИ українська
+- Коротко: 2-4 речення для простих питань
+- Структура: emoji-маркери і нумерація для кроків
+- Посилання: формат /dashboard/wheel (без домену)
+- Завершення: один конкретний наступний крок або питання
+- НЕ вигадуй функцій яких немає в списку модулів вище`
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    max_tokens: 600,
+    temperature: 0.65,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...history.slice(-10),
+      { role: 'user', content: message },
+    ],
+  })
+
+  return completion.choices[0]?.message?.content ?? 'Системна помилка.'
 }
 
 // ─── Генерація персональних афірмацій (для scheduler) ────────

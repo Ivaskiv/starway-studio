@@ -7,8 +7,9 @@ import type {
 } from './types.js'
 import { prisma } from '../../../db/client.js'
 import { openai } from '../../../lib/openai.js'
+import { suggestNextProduct } from '../../assistant/service.js'
 import { logger } from '../../../utils/logger.js'
-import { SubscriptionStatus } from '../../../db/generated/prisma/client.js'
+import { SubscriptionStatus } from '@prisma/client'
 
 const extractAnswers = (value: unknown): string[] => {
   if (!value || typeof value !== 'object') return []
@@ -343,6 +344,27 @@ export async function runWeeklyAnalysis(
     ])
 
     const profile = await generateMentorProfile(rawData, userReport!)
+    const suggestion = await suggestNextProduct(userId)
+
+    const offerMap: Record<string, string> = {
+      '5points': '🧭 Знайти свої точки опори',
+      'trial': '✨ Спробувати 7 днів',
+      'subscription': '🚀 Отримати повний доступ',
+      'mentorship': '💬 Записатись на наставництво',
+    }
+
+    const upsellMap: Record<string, string> = {
+      '5points': '5points',
+      'trial': 'trial',
+      'subscription': 'subscription',
+      'mentorship': 'mentorship',
+    }
+
+    if (suggestion) {
+      profile.recommendedOffer = offerMap[suggestion] ?? profile.recommendedOffer
+      profile.upsellProduct = upsellMap[suggestion] ?? profile.upsellProduct
+      profile.upsellReady = true
+    }
 
     const result: WeeklyAnalysisResult = {
       userReport:    userReport!,

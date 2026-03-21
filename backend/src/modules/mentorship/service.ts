@@ -1,7 +1,7 @@
 // backend/src/modules/mentorship/service.ts
 
 import { prisma } from '../../db/client.js'
-import { MentorshipStatus } from '../../db/generated/prisma/client.js'
+import { MentorshipStatus } from '@prisma/client'
 
 /**
  * Domain Errors

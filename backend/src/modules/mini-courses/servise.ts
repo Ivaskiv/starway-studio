@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js';
-import { Prisma } from '../../db/generated/prisma/client.js';
+import { Prisma } from '@prisma/client';
 
 // ==========================================
 // TYPES

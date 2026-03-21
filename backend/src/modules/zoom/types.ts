@@ -1,6 +1,6 @@
 // backend/src/modules/zoom/types.ts
 
-import type { ZoomSession, ZoomSessionAttendee, User } from '../../db/generated/prisma/client.js';
+import type { ZoomSession, ZoomSessionAttendee, User } from '@prisma/client';
 
 // Re-export Prisma типів як є — не дублюємо вручну
 export type { ZoomSession, ZoomSessionAttendee };
