@@ -10,7 +10,6 @@ import type { AccessKey } from '@/features/auth/types/auth.types';
 import { settingsApi } from '@/features/settings/services/settings.api';
 import type { User } from '@/features/user/types/user.types';
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback';
-import { useFrontendReady } from '@/hooks/useFrontendReady';
 import MainLayout from '@/layout/MainLayout';
 import { useThemeContext } from '@/theme/ThemeProvider';
 import { DEFAULT_ACCENT, normalizeUiMode } from '@/theme/accent.utils';
@@ -226,7 +225,6 @@ function withGuard(route: RouteConfig): ReactElement {
 }
 
 export default function App() {
-  const frontendReady = useFrontendReady();
   const [authRestoreStatus, setAuthRestoreStatus] = useState<AuthRestoreStatus>('idle');
   const isAuthenticated = useSelector(selectIsAuthenticated);
 
@@ -243,7 +241,6 @@ export default function App() {
     }
   }, [authRestoreStatus, isAuthenticated]);
 
-  if (!frontendReady) {
     return <div>Фронтенд ще не запущено. Будь ласка, почекайте...</div>;
   }
 
