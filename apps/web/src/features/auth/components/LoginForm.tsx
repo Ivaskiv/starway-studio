@@ -8,7 +8,7 @@ import {
 }                               from '@/features/auth/services/auth.api'
 import { getToastMessage, type ToastLang } from '@/features/notifications/i18n/toast'
 import { Button, Input }        from '@/ui'
-import { useForm, type AnyFieldApi } from '@tanstack/react-form'
+import { useForm } from '@tanstack/react-form'
 import { useMemo, type FormEvent } from 'react'
 import { useState }             from 'react'
 import toast                    from 'react-hot-toast'
@@ -19,13 +19,6 @@ type Mode = 'login' | 'forgot'
 
 const PRIMARY_AUTH_BUTTON_CLASS = 'rounded-[14px] border border-[rgba(var(--accent-rgb),0.42)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.34),rgba(36,58,118,0.58))] text-white shadow-[0_20px_45px_rgba(0,0,0,0.45),0_0_24px_rgba(var(--accent-rgb),0.22)] transition-all duration-200 hover:-translate-y-[2px] hover:border-[rgba(var(--accent-rgb),0.58)] hover:bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.42),rgba(36,58,118,0.72))] hover:shadow-[0_24px_54px_rgba(0,0,0,0.48),0_0_30px_rgba(var(--accent-rgb),0.28)] active:translate-y-0 active:shadow-[0_10px_20px_rgba(0,0,0,0.45),0_0_18px_rgba(var(--accent-rgb),0.2)]'
 const SECONDARY_AUTH_BUTTON_CLASS = 'rounded-[14px] border border-white/18 bg-white/8 text-[color:var(--text-primary)] shadow-[0_20px_45px_rgba(0,0,0,0.45)] transition-all duration-200 hover:-translate-y-[2px] hover:bg-white/15 hover:border-white/24 active:translate-y-0 active:shadow-[0_10px_20px_rgba(0,0,0,0.45)]'
-
-function FieldInfo({ field }: { field: AnyFieldApi }) {
-  if (field.state.meta.isValidating) return <span>Перевірка...</span>
-  if (field.state.meta.isTouched && !field.state.meta.isValid)
-    return <p className="text-red-400 text-sm">{field.state.meta.errors.join(', ')}</p>
-  return null
-}
 
 export function LoginForm({ onSuccess, onSwitch }: Props) {
   const [mode, setMode]           = useState<Mode>('login')
@@ -120,16 +113,13 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
           }}
         >
           {field => (
-            <>
-              <Input
-                label="Email" value={field.state.value}
-                onChange={e => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur} disabled={anyLoading}
-                error={field.state.meta.isTouched && !field.state.meta.isValid
-                  ? field.state.meta.errors.join(', ') : undefined}
-              />
-              <FieldInfo field={field} />
-            </>
+            <Input
+              label="Email" value={field.state.value}
+              onChange={e => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur} disabled={anyLoading}
+              error={field.state.meta.isTouched && !field.state.meta.isValid
+                ? field.state.meta.errors.join(', ') : undefined}
+            />
           )}
         </form.Field>
 
@@ -138,20 +128,16 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
           validators={{ onChange: ({ value }) => (!value ? 'Пароль обовʼязковий' : undefined) }}
         >
           {field => (
-            <>
-              {/* showPasswordToggle — Input сам рендерить Eye/EyeOff всередині */}
-              <Input
-                label="Пароль"
-                type="password"
-                value={field.state.value}
-                onChange={e => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-                disabled={anyLoading}
-                error={field.state.meta.isTouched && !field.state.meta.isValid
-                  ? field.state.meta.errors.join(', ') : undefined}
-              />
-              <FieldInfo field={field} />
-            </>
+            <Input
+              label="Пароль"
+              type="password"
+              value={field.state.value}
+              onChange={e => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              disabled={anyLoading}
+              error={field.state.meta.isTouched && !field.state.meta.isValid
+                ? field.state.meta.errors.join(', ') : undefined}
+            />
           )}
         </form.Field>
 
