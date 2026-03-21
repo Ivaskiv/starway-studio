@@ -5,7 +5,7 @@ services:
     region: frankfurt
     plan: starter
     rootDir: backend
-    buildCommand: npm install -g pnpm && cd /opt/render/project/src && pnpm install && cd backend && npx prisma generate --schema=/opt/render/project/src/backend/prisma/schema.prisma && pnpm run build
+    buildCommand: npm install -g pnpm && cd /opt/render/project/src && pnpm install && npx prisma generate --schema=/opt/render/project/src/backend/prisma/schema.prisma && cd backend && pnpm run build
     startCommand: pnpm run start
     envVars:
       - key: NODE_ENV
