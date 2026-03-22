@@ -194,7 +194,7 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
 
     return res.status(201).json({
       success: true,
-      wheel: { id: result.entry.id },
+      wheel: result.entry,
       insights: result.insights,
       analytics: result.analytics,
       pdfUrl: result.pdfUrl,

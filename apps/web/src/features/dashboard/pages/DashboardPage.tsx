@@ -1,28 +1,24 @@
 // frontend/src/pages/DashboardPage.tsx
 
 import { ROUTES } from '@/config/routes'
+import { useAppSelector } from '@/app/hooks'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { ABILITIES } from '@/features/auth/permissions/abilities'
+import { selectUserRole } from '@/features/auth/services/auth.slice'
 import { useAbility } from '@/features/auth/utils/can'
 import GamificationWidget from '@/features/gamification/components/GamificationWidget'
-import CreateLandingForm from '@/features/landing/components/CreateLandingForm'
-import LandingCards from '@/features/landing/components/LandingCards'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
-import InfoPage from '@/pages/InfoPage'
 import { hasSavedAccentColor } from '@/theme/accent.utils'
 import { GlassCard } from '@/ui'
 import {
   ArrowRight,
-  BarChart2,
-  Bot,
   Calendar,
   Lock,
   Target,
   TrendingUp,
   Zap,
 } from 'lucide-react'
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 type NavFn = (
@@ -264,6 +260,36 @@ function JourneySection() {
   )
 }
 
+function Greeting({ name, isExpert }: { name: string; isExpert: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
+          {isExpert ? 'Кабінет коуча' : 'Мій кабінет'}
+        </p>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">
+          {isExpert ? `Starway by Nadya · ${name}` : `Мій кабінет · ${name}`}
+        </h1>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          {isExpert
+            ? 'Панель коуча — аналітика, продукти, AI-система'
+            : 'Твій особистий простір зростання та трансформації'}
+        </p>
+      </div>
+      <div
+        className={[
+          'flex-shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium',
+          isExpert
+            ? 'border-[var(--accent)] bg-[var(--accent-bg,var(--bg-secondary))] text-[var(--accent)]'
+            : 'border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)]',
+        ].join(' ')}
+      >
+        {isExpert ? '🎓 Коуч' : '🌱 Учень'}
+      </div>
+    </div>
+  )
+}
+
 // ─── QuickActionsSection ──────────────────────────────────────────────────────
 
 function QuickActionsSection({ onNavigate }: { onNavigate: NavFn }) {
@@ -318,77 +344,70 @@ function QuickActionsSection({ onNavigate }: { onNavigate: NavFn }) {
   )
 }
 
-// ─── ModulesSection ───────────────────────────────────────────────────────────
-
-function ModulesSection({ onNavigate }: { onNavigate: NavFn }) {
-  const { user } = useAuth()
-  const dashboardUser = user as DashboardUser
-  const abilities = dashboardUser?.abilities ?? []
-
-  const can = (ability: string) => abilities.includes(ability)
-
-  const MODULES = [
-    { Icon: Bot, title: 'AI Ментор', desc: 'Персональний коуч 24/7', path: ROUTES.AI_MENTOR, ability: ABILITIES.MENTOR_CORE, gradient: 'from-accent from-400 to-accent to-500' },
-    { Icon: Target, title: 'Цілі', desc: 'Постав і досягни', path: ROUTES.GOALS, ability: ABILITIES.MENTOR_GOALS, gradient: 'from-green-400 to-teal-500' },
-    { Icon: BarChart2, title: 'Аналітика', desc: 'Глибокий аналіз прогресу', path: ROUTES.PROGRESS, ability: ABILITIES.PROGRESS_VIEW, gradient: 'from-blue-400 to-indigo-500' },
-    { Icon: Calendar, title: 'Дії та рішення', desc: 'Трекер щоденних виборів', path: ROUTES.CYCLE, ability: ABILITIES.MENTOR_DECISIONS, gradient: 'from-purple-400 to-pink-500' },
-  ]
-
+function ExpertStatsSection() {
   return (
-    <section>
-      <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">Модулі</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {MODULES.map(({ Icon, title, desc, path, ability, gradient }) => {
-          const hasAccess = can(ability)
-          return (
-            <GlassCard
-              key={path}
-              className={`p-5 flex items-center gap-4 transition-all ${hasAccess ? 'cursor-pointer hover:scale-[1.01]' : 'opacity-50 cursor-not-allowed'}`}
-              onClick={() => hasAccess && onNavigate(path, { requiresAuth: true })}
-            >
-              <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shrink-0`}>
-                <Icon className="w-6 h-6 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-[var(--text-primary)]">{title}</p>
-                <p className="text-xs text-[var(--text-muted-light)] mt-0.5">{desc}</p>
-              </div>
-              {hasAccess ? <ArrowRight className="w-4 h-4 text-[var(--text-muted)] shrink-0" /> : <Lock className="w-4 h-4 text-[var(--text-muted)] shrink-0" />}
-            </GlassCard>
-          )
-        })}
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: 'Активних учнів', value: '—', icon: '👥', sub: 'підключається' },
+          { label: 'Завершують день', value: '—', icon: '📊', sub: 'підключається' },
+          { label: 'Потреб уваги', value: '—', icon: '⚠️', sub: 'підключається' },
+          { label: 'Дохід місяця', value: '—', icon: '💰', sub: 'підключається' },
+        ].map(s => (
+          <GlassCard key={s.label} className="p-5">
+            <div className="mb-2 text-2xl">{s.icon}</div>
+            <p className="text-2xl font-bold text-[var(--text-primary)]">{s.value}</p>
+            <p className="mt-0.5 text-sm text-[var(--text-muted)]">{s.label}</p>
+            <p className="mt-1 text-xs text-[var(--text-muted-light)]">{s.sub}</p>
+          </GlassCard>
+        ))}
       </div>
-    </section>
-  )
-}
 
-// ─── RecentActivitySection ────────────────────────────────────────────────────
-
-function RecentActivitySection() {
-  const { user } = useAuth()
-  const canView = useAbility(ABILITIES.PROGRESS_VIEW)
-  if (!canView) return null
-
-  const dashboardUser = user as DashboardUser
-  const activity = dashboardUser?.recentActivity ?? FALLBACK_ACTIVITY
-
-  return (
-    <section>
-      <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">Остання активність</h2>
-      <GlassCard className="divide-y divide-[var(--border)]">
-        {activity.map(({ id, icon, text, time }) => (
-          <div key={id} className="flex items-center gap-3 px-5 py-4">
-            <span className="text-xl">{icon}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-white truncate">{text}</p>
-              <p className="text-xs text-white/40 mt-0.5">{time}</p>
+      <GlassCard className="p-5">
+        <h2 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
+          AI Воронка — конверсія
+        </h2>
+        {[
+          { label: 'Лідмагніт', value: '—', pct: 100 },
+          { label: 'Реєстрація', value: '—', pct: 60 },
+          { label: 'Активація', value: '—', pct: 40 },
+          { label: 'Підписка', value: '—', pct: 13 },
+        ].map(f => (
+          <div key={f.label} className="mb-3 flex items-center gap-3">
+            <span className="w-24 flex-shrink-0 text-xs text-[var(--text-muted)]">{f.label}</span>
+            <div className="h-1.5 flex-1 rounded-full bg-[var(--border)]">
+              <div
+                className="h-full rounded-full bg-[var(--accent)] transition-all"
+                style={{ width: `${f.pct}%` }}
+              />
             </div>
+            <span className="w-6 text-right text-xs text-[var(--text-muted)]">{f.value}</span>
           </div>
         ))}
       </GlassCard>
-    </section>
+
+      <GlassCard className="p-5">
+        <h2 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
+          AI Producer — рекомендації
+        </h2>
+        {[
+          { icon: '🎯', text: 'Підключіть аналітику щоб побачити рекомендації' },
+          { icon: '📣', text: 'Дані з\'являться після першого деплою воронки' },
+          { icon: '🔍', text: 'SEO аналіз стане доступний після налаштування' },
+        ].map((r, i) => (
+          <div key={i} className="flex items-start gap-3 border-b border-[var(--border)] py-2.5 last:border-0">
+            <span className="flex-shrink-0 text-base">{r.icon}</span>
+            <span className="text-xs leading-relaxed text-[var(--text-muted)]">{r.text}</span>
+          </div>
+        ))}
+      </GlassCard>
+    </div>
   )
 }
+
+function FunnelConversionSection() { return null }
+
+function AIProducerRecommendations() { return null }
 
 // ─── DashboardPage ────────────────────────────────────────────────────────────
 
@@ -396,20 +415,26 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const { navigateTo } = useSmartNavigation()
   const navigate = useNavigate()
-const [showCreateForm,  setShowCreateForm] = useState(false)
 
   const dashboardUser = user as DashboardUser
+  const userRole = useAppSelector(selectUserRole)
+  const role = (userRole ?? 'USER').toUpperCase()
+  const isExpert = role === 'EXPERT' || role === 'SUPERADMIN'
+  const name = dashboardUser?.firstName || dashboardUser?.name || 'Користувач'
   const needsAccentSetup = !dashboardUser?.settings?.accentColor && !hasSavedAccentColor()
 
   return (
-    <div className="space-y-8 p-6">
-      {/* Акцентний колір */}
+    <div className="space-y-6 p-6">
       {needsAccentSetup && (
         <GlassCard className="border-[var(--border)] bg-[var(--bg-secondary)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">Налаштуй свій акцентний колір</p>
-              <p className="text-xs text-[var(--text-muted-light)] mt-1">Обери колір у Налаштуваннях. Значення збережеться у профілі.</p>
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                Налаштуй свій акцентний колір
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted-light)]">
+                Обери колір у Налаштуваннях.
+              </p>
             </div>
             <button
               type="button"
@@ -422,45 +447,24 @@ const [showCreateForm,  setShowCreateForm] = useState(false)
         </GlassCard>
       )}
 
-      {/* Привітання */}
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-          Привіт, {dashboardUser?.firstName || dashboardUser?.name || 'user'} 👋
-        </h1>
-        <p className="text-sm text-[var(--text-muted-light)] mt-1">Твій прогрес сьогодні</p>
-      </div>
+      <Greeting name={name} isExpert={isExpert} />
 
-      {/* Статистика */}
-      <StatsGrid />
-      <JourneySection />
-      <GamificationWidget />
+      {!isExpert && (
+        <>
+          <StatsGrid />
+          <JourneySection />
+          <GamificationWidget />
+          <QuickActionsSection onNavigate={navigateTo} />
+        </>
+      )}
 
-      {/* QuickActions + Modules */}
-      <QuickActionsSection onNavigate={navigateTo} />
-      <ModulesSection onNavigate={navigateTo} />
-
-      {/* Landing Cards з кнопкою Create + Live Edit */}
-{dashboardUser?.id && (
-  <section className="space-y-4">
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-lg font-bold text-[var(--text-primary)]">Мої лендінги</h2>
-      <button
-        className="px-3 py-1 rounded bg-[var(--accent)] text-black text-sm font-semibold hover:brightness-105 transition"
-        onClick={() => setShowCreateForm((prev) => !prev)}
-      >
-        + Створити лендінг
-      </button>
-    </div>
-
-    {showCreateForm && <CreateLandingForm userId={dashboardUser.id} />}
-    <LandingCards userId={dashboardUser.id} />
-  </section>
-)}
-      {/* InfoPage інтеграція */}
-      <InfoPage />
-
-      {/* Остання активність */}
-      <RecentActivitySection />
+      {isExpert && (
+        <>
+          <ExpertStatsSection />
+          <FunnelConversionSection />
+          <AIProducerRecommendations />
+        </>
+      )}
     </div>
   )
 }

@@ -48,35 +48,44 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: null,
     visibleTo: [],
     items: [
-      { id: 'dashboard', label: 'Дашборд', icon: '⬛', path: '/dashboard', visibleTo: [] },
+      { id: 'dashboard', label: 'Зоряний шлях', icon: '✦', path: '/dashboard', visibleTo: [] },
       { id: 'ai-mentor', label: 'AI Ментор', icon: '🤖', path: '/dashboard/ai-mentor', visibleTo: [] },
-      { id: 'wheel', label: 'Колесо балансу', icon: '⚖️', path: '/dashboard/wheel', visibleTo: ['EXPERT', 'SUPERADMIN', 'ADMIN', 'MENTOR', 'PRODUCT_OWNER'] },
-      { id: 'cycle', label: 'Щоденний цикл', icon: '🔄', path: '/dashboard/cycle', visibleTo: ['EXPERT', 'SUPERADMIN', 'ADMIN', 'MENTOR', 'PRODUCT_OWNER'] },
       { id: 'progress', label: 'Прогрес', icon: '↗', path: '/dashboard/progress', visibleTo: [] },
     ],
   },
 
   {
-    id: 'ai',
-    label: 'AI система',
-    visibleTo: [],
+    id: 'user-programs',
+    label: 'Мій розвиток',
+    visibleTo: ['USER'],
     items: [
-      { id: 'ai-funnel', label: 'AI Воронка', icon: '🚀', path: ROUTES.AI_FUNNEL_BUILDER, visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'ai-producer', label: 'AI Producer', icon: '🎬', path: '/dashboard/ai-producer', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'ai-seo', label: 'AI SEO', icon: '📊', path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'courses', label: 'Практики', icon: '🎁', path: '/dashboard/courses', visibleTo: ['USER'] },
+      { id: 'zoom', label: 'Zoom-сесії', icon: '📹', path: '/dashboard/zoom', visibleTo: ['USER'] },
+      { id: 'subscription', label: 'Підписка', icon: '💎', path: '/dashboard/subscription', visibleTo: ['USER'] },
     ],
   },
 
   {
-    id: 'programs',
-    label: 'Програми',
-    visibleTo: [],
+    id: 'expert-ai',
+    label: 'AI Система',
+    visibleTo: ['EXPERT', 'SUPERADMIN'],
     items: [
-      { id: 'programs', label: 'Мої програми', icon: '📦', path: '/dashboard/programs', visibleTo: [] },
-      { id: 'leadmagnet', label: 'Лідмагніти', icon: '🎁', path: '/dashboard/leadmagnet', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'tg', label: 'Telegram', icon: '✈️', path: '/dashboard/telegram', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'zoom', label: 'Zoom сесії', icon: '📹', path: '/dashboard/zoom', visibleTo: ['USER'] },
-      { id: 'miniapps', label: 'Мініапки', icon: '📱', path: '/dashboard/miniapps', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ai-funnel', label: 'AI Воронка', icon: '🚀', path: '/dashboard/ai-funnel', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ai-producer', label: 'AI Producer', icon: '🎬', path: '/dashboard/ai-producer-console', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ai-seo', label: 'AI SEO', icon: '🔍', path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ads', label: 'Реклама', icon: '📣', path: '/dashboard/ads', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+    ],
+  },
+
+  {
+    id: 'expert-products',
+    label: 'Продукти',
+    visibleTo: ['EXPERT', 'SUPERADMIN'],
+    items: [
+      { id: 'my-products', label: 'Мої продукти', icon: '📦', path: '/dashboard/products', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'leadmagnet', label: 'Лідмагніти', icon: '🎯', path: '/dashboard/leadmagnet', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'telegram', label: 'Telegram', icon: '✈️', path: '/dashboard/telegram', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'students', label: 'Учні', icon: '👥', path: '/dashboard/students', visibleTo: ['EXPERT', 'SUPERADMIN'] },
     ],
   },
 
@@ -85,7 +94,7 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Акаунт',
     visibleTo: [],
     items: [
-      { id: 'subscription', label: 'Підписка', icon: '💎', path: ROUTES.SUBSCRIPTION, visibleTo: [] },
+      { id: 'profile', label: 'Профіль', icon: '👤', path: '/dashboard/profile', visibleTo: [] },
       { id: 'settings', label: 'Налаштування', icon: '⚙️', path: '/dashboard/settings', visibleTo: [] },
     ],
   },
@@ -96,10 +105,9 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     visibleTo: ['SUPERADMIN'],
     accent: true,
     items: [
-      { id: 'users', label: 'Користувачі', icon: '👥', path: '/dashboard/admin/users', visibleTo: ['SUPERADMIN'] },
-      { id: 'products', label: 'Продукти', icon: '📦', path: '/dashboard/admin/products', visibleTo: ['SUPERADMIN'] },
-      { id: 'funnels', label: 'Воронки', icon: '🚀', path: '/dashboard/admin/funnels', visibleTo: ['SUPERADMIN'] },
+      { id: 'users', label: 'Всі користувачі', icon: '👥', path: '/dashboard/admin/users', visibleTo: ['SUPERADMIN'] },
       { id: 'revenue', label: 'Revenue', icon: '💰', path: '/dashboard/admin/revenue', visibleTo: ['SUPERADMIN'] },
+      { id: 'transfer', label: 'Transfer', icon: '🔄', path: '/dashboard/admin/transfer-ownership', visibleTo: ['SUPERADMIN'] },
     ],
   },
 ]
@@ -176,7 +184,7 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
     if (!isVisibleFor(item.visibleTo, currentRole)) return null
     if (item.requiresEnrollment && !enrollments.includes(item.requiresEnrollment)) return null
 
-    const isLocked = Boolean(item.requiresPaid && !hasPremium)
+    const isLocked = Boolean(item.requiresPaid && !hasPremium && currentRole !== 'SUPERADMIN')
     const isActive = item.path === '/dashboard'
       ? pathname === '/dashboard'
       : pathname === item.path || pathname.startsWith(item.path + '/')

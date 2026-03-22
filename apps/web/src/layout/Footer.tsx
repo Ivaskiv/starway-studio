@@ -63,7 +63,6 @@ export default function Footer() {
         border-t border-[color:var(--border-primary)]
         bg-[color:var(--bg-secondary)]
         text-[color:var(--text-primary)]
-        backdrop-blur-md
       ">
         <div className="max-w-7xl mx-auto px-5 sm:px-6 py-6 flex flex-col gap-5">
 

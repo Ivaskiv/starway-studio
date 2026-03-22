@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import * as aiService from './services.js';
 import { trackEvent, trackQuestionEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
+import { createWheelAssessment } from '../wheel/controller.js';
 import type { StreamChatMessage } from './types.js';
 
 const requireUser = (req: AuthenticatedRequest, res: Response): string | null => {
@@ -336,7 +337,7 @@ export const generate = safeHandler(async (req, res) => {
   res.json(response);
 });
 
-export const setupWheel = processWheel;
+export const setupWheel = createWheelAssessment;
 
 export const generateQuestions = safeHandler(async (req, res) => {
   const prompt = `Генерація запитань: ${JSON.stringify(req.body)}`;

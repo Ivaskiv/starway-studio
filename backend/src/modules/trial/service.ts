@@ -3,12 +3,10 @@
 import { prisma }                                                    from '../../db/client.js'
 import {
   CTAType,
-  DailyChoice,
-  DailyDrain,
   DailyState,
-  Prisma,
   ReminderType,
   StageType,
+  User,
 } from '@starway/db/prisma-client'
 import { scheduleReminder }                                          from '../notifications/reminder.service.js'
 import type { TrialStatus }                                          from './types.js'
@@ -26,13 +24,13 @@ const CTA_DELAY_MS      = 60 * 60 * 1000   // 1 год до нагадуванн
 // START TRIAL
 // ─────────────────────────────────────────────
 
-export async function startTrial(userId: string) {
+export async function startTrial(userId: string): Promise<User> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { trialStartsAt: true },
+    select: { trialStartsAt: true, role: true },
   })
 
-  if (user?.trialStartsAt) {
+  if (user?.trialStartsAt && user?.role !== 'SUPERADMIN') {
     throw new Error('TRIAL_ALREADY_USED')
   }
 
@@ -59,9 +57,10 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
       where:   { userId, status: { in: ['TRIAL', 'ACTIVE'] } },
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.$queryRaw<{ day: number }[]>`
-      SELECT day FROM trial_mirrors WHERE user_id = ${userId}
-    `,
+    prisma.trialMirror.findMany({
+      where: { userId },
+      select: { day: true },
+    }),
   ])
 
   const trialStart = user?.trialStartsAt
