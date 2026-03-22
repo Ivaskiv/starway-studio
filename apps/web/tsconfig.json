@@ -12,7 +12,6 @@
     "strict": true,
     "jsx": "react-jsx",
     "types": ["vite/client"],
-    "baseUrl": ".",
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "paths": {

@@ -8,6 +8,7 @@ import GamificationWidget from '@/features/gamification/components/GamificationW
 import CreateLandingForm from '@/features/landing/components/CreateLandingForm'
 import LandingCards from '@/features/landing/components/LandingCards'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
+import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import InfoPage from '@/pages/InfoPage'
 import { hasSavedAccentColor } from '@/theme/accent.utils'
 import { GlassCard } from '@/ui'
@@ -102,6 +103,136 @@ function StatsGrid() {
         </GlassCard>
       ))}
     </div>
+  )
+}
+
+function JourneySection() {
+  const { data: trial, isLoading } = useGetTrialStatusQuery()
+  if (isLoading || !trial?.isActive) return null
+
+  const totalDays = trial.daysLeft + trial.currentDay
+  const currentDay = trial.currentDay
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+        <span className="text-2xl font-bold text-[var(--accent)]">🔥 {currentDay}</span>
+        <div>
+          <p className="text-sm font-medium text-[var(--text-primary)]">день поспіль</p>
+          <p className="text-xs text-[var(--text-muted)]">День {currentDay} з {totalDays} · залишилось {trial.daysLeft} дн.</p>
+        </div>
+        <div className="ml-auto flex gap-1.5">
+          {Array.from({ length: Math.min(totalDays, 7) }).map((_, i) => {
+            const day = i + 1
+            const isDone = day < currentDay
+            const isToday = day === currentDay
+            return (
+              <div
+                key={day}
+                className={[
+                  'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium transition-all',
+                  isDone ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' :
+                  isToday ? 'bg-[var(--accent)] text-white' :
+                  'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                ].join(' ')}
+              >
+                {isDone ? '✓' : day}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto pb-1">
+        <div className="flex gap-2" style={{ width: 'max-content' }}>
+          {Array.from({ length: totalDays }).map((_, i) => {
+            const day = i + 1
+            const isDone = day < currentDay
+            const isToday = day === currentDay
+            return (
+              <div
+                key={day}
+                className={[
+                  'w-14 flex-shrink-0 rounded-xl border p-2 text-center transition-all',
+                  isDone ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]' :
+                  isToday ? 'border-2 border-[var(--accent)] bg-[var(--bg-secondary)]' :
+                  'border-[var(--border)] opacity-40'
+                ].join(' ')}
+              >
+                <div
+                  className={[
+                    'text-base font-medium',
+                    isDone ? 'text-[var(--color-success)]' :
+                    isToday ? 'text-[var(--accent)]' :
+                    'text-[var(--text-muted)]'
+                  ].join(' ')}
+                >
+                  {day}
+                </div>
+                <div className="text-[9px] text-[var(--text-muted)]">
+                  {isDone ? 'готово' : isToday ? 'зараз' : '🔒'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
+        <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+            ДЕНЬ {currentDay} · МІЙ ШЛЯХ
+          </p>
+          <h2 className="text-xl font-bold text-[var(--text-primary)]">Ранкова сесія</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Зафіксуй стан та отримай мікрозавдання на день
+          </p>
+          <div className="mt-3 h-1 rounded-full bg-[var(--border)]">
+            <div
+              className="h-full rounded-full bg-[var(--accent)] transition-all"
+              style={{ width: `${Math.round((currentDay / totalDays) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+            Прогрес {Math.round((currentDay / totalDays) * 100)}%
+          </p>
+        </div>
+        <div className="divide-y divide-[var(--border)] p-4">
+          {[
+            { icon: '🌞', title: 'Ранок', sub: '7 питань · ~5 хв', status: 'done' },
+            { icon: '🌙', title: 'Вечір', sub: 'Відкривається о 21:00', status: 'pending' },
+            { icon: '⚖️', title: 'Колесо балансу', sub: 'Раз на місяць (+одна додаткова перегенерація+ нагадування через місяць+аналіз-звіт в профіль користувача', status: 'locked' },
+          ].map(task => (
+            <div key={task.title} className="flex items-center gap-3 py-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--bg-tertiary)] text-sm">
+                {task.icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--text-primary)]">{task.title}</p>
+                <p className="text-xs text-[var(--text-muted)]">{task.sub}</p>
+              </div>
+              <span
+                className={[
+                  'flex-shrink-0 rounded-full px-2 py-1 text-xs',
+                  task.status === 'done' ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' :
+                  task.status === 'pending' ? 'bg-[var(--bg-tertiary)] text-[var(--accent)]' :
+                  'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                ].join(' ')}
+              >
+                {task.status === 'done' ? '✓ Готово' :
+                  task.status === 'pending' ? 'Сьогодні' : '🔒'}
+              </span>
+            </div>
+          ))}
+          <button
+            className="mt-3 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+            onClick={() => { window.location.href = '/dashboard/cycle' }}
+          >
+            ▶ Продовжити день
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -273,6 +404,7 @@ const [showCreateForm,  setShowCreateForm] = useState(false)
 
       {/* Статистика */}
       <StatsGrid />
+      <JourneySection />
       <GamificationWidget />
 
       {/* QuickActions + Modules */}

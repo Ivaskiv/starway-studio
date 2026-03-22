@@ -7,6 +7,7 @@ import { Prisma } from '@starway/db/prisma-client'
 import { isSuperAdminEmail } from './superadmin.js'
 import { resolveUserAbilities, ABILITIES } from './abilities.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
+import { startTrial } from '../trial/service.js'
 
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
@@ -515,6 +516,9 @@ export async function registerUser(input: {
     const accessToken = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
     const refreshToken = generateRefreshToken(user.id)
     await storeRefreshToken(user.id, refreshToken)
+    await startTrial(createdUser.id).catch(err =>
+      console.error('[Auth] startTrial failed:', err)
+    )
 
     return {
       user: toSafeUser(user),

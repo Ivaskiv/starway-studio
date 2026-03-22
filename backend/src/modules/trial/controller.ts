@@ -28,6 +28,12 @@ export async function startTrialHandler(req: AuthenticatedRequest, res: Response
     })
     return res.status(200).json(user);
   } catch (error: any) {
+    if (error instanceof Error && error.message === 'SUBSCRIPTION_REQUIRED') {
+      return res.status(403).json({ error: 'Потрібна активна підписка для запуску тріалу' });
+    }
+    if (error instanceof Error && error.message === 'TRIAL_ALREADY_USED') {
+      return res.status(409).json({ error: 'Тріал вже був використаний' });
+    }
     console.error('[TrialController] startTrial error:', error);
     next(error);
   }

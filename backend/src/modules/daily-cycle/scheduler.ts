@@ -11,7 +11,7 @@
 import cron, { type ScheduledTask } from 'node-cron'
 import { prisma, withRetry }       from '../../db/client.js'
 import { sendEveningQuestion, sendMorningQuestion } from './telegram.js'
-import { generateTrialMirror }     from '../trial/service.js'
+import { expireTrials, runTrialMirrorCheck } from '../trial/scheduler.js'
 import { bot }                     from '../../lib/telegram.js'
 import type { MicroTask }          from '@starway/db/prisma-client'
 import { SubscriptionStatus }      from '@starway/db/prisma-client'
@@ -117,6 +117,14 @@ export function startScheduler() {
     setImmediate(async () => {
       try { await runTrialMirrorCheck() }
       catch (e) { console.error('❌ Trial mirror error:', e) }
+    })
+  }, { timezone: tz }))
+
+  registerTask(cron.schedule('5 0 * * *', () => {
+    console.log('⛔ Trial expiration check trigger')
+    setImmediate(async () => {
+      try { await expireTrials() }
+      catch (e) { console.error('❌ Trial expiration error:', e) }
     })
   }, { timezone: tz }))
 
@@ -304,28 +312,6 @@ async function sendTaskReminders(): Promise<void> {
   })
 
   if (entries.length > 0) console.log(`📬 Task reminders → ${entries.length} users`)
-}
-
-async function runTrialMirrorCheck(): Promise<void> {
-  const users = await withRetry(() => prisma.user.findMany({
-    where: {
-      trialStartsAt: { not: null },
-      trialEndsAt:   { gte: new Date() },
-    },
-    select: { id: true, trialStartsAt: true },
-  }))
-
-  const targets = users.filter(u => {
-    if (!u.trialStartsAt) return false
-    const days = Math.floor((Date.now() - u.trialStartsAt.getTime()) / 86_400_000)
-    return days === 4 || days === 7
-  })
-
-  await runWithConcurrency(targets, 3, async (user) => {
-    const days = Math.floor((Date.now() - user.trialStartsAt!.getTime()) / 86_400_000) as 4 | 7
-    await generateTrialMirror(user.id, days)
-    console.log(`[Trial] Mirror day=${days} userId=${user.id}`)
-  })
 }
 
 async function runWeeklyAnalysisForAll(): Promise<void> {

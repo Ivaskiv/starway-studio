@@ -17,15 +17,6 @@ export default function GlobalAssistant() {
     enabled: isAuthenticated,
   })
 
-  useEffect(() => {
-    console.log('🎯 Assistant state:', {
-      isAuthenticated, open,
-      steps: steps?.length || 0,
-      messages: chat?.messages?.length || 0,
-      nextAction, isLoading,
-    })
-  }, [isAuthenticated, open, steps, chat, nextAction, isLoading])
-
   const handleToggle = useCallback(() => {
     const next = !open
     setOpen(next)

@@ -27,6 +27,15 @@ const CTA_DELAY_MS      = 60 * 60 * 1000   // 1 год до нагадуванн
 // ─────────────────────────────────────────────
 
 export async function startTrial(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { trialStartsAt: true },
+  })
+
+  if (user?.trialStartsAt) {
+    throw new Error('TRIAL_ALREADY_USED')
+  }
+
   return prisma.user.update({
     where: { id: userId },
     data: {
