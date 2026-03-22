@@ -31,10 +31,14 @@ export default function GlobalAssistant() {
   const handleAction = useCallback((action: string) => {
     logAssistantEvent('assistant_action', { action })
     switch (action) {
-      case 'open_funnel':        navigate('/funnels');   break
-      case 'open_mentor':        navigate('/ai-mentor'); break
-      case 'open_products':      navigate('/products');  break
-      case 'open_distribution':  navigate('/social');    break
+      case 'open_funnel':       navigate('/dashboard/ai-funnel'); break
+      case 'open_mentor':       navigate('/dashboard/ai-mentor'); break
+      case 'open_products':     navigate('/dashboard/products'); break
+      case 'open_distribution': navigate('/dashboard/telegram'); break
+      case 'open_morning':      navigate('/dashboard/cycle?session=morning'); break
+      case 'open_evening':      navigate('/dashboard/cycle?session=evening'); break
+      case 'open_wheel':        navigate('/dashboard/wheel'); break
+      case 'open_progress':     navigate('/dashboard/progress'); break
       default: console.warn('Unknown assistant action:', action)
     }
     handleClose()
@@ -68,12 +72,7 @@ export default function GlobalAssistant() {
       {open && (
         <div className="assistant-panel-wrap">
           {!isGuestMode && isLoading ? (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              height: 200, color: 'var(--text-muted)', fontSize: 13,
-              background: 'rgba(14,15,22,0.97)', borderRadius: 16,
-              border: '1px solid rgba(255,255,255,0.1)',
-            }}>
+            <div className="flex h-48 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] text-sm text-[var(--text-muted)]">
               Завантаження...
             </div>
           ) : (

@@ -54,13 +54,13 @@ export const weeklyAnalysisApi = api.injectEndpoints({
 
     // Користувач — свій останній звіт
     getMyWeeklyReport: build.query<{ report: WeeklyReportFull | null }, void>({
-      query: () => '/ai-mentor/weekly/my-report',
+      query: () => '/mentor/weekly/my-report',
       providesTags: ['WeeklyReport'],
     }),
 
     // Користувач — список звітів
     getMyWeeklyReports: build.query<{ reports: WeeklyReportSummary[] }, void>({
-      query: () => '/ai-mentor/weekly/my-reports',
+      query: () => '/mentor/weekly/my-reports',
       providesTags: ['WeeklyReport'],
     }),
 
@@ -70,7 +70,7 @@ export const weeklyAnalysisApi = api.injectEndpoints({
       { risk?: 'low' | 'medium' | 'high'; upsell?: boolean; page?: number }
     >({
       query: ({ risk, upsell, page = 1 } = {}) => ({
-        url: '/ai-mentor/weekly/admin/profiles',
+        url: '/mentor/weekly/admin/profiles',
         params: { risk, upsell, page },
       }),
       providesTags: ['MentorProfile'],
@@ -81,14 +81,14 @@ export const weeklyAnalysisApi = api.injectEndpoints({
       { profiles: MentorProfile[]; reports: WeeklyReportFull[] },
       string
     >({
-      query: userId => `/ai-mentor/weekly/admin/profiles/${userId}`,
+      query: userId => `/mentor/weekly/admin/profiles/${userId}`,
       providesTags: ['MentorProfile'],
     }),
 
     // Адмін — ручний запуск аналізу
     runAnalysis: build.mutation<{ ok: boolean; retentionRisk: number }, string>({
       query: userId => ({
-        url:    `/ai-mentor/weekly/admin/run/${userId}`,
+        url:    `/mentor/weekly/admin/run/${userId}`,
         method: 'POST',
       }),
       invalidatesTags: ['MentorProfile'],
@@ -97,7 +97,7 @@ export const weeklyAnalysisApi = api.injectEndpoints({
     // Адмін — позначити оффер показаним
     markOfferShown: build.mutation<{ ok: boolean }, string>({
       query: profileId => ({
-        url:    `/ai-mentor/weekly/admin/profiles/${profileId}/offer-shown`,
+        url:    `/mentor/weekly/admin/profiles/${profileId}/offer-shown`,
         method: 'PATCH',
       }),
       invalidatesTags: ['MentorProfile'],

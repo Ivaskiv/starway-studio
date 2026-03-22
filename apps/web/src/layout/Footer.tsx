@@ -16,7 +16,7 @@ const FOOTER_LINKS = {
     { label: 'Щоденний цикл',   path: ROUTES.CYCLE         },
     { label: 'Бачення життя',   path: ROUTES.VISION        },
     { label: 'Цілі',            path: ROUTES.GOALS         },
-    { label: 'AI Генератор',    path: ROUTES.AI_GENERATOR  },
+    { label: 'Підписка',        path: ROUTES.SUBSCRIPTION  },
   ],
   company: [
     { label: 'Про нас',         path: '/about'             },

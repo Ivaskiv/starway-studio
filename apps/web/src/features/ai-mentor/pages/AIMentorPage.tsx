@@ -1,29 +1,96 @@
 import { useAppSelector } from '@/app/hooks'
-import { Bot, Sparkles } from 'lucide-react'
 import { ROUTES } from '@/config/routes'
 import { selectUserRole } from '@/features/auth/services/auth.slice'
 import { useGetTrialStatusQuery, useStartTrialMutation } from '@/features/trial/services/trial.api'
 
 import { useMentorAccess } from '../hooks/useMentorAccess'
-import { useMentorOnboarding } from '../hooks/useMentorOnboarding'
-import { useGetSetupProgressQuery } from '../services/setup.api'
 
-import MentorHeader from '../components/MentorHeader'
 import MentorLocked from '../components/MentorLocked'
 import MentorWorkspace from '../components/mentorWorkspace/MentorWorkspace'
-import OnboardingFlow from '@/features/ai-mentor/components/OnboardingFlow/OnboardingFlow'
-import { SetupWizard } from '../components/SetupWizard'
 
 import AIMentorChat from '../components/AIMentorChat'
-import { GlassCard } from '@/ui'
 import GamificationWidget from '@/features/gamification/components/GamificationWidget'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+function DailyStatusBar() {
+  const navigate = useNavigate()
+  const now = new Date()
+  const hour = now.getHours()
+
+  const items = [
+    {
+      icon: '🌞',
+      label: 'Ранкова сесія',
+      sub: '6 питань · ~5 хв',
+      available: hour >= 9,
+      path: '/dashboard/cycle?session=morning',
+      timeHint: 'о 09:00',
+    },
+    {
+      icon: '🌙',
+      label: 'Вечірня рефлексія',
+      sub: 'Афірмації + мікрозавдання',
+      available: hour >= 21,
+      path: '/dashboard/cycle?session=evening',
+      timeHint: 'о 21:00',
+    },
+    {
+      icon: '⚖️',
+      label: 'Колесо балансу',
+      sub: 'Раз на місяць · аналіз 8 сфер',
+      available: true,
+      path: '/dashboard/wheel',
+      timeHint: null,
+    },
+  ] as const
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
+        Сьогодні
+      </p>
+      <div className="space-y-2">
+        {items.map(item => (
+          <div
+            key={item.label}
+            className={[
+              'flex items-center gap-3 rounded-xl p-3 transition-all',
+              item.available
+                ? 'cursor-pointer border border-[var(--border)] hover:bg-[var(--glass-bg)]'
+                : 'opacity-40 border border-transparent',
+            ].join(' ')}
+            onClick={() => item.available && navigate(item.path)}
+          >
+            <span className="text-lg flex-shrink-0">{item.icon}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                {item.label}
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">{item.sub}</p>
+            </div>
+            <span
+              className={[
+                'text-xs px-2 py-1 rounded-full flex-shrink-0',
+                item.available
+                  ? 'bg-[var(--bg-tertiary)] text-[var(--accent)]'
+                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
+              ].join(' ')}
+            >
+              {item.available
+                ? 'Розпочати'
+                : item.timeHint ?? ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function AIMentorPage() {
   const navigate = useNavigate()
   const access = useMentorAccess()
-  const onboarding = useMentorOnboarding()
   const userRole = useAppSelector(selectUserRole)
   const isSuperAdmin = (userRole ?? '').toUpperCase() === 'SUPERADMIN'
   const [previewAsUser, setPreviewAsUser] = useState(false)
@@ -31,24 +98,10 @@ export default function AIMentorPage() {
   const { data: trial } = useGetTrialStatusQuery()
   const [startTrial] = useStartTrialMutation()
 
-  const { data: setupProgress, isLoading } =
-    useGetSetupProgressQuery(undefined, {
-      skip: access.level === 'none',
-    })
-
-  const shouldShowSetup =
-    access.level !== 'none' && setupProgress?.currentStep !== 'complete'
-
-  const tabs = [
-    { id: 'session', label: 'Сесія', path: ROUTES.AI_MENTOR, active: true },
-    { id: 'wheel', label: 'Колесо', path: ROUTES.WHEEL, active: false },
-    { id: 'report', label: 'Звіт', path: `${ROUTES.PROGRESS}?tab=report`, active: false },
-    { id: 'progress', label: 'Прогрес', path: ROUTES.PROGRESS, active: false },
-  ] as const
-
   const handleStartTrial = async () => {
     try {
       await startTrial().unwrap()
+      navigate('/dashboard')
     } catch (e) {
       console.error('[AIMentor] startTrial failed:', e)
     }
@@ -75,20 +128,29 @@ export default function AIMentorPage() {
         </div>
       )}
 
-      <MentorHeader
-        level={access.level}
-        isOnboarding={onboarding.isOnboarding}
-        progress={onboarding.getProgressPercentage()}
-      />
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-[rgba(var(--accent-rgb),0.15)] border border-[rgba(var(--accent-rgb),0.3)] flex items-center justify-center">
+          <span className="text-lg">🤖</span>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)] mb-0.5">
+            Модуль AI Асистента
+          </p>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">AI Ментор</h1>
+        </div>
+      </div>
 
       <div className="flex flex-wrap gap-2">
-        {tabs.map(tab => (
+        {[
+          { id: 'session', label: 'Сесія', active: true },
+          { id: 'wheel', label: 'Колесо', path: ROUTES.WHEEL },
+          { id: 'report', label: 'Звіт', path: ROUTES.PROGRESS },
+          { id: 'progress', label: 'Прогрес', path: ROUTES.PROGRESS },
+        ].map(tab => (
           <button
             key={tab.id}
             type="button"
-            onClick={() => {
-              if (!tab.active) navigate(tab.path)
-            }}
+            onClick={() => tab.path && navigate(tab.path)}
             className={[
               'rounded-xl border px-4 py-2 text-sm font-medium transition-colors',
               tab.active
@@ -150,75 +212,33 @@ export default function AIMentorPage() {
         </div>
       )}
 
-      {(showAsUser && trial?.isActive) || !showAsUser ? (
+      {showAsUser && trial?.isActive && (
         <>
           {access.level === 'none' && <MentorLocked />}
-
-          {isLoading && access.level !== 'none' && (
-            <GlassCard className="p-6 text-white/70">
-              Завантаження конфігурації AI-ментора...
-            </GlassCard>
-          )}
-
-          {shouldShowSetup && (
+          {access.level !== 'none' && (
             <>
-              <GlassCard className="p-6 md:p-7 border border-[color:rgba(var(--accent-rgb),0.35)]">
-
-                <div className="flex items-start gap-3">
-
-                  <div className="h-10 w-10 rounded-xl bg-[color:rgba(var(--accent-rgb),0.22)] border border-[color:rgba(var(--accent-rgb),0.4)] flex items-center justify-center shrink-0">
-                    <Bot className="w-5 h-5 text-white" />
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs uppercase tracking-[0.2em] text-white/45">
-                      AI Mentor Quick Start
-                    </p>
-
-                    <h2 className="text-xl md:text-2xl font-semibold text-white mt-1">
-                      Створи власного AI-ментора
-                    </h2>
-
-                    <p className="text-white/70 mt-2">
-                      1) Колесо балансу
-                      2) Telegram контакт
-                      3) Генерація питань
-                    </p>
-
-                    <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs text-white/75">
-                      <Sparkles className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-                      СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ
-                    </div>
-
-                  </div>
-                </div>
-
-              </GlassCard>
-
-              <SetupWizard embedded />
-            </>
-          )}
-
-          {access.level === 'trial' && !shouldShowSetup && (
-            <>
-              <OnboardingFlow />
-              <MentorWorkspace limited>
+              <DailyStatusBar />
+              <MentorWorkspace limited={access.level === 'trial'}>
                 <AIMentorChat />
               </MentorWorkspace>
             </>
           )}
+        </>
+      )}
 
-          {access.level === 'paid' && !shouldShowSetup && (
+      {!showAsUser && (
+        <>
+          {access.level === 'none' && <MentorLocked />}
+          {access.level !== 'none' && (
             <>
-              {onboarding.isOnboarding && <OnboardingFlow />}
+              <DailyStatusBar />
               <MentorWorkspace>
                 <AIMentorChat />
               </MentorWorkspace>
             </>
           )}
         </>
-      ) : null}
+      )}
 
     </div>
   )

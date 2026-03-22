@@ -141,12 +141,12 @@ export const mentorApi = api.injectEndpoints({
     //     body,
     //   }),
  getMentorContext: builder.query<MentorContext, string>({
-      query: userId => `/ai-mentor/context/${userId}`,
+      query: userId => `/mentor/context/${userId}`,
       providesTags: ['MentorContext'],
     }),
 
     sendMentorMessage: builder.mutation<MentorReply, SendMentorPayload>({
-      query: body => ({ url: '/ai-mentor/chat', method: 'POST', body }),
+      query: body => ({ url: '/mentor/chat', method: 'POST', body }),
       // зберігаємо повідомлення — інвалідуємо контекст після
       invalidatesTags: ['MentorContext'],
     }),

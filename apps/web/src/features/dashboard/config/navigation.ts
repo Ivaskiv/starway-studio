@@ -1,6 +1,6 @@
 // frontend/src/config/navigation.ts
 import { AccessKey } from '@/features/auth/types/auth.types';
-import { User, Home, Target, TrendingUp, MessageCircle, Sparkles, Package, Settings } from 'lucide-react';
+import { User, Home, Target, TrendingUp, MessageCircle, Package, Settings } from 'lucide-react';
 
 export interface NavItem {
   path: string;
@@ -16,7 +16,6 @@ export const NAV_ITEMS: NavItem[] = [
   // { path: '/dashboard/wheel', icon: Target, label: 'Колесо балансу', key: 'wheel.view' },
   { path: '/dashboard/products', icon: Package, label: 'Продукти', key: 'products.manage', isPremium: true },
   { path: '/dashboard/mentor', icon: MessageCircle, label: 'AI Ментор', key: 'mentor.core', isPremium: true },
-  { path: '/dashboard/ai-generator', icon: Sparkles, label: 'AI Генератор', key: 'ai.basic', isPremium: true },
   { path: '/dashboard/profile', icon: User, label: 'Профіль', key: 'profile.view' },
   { path: '/dashboard/progress', icon: TrendingUp, label: 'Прогрес', key: 'progress.view' },
   { path: '/dashboard/settings', icon: Settings, label: 'Налаштування', key: 'settings.manage' },

@@ -105,10 +105,16 @@ function StatsGrid() {
 function JourneySection() {
   const { data: trial, isLoading } = useGetTrialStatusQuery()
   const navigate = useNavigate()
-  if (isLoading || !trial?.isActive) return null
+  if (isLoading) return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-6 text-center">
+      <p className="text-sm text-[var(--text-muted)]">Завантажуємо твій шлях...</p>
+    </div>
+  )
+  if (!trial?.isActive) return null
 
   const totalDays = trial.daysLeft + trial.currentDay
   const currentDay = trial.currentDay
+  const isJustStarted = trial.currentDay === 1 && trial.progress < 5
   const now = new Date()
   const isMorningDone = false
   const isEveningDone = false
@@ -143,6 +149,16 @@ function JourneySection() {
 
   return (
     <section className="space-y-4">
+      {isJustStarted && (
+        <div className="rounded-xl border border-[var(--accent)] bg-[var(--accent-bg,var(--bg-secondary))] p-4 text-center">
+          <p className="text-sm font-medium text-[var(--accent)]">
+            🎉 Вітаємо! Твій 7-денний шлях розпочато
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Щодня о 09:00 — ранкові питання · о 21:00 — вечірня рефлексія
+          </p>
+        </div>
+      )}
       <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
         <span className="text-2xl font-bold text-[var(--accent)]">🔥 {currentDay}</span>
         <div>
@@ -260,33 +276,81 @@ function JourneySection() {
   )
 }
 
-function Greeting({ name, isExpert }: { name: string; isExpert: boolean }) {
+function Greeting({ name, isExpert, isSuperAdmin }: { name: string; isExpert: boolean; isSuperAdmin: boolean }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
         <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-          {isExpert ? 'Кабінет коуча' : 'Мій кабінет'}
+          {isSuperAdmin ? 'SuperAdmin' : isExpert ? 'Кабінет коуча' : 'Мій кабінет'}
         </p>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-          {isExpert ? `Starway by Nadya · ${name}` : `Мій кабінет · ${name}`}
+          {isSuperAdmin
+            ? `SuperAdmin · ${name}`
+            : isExpert
+              ? `Starway by Nadya · ${name}`
+              : `Мій кабінет · ${name}`}
         </h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          {isExpert
-            ? 'Панель коуча — аналітика, продукти, AI-система'
-            : 'Твій особистий простір зростання та трансформації'}
+          {isSuperAdmin
+            ? 'Повний доступ — всі коучі та учні'
+            : isExpert
+              ? 'Starway by Nadya — панель коуча'
+              : 'Твій особистий простір зростання та трансформації'}
         </p>
       </div>
-      <div
+      <span
         className={[
-          'flex-shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium',
-          isExpert
+          'mt-2 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium',
+          isSuperAdmin
             ? 'border-[var(--accent)] bg-[var(--accent-bg,var(--bg-secondary))] text-[var(--accent)]'
-            : 'border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)]',
+            : isExpert
+              ? 'border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]'
+              : 'border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)]',
         ].join(' ')}
       >
-        {isExpert ? '🎓 Коуч' : '🌱 Учень'}
-      </div>
+        {isSuperAdmin ? '⭐ SuperAdmin' : isExpert ? '🎓 Коуч' : '🌱 Учень'}
+      </span>
     </div>
+  )
+}
+
+function DashboardRail({
+  items,
+  title,
+}: {
+  items: Array<{ label: string; icon: string; active?: boolean; section?: string }>
+  title?: string
+}) {
+  return (
+    <GlassCard className="h-fit border border-[var(--border)] bg-[var(--bg-secondary)] p-3">
+      {title && (
+        <p className="px-2 pb-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+          {title}
+        </p>
+      )}
+      <div className="space-y-1.5">
+        {items.map(item => (
+          <div key={item.label}>
+            {item.section && (
+              <p className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                {item.section}
+              </p>
+            )}
+            <div
+              className={[
+                'flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition-all',
+                item.active
+                  ? 'border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--text-primary)]'
+                  : 'border-transparent text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)]',
+              ].join(' ')}
+            >
+              <span className="text-base leading-none">{item.icon}</span>
+              <span className="truncate">{item.label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </GlassCard>
   )
 }
 
@@ -344,12 +408,12 @@ function QuickActionsSection({ onNavigate }: { onNavigate: NavFn }) {
   )
 }
 
-function ExpertStatsSection() {
+function ExpertStatsSection({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: 'Активних учнів', value: '—', icon: '👥', sub: 'підключається' },
+          { label: isSuperAdmin ? 'Всіх учнів (всі коучі)' : 'Активних учнів', value: '—', icon: '👥', sub: 'підключається' },
           { label: 'Завершують день', value: '—', icon: '📊', sub: 'підключається' },
           { label: 'Потреб уваги', value: '—', icon: '⚠️', sub: 'підключається' },
           { label: 'Дохід місяця', value: '—', icon: '💰', sub: 'підключається' },
@@ -365,7 +429,7 @@ function ExpertStatsSection() {
 
       <GlassCard className="p-5">
         <h2 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
-          AI Воронка — конверсія
+          {isSuperAdmin ? 'Загальна воронка — всі коучі' : 'AI Воронка — конверсія'}
         </h2>
         {[
           { label: 'Лідмагніт', value: '—', pct: 100 },
@@ -419,9 +483,32 @@ export default function DashboardPage() {
   const dashboardUser = user as DashboardUser
   const userRole = useAppSelector(selectUserRole)
   const role = (userRole ?? 'USER').toUpperCase()
+  const isSuperAdmin = role === 'SUPERADMIN'
   const isExpert = role === 'EXPERT' || role === 'SUPERADMIN'
   const name = dashboardUser?.firstName || dashboardUser?.name || 'Користувач'
   const needsAccentSetup = !dashboardUser?.settings?.accentColor && !hasSavedAccentColor()
+  const userRail = [
+    { label: 'Дашборд', icon: '⬛' },
+    { label: 'Мій шлях', icon: '📅', active: true },
+    { label: 'Прогрес', icon: '📊' },
+    { label: 'AI Ментор', icon: '🤖' },
+    { label: 'Безкоштовні практики', icon: '🎁', section: 'Продукти' },
+    { label: 'Мої програми', icon: '📦' },
+    { label: 'Підписка', icon: '💎' },
+    { label: 'Налаштування', icon: '⚙️', section: 'Акаунт' },
+  ]
+  const expertRail = [
+    { label: 'Аналітика', icon: '📊', active: true },
+    { label: 'Учні', icon: '👥' },
+    { label: 'Прогрес учнів', icon: '📈' },
+    { label: 'AI Воронка', icon: '🚀', section: 'Маркетинг' },
+    { label: 'AI Producer', icon: '🎬' },
+    { label: 'AI SEO', icon: '🔍' },
+    { label: 'Реклама', icon: '📣' },
+    { label: 'Мої продукти', icon: '📦', section: 'Продукти' },
+    { label: 'Лідмагніти', icon: '🎯' },
+    { label: 'Telegram', icon: '✈️' },
+  ]
 
   return (
     <div className="space-y-6 p-6">
@@ -447,23 +534,50 @@ export default function DashboardPage() {
         </GlassCard>
       )}
 
-      <Greeting name={name} isExpert={isExpert} />
+      <Greeting name={name} isExpert={isExpert} isSuperAdmin={isSuperAdmin} />
 
       {!isExpert && (
-        <>
-          <StatsGrid />
-          <JourneySection />
-          <GamificationWidget />
-          <QuickActionsSection onNavigate={navigateTo} />
-        </>
+        <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
+          <DashboardRail items={userRail} />
+          <div className="space-y-5">
+            <GlassCard className="border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
+              <div className="space-y-5">
+                <StatsGrid />
+                <JourneySection />
+              </div>
+            </GlassCard>
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <GlassCard className="border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
+                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
+                  Навігація дня
+                </p>
+                <QuickActionsSection onNavigate={navigateTo} />
+              </GlassCard>
+              <div className="space-y-5">
+                <GamificationWidget />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {isExpert && (
-        <>
-          <ExpertStatsSection />
-          <FunnelConversionSection />
-          <AIProducerRecommendations />
-        </>
+        <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
+          <DashboardRail items={expertRail} title="Режим коуча" />
+          <GlassCard className="border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
+            <div className="mb-5">
+              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
+                {isSuperAdmin ? 'Аналітика платформи' : 'Аналітика коуча'}
+              </p>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                {isSuperAdmin ? 'Усі коучі · всі учні · поточний період' : 'Starway by Nadya · поточний період'}
+              </p>
+            </div>
+            <ExpertStatsSection isSuperAdmin={isSuperAdmin} />
+            <FunnelConversionSection />
+            <AIProducerRecommendations />
+          </GlassCard>
+        </div>
       )}
     </div>
   )

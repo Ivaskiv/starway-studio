@@ -1,3 +1,4 @@
+import { useAppSelector } from '@/app/hooks'
 import { useMemo } from 'react';
 
 import { useGetMySystemStateQuery } from '@/features/auth/services/accessApi';
@@ -5,7 +6,10 @@ import { useGetMySystemStateQuery } from '@/features/auth/services/accessApi';
 type ModuleId = 'AI_GENERATOR' | 'AI_FUNNEL' | 'AI_MENTOR' | 'WHEEL_OF_BALANCE';
 
 export function useSystemState() {
-  const query = useGetMySystemStateQuery();
+  const isAuthenticated = useAppSelector(state => state.auth.status === 'authenticated')
+  const query = useGetMySystemStateQuery(undefined, {
+    skip: !isAuthenticated,
+  });
   const state = query.data;
 
   const moduleMap = useMemo(() => {

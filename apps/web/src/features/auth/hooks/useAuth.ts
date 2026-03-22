@@ -61,7 +61,7 @@ export function useAuth() {
   const hasToken = !!getToken()
 
   const { data: meData, isError: meError, error: meRawError } = useGetMeQuery(undefined, {
-    skip: !hasToken || isAuthenticated,
+    skip: !hasToken || isAuthenticated || isLoading,
   })
 
   useEffect(() => {

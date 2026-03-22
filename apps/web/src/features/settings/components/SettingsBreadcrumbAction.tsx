@@ -1,3 +1,4 @@
+import { useAppSelector } from '@/app/hooks'
 import { Send } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
@@ -5,7 +6,10 @@ import { useGetTelegramLinkUrlQuery } from '@/features/auth/services/auth.api'
 
 export default function SettingsBreadcrumbAction() {
   const { pathname } = useLocation()
-  const { data } = useGetTelegramLinkUrlQuery()
+  const isAuthenticated = useAppSelector(state => state.auth.status === 'authenticated')
+  const { data } = useGetTelegramLinkUrlQuery(undefined, {
+    skip: !isAuthenticated || pathname !== ROUTES.SETTINGS,
+  })
 
   if (pathname !== ROUTES.SETTINGS) return null
 

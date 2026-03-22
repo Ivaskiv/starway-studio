@@ -126,7 +126,7 @@ export default function AIMentorChat() {
         context: ctx ?? {},
       }
 
-      const response = await fetch('/api/ai-mentor/chat', {
+      const response = await fetch('/api/mentor/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

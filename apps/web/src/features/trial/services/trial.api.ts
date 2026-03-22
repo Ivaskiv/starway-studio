@@ -12,6 +12,7 @@ export interface TrialStatus {
   endsAt: string | null;
   daysLeft: number;
   currentDay: number;
+  progress: number;
   hasDay4Mirror: boolean;
   hasDay7Mirror: boolean;
 }

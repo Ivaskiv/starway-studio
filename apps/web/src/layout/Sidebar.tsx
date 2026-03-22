@@ -136,7 +136,7 @@ function isVisibleFor(visibleTo: UserRole[], role: UserRole): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarProps) {
-  const { state, getModuleAccess } = useSystemState()
+  const { state } = useSystemState()
   const { navigateTo }             = useSmartNavigation()
   const { pathname }               = useLocation()
   const isMobile                   = useMediaQuery('(max-width:768px)')
@@ -277,7 +277,6 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
 
   // ── ВИПРАВЛЕНО: lowercase → UPPERCASE (рядки 324 і 327 оригіналу) ─────────
   const showUpgradeBanner = currentRole === 'USER' && !hasPremium && !collapsed
-  const showCreateProduct = (currentRole === 'EXPERT' || currentRole === 'SUPERADMIN') && !collapsed
 
   return (
     <aside
@@ -295,42 +294,6 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
         ].join(' ')}
       >
         {SIDEBAR_NAV.map(renderSection)}
-
-        {showCreateProduct && (
-          <div className="px-0 pb-3 border-t border-[var(--border-primary)] mt-2 pt-3">
-            <button
-              onClick={() => handleNav(ROUTES.PRODUCT_CREATION)}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-[13px] font-medium border bg-[rgba(var(--accent-rgb),0.08)] border-[rgba(var(--accent-rgb),0.20)] text-[var(--text-primary)] hover:bg-[rgba(var(--accent-rgb),0.15)] hover:border-[rgba(var(--accent-rgb),0.35)] transition-all"
-            >
-              <span className="text-[rgb(var(--accent-rgb))] text-[16px] leading-none">+</span>
-              <span className="truncate">Створити продукт</span>
-            </button>
-
-            {['ai-generator', 'ai-funnel'].map(key => {
-              const cfg = key === 'ai-generator'
-                ? { label: 'AI Генератор', path: ROUTES.AI_GENERATOR,      moduleKey: 'AI_GENERATOR' }
-                : { label: 'AI Воронка',   path: ROUTES.AI_FUNNEL_BUILDER,  moduleKey: 'AI_FUNNEL'   }
-              const access = getModuleAccess(cfg.moduleKey as any)
-              const locked = access?.isLocked ?? false
-              return (
-                <button
-                  key={key}
-                  onClick={() => locked ? handleLocked(cfg.path) : handleNav(cfg.path)}
-                  className={[
-                    'w-full flex items-center gap-2 px-3 py-2 mt-1.5 rounded-xl text-[12px] font-medium transition-all border',
-                    locked
-                      ? 'bg-[var(--glass-bg)] border-[var(--border-primary)] text-[var(--text-subtle)]'
-                      : 'bg-[rgba(var(--accent-rgb),0.06)] border-[rgba(var(--accent-rgb),0.15)] text-[var(--text-secondary)] hover:bg-[rgba(var(--accent-rgb),0.12)] hover:border-[rgba(var(--accent-rgb),0.25)]',
-                  ].join(' ')}
-                >
-                  <span className={locked ? 'text-[var(--text-subtle)]' : 'text-[rgb(var(--accent-rgb))]'}>✦</span>
-                  <span className="truncate">{cfg.label}</span>
-                  {locked && <span className="ml-auto text-[10px]">🔒</span>}
-                </button>
-              )
-            })}
-          </div>
-        )}
 
         {showUpgradeBanner && (
           <div className="mx-0 my-3 p-3.5 rounded-xl border border-[rgba(var(--accent-rgb),0.25)] bg-[rgba(var(--accent-rgb),0.06)]">
