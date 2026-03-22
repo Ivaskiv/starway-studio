@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 type NavFn = (
@@ -110,11 +111,51 @@ function JourneySection() {
       <p className="text-sm text-[var(--text-muted)]">Завантажуємо твій шлях...</p>
     </div>
   )
-  if (!trial?.isActive) return null
+  if (!trial?.isActive) return (
+    <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
+      <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+          МІЙ ШЛЯХ
+        </p>
+        <h2 className="text-xl font-bold text-[var(--text-primary)]">
+          Розпочни свій шлях
+        </h2>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          7 днів безкоштовно — ранкові питання, вечірні афірмації,
+          колесо балансу та AI аналіз стану.
+        </p>
+      </div>
+      <div className="p-4">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            { icon: '🌞', label: 'Ранкові питання', sub: 'щодня о 09:00' },
+            { icon: '🌙', label: 'Вечірня рефлексія', sub: 'щодня о 21:00' },
+            { icon: '⚖️', label: 'Колесо балансу', sub: 'раз на місяць' },
+          ].map(item => (
+            <div
+              key={item.label}
+              className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-3 text-center"
+            >
+              <span className="text-2xl">{item.icon}</span>
+              <p className="mt-2 text-xs font-medium text-[var(--text-primary)]">{item.label}</p>
+              <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">{item.sub}</p>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+          onClick={() => navigate('/dashboard/ai-mentor')}
+        >
+          Розпочати безкоштовний тріал
+        </button>
+      </div>
+    </div>
+  )
 
-  const totalDays = trial.daysLeft + trial.currentDay
-  const currentDay = trial.currentDay
-  const isJustStarted = trial.currentDay === 1 && trial.progress < 5
+  const totalDays = (trial?.daysLeft ?? 0) + (trial?.currentDay ?? 1)
+  const currentDay = trial?.currentDay ?? 1
+  const isJustStarted = (trial?.currentDay ?? 0) === 1 && (trial?.progress ?? 0) < 5
   const now = new Date()
   const isMorningDone = false
   const isEveningDone = false
@@ -139,8 +180,8 @@ function JourneySection() {
     {
       icon: '⚖️',
       title: 'Колесо балансу',
-      sub: trial.hasDay4Mirror ? 'Наступне через 27 дн.' : 'День 4 — перший аналіз',
-      status: trial.hasDay4Mirror ? 'done' : currentDay >= 4 ? 'pending' : 'locked',
+      sub: (trial?.hasDay4Mirror ?? false) ? 'Наступне через 27 дн.' : 'День 4 — перший аналіз',
+      status: (trial?.hasDay4Mirror ?? false) ? 'done' : currentDay >= 4 ? 'pending' : 'locked',
       path: '/dashboard/wheel',
     },
   ] as const
@@ -163,7 +204,7 @@ function JourneySection() {
         <span className="text-2xl font-bold text-[var(--accent)]">🔥 {currentDay}</span>
         <div>
           <p className="text-sm font-medium text-[var(--text-primary)]">день поспіль</p>
-          <p className="text-xs text-[var(--text-muted)]">День {currentDay} з {totalDays} · залишилось {trial.daysLeft} дн.</p>
+          <p className="text-xs text-[var(--text-muted)]">День {currentDay} з {totalDays} · залишилось {trial?.daysLeft ?? 0} дн.</p>
         </div>
         <div className="ml-auto flex gap-1.5">
           {Array.from({ length: Math.min(totalDays, 7) }).map((_, i) => {
@@ -288,7 +329,7 @@ function Greeting({ name, isExpert, isSuperAdmin }: { name: string; isExpert: bo
             ? `SuperAdmin · ${name}`
             : isExpert
               ? `Starway by Nadya · ${name}`
-              : `Мій кабінет · ${name}`}
+              : `Кабінет · ${name}`}
         </h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           {isSuperAdmin
@@ -311,46 +352,6 @@ function Greeting({ name, isExpert, isSuperAdmin }: { name: string; isExpert: bo
         {isSuperAdmin ? '⭐ SuperAdmin' : isExpert ? '🎓 Коуч' : '🌱 Учень'}
       </span>
     </div>
-  )
-}
-
-function DashboardRail({
-  items,
-  title,
-}: {
-  items: Array<{ label: string; icon: string; active?: boolean; section?: string }>
-  title?: string
-}) {
-  return (
-    <GlassCard className="h-fit border border-[var(--border)] bg-[var(--bg-secondary)] p-3">
-      {title && (
-        <p className="px-2 pb-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-          {title}
-        </p>
-      )}
-      <div className="space-y-1.5">
-        {items.map(item => (
-          <div key={item.label}>
-            {item.section && (
-              <p className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-                {item.section}
-              </p>
-            )}
-            <div
-              className={[
-                'flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition-all',
-                item.active
-                  ? 'border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--text-primary)]'
-                  : 'border-transparent text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)]',
-              ].join(' ')}
-            >
-              <span className="text-base leading-none">{item.icon}</span>
-              <span className="truncate">{item.label}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </GlassCard>
   )
 }
 
@@ -487,28 +488,7 @@ export default function DashboardPage() {
   const isExpert = role === 'EXPERT' || role === 'SUPERADMIN'
   const name = dashboardUser?.firstName || dashboardUser?.name || 'Користувач'
   const needsAccentSetup = !dashboardUser?.settings?.accentColor && !hasSavedAccentColor()
-  const userRail = [
-    { label: 'Дашборд', icon: '⬛' },
-    { label: 'Мій шлях', icon: '📅', active: true },
-    { label: 'Прогрес', icon: '📊' },
-    { label: 'AI Ментор', icon: '🤖' },
-    { label: 'Безкоштовні практики', icon: '🎁', section: 'Продукти' },
-    { label: 'Мої програми', icon: '📦' },
-    { label: 'Підписка', icon: '💎' },
-    { label: 'Налаштування', icon: '⚙️', section: 'Акаунт' },
-  ]
-  const expertRail = [
-    { label: 'Аналітика', icon: '📊', active: true },
-    { label: 'Учні', icon: '👥' },
-    { label: 'Прогрес учнів', icon: '📈' },
-    { label: 'AI Воронка', icon: '🚀', section: 'Маркетинг' },
-    { label: 'AI Producer', icon: '🎬' },
-    { label: 'AI SEO', icon: '🔍' },
-    { label: 'Реклама', icon: '📣' },
-    { label: 'Мої продукти', icon: '📦', section: 'Продукти' },
-    { label: 'Лідмагніти', icon: '🎯' },
-    { label: 'Telegram', icon: '✈️' },
-  ]
+  const [activeTab, setActiveTab] = useState<'session' | 'products' | 'progress'>('session')
 
   return (
     <div className="space-y-6 p-6">
@@ -537,45 +517,115 @@ export default function DashboardPage() {
       <Greeting name={name} isExpert={isExpert} isSuperAdmin={isSuperAdmin} />
 
       {!isExpert && (
-        <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
-          <DashboardRail items={userRail} />
-          <div className="space-y-5">
-            <GlassCard className="border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
-              <div className="space-y-5">
-                <StatsGrid />
-                <JourneySection />
-              </div>
-            </GlassCard>
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <GlassCard className="border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
-                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-                  Навігація дня
-                </p>
-                <QuickActionsSection onNavigate={navigateTo} />
-              </GlassCard>
-              <div className="space-y-5">
-                <GamificationWidget />
+        <div className="space-y-5">
+          <div className="flex gap-2 border-b border-[var(--border)] pb-1">
+            {([
+              { id: 'session', label: 'Сесія', icon: '📅' },
+              { id: 'products', label: 'Продукти', icon: '🎁' },
+              { id: 'progress', label: 'Прогрес', icon: '↗' },
+            ] as const).map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={[
+                  'flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all',
+                  activeTab === tab.id
+                    ? 'border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--text-primary)]'
+                    : 'border border-transparent text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)]',
+                ].join(' ')}
+              >
+                <span className="text-sm">{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'session' && (
+            <div className="space-y-5">
+              <StatsGrid />
+              <JourneySection />
+              <GamificationWidget />
+              <QuickActionsSection onNavigate={navigateTo} />
+            </div>
+          )}
+
+          {activeTab === 'products' && (
+            <div className="space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
+                Всі продукти
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  { tag: 'free', tagLabel: 'Безкоштовно', title: '5 точок опори', price: 'практикум', path: '/dashboard/courses', locked: false },
+                  { tag: 'trial', tagLabel: 'Тріал', title: 'Система 21', price: '33€ · 21 день', path: '/dashboard/courses', locked: false },
+                  { tag: 'paid', tagLabel: '33€', title: 'Страхи', price: '30 днів', path: '/dashboard/subscription', locked: true },
+                  { tag: 'paid', tagLabel: '33€', title: 'Код змін', price: '30 днів', path: '/dashboard/subscription', locked: true },
+                  { tag: 'paid', tagLabel: '10€', title: 'Стан — ключ до успіху', price: '14 днів', path: '/dashboard/subscription', locked: true },
+                  { tag: 'paid', tagLabel: '150€', title: 'Консультація з Надею', price: '60 хв', path: 'https://t.me/Nadya2316', locked: true },
+                ].map(p => (
+                  <GlassCard
+                    key={p.title}
+                    className={[
+                      'cursor-pointer p-5 transition-all hover:scale-[1.01]',
+                      p.locked ? 'opacity-60' : '',
+                      p.tag === 'free' ? 'border-[var(--color-success)]' : '',
+                    ].join(' ')}
+                    onClick={() => p.path.startsWith('http')
+                      ? window.open(p.path, '_blank')
+                      : navigate(p.path)}
+                  >
+                    <span
+                      className={[
+                        'mb-3 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        p.tag === 'free' ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' :
+                        p.tag === 'trial' ? 'bg-[var(--color-info-bg,var(--bg-tertiary))] text-[var(--accent)]' :
+                        'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
+                      ].join(' ')}
+                    >
+                      {p.locked ? '🔒 ' : ''}{p.tagLabel}
+                    </span>
+                    <p className="font-semibold text-[var(--text-primary)]">{p.title}</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">{p.price}</p>
+                    {p.locked && (
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); navigate('/dashboard/subscription') }}
+                        className="mt-3 w-full rounded-lg border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.08)] py-1.5 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[rgba(var(--accent-rgb),0.15)]"
+                      >
+                        Відкрити доступ →
+                      </button>
+                    )}
+                  </GlassCard>
+                ))}
               </div>
             </div>
-          </div>
+          )}
+
+          {activeTab === 'progress' && (
+            <div className="space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
+                Прогрес
+              </p>
+              <GamificationWidget />
+              <StatsGrid />
+            </div>
+          )}
         </div>
       )}
 
       {isExpert && (
-        <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
-          <DashboardRail items={expertRail} title="Режим коуча" />
+        <div className="space-y-5">
           <GlassCard className="border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
             <div className="mb-5">
               <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
                 {isSuperAdmin ? 'Аналітика платформи' : 'Аналітика коуча'}
               </p>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                {isSuperAdmin ? 'Усі коучі · всі учні · поточний період' : 'Starway by Nadya · поточний період'}
+                {isSuperAdmin ? 'Усі коучі · всі учні' : 'Starway by Nadya · поточний період'}
               </p>
             </div>
             <ExpertStatsSection isSuperAdmin={isSuperAdmin} />
-            <FunnelConversionSection />
-            <AIProducerRecommendations />
           </GlassCard>
         </div>
       )}

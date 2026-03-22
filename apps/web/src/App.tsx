@@ -192,7 +192,7 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
 
         dispatch(setCredentials({ user: newUser, accessToken: newToken }));
         applyUserTheme(newUser);
-        localStorage.setItem('accessToken', newToken);
+        localStorage.setItem('starway_access_token', newToken);
         markReady();
       } catch (error) {
         console.error('[AuthRestore] Failed to restore auth:', error);

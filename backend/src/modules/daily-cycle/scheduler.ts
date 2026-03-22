@@ -22,6 +22,27 @@ import { getNudgeText, getStateMessage, resolveUserState } from '../telegram-men
 import { logger }                  from '../../utils/logger.js'
 import type { Telegraf }           from 'telegraf'
 
+async function getActiveUserChatIds(): Promise<string[]> {
+  const now = new Date()
+  const users = await withRetry(() => prisma.user.findMany({
+    where: {
+      telegramChatId: { not: null },
+      OR: [
+        { trialEndsAt: { gt: now } },
+        {
+          subscriptions: {
+            some: {
+              status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
+            },
+          },
+        },
+      ],
+    },
+    select: { telegramChatId: true },
+  }))
+  return users.map(u => u.telegramChatId!)
+}
+
 let schedulerStarted = false
 const scheduledTasks: ScheduledTask[] = []
 const reminderTimeouts = new Set<NodeJS.Timeout>()
@@ -216,11 +237,7 @@ export const stopDailyScheduler = stopScheduler
 // ═════════════════════════════════════════════════════════════
 
 export async function sendMorningReminders(): Promise<void> {
-  const links = await withRetry(() => prisma.telegramLink.findMany({
-    where:  { isActive: true, chatId: { not: null } },
-    select: { chatId: true },
-  }))
-  const chatIds = links.map(l => l.chatId!)
+  const chatIds = await getActiveUserChatIds()
   console.log(`🌅 Morning reminders → ${chatIds.length} users`)
   await runWithConcurrency(chatIds, 10, chatId =>
     sendTg(chatId, '🌅 Доброго ранку!\n\nЧас для ранкового чекіну.\nНатисни /morning або кнопку 👇')
@@ -228,11 +245,7 @@ export async function sendMorningReminders(): Promise<void> {
 }
 
 export async function sendEveningReminders(): Promise<void> {
-  const links = await withRetry(() => prisma.telegramLink.findMany({
-    where:  { isActive: true, chatId: { not: null } },
-    select: { chatId: true },
-  }))
-  const chatIds = links.map(l => l.chatId!)
+  const chatIds = await getActiveUserChatIds()
   console.log(`🌙 Evening reminders → ${chatIds.length} users`)
   await runWithConcurrency(chatIds, 10, chatId =>
     sendTg(chatId, '🌙 Вечірній чекін!\n\nЯк минув твій день?\nНатисни /evening 👇')
@@ -375,15 +388,11 @@ async function sendWeeklyPdfReports(): Promise<void> {
 }
 
 async function runWheelMonthlyReminder(): Promise<void> {
-  const links = await withRetry(() => prisma.telegramLink.findMany({
-    where:  { isActive: true, chatId: { not: null } },
-    select: { chatId: true },
-  }))
-  const chatIds = links.map(l => l.chatId!)
+  const chatIds = await getActiveUserChatIds()
   await runWithConcurrency(chatIds, 10, chatId =>
     sendTg(chatId, '📊 Час оновити своє колесо балансу! /wheel')
   )
-  console.log(`📬 Wheel reminders: ${chatIds.length} users`)
+  console.log(`📬 Wheel reminders: ${chatIds.length} active users`)
 }
 
 async function runWheelMonthlyReport(): Promise<void> {

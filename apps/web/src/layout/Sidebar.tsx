@@ -48,7 +48,7 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: null,
     visibleTo: [],
     items: [
-      { id: 'dashboard', label: 'Зоряний шлях', icon: '✦', path: '/dashboard', visibleTo: [] },
+      { id: 'dashboard', label: 'Кабінет', icon: '✦', path: '/dashboard', visibleTo: [] },
       { id: 'ai-mentor', label: 'AI Ментор', icon: '🤖', path: '/dashboard/ai-mentor', visibleTo: [] },
       { id: 'progress', label: 'Прогрес', icon: '↗', path: '/dashboard/progress', visibleTo: [] },
     ],
