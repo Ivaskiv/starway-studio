@@ -49,8 +49,9 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     visibleTo: [],
     items: [
       { id: 'dashboard', label: 'Дашборд', icon: '⬛', path: '/dashboard', visibleTo: [] },
-      { id: 'wheel', label: 'Колесо балансу', icon: '⚖️', path: '/dashboard/wheel', visibleTo: [] },
-      { id: 'cycle', label: 'Щоденний цикл', icon: '🔄', path: '/dashboard/cycle', visibleTo: [] },
+      { id: 'ai-mentor', label: 'AI Ментор', icon: '🤖', path: '/dashboard/ai-mentor', visibleTo: [] },
+      { id: 'wheel', label: 'Колесо балансу', icon: '⚖️', path: '/dashboard/wheel', visibleTo: ['EXPERT', 'SUPERADMIN', 'ADMIN', 'MENTOR', 'PRODUCT_OWNER'] },
+      { id: 'cycle', label: 'Щоденний цикл', icon: '🔄', path: '/dashboard/cycle', visibleTo: ['EXPERT', 'SUPERADMIN', 'ADMIN', 'MENTOR', 'PRODUCT_OWNER'] },
       { id: 'progress', label: 'Прогрес', icon: '↗', path: '/dashboard/progress', visibleTo: [] },
     ],
   },
@@ -60,7 +61,6 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'AI система',
     visibleTo: [],
     items: [
-      { id: 'ai-mentor', label: 'AI Ментор', icon: '🤖', path: '/dashboard/ai-mentor', visibleTo: [] },
       { id: 'ai-funnel', label: 'AI Воронка', icon: '🚀', path: ROUTES.AI_FUNNEL_BUILDER, visibleTo: ['EXPERT', 'SUPERADMIN'] },
       { id: 'ai-producer', label: 'AI Producer', icon: '🎬', path: '/dashboard/ai-producer', visibleTo: ['EXPERT', 'SUPERADMIN'] },
       { id: 'ai-seo', label: 'AI SEO', icon: '📊', path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },

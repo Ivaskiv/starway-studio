@@ -1,4 +1,5 @@
 import { Bot, Sparkles } from 'lucide-react'
+import { ROUTES } from '@/config/routes'
 
 import { useMentorAccess } from '../hooks/useMentorAccess'
 import { useMentorOnboarding } from '../hooks/useMentorOnboarding'
@@ -13,8 +14,10 @@ import { SetupWizard } from '../components/SetupWizard'
 import AIMentorChat from '../components/AIMentorChat'
 import { GlassCard } from '@/ui'
 import GamificationWidget from '@/features/gamification/components/GamificationWidget'
+import { useNavigate } from 'react-router-dom'
 
 export default function AIMentorPage() {
+  const navigate = useNavigate()
   const access = useMentorAccess()
   const onboarding = useMentorOnboarding()
 
@@ -26,6 +29,13 @@ export default function AIMentorPage() {
   const shouldShowSetup =
     access.level !== 'none' && setupProgress?.currentStep !== 'complete'
 
+  const tabs = [
+    { id: 'session', label: 'Сесія', path: ROUTES.AI_MENTOR, active: true },
+    { id: 'wheel', label: 'Колесо', path: ROUTES.WHEEL, active: false },
+    { id: 'report', label: 'Звіт', path: `${ROUTES.PROGRESS}?tab=report`, active: false },
+    { id: 'progress', label: 'Прогрес', path: ROUTES.PROGRESS, active: false },
+  ] as const
+
   return (
     <div className="space-y-6">
 
@@ -34,6 +44,26 @@ export default function AIMentorPage() {
         isOnboarding={onboarding.isOnboarding}
         progress={onboarding.getProgressPercentage()}
       />
+
+      <div className="flex flex-wrap gap-2">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => {
+              if (!tab.active) navigate(tab.path)
+            }}
+            className={[
+              'rounded-xl border px-4 py-2 text-sm font-medium transition-colors',
+              tab.active
+                ? 'border-[rgba(var(--accent-rgb),0.45)] bg-[rgba(var(--accent-rgb),0.16)] text-white'
+                : 'border-white/12 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white',
+            ].join(' ')}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       <GamificationWidget />
 

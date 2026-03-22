@@ -108,10 +108,42 @@ function StatsGrid() {
 
 function JourneySection() {
   const { data: trial, isLoading } = useGetTrialStatusQuery()
+  const navigate = useNavigate()
   if (isLoading || !trial?.isActive) return null
 
   const totalDays = trial.daysLeft + trial.currentDay
   const currentDay = trial.currentDay
+  const now = new Date()
+  const isMorningDone = false
+  const isEveningDone = false
+  const isAfterMorning = now.getHours() >= 9
+  const isAfterEvening = now.getHours() >= 21
+
+  const tasks = [
+    {
+      icon: '🌞',
+      title: 'Ранкові питання',
+      sub: '6 питань · ~5 хв',
+      status: isMorningDone ? 'done' : isAfterMorning ? 'pending' : 'locked',
+      path: '/dashboard/cycle?session=morning',
+    },
+    {
+      icon: '🌙',
+      title: 'Вечірня рефлексія',
+      sub: 'Афірмації + підсумок дня',
+      status: isEveningDone ? 'done' : isAfterEvening ? 'pending' : 'locked',
+      path: '/dashboard/cycle?session=evening',
+    },
+    {
+      icon: '⚖️',
+      title: 'Колесо балансу',
+      sub: trial.hasDay4Mirror ? 'Наступне через 27 дн.' : 'День 4 — перший аналіз',
+      status: trial.hasDay4Mirror ? 'done' : currentDay >= 4 ? 'pending' : 'locked',
+      path: '/dashboard/wheel',
+    },
+  ] as const
+
+  const nextTask = tasks.find(task => task.status === 'pending') ?? tasks[0]
 
   return (
     <section className="space-y-4">
@@ -198,11 +230,7 @@ function JourneySection() {
           </p>
         </div>
         <div className="divide-y divide-[var(--border)] p-4">
-          {[
-            { icon: '🌞', title: 'Ранок', sub: '7 питань · ~5 хв', status: 'done' },
-            { icon: '🌙', title: 'Вечір', sub: 'Відкривається о 21:00', status: 'pending' },
-            { icon: '⚖️', title: 'Колесо балансу', sub: 'Раз на місяць (+одна додаткова перегенерація+ нагадування через місяць+аналіз-звіт в профіль користувача', status: 'locked' },
-          ].map(task => (
+          {tasks.map(task => (
             <div key={task.title} className="flex items-center gap-3 py-3">
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--bg-tertiary)] text-sm">
                 {task.icon}
@@ -226,7 +254,7 @@ function JourneySection() {
           ))}
           <button
             className="mt-3 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
-            onClick={() => { window.location.href = '/dashboard/cycle' }}
+            onClick={() => navigate(nextTask.path)}
           >
             ▶ Продовжити день
           </button>

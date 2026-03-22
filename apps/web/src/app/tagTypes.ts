@@ -54,6 +54,7 @@ export const TAG_TYPES = [
 
   'Questions',
   'Answers',
+  'Courses',
 
   'AI',
   'AIMentor',
