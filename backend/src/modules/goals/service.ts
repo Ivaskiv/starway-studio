@@ -62,7 +62,7 @@ export async function checkChoiceAlignment(
   if (!alignment.aligns) {
     // Save betrayal record
     await prisma.$executeRaw`
-      INSERT INTO choice_betrayals (user_id, choice, primary_goal, reason, created_at)
+      INSERT INTO choice_betrayals ("userId", choice, "primaryGoal", reason, "createdAt")
       VALUES (${userId}, ${choice}, ${goal.text}, ${alignment.reason}, NOW())
     `;
   }
