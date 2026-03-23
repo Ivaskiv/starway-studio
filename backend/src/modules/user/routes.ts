@@ -3,6 +3,7 @@ import { prisma } from '../../db/client.js'
 import { Role } from '@starway/db/prisma-client'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { authRequired } from '../auth/middleware/auth.js'
+import { requireUser } from '../../utils/requireUser.js'
 
 const router = Router()
 
@@ -114,6 +115,32 @@ router.put('/:id/settings', authRequired, async (req: AuthenticatedRequest, res:
   })
 
   return res.json(updated.settings)
+})
+
+router.patch('/email', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const user = requireUser(req, res)
+  if (!user) return
+
+  const userId = user.id
+  const { email } = req.body as { email?: string }
+
+  if (!email || !email.includes('@')) {
+    res.status(400).json({ error: 'INVALID_EMAIL' })
+    return
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } })
+  if (existing && existing.id !== userId) {
+    res.status(409).json({ error: 'EMAIL_TAKEN' })
+    return
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { email },
+  })
+
+  res.json({ ok: true })
 })
 
 export default router

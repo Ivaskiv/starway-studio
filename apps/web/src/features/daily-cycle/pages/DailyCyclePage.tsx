@@ -1,4 +1,5 @@
 import { ROUTES } from '@/config/routes';
+import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api';
 import { GlassCard } from '@/ui';
 import { ArrowRight, CheckCircle2, Clock3, HeartPulse } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -24,6 +25,62 @@ const STEPS = [
 
 export default function DailyCyclePage() {
   const navigate = useNavigate();
+  const { data: trial } = useGetTrialStatusQuery();
+  const hasAccess = (trial?.isActive ?? false) || (trial?.isPaid ?? false);
+
+  if (!hasAccess) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-6 p-6">
+        <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
+          <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+              ЩОДЕННИЙ ЦИКЛ
+            </p>
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">
+              Зафіксуй свій стан дня
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Ранкові питання та вечірня рефлексія доступні
+              з активним тріалом або підпискою.
+            </p>
+          </div>
+          <div className="space-y-3 p-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { icon: '🌞', label: 'Ранкові питання', sub: '6 питань · ~5 хв · о 09:00' },
+                { icon: '🌙', label: 'Вечірня рефлексія', sub: 'Афірмації + підсумок · о 21:00' },
+              ].map(item => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-3 text-center"
+                >
+                  <span className="text-xl">{item.icon}</span>
+                  <p className="mt-2 text-xs font-medium text-[var(--text-primary)]">
+                    {item.label}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">{item.sub}</p>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+              onClick={() => navigate('/dashboard/ai-mentor')}
+            >
+              ▶ Розпочати 7 днів безкоштовно
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] py-3 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+              onClick={() => navigate('/dashboard/subscription')}
+            >
+              Переглянути плани →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

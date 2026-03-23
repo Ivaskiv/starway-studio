@@ -27,8 +27,12 @@ const CTA_DELAY_MS      = 60 * 60 * 1000   // 1 год до нагадуванн
 export async function startTrial(userId: string): Promise<User> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { trialStartsAt: true, role: true },
+    select: { email: true, trialStartsAt: true, role: true },
   })
+
+  if (user?.email?.startsWith('telegram-guest-')) {
+    throw Object.assign(new Error('EMAIL_REQUIRED'), { code: 'EMAIL_REQUIRED' })
+  }
 
   if (user?.trialStartsAt && user?.role !== 'SUPERADMIN') {
     throw new Error('TRIAL_ALREADY_USED')

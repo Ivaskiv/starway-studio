@@ -83,7 +83,7 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   { path: '/dashboard/goals/trial-mirror', element: <TrialMirror />, ability: 'mentor.goals', showDeniedScreen: true },
   { path: '/dashboard/goals/weekly-mirror', element: <WeeklyMirror />, ability: 'mentor.goals', showDeniedScreen: true },
   { path: '/dashboard/actions', element: <Actions />, ability: 'mentor.actions', showDeniedScreen: true },
-  { path: '/dashboard/courses', element: <Courses />, ability: 'products.manage', showDeniedScreen: true },
+  { path: '/dashboard/courses', element: <Courses />, ability: 'dashboard.view' },
   { path: '/dashboard/ai-mentor', element: <AIMentor />, ability: 'mentor.core' },
   { path: '/dashboard/ai-generator', element: <AIGenerator />, ability: 'ai.basic' },
   { path: '/dashboard/ai-funnel', element: <AIFunnelBuilder />, ability: 'ai.basic' },

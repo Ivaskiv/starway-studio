@@ -117,6 +117,7 @@ app.use('/api/aIMentor', mentorRoutes);
   app.use('/api/goals', goalsRoutes);
   app.use('/api/trial', trialRoutes);
   app.use('/api/user', userStateRoutes);
+  app.use('/api/user', userRoutes);
   app.use('/api/quota', quotaRoutes);
 app.use("/api/affiliate", affiliateRoutes)
 app.use('/api/lead-magnet', leadMagnetRoutes)

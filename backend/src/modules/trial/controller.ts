@@ -28,6 +28,9 @@ export async function startTrialHandler(req: AuthenticatedRequest, res: Response
     })
     return res.status(200).json(user);
   } catch (error: any) {
+    if (error instanceof Error && error.message === 'EMAIL_REQUIRED') {
+      return res.status(400).json({ error: 'EMAIL_REQUIRED' });
+    }
     if (error instanceof Error && error.message === 'SUBSCRIPTION_REQUIRED') {
       return res.status(403).json({ error: 'Потрібна активна підписка для запуску тріалу' });
     }

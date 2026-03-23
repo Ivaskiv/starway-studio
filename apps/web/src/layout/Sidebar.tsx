@@ -60,6 +60,7 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     visibleTo: ['USER'],
     items: [
       { id: 'courses', label: 'Практики', icon: '🎁', path: '/dashboard/courses', visibleTo: ['USER'] },
+      { id: 'products', label: 'Продукти', icon: '📦', path: '/dashboard/products', visibleTo: ['USER'] },
       { id: 'zoom', label: 'Zoom-сесії', icon: '📹', path: '/dashboard/zoom', visibleTo: ['USER'] },
       { id: 'subscription', label: 'Підписка', icon: '💎', path: '/dashboard/subscription', visibleTo: ['USER'] },
     ],
@@ -107,6 +108,7 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     items: [
       { id: 'users', label: 'Всі користувачі', icon: '👥', path: '/dashboard/admin/users', visibleTo: ['SUPERADMIN'] },
       { id: 'revenue', label: 'Revenue', icon: '💰', path: '/dashboard/admin/revenue', visibleTo: ['SUPERADMIN'] },
+      { id: 'roles', label: 'Ролі юзерів', icon: '🎭', path: '/dashboard/admin/roles', visibleTo: ['SUPERADMIN'] },
       { id: 'transfer', label: 'Transfer', icon: '🔄', path: '/dashboard/admin/transfer-ownership', visibleTo: ['SUPERADMIN'] },
     ],
   },

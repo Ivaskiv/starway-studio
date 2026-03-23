@@ -111,11 +111,12 @@ function JourneySection() {
     </div>
   )
 
-  const hasEverStarted = !!(trial?.startedAt ?? trial?.currentDay)
-  const isTrialExpired = !trial?.isActive && hasEverStarted
-  const isPaid = trial?.isPaid ?? false
-  const isLocked = isTrialExpired && !isPaid
-  const hasNoTrial = !trial?.isActive && !hasEverStarted
+  const hasEverStarted = (trial?.currentDay ?? 0) > 0
+    || (trial?.startedAt != null && trial.startedAt !== null)
+  const isTrialExpired  = !trial?.isActive && hasEverStarted
+  const isPaid          = trial?.isPaid ?? false
+  const isLocked        = isTrialExpired && !isPaid
+  const hasNoTrial      = !trial?.isActive && !hasEverStarted
   const totalDays = (trial?.daysLeft ?? 0) + (trial?.currentDay ?? 1)
   const currentDay = trial?.currentDay ?? 1
   const isJustStarted = (trial?.currentDay ?? 0) === 1 && (trial?.progress ?? 0) < 5
@@ -127,7 +128,7 @@ function JourneySection() {
 
   if (hasNoTrial) return (
     <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
-      <div className="p-5">
+      <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
           МІЙ ШЛЯХ
         </p>
@@ -136,9 +137,11 @@ function JourneySection() {
         </h2>
         <p className="mt-2 text-sm text-[var(--text-muted)]">
           7 днів безкоштовно — ранкові питання, вечірня рефлексія,
-          колесо балансу та AI аналіз твого стану.
+          колесо балансу та AI аналіз стану.
         </p>
-        <div className="mt-4 grid grid-cols-3 gap-3">
+      </div>
+      <div className="p-4">
+        <div className="mb-4 grid grid-cols-3 gap-3">
           {[
             { icon: '🌞', label: 'Ранкові питання', sub: 'щодня о 09:00' },
             { icon: '🌙', label: 'Вечірня рефлексія', sub: 'щодня о 21:00' },
@@ -148,7 +151,7 @@ function JourneySection() {
               key={item.label}
               className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-3 text-center"
             >
-              <span className="text-2xl">{item.icon}</span>
+              <span className="text-xl">{item.icon}</span>
               <p className="mt-2 text-xs font-medium text-[var(--text-primary)]">{item.label}</p>
               <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">{item.sub}</p>
             </div>
@@ -156,7 +159,7 @@ function JourneySection() {
         </div>
         <button
           type="button"
-          className="mt-4 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+          className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
           onClick={() => navigate('/dashboard/ai-mentor')}
         >
           ▶ Розпочати 7 днів безкоштовно
@@ -165,19 +168,25 @@ function JourneySection() {
     </div>
   )
 
-  const tasks = [
+  const tasks: Array<{
+    icon: string
+    title: string
+    sub: string
+    status: 'done' | 'pending' | 'locked' | 'time-locked'
+    path: string
+  }> = [
     {
       icon: '🌞',
       title: 'Ранкові питання',
       sub: '6 питань · ~5 хв',
-      status: isMorningDone ? 'done' : isAfterMorning ? 'pending' : 'locked',
+      status: isMorningDone ? 'done' : isAfterMorning ? 'pending' : 'time-locked',
       path: '/dashboard/cycle?session=morning',
     },
     {
       icon: '🌙',
       title: 'Вечірня рефлексія',
       sub: 'Афірмації + підсумок дня',
-      status: isEveningDone ? 'done' : isAfterEvening ? 'pending' : 'locked',
+      status: isEveningDone ? 'done' : isAfterEvening ? 'pending' : 'time-locked',
       path: '/dashboard/cycle?session=evening',
     },
     {
@@ -187,7 +196,7 @@ function JourneySection() {
       status: (trial?.hasDay4Mirror ?? false) ? 'done' : currentDay >= 4 ? 'pending' : 'locked',
       path: '/dashboard/wheel',
     },
-  ] as const
+  ]
 
   const nextTask = tasks.find(task => task.status === 'pending') ?? tasks[0]
 
@@ -284,7 +293,7 @@ function JourneySection() {
                 className={[
                   'w-14 flex-shrink-0 rounded-xl border p-2 text-center transition-all',
                   isLocked
-                    ? 'border-[var(--border)] opacity-30 grayscale'
+                    ? 'border-[var(--border)] opacity-25 grayscale cursor-not-allowed'
                     : isDone
                       ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]'
                       : isToday
@@ -332,7 +341,13 @@ function JourneySection() {
         </div>
         <div className="divide-y divide-[var(--border)] p-4">
           {tasks.map(task => (
-            <div key={task.title} className="flex items-center gap-3 py-3">
+            <div
+              key={task.title}
+              className={[
+                'flex items-center gap-3 py-3',
+                isLocked ? 'pointer-events-none opacity-40' : '',
+              ].join(' ')}
+            >
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--bg-tertiary)] text-sm">
                 {task.icon}
               </div>
@@ -345,27 +360,36 @@ function JourneySection() {
                   'flex-shrink-0 rounded-full px-2 py-1 text-xs',
                   task.status === 'done' ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' :
                   task.status === 'pending' ? 'bg-[var(--bg-tertiary)] text-[var(--accent)]' :
+                  task.status === 'time-locked' ? 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]' :
                   'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
                 ].join(' ')}
               >
                 {task.status === 'done' ? '✓ Готово' :
-                  task.status === 'pending' ? 'Сьогодні' : '🔒'}
+                  task.status === 'pending' ? 'Сьогодні' :
+                  task.status === 'time-locked' ? (
+                    <span className="flex items-center gap-1">
+                      <span>🕐</span>
+                      <span>{task.title === 'Ранкові питання' ? '09:00' : '21:00'}</span>
+                    </span>
+                  ) : '🔒'}
               </span>
             </div>
           ))}
-          {!isLocked ? (
+          {isLocked ? (
             <button
-              className="mt-3 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
-              onClick={() => navigate(nextTask.path)}
-            >
-              ▶ Продовжити день
-            </button>
-          ) : (
-            <button
+              type="button"
               className="mt-3 w-full rounded-xl border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.08)] py-3 text-sm font-medium text-[var(--accent)] transition-all hover:bg-[rgba(var(--accent-rgb),0.15)]"
               onClick={() => navigate('/dashboard/subscription')}
             >
               Розблокувати доступ →
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="mt-3 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+              onClick={() => navigate(nextTask.path)}
+            >
+              ▶ Продовжити день
             </button>
           )}
         </div>
@@ -390,10 +414,10 @@ function Greeting({ name, isExpert, isSuperAdmin }: { name: string; isExpert: bo
         </h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           {isSuperAdmin
-            ? 'Повний доступ — всі коучі та учні'
+            ? 'Повний доступ — всі коучі, учні, аналітика'
             : isExpert
-              ? 'Starway by Nadya — панель коуча'
-              : 'Твій особистий простір зростання та трансформації'}
+              ? 'Панель коуча — учні, продукти, AI-система'
+              : 'Твій особистий простір зростання'}
         </p>
       </div>
       <span
@@ -545,7 +569,7 @@ export default function DashboardPage() {
   const isExpert = role === 'EXPERT' || role === 'SUPERADMIN'
   const name = dashboardUser?.firstName || dashboardUser?.name || 'Користувач'
   const needsAccentSetup = !dashboardUser?.settings?.accentColor && !hasSavedAccentColor()
-  const [activeTab, setActiveTab] = useState<'session' | 'products' | 'progress'>('session')
+  const [activeTab, setActiveTab] = useState<'session' | 'progress'>('session')
 
   return (
     <div className="space-y-6 p-6">
@@ -578,7 +602,6 @@ export default function DashboardPage() {
           <div className="flex gap-2 border-b border-[var(--border)] pb-1">
             {([
               { id: 'session', label: 'Сесія', icon: '📅' },
-              { id: 'products', label: 'Продукти', icon: '🎁' },
               { id: 'progress', label: 'Прогрес', icon: '↗' },
             ] as const).map(tab => (
               <button
@@ -603,58 +626,6 @@ export default function DashboardPage() {
               <StatsGrid />
               <JourneySection />
               <QuickActionsSection onNavigate={navigateTo} />
-            </div>
-          )}
-
-          {activeTab === 'products' && (
-            <div className="space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-                Всі продукти
-              </p>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {[
-                  { tag: 'free', tagLabel: 'Безкоштовно', title: '5 точок опори', price: 'практикум', path: '/dashboard/courses', locked: false },
-                  { tag: 'trial', tagLabel: 'Тріал', title: 'Система 21', price: '33€ · 21 день', path: '/dashboard/courses', locked: false },
-                  { tag: 'paid', tagLabel: '33€', title: 'Страхи', price: '30 днів', path: '/dashboard/subscription', locked: true },
-                  { tag: 'paid', tagLabel: '33€', title: 'Код змін', price: '30 днів', path: '/dashboard/subscription', locked: true },
-                  { tag: 'paid', tagLabel: '10€', title: 'Стан — ключ до успіху', price: '14 днів', path: '/dashboard/subscription', locked: true },
-                  { tag: 'paid', tagLabel: '150€', title: 'Консультація з Надею', price: '60 хв', path: 'https://t.me/Nadya2316', locked: true },
-                ].map(p => (
-                  <GlassCard
-                    key={p.title}
-                    className={[
-                      'cursor-pointer p-5 transition-all hover:scale-[1.01]',
-                      p.locked ? 'opacity-60' : '',
-                      p.tag === 'free' ? 'border-[var(--color-success)]' : '',
-                    ].join(' ')}
-                    onClick={() => p.path.startsWith('http')
-                      ? window.open(p.path, '_blank')
-                      : navigate(p.path)}
-                  >
-                    <span
-                      className={[
-                        'mb-3 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                        p.tag === 'free' ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' :
-                        p.tag === 'trial' ? 'bg-[var(--color-info-bg,var(--bg-tertiary))] text-[var(--accent)]' :
-                        'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-                      ].join(' ')}
-                    >
-                      {p.locked ? '🔒 ' : ''}{p.tagLabel}
-                    </span>
-                    <p className="font-semibold text-[var(--text-primary)]">{p.title}</p>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">{p.price}</p>
-                    {p.locked && (
-                      <button
-                        type="button"
-                        onClick={e => { e.stopPropagation(); navigate('/dashboard/subscription') }}
-                        className="mt-3 w-full rounded-lg border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.08)] py-1.5 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[rgba(var(--accent-rgb),0.15)]"
-                      >
-                        Відкрити доступ →
-                      </button>
-                    )}
-                  </GlassCard>
-                ))}
-              </div>
             </div>
           )}
 

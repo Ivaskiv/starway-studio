@@ -72,6 +72,7 @@ export const ROUTES = {
   AI_FUNNEL_BUILDER: '/dashboard/ai-funnel',
   AI_PRODUCER_CONSOLE: '/dashboard/ai-producer-console',
   AI_PRODUCER_ASSISTANT: '/producer/assistant',
+  ADMIN_ROLES: '/dashboard/admin/roles',
   DEV_ROUTES: '/dev/routes',
 
 } as const;
@@ -261,6 +262,11 @@ export const ROUTE_METADATA: Record<RoutePath, {
   },
   '/dashboard/ai-producer-console': {
     title: 'AI Producer Console',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  '/dashboard/admin/roles': {
+    title: 'Управління ролями',
     requiresAuth: true,
     requiresPaid: false,
   },
