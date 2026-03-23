@@ -45,6 +45,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .text-\[var\(--accent\)\] {
+    color: #397bcd;
+  }
+
+  .text-\[var\(--text-muted\)\] {
+    color: #aeb4bb;
+  }
+}
+
 
 // ══════════════════════════════════════════════════════════════
 // INLINE GLOBAL STYLES (не виносяться в окремі файли)

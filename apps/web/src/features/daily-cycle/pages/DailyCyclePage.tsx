@@ -91,7 +91,19 @@ const MORNING_AFFIRMATION =
 const EVENING_AFFIRMATION =
   'Я вдячна цьому дню. Я стала сильнішою. Я обираю рухатися далі — до себе справжньої.'
 
-export default function DailyCyclePage() {
+type DailyCycleFlowProps = {
+  embedded?: boolean
+  initialSession?: 'morning' | 'evening'
+  onClose?: () => void
+  onComplete?: () => void
+}
+
+export function DailyCycleFlow({
+  embedded = false,
+  initialSession,
+  onClose,
+  onComplete,
+}: DailyCycleFlowProps) {
   const navigate = useNavigate()
   const { data: trial } = useGetTrialStatusQuery()
   const hasAccess = (trial?.isActive ?? false) || (trial?.isPaid ?? false)
@@ -99,13 +111,14 @@ export default function DailyCyclePage() {
   const hour = now.getHours()
 
   const sessionFromUrl = new URLSearchParams(window.location.search).get('session')
-  const defaultSession = sessionFromUrl === 'evening'
-    ? 'evening'
-    : sessionFromUrl === 'morning'
-      ? 'morning'
-      : hour >= 21
-        ? 'evening'
-        : 'morning'
+  const defaultSession = initialSession
+    ?? (sessionFromUrl === 'evening'
+      ? 'evening'
+      : sessionFromUrl === 'morning'
+        ? 'morning'
+        : hour >= 21
+          ? 'evening'
+          : 'morning')
 
   const [session, setSession] = useState<'morning' | 'evening'>(defaultSession)
   const [answers, setAnswers] = useState<Record<string, string>>({})
@@ -118,10 +131,13 @@ export default function DailyCyclePage() {
   const currentQ = questions[step]
   const isLastStep = step === questions.length - 1
   const progress = Math.round((step / questions.length) * 100)
+  const shellClassName = embedded
+    ? 'space-y-4'
+    : 'mx-auto max-w-xl space-y-4 p-4'
 
   if (!hasAccess) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center p-6">
+      <div className={embedded ? 'p-4' : 'flex min-h-[60vh] flex-col items-center justify-center p-6'}>
         <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
           <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
@@ -150,7 +166,7 @@ export default function DailyCyclePage() {
 
   if (submitted) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center p-6">
+      <div className={embedded ? 'p-4' : 'flex min-h-[60vh] flex-col items-center justify-center p-6'}>
         <div className="w-full max-w-md space-y-5">
           <div className="overflow-hidden rounded-2xl border border-[var(--color-success)] bg-[var(--color-success-bg)]">
             <div className="p-5 text-center">
@@ -194,16 +210,28 @@ export default function DailyCyclePage() {
             <button
               type="button"
               className="flex-1 rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
-              onClick={() => navigate('/dashboard/ai-mentor')}
+              onClick={() => {
+                if (embedded) {
+                  onComplete?.()
+                  return
+                }
+                navigate('/dashboard/ai-mentor')
+              }}
             >
-              AI Ментор →
+              {embedded ? 'Готово' : 'AI Ментор →'}
             </button>
             <button
               type="button"
               className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
-              onClick={() => navigate('/dashboard')}
+              onClick={() => {
+                if (embedded) {
+                  onClose?.()
+                  return
+                }
+                navigate('/dashboard')
+              }}
             >
-              Кабінет
+              {embedded ? 'Закрити' : 'Кабінет'}
             </button>
           </div>
         </div>
@@ -255,6 +283,7 @@ export default function DailyCyclePage() {
         }
 
         setSubmitted(true)
+        onComplete?.()
       } catch (e) {
         console.error('[DailyCycle] submit failed:', e)
       } finally {
@@ -267,15 +296,26 @@ export default function DailyCyclePage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 p-4">
+    <div className={shellClassName}>
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard')}
-          className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
-        >
-          ← Кабінет
-        </button>
+        {!embedded && (
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+          >
+            ← Кабінет
+          </button>
+        )}
+        {embedded && (
+          <button
+            type="button"
+            onClick={() => onClose?.()}
+            className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+          >
+            Закрити ✕
+          </button>
+        )}
         <div className="flex gap-2">
           {(['morning', 'evening'] as const).map(s => (
             <button
@@ -397,4 +437,8 @@ export default function DailyCyclePage() {
       </div>
     </div>
   )
+}
+
+export default function DailyCyclePage() {
+  return <DailyCycleFlow />
 }

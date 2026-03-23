@@ -9,7 +9,10 @@ import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 type WheelCooldown = {
   canFill: boolean;
-  daysLeft: number;
+  regenCount: number;
+  regenLeft: number;
+  nextWheelAt: string | null;
+  lastWheelAt: string | null;
 };
 
 type WheelHistoryResponse = {
@@ -118,13 +121,9 @@ export const wheelApi = api.injectEndpoints({
     /* =========================
        Cooldown (anti-abuse)
     ========================== */
-    getWheelCooldown: builder.query<WheelCooldown, string>({
+    getWheelCooldown: builder.query<WheelCooldown, string | void>({
       query: () => ({
         url: '/wheel/cooldown',
-      }),
-      transformResponse: (response: any): WheelCooldown => ({
-        canFill: Boolean(response?.canFill),
-        daysLeft: Number(response?.daysLeft ?? 0),
       }),
       providesTags: ['WheelCooldown'],
     }),

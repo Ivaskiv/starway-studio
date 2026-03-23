@@ -138,8 +138,11 @@ export interface WheelNotificationPayload {
 }
 
 export interface WheelCooldownStatus {
-  active: boolean
-  remainingMs: number
+  canFill: boolean
+  regenCount: number
+  regenLeft: number
+  nextWheelAt: string | null
+  lastWheelAt: string | null
 }
 
 export interface WheelResponsePayload {

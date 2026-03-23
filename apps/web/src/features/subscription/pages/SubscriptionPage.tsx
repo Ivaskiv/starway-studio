@@ -150,7 +150,7 @@ export default function SubscriptionPage() {
             <div
               key={plan.id}
               className={[
-                'relative overflow-hidden rounded-2xl p-6 flex flex-col transition-all duration-300',
+                'relative rounded-2xl px-6 pb-6 pt-8 flex flex-col transition-all duration-300',
                 plan.highlighted
                   ? 'bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-purple-500/15 border-2 border-purple-500/40 shadow-[0_20px_80px_rgba(168,85,247,0.35)]'
                   : 'bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-white/[0.07] border border-white/[0.1]',
@@ -158,7 +158,7 @@ export default function SubscriptionPage() {
               ].join(' ')}
             >
               <div className={[
-                'absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-300',
+                'absolute inset-0 rounded-2xl opacity-0 hover:opacity-100 transition-opacity duration-300',
                 plan.highlighted
                   ? 'bg-[radial-gradient(circle_at_50%_50%,rgba(168,85,247,0.15),transparent_70%)]'
                   : 'bg-[radial-gradient(circle_at_50%_50%,rgba(var(--accent-rgb),0.1),transparent_70%)]',

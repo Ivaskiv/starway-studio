@@ -1,31 +1,28 @@
 // frontend/src/pages/DashboardPage.tsx
 
-import { ROUTES } from '@/config/routes'
 import { useAppSelector } from '@/app/hooks'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { ABILITIES } from '@/features/auth/permissions/abilities'
 import { selectUserRole } from '@/features/auth/services/auth.slice'
 import { useAbility } from '@/features/auth/utils/can'
+import { DailyCycleFlow } from '@/features/daily-cycle/pages/DailyCyclePage'
 import GamificationWidget from '@/features/gamification/components/GamificationWidget'
-import { useSmartNavigation } from '@/hooks/useSmartNavigation'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
+import { WheelChart } from '@/features/wheel/components/WheelChart'
+import { WheelForm } from '@/features/wheel/components/WheelForm'
+import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
+import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
 import { hasSavedAccentColor } from '@/theme/accent.utils'
 import { GlassCard } from '@/ui'
 import {
-  ArrowRight,
-  Calendar,
-  Lock,
-  Target,
-  TrendingUp,
-  Zap,
+  BarChart3,
+  CalendarDays,
+  Download,
+  RefreshCcw,
+  X,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-type NavFn = (
-  path: string,
-  opts?: { requiresAuth?: boolean; requiresPaid?: boolean }
-) => boolean
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -70,6 +67,12 @@ const FALLBACK_ACTIVITY: ActivityItem[] = [
   { id: '3', icon: '📝', text: 'Щоденний цикл заповнено', time: 'Вчора' },
 ]
 
+const WHEEL_LABEL_MAP = new Map(WHEEL_CATEGORIES.map(item => [item.id, item.nameUk]))
+const WHEEL_EMOJI_MAP = new Map(WHEEL_CATEGORIES.map(item => [item.id, item.emoji]))
+
+const formatWheelDate = (value: Date) =>
+  value.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
+
 // ─── StatsGrid ─────────────────────────────────────────────────────────────
 
 function StatsGrid() {
@@ -80,31 +83,49 @@ function StatsGrid() {
   const stats = dashboardUser?.stats ?? FALLBACK_STATS
 
   const STATS = [
-    { label: 'Streak', value: stats.streak ?? FALLBACK_STATS.streak, Icon: Zap, gradient: 'from-accent from-400 to-accent to-500', description: 'Днів поспіль' },
-    { label: 'Дії', value: stats.actions ?? FALLBACK_STATS.actions, Icon: Target, gradient: 'from-green-400 to-emerald-500', description: 'Цього тижня' },
-    { label: 'Прогрес', value: stats.progress ?? FALLBACK_STATS.progress, Icon: TrendingUp, gradient: 'from-blue-400 to-cyan-500', description: 'Загальний' },
-    { label: 'Стабільність', value: stats.stability ?? FALLBACK_STATS.stability, Icon: Calendar, gradient: 'from-purple-400 to-violet-500', description: 'Днів з циклом' },
+    { label: 'Streak', value: stats.streak ?? FALLBACK_STATS.streak, sub: 'Днів поспіль', icon: '🔥' },
+    { label: 'Дії', value: stats.actions ?? FALLBACK_STATS.actions, sub: 'Цього тижня', icon: '⚡' },
+    { label: 'Прогрес', value: stats.progress ?? FALLBACK_STATS.progress, sub: 'Загальний', icon: '📈' },
+    { label: 'Стабільність', value: stats.stability ?? FALLBACK_STATS.stability, sub: 'Днів з циклом', icon: '🗓' },
   ]
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {STATS.map(({ label, value, Icon, gradient, description }) => (
-        <GlassCard key={label} className="p-5 hover:scale-[1.02] transition-transform">
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-3`}>
-            <Icon className="w-5 h-5 text-white" />
+    <div className="flex items-center gap-0 overflow-hidden rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+      {STATS.map(({ label, value, sub, icon }, idx) => (
+        <div
+          key={label}
+          className={[
+            'flex min-w-0 flex-1 items-center gap-2.5 px-4 py-3',
+            idx < STATS.length - 1
+              ? 'border-r border-[var(--border-primary)]'
+              : '',
+          ].join(' ')}
+        >
+          <span className="flex-shrink-0 text-xl">{icon}</span>
+          <div className="min-w-0">
+            <p className="text-base font-bold leading-none text-[var(--text-primary)]">
+              {value}
+            </p>
+            <p className="mt-0.5 truncate text-[10px] text-[var(--text-muted)]">
+              {label} · {sub}
+            </p>
           </div>
-          <p className="text-2xl font-bold text-[var(--text-primary)]">{value}</p>
-          <p className="text-sm text-[var(--text-muted)] mt-0.5">{label}</p>
-          <p className="text-xs text-[var(--text-muted-light)] mt-1">{description}</p>
-        </GlassCard>
+        </div>
       ))}
     </div>
   )
 }
 
-function JourneySection() {
+function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) {
+  const { user } = useAuth()
   const { data: trial, isLoading } = useGetTrialStatusQuery()
   const navigate = useNavigate()
+  const dashboardUser = user as DashboardUser
+  const userId = dashboardUser?.id
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', {
+    skip: !userId,
+  })
+  const [embeddedSession, setEmbeddedSession] = useState<'morning' | 'evening' | null>(null)
   if (isLoading) return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-6 text-center">
       <p className="text-sm text-[var(--text-muted)]">Завантажуємо твій шлях...</p>
@@ -125,10 +146,26 @@ function JourneySection() {
   const isEveningDone = false
   const isAfterMorning = now.getHours() >= 9
   const isAfterEvening = now.getHours() >= 21
+  const currentDate = new Date()
+  const lastWheelDate = latestWheel
+    ? new Date(latestWheel.completedAt ?? latestWheel.createdAt)
+    : null
+  const nextWheelDate = lastWheelDate
+    ? new Date(lastWheelDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+    : null
+  const formatShortDate = (value: Date) =>
+    value.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
+  const wheelSubtitle = lastWheelDate
+    ? `Було ${formatShortDate(lastWheelDate)} · далі ${nextWheelDate ? formatShortDate(nextWheelDate) : '—'}`
+    : 'Пройти колесо балансу'
+  const wheelStatus: 'done' | 'pending' =
+    lastWheelDate
+      ? nextWheelDate && nextWheelDate <= currentDate ? 'pending' : 'done'
+      : 'pending'
 
   if (hasNoTrial) return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
-      <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+    <div className="overflow-hidden rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(255,255,255,0.02))] p-5">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
           МІЙ ШЛЯХ
         </p>
@@ -149,7 +186,7 @@ function JourneySection() {
           ].map(item => (
             <div
               key={item.label}
-              className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-3 text-center"
+              className="rounded-xl border border-[var(--border-primary)] bg-[rgba(255,255,255,0.03)] p-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
             >
               <span className="text-xl">{item.icon}</span>
               <p className="mt-2 text-xs font-medium text-[var(--text-primary)]">{item.label}</p>
@@ -192,13 +229,26 @@ function JourneySection() {
     {
       icon: '⚖️',
       title: 'Колесо балансу',
-      sub: (trial?.hasDay4Mirror ?? false) ? 'Наступне через 27 дн.' : 'День 4 — перший аналіз',
-      status: (trial?.hasDay4Mirror ?? false) ? 'done' : currentDay >= 4 ? 'pending' : 'locked',
+      sub: wheelSubtitle,
+      status: wheelStatus,
       path: '/dashboard/wheel',
     },
   ]
 
   const nextTask = tasks.find(task => task.status === 'pending') ?? tasks[0]
+  const openTask = (task: (typeof tasks)[number]) => {
+    if (isLocked) return
+    if (task.path.startsWith('/dashboard/cycle')) {
+      const session = task.path.includes('evening') ? 'evening' : 'morning'
+      setEmbeddedSession(session)
+      return
+    }
+    if (task.path === '/dashboard/wheel') {
+      onOpenWheelFrame()
+      return
+    }
+    navigate(task.path)
+  }
 
   return (
     <section className="space-y-4">
@@ -213,8 +263,8 @@ function JourneySection() {
         </div>
       )}
       {isTrialExpired && !isPaid && (
-        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
-          <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+        <div className="overflow-hidden rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+          <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(255,255,255,0.02))] p-5">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
               ТВІЙ ШЛЯХ · ПАУЗА
             </p>
@@ -234,7 +284,7 @@ function JourneySection() {
             ].map(p => (
               <div
                 key={p.key}
-                className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-primary,var(--bg-secondary))] px-4 py-3"
+                className="flex items-center justify-between rounded-xl border border-[var(--border-primary)] bg-[rgba(255,255,255,0.02)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
               >
                 <div>
                   <p className="text-sm font-medium text-[var(--text-primary)]">{p.plan}</p>
@@ -253,75 +303,55 @@ function JourneySection() {
           </div>
         </div>
       )}
-      <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-        <span className="text-2xl font-bold text-[var(--accent)]">🔥 {currentDay}</span>
-        <div>
-          <p className="text-sm font-medium text-[var(--text-primary)]">день поспіль</p>
-          <p className="text-xs text-[var(--text-muted)]">День {currentDay} з {totalDays} · залишилось {trial?.daysLeft ?? 0} дн.</p>
-        </div>
-        <div className="ml-auto flex gap-1.5">
-          {Array.from({ length: Math.min(totalDays, 7) }).map((_, i) => {
-            const day = i + 1
-            const isDone = day < currentDay
-            const isToday = day === currentDay
-            return (
-              <div
-                key={day}
-                className={[
-                  'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium transition-all',
-                  isDone ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' :
-                  isToday ? 'bg-[var(--accent)] text-white' :
-                  'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
-                ].join(' ')}
-              >
-                {isDone ? '✓' : day}
+      <div className="overflow-hidden rounded-[24px] border border-[rgba(var(--accent-rgb),0.16)] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] shadow-[0_18px_48px_rgba(0,0,0,0.22),0_0_0_1px_rgba(var(--accent-rgb),0.05),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-18px_28px_rgba(0,0,0,0.12)]">
+        <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.18),rgba(255,255,255,0.02)_58%,rgba(255,255,255,0.01))] p-5">
+          <div className="mb-4 border-b border-[rgba(255,255,255,0.06)] pb-4">
+            <div className="flex items-center gap-3">
+            <span className="text-2xl font-bold text-[var(--accent)]">🔥 {currentDay}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[var(--text-primary)]">день поспіль</p>
+              <p className="text-xs text-[var(--text-muted)]">День {currentDay} з {totalDays} · залишилось {trial?.daysLeft ?? 0} дн.</p>
+            </div>
+            <div className="ml-auto overflow-x-auto pb-1">
+              <div className="flex gap-2" style={{ width: 'max-content' }}>
+                {Array.from({ length: totalDays }).map((_, i) => {
+                  const day = i + 1
+                  const isDone = day < currentDay
+                  const isToday = day === currentDay
+                  return (
+                    <div
+                      key={day}
+                      className={[
+                        'w-11 flex-shrink-0 rounded-2xl px-2 py-1.5 text-center transition-all',
+                        isLocked
+                          ? 'bg-[rgba(255,255,255,0.02)] opacity-25 grayscale cursor-not-allowed'
+                          : isDone
+                            ? 'bg-[rgba(120,190,120,0.14)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+                            : isToday
+                              ? 'bg-[rgba(var(--accent-rgb),0.16)] ring-1 ring-[rgba(var(--accent-rgb),0.28)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+                              : 'bg-[rgba(255,255,255,0.03)] opacity-70'
+                      ].join(' ')}
+                    >
+                      <div
+                        className={[
+                          'text-sm font-medium leading-none',
+                          isDone ? 'text-[var(--color-success)]' :
+                          isToday ? 'text-[var(--accent)]' :
+                          'text-[var(--text-muted)]'
+                        ].join(' ')}
+                      >
+                        {day}
+                      </div>
+                      <div className="mt-0.5 text-[8px] text-[var(--text-muted)]">
+                        {isDone ? 'готово' : isToday ? 'зараз' : '🔒'}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="overflow-x-auto pb-1">
-        <div className="flex gap-2" style={{ width: 'max-content' }}>
-          {Array.from({ length: totalDays }).map((_, i) => {
-            const day = i + 1
-            const isDone = day < currentDay
-            const isToday = day === currentDay
-            return (
-              <div
-                key={day}
-                className={[
-                  'w-14 flex-shrink-0 rounded-xl border p-2 text-center transition-all',
-                  isLocked
-                    ? 'border-[var(--border)] opacity-25 grayscale cursor-not-allowed'
-                    : isDone
-                      ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]'
-                      : isToday
-                        ? 'border-2 border-[var(--accent)] bg-[var(--bg-secondary)]'
-                        : 'border-[var(--border)] opacity-40'
-                ].join(' ')}
-              >
-                <div
-                  className={[
-                    'text-base font-medium',
-                    isDone ? 'text-[var(--color-success)]' :
-                    isToday ? 'text-[var(--accent)]' :
-                    'text-[var(--text-muted)]'
-                  ].join(' ')}
-                >
-                  {day}
-                </div>
-                <div className="text-[9px] text-[var(--text-muted)]">
-                  {isDone ? 'готово' : isToday ? 'зараз' : '🔒'}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
-        <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+            </div>
+          </div>
+          </div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
             ДЕНЬ {currentDay} · МІЙ ШЛЯХ
           </p>
@@ -345,10 +375,17 @@ function JourneySection() {
               key={task.title}
               className={[
                 'flex items-center gap-3 py-3',
+                task.status === 'pending' || task.status === 'done' ? 'cursor-pointer' : '',
                 isLocked ? 'pointer-events-none opacity-40' : '',
               ].join(' ')}
+              onClick={() => {
+                if (isLocked) return
+                if (task.status === 'pending' || task.status === 'done') {
+                  openTask(task)
+                }
+              }}
             >
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--bg-tertiary)] text-sm">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[rgba(255,255,255,0.03)] text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                 {task.icon}
               </div>
               <div className="min-w-0 flex-1">
@@ -375,10 +412,24 @@ function JourneySection() {
               </span>
             </div>
           ))}
+        </div>
+        {embeddedSession && (
+          <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)]">
+            <div className="p-4">
+              <DailyCycleFlow
+                embedded
+                initialSession={embeddedSession}
+                onClose={() => setEmbeddedSession(null)}
+                onComplete={() => setEmbeddedSession(null)}
+              />
+            </div>
+          </div>
+        )}
+        <div className="px-3 pb-3 pt-1">
           {isLocked ? (
             <button
               type="button"
-              className="mt-3 w-full rounded-xl border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.08)] py-3 text-sm font-medium text-[var(--accent)] transition-all hover:bg-[rgba(var(--accent-rgb),0.15)]"
+              className="w-full rounded-t-[18px] rounded-b-[20px] border border-[rgba(var(--accent-rgb),0.18)] border-t-[rgba(255,255,255,0.10)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(var(--accent-rgb),0.08))] py-3 text-sm font-medium text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(var(--accent-rgb),0.08)] transition-all hover:bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.16),rgba(var(--accent-rgb),0.10))]"
               onClick={() => navigate('/dashboard/subscription')}
             >
               Розблокувати доступ →
@@ -386,8 +437,8 @@ function JourneySection() {
           ) : (
             <button
               type="button"
-              className="mt-3 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
-              onClick={() => navigate(nextTask.path)}
+              className="w-full rounded-t-[18px] rounded-b-[20px] border border-[rgba(var(--accent-rgb),0.20)] border-t-[rgba(255,255,255,0.14)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.92),rgba(var(--accent-rgb),0.78))] py-3 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_14px_34px_rgba(var(--accent-rgb),0.26)] transition-all hover:brightness-110"
+              onClick={() => openTask(nextTask)}
             >
               ▶ Продовжити день
             </button>
@@ -399,11 +450,26 @@ function JourneySection() {
 }
 
 function Greeting({ name, isExpert, isSuperAdmin }: { name: string; isExpert: boolean; isSuperAdmin: boolean }) {
+  if (!isExpert && !isSuperAdmin) {
+    return (
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xl font-semibold text-[var(--text-primary)]">
+            Твій особистий простір зростання
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
+          🌱 Учень
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
         <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-          {isSuperAdmin ? 'SuperAdmin' : isExpert ? 'Кабінет коуча' : 'Мій кабінет'}
+          {isSuperAdmin ? 'SuperAdmin' : 'Кабінет коуча'}
         </p>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
           {isSuperAdmin
@@ -425,68 +491,12 @@ function Greeting({ name, isExpert, isSuperAdmin }: { name: string; isExpert: bo
           'mt-2 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium',
           isSuperAdmin
             ? 'border-[var(--accent)] bg-[var(--accent-bg,var(--bg-secondary))] text-[var(--accent)]'
-            : isExpert
-              ? 'border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]'
-              : 'border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)]',
+            : 'border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]',
         ].join(' ')}
       >
-        {isSuperAdmin ? '⭐ SuperAdmin' : isExpert ? '🎓 Коуч' : '🌱 Учень'}
+        {isSuperAdmin ? '⭐ SuperAdmin' : '🎓 Коуч'}
       </span>
     </div>
-  )
-}
-
-// ─── QuickActionsSection ──────────────────────────────────────────────────────
-
-function QuickActionsSection({ onNavigate }: { onNavigate: NavFn }) {
-  const { user } = useAuth()
-  const dashboardUser = user as DashboardUser
-  const abilities = dashboardUser?.abilities ?? []
-
-  const can = (ability: string) => abilities.includes(ability)
-
-  const ACTIONS = [
-    { icon: '🤖', title: 'AI сесія', desc: 'Поговори з ментором', path: ROUTES.AI_MENTOR, paid: false, gradient: 'from-accent from-400 to-accent to-500', ability: ABILITIES.MENTOR_CORE },
-    { icon: '📝', title: 'Щоденний цикл', desc: 'Зафіксуй стан дня', path: ROUTES.CYCLE, paid: false, gradient: 'from-blue-400 to-cyan-500', ability: ABILITIES.DASHBOARD_VIEW },
-    { icon: '⚖️', title: 'Колесо балансу', desc: 'Оціни сфери життя', path: ROUTES.WHEEL, paid: false, gradient: 'from-purple-400 to-pink-500', ability: ABILITIES.WHEEL_VIEW },
-    { icon: '📊', title: 'Прогрес', desc: 'Твоя аналітика', path: ROUTES.PROGRESS, paid: false, gradient: 'from-green-400 to-emerald-500', ability: ABILITIES.PROGRESS_VIEW },
-    { icon: '🎯', title: 'Бачення', desc: 'Визнач точку Б', path: ROUTES.VISION, paid: true, gradient: 'from-yellow-400 to-orange-500', ability: ABILITIES.MENTOR_VISION },
-    { icon: '🎬', title: 'Zoom-сесія', desc: 'Живе заняття', path: ROUTES.ZOOM, paid: true, gradient: 'from-indigo-400 to-purple-500', ability: ABILITIES.MENTOR_ZOOM },
-  ]
-
-  return (
-    <section>
-      <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">Швидкі дії</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {ACTIONS.map((a) => {
-          const hasAccess = can(a.ability)
-          return (
-            <GlassCard
-              key={a.path}
-              className={`p-5 group relative overflow-hidden transition-all ${hasAccess ? 'cursor-pointer hover:scale-[1.02]' : 'opacity-60 cursor-not-allowed'}`}
-              onClick={() => hasAccess && onNavigate(a.path, { requiresAuth: true, requiresPaid: a.paid })}
-            >
-              <div className={`absolute inset-0 bg-gradient-to-br ${a.gradient} opacity-0 group-hover:opacity-10 transition-opacity`} />
-              {a.paid && !hasAccess && (
-                <span className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] border border-[var(--border)] text-[10px] text-[var(--text-muted)] font-semibold">
-                  <Lock className="w-3 h-3" /> Paid
-                </span>
-              )}
-              <div className="relative">
-                <div className="text-3xl mb-3">{a.icon}</div>
-                <p className="font-bold text-[var(--text-primary)] mb-1 group-hover:text-[var(--accent)] transition-colors">{a.title}</p>
-                <p className="text-xs text-[var(--text-muted-light)]">{a.desc}</p>
-                {hasAccess && (
-                  <div className="flex items-center gap-1 mt-3 text-xs text-[var(--accent)] font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
-                    Відкрити <ArrowRight className="w-3 h-3" />
-                  </div>
-                )}
-              </div>
-            </GlassCard>
-          )
-        })}
-      </div>
-    </section>
   )
 }
 
@@ -514,20 +524,20 @@ function ExpertStatsSection({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           {isSuperAdmin ? 'Загальна воронка — всі коучі' : 'AI Воронка — конверсія'}
         </h2>
         {[
-          { label: 'Лідмагніт', value: '—', pct: 100 },
-          { label: 'Реєстрація', value: '—', pct: 60 },
-          { label: 'Активація', value: '—', pct: 40 },
-          { label: 'Підписка', value: '—', pct: 13 },
+          { label: 'Лідмагніт', value: '—', pct: 100, color: '#4d9de0' },
+          { label: 'Реєстрація', value: '—', pct: 60, color: '#3a7bd5' },
+          { label: 'Активація', value: '—', pct: 40, color: '#2d6bc4' },
+          { label: 'Підписка', value: '—', pct: 13, color: '#1f5aad' },
         ].map(f => (
           <div key={f.label} className="mb-3 flex items-center gap-3">
             <span className="w-24 flex-shrink-0 text-xs text-[var(--text-muted)]">{f.label}</span>
             <div className="h-1.5 flex-1 rounded-full bg-[var(--border)]">
               <div
-                className="h-full rounded-full bg-[var(--accent)] transition-all"
-                style={{ width: `${f.pct}%` }}
+                className="h-full rounded-full transition-all"
+                style={{ width: `${f.pct}%`, background: f.color }}
               />
             </div>
-            <span className="w-6 text-right text-xs text-[var(--text-muted)]">{f.value}</span>
+            <span className="w-6 text-right text-xs text-[#4d9de0]">{f.value}</span>
           </div>
         ))}
       </GlassCard>
@@ -555,11 +565,246 @@ function FunnelConversionSection() { return null }
 
 function AIProducerRecommendations() { return null }
 
+function WheelStatusNotice({ onOpenInline }: { onOpenInline: () => void }) {
+  const { user } = useAuth()
+  const dashboardUser = user as DashboardUser
+  const userId = dashboardUser?.id
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', {
+    skip: !userId,
+  })
+
+  const now = new Date()
+  const lastWheelDate = latestWheel
+    ? new Date(latestWheel.completedAt ?? latestWheel.createdAt)
+    : null
+  const nextWheelDate = lastWheelDate
+    ? new Date(lastWheelDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+    : null
+
+  const needsWheel = !lastWheelDate || (nextWheelDate ? nextWheelDate <= now : false)
+
+  if (!needsWheel) return null
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[rgba(var(--accent-rgb),0.18)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.08),rgba(255,255,255,0.02))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+            КОЛЕСО БАЛАНСУ
+          </p>
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            {!lastWheelDate ? 'Пройти колесо балансу' : 'Час оновити колесо балансу'}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {!lastWheelDate
+              ? 'Ще не було жодного проходження. Заповни 8 сфер і отримай новий зріз стану.'
+              : `Було ${formatWheelDate(lastWheelDate)} · наступне було заплановане на ${nextWheelDate ? formatWheelDate(nextWheelDate) : '—'}`}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpenInline}
+          className="rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-white transition-all hover:brightness-110"
+        >
+          Відкрити колесо →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function WheelInlineFrame({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean
+  onClose: () => void
+}) {
+  const { user } = useAuth()
+  const accessToken = useAppSelector(state => state.auth.accessToken)
+  const dashboardUser = user as DashboardUser
+  const userId = dashboardUser?.id
+
+  const {
+    data: latestWheel,
+    isLoading,
+    refetch,
+  } = useGetLatestWheelAssessmentQuery(userId ?? '', {
+    skip: !userId || !isOpen,
+    refetchOnFocus: true,
+    pollingInterval: isOpen ? 30_000 : 0,
+  })
+
+  if (!isOpen || !userId) return null
+
+  const lastWheelDate = latestWheel
+    ? new Date(latestWheel.completedAt ?? latestWheel.createdAt)
+    : null
+  const nextWheelDate = lastWheelDate
+    ? new Date(lastWheelDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+    : null
+  const weakestId = latestWheel?.gaps?.[0]
+  const strongestId = latestWheel?.strengths?.[0]
+  const weakestLabel = weakestId ? (WHEEL_LABEL_MAP.get(weakestId) ?? weakestId) : '—'
+  const strongestLabel = strongestId ? (WHEEL_LABEL_MAP.get(strongestId) ?? strongestId) : '—'
+  const weakestEmoji = weakestId ? (WHEEL_EMOJI_MAP.get(weakestId) ?? '⚖️') : '⚖️'
+  const strongestEmoji = strongestId ? (WHEEL_EMOJI_MAP.get(strongestId) ?? '✨') : '✨'
+  const summaryText = latestWheel?.notes?.trim()
+    ? latestWheel.notes
+    : `Зараз найбільше уваги просить сфера "${weakestLabel}". Найсильніша опора — "${strongestLabel}".`
+
+  const handleDownloadPdf = async () => {
+    if (!latestWheel?.id) return
+    try {
+      const headers: Record<string, string> = {}
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+      const response = await fetch(`/api/wheel/${latestWheel.id}/pdf`, {
+        headers,
+        credentials: 'include',
+      })
+      if (!response.ok) throw new Error('pdf_failed')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `wheel-report-${new Date().toISOString().slice(0, 10)}.pdf`
+      anchor.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+    } catch (error) {
+      console.error('[Dashboard] wheel pdf failed:', error)
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-[24px] border border-[rgba(var(--accent-rgb),0.18)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.10),rgba(255,255,255,0.02))] shadow-[0_18px_50px_rgba(0,0,0,0.18),0_0_0_1px_rgba(var(--accent-rgb),0.06),inset_0_1px_0_rgba(255,255,255,0.08)]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[rgba(255,255,255,0.06)] p-5">
+        <div>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+            КОЛЕСО БАЛАНСУ
+          </p>
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">
+            {!latestWheel ? 'Заповни колесо прямо тут' : 'Твій зріз стану по 8 сферах'}
+          </h2>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {!latestWheel
+              ? 'Форма відкривається в кабінеті. Якщо пройдеш колесо в Telegram або miniapp, цей блок оновиться автоматично.'
+              : `Було ${lastWheelDate ? formatWheelDate(lastWheelDate) : '—'} · наступне ${nextWheelDate ? formatWheelDate(nextWheelDate) : '—'}`}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {latestWheel && (
+            <>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
+              >
+                <RefreshCcw className="h-3.5 w-3.5" />
+                Оновити
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-medium text-white transition-all hover:brightness-110"
+              >
+                <Download className="h-3.5 w-3.5" />
+                PDF звіт
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
+          >
+            <X className="h-3.5 w-3.5" />
+            Закрити
+          </button>
+        </div>
+      </div>
+
+      <div className="p-5">
+        {isLoading ? (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-8 text-center text-sm text-[var(--text-muted)]">
+            Завантажуємо колесо балансу...
+          </div>
+        ) : latestWheel ? (
+          <div className="grid gap-5 lg:grid-cols-[minmax(320px,1.1fr)_minmax(280px,0.9fr)]">
+            <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.12)] bg-[rgba(255,255,255,0.02)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <WheelChart scores={latestWheel.scores} size={340} />
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+                  Короткий звіт
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                  {summaryText}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.08)] p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-success)]">
+                    Сильна сфера
+                  </p>
+                  <p className="mt-2 flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
+                    <span>{strongestEmoji}</span>
+                    <span>{strongestLabel}</span>
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[rgba(245,158,11,0.24)] bg-[rgba(245,158,11,0.08)] p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+                    Сфера фокусу
+                  </p>
+                  <p className="mt-2 flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
+                    <span>{weakestEmoji}</span>
+                    <span>{weakestLabel}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+                <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+                  Легенда
+                </p>
+                <div className="space-y-2">
+                  {latestWheel.scores.map(score => {
+                    const label = WHEEL_LABEL_MAP.get(score.categoryId) ?? score.categoryId
+                    const emoji = WHEEL_EMOJI_MAP.get(score.categoryId) ?? '•'
+                    return (
+                      <div key={score.categoryId} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="inline-flex min-w-0 items-center gap-2 text-[var(--text-secondary)]">
+                          <span>{emoji}</span>
+                          <span className="truncate">{label}</span>
+                        </span>
+                        <span className="rounded-full bg-[var(--bg-tertiary)] px-2 py-1 font-medium text-[var(--text-primary)]">
+                          {score.score}/10
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <WheelForm
+            userId={userId}
+            onComplete={() => void refetch()}
+            onCancel={onClose}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── DashboardPage ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { navigateTo } = useSmartNavigation()
   const navigate = useNavigate()
 
   const dashboardUser = user as DashboardUser
@@ -570,6 +815,7 @@ export default function DashboardPage() {
   const name = dashboardUser?.firstName || dashboardUser?.name || 'Користувач'
   const needsAccentSetup = !dashboardUser?.settings?.accentColor && !hasSavedAccentColor()
   const [activeTab, setActiveTab] = useState<'session' | 'progress'>('session')
+  const [showWheelFrame, setShowWheelFrame] = useState(false)
 
   return (
     <div className="space-y-6 p-6">
@@ -599,33 +845,39 @@ export default function DashboardPage() {
 
       {!isExpert && (
         <div className="space-y-5">
-          <div className="flex gap-2 border-b border-[var(--border)] pb-1">
+          <WheelStatusNotice onOpenInline={() => setShowWheelFrame(true)} />
+          <WheelInlineFrame
+            isOpen={showWheelFrame}
+            onClose={() => setShowWheelFrame(false)}
+          />
+          <div className="h-px bg-[rgba(255,255,255,0.06)]" />
+          <div className="overflow-x-auto no-scrollbar">
+            <div className="app-tabs-shell">
             {([
-              { id: 'session', label: 'Сесія', icon: '📅' },
-              { id: 'progress', label: 'Прогрес', icon: '↗' },
+              { id: 'session', label: 'Сесія', Icon: CalendarDays },
+              { id: 'progress', label: 'Прогрес', Icon: BarChart3 },
             ] as const).map(tab => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={[
-                  'flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all',
+                  'app-tab',
                   activeTab === tab.id
-                    ? 'border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.12)] text-[var(--text-primary)]'
-                    : 'border border-transparent text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)]',
+                    ? 'app-tab-active'
+                    : 'app-tab-inactive',
                 ].join(' ')}
               >
-                <span className="text-sm">{tab.icon}</span>
+                <tab.Icon className="h-4 w-4 shrink-0" />
                 {tab.label}
               </button>
             ))}
+            </div>
           </div>
 
           {activeTab === 'session' && (
             <div className="space-y-5">
-              <StatsGrid />
-              <JourneySection />
-              <QuickActionsSection onNavigate={navigateTo} />
+              <JourneySection onOpenWheelFrame={() => setShowWheelFrame(true)} />
             </div>
           )}
 

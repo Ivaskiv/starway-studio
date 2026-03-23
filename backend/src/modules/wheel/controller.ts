@@ -4,12 +4,12 @@ import { trackEvent } from '../events/service.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import { createWheelPDF } from './pdf.js'
 import {
-  canFillWheel,
   executeWheelWorkflow,
   findFocus,
   findWeakest,
   getLatestWheel,
   getWheelAnalytics,
+  getWheelCooldown,
   getWheelHistory,
   scoresFromMap,
 } from './service.js'
@@ -153,16 +153,15 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
     const bypassCooldown = isSuperAdmin || isExpertOwner
 
     if (!bypassCooldown) {
-      const cooldown = await canFillWheel(userId)
+      const cooldown = await getWheelCooldown(userId)
 
-      if (cooldown.active) {
-        const nextAvailableAt = new Date(Date.now() + cooldown.remainingMs)
+      if (!cooldown.canFill && cooldown.regenLeft <= 0) {
         return res.status(409).json({
-          error: 'wheel_cooldown_active',
-          message: 'Колесо балансу можна проходити лише 1 раз на 24 години',
-          detail: 'Щоб відстежувати реальні зміни у житті',
-          remainingMs: cooldown.remainingMs,
-          nextAvailableAt
+          error: 'WHEEL_QUOTA_EXCEEDED',
+          message: 'Ліміт оновлень колеса вичерпано',
+          detail: 'Нове колесо буде доступне після завершення 30-денного циклу',
+          regenLeft: cooldown.regenLeft,
+          nextWheelAt: cooldown.nextWheelAt,
         })
       }
     }
@@ -176,7 +175,8 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
       expertId,
       balanceConfigId,
       scores,
-      userContext
+      userContext,
+      bypassCooldown,
     })
 
     const state = await resolveUserState(userId).catch(() => null)
@@ -218,11 +218,11 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
         detail: 'Неможливо знайти конфігурацію колеса'
       })
     }
-    if (message === 'wheel_cooldown_active') {
+    if (message === 'WHEEL_QUOTA_EXCEEDED') {
       return res.status(409).json({
-        error: 'wheel_cooldown_active',
-        message: 'Колесо балансу можна проходити лише 1 раз на 24 години',
-        detail: 'Щоб відстежувати реальні зміни у житті',
+        error: 'WHEEL_QUOTA_EXCEEDED',
+        message: 'Ліміт оновлень колеса вичерпано',
+        detail: 'Нове колесо буде доступне після завершення 30-денного циклу',
       })
     }
 
@@ -251,20 +251,18 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
 
 export async function getWheelCooldownHandler(req: AuthenticatedRequest, res: Response) {
   try {
-    const userId = req.user!.id
-    const status = await canFillWheel(userId)
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const status = await getWheelCooldown(userId)
     const state = await resolveUserState(userId).catch(() => null)
     await trackEvent({
       userId,
       type: 'web_wheel_cooldown_viewed',
       source: 'web',
       state,
-      payload: {
-        active: status.active,
-        remainingMs: status.remainingMs,
-      },
+      payload: { ...status },
     })
-    return res.json({ success: true, ...status })
+    return res.json(status)
   } catch (error) {
     console.error('❌ getWheelCooldown', error)
     return res.status(500).json({ error: 'server_error' })

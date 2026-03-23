@@ -59,8 +59,11 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Мій розвиток',
     visibleTo: ['USER'],
     items: [
+      { id: 'cycle', label: 'Щоденний цикл', icon: '📝', path: '/dashboard/cycle', visibleTo: ['USER'] },
+      { id: 'wheel', label: 'Колесо балансу', icon: '⚖️', path: '/dashboard/wheel', visibleTo: ['USER'] },
       { id: 'courses', label: 'Практики', icon: '🎁', path: '/dashboard/courses', visibleTo: ['USER'] },
       { id: 'products', label: 'Продукти', icon: '📦', path: '/dashboard/products', visibleTo: ['USER'] },
+      { id: 'vision', label: 'Бачення', icon: '🎯', path: '/dashboard/vision', visibleTo: ['USER'] },
       { id: 'zoom', label: 'Zoom-сесії', icon: '📹', path: '/dashboard/zoom', visibleTo: ['USER'] },
       { id: 'subscription', label: 'Підписка', icon: '💎', path: '/dashboard/subscription', visibleTo: ['USER'] },
     ],

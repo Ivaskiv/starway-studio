@@ -98,6 +98,48 @@
 // ── Tabs ──────────────────────────────────────────────────────
 .theme-swatch-tabs-bar { display:flex; gap:.25rem; }
 
+.app-tabs-shell {
+  display: inline-flex;
+  align-items: flex-end;
+  padding-bottom: .25rem;
+}
+
+.app-tab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: .5rem;
+  border-right: 1px solid rgba(255,255,255,.18);
+  border-bottom: 1px solid rgba(255,255,255,.18);
+  border-left: 0;
+  border-top: 0;
+  border-bottom-right-radius: .75rem;
+  padding: .625rem 1rem;
+  font-size: .875rem;
+  font-weight: 600;
+  transition: all var(--duration-fast) var(--ease-standard);
+}
+
+.app-tab + .app-tab { margin-left: -1px; }
+
+.app-tab-active {
+  color: var(--text-primary);
+  border-color: rgba(var(--accent-rgb), .42);
+  background: rgba(var(--accent-rgb), .20);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), .18);
+}
+
+.app-tab-inactive {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,.07);
+  border-color: rgba(255,255,255,.18);
+}
+
+.app-tab-inactive:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,.11);
+}
+
 // ── Scrollbar ─────────────────────────────────────────────────
 ::-webkit-scrollbar { width:5px;height:5px; }
 ::-webkit-scrollbar-track { background:rgba(255,255,255,.02); }

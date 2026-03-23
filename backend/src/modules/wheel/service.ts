@@ -34,6 +34,7 @@ export interface WheelWorkflowOptions {
   balanceConfigId: string
   scores: WheelScore[]
   userContext: WheelUserContext
+  bypassCooldown?: boolean
 }
 
 export interface WheelWorkflowResult {
@@ -46,7 +47,8 @@ export interface WheelWorkflowResult {
   cooldown: WheelCooldownStatus
 }
 
-const COOLDOWN_MS = 24 * 60 * 60 * 1000
+const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000
+const MAX_REGEN_COUNT = 3
 const APP_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173'
 
 const SCORE_ERROR = 'wheel_invalid_spheres_set'
@@ -67,6 +69,20 @@ export function scoresToMap(scores: WheelScore[]): WheelScoreMap {
     acc[score.categoryId] = score.score
     return acc
   }, {} as WheelScoreMap)
+}
+
+function extractRegenCount(value: unknown): number {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 0
+  const raw = (value as Record<string, unknown>).__regenCount
+  const parsed = Number(raw ?? 0)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function buildStoredScoreMap(scores: WheelScore[], regenCount: number): Prisma.InputJsonValue {
+  return {
+    ...scoresToMap(scores),
+    __regenCount: Math.max(0, regenCount),
+  } satisfies Prisma.JsonObject
 }
 
 export function scoresFromMap(value: unknown): WheelScore[] {
@@ -90,18 +106,38 @@ export function findFocus(scores: WheelScore[], weakest: WheelScore): WheelScore
   return filtered.sort((a, b) => b.score - a.score)[0] ?? weakest
 }
 
-export async function canFillWheel(userId: string): Promise<WheelCooldownStatus> {
-  const lastEntry = await prisma.userBalanceEntry.findFirst({
+export async function getWheelCooldown(userId: string): Promise<WheelCooldownStatus> {
+  const latest = await prisma.userBalanceEntry.findFirst({
     where: { userId },
     orderBy: { createdAt: 'desc' },
-    select: { createdAt: true },
+    select: {
+      createdAt: true,
+      scores: true,
+    },
   })
-  if (!lastEntry) return { active: false, remainingMs: 0 }
+  if (!latest) {
+    return {
+      canFill: true,
+      regenCount: 0,
+      regenLeft: MAX_REGEN_COUNT,
+      nextWheelAt: null,
+      lastWheelAt: null,
+    }
+  }
 
-  const elapsed = Date.now() - lastEntry.createdAt.getTime()
-  if (elapsed >= COOLDOWN_MS) return { active: false, remainingMs: 0 }
+  const now = new Date()
+  const lastDate = new Date(latest.createdAt)
+  const nextWheelAt = new Date(lastDate.getTime() + COOLDOWN_MS)
+  const canStartNew = now >= nextWheelAt
+  const regenCount = extractRegenCount(latest.scores)
 
-  return { active: true, remainingMs: COOLDOWN_MS - elapsed }
+  return {
+    canFill: canStartNew,
+    regenCount: canStartNew ? 0 : regenCount,
+    regenLeft: canStartNew ? MAX_REGEN_COUNT : Math.max(0, MAX_REGEN_COUNT - regenCount),
+    nextWheelAt: nextWheelAt.toISOString(),
+    lastWheelAt: lastDate.toISOString(),
+  }
 }
 
 export function getLatestWheel(userId: string): Promise<UserBalanceEntry | null> {
@@ -254,10 +290,8 @@ export async function addWheelMicroTasks(userId: string, weakest: WheelScore) {
 }
 
 export async function executeWheelWorkflow(options: WheelWorkflowOptions): Promise<WheelWorkflowResult> {
-  const { userId, expertId, balanceConfigId, scores, userContext } = options
+  const { userId, expertId, balanceConfigId, scores, userContext, bypassCooldown = false } = options
   validateScores(scores)
-  // cooldown перевіряється в controller перед викликом цієї функції
-  const cooldown: WheelCooldownStatus = { active: false, remainingMs: 0 }
   
   const weakest = findWeakest(scores)
   const focus = findFocus(scores, weakest)
@@ -280,15 +314,50 @@ export async function executeWheelWorkflow(options: WheelWorkflowOptions): Promi
     adaptiveMissions: missions,
   }
 
-  const entry = await prisma.userBalanceEntry.create({
-    data: {
-      userId,
-      expertId,
-      balanceConfigId,
-      scores: scoresToMap(scores) as Prisma.InputJsonValue,
-      note: analysis,
-    },
-  })
+  const cooldownBeforeSave = await getWheelCooldown(userId)
+
+  if (!bypassCooldown && !cooldownBeforeSave.canFill && cooldownBeforeSave.regenLeft <= 0) {
+    throw new Error('WHEEL_QUOTA_EXCEEDED')
+  }
+
+  let entry: UserBalanceEntry
+
+  if (!bypassCooldown && !cooldownBeforeSave.canFill) {
+    const latest = await prisma.userBalanceEntry.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (latest) {
+      entry = await prisma.userBalanceEntry.update({
+        where: { id: latest.id },
+        data: {
+          scores: buildStoredScoreMap(scores, cooldownBeforeSave.regenCount + 1),
+          note: analysis,
+        },
+      })
+    } else {
+      entry = await prisma.userBalanceEntry.create({
+        data: {
+          userId,
+          expertId,
+          balanceConfigId,
+          scores: buildStoredScoreMap(scores, 0),
+          note: analysis,
+        },
+      })
+    }
+  } else {
+    entry = await prisma.userBalanceEntry.create({
+      data: {
+        userId,
+        expertId,
+        balanceConfigId,
+        scores: buildStoredScoreMap(scores, 0),
+        note: analysis,
+      },
+    })
+  }
 
   const analytics = await getWheelAnalytics(userId)
   const gamification = await gatherGamificationSnapshot(userId)
@@ -339,6 +408,8 @@ export async function executeWheelWorkflow(options: WheelWorkflowOptions): Promi
   if (!telegramResult.ok) {
     console.error('Telegram notification failed at wheel creation', telegramResult)
   }
+
+  const cooldown = await getWheelCooldown(userId)
 
   return {
     entry,

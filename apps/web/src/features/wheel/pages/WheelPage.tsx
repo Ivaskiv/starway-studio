@@ -115,16 +115,39 @@ export const WheelPage = () => {
     ? new Date(lastAssessmentDate.getTime() + 30 * 24 * 60 * 60 * 1000)
     : null;
 
-  const canFill =
-    isSuperAdmin ||
-    (cooldown?.canFill ?? true) ||
-    (nextWheelAvailable ? new Date() >= nextWheelAvailable : true);
+  const canFill = isSuperAdmin || (cooldown?.canFill ?? true);
 
   // ─── handlers ─────────────────────────────────────────────
 
   const handleShowForm = () => setShowForm(true);
   const handleHideForm = () => setShowForm(false);
   const handleComplete = () => setShowForm(false);
+
+  const renderWheelAction = () => (
+    <div className="flex justify-center">
+      <div className="flex items-center gap-3">
+        <Button
+          onClick={handleShowForm}
+          disabled={(!canFill && (cooldown?.regenLeft ?? 0) <= 0)}
+          size="lg"
+          variant="solid"
+        >
+          {isSuperAdmin
+            ? 'Перегенерувати'
+            : canFill
+              ? 'Нове колесо балансу'
+              : (cooldown?.regenLeft ?? 0) > 0
+                ? `Оновити оцінку (${cooldown?.regenLeft ?? 0} із 3)`
+                : nextWheelAvailable
+                  ? `Доступно через ${Math.max(0, Math.ceil(
+                      ((nextWheelAvailable?.getTime() ?? 0) - Date.now()) /
+                      (1000 * 60 * 60 * 24)
+                    ))} дн.`
+                  : 'Очікування...'}
+        </Button>
+      </div>
+    </div>
+  );
 
   const fetchWheelPdfBlob = async (): Promise<Blob> => {
     if (!currentWheel?.id) throw new Error('wheel_not_found');
@@ -338,15 +361,17 @@ export const WheelPage = () => {
           </div>
         </div>
 
-        <div className="mx-3 h-px bg-white/30" />
         <div className="px-3 pt-2 overflow-x-auto no-scrollbar">
-          <div className="inline-flex items-end pb-1">
-            {topTabs.map((item, idx) => (
+          <div className="app-tabs-shell">
+            {topTabs.map(item => (
               <button
                 key={item.id}
                 onClick={() => { setActiveTopTab(item.id); item.onClick(); }}
                 disabled={item.disabled}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-br-xl border-r border-b border-l-0 border-t-0 px-4 py-2.5 text-sm font-semibold transition-all ${idx === 0 ? '' : '-ml-px'} ${activeTopTab === item.id ? 'text-white border-[color:rgba(var(--accent-rgb),0.62)] bg-[color:rgba(var(--accent-rgb),0.28)] shadow-[0_4px_12px_rgba(var(--accent-rgb),0.22)]' : 'text-white/85 border-white/30 bg-white/10 hover:text-white hover:bg-white/14'}`}
+                className={[
+                  'app-tab',
+                  activeTopTab === item.id ? 'app-tab-active' : 'app-tab-inactive',
+                ].join(' ')}
               >
                 <item.icon className="h-4 w-4 shrink-0" />
                 <span>{item.label}</span>
@@ -417,26 +442,14 @@ export const WheelPage = () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-center">
-                    <Button onClick={handleShowForm} disabled={!canFill} size="lg" variant="solid">
-                      {isSuperAdmin
-                        ? 'Заповнити / Перегенерувати'
-                        : canFill
-                          ? 'Оновити оцінку'
-                          : nextWheelAvailable
-                            ? `Доступно через ${Math.max(0, Math.ceil(((nextWheelAvailable.getTime() ?? 0) - Date.now()) / (1000 * 60 * 60 * 24)))} дн.`
-                            : 'Очікування...'}
-                    </Button>
-                  </div>
+                  {renderWheelAction()}
                 </div>
               ) : (
                 <div className="text-center py-12">
                   <p className="text-white/60 mb-4">
                     {isWheelError ? 'Тимчасово не вдалося завантажити колесо' : 'Колесо ще не заповнено'}
                   </p>
-                  <Button onClick={handleShowForm} color="accent" size="lg" variant="solid">
-                    Заповнити зараз
-                  </Button>
+                  {renderWheelAction()}
                 </div>
               )
             ) : (
