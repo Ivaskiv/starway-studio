@@ -1,5 +1,6 @@
 // frontend/src/layout/Header.tsx
 import { NAVIGATION, type NavMenu } from '@/core/navigation/navigation.registry'
+import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { selectCurrentUser, selectIsAuthenticated } from '@/features/auth/services/auth.slice'
 import { useGetWheelCooldownQuery } from '@/features/wheel/services/wheel.api'
 import { UserMenu } from '@/features/user/userMenu/UserMenu'
@@ -50,7 +51,14 @@ export default function Header({
   // ── ВИПРАВЛЕНО: isAuthenticated з Redux store ─────────────────────────────
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
-  const shouldLoadWheelCooldown = isAuthenticated && !!user?.id && user.role === 'USER'
+  const { accessControl } = useSystemState()
+  const shouldLoadWheelCooldown =
+    isAuthenticated &&
+    !!user?.id &&
+    user.role === 'USER' &&
+    accessControl?.hasSubscription === true &&
+    accessControl?.hasRequiredContacts === true &&
+    accessControl?.currentFlow !== 'lead-magnet'
   const { data: wheelCooldown } = useGetWheelCooldownQuery(
     user?.id ?? '',
     { skip: !shouldLoadWheelCooldown },
@@ -239,18 +247,6 @@ export default function Header({
           {/* ── ВИПРАВЛЕНО: умовний рендер залогінений/гість ─────────────── */}
           {isAuthenticated ? (
             <>
-              {wheelCooldown && !wheelCooldown.canFill && (
-                <div className="relative flex-shrink-0">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white">
-                    <span className="text-xs font-bold text-[#4d7fe8]">
-                      {wheelCooldown.regenLeft}/3
-                    </span>
-                  </div>
-                  <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] text-[var(--text-muted)]">
-                    колесо
-                  </span>
-                </div>
-              )}
               <button className="hdr-notif" aria-label="Сповіщення">
                 🔔
                 <span className="hdr-notif-dot" aria-label="2 непрочитані">2</span>

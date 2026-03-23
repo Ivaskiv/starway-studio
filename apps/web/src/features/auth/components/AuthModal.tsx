@@ -2,10 +2,6 @@
 import { X } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/ui'
-import { useAppDispatch } from '@/app/hooks'
-import { setCredentials } from '../services/auth.slice'
-import { useLoginMutation } from '../services/auth.api'
-import { saveToken } from '../services/token'
 import { useAuth } from '../hooks/useAuth'
 import { LoginForm } from './LoginForm'
 import { RegisterForm } from './RegisterForm'
@@ -17,22 +13,20 @@ type Mode = 'login' | 'register'
 interface Props { isOpen: boolean; onClose: () => void; defaultMode?: Mode }
 
 export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Props) {
-  const dispatch        = useAppDispatch()
   const { loginWithSocial } = useAuth()
   const lang: ToastLang = 'uk'
-  const [loginMutation] = useLoginMutation()
   const postAuthNavigate = usePostAuthNavigation()
 
   const [mode, setMode] = useState<Mode>(defaultMode)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [autoLoginData, setAutoLoginData] = useState<{ email: string; password: string } | null>(null)
+  const [loginPrefill, setLoginPrefill] = useState<{ email: string; password: string } | null>(null)
   const formKey = useRef(0)
 
   useEffect(() => {
     if (!isOpen) {
       setMode(defaultMode)
       setIsProcessing(false)
-      setAutoLoginData(null)
+      setLoginPrefill(null)
       formKey.current += 1
     }
   }, [isOpen, defaultMode])
@@ -45,24 +39,6 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
       document.body.classList.remove('overflow-hidden')
     }
   }, [isOpen])
-
-  useEffect(() => { if (autoLoginData) performAutoLogin() }, [autoLoginData])
-
-  const performAutoLogin = async () => {
-    if (!autoLoginData) return
-    try {
-      const expertId = window.localStorage.getItem('expertId')?.trim() || import.meta.env.VITE_EXPERT_ID?.trim()
-      const response = await loginMutation({ ...autoLoginData, ...(expertId ? { expertId } : {}) }).unwrap()
-      saveToken(response.accessToken)
-      dispatch(setCredentials({ user: response.user as any, accessToken: response.accessToken }))
-      toast.success(getToastMessage('auth.autoLoginSuccess', lang))
-      onClose()
-      await postAuthNavigate(response.user)
-    } catch {
-      toast.error(getToastMessage('auth.autoLoginFailed', lang))
-      setMode('login')
-    } finally { setAutoLoginData(null) }
-  }
 
   const handleSocial = async (provider: 'google' | 'telegram') => {
     setIsProcessing(true)
@@ -80,11 +56,17 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
   }
 
   const handleRegisterSuccess = (credentials?: { email: string; password: string }) => {
-    if (credentials) setAutoLoginData(credentials)
-    else { setMode('login'); formKey.current += 1 }
+    setMode('login')
+    setLoginPrefill(credentials ?? null)
+    formKey.current += 1
+    toast.success(getToastMessage('auth.registerSuccess', lang))
   }
 
-  const switchMode = () => { setMode(prev => prev === 'login' ? 'register' : 'login'); formKey.current += 1 }
+  const switchMode = () => {
+    setMode(prev => prev === 'login' ? 'register' : 'login')
+    setLoginPrefill(null)
+    formKey.current += 1
+  }
 
   if (!isOpen) return null
 
@@ -123,7 +105,13 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
           {/* Forms */}
           <div className="px-8 pt-3 pb-8 space-y-6 relative z-10">
             {mode === 'login' ? (
-              <LoginForm key={`login-${formKey.current}`} onSwitch={switchMode} onSuccess={() => { onClose(); void postAuthNavigate() }} />
+              <LoginForm
+                key={`login-${formKey.current}`}
+                onSwitch={switchMode}
+                onSuccess={() => { onClose(); void postAuthNavigate() }}
+                initialEmail={loginPrefill?.email}
+                initialPassword={loginPrefill?.password}
+              />
             ) : (
               <RegisterForm key={`register-${formKey.current}`} onSwitch={switchMode} onSuccess={handleRegisterSuccess} />
             )}

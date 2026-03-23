@@ -5,7 +5,6 @@ import GlobalAssistant from '@/features/assistant/components/GlobalAssistant';
 import ProtectedRoute from '@/features/auth/components/ProtectedRoute';
 import { AuthRestoreProvider, type AuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext';
 import { clearAuth, selectIsAuthenticated, setCredentials } from '@/features/auth/services/auth.slice';
-import { getToken } from '@/features/auth/services/token';
 import type { AccessKey } from '@/features/auth/types/auth.types';
 import { settingsApi } from '@/features/settings/services/settings.api';
 import type { User } from '@/features/user/types/user.types';
@@ -162,11 +161,6 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
 
     const initAuth = async () => {
       updateStatus('restoring');
-
-      if (!getToken()) {
-        markFailed();
-        return;
-      }
 
       try {
         const refreshRes = await fetch('/api/auth/refresh', {

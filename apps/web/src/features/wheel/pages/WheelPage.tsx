@@ -1,5 +1,6 @@
 // frontend/src/features/wheel/pages/WheelPage.tsx
 import { useAppSelector } from '@/app/hooks';
+import { useSystemState } from '@/features/auth/hooks/useSystemState';
 import { WheelHistory } from '@/features/wheel';
 import {
   useConnectTelegramProfileMutation,
@@ -36,6 +37,14 @@ export const WheelPage = () => {
   const userId = user?.id;
   const accessToken = useAppSelector(s => s.auth.accessToken);
   const isSuperAdmin = user?.role?.toLowerCase?.() === 'superadmin';
+  const { accessControl } = useSystemState();
+  const hasWheelApiAccess =
+    isSuperAdmin ||
+    (
+      accessControl?.hasSubscription === true &&
+      accessControl?.hasRequiredContacts === true &&
+      accessControl?.currentFlow !== 'lead-magnet'
+    );
 
   // ─── state ────────────────────────────────────────────────
   const [tab, setTab] = useState<Tab>('assessment');
@@ -57,11 +66,11 @@ export const WheelPage = () => {
     isLoading: isWheelLoading,
     isError: isWheelError,
     error: wheelError,
-  } = useGetLatestWheelAssessmentQuery(userId ?? '', { skip: !userId });
+  } = useGetLatestWheelAssessmentQuery(userId ?? '', { skip: !userId || !hasWheelApiAccess });
 
   const { data: cooldown, isLoading: isCooldownLoading } = useGetWheelCooldownQuery(
     userId ?? '',
-    { skip: !userId },
+    { skip: !userId || !hasWheelApiAccess },
   );
 
   // ─── ALL hooks BEFORE any early return ───────────────────
@@ -93,6 +102,29 @@ export const WheelPage = () => {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-white/60">Будь ласка, увійдіть</p>
+      </div>
+    );
+  }
+
+  if (!hasWheelApiAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="ios-panel w-full max-w-xl rounded-[28px] p-6 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-subtle)]">
+            Колесо балансу
+          </p>
+          <h1 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
+            Доступ відкривається з активним тріалом або підпискою
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
+            Коли доступ буде активний, тут з&apos;явиться твій поточний зріз, історія колеса та оновлення оцінок.
+          </p>
+          <div className="mt-5 flex justify-center">
+            <Button onClick={() => navigate('/dashboard/subscription')} size="lg" variant="solid">
+              Оформити доступ
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }

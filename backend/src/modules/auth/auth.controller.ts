@@ -21,6 +21,7 @@ const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  path: '/',
   maxAge: 30 * 24 * 60 * 60 * 1000,
 } as const
 
@@ -112,7 +113,12 @@ export async function logout(req: Request, res: Response) {
     const token = req.cookies.refreshToken
     if (token) await removeRefreshToken(token)
 
-    res.clearCookie('refreshToken', { path: '/api/auth/refresh' })
+    res.clearCookie('refreshToken', {
+      path: '/',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    })
     return res.sendStatus(204)
   } catch (error) {
     return sendControllerError(res, error)
