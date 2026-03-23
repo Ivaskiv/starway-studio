@@ -38,10 +38,30 @@ export interface UserAccessResult {
   trialEnd: Date | null;
 }
 
+export type AccessLevel = 'GUEST' | 'LEAD' | 'CLIENT';
+export type CurrentFlow = 'lead-magnet' | 'mentor' | null;
+export type AccessBlockReason =
+  | 'LEAD_FLOW_LOCK'
+  | 'SUBSCRIPTION_REQUIRED'
+  | 'CONTACT_REQUIRED'
+  | 'LEAD_ACCESS_REQUIRED';
+
+export interface AccessControlState {
+  accessLevel: AccessLevel;
+  currentFlow: CurrentFlow;
+  currentStep: number;
+  hasLeadMagnet: boolean;
+  hasSubscription: boolean;
+  telegramId: string | null;
+  email: string | null;
+  hasRequiredContacts: boolean;
+}
+
 export type ModuleAccessLevel = 'TRIAL' | 'PAID' | 'NONE';
 export type ModuleLockReason = 'TRIAL_EXPIRED' | 'NO_SUBSCRIPTION' | null;
 
 export interface UserSystemState {
+  accessControl: AccessControlState;
   products: {
     owned: Array<{ id: string; name: string; type?: string | null; status?: string | null }>;
     subscribed: Array<{

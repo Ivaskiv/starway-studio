@@ -12,7 +12,7 @@ import cron, { type ScheduledTask } from 'node-cron'
 import { prisma, withRetry }       from '../../db/client.js'
 import { sendEveningQuestion, sendMorningQuestion } from './telegram.js'
 import { expireTrials, runTrialMirrorCheck, sendExpiredTrialReminder } from '../trial/scheduler.js'
-import { bot }                     from '../../lib/telegram.js'
+import { bot, sendDedupedTelegramMessage } from '../../lib/telegram.js'
 import type { MicroTask }          from '@starway/db/prisma-client'
 import { SubscriptionStatus }      from '@starway/db/prisma-client'
 import { generateWeeklyReport }    from '../ai-mentor/services.js'
@@ -79,7 +79,7 @@ async function runWithConcurrency<T>(
 
 async function sendTg(chatId: string, text: string): Promise<void> {
   try {
-    await bot.telegram.sendMessage(chatId, text)
+    await sendDedupedTelegramMessage(chatId, text)
   } catch {
     // мовчки — юзер заблокував бота
   }

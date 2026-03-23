@@ -5,11 +5,11 @@
  */
 
 import { prisma } from '../../db/client.js';
-import { bot } from '../../lib/telegram.js';
+import { bot, sendDedupedTelegramMessage } from '../../lib/telegram.js';
 import { generateTrialMirror } from './service.js';
 
 async function sendTg(chatId: string, text: string): Promise<void> {
-  await bot.telegram.sendMessage(chatId, text).catch(err =>
+  await sendDedupedTelegramMessage(chatId, text).catch(err =>
     console.error('[Trial] telegram send failed:', err)
   )
 }
@@ -36,7 +36,7 @@ export async function sendTrialReminder(userId: string, daysLeft: number) {
   const text = messages[daysLeft]
   if (!text) return
 
-  await bot.telegram.sendMessage(user.telegramUserId, text).catch(err =>
+  await sendDedupedTelegramMessage(user.telegramUserId, text).catch(err =>
     console.error('[Trial] reminder send failed:', err)
   )
 }
@@ -95,7 +95,7 @@ export async function expireTrials() {
     if (hasSub) continue
 
     if (user.telegramUserId) {
-      await bot.telegram.sendMessage(
+      await sendDedupedTelegramMessage(
         user.telegramUserId,
         `❌ Твій тріал закінчився.\n\nПідпишись щоб відновити доступ:\n\n💎 Тиждень — 7€\n💎 Місяць — 30€\n💎 Рік — 300€\n\n👉 /subscription`
       ).catch(() => {})

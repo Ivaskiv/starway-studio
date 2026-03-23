@@ -131,4 +131,6 @@ export interface UserAccessResult {
   plan: 'free' | 'trial' | 'paid'
   role: string
   trialEnd: string | null
+  accessLevel?: 'GUEST' | 'LEAD' | 'CLIENT'
+  currentFlow?: 'lead-magnet' | 'mentor' | null
 }

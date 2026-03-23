@@ -6,6 +6,7 @@ import type {
   UserProgress,
 } from '@starway/db/prisma-client'; 
 import type { Product } from '../modules/products/types.js'
+import type { AccessControlState } from '../modules/access/types.js'
 
 export type UserRole = 'SUPERADMIN' | 'EXPERT' | 'USER' | 'ADMIN' | 'MENTOR' | 'PRODUCT_OWNER'
 
@@ -77,7 +78,7 @@ export interface AuthUser {
 // ✅ ВИДАЛЕНО: declare global для Request.user (створював конфлікт)
 export interface AuthenticatedRequest extends Request {
   user?: AuthUser
-
+  accessControl?: AccessControlState
 }
 
 export interface AuthApiResponse {

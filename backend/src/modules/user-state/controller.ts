@@ -2,6 +2,7 @@ import type { Response } from 'express'
 import { prisma } from '../../db/client.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { trackEvent } from '../events/service.js'
+import { getAccessControlState } from '../access/service.js'
 
 const DEFAULT_STATE = 'NEW'
 const DEFAULT_STEP = 'LINK_TELEGRAM'
@@ -27,6 +28,7 @@ export async function getUserState(req: AuthenticatedRequest, res: Response) {
 
   const state = user.currentState ?? DEFAULT_STATE
   const step = user.currentStep ?? DEFAULT_STEP
+  const accessControl = await getAccessControlState(userId)
   await trackEvent({
     userId,
     type: 'web_user_state_viewed',
@@ -40,5 +42,6 @@ export async function getUserState(req: AuthenticatedRequest, res: Response) {
   return res.json({
     state,
     step,
+    accessControl,
   })
 }

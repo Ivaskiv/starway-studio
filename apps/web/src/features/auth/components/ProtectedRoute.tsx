@@ -1,6 +1,7 @@
 // frontend/src/features/auth/components/ProtectedRoute.tsx
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback';
 import { Button } from '@/ui';
+import { useGetMySystemStateQuery } from '@/features/auth/services/accessApi';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useSelector } from 'react-redux';
@@ -22,22 +23,41 @@ interface ProtectedRouteProps {
 function AccessDeniedScreen({ ability }: { ability: AccessKey }) {
   const navigate = useNavigate();
   const { trialEnd, plan } = useAccess();
+  const { data: systemState } = useGetMySystemStateQuery();
   const trialEnded = !!trialEnd && new Date(trialEnd).getTime() <= Date.now() && plan === 'free';
+  const accessControl = systemState?.accessControl;
+  const isLeadLocked = accessControl?.currentFlow === 'lead-magnet';
+  const isContactBlocked = accessControl?.accessLevel === 'CLIENT' && accessControl?.hasRequiredContacts === false;
+  const title = isLeadLocked ? 'Завершіть практикум' : isContactBlocked ? 'Додайте контакти' : 'Оформіть підписку';
+  const description = isLeadLocked
+    ? 'Зараз активний lead magnet. Завершіть практикум, щоб відкрити наступні модулі.'
+    : isContactBlocked
+      ? 'Щоб користуватись платними модулями, додайте email і Telegram у профілі.'
+      : `Для доступу до ${ability} потрібна активна підписка`;
+  const primaryLabel = isLeadLocked ? 'Продовжити практикум' : isContactBlocked ? 'Відкрити налаштування' : 'Оформити підписку';
+  const primaryAction = () => {
+    if (isLeadLocked) {
+      navigate('/dashboard/courses')
+      return
+    }
+    if (isContactBlocked) {
+      navigate('/dashboard/settings')
+      return
+    }
+    navigate('/dashboard/subscription')
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-primary)] p-4">
       <div className="max-w-md w-full space-y-6 text-center">
-        <div className="w-20 h-20 rounded-full bg-red-500/10 backdrop-blur-sm border border-red-500/20 flex items-center justify-center mx-auto">
-          <AlertCircle className="w-10 h-10 text-red-400" />
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-secondary)]">
+          <AlertCircle className="h-10 w-10 text-[var(--accent)]" />
         </div>
         <div className="space-y-2">
-          <h2 className="text-3xl font-bold text-white">Доступ заборонено</h2>
-          <p className="text-white/60">
-            Для доступу до <span className="text-orange-400 font-semibold">{ability}</span> потрібна
-            активна підписка
-          </p>
+          <h2 className="text-3xl font-bold text-[var(--text-primary)]">{title}</h2>
+          <p className="text-[var(--text-muted)]">{description}</p>
           {trialEnded && (
-            <p className="text-amber-300/90 text-sm">
+            <p className="text-sm text-[var(--text-secondary)]">
               Пробний період завершено. Ваші дані збережені. Оберіть тариф, щоб розблокувати функції.
             </p>
           )}
@@ -45,19 +65,19 @@ function AccessDeniedScreen({ ability }: { ability: AccessKey }) {
         <div className="flex flex-col sm:flex-row gap-3">
           <Button
             onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/dashboard'))}
-            className="flex-1 bg-white/10 hover:bg-white/20 text-white border border-white/10"
+            className="flex-1 border border-[var(--border)] bg-[var(--glass-bg)] text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)]"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Назад
           </Button>
           <Button
-            onClick={() => navigate('/dashboard/subscription')}
-            className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:shadow-lg hover:shadow-orange-500/30"
+            onClick={primaryAction}
+            className="flex-1 bg-[var(--accent)] text-white hover:brightness-110"
           >
-            Обрати тариф
+            {primaryLabel}
           </Button>
         </div>
-        <p className="text-sm text-white/40">Або поверніться на головну сторінку дашборду</p>
+        <p className="text-sm text-[var(--text-muted-light)]">Або поверніться на головну сторінку дашборду</p>
       </div>
     </div>
   );

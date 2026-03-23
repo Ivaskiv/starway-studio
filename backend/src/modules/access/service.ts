@@ -2,12 +2,21 @@
 import { prisma } from '../../db/client.js'
 import { getAllAbilities } from '../../modules/auth/abilities.js'
 import { isSuperAdminEmail } from '../../modules/auth/superadmin.js'
-import type { AccessItem, UserAccessResult, UserSystemState } from './types.js'
+import type { AccessControlState, AccessItem, UserAccessResult, UserSystemState } from './types.js'
 
 type AccessUserSnapshot = {
   id: string
   email: string | null
   role: 'USER' | 'EXPERT' | 'SUPERADMIN'
+  onboardingStage: string | null
+  currentStep: string | null
+  telegramUserId: string | null
+  telegramChatId: string | null
+  fivePointsEnrollment: {
+    progress: unknown
+    completedAt: Date | null
+    createdAt: Date
+  } | null
   subscription: {
     status: string
     trialEndsAt: Date | null
@@ -28,6 +37,20 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
       id: true,
       email: true,
       role: true,
+      onboardingStage: true,
+      currentStep: true,
+      telegramUserId: true,
+      telegramChatId: true,
+
+      fivePointsEnrollment: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          progress: true,
+          completedAt: true,
+          createdAt: true,
+        },
+      },
 
       subscriptions: {
         orderBy: { createdAt: 'desc' },
@@ -55,12 +78,24 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
   if (!user) return null
 
   const sub = user.subscriptions[0] ?? null
+  const leadEnrollment = user.fivePointsEnrollment[0] ?? null
   const mentorship = user.mentorships[0] ?? null
 
   return {
     id: user.id,
     email: user.email,
     role: user.role as 'USER' | 'EXPERT' | 'SUPERADMIN',
+    onboardingStage: user.onboardingStage ?? null,
+    currentStep: user.currentStep ?? null,
+    telegramUserId: user.telegramUserId ?? null,
+    telegramChatId: user.telegramChatId ?? null,
+    fivePointsEnrollment: leadEnrollment
+      ? {
+          progress: leadEnrollment.progress,
+          completedAt: leadEnrollment.completedAt,
+          createdAt: leadEnrollment.createdAt,
+        }
+      : null,
 
     subscription: sub
       ? {
@@ -80,6 +115,88 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
   }
 }
 
+function deriveLeadStep(progress: unknown): number {
+  if (!progress || typeof progress !== 'object' || Array.isArray(progress)) {
+    return 0
+  }
+
+  const raw = progress as {
+    completedLessons?: unknown
+    steps?: unknown
+  }
+
+  if (typeof raw.completedLessons === 'number' && Number.isFinite(raw.completedLessons)) {
+    return raw.completedLessons
+  }
+
+  if (Array.isArray(raw.steps)) {
+    return raw.steps.filter(step => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) {
+        return false
+      }
+
+      return (step as { completed?: unknown }).completed === true
+    }).length
+  }
+
+  return 0
+}
+
+export async function getAccessControlState(userId: string): Promise<AccessControlState> {
+  const user = await getAccessUserSnapshot(userId)
+  if (!user) {
+    throw new Error('User not found')
+  }
+
+  const now = new Date()
+  const subscription = user.subscription
+  const leadEnrollment = user.fivePointsEnrollment
+  const isPaidActive =
+    subscription?.status === 'ACTIVE' &&
+    (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
+  const isTrialActive =
+    !isPaidActive &&
+    subscription?.status === 'TRIAL' &&
+    !!subscription.trialEndsAt &&
+    subscription.trialEndsAt > now
+  const hasSubscription = isPaidActive || isTrialActive
+  const hasLeadMagnet = Boolean(
+    leadEnrollment?.completedAt ||
+    ((leadEnrollment?.progress as { completed?: unknown } | null | undefined)?.completed === true),
+  )
+  const currentFlow: AccessControlState['currentFlow'] = hasSubscription
+    ? 'mentor'
+    : leadEnrollment && !hasLeadMagnet
+      ? 'lead-magnet'
+      : null
+  const currentStep = currentFlow === 'lead-magnet'
+    ? deriveLeadStep(leadEnrollment?.progress)
+    : 0
+  const accessLevel: AccessControlState['accessLevel'] = hasSubscription
+    ? 'CLIENT'
+    : currentFlow === 'lead-magnet' || hasLeadMagnet || user.onboardingStage === 'lead_magnet'
+      ? 'LEAD'
+      : 'GUEST'
+  const email = user.email ?? null
+  const telegramId = user.telegramChatId ?? user.telegramUserId ?? null
+  const hasRequiredContacts = Boolean(
+    email &&
+    !email.startsWith('telegram-guest-') &&
+    telegramId,
+  )
+
+  return {
+    accessLevel,
+    currentFlow,
+    currentStep,
+    hasLeadMagnet,
+    hasSubscription,
+    telegramId,
+    email,
+    hasRequiredContacts,
+  }
+}
+
 export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   const user = await getAccessUserSnapshot(userId)
   if (!user) throw new Error('User not found')
@@ -88,6 +205,8 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   const subscription = user.subscription
   const items: AccessItem[] = []
   const isSuperAdmin = isSuperAdminEmail(user.email ?? '')
+  const accessControl = await getAccessControlState(userId)
+  const canUseClientFeatures = accessControl.hasSubscription && accessControl.hasRequiredContacts
 
   // ── SUPERADMIN ─────────────────────────────────────────────────────────────
   if (user.role === 'SUPERADMIN' || isSuperAdmin) {
@@ -105,7 +224,7 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
     subscription?.status === 'ACTIVE' &&
     (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
 
-  if (isPaidActive) {
+  if (isPaidActive && canUseClientFeatures) {
     const expiresAt = subscription!.currentPeriodEnd ?? null
     items.push(
       { key: 'mentor.core',       source: 'purchase', expiresAt },
@@ -131,7 +250,7 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
     !!subscription.trialEndsAt &&
     subscription.trialEndsAt > now
 
-  if (isTrialActive) {
+  if (isTrialActive && canUseClientFeatures) {
     const expiresAt = subscription!.trialEndsAt
     const trialDay = subscription?.createdAt
       ? Math.floor((now.getTime() - subscription.createdAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
@@ -223,6 +342,7 @@ const PRODUCT_TEMPLATES: UserSystemState['products']['templates'] = [
 
 export async function getUserSystemState(userId: string): Promise<UserSystemState> {
   const access      = await getUserAccess(userId)
+  const accessControl = await getAccessControlState(userId)
   const now         = new Date()
   const isSuperAdmin = String(access.role).toUpperCase() === 'SUPERADMIN'
 
@@ -285,6 +405,7 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
   const showMyProductsSection = ownedRaw.length > 0 || isSuperAdmin
 
   return {
+    accessControl,
     products: {
       owned: ownedRaw.map((p) => ({
         id:     p.id,

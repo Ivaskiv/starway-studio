@@ -3,7 +3,7 @@
  * Daily Cycle Telegram - FIXED
  */
 
-import { bot as sharedTelegramBot } from '../../lib/telegram.js';
+import { bot as sharedTelegramBot, sendDedupedTelegramMessage } from '../../lib/telegram.js';
 import type { Context } from 'telegraf';
 import { prisma } from '../../db/client.js';
 import { checkDailyAccess } from './subscription.js';
@@ -89,7 +89,7 @@ export async function sendMorningQuestion() {
 
       if (!access.canCreateEntry) continue;
 
-      await sharedTelegramBot.telegram.sendMessage(
+      await sendDedupedTelegramMessage(
         user.telegramUserId!,
         `🌅 Ранкові питання готові!\nВідкрий /daily`
       );
@@ -132,7 +132,7 @@ export async function sendEveningQuestion() {
 
       if (!access.canCreateEntry) continue;
 
-      await sharedTelegramBot.telegram.sendMessage(
+      await sendDedupedTelegramMessage(
         user.telegramUserId!,
         `🌙 Вечірній чекін.\nНе забудь завершити Daily 👉 /daily`
       );

@@ -2,6 +2,16 @@ import { api } from '@/services/api'
 import type { UserAccessResult } from '@/features/auth/types/auth.types'
 
 export interface UserSystemState {
+  accessControl: {
+    accessLevel: 'GUEST' | 'LEAD' | 'CLIENT'
+    currentFlow: 'lead-magnet' | 'mentor' | null
+    currentStep: number
+    hasLeadMagnet: boolean
+    hasSubscription: boolean
+    telegramId: string | null
+    email: string | null
+    hasRequiredContacts: boolean
+  }
   products: {
     owned: Array<{ id: string; name: string; type?: string | null; status?: string | null }>
     subscribed: Array<{ id: string; name: string; status: 'trial' | 'paid' | 'locked'; expiresAt: string | null }>

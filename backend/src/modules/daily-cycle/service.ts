@@ -153,7 +153,7 @@ export async function getOrCreateTodayEntry(userId: string, expertId: string): P
 }
 
 export async function upsertDailyEntry(input: UpsertDailyEntryInput): Promise<DailyEntryRow> {
-  const { entryId, userId, expertId, microSupport, state, choice, drain, dayFact } = input
+  const { entryId, userId, expertId, microSupport, state, choice, drain, dayFact, answers } = input
   const entryDate = input.date ? new Date(input.date) : new Date()
 
   const upsertData = {
@@ -165,7 +165,10 @@ export async function upsertDailyEntry(input: UpsertDailyEntryInput): Promise<Da
     drain: drain ?? null,
     dayFact: dayFact ?? null,
     microSupport: microSupport ?? Prisma.JsonNull,
-    content: Prisma.JsonNull,
+    content:
+      answers && answers.length > 0
+        ? toPrismaJson({ answers })
+        : Prisma.JsonNull,
   }
 
   const entry = await prisma.dailyEntry.upsert({
@@ -173,6 +176,124 @@ export async function upsertDailyEntry(input: UpsertDailyEntryInput): Promise<Da
     create: { id: entryId, ...upsertData },
     update: upsertData,
   })
+  syncUserStateFromEntry(entry)
+  return entry
+}
+
+function mergeSessionContent(
+  existingContent: unknown,
+  session: 'morning' | 'evening',
+  answers: Record<string, string>,
+): Prisma.InputJsonValue {
+  const base =
+    existingContent && typeof existingContent === 'object' && !Array.isArray(existingContent)
+      ? existingContent as Record<string, unknown>
+      : {}
+
+  return toPrismaJson({
+    ...base,
+    [session]: answers,
+  })
+}
+
+async function generateMicroTasksFromMorning(
+  userId: string,
+  answers: Record<string, string>,
+  expertId: string,
+): Promise<void> {
+  const focusGoal = answers.focus ?? ''
+  const state = answers.state ?? ''
+  const identity = answers.identity ?? ''
+
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  tomorrow.setHours(21, 0, 0, 0)
+
+  const title = focusGoal
+    ? `Просунути ціль: ${focusGoal.slice(0, 80)}`
+    : 'Зроби один малий крок до своєї головної цілі'
+  const description = state
+    ? `Стан: ${state}. Дій із позиції ${identity || 'сили'}.`
+    : identity
+      ? `Дій із позиції ${identity}.`
+      : undefined
+
+  const existingTask = await prisma.microTask.findFirst({
+    where: {
+      userId,
+      isCompleted: false,
+      title,
+      dueAt: tomorrow,
+    },
+    select: { id: true },
+  })
+
+  if (existingTask) {
+    return
+  }
+
+  await prisma.microTask.create({
+    data: {
+      userId,
+      expertId,
+      title,
+      description,
+      sphere: 'growth',
+      dueAt: tomorrow,
+    },
+  })
+}
+
+export async function saveDailySession(
+  userId: string,
+  data: {
+    session: 'morning' | 'evening'
+    answers: Record<string, string>
+    date: string
+  },
+): Promise<DailyEntryRow> {
+  const dateObj = new Date(data.date)
+  dateObj.setHours(0, 0, 0, 0)
+
+  const expert = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { expertId: true },
+  })
+  const expertId = expert?.expertId ?? userId
+
+  const existingEntry = await prisma.dailyEntry.findUnique({
+    where: { userId_date: { userId, date: dateObj } },
+    select: { id: true, content: true },
+  })
+
+  const content = mergeSessionContent(existingEntry?.content, data.session, data.answers)
+  const dayFact =
+    data.session === 'morning'
+      ? data.answers.focus ?? data.answers.identity ?? null
+      : data.answers.win ?? data.answers.energy_in ?? null
+
+  const entry = await prisma.dailyEntry.upsert({
+    where: { userId_date: { userId, date: dateObj } },
+    create: {
+      userId,
+      expertId,
+      date: dateObj,
+      content,
+      state: DailyState.STABILITY,
+      choice: DailyChoice.CONFIRMED_OLD,
+      dayFact,
+      microSupport: Prisma.JsonNull,
+    },
+    update: {
+      content,
+      dayFact,
+    },
+  })
+
+  if (data.session === 'morning') {
+    await generateMicroTasksFromMorning(userId, data.answers, expertId)
+  }
+
   syncUserStateFromEntry(entry)
   return entry
 }

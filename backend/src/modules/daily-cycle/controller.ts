@@ -5,11 +5,28 @@ import type { DailyEntryInput, UpsertDailyEntryInput } from './types.js';
 import {
   getOrCreateTodayEntry,
   upsertDailyEntry,
+  saveDailySession,
   getMicroTasks,
   completeMicroTask,
   getDailyEntryHistory,
 } from './service.js';
 import { rewardEngine } from '../gamification/reward.engine.js';
+
+function isDailySessionPayload(
+  payload: DailyEntryInput | { session?: 'morning' | 'evening'; answers?: unknown; date?: unknown },
+): payload is { session: 'morning' | 'evening'; answers: Record<string, string>; date: string } {
+  const session = 'session' in payload ? payload.session : undefined
+  const date = 'date' in payload ? payload.date : undefined
+  const answers = 'answers' in payload ? payload.answers : undefined
+
+  return (
+    (session === 'morning' || session === 'evening')
+    && typeof date === 'string'
+    && typeof answers === 'object'
+    && answers !== null
+    && !Array.isArray(answers)
+  )
+}
 
 // =====================================================
 // GET TODAY'S ENTRY
@@ -43,22 +60,39 @@ export async function upsertEntry(req: AuthenticatedRequest, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const payload = req.body as DailyEntryInput;
+    const payload = req.body as
+      | DailyEntryInput
+      | {
+        session?: 'morning' | 'evening'
+        answers?: Record<string, string>
+        date?: string
+      };
 
-    // ⚠️ service тепер приймає (entryId, input)
-    // тому очікуємо entryId в body
-    if (!payload.id) {
+    if (isDailySessionPayload(payload)) {
+      const entry = await saveDailySession(user.id, {
+        session: payload.session,
+        answers: payload.answers,
+        date: payload.date,
+      })
+      await rewardEngine.onDailyEntryCreated(user.id);
+      res.json(entry);
+      return;
+    }
+
+    const entryPayload = payload as DailyEntryInput;
+
+    if (!entryPayload.id) {
       return res.status(400).json({ error: 'Entry ID missing' });
     }
 
     const expertId = user.expertId ?? user.id;
 
     const entryInput: UpsertDailyEntryInput = {
-      ...payload,
-      entryId: payload.id,
+      ...entryPayload,
+      entryId: entryPayload.id,
       userId: user.id,
       expertId,
-      date: payload.date ? new Date(payload.date) : new Date(),
+      date: entryPayload.date ? new Date(entryPayload.date) : new Date(),
     };
 
     const entry = await upsertDailyEntry(entryInput);

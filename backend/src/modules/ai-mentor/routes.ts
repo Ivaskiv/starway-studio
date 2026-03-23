@@ -1,5 +1,6 @@
 import { Request, Router } from 'express';
 import { productOwnerGuard } from '../../middleware/productOwnerGuard.js';
+import { requireClientAccess } from '../access/guard.js';
 import { authRequired } from '../../modules/auth/middleware/auth.js';
 import { producerMentorChatHandler } from '../producer/controller.js';
 import { requireGenerationQuota } from '../quota/generation.middleware.js';
@@ -7,6 +8,7 @@ import * as aiController from './controllers.js';
 
 const router: Router = Router();
 router.use(authRequired);
+router.use(requireClientAccess);
 
 // ── Існуючі роути (не змінено) ───────────────────────────────────────────────
 router.get('/session/:sessionId?', aiController.getSession);

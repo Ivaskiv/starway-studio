@@ -57,6 +57,7 @@ export interface DailyEntryInput {
   drain?: DailyDrain | null;
   choice: DailyChoice;
   dayFact: string;
+  answers?: DailyAnswerInput[];
   microSupport?: JsonMicroSupport;
   date?: string | Date; // щоб можна було передавати строку з фронта
 }
