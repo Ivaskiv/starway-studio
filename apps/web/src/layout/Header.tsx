@@ -50,9 +50,10 @@ export default function Header({
   // ── ВИПРАВЛЕНО: isAuthenticated з Redux store ─────────────────────────────
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
+  const shouldLoadWheelCooldown = isAuthenticated && !!user?.id && user.role === 'USER'
   const { data: wheelCooldown } = useGetWheelCooldownQuery(
     user?.id ?? '',
-    { skip: !isAuthenticated || !user?.id },
+    { skip: !shouldLoadWheelCooldown },
   )
 
   const viewRole = previewRole

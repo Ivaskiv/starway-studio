@@ -43,7 +43,7 @@ export const Input = forwardRef<HTMLInputElement, Props>(
 
         {label && (
           <label className={cn(
-            'text-sm font-semibold',
+            'text-sm font-semibold text-[var(--text-primary)]',
             error ? 'text-red-400' : 'text-[color:var(--text-primary)]',
           )}>
             {label}
@@ -64,11 +64,10 @@ export const Input = forwardRef<HTMLInputElement, Props>(
 
           <input
             ref={ref}
-            type={actualType}
-            disabled={disabled}
-            className={cn(
-              // Liquid Glass base
-              'input-glass w-full',
+              type={actualType}
+              disabled={disabled}
+              className={cn(
+              'ios-input',
               hasLeft  ? 'pl-10' : 'pl-4',
               hasRight ? 'pr-11' : 'pr-4',
               error    && 'input-glass--error',
@@ -89,7 +88,7 @@ export const Input = forwardRef<HTMLInputElement, Props>(
                 absolute right-3 top-1/2 -translate-y-1/2
                 w-7 h-7 flex items-center justify-center rounded-lg
                 text-[color:var(--text-muted)] hover:text-[color:var(--text-primary)]
-                hover:bg-white/[.07]
+                hover:bg-white/[.08]
                 transition-colors duration-150
                 focus:outline-none
               "

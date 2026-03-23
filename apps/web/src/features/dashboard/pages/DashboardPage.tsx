@@ -73,6 +73,30 @@ const WHEEL_EMOJI_MAP = new Map(WHEEL_CATEGORIES.map(item => [item.id, item.emoj
 const formatWheelDate = (value: Date) =>
   value.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
 
+const LIQUID_FOOTER_BUTTON_BASE =
+  'w-full rounded-t-[18px] rounded-b-[22px] border-x border-b border-t-0 py-3 text-sm font-medium transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_14px_30px_rgba(0,0,0,0.12)]'
+
+const LIQUID_FOOTER_BUTTON_PRIMARY =
+  `${LIQUID_FOOTER_BUTTON_BASE} border-x-[rgba(var(--accent-rgb),0.18)] border-b-[rgba(255,255,255,0.12)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.88),rgba(var(--accent-rgb),0.72))] text-white hover:brightness-110`
+
+const LIQUID_FOOTER_BUTTON_TINT =
+  `${LIQUID_FOOTER_BUTTON_BASE} border-x-[rgba(var(--accent-rgb),0.16)] border-b-[rgba(255,255,255,0.10)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(var(--accent-rgb),0.07))] text-[var(--accent)] hover:bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.16),rgba(var(--accent-rgb),0.10))]`
+
+const LIQUID_FOOTER_BUTTON_ICE =
+  `${LIQUID_FOOTER_BUTTON_BASE} border-x-[rgba(var(--accent-rgb),0.14)] border-b-[rgba(255,255,255,0.10)] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.025))] text-[var(--text-secondary)] hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035))] hover:text-[var(--text-primary)]`
+
+const DASHBOARD_USER_CARD =
+  'overflow-hidden rounded-[24px] border border-[rgba(var(--accent-rgb),0.14)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.07),rgba(255,255,255,0.02)_18%,rgba(255,255,255,0.015)_100%)] shadow-[0_18px_48px_rgba(0,0,0,0.22),0_0_0_1px_rgba(var(--accent-rgb),0.04),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_-18px_30px_rgba(0,0,0,0.10)]'
+
+const DASHBOARD_USER_CARD_SOFT =
+  'overflow-hidden rounded-[22px] border border-[rgba(var(--accent-rgb),0.12)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.05),rgba(255,255,255,0.02)_22%,rgba(255,255,255,0.012)_100%)] shadow-[0_14px_36px_rgba(0,0,0,0.18),0_0_0_1px_rgba(var(--accent-rgb),0.03),inset_0_1px_0_rgba(255,255,255,0.06)]'
+
+const EDGE_ACTION_WRAP =
+  'border-t border-[rgba(255,255,255,0.06)] bg-[linear-gradient(180deg,rgba(255,255,255,0.025),rgba(255,255,255,0.01))] px-0 pb-0 pt-0'
+
+const EDGE_ACTION_TOP_WRAP =
+  'border-b border-[rgba(255,255,255,0.06)] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.012))]'
+
 // ─── StatsGrid ─────────────────────────────────────────────────────────────
 
 function StatsGrid() {
@@ -122,8 +146,9 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
   const navigate = useNavigate()
   const dashboardUser = user as DashboardUser
   const userId = dashboardUser?.id
+  const hasWheelAccess = (trial?.isActive ?? false) || (trial?.isPaid ?? false)
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', {
-    skip: !userId,
+    skip: !userId || !hasWheelAccess,
   })
   const [embeddedSession, setEmbeddedSession] = useState<'morning' | 'evening' | null>(null)
   if (isLoading) return (
@@ -164,7 +189,7 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
       : 'pending'
 
   if (hasNoTrial) return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+    <div className={DASHBOARD_USER_CARD_SOFT}>
       <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(255,255,255,0.02))] p-5">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
           МІЙ ШЛЯХ
@@ -194,13 +219,15 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
             </div>
           ))}
         </div>
-        <button
-          type="button"
-          className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
-          onClick={() => navigate('/dashboard/ai-mentor')}
-        >
-          ▶ Розпочати 7 днів безкоштовно
-        </button>
+        <div className={EDGE_ACTION_WRAP}>
+          <button
+            type="button"
+            className={LIQUID_FOOTER_BUTTON_PRIMARY}
+            onClick={() => navigate('/dashboard/ai-mentor')}
+          >
+            ▶ Розпочати 7 днів безкоштовно
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -263,7 +290,7 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
         </div>
       )}
       {isTrialExpired && !isPaid && (
-        <div className="overflow-hidden rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+        <div className={DASHBOARD_USER_CARD_SOFT}>
           <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(255,255,255,0.02))] p-5">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
               ТВІЙ ШЛЯХ · ПАУЗА
@@ -293,17 +320,19 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
                 <span className="text-lg font-bold text-[var(--accent)]">{p.price}</span>
               </div>
             ))}
-            <button
-              type="button"
-              className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
-              onClick={() => navigate('/dashboard/subscription')}
-            >
-              Продовжити шлях →
-            </button>
+            <div className={EDGE_ACTION_WRAP}>
+              <button
+                type="button"
+                className={LIQUID_FOOTER_BUTTON_PRIMARY}
+                onClick={() => navigate('/dashboard/subscription')}
+              >
+                Продовжити шлях →
+              </button>
+            </div>
           </div>
         </div>
       )}
-      <div className="overflow-hidden rounded-[24px] border border-[rgba(var(--accent-rgb),0.16)] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] shadow-[0_18px_48px_rgba(0,0,0,0.22),0_0_0_1px_rgba(var(--accent-rgb),0.05),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-18px_28px_rgba(0,0,0,0.12)]">
+      <div className={DASHBOARD_USER_CARD}>
         <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.18),rgba(255,255,255,0.02)_58%,rgba(255,255,255,0.01))] p-5">
           <div className="mb-4 border-b border-[rgba(255,255,255,0.06)] pb-4">
             <div className="flex items-center gap-3">
@@ -414,7 +443,7 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
           ))}
         </div>
         {embeddedSession && (
-          <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)]">
+          <div className="border-t border-[rgba(255,255,255,0.06)] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))]">
             <div className="p-4">
               <DailyCycleFlow
                 embedded
@@ -425,11 +454,11 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
             </div>
           </div>
         )}
-        <div className="px-3 pb-3 pt-1">
+        <div className={EDGE_ACTION_WRAP}>
           {isLocked ? (
             <button
               type="button"
-              className="w-full rounded-t-[18px] rounded-b-[20px] border border-[rgba(var(--accent-rgb),0.18)] border-t-[rgba(255,255,255,0.10)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(var(--accent-rgb),0.08))] py-3 text-sm font-medium text-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(var(--accent-rgb),0.08)] transition-all hover:bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.16),rgba(var(--accent-rgb),0.10))]"
+              className={LIQUID_FOOTER_BUTTON_TINT}
               onClick={() => navigate('/dashboard/subscription')}
             >
               Розблокувати доступ →
@@ -437,7 +466,7 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
           ) : (
             <button
               type="button"
-              className="w-full rounded-t-[18px] rounded-b-[20px] border border-[rgba(var(--accent-rgb),0.20)] border-t-[rgba(255,255,255,0.14)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.92),rgba(var(--accent-rgb),0.78))] py-3 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_14px_34px_rgba(var(--accent-rgb),0.26)] transition-all hover:brightness-110"
+              className={LIQUID_FOOTER_BUTTON_PRIMARY}
               onClick={() => openTask(nextTask)}
             >
               ▶ Продовжити день
@@ -567,11 +596,15 @@ function AIProducerRecommendations() { return null }
 
 function WheelStatusNotice({ onOpenInline }: { onOpenInline: () => void }) {
   const { user } = useAuth()
+  const { data: trial } = useGetTrialStatusQuery()
   const dashboardUser = user as DashboardUser
   const userId = dashboardUser?.id
+  const hasWheelAccess = (trial?.isActive ?? false) || (trial?.isPaid ?? false)
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', {
-    skip: !userId,
+    skip: !userId || !hasWheelAccess,
   })
+
+  if (!hasWheelAccess) return null
 
   const now = new Date()
   const lastWheelDate = latestWheel
@@ -586,8 +619,8 @@ function WheelStatusNotice({ onOpenInline }: { onOpenInline: () => void }) {
   if (!needsWheel) return null
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[rgba(var(--accent-rgb),0.18)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.08),rgba(255,255,255,0.02))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+    <div className={DASHBOARD_USER_CARD_SOFT}>
+      <div className="p-4">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
             КОЛЕСО БАЛАНСУ
@@ -601,10 +634,12 @@ function WheelStatusNotice({ onOpenInline }: { onOpenInline: () => void }) {
               : `Було ${formatWheelDate(lastWheelDate)} · наступне було заплановане на ${nextWheelDate ? formatWheelDate(nextWheelDate) : '—'}`}
           </p>
         </div>
+      </div>
+        <div className={EDGE_ACTION_WRAP}>
         <button
           type="button"
           onClick={onOpenInline}
-          className="rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-white transition-all hover:brightness-110"
+          className={LIQUID_FOOTER_BUTTON_PRIMARY}
         >
           Відкрити колесо →
         </button>
@@ -676,8 +711,16 @@ function WheelInlineFrame({
   }
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-[rgba(var(--accent-rgb),0.18)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.10),rgba(255,255,255,0.02))] shadow-[0_18px_50px_rgba(0,0,0,0.18),0_0_0_1px_rgba(var(--accent-rgb),0.06),inset_0_1px_0_rgba(255,255,255,0.08)]">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[rgba(255,255,255,0.06)] p-5">
+    <div className={`relative ${DASHBOARD_USER_CARD}`}>
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(255,255,255,0.12)] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] text-[var(--text-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),0_10px_24px_rgba(0,0,0,0.18)] transition-all hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.05))] hover:text-[var(--text-primary)]"
+        aria-label="Закрити колесо"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      <div className={`flex flex-wrap items-start justify-between gap-3 p-5 ${EDGE_ACTION_TOP_WRAP}`}>
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
             КОЛЕСО БАЛАНСУ
@@ -697,7 +740,7 @@ function WheelInlineFrame({
               <button
                 type="button"
                 onClick={() => void refetch()}
-                className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
+                className="inline-flex items-center gap-2 rounded-t-[14px] rounded-b-[18px] border-x border-b border-t-0 border-x-[rgba(var(--accent-rgb),0.12)] border-b-[rgba(255,255,255,0.10)] bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.025))] px-3 py-2 text-xs text-[var(--text-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),0_10px_22px_rgba(0,0,0,0.14)] transition-all hover:text-[var(--text-primary)]"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 Оновити
@@ -705,21 +748,13 @@ function WheelInlineFrame({
               <button
                 type="button"
                 onClick={handleDownloadPdf}
-                className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-medium text-white transition-all hover:brightness-110"
+                className="inline-flex items-center gap-2 rounded-t-[14px] rounded-b-[18px] border-x border-b border-t-0 border-x-[rgba(var(--accent-rgb),0.18)] border-b-[rgba(255,255,255,0.12)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.88),rgba(var(--accent-rgb),0.72))] px-3 py-2 text-xs font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_12px_26px_rgba(0,0,0,0.16)] transition-all hover:brightness-110"
               >
                 <Download className="h-3.5 w-3.5" />
                 PDF звіт
               </button>
             </>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
-          >
-            <X className="h-3.5 w-3.5" />
-            Закрити
-          </button>
         </div>
       </div>
 
@@ -796,6 +831,16 @@ function WheelInlineFrame({
             onCancel={onClose}
           />
         )}
+      </div>
+
+      <div className={EDGE_ACTION_WRAP}>
+        <button
+          type="button"
+          onClick={onClose}
+          className={LIQUID_FOOTER_BUTTON_ICE}
+        >
+          ↑ Згорнути вгору
+        </button>
       </div>
     </div>
   )

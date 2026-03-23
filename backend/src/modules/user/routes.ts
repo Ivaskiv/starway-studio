@@ -4,6 +4,7 @@ import { Role } from '@starway/db/prisma-client'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { authRequired } from '../auth/middleware/auth.js'
 import { requireUser } from '../../utils/requireUser.js'
+import { attachEmailToUser } from './identity.service.js'
 
 const router = Router()
 
@@ -129,18 +130,23 @@ router.patch('/email', authRequired, async (req: AuthenticatedRequest, res: Resp
     return
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } })
-  if (existing && existing.id !== userId) {
-    res.status(409).json({ error: 'EMAIL_TAKEN' })
-    return
+  try {
+    const result = await attachEmailToUser(userId, email)
+    res.json({ ok: true, merged: result.merged, userId: result.userId })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_EMAIL') {
+      res.status(400).json({ error: 'INVALID_EMAIL' })
+      return
+    }
+
+    if (error instanceof Error && error.message === 'IDENTITY_MERGE_CONFLICT') {
+      res.status(409).json({ error: 'EMAIL_TAKEN' })
+      return
+    }
+
+    console.error('[UserRoutes] PATCH /email failed:', error)
+    res.status(500).json({ error: 'SERVER_ERROR' })
   }
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { email },
-  })
-
-  res.json({ ok: true })
 })
 
 export default router

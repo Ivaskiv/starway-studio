@@ -3,14 +3,12 @@
 import { cn } from '@/lib/utils'
 import { GlassCard, Input } from '@/ui'
 import { Check, GitBranch, Palette, Pipette } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import {
-  colorToRgba,
   darkenColor,
-  generateShades,
-  getContrastColor,
   lightenColor,
+  generateShades,
 } from '@/lib/theme/color.utils'
 
 import { ACCENT_PRESETS, type UiMode } from '@/theme/accent.utils'
@@ -74,36 +72,6 @@ interface Props {
   onModeChange: (mode: UiMode) => void
 }
 
-function ColorPreview({ color, contrast }: { color: string; contrast: string }) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!ref.current) return
-    ref.current.style.background = color
-    ref.current.style.color = contrast
-  }, [color, contrast])
-
-  return <div ref={ref} className="mt-3 h-14 rounded-xl border border-[var(--border-primary)]" />
-}
-
-function PaletteShadeCard({ shade }: { shade: { name: string; hex: string } }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const contrast = getContrastColor(shade.hex)
-
-  useEffect(() => {
-    if (!ref.current) return
-    ref.current.style.background = shade.hex
-    ref.current.style.color = contrast
-    ref.current.style.boxShadow = `0 10px 20px ${colorToRgba(shade.hex, 0.4)}`
-  }, [shade.hex, contrast])
-
-  return (
-    <div ref={ref} className="theme-color-card">
-      {shade.name}
-    </div>
-  )
-}
-
 export function ThemeSettingsPanel({
   accent,
   mode,
@@ -146,36 +114,35 @@ export function ThemeSettingsPanel({
   /* -------------------------------------------------- */
 
   return (
-    <GlassCard className="p-0 overflow-hidden">
+    <GlassCard className="ios-panel overflow-hidden p-0">
 
       {/* header */}
 
-      <div className="flex items-center justify-between px-6 py-4 border-b">
+      <div className="flex items-center justify-between border-b border-[var(--border-primary)] px-6 py-5">
 
         <div className="flex items-center gap-3">
           <Palette size={18} />
           <div>
-            <p className="font-bold">Колірна система</p>
-            <p className="text-xs opacity-70">
-              Accent + tokens + palette engine
+            <p className="font-bold text-[var(--text-primary)]">Колірна система</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Accent, палітра і preview в одному control center
             </p>
           </div>
         </div>
 
         {/* mode switch */}
 
-        <div className="flex gap-2">
+        <div className="ios-segment-shell">
 
           {(['dark', 'light'] as UiMode[]).map(m => (
             <button
               key={m}
               onClick={() => onModeChange(m)}
               className={cn(
-                'theme-toggle',
-                mode === m && 'theme-toggle-active'
+                mode === m ? 'ios-segment-btn--active' : 'ios-segment-btn--idle'
               )}
             >
-              {m}
+              {m === 'dark' ? 'Темна' : 'Світла'}
             </button>
           ))}
 
@@ -185,7 +152,7 @@ export function ThemeSettingsPanel({
 
       {/* accent presets */}
 
-      <div className="flex gap-2 px-6 py-3 border-b flex-wrap">
+      <div className="flex flex-wrap gap-2 border-b border-[var(--border-primary)] px-6 py-4">
 
         {ACCENT_PRESETS.map((p, index) => (
           <button
@@ -217,18 +184,17 @@ export function ThemeSettingsPanel({
 
       {/* tabs */}
 
-      <div className="flex border-b">
+      <div className="flex border-b border-[var(--border-primary)] px-6 py-3">
 
         {['tokens', 'palette', 'preview'].map(t => (
           <button
             key={t}
             onClick={() => setTab(t as any)}
             className={cn(
-              'theme-tab',
-              tab === t && 'theme-tab-active'
+              tab === t ? 'ios-segment-btn--active' : 'ios-segment-btn--idle'
             )}
           >
-            {t}
+            {t === 'tokens' ? 'Токени' : t === 'palette' ? 'Палітра' : 'Preview'}
           </button>
         ))}
 
@@ -244,7 +210,6 @@ export function ThemeSettingsPanel({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {TOKENS.map(t => {
               const raw = cssVar(t.token)
-              const contrast = getContrastColor(raw)
               return (
                 <div
                   key={t.token}
@@ -265,7 +230,14 @@ export function ThemeSettingsPanel({
                     )}
                   </div>
 
-                  <ColorPreview color={raw} contrast={contrast} />
+                  <div className="mt-3 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3 shadow-[inset_0_1px_0_var(--glass-highlight)] backdrop-blur-[var(--blur-soft)]">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                      Поточне значення
+                    </p>
+                    <p className="mt-2 font-mono text-sm text-[var(--text-primary)]">
+                      {raw}
+                    </p>
+                  </div>
 
                   <div className="mt-3 flex items-center justify-between text-xs uppercase text-[var(--text-muted)]">
                     <span className="font-semibold tracking-widest">{raw}</span>
@@ -289,10 +261,13 @@ export function ThemeSettingsPanel({
 
         {tab === 'palette' && (
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
 
             {palette.shades.map((shade) => (
-              <PaletteShadeCard key={shade.name} shade={shade} />
+              <div key={shade.name} className="ios-glass-soft p-4">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">{shade.name}</p>
+                <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">{shade.hex}</p>
+              </div>
             ))}
 
           </div>
@@ -304,20 +279,9 @@ export function ThemeSettingsPanel({
         {tab === 'preview' && (
 
           <div className="space-y-4">
-
-            <button className="theme-btn-primary">
-              Primary Button
-            </button>
-
-            <div className="theme-glass-card p-4 rounded-xl">
-              Glass Card Preview
-            </div>
-
-            <input
-              className="theme-input"
-              placeholder="Input preview"
-            />
-
+            <button className="ios-button">Primary Action</button>
+            <div className="ios-glass-soft rounded-[20px] p-4">Glass Card Preview</div>
+            <input className="ios-input" placeholder="Input preview" />
           </div>
 
         )}
@@ -326,7 +290,7 @@ export function ThemeSettingsPanel({
 
       {/* footer */}
 
-      <div className="px-6 py-3 border-t text-xs opacity-70 flex items-center gap-2">
+      <div className="flex items-center gap-2 border-t border-[var(--border-primary)] px-6 py-4 text-xs text-[var(--text-muted)]">
 
         <GitBranch size={12} />
 

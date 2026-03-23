@@ -5,18 +5,17 @@ import { prisma } from '../../../db/client.js'
 import { buildWebDeepLink, generateDeepLink, resolveDeepLinkToken } from '../../deeplinks/service.js'
 import { trackEvent } from '../../events/service.js'
 import { startFlow } from '../../start-flow/service.js'
+import { getAccessControlState } from '../../access/service.js'
 import { verifyTelegramLinkCode } from '../../social/service.js'
 import { findLinkedUserId, upsertTelegramBinding } from '../services/linking.service.js'
+import { resolveOrCreateTelegramGuestUser } from '../../user/identity.service.js'
 import {
   aiMentorStartKeyboard,
   continueOrRestartKeyboard,
   getTelegramAppUrl,
-  leadMagnetChoiceKeyboard,
   mainMenuKeyboard,
   openAppKeyboard,
   openUrlKeyboard,
-  subscribedKeyboard,
-  trialActiveKeyboard,
 } from '../keyboards.js'
 
 type TelegramUserState = 'NEW' | 'LINKED' | 'RETURNING' | 'TRIAL' | 'SUBSCRIBED'
@@ -31,7 +30,9 @@ export type UserState =
   | 'in_trial'
   | 'subscribed'
 
-type InlineButton = { text: string; callback_data: string }
+type InlineButton =
+  | { text: string; callback_data: string }
+  | { text: string; url: string }
 type StateMessage = {
   text: string
   buttons: InlineButton[][]
@@ -62,38 +63,85 @@ type MenuMentor = {
   blocker?: string | null
 }
 
-async function ensureTelegramGuestUser(params: {
-  linkedUserId: string | null
-  telegramUserId: string
-  telegramUserName: string | null
-  chatId: string
-  firstName: string
-}): Promise<string> {
-  if (params.linkedUserId) {
-    return params.linkedUserId
+type ProductShowcaseItem = {
+  id: string
+  title: string
+  description: string
+  infoUrl: string | null
+}
+
+const TELEGRAM_PRODUCT_SHOWCASE: ProductShowcaseItem[] = [
+  {
+    id: 'ai-mentor',
+    title: '🤖 AI Ментор',
+    description: 'Щоденні сесії, мікрозавдання, AI аналіз стану та підтримка 24/7.',
+    infoUrl: getTelegramAppUrl('/products/ai-mentor'),
+  },
+  {
+    id: 'five-points',
+    title: '🎁 5 точок опори',
+    description: 'Безкоштовний практикум для знайомства з системою і фіксації стартової точки.',
+    infoUrl: getTelegramAppUrl('/products/five-points'),
+  },
+  {
+    id: 'system-21',
+    title: '🔥 Система 21',
+    description: '21 день для виходу з відкладання і повернення в дію.',
+    infoUrl: getTelegramAppUrl('/products/system-21'),
+  },
+  {
+    id: 'fears',
+    title: '🛡️ Страхи',
+    description: 'Робота з внутрішніми блоками, сумнівами і реакціями.',
+    infoUrl: getTelegramAppUrl('/products/fears'),
+  },
+  {
+    id: 'code-of-change',
+    title: '🎯 Код змін',
+    description: 'Стратегія цілей, рішень і системного руху.',
+    infoUrl: getTelegramAppUrl('/products/code-of-change'),
+  },
+  {
+    id: 'state-mastery',
+    title: '⚡ Стан — ключ до успіху',
+    description: 'Керування енергією, відновленням і внутрішньою стабільністю.',
+    infoUrl: getTelegramAppUrl('/products/state-mastery'),
+  },
+  {
+    id: 'consultation',
+    title: '👥 Консультація з Надею',
+    description: 'Персональний розбір, фокус на вузькому місці і стратегія руху.',
+    infoUrl: getTelegramAppUrl('/products/consultation'),
+  },
+]
+
+function getProductShowcaseMessage(): StateMessage {
+  return {
+    text:
+      'Starway.\n\n' +
+      'Система яка веде від поточного стану до конкретного результату.\n' +
+      'Без мотивації. Без зайвого.\n\n' +
+      'Зараз у системі доступні:\n\n' +
+      TELEGRAM_PRODUCT_SHOWCASE.map(product => `• ${product.title} — ${product.description}`).join('\n') +
+      '\n\nОбери продукт і відкрий сторінку з деталями:',
+    buttons: TELEGRAM_PRODUCT_SHOWCASE.map(product => [
+      product.infoUrl
+        ? { text: `Дізнатись більше · ${product.title}`, url: product.infoUrl }
+        : { text: `Дізнатись більше · ${product.title}`, callback_data: 'return_main_menu' },
+    ]),
   }
+}
 
-  const guestEmail = `telegram-guest-${params.telegramUserId}@starway.local`
-
-  const existing = await prisma.user.findUnique({
-    where: { email: guestEmail },
-    select: { id: true },
-  })
-
-  const user = existing ?? await prisma.user.create({
-    data: {
-      email: guestEmail,
-      name: params.firstName,
-      firstName: params.firstName,
-      telegramUserId: params.telegramUserId,
-      telegramUserName: params.telegramUserName,
-      telegramChatId: params.chatId,
-      telegramLinkedAt: new Date(),
-    },
-    select: { id: true },
-  })
-
-  return user.id
+function getPauseSessionMessage(kind: 'trial' | 'subscription'): StateMessage {
+  return {
+    text: kind === 'trial'
+      ? 'Сесію призупинено.\n\nТріал продовжує тривати, дні не зупиняються.\nКошти не списуються, але й час не заморожується.\n\nКоли повернешся, продовжиш з того місця, де зупинилась.'
+      : 'Сесію призупинено.\n\nПідписка залишається активною, кошти не повертаються.\nКоли повернешся, продовжиш з того місця, де зупинилась.',
+    buttons: [
+      [{ text: '▶️ Продовжити з місця зупинки', callback_data: 'continue_ai_mentor' }],
+      [{ text: '🏠 Головне меню', callback_data: 'return_main_menu' }],
+    ],
+  }
 }
 
 async function sendResolvedDeepLinkReply(ctx: Context, params: {
@@ -116,7 +164,10 @@ async function sendResolvedDeepLinkReply(ctx: Context, params: {
   })
 
   const url = buildWebDeepLink(nextLink.token, nextLink.path)
-  const label = params.action === 'open_miniapp'
+  const canOpenMiniApp = params.action === 'open_miniapp'
+    ? await hasMiniAppAccess(params.userId)
+    : false
+  const label = params.action === 'open_miniapp' && canOpenMiniApp
     ? '📱 Відкрити Mini App'
     : '🌐 Продовжити у web'
   const text = params.action === 'bind_telegram'
@@ -165,6 +216,33 @@ async function setPersistentKeyboardSilently(ctx: Context): Promise<void> {
   } catch {
     // completely silent
   }
+}
+
+async function hasMiniAppAccess(userId: string | null): Promise<boolean> {
+  if (!userId) return false
+
+  try {
+    const access = await getAccessControlState(userId)
+    return access.hasSubscription
+  } catch {
+    return false
+  }
+}
+
+async function getAccessAwareAppReplyMarkup(
+  userId: string | null,
+  fallbackPath = '/products/ai-mentor',
+): Promise<ReturnType<typeof openUrlKeyboard>['reply_markup'] | undefined> {
+  if (await hasMiniAppAccess(userId)) {
+    return openAppKeyboard().reply_markup
+  }
+
+  const fallbackUrl = getTelegramAppUrl(fallbackPath)
+  if (!fallbackUrl) {
+    return undefined
+  }
+
+  return openUrlKeyboard(fallbackUrl, '🌐 Відкрити сайт').reply_markup
 }
 
 async function hasActiveLeadMagnetSession(userId: string): Promise<boolean> {
@@ -445,14 +523,9 @@ export function getStateMessage(
   nudgeCount = 0,
 ): StateMessage {
   const insight = mentor?.insight ? `\n\n${mentor.insight}` : ''
+  const activeStateLabel = mentor?.stage ? `\nСтан: ${mentor.stage}` : '\nСтан: у процесі'
   const map: Record<UserState, StateMessage> = {
-    new: {
-      text: 'Starway.\n\nСистема яка веде від поточного стану до конкретного результату.\nБез мотивації. Без зайвого.\n\nОбери з чого почати:',
-      buttons: [
-        [{ text: '🎯 Дізнатись свій стан', callback_data: 'start_wheel' }],
-        [{ text: '✨ Спробувати 7 днів', callback_data: 'start_trial' }],
-      ],
-    },
+    new: getProductShowcaseMessage(),
     lm_started: {
       text: `Ти відкрила лідмагніт, але не почала.${insight}\n\nЯкщо залишиш це тут, нічого не зміниться.\n\nПродовжиш зараз чи вийдеш?`,
       buttons: [
@@ -497,24 +570,21 @@ export function getStateMessage(
       ],
     },
     in_trial: {
-      text: `День ${trialDay ?? '?'} з 7.${insight}`,
+      text:
+        `Сесія активна.\nПідписка: тріал · день ${trialDay ?? '?'} із 7.${activeStateLabel}${insight}\n\n` +
+        'Можеш продовжити з місця зупинки або вийти із сесії.',
       buttons: [
-        [{ text: '✅ Мої завдання', callback_data: 'open_tasks' }],
-        [{ text: '📊 Мій стан', callback_data: 'open_status' }],
-        [{ text: '🤖 AI Ментор', callback_data: 'continue_ai_mentor' }],
+        [{ text: '▶️ Продовжити', callback_data: 'continue_ai_mentor' }],
+        [{ text: '⏸ Вийти із сесії', callback_data: 'pause_trial_session' }],
       ],
     },
     subscribed: {
-      text: 'Обери дію:',
+      text:
+        `Сесія активна.\nПідписка: активна.${activeStateLabel}${insight}\n\n` +
+        'Можеш продовжити з місця зупинки або вийти із сесії.',
       buttons: [
-        [
-          { text: '🤖 AI Ментор', callback_data: 'continue_ai_mentor' },
-          { text: '📊 Мій стан', callback_data: 'open_status' },
-        ],
-        [
-          { text: '🎯 Моя ціль', callback_data: 'open_goal' },
-          { text: '💬 Підтримка', callback_data: 'open_support' },
-        ],
+        [{ text: '▶️ Продовжити', callback_data: 'continue_ai_mentor' }],
+        [{ text: '⏸ Вийти із сесії', callback_data: 'pause_subscription_session' }],
       ],
     },
   }
@@ -639,95 +709,45 @@ async function getUserState(userId: string | null): Promise<{ state: TelegramUse
   return { state: 'LINKED', trialDay: null }
 }
 
-async function getUserStatsBlock(userId: string): Promise<string> {
-  const [streak, entries, wheel] = await Promise.all([
-    prisma.streak.findFirst({
-      where: { userId },
-      orderBy: { updatedAt: 'desc' },
-      select: { current: true },
-    }),
-    prisma.dailyEntry.count({ where: { userId } }),
-    prisma.wheelAssessment.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-    }),
-  ])
-
-  let stats = ''
-  if (streak?.current) stats += `\nСерія: ${streak.current} днів`
-  if (entries) stats += `\nЗаписів: ${entries}`
-  if (wheel) stats += `\nОстаннє колесо: ${wheel.createdAt.toLocaleDateString('uk-UA')}`
-
-  return stats
-}
-
-async function getSmartOffer(userId: string): Promise<string> {
-  const [user, subscription, fivePointsEnrollment] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { currentState: true },
-    }),
-    prisma.subscription.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      select: { status: true, trialEndsAt: true },
-    }),
-    prisma.fivePointsEnrollment.findFirst({
-      where: { userId },
-      select: { id: true },
-    }),
-  ])
-
-  if (subscription?.status === 'ACTIVE') {
-    return ''
-  }
-
-  if (subscription?.status === 'TRIAL' && subscription.trialEndsAt && subscription.trialEndsAt.getTime() <= Date.now()) {
-    return '\nГотовий зробити наступний крок?\n👉 Повний доступ відкриває всі модулі.'
-  }
-
-  if (user?.currentState === 'TELEGRAM_LINKED') {
-    return '\n7 днів безкоштовно — достатньо щоб побачити зсув.'
-  }
-
-  if (fivePointsEnrollment) {
-    return '\nAI Ментор продовжить роботу яку ти почав.'
-  }
-
-  return '\nКолесо балансу покаже де найбільший перекіс. Займе 3 хвилини.'
-}
-
 async function decideNextStep(state: TelegramUserState, userId: string | null, trialDay: number | null): Promise<StartReply> {
   if (state === 'NEW') {
-    return {
-      text: 'Starway.\nСистема яка веде від поточного стану до конкретного результату.\nБез мотивації. Без зайвого.\n\nОбери з чого почати:',
-      reply_markup: leadMagnetChoiceKeyboard().reply_markup,
-    }
+    const menu = getProductShowcaseMessage()
+    return { text: menu.text, reply_markup: { inline_keyboard: menu.buttons } }
   }
 
   if (state === 'TRIAL') {
+    const mentor = userId
+      ? await prisma.userAIMentor.findFirst({
+          where: { userId },
+          orderBy: { updatedAt: 'desc' },
+          select: { stage: true, insight: true, blocker: true },
+        })
+      : null
+    const menu = getStateMessage('in_trial', '', mentor, String(trialDay ?? 1))
     return {
-      text: `День ${trialDay ?? 1} з 7. Продовжуємо?`,
-      reply_markup: trialActiveKeyboard().reply_markup,
+      text: menu.text,
+      reply_markup: { inline_keyboard: menu.buttons },
     }
   }
 
   if (state === 'SUBSCRIBED') {
+    const mentor = userId
+      ? await prisma.userAIMentor.findFirst({
+          where: { userId },
+          orderBy: { updatedAt: 'desc' },
+          select: { stage: true, insight: true, blocker: true },
+        })
+      : null
+    const menu = getStateMessage('subscribed', '', mentor)
     return {
-      text: 'Система активна.',
-      reply_markup: subscribedKeyboard().reply_markup,
+      text: menu.text,
+      reply_markup: { inline_keyboard: menu.buttons },
     }
   }
 
   if (userId) {
-    const stats = await getUserStatsBlock(userId)
-    const smartOffer = await getSmartOffer(userId)
-
-    return {
-      text: `З поверненням.\nПродовжимо з того місця де зупинились?${stats}\n${smartOffer}`.trim(),
-      reply_markup: continueOrRestartKeyboard().reply_markup,
-    }
+    const menu = getProductShowcaseMessage()
+    return { text: menu.text, reply_markup: { inline_keyboard: menu.buttons } }
   }
 
   return {
@@ -754,8 +774,9 @@ async function resolveUserId(ctx: Context): Promise<string | null> {
 export async function handleStartWheel(ctx: Context) {
   const userId = await resolveUserId(ctx)
   if (!userId) {
+    const replyMarkup = await getAccessAwareAppReplyMarkup(null)
     await ctx.reply('Відкрий додаток і натисни Підключити Telegram', {
-      reply_markup: openAppKeyboard().reply_markup,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
   }
@@ -797,8 +818,9 @@ export async function handleStartTrial(ctx: Context) {
 
   const userId = await resolveUserId(ctx)
   if (!userId) {
+    const replyMarkup = await getAccessAwareAppReplyMarkup(null)
     await ctx.reply('Відкрий додаток і натисни Підключити Telegram', {
-      reply_markup: openAppKeyboard().reply_markup,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
   }
@@ -869,8 +891,9 @@ export async function handleStart(ctx: StartContext) {
         hasChat: false,
       },
     })
+    const replyMarkup = await getAccessAwareAppReplyMarkup(null)
     await ctx.reply('⚠️ Не вдалося визначити чат.', {
-      reply_markup: openAppKeyboard().reply_markup,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
   }
@@ -895,7 +918,7 @@ export async function handleStart(ctx: StartContext) {
       const resolvedDeepLink = await resolveDeepLinkToken({ token: payload, consume: true })
 
       if (resolvedDeepLink) {
-        linkedUserId = await ensureTelegramGuestUser({
+        linkedUserId = await resolveOrCreateTelegramGuestUser({
           linkedUserId: resolvedDeepLink.userId,
           telegramUserId,
           telegramUserName,
@@ -965,12 +988,15 @@ export async function handleStart(ctx: StartContext) {
       })
 
       await ctx.reply('Telegram підключено. Повернись у додаток, щоб продовжити flow.', {
-        reply_markup: openAppKeyboard().reply_markup,
+        ...(await (async () => {
+          const replyMarkup = await getAccessAwareAppReplyMarkup(linkedUserId)
+          return replyMarkup ? { reply_markup: replyMarkup } : {}
+        })()),
       })
       return
     }
 
-    linkedUserId = await ensureTelegramGuestUser({
+    linkedUserId = await resolveOrCreateTelegramGuestUser({
       linkedUserId,
       telegramUserId,
       telegramUserName,

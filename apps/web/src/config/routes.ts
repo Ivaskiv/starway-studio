@@ -21,6 +21,7 @@ export const ROUTES = {
   ONBOARDING_CONTINUE: '/onboarding/continue',
   AI_FUNNEL_LANDING: '/ai-funnel',
   HELP: '/help',
+  PRODUCT_INFO_BASE: '/products',
   RESET_PASSWORD: '/reset-password',
   
   // ==========================================
@@ -126,6 +127,11 @@ export const ROUTE_METADATA: Record<RoutePath, {
   },
   '/help': {
     title: 'Допомога',
+    requiresAuth: false,
+    requiresPaid: false,
+  },
+  '/products': {
+    title: 'Продукти Starway',
     requiresAuth: false,
     requiresPaid: false,
   },

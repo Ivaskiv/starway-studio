@@ -91,12 +91,12 @@ export default function MainLayout({
                 <Footer />
               </>
             ) : (
-              <div className="max-w-[1600px] mx-auto w-full px-6 py-6">
-                <div className="flex items-center justify-between gap-4 mb-6">
+              <div className="flex min-h-full flex-col">
+                <div className="flex items-center justify-between gap-4 px-3 py-4">
                   <div className="flex-1"><Breadcrumbs /></div>
                   <SettingsBreadcrumbAction />
                 </div>
-                <main className="min-h-[60vh]"><Outlet /></main>
+                <main className="min-h-[60vh] flex-1 px-3 pb-6"><Outlet /></main>
                 <Footer />
               </div>
             )}

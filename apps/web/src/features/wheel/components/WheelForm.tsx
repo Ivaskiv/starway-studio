@@ -342,16 +342,6 @@ export const WheelForm = ({ userId, onComplete, onCancel, nextWheelAvailable }: 
 
       </div>
 
-      {/* ───────────────────────────────────────── */}
-      {/* Generation note */}
-      {/* ───────────────────────────────────────── */}
-
-      {isResultStep && (
-        <p className="text-center text-xs text-white/35">
-          Використано {generationsUsed} із {MAX_GENERATIONS} генерацій
-        </p>
-      )}
-
     </div>
   )
 }

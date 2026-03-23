@@ -57,7 +57,9 @@ export interface DailyCycleEntry {
   choice: DailyChoice
   dayFact: string
   microSupport?: string
+  content?: Record<string, unknown> | null
   createdAt: string
+  updatedAt?: string
 }
 
 /* ── Input (у БД) ── */

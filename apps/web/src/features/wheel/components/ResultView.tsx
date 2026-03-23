@@ -27,6 +27,7 @@ export const ResultView = ({
   nextWheelAvailable,
 }: ResultViewProps) => {
   const fillCompleted = scores.every((item) => typeof item.score === 'number' && item.score > 0);
+  const generationsLeft = Math.max(0, maxGenerations - generationsUsed);
 
   const summary = useMemo(() => {
     const normalized = scores.map((item) => ({ ...item, score: item.score ?? 1 }));
@@ -81,29 +82,11 @@ export const ResultView = ({
           fullWidth
           className="h-11 flex items-center justify-center gap-3 bg-[var(--accent)] shadow-[0_10px_25px_rgba(var(--accent-rgb),0.35)] transition-all hover:scale-[1.01]"
         >
-          <span className="relative">
-            <span>
-              {fillCompleted ? 'Зберегти' : generationsUsed === 0 ? 'Заповнити' : 'Перегенерувати'}
-            </span>
-            <span
-              className="
-              badge-notification 
-              absolute 
-              -top-2 
-              right-[-12px] 
-              inline-flex 
-              h-16 
-              w-16 
-              items-center 
-              justify-center 
-              rounded-full 
-              border 
-              border-white/40 
-              text-[10px] font-semibold text-white shadow-[0_4px_14px_rgba(var(--accent-rgb),0.55)]"
-              aria-label={`Генерація ${generationsUsed + 1} з ${maxGenerations}`}
-            >
-              {generationsUsed + 1}/{maxGenerations}
-            </span>
+          <span>
+            {fillCompleted ? 'Зберегти' : generationsUsed === 0 ? 'Заповнити' : 'Перегенерувати'}
+          </span>
+          <span className="inline-flex min-w-[38px] items-center justify-center rounded-full border border-[rgba(255,255,255,0.24)] bg-[rgba(255,255,255,0.12)] px-2 py-0.5 text-[11px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]">
+            {generationsLeft}/{maxGenerations}
           </span>
         </Button>
       )}

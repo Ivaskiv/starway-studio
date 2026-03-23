@@ -1,6 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import {
+  useGetTelegramLinkUrlQuery,
+  useGetTelegramStatusQuery,
+} from '@/features/auth/services/auth.api'
+import {
+  useGetTodayEntryQuery,
+  useSubmitDailyCycleMutation,
+} from '@/features/daily-cycle/services/daily.api'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 
 const MORNING_QUESTIONS = [
@@ -125,15 +133,66 @@ export function DailyCycleFlow({
   const [step, setStep] = useState(0)
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const lastSyncedSessionRef = useRef<'morning' | 'evening' | null>(null)
+  const { data: telegramStatus } = useGetTelegramStatusQuery(undefined, {
+    skip: embedded,
+  })
+  const { data: telegramLinkData, isFetching: isTelegramLinkLoading } = useGetTelegramLinkUrlQuery(undefined, {
+    skip: embedded,
+  })
+  const {
+    data: todayEntry,
+    refetch: refetchTodayEntry,
+  } = useGetTodayEntryQuery(undefined, {
+    skip: !hasAccess,
+    pollingInterval: embedded ? 15000 : 10000,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  })
+  const [submitDailyCycle] = useSubmitDailyCycleMutation()
 
   const questions = session === 'morning' ? MORNING_QUESTIONS : EVENING_QUESTIONS
   const affirmation = session === 'morning' ? MORNING_AFFIRMATION : EVENING_AFFIRMATION
   const currentQ = questions[step]
   const isLastStep = step === questions.length - 1
   const progress = Math.round((step / questions.length) * 100)
+  const normalizedContent = useMemo(() => {
+    const rawContent = todayEntry?.content
+    return rawContent && typeof rawContent === 'object' && !Array.isArray(rawContent)
+      ? rawContent as Record<string, unknown>
+      : null
+  }, [todayEntry?.content])
+  const hasMorningSession = Boolean(
+    normalizedContent?.morning
+    && typeof normalizedContent.morning === 'object'
+    && !Array.isArray(normalizedContent.morning),
+  )
+  const hasEveningSession = Boolean(
+    normalizedContent?.evening
+    && typeof normalizedContent.evening === 'object'
+    && !Array.isArray(normalizedContent.evening),
+  )
+  const sessionAlreadyCompleted = session === 'morning' ? hasMorningSession : hasEveningSession
   const shellClassName = embedded
     ? 'space-y-4'
     : 'mx-auto max-w-xl space-y-4 p-4'
+
+  useEffect(() => {
+    setSubmitted(sessionAlreadyCompleted)
+
+    if (sessionAlreadyCompleted) {
+      setAnswers({})
+      setStep(0)
+      lastSyncedSessionRef.current = session
+      return
+    }
+
+    if (lastSyncedSessionRef.current !== session) {
+      setAnswers({})
+      setStep(0)
+      lastSyncedSessionRef.current = session
+    }
+  }, [session, sessionAlreadyCompleted])
 
   if (!hasAccess) {
     return (
@@ -245,43 +304,13 @@ export function DailyCycleFlow({
     if (isLastStep) {
       setIsSubmitting(true)
       try {
-        const token = localStorage.getItem('starway_access_token') ?? ''
-        const todayResponse = await fetch('/api/daily/today', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
+        await submitDailyCycle({
+          session,
+          answers,
+          date: new Date().toISOString(),
+        }).unwrap()
 
-        if (!todayResponse.ok) {
-          throw new Error('DAILY_ENTRY_RESOLVE_FAILED')
-        }
-
-        const todayEntry = await todayResponse.json() as { id: string }
-        const serializedAnswers = questions.map(question => ({
-          question: question.label,
-          answer: answers[question.id] ?? '',
-        }))
-
-        const submitResponse = await fetch('/api/daily/entry', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            id: todayEntry.id,
-            state: 'NEUTRAL',
-            choice: 'PENDING',
-            dayFact: answers[currentQ.id] ?? '',
-            answers: serializedAnswers,
-            date: new Date().toISOString(),
-          }),
-        })
-
-        if (!submitResponse.ok) {
-          throw new Error('DAILY_ENTRY_SUBMIT_FAILED')
-        }
-
+        await refetchTodayEntry()
         setSubmitted(true)
         onComplete?.()
       } catch (e) {
@@ -325,11 +354,12 @@ export function DailyCycleFlow({
                 setSession(s)
                 setStep(0)
                 setAnswers({})
+                setSubmitted(false)
               }}
               className={[
                 'rounded-xl px-3 py-1.5 text-xs font-medium transition-all',
                 session === s
-                  ? 'border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.15)] text-[var(--accent)]'
+                  ? 'border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.15)] text-[var(--text-subtle)]'
                   : 'border border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--glass-bg)]',
               ].join(' ')}
             >
@@ -337,6 +367,31 @@ export function DailyCycleFlow({
             </button>
           ))}
         </div>
+        {!embedded && (
+          telegramLinkData?.url ? (
+            <a
+              href={telegramLinkData.url}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-auto inline-flex"
+            >
+              <button
+                type="button"
+                className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+              >
+                {telegramStatus?.botActive ? 'Відповідати в Telegram' : 'Підключити Telegram'}
+              </button>
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled={isTelegramLinkLoading}
+              className="ml-auto rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] opacity-60"
+            >
+              Telegram...
+            </button>
+          )
+        )}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">

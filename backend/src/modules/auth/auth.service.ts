@@ -8,6 +8,7 @@ import { isSuperAdminEmail } from './superadmin.js'
 import { resolveUserAbilities, ABILITIES } from './abilities.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
 import { startTrial } from '../trial/service.js'
+import { attachEmailToUser } from '../user/identity.service.js'
 
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
@@ -345,16 +346,6 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
       throw new AuthServiceError('user_not_found', 404)
     }
 
-    if (normalizedEmail && normalizedEmail !== existing.email) {
-      const emailOwner = await prisma.user.findUnique({
-        where: { email: normalizedEmail },
-        select: { id: true },
-      })
-      if (emailOwner && emailOwner.id !== userId) {
-        throw new AuthServiceError('email_exists', 400)
-      }
-    }
-
     const currentSettings = existing?.uiSettings && typeof existing.uiSettings === 'object' && !Array.isArray(existing.uiSettings)
       ? (existing.uiSettings as Record<string, unknown>)
       : {}
@@ -368,10 +359,23 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
       Object.keys(mergedSettings as Record<string, unknown>).length > 0
     const uiPayload: Prisma.JsonValue | undefined = shouldPersistSettings ? (mergedSettings as Prisma.JsonObject) : undefined
 
+    if (normalizedEmail && normalizedEmail !== existing.email) {
+      try {
+        await attachEmailToUser(userId, normalizedEmail)
+      } catch (error) {
+        if (error instanceof Error && error.message === 'INVALID_EMAIL') {
+          throw new AuthServiceError('invalid_email', 400)
+        }
+        if (error instanceof Error && error.message === 'IDENTITY_MERGE_CONFLICT') {
+          throw new AuthServiceError('email_exists', 400)
+        }
+        throw error
+      }
+    }
+
     await prisma.user.update({
       where: { id: userId },
       data: {
-        email: normalizedEmail ?? undefined,
         firstName: payload.firstName ?? undefined,
         lastName: payload.lastName ?? undefined,
         uiSettings: uiPayload,

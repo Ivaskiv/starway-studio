@@ -64,7 +64,7 @@ export default function Footer() {
         bg-[color:var(--bg-secondary)]
         text-[color:var(--text-primary)]
       ">
-        <div className="max-w-7xl mx-auto px-5 sm:px-6 py-6 flex flex-col gap-5">
+        <div className="w-full px-2 sm:px-3 py-6 flex flex-col gap-5">
 
           {/* ── Brand row ── */}
           <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
@@ -72,7 +72,7 @@ export default function Footer() {
             {/* Logo */}
           <button
             onClick={() => navigateTo('/')}
-            className="flex items-center gap-2.5 focus:outline-none"
+            className="flex items-center gap-2.5 rounded-xl px-1 py-1 focus:outline-none"
           >
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[rgb(var(--accent-rgb))] to-[rgb(var(--accent-strong-rgb))] flex items-center justify-center text-sm font-bold text-white shadow-[var(--shadow-glow)]">
               ✦
@@ -81,7 +81,7 @@ export default function Footer() {
           </button>
 
             {/* Socials */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 self-end sm:self-auto">
               {SOCIALS.map(s => (
                 <a
                   key={s.label}
@@ -109,7 +109,7 @@ export default function Footer() {
           {/* ── Links grid ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {columns.map(col => (
-              <div key={col.title}>
+              <div key={col.title} className="min-w-0">
 
                 {/* Mobile: accordion toggle */}
                 <button
@@ -117,7 +117,7 @@ export default function Footer() {
                   className="
                     w-full flex justify-between items-center
                     text-[10px] font-bold uppercase tracking-[0.12em]
-                    text-[color:var(--text-primary)] mb-2 opacity-80
+                    text-[color:var(--accent)] mb-2 opacity-90
                     sm:cursor-default
                   "
                 >
@@ -134,7 +134,7 @@ export default function Footer() {
                       <button
                         onClick={() => navigateTo(link.path, col.auth ? { requiresAuth: true } : {})}
                         className="
-                          text-[12px] text-left w-full
+                          text-[12px] text-left w-full rounded-lg px-1 py-0.5
                           text-[color:var(--text-muted)]
                           hover:text-[color:var(--accent-soft)]
                           transition-colors duration-150
@@ -165,6 +165,7 @@ export default function Footer() {
                   key={item.path}
                   onClick={() => navigateTo(item.path)}
                   className="
+                    rounded-lg px-1 py-0.5
                     hover:text-[color:var(--accent-soft)]
                     transition-colors duration-150
                   "

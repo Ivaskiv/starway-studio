@@ -84,7 +84,9 @@ export async function runFunnelRole(context: RouterContext, intent: Intent): Pro
 
   return {
     reply: message.text,
-    buttons: message.buttons.flat(),
+    buttons: message.buttons
+      .flat()
+      .filter((button): button is { text: string; callback_data: string } => 'callback_data' in button),
     action: 'NONE',
   }
 }

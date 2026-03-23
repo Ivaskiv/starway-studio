@@ -130,7 +130,7 @@ $bp-sm: 540px;   // mobile
   z-index:     1;
   display:     flex;
   align-items: center;
-  padding:     0 14px;
+  padding:     0;
 
   &--roles { height: var(--hh-role); }
   &--tabs  { height: var(--hh-tab);  }
@@ -255,7 +255,7 @@ $bp-sm: 540px;   // mobile
   display:     flex;
   align-items: center;
   height:      var(--hh-main);
-  padding:     0 14px;
+  padding:     0;
   gap:         10px;
 }
 
@@ -264,12 +264,12 @@ $bp-sm: 540px;   // mobile
   display:       flex;
   align-items:   center;
   gap:           7px;
-  margin-right:  4px;
+  margin-right:  2px;
   flex-shrink:   0;
   background:    transparent;
   border:        none;
   cursor:        pointer;
-  padding:       4px 6px;
+  padding:       4px 4px 4px 2px;
   border-radius: 8px;
   transition:    background 0.12s;
 
@@ -316,6 +316,7 @@ $bp-sm: 540px;   // mobile
   align-items: center;
   gap:         2px;
   flex:        1;
+  min-width:   0;
 
   @media (max-width: $bp-md) { display: none; }
 }
@@ -473,6 +474,8 @@ $bp-sm: 540px;   // mobile
   align-items: center;
   gap:         8px;
   flex-shrink: 0;
+  margin-left: auto;
+  padding-right: 2px;
 }
 
 // Search — desktop

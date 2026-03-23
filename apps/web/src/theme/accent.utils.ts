@@ -120,11 +120,15 @@ export function applyAccentColor(accentHex?: string | null, mode?: UiMode) {
   const rgb = hexToRgb(hex)
   const [r, g, b] = rgb
   const [h, s, l] = rgbToHsl(r, g, b)
+  const resolvedMode = mode ?? loadUiMode()
 
   // Похідні кольори — м'якший soft, глибший strong
   const softRgb   = hslToRgb(h, clamp(s * 0.78, 38, 72), clamp(l + 16, 52, 72))
   const strongRgb = hslToRgb(h, clamp(s * 0.92, 50, 90), clamp(l - 16, 22, 44))
   const glowRgb   = hslToRgb(h, clamp(s * 0.68, 24, 60), clamp(l + 10, 36, 58))
+  const subtleRgb = resolvedMode === 'light'
+    ? hslToRgb(h, clamp(s * 0.56, 34, 64), 44)
+    : hslToRgb(h, clamp(s * 0.72, 48, 82), 70)
 
   // Ambient — синій напрямок (не olive)
   const ambientHue = (h + 10) % 360
@@ -133,6 +137,7 @@ export function applyAccentColor(accentHex?: string | null, mode?: UiMode) {
 
   const darkerHex  = rgbToHex(...strongRgb)
   const lighterHex = rgbToHex(...softRgb)
+  const subtleHex  = rgbToHex(...subtleRgb)
 
   const accentLuminance = relativeLuminance(rgb)
   const onAccentHex = accentLuminance > 0.35 ? '#071018' : '#f0f6ff'
@@ -143,6 +148,9 @@ export function applyAccentColor(accentHex?: string | null, mode?: UiMode) {
 
   // ── Акцент ────────────────────────────────────────────────────────────────
   set('--accent',               hex)
+  set('--accent-h',             `${Math.round(h)}`)
+  set('--accent-s',             `${Math.round(s)}%`)
+  set('--accent-l',             `${Math.round(l)}%`)
   set('--color-accent',         hex)
   set('--color-primary',        hex)
   set('--color-accent-strong',  darkerHex)
@@ -154,6 +162,7 @@ export function applyAccentColor(accentHex?: string | null, mode?: UiMode) {
   set('--accent-gradient',      `linear-gradient(135deg, ${lighterHex} 0%, ${hex} 50%, ${darkerHex} 100%)`)
   set('--on-accent',            onAccentHex)
   set('--on-accent-rgb',        `${onAccentRgb[0]}, ${onAccentRgb[1]}, ${onAccentRgb[2]}`)
+  set('--text-subtle',          subtleHex)
 
   // ── Ambient / фон ─────────────────────────────────────────────────────────
   set('--ambient-rgb',          `${ambient1[0]}, ${ambient1[1]}, ${ambient1[2]}`)

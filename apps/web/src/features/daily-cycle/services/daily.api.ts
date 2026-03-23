@@ -3,10 +3,16 @@
 import { api } from '@/services/api'
 import type { DailyCycleEntry, DailyCycleInput } from '../types/daily.types'
 
-export interface SubmitDailyCycleInput extends DailyCycleInput {
-  id?: string   // ✅ optional — потрібен тільки при оновленні існуючого запису (PATCH)
-  date?: string
-}
+export type SubmitDailyCycleInput =
+  | (DailyCycleInput & {
+    id?: string
+    date?: string
+  })
+  | {
+    session: 'morning' | 'evening'
+    answers: Record<string, string>
+    date: string
+  }
 
 export const dailyCycleApi = api.injectEndpoints({
   endpoints: builder => ({

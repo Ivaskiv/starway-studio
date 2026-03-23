@@ -15,28 +15,22 @@ export type Variant =
   | 'muted';
 
 const blurMap: Record<Blur, string> = {
-  sm: '',
-  md: '',
-  lg: '',
-  xl: '',
+  sm: 'backdrop-blur-[10px]',
+  md: 'backdrop-blur-[14px]',
+  lg: 'backdrop-blur-[18px]',
+  xl: 'backdrop-blur-[24px]',
 };
 
 const variantClasses: Record<Variant, string> = {
-  default: 'border border-[var(--border-accent)] bg-[var(--glass-bg)]/80',
-  bordered: 'border-2 border-[var(--border-accent)] bg-[var(--glass-bg)]/90 shadow-[0_30px_60px_rgba(var(--accent-rgb),0.25)]',
-  gradient:
-    'border border-[var(--border-accent)] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(var(--accent-soft-rgb),0.15),rgba(var(--accent-rgb),0.08))]',
-  frosted: 'border border-[var(--border-accent)] bg-[var(--glass-bg)]/70',
-  accent:
-    'border border-[var(--border-accent)] bg-[linear-gradient(180deg,rgba(var(--accent-soft-rgb),0.28),rgba(var(--accent-rgb),0.12))] text-[var(--accent)] shadow-[inset_0_0_0_1px_rgba(var(--accent-rgb),0.25),0_20px_45px_rgba(var(--accent-rgb),0.2)]',
-  success:
-    'border border-[color:rgba(16,185,129,0.45)] bg-[color:rgba(16,185,129,0.12)] text-[var(--text-primary)] shadow-[0_30px_60px_rgba(16,185,129,0.18)]',
-  error:
-    'border border-[color:rgba(239,68,68,0.5)] bg-[color:rgba(220,38,38,0.12)] text-[var(--text-primary)] shadow-[0_30px_60px_rgba(239,68,68,0.2)]',
-  warning:
-    'border border-[color:rgba(251,191,36,0.55)] bg-[color:rgba(245,158,11,0.12)] text-[var(--text-primary)] shadow-[0_30px_60px_rgba(245,158,11,0.22)]',
-  muted:
-    'border border-[color:rgba(var(--text-rgb),0.3)] bg-[rgba(var(--bg-card-rgb),0.45)] text-[var(--text-muted)] shadow-[0_20px_60px_rgba(var(--text-rgb),0.2)]',
+  default: 'ios-glass',
+  bordered: 'ios-glass ring-1 ring-white/10',
+  gradient: 'ios-glass bg-[linear-gradient(160deg,hsl(0_0%_100%_/_0.14),hsl(var(--accent-h)_82%_60%_/_0.10)_38%,hsl(220_28%_10%_/_0.54)_100%)]',
+  frosted: 'ios-glass-soft',
+  accent: 'ios-glass border-[hsl(var(--accent-h)_82%_60%_/_0.22)] bg-[linear-gradient(180deg,hsl(var(--accent-h)_82%_60%_/_0.14),hsl(0_0%_100%_/_0.03))]',
+  success: 'ios-glass border-[rgba(16,185,129,0.24)] bg-[linear-gradient(180deg,rgba(16,185,129,0.18),rgba(255,255,255,0.03))]',
+  error: 'ios-glass border-[rgba(239,68,68,0.24)] bg-[linear-gradient(180deg,rgba(239,68,68,0.18),rgba(255,255,255,0.03))]',
+  warning: 'ios-glass border-[rgba(245,158,11,0.24)] bg-[linear-gradient(180deg,rgba(245,158,11,0.18),rgba(255,255,255,0.03))]',
+  muted: 'ios-glass-soft opacity-95',
 };
 
 interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
@@ -64,10 +58,10 @@ export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
     <div
       ref={ref}
       className={cn(
-        'liquid-glass surface glass-noise shadow-[0_35px_80px_rgba(var(--accent-rgb),0.22)] text-[var(--text-primary)] transition-all duration-300',
+        'surface glass-noise text-[var(--text-primary)] transition-all duration-300',
         blurMap[blur],
         variantClasses[variant],
-        hover && 'hover:-translate-y-0.5 hover:shadow-[0_0_40px_rgba(var(--accent-rgb),0.25)]',
+        hover && 'hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(0,0,0,0.24),0_12px_30px_var(--glass-shadow)]',
         glow && 'glow-accent',
         animate && 'animate-in fade-in duration-500',
         clickable && 'cursor-pointer active:scale-[0.98]',
@@ -93,7 +87,7 @@ export const GlassCardTitle = ({ children, className }: { children: ReactNode; c
 export const GlassCardDescription = ({ children, className }: { children: ReactNode; className?: string }) => (
   <p
     className={cn(
-      'w-full rounded-xl glass-field bg-[var(--glass-bg)] border border-[var(--glass-border)] text-sm text-[var(--text-muted)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.25)] mt-1',
+      'mt-1 text-sm text-[var(--text-muted)]',
       className
     )}
   >

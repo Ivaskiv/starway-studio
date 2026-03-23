@@ -48,9 +48,9 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: null,
     visibleTo: [],
     items: [
-      { id: 'dashboard', label: 'Кабінет', icon: '✦', path: '/dashboard', visibleTo: [] },
-      { id: 'ai-mentor', label: 'AI Ментор', icon: '🤖', path: '/dashboard/ai-mentor', visibleTo: [] },
-      { id: 'progress', label: 'Прогрес', icon: '↗', path: '/dashboard/progress', visibleTo: [] },
+      { id: 'dashboard', label: 'Кабінет', icon: '', path: '/dashboard', visibleTo: [] },
+      { id: 'ai-mentor', label: 'AI Ментор', icon: '', path: '/dashboard/ai-mentor', visibleTo: [] },
+      { id: 'progress', label: 'Прогрес', icon: '', path: '/dashboard/progress', visibleTo: [] },
     ],
   },
 
@@ -59,13 +59,13 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Мій розвиток',
     visibleTo: ['USER'],
     items: [
-      { id: 'cycle', label: 'Щоденний цикл', icon: '📝', path: '/dashboard/cycle', visibleTo: ['USER'] },
-      { id: 'wheel', label: 'Колесо балансу', icon: '⚖️', path: '/dashboard/wheel', visibleTo: ['USER'] },
-      { id: 'courses', label: 'Практики', icon: '🎁', path: '/dashboard/courses', visibleTo: ['USER'] },
-      { id: 'products', label: 'Продукти', icon: '📦', path: '/dashboard/products', visibleTo: ['USER'] },
-      { id: 'vision', label: 'Бачення', icon: '🎯', path: '/dashboard/vision', visibleTo: ['USER'] },
-      { id: 'zoom', label: 'Zoom-сесії', icon: '📹', path: '/dashboard/zoom', visibleTo: ['USER'] },
-      { id: 'subscription', label: 'Підписка', icon: '💎', path: '/dashboard/subscription', visibleTo: ['USER'] },
+      { id: 'cycle', label: 'Щоденний цикл', icon: '', path: '/dashboard/cycle', visibleTo: ['USER'] },
+      { id: 'wheel', label: 'Колесо балансу', icon: '', path: '/dashboard/wheel', visibleTo: ['USER'] },
+      { id: 'courses', label: 'Практики', icon: '', path: '/dashboard/courses', visibleTo: ['USER'] },
+      { id: 'products', label: 'Продукти', icon: '', path: '/dashboard/products', visibleTo: ['USER'] },
+      { id: 'vision', label: 'Бачення', icon: '', path: '/dashboard/vision', visibleTo: ['USER'] },
+      { id: 'zoom', label: 'Zoom-сесії', icon: '', path: '/dashboard/zoom', visibleTo: ['USER'] },
+      { id: 'subscription', label: 'Підписка', icon: '', path: '/dashboard/subscription', visibleTo: ['USER'] },
     ],
   },
 
@@ -74,10 +74,10 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'AI Система',
     visibleTo: ['EXPERT', 'SUPERADMIN'],
     items: [
-      { id: 'ai-funnel', label: 'AI Воронка', icon: '🚀', path: '/dashboard/ai-funnel', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'ai-producer', label: 'AI Producer', icon: '🎬', path: '/dashboard/ai-producer-console', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'ai-seo', label: 'AI SEO', icon: '🔍', path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'ads', label: 'Реклама', icon: '📣', path: '/dashboard/ads', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ai-funnel', label: 'AI Воронка', icon: '', path: '/dashboard/ai-funnel', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ai-producer', label: 'AI Producer', icon: '', path: '/dashboard/ai-producer-console', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ai-seo', label: 'AI SEO', icon: '', path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ads', label: 'Реклама', icon: '', path: '/dashboard/ads', visibleTo: ['EXPERT', 'SUPERADMIN'] },
     ],
   },
 
@@ -86,10 +86,10 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Продукти',
     visibleTo: ['EXPERT', 'SUPERADMIN'],
     items: [
-      { id: 'my-products', label: 'Мої продукти', icon: '📦', path: '/dashboard/products', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'leadmagnet', label: 'Лідмагніти', icon: '🎯', path: '/dashboard/leadmagnet', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'telegram', label: 'Telegram', icon: '✈️', path: '/dashboard/telegram', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'students', label: 'Учні', icon: '👥', path: '/dashboard/students', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'my-products', label: 'Мої продукти', icon: '', path: '/dashboard/products', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'leadmagnet', label: 'Лідмагніти', icon: '', path: '/dashboard/leadmagnet', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'telegram', label: 'Telegram', icon: '', path: '/dashboard/telegram', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'students', label: 'Учні', icon: '', path: '/dashboard/students', visibleTo: ['EXPERT', 'SUPERADMIN'] },
     ],
   },
 
@@ -109,10 +109,10 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     visibleTo: ['SUPERADMIN'],
     accent: true,
     items: [
-      { id: 'users', label: 'Всі користувачі', icon: '👥', path: '/dashboard/admin/users', visibleTo: ['SUPERADMIN'] },
-      { id: 'revenue', label: 'Revenue', icon: '💰', path: '/dashboard/admin/revenue', visibleTo: ['SUPERADMIN'] },
-      { id: 'roles', label: 'Ролі юзерів', icon: '🎭', path: '/dashboard/admin/roles', visibleTo: ['SUPERADMIN'] },
-      { id: 'transfer', label: 'Transfer', icon: '🔄', path: '/dashboard/admin/transfer-ownership', visibleTo: ['SUPERADMIN'] },
+      { id: 'users', label: 'Всі користувачі', icon: '', path: '/dashboard/admin/users', visibleTo: ['SUPERADMIN'] },
+      { id: 'revenue', label: 'Revenue', icon: '', path: '/dashboard/admin/revenue', visibleTo: ['SUPERADMIN'] },
+      { id: 'roles', label: 'Ролі юзерів', icon: '', path: '/dashboard/admin/roles', visibleTo: ['SUPERADMIN'] },
+      { id: 'transfer', label: 'Transfer', icon: '', path: '/dashboard/admin/transfer-ownership', visibleTo: ['SUPERADMIN'] },
     ],
   },
 ]
@@ -200,30 +200,32 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
         title={collapsed ? item.label : undefined}
         onClick={() => isLocked ? handleLocked(item.path) : handleNav(item.path)}
         className={[
-          'w-full flex items-center rounded-xl mb-1 transition-all duration-200 relative',
-          collapsed ? 'gap-0 justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2.5',
+          'w-full flex items-center rounded-xl mb-0.5 transition-all duration-200 relative',
+          collapsed ? 'gap-0 justify-center px-0 py-2' : 'gap-2.5 px-3 py-2',
           isActive
-            ? 'bg-[var(--glass-bg-hover)] border border-[var(--border-accent)] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-glow)]'
+            ? 'border border-transparent font-semibold text-[var(--text-primary)] underline underline-offset-[6px] decoration-[1px] decoration-[rgba(var(--accent-rgb),0.5)]'
             : isLocked
               ? 'text-[var(--text-subtle)] opacity-50 cursor-not-allowed border border-transparent'
-              : 'text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)] border border-transparent',
+              : 'text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)] hover:underline hover:underline-offset-[6px] hover:decoration-[1px] hover:decoration-[rgba(var(--accent-rgb),0.28)] border border-transparent',
         ].join(' ')}
       >
         {!collapsed && isActive && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] rounded-r-sm bg-gradient-to-b from-[rgb(var(--accent-soft-rgb))] to-[rgb(var(--accent-rgb))] shadow-[var(--shadow-glow)]" />
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[62%] rounded-r-sm bg-[rgba(var(--accent-rgb),0.82)]" />
         )}
 
-        <span
-          className={[
-            'flex-shrink-0 text-center leading-none select-none',
-            collapsed ? 'text-[20px]' : 'text-[14px]',
-            isActive  ? 'text-[rgb(var(--accent-rgb))]'  :
-            isLocked  ? 'text-[var(--text-subtle)]'       :
-                        'text-[var(--text-muted)]',
-          ].join(' ')}
-        >
-          {item.icon}
-        </span>
+        {item.icon && (
+          <span
+            className={[
+              'flex-shrink-0 text-center leading-none select-none',
+              collapsed ? 'text-[20px]' : 'text-[14px]',
+              isActive  ? 'text-[rgb(var(--accent-rgb))]'  :
+              isLocked  ? 'text-[var(--text-subtle)]'       :
+                          'text-[var(--text-muted)]',
+            ].join(' ')}
+          >
+            {item.icon}
+          </span>
+        )}
 
         {!collapsed && (
           <>
@@ -258,14 +260,25 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
 
   const renderSectionLabel = (label: string, accent = false) =>
     !collapsed ? (
-      <p className={[
-        'text-[9px] font-bold tracking-widest uppercase px-3 pt-4 pb-2',
-        accent ? 'text-amber-400/60' : 'text-[var(--text-subtle)]',
-      ].join(' ')}>
-        {label}
-      </p>
+      <div className="flex items-center gap-2 px-3 pt-3 pb-1">
+        <p className={[
+          'shrink-0 text-[9px] font-bold tracking-widest uppercase',
+          accent ? 'text-amber-400/60' : 'text-[var(--text-subtle)]',
+        ].join(' ')}>
+          {label}
+        </p>
+        <span
+          className={[
+            'block min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[8px] tracking-[0.22em]',
+            accent ? 'text-amber-400/30' : 'text-[rgba(var(--accent-rgb),0.26)]',
+          ].join(' ')}
+          aria-hidden="true"
+        >
+          ................................................................................................
+        </span>
+      </div>
     ) : (
-      <div className="h-px bg-[var(--border-primary)] mx-1.5 my-2" />
+      <div className="h-px bg-[var(--border-primary)] mx-1.5 my-1.5" />
     )
 
   const renderSection = (section: SidebarNavSection) => {
@@ -273,7 +286,7 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
     const visibleItems = section.items.map(item => renderNavItem(item)).filter(Boolean)
     if (visibleItems.length === 0) return null
     return (
-      <div key={section.id} className="mb-2">
+      <div key={section.id} className="mb-1.5">
         {section.label && renderSectionLabel(section.label, section.accent)}
         {visibleItems}
       </div>
@@ -289,7 +302,7 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
         'relative flex flex-col flex-shrink-0 bg-[var(--bg-secondary)] h-screen border-r border-[var(--border-primary)]',
         'dashboard-sidebar',
         'transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-visible',
-        collapsed ? 'w-[var(--sidebar-collapsed)]' : 'w-[var(--sidebar-width)]',
+        collapsed ? 'w-[68px]' : 'w-[232px]',
       ].join(' ')}
     >
       <div

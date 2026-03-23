@@ -1,5 +1,5 @@
 // frontend/src/features/settings/pages/SettingsPage.tsx
-import { Palette } from 'lucide-react'
+import { Palette, Sparkles, SunMoon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useDispatch } from 'react-redux'
@@ -21,13 +21,6 @@ import {
 } from '@/theme/accent.utils'
 import { GlassCard } from '@/ui'
 
-type Language = 'uk' | 'en'
-
-const LANGUAGES: { id: Language; label: string; flag: string }[] = [
-  { id: 'uk', label: 'Українська', flag: '🇺🇦' },
-  { id: 'en', label: 'English', flag: '🇬🇧' },
-]
-
 export default function SettingsPage() {
   const { user } = useAuth()
   const dispatch = useDispatch<AppDispatch>()
@@ -36,41 +29,33 @@ export default function SettingsPage() {
 
   const defaultAccent = user?.settings?.accentColor ?? theme.accent ?? loadAccentColor()
   const defaultMode: UiMode = (user?.settings?.theme as UiMode) ?? theme.mode ?? loadUiMode()
-  const defaultLang = (user?.settings?.language as Language) || 'uk'
-
   const [accent, setAccent] = useState(defaultAccent)
   const [mode, setMode] = useState<UiMode>(defaultMode)
-  const [language, setLanguage] = useState<Language>(defaultLang)
   const [saved, setSaved] = useState({
     accent: defaultAccent,
     mode: defaultMode,
-    language: defaultLang,
   })
 
   useEffect(() => {
     if (!user) return
     const savedAccent = user.settings?.accentColor ?? defaultAccent
     const savedMode = (user.settings?.theme as UiMode) ?? defaultMode
-    const savedLang = (user.settings?.language as Language) ?? defaultLang
     setAccent(savedAccent)
     setMode(savedMode)
-    setLanguage(savedLang)
     setSaved({
       accent: savedAccent,
       mode: savedMode,
-      language: savedLang,
     })
     applyAccentColor(savedAccent, savedMode)
     theme.setAccent(savedAccent)
     theme.setMode(savedMode)
-  }, [user, defaultAccent, defaultMode, defaultLang, theme])
+  }, [user, defaultAccent, defaultMode, theme])
 
   const hasChanges = useMemo(
     () =>
       accent !== saved.accent ||
-      mode !== saved.mode ||
-      language !== saved.language,
-    [accent, mode, language, saved],
+      mode !== saved.mode,
+    [accent, mode, saved],
   )
 
   const handleAccent = useCallback((hex: string) => {
@@ -89,12 +74,12 @@ export default function SettingsPage() {
     if (!user) return
     try {
       await updateUserSettings({
-        settings: { accentColor: accent, theme: mode, language },
+        settings: { accentColor: accent, theme: mode },
       }).unwrap()
-      dispatch(updateUserSettingsState({ accentColor: accent, theme: mode, language }))
+      dispatch(updateUserSettingsState({ accentColor: accent, theme: mode }))
       saveAccentColor(accent, mode)
       saveUiMode(mode)
-      setSaved({ accent, mode, language })
+      setSaved({ accent, mode })
       toast.success('Налаштування збережено')
     } catch (error) {
       console.error('settings save failed', error)
@@ -105,7 +90,6 @@ export default function SettingsPage() {
   const handleCancel = () => {
     setAccent(saved.accent)
     setMode(saved.mode)
-    setLanguage(saved.language)
     theme.setAccent(saved.accent)
     theme.setMode(saved.mode)
     applyAccentColor(saved.accent, saved.mode)
@@ -122,66 +106,78 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-      <div className="flex flex-wrap gap-4 justify-between items-center">
-        <div>
-          <p className="text-xs uppercase tracking-[0.5em] text-[var(--text-muted)] mb-1">Налаштування</p>
-          <h1 className="text-3xl font-black text-[var(--text-primary)]">Колірна система · Tokens · Components</h1>
-          <p className="text-sm text-[var(--text-muted)]">Обирайте акцент, переключайте тему, зберігайте токени.</p>
-        </div>
+    <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+      <section className="ios-panel">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
+              Налаштування
+            </p>
+            <h1 className="text-3xl font-black tracking-tight text-[var(--text-primary)] md:text-4xl">
+              Візуальна система Starway
+            </h1>
+            <p className="mt-3 text-base leading-relaxed text-[var(--text-secondary)]">
+              Один центр керування темою, акцентом і glass-поверхнями. Без мовного перемикача, без зайвих технічних рішень, тільки український інтерфейс.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
-          {LANGUAGES.map(lang => (
+          <div className="flex flex-wrap gap-3">
+            <button onClick={handleCancel} className="ios-button-secondary">
+              Скинути
+            </button>
             <button
-              key={lang.id}
-              onClick={() => setLanguage(lang.id)}
+              onClick={handleSave}
+              disabled={!hasChanges || isLoading}
               className={cn(
-                'px-3 py-1 rounded-full text-sm border transition-colors',
-                language === lang.id
-                  ? 'border-[var(--accent)] bg-[rgba(var(--accent-rgb),0.2)] text-[var(--accent-soft)]'
-                  : 'border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--accent-soft)]',
+                'ios-button',
+                (!hasChanges || isLoading) && 'cursor-not-allowed opacity-50 hover:translate-y-0 hover:scale-100',
               )}
             >
-              <span className="mr-1">{lang.flag}</span>
-              {lang.label}
+              {isLoading ? 'Збереження...' : 'Зберегти'}
             </button>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={handleCancel}
-            className="px-5 py-2.5 rounded-full text-sm border border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--accent-rgb)]"
-          >
-            Скинути
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!hasChanges || isLoading}
-            className={cn(
-              'px-5 py-2.5 rounded-full text-sm font-semibold transition',
-              hasChanges ? 'bg-[var(--accent)] text-white shadow-[0_10px_30px_rgba(var(--accent-rgb),0.35)]' : 'bg-white/5 text-[var(--text-muted)] cursor-not-allowed',
-            )}
-          >
-            {isLoading ? 'Збереження...' : 'Зберегти'}
-          </button>
-        </div>
-      </div>
-
-      <GlassCard className="space-y-6 border border-[var(--border-primary)]">
-        <div className="px-6 pt-6 space-y-4">
-          <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
-            <Palette size={16} />
-            Керуйте акцентом, токенами та компонентами в одному місці
           </div>
-          <ThemeSettingsPanel
-            accent={accent}
-            mode={mode}
-            onAccentChange={handleAccent}
-            onModeChange={handleMode}
-          />
         </div>
-      </GlassCard>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <GlassCard className="ios-panel">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="ios-glass-soft p-4">
+              <div className="flex items-center gap-2 text-[var(--accent)]">
+                <Palette size={16} />
+                <span className="text-xs font-semibold uppercase tracking-widest">Accent</span>
+              </div>
+              <p className="mt-3 text-sm text-[var(--text-primary)]">{accent}</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Базове джерело кольору для glow, кнопок і highlights.</p>
+            </div>
+
+            <div className="ios-glass-soft p-4">
+              <div className="flex items-center gap-2 text-[var(--accent)]">
+                <SunMoon size={16} />
+                <span className="text-xs font-semibold uppercase tracking-widest">Режим</span>
+              </div>
+              <p className="mt-3 text-sm capitalize text-[var(--text-primary)]">{mode}</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Світлий або темний glass-корпус із однаковою структурою.</p>
+            </div>
+
+            <div className="ios-glass-soft p-4">
+              <div className="flex items-center gap-2 text-[var(--accent)]">
+                <Sparkles size={16} />
+                <span className="text-xs font-semibold uppercase tracking-widest">UI</span>
+              </div>
+              <p className="mt-3 text-sm text-[var(--text-primary)]">Liquid Glass</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Панелі, кнопки і поля синхронізовані в один iOS-подібний шар.</p>
+            </div>
+          </div>
+        </GlassCard>
+
+        <ThemeSettingsPanel
+          accent={accent}
+          mode={mode}
+          onAccentChange={handleAccent}
+          onModeChange={handleMode}
+        />
+      </section>
     </div>
   )
 }

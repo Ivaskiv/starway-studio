@@ -6,9 +6,9 @@ import { useAppDispatch } from '@/app/hooks'
 import { setCredentials } from '../services/auth.slice'
 import { useLoginMutation } from '../services/auth.api'
 import { saveToken } from '../services/token'
+import { useAuth } from '../hooks/useAuth'
 import { LoginForm } from './LoginForm'
 import { RegisterForm } from './RegisterForm'
-import { useAuth } from '../hooks/useAuth'
 import { usePostAuthNavigation } from '../hooks/usePostAuthNavigation'
 import { getToastMessage, type ToastLang } from '@/features/notifications/i18n/toast'
 import toast from 'react-hot-toast'
@@ -18,8 +18,8 @@ interface Props { isOpen: boolean; onClose: () => void; defaultMode?: Mode }
 
 export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Props) {
   const dispatch        = useAppDispatch()
-  const { user, loginWithSocial } = useAuth()
-  const lang            = (user?.settings?.language ?? 'uk') as ToastLang
+  const { loginWithSocial } = useAuth()
+  const lang: ToastLang = 'uk'
   const [loginMutation] = useLoginMutation()
   const postAuthNavigate = usePostAuthNavigation()
 
@@ -138,8 +138,8 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" onClick={() => handleSocial('google')} disabled={isProcessing} className="border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all">Google</Button>
-                  <Button variant="outline" onClick={() => handleSocial('telegram')} disabled={isProcessing} className="border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all">Telegram</Button>
+                  <Button variant="outline" onClick={() => handleSocial('google')} disabled={isProcessing}>Google</Button>
+                  <Button variant="outline" onClick={() => handleSocial('telegram')} disabled={isProcessing}>Telegram</Button>
                 </div>
               </>
             )}

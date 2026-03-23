@@ -35,6 +35,7 @@ const TrialMirror = lazy(() => import('@/features/goals/pages/TrialMirrorPage'))
 const WeeklyMirror = lazy(() => import('@/features/goals/pages/WeeklyMirrorPage'));
 const Actions = lazy(() => import('@/features/actions/pages/ActionsPage'));
 const Courses = lazy(() => import('@/features/mini-courses/pages/CoursesPage'));
+const ProductInfo = lazy(() => import('@/features/mini-courses/pages/ProductInfoPage'));
 const Subscription = lazy(() => import('@/features/subscription/pages/SubscriptionPage'));
 const AIMentor = lazy(() => import('@/features/ai-mentor/pages/AIMentorPage'));
 const AIGenerator = lazy(() => import('@/features/ai-generator/pages/AIGeneratorPage'));
@@ -258,6 +259,7 @@ export default function App() {
                 <Route path={ROUTES.WHEEL_START} element={<WheelStart />} />
                 <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
                 <Route path={ROUTES.DEV_ROUTES} element={<DevRoutes />} />
+                <Route path="/products/:slug" element={<ProductInfo />} />
                 {PUBLIC_INFO_ROUTES.map((path) => (
                   <Route key={path} path={path} element={<InfoPage />} />
                 ))}

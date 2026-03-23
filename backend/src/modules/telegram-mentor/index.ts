@@ -277,6 +277,24 @@ async function handleCallbackUpdate(ctx: Context): Promise<void> {
     return
   }
 
+  if (data === 'pause_trial_session' || data === 'pause_subscription_session') {
+    await ctx.answerCbQuery()
+    await ctx.reply(
+      data === 'pause_trial_session'
+        ? 'Сесію призупинено.\n\nТріал продовжує тривати, дні не зупиняються.\nКоли повернешся, продовжиш з того місця, де зупинилась.'
+        : 'Сесію призупинено.\n\nПідписка залишається активною, кошти не повертаються.\nКоли повернешся, продовжиш з того місця, де зупинилась.',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '▶️ Продовжити з місця зупинки', callback_data: 'continue_ai_mentor' }],
+            [{ text: '🏠 Головне меню', callback_data: 'return_main_menu' }],
+          ],
+        },
+      },
+    )
+    return
+  }
+
   if (data === 'return_main_menu' || data === 'main_menu') {
     await ctx.answerCbQuery()
     await handleFallback(ctx)

@@ -1,7 +1,6 @@
 // frontend/src/features/auth/components/RegisterForm.tsx
 // ✓ showPasswordToggle в Input — прибрано окремі кнопки show/hide
 
-import { useAuth }              from '@/features/auth/hooks/useAuth'
 import { getToastMessage, type ToastLang } from '@/features/notifications/i18n/toast'
 import { Button, Input }        from '@/ui'
 import { useForm, type AnyFieldApi } from '@tanstack/react-form'
@@ -38,8 +37,7 @@ const FieldInfo = ({ field }: { field: AnyFieldApi }) =>
   ) : null
 
 export function RegisterForm({ email: initialEmail = '', name: initialName = '', onSwitch, onSuccess }: Props) {
-  const { user }    = useAuth()
-  const lang: ToastLang = (user?.settings?.language === 'en' ? 'en' : 'uk') as ToastLang
+  const lang: ToastLang = 'uk'
   const [registerUser, { isLoading }] = useRegisterMutation()
   const isSocialEmail = !!initialEmail
 

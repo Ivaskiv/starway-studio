@@ -29,9 +29,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 // 🔹 Розміри кнопок
 const sizes: Record<Size, string> = {
-  sm: 'h-8 px-3 text-sm gap-1.5',
-  md: 'h-10 px-4 text-base gap-2',
-  lg: 'h-12 px-6 text-lg gap-2.5',
+  sm: 'h-9 px-3.5 text-sm gap-1.5',
+  md: 'h-11 px-5 text-sm gap-2',
+  lg: 'h-12 px-6 text-base gap-2.5',
 };
 
 // 🔹 Розміри іконок
@@ -45,40 +45,40 @@ const iconSizes: Record<Size, string> = {
 // 🔹 Видалені всі старі color maps та inline градієнти
 const colors: Record<Color, Record<Variant, string>> = {
   accent: {
-    solid: 'bg-[var(--accent)] text-[var(--text-primary)] border border-[color:var(--accent)] shadow-lg transition hover:bg-[var(--accent-hover)]/90',
-    outline: 'border border-[color:var(--accent)] text-[var(--accent)] bg-transparent transition hover:bg-[var(--accent-hover)]/10',
-    ghost: 'text-[var(--accent)] bg-transparent hover:bg-[var(--accent-soft)]/20 transition',
-    glass: 'glass-button border-[var(--border-accent)] text-[var(--accent)] bg-[var(--glass-bg)]',
+    solid: 'ios-button',
+    outline: 'ios-button-secondary border-[hsl(var(--accent-h)_82%_60%_/_0.22)] text-[var(--accent)]',
+    ghost: 'ios-button-ghost text-[var(--accent)]',
+    glass: 'ios-button-secondary text-[var(--accent)]',
   },
   muted: {
-    solid: 'bg-[var(--background)] text-[var(--text-primary)] border border-[color:var(--border)] shadow transition duration-200 hover:bg-[rgba(var(--background-rgb),0.8)]',
-    outline: 'border border-[color:var(--border)] text-[var(--text-muted)] bg-transparent transition duration-200 hover:bg-[color:rgba(var(--text-rgb),0.08)]',
-    ghost: 'text-[var(--text-muted)] bg-transparent transition duration-200 hover:bg-[color:rgba(var(--text-rgb),0.06)]',
-    glass: 'glass-button border-[var(--border-primary)] text-[var(--text-muted)] bg-[var(--glass-bg)]',
+    solid: 'ios-button-secondary',
+    outline: 'ios-button-secondary text-[var(--text-secondary)]',
+    ghost: 'ios-button-ghost text-[var(--text-muted)]',
+    glass: 'ios-button-secondary text-[var(--text-secondary)]',
   },
   white: {
-    solid: 'bg-[var(--glass-bg)] text-[var(--text-primary)] border border-[color:var(--glass-border)] shadow-sm transition duration-200 hover:bg-[color:rgba(var(--text-rgb),0.08)]',
-    outline: 'border border-[color:var(--border)] text-[var(--text-muted)] bg-transparent transition duration-200 hover:bg-[color:rgba(var(--text-rgb),0.08)]',
-    ghost: 'text-[var(--text-primary)] bg-transparent transition duration-200 hover:bg-[color:rgba(var(--text-rgb),0.1)]',
-    glass: 'glass-button border-[var(--border-accent)] text-[var(--text-primary)]',
+    solid: 'ios-button-secondary text-[var(--text-primary)]',
+    outline: 'ios-button-secondary text-[var(--text-primary)]',
+    ghost: 'ios-button-ghost text-[var(--text-primary)]',
+    glass: 'ios-button-secondary text-[var(--text-primary)]',
   },
   success: {
-    solid: 'bg-[color:rgba(16,185,129,0.9)] text-[var(--text-primary)] border border-[color:rgba(16,185,129,0.8)] shadow-[0_12px_30px_rgba(16,185,129,0.25)] transition hover:bg-[color:rgba(16,185,129,0.95)]',
-    outline: 'border border-[color:rgba(16,185,129,0.4)] text-[color:rgba(16,185,129,0.9)] bg-transparent transition hover:bg-[color:rgba(16,185,129,0.15)]',
-    ghost: 'text-[color:rgba(16,185,129,0.9)] bg-transparent hover:bg-[color:rgba(16,185,129,0.15)] transition',
-    glass: 'glass-button border-[var(--border-accent)] text-[color:rgba(16,185,129,0.95)]',
+    solid: 'ios-button bg-[linear-gradient(180deg,rgba(16,185,129,0.34),rgba(16,185,129,0.18))]',
+    outline: 'ios-button-secondary border-[rgba(16,185,129,0.22)] text-[rgba(110,231,183,0.95)]',
+    ghost: 'ios-button-ghost text-[rgba(110,231,183,0.95)]',
+    glass: 'ios-button-secondary text-[rgba(110,231,183,0.95)]',
   },
   error: {
-    solid: 'bg-[color:rgba(239,68,68,0.9)] text-[var(--text-primary)] border border-[color:rgba(239,68,68,0.85)] shadow-[0_12px_30px_rgba(239,68,68,0.3)] transition hover:bg-[color:rgba(239,68,68,0.95)]',
-    outline: 'border border-[color:rgba(239,68,68,0.4)] text-[color:rgba(239,68,68,0.9)] bg-transparent transition hover:bg-[color:rgba(239,68,68,0.15)]',
-    ghost: 'text-[color:rgba(239,68,68,0.9)] bg-transparent hover:bg-[color:rgba(239,68,68,0.15)] transition',
-    glass: 'glass-button border-[var(--border-accent)] text-[color:rgba(239,68,68,0.95)]',
+    solid: 'ios-button bg-[linear-gradient(180deg,rgba(239,68,68,0.34),rgba(239,68,68,0.18))]',
+    outline: 'ios-button-secondary border-[rgba(239,68,68,0.22)] text-[rgba(252,165,165,0.95)]',
+    ghost: 'ios-button-ghost text-[rgba(252,165,165,0.95)]',
+    glass: 'ios-button-secondary text-[rgba(252,165,165,0.95)]',
   },
   warning: {
-    solid: 'bg-[color:rgba(245,158,11,0.95)] text-[var(--text-primary)] border border-[color:rgba(245,158,11,0.75)] shadow-[0_12px_30px_rgba(245,158,11,0.3)] transition hover:bg-[color:rgba(245,158,11,0.98)]',
-    outline: 'border border-[color:rgba(245,158,11,0.4)] text-[color:rgba(245,158,11,0.9)] bg-transparent transition hover:bg-[color:rgba(245,158,11,0.15)]',
-    ghost: 'text-[color:rgba(245,158,11,0.9)] bg-transparent hover:bg-[color:rgba(245,158,11,0.15)] transition',
-    glass: 'glass-button border-[var(--border-accent)] text-[color:rgba(245,158,11,0.95)]',
+    solid: 'ios-button bg-[linear-gradient(180deg,rgba(245,158,11,0.34),rgba(245,158,11,0.18))]',
+    outline: 'ios-button-secondary border-[rgba(245,158,11,0.22)] text-[rgba(253,224,71,0.95)]',
+    ghost: 'ios-button-ghost text-[rgba(253,224,71,0.95)]',
+    glass: 'ios-button-secondary text-[rgba(253,224,71,0.95)]',
   },
 };
 
@@ -116,12 +116,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>((props, ref) =>
       type={type}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.5)]',
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[999px] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.24)] focus:ring-offset-0',
         sizes[size],
         colors[resolvedColor][variant],
         fullWidth && 'w-full',
         (disabled || loading) && 'opacity-60 cursor-not-allowed',
-        animate && 'hover:scale-105 active:scale-95',
+        animate && 'hover:scale-[1.02] active:scale-[0.985]',
         pulse && 'animate-pulse',
         activeClasses,
         className

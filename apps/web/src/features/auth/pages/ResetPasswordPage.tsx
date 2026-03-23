@@ -1,6 +1,5 @@
 // frontend/src/features/auth/pages/ResetPasswordPage.tsx
 import { useResetPasswordMutation } from '@/features/auth/services/auth.api'
-import { useAuth } from '@/features/auth/hooks/useAuth'
 import { getToastMessage } from '@/features/notifications/i18n/toast'
 import { Button, Input } from '@/ui'
 import { type FormEvent, useState } from 'react'
@@ -17,8 +16,7 @@ export default function ResetPasswordPage() {
   const [searchParams]  = useSearchParams()
   const navigate        = useNavigate()
   const [resetPassword, { isLoading }] = useResetPasswordMutation()
-  const { user }        = useAuth()
-  const lang            = user?.settings?.language ?? 'uk'
+  const lang            = 'uk'
 
   const initialToken    = searchParams.get('token') ?? ''
   const [token,           setToken]           = useState(initialToken)

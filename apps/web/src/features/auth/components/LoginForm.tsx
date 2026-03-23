@@ -1,7 +1,6 @@
 // frontend/src/features/auth/components/LoginForm.tsx
 // ✓ showPasswordToggle перенесено в Input — тут більше немає окремої кнопки
 import { FormLayout }           from './FormLayout'
-import { useAuth }              from '@/features/auth/hooks/useAuth'
 import {
   useLoginMutation,
   useForgotPasswordMutation,
@@ -25,8 +24,7 @@ export function LoginForm({ onSuccess, onSwitch }: Props) {
   const [resetEmail, setResetEmail] = useState('')
   const navigate                  = useNavigate()
 
-  const { user } = useAuth()
-  const lang: ToastLang = (user?.settings?.language ?? 'uk') as ToastLang
+  const lang: ToastLang = 'uk'
 
   const [login,          { isLoading: isLoginLoading   }] = useLoginMutation()
   const [forgotPassword, { isLoading: isForgotLoading  }] = useForgotPasswordMutation()

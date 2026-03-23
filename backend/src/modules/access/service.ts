@@ -10,6 +10,8 @@ type AccessUserSnapshot = {
   role: 'USER' | 'EXPERT' | 'SUPERADMIN'
   onboardingStage: string | null
   currentStep: string | null
+  trialStartsAt: Date | null
+  trialEndsAt: Date | null
   telegramUserId: string | null
   telegramChatId: string | null
   fivePointsEnrollment: {
@@ -39,6 +41,8 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
       role: true,
       onboardingStage: true,
       currentStep: true,
+      trialStartsAt: true,
+      trialEndsAt: true,
       telegramUserId: true,
       telegramChatId: true,
 
@@ -87,6 +91,8 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
     role: user.role as 'USER' | 'EXPERT' | 'SUPERADMIN',
     onboardingStage: user.onboardingStage ?? null,
     currentStep: user.currentStep ?? null,
+    trialStartsAt: user.trialStartsAt ?? null,
+    trialEndsAt: user.trialEndsAt ?? null,
     telegramUserId: user.telegramUserId ?? null,
     telegramChatId: user.telegramChatId ?? null,
     fivePointsEnrollment: leadEnrollment
@@ -149,17 +155,22 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
   }
 
   const now = new Date()
+  const isSuperAdmin = user.role === 'SUPERADMIN' || isSuperAdminEmail(user.email ?? '')
   const subscription = user.subscription
   const leadEnrollment = user.fivePointsEnrollment
   const isPaidActive =
     subscription?.status === 'ACTIVE' &&
     (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
-  const isTrialActive =
+  const isSubscriptionTrialActive =
     !isPaidActive &&
     subscription?.status === 'TRIAL' &&
     !!subscription.trialEndsAt &&
     subscription.trialEndsAt > now
-  const hasSubscription = isPaidActive || isTrialActive
+  const isUserTrialActive =
+    !!user.trialStartsAt &&
+    !!user.trialEndsAt &&
+    user.trialEndsAt > now
+  const hasSubscription = isSuperAdmin || isPaidActive || isSubscriptionTrialActive || isUserTrialActive
   const hasLeadMagnet = Boolean(
     leadEnrollment?.completedAt ||
     ((leadEnrollment?.progress as { completed?: unknown } | null | undefined)?.completed === true),
@@ -179,7 +190,7 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
       : 'GUEST'
   const email = user.email ?? null
   const telegramId = user.telegramChatId ?? user.telegramUserId ?? null
-  const hasRequiredContacts = Boolean(
+  const hasRequiredContacts = isSuperAdmin || Boolean(
     email &&
     !email.startsWith('telegram-guest-') &&
     telegramId,
@@ -246,14 +257,20 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   // ── TRIAL ──────────────────────────────────────────────────────────────────
   const isTrialActive =
     !isPaidActive &&
-    subscription?.status === 'TRIAL' &&
-    !!subscription.trialEndsAt &&
-    subscription.trialEndsAt > now
+    (
+      (
+        subscription?.status === 'TRIAL' &&
+        !!subscription.trialEndsAt &&
+        subscription.trialEndsAt > now
+      ) ||
+      (!!user.trialStartsAt && !!user.trialEndsAt && user.trialEndsAt > now)
+    )
 
   if (isTrialActive && canUseClientFeatures) {
-    const expiresAt = subscription!.trialEndsAt
-    const trialDay = subscription?.createdAt
-      ? Math.floor((now.getTime() - subscription.createdAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    const expiresAt = subscription?.trialEndsAt ?? user.trialEndsAt ?? null
+    const trialStartAt = subscription?.createdAt ?? user.trialStartsAt ?? null
+    const trialDay = trialStartAt
+      ? Math.floor((now.getTime() - trialStartAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
       : null
     const wheelAllowed = trialDay === 1
     items.push(
@@ -311,7 +328,7 @@ if (isMentorshipActive) {
   return {
     role:     user.role,
     plan,
-    trialEnd: subscription?.trialEndsAt ?? null,
+    trialEnd: subscription?.trialEndsAt ?? user.trialEndsAt ?? null,
     items,
     abilities,
   }
