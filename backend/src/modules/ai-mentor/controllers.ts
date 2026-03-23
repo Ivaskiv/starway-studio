@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import { prisma } from '../../db/client.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import * as aiService from './services.js';
 import { trackEvent, trackQuestionEvent } from '../events/service.js';
@@ -168,6 +169,65 @@ export const getPaidStatus = safeHandler(async (req, res) => {
   if (!userId) return;
   res.json(await aiService.getPaidAccessStatus(userId));
 });
+
+export const getMicroTasks = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const tasks = await prisma.microTask.findMany({
+    where: {
+      userId,
+      isCompleted: false,
+      OR: [
+        { dueAt: null },
+        { dueAt: { gt: new Date() } },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  })
+
+  const mapped = tasks.map(t => ({
+    id: t.id,
+    userId: t.userId,
+    title: t.title,
+    description: t.description ?? undefined,
+    status: t.isCompleted ? 'COMPLETED' : 'PENDING',
+    source: 'aiMentor',
+    reason: t.sphere ?? undefined,
+    expiresAt: t.dueAt?.toISOString() ?? undefined,
+    createdAt: t.createdAt.toISOString(),
+    completedAt: t.completedAt?.toISOString() ?? undefined,
+  }))
+
+  res.json(mapped)
+})
+
+export const completeMicroTask = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const { id } = req.params
+  await prisma.microTask.updateMany({
+    where: { id, userId },
+    data: { isCompleted: true, completedAt: new Date() },
+  })
+
+  res.json({ ok: true })
+})
+
+export const skipMicroTask = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const { id } = req.params
+  await prisma.microTask.updateMany({
+    where: { id, userId },
+    data: { isCompleted: true, completedAt: new Date() },
+  })
+
+  res.json({ ok: true })
+})
 
 export const completeOnboardingStage = safeHandler(async (req, res) => {
   await aiService.completeStage(req.body);

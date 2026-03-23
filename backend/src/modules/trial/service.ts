@@ -71,6 +71,7 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
     return {
       userId,
       isActive:      false,
+      isPaid:        activeSub?.status === 'ACTIVE',
       startedAt:     null,
       endsAt:        null,
       daysLeft:      0,
@@ -94,6 +95,7 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
   return {
     userId,
     isActive,
+    isPaid:        activeSub?.status === 'ACTIVE',
     startedAt:     trialStart,
     endsAt:        trialEnd ?? null,
     daysLeft,

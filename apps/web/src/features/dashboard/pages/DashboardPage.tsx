@@ -74,8 +74,7 @@ const FALLBACK_ACTIVITY: ActivityItem[] = [
 
 function StatsGrid() {
   const { user } = useAuth()
-  const canView = useAbility(ABILITIES.DASHBOARD_VIEW)
-  if (!canView) return null
+  useAbility(ABILITIES.DASHBOARD_VIEW)
 
   const dashboardUser = user as DashboardUser
   const stats = dashboardUser?.stats ?? FALLBACK_STATS
@@ -111,22 +110,35 @@ function JourneySection() {
       <p className="text-sm text-[var(--text-muted)]">Завантажуємо твій шлях...</p>
     </div>
   )
-  if (!trial?.isActive) return (
+
+  const hasEverStarted = !!(trial?.startedAt ?? trial?.currentDay)
+  const isTrialExpired = !trial?.isActive && hasEverStarted
+  const isPaid = trial?.isPaid ?? false
+  const isLocked = isTrialExpired && !isPaid
+  const hasNoTrial = !trial?.isActive && !hasEverStarted
+  const totalDays = (trial?.daysLeft ?? 0) + (trial?.currentDay ?? 1)
+  const currentDay = trial?.currentDay ?? 1
+  const isJustStarted = (trial?.currentDay ?? 0) === 1 && (trial?.progress ?? 0) < 5
+  const now = new Date()
+  const isMorningDone = false
+  const isEveningDone = false
+  const isAfterMorning = now.getHours() >= 9
+  const isAfterEvening = now.getHours() >= 21
+
+  if (hasNoTrial) return (
     <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
-      <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+      <div className="p-5">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
           МІЙ ШЛЯХ
         </p>
         <h2 className="text-xl font-bold text-[var(--text-primary)]">
-          Розпочни свій шлях
+          Розпочни свій шлях ✦
         </h2>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          7 днів безкоштовно — ранкові питання, вечірні афірмації,
-          колесо балансу та AI аналіз стану.
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          7 днів безкоштовно — ранкові питання, вечірня рефлексія,
+          колесо балансу та AI аналіз твого стану.
         </p>
-      </div>
-      <div className="p-4">
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-3 gap-3">
           {[
             { icon: '🌞', label: 'Ранкові питання', sub: 'щодня о 09:00' },
             { icon: '🌙', label: 'Вечірня рефлексія', sub: 'щодня о 21:00' },
@@ -144,23 +156,14 @@ function JourneySection() {
         </div>
         <button
           type="button"
-          className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+          className="mt-4 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
           onClick={() => navigate('/dashboard/ai-mentor')}
         >
-          Розпочати безкоштовний тріал
+          ▶ Розпочати 7 днів безкоштовно
         </button>
       </div>
     </div>
   )
-
-  const totalDays = (trial?.daysLeft ?? 0) + (trial?.currentDay ?? 1)
-  const currentDay = trial?.currentDay ?? 1
-  const isJustStarted = (trial?.currentDay ?? 0) === 1 && (trial?.progress ?? 0) < 5
-  const now = new Date()
-  const isMorningDone = false
-  const isEveningDone = false
-  const isAfterMorning = now.getHours() >= 9
-  const isAfterEvening = now.getHours() >= 21
 
   const tasks = [
     {
@@ -198,6 +201,47 @@ function JourneySection() {
           <p className="mt-1 text-xs text-[var(--text-muted)]">
             Щодня о 09:00 — ранкові питання · о 21:00 — вечірня рефлексія
           </p>
+        </div>
+      )}
+      {isTrialExpired && !isPaid && (
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
+          <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+              ТВІЙ ШЛЯХ · ПАУЗА
+            </p>
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">
+              7 днів завершено 🎯
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Ти пройшов пробний період. Продовж щоб зберегти прогрес
+              і розблокувати повний доступ.
+            </p>
+          </div>
+          <div className="space-y-3 p-4">
+            {[
+              { plan: 'Тиждень', price: '7€', desc: 'Продовжити знайомство', key: 'WEEK' },
+              { plan: 'Місяць', price: '30€', desc: 'Глибинна робота', key: 'MONTH' },
+              { plan: 'Рік', price: '300€', desc: 'Максимальна економія', key: 'YEAR' },
+            ].map(p => (
+              <div
+                key={p.key}
+                className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-primary,var(--bg-secondary))] px-4 py-3"
+              >
+                <div>
+                  <p className="text-sm font-medium text-[var(--text-primary)]">{p.plan}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{p.desc}</p>
+                </div>
+                <span className="text-lg font-bold text-[var(--accent)]">{p.price}</span>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+              onClick={() => navigate('/dashboard/subscription')}
+            >
+              Продовжити шлях →
+            </button>
+          </div>
         </div>
       )}
       <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
@@ -239,9 +283,13 @@ function JourneySection() {
                 key={day}
                 className={[
                   'w-14 flex-shrink-0 rounded-xl border p-2 text-center transition-all',
-                  isDone ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]' :
-                  isToday ? 'border-2 border-[var(--accent)] bg-[var(--bg-secondary)]' :
-                  'border-[var(--border)] opacity-40'
+                  isLocked
+                    ? 'border-[var(--border)] opacity-30 grayscale'
+                    : isDone
+                      ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]'
+                      : isToday
+                        ? 'border-2 border-[var(--accent)] bg-[var(--bg-secondary)]'
+                        : 'border-[var(--border)] opacity-40'
                 ].join(' ')}
               >
                 <div
@@ -305,12 +353,21 @@ function JourneySection() {
               </span>
             </div>
           ))}
-          <button
-            className="mt-3 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
-            onClick={() => navigate(nextTask.path)}
-          >
-            ▶ Продовжити день
-          </button>
+          {!isLocked ? (
+            <button
+              className="mt-3 w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+              onClick={() => navigate(nextTask.path)}
+            >
+              ▶ Продовжити день
+            </button>
+          ) : (
+            <button
+              className="mt-3 w-full rounded-xl border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.08)] py-3 text-sm font-medium text-[var(--accent)] transition-all hover:bg-[rgba(var(--accent-rgb),0.15)]"
+              onClick={() => navigate('/dashboard/subscription')}
+            >
+              Розблокувати доступ →
+            </button>
+          )}
         </div>
       </div>
     </section>
@@ -545,7 +602,6 @@ export default function DashboardPage() {
             <div className="space-y-5">
               <StatsGrid />
               <JourneySection />
-              <GamificationWidget />
               <QuickActionsSection onNavigate={navigateTo} />
             </div>
           )}

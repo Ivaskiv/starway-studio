@@ -11,7 +11,7 @@
 import cron, { type ScheduledTask } from 'node-cron'
 import { prisma, withRetry }       from '../../db/client.js'
 import { sendEveningQuestion, sendMorningQuestion } from './telegram.js'
-import { expireTrials, runTrialMirrorCheck } from '../trial/scheduler.js'
+import { expireTrials, runTrialMirrorCheck, sendExpiredTrialReminder } from '../trial/scheduler.js'
 import { bot }                     from '../../lib/telegram.js'
 import type { MicroTask }          from '@starway/db/prisma-client'
 import { SubscriptionStatus }      from '@starway/db/prisma-client'
@@ -174,6 +174,13 @@ export function startScheduler() {
       setImmediate(() => runWheelMonthlyReport().catch(console.error))
     }
   }, { timezone: tz }))
+
+  registerTask(cron.schedule('0 10 * * *', () => {
+    setImmediate(async () => {
+      try { await sendExpiredTrialReminder() }
+      catch (e) { console.error('❌ Expired trial reminder error:', e) }
+    })
+  }, { timezone: 'Europe/Kyiv' }))
 
   registerTask(cron.schedule('0 10 * * *', () => {
     setImmediate(() => sendMarketingNudges().catch(error => logger.error('[nudge-cron]', error)))

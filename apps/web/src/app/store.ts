@@ -6,12 +6,14 @@ import { setupListeners } from '@reduxjs/toolkit/query'
 
 import producerReducer from '@/features/ai-generator/services/slice'
 import authReducer     from '@/features/auth/services/auth.slice'
+import { microTaskApi } from '@/features/microTask/services/microTask.api'
 import { api }         from '@/services/api'
 import themeReducer    from '@/theme/theme.slice'
 
 export const store = configureStore({
   reducer: {
     [api.reducerPath]: api.reducer,   // єдиний RTK Query reducer
+    [microTaskApi.reducerPath]: microTaskApi.reducer,
     auth:     authReducer,
     theme:    themeReducer,
     producer: producerReducer,
@@ -21,7 +23,7 @@ export const store = configureStore({
       serializableCheck: {
         ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
       },
-    }).concat(api.middleware),        // єдиний RTK Query middleware
+    }).concat(api.middleware).concat(microTaskApi.middleware),        // єдиний RTK Query middleware
   devTools: import.meta.env.NODE_ENV !== 'production',
 })
 

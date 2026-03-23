@@ -17,6 +17,7 @@ export interface TrialMirror {
 export interface TrialStatus {
 userId:        string
   isActive:      boolean
+  isPaid:        boolean
   startedAt:     Date | null
   endsAt:        Date | null
   daysLeft:      number

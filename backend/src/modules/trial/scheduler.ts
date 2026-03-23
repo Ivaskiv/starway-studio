@@ -8,6 +8,12 @@ import { prisma } from '../../db/client.js';
 import { bot } from '../../lib/telegram.js';
 import { generateTrialMirror } from './service.js';
 
+async function sendTg(chatId: string, text: string): Promise<void> {
+  await bot.telegram.sendMessage(chatId, text).catch(err =>
+    console.error('[Trial] telegram send failed:', err)
+  )
+}
+
 export async function scheduleTrialMirror(userId: string, day: 4 | 7) {
   // In production, use cron job or queue
   // For now, manual trigger
@@ -33,6 +39,35 @@ export async function sendTrialReminder(userId: string, daysLeft: number) {
   await bot.telegram.sendMessage(user.telegramUserId, text).catch(err =>
     console.error('[Trial] reminder send failed:', err)
   )
+}
+
+export async function sendExpiredTrialReminder(): Promise<void> {
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+
+  const users = await prisma.user.findMany({
+    where: {
+      trialEndsAt: { gte: twoDaysAgo, lte: yesterday },
+      telegramChatId: { not: null },
+      subscriptions: {
+        none: { status: { in: ['ACTIVE', 'TRIAL'] } },
+      },
+    },
+    select: { telegramChatId: true, firstName: true },
+  })
+
+  for (const user of users) {
+    if (!user.telegramChatId) continue
+    const name = user.firstName ?? 'друже'
+    await sendTg(
+      user.telegramChatId,
+      `✨ ${name}, твій пробний період завершено!\n\n` +
+      `Твій прогрес збережено і чекає на тебе.\n` +
+      `Продовж шлях — від 7€/тиждень 👇\n\n` +
+      `Обери план: /subscription`
+    )
+  }
+  console.log(`📬 Expired trial reminders: ${users.length} users`)
 }
 
 export async function expireTrials() {
