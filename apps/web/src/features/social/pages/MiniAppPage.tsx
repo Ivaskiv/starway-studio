@@ -4,6 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import type { RootState } from '@/app/store'
 import BottomNav from '@/components/miniapp/BottomNav'
+import { EmailCompletionCard } from '@/features/auth/components/EmailCompletionCard'
+import { useUserState } from '@/features/auth/hooks/useUserState'
 import MiniAppHomeSection from '@/features/social/components/MiniAppHomeSection'
 import MiniAppLibrarySection from '@/features/social/components/MiniAppLibrarySection'
 import MiniAppMentorSection from '@/features/social/components/MiniAppMentorSection'
@@ -46,11 +48,12 @@ export default function MiniAppPage() {
   const user = useSelector((state: RootState) => state.auth.user)
   const userId = user?.id ?? ''
   const userName = user?.firstName ?? user?.name ?? 'Учень'
+  const { emailCompletionRequired, refetch } = useUserState()
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !userId })
   const { data: profile } = useGetProfileQuery(undefined, { skip: !userId })
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, { skip: !userId })
   const { chatInput, chatMessages, isSending, sendMessage, setChatInput } = useMiniAppMentorChat({ userId })
-  const { telegramUser } = useMiniAppTelegram({
+  const { isBootstrappingAuth, telegramUser } = useMiniAppTelegram({
     page,
     onOpenMentor: () => navigate('/miniapp/mentor'),
     onOpenStarway: () => navigate('/dashboard'),
@@ -66,7 +69,24 @@ export default function MiniAppPage() {
   return (
     <div className="miniapp-page-shell mx-auto flex w-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
       <div className="flex-1 overflow-y-auto pb-32">
-        {page === 'home' && (
+        {isBootstrappingAuth && !userId ? (
+          <div className="px-4 pt-6">
+            <div className="card-surface liquid-glass p-5 text-center">
+              <p className="text-sm font-semibold text-white">Синхронізуємо вхід…</p>
+              <p className="mt-2 text-xs text-white/65">
+                Підтягуємо сесію з Telegram і відновлюємо доступ без повторного логіну.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {!isBootstrappingAuth && emailCompletionRequired ? (
+          <div className="px-4 pt-6">
+            <EmailCompletionCard onCompleted={async () => { await refetch() }} />
+          </div>
+        ) : null}
+
+        {!isBootstrappingAuth && !emailCompletionRequired && page === 'home' && (
           <MiniAppHomeSection
             hasAccess={view.hasAccess}
             profileBitMind={view.profileBitMind}
@@ -80,7 +100,7 @@ export default function MiniAppPage() {
           />
         )}
 
-        {page === 'mentor' && (
+        {!isBootstrappingAuth && !emailCompletionRequired && page === 'mentor' && (
           <MiniAppMentorSection
             chatInput={chatInput}
             chatMessages={chatMessages}
@@ -90,15 +110,15 @@ export default function MiniAppPage() {
           />
         )}
 
-        {page === 'tracker' && (
+        {!isBootstrappingAuth && !emailCompletionRequired && page === 'tracker' && (
           <MiniAppTrackerSection currentDay={view.trialDay} trackerData={view.trackerData} />
         )}
 
-        {page === 'library' && (
+        {!isBootstrappingAuth && !emailCompletionRequired && page === 'library' && (
           <MiniAppLibrarySection items={LIBRARY_ITEMS} />
         )}
 
-        {page === 'profile' && (
+        {!isBootstrappingAuth && !emailCompletionRequired && page === 'profile' && (
           <MiniAppProfileSection
             displayName={view.displayName}
             isTrialActive={view.isTrialActive}

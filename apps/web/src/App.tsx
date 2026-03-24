@@ -6,7 +6,7 @@ import ProtectedRoute from '@/features/auth/components/ProtectedRoute';
 import { AuthRestoreProvider, type AuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext';
 import { selectIsAuthenticated } from '@/features/auth/services/auth.slice';
 import type { AccessKey } from '@/features/auth/types/auth.types';
-import { shouldAllowSessionProbeWithoutHint, syncAuthSession } from '@/features/auth/utils/sessionSync';
+import { syncAuthSession } from '@/features/auth/utils/sessionSync';
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback';
 import MainLayout from '@/layout/MainLayout';
 import { useThemeContext } from '@/theme/ThemeProvider';
@@ -119,7 +119,7 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
         if (cancelled) return;
 
         const restored = await syncAuthSession({
-          allowRefreshWithoutHint: shouldAllowSessionProbeWithoutHint(),
+          allowRefreshWithoutHint: true,
           dispatch,
           theme,
         })

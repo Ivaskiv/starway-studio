@@ -83,7 +83,11 @@ export async function syncAuthSession({
   theme,
 }: SyncAuthSessionOptions): Promise<boolean> {
   const token = getToken()
-  const canTryRefresh = allowRefreshWithoutHint || Boolean(token) || hasSessionHint()
+  const canTryRefresh =
+    allowRefreshWithoutHint ||
+    Boolean(token) ||
+    hasSessionHint() ||
+    typeof document !== 'undefined'
 
   const markGuest = () => {
     dispatch(clearAuth())

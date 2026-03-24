@@ -125,6 +125,10 @@ export const authApi = api.injectEndpoints({
       },
     }),
 
+    attachEmail: builder.mutation<{ ok: true; merged?: boolean; userId?: string }, { email: string }>({
+      query: body => ({ url: '/users/email', method: 'PATCH', body }),
+    }),
+
     forgotPassword: builder.mutation<ForgotPasswordResponseDTO, ForgotPasswordInput>({
       query: body => ({ url: '/auth/forgot-password', method: 'POST', body }),
     }),
@@ -146,5 +150,6 @@ export const {
   useLogoutMutation,
   useForgotPasswordMutation,
   useResetPasswordMutation,
+  useAttachEmailMutation,
   useUpdateUserSettingsMutation,
 } = authApi

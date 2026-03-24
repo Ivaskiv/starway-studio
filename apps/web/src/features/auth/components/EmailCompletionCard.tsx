@@ -1,7 +1,11 @@
-import { useUpdateUserSettingsMutation } from '@/features/auth/services/auth.api'
+import type { AppDispatch } from '@/app/store'
+import { useAttachEmailMutation } from '@/features/auth/services/auth.api'
+import { syncAuthSession } from '@/features/auth/utils/sessionSync'
+import { useThemeContext } from '@/theme/ThemeProvider'
 import { Button, Input } from '@/ui'
 import { useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
+import { useDispatch } from 'react-redux'
 
 interface Props {
   onCompleted?: () => Promise<unknown> | unknown
@@ -9,7 +13,9 @@ interface Props {
 
 export function EmailCompletionCard({ onCompleted }: Props) {
   const [email, setEmail] = useState('')
-  const [updateSettings, { isLoading }] = useUpdateUserSettingsMutation()
+  const dispatch = useDispatch<AppDispatch>()
+  const theme = useThemeContext()
+  const [attachEmail, { isLoading }] = useAttachEmailMutation()
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -21,12 +27,17 @@ export function EmailCompletionCard({ onCompleted }: Props) {
     }
 
     try {
-      await updateSettings({ email: normalizedEmail }).unwrap()
+      await attachEmail({ email: normalizedEmail }).unwrap()
+      await syncAuthSession({
+        allowRefreshWithoutHint: true,
+        dispatch,
+        theme,
+      })
       await onCompleted?.()
       toast.success('Email збережено')
     } catch (error: any) {
       const message =
-        error?.data?.error === 'email_exists'
+        error?.data?.error === 'EMAIL_TAKEN' || error?.data?.error === 'email_exists'
           ? 'Цей email уже використовується'
           : 'Не вдалося зберегти email'
       toast.error(message)

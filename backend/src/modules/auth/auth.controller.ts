@@ -113,11 +113,11 @@ export async function refresh(req: Request, res: Response) {
   if (!token) return res.status(401).json({ error: 'no_refresh_token' })
 
   try {
-    const payload = verifyRefreshToken(token)
+    verifyRefreshToken(token)
     const exists = await withRetry(() => findRefreshToken(token))
     if (!exists) return res.status(401).json({ error: 'invalid_refresh' })
 
-    const user = await withRetry(() => findUserById(payload.id))
+    const user = await withRetry(() => findUserById(exists.userId))
     if (!user) return res.status(401).json({ error: 'user_not_found' })
 
     const newAccess = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)

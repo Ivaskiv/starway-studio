@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useState } from 'react'
 
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import type { MiniAppPageId } from '@/features/social/types/miniapp'
@@ -35,6 +36,7 @@ export function useMiniAppTelegram({
 }: UseMiniAppTelegramOptions) {
   const { isAuthenticated, loginWithSocial } = useAuth()
   const autoLoginAttemptedRef = useRef(false)
+  const [isBootstrappingAuth, setIsBootstrappingAuth] = useState(false)
 
   useEffect(() => {
     if (typeof Telegram === 'undefined') return
@@ -64,19 +66,26 @@ export function useMiniAppTelegram({
   const telegramUser = typeof Telegram === 'undefined' ? null : Telegram.WebApp.initDataUnsafe.user
 
   useEffect(() => {
+    if (isAuthenticated) {
+      setIsBootstrappingAuth(false)
+      return
+    }
+
     if (!telegramUser?.id) return
-    if (isAuthenticated) return
     if (autoLoginAttemptedRef.current) return
 
     autoLoginAttemptedRef.current = true
+    setIsBootstrappingAuth(true)
 
     void loginWithSocial('telegram').catch((error) => {
       console.warn('[useMiniAppTelegram] Telegram auto-login failed', error)
       autoLoginAttemptedRef.current = false
+      setIsBootstrappingAuth(false)
     })
   }, [isAuthenticated, loginWithSocial, telegramUser?.id])
 
   return {
+    isBootstrappingAuth,
     telegramUser,
   }
 }
