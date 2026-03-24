@@ -8,7 +8,7 @@ import { useAccess } from '@/features/auth/hooks/useAccess';
 import { getUserMenuItems } from '@/config/menu';
 import { ROUTES } from '@/config/routes';
 
-interface UserMenuProps { variant?: 'sidebar' | 'header'; }
+interface UserMenuProps { variant?: 'sidebar' | 'header' | 'miniapp'; }
 
 export function UserMenu({ variant = 'sidebar' }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -39,7 +39,7 @@ export function UserMenu({ variant = 'sidebar' }: UserMenuProps) {
   const displayName = user.name || user.email?.split('@')[0] || 'User';
   const planLabel   = isPaid ? 'Premium' : isTrial ? 'Trial' : 'Free';
 
-  const menuItems = getUserMenuItems();
+  const menuItems = getUserMenuItems().filter(item => !(variant === 'miniapp' && item.id === 'profile'));
 
   const planCls = isPaid
     ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
@@ -55,9 +55,13 @@ export function UserMenu({ variant = 'sidebar' }: UserMenuProps) {
         type="button"
         onClick={() => setIsOpen(v => !v)}
         className={[
-          'flex items-center gap-2 rounded-[10px] border border-white/[0.07] bg-white/[0.04]',
+          'flex min-w-0 items-center gap-2 rounded-[10px] border border-white/[0.07] bg-white/[0.04]',
           'hover:bg-white/[0.07] transition-colors outline-none',
-          variant === 'header' ? 'pl-1 pr-2.5 py-1' : 'w-full px-3 py-2.5',
+          variant === 'miniapp'
+            ? 'h-9 w-9 justify-center rounded-full p-0'
+            : variant === 'header'
+              ? 'max-w-[132px] pl-1 pr-2 py-1 sm:max-w-[176px] sm:pr-2.5'
+              : 'w-full px-3 py-2.5',
         ].join(' ')}
       >
         {/* avatar */}
@@ -68,7 +72,16 @@ export function UserMenu({ variant = 'sidebar' }: UserMenuProps) {
           <div className="absolute -bottom-px -right-px w-2 h-2 rounded-full bg-emerald-400 border-[1.5px] border-[#111318]" />
         </div>
 
-        <span className="text-[13px] font-semibold text-white">{displayName}</span>
+        {variant !== 'miniapp' && (
+          <span
+            className={[
+              'text-[13px] font-semibold text-white',
+              variant === 'header' ? 'min-w-0 max-w-[68px] truncate sm:max-w-[108px]' : '',
+            ].join(' ')}
+          >
+            {displayName}
+          </span>
+        )}
 
         {/* plan pill — sidebar only */}
         {variant === 'sidebar' && (
@@ -78,7 +91,9 @@ export function UserMenu({ variant = 'sidebar' }: UserMenuProps) {
           </span>
         )}
 
-        <ChevronDown className={`w-3.5 h-3.5 text-white/38 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        {variant !== 'miniapp' && (
+          <ChevronDown className={`w-3.5 h-3.5 text-white/38 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        )}
       </button>
 
       {/* ── DROPDOWN ── */}
@@ -86,7 +101,7 @@ export function UserMenu({ variant = 'sidebar' }: UserMenuProps) {
         <div className={[
           'absolute z-[100] w-[240px] bg-[#181b27] border border-white/[0.07]',
           'rounded-[14px] shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden',
-          variant === 'header' ? 'right-0 top-[calc(100%+6px)]' : 'left-0 bottom-[calc(100%+6px)]',
+          variant === 'header' || variant === 'miniapp' ? 'right-0 top-[calc(100%+6px)]' : 'left-0 bottom-[calc(100%+6px)]',
         ].join(' ')}>
 
           {/* user info */}

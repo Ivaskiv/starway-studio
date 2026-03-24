@@ -5,6 +5,7 @@
 // логін, реєстрація, соціальний логін, logout. 
 // Також відновлює сесію через useGetMeQuery якщо є токен. 
 // Повертає user, isAuthenticated, loginWithCredentials тощо.
+import type { AppDispatch } from '@/app/store'
 import {
   useGetMeQuery,
   useLoginMutation,
@@ -20,6 +21,7 @@ import {
   selectIsLoading,
   setCredentials,
 } from '@/features/auth/services/auth.slice'
+import { accessApi } from '@/features/auth/services/accessApi'
 import { getToken, removeToken } from '@/features/auth/services/token'
 import type { SocialAuthApiInput, SocialAuthResult } from '@/features/auth/types/auth.types'
 import type { SocialPlatform } from '@/features/social/types/social.types'
@@ -48,7 +50,7 @@ function safeAccent(color?: string | null): string {
 }
 
 export function useAuth() {
-  const dispatch        = useDispatch()
+  const dispatch        = useDispatch<AppDispatch>()
   const user            = useSelector(selectCurrentUser)
   const isLoading       = useSelector(selectIsLoading)
   const isAuthenticated = useSelector(selectIsAuthenticated)
@@ -66,12 +68,18 @@ export function useAuth() {
     skip: !hasToken || isAuthenticated || isLoading,
   })
 
+  const finalizeAuth = (nextUser: User, accessToken: string) => {
+    dispatch(setCredentials({ user: nextUser, accessToken }))
+    theme.setAccent(safeAccent(nextUser.settings?.accentColor))
+    if (nextUser.settings?.theme) theme.setMode(normalizeUiMode(nextUser.settings.theme))
+    void dispatch(accessApi.endpoints.getMyAccess.initiate(undefined, { forceRefetch: true, subscribe: false }))
+    void dispatch(accessApi.endpoints.getMySystemState.initiate(undefined, { forceRefetch: true, subscribe: false }))
+  }
+
   useEffect(() => {
     if (meData?.user) {
       const token = getToken()
-      if (token) dispatch(setCredentials({ user: toUser(meData.user), accessToken: token }))
-      theme.setAccent(safeAccent(meData.user.settings?.accentColor))
-      if (meData.user.settings?.theme) theme.setMode(normalizeUiMode(meData.user.settings.theme))
+      if (token) finalizeAuth(toUser(meData.user), token)
       return
     }
     if (meError) {
@@ -88,18 +96,14 @@ export function useAuth() {
   const loginWithCredentials = async (data: { email: string; password: string; expertId?: string }) => {
     const expertId = data.expertId ?? resolveExpertId()
     const res = await loginMutation({ ...data, ...(expertId ? { expertId } : {}) }).unwrap()
-    dispatch(setCredentials({ user: toUser(res.user), accessToken: res.accessToken }))
-    theme.setAccent(safeAccent(res.user.settings?.accentColor))
-    if (res.user.settings?.theme) theme.setMode(normalizeUiMode(res.user.settings.theme))
+    finalizeAuth(toUser(res.user), res.accessToken)
     return res
   }
 
   const registerWithCredentials = async (data: RegisterRequest) => {
     const expertId = resolveExpertId()
     const res = await registerMutation({ ...data, ...(expertId ? { expertId } : {}) }).unwrap()
-    dispatch(setCredentials({ user: toUser(res.user), accessToken: res.accessToken }))
-    theme.setAccent(safeAccent(res.user.settings?.accentColor))
-    if (res.user.settings?.theme) theme.setMode(normalizeUiMode(res.user.settings.theme))
+    finalizeAuth(toUser(res.user), res.accessToken)
     return res
   }
 
@@ -118,9 +122,7 @@ export function useAuth() {
 
     const expertId = resolveExpertId()
     const res = await socialAuth({ ...payload, ...(expertId ? { expertId } : {}) }).unwrap()
-    dispatch(setCredentials({ user: toUser(res.user), accessToken: res.accessToken }))
-    theme.setAccent(safeAccent(res.user.settings?.accentColor))
-    if (res.user.settings?.theme) theme.setMode(normalizeUiMode(res.user.settings.theme))
+    finalizeAuth(toUser(res.user), res.accessToken)
 
     return {
       provider,
@@ -138,9 +140,7 @@ export function useAuth() {
 
   const loginWithTelegramMiniApp = async (initData: string): Promise<SocialAuthResult> => {
     const res = await telegramMiniAppAuth({ initData }).unwrap()
-    dispatch(setCredentials({ user: toUser(res.user), accessToken: res.accessToken }))
-    theme.setAccent(safeAccent(res.user.settings?.accentColor))
-    if (res.user.settings?.theme) theme.setMode(normalizeUiMode(res.user.settings.theme))
+    finalizeAuth(toUser(res.user), res.accessToken)
 
     return {
       provider: 'telegram',

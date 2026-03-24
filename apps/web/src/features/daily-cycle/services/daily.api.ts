@@ -29,10 +29,16 @@ export const dailyCycleApi = api.injectEndpoints({
       query: () => '/daily/today',
       providesTags: [{ type: 'DailyCycle' as const, id: 'ENTRY' }],
     }),
+
+    getDailyHistory: builder.query<DailyCycleEntry[], void>({
+      query: () => '/daily/history',
+      providesTags: [{ type: 'DailyCycle' as const, id: 'HISTORY' }],
+    }),
   }),
 })
 
 export const {
   useSubmitDailyCycleMutation,
   useGetTodayEntryQuery,
+  useGetDailyHistoryQuery,
 } = dailyCycleApi

@@ -169,11 +169,13 @@ export default function Header({
 
   const AuthControls = isAuthenticated ? (
     <>
-      <button className="hdr-notif" aria-label="Сповіщення">
-        🔔
-        <span className="hdr-notif-dot" aria-label="2 непрочитані">2</span>
-      </button>
-      <UserMenu variant="header" />
+      {!miniAppMode && (
+        <button className="hdr-notif" aria-label="Сповіщення">
+          🔔
+          <span className="hdr-notif-dot" aria-label="2 непрочитані">2</span>
+        </button>
+      )}
+      <UserMenu variant={miniAppMode ? 'miniapp' : 'header'} />
     </>
   ) : holdMiniAppGuestAuth ? (
     <div className="hdr-auth-pending" aria-hidden="true" />

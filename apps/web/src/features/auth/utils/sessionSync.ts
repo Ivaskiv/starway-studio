@@ -109,6 +109,24 @@ function getTelegramRuntimeInitData(): string {
   return telegram?.WebApp?.initData?.trim() ?? ''
 }
 
+async function waitForTelegramRuntimeReady(timeoutMs = 1600): Promise<void> {
+  if (typeof window === 'undefined' || !isLikelyTelegramMiniAppRuntime()) return
+
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const runtimeUser = getTelegramRuntimeUser()
+    const initData = getTelegramRuntimeInitData()
+    const telegramReady = Boolean((window as { Telegram?: { WebApp?: unknown } }).Telegram?.WebApp)
+
+    if (runtimeUser?.id || initData || telegramReady) {
+      return
+    }
+
+    await new Promise(resolve => window.setTimeout(resolve, 100))
+  }
+}
+
 function isTelegramDevFallbackAllowed(): boolean {
   if (typeof window === 'undefined') return false
   return import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -212,6 +230,8 @@ export async function syncAuthSession({
       console.warn('[sessionSync] Access-token restore failed', error)
     }
   }
+
+  await waitForTelegramRuntimeReady()
 
   const telegramUser = getTelegramRuntimeUser()
   const telegramInitData = getTelegramRuntimeInitData()

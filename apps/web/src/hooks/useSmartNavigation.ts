@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useAuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext';
 import { ROUTES, ROUTE_METADATA } from '@/config/routes';
 import type { RoutePath } from '@/config/routes';
 import { hasPaidAccess } from '@/features/auth/utils/access.utils';
@@ -19,7 +20,8 @@ interface NavigationOptions {
 export function useSmartNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+  const authRestoreStatus = useAuthRestoreStatus();
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -32,9 +34,13 @@ export function useSmartNavigation() {
         typeof path === 'string' && (path === '/dashboard' || path.startsWith('/dashboard/'));
       const requiresAuth = options.requiresAuth ?? meta?.requiresAuth ?? isDashboardPath;
       const requiresPaid = options.requiresPaid ?? meta?.requiresPaid ?? false;
+      const authPending = isLoading || authRestoreStatus === 'idle' || authRestoreStatus === 'restoring'
 
       // AUTH
       if (requiresAuth && !user) {
+        if (authPending) {
+          return false;
+        }
         options.onAuthRequired?.() ?? setAuthModalOpen(true);
         return false;
       }
@@ -56,7 +62,7 @@ export function useSmartNavigation() {
       options.onSuccess?.();
       return true;
     },
-    [navigate, user],
+    [authRestoreStatus, isLoading, navigate, user],
   );
 
   return {

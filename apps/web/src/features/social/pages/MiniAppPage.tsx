@@ -111,7 +111,7 @@ export default function MiniAppPage() {
         )}
 
         {!isBootstrappingAuth && !emailCompletionRequired && page === 'tracker' && (
-          <MiniAppTrackerSection currentDay={view.trialDay} trackerData={view.trackerData} />
+          <MiniAppTrackerSection currentDay={view.trialDay} />
         )}
 
         {!isBootstrappingAuth && !emailCompletionRequired && page === 'library' && (
@@ -121,11 +121,6 @@ export default function MiniAppPage() {
         {!isBootstrappingAuth && !emailCompletionRequired && page === 'profile' && (
           <MiniAppProfileSection
             displayName={view.displayName}
-            isTrialActive={view.isTrialActive}
-            profileBitMind={view.profileBitMind}
-            profileNeuroGems={view.profileNeuroGems}
-            profileStreak={view.profileStreak}
-            navigate={navigate}
           />
         )}
       </div>

@@ -74,7 +74,7 @@ export default function MiniAppHomeSection({
             </span>
             <div className="flex-1">
               <p className="text-sm font-semibold text-[var(--text-primary)]">Трекер Ювеліра</p>
-              <p className="text-xs text-[var(--text-muted)]">{trialDay}/100 · 5 граней розвитку</p>
+              <p className="text-xs text-[var(--text-muted)]">{trialDay}/7 · AI Mentor progress</p>
             </div>
           </div>
           <progress

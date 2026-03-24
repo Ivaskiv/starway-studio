@@ -163,8 +163,8 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
   const isPaid          = trial?.isPaid ?? false
   const isLocked        = isTrialExpired && !isPaid
   const hasNoTrial      = !trial?.isActive && !hasEverStarted
-  const totalDays = (trial?.daysLeft ?? 0) + (trial?.currentDay ?? 1)
-  const currentDay = trial?.currentDay ?? 1
+  const totalDays = 7
+  const currentDay = Math.min(7, Math.max(1, trial?.currentDay ?? 1))
   const isJustStarted = (trial?.currentDay ?? 0) === 1 && (trial?.progress ?? 0) < 5
   const now = new Date()
   const isMorningDone = false

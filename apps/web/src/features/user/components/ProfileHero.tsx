@@ -1,10 +1,14 @@
 // frontend/src/features/user/components/ProfileHero.tsx
 import { useAuth }   from '@/features/auth/hooks/useAuth'
+import { useSystemState } from '@/features/auth/hooks/useSystemState'
+import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import { GlassCard } from '@/ui'
 import { Crown }     from 'lucide-react'
 
 export default function ProfileHero() {
   const { user } = useAuth()
+  const { accessControl } = useSystemState()
+  const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !user?.id })
   if (!user) return null
 
   const initials = (user.firstName?.[0] || user.name?.[0] || 'U').toUpperCase()
@@ -13,14 +17,16 @@ export default function ProfileHero() {
     ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}`
     : user.name ?? 'Користувач'
 
+  const isPaid = Boolean(user.access?.isPaid)
+  const isTrial = Boolean(trial?.isActive || user.access?.isTrial || (accessControl?.hasSubscription && !isPaid))
   const planLabel =
-    user.access?.isPaid    ? 'Pro'
-    : user.access?.isTrial ? 'Trial'
+    isPaid ? 'Pro'
+    : isTrial ? 'Trial'
     : 'Free'
 
   const planClass =
-    user.access?.isPaid    ? 'text-[rgb(var(--accent-rgb))] border-[rgba(var(--accent-rgb),.4)]'
-    : user.access?.isTrial ? 'text-amber-300 border-amber-300/40'
+    isPaid    ? 'text-[rgb(var(--accent-rgb))] border-[rgba(var(--accent-rgb),.4)]'
+    : isTrial ? 'text-amber-300 border-amber-300/40'
     : 'text-white/50 border-white/15'
 
   return (

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 
 import type { MiniAppTrackerItem } from '@/features/social/types/miniapp'
+import { clampTrialDay, getTrialCompletionPercent } from '@/features/trial/utils/trialProgress'
 
 interface TelegramUserLike {
   first_name?: string
@@ -46,8 +47,8 @@ export function useMiniAppViewModel({
 }: UseMiniAppViewModelOptions) {
   return useMemo(() => {
     const hasAccess = (trial?.isActive ?? false) || (trial?.isPaid ?? false)
-    const trialDay = trial?.currentDay ?? 0
-    const trackerProgress = Math.min(100, (trialDay / 100) * 100)
+    const trialDay = clampTrialDay(trial?.currentDay ?? 0)
+    const trackerProgress = getTrialCompletionPercent(trial?.currentDay ?? 0)
     const displayName = telegramUser?.first_name ?? userName
     const profileStreak = profile?.currentStreakDays ?? 0
     const profileBitMind = profile?.bitMind ?? 0
