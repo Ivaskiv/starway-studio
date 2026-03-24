@@ -8,6 +8,11 @@ export async function findLinkedUserId(params: {
 }) {
   const { chatId, telegramUserId, telegramUserName } = params
 
+  const existingLink = await prisma.telegramLink.findFirst({
+    where: { chatId, isActive: true },
+    select: { userId: true },
+  })
+
   const foundByTelegramIdentity = await prisma.user.findFirst({
     where: {
       OR: [
@@ -19,16 +24,28 @@ export async function findLinkedUserId(params: {
     select: { id: true },
   })
 
-  if (foundByTelegramIdentity?.id) {
-    return foundByTelegramIdentity.id
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[telegram/linking] resolve user', {
+      chatId,
+      telegramUserId,
+      telegramUserName,
+      linkedUserId: existingLink?.userId ?? null,
+      identityUserId: foundByTelegramIdentity?.id ?? null,
+      source: existingLink?.userId
+        ? existingLink.userId === foundByTelegramIdentity?.id
+          ? 'link+identity'
+          : 'link'
+        : foundByTelegramIdentity?.id
+          ? 'identity'
+          : 'none',
+    })
   }
 
-  const existingLink = await prisma.telegramLink.findFirst({
-    where: { chatId, isActive: true },
-    select: { userId: true },
-  })
+  if (existingLink?.userId) {
+    return existingLink.userId
+  }
 
-  return existingLink?.userId ?? null
+  return foundByTelegramIdentity?.id ?? null
 }
 
 export async function upsertTelegramBinding(params: {

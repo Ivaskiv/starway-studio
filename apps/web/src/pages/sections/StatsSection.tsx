@@ -21,9 +21,14 @@ function mapStats(stat: DashboardStat) {
 
 export default function StatsSection() {
   const isAuthenticated = useAppSelector(state => state.auth.status === 'authenticated')
+  const user = useAppSelector(state => state.auth.user)
+  const canLoadOwnerStats = Boolean(
+    isAuthenticated &&
+    (user?.isAdmin || user?.isSuperAdmin || user?.role === 'PRODUCT_OWNER'),
+  )
   const { data } = useGetDashboardStatsQuery(
     { period: '30d' },
-    { skip: !isAuthenticated },
+    { skip: !canLoadOwnerStats },
   )
   const stats = data?.stats?.length ? data.stats.slice(0, 4).map(mapStats) : FALLBACK_STATS
 

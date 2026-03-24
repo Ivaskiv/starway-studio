@@ -1,7 +1,9 @@
 // frontend/src/layout/Header.tsx
 import { NAVIGATION, type NavMenu } from '@/core/navigation/navigation.registry'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
-import { selectCurrentUser, selectIsAuthenticated } from '@/features/auth/services/auth.slice'
+import { useAuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext'
+import { selectCurrentUser, selectIsAuthenticated, selectIsLoading } from '@/features/auth/services/auth.slice'
+import { isTelegramMiniAppAuthContext } from '@/features/auth/utils/sessionSync'
 import type { UserRole } from '@/features/user/types/user.types'
 import { UserMenu } from '@/features/user/userMenu/UserMenu'
 import { useGetWheelCooldownQuery } from '@/features/wheel/services/wheel.api'
@@ -45,7 +47,9 @@ export default function Header({
 
   // ── ВИПРАВЛЕНО: isAuthenticated з Redux store ─────────────────────────────
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isAuthLoading = useSelector(selectIsLoading)
   const user = useSelector(selectCurrentUser)
+  const authRestoreStatus = useAuthRestoreStatus()
   const { accessControl } = useSystemState()
   const shouldLoadWheelCooldown =
     isAuthenticated &&
@@ -60,6 +64,13 @@ export default function Header({
   )
 
   const compactShellMode = miniAppMode || forceBurgerMenu
+  const holdMiniAppGuestAuth =
+    miniAppMode &&
+    !isAuthenticated &&
+    (authRestoreStatus === 'idle' ||
+      authRestoreStatus === 'restoring' ||
+      isAuthLoading ||
+      isTelegramMiniAppAuthContext())
   const viewRole = previewRole
   const [openDrop, setOpenDrop] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -164,9 +175,24 @@ export default function Header({
       </button>
       <UserMenu variant="header" />
     </>
+  ) : holdMiniAppGuestAuth ? (
+    <div className="hdr-auth-pending" aria-hidden="true" />
   ) : (
     renderGuestAuthButtons()
   )
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !miniAppMode) return
+
+    console.info('[Header] miniapp auth snapshot', {
+      isAuthenticated,
+      isAuthLoading,
+      authRestoreStatus,
+      holdMiniAppGuestAuth,
+      userId: user?.id ?? null,
+      email: user?.email ?? null,
+    })
+  }, [authRestoreStatus, holdMiniAppGuestAuth, isAuthLoading, isAuthenticated, miniAppMode, user?.email, user?.id])
 
   return (
     <header

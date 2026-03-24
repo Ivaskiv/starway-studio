@@ -14,6 +14,7 @@ type AccessUserSnapshot = {
   trialEndsAt: Date | null
   telegramUserId: string | null
   telegramChatId: string | null
+  telegramLinkChatId: string | null
   fivePointsEnrollment: {
     progress: unknown
     completedAt: Date | null
@@ -45,6 +46,14 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
       trialEndsAt: true,
       telegramUserId: true,
       telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          chatId: true,
+        },
+      },
 
       fivePointsEnrollment: {
         orderBy: { createdAt: 'desc' },
@@ -95,6 +104,7 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
     trialEndsAt: user.trialEndsAt ?? null,
     telegramUserId: user.telegramUserId ?? null,
     telegramChatId: user.telegramChatId ?? null,
+    telegramLinkChatId: user.telegramLinks[0]?.chatId ?? null,
     fivePointsEnrollment: leadEnrollment
       ? {
           progress: leadEnrollment.progress,
@@ -189,12 +199,25 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
       ? 'LEAD'
       : 'GUEST'
   const email = user.email ?? null
-  const telegramId = user.telegramChatId ?? user.telegramUserId ?? null
+  const telegramId = user.telegramChatId ?? user.telegramUserId ?? user.telegramLinkChatId ?? null
   const hasRequiredContacts = isSuperAdmin || Boolean(
     email &&
     !email.startsWith('telegram-guest-') &&
     telegramId,
   )
+
+  if (!hasRequiredContacts && hasSubscription && process.env.NODE_ENV !== 'production') {
+    console.info('[access/state] CONTACT_REQUIRED snapshot', {
+      userId: user.id,
+      email,
+      telegramUserId: user.telegramUserId,
+      telegramChatId: user.telegramChatId,
+      telegramLinkChatId: user.telegramLinkChatId,
+      hasSubscription,
+      currentFlow,
+      accessLevel,
+    })
+  }
 
   return {
     accessLevel,

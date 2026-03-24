@@ -114,6 +114,10 @@ function isTelegramDevFallbackAllowed(): boolean {
   return import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 }
 
+export function isTelegramMiniAppAuthContext(): boolean {
+  return isLikelyTelegramMiniAppRuntime()
+}
+
 export function shouldAllowSessionProbeWithoutHint(): boolean {
   return isLikelyTelegramMiniAppRuntime()
 }
@@ -131,6 +135,16 @@ export async function syncAuthSession({
     typeof document !== 'undefined'
 
   const markGuest = () => {
+    if (import.meta.env.DEV) {
+      console.info('[sessionSync] mark guest', {
+        allowRefreshWithoutHint,
+        hasToken: Boolean(token),
+        hasSessionHint: hasSessionHint(),
+        isTelegramRuntime: isLikelyTelegramMiniAppRuntime(),
+        telegramUserId: getTelegramRuntimeUser()?.id ?? null,
+        hasTelegramInitData: Boolean(getTelegramRuntimeInitData()),
+      })
+    }
     dispatch(clearAuth())
     return false
   }
@@ -149,6 +163,12 @@ export async function syncAuthSession({
         const refreshedToken = typeof refreshData.accessToken === 'string' ? refreshData.accessToken : null
 
         if (refreshedUser && refreshedToken) {
+          if (import.meta.env.DEV) {
+            console.info('[sessionSync] restored via refresh', {
+              userId: refreshedUser.id,
+              email: refreshedUser.email ?? null,
+            })
+          }
           dispatch(setCredentials({ user: refreshedUser, accessToken: refreshedToken }))
           applyUserTheme(theme, refreshedUser)
           await refreshAccessState(dispatch)
@@ -176,6 +196,12 @@ export async function syncAuthSession({
         const restoredUser = (meData.user ?? null) as User | null
 
         if (restoredUser) {
+          if (import.meta.env.DEV) {
+            console.info('[sessionSync] restored via access token', {
+              userId: restoredUser.id,
+              email: restoredUser.email ?? null,
+            })
+          }
           dispatch(setCredentials({ user: restoredUser, accessToken: token }))
           applyUserTheme(theme, restoredUser)
           await refreshAccessState(dispatch)
@@ -209,6 +235,13 @@ export async function syncAuthSession({
         const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null
 
         if (socialUser && socialToken) {
+          if (import.meta.env.DEV) {
+            console.info('[sessionSync] restored via telegram initData', {
+              userId: socialUser.id,
+              email: socialUser.email ?? null,
+              telegramRuntimeUserId: telegramUser.id,
+            })
+          }
           dispatch(setCredentials({ user: socialUser, accessToken: socialToken }))
           applyUserTheme(theme, socialUser)
           await refreshAccessState(dispatch)
@@ -243,6 +276,13 @@ export async function syncAuthSession({
         const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null
 
         if (socialUser && socialToken) {
+          if (import.meta.env.DEV) {
+            console.info('[sessionSync] restored via telegram dev fallback', {
+              userId: socialUser.id,
+              email: socialUser.email ?? null,
+              telegramRuntimeUserId: telegramUser.id,
+            })
+          }
           dispatch(setCredentials({ user: socialUser, accessToken: socialToken }))
           applyUserTheme(theme, socialUser)
           await refreshAccessState(dispatch)

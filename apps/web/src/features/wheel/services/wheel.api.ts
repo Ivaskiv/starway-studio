@@ -91,6 +91,12 @@ export const wheelApi = api.injectEndpoints({
         const result = await fetchWithBQ({ url: '/wheel/latest' });
         if ('error' in result) {
           const status = (result.error as { status?: number }).status;
+          if (import.meta.env.DEV && status === 403) {
+            console.info('[wheel/latest] blocked', {
+              status,
+              error: result.error,
+            })
+          }
           if (status === 404) return { data: null };
         const error: FetchBaseQueryError =
           result.error ?? ({ status: 'FETCH_ERROR', error: 'Fetch failed' });

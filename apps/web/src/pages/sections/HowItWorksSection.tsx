@@ -1,4 +1,5 @@
 import { useUserState } from '@/features/auth/hooks/useUserState'
+import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetTelegramLinkUrlQuery } from '@/features/auth/services/auth.api'
 import { useAppSelector } from '@/app/hooks'
 import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
@@ -41,6 +42,8 @@ const STEP_CONFIG: Record<StepId, Step> = {
 export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }) {
   const navigate = useNavigate()
   const user = useAppSelector(state => state.auth.user)
+  const userWithTelegram = user as (typeof user & { telegramUserId?: string | null; telegramChatId?: string | null }) | null
+  const { accessControl } = useSystemState()
   const {
     step,
     isAuthenticated,
@@ -53,21 +56,25 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   const { data: telegramLinkData } = useGetTelegramLinkUrlQuery(undefined, {
     skip: !isAuthenticated || emailCompletionRequired,
   })
+  const isMentorClient = accessControl?.accessLevel === 'CLIENT' && accessControl?.currentFlow === 'mentor'
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(user?.id ?? '', {
-    skip: !isAuthenticated || !user?.id,
+    skip: !isAuthenticated || !user?.id || (!isMentorClient && !(accessControl?.hasRequiredContacts ?? false)),
   })
 
   const hasTelegramIdentity = useMemo(() => {
     if (telegramLinked) return true
+    if (userWithTelegram?.telegramUserId || userWithTelegram?.telegramChatId) return true
     if (typeof window === 'undefined') return false
 
     const telegram = (window as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } }).Telegram
     return Boolean(telegram?.WebApp?.initDataUnsafe?.user?.id)
-  }, [telegramLinked])
+  }, [telegramLinked, userWithTelegram?.telegramChatId, userWithTelegram?.telegramUserId])
 
   const hasLinkedTelegram = telegramLinked || hasTelegramIdentity
   const hasCompletedWheel = Boolean(latestWheel?.id)
-  const hasAssistantSetup = isAuthenticated && hasRealEmail && hasLinkedTelegram
+  const hasRequiredContacts = accessControl?.hasRequiredContacts ?? false
+  const hasAssistantSetup = isAuthenticated && (isMentorClient || hasRequiredContacts || (hasRealEmail && hasLinkedTelegram))
+  const canContinueToFlow = hasAssistantSetup || (!emailCompletionRequired && hasLinkedTelegram && botActive)
 
   const steps = useMemo(() => {
     const order: StepId[] =
@@ -84,6 +91,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   const getInitialStep = (): StepId => {
     if (!isAuthenticated) return steps[0]?.id ?? 'register'
     if (emailCompletionRequired) return hasTelegramIdentity ? 'register' : 'telegram'
+    if (hasAssistantSetup) return 'flow'
     if (!hasLinkedTelegram || !botActive) return 'telegram'
     if (step === 'LINK_TELEGRAM') return 'telegram'
     if (hasRealEmail && hasLinkedTelegram) return 'flow'
@@ -107,7 +115,45 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
 
   useEffect(() => {
     setActiveStep(getInitialStep())
-  }, [step, isAuthenticated, emailCompletionRequired, telegramLinked, botActive, hasTelegramIdentity, hasRealEmail, hasCompletedWheel])
+  }, [step, isAuthenticated, emailCompletionRequired, telegramLinked, botActive, hasTelegramIdentity, hasRealEmail, hasCompletedWheel, hasRequiredContacts])
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+
+    console.info('[HowItWorks] decision snapshot', {
+      activeStep,
+      step,
+      isAuthenticated,
+      hasRealEmail,
+      emailCompletionRequired,
+      telegramLinked,
+      botActive,
+      hasTelegramIdentity,
+      hasLinkedTelegram,
+      isMentorClient,
+      hasRequiredContacts,
+      hasAssistantSetup,
+      canContinueToFlow,
+      hasCompletedWheel,
+      userId: user?.id ?? null,
+    })
+  }, [
+    activeStep,
+    botActive,
+    canContinueToFlow,
+    emailCompletionRequired,
+    hasAssistantSetup,
+    hasCompletedWheel,
+    hasLinkedTelegram,
+    isMentorClient,
+    hasRealEmail,
+    hasRequiredContacts,
+    hasTelegramIdentity,
+    isAuthenticated,
+    step,
+    telegramLinked,
+    user?.id,
+  ])
 
   const openStep = (nextStep: StepId) => {
     if (nextStep === 'register' && !isAuthenticated) {
@@ -120,7 +166,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
       return
     }
 
-    if (nextStep === 'flow' && (emailCompletionRequired || !hasLinkedTelegram || !botActive)) {
+    if (nextStep === 'flow' && !canContinueToFlow) {
       setActiveStep(emailCompletionRequired && hasTelegramIdentity ? 'register' : 'telegram')
       setStatusMessage(null)
       return
@@ -152,14 +198,23 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
       : 'Додати email'
 
   const stepsWithDynamicCopy = steps.map(item => {
-    if (item.id !== 'register') return item
-
-    return {
-      ...item,
-      desc: isAuthenticated && hasTelegramIdentity && !hasRealEmail
-        ? 'Telegram уже визначено. Тепер додай email, щоб завершити вхід у систему.'
-        : item.desc,
+    if (item.id === 'register') {
+      return {
+        ...item,
+        desc: isAuthenticated && hasTelegramIdentity && !hasRealEmail
+          ? 'Telegram уже визначено. Тепер додай email, щоб завершити вхід у систему.'
+          : item.desc,
+      }
     }
+
+    if (item.id === 'flow' && hasAssistantSetup) {
+      return {
+        ...item,
+        desc: 'Усе потрібне для асистента вже підключено. Можеш продовжити роботу в кабінеті.',
+      }
+    }
+
+    return item
   })
 
   return (
@@ -276,7 +331,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                         )}
 
                         <div className="flex justify-center">
-                          {!emailCompletionRequired && (!hasLinkedTelegram || !botActive) ? (
+                          {!canContinueToFlow ? (
                             telegramFlowUrl ? (
                               <a
                                 href={telegramFlowUrl}
@@ -321,7 +376,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                                 event.stopPropagation()
                                 goNext()
                               }}
-                              disabled={emailCompletionRequired || !hasLinkedTelegram || !botActive}
+                              disabled={!canContinueToFlow}
                               variant="outline"
                             >
                               Вперед
@@ -334,7 +389,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
 
                     {item.id === 'flow' && isActive && (
                       <div className="mt-auto flex flex-col gap-4 pt-6">
-                        {hasAssistantSetup && hasCompletedWheel && (
+                        {hasAssistantSetup && (
                           <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-4 py-3 text-center text-sm text-white/78">
                             Усі дані для асистента вже є. Можеш продовжити роботу в кабінеті.
                           </div>
@@ -344,10 +399,10 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                           <Button
                             onClick={event => {
                               event.stopPropagation()
-                              navigate(hasAssistantSetup && hasCompletedWheel ? '/dashboard' : '/dashboard/wheel')
+                              navigate(hasAssistantSetup ? '/dashboard' : '/dashboard/wheel')
                             }}
                           >
-                            {hasAssistantSetup && hasCompletedWheel ? 'Продовжити' : 'Відкрити колесо'}
+                            {hasAssistantSetup ? 'Продовжити' : 'Відкрити колесо'}
                           </Button>
                         </div>
 

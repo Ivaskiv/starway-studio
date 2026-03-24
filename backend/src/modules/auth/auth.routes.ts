@@ -56,19 +56,49 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
     return res.status(401).json({ message: 'unauthorized' })
   }
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      telegramUserId: true,
+      telegramChatId: true,
+    },
+  })
+
   const link = await prisma.telegramLink.findFirst({
     where: { userId },
     orderBy: { createdAt: 'desc' },
   })
 
   if (!link) {
+    const hasTelegramIdentity = Boolean(user?.telegramUserId || user?.telegramChatId)
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[telegram/status] no-link fallback', {
+        userId,
+        telegramUserId: user?.telegramUserId ?? null,
+        telegramChatId: user?.telegramChatId ?? null,
+        linked: hasTelegramIdentity,
+        botActive: hasTelegramIdentity,
+      })
+    }
     return res.json({
-      linked: false,
-      botActive: false,
+      linked: hasTelegramIdentity,
+      botActive: hasTelegramIdentity,
     })
   }
 
   if (link.isActive !== true || !link.chatId || !process.env.TELEGRAM_BOT_TOKEN) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[telegram/status] link snapshot', {
+        userId,
+        telegramUserId: user?.telegramUserId ?? null,
+        telegramChatId: user?.telegramChatId ?? null,
+        linkId: link.id,
+        linkChatId: link.chatId ?? null,
+        linkActive: link.isActive,
+        linked: true,
+        botActive: link.isActive === true && Boolean(link.chatId) && Boolean(process.env.TELEGRAM_BOT_TOKEN),
+      })
+    }
     return res.json({
       linked: true,
       botActive: link.isActive === true && Boolean(link.chatId) && Boolean(process.env.TELEGRAM_BOT_TOKEN),
@@ -77,6 +107,18 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
 
   try {
     await bot.telegram.getChat(link.chatId)
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[telegram/status] verified chat', {
+        userId,
+        telegramUserId: user?.telegramUserId ?? null,
+        telegramChatId: user?.telegramChatId ?? null,
+        linkId: link.id,
+        linkChatId: link.chatId,
+        linked: true,
+        botActive: true,
+      })
+    }
 
     return res.json({
       linked: true,

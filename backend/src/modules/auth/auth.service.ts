@@ -9,6 +9,7 @@ import { resolveUserAbilities, ABILITIES } from './abilities.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
 import { startTrial } from '../trial/service.js'
 import { attachEmailToUser, resolveOrCreateTelegramGuestUser } from '../user/identity.service.js'
+import { findLinkedUserId } from '../telegram-mentor/services/linking.service.js'
 
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
@@ -701,19 +702,14 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
     } else {
       const telegramUserId = externalId
       const telegramUserName = input.username?.trim() || null
-      const linked = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { telegramUserId },
-            { telegramChatId: telegramUserId },
-            ...(telegramUserName ? [{ telegramUserName }] : []),
-          ],
-        },
-        select: { id: true },
+      const linkedUserId = await findLinkedUserId({
+        chatId: telegramUserId,
+        telegramUserId,
+        telegramUserName,
       })
 
-      if (linked?.id) {
-        userId = linked.id
+      if (linkedUserId) {
+        userId = linkedUserId
       } else {
         const createdUserId = await resolveOrCreateTelegramGuestUser({
           linkedUserId: null,

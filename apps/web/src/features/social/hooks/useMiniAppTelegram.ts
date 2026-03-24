@@ -71,6 +71,11 @@ export function useMiniAppTelegram({
 
   useEffect(() => {
     if (isAuthenticated) {
+      if (import.meta.env.DEV) {
+        console.info('[miniapp/auth] authenticated in Telegram runtime', {
+          telegramUserId: telegramUser?.id ?? null,
+        })
+      }
       setIsBootstrappingAuth(false)
       return
     }
@@ -81,17 +86,35 @@ export function useMiniAppTelegram({
     autoLoginAttemptedRef.current = true
     setIsBootstrappingAuth(true)
 
+    if (import.meta.env.DEV) {
+      console.info('[miniapp/auth] starting Telegram auto-login', {
+        telegramUserId: telegramUser.id,
+        hasInitData: Boolean(telegramInitData),
+        allowDevFallback,
+      })
+    }
+
     const loginPromise = telegramInitData
       ? loginWithTelegramMiniApp(telegramInitData)
       : allowDevFallback
         ? loginWithSocial('telegram')
         : Promise.reject(new Error('Telegram initData is missing'))
 
-    void loginPromise.catch((error) => {
-      console.warn('[useMiniAppTelegram] Telegram auto-login failed', error)
-      autoLoginAttemptedRef.current = false
-      setIsBootstrappingAuth(false)
-    })
+    void loginPromise
+      .then((result) => {
+        if (import.meta.env.DEV) {
+          console.info('[miniapp/auth] Telegram auto-login success', {
+            email: result.email ?? null,
+            isNewUser: result.isNewUser,
+            needsCompletion: result.needsCompletion,
+          })
+        }
+      })
+      .catch((error) => {
+        console.warn('[useMiniAppTelegram] Telegram auto-login failed', error)
+        autoLoginAttemptedRef.current = false
+        setIsBootstrappingAuth(false)
+      })
   }, [allowDevFallback, isAuthenticated, loginWithSocial, loginWithTelegramMiniApp, telegramInitData, telegramUser?.id])
 
   return {
