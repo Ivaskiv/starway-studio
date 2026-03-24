@@ -14,6 +14,7 @@ const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT !== 'false'
 const TELEGRAM_POLLING_ENABLED = process.env.TELEGRAM_POLLING_ENABLED === 'true'
 const MINIAPP_URL = process.env.MINIAPP_URL?.trim() || 'https://starway-frontend.vercel.app/miniapp'
+const MINIAPP_VERSION = process.env.MINIAPP_VERSION?.trim() || 'dev'
 
 const app = createApp()
 let server: ReturnType<typeof app.listen> | null = null
@@ -64,11 +65,13 @@ async function startTelegramBot() {
       console.log('🤖 [Telegram] Checking bot identity...')
       const me = await bot.telegram.getMe()
       console.log(`🤖 [Telegram] Bot: @${me.username} (id: ${me.id})`)
+      const menuMiniAppUrl = new URL(MINIAPP_URL)
+      menuMiniAppUrl.searchParams.set('v', MINIAPP_VERSION)
       await bot.telegram.setChatMenuButton({
         menuButton: {
           type: 'web_app',
           text: 'Відкрити Starway',
-          web_app: { url: MINIAPP_URL },
+          web_app: { url: menuMiniAppUrl.toString() },
         },
       }).catch((error) => {
         console.warn('⚠️ [Telegram] Failed to set chat menu button:', error)

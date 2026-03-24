@@ -1,0 +1,101 @@
+.miniapp-bottomnav-shell {
+  @apply fixed inset-x-0 bottom-0 z-[70] px-3;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+.miniapp-bottomnav {
+  @apply mx-auto flex w-full max-w-[430px] items-stretch gap-1 rounded-[26px] border px-2 py-2;
+  border-color: rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(15, 20, 34, 0.98), rgba(8, 12, 23, 0.995));
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(var(--accent-rgb), 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.miniapp-bottomnav__item {
+  @apply relative flex min-h-[72px] flex-1 flex-col items-center justify-center gap-1.5 rounded-[18px] px-1.5 py-2 text-center opacity-80 transition-all duration-200;
+  color: var(--text-muted);
+
+  &:hover {
+    @apply opacity-100;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+  }
+}
+
+.miniapp-bottomnav__item--active {
+  @apply opacity-100;
+  color: rgb(var(--accent-soft-rgb));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(145deg, rgba(var(--accent-rgb), 0.12), rgba(var(--accent-soft-rgb), 0.06));
+  box-shadow:
+    0 8px 18px rgba(var(--accent-rgb), 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.miniapp-bottomnav__icon {
+  @apply h-10 w-10 rounded-[14px];
+  border-color: rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
+    linear-gradient(145deg, rgba(var(--accent-rgb), 0.07), rgba(255, 255, 255, 0.01));
+}
+
+.miniapp-bottomnav__item--active .miniapp-bottomnav__icon {
+  border-color: rgba(var(--accent-soft-rgb), 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
+    linear-gradient(145deg, rgba(var(--accent-soft-rgb), 0.18), rgba(var(--accent-rgb), 0.08));
+  box-shadow:
+    0 10px 22px rgba(var(--accent-rgb), 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.miniapp-bottomnav__icon--pulse {
+  animation: miniapp-ai-pulse 2.2s ease-in-out infinite;
+}
+
+.miniapp-bottomnav__label {
+  @apply text-[9px] font-semibold leading-none;
+  white-space: nowrap;
+}
+
+.miniapp-bottomnav__dot {
+  @apply h-1.5 w-1.5 rounded-full opacity-0 transition-all duration-200;
+  background: rgba(var(--accent-soft-rgb), 0.9);
+  box-shadow: 0 0 14px rgba(var(--accent-soft-rgb), 0.5);
+}
+
+.miniapp-bottomnav__dot--active {
+  @apply opacity-100;
+}
+
+@media (min-width: 768px) {
+  .miniapp-bottomnav__item {
+    @apply min-h-[76px] gap-2 px-2.5 py-2.5;
+  }
+
+  .miniapp-bottomnav__label {
+    @apply text-[10px];
+  }
+}
+
+@keyframes miniapp-ai-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 10px 24px rgba(var(--accent-rgb), 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow:
+      0 14px 28px rgba(var(--accent-rgb), 0.26),
+      0 0 20px rgba(var(--accent-soft-rgb), 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  }
+}

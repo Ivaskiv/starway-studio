@@ -1,0 +1,87 @@
+.miniapp-page-shell {
+  @apply min-h-[100dvh] max-w-[430px];
+}
+
+.miniapp-progressbar {
+  @apply h-1.5 w-full overflow-hidden rounded-full appearance-none border-0;
+  background: rgba(255, 255, 255, 0.08);
+
+  &::-webkit-progress-bar {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+  }
+
+  &::-webkit-progress-value {
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.2s ease;
+  }
+
+  &::-moz-progress-bar {
+    background: var(--accent);
+    border-radius: 999px;
+  }
+}
+
+.miniapp-floating-ai {
+  @apply fixed bottom-[calc(88px+env(safe-area-inset-bottom))] right-4 z-[72];
+}
+
+.miniapp-floating-ai__button {
+  @apply relative inline-flex h-14 min-w-[68px] items-center justify-center overflow-hidden rounded-full border px-4 py-0 text-[var(--text-primary)] transition-all duration-300;
+  border-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
+    linear-gradient(135deg, rgba(var(--accent-soft-rgb), 0.55), rgba(var(--accent-rgb), 0.78));
+  box-shadow:
+    0 18px 30px rgba(var(--accent-rgb), 0.18),
+    0 10px 22px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  backdrop-filter: blur(var(--blur-soft)) saturate(1.18);
+  -webkit-backdrop-filter: blur(var(--blur-soft)) saturate(1.18);
+
+  &:hover {
+    @apply -translate-y-0.5;
+  }
+}
+
+.miniapp-floating-ai__content {
+  @apply relative z-[1] flex items-center gap-2;
+}
+
+.miniapp-floating-ai__shine {
+  @apply pointer-events-none absolute inset-[1px] rounded-full;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.34), transparent 28%),
+    linear-gradient(120deg, transparent 24%, rgba(255, 255, 255, 0.16) 42%, transparent 58%);
+}
+
+.miniapp-floating-ai__ring {
+  @apply pointer-events-none absolute inset-[-8px] rounded-full border;
+  border-color: rgba(var(--accent-soft-rgb), 0.32);
+  animation: miniapp-floating-ring 2.4s ease-out infinite;
+}
+
+.miniapp-floating-ai__tooltip {
+  @apply pointer-events-none absolute bottom-[calc(100%+14px)] right-0 w-[260px] translate-y-3 opacity-0 transition-all duration-300;
+}
+
+.miniapp-floating-ai__tooltip--open {
+  @apply pointer-events-auto translate-y-0 opacity-100;
+}
+
+@keyframes miniapp-floating-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+
+  35% {
+    opacity: 0.46;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}

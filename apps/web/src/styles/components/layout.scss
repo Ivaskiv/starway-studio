@@ -78,6 +78,32 @@
   flex-shrink: 0;
 }
 
+.site-footer {
+  position: relative;
+}
+
+.site-footer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--accent-soft-rgb), 0.28) 14%,
+    rgba(var(--accent-rgb), 0.82) 50%,
+    rgba(var(--accent-soft-rgb), 0.28) 86%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 14px rgba(var(--accent-rgb), 0.3),
+    0 0 28px rgba(var(--accent-soft-rgb), 0.16),
+    0 -1px 0 rgba(255, 255, 255, 0.08);
+}
+
 .dashboard-sidebar {
   --sidebar-width: 270px;
   --sidebar-collapsed: 82px;

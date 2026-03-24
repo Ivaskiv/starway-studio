@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -n backend,web \"pnpm --dir backend dev\" \"pnpm --dir apps/web dev\"",
+    "dev:tunnel": "concurrently -n backend,web,tunnel \"pnpm --dir backend dev\" \"pnpm --dir apps/web dev\" \"pnpm --dir apps/web dev:tunnel\"",
     "dev:bot": "pnpm --dir apps/bot dev",
     "prisma:generate": "pnpm --filter @starway/db run prisma:generate",
     "build": "pnpm --dir packages/shared build && pnpm --dir packages/db build && pnpm --dir backend build && pnpm --dir apps/web build && pnpm --dir apps/bot build",

@@ -215,18 +215,6 @@ export default function AIMentorPage() {
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[rgba(var(--accent-rgb),0.15)] border border-[rgba(var(--accent-rgb),0.3)] flex items-center justify-center">
-          <span className="text-lg">🤖</span>
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)] mb-0.5">
-            Модуль AI Асистента
-          </p>
-          <h1 className="text-xl font-bold text-[var(--text-primary)]">AI Ментор</h1>
-        </div>
-      </div>
-
       <div className="flex flex-wrap gap-2">
         {[
           { id: 'session', label: 'Сесія', active: true },

@@ -71,3 +71,14 @@ yarn.lock
 AGENTS.md
 APP_LOGIC.md
 ARCHITECTURE_MAP.md
+
+# Cloudflare tunnel
+.cloudflared/
+*.pem
+*.json
+cloudflared.log
+
+# Ngrok
+ngrok.yml
+
+.DS_Store

@@ -5,6 +5,7 @@ import type { ReplyKeyboardMarkup } from '@telegraf/types'
 type InlineKeyboard = ReturnType<typeof Markup.inlineKeyboard>
 
 const appBaseUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+const miniAppVersion = process.env.MINIAPP_VERSION?.trim() || 'dev'
 
 function isTelegramSafeUrl(value: string): boolean {
   try {
@@ -19,12 +20,15 @@ function isTelegramSafeUrl(value: string): boolean {
   }
 }
 
-export function getTelegramAppUrl(path = ''): string | null {
+export function getTelegramAppUrl(path = '/miniapp'): string | null {
   if (!isTelegramSafeUrl(appBaseUrl)) {
     return null
   }
 
   const url = new URL(path, appBaseUrl)
+  if (path.startsWith('/miniapp')) {
+    url.searchParams.set('v', miniAppVersion)
+  }
   return url.toString()
 }
 

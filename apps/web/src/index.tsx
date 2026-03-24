@@ -9,6 +9,7 @@ import { initTheme } from '@/theme/accent.utils';
 import App from './App';
 import { store } from './app/store';
 import { TOASTER_CONFIG } from './app/config/toaster';
+import { enableMiniAppDevReload } from './dev/enableMiniAppDevReload';
 import './styles/index.scss';
 import { ThemeProvider } from './theme/ThemeProvider';
 
@@ -19,6 +20,7 @@ import { ThemeProvider } from './theme/ThemeProvider';
 // ==================== Render App ====================
 
 initTheme()
+enableMiniAppDevReload()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

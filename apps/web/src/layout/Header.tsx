@@ -2,10 +2,11 @@
 import { NAVIGATION, type NavMenu } from '@/core/navigation/navigation.registry'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { selectCurrentUser, selectIsAuthenticated } from '@/features/auth/services/auth.slice'
-import { SIDEBAR_NAV, isVisibleFor } from '@/layout/Sidebar'
-import type { SidebarNavItem } from '@/layout/Sidebar'
-import { useGetWheelCooldownQuery } from '@/features/wheel/services/wheel.api'
 import type { UserRole } from '@/features/user/types/user.types'
+import { UserMenu } from '@/features/user/userMenu/UserMenu'
+import { useGetWheelCooldownQuery } from '@/features/wheel/services/wheel.api'
+import type { SidebarNavItem } from '@/layout/Sidebar'
+import { SIDEBAR_NAV, isVisibleFor } from '@/layout/Sidebar'
 import type { LayoutSharedProps } from '@/layout/types/layout.types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
@@ -14,23 +15,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 // ── Ролі ─────────────────────────────────────────────────────────────────────
 type ViewRole = 'user' | 'expert' | 'superadmin'
 
-const ROLE_TABS = [
-  { id: 'user'       as ViewRole, icon: '👤', label: 'User'       },
-  { id: 'expert'     as ViewRole, icon: '🎬', label: 'Expert'     },
-  { id: 'superadmin' as ViewRole, icon: '⭐', label: 'SuperAdmin' },
-] as const
-
 const ROLE_NAV: Record<ViewRole, string[]> = {
   superadmin: NAVIGATION.map(m => m.id),
   expert:     ['platform', 'programs', 'learning'],
   user:       ['programs', 'learning'],
 }
-
-const PANEL_TABS = [
-  { id: 'nav',   label: 'Навігація' },
-  { id: 'pages', label: 'Сторінки'  },
-] as const
-type PanelTab = typeof PANEL_TABS[number]['id']
 
 // ── ВИПРАВЛЕНО: додано onLoginClick та onRegisterClick ────────────────────────
 interface HeaderProps extends LayoutSharedProps {
@@ -72,9 +61,8 @@ export default function Header({
 
   const compactShellMode = miniAppMode || forceBurgerMenu
   const viewRole = previewRole
-  const [openDrop,    setOpenDrop]    = useState<string | null>(null)
-  const [activePanel, setActivePanel] = useState<PanelTab | null>(null)
-  const [mobileOpen,  setMobileOpen]  = useState(false)
+  const [openDrop, setOpenDrop] = useState<string | null>(null)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const normalizeRole = useCallback((value: string): UserRole => {
     const normalized = value.toUpperCase()
@@ -111,8 +99,8 @@ export default function Header({
     return NAVIGATION.filter(m => allowed.includes(m.id))
   }, [viewRole])
 
-  const allPages = useMemo(
-    () => filteredNav.flatMap(m => m.groups?.flatMap(g => g.pages) ?? []),
+  const desktopNav = useMemo(
+    () => filteredNav.filter(menu => !['programs', 'learning'].includes(menu.id)),
     [filteredNav],
   )
 
@@ -120,7 +108,6 @@ export default function Header({
     const onEsc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setOpenDrop(null)
-      setActivePanel(null)
       setMobileOpen(false)
     }
     document.addEventListener('keydown', onEsc)
@@ -129,7 +116,6 @@ export default function Header({
 
   useEffect(() => {
     setOpenDrop(null)
-    setActivePanel(null)
     setMobileOpen(false)
   }, [location.pathname])
 
@@ -137,29 +123,50 @@ export default function Header({
     const onClick = (e: MouseEvent) => {
       if (!headerRef.current?.contains(e.target as Node)) {
         setOpenDrop(null)
-        setActivePanel(null)
       }
     }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
-  const togglePanel = (tab: PanelTab) =>
-    setActivePanel(prev => {
-      const next = prev === tab ? null : tab
-      onViewChange(next === 'pages' ? 'pages' : 'navigation')
-      return next
-    })
+  const renderGuestAuthButtons = (onAfterClick?: () => void) => (
+    <>
+      <button
+        className="hdr-btn-ghost"
+        onClick={() => {
+          onLoginClick?.()
+          onAfterClick?.()
+        }}
+        aria-label="Увійти"
+        type="button"
+      >
+        Увійти
+      </button>
+      <button
+        className="hdr-btn-accent"
+        onClick={() => {
+          onRegisterClick?.()
+          onAfterClick?.()
+        }}
+        aria-label="Реєстрація"
+        type="button"
+      >
+        Реєстрація
+      </button>
+    </>
+  )
 
-  useEffect(() => {
-    if (view === 'pages' && activePanel !== 'pages') {
-      setActivePanel('pages')
-      return
-    }
-    if (view === 'navigation' && activePanel === 'pages') {
-      setActivePanel(null)
-    }
-  }, [view, activePanel])
+  const AuthControls = isAuthenticated ? (
+    <>
+      <button className="hdr-notif" aria-label="Сповіщення">
+        🔔
+        <span className="hdr-notif-dot" aria-label="2 непрочитані">2</span>
+      </button>
+      <UserMenu variant="header" />
+    </>
+  ) : (
+    renderGuestAuthButtons()
+  )
 
   return (
     <header
@@ -168,168 +175,111 @@ export default function Header({
       role="banner"
     >
 
-      {/* ══ РЯДОК 1: Role switcher ════════════════════════════════════════════ */}
-      {!compactShellMode && (
-        <div className="hdr-split-row hdr-split-row--roles">
-          <span className="hdr-split-line" aria-hidden="true" />
-          <div className="hdr-role-group" role="tablist" aria-label="Перемикання ролей">
-            {ROLE_TABS.map((tab, i) => (
-              <button
-                key={tab.id}
-                role="tab"
-                id={`hdr-tab-${tab.id}`}
-                tabIndex={viewRole === tab.id ? 0 : -1}
-                className={`hdr-role-btn${viewRole === tab.id ? ' hdr-role-btn--on' : ''}`}
-                onClick={() => onRoleChange(tab.id)}
-                onKeyDown={e => {
-                  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-                  e.preventDefault()
-                  const tabs = headerRef.current?.querySelectorAll<HTMLButtonElement>('.hdr-role-btn')
-                  if (!tabs?.length) return
-                  const next = e.key === 'ArrowRight'
-                    ? (i + 1) % tabs.length
-                    : (i - 1 + tabs.length) % tabs.length
-                  tabs[next]?.focus()
-                }}
-                ref={el => {
-                  if (el) el.setAttribute('aria-selected', viewRole === tab.id ? 'true' : 'false')
-                }}
-              >
-                <span className="hdr-role-icon" aria-hidden="true">{tab.icon}</span>
-                <span className="hdr-role-label">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ══ РЯДОК 2: Main row ════════════════════════════════════════════════ */}
-      <div className="hdr-main">
-
-        {/* Логотип */}
-        <button
-          className="hdr-logo"
-          onClick={() => go('/')}
-          aria-label="Перейти на головну сторінку"
-        >
-          <span className="hdr-logo-gem" aria-hidden="true">⭐</span>
-          <span >Starway</span>
-        </button>
-
-        {/* Desktop nav */}
-        {!compactShellMode && (
-          <nav className="hdr-nav" aria-label="Головна навігація">
-            {filteredNav.map(menu => {
-              if (menu.path) {
-                return (
-                  <Link key={menu.id} className="hdr-nb" to={menu.path}>
-                    {menu.label}
-                  </Link>
-                )
-              }
-              const isOpen = openDrop === menu.id
-              return (
-                <div key={menu.id} className="hdr-drop-wrap">
-                  <button
-                    className={`hdr-nb${isOpen ? ' hdr-nb--open' : ''}`}
-                    onClick={() => setOpenDrop(isOpen ? null : menu.id)}
-                    ref={el => {
-                      if (el) el.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
-                    }}
-                  >
-                    {menu.label}
-                    <span className={`hdr-chev${isOpen ? ' hdr-chev--flip' : ''}`} aria-hidden="true">▾</span>
-                  </button>
-                  {isOpen && (
-                    <div className="hdr-drop" role="dialog" aria-label={menu.label}>
-                      <span className="hdr-drop-ridge" aria-hidden="true" />
-                      {menu.groups?.map(group => (
-                        <div key={group.id} className="hdr-drop-group">
-                          <span className="hdr-drop-gtitle">{group.title}</span>
-                          {group.pages.map(page => (
-                            <Link
-                              key={page.id}
-                              className={`hdr-drop-item${location.pathname === page.path ? ' hdr-drop-item--on' : ''}`}
-                              to={page.path}
-                              onClick={() => setOpenDrop(null)}
-                            >
-                              {page.icon && (
-                                <span className="hdr-drop-icon" aria-hidden="true">{page.icon}</span>
-                              )}
-                              <span className="hdr-drop-body">
-                                <span className="hdr-drop-label">{page.label}</span>
-                                {page.description && (
-                                  <span className="hdr-drop-desc">{page.description}</span>
-                                )}
-                              </span>
-                            </Link>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </nav>
-        )}
-
-        {/* Controls */}
-        <div className="hdr-controls">
-          {/* Search */}
-          {!compactShellMode && (
-            <div className="hdr-search">
-              <span className="hdr-search-ico" aria-hidden="true">🔍</span>
-              <input
-                className="hdr-search-input"
-                type="search"
-                placeholder="Пошук"
-                aria-label="Поле пошуку"
-              />
-            </div>
-          )}
-
-          {/* ── ВИПРАВЛЕНО: умовний рендер залогінений/гість ─────────────── */}
-          {isAuthenticated ? (
-            <>
-              <button className="hdr-notif" aria-label="Сповіщення">
-                🔔
-                <span className="hdr-notif-dot" aria-label="2 непрочитані">2</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className="hdr-btn-ghost"
-                onClick={onLoginClick}
-                aria-label="Увійти"
-              >
-                Увійти
-              </button>
-              <button
-                className="hdr-btn-accent"
-                onClick={onRegisterClick}
-                aria-label="Реєстрація"
-              >
-                Реєстрація
-              </button>
-            </>
-          )}
-
-          {/* Burger */}
+      <div className="hdr-container">
+        <div className="hdr-left">
           <button
-            className={`hdr-burger${mobileOpen ? ' hdr-burger--open' : ''}${forceBurgerMenu ? ' hdr-burger--force' : ''}`}
-            aria-label={mobileOpen ? 'Закрити меню' : 'Відкрити меню'}
-            aria-controls="hdr-bmenu"
-            ref={el => {
-              if (el) el.setAttribute('aria-expanded', mobileOpen ? 'true' : 'false')
-            }}
-            onClick={() => setMobileOpen(v => !v)}
+            className="hdr-logo"
+            onClick={() => go('/')}
+            aria-label="Перейти на головну сторінку"
+            type="button"
           >
-            <span className="hdr-bline" aria-hidden="true" />
-            <span className="hdr-bline" aria-hidden="true" />
-            <span className="hdr-bline" aria-hidden="true" />
+            <span className="hdr-logo-gem" aria-hidden="true">⭐</span>
+            <span>Starway</span>
           </button>
+        </div>
+
+        <div className="hdr-center">
+          {!compactShellMode && (
+            <nav className="hdr-nav" aria-label="Головна навігація">
+              {desktopNav.map(menu => {
+                if (menu.path) {
+                  return (
+                    <Link key={menu.id} className="hdr-nb" to={menu.path}>
+                      {menu.label}
+                    </Link>
+                  )
+                }
+                const isOpen = openDrop === menu.id
+                return (
+                  <div key={menu.id} className="hdr-drop-wrap">
+                    <button
+                      className={`hdr-nb${isOpen ? ' hdr-nb--open' : ''}`}
+                      onClick={() => setOpenDrop(isOpen ? null : menu.id)}
+                      type="button"
+                      ref={el => {
+                        if (el) el.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
+                      }}
+                    >
+                      {menu.label}
+                      <span className={`hdr-chev${isOpen ? ' hdr-chev--flip' : ''}`} aria-hidden="true">▾</span>
+                    </button>
+                    {isOpen && (
+                      <div className="hdr-drop" role="dialog" aria-label={menu.label}>
+                        <span className="hdr-drop-ridge" aria-hidden="true" />
+                        {menu.groups?.map(group => (
+                          <div key={group.id} className="hdr-drop-group">
+                            <span className="hdr-drop-gtitle">{group.title}</span>
+                            {group.pages.map(page => (
+                              <Link
+                                key={page.id}
+                                className={`hdr-drop-item${location.pathname === page.path ? ' hdr-drop-item--on' : ''}`}
+                                to={page.path}
+                                onClick={() => setOpenDrop(null)}
+                              >
+                                {page.icon && (
+                                  <span className="hdr-drop-icon" aria-hidden="true">{page.icon}</span>
+                                )}
+                                <span className="hdr-drop-body">
+                                  <span className="hdr-drop-label">{page.label}</span>
+                                  {page.description && (
+                                    <span className="hdr-drop-desc">{page.description}</span>
+                                  )}
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </nav>
+          )}
+        </div>
+
+        <div className="hdr-right">
+          <div className="hdr-controls">
+            {!compactShellMode && (
+              <label className="hdr-search" aria-label="Пошук">
+                <span className="hdr-search-ico" aria-hidden="true">🔍</span>
+                <input
+                  className="hdr-search-input"
+                  type="search"
+                  placeholder="Пошук"
+                  aria-label="Поле пошуку"
+                />
+              </label>
+            )}
+
+            {AuthControls}
+
+            <button
+              className={`hdr-burger${mobileOpen ? ' hdr-burger--open' : ''}${forceBurgerMenu ? ' hdr-burger--force' : ''}`}
+              aria-label={mobileOpen ? 'Закрити меню' : 'Відкрити меню'}
+              aria-controls="hdr-bmenu"
+              type="button"
+              ref={el => {
+                if (el) el.setAttribute('aria-expanded', mobileOpen ? 'true' : 'false')
+              }}
+              onClick={() => setMobileOpen(v => !v)}
+            >
+              <span className="hdr-bline" aria-hidden="true" />
+              <span className="hdr-bline" aria-hidden="true" />
+              <span className="hdr-bline" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -407,35 +357,11 @@ export default function Header({
           {/* Гостьові кнопки в бургері */}
           {!isAuthenticated && (
             <div className="hdr-bmenu-auth">
-              <button
-                className="hdr-btn-ghost"
-                onClick={() => { onLoginClick?.(); setMobileOpen(false) }}
-              >
-                Увійти
-              </button>
-              <button
-                className="hdr-btn-accent"
-                onClick={() => { onRegisterClick?.(); setMobileOpen(false) }}
-              >
-                Реєстрація
-              </button>
+              {renderGuestAuthButtons(() => setMobileOpen(false))}
             </div>
           )}
         </div>
       </div>
-
-      {/* Tabpanels для role-tabs (WAI-ARIA вимога) */}
-      {!compactShellMode && ROLE_TABS.map(tab => (
-        <div
-          key={`tabpanel-${tab.id}`}
-          id={`hdr-tabpanel-${tab.id}`}
-          role="tabpanel"
-          aria-labelledby={`hdr-tab-${tab.id}`}
-          hidden={viewRole !== tab.id}
-          className="hdr-tabpanel"
-        />
-      ))}
-
     </header>
   )
 }

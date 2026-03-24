@@ -1,5 +1,7 @@
 import { useUserState } from '@/features/auth/hooks/useUserState'
 import { useGetTelegramLinkUrlQuery } from '@/features/auth/services/auth.api'
+import { useAppSelector } from '@/app/hooks'
+import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
 import { Button, GlassCard } from '@/ui'
 import { ArrowLeft, ArrowRight, Play, Sparkles, Target } from 'lucide-react'
 import type { ElementType } from 'react'
@@ -38,6 +40,7 @@ const STEP_CONFIG: Record<StepId, Step> = {
 
 export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }) {
   const navigate = useNavigate()
+  const user = useAppSelector(state => state.auth.user)
   const {
     step,
     isAuthenticated,
@@ -50,6 +53,9 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   const { data: telegramLinkData } = useGetTelegramLinkUrlQuery(undefined, {
     skip: !isAuthenticated || emailCompletionRequired,
   })
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(user?.id ?? '', {
+    skip: !isAuthenticated || !user?.id,
+  })
 
   const hasTelegramIdentity = useMemo(() => {
     if (telegramLinked) return true
@@ -58,6 +64,10 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
     const telegram = (window as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } }).Telegram
     return Boolean(telegram?.WebApp?.initDataUnsafe?.user?.id)
   }, [telegramLinked])
+
+  const hasLinkedTelegram = telegramLinked || hasTelegramIdentity
+  const hasCompletedWheel = Boolean(latestWheel?.id)
+  const hasAssistantSetup = isAuthenticated && hasRealEmail && hasLinkedTelegram
 
   const steps = useMemo(() => {
     const order: StepId[] =
@@ -74,8 +84,9 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   const getInitialStep = (): StepId => {
     if (!isAuthenticated) return steps[0]?.id ?? 'register'
     if (emailCompletionRequired) return hasTelegramIdentity ? 'register' : 'telegram'
-    if (!telegramLinked || !botActive) return 'telegram'
+    if (!hasLinkedTelegram || !botActive) return 'telegram'
     if (step === 'LINK_TELEGRAM') return 'telegram'
+    if (hasRealEmail && hasLinkedTelegram) return 'flow'
     if (step === 'START_FLOW' || step === 'WHEEL' || step === 'DAILY_MORNING') return 'flow'
     return 'register'
   }
@@ -96,7 +107,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
 
   useEffect(() => {
     setActiveStep(getInitialStep())
-  }, [step, isAuthenticated, emailCompletionRequired, telegramLinked, botActive, hasTelegramIdentity, hasRealEmail])
+  }, [step, isAuthenticated, emailCompletionRequired, telegramLinked, botActive, hasTelegramIdentity, hasRealEmail, hasCompletedWheel])
 
   const openStep = (nextStep: StepId) => {
     if (nextStep === 'register' && !isAuthenticated) {
@@ -109,7 +120,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
       return
     }
 
-    if (nextStep === 'flow' && (emailCompletionRequired || !telegramLinked || !botActive)) {
+    if (nextStep === 'flow' && (emailCompletionRequired || !hasLinkedTelegram || !botActive)) {
       setActiveStep(emailCompletionRequired && hasTelegramIdentity ? 'register' : 'telegram')
       setStatusMessage(null)
       return
@@ -150,12 +161,6 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
         : item.desc,
     }
   })
-
-  const shouldHideSection = isAuthenticated && hasRealEmail && telegramLinked
-
-  if (shouldHideSection) {
-    return null
-  }
 
   return (
     <section id="how-it-works" className="py-8">
@@ -271,7 +276,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                         )}
 
                         <div className="flex justify-center">
-                          {!emailCompletionRequired && (!telegramLinked || !botActive) ? (
+                          {!emailCompletionRequired && (!hasLinkedTelegram || !botActive) ? (
                             telegramFlowUrl ? (
                               <a
                                 href={telegramFlowUrl}
@@ -288,8 +293,8 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                               <Button disabled>Завантаження Telegram...</Button>
                             )
                           ) : (
-                            <Button disabled={!telegramLinked && !hasTelegramIdentity}>
-                              {telegramLinked || hasTelegramIdentity ? 'Telegram підключено' : 'Очікуємо підключення'}
+                            <Button disabled={!hasLinkedTelegram}>
+                              {hasLinkedTelegram ? 'Telegram підключено' : 'Очікуємо підключення'}
                             </Button>
                           )}
                         </div>
@@ -316,7 +321,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                                 event.stopPropagation()
                                 goNext()
                               }}
-                              disabled={emailCompletionRequired || (!telegramLinked && !hasTelegramIdentity) || !botActive}
+                              disabled={emailCompletionRequired || !hasLinkedTelegram || !botActive}
                               variant="outline"
                             >
                               Вперед
@@ -329,14 +334,20 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
 
                     {item.id === 'flow' && isActive && (
                       <div className="mt-auto flex flex-col gap-4 pt-6">
+                        {hasAssistantSetup && hasCompletedWheel && (
+                          <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-4 py-3 text-center text-sm text-white/78">
+                            Усі дані для асистента вже є. Можеш продовжити роботу в кабінеті.
+                          </div>
+                        )}
+
                         <div className="flex justify-center">
                           <Button
                             onClick={event => {
                               event.stopPropagation()
-                              navigate('/dashboard/wheel')
+                              navigate(hasAssistantSetup && hasCompletedWheel ? '/dashboard' : '/dashboard/wheel')
                             }}
                           >
-                            Відкрити колесо
+                            {hasAssistantSetup && hasCompletedWheel ? 'Продовжити' : 'Відкрити колесо'}
                           </Button>
                         </div>
 

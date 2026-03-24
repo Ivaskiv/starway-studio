@@ -33,15 +33,6 @@ export default function ProgressPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center border border-[color:rgba(var(--accent-rgb),0.35)] bg-[color:rgba(var(--accent-rgb),0.22)]">
-          <Activity className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Прогрес</h1>
-        </div>
-      </div>
-
       {isLoading ? (
         <GlassCard className="p-6">
           <p className="text-white/60">Завантаження прогресу...</p>

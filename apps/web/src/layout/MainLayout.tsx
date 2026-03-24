@@ -8,9 +8,7 @@ import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import BottomNav from '@/components/miniapp/BottomNav'
 import FloatingAIButton from '@/components/miniapp/FloatingAIButton'
 import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
-import SettingsBreadcrumbAction from '@/features/settings/components/SettingsBreadcrumbAction'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
-import Breadcrumbs from '@/layout/Breadcrumbs'
 import Footer from '@/layout/Footer'
 import Header from '@/layout/Header'
 import Sidebar from '@/layout/Sidebar'
@@ -18,12 +16,77 @@ import Sidebar from '@/layout/Sidebar'
 import type { AppView, PreviewRole } from '@/layout/types/layout.types'
 
 interface MainLayoutProps {
-  showBreadcrumbs?: boolean
   dashboard?: boolean
 }
 
+type PageContext = {
+  title: string
+  subtitle: string
+  status?: string
+}
+
+function getPageContext(pathname: string, isDashboardShell: boolean): PageContext | null {
+  if (pathname === '/' || pathname === '/dashboard' || pathname === '/miniapp') return null
+
+  const contexts: Array<[RegExp, PageContext]> = [
+    [/^\/dashboard\/cycle/, { title: 'Пройди чекін', subtitle: 'Відповідай на питання і рухайся до наступного кроку.', status: 'Сесія в процесі' }],
+    [/^\/dashboard\/ai-mentor/, { title: 'Відкрий асистента', subtitle: 'Постав запит або пройди коротку сесію.', status: 'Асистент готовий' }],
+    [/^\/dashboard\/wheel/, { title: 'Оціни свій стан', subtitle: 'Пройди колесо балансу і знайди точку фокусу.', status: 'Крок самодіагностики' }],
+    [/^\/dashboard\/progress/, { title: 'Подивись прогрес', subtitle: 'Оціни динаміку і обери, що робити далі.', status: 'Аналітика доступна' }],
+    [/^\/dashboard\/profile/, { title: 'Мій профіль', subtitle: 'Перевір канали доступу та основні дані акаунта.', status: 'Профіль активний' }],
+    [/^\/dashboard\/subscription/, { title: 'Онови доступ', subtitle: 'Подивись план і виріши, як рухатись далі.', status: 'Доступ і плани' }],
+    [/^\/dashboard\/(courses|products|vision|goals|actions)/, { title: 'Обери наступний крок', subtitle: 'Відкрий матеріал або інструмент, який рухає тебе далі.', status: 'Каталог доступний' }],
+    [/^\/subscription/, { title: 'Обери доступ', subtitle: 'Подивись умови і відкрий наступний рівень системи.', status: 'Плани Starway' }],
+    [/^\/profile/, { title: 'Керуй профілем', subtitle: 'Онови дані і продовжуй роботу без зайвих кроків.', status: 'Профіль відкрито' }],
+  ]
+
+  const match = contexts.find(([pattern]) => pattern.test(pathname))
+  if (match) return match[1]
+
+  if (isDashboardShell && pathname.startsWith('/dashboard/')) {
+    return {
+      title: 'Продовжуй роботу',
+      subtitle: 'Відкрий потрібний блок і зроби наступну дію без зайвих переходів.',
+      status: 'Starway dashboard',
+    }
+  }
+
+  return {
+    title: 'Продовжуй далі',
+    subtitle: 'На цьому екрані є все потрібне для наступної дії.',
+  }
+}
+
+function PageIntro({
+  context,
+  onBack,
+}: {
+  context: PageContext
+  onBack: () => void
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-3 py-4">
+      <div className="min-w-0">
+        <h1 className="text-lg font-bold text-[var(--text-primary)]">{context.title}</h1>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">{context.subtitle}</p>
+        {context.status ? (
+          <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--accent-soft-rgb))]">
+            {context.status}
+          </p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={onBack}
+        className="hero-cta-secondary whitespace-nowrap px-3 py-1.5 text-xs font-semibold"
+      >
+        ← Назад
+      </button>
+    </div>
+  )
+}
+
 export default function MainLayout({
-  showBreadcrumbs = true,
   dashboard = false,
 }: MainLayoutProps) {
   const location = useLocation()
@@ -40,6 +103,7 @@ export default function MainLayout({
   const { navigateTo } = useSmartNavigation()
 
   const isMiniAppContext = isTelegramMiniAppContext(location.pathname)
+  const pageContext = getPageContext(location.pathname, dashboard || isAuthenticated)
 
   const toggle = () => setCollapsed(c => !c)
 
@@ -78,7 +142,7 @@ export default function MainLayout({
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const mediaQuery = window.matchMedia('(max-width: 1024px)')
+    const mediaQuery = window.matchMedia('(max-width: 768px)')
     const syncViewport = (event?: MediaQueryListEvent) => {
       setIsCompactViewport(event?.matches ?? mediaQuery.matches)
     }
@@ -175,10 +239,12 @@ export default function MainLayout({
               </>
             ) : (
               <div className="flex min-h-full flex-col">
-                <div className="flex items-center justify-between gap-4 px-3 py-4">
-                  <div className="flex-1"><Breadcrumbs /></div>
-                  <SettingsBreadcrumbAction />
-                </div>
+                {pageContext ? (
+                  <PageIntro
+                    context={pageContext}
+                    onBack={() => navigateTo('/dashboard', { requiresAuth: true })}
+                  />
+                ) : null}
                 <main className={`min-h-[60vh] flex-1 px-3 ${shouldShowMiniAppNav ? 'pb-32' : 'pb-6'}`}><Outlet /></main>
                 {!isMiniAppContext && <Footer />}
               </div>
@@ -223,11 +289,14 @@ export default function MainLayout({
         miniAppMode={isMiniAppContext}
       />
 
-      {!isHomePage && (
-        <div className="max-w-7xl mx-auto w-full px-5 sm:px-6">
-          <Breadcrumbs />
+      {!isHomePage && pageContext ? (
+        <div className="mx-auto w-full max-w-7xl px-5 sm:px-6">
+          <PageIntro
+            context={pageContext}
+            onBack={() => navigateTo('/', { requiresAuth: false })}
+          />
         </div>
-      )}
+      ) : null}
 
       <main className={isHomePage ? 'flex-1' : 'flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8'}>
         <Outlet />

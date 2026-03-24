@@ -350,13 +350,6 @@ export const WheelPage = () => {
 
   return (
     <div className="mx-auto max-w-5xl space-y-1 p-1 md:p-1">
-      <div>
-        <h1 className="hero-h1 flex items-center gap-3 mt-3">
-          <Sparkles className="w-7 h-7 text-[var(--color-accent-soft)] animate-pulse" />
-          Колесо балансу
-        </h1>
-      </div>
-
       <div className="w-full">
         <div className="px-3 pb-2 flex justify-end">
           <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/75">

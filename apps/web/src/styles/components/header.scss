@@ -107,6 +107,28 @@ $bp-sm: 540px;   // mobile
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.hdr::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--accent-soft-rgb), 0.28) 14%,
+    rgba(var(--tf-rgb), 0.82) 50%,
+    rgba(var(--accent-soft-rgb), 0.28) 86%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 14px rgba(var(--tf-rgb), 0.3),
+    0 0 28px rgba(var(--accent-soft-rgb), 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 // Кристальні відблиски — span замість ::before (без псевдо)
 .hdr-glint {
   position:       absolute;
@@ -274,22 +296,11 @@ $bp-sm: 540px;   // mobile
 //  MAIN ROW
 // ═══════════════════════════════════════════════════════════════════════════
 
-.hdr-main {
-  position:    relative;
-  z-index:     1;
-  display:     flex;
-  align-items: center;
-  height:      var(--hh-main);
-  padding:     0;
-  gap:         10px;
-}
-
 // ── Logo ──────────────────────────────────────────────────────────────────────
 .hdr-logo {
   display:       flex;
   align-items:   center;
   gap:           7px;
-  margin-right:  2px;
   flex-shrink:   0;
   background:    transparent;
   border:        none;
@@ -340,7 +351,7 @@ $bp-sm: 540px;   // mobile
   display:     flex;
   align-items: center;
   gap:         2px;
-  flex:        1;
+  flex:        1 1 auto;
   min-width:   0;
 
   @media (max-width: $bp-md) { display: none; }
@@ -493,50 +504,6 @@ $bp-sm: 540px;   // mobile
   line-height: 1.35;
 }
 
-// ── Controls ──────────────────────────────────────────────────────────────────
-.hdr-controls {
-  display:     flex;
-  align-items: center;
-  gap:         8px;
-  flex-shrink: 0;
-  margin-left: auto;
-  padding-right: 2px;
-}
-
-// Search — desktop
-.hdr-search {
-  display:       flex;
-  align-items:   center;
-  gap:           6px;
-  padding:       5px 12px;
-  border-radius: 10px;
-  background:    var(--tf-08);
-  border:        1px solid rgba(var(--tf-rgb), 0.09);
-  cursor:        text;
-  transition:    border-color 0.15s, background 0.15s;
-
-  @media (max-width: $bp-md) { display: none; }
-
-  &:focus-within {
-    border-color: var(--tf-36);
-    background:   rgba(var(--tf-rgb), 0.07);
-    box-shadow:   0 0 12px rgba(var(--tf-rgb), 0.07);
-  }
-}
-
-.hdr-search-ico   { color: var(--ht3); font-size: 15px; }
-
-.hdr-search-input {
-  background: none;
-  border:     none;
-  outline:    none;
-  font-size:  12px;
-  color:      var(--ht1);
-  width:      94px;
-
-  &::placeholder { color: var(--ht3); }
-}
-
 // Notifications
 .hdr-notif {
   position:      relative;
@@ -573,70 +540,6 @@ $bp-sm: 540px;   // mobile
   align-items:   center;
   justify-content: center;
   box-shadow:    0 2px 6px rgba(var(--accent-rgb), 0.50);
-}
-
-// ── Guest auth buttons ───────────────────────────────────────────────────────
-.hdr-btn-ghost,
-.hdr-btn-accent {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 0 14px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition:
-    transform 0.14s ease,
-    border-color 0.14s ease,
-    box-shadow 0.14s ease,
-    background 0.14s ease,
-    color 0.14s ease;
-
-  &:hover {
-    transform: translateY(-1px);
-  }
-}
-
-.hdr-btn-ghost {
-  color: var(--ht1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-    linear-gradient(135deg, rgba(var(--accent-rgb), 0.08) 0%, transparent 58%);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 8px 22px rgba(0, 0, 0, 0.28),
-    0 0 18px rgba(var(--accent-rgb), 0.08);
-
-  &:hover {
-    border-color: rgba(var(--accent-rgb), 0.24);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.03) 100%),
-      linear-gradient(135deg, rgba(var(--accent-rgb), 0.10) 0%, transparent 58%);
-  }
-}
-
-.hdr-btn-accent {
-  color: #fff;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.03) 18%, transparent 100%),
-    linear-gradient(135deg, rgba(var(--accent-soft-rgb), 0.92) 0%, rgba(var(--accent-rgb), 0.92) 100%);
-  border: 1px solid rgba(var(--accent-soft-rgb), 0.42);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 10px 24px rgba(var(--accent-rgb), 0.24),
-    0 0 28px rgba(var(--accent-soft-rgb), 0.12);
-
-  &:hover {
-    border-color: rgba(var(--accent-soft-rgb), 0.56);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.34),
-      0 12px 28px rgba(var(--accent-rgb), 0.28),
-      0 0 34px rgba(var(--accent-soft-rgb), 0.16);
-  }
 }
 
 .hdr-bmenu-auth {
@@ -789,6 +692,7 @@ $bp-sm: 540px;   // mobile
   gap:            4.5px;
   width:          36px;
   height:         36px;
+  flex-shrink:    0;
   border-radius:  10px;
   border:         1px solid rgba(var(--tf-rgb), 0.14);
   background:     var(--tf-08);
@@ -825,6 +729,9 @@ $bp-sm: 540px;   // mobile
       background: var(--tf);
     }
   }
+}
+
+@media (max-width: $bp-md) {
 }
 
 .hdr-bline {

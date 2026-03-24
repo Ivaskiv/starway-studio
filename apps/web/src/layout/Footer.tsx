@@ -59,6 +59,7 @@ export default function Footer() {
   return (
     <>
       <footer className="
+        site-footer
         w-full mt-auto
         border-t border-[color:var(--border-primary)]
         bg-[color:var(--bg-secondary)]
