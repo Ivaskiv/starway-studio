@@ -3,7 +3,7 @@
 import 'dotenv/config'
 import { type Request, type Response } from 'express'
 import { createApp }                                           from './app.js'
-import { prisma }                                              from './db/client.js'
+import { prisma, withRetry }                                   from './db/client.js'
 import { startDailyScheduler, stopDailyScheduler }             from './modules/daily-cycle/scheduler.js'
 import { registerDailyTelegramCommands }                       from './modules/daily-cycle/telegram.js'
 import { bot }                                                 from './lib/telegram.js'
@@ -12,12 +12,24 @@ import { registerMentorBot }              from './modules/telegram-mentor/index.
 const PORT = Number(process.env.PORT) || 3001
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT !== 'false'
+const TELEGRAM_POLLING_ENABLED = process.env.TELEGRAM_POLLING_ENABLED === 'true'
+const MINIAPP_URL = process.env.MINIAPP_URL?.trim() || 'https://starway-frontend.vercel.app/miniapp'
 
 const app = createApp()
 let server: ReturnType<typeof app.listen> | null = null
 let telegramRunningMode: 'webhook' | 'polling' | null = null
 let isShuttingDown = false
 let prismaKeepAliveInterval: NodeJS.Timeout | null = null
+
+function isTelegramPollingConflict(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { error_code?: number; description?: string } }).response
+    if (response?.error_code === 409) return true
+    if (response?.description?.includes('terminated by other getUpdates request')) return true
+  }
+
+  return error instanceof Error && error.message.includes('terminated by other getUpdates request')
+}
 
 // ─────────────────────────────────────────────
 // TELEGRAM WEBHOOK ROUTE
@@ -52,6 +64,15 @@ async function startTelegramBot() {
       console.log('🤖 [Telegram] Checking bot identity...')
       const me = await bot.telegram.getMe()
       console.log(`🤖 [Telegram] Bot: @${me.username} (id: ${me.id})`)
+      await bot.telegram.setChatMenuButton({
+        menuButton: {
+          type: 'web_app',
+          text: 'Відкрити Starway',
+          web_app: { url: MINIAPP_URL },
+        },
+      }).catch((error) => {
+        console.warn('⚠️ [Telegram] Failed to set chat menu button:', error)
+      })
 
       const webhookInfoBefore = await bot.telegram.getWebhookInfo()
       console.log('🤖 [Telegram] Webhook before start:', {
@@ -76,6 +97,11 @@ async function startTelegramBot() {
         return
       }
 
+      if (!TELEGRAM_POLLING_ENABLED) {
+        console.log('🤖 [Telegram] Polling skipped (set TELEGRAM_POLLING_ENABLED=true to enable local polling)')
+        return
+      }
+
       // Local development fallback:
       // Telegram cannot reach localhost webhook, so we switch to polling.
       console.log('🤖 [Telegram] Switching to polling mode...')
@@ -92,6 +118,10 @@ async function startTelegramBot() {
         { dropPendingUpdates: false },
         () => console.log('🤖 Telegram bot ready (polling mode for local development)'),
       ).catch((error) => {
+        if (isTelegramPollingConflict(error)) {
+          console.warn('⚠️ [Telegram] Polling skipped: another bot instance is already consuming updates')
+          return
+        }
         console.error('⚠️ [Telegram] Polling launch failed:', error)
       })
       console.log('🤖 [Telegram] Polling launch started')
@@ -106,9 +136,9 @@ async function startTelegramBot() {
 async function bootstrap() {
   try {
     console.log('🧪 [BOOT] Connecting to database...')
-    await prisma.$connect()
+    await withRetry(() => prisma.$connect())
 
-    const result = await prisma.$queryRaw`SELECT 1`
+    const result = await withRetry(() => prisma.$queryRaw`SELECT 1`)
     console.log('✅ [PRISMA] Database connected | Test query result:', result)
 
     server = app.listen(PORT, () => {
@@ -136,9 +166,9 @@ async function bootstrap() {
 
     prismaKeepAliveInterval = setInterval(async () => {
       try {
-        await prisma.$queryRaw`SELECT 1`
+        await withRetry(() => prisma.$queryRaw`SELECT 1`)
       } catch {
-        await prisma.$connect().catch(() => undefined)
+        await withRetry(() => prisma.$connect()).catch(() => undefined)
       }
     }, 30 * 60 * 1000)
     prismaKeepAliveInterval.unref()

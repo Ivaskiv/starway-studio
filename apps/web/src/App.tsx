@@ -37,22 +37,17 @@ const Courses = lazy(() => import('@/features/mini-courses/pages/CoursesPage'));
 const ProductInfo = lazy(() => import('@/features/mini-courses/pages/ProductInfoPage'));
 const Subscription = lazy(() => import('@/features/subscription/pages/SubscriptionPage'));
 const AIMentor = lazy(() => import('@/features/ai-mentor/pages/AIMentorPage'));
-const AIGenerator = lazy(() => import('@/features/ai-generator/pages/AIGeneratorPage'));
-const AIProducerConsole = lazy(() => import('@/features/ai-generator/pages/AIProducerConsolePage'));
 const Products = lazy(() => import('@/features/products/pages/ProductsPage'));
 const ProductCreation = lazy(() => import('@/features/products/pages/ProductCreationPage'));
-const FunnelEditor = lazy(() => import('@/features/funnels/pages/FunnelEditorPage'));
-const AIFunnelBuilder = lazy(() => import('@/features/funnels/pages/AIFunnelBuilderPage'));
 const Profile = lazy(() => import('@/features/user/pages/UserProfilePage'));
 const InfoPage = lazy(() => import('@/pages/InfoPage'));
 const MentorLanding = lazy(() => import('@/features/ai-mentor/pages/MentorLanding'));
 const MentorSetup = lazy(() => import('@/features/ai-mentor/pages/MentorSetup'));
-const AIFunnelLanding = lazy(() => import('@/features/ai-funnel-landing/pages/AIFunnelLandingPage'));
 const ResetPasswordPage = lazy(() => import('@/features/auth/pages/ResetPasswordPage'));
 const SessionsPage = lazy(() => import('@/features/zoom/pages/SessionsPage'));
 const DevRoutes = lazy(() => import('@/pages/dev/DevRoutes'));
-const AIProducerAssistantPage = lazy(() => import('@/features/assistant/pages/ProducerAssistant'));
 const TransferOwnership = lazy(() => import('@/features/admin/pages/TransferOwnershipPage'));
+const MiniAppPage = lazy(() => import('@/features/social/pages/MiniAppPage'));
 
 type RouteConfig = {
   path: string;
@@ -85,12 +80,7 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   { path: '/dashboard/actions', element: <Actions />, ability: 'mentor.actions', showDeniedScreen: true },
   { path: '/dashboard/courses', element: <Courses />, ability: 'dashboard.view' },
   { path: '/dashboard/ai-mentor', element: <AIMentor />, ability: 'mentor.core' },
-  { path: '/dashboard/ai-generator', element: <AIGenerator />, ability: 'ai.basic' },
-  { path: '/dashboard/ai-funnel', element: <AIFunnelBuilder />, ability: 'ai.basic' },
-  { path: '/dashboard/ai-producer-console', element: <AIProducerConsole />, ability: 'ai.basic' },
-  { path: ROUTES.AI_PRODUCER_ASSISTANT, element: <AIProducerAssistantPage />, ability: 'ai.basic' },
   { path: '/dashboard/admin/transfer-ownership', element: <TransferOwnership />, ability: 'dashboard.view' },
-  { path: '/dashboard/funnels/:id/edit', element: <FunnelEditor />, ability: 'dashboard.view' },
   { path: '/dashboard/sessions', element: <SessionsPage />, ability: 'dashboard.view' },
   { path: '/dashboard/products', element: <Products />, ability: 'dashboard.view' },
   { path: '/dashboard/product-create', element: <ProductCreation />, ability: 'dashboard.view' },
@@ -162,6 +152,47 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
     const initAuth = async () => {
       updateStatus('restoring');
 
+      const restoreWithAccessToken = async () => {
+        const existingToken = localStorage.getItem('starway_access_token')
+        if (!existingToken) {
+          markFailed()
+          return
+        }
+
+        try {
+          const meRes = await fetch('/api/auth/me', {
+            method: 'GET',
+            credentials: 'include',
+            cache: 'no-store',
+            headers: {
+              Authorization: `Bearer ${existingToken}`,
+            },
+          })
+
+          if (cancelled) return
+
+          if (!meRes.ok) {
+            markFailed()
+            return
+          }
+
+          const meData = await meRes.json()
+          const restoredUser = (meData.user ?? null) as User | null
+
+          if (!restoredUser) {
+            markFailed()
+            return
+          }
+
+          dispatch(setCredentials({ user: restoredUser, accessToken: existingToken }))
+          applyUserTheme(restoredUser)
+          markReady()
+        } catch (error) {
+          console.error('[AuthRestore] Failed to restore auth from access token:', error)
+          markFailed()
+        }
+      }
+
       try {
         const refreshRes = await fetch('/api/auth/refresh', {
           method: 'POST',
@@ -172,7 +203,7 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
         if (cancelled) return;
 
         if (!refreshRes.ok) {
-          markFailed();
+          await restoreWithAccessToken();
           return;
         }
 
@@ -181,7 +212,7 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
         const newUser  = (refreshData.user ?? null) as User | null;
 
         if (!newToken || !newUser) {
-          markFailed();
+          await restoreWithAccessToken();
           return;
         }
 
@@ -191,7 +222,7 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
         markReady();
       } catch (error) {
         console.error('[AuthRestore] Failed to restore auth:', error);
-        markFailed();
+        await restoreWithAccessToken();
       }
     };
 
@@ -249,11 +280,12 @@ export default function App() {
                 <Route path={ROUTES.TELEGRAM_SUCCESS} element={<TelegramSuccessPage />} />
                 <Route path={ROUTES.ONBOARDING_START} element={<StartFlowPage />} />
                 <Route path={ROUTES.ONBOARDING_CONTINUE} element={<ContinueFlowPage />} />
-                <Route path={ROUTES.AI_FUNNEL_LANDING} element={<AIFunnelLanding />} />
                 <Route path={ROUTES.WHEEL_START} element={<WheelStart />} />
                 <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
                 <Route path={ROUTES.DEV_ROUTES} element={<DevRoutes />} />
                 <Route path="/products/:slug" element={<ProductInfo />} />
+                <Route path="/miniapp" element={<Suspense fallback={null}><MiniAppPage /></Suspense>} />
+                <Route path="/miniapp/*" element={<Suspense fallback={null}><MiniAppPage /></Suspense>} />
                 {PUBLIC_INFO_ROUTES.map((path) => (
                   <Route key={path} path={path} element={<InfoPage />} />
                 ))}
