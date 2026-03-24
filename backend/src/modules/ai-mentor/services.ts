@@ -528,9 +528,21 @@ export interface WeeklyReportData {
     streakDays:    number;
     totalSessions: number;
   };
-  heroVariants: import('../ai-generator/types.js').HeroVariant[];
+  heroVariants: Array<{
+    headline: string;
+    subline: string;
+    cta: string;
+    angle: 'pain' | 'desire' | 'curiosity';
+    description: string;
+  }>;
   analysis:     string;
-  adTexts:      import('../ai-generator/types.js').AdTexts;
+  adTexts: {
+    facebook: string;
+    instagram_caption: string;
+    tiktok_hook: string;
+    stories: string;
+    reels_script: string;
+  };
 }
 
 export async function generateWeeklyReport(
@@ -604,31 +616,14 @@ export async function generateWeeklyReport(
 
   const analysis = analysisResult.choices[0]?.message?.content?.trim() ?? '';
 
-  // 3. Генеруємо Hero варіанти (lazy import щоб уникнути циклічних залежностей)
-  const { generateHeroVariants, generateAdTexts } = await import(
-    '../ai-generator/products-generator/producer.js'
-  );
-
-  // Базовий контекст для Hero — беремо з продукту або дефолт
-  let niche          = 'особистий розвиток';
-  let targetAudience = 'жінки 25-45 що прагнуть балансу';
-  let utp            = 'AI-ментор + щоденний цикл + колесо балансу';
-
-  if (productId) {
-    const product = await prisma.product.findUnique({
-      where:  { id: productId },
-      select: { name: true, description: true },
-    });
-    if (product) {
-      niche = product.name;
-      utp   = product.description ?? utp;
-    }
+  const heroVariants: WeeklyReportData['heroVariants'] = []
+  const adTexts: WeeklyReportData['adTexts'] = {
+    facebook: '',
+    instagram_caption: '',
+    tiktok_hook: '',
+    stories: '',
+    reels_script: '',
   }
-
-  const [heroVariants, adTexts] = await Promise.all([
-    generateHeroVariants({ niche, targetAudience, utp, tone: 'inspiring', language: 'uk' }),
-    generateAdTexts({ niche, targetAudience, heroHeadline: niche, language: 'uk' }),
-  ]);
 
   return {
     userId,

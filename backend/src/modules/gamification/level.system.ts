@@ -10,7 +10,7 @@ export const LEVELS: LevelDefinition[] = [
   { level: 7, title: 'Architect', xpThreshold: 2100, unlocks: ['Преміум NeuroGems бонуси'] },
   { level: 8, title: 'Mentor', xpThreshold: 2800, unlocks: ['Daily Cycle streak multipliers'] },
   { level: 9, title: 'Mastermind', xpThreshold: 3600, unlocks: ['Розширені Wheel аналізи'] },
-  { level: 10, title: 'Oracle', xpThreshold: 4500, unlocks: ['VIP AI Producer правила'] },
+  { level: 10, title: 'Oracle', xpThreshold: 4500, unlocks: ['VIP AI правила'] },
 ]
 
 const MAX_LEVEL = LEVELS[LEVELS.length - 1].level

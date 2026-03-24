@@ -74,11 +74,6 @@ export default function HomePage() {
       <div className="min-h-screen bg-[color:var(--bg-primary)] text-[color:var(--text-primary)]">
         {/* <TrialBannerSection user={user} /> */}
         <HeroSection onGetStarted={handleGetStarted} onLearnMore={handleLearnMore} />
-        {!user && (
-          <div className="mx-auto max-w-[1600px] px-6 pb-6">
-            <LandingAuthActions onEmailLogin={() => openAuth('login')} />
-          </div>
-        )}
 
         <section ref={el => { howItWorksRef.current = el }}>
           <HowItWorksSection onGetStarted={handleGetStarted} />

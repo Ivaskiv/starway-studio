@@ -51,13 +51,6 @@ export const NAVIGATION: NavMenu[] = [
             description: 'Стан → Ціль → Вибір → Дія',
             path:        '/platform/daily',
           },
-          {
-            id:          'platform-funnel',
-            label:       'AI Воронка',
-            icon:        '🚀',
-            description: 'Автоматичний 11-кроковий маркетинг',
-            path:        '/platform/funnel',
-          },
         ],
       },
     ],

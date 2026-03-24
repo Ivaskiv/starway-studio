@@ -10,9 +10,6 @@ export type Intent =
   | 'product_intent'
   | 'support'
   | 'general'
-  | 'seo_request'
-  | 'ads_request'
-  | 'producer_request'
 
 function containsAny(text: string, parts: string[]): boolean {
   return parts.some(part => text.includes(part))
@@ -29,16 +26,8 @@ export function resolveIntent(ctx: RouterContext): Intent {
 
   const text = ctx.rawText.toLowerCase()
 
-  if (containsAny(text, ['seo', 'контент', 'ранжув', 'мета-тег', 'ключов'])) {
-    return 'seo_request'
-  }
-
-  if (containsAny(text, ['реклама', 'таргет', 'банер', 'креатив', 'audience'])) {
-    return 'ads_request'
-  }
-
   if (containsAny(text, ['продукт', 'воронк', 'монетизац', 'офер', 'upsell'])) {
-    return 'producer_request'
+    return 'product_intent'
   }
 
   if (containsAny(text, ['що ти вмієш', 'як ти працюєш', 'що ти можеш', 'хто ти'])) {

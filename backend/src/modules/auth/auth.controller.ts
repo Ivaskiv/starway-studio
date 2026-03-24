@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import type { AuthenticatedRequest, AuthUser } from '../../types/globalTypes.js'
+import { withRetry } from '../../db/client.js'
 
 import {
   AuthServiceError,
@@ -7,6 +8,7 @@ import {
   findUserById,
   getCurrentUser,
   loginUser,
+  socialLoginUser,
   updateUserSettings,
   generateAccessToken,
   generateRefreshToken,
@@ -79,6 +81,32 @@ export async function login(req: Request, res: Response) {
   }
 }
 
+export async function social(req: Request, res: Response) {
+  try {
+    const { provider, externalId, email, name, username } = req.body ?? {}
+    const result = await socialLoginUser({
+      provider,
+      externalId,
+      email,
+      name,
+      username,
+    })
+
+    res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
+
+    return res.json({
+      user: result.user,
+      accessToken: result.accessToken,
+      needsProfile: result.needsProfile,
+      expiresIn: result.expiresIn,
+      isNewUser: result.isNewUser,
+      needsCompletion: result.needsCompletion,
+    })
+  } catch (error) {
+    return sendControllerError(res, error)
+  }
+}
+
 // ── REFRESH ───────────────────────────────
 export async function refresh(req: Request, res: Response) {
   const token = req.cookies.refreshToken
@@ -86,17 +114,16 @@ export async function refresh(req: Request, res: Response) {
 
   try {
     const payload = verifyRefreshToken(token)
-    const exists = await findRefreshToken(token)
+    const exists = await withRetry(() => findRefreshToken(token))
     if (!exists) return res.status(401).json({ error: 'invalid_refresh' })
 
-    await removeRefreshToken(token)
-
-    const user = await findUserById(payload.id)
+    const user = await withRetry(() => findUserById(payload.id))
     if (!user) return res.status(401).json({ error: 'user_not_found' })
 
     const newAccess = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
     const newRefresh = generateRefreshToken(user.id)
-    await storeRefreshToken(user.id, newRefresh)
+    await withRetry(() => storeRefreshToken(user.id, newRefresh))
+    await withRetry(() => removeRefreshToken(token))
     res.cookie('refreshToken', newRefresh, COOKIE_OPTIONS)
     return res.json({ accessToken: newAccess, user: toSafeUser(user) })
   } catch (error) {

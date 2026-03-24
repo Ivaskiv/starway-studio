@@ -1,6 +1,19 @@
 // frontend/src/features/analytics/components/FunnelHealthCard.tsx
 
-import type { FunnelHealthResult } from '@/features/producer/services/producer.api'
+interface FunnelHealthResult {
+  health: 'good' | 'needs_attention' | 'critical'
+  bottleneck: string
+  currentConversion: number
+  benchmark: number
+  dropoffRate: number
+  recommendations: string[]
+  urgentAction: string
+  readyTexts: {
+    day3Email?: string
+    day7Push?: string
+    retarget?: string
+  }
+}
 
 interface Props {
   data:      FunnelHealthResult

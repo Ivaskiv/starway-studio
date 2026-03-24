@@ -1,8 +1,6 @@
-import { ArrowRight, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-
 import { ROUTES } from '@/config/routes';
 import { useCreateProductMutation } from '@/features/products/services/products.api';
 import { ProductFormInputs } from '@/features/products/types/product.types';
@@ -76,12 +74,12 @@ export default function ProductCreationPage() {
     <div className="space-y-6 p-4 md:p-6">
       <ModuleIntro
         title="Створення продукту"
-        description="Створи базовий продукт, після цього доповни його AI-генерацією або підключи до воронки."
+        description="Створи базовий продукт і збережи його в каталозі без додаткових конструкторів."
         steps={[
           '1. Заповни назву та короткий опис.',
           '2. Вкажи власника продукту.',
           '3. Збережи продукт у каталозі.',
-          '4. Перейди в AI Генератор або AI Воронку для розширення.',
+          '4. Повернись у каталог продуктів для подальшої роботи.',
         ]}
       />
 
@@ -120,20 +118,6 @@ export default function ProductCreationPage() {
         <div className="flex flex-wrap gap-2">
           <Button onClick={handleCreate} loading={createState.isLoading}>
             Створити продукт
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => navigate(`${ROUTES.AI_GENERATOR}?tab=mentor`)}
-          >
-            <Sparkles className="w-4 h-4 mr-2" />
-            Перейти в AI Генератор
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => navigate(`${ROUTES.AI_FUNNEL_BUILDER}?tab=funnel`)}
-          >
-            AI Воронка
-            <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
         </div>
       </GlassCard>

@@ -30,6 +30,14 @@ export type UserState =
   | 'in_trial'
   | 'subscribed'
 
+export function isLeadMagnetActive(state: UserState | null | undefined): boolean {
+  return state === 'lm_started'
+    || state === 'lm_engaged'
+    || state === 'lm_almost_done'
+    || state === 'lm_completed'
+    || state === 'lm_exited'
+}
+
 type InlineButton =
   | { text: string; callback_data: string }
   | { text: string; url: string }
@@ -910,6 +918,13 @@ export async function handleStart(ctx: StartContext) {
     telegramUserName,
   })
 
+  if (linkedUserId) {
+    const existingState = await resolveUserState(linkedUserId).catch(() => 'new' as UserState)
+    if (isLeadMagnetActive(existingState)) {
+      return
+    }
+  }
+
   // =========================
   // 🚀 1. PAYLOAD = ПРІОРИТЕТ
   // =========================
@@ -1022,6 +1037,11 @@ export async function handleStart(ctx: StartContext) {
       payload.length > 10
 
     if (isFunnel) {
+      const existingState = await resolveUserState(linkedUserId).catch(() => 'new' as UserState)
+      if (isLeadMagnetActive(existingState)) {
+        return
+      }
+
       await markLeadMagnetSessionActive(linkedUserId, payload)
       await trackEvent({
         userId: linkedUserId,
@@ -1034,10 +1054,7 @@ export async function handleStart(ctx: StartContext) {
         },
       })
 
-      // 👉 тут можна нічого не слати (SendPulse сам веде)
-      // або легкий silent state
-      await setPersistentKeyboardSilently(ctx)
-
+      await ctx.reply('Зараз ти проходиш безкоштовний практикум 👇\nЗаверши його, щоб рухатись далі.')
       return
     }
 
@@ -1092,18 +1109,8 @@ export async function handleStart(ctx: StartContext) {
     firstName,
   })
 
-  // 👉 якщо активна funnel-сесія — не мовчимо
+  // Активний lead magnet = повна тиша.
   if (await hasActiveSendPulseLeadMagnetSession(linkedUserId)) {
-    await trackEvent({
-      userId: linkedUserId,
-      type: 'telegram_start',
-      source: 'telegram',
-      state: 'lm_engaged',
-      payload: {
-        branch: 'active_sendpulse_session',
-      },
-    })
-    await setPersistentKeyboardSilently(ctx)
     return
   }
 
@@ -1128,6 +1135,10 @@ export async function handleStart(ctx: StartContext) {
     getTrialDay(user?.trialStartsAt),
     nudgeCount,
   )
+
+  if (isLeadMagnetActive(state)) {
+    return
+  }
 
   await trackEvent({
     userId: linkedUserId,

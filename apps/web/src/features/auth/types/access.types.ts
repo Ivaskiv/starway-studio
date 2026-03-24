@@ -33,7 +33,6 @@ export type AccessKey =
   | 'actions'
   | 'wheel'
   | 'progress'
-  | 'ai-generator'
   // Commerce
   | 'products'
   | 'subscription'

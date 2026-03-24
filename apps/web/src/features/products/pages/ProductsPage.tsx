@@ -1,5 +1,4 @@
 import { ROUTES } from '@/config/routes';
-import { DEMO_TEMPLATES } from '@/features/ai-generator/utils/templates';
 import { useAccess } from '@/features/auth/hooks/useAccess';
 import { useSystemState } from '@/features/auth/hooks/useSystemState';
 import { useGetMyProductsQuery } from '@/features/products/services/products.api';
@@ -69,7 +68,7 @@ export default function ProductsPage() {
                     <button
                       type="button"
                       disabled={isLocked}
-                      onClick={() => navigate(ROUTES.AI_GENERATOR)}
+                      onClick={() => navigate(ROUTES.PRODUCTS)}
                       className={`rounded-lg px-4 py-2 text-sm font-medium inline-flex items-center gap-2 ${
                         isLocked
                           ? 'bg-white/10 text-white/60 cursor-not-allowed'
@@ -127,39 +126,11 @@ export default function ProductsPage() {
         )}
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold text-white">Шаблони продуктів</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {DEMO_TEMPLATES.map((tpl) => {
-            const createLocked = !(can('ai.basic' as any) || can('products.manage' as any));
-            return (
-              <GlassCard key={tpl.id} className="p-6 border border-white/10">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                      {tpl.name}
-                      {createLocked && <Lock className="w-4 h-4 text-amber-300" />}
-                    </h3>
-                    <p className="text-white/65 mt-2">RESULT: {tpl.quickWin}</p>
-                    <p className="text-white/60 mt-1">Модулі: A–G</p>
-                    <p className="text-white/60 mt-1">Фінальний стан: {tpl.steps.upsell}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate(createLocked ? ROUTES.SUBSCRIPTION : ROUTES.AI_GENERATOR)}
-                  className={`mt-4 rounded-lg px-4 py-2 text-sm font-medium inline-flex items-center gap-2 ${
-                    createLocked ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-orange-500 text-white'
-                  }`}
-                >
-                  {createLocked ? 'Спробувати 7 днів' : 'Створити'}
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </GlassCard>
-            );
-          })}
-        </div>
-      </section>
+      {!can('products.manage' as any) && (
+        <GlassCard className="p-5 text-white/70">
+          Додаткові шаблони продуктів тимчасово приховані. Основна робота з продуктами доступна через каталог і підписки.
+        </GlassCard>
+      )}
     </div>
   );
 }

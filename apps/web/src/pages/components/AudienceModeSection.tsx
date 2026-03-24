@@ -16,8 +16,8 @@ const USER_POINTS = [
 ] as const;
 
 const OWNER_POINTS = [
-  'Створюєш продукти та збираєш їх у власну AI-систему',
-  'Керуєш сценаріями, контентом, аналітикою, гейміфікацією та звітами',
+  'Створюєш і публікуєш свої продукти в єдиному каталозі',
+  'Керуєш аналітикою, гейміфікацією та навчальним контентом',
   'Підключаєш Telegram bot-flow і miniapp для своїх клієнтів',
 ] as const;
 
@@ -41,7 +41,7 @@ export default function AudienceModeSection({ onAuthRequired }: AudienceModeSect
     }
 
     if (target === 'owner') {
-      navigateTo(ROUTES.AI_GENERATOR, { requiresAuth: true });
+      navigateTo(ROUTES.PRODUCTS, { requiresAuth: true });
       return;
     }
 
@@ -124,8 +124,8 @@ export default function AudienceModeSection({ onAuthRequired }: AudienceModeSect
           <div className="mt-6 glass-card rounded-3xl p-6 border border-white/15">
             <h4 className="text-xl font-semibold mb-3">11 кроків створення системи</h4>
             <p className="text-white/70 leading-relaxed">
-              Ніша → продукт → сценарії → колесо балансу → AI-аналіз → звіти → Telegram → miniapp →
-              гейміфікація. Кожен крок має 3 AI-генерації з переносом невикористаних.
+              Продукт → контент → колесо балансу → AI-аналіз → звіти → Telegram → miniapp →
+              гейміфікація. Вся основна робота зібрана навколо core-модулів платформи.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-3">
@@ -134,7 +134,7 @@ export default function AudienceModeSection({ onAuthRequired }: AudienceModeSect
                 onClick={() => onStart('owner')}
                 className="btn rounded-xl bg-[color:rgba(var(--accent-rgb),0.72)] border-[color:rgba(var(--accent-rgb),0.9)]"
               >
-                Відкрити конструктор
+                Відкрити продукти
               </button>
               <button
                 type="button"

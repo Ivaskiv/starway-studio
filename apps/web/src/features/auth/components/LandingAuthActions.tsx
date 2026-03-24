@@ -5,7 +5,7 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 
 interface Props {
-  onEmailLogin: () => void
+  onEmailLogin?: () => void
 }
 
 export function LandingAuthActions({ onEmailLogin }: Props) {
@@ -34,9 +34,6 @@ export function LandingAuthActions({ onEmailLogin }: Props) {
         </Button>
         <Button onClick={() => handleSocialLogin('telegram')} disabled={pendingProvider !== null} variant="outline">
           {pendingProvider === 'telegram' ? 'Telegram...' : 'Login via Telegram'}
-        </Button>
-        <Button onClick={onEmailLogin} disabled={pendingProvider !== null} variant="ghost">
-          Email / Registration
         </Button>
       </div>
     </div>

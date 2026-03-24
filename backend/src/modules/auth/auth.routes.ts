@@ -1,7 +1,7 @@
 // backend/src/modules/auth/auth.routes.ts
 
 import { Router } from 'express'
-import { register, login, refresh, logout, getMe, updateSettings } from './auth.controller.js'
+import { register, login, social, refresh, logout, getMe, updateSettings } from './auth.controller.js'
 import { authRequired } from './middleware/auth.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { prisma } from '../../db/client.js'
@@ -28,6 +28,7 @@ function isTelegramInactiveError(error: unknown): boolean {
 
 router.post('/register', register)
 router.post('/login', login)
+router.post('/social', social)
 router.post('/refresh', refresh)
 router.post('/logout', authRequired, logout)
 router.get('/me', authRequired, getMe)

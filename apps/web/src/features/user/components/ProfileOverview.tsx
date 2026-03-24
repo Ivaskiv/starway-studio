@@ -28,7 +28,7 @@ import {
 import { GlassCard } from '@/ui'
 import {
   Activity, Award, BellRing, Crown,
-  ExternalLink, Flame, Globe, Package,
+  ExternalLink, Flame, Package,
   Send, Smartphone, Target, TrendingUp, UserCheck,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -200,14 +200,6 @@ function DeliveryChannels() {
           <span className="flex items-center gap-2">
             <Smartphone className="w-4 h-4" />
             Web кабінет
-          </span>
-          <ExternalLink className="w-4 h-4 text-[color:var(--text-muted)]" />
-        </button>
-
-        <button onClick={() => navigate(ROUTES.AI_FUNNEL_LANDING)} className={channelBtn}>
-          <span className="flex items-center gap-2">
-            <Globe className="w-4 h-4" />
-            Лендінг
           </span>
           <ExternalLink className="w-4 h-4 text-[color:var(--text-muted)]" />
         </button>

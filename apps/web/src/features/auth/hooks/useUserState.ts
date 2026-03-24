@@ -12,6 +12,7 @@ const DEFAULT_STEP: UserStep = 'LINK_TELEGRAM'
 export function useUserState() {
   const user = useAppSelector(state => state.auth.user)
   const isAuthenticated = useAppSelector(state => state.auth.status === 'authenticated')
+  const hasRealEmail = Boolean(user?.email && !user.email.startsWith('telegram-guest-'))
 
   const query = useGetUserStateQuery(undefined, {
     skip: !isAuthenticated,
@@ -26,7 +27,8 @@ export function useUserState() {
     state: query.data?.state ?? DEFAULT_STATE,
     step: query.data?.step ?? DEFAULT_STEP,
     email: user?.email ?? null,
-    emailCompletionRequired: Boolean(isAuthenticated && !user?.email),
+    emailCompletionRequired: Boolean(isAuthenticated && !hasRealEmail),
+    hasRealEmail,
     isLoading: isAuthenticated ? query.isLoading || query.isFetching : false,
     telegramLinked: telegramStatusQuery.data?.linked ?? false,
     botActive: telegramStatusQuery.data?.botActive ?? false,

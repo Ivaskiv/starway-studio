@@ -573,11 +573,11 @@ function ExpertStatsSection({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
       <GlassCard className="p-5">
         <h2 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
-          AI Producer — рекомендації
+          AI аналітика — рекомендації
         </h2>
         {[
           { icon: '🎯', text: 'Підключіть аналітику щоб побачити рекомендації' },
-          { icon: '📣', text: 'Дані з\'являться після першого деплою воронки' },
+          { icon: '📣', text: 'Дані з\'являться після першого запуску навчального сценарію' },
           { icon: '🔍', text: 'SEO аналіз стане доступний після налаштування' },
         ].map((r, i) => (
           <div key={i} className="flex items-start gap-3 border-b border-[var(--border)] py-2.5 last:border-0">

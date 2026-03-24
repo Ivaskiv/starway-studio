@@ -45,9 +45,9 @@ const PLANS: Plan[] = [
 ]
 
 const BADGE_STYLES = {
-  blue:   'bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-600',
-  purple: 'bg-gradient-to-r from-pink-500 via-purple-500 to-pink-600',
-  amber:  'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600',
+  blue:   'border border-[rgba(255,255,255,0.24)] bg-gradient-to-r from-[#3d8dff] via-[#5fa7ff] to-[#3674e0] text-white shadow-[0_10px_28px_rgba(40,104,214,0.35),inset_0_1px_0_rgba(255,255,255,0.24)]',
+  purple: 'border border-[rgba(255,255,255,0.24)] bg-gradient-to-r from-[#d94cff] via-[#9d5bff] to-[#d44fd8] text-white shadow-[0_10px_28px_rgba(162,76,255,0.35),inset_0_1px_0_rgba(255,255,255,0.24)]',
+  amber:  'border border-[rgba(255,255,255,0.24)] bg-gradient-to-r from-[#ffb347] via-[#ff9a3d] to-[#ffb84d] text-[#fff8ef] shadow-[0_10px_28px_rgba(255,163,71,0.35),inset_0_1px_0_rgba(255,255,255,0.24)]',
 }
 
 export default function SubscriptionPage() {
@@ -150,7 +150,7 @@ export default function SubscriptionPage() {
             <div
               key={plan.id}
               className={[
-                'relative rounded-2xl px-6 pb-6 pt-8 flex flex-col transition-all duration-300',
+                'relative flex h-full flex-col rounded-2xl px-6 pb-6 pt-8 transition-all duration-300',
                 plan.highlighted
                   ? 'bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-purple-500/15 border-2 border-purple-500/40 shadow-[0_20px_80px_rgba(168,85,247,0.35)]'
                   : 'bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-white/[0.07] border border-white/[0.1]',
@@ -166,15 +166,14 @@ export default function SubscriptionPage() {
 
               {plan.badge && (
                 <span className={[
-                  'absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-[11px] font-bold text-white z-10',
-                  'shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
+                  'absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-4 py-1.5 rounded-full text-[12px] font-semibold tracking-[0.02em] z-10',
                   BADGE_STYLES[plan.badgeColor || 'blue'],
                 ].join(' ')}>
                   {plan.badge}
                 </span>
               )}
 
-              <div className="relative z-10">
+              <div className="relative z-10 flex h-full flex-col">
                 <h3 className="text-xl font-bold text-[color:var(--text-primary)] mb-4">{plan.name}</h3>
 
                 <div className="flex items-baseline gap-2 mb-6">
@@ -189,7 +188,7 @@ export default function SubscriptionPage() {
                   <span className="text-[color:var(--text-muted)] text-sm">/{plan.period}</span>
                 </div>
 
-                <ul className="space-y-3 mb-8 flex-1">
+                <ul className="mb-8 flex-1 space-y-3">
                   {plan.features.map((feature, i) => (
                     <li key={i} className="flex items-start gap-2.5">
                       <div className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center mt-0.5">
@@ -204,7 +203,7 @@ export default function SubscriptionPage() {
                   onClick={() => handleSubscribe(plan.id)}
                   disabled={isProcessing}
                   className={[
-                    'w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white transition-all duration-300',
+                    'mt-auto flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-semibold text-white transition-all duration-300',
                     plan.highlighted
                       ? 'bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 hover:shadow-[0_8px_32px_rgba(168,85,247,0.5)]'
                       : 'bg-gradient-to-r from-[color:var(--accent)] to-[color:var(--accent-strong)] hover:shadow-[0_8px_32px_rgba(var(--accent-rgb),0.5)]',

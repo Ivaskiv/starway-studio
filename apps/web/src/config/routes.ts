@@ -19,10 +19,11 @@ export const ROUTES = {
   TELEGRAM_SUCCESS: '/auth/telegram/success',
   ONBOARDING_START: '/onboarding/start',
   ONBOARDING_CONTINUE: '/onboarding/continue',
-  AI_FUNNEL_LANDING: '/ai-funnel',
+  AI_FUNNEL_LANDING: '/',
   HELP: '/help',
   PRODUCT_INFO_BASE: '/products',
   RESET_PASSWORD: '/reset-password',
+  MINIAPP: '/miniapp',
   
   // ==========================================
   // DASHBOARD
@@ -69,10 +70,10 @@ export const ROUTES = {
   // ==========================================
   PRODUCTS: '/dashboard/products',
   PRODUCT_CREATION: '/dashboard/product-create',
-  AI_GENERATOR: '/dashboard/ai-generator',
-  AI_FUNNEL_BUILDER: '/dashboard/ai-funnel',
-  AI_PRODUCER_CONSOLE: '/dashboard/ai-producer-console',
-  AI_PRODUCER_ASSISTANT: '/producer/assistant',
+  AI_GENERATOR: '/dashboard/products',
+  AI_FUNNEL_BUILDER: '/dashboard/products',
+  AI_PRODUCER_CONSOLE: '/dashboard/products',
+  AI_PRODUCER_ASSISTANT: '/dashboard/products',
   ADMIN_ROLES: '/dashboard/admin/roles',
   DEV_ROUTES: '/dev/routes',
 
@@ -132,11 +133,6 @@ export const ROUTE_METADATA: Record<RoutePath, {
   },
   '/products': {
     title: 'Продукти Starway',
-    requiresAuth: false,
-    requiresPaid: false,
-  },
-  '/ai-funnel': {
-    title: 'AI Funnel Landing',
     requiresAuth: false,
     requiresPaid: false,
   },
@@ -256,34 +252,19 @@ export const ROUTE_METADATA: Record<RoutePath, {
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/ai-generator': {
-    title: 'AI Генератор',
-    requiresAuth: true,
-    requiresPaid: false,
-  },
-  '/dashboard/ai-funnel': {
-    title: 'AI Воронка',
-    requiresAuth: true,
-    requiresPaid: false,
-  },
-  '/dashboard/ai-producer-console': {
-    title: 'AI Producer Console',
-    requiresAuth: true,
-    requiresPaid: false,
-  },
   '/dashboard/admin/roles': {
     title: 'Управління ролями',
-    requiresAuth: true,
-    requiresPaid: false,
-  },
-  '/producer/assistant': {
-    title: 'AI Producer Assistant',
     requiresAuth: true,
     requiresPaid: false,
   },
   '/reset-password': {
     title: 'Скидання пароля',
     requiresAuth: false,
+    requiresPaid: false,
+  },
+  '/miniapp': {
+    title: 'Mini App',
+    requiresAuth: true,
     requiresPaid: false,
   },
   '/dev/routes': {
@@ -299,7 +280,6 @@ export const ROUTE_METADATA: Record<RoutePath, {
 export const ROUTE_GROUPS = {
   public: [
     ROUTES.HOME,
-    ROUTES.AI_FUNNEL_LANDING,
     ROUTES.HELP,
   ],
   dashboard: [
@@ -333,9 +313,5 @@ export const ROUTE_GROUPS = {
   ],
   marketplace: [
     ROUTES.PRODUCTS,
-    ROUTES.AI_GENERATOR,
-    ROUTES.AI_FUNNEL_BUILDER,
-    ROUTES.AI_PRODUCER_CONSOLE,
-    ROUTES.AI_PRODUCER_ASSISTANT,
   ],
 } as const;

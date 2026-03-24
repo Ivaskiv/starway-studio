@@ -33,8 +33,6 @@
 // ── 5. Feature-специфічні стилі ──────────────────────────────
 @use "./components/assistantBubble"; // .ava-bubble, .ap-*
 @use "./components/userMenu";    // .user-menu-*
-@use "./components/producer";         // producer-* (gold theme, AI producer)
-@use "./components/producer-console"; // producer-console-layout (placeholder)
 @use "./components/liquid-landing";     
 // ── 6. Utilities ─────────────────────────────────────────────
 @use "./utilities/effects";
@@ -298,8 +296,334 @@
         0 10px 22px hsl(220 12% 100% / 0.12),
         inset 0 1px 0 hsl(0 0% 100% / 0.34),
         inset 0 -1px 0 hsl(220 34% 12% / 0.24);
+  }
+
+  .miniapp-layout {
+    @apply relative min-h-screen;
+  }
+
+  .miniapp-layout__content {
+    @apply pb-[calc(108px+env(safe-area-inset-bottom))] md:pb-[calc(112px+env(safe-area-inset-bottom))];
+  }
+
+  .miniapp-bottomnav-shell {
+    @apply fixed inset-x-0 bottom-0 z-[70] bg-[linear-gradient(180deg,rgba(6,9,16,0)_0%,rgba(6,9,16,0.68)_24%,rgba(8,12,20,0.98)_100%)] pt-5;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+
+  .miniapp-bottomnav {
+    @apply mx-auto flex w-full max-w-5xl items-stretch gap-1 rounded-t-[28px] rounded-b-none border border-b-0 px-2 py-2 md:gap-2 md:px-3;
+    border-color: rgba(255, 255, 255, 0.06);
+    background:
+      linear-gradient(180deg, rgba(24, 28, 44, 0.99), rgba(14, 18, 31, 0.985));
+    box-shadow:
+      0 -18px 44px rgba(0, 0, 0, 0.42),
+      0 -8px 24px rgba(var(--accent-rgb), 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .miniapp-bottomnav__item {
+    @apply relative flex min-h-[74px] flex-1 scale-[0.98] flex-col items-center justify-center gap-1.5 rounded-[22px] px-2 py-2.5 text-center opacity-75 transition-all duration-200;
+    color: var(--text-muted);
+
+    &:hover {
+      @apply scale-100 opacity-100;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-secondary);
     }
   }
+
+  .miniapp-bottomnav__item--active {
+    @apply scale-100 opacity-100;
+    color: rgb(var(--accent-soft-rgb));
+    background:
+      linear-gradient(180deg, rgba(var(--accent-soft-rgb), 0.18), rgba(var(--accent-rgb), 0.12));
+    box-shadow:
+      0 12px 24px rgba(var(--accent-rgb), 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+
+  .miniapp-bottomnav__icon {
+    @apply h-10 w-10 rounded-[18px];
+    border-color: rgba(255, 255, 255, 0.1);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
+      linear-gradient(145deg, rgba(var(--accent-rgb), 0.08), rgba(255, 255, 255, 0.02));
+  }
+
+  .miniapp-bottomnav__item--active .miniapp-bottomnav__icon {
+    border-color: rgba(var(--accent-soft-rgb), 0.28);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.07)),
+      linear-gradient(145deg, rgba(var(--accent-soft-rgb), 0.18), rgba(var(--accent-rgb), 0.1));
+    box-shadow:
+      0 10px 24px rgba(var(--accent-rgb), 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .miniapp-bottomnav__icon--pulse {
+    animation: miniapp-ai-pulse 2.2s ease-in-out infinite;
+  }
+
+  .miniapp-bottomnav__label {
+    @apply text-[11px] font-semibold leading-tight;
+  }
+
+  @media (min-width: 768px) {
+    .miniapp-bottomnav__item {
+      @apply min-h-[78px] flex-row gap-2.5 px-4 py-3 text-left;
+    }
+
+    .miniapp-bottomnav__label {
+      @apply text-xs;
+    }
+  }
+
+  .miniapp-bottomnav__dot {
+    @apply h-1.5 w-1.5 rounded-full opacity-0 transition-all duration-200;
+    background: rgba(var(--accent-soft-rgb), 0.9);
+    box-shadow: 0 0 14px rgba(var(--accent-soft-rgb), 0.5);
+  }
+
+  .miniapp-bottomnav__dot--active {
+    @apply opacity-100;
+  }
+
+  .miniapp-floating-ai {
+    @apply fixed bottom-[calc(88px+env(safe-area-inset-bottom))] right-4 z-[72];
+  }
+
+  .miniapp-floating-ai__button {
+    @apply relative inline-flex h-14 min-w-[68px] items-center justify-center overflow-hidden rounded-full border px-4 py-0 text-[var(--text-primary)] transition-all duration-300;
+    border-color: rgba(255, 255, 255, 0.16);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
+      linear-gradient(135deg, rgba(var(--accent-soft-rgb), 0.55), rgba(var(--accent-rgb), 0.78));
+    box-shadow:
+      0 18px 30px rgba(var(--accent-rgb), 0.18),
+      0 10px 22px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.26);
+    backdrop-filter: blur(var(--blur-soft)) saturate(1.18);
+    -webkit-backdrop-filter: blur(var(--blur-soft)) saturate(1.18);
+
+    &:hover {
+      @apply -translate-y-0.5;
+    }
+  }
+
+  .miniapp-floating-ai__content {
+    @apply relative z-[1] flex items-center gap-2;
+  }
+
+  .miniapp-floating-ai__shine {
+    @apply pointer-events-none absolute inset-[1px] rounded-full;
+    background:
+      radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.34), transparent 28%),
+      linear-gradient(120deg, transparent 24%, rgba(255, 255, 255, 0.16) 42%, transparent 58%);
+  }
+
+  .miniapp-floating-ai__ring {
+    @apply pointer-events-none absolute inset-[-8px] rounded-full border;
+    border-color: rgba(var(--accent-soft-rgb), 0.32);
+    animation: miniapp-floating-ring 2.4s ease-out infinite;
+  }
+
+  .miniapp-floating-ai__tooltip {
+    @apply pointer-events-none absolute bottom-[calc(100%+14px)] right-0 w-[260px] translate-y-3 opacity-0 transition-all duration-300;
+  }
+
+  .miniapp-floating-ai__tooltip--open {
+    @apply pointer-events-auto translate-y-0 opacity-100;
+  }
+
+  .miniapp-gamebadge {
+    @apply grid grid-cols-2 gap-2;
+  }
+
+  .miniapp-gamebadge__pill {
+    @apply flex min-w-0 items-center gap-2 rounded-2xl border px-3 py-3;
+    border-color: rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+      rgba(255, 255, 255, 0.03);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .miniapp-gamebadge__pill-icon {
+    @apply btn-icon h-8 w-8 rounded-xl;
+  }
+
+  .miniapp-gamebadge__pill-label {
+    @apply block text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)];
+  }
+
+  .miniapp-gamebadge__pill-value {
+    @apply mt-0.5 block truncate text-sm font-bold text-[var(--text-primary)];
+  }
+
+  .miniapp-gamebadge__pill--blue .miniapp-gamebadge__pill-icon {
+    color: rgb(var(--accent-soft-rgb));
+  }
+
+  .miniapp-gamebadge__pill--teal .miniapp-gamebadge__pill-icon {
+    color: rgb(74 219 191);
+  }
+
+  .miniapp-gamebadge__pill--gold .miniapp-gamebadge__pill-icon {
+    color: rgb(245 200 66);
+  }
+
+  .miniapp-gamebadge__pill--accent {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .miniapp-gamebadge__pill--accent::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 12%, rgba(255, 255, 255, 0.18) 42%, transparent 68%);
+    transform: translateX(-120%);
+    animation: miniapp-level-shimmer 3.2s linear infinite;
+    pointer-events: none;
+  }
+
+  .miniapp-gamebadge__progress {
+    @apply h-full rounded-full transition-all duration-300;
+    background: linear-gradient(90deg, rgba(var(--accent-soft-rgb), 0.95), rgba(var(--accent-rgb), 0.82));
+    box-shadow: 0 0 16px rgba(var(--accent-soft-rgb), 0.24);
+  }
+
+  .miniapp-aichat__avatar {
+    @apply inline-flex h-12 w-12 items-center justify-center rounded-full text-base font-black text-[var(--text-primary)];
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.04)),
+      linear-gradient(135deg, rgba(var(--accent-soft-rgb), 0.7), rgba(var(--accent-rgb), 0.9));
+    box-shadow:
+      0 14px 28px rgba(var(--accent-rgb), 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  }
+
+  .miniapp-aichat__status {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold text-[var(--text-secondary)];
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .miniapp-aichat__status--accent {
+    color: rgb(var(--accent-soft-rgb));
+    border-color: rgba(var(--accent-soft-rgb), 0.18);
+    background: rgba(var(--accent-soft-rgb), 0.08);
+  }
+
+  .miniapp-aichat__bubble {
+    @apply max-w-[88%] whitespace-pre-line rounded-2xl px-4 py-3 text-sm leading-relaxed;
+  }
+
+  .miniapp-aichat__bubble--assistant {
+    @apply border text-[var(--text-secondary)];
+    border-color: var(--glass-border);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .miniapp-aichat__bubble--user {
+    @apply ml-auto text-[var(--text-primary)];
+    background: rgba(var(--accent-soft-rgb), 0.18);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .miniapp-aichat__input-wrap {
+    @apply flex items-end gap-2 rounded-[22px] border px-3 py-3;
+    border-color: rgba(255, 255, 255, 0.1);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03)),
+      rgba(10, 14, 24, 0.72);
+    backdrop-filter: blur(var(--blur-soft)) saturate(1.12);
+    -webkit-backdrop-filter: blur(var(--blur-soft)) saturate(1.12);
+  }
+
+  .miniapp-aichat__input {
+    @apply min-h-[48px] flex-1 resize-none bg-transparent py-2 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)];
+  }
+
+  .miniapp-aichat__send {
+    @apply hero-cta-primary inline-flex h-11 w-11 items-center justify-center rounded-2xl p-0 disabled:opacity-55;
+  }
+
+  .miniapp-aichat__toast {
+    @apply absolute -top-11 left-1/2 z-[1] -translate-x-1/2 rounded-full border px-3 py-1.5 text-xs font-bold text-[var(--text-primary)];
+    border-color: rgba(var(--accent-soft-rgb), 0.22);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06)),
+      linear-gradient(135deg, rgba(var(--accent-soft-rgb), 0.22), rgba(var(--accent-rgb), 0.12));
+    box-shadow:
+      0 12px 20px rgba(var(--accent-rgb), 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .miniapp-tracker__circle {
+    @apply flex h-[124px] w-[124px] items-center justify-center rounded-full p-[12px];
+    box-shadow:
+      0 18px 34px rgba(0, 0, 0, 0.22),
+      0 12px 24px rgba(var(--accent-rgb), 0.12);
+  }
+
+  .miniapp-tracker__circle-inner {
+    @apply flex h-full w-full flex-col items-center justify-center rounded-full border;
+    border-color: rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03)),
+      rgba(12, 16, 28, 0.88);
+  }
+
+  .miniapp-tracker__banner {
+    @apply flex items-center gap-3 rounded-2xl border px-4 py-4;
+    border-color: rgba(var(--accent-soft-rgb), 0.16);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03)),
+      linear-gradient(135deg, rgba(var(--accent-soft-rgb), 0.12), rgba(var(--accent-rgb), 0.06));
+  }
+
+  @keyframes miniapp-floating-ring {
+    0% {
+      opacity: 0;
+      transform: scale(0.88);
+    }
+    35% {
+      opacity: 0.46;
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.18);
+    }
+  }
+
+  @keyframes miniapp-ai-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      box-shadow:
+        0 10px 24px rgba(var(--accent-rgb), 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    50% {
+      transform: scale(1.06);
+      box-shadow:
+        0 14px 28px rgba(var(--accent-rgb), 0.26),
+        0 0 20px rgba(var(--accent-soft-rgb), 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    }
+  }
+
+  @keyframes miniapp-level-shimmer {
+    0% {
+      transform: translateX(-120%);
+    }
+    100% {
+      transform: translateX(120%);
+    }
+  }
+}
 
   .ios-button-secondary {
     @apply relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-[999px] px-5 py-3 text-sm font-medium transition-all duration-200;

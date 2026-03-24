@@ -18,7 +18,7 @@ import { useMediaQuery } from '@/features/media/services/media.api'
 // ТИПИ
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface SidebarNavItem {
+export interface SidebarNavItem {
   id:                  string
   label:               string
   icon:                string
@@ -30,7 +30,7 @@ interface SidebarNavItem {
   highlight?:          boolean
 }
 
-interface SidebarNavSection {
+export interface SidebarNavSection {
   id:        string
   label:     string | null
   visibleTo: UserRole[]
@@ -42,7 +42,7 @@ interface SidebarNavSection {
 // ЄДИНА КОНФІГУРАЦІЯ НАВІГАЦІЇ
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SIDEBAR_NAV: SidebarNavSection[] = [
+export const SIDEBAR_NAV: SidebarNavSection[] = [
   {
     id: 'main',
     label: null,
@@ -74,8 +74,6 @@ const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'AI Система',
     visibleTo: ['EXPERT', 'SUPERADMIN'],
     items: [
-      { id: 'ai-funnel', label: 'AI Воронка', icon: '', path: '/dashboard/ai-funnel', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'ai-producer', label: 'AI Producer', icon: '', path: '/dashboard/ai-producer-console', visibleTo: ['EXPERT', 'SUPERADMIN'] },
       { id: 'ai-seo', label: 'AI SEO', icon: '', path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },
       { id: 'ads', label: 'Реклама', icon: '', path: '/dashboard/ads', visibleTo: ['EXPERT', 'SUPERADMIN'] },
     ],
@@ -132,7 +130,7 @@ interface SidebarProps {
 // ХЕЛПЕРИ
 // ─────────────────────────────────────────────────────────────────────────────
 
-function isVisibleFor(visibleTo: UserRole[], role: UserRole): boolean {
+export function isVisibleFor(visibleTo: UserRole[], role: UserRole): boolean {
   return visibleTo.length === 0 || visibleTo.includes(role)
 }
 
@@ -203,14 +201,14 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
           'w-full flex items-center rounded-xl mb-0.5 transition-all duration-200 relative',
           collapsed ? 'gap-0 justify-center px-0 py-2' : 'gap-2.5 px-3 py-2',
           isActive
-            ? 'border border-transparent font-semibold text-[var(--text-primary)] underline underline-offset-[6px] decoration-[1px] decoration-[rgba(var(--accent-rgb),0.5)]'
+            ? 'border border-transparent font-semibold text-[var(--text-primary)] underline underline-offset-[6px] decoration-[1px] decoration-[rgba(var(--accent-rgb),0.68)]'
             : isLocked
               ? 'text-[var(--text-subtle)] opacity-50 cursor-not-allowed border border-transparent'
-              : 'text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)] hover:underline hover:underline-offset-[6px] hover:decoration-[1px] hover:decoration-[rgba(var(--accent-rgb),0.28)] border border-transparent',
+              : 'text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)] hover:underline hover:underline-offset-[6px] hover:decoration-[1px] hover:decoration-[rgba(var(--accent-rgb),0.42)] border border-transparent',
         ].join(' ')}
       >
         {!collapsed && isActive && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[62%] rounded-r-sm bg-[rgba(var(--accent-rgb),0.82)]" />
+          <span className="absolute left-0 top-1/2 h-[68%] w-[2px] -translate-y-1/2 rounded-r-sm bg-[rgba(var(--accent-rgb),0.92)]" />
         )}
 
         {item.icon && (
@@ -262,15 +260,17 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
     !collapsed ? (
       <div className="flex items-center gap-2 px-3 pt-3 pb-1">
         <p className={[
-          'shrink-0 text-[9px] font-bold tracking-widest uppercase',
-          accent ? 'text-amber-400/60' : 'text-[var(--text-subtle)]',
+          'shrink-0 text-[10px] font-bold uppercase tracking-[.14em]',
+          accent
+            ? 'text-amber-300/85'
+            : 'text-[rgb(var(--accent-soft-rgb))] [text-shadow:0_0_14px_rgba(var(--accent-soft-rgb),0.18)]',
         ].join(' ')}>
           {label}
         </p>
         <span
           className={[
             'block min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[8px] tracking-[0.22em]',
-            accent ? 'text-amber-400/30' : 'text-[rgba(var(--accent-rgb),0.26)]',
+            accent ? 'text-amber-300/40' : 'text-[rgba(var(--accent-soft-rgb),0.42)]',
           ].join(' ')}
           aria-hidden="true"
         >

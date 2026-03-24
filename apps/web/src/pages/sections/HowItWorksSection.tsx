@@ -3,10 +3,10 @@ import { useGetTelegramLinkUrlQuery } from '@/features/auth/services/auth.api'
 import { Button, GlassCard } from '@/ui'
 import { ArrowLeft, ArrowRight, Play, Sparkles, Target } from 'lucide-react'
 import type { ElementType } from 'react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-type StepId = '01' | '02' | '03'
+type StepId = 'register' | 'telegram' | 'flow'
 
 interface Step {
   id: StepId
@@ -15,31 +15,25 @@ interface Step {
   icon: ElementType
 }
 
-const STEPS: Step[] = [
-  {
-    id: '01',
+const STEP_CONFIG: Record<StepId, Step> = {
+  register: {
+    id: 'register',
     title: 'Реєстрація',
     desc: 'Email + пароль за 30 секунд. Увійди в систему і відкрий наступний крок.',
     icon: Play,
   },
-  {
-    id: '02',
+  telegram: {
+    id: 'telegram',
     title: 'Telegram',
     desc: 'Підключення бота і синхронізація доступу.',
     icon: Target,
   },
-  {
-    id: '03',
+  flow: {
+    id: 'flow',
     title: 'Колесо та AI flow',
     desc: 'Переходь до колеса балансу і далі рухайся по системі крок за кроком.',
     icon: Sparkles,
   },
-] as const
-
-const PROGRESS_WIDTH: Record<StepId, string> = {
-  '01': 'w-1/3',
-  '02': 'w-2/3',
-  '03': 'w-full',
 }
 
 export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }) {
@@ -47,21 +41,43 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   const {
     step,
     isAuthenticated,
+    hasRealEmail,
     emailCompletionRequired,
     telegramLinked,
     botActive,
   } = useUserState()
+
   const { data: telegramLinkData } = useGetTelegramLinkUrlQuery(undefined, {
     skip: !isAuthenticated || emailCompletionRequired,
   })
 
+  const hasTelegramIdentity = useMemo(() => {
+    if (telegramLinked) return true
+    if (typeof window === 'undefined') return false
+
+    const telegram = (window as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } }).Telegram
+    return Boolean(telegram?.WebApp?.initDataUnsafe?.user?.id)
+  }, [telegramLinked])
+
+  const steps = useMemo(() => {
+    const order: StepId[] =
+      isAuthenticated && hasTelegramIdentity && !hasRealEmail
+        ? ['telegram', 'register', 'flow']
+        : ['register', 'telegram', 'flow']
+
+    return order.map((id, index) => ({
+      ...STEP_CONFIG[id],
+      displayId: String(index + 1).padStart(2, '0'),
+    }))
+  }, [hasRealEmail, hasTelegramIdentity, isAuthenticated])
+
   const getInitialStep = (): StepId => {
-    if (!isAuthenticated) return '01'
-    if (emailCompletionRequired) return '02'
-    if (!telegramLinked || !botActive) return '02'
-    if (step === 'LINK_TELEGRAM') return '02'
-    if (step === 'START_FLOW' || step === 'WHEEL' || step === 'DAILY_MORNING') return '03'
-    return '01'
+    if (!isAuthenticated) return steps[0]?.id ?? 'register'
+    if (emailCompletionRequired) return hasTelegramIdentity ? 'register' : 'telegram'
+    if (!telegramLinked || !botActive) return 'telegram'
+    if (step === 'LINK_TELEGRAM') return 'telegram'
+    if (step === 'START_FLOW' || step === 'WHEEL' || step === 'DAILY_MORNING') return 'flow'
+    return 'register'
   }
 
   const [activeStep, setActiveStep] = useState<StepId>(() => getInitialStep())
@@ -75,20 +91,26 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   })
 
   const telegramFlowUrl = telegramLinkData?.url ?? null
+  const activeIndex = Math.max(steps.findIndex(item => item.id === activeStep), 0)
+  const progressWidth = ['w-1/3', 'w-2/3', 'w-full'][activeIndex] ?? 'w-1/3'
+
+  useEffect(() => {
+    setActiveStep(getInitialStep())
+  }, [step, isAuthenticated, emailCompletionRequired, telegramLinked, botActive, hasTelegramIdentity, hasRealEmail])
 
   const openStep = (nextStep: StepId) => {
-    if (nextStep === '01' && !isAuthenticated) {
+    if (nextStep === 'register' && !isAuthenticated) {
       onGetStarted()
       return
     }
 
-    if (nextStep === '02' && !isAuthenticated) {
+    if (nextStep === 'telegram' && !isAuthenticated) {
       setStatusMessage('Спочатку зареєструйся')
       return
     }
 
-    if (nextStep === '03' && (emailCompletionRequired || !telegramLinked || !botActive)) {
-      setActiveStep('02')
+    if (nextStep === 'flow' && (emailCompletionRequired || !telegramLinked || !botActive)) {
+      setActiveStep(emailCompletionRequired && hasTelegramIdentity ? 'register' : 'telegram')
       setStatusMessage(null)
       return
     }
@@ -98,25 +120,41 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   }
 
   const goPrev = () => {
-    if (activeStep === '03') {
-      setActiveStep('02')
-      return
-    }
-
-    if (activeStep === '02') {
-      setActiveStep('01')
+    const prev = steps[activeIndex - 1]
+    if (prev) {
+      setActiveStep(prev.id)
+      setStatusMessage(null)
     }
   }
 
   const goNext = () => {
-    if (activeStep === '01') {
-      openStep('02')
-      return
+    const next = steps[activeIndex + 1]
+    if (next) {
+      openStep(next.id)
     }
+  }
 
-    if (activeStep === '02') {
-      openStep('03')
+  const registerPrimaryLabel = !isAuthenticated
+    ? 'Почати'
+    : hasRealEmail
+      ? 'Продовжити'
+      : 'Додати email'
+
+  const stepsWithDynamicCopy = steps.map(item => {
+    if (item.id !== 'register') return item
+
+    return {
+      ...item,
+      desc: isAuthenticated && hasTelegramIdentity && !hasRealEmail
+        ? 'Telegram уже визначено. Тепер додай email, щоб завершити вхід у систему.'
+        : item.desc,
     }
+  })
+
+  const shouldHideSection = isAuthenticated && hasRealEmail && telegramLinked
+
+  if (shouldHideSection) {
+    return null
   }
 
   return (
@@ -132,7 +170,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
 
           <div className="mb-8 h-2 w-full overflow-hidden rounded-full bg-white/20">
             <div
-              className={`h-full ${PROGRESS_WIDTH[activeStep]} bg-[rgb(var(--accent-soft-rgb))] transition-all duration-500`}
+              className={`h-full ${progressWidth} bg-[rgb(var(--accent-soft-rgb))] transition-all duration-500`}
             />
           </div>
 
@@ -143,12 +181,12 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
           )}
 
           <div className="mb-10 grid gap-6 md:grid-cols-3">
-            {STEPS.map((item, index) => {
+            {stepsWithDynamicCopy.map((item, index) => {
               const isActive = activeStep === item.id
 
               return (
                 <div key={item.id} className="relative group">
-                  {index < STEPS.length - 1 && (
+                  {index < stepsWithDynamicCopy.length - 1 && (
                     <div className="absolute left-[calc(100%+12px)] top-9 z-10 hidden w-6 md:block">
                       <ArrowRight className="h-5 w-5 text-white/50" />
                     </div>
@@ -164,7 +202,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                     onClick={isActive ? undefined : () => openStep(item.id)}
                   >
                     <div className="step-card__badge gap-1 text-[rgb(var(--accent-soft-rgb))]">
-                      {item.id}
+                      {item.displayId}
                       <div className="step-card__icon">
                         <item.icon className="h-5 w-5 text-[rgb(var(--accent-soft-rgb))]" />
                       </div>
@@ -183,41 +221,42 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
 
                     <p className="step-card-desc text-sm">{item.desc}</p>
 
-                    {item.id === '01' && isActive && (
+                    {item.id === 'register' && isActive && (
                       <div className="mt-auto flex flex-col gap-4 pt-6">
                         <div className="flex justify-center">
                           <Button
                             onClick={event => {
                               event.stopPropagation()
                               if (isAuthenticated) {
-                                setActiveStep('02')
-                                setStatusMessage(null)
+                                goNext()
                                 return
                               }
                               onGetStarted()
                             }}
                             className="hero-cta-primary inline-flex items-center gap-2 rounded-2xl px-8 py-4 font-semibold"
                           >
-                            {isAuthenticated ? 'Продовжити' : 'Почати'}
+                            {registerPrimaryLabel}
                           </Button>
                         </div>
 
-                        <div className="flex justify-end">
-                          <Button
-                            onClick={event => {
-                              event.stopPropagation()
-                              goNext()
-                            }}
-                            variant="outline"
-                          >
-                            Далі
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        {activeIndex < stepsWithDynamicCopy.length - 1 && (
+                          <div className="flex justify-end">
+                            <Button
+                              onClick={event => {
+                                event.stopPropagation()
+                                goNext()
+                              }}
+                              variant="outline"
+                            >
+                              Далі
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {item.id === '02' && isActive && (
+                    {item.id === 'telegram' && isActive && (
                       <div className="mt-auto flex flex-col gap-4 pt-6">
                         {returnMessage && (
                           <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-4 py-3 text-center text-sm text-white/78">
@@ -225,7 +264,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                           </div>
                         )}
 
-                        {emailCompletionRequired && (
+                        {emailCompletionRequired && !hasTelegramIdentity && (
                           <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-4 py-3 text-sm text-white/78">
                             Спочатку додай email до акаунта.
                           </div>
@@ -249,40 +288,46 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                               <Button disabled>Завантаження Telegram...</Button>
                             )
                           ) : (
-                            <Button disabled={!telegramLinked || !botActive}>
-                              {telegramLinked && botActive ? 'Telegram підключено' : 'Очікуємо підключення'}
+                            <Button disabled={!telegramLinked && !hasTelegramIdentity}>
+                              {telegramLinked || hasTelegramIdentity ? 'Telegram підключено' : 'Очікуємо підключення'}
                             </Button>
                           )}
                         </div>
 
                         <div className="flex items-end justify-between gap-3">
-                          <Button
-                            onClick={event => {
-                              event.stopPropagation()
-                              goPrev()
-                            }}
-                            variant="outline"
-                          >
-                            <ArrowLeft className="h-4 w-4" />
-                            Назад
-                          </Button>
+                          {activeIndex > 0 ? (
+                            <Button
+                              onClick={event => {
+                                event.stopPropagation()
+                                goPrev()
+                              }}
+                              variant="outline"
+                            >
+                              <ArrowLeft className="h-4 w-4" />
+                              Назад
+                            </Button>
+                          ) : (
+                            <span />
+                          )}
 
-                          <Button
-                            onClick={event => {
-                              event.stopPropagation()
-                              goNext()
-                            }}
-                            disabled={emailCompletionRequired || !telegramLinked || !botActive}
-                            variant="outline"
-                          >
-                            Вперед
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
+                          {activeIndex < stepsWithDynamicCopy.length - 1 && (
+                            <Button
+                              onClick={event => {
+                                event.stopPropagation()
+                                goNext()
+                              }}
+                              disabled={emailCompletionRequired || (!telegramLinked && !hasTelegramIdentity) || !botActive}
+                              variant="outline"
+                            >
+                              Вперед
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     )}
 
-                    {item.id === '03' && isActive && (
+                    {item.id === 'flow' && isActive && (
                       <div className="mt-auto flex flex-col gap-4 pt-6">
                         <div className="flex justify-center">
                           <Button

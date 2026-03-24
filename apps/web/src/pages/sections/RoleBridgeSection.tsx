@@ -17,7 +17,7 @@ export function RoleBridgeSection({ onAuthRequired }: { onAuthRequired: () => vo
       onAuthRequired();
       return;
     }
-    navigateTo(ROUTES.AI_GENERATOR, { requiresAuth: true });
+    navigateTo(ROUTES.PRODUCTS, { requiresAuth: true });
   };
 
   return (
@@ -42,7 +42,7 @@ export function RoleBridgeSection({ onAuthRequired }: { onAuthRequired: () => vo
           <article className="glass-card p-6 rounded-3xl border border-white/15">
             <h3 className="text-2xl font-bold mb-3">Я власник продуктів</h3>
             <p className="text-white/70 mb-4">
-              Створюю продукти, AI-воронки, сценарії miniapp і керую клієнтським досвідом в одному місці.
+              Створюю продукти, веду навчальні сценарії miniapp і керую клієнтським досвідом в одному місці.
             </p>
             <button
               type="button"

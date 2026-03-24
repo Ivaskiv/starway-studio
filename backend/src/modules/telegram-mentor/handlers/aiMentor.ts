@@ -4,15 +4,6 @@ import { sendEntryOffer, sendStateMenu } from './start.js'
 
 export async function handleAIMentor(ctx: Context) {
   if (process.env.APP_MODE === 'LM_ONLY') {
-    // [LM_ONLY_MODE] AI disabled during funnel-only phase.
-    await ctx.reply(
-      'Зараз ти проходиш безкоштовний практикум 👇\nЗаверши його, щоб рухатись далі.',
-      {
-        reply_markup: {
-          inline_keyboard: [[{ text: '▶️ Продовжити', callback_data: 'lm_continue' }]],
-        },
-      },
-    )
     return
   }
 

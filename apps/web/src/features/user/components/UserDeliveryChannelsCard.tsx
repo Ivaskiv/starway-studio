@@ -1,7 +1,6 @@
-import { ROUTES } from '@/config/routes'
 import { useGenerateTelegramLinkMutation, useGetConnectionsQuery } from '@/features/social/services/social.api'
 import { Button, GlassCard } from '@/ui'
-import { BellRing, ExternalLink, Globe, Send, Smartphone } from 'lucide-react'
+import { BellRing, ExternalLink, Send, Smartphone } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 
@@ -61,7 +60,7 @@ export default function UserDeliveryChannelsCard() {
         </Button>
 
         <Button
-          onClick={() => navigate(ROUTES.DASHBOARD)}
+          onClick={() => navigate('/dashboard')}
           className="btn justify-between bg-white/10 border-white/20"
         >
           <span className="flex items-center gap-2">
@@ -72,18 +71,7 @@ export default function UserDeliveryChannelsCard() {
         </Button>
 
         <Button
-          onClick={() => navigate(ROUTES.AI_FUNNEL_LANDING)}
-          className="btn justify-between bg-white/10 border-white/20"
-        >
-          <span className="flex items-center gap-2">
-            <Globe className="w-4 h-4" />
-            Лендінг
-          </span>
-          <ExternalLink className="w-4 h-4" />
-        </Button>
-
-        <Button
-          onClick={() => navigate(ROUTES.PRODUCTS)}
+          onClick={() => navigate('/dashboard/products')}
           className="btn justify-between bg-[rgb(var(--accent-rgb))]"
         >
           <span className="flex items-center gap-2">

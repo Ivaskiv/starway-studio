@@ -11,6 +11,8 @@ import { handlePrivacy } from './handlers/privacy.js'
 import {
   handleContinueFlow,
   handleRestartFlow,
+  isLeadMagnetActive,
+  type UserState,
   resolveLinkedUserIdFromContext,
   resolveUserState,
   sendEntryOffer,
@@ -90,6 +92,10 @@ export async function registerMentorBot() {
           : null
 
         if (link?.userId) {
+          const state = await resolveUserState(link.userId).catch(() => 'new' as UserState)
+          if (isLeadMagnetActive(state)) {
+            return
+          }
           await sendStateMenu(ctx, link.userId)
           return
         }
@@ -303,16 +309,6 @@ async function handleCallbackUpdate(ctx: Context): Promise<void> {
 
   if (data === 'lm_continue') {
     await ctx.answerCbQuery()
-    const url = getTelegramAppUrl('/lead-magnet')
-    await ctx.reply('Продовжуємо.', {
-      reply_markup: {
-        inline_keyboard: [[
-          url
-            ? { text: '▶️ Перейти до матеріалу', url }
-            : { text: '🏠 Головне меню', callback_data: 'main_menu' },
-        ]],
-      },
-    })
     return
   }
 
@@ -582,6 +578,10 @@ async function handleAI(ctx: Context, text: string): Promise<void> {
 async function handleFallback(ctx: Context): Promise<void> {
   const userId = await resolveLinkedUserIdFromContext(ctx)
   if (userId) {
+    const state = await resolveUserState(userId)
+    if (isLeadMagnetActive(state)) {
+      return
+    }
     await sendStateMenu(ctx, userId)
     return
   }

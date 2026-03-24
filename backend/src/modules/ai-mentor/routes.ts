@@ -2,7 +2,6 @@ import { Request, Router } from 'express';
 import { productOwnerGuard } from '../../middleware/productOwnerGuard.js';
 import { requireClientAccess } from '../access/guard.js';
 import { authRequired } from '../../modules/auth/middleware/auth.js';
-import { producerMentorChatHandler } from '../producer/controller.js';
 import { requireGenerationQuota } from '../quota/generation.middleware.js';
 import * as aiController from './controllers.js';
 
@@ -39,7 +38,6 @@ router.post('/morning',        requireGenerationQuota, aiController.morningSessi
 router.post('/evening',        requireGenerationQuota, aiController.eveningSession);
 router.post('/chat-legacy',    requireGenerationQuota, aiController.sendMessage);
 router.post('/chat', aiController.streamChat)
-router.post('/producer-chat', producerMentorChatHandler)
 
 router.post('/wheel-analysis', requireGenerationQuota, aiController.processWheel);
 router.post('/weekly',         requireGenerationQuota, aiController.weeklySession);

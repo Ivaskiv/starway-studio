@@ -8,7 +8,7 @@ import { isSuperAdminEmail } from './superadmin.js'
 import { resolveUserAbilities, ABILITIES } from './abilities.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
 import { startTrial } from '../trial/service.js'
-import { attachEmailToUser } from '../user/identity.service.js'
+import { attachEmailToUser, resolveOrCreateTelegramGuestUser } from '../user/identity.service.js'
 
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
@@ -100,6 +100,16 @@ export interface AuthTokensPayload {
   refreshToken: string
   needsProfile: boolean
   expiresIn: number
+  isNewUser?: boolean
+  needsCompletion?: boolean
+}
+
+type SocialAuthInput = {
+  provider: 'google' | 'telegram'
+  externalId: string
+  email?: string | null
+  name?: string | null
+  username?: string | null
 }
 
 // ── Хешування пароля ──────────────────
@@ -583,6 +593,102 @@ export async function loginUser(input: {
     }
   } catch (error) {
     throw toAuthServiceError(error, 'login_failed')
+  }
+}
+
+export async function socialLoginUser(input: SocialAuthInput): Promise<AuthTokensPayload> {
+  const provider = input.provider
+  const externalId = String(input.externalId ?? '').trim()
+
+  if (!provider || !externalId) {
+    throw new AuthServiceError('missing_fields', 400)
+  }
+
+  try {
+    let userId: string | null = null
+    let isNewUser = false
+
+    if (provider === 'google') {
+      const email = normalizeEmail(input.email ?? '')
+      if (!email) {
+        throw new AuthServiceError('missing_fields', 400)
+      }
+
+      const existing = await findUserByEmail(email)
+      if (existing?.id) {
+        userId = existing.id
+      } else {
+        const created = await prisma.user.create({
+          data: {
+            email,
+            name: input.name?.trim() || null,
+            firstName: input.name?.trim() || null,
+            role: isSuperAdminEmail(email) ? 'SUPERADMIN' : 'USER',
+            lastLoginAt: new Date(),
+          },
+          select: { id: true },
+        })
+        userId = created.id
+        isNewUser = true
+        await startTrial(created.id).catch(err =>
+          console.error('[Auth] startTrial failed for social login:', err)
+        )
+      }
+    } else {
+      const telegramUserId = externalId
+      const telegramUserName = input.username?.trim() || null
+      const linked = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { telegramUserId },
+            { telegramChatId: telegramUserId },
+            ...(telegramUserName ? [{ telegramUserName }] : []),
+          ],
+        },
+        select: { id: true },
+      })
+
+      if (linked?.id) {
+        userId = linked.id
+      } else {
+        const createdUserId = await resolveOrCreateTelegramGuestUser({
+          linkedUserId: null,
+          telegramUserId,
+          telegramUserName,
+          chatId: telegramUserId,
+          firstName: input.name?.trim() || telegramUserName || 'Учень',
+        })
+        userId = createdUserId
+        isNewUser = true
+      }
+    }
+
+    if (!userId) {
+      throw new AuthServiceError('user_creation_failed', 500)
+    }
+
+    await markUserLoggedIn(userId)
+
+    const freshUser = await findUserById(userId)
+    if (!freshUser) {
+      throw new AuthServiceError('user_not_found', 404)
+    }
+
+    const accessToken = generateAccessToken({ id: freshUser.id, role: freshUser.role, email: freshUser.email } as AuthUser)
+    const refreshToken = generateRefreshToken(freshUser.id)
+    await storeRefreshToken(freshUser.id, refreshToken)
+
+    return {
+      user: toSafeUser(freshUser),
+      accessToken,
+      refreshToken,
+      needsProfile: !freshUser.name,
+      needsCompletion: !freshUser.email || !freshUser.name,
+      isNewUser,
+      expiresIn: 15 * 60,
+    }
+  } catch (error) {
+    throw toAuthServiceError(error, 'social_login_failed')
   }
 }
 

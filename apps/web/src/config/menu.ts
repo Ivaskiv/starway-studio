@@ -22,7 +22,7 @@ import {
   CreditCard, Eye, Flame, HelpCircle,
   Home, LayoutDashboard, LogOut,
   Package, Settings, Sparkles, Star,
-  Target, TrendingUp, User, Video, Wand2, Zap,
+  Target, TrendingUp, User, Video, Zap,
 } from 'lucide-react'
 import { ROUTES } from '@/config/routes'
 import { resolvePlan, type SubscriptionSnapshot } from '@/features/subscription/utils/subscription'
@@ -94,15 +94,6 @@ export const HEADER_MENU: MenuItem[] = [
         label:       'Щоденний цикл',
         description: 'Стан → Ціль → Вибір → Дія',
         icon:        Flame,
-      },
-      {
-        id:           'platform-funnel',
-        path:         ROUTES.AI_FUNNEL_LANDING,
-        label:        'AI Воронка',
-        description:  'Автоматичний 11-кроковий маркетинг',
-        icon:         Wand2,
-        badge:        'New',
-        badgeVariant: 'new',
       },
     ],
   },
@@ -194,11 +185,6 @@ export const SIDEBAR_MENU: MenuItem[] = [
   {
     id: 'ai-mentor', path: ROUTES.AI_MENTOR,
     label: 'AI Ментор', icon: Bot, showInSidebar: true,
-  },
-  {
-    id: 'ai-producer', path: ROUTES.AI_PRODUCER_CONSOLE,
-    label: 'AI Producer', icon: Sparkles, showInSidebar: true,
-    badge: 'New', badgeVariant: 'new',
   },
 
   // ── Free ─────────────────────────────────────────────────────

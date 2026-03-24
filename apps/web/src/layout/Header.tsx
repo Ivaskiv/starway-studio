@@ -2,8 +2,10 @@
 import { NAVIGATION, type NavMenu } from '@/core/navigation/navigation.registry'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { selectCurrentUser, selectIsAuthenticated } from '@/features/auth/services/auth.slice'
+import { SIDEBAR_NAV, isVisibleFor } from '@/layout/Sidebar'
+import type { SidebarNavItem } from '@/layout/Sidebar'
 import { useGetWheelCooldownQuery } from '@/features/wheel/services/wheel.api'
-import { UserMenu } from '@/features/user/userMenu/UserMenu'
+import type { UserRole } from '@/features/user/types/user.types'
 import type { LayoutSharedProps } from '@/layout/types/layout.types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
@@ -34,6 +36,8 @@ type PanelTab = typeof PANEL_TABS[number]['id']
 interface HeaderProps extends LayoutSharedProps {
   onLoginClick?:    () => void
   onRegisterClick?: () => void
+  forceBurgerMenu?: boolean
+  miniAppMode?: boolean
 }
 
 export default function Header({
@@ -43,6 +47,8 @@ export default function Header({
   onRoleChange,
   onLoginClick,
   onRegisterClick,
+  forceBurgerMenu = false,
+  miniAppMode = false,
 }: HeaderProps) {
   const navigate  = useNavigate()
   const location  = useLocation()
@@ -64,10 +70,39 @@ export default function Header({
     { skip: !shouldLoadWheelCooldown },
   )
 
+  const compactShellMode = miniAppMode || forceBurgerMenu
   const viewRole = previewRole
   const [openDrop,    setOpenDrop]    = useState<string | null>(null)
   const [activePanel, setActivePanel] = useState<PanelTab | null>(null)
   const [mobileOpen,  setMobileOpen]  = useState(false)
+
+  const normalizeRole = useCallback((value: string): UserRole => {
+    const normalized = value.toUpperCase()
+    if (normalized === 'SUPERADMIN') return 'SUPERADMIN'
+    if (normalized === 'ADMIN')      return 'ADMIN'
+    if (normalized === 'EXPERT')     return 'EXPERT'
+    if (normalized === 'MENTOR')     return 'MENTOR'
+    return 'USER'
+  }, [])
+
+  const currentRole = useMemo<UserRole>(() => {
+    const role = user?.role ?? 'USER'
+    return normalizeRole(String(role))
+  }, [normalizeRole, user?.role])
+
+  const hasPremium = Boolean(accessControl?.hasSubscription)
+
+  const sidebarSections = useMemo(() => {
+    if (!isAuthenticated) return []
+
+    return SIDEBAR_NAV
+      .filter(section => isVisibleFor(section.visibleTo, currentRole))
+      .map(section => ({
+        ...section,
+        items: section.items.filter(item => isVisibleFor(item.visibleTo, currentRole)),
+      }))
+      .filter(section => section.items.length > 0)
+  }, [currentRole, isAuthenticated])
 
   const go = useCallback((p: string) => navigate(p), [navigate])
 
@@ -127,40 +162,46 @@ export default function Header({
   }, [view, activePanel])
 
   return (
-    <header ref={headerRef} className="hdr" role="banner">
+    <header
+      ref={headerRef}
+      className={`hdr${miniAppMode ? ' hdr--miniapp' : ''}`}
+      role="banner"
+    >
 
       {/* ══ РЯДОК 1: Role switcher ════════════════════════════════════════════ */}
-      <div className="hdr-split-row hdr-split-row--roles">
-        <span className="hdr-split-line" aria-hidden="true" />
-        <div className="hdr-role-group" role="tablist" aria-label="Перемикання ролей">
-          {ROLE_TABS.map((tab, i) => (
-            <button
-              key={tab.id}
-              role="tab"
-              id={`hdr-tab-${tab.id}`}
-              tabIndex={viewRole === tab.id ? 0 : -1}
-              className={`hdr-role-btn${viewRole === tab.id ? ' hdr-role-btn--on' : ''}`}
-              onClick={() => onRoleChange(tab.id)}
-              onKeyDown={e => {
-                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-                e.preventDefault()
-                const tabs = headerRef.current?.querySelectorAll<HTMLButtonElement>('.hdr-role-btn')
-                if (!tabs?.length) return
-                const next = e.key === 'ArrowRight'
-                  ? (i + 1) % tabs.length
-                  : (i - 1 + tabs.length) % tabs.length
-                tabs[next]?.focus()
-              }}
-              ref={el => {
-                if (el) el.setAttribute('aria-selected', viewRole === tab.id ? 'true' : 'false')
-              }}
-            >
-              <span className="hdr-role-icon" aria-hidden="true">{tab.icon}</span>
-              <span className="hdr-role-label">{tab.label}</span>
-            </button>
-          ))}
+      {!compactShellMode && (
+        <div className="hdr-split-row hdr-split-row--roles">
+          <span className="hdr-split-line" aria-hidden="true" />
+          <div className="hdr-role-group" role="tablist" aria-label="Перемикання ролей">
+            {ROLE_TABS.map((tab, i) => (
+              <button
+                key={tab.id}
+                role="tab"
+                id={`hdr-tab-${tab.id}`}
+                tabIndex={viewRole === tab.id ? 0 : -1}
+                className={`hdr-role-btn${viewRole === tab.id ? ' hdr-role-btn--on' : ''}`}
+                onClick={() => onRoleChange(tab.id)}
+                onKeyDown={e => {
+                  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+                  e.preventDefault()
+                  const tabs = headerRef.current?.querySelectorAll<HTMLButtonElement>('.hdr-role-btn')
+                  if (!tabs?.length) return
+                  const next = e.key === 'ArrowRight'
+                    ? (i + 1) % tabs.length
+                    : (i - 1 + tabs.length) % tabs.length
+                  tabs[next]?.focus()
+                }}
+                ref={el => {
+                  if (el) el.setAttribute('aria-selected', viewRole === tab.id ? 'true' : 'false')
+                }}
+              >
+                <span className="hdr-role-icon" aria-hidden="true">{tab.icon}</span>
+                <span className="hdr-role-label">{tab.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ══ РЯДОК 2: Main row ════════════════════════════════════════════════ */}
       <div className="hdr-main">
@@ -176,73 +217,77 @@ export default function Header({
         </button>
 
         {/* Desktop nav */}
-        <nav className="hdr-nav" aria-label="Головна навігація">
-          {filteredNav.map(menu => {
-            if (menu.path) {
+        {!compactShellMode && (
+          <nav className="hdr-nav" aria-label="Головна навігація">
+            {filteredNav.map(menu => {
+              if (menu.path) {
+                return (
+                  <Link key={menu.id} className="hdr-nb" to={menu.path}>
+                    {menu.label}
+                  </Link>
+                )
+              }
+              const isOpen = openDrop === menu.id
               return (
-                <Link key={menu.id} className="hdr-nb" to={menu.path}>
-                  {menu.label}
-                </Link>
-              )
-            }
-            const isOpen = openDrop === menu.id
-            return (
-              <div key={menu.id} className="hdr-drop-wrap">
-                <button
-                  className={`hdr-nb${isOpen ? ' hdr-nb--open' : ''}`}
-                  onClick={() => setOpenDrop(isOpen ? null : menu.id)}
-                  ref={el => {
-                    if (el) el.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
-                  }}
-                >
-                  {menu.label}
-                  <span className={`hdr-chev${isOpen ? ' hdr-chev--flip' : ''}`} aria-hidden="true">▾</span>
-                </button>
-                {isOpen && (
-                  <div className="hdr-drop" role="dialog" aria-label={menu.label}>
-                    <span className="hdr-drop-ridge" aria-hidden="true" />
-                    {menu.groups?.map(group => (
-                      <div key={group.id} className="hdr-drop-group">
-                        <span className="hdr-drop-gtitle">{group.title}</span>
-                        {group.pages.map(page => (
-                          <Link
-                            key={page.id}
-                            className={`hdr-drop-item${location.pathname === page.path ? ' hdr-drop-item--on' : ''}`}
-                            to={page.path}
-                            onClick={() => setOpenDrop(null)}
-                          >
-                            {page.icon && (
-                              <span className="hdr-drop-icon" aria-hidden="true">{page.icon}</span>
-                            )}
-                            <span className="hdr-drop-body">
-                              <span className="hdr-drop-label">{page.label}</span>
-                              {page.description && (
-                                <span className="hdr-drop-desc">{page.description}</span>
+                <div key={menu.id} className="hdr-drop-wrap">
+                  <button
+                    className={`hdr-nb${isOpen ? ' hdr-nb--open' : ''}`}
+                    onClick={() => setOpenDrop(isOpen ? null : menu.id)}
+                    ref={el => {
+                      if (el) el.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
+                    }}
+                  >
+                    {menu.label}
+                    <span className={`hdr-chev${isOpen ? ' hdr-chev--flip' : ''}`} aria-hidden="true">▾</span>
+                  </button>
+                  {isOpen && (
+                    <div className="hdr-drop" role="dialog" aria-label={menu.label}>
+                      <span className="hdr-drop-ridge" aria-hidden="true" />
+                      {menu.groups?.map(group => (
+                        <div key={group.id} className="hdr-drop-group">
+                          <span className="hdr-drop-gtitle">{group.title}</span>
+                          {group.pages.map(page => (
+                            <Link
+                              key={page.id}
+                              className={`hdr-drop-item${location.pathname === page.path ? ' hdr-drop-item--on' : ''}`}
+                              to={page.path}
+                              onClick={() => setOpenDrop(null)}
+                            >
+                              {page.icon && (
+                                <span className="hdr-drop-icon" aria-hidden="true">{page.icon}</span>
                               )}
-                            </span>
-                          </Link>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </nav>
+                              <span className="hdr-drop-body">
+                                <span className="hdr-drop-label">{page.label}</span>
+                                {page.description && (
+                                  <span className="hdr-drop-desc">{page.description}</span>
+                                )}
+                              </span>
+                            </Link>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </nav>
+        )}
 
         {/* Controls */}
         <div className="hdr-controls">
           {/* Search */}
-          <div className="hdr-search">
-            <span className="hdr-search-ico" aria-hidden="true">🔍</span>
-            <input
-              className="hdr-search-input"
-              type="search"
-              placeholder="Пошук"
-              aria-label="Поле пошуку"
-            />
-          </div>
+          {!compactShellMode && (
+            <div className="hdr-search">
+              <span className="hdr-search-ico" aria-hidden="true">🔍</span>
+              <input
+                className="hdr-search-input"
+                type="search"
+                placeholder="Пошук"
+                aria-label="Поле пошуку"
+              />
+            </div>
+          )}
 
           {/* ── ВИПРАВЛЕНО: умовний рендер залогінений/гість ─────────────── */}
           {isAuthenticated ? (
@@ -251,7 +296,6 @@ export default function Header({
                 🔔
                 <span className="hdr-notif-dot" aria-label="2 непрочитані">2</span>
               </button>
-              <UserMenu variant="header" />
             </>
           ) : (
             <>
@@ -267,14 +311,14 @@ export default function Header({
                 onClick={onRegisterClick}
                 aria-label="Реєстрація"
               >
-                Старт →
+                Реєстрація
               </button>
             </>
           )}
 
           {/* Burger */}
           <button
-            className={`hdr-burger${mobileOpen ? ' hdr-burger--open' : ''}`}
+            className={`hdr-burger${mobileOpen ? ' hdr-burger--open' : ''}${forceBurgerMenu ? ' hdr-burger--force' : ''}`}
             aria-label={mobileOpen ? 'Закрити меню' : 'Відкрити меню'}
             aria-controls="hdr-bmenu"
             ref={el => {
@@ -292,39 +336,72 @@ export default function Header({
       {/* ══ БУРГЕР МЕНЮ ══════════════════════════════════════════════════════ */}
       <div
         id="hdr-bmenu"
-        className={`hdr-bmenu${mobileOpen ? ' hdr-bmenu--open' : ''}`}
+        className={`hdr-bmenu${mobileOpen ? ' hdr-bmenu--open' : ''}${forceBurgerMenu ? ' hdr-bmenu--force' : ''}`}
         ref={el => {
           if (el) el.setAttribute('aria-hidden', mobileOpen ? 'false' : 'true')
         }}
       >
         <div className="hdr-bmenu-inner">
-          <div className="hdr-bmenu-search">
-            <span aria-hidden="true">🔍</span>
-            <input type="search" placeholder="Пошук" aria-label="Пошук у меню" />
-          </div>
-          {filteredNav.map(menu =>
-            menu.groups?.map(group => (
-              <div key={group.id} className="hdr-bmenu-sec">
-                <span className="hdr-bmenu-sec-title">{group.title}</span>
-                {group.pages.map(page => (
-                  <button
-                    key={page.id}
-                    className={`hdr-bmenu-link${location.pathname === page.path ? ' hdr-bmenu-link--on' : ''}`}
-                    onClick={() => { go(page.path); setMobileOpen(false) }}
-                  >
-                    {page.icon && (
-                      <span className="hdr-bmenu-link-ico" aria-hidden="true">{page.icon}</span>
-                    )}
-                    <span className="hdr-bmenu-link-body">
-                      <span className="hdr-bmenu-link-label">{page.label}</span>
-                      {page.description && (
-                        <span className="hdr-bmenu-link-desc">{page.description}</span>
-                      )}
-                    </span>
-                  </button>
-                ))}
+          {forceBurgerMenu ? (
+            isAuthenticated ? (
+            sidebarSections.map(section => (
+              <div key={section.id} className="hdr-bmenu-sec">
+                {section.label && (
+                  <span className="hdr-bmenu-sec-title">{section.label}</span>
+                )}
+                {section.items.map((item: SidebarNavItem) => {
+                  const isLocked = Boolean(item.requiresPaid && !hasPremium && currentRole !== 'SUPERADMIN')
+                  const isActive = item.path === '/dashboard'
+                    ? location.pathname === '/dashboard'
+                    : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+
+                  return (
+                    <button
+                      key={item.id}
+                      className={`hdr-bmenu-link${isActive ? ' hdr-bmenu-link--on' : ''}${isLocked ? ' hdr-bmenu-link--locked' : ''}`}
+                      onClick={() => {
+                        if (isLocked) return
+                        go(item.path)
+                        setMobileOpen(false)
+                      }}
+                    >
+                      <span className="hdr-bmenu-link-body">
+                        <span className="hdr-bmenu-link-label">{item.label}</span>
+                        {isLocked && (
+                          <span className="hdr-bmenu-link-desc">Потрібен Premium</span>
+                        )}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             ))
+            ) : null
+          ) : (
+            filteredNav.map(menu =>
+              menu.groups?.map(group => (
+                <div key={group.id} className="hdr-bmenu-sec">
+                  <span className="hdr-bmenu-sec-title">{group.title}</span>
+                  {group.pages.map(page => (
+                    <button
+                      key={page.id}
+                      className={`hdr-bmenu-link${location.pathname === page.path ? ' hdr-bmenu-link--on' : ''}`}
+                      onClick={() => { go(page.path); setMobileOpen(false) }}
+                    >
+                      {page.icon && (
+                        <span className="hdr-bmenu-link-ico" aria-hidden="true">{page.icon}</span>
+                      )}
+                      <span className="hdr-bmenu-link-body">
+                        <span className="hdr-bmenu-link-label">{page.label}</span>
+                        {page.description && (
+                          <span className="hdr-bmenu-link-desc">{page.description}</span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ))
+            )
           )}
 
           {/* Гостьові кнопки в бургері */}
@@ -340,7 +417,7 @@ export default function Header({
                 className="hdr-btn-accent"
                 onClick={() => { onRegisterClick?.(); setMobileOpen(false) }}
               >
-                Старт →
+                Реєстрація
               </button>
             </div>
           )}
@@ -348,7 +425,7 @@ export default function Header({
       </div>
 
       {/* Tabpanels для role-tabs (WAI-ARIA вимога) */}
-      {ROLE_TABS.map(tab => (
+      {!compactShellMode && ROLE_TABS.map(tab => (
         <div
           key={`tabpanel-${tab.id}`}
           id={`hdr-tabpanel-${tab.id}`}

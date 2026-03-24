@@ -1,10 +1,10 @@
 // frontend/src/App.tsx
 
 import { ROUTES } from '@/config/routes';
-import GlobalAssistant from '@/features/assistant/components/GlobalAssistant';
 import ProtectedRoute from '@/features/auth/components/ProtectedRoute';
 import { AuthRestoreProvider, type AuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext';
 import { clearAuth, selectIsAuthenticated, setCredentials } from '@/features/auth/services/auth.slice';
+import { hasSessionHint } from '@/features/auth/services/token';
 import type { AccessKey } from '@/features/auth/types/auth.types';
 import { settingsApi } from '@/features/settings/services/settings.api';
 import type { User } from '@/features/user/types/user.types';
@@ -151,6 +151,7 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
 
     const initAuth = async () => {
       updateStatus('restoring');
+      const hasRestoreHint = hasSessionHint()
 
       const restoreWithAccessToken = async () => {
         const existingToken = localStorage.getItem('starway_access_token')
@@ -191,6 +192,12 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
           console.error('[AuthRestore] Failed to restore auth from access token:', error)
           markFailed()
         }
+      }
+
+      const existingToken = localStorage.getItem('starway_access_token')
+      if (!existingToken && !hasRestoreHint) {
+        markFailed()
+        return
       }
 
       try {
@@ -299,8 +306,8 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
 
-            {/* GlobalAssistant рендериться через createPortal в document.body — має бути поза <Routes> */}
-            <GlobalAssistant />
+            {/* GlobalAssistant рендериться через createPortal в document.body — тимчасово вимкнено */}
+            {/* <GlobalAssistant /> */}
           </Suspense>
         </AuthRestore>
       </AuthRestoreProvider>

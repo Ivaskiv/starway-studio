@@ -23,11 +23,8 @@ import { getSession } from '../session.js'
 import type { FlowState, RouterContext } from './context.js'
 import { resolveIntent, type Intent } from './intent.js'
 import type { RoleResult } from '../roles/base.role.js'
-import { runAdsRoleResult } from '../roles/ads.role.js'
 import { runFunnelRole } from '../roles/funnel.role.js'
 import { runMentorRole } from '../roles/mentor.role.js'
-import { runProducerRoleResult } from '../roles/producer.role.js'
-import { runSeoRoleResult } from '../roles/seo.role.js'
 
 function isLmOnlyModeEnabled(): boolean {
   // [LM_ONLY_MODE] added
@@ -543,21 +540,6 @@ export async function handleUpdate(ctx: Context): Promise<void> {
 
   if (isLeadMagnetState(routerContext.userState)) {
     await applyRoleResult(ctx, routerContext, await runFunnelRole(routerContext, intent))
-    return
-  }
-
-  if (intent === 'seo_request') {
-    await applyRoleResult(ctx, routerContext, await runSeoRoleResult(routerContext.userId))
-    return
-  }
-
-  if (intent === 'ads_request') {
-    await applyRoleResult(ctx, routerContext, await runAdsRoleResult(routerContext.userId))
-    return
-  }
-
-  if (intent === 'producer_request') {
-    await applyRoleResult(ctx, routerContext, await runProducerRoleResult(routerContext.userId, routerContext.rawText))
     return
   }
 

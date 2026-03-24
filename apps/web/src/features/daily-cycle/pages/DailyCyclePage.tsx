@@ -199,7 +199,7 @@ export function DailyCycleFlow({
       <div className={embedded ? 'p-4' : 'flex min-h-[60vh] flex-col items-center justify-center p-6'}>
         <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
           <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--accent-soft-rgb))]">
               ЩОДЕННИЙ ЦИКЛ
             </p>
             <h2 className="text-xl font-bold text-[var(--text-primary)]">
@@ -212,7 +212,7 @@ export function DailyCycleFlow({
           <div className="p-4 space-y-3">
             <button
               type="button"
-              className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+              className="hero-cta-primary w-full py-3 text-sm font-medium"
               onClick={() => navigate('/dashboard/ai-mentor')}
             >
               ▶ Розпочати 7 днів безкоштовно
@@ -244,7 +244,7 @@ export function DailyCycleFlow({
           </div>
 
           <div className="rounded-xl border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.06)] p-4">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--accent-soft-rgb))]">
               {session === 'morning' ? '🌀 Мотивація на ранок' : '🌟 Афірмація на вечір'}
             </p>
             <p className="text-sm italic leading-relaxed text-[var(--text-secondary)]">
@@ -254,7 +254,7 @@ export function DailyCycleFlow({
 
           {session === 'morning' && (
             <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[rgb(var(--accent-soft-rgb))]">
                 Що далі?
               </p>
               <p className="text-sm text-[var(--text-muted)]">
@@ -268,7 +268,7 @@ export function DailyCycleFlow({
           <div className="flex gap-3">
             <button
               type="button"
-              className="flex-1 rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-all hover:brightness-110"
+              className="hero-cta-primary flex-1 py-3 text-sm font-medium"
               onClick={() => {
                 if (embedded) {
                   onComplete?.()
@@ -281,7 +281,7 @@ export function DailyCycleFlow({
             </button>
             <button
               type="button"
-              className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+              className="hero-cta-secondary px-4 py-3 text-sm"
               onClick={() => {
                 if (embedded) {
                   onClose?.()
@@ -331,7 +331,7 @@ export function DailyCycleFlow({
           <button
             type="button"
             onClick={() => navigate('/dashboard')}
-            className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+            className="hero-cta-secondary px-3 py-1.5 text-xs"
           >
             ← Кабінет
           </button>
@@ -340,7 +340,7 @@ export function DailyCycleFlow({
           <button
             type="button"
             onClick={() => onClose?.()}
-            className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+            className="hero-cta-secondary px-3 py-1.5 text-xs"
           >
             Закрити ✕
           </button>
@@ -357,10 +357,10 @@ export function DailyCycleFlow({
                 setSubmitted(false)
               }}
               className={[
-                'rounded-xl px-3 py-1.5 text-xs font-medium transition-all',
+                'rounded-xl px-3 py-1.5 text-xs font-semibold tracking-[0.04em] transition-all',
                 session === s
-                  ? 'border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.15)] text-[var(--text-subtle)]'
-                  : 'border border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--glass-bg)]',
+                  ? 'border border-[rgba(var(--accent-soft-rgb),0.58)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.16),rgba(var(--accent-rgb),0.08))] text-[rgb(var(--accent-soft-rgb))] shadow-[0_0_18px_rgba(var(--accent-soft-rgb),0.14),inset_0_1px_0_rgba(255,255,255,0.08)]'
+                  : 'border border-[rgba(var(--accent-rgb),0.26)] bg-[rgba(var(--accent-rgb),0.05)] text-[var(--text-secondary)] hover:border-[rgba(var(--accent-soft-rgb),0.34)] hover:bg-[rgba(var(--accent-rgb),0.12)] hover:text-[var(--text-primary)]',
               ].join(' ')}
             >
               {s === 'morning' ? '🌞 Ранок' : '🌙 Вечір'}
@@ -377,7 +377,7 @@ export function DailyCycleFlow({
             >
               <button
                 type="button"
-                className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--glass-bg-hover)]"
+                className="hero-cta-secondary border-[rgba(var(--accent-soft-rgb),0.34)] bg-[rgba(var(--accent-rgb),0.06)] px-3 py-1.5 text-xs font-semibold text-[rgb(var(--accent-soft-rgb))]"
               >
                 {telegramStatus?.botActive ? 'Відповідати в Telegram' : 'Підключити Telegram'}
               </button>
@@ -386,7 +386,7 @@ export function DailyCycleFlow({
             <button
               type="button"
               disabled={isTelegramLinkLoading}
-              className="ml-auto rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] opacity-60"
+              className="hero-cta-secondary ml-auto border-[rgba(var(--accent-soft-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.04)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] opacity-75"
             >
               Telegram...
             </button>
@@ -395,20 +395,20 @@ export function DailyCycleFlow({
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
-        <div className="bg-[var(--accent-bg,var(--bg-secondary))] p-5">
+        <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.08),rgba(255,255,255,0.015))] p-5">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[rgb(var(--accent-soft-rgb))] [text-shadow:0_0_16px_rgba(var(--accent-soft-rgb),0.18)]">
               {session === 'morning' ? 'РАНКОВІ ПИТАННЯ' : 'ВЕЧІРНЯ РЕФЛЕКСІЯ'}
               {' · '}
               {step + 1}/{questions.length}
             </p>
-            <span className="text-[10px] text-[var(--text-muted)]">
+            <span className="rounded-full border border-[rgba(var(--accent-rgb),0.18)] bg-[rgba(var(--accent-rgb),0.06)] px-2 py-1 text-[10px] font-medium text-[var(--text-secondary)]">
               День {trial?.currentDay ?? 1}
             </span>
           </div>
           <div className="h-1 rounded-full bg-[var(--border)]">
             <div
-              className="h-full rounded-full bg-[var(--accent)] transition-all"
+              className="h-full rounded-full bg-[rgb(var(--accent-soft-rgb))] transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -419,11 +419,20 @@ export function DailyCycleFlow({
             <p className="text-base font-semibold text-[var(--text-primary)]">
               {step + 1}. {currentQ.label}
             </p>
-            {currentQ.hint && (
+            {currentQ.id === 'identity' ? (
+              <div className="mt-1 space-y-1">
+                <p className="text-xs leading-relaxed text-[rgb(var(--accent-soft-rgb))]">
+                  Опиши себе як нову версію — з позиції сили.
+                </p>
+                <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+                  Наприклад: я топ-експерт, я власниця бренду...
+                </p>
+              </div>
+            ) : currentQ.hint ? (
               <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
                 {currentQ.hint}
               </p>
-            )}
+            ) : null}
           </div>
 
           {currentQ.type === 'textarea' ? (
@@ -432,7 +441,7 @@ export function DailyCycleFlow({
               value={answers[currentQ.id] ?? ''}
               onChange={e => setAnswers(a => ({ ...a, [currentQ.id]: e.target.value }))}
               placeholder={currentQ.placeholder}
-              className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-primary,var(--bg-secondary))] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder-[var(--text-muted)] focus:border-[var(--accent)]"
+              className="ios-input min-h-[152px] w-full resize-none px-4 py-3 text-sm placeholder-[var(--text-muted)]"
             />
           ) : (
             <input
@@ -440,7 +449,7 @@ export function DailyCycleFlow({
               value={answers[currentQ.id] ?? ''}
               onChange={e => setAnswers(a => ({ ...a, [currentQ.id]: e.target.value }))}
               placeholder={currentQ.placeholder}
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary,var(--bg-secondary))] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder-[var(--text-muted)] focus:border-[var(--accent)]"
+              className="ios-input w-full px-4 py-3 text-sm placeholder-[var(--text-muted)]"
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   void handleNext()
@@ -452,12 +461,12 @@ export function DailyCycleFlow({
           <div className="flex items-center gap-3">
             {step > 0 && (
               <button
-                type="button"
-                onClick={() => setStep(s => s - 1)}
-                className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-2.5 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)]"
-              >
-                ← Назад
-              </button>
+              type="button"
+              onClick={() => setStep(s => s - 1)}
+              className="hero-cta-secondary px-4 py-2.5 text-sm"
+            >
+              ← Назад
+            </button>
             )}
             <button
               type="button"
@@ -465,7 +474,7 @@ export function DailyCycleFlow({
                 void handleNext()
               }}
               disabled={!answers[currentQ.id]?.trim() || isSubmitting}
-              className="flex-1 rounded-xl bg-[var(--accent)] py-2.5 text-sm font-medium text-white transition-all hover:brightness-110 disabled:opacity-50"
+              className="hero-cta-primary flex-1 py-2.5 text-sm font-medium disabled:opacity-70 disabled:text-white/85"
             >
               {isLastStep
                 ? isSubmitting ? 'Зберігаємо...' : 'Завершити ✓'
@@ -484,7 +493,7 @@ export function DailyCycleFlow({
               i < step
                 ? 'bg-[var(--color-success)]'
                 : i === step
-                  ? 'bg-[var(--accent)]'
+                  ? 'bg-[rgb(var(--accent-soft-rgb))]'
                   : 'bg-[var(--border)]',
             ].join(' ')}
           />

@@ -4,7 +4,6 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { setupListeners } from '@reduxjs/toolkit/query'
 
-import producerReducer from '@/features/ai-generator/services/slice'
 import authReducer     from '@/features/auth/services/auth.slice'
 import { microTaskApi } from '@/features/microTask/services/microTask.api'
 import { api }         from '@/services/api'
@@ -16,7 +15,6 @@ export const store = configureStore({
     [microTaskApi.reducerPath]: microTaskApi.reducer,
     auth:     authReducer,
     theme:    themeReducer,
-    producer: producerReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

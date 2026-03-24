@@ -112,7 +112,6 @@ export type AccessKey =
   | 'actions'
   | 'wheel'
   | 'progress'
-  | 'ai-generator'
   | 'products'
   | 'profile'
   | 'settings'

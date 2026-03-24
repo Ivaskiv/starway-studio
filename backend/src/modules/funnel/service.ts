@@ -1,9 +1,12 @@
 // backend/src/modules/funnel/service.ts
 import type { Funnel, Product } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js';
-import type { FunnelBlueprint } from '../../modules/ai-generator/types.js';
 import { CourseWithProducts, generateProductFromCourse, getAllCourses } from '../../modules/mini-courses/servise.js';
 import { FunnelWithStagesAndProducts } from '../../types/globalTypes.js';
+
+interface FunnelBlueprint {
+  name: string;
+}
 
 // ────────────────────────────────────────────────
 // HELPERS
