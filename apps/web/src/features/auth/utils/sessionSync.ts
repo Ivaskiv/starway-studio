@@ -28,6 +28,12 @@ type SyncAuthSessionOptions = {
   theme: ThemeSyncApi
 }
 
+type TelegramRuntimeUser = {
+  id: number
+  username?: string
+  first_name?: string
+}
+
 function safeAccent(color?: string | null): string {
   return (!color || BAD_COLORS.has(color)) ? DEFAULT_ACCENT : color
 }
@@ -71,6 +77,22 @@ function isLikelyTelegramMiniAppRuntime(): boolean {
     isTelegramUserAgent ||
     isTelegramReferrer,
   )
+}
+
+function getTelegramRuntimeUser(): TelegramRuntimeUser | null {
+  if (typeof window === 'undefined') return null
+
+  const telegram = (window as {
+    Telegram?: {
+      WebApp?: {
+        initDataUnsafe?: {
+          user?: TelegramRuntimeUser
+        }
+      }
+    }
+  }).Telegram
+
+  return telegram?.WebApp?.initDataUnsafe?.user ?? null
 }
 
 export function shouldAllowSessionProbeWithoutHint(): boolean {
@@ -143,6 +165,41 @@ export async function syncAuthSession({
       }
     } catch (error) {
       console.warn('[sessionSync] Access-token restore failed', error)
+    }
+  }
+
+  const telegramUser = getTelegramRuntimeUser()
+  if (telegramUser?.id && isLikelyTelegramMiniAppRuntime()) {
+    try {
+      const socialRes = await fetch('/api/auth/social', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'telegram',
+          externalId: String(telegramUser.id),
+          username: telegramUser.username,
+          name: telegramUser.first_name,
+        }),
+      })
+
+      if (socialRes.ok) {
+        const socialData = await socialRes.json()
+        const socialUser = (socialData.user ?? null) as User | null
+        const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null
+
+        if (socialUser && socialToken) {
+          dispatch(setCredentials({ user: socialUser, accessToken: socialToken }))
+          applyUserTheme(theme, socialUser)
+          await refreshAccessState(dispatch)
+          return true
+        }
+      }
+    } catch (error) {
+      console.warn('[sessionSync] Telegram social restore failed', error)
     }
   }
 
