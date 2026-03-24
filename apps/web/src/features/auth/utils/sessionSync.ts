@@ -109,6 +109,11 @@ function getTelegramRuntimeInitData(): string {
   return telegram?.WebApp?.initData?.trim() ?? ''
 }
 
+function isTelegramDevFallbackAllowed(): boolean {
+  if (typeof window === 'undefined') return false
+  return import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+}
+
 export function shouldAllowSessionProbeWithoutHint(): boolean {
   return isLikelyTelegramMiniAppRuntime()
 }
@@ -212,6 +217,40 @@ export async function syncAuthSession({
       }
     } catch (error) {
       console.warn('[sessionSync] Telegram social restore failed', error)
+    }
+  }
+
+  if (telegramUser?.id && !telegramInitData && isLikelyTelegramMiniAppRuntime() && isTelegramDevFallbackAllowed()) {
+    try {
+      const socialRes = await fetch('/api/auth/social', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'telegram',
+          externalId: String(telegramUser.id),
+          username: telegramUser.username,
+          name: telegramUser.first_name,
+        }),
+      })
+
+      if (socialRes.ok) {
+        const socialData = await socialRes.json()
+        const socialUser = (socialData.user ?? null) as User | null
+        const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null
+
+        if (socialUser && socialToken) {
+          dispatch(setCredentials({ user: socialUser, accessToken: socialToken }))
+          applyUserTheme(theme, socialUser)
+          await refreshAccessState(dispatch)
+          return true
+        }
+      }
+    } catch (error) {
+      console.warn('[sessionSync] Telegram dev fallback restore failed', error)
     }
   }
 

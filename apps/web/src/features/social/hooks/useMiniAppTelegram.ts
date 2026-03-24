@@ -35,7 +35,7 @@ export function useMiniAppTelegram({
   onOpenStarway,
   page,
 }: UseMiniAppTelegramOptions) {
-  const { isAuthenticated, loginWithTelegramMiniApp } = useAuth()
+  const { isAuthenticated, loginWithSocial, loginWithTelegramMiniApp } = useAuth()
   const autoLoginAttemptedRef = useRef(false)
   const [isBootstrappingAuth, setIsBootstrappingAuth] = useState(false)
 
@@ -66,6 +66,8 @@ export function useMiniAppTelegram({
 
   const telegramInitData = typeof Telegram === 'undefined' ? '' : Telegram.WebApp.initData
   const telegramUser = typeof Telegram === 'undefined' ? null : Telegram.WebApp.initDataUnsafe.user
+  const allowDevFallback =
+    import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -73,18 +75,24 @@ export function useMiniAppTelegram({
       return
     }
 
-    if (!telegramUser?.id || !telegramInitData) return
+    if (!telegramUser?.id) return
     if (autoLoginAttemptedRef.current) return
 
     autoLoginAttemptedRef.current = true
     setIsBootstrappingAuth(true)
 
-    void loginWithTelegramMiniApp(telegramInitData).catch((error) => {
+    const loginPromise = telegramInitData
+      ? loginWithTelegramMiniApp(telegramInitData)
+      : allowDevFallback
+        ? loginWithSocial('telegram')
+        : Promise.reject(new Error('Telegram initData is missing'))
+
+    void loginPromise.catch((error) => {
       console.warn('[useMiniAppTelegram] Telegram auto-login failed', error)
       autoLoginAttemptedRef.current = false
       setIsBootstrappingAuth(false)
     })
-  }, [isAuthenticated, loginWithTelegramMiniApp, telegramInitData, telegramUser?.id])
+  }, [allowDevFallback, isAuthenticated, loginWithSocial, loginWithTelegramMiniApp, telegramInitData, telegramUser?.id])
 
   return {
     isBootstrappingAuth,
