@@ -18,6 +18,7 @@ import type {
   RegisterInput,
   ResetPasswordInput,
   SocialAuthApiInput,
+  TelegramMiniAppAuthInput,
   UpdateUserSettingsInput,
 } from '../types/auth.types'
 import { clearAuth, setCredentials, updateUser, updateUserSettings } from './auth.slice'
@@ -63,6 +64,15 @@ export const authApi = api.injectEndpoints({
 
     socialAuth: builder.mutation<SocialAuthResponseDTO, SocialAuthApiInput>({
       query: body => ({ url: '/auth/social', method: 'POST', body }),
+      async onQueryStarted(_, { dispatch, queryFulfilled }) {
+        const { data } = await queryFulfilled
+        dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
+        await refreshAccessState(dispatch)
+      },
+    }),
+
+    telegramMiniAppAuth: builder.mutation<SocialAuthResponseDTO & { token: string }, TelegramMiniAppAuthInput>({
+      query: body => ({ url: '/auth/telegram', method: 'POST', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         const { data } = await queryFulfilled
         dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
@@ -144,6 +154,7 @@ export const {
   useLoginMutation,
   useRegisterMutation,
   useSocialAuthMutation,
+  useTelegramMiniAppAuthMutation,
   useGetMeQuery,
   useGetTelegramLinkUrlQuery,
   useGetTelegramStatusQuery,

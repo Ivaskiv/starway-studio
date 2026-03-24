@@ -95,6 +95,20 @@ function getTelegramRuntimeUser(): TelegramRuntimeUser | null {
   return telegram?.WebApp?.initDataUnsafe?.user ?? null
 }
 
+function getTelegramRuntimeInitData(): string {
+  if (typeof window === 'undefined') return ''
+
+  const telegram = (window as {
+    Telegram?: {
+      WebApp?: {
+        initData?: string
+      }
+    }
+  }).Telegram
+
+  return telegram?.WebApp?.initData?.trim() ?? ''
+}
+
 export function shouldAllowSessionProbeWithoutHint(): boolean {
   return isLikelyTelegramMiniAppRuntime()
 }
@@ -169,9 +183,10 @@ export async function syncAuthSession({
   }
 
   const telegramUser = getTelegramRuntimeUser()
-  if (telegramUser?.id && isLikelyTelegramMiniAppRuntime()) {
+  const telegramInitData = getTelegramRuntimeInitData()
+  if (telegramUser?.id && telegramInitData && isLikelyTelegramMiniAppRuntime()) {
     try {
-      const socialRes = await fetch('/api/auth/social', {
+      const socialRes = await fetch('/api/auth/telegram', {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
@@ -179,10 +194,7 @@ export async function syncAuthSession({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          provider: 'telegram',
-          externalId: String(telegramUser.id),
-          username: telegramUser.username,
-          name: telegramUser.first_name,
+          initData: telegramInitData,
         }),
       })
 

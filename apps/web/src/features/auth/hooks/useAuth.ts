@@ -11,6 +11,7 @@ import {
   useLogoutMutation,
   useRegisterMutation,
   useSocialAuthMutation,
+  useTelegramMiniAppAuthMutation,
 } from '@/features/auth/services/auth.api'
 import {
   clearAuth,
@@ -56,6 +57,7 @@ export function useAuth() {
   const [loginMutation]    = useLoginMutation()
   const [registerMutation] = useRegisterMutation()
   const [socialAuth]       = useSocialAuthMutation()
+  const [telegramMiniAppAuth] = useTelegramMiniAppAuthMutation()
   const [logoutMutation]   = useLogoutMutation()
 
   const hasToken = !!getToken()
@@ -134,7 +136,31 @@ export function useAuth() {
     finally { dispatch(clearAuth()); removeToken() }
   }
 
-  return { user, isAuthenticated, isLoading, loginWithCredentials, registerWithCredentials, loginWithSocial, logout }
+  const loginWithTelegramMiniApp = async (initData: string): Promise<SocialAuthResult> => {
+    const res = await telegramMiniAppAuth({ initData }).unwrap()
+    dispatch(setCredentials({ user: toUser(res.user), accessToken: res.accessToken }))
+    theme.setAccent(safeAccent(res.user.settings?.accentColor))
+    if (res.user.settings?.theme) theme.setMode(normalizeUiMode(res.user.settings.theme))
+
+    return {
+      provider: 'telegram',
+      isNewUser: res.isNewUser ?? false,
+      needsCompletion: res.needsCompletion ?? false,
+      name: res.user.name ?? undefined,
+      email: res.user.email ?? undefined,
+    }
+  }
+
+  return {
+    user,
+    isAuthenticated,
+    isLoading,
+    loginWithCredentials,
+    registerWithCredentials,
+    loginWithSocial,
+    loginWithTelegramMiniApp,
+    logout,
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -43,6 +43,10 @@ export interface SocialAuthApiInput {
   expertId?: string
 }
 
+export interface TelegramMiniAppAuthInput {
+  initData: string
+}
+
 export interface UpdateUserSettingsInput {
   email?: string
   firstName?: string

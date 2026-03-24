@@ -9,6 +9,7 @@ import {
   getCurrentUser,
   loginUser,
   socialLoginUser,
+  telegramMiniAppLoginUser,
   updateUserSettings,
   generateAccessToken,
   generateRefreshToken,
@@ -97,6 +98,27 @@ export async function social(req: Request, res: Response) {
     return res.json({
       user: result.user,
       accessToken: result.accessToken,
+      needsProfile: result.needsProfile,
+      expiresIn: result.expiresIn,
+      isNewUser: result.isNewUser,
+      needsCompletion: result.needsCompletion,
+    })
+  } catch (error) {
+    return sendControllerError(res, error)
+  }
+}
+
+export async function telegram(req: Request, res: Response) {
+  try {
+    const { initData } = req.body ?? {}
+    const result = await telegramMiniAppLoginUser(String(initData ?? ''))
+
+    res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
+
+    return res.json({
+      token: result.accessToken,
+      accessToken: result.accessToken,
+      user: result.user,
       needsProfile: result.needsProfile,
       expiresIn: result.expiresIn,
       isNewUser: result.isNewUser,
