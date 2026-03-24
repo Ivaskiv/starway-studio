@@ -77,18 +77,19 @@ function AIIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden="true">
       <path
-        d="m12 3.75 1.85 4.55 4.9 1.1-3.7 3.2.45 4.9L12 15.8l-3.5 1.7.45-4.9-3.7-3.2 4.9-1.1L12 3.75Z"
+        d="M12 3.5 13.75 8.25 18.5 10 13.75 11.75 12 16.5 10.25 11.75 5.5 10l4.75-1.75L12 3.5Z"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M12 7.25v9.5M8.75 10.4 15.25 13.6"
+        d="M18.25 4.75 18.8 6.2l1.45.55-1.45.55-.55 1.45-.55-1.45-1.45-.55 1.45-.55.55-1.45ZM6.25 15.6l.65 1.65 1.65.65-1.65.65-.65 1.65-.65-1.65-1.65-.65 1.65-.65.65-1.65Z"
         stroke="currentColor"
-        strokeWidth="1.15"
+        strokeWidth="1.1"
         strokeLinecap="round"
-        opacity="0.42"
+        strokeLinejoin="round"
+        opacity="0.56"
       />
     </svg>
   )
