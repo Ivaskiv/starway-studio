@@ -1,17 +1,43 @@
 .miniapp-bottomnav-shell {
-  @apply fixed inset-x-0 bottom-0 z-[70] px-3;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  @apply fixed inset-x-0 bottom-0 z-[70];
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .miniapp-bottomnav {
-  @apply mx-auto flex w-full max-w-[430px] items-stretch gap-1 rounded-[26px] border px-2 py-2;
-  border-color: rgba(255, 255, 255, 0.1);
+  @apply relative mx-auto flex w-full max-w-[430px] items-stretch gap-1 px-2 py-2;
+  border-top: 1px solid rgba(var(--accent-rgb), 0.2);
+  border-left: 1px solid rgba(var(--accent-rgb), 0.08);
+  border-right: 1px solid rgba(var(--accent-rgb), 0.08);
   background:
-    linear-gradient(180deg, rgba(15, 20, 34, 0.98), rgba(8, 12, 23, 0.995));
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.16) 0%, transparent 3px) top / 100% 100% no-repeat,
+    linear-gradient(110deg, rgba(var(--accent-rgb), 0.06) 0%, transparent 44%),
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.08) 0%, rgba(var(--accent-rgb), 0.04) 100%);
   box-shadow:
-    0 16px 38px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(var(--accent-rgb), 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 -2px 24px rgba(0, 0, 0, 0.55),
+    0 -8px 64px rgba(3, 15, 40, 0.4),
+    inset 0 1px 0 rgba(var(--accent-rgb), 0.08);
+}
+
+.miniapp-bottomnav::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--accent-soft-rgb), 0.28) 14%,
+    rgba(var(--accent-rgb), 0.82) 50%,
+    rgba(var(--accent-soft-rgb), 0.28) 86%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 14px rgba(var(--accent-rgb), 0.3),
+    0 0 28px rgba(var(--accent-soft-rgb), 0.16),
+    0 -1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .miniapp-bottomnav__item {
@@ -37,11 +63,15 @@
 }
 
 .miniapp-bottomnav__icon {
-  @apply h-10 w-10 rounded-[14px];
+  @apply inline-flex h-11 w-11 items-center justify-center rounded-full;
   border-color: rgba(255, 255, 255, 0.1);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
     linear-gradient(145deg, rgba(var(--accent-rgb), 0.07), rgba(255, 255, 255, 0.01));
+}
+
+.miniapp-bottomnav__item:nth-child(3) .miniapp-bottomnav__icon {
+  @apply h-12 w-12;
 }
 
 .miniapp-bottomnav__item--active .miniapp-bottomnav__icon {
@@ -78,8 +108,18 @@
     @apply min-h-[76px] gap-2 px-2.5 py-2.5;
   }
 
+  .miniapp-bottomnav__item:nth-child(3) .miniapp-bottomnav__icon {
+    @apply h-[3.25rem] w-[3.25rem];
+  }
+
   .miniapp-bottomnav__label {
     @apply text-[10px];
+  }
+}
+
+@media (max-width: 540px) {
+  .miniapp-bottomnav {
+    max-width: 100%;
   }
 }
 
