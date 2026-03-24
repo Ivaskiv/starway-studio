@@ -1,18 +1,16 @@
 // frontend/src/App.tsx
 
 import { ROUTES } from '@/config/routes';
+import { useAuthSessionSync } from '@/features/auth/hooks/useAuthSessionSync';
 import ProtectedRoute from '@/features/auth/components/ProtectedRoute';
 import { AuthRestoreProvider, type AuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext';
-import { clearAuth, selectIsAuthenticated, setCredentials } from '@/features/auth/services/auth.slice';
-import { hasSessionHint } from '@/features/auth/services/token';
+import { selectIsAuthenticated } from '@/features/auth/services/auth.slice';
 import type { AccessKey } from '@/features/auth/types/auth.types';
-import { settingsApi } from '@/features/settings/services/settings.api';
-import type { User } from '@/features/user/types/user.types';
+import { shouldAllowSessionProbeWithoutHint, syncAuthSession } from '@/features/auth/utils/sessionSync';
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback';
 import MainLayout from '@/layout/MainLayout';
 import { useThemeContext } from '@/theme/ThemeProvider';
-import { DEFAULT_ACCENT, normalizeUiMode } from '@/theme/accent.utils';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useDispatch, useSelector } from 'react-redux';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
@@ -100,36 +98,10 @@ interface AuthRestoreProps {
   onStatusChange?: (status: AuthRestoreStatus) => void;
 }
 
-const BAD_COLORS = new Set([
-  '#ff6b00', '#FF6B00',
-  '#ea580c', '#f97316', '#d97706',
-  '#0a2446', '#0d1b3e',
-])
-
-function safeAccent(color?: string): string {
-  return (!color || BAD_COLORS.has(color)) ? DEFAULT_ACCENT : color
-}
-
-function deriveThemeSettings(user: User) {
-  const settings = user.settings
-  return {
-    accentColor: safeAccent(settings?.accentColor ?? undefined),
-    bgColor:     settings?.bgColor || undefined,
-    theme:       normalizeUiMode(settings?.theme),
-  }
-}
-
 function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
   const dispatch = useDispatch();
   const [status, setStatus] = useState<AuthRestoreStatus>('idle');
   const theme = useThemeContext()
-
-  const applyUserTheme = useCallback((user: User) => {
-    const { accentColor, theme: mode, bgColor } = deriveThemeSettings(user)
-    theme.setAccent(accentColor)
-    if (mode) theme.setMode(mode)
-    theme.setBgColor(bgColor)
-  }, [theme])
 
   useEffect(() => {
     let cancelled = false;
@@ -140,96 +112,23 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
       onStatusChange?.(next);
     };
 
-    const markFailed = () => {
-      dispatch(clearAuth());
-      updateStatus('failed');
-    };
-
-    const markReady = () => {
-      updateStatus('ready');
-    };
-
     const initAuth = async () => {
       updateStatus('restoring');
-      const hasRestoreHint = hasSessionHint()
-
-      const restoreWithAccessToken = async () => {
-        const existingToken = localStorage.getItem('starway_access_token')
-        if (!existingToken) {
-          markFailed()
-          return
-        }
-
-        try {
-          const meRes = await fetch('/api/auth/me', {
-            method: 'GET',
-            credentials: 'include',
-            cache: 'no-store',
-            headers: {
-              Authorization: `Bearer ${existingToken}`,
-            },
-          })
-
-          if (cancelled) return
-
-          if (!meRes.ok) {
-            markFailed()
-            return
-          }
-
-          const meData = await meRes.json()
-          const restoredUser = (meData.user ?? null) as User | null
-
-          if (!restoredUser) {
-            markFailed()
-            return
-          }
-
-          dispatch(setCredentials({ user: restoredUser, accessToken: existingToken }))
-          applyUserTheme(restoredUser)
-          markReady()
-        } catch (error) {
-          console.error('[AuthRestore] Failed to restore auth from access token:', error)
-          markFailed()
-        }
-      }
-
-      const existingToken = localStorage.getItem('starway_access_token')
-      if (!existingToken && !hasRestoreHint) {
-        markFailed()
-        return
-      }
 
       try {
-        const refreshRes = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          credentials: 'include',
-          cache: 'no-store',
-        });
-
         if (cancelled) return;
 
-        if (!refreshRes.ok) {
-          await restoreWithAccessToken();
-          return;
-        }
+        const restored = await syncAuthSession({
+          allowRefreshWithoutHint: shouldAllowSessionProbeWithoutHint(),
+          dispatch,
+          theme,
+        })
 
-        const refreshData = await refreshRes.json();
-        const newToken = refreshData.accessToken;
-        const newUser  = (refreshData.user ?? null) as User | null;
-
-        if (!newToken || !newUser) {
-          await restoreWithAccessToken();
-          return;
-        }
-
-        dispatch(setCredentials({ user: newUser, accessToken: newToken }));
-        applyUserTheme(newUser);
-        localStorage.setItem('starway_access_token', newToken);
-        markReady();
+        if (cancelled) return
+        updateStatus(restored ? 'ready' : 'failed')
       } catch (error) {
         console.error('[AuthRestore] Failed to restore auth:', error);
-        await restoreWithAccessToken();
+        updateStatus('failed')
       }
     };
 
@@ -238,7 +137,7 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
     return () => {
       cancelled = true;
     };
-  }, [dispatch, onStatusChange, applyUserTheme]);
+  }, [dispatch, onStatusChange, theme]);
 
   if (status === 'idle' || status === 'restoring') {
     return <LoadingFallback />;
@@ -260,6 +159,8 @@ function withGuard(route: RouteConfig): ReactElement {
 export default function App() {
   const [authRestoreStatus, setAuthRestoreStatus] = useState<AuthRestoreStatus>('idle');
   const isAuthenticated = useSelector(selectIsAuthenticated);
+
+  useAuthSessionSync(authRestoreStatus === 'ready')
 
   const dashboardRoutes = useMemo(
     () => DASHBOARD_ROUTES.map((route) => (
