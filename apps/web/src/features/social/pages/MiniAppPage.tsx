@@ -18,6 +18,7 @@ import { ROUTES } from '@/config/routes'
 import { useGetProfileQuery } from '@/features/gamification/services/gamification.api'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
+import { Button } from '@/ui'
 
 declare const Telegram:
   | {
@@ -159,10 +160,7 @@ export default function MiniAppPage() {
   }
 
   return (
-    <div
-      className="mx-auto flex w-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]"
-      style={{ minHeight: '100dvh', maxWidth: 430 }}
-    >
+    <div className="miniapp-page-shell mx-auto flex w-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
       <div className="flex-1 overflow-y-auto pb-20">
         {page === 'home' && (
           <div className="space-y-3 px-4 pt-5">
@@ -220,12 +218,12 @@ export default function MiniAppPage() {
                     </p>
                   </div>
                 </div>
-                <div className="h-1.5 rounded-full bg-[var(--border)]">
-                  <div
-                    className="h-full rounded-full bg-[var(--accent)] transition-all"
-                    style={{ width: trackerWidth }}
-                  />
-                </div>
+                <progress
+                  className="miniapp-progressbar"
+                  value={trackerProgress}
+                  max={100}
+                  aria-label="Прогрес трекера"
+                />
               </button>
 
               <button
@@ -315,6 +313,8 @@ export default function MiniAppPage() {
                   onClick={() => void sendMessage()}
                   disabled={!chatInput.trim() || isSending}
                   className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)] text-white disabled:opacity-50"
+                  aria-label="Надіслати повідомлення"
+                  title="Надіслати повідомлення"
                 >
                   <ArrowRight className="h-4 w-4" />
                 </button>
@@ -348,12 +348,12 @@ export default function MiniAppPage() {
                   className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3"
                 >
                   <span className="w-28 flex-shrink-0 text-sm text-[var(--text-primary)]">{item.label}</span>
-                  <div className="flex-1 rounded-full bg-[var(--border)]">
-                    <div
-                      className="h-1.5 rounded-full bg-[var(--accent)] transition-all"
-                      style={{ width: `${item.value}%` }}
-                    />
-                  </div>
+                  <progress
+                    className="miniapp-progressbar flex-1"
+                    value={item.value}
+                    max={100}
+                    aria-label={`${item.label} ${item.value} відсотків`}
+                  />
                   <span className="w-8 text-right text-xs text-[var(--text-muted)]">{item.value}%</span>
                 </div>
               ))}
