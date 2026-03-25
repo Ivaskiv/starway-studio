@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 
 import {
   useGetTelegramLinkUrlQuery,
@@ -10,6 +11,46 @@ import {
   useSubmitDailyCycleMutation,
 } from '@/features/daily-cycle/services/daily.api'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
+import type { RootState } from '@/app/store'
+
+type DailyDraftState = {
+  answers: Record<string, string>
+  step: number
+}
+
+function getDraftKey(userId: string, session: 'morning' | 'evening', dateKey: string) {
+  return `starway_daily_cycle_draft:${userId || 'guest'}:${session}:${dateKey}`
+}
+
+function loadDraft(userId: string, session: 'morning' | 'evening', dateKey: string): DailyDraftState | null {
+  try {
+    const raw = window.localStorage.getItem(getDraftKey(userId, session, dateKey))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<DailyDraftState>
+    return {
+      answers: parsed.answers && typeof parsed.answers === 'object' ? parsed.answers as Record<string, string> : {},
+      step: typeof parsed.step === 'number' ? parsed.step : 0,
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(userId: string, session: 'morning' | 'evening', dateKey: string, draft: DailyDraftState) {
+  try {
+    window.localStorage.setItem(getDraftKey(userId, session, dateKey), JSON.stringify(draft))
+  } catch {
+    // ignore persistence errors
+  }
+}
+
+function clearDraft(userId: string, session: 'morning' | 'evening', dateKey: string) {
+  try {
+    window.localStorage.removeItem(getDraftKey(userId, session, dateKey))
+  } catch {
+    // ignore persistence errors
+  }
+}
 
 const MORNING_QUESTIONS = [
   {
@@ -113,10 +154,12 @@ export function DailyCycleFlow({
   onComplete,
 }: DailyCycleFlowProps) {
   const navigate = useNavigate()
+  const userId = useSelector((state: RootState) => state.auth.user?.id ?? '')
   const { data: trial } = useGetTrialStatusQuery()
   const hasAccess = (trial?.isActive ?? false) || (trial?.isPaid ?? false)
   const now = new Date()
   const hour = now.getHours()
+  const dateKey = new Date().toISOString().slice(0, 10)
 
   const sessionFromUrl = new URLSearchParams(window.location.search).get('session')
   const defaultSession = initialSession
@@ -183,16 +226,23 @@ export function DailyCycleFlow({
     if (sessionAlreadyCompleted) {
       setAnswers({})
       setStep(0)
+      clearDraft(userId, session, dateKey)
       lastSyncedSessionRef.current = session
       return
     }
 
     if (lastSyncedSessionRef.current !== session) {
-      setAnswers({})
-      setStep(0)
+      const draft = loadDraft(userId, session, dateKey)
+      setAnswers(draft?.answers ?? {})
+      setStep(draft?.step ?? 0)
       lastSyncedSessionRef.current = session
     }
-  }, [session, sessionAlreadyCompleted])
+  }, [dateKey, session, sessionAlreadyCompleted, userId])
+
+  useEffect(() => {
+    if (sessionAlreadyCompleted) return
+    saveDraft(userId, session, dateKey, { answers, step })
+  }, [answers, dateKey, session, sessionAlreadyCompleted, step, userId])
 
   if (!hasAccess) {
     return (
@@ -310,6 +360,7 @@ export function DailyCycleFlow({
           date: new Date().toISOString(),
         }).unwrap()
 
+        clearDraft(userId, session, dateKey)
         await refetchTodayEntry()
         setSubmitted(true)
         onComplete?.()
@@ -394,8 +445,8 @@ export function DailyCycleFlow({
         )}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
-        <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.08),rgba(255,255,255,0.015))] p-5">
+      <div className="dashboard-liquid-card--soft overflow-hidden">
+        <div className="dashboard-liquid-edge--top p-5">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[rgb(var(--accent-soft-rgb))] [text-shadow:0_0_16px_rgba(var(--accent-soft-rgb),0.18)]">
               {session === 'morning' ? 'РАНКОВІ ПИТАННЯ' : 'ВЕЧІРНЯ РЕФЛЕКСІЯ'}

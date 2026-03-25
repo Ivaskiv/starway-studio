@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/app/store'
 import { useGetMentorContextQuery } from '../services/mentor.api'
+import { createAppRequestHeaders } from '@/lib/miniapp/apiClient'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,8 +104,6 @@ export default function AIMentorChat() {
     setMessages([{ role: 'assistant', content: greeting }])
   }, [ctx])
 
-  const authToken = useSelector((s: RootState) => s.auth.accessToken)
-
   const [streamingContent, setStreamingContent] = useState('')
 
   const handleSend = useCallback(async () => {
@@ -128,10 +127,8 @@ export default function AIMentorChat() {
 
       const response = await fetch('/api/mentor/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: authToken ? `Bearer ${authToken}` : '',
-        },
+        credentials: 'include',
+        headers: createAppRequestHeaders(undefined, true),
         body: JSON.stringify(body),
       })
 
@@ -176,7 +173,7 @@ export default function AIMentorChat() {
       setIsStreaming(false)
       setStreamingContent('')
     }
-  }, [input, isStreaming, messages, ctx, authToken])
+  }, [input, isStreaming, messages, ctx])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

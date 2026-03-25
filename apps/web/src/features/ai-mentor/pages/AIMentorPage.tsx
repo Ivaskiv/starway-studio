@@ -1,5 +1,6 @@
 import { useAppSelector } from '@/app/hooks'
 import { ROUTES } from '@/config/routes'
+import { useAttachEmailMutation } from '@/features/auth/services/auth.api'
 import { selectUserRole } from '@/features/auth/services/auth.slice'
 import { MicroTaskList } from '@/features/microTask/components/MicroTaskList'
 import {
@@ -147,6 +148,7 @@ export default function AIMentorPage() {
   const showAsUser = !isSuperAdmin || previewAsUser
   const { data: trial } = useGetTrialStatusQuery()
   const [startTrial] = useStartTrialMutation()
+  const [attachEmail] = useAttachEmailMutation()
 
   const handleStartTrial = async () => {
     try {
@@ -170,20 +172,7 @@ export default function AIMentorPage() {
 
     setIsUpdatingEmail(true)
     try {
-      const token = localStorage.getItem('starway_access_token') ?? ''
-      const response = await fetch('/api/user/email', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ email: emailInput }),
-      })
-
-      if (!response.ok) {
-        throw new Error('EMAIL_UPDATE_FAILED')
-      }
-
+      await attachEmail({ email: emailInput }).unwrap()
       setShowEmailForm(false)
       await startTrial().unwrap()
       navigate('/dashboard')

@@ -58,7 +58,7 @@ export default function MonthGrid({
     <div className="space-y-4 transition-all duration-300 ease-out">
       <div className="grid grid-cols-7 gap-2">
         {WEEK_DAYS.map((day) => (
-          <div key={day} className="px-2 text-center text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+          <div key={day} className="px-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgb(var(--accent-soft-rgb))]">
             {day}
           </div>
         ))}

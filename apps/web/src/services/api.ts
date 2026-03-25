@@ -11,6 +11,7 @@ import type { RootState } from '@/app/store';
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice';
 import type { User } from '@/features/user/types/user.types';
 import { TAG_TYPES } from '@/app/tagTypes';
+import { getTelegramMiniAppAuthHeader } from '@/lib/miniapp/apiClient';
 
 type ApiTagType = (typeof TAG_TYPES)[number];
 
@@ -86,6 +87,11 @@ const rawBaseQuery = fetchBaseQuery({
 
     if (accessToken) {
       headers.set('Authorization', `Bearer ${accessToken}`);
+    } else {
+      const miniAppAuthHeader = getTelegramMiniAppAuthHeader()
+      if (miniAppAuthHeader) {
+        headers.set('Authorization', miniAppAuthHeader)
+      }
     }
 
     if (expertId) {

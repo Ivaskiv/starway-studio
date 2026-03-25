@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import JournalLayout from './components/JournalLayout'
 import { useJournal } from './hooks/useJournal'
+import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
 
 function shiftMonth(month: number, year: number, diff: number) {
   const date = new Date(year, month - 1 + diff, 1)
@@ -11,6 +13,8 @@ function shiftMonth(month: number, year: number, diff: number) {
 }
 
 export default function JournalPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const today = new Date()
   const [calendar, setCalendar] = useState({
     month: today.getMonth() + 1,
@@ -18,6 +22,11 @@ export default function JournalPage() {
   })
 
   const journal = useJournal(calendar.month, calendar.year)
+
+  useEffect(() => {
+    if (!isTelegramMiniAppContext(location.pathname)) return
+    navigate('/miniapp/journal', { replace: true })
+  }, [location.pathname, navigate])
 
   return (
     <div className="p-6">

@@ -1,4 +1,4 @@
-import { Button, GlassCard } from '@/ui'
+import { Button } from '@/ui'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { JournalEvent, JournalFilter } from '../types'
 import DayDetails from './DayDetails'
@@ -41,7 +41,8 @@ export default function JournalLayout({
 
   return (
     <div className="space-y-6">
-      <GlassCard className="p-5">
+      <div className="dashboard-liquid-card--soft overflow-hidden">
+        <div className="dashboard-liquid-edge--top p-5">
         <div >
           <div>
           
@@ -67,10 +68,11 @@ export default function JournalLayout({
         <div className="mt-4">
           <Filters filter={filter} onChange={onFilterChange} />
         </div>
-      </GlassCard>
+        </div>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-        <GlassCard className="p-5 transition-all duration-300 ease-out">
+        <div className="dashboard-liquid-card--soft p-5 transition-all duration-300 ease-out">
           {isLoading ? (
             <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-5 text-sm text-[var(--text-muted)]">
               Завантажуємо журнал...
@@ -85,7 +87,7 @@ export default function JournalLayout({
               onSelectDay={onSelectDay}
             />
           )}
-        </GlassCard>
+        </div>
 
         <div className="xl:sticky xl:top-6 xl:self-start">
           <DayDetails day={selectedDay} events={selectedEvents} />

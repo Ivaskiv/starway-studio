@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { miniAppFetch } from '@/lib/miniapp/apiClient'
 import type { MiniAppChatMessage } from '@/features/social/types/miniapp'
 
 const INITIAL_MESSAGES: MiniAppChatMessage[] = [
@@ -31,20 +32,13 @@ export function useMiniAppMentorChat({ userId, context }: UseMiniAppMentorChatOp
     setIsSending(true)
 
     try {
-      const token = localStorage.getItem('starway_access_token') ?? ''
-      const response = await fetch('/api/mentor/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ message: text, userId }),
-      })
-
-      const data = (await response.json()) as {
+      const data = await miniAppFetch<{
         mentorMessage?: { content?: string }
         reply?: string
-      }
+      }>('/api/mentor/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: text, userId }),
+      })
 
       const reply =
         data.mentorMessage?.content ??

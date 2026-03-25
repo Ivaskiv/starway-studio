@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { GlassCard } from '@/ui'
 import { Bot, CalendarCheck2, Flame, ListTodo, MoonStar, Sparkles, SunMedium, Video } from 'lucide-react'
 import type { JournalEvent } from '../types'
 
@@ -107,7 +106,7 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
   )
 
   return (
-    <GlassCard className="h-full p-5 transition-all duration-300 ease-out xl:max-h-[calc(100vh-9rem)] xl:overflow-hidden">
+    <div className="dashboard-liquid-card h-full p-5 transition-all duration-300 ease-out xl:max-h-[calc(100vh-9rem)] xl:overflow-hidden">
       <div className="mb-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgb(var(--accent-soft-rgb))]">
           Щоденник дня
@@ -117,7 +116,7 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
 
       <div className="space-y-5 xl:max-h-[calc(100vh-13rem)] xl:overflow-y-auto xl:pr-1">
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+          <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.14)] bg-[linear-gradient(180deg,rgb(22_58_102_/_0.24),rgba(255,255,255,0.02)_26%,rgba(255,255,255,0.012)_100%)] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.18)]">
             <div className="flex items-center gap-2 text-[rgb(var(--accent-soft-rgb))]">
               <Sparkles className="h-4 w-4" />
               <span className="text-[11px] font-semibold uppercase tracking-widest">XP</span>
@@ -126,7 +125,7 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
             <p className="mt-1 text-xs text-[var(--text-muted)]">Нараховано за день</p>
           </div>
 
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+          <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.14)] bg-[linear-gradient(180deg,rgb(22_58_102_/_0.24),rgba(255,255,255,0.02)_26%,rgba(255,255,255,0.012)_100%)] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.18)]">
             <div className="flex items-center gap-2 text-[rgb(var(--accent-soft-rgb))]">
               <ListTodo className="h-4 w-4" />
               <span className="text-[11px] font-semibold uppercase tracking-widest">Практики</span>
@@ -135,7 +134,7 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
             <p className="mt-1 text-xs text-[var(--text-muted)]">Подій типу Task</p>
           </div>
 
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+          <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.14)] bg-[linear-gradient(180deg,rgb(22_58_102_/_0.24),rgba(255,255,255,0.02)_26%,rgba(255,255,255,0.012)_100%)] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.18)]">
             <div className="flex items-center gap-2 text-[rgb(var(--accent-soft-rgb))]">
               <Flame className="h-4 w-4" />
               <span className="text-[11px] font-semibold uppercase tracking-widest">Streak</span>
@@ -168,6 +167,6 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
           </div>
         ) : null}
       </div>
-    </GlassCard>
+    </div>
   )
 }

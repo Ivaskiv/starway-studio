@@ -1,6 +1,6 @@
 // frontend/src/layout/MainLayout.tsx
-import { useEffect, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import AuthModal from '@/features/auth/components/AuthModal'
 import { useAuth } from '@/features/auth/hooks/useAuth'
@@ -90,6 +90,7 @@ export default function MainLayout({
   dashboard = false,
 }: MainLayoutProps) {
   const location = useLocation()
+  const navigate = useNavigate()
 
   const [collapsed,   setCollapsed]   = useState(false)
   const [view,        setView]        = useState<AppView>('navigation')
@@ -103,6 +104,26 @@ export default function MainLayout({
   const { navigateTo } = useSmartNavigation()
 
   const isMiniAppContext = isTelegramMiniAppContext(location.pathname)
+  const miniAppRouteTarget = useMemo(() => {
+    if (!isMiniAppContext) return null
+
+    if (location.pathname === '/dashboard') return '/miniapp'
+    if (location.pathname.startsWith('/dashboard/ai-mentor')) return '/miniapp/mentor'
+    if (location.pathname.startsWith('/dashboard/progress')) return '/miniapp/tracker'
+    if (location.pathname.startsWith('/dashboard/journal')) return '/miniapp/journal'
+    if (location.pathname.startsWith('/dashboard/profile') || location.pathname.startsWith('/dashboard/settings')) return '/miniapp/profile'
+    if (
+      location.pathname.startsWith('/dashboard/courses') ||
+      location.pathname.startsWith('/dashboard/products') ||
+      location.pathname.startsWith('/dashboard/vision') ||
+      location.pathname.startsWith('/dashboard/goals') ||
+      location.pathname.startsWith('/dashboard/actions')
+    ) {
+      return '/miniapp/library'
+    }
+
+    return null
+  }, [isMiniAppContext, location.pathname])
   const pageContext = getPageContext(location.pathname, dashboard || isAuthenticated)
 
   const toggle = () => setCollapsed(c => !c)
@@ -138,6 +159,12 @@ export default function MainLayout({
       setCollapsed(true)
     }
   }, [isMiniAppContext])
+
+  useEffect(() => {
+    if (!miniAppRouteTarget) return
+    if (`${location.pathname}${location.search}` === miniAppRouteTarget) return
+    navigate(miniAppRouteTarget, { replace: true })
+  }, [location.pathname, location.search, miniAppRouteTarget, navigate])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

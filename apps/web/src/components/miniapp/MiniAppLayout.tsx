@@ -18,6 +18,7 @@ const START_PARAM_ROUTE_MAP: Record<string, string> = {
   ai_evening: '/miniapp/mentor?context=evening',
   assistant: '/miniapp/mentor',
   tracker: '/miniapp/tracker',
+  journal: '/miniapp/journal',
   library: '/miniapp/library',
   profile: '/miniapp/profile',
   subscription: '/dashboard/subscription',
@@ -102,7 +103,7 @@ export default function MiniAppLayout({
       ) : null}
 
       <BottomNav
-        activeTab={activeTab === 'mentor' ? 'ai' : activeTab}
+        activeTab={activeTab === 'mentor' ? 'ai' : activeTab === 'journal' ? 'home' : activeTab}
         onTabChange={(tab) => {
           switch (tab) {
             case 'library':

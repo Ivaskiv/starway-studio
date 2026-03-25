@@ -128,7 +128,7 @@ export function HeroSection({ onGetStarted, onLearnMore }: HeroSectionProps) {
           </button>
         </div>
 
-        <div className="mb-10 flex justify-center">
+        {/* <div className="mb-10 flex justify-center">
           <a
             href="https://tg.pulse.is/Starway_byNadya_Bot?start=69b937fefa457b8036094169&username=value1&telegram_id=value2"
             target="_blank"
@@ -137,7 +137,7 @@ export function HeroSection({ onGetStarted, onLearnMore }: HeroSectionProps) {
           >
             ← тест: перехід із соцмереж (лідмагніт)
           </a>
-        </div>
+        </div> */}
 
         {/* Social proof */}
         <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-8">

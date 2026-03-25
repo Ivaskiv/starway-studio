@@ -1,4 +1,4 @@
-export type MiniAppPageId = 'home' | 'mentor' | 'tracker' | 'library' | 'profile'
+export type MiniAppPageId = 'home' | 'mentor' | 'tracker' | 'library' | 'profile' | 'journal'
 
 export type MiniAppChatRole = 'user' | 'ai'
 

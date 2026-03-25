@@ -1,9 +1,7 @@
 import { BookOpen, Bot, Gem } from 'lucide-react'
 
 import GameBadge from '@/components/miniapp/GameBadge'
-import EventList from '@/features/journal-mini/components/EventList'
-import WeeklyStrip from '@/features/journal-mini/components/WeeklyStrip'
-import { useWeeklyJournal } from '@/features/journal-mini/hooks/useWeeklyJournal'
+import MiniAppJournalSection from '@/features/social/components/MiniAppJournalSection'
 
 interface MiniAppHomeSectionProps {
   hasAccess: boolean
@@ -28,14 +26,6 @@ export default function MiniAppHomeSection({
   onOpenTracker,
   onOpenLibrary,
 }: MiniAppHomeSectionProps) {
-  const { days, eventsByDate, selectedDay, setSelectedDay } = useWeeklyJournal()
-  const selectedDate = new Date(`${selectedDay}T12:00:00`)
-  const selectedDayLabel = selectedDate.toLocaleDateString('uk-UA', {
-    day: 'numeric',
-    month: 'long',
-  })
-  const selectedEvents = eventsByDate[selectedDay] ?? []
-
   return (
     <div className="space-y-3 px-4 pt-5">
       {!hasAccess && (
@@ -55,14 +45,7 @@ export default function MiniAppHomeSection({
           <GameBadge label="Рівень" value={profileLevel} variant="level" />
         </div>
 
-        <WeeklyStrip
-          days={days}
-          eventsByDate={eventsByDate}
-          selectedDay={selectedDay}
-          onSelectDay={setSelectedDay}
-        />
-
-        <EventList dayLabel={selectedDayLabel} events={selectedEvents} />
+        <MiniAppJournalSection showHeader={false} />
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
           <div className="mb-3 flex items-center gap-3">

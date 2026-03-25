@@ -13,7 +13,7 @@ type Mode = 'login' | 'register'
 interface Props { isOpen: boolean; onClose: () => void; defaultMode?: Mode }
 
 export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Props) {
-  const { loginWithSocial } = useAuth()
+  const { loginWithSocial, canUseSocialProvider } = useAuth()
   const lang: ToastLang = 'uk'
   const postAuthNavigate = usePostAuthNavigation()
 
@@ -50,10 +50,16 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
     } catch (err) {
       const message = err instanceof Error && err.message.includes('VITE_GOOGLE_CLIENT_ID not configured')
         ? getToastMessage('auth.socialGoogleNotConfigured', lang)
-        : getToastMessage('auth.socialGenericError', lang)
+        : err instanceof Error && err.message.includes('Telegram social auth unavailable')
+          ? 'Telegram-вхід доступний лише з Telegram WebApp'
+          : getToastMessage('auth.socialGenericError', lang)
       toast.error(message)
     } finally { setIsProcessing(false) }
   }
+
+  const showGoogleSocial = canUseSocialProvider('google')
+  const showTelegramSocial = canUseSocialProvider('telegram')
+  const showSocialSection = showGoogleSocial || showTelegramSocial
 
   const handleRegisterSuccess = (credentials?: { email: string; password: string }) => {
     setMode('login')
@@ -117,17 +123,21 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
             )}
 
             {/* Social buttons */}
-            {mode === 'login' && (
+            {showSocialSection && (
               <>
                 <div className="relative flex items-center my-4">
-                  <span className="px-3 text-xs text-white/40">або продовжити з</span>
+                  <span className="px-3 text-xs text-white/40">або продовжити через</span>
                   <div className="absolute inset-0 flex items-center">
                     <div className="flex-1 h-px bg-white/8"></div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" onClick={() => handleSocial('google')} disabled={isProcessing}>Google</Button>
-                  <Button variant="outline" onClick={() => handleSocial('telegram')} disabled={isProcessing}>Telegram</Button>
+                  {showGoogleSocial ? (
+                    <Button variant="outline" onClick={() => handleSocial('google')} disabled={isProcessing}>Google</Button>
+                  ) : <div />}
+                  {showTelegramSocial ? (
+                    <Button variant="outline" onClick={() => handleSocial('telegram')} disabled={isProcessing}>Telegram</Button>
+                  ) : <div />}
                 </div>
               </>
             )}

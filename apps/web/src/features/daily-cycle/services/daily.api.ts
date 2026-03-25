@@ -22,7 +22,13 @@ export const dailyCycleApi = api.injectEndpoints({
         method: 'POST',
         body: payload,
       }),
-      invalidatesTags: [{ type: 'DailyCycle' as const, id: 'ENTRY' }],
+      invalidatesTags: [
+        { type: 'DailyCycle' as const, id: 'ENTRY' },
+        'Journal',
+        'GamificationProfile',
+        'Streak',
+        'Progress',
+      ],
     }),
 
     getTodayEntry: builder.query<DailyCycleEntry, void>({

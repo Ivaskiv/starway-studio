@@ -7,6 +7,7 @@ import MiniAppLayout from '@/components/miniapp/MiniAppLayout'
 import { EmailCompletionCard } from '@/features/auth/components/EmailCompletionCard'
 import { useUserState } from '@/features/auth/hooks/useUserState'
 import MiniAppHomeSection from '@/features/social/components/MiniAppHomeSection'
+import MiniAppJournalSection from '@/features/social/components/MiniAppJournalSection'
 import MiniAppLibrarySection from '@/features/social/components/MiniAppLibrarySection'
 import MiniAppMentorSection from '@/features/social/components/MiniAppMentorSection'
 import MiniAppProfileSection from '@/features/social/components/MiniAppProfileSection'
@@ -41,6 +42,7 @@ export default function MiniAppPage() {
       return 'mentor'
     }
     if (location.pathname.startsWith('/miniapp/tracker')) return 'tracker'
+    if (location.pathname.startsWith('/miniapp/journal')) return 'journal'
     if (location.pathname.startsWith('/miniapp/profile')) return 'profile'
     return 'home'
   }, [location.pathname])
@@ -118,6 +120,12 @@ export default function MiniAppPage() {
 
         {!isBootstrappingAuth && !emailCompletionRequired && page === 'tracker' && (
           <MiniAppTrackerSection currentDay={view.trialDay} />
+        )}
+
+        {!isBootstrappingAuth && !emailCompletionRequired && page === 'journal' && (
+          <div className="px-4 pt-6">
+            <MiniAppJournalSection showHeader />
+          </div>
         )}
 
         {!isBootstrappingAuth && !emailCompletionRequired && page === 'library' && (

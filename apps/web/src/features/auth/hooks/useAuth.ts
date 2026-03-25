@@ -30,6 +30,7 @@ import { DEFAULT_ACCENT, normalizeUiMode } from '@/theme/accent.utils'
 import { useThemeContext } from '@/theme/ThemeProvider'
 import { useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
 
 // ── Хелпер: SafeUserDTO → User ───────────────────────────────────────────────
 // SafeUserDTO.abilities = string[] (бекенд не знає про тип Ability)
@@ -63,6 +64,11 @@ export function useAuth() {
   const [logoutMutation]   = useLogoutMutation()
 
   const hasToken = !!getToken()
+  const canUseSocialProvider = (provider: SocialPlatform) => {
+    if (provider === 'google') return true
+    if (provider === 'telegram') return Boolean(getTelegramRuntimeAuthData()) && !isTelegramMiniAppContext()
+    return false
+  }
 
   const { data: meData, isError: meError, error: meRawError } = useGetMeQuery(undefined, {
     skip: !hasToken || isAuthenticated || isLoading,
@@ -108,6 +114,10 @@ export function useAuth() {
   }
 
   const loginWithSocial = async (provider: SocialPlatform): Promise<SocialAuthResult> => {
+    if (!canUseSocialProvider(provider)) {
+      throw new Error(provider === 'telegram' ? 'Telegram social auth unavailable' : 'Social auth unavailable')
+    }
+
     let payload: SocialAuthApiInput
 
     if (provider === 'telegram') {
@@ -159,6 +169,7 @@ export function useAuth() {
     registerWithCredentials,
     loginWithSocial,
     loginWithTelegramMiniApp,
+    canUseSocialProvider,
     logout,
   }
 }
@@ -175,14 +186,17 @@ function resolveExpertId(): string | undefined {
   return resolved
 }
 
-async function getTelegramAuthData(): Promise<{ id: string; username?: string }> {
-  const tg   = (window as any)?.Telegram?.WebApp
+function getTelegramRuntimeAuthData(): Promise<{ id: string; username?: string }> | { id: string; username?: string } | null {
+  const tg = (window as any)?.Telegram?.WebApp
   const user = tg?.initDataUnsafe?.user
-  if (user) return { id: String(user.id), username: user.username }
-  const typed    = window.prompt('Вкажіть ваш Telegram username (без @)')
-  const username = typed?.trim().replace('@', '')
-  if (!username) throw new Error('Telegram username required')
-  return { id: username, username }
+  if (!user?.id) return null
+  return { id: String(user.id), username: user.username }
+}
+
+async function getTelegramAuthData(): Promise<{ id: string; username?: string }> {
+  const user = getTelegramRuntimeAuthData()
+  if (user) return user
+  throw new Error('Telegram social auth unavailable')
 }
 
 async function getGoogleAuthData(): Promise<{ id: string; email: string; name: string }> {

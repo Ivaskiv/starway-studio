@@ -1,9 +1,9 @@
 import type { Request, Response } from 'express'
 import type { AuthenticatedRequest, AuthUser } from '../../types/globalTypes.js'
 import { withRetry } from '../../db/client.js'
+import { AuthServiceError } from './auth.errors.js'
 
 import {
-  AuthServiceError,
   findRefreshToken,
   findUserById,
   getCurrentUser,
