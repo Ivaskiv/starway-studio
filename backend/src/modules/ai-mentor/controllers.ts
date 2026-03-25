@@ -6,6 +6,12 @@ import { trackEvent, trackQuestionEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 import { createWheelAssessment } from '../wheel/controller.js';
 import type { StreamChatMessage } from './types.js';
+import {
+  completeMicroTask as completeRichMicroTask,
+  listMicroTasksForUser,
+  skipMicroTask as skipRichMicroTask,
+  updateMicroTaskStep,
+} from '../microTask/service.js';
 
 const requireUser = (req: AuthenticatedRequest, res: Response): string | null => {
   if (!req.user?.id) {
@@ -174,33 +180,8 @@ export const getMicroTasks = safeHandler(async (req, res) => {
   const userId = requireUser(req, res)
   if (!userId) return
 
-  const tasks = await prisma.microTask.findMany({
-    where: {
-      userId,
-      isCompleted: false,
-      OR: [
-        { dueAt: null },
-        { dueAt: { gt: new Date() } },
-      ],
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  })
-
-  const mapped = tasks.map(t => ({
-    id: t.id,
-    userId: t.userId,
-    title: t.title,
-    description: t.description ?? undefined,
-    status: t.isCompleted ? 'COMPLETED' : 'PENDING',
-    source: 'aiMentor',
-    reason: t.sphere ?? undefined,
-    expiresAt: t.dueAt?.toISOString() ?? undefined,
-    createdAt: t.createdAt.toISOString(),
-    completedAt: t.completedAt?.toISOString() ?? undefined,
-  }))
-
-  res.json(mapped)
+  const tasks = await listMicroTasksForUser(userId, 'all')
+  res.json(tasks)
 })
 
 export const completeMicroTask = safeHandler(async (req, res) => {
@@ -208,10 +189,7 @@ export const completeMicroTask = safeHandler(async (req, res) => {
   if (!userId) return
 
   const { id } = req.params
-  await prisma.microTask.updateMany({
-    where: { id, userId },
-    data: { isCompleted: true, completedAt: new Date() },
-  })
+  await completeRichMicroTask(id, userId)
 
   res.json({ ok: true })
 })
@@ -221,10 +199,24 @@ export const skipMicroTask = safeHandler(async (req, res) => {
   if (!userId) return
 
   const { id } = req.params
-  await prisma.microTask.updateMany({
-    where: { id, userId },
-    data: { isCompleted: true, completedAt: new Date() },
-  })
+  await skipRichMicroTask(id, userId)
+
+  res.json({ ok: true })
+})
+
+export const updateMicroTaskStepController = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const { id } = req.params
+  const stepIndex = Number(req.body.stepIndex)
+  const done = Boolean(req.body.done)
+
+  const updated = await updateMicroTaskStep(id, userId, stepIndex, done)
+  if (!updated) {
+    res.status(404).json({ error: 'task_not_found' })
+    return
+  }
 
   res.json({ ok: true })
 })

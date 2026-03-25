@@ -26,6 +26,7 @@ router.get('/paid/status',         aiController.getPaidStatus);
 router.get('/micro-tasks',         aiController.getMicroTasks);
 router.patch('/micro-tasks/:id/complete', aiController.completeMicroTask);
 router.patch('/micro-tasks/:id/skip',     aiController.skipMicroTask);
+router.patch('/micro-tasks/:id/step',     aiController.updateMicroTaskStepController);
 
 router.get('/setup/progress',              aiController.getOnboardingStage);
 router.post('/setup/wheel',                aiController.setupWheel);

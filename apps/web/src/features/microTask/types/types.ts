@@ -3,7 +3,7 @@
 import { DecisionSource } from '@/features/ai-engine/decisions/types/decisions.types';
 import { WheelArea } from '@/features/wheel/types/wheel.types';
 
-export type MicroTaskStatus = 'PENDING' | 'COMPLETED' | 'skipped';
+export type MicroTaskStatus = 'PENDING' | 'COMPLETED' | 'skipped' | 'expired';
 
 export type MicroTaskSource = (typeof MICRO_TASK_SOURCES)[number];
 
@@ -22,6 +22,14 @@ export interface MicroTask {
   userId: string;
   title: string;
   description?: string;
+  why?: string;
+  steps?: string[];
+  stepsCompleted?: boolean[];
+  sphere?: string;
+  priority?: 'high' | 'medium' | 'low';
+  xpReward?: number;
+  daysToComplete?: number;
+  dueAt?: string;
 
   type?: 'actionable' | 'reflection'; // для AI або follow-up
   persist?: boolean; // якщо true → зберігаємо в БД

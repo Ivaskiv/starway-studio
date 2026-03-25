@@ -121,6 +121,7 @@ export interface MentorChatContext {
   wheelScore?: number;
   primaryGoal?: string;
   streakDays?: number;
+  activeTasks?: string[];
 }
 
 export interface MentorExtendedContext extends MentorChatContext {

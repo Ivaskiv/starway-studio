@@ -157,6 +157,7 @@ export const {
   useTelegramMiniAppAuthMutation,
   useGetMeQuery,
   useGetTelegramLinkUrlQuery,
+  useLazyGetTelegramLinkUrlQuery,
   useGetTelegramStatusQuery,
   useLogoutMutation,
   useForgotPasswordMutation,

@@ -70,7 +70,8 @@ export function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
     updatedAt: user.updatedAt,
     subscription: user.subscriptions[0] ?? null,
     userProgress: user.progress ?? null,
-    mentorConfigs: user.mentorConfig ? [{ config: user.mentorConfig.config }] : []
+    mentorConfigs: user.mentorConfig ? [{ config: user.mentorConfig.config }] : [],
+    notificationPreference: null,
   }
 }
 export interface PrismaUserWithRelations {

@@ -5,13 +5,15 @@ interface Props {
   tasks: MicroTask[]
   onComplete: (taskId: string) => void
   onSkip?: (taskId: string) => void
+  onToggleStep?: (taskId: string, stepIndex: number, done: boolean) => void
   title?: string
 }
 
-export function MicroTaskList({ tasks, onComplete, onSkip, title }: Props) {
+export function MicroTaskList({ tasks, onComplete, onSkip, onToggleStep, title }: Props) {
   const active = tasks.filter(t => (t.status ?? 'PENDING') === 'PENDING')
   const completed = tasks.filter(t => t.status === 'COMPLETED')
   const skipped = tasks.filter(t => t.status === 'skipped')
+  const expired = tasks.filter(t => t.status === 'expired')
 
   if (!tasks.length) {
     return (
@@ -42,6 +44,7 @@ export function MicroTaskList({ tasks, onComplete, onSkip, title }: Props) {
               task={task}
               onComplete={() => onComplete(task.id)}
               onSkip={onSkip ? () => onSkip(task.id) : undefined}
+              onToggleStep={onToggleStep ? (stepIndex, done) => onToggleStep(task.id, stepIndex, done) : undefined}
             />
           ))}
         </div>
@@ -69,6 +72,23 @@ export function MicroTaskList({ tasks, onComplete, onSkip, title }: Props) {
           </summary>
           <div className="mt-2 space-y-2">
             {skipped.map(task => (
+              <MicroTaskCard
+                key={task.id}
+                task={task}
+                onComplete={() => onComplete(task.id)}
+              />
+            ))}
+          </div>
+        </details>
+      )}
+
+      {expired.length > 0 && (
+        <details className="group">
+          <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+            Прострочено · {expired.length}
+          </summary>
+          <div className="mt-2 space-y-2">
+            {expired.map(task => (
               <MicroTaskCard
                 key={task.id}
                 task={task}

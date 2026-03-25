@@ -1,4 +1,4 @@
-export type JournalEventType = 'AI' | 'REFLECTION' | 'ZOOM' | 'TASK' | 'STREAK' | 'SUBSCRIPTION'
+export type JournalEventType = 'AI' | 'REFLECTION' | 'ZOOM' | 'TASK' | 'STREAK' | 'SUBSCRIPTION' | 'TG_REMINDER'
 
 export type JournalEvent = {
   id: string

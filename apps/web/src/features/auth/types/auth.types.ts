@@ -66,6 +66,8 @@ export interface UpdateUserSettingsInput {
         streakAlert?: boolean
         streakBroken?: boolean
         levelUp?: boolean
+        subscription?: boolean
+        aiReminders?: boolean
       }
     }
   }

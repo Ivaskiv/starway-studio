@@ -6,9 +6,10 @@ const POLL_INTERVAL_MS = 60_000
 
 let workerTimer: NodeJS.Timeout | null = null
 let workerRunning = false
+let workerStopping = false
 
 export async function processDueNotificationJobs(limit = 100) {
-  if (workerRunning) return
+  if (workerRunning || workerStopping) return
   workerRunning = true
 
   try {
@@ -39,14 +40,18 @@ export async function processDueNotificationJobs(limit = 100) {
 
 export function startNotificationWorker() {
   if (workerTimer) return
+  workerStopping = false
   workerTimer = setInterval(() => {
+    if (workerStopping) return
     void processDueNotificationJobs().catch((error) => {
       console.error('[NotificationWorker] process failed', error)
     })
   }, POLL_INTERVAL_MS)
+  workerTimer.unref()
 }
 
 export function stopNotificationWorker() {
+  workerStopping = true
   if (!workerTimer) return
   clearInterval(workerTimer)
   workerTimer = null

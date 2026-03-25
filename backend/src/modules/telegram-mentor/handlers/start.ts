@@ -9,6 +9,7 @@ import { getAccessControlState } from '../../access/service.js'
 import { verifyTelegramLinkCode } from '../../social/service.js'
 import { findLinkedUserId, upsertTelegramBinding } from '../services/linking.service.js'
 import { resolveOrCreateTelegramGuestUser } from '../../user/identity.service.js'
+import { getQuestion, questionState, updateSession } from '../session.js'
 import {
   aiMentorStartKeyboard,
   continueOrRestartKeyboard,
@@ -17,6 +18,7 @@ import {
   openAppKeyboard,
   openUrlKeyboard,
 } from '../keyboards.js'
+import type { SessionData } from '../types.js'
 
 type TelegramUserState = 'NEW' | 'LINKED' | 'RETURNING' | 'TRIAL' | 'SUBSCRIBED'
 export type UserState =
@@ -58,6 +60,12 @@ type StartContext = Context & {
 type StartReply = {
   text: string
   reply_markup: ReturnType<typeof openAppKeyboard>['reply_markup']
+}
+
+type ResumeTaskPayload = {
+  session?: 'morning' | 'evening'
+  step?: number
+  answers?: Record<string, string>
 }
 
 type MenuUser = {
@@ -197,6 +205,69 @@ async function sendResolvedDeepLinkReply(ctx: Context, params: {
       target: params.action === 'open_miniapp' ? 'miniapp' : 'web',
     },
   })
+}
+
+function parseResumeTaskPayload(payload: unknown): ResumeTaskPayload | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null
+  }
+
+  const raw = payload as Record<string, unknown>
+  const session = raw.session === 'morning' || raw.session === 'evening' ? raw.session : null
+  const step = typeof raw.step === 'number' && Number.isFinite(raw.step) ? Math.max(0, Math.floor(raw.step)) : 0
+  const answers =
+    raw.answers && typeof raw.answers === 'object' && !Array.isArray(raw.answers)
+      ? Object.fromEntries(
+          Object.entries(raw.answers as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+        )
+      : {}
+
+  if (!session) {
+    return null
+  }
+
+  return { session, step, answers }
+}
+
+async function sendResumedTaskQuestion(ctx: Context, params: {
+  userId: string
+  chatId: string
+  payload: ResumeTaskPayload
+}): Promise<boolean> {
+  const session = params.payload.session
+  if (!session) {
+    return false
+  }
+
+  const question = await getQuestion(session, params.payload.step ?? 0)
+  if (!question) {
+    return false
+  }
+
+  const nextData: SessionData = {
+    answers: params.payload.answers ?? {},
+    [session]: params.payload.answers ?? {},
+  }
+
+  await updateSession(
+    params.userId,
+    params.chatId,
+    questionState(session, params.payload.step ?? 0),
+    nextData,
+    params.payload.step ?? 0,
+  )
+
+  await ctx.reply(
+    `${session === 'morning' ? '🌅 Ранкова сесія' : '🌙 Вечірня рефлексія'}\n\n` +
+    `<b>${question.text}</b>` +
+    `${question.hint ? `\n\n<i>${question.hint}</i>` : ''}` +
+    '\n\nНапиши відповідь одним повідомленням.',
+    {
+      parse_mode: 'HTML',
+    },
+  )
+
+  return true
 }
 
 function getStartPayload(ctx: StartContext): string {
@@ -972,6 +1043,21 @@ export async function handleStart(ctx: StartContext) {
             telegramState: state,
           })
           return
+        }
+
+        if (resolvedDeepLink.action === 'resume_task') {
+          const resumePayload = parseResumeTaskPayload(resolvedDeepLink.payload)
+          if (resumePayload) {
+            const resumed = await sendResumedTaskQuestion(ctx, {
+              userId: linkedUserId,
+              chatId,
+              payload: resumePayload,
+            })
+
+            if (resumed) {
+              return
+            }
+          }
         }
 
         await sendStateMenu(ctx, linkedUserId)

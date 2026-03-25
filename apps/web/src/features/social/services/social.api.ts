@@ -24,6 +24,15 @@ export const socialApi = api.injectEndpoints({
       invalidatesTags: ['Social'],
     }),
 
+    disconnectSocial: builder.mutation<{ success: boolean; message: string }, { provider: SocialPlatform }>({
+      query: (body) => ({
+        url: '/social/disconnect',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Social', 'User'],
+    }),
+
     socialCallback: builder.mutation<AuthApiResponse, { code: string; state?: string }>({
       query: (body) => ({
         url: '/auth/callback',
@@ -47,6 +56,7 @@ export const socialApi = api.injectEndpoints({
 export const {
   useGetConnectionsQuery,
   useGenerateTelegramLinkMutation,
+  useDisconnectSocialMutation,
   useSocialCallbackMutation,
   useSocialLoginMutation,
 } = socialApi;

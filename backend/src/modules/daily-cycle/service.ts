@@ -9,8 +9,10 @@ import {
   ReminderType,
 } from '@starway/db/prisma-client'
 import { updateUserState } from '../ai-mentor/state.service.js'
+import { ensureUserExpertId } from '../ai-mentor/helpers.js'
 import { scheduleReminder } from '../notifications/reminder.service.js'
 import type { DailyEntryDTO, DailyStats, UpsertDailyEntryInput } from './types.js'
+import { generateMicroTasksFromEntry } from '../microTask/service.js'
 
 const todayRange = () => {
   const start = new Date()
@@ -63,7 +65,7 @@ interface DailyEntryRow {
 ════════════════════════════════════════════════════════════════════════════ */
 export class DailyService {
   static async createEntry(userId: string, dto: DailyEntryDTO): Promise<DailyEntryRow> {
-    const expertId = dto.expertId ?? userId
+    const expertId = dto.expertId ?? await ensureUserExpertId(userId)
     const today = new Date(new Date().toDateString())
 
     const entry = await prisma.dailyEntry.create({
@@ -196,54 +198,6 @@ function mergeSessionContent(
   })
 }
 
-async function generateMicroTasksFromMorning(
-  userId: string,
-  answers: Record<string, string>,
-  expertId: string,
-): Promise<void> {
-  const focusGoal = answers.focus ?? ''
-  const state = answers.state ?? ''
-  const identity = answers.identity ?? ''
-
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  tomorrow.setHours(21, 0, 0, 0)
-
-  const title = focusGoal
-    ? `Просунути ціль: ${focusGoal.slice(0, 80)}`
-    : 'Зроби один малий крок до своєї головної цілі'
-  const description = state
-    ? `Стан: ${state}. Дій із позиції ${identity || 'сили'}.`
-    : identity
-      ? `Дій із позиції ${identity}.`
-      : undefined
-
-  const existingTask = await prisma.microTask.findFirst({
-    where: {
-      userId,
-      isCompleted: false,
-      title,
-      dueAt: tomorrow,
-    },
-    select: { id: true },
-  })
-
-  if (existingTask) {
-    return
-  }
-
-  await prisma.microTask.create({
-    data: {
-      userId,
-      expertId,
-      title,
-      description,
-      sphere: 'growth',
-      dueAt: tomorrow,
-    },
-  })
-}
-
 export async function saveDailySession(
   userId: string,
   data: {
@@ -259,7 +213,7 @@ export async function saveDailySession(
     where: { id: userId },
     select: { expertId: true },
   })
-  const expertId = expert?.expertId ?? userId
+  const expertId = expert?.expertId ?? await ensureUserExpertId(userId)
 
   const existingEntry = await prisma.dailyEntry.findUnique({
     where: { userId_date: { userId, date: dateObj } },
@@ -290,12 +244,18 @@ export async function saveDailySession(
     },
   })
 
-  if (data.session === 'morning') {
-    await generateMicroTasksFromMorning(userId, data.answers, expertId)
-  }
-
   syncUserStateFromEntry(entry)
   return entry
+}
+
+export function queueMorningMicroTaskGeneration(userId: string, entryId: string) {
+  setImmediate(async () => {
+    try {
+      await generateMicroTasksFromEntry(userId, entryId)
+    } catch (error) {
+      console.error('[daily-cycle] microtask generation failed', error)
+    }
+  })
 }
 
 async function resolveEntryUserId(entryId: string): Promise<string | null> {
@@ -326,6 +286,7 @@ export async function completeMicroTask(entryId: string, taskId: string) {
       userId,
     },
     data: {
+      status: 'done',
       isCompleted: true,
       completedAt: new Date(),
     },

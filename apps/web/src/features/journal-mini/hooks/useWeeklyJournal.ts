@@ -27,10 +27,17 @@ export function useWeeklyJournal() {
   }, [today])
   const end = useMemo(() => endOfDay(today), [today])
 
-  const { data = [], isFetching, isLoading } = useGetJournalRangeQuery({
-    start: start.toISOString(),
-    end: end.toISOString(),
-  })
+  const { data = [], isFetching, isLoading } = useGetJournalRangeQuery(
+    {
+      start: start.toISOString(),
+      end: end.toISOString(),
+    },
+    {
+      pollingInterval: 15_000,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    },
+  )
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, index) => {

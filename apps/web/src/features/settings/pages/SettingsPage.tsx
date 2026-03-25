@@ -2,11 +2,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useDispatch } from 'react-redux'
+import { Link as LinkIcon, RefreshCw, Smartphone, Unlink2 } from 'lucide-react'
 
 import { AppDispatch } from '@/app/store'
 import { useAuth } from '@/features/auth/hooks/useAuth'
-import { useUpdateUserSettingsMutation } from '@/features/auth/services/auth.api'
+import { authApi, useGetTelegramStatusQuery, useLazyGetTelegramLinkUrlQuery, useUpdateUserSettingsMutation } from '@/features/auth/services/auth.api'
 import { updateUserSettings as updateUserSettingsState } from '@/features/auth/services/auth.slice'
+import { useDisconnectSocialMutation } from '@/features/social/services/social.api'
 import { cn } from '@/lib/utils'
 import { GlassCard } from '@/ui'
 
@@ -14,6 +16,18 @@ export default function SettingsPage() {
   const { user } = useAuth()
   const dispatch = useDispatch<AppDispatch>()
   const [updateUserSettings, { isLoading }] = useUpdateUserSettingsMutation()
+  const [triggerTelegramLink, telegramLinkRequest] = useLazyGetTelegramLinkUrlQuery()
+  const [disconnectSocial, { isLoading: isDisconnecting }] = useDisconnectSocialMutation()
+  const [deepLink, setDeepLink] = useState<string | null>(null)
+  const [isWaitingForTelegram, setIsWaitingForTelegram] = useState(false)
+  const hasTelegramIdentity = Boolean(user?.telegramChatId || user?.telegramUserId || user?.telegramUserName)
+  const telegramStatusQuery = useGetTelegramStatusQuery(undefined, {
+    skip: !user,
+    refetchOnFocus: true,
+    pollingInterval: isWaitingForTelegram ? 3000 : 0,
+  })
+  const telegramLinked = telegramStatusQuery.data?.linked ?? hasTelegramIdentity
+  const telegramBotActive = telegramStatusQuery.data?.botActive ?? telegramLinked
 
   const defaultNotifications = useMemo(() => (user?.settings?.notifications ?? {
     enabled: true,
@@ -26,6 +40,8 @@ export default function SettingsPage() {
       streakAlert: true,
       streakBroken: true,
       levelUp: true,
+      subscription: true,
+      aiReminders: true,
     },
   }), [user?.settings?.notifications])
   const [saved, setSaved] = useState({
@@ -39,6 +55,8 @@ export default function SettingsPage() {
       streakAlert: defaultNotifications.types?.streakAlert ?? true,
       streakBroken: defaultNotifications.types?.streakBroken ?? true,
       levelUp: defaultNotifications.types?.levelUp ?? true,
+      subscription: defaultNotifications.types?.subscription ?? true,
+      aiReminders: defaultNotifications.types?.aiReminders ?? true,
     },
   })
   const [notificationsEnabled, setNotificationsEnabled] = useState(defaultNotifications.enabled ?? true)
@@ -48,9 +66,11 @@ export default function SettingsPage() {
     dailyMorning: defaultNotifications.types?.dailyMorning ?? true,
     dailyEvening: defaultNotifications.types?.dailyEvening ?? true,
     weeklySummary: defaultNotifications.types?.weeklySummary ?? true,
-    streakAlert: defaultNotifications.types?.streakAlert ?? true,
-    streakBroken: defaultNotifications.types?.streakBroken ?? true,
-    levelUp: defaultNotifications.types?.levelUp ?? true,
+      streakAlert: defaultNotifications.types?.streakAlert ?? true,
+      streakBroken: defaultNotifications.types?.streakBroken ?? true,
+      levelUp: defaultNotifications.types?.levelUp ?? true,
+      subscription: defaultNotifications.types?.subscription ?? true,
+      aiReminders: defaultNotifications.types?.aiReminders ?? true,
   })
 
   useEffect(() => {
@@ -63,10 +83,12 @@ export default function SettingsPage() {
       dailyMorning: nextNotifications.types?.dailyMorning ?? true,
       dailyEvening: nextNotifications.types?.dailyEvening ?? true,
       weeklySummary: nextNotifications.types?.weeklySummary ?? true,
-      streakAlert: nextNotifications.types?.streakAlert ?? true,
-      streakBroken: nextNotifications.types?.streakBroken ?? true,
-      levelUp: nextNotifications.types?.levelUp ?? true,
-    })
+        streakAlert: nextNotifications.types?.streakAlert ?? true,
+        streakBroken: nextNotifications.types?.streakBroken ?? true,
+        levelUp: nextNotifications.types?.levelUp ?? true,
+        subscription: nextNotifications.types?.subscription ?? true,
+        aiReminders: nextNotifications.types?.aiReminders ?? true,
+      })
     setSaved({
       notificationsEnabled: nextNotifications.enabled ?? true,
       morningTime: nextNotifications.morningTime ?? '09:00',
@@ -75,12 +97,22 @@ export default function SettingsPage() {
         dailyMorning: nextNotifications.types?.dailyMorning ?? true,
         dailyEvening: nextNotifications.types?.dailyEvening ?? true,
         weeklySummary: nextNotifications.types?.weeklySummary ?? true,
-        streakAlert: nextNotifications.types?.streakAlert ?? true,
-        streakBroken: nextNotifications.types?.streakBroken ?? true,
-        levelUp: nextNotifications.types?.levelUp ?? true,
+          streakAlert: nextNotifications.types?.streakAlert ?? true,
+          streakBroken: nextNotifications.types?.streakBroken ?? true,
+          levelUp: nextNotifications.types?.levelUp ?? true,
+          subscription: nextNotifications.types?.subscription ?? true,
+          aiReminders: nextNotifications.types?.aiReminders ?? true,
       },
     })
   }, [user, defaultNotifications])
+
+  useEffect(() => {
+    if (!isWaitingForTelegram || !telegramLinked) return
+
+    setIsWaitingForTelegram(false)
+    void dispatch(authApi.endpoints.getMe.initiate(undefined, { forceRefetch: true, subscribe: false }))
+    toast.success('Telegram підключено')
+  }, [dispatch, isWaitingForTelegram, telegramLinked])
 
   const hasChanges = useMemo(
     () =>
@@ -132,6 +164,47 @@ export default function SettingsPage() {
     setNotificationTypes(saved.notificationTypes)
   }
 
+  const handleConnectTelegram = useCallback(async () => {
+    try {
+      const result = await triggerTelegramLink().unwrap()
+      setDeepLink(result.url)
+      setIsWaitingForTelegram(true)
+
+      if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        window.open(result.url, '_blank', 'noopener,noreferrer')
+      }
+    } catch (error) {
+      console.error('telegram link generation failed', error)
+      toast.error('Не вдалося згенерувати Telegram-посилання')
+    }
+  }, [triggerTelegramLink])
+
+  const handleCopyTelegramLink = useCallback(async () => {
+    if (!deepLink) return
+
+    try {
+      await navigator.clipboard.writeText(deepLink)
+      toast.success('Посилання скопійовано')
+    } catch (error) {
+      console.error('copy telegram link failed', error)
+      toast.error('Не вдалося скопіювати посилання')
+    }
+  }, [deepLink])
+
+  const handleDisconnectTelegram = useCallback(async () => {
+    try {
+      await disconnectSocial({ provider: 'telegram' }).unwrap()
+      setDeepLink(null)
+      setIsWaitingForTelegram(false)
+      await telegramStatusQuery.refetch()
+      void dispatch(authApi.endpoints.getMe.initiate(undefined, { forceRefetch: true, subscribe: false }))
+      toast.success('Telegram відключено')
+    } catch (error) {
+      console.error('telegram disconnect failed', error)
+      toast.error('Не вдалося відключити Telegram')
+    }
+  }, [disconnectSocial, dispatch, telegramStatusQuery])
+
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -180,18 +253,132 @@ export default function SettingsPage() {
         <GlassCard className="ios-panel">
           <div className="max-w-2xl">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
-              Telegram Notifications
+              Telegram
             </p>
             <h2 className="text-2xl font-black tracking-tight text-[var(--text-primary)]">
-              Нагадування і сигнали
+              Підключення і нагадування
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
-              Один блок для Telegram-нагадувань: ранковий старт, вечірній підсумок, тижневий звіт, streak alerts і level up.
+              Спочатку привʼяжіть Telegram до акаунту через magic link у боті. Після цього тут же працюють ранкові й вечірні нагадування, тижневі звіти, streak alerts і level up.
             </p>
           </div>
         </GlassCard>
 
         <GlassCard className="ios-panel space-y-5">
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--accent)]">
+                  Magic Link через бота
+                </p>
+                <h3 className="text-xl font-bold text-[var(--text-primary)]">
+                  {telegramLinked ? 'Telegram підключено' : 'Підключити Telegram'}
+                </h3>
+                <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                  {telegramLinked
+                    ? telegramBotActive
+                      ? 'Бот активний. Нагадування і сповіщення будуть приходити прямо в Telegram.'
+                      : 'Акаунт прив’язаний, але бот зараз неактивний. Можна швидко підключити знову.'
+                    : 'Натисніть кнопку, відкрийте бота і підтвердіть прив’язку. Сайт сам побачить підключення без перезавантаження.'}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {telegramLinked ? (
+                  <>
+                    {deepLink && !telegramBotActive && (
+                      <a href={deepLink} target="_blank" rel="noreferrer" className="inline-flex">
+                        <button className="ios-button-secondary">
+                          Підключити знову
+                        </button>
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleDisconnectTelegram}
+                      disabled={isDisconnecting}
+                      className={cn(
+                        'ios-button-secondary inline-flex items-center gap-2',
+                        isDisconnecting && 'cursor-not-allowed opacity-60',
+                      )}
+                    >
+                      <Unlink2 className="h-4 w-4" />
+                      {isDisconnecting ? 'Відключення...' : 'Відключити'}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleConnectTelegram}
+                    disabled={telegramLinkRequest.isFetching}
+                    className={cn(
+                      'ios-button inline-flex items-center gap-2',
+                      telegramLinkRequest.isFetching && 'cursor-not-allowed opacity-60',
+                    )}
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                    {telegramLinkRequest.isFetching ? 'Генеруємо посилання...' : 'Підключити Telegram'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">Статус</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                  {telegramLinked ? 'Підключено' : 'Не підключено'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">Бот</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                  {telegramBotActive ? 'Активний' : telegramLinked ? 'Потрібно перепідключити' : 'Очікує підключення'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">Синхронізація</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                  {isWaitingForTelegram ? 'Очікуємо підтвердження…' : 'Автоматична'}
+                </p>
+              </div>
+            </div>
+
+            {deepLink && (
+              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
+                      Telegram посилання
+                    </p>
+                    <p className="mt-2 truncate text-sm text-[var(--text-secondary)]">
+                      {deepLink}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <a href={deepLink} target="_blank" rel="noreferrer" className="inline-flex">
+                      <button className="ios-button-secondary inline-flex items-center gap-2">
+                        <Smartphone className="h-4 w-4" />
+                        Відкрити Telegram
+                      </button>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={handleCopyTelegramLink}
+                      className="ios-button-secondary inline-flex items-center gap-2"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Скопіювати
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-[var(--text-muted)]">
+                  Посилання діє 15 хвилин. Після підтвердження на сайті статус оновиться автоматично.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-4">
             <div>
               <p className="text-sm font-semibold text-[var(--text-primary)]">Увімкнути TG нагадування</p>
@@ -241,6 +428,8 @@ export default function SettingsPage() {
               { key: 'streakAlert', label: 'Попередження про streak' },
               { key: 'streakBroken', label: 'Відновлення після зриву' },
               { key: 'levelUp', label: 'Новий рівень' },
+              { key: 'subscription', label: 'Підписка і білінг' },
+              { key: 'aiReminders', label: 'AI сесії та мікрозадачі' },
             ].map((item) => (
               <label
                 key={item.key}

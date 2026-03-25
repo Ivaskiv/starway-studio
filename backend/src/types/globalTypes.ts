@@ -2,6 +2,7 @@ import type { Request } from 'express'
 import type {
   FunnelStage,
   MentorConfig,
+  NotificationPreference,
   Subscription,
   UserProgress,
 } from '@starway/db/prisma-client'; 
@@ -31,6 +32,7 @@ export interface UserWithSub extends User {
   subscription: Subscription | null
   userProgress: Pick<UserProgress, 'level' | 'totalPoints' | 'completedBlocks'> | null
   mentorConfigs: Array<Pick<MentorConfig, 'config'>>
+  notificationPreference: NotificationPreference | null
 }
 
 export interface SafeUser {
@@ -39,6 +41,9 @@ export interface SafeUser {
   name: string | null
   firstName: string | null
   lastName: string | null
+  telegramUserId: string | null
+  telegramUserName: string | null
+  telegramChatId: string | null
   role: UserRole // ✅ гарантовано сумісний з фронтендом
   isAdmin: boolean
   isSuperAdmin: boolean

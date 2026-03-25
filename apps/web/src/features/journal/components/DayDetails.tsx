@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Bot, CalendarCheck2, Flame, ListTodo, MoonStar, Sparkles, SunMedium, Video } from 'lucide-react'
+import { BellRing, Bot, CalendarCheck2, Flame, ListTodo, MoonStar, Sparkles, SunMedium, Video } from 'lucide-react'
 import type { JournalEvent } from '../types'
 
 interface DayDetailsProps {
@@ -92,7 +92,7 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
   })
 
   const xpToday = events.reduce((sum, event) => sum + getMetaNumber(event, 'xp'), 0)
-  const practicesCount = events.filter((event) => event.type === 'TASK').length
+  const practicesCount = events.filter((event) => event.type === 'TASK' || event.type === 'REFLECTION').length
   const streakEvent = [...events].reverse().find((event) => event.type === 'STREAK')
   const streakValue = streakEvent ? getMetaNumber(streakEvent, 'current') : 0
 
@@ -104,6 +104,8 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
   const eveningReflection = events.filter(
     (event) => event.type === 'REFLECTION' && getMetaString(event, 'period') === 'evening',
   )
+  const subscriptionEvents = events.filter((event) => event.type === 'SUBSCRIPTION')
+  const reminderEvents = events.filter((event) => event.type === 'TG_REMINDER')
 
   return (
     <div className="dashboard-liquid-card h-full p-5 transition-all duration-300 ease-out xl:max-h-[calc(100vh-9rem)] xl:overflow-hidden">
@@ -151,16 +153,27 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
           <SectionCard title="Вечірній підсумок" icon={<MoonStar className="h-4 w-4" />} events={eveningReflection} />
         </div>
 
-        {events.some((event) => event.type === 'SUBSCRIPTION') ? (
+        {subscriptionEvents.length > 0 || reminderEvents.length > 0 ? (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
             <div className="mb-2 flex items-center gap-2">
               <CalendarCheck2 className="h-4 w-4 text-[rgb(var(--accent-soft-rgb))]" />
               <h4 className="text-sm font-semibold text-[var(--text-primary)]">Системні події</h4>
             </div>
             <div className="space-y-2">
-              {events.filter((event) => event.type === 'SUBSCRIPTION').map((event) => (
+              {subscriptionEvents.map((event) => (
                 <div key={event.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-[var(--text-primary)]">
                   {event.title}
+                </div>
+              ))}
+              {reminderEvents.map((event) => (
+                <div key={event.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                    <BellRing className="h-4 w-4 text-cyan-300" />
+                    {event.title}
+                  </div>
+                  {typeof event.meta?.preview === 'string' ? (
+                    <p className="mt-2 text-xs leading-6 text-[var(--text-muted)]">{event.meta.preview}</p>
+                  ) : null}
                 </div>
               ))}
             </div>

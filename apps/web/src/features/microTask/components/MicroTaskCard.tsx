@@ -18,6 +18,11 @@ const STATUS_CONFIG: Record<
     className: 'bg-[var(--color-success-bg)] text-[var(--color-success)]',
     dotClass: 'bg-[var(--color-success)]',
   },
+  expired: {
+    label: 'Прострочено',
+    className: 'bg-[rgba(255,173,74,0.14)] text-[rgb(255,173,74)]',
+    dotClass: 'bg-[rgb(255,173,74)]',
+  },
   skipped: {
     label: 'Пропущено',
     className: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
@@ -40,15 +45,17 @@ interface Props {
   task: MicroTask
   onComplete: () => void
   onSkip?: () => void
+  onToggleStep?: (stepIndex: number, done: boolean) => void
 }
 
-export function MicroTaskCard({ task, onComplete, onSkip }: Props) {
+export function MicroTaskCard({ task, onComplete, onSkip, onToggleStep }: Props) {
   const status = task.status ?? 'PENDING'
   const cfg = STATUS_CONFIG[status]
   const icon = REASON_ICON[task.reason ?? task.source ?? ''] ?? '🎯'
   const isActive = status === 'PENDING'
+  const hasSteps = Array.isArray(task.steps) && task.steps.length > 0
 
-  const expiresAt = task.expiresAt ? new Date(task.expiresAt) : null
+  const expiresAt = task.dueAt ? new Date(task.dueAt) : task.expiresAt ? new Date(task.expiresAt) : null
   const now = new Date()
   const daysLeft = expiresAt
     ? Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
@@ -101,6 +108,40 @@ export function MicroTaskCard({ task, onComplete, onSkip }: Props) {
               <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
                 {task.description}
               </p>
+            )}
+
+            {task.why && isActive && (
+              <div className="mt-2 border-l-2 border-[rgba(var(--accent-rgb),0.2)] pl-3 text-xs leading-relaxed text-[var(--text-secondary)]">
+                {task.why}
+              </div>
+            )}
+
+            {hasSteps && (
+              <div className="mt-3 space-y-2">
+                {task.steps!.map((step, index) => {
+                  const done = Boolean(task.stepsCompleted?.[index])
+                  return (
+                    <button
+                      key={`${task.id}-step-${index}`}
+                      type="button"
+                      disabled={!isActive || !onToggleStep}
+                      onClick={() => onToggleStep?.(index, !done)}
+                      className={[
+                        'flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left text-xs transition-colors',
+                        done
+                          ? 'border-[rgba(87,214,104,0.22)] bg-[rgba(87,214,104,0.08)] text-[var(--text-muted)]'
+                          : 'border-[var(--border)] bg-[var(--bg-primary,var(--bg-secondary))] text-[var(--text-primary)]',
+                        isActive && onToggleStep ? 'hover:bg-[var(--glass-bg-hover)]' : 'cursor-default',
+                      ].join(' ')}
+                    >
+                      <span className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border border-[var(--border)] text-[10px]">
+                        {done ? '✓' : index + 1}
+                      </span>
+                      <span className={done ? 'line-through' : ''}>{step}</span>
+                    </button>
+                  )
+                })}
+              </div>
             )}
 
             <div className="mt-2 flex items-center gap-3">

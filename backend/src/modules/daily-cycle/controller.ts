@@ -6,11 +6,13 @@ import {
   getOrCreateTodayEntry,
   upsertDailyEntry,
   saveDailySession,
+  queueMorningMicroTaskGeneration,
   getMicroTasks,
   completeMicroTask,
   getDailyEntryHistory,
 } from './service.js';
 import { rewardEngine } from '../gamification/reward.engine.js';
+import { ensureUserExpertId } from '../ai-mentor/helpers.js';
 
 function isDailySessionPayload(
   payload: DailyEntryInput | { session?: 'morning' | 'evening'; answers?: unknown; date?: unknown },
@@ -38,9 +40,7 @@ export async function getToday(req: AuthenticatedRequest, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // ⚠️ service очікує userId + expertId
-    // якщо в тебе немає окремого expertId — тимчасово передаємо user.id
-    const expertId = user.expertId ?? user.id;
+    const expertId = user.expertId ?? await ensureUserExpertId(user.id);
     const entry = await getOrCreateTodayEntry(user.id, expertId);
 
     res.json(entry);
@@ -75,6 +75,9 @@ export async function upsertEntry(req: AuthenticatedRequest, res: Response) {
         date: payload.date,
       })
       await rewardEngine.onDailyEntryCreated(user.id);
+      if (payload.session === 'morning') {
+        queueMorningMicroTaskGeneration(user.id, entry.id)
+      }
       res.json(entry);
       return;
     }
@@ -85,7 +88,7 @@ export async function upsertEntry(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ error: 'Entry ID missing' });
     }
 
-    const expertId = user.expertId ?? user.id;
+    const expertId = user.expertId ?? await ensureUserExpertId(user.id);
 
     const entryInput: UpsertDailyEntryInput = {
       ...entryPayload,

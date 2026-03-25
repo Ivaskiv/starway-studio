@@ -196,6 +196,80 @@ function templateKeyForEvent(event: NotificationEvent, payload?: EventPayload) {
 }
 
 export class NotificationService {
+  private async sendDirectTelegramNotification(input: {
+    userId: string
+    type: NotificationType
+    title: string
+    body: string
+    templateKey: string
+    ctaText?: string
+    ctaUrl?: string
+    data?: EventPayload
+    duplicateWindowStart?: Date
+    isEnabled: (preferences: Awaited<ReturnType<typeof notificationPreferenceRepository.ensureForUser>>) => boolean
+  }): Promise<boolean> {
+    const user = await loadDeliveryUser(input.userId)
+    if (!user) return false
+
+    const preferences = await notificationPreferenceRepository.ensureForUser(input.userId)
+    if (!preferences.telegramEnabled || !input.isEnabled(preferences)) {
+      return false
+    }
+
+    const dayStart = startOfDay()
+    const dayEnd = endOfDay()
+    const duplicateWindowStart = input.duplicateWindowStart ?? dayStart
+
+    const duplicate = await prisma.notification.findFirst({
+      where: {
+        userId: input.userId,
+        channel: NotificationChannel.TELEGRAM,
+        templateKey: input.templateKey,
+        createdAt: { gte: duplicateWindowStart, lt: dayEnd },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (duplicate) return false
+
+    if (!isCriticalTemplateKey(input.templateKey)) {
+      const todayCount = await prisma.notification.count({
+        where: {
+          userId: input.userId,
+          channel: NotificationChannel.TELEGRAM,
+          createdAt: { gte: dayStart, lt: dayEnd },
+        },
+      })
+
+      if (todayCount >= DAILY_LIMIT) {
+        return false
+      }
+    }
+
+    const message: DeliveryMessage = {
+      title: input.title,
+      body: input.body,
+      ctaText: input.ctaText,
+      ctaUrl: input.ctaUrl,
+    }
+
+    const sent = await notificationDeliveryLayer.sendTelegram(user, message)
+
+    await this.createNotification({
+      userId: input.userId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      data: input.data,
+      templateKey: input.templateKey,
+      channel: NotificationChannel.TELEGRAM,
+      status: sent ? NotificationStatus.SENT : NotificationStatus.FAILED,
+      sentAt: sent ? new Date() : null,
+    })
+
+    return sent
+  }
+
   async emit(event: NotificationEvent, userId: string, payload?: EventPayload): Promise<NotificationJob> {
     return this.enqueueJob(event, userId, new Date(), payload)
   }
@@ -340,7 +414,7 @@ export class NotificationService {
 
     await Promise.all(users.map(async (user) => {
       const preferences = await notificationPreferenceRepository.ensureForUser(user.id)
-      if (!preferences.telegramEnabled || !preferences.aiRemindersEnabled) return
+      if (!preferences.telegramEnabled || !preferences.dailyMorningEnabled) return
       await this.schedule(NotificationEvent.DAILY_MORNING_DUE, user.id, minutesToDate(preferences.dailyMorningTime))
     }))
   }
@@ -350,7 +424,7 @@ export class NotificationService {
 
     await Promise.all(users.map(async (user) => {
       const preferences = await notificationPreferenceRepository.ensureForUser(user.id)
-      if (!preferences.telegramEnabled || !preferences.aiRemindersEnabled) return
+      if (!preferences.telegramEnabled || !preferences.dailyEveningEnabled) return
       await this.schedule(NotificationEvent.DAILY_EVENING_DUE, user.id, minutesToDate(preferences.dailyEveningTime))
     }))
   }
@@ -392,7 +466,7 @@ export class NotificationService {
 
     for (const user of users) {
       const preferences = await notificationPreferenceRepository.ensureForUser(user.id)
-      if (!preferences.telegramEnabled || !preferences.streakAlertsEnabled) continue
+      if (!preferences.telegramEnabled || !preferences.streakRiskEnabled) continue
 
       const [streak, todayActivity] = await Promise.all([
         prisma.streak.findFirst({
@@ -440,6 +514,70 @@ export class NotificationService {
     return this.emit(NotificationEvent.STREAK_BROKEN, userId)
   }
 
+  async sendNewMicroTasks(userId: string, firstName: string, titles: string[]): Promise<void> {
+    await this.sendDirectTelegramNotification({
+      userId,
+      type: NotificationType.AI_REMINDER,
+      title: '✦ AI склав твої завдання на сьогодні',
+      body: [
+        `${firstName}, готово ${titles.length} мікрозавдання.`,
+        '',
+        ...titles.slice(0, 3).map(title => `• ${title}`),
+        '',
+        'Почни з першого — він найважливіший.',
+      ].join('\n'),
+      templateKey: `microtasks_${startOfDay().toISOString().slice(0, 10)}`,
+      ctaText: '🗂 Відкрити завдання',
+      ctaUrl: buildMiniAppStartUrl('home'),
+      data: { titles },
+      isEnabled: preferences => preferences.aiRemindersEnabled,
+    })
+  }
+
+  async sendTaskCompleted(userId: string, taskTitle: string, xpReward: number): Promise<void> {
+    await this.sendDirectTelegramNotification({
+      userId,
+      type: NotificationType.AI_REMINDER,
+      title: '✅ Завдання виконано',
+      body: `Ти закрив(ла) "${taskTitle}". +${xpReward} XP уже нараховано.`,
+      templateKey: `task_completed_${taskTitle.slice(0, 48)}`,
+      ctaText: '📊 Мій прогрес',
+      ctaUrl: buildMiniAppStartUrl('tracker'),
+      data: { taskTitle, xpReward },
+      isEnabled: preferences => preferences.aiRemindersEnabled,
+    })
+  }
+
+  async sendMicroTaskReminder(userId: string, taskTitle: string, dueSoon = false): Promise<void> {
+    await this.sendDirectTelegramNotification({
+      userId,
+      type: NotificationType.AI_REMINDER,
+      title: dueSoon ? '⏰ Дедлайн уже близько' : '📌 Повернись до задачі',
+      body: dueSoon
+        ? `Задача "${taskTitle}" добігає дедлайну. Краще закрити її зараз коротким ривком.`
+        : `Задача "${taskTitle}" ще не почата. Один крок зараз збереже темп дня.`,
+      templateKey: `${dueSoon ? 'microtask_due' : 'microtask_nudge'}_${taskTitle.slice(0, 40)}_${startOfDay().toISOString().slice(0, 10)}`,
+      ctaText: '🗂 Відкрити завдання',
+      ctaUrl: buildMiniAppStartUrl('home'),
+      data: { taskTitle, dueSoon },
+      isEnabled: preferences => preferences.aiRemindersEnabled,
+    })
+  }
+
+  async sendExpiredTaskNotice(userId: string, taskTitle: string): Promise<void> {
+    await this.sendDirectTelegramNotification({
+      userId,
+      type: NotificationType.AI_REMINDER,
+      title: '📦 Дедлайн задачі минув',
+      body: `Задача "${taskTitle}" перейшла в прострочені. На вечірній рефлексії можна буде або закрити її, або перепланувати.`,
+      templateKey: `microtask_expired_${taskTitle.slice(0, 40)}_${startOfDay().toISOString().slice(0, 10)}`,
+      ctaText: '🌙 Вечірня рефлексія',
+      ctaUrl: buildMiniAppStartUrl('ai_evening'),
+      data: { taskTitle },
+      isEnabled: preferences => preferences.aiRemindersEnabled,
+    })
+  }
+
   async scheduleStreakBroken(userId: string): Promise<NotificationJob> {
     return this.schedule(NotificationEvent.STREAK_BROKEN, userId, nextMorningNine())
   }
@@ -450,15 +588,24 @@ export class NotificationService {
   ) {
     switch (event) {
       case NotificationEvent.DAILY_MORNING_DUE:
+        return preferences.dailyMorningEnabled
       case NotificationEvent.DAILY_EVENING_DUE:
+        return preferences.dailyEveningEnabled
+      case NotificationEvent.LEVEL_UP:
+      case NotificationEvent.NEAR_LEVEL_UP:
+        return preferences.levelUpEnabled
       case NotificationEvent.AI_INACTIVE:
         return preferences.aiRemindersEnabled
       case NotificationEvent.STREAK_RISK:
+        return preferences.streakRiskEnabled
       case NotificationEvent.STREAK_MILESTONE:
-      case NotificationEvent.STREAK_BROKEN:
         return preferences.streakAlertsEnabled
+      case NotificationEvent.STREAK_BROKEN:
+        return preferences.streakBrokenEnabled
       case NotificationEvent.WEEKLY_SUMMARY:
         return preferences.weeklySummaryEnabled
+      case NotificationEvent.SUBSCRIPTION_EXPIRING:
+        return preferences.subscriptionEnabled
       default:
         return true
     }
@@ -565,12 +712,17 @@ export class NotificationService {
           ctaUrl: buildMiniAppStartUrl('ai'),
         }
       case NotificationEvent.SUBSCRIPTION_EXPIRING:
+      {
+        const daysLeft = Number(payload?.daysLeft ?? 0)
         return {
           title: '💎 Підписка',
-          body: 'Перевір підписку зараз, щоб не втратити прогрес, історію і AI-сесії.',
+          body: daysLeft > 0
+            ? `До завершення підписки залишилось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дні' : 'днів'}. Перевір доступ зараз, щоб не втратити прогрес, історію і AI-сесії.`
+            : 'Перевір підписку зараз, щоб не втратити прогрес, історію і AI-сесії.',
           ctaText: '💎 Відкрити підписку',
           ctaUrl: buildMiniAppStartUrl('subscription'),
         }
+      }
     }
   }
 }

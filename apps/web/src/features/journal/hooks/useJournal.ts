@@ -19,7 +19,14 @@ function filterEvents(events: JournalEvent[], filter: JournalFilter) {
 }
 
 export function useJournal(month: number, year: number) {
-  const { data = [], isFetching, isLoading } = useGetJournalEventsQuery({ month, year })
+  const { data = [], isFetching, isLoading } = useGetJournalEventsQuery(
+    { month, year },
+    {
+      pollingInterval: 15_000,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    },
+  )
   const [selectedDay, setSelectedDay] = useState<string>(() => toDateKey(new Date(year, month - 1, 1)))
   const [filter, setFilter] = useState<JournalFilter>('all')
 

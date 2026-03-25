@@ -3,11 +3,7 @@ import { ROUTES } from '@/config/routes'
 import { useAttachEmailMutation } from '@/features/auth/services/auth.api'
 import { selectUserRole } from '@/features/auth/services/auth.slice'
 import { MicroTaskList } from '@/features/microTask/components/MicroTaskList'
-import {
-  useCompleteMicroTaskMutation,
-  useGetMicroTasksQuery,
-  useSkipMicroTaskMutation,
-} from '@/features/microTask/services/microTask.api'
+import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
 import { useGetTrialStatusQuery, useStartTrialMutation } from '@/features/trial/services/trial.api'
 
 import { useMentorAccess } from '../hooks/useMentorAccess'
@@ -18,16 +14,17 @@ import MentorWorkspace from '../components/mentorWorkspace/MentorWorkspace'
 import AIMentorChat from '../components/AIMentorChat'
 import GamificationWidget from '@/features/gamification/components/GamificationWidget'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 function DailyStatusBar() {
   const navigate = useNavigate()
   const { data: trial } = useGetTrialStatusQuery()
-  const { data: microTasks = [] } = useGetMicroTasksQuery(undefined, {
-    skip: !(trial?.isActive ?? false),
-  })
-  const [completeMicroTask] = useCompleteMicroTaskMutation()
-  const [skipMicroTask] = useSkipMicroTaskMutation()
+  const {
+    tasks: microTasks,
+    completeTask,
+    skipTask,
+    updateStep,
+  } = useMicroTasks()
 
   const now = new Date()
   const hour = now.getHours()
@@ -123,10 +120,13 @@ function DailyStatusBar() {
           <MicroTaskList
             tasks={microTasks}
             onComplete={id => {
-              void completeMicroTask(id)
+              void completeTask(id)
             }}
             onSkip={id => {
-              void skipMicroTask(id)
+              void skipTask(id)
+            }}
+            onToggleStep={(taskId, stepIndex, done) => {
+              void updateStep(taskId, stepIndex, done)
             }}
           />
         </div>
@@ -137,6 +137,7 @@ function DailyStatusBar() {
 
 export default function AIMentorPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const access = useMentorAccess()
   const userRole = useAppSelector(selectUserRole)
   const isSuperAdmin = (userRole ?? '').toUpperCase() === 'SUPERADMIN'
@@ -147,8 +148,13 @@ export default function AIMentorPage() {
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false)
   const showAsUser = !isSuperAdmin || previewAsUser
   const { data: trial } = useGetTrialStatusQuery()
+  const { tasks: microTasks, isFetching: isFetchingMicroTasks } = useMicroTasks()
   const [startTrial] = useStartTrialMutation()
   const [attachEmail] = useAttachEmailMutation()
+  const searchParams = new URLSearchParams(location.search)
+  const awaitingFreshTasks = searchParams.get('awaitTasks') === '1'
+  const source = searchParams.get('source') ?? ''
+  const pendingTaskCount = microTasks.filter(task => (task.status ?? 'PENDING') === 'PENDING').length
 
   const handleStartTrial = async () => {
     try {
@@ -228,6 +234,24 @@ export default function AIMentorPage() {
       </div>
 
       <GamificationWidget />
+
+      {awaitingFreshTasks && (
+        <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.08)] p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
+            Повернення після рефлексії
+          </p>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            {pendingTaskCount > 0
+              ? `AI уже підготував ${pendingTaskCount} активних мікрозавдання.`
+              : isFetchingMicroTasks
+                ? 'Оновлюємо мікрозавдання після ранкової сесії...'
+                : 'AI ще допрацьовує мікрозавдання. Зазвичай вони з’являються за 5–15 секунд.'}
+          </p>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Джерело: {source || 'невідомо'}
+          </p>
+        </div>
+      )}
 
       {showAsUser && (
         <>

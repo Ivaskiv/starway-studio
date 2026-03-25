@@ -51,6 +51,8 @@ const authSlice = createSlice({
             streakAlert?: boolean
             streakBroken?: boolean
             levelUp?: boolean
+            subscription?: boolean
+            aiReminders?: boolean
           }
         }
       }>,

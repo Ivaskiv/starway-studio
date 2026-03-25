@@ -5,6 +5,7 @@ export type JournalEventType =
   | 'TASK'
   | 'STREAK'
   | 'SUBSCRIPTION'
+  | 'TG_REMINDER'
 
 export interface JournalEvent {
   id: string

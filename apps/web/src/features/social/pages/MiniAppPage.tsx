@@ -65,7 +65,7 @@ export default function MiniAppPage() {
   const { isBootstrappingAuth, telegramUser } = useMiniAppTelegram({
     page,
     onOpenMentor: () => navigate('/miniapp/mentor'),
-    onOpenStarway: () => navigate('/dashboard'),
+    onOpenStarway: () => navigate('/miniapp'),
   })
   const view = useMiniAppViewModel({
     latestWheel,

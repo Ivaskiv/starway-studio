@@ -246,7 +246,7 @@ async function shutdown(signal: string) {
     console.log('🔌 Database disconnected\n✅ Shutdown complete')
 
     clearTimeout(forceKill)
-    process.exitCode = 0
+    setImmediate(() => process.exit(0))
     return
   } catch (error) {
     console.error('⚠️ Shutdown error:', error)

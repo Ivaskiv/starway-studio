@@ -16,8 +16,39 @@ interface ResolveDeepLinkResponse {
   webUrl: string
 }
 
+interface GenerateDeepLinkResponse {
+  ok: boolean
+  deepLink: {
+    userId: string
+    token: string
+    action: 'bind_telegram' | 'continue_flow' | 'open_web' | 'open_miniapp' | 'resume_task' | 'open_mentor'
+    source: 'telegram' | 'web' | 'miniapp'
+    target: 'telegram' | 'web' | 'miniapp'
+    path: string | null
+    payload: Record<string, unknown> | null
+  }
+  telegramUrl: string
+  webUrl: string
+}
+
 export const deeplinksApi = api.injectEndpoints({
   endpoints: builder => ({
+    generateDeepLink: builder.mutation<
+      GenerateDeepLinkResponse,
+      {
+        action: 'bind_telegram' | 'continue_flow' | 'open_web' | 'open_miniapp' | 'resume_task' | 'open_mentor'
+        source: 'telegram' | 'web' | 'miniapp'
+        target: 'telegram' | 'web' | 'miniapp'
+        path?: string | null
+        payload?: Record<string, unknown>
+      }
+    >({
+      query: body => ({
+        url: '/deeplinks/generate',
+        method: 'POST',
+        body,
+      }),
+    }),
     resolveDeepLink: builder.mutation<ResolveDeepLinkResponse, { token: string; consume?: boolean }>({
       query: body => ({
         url: '/deeplinks/resolve',
@@ -29,5 +60,6 @@ export const deeplinksApi = api.injectEndpoints({
 })
 
 export const {
+  useGenerateDeepLinkMutation,
   useResolveDeepLinkMutation,
 } = deeplinksApi

@@ -82,7 +82,51 @@ type PrismaUserBase = Prisma.UserGetPayload<{
   select: typeof USER_BASE_SELECT
 }>
 
-type UserDecorations = Pick<UserWithSub, 'subscription' | 'userProgress' | 'mentorConfigs'>
+type UserDecorations = Pick<UserWithSub, 'subscription' | 'userProgress' | 'mentorConfigs' | 'notificationPreference'>
+
+type NotificationTypesPayload = {
+  dailyMorning?: boolean
+  dailyEvening?: boolean
+  weeklySummary?: boolean
+  streakAlert?: boolean
+  streakBroken?: boolean
+  levelUp?: boolean
+  subscription?: boolean
+  aiReminders?: boolean
+}
+
+function parseTimeStringToMinutes(value: string | null | undefined, fallback: number): number {
+  if (!value) return fallback
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim())
+  if (!match) return fallback
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return fallback
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return fallback
+  return hours * 60 + minutes
+}
+
+function formatMinutesToTimeString(value: number | null | undefined, fallback: string): string {
+  if (!Number.isInteger(value)) return fallback
+  const safeValue = value as number
+  const normalized = Math.min(Math.max(safeValue, 0), 23 * 60 + 59)
+  const hours = Math.floor(normalized / 60)
+  const minutes = normalized % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function normalizeNotificationTypes(input: NotificationTypesPayload | undefined) {
+  return {
+    dailyMorning: input?.dailyMorning ?? true,
+    dailyEvening: input?.dailyEvening ?? true,
+    weeklySummary: input?.weeklySummary ?? true,
+    streakAlert: input?.streakAlert ?? true,
+    streakBroken: input?.streakBroken ?? true,
+    levelUp: input?.levelUp ?? true,
+    subscription: input?.subscription ?? true,
+    aiReminders: input?.aiReminders ?? true,
+  }
+}
 
 export interface AuthTokensPayload {
   user: SafeUser
@@ -203,10 +247,11 @@ async function loadUserDecorations(userId: string): Promise<UserDecorations> {
     subscription: null,
     userProgress: null,
     mentorConfigs: [],
+    notificationPreference: null,
   }
 
   try {
-    const [subscription, progress, mentorConfig] = await Promise.all([
+    const [subscription, progress, mentorConfig, notificationPreference] = await Promise.all([
       prisma.subscription.findFirst({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -215,6 +260,9 @@ async function loadUserDecorations(userId: string): Promise<UserDecorations> {
         where: { userId },
       }),
       prisma.mentorConfig.findUnique({
+        where: { userId },
+      }),
+      prisma.notificationPreference.findUnique({
         where: { userId },
       }),
     ])
@@ -229,6 +277,7 @@ async function loadUserDecorations(userId: string): Promise<UserDecorations> {
           }
         : null,
       mentorConfigs: mentorConfig ? [mentorConfig] : [],
+      notificationPreference,
     }
   } catch (error) {
     if (isMissingStructureError(error)) {
@@ -262,6 +311,7 @@ function toUserWithSub(baseUser: PrismaUserBase, decorations: UserDecorations): 
     subscription: decorations.subscription,
     userProgress: decorations.userProgress,
     mentorConfigs: decorations.mentorConfigs,
+    notificationPreference: decorations.notificationPreference,
   }
 }
 
@@ -336,15 +386,17 @@ export type UpdateUserSettingsPayload = {
       enabled?: boolean
       morningTime?: string | null
       eveningTime?: string | null
-      types?: {
-        dailyMorning?: boolean
-        dailyEvening?: boolean
-        weeklySummary?: boolean
-        streakAlert?: boolean
-        streakBroken?: boolean
-        levelUp?: boolean
+        types?: {
+          dailyMorning?: boolean
+          dailyEvening?: boolean
+          weeklySummary?: boolean
+          streakAlert?: boolean
+          streakBroken?: boolean
+          levelUp?: boolean
+          subscription?: boolean
+          aiReminders?: boolean
+        }
       }
-    }
   }
 }
 
@@ -359,12 +411,15 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
       throw new AuthServiceError('user_not_found', 404)
     }
 
-    const currentSettings = existing?.uiSettings && typeof existing.uiSettings === 'object' && !Array.isArray(existing.uiSettings)
+    const currentSettings = existing.uiSettings && typeof existing.uiSettings === 'object' && !Array.isArray(existing.uiSettings)
       ? (existing.uiSettings as Record<string, unknown>)
       : {}
-    const mergedSettings: Prisma.JsonValue = payload.settings && Object.keys(payload.settings).length
-      ? ({ ...currentSettings, ...payload.settings } as Prisma.JsonValue)
-      : (currentSettings as Prisma.JsonValue)
+    const { notifications: notificationPayload, ...uiSettingsPayload } = payload.settings ?? {}
+    const legacyFreeCurrentSettings = { ...currentSettings }
+    delete legacyFreeCurrentSettings.notifications
+    const mergedSettings: Prisma.JsonValue = Object.keys(uiSettingsPayload).length
+      ? ({ ...legacyFreeCurrentSettings, ...uiSettingsPayload } as Prisma.JsonValue)
+      : (legacyFreeCurrentSettings as Prisma.JsonValue)
 
     const shouldPersistSettings =
       typeof mergedSettings === 'object' &&
@@ -386,13 +441,57 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
       }
     }
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        firstName: payload.firstName ?? undefined,
-        lastName: payload.lastName ?? undefined,
-        uiSettings: uiPayload,
-      },
+    await prisma.$transaction(async tx => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          firstName: payload.firstName ?? undefined,
+          lastName: payload.lastName ?? undefined,
+          uiSettings: uiPayload,
+        },
+      })
+
+      if (notificationPayload) {
+        const normalizedTypes = normalizeNotificationTypes(notificationPayload.types)
+        await tx.notificationPreference.upsert({
+          where: { userId },
+          create: {
+            userId,
+            telegramEnabled: notificationPayload.enabled ?? true,
+            emailEnabled: false,
+            dailyMorningTime: parseTimeStringToMinutes(notificationPayload.morningTime, 9 * 60),
+            dailyEveningTime: parseTimeStringToMinutes(notificationPayload.eveningTime, 21 * 60),
+            timezone: 'Europe/Kyiv',
+            dailyMorningEnabled: normalizedTypes.dailyMorning,
+            dailyEveningEnabled: normalizedTypes.dailyEvening,
+            levelUpEnabled: normalizedTypes.levelUp,
+            streakRiskEnabled: normalizedTypes.streakAlert,
+            streakBrokenEnabled: normalizedTypes.streakBroken,
+            weeklySummaryEnabled: normalizedTypes.weeklySummary,
+            streakAlertsEnabled: normalizedTypes.streakAlert || normalizedTypes.streakBroken,
+            subscriptionEnabled: normalizedTypes.subscription,
+            aiRemindersEnabled: normalizedTypes.aiReminders,
+          },
+          update: {
+            telegramEnabled: notificationPayload.enabled ?? undefined,
+            dailyMorningTime: notificationPayload.morningTime
+              ? parseTimeStringToMinutes(notificationPayload.morningTime, 9 * 60)
+              : undefined,
+            dailyEveningTime: notificationPayload.eveningTime
+              ? parseTimeStringToMinutes(notificationPayload.eveningTime, 21 * 60)
+              : undefined,
+            dailyMorningEnabled: normalizedTypes.dailyMorning,
+            dailyEveningEnabled: normalizedTypes.dailyEvening,
+            levelUpEnabled: normalizedTypes.levelUp,
+            streakRiskEnabled: normalizedTypes.streakAlert,
+            streakBrokenEnabled: normalizedTypes.streakBroken,
+            weeklySummaryEnabled: normalizedTypes.weeklySummary,
+            streakAlertsEnabled: normalizedTypes.streakAlert || normalizedTypes.streakBroken,
+            subscriptionEnabled: normalizedTypes.subscription,
+            aiRemindersEnabled: normalizedTypes.aiReminders,
+          },
+        })
+      }
     })
 
     const updated = await findUserById(userId)
@@ -427,6 +526,30 @@ export function toSafeUser(user: UserWithSub): SafeUser {
     ? user.uiSettings as Record<string, unknown>
     : {}
   const resolvedUi = { ...mentorUi, ...fallbackUiSettings }
+  const notificationPreference = user.notificationPreference
+  const normalizedNotificationSettings = notificationPreference
+    ? {
+        enabled: notificationPreference.telegramEnabled,
+        morningTime: formatMinutesToTimeString(notificationPreference.dailyMorningTime, '09:00'),
+        eveningTime: formatMinutesToTimeString(notificationPreference.dailyEveningTime, '21:00'),
+        types: {
+          dailyMorning: notificationPreference.dailyMorningEnabled,
+          dailyEvening: notificationPreference.dailyEveningEnabled,
+          weeklySummary: notificationPreference.weeklySummaryEnabled,
+          streakAlert: notificationPreference.streakRiskEnabled,
+          streakBroken: notificationPreference.streakBrokenEnabled,
+          levelUp: notificationPreference.levelUpEnabled,
+          subscription: notificationPreference.subscriptionEnabled,
+          aiReminders: notificationPreference.aiRemindersEnabled,
+        },
+      }
+    : (
+      typeof resolvedUi.notifications === 'object' &&
+      resolvedUi.notifications !== null &&
+      !Array.isArray(resolvedUi.notifications)
+        ? resolvedUi.notifications as Record<string, unknown>
+        : undefined
+    )
 
   return {
     id: user.id,
@@ -434,6 +557,9 @@ export function toSafeUser(user: UserWithSub): SafeUser {
     name: user.name,
     firstName: user.firstName,
     lastName: user.lastName,
+    telegramUserId: user.telegramUserId,
+    telegramUserName: user.telegramUserName,
+    telegramChatId: user.telegramChatId,
     role: user.role,
     isAdmin: user.role === 'SUPERADMIN' || isSuperAdmin,
     isSuperAdmin,
@@ -453,9 +579,7 @@ export function toSafeUser(user: UserWithSub): SafeUser {
       accentColor: typeof resolvedUi.accentColor === 'string' ? resolvedUi.accentColor : null,
       theme: typeof resolvedUi.theme === 'string' ? resolvedUi.theme : null,
       language: typeof resolvedUi.language === 'string' ? resolvedUi.language : null,
-      notifications: typeof resolvedUi.notifications === 'object' && resolvedUi.notifications !== null && !Array.isArray(resolvedUi.notifications)
-        ? resolvedUi.notifications as Record<string, unknown>
-        : undefined,
+      notifications: normalizedNotificationSettings,
     },
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     subscriptionStatus: normalizeSubscriptionStatus(sub?.status ?? null),

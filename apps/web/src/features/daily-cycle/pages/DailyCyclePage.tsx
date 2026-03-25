@@ -6,10 +6,12 @@ import {
   useGetTelegramLinkUrlQuery,
   useGetTelegramStatusQuery,
 } from '@/features/auth/services/auth.api'
+import { useGenerateDeepLinkMutation } from '@/features/auth/services/deeplinks.api'
 import {
   useGetTodayEntryQuery,
   useSubmitDailyCycleMutation,
 } from '@/features/daily-cycle/services/daily.api'
+import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import type { RootState } from '@/app/store'
 
@@ -193,6 +195,12 @@ export function DailyCycleFlow({
     refetchOnReconnect: true,
   })
   const [submitDailyCycle] = useSubmitDailyCycleMutation()
+  const [generateDeepLink, { isLoading: isGeneratingTelegramResume }] = useGenerateDeepLinkMutation()
+  const {
+    tasks: microTasks,
+    refresh: refetchMicroTasks,
+    isFetching: isFetchingMicroTasks,
+  } = useMicroTasks()
 
   const questions = session === 'morning' ? MORNING_QUESTIONS : EVENING_QUESTIONS
   const affirmation = session === 'morning' ? MORNING_AFFIRMATION : EVENING_AFFIRMATION
@@ -216,6 +224,44 @@ export function DailyCycleFlow({
     && !Array.isArray(normalizedContent.evening),
   )
   const sessionAlreadyCompleted = session === 'morning' ? hasMorningSession : hasEveningSession
+  const todayGeneratedTasks = useMemo(() => (
+    microTasks.filter(task => task.createdAt?.slice(0, 10) === dateKey)
+  ), [dateKey, microTasks])
+
+  useEffect(() => {
+    if (!submitted || session !== 'morning') return
+    if (todayGeneratedTasks.length > 0) return
+
+    let attempts = 0
+    const maxAttempts = 6
+
+    console.log('[DailyCycle] success screen mounted, waiting for AI microtasks', {
+      session,
+      dateKey,
+      currentTasks: todayGeneratedTasks.length,
+    })
+
+    const timer = window.setInterval(() => {
+      attempts += 1
+      console.log('[DailyCycle] polling for generated microtasks', {
+        attempt: attempts,
+        maxAttempts,
+        dateKey,
+      })
+      void refetchMicroTasks()
+      void refetchTodayEntry()
+
+      if (attempts >= maxAttempts) {
+        window.clearInterval(timer)
+        console.log('[DailyCycle] stopped waiting for generated microtasks', {
+          attempts,
+          foundTasks: todayGeneratedTasks.length,
+        })
+      }
+    }, 4000)
+
+    return () => window.clearInterval(timer)
+  }, [dateKey, refetchMicroTasks, refetchTodayEntry, session, submitted, todayGeneratedTasks.length])
   const shellClassName = embedded
     ? 'space-y-4'
     : 'mx-auto max-w-xl space-y-4 p-4'
@@ -290,6 +336,15 @@ export function DailyCycleFlow({
               <p className="mt-2 text-sm text-[var(--text-muted)]">
                 AI Асистент аналізує твої відповіді та формує мікрозавдання
               </p>
+              {session === 'morning' && (
+                <p className="mt-2 text-xs text-[rgb(var(--accent-soft-rgb))]">
+                  {todayGeneratedTasks.length > 0
+                    ? `AI уже підготував ${todayGeneratedTasks.length} мікрозавдання`
+                    : isFetchingMicroTasks
+                      ? 'Оновлюємо задачі...'
+                      : 'Зазвичай це займає 5–15 секунд'}
+                </p>
+              )}
             </div>
           </div>
 
@@ -308,7 +363,10 @@ export function DailyCycleFlow({
                 Що далі?
               </p>
               <p className="text-sm text-[var(--text-muted)]">
-                AI сформує мікрозавдання на день.
+                {todayGeneratedTasks.length > 0
+                  ? `AI вже сформував ${todayGeneratedTasks.length} мікрозавдання на день.`
+                  : 'AI сформує мікрозавдання на день.'}
+                {' '}
                 Перевір їх у модулі AI Ментора.
                 Ввечері о 21:00 — вечірня рефлексія.
               </p>
@@ -320,11 +378,17 @@ export function DailyCycleFlow({
               type="button"
               className="hero-cta-primary flex-1 py-3 text-sm font-medium"
               onClick={() => {
+                console.log('[DailyCycle] success primary action click', {
+                  embedded,
+                  session,
+                  target: embedded ? 'onComplete' : '/dashboard/ai-mentor?awaitTasks=1&source=daily-cycle',
+                  generatedTasksToday: todayGeneratedTasks.length,
+                })
                 if (embedded) {
                   onComplete?.()
                   return
                 }
-                navigate('/dashboard/ai-mentor')
+                navigate('/dashboard/ai-mentor?awaitTasks=1&source=daily-cycle')
               }}
             >
               {embedded ? 'Готово' : 'AI Ментор →'}
@@ -333,11 +397,17 @@ export function DailyCycleFlow({
               type="button"
               className="hero-cta-secondary px-4 py-3 text-sm"
               onClick={() => {
+                console.log('[DailyCycle] success secondary action click', {
+                  embedded,
+                  session,
+                  target: embedded ? 'onClose' : '/dashboard?source=daily-cycle',
+                  generatedTasksToday: todayGeneratedTasks.length,
+                })
                 if (embedded) {
                   onClose?.()
                   return
                 }
-                navigate('/dashboard')
+                navigate('/dashboard?source=daily-cycle')
               }}
             >
               {embedded ? 'Закрити' : 'Кабінет'}
@@ -354,6 +424,12 @@ export function DailyCycleFlow({
     if (isLastStep) {
       setIsSubmitting(true)
       try {
+        console.log('[DailyCycle] submitting session', {
+          session,
+          stepCount: questions.length,
+          answerKeys: Object.keys(answers),
+          date: new Date().toISOString(),
+        })
         await submitDailyCycle({
           session,
           answers,
@@ -362,8 +438,15 @@ export function DailyCycleFlow({
 
         clearDraft(userId, session, dateKey)
         await refetchTodayEntry()
+        void refetchMicroTasks()
         setSubmitted(true)
-        onComplete?.()
+        console.log('[DailyCycle] session submitted successfully', {
+          session,
+          dateKey,
+        })
+        if (embedded && session === 'evening') {
+          onComplete?.()
+        }
       } catch (e) {
         console.error('[DailyCycle] submit failed:', e)
       } finally {
@@ -373,6 +456,49 @@ export function DailyCycleFlow({
     }
 
     setStep(s => s + 1)
+  }
+
+  const handleOpenTelegram = async () => {
+    console.log('[DailyCycle] open telegram resume clicked', {
+      session,
+      embedded,
+      botActive: telegramStatus?.botActive ?? false,
+      hasTelegramLink: Boolean(telegramLinkData?.url),
+      answerKeys: Object.keys(answers),
+    })
+
+    if (!telegramStatus?.botActive) {
+      if (telegramLinkData?.url) {
+        window.open(telegramLinkData.url, '_blank', 'noopener,noreferrer')
+      }
+      return
+    }
+
+    try {
+      const result = await generateDeepLink({
+        action: 'resume_task',
+        source: 'web',
+        target: 'telegram',
+        payload: {
+          session,
+          step,
+          answers,
+          date: new Date().toISOString(),
+        },
+      }).unwrap()
+
+      console.log('[DailyCycle] telegram resume deep link generated', {
+        session,
+        step,
+        telegramUrl: result.telegramUrl,
+      })
+      window.open(result.telegramUrl, '_blank', 'noopener,noreferrer')
+    } catch (error) {
+      console.error('[DailyCycle] telegram resume link failed:', error)
+      if (telegramLinkData?.url) {
+        window.open(telegramLinkData.url, '_blank', 'noopener,noreferrer')
+      }
+    }
   }
 
   return (
@@ -420,23 +546,20 @@ export function DailyCycleFlow({
         </div>
         {!embedded && (
           telegramLinkData?.url ? (
-            <a
-              href={telegramLinkData.url}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-auto inline-flex"
+            <button
+              type="button"
+              onClick={() => { void handleOpenTelegram() }}
+              disabled={isGeneratingTelegramResume}
+              className="hero-cta-secondary ml-auto border-[rgba(var(--accent-soft-rgb),0.34)] bg-[rgba(var(--accent-rgb),0.06)] px-3 py-1.5 text-xs font-semibold text-[rgb(var(--accent-soft-rgb))]"
             >
-              <button
-                type="button"
-                className="hero-cta-secondary border-[rgba(var(--accent-soft-rgb),0.34)] bg-[rgba(var(--accent-rgb),0.06)] px-3 py-1.5 text-xs font-semibold text-[rgb(var(--accent-soft-rgb))]"
-              >
-                {telegramStatus?.botActive ? 'Відповідати в Telegram' : 'Підключити Telegram'}
-              </button>
-            </a>
+              {telegramStatus?.botActive
+                ? (isGeneratingTelegramResume ? 'Telegram…' : 'Відповідати в Telegram')
+                : 'Підключити Telegram'}
+            </button>
           ) : (
             <button
               type="button"
-              disabled={isTelegramLinkLoading}
+              disabled={isTelegramLinkLoading || isGeneratingTelegramResume}
               className="hero-cta-secondary ml-auto border-[rgba(var(--accent-soft-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.04)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] opacity-75"
             >
               Telegram...

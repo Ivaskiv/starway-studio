@@ -7,6 +7,9 @@ import { startNotificationWorker, stopNotificationWorker } from '../notification
 
 const scheduledTasks: ScheduledTask[] = []
 let schedulerStarted = false
+let schedulerStopping = false
+let notificationPreferenceTableAvailable: boolean | undefined
+let hasWarnedAboutMissingNotificationPreferenceTable = false
 
 function register(task: ScheduledTask) {
   scheduledTasks.push(task)
@@ -41,12 +44,51 @@ function getStartOfUtcDay(date = new Date()) {
   return next
 }
 
+async function ensureNotificationPreferenceTableAvailability(): Promise<boolean> {
+  if (typeof notificationPreferenceTableAvailable !== 'undefined') {
+    return notificationPreferenceTableAvailable
+  }
+
+  try {
+    const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'NotificationPreference'
+      ) AS "exists"
+    `
+    notificationPreferenceTableAvailable = rows[0]?.exists === true
+  } catch (error) {
+    throw error
+  }
+
+  if (!notificationPreferenceTableAvailable) {
+    if (!hasWarnedAboutMissingNotificationPreferenceTable) {
+      hasWarnedAboutMissingNotificationPreferenceTable = true
+      console.warn('[scheduler] NotificationPreference table missing; notification schedulers are disabled until migration is applied')
+    }
+    return false
+  }
+
+  return notificationPreferenceTableAvailable
+}
+
+function runScheduled(task: () => Promise<void>) {
+  if (schedulerStopping || !schedulerStarted) return
+  setImmediate(() => {
+    if (schedulerStopping || !schedulerStarted) return
+    void task().catch(console.error)
+  })
+}
+
 export async function dailyMorningCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
   const now = new Date()
   const preferences = await prisma.notificationPreference.findMany({
     where: {
       telegramEnabled: true,
-      aiRemindersEnabled: true,
+      dailyMorningEnabled: true,
     },
     select: {
       userId: true,
@@ -62,11 +104,12 @@ export async function dailyMorningCron(): Promise<void> {
 }
 
 export async function dailyEveningCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
   const now = new Date()
   const preferences = await prisma.notificationPreference.findMany({
     where: {
       telegramEnabled: true,
-      aiRemindersEnabled: true,
+      dailyEveningEnabled: true,
     },
     select: {
       userId: true,
@@ -82,6 +125,7 @@ export async function dailyEveningCron(): Promise<void> {
 }
 
 export async function streakRiskCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
   const todayStart = getStartOfUtcDay()
   const candidates = await prisma.streak.findMany({
     where: {
@@ -97,7 +141,7 @@ export async function streakRiskCron(): Promise<void> {
           notificationPreference: {
             select: {
               telegramEnabled: true,
-              streakAlertsEnabled: true,
+              streakRiskEnabled: true,
             },
           },
           dailyEntries: {
@@ -112,7 +156,7 @@ export async function streakRiskCron(): Promise<void> {
 
   for (const candidate of candidates) {
     const preferences = candidate.user.notificationPreference
-    if (!preferences?.telegramEnabled || !preferences.streakAlertsEnabled) continue
+    if (!preferences?.telegramEnabled || !preferences.streakRiskEnabled) continue
     if (candidate.user.dailyEntries.length > 0) continue
 
     await notificationService.emit(NotificationEvent.STREAK_RISK, candidate.userId, {
@@ -123,6 +167,7 @@ export async function streakRiskCron(): Promise<void> {
 }
 
 export async function weeklySummaryCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
   const now = new Date()
   const preferences = await prisma.notificationPreference.findMany({
     where: {
@@ -163,6 +208,7 @@ export async function weeklySummaryCron(): Promise<void> {
 }
 
 export async function aiInactiveCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
   const threshold = new Date(Date.now() - 48 * 60 * 60 * 1000)
 
   const mentors = await prisma.userAIMentor.findMany({
@@ -197,6 +243,7 @@ export async function aiInactiveCron(): Promise<void> {
 }
 
 export async function streakBrokenCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
   const todayStart = getStartOfUtcDay()
   const yesterdayStart = new Date(todayStart)
   yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1)
@@ -215,7 +262,7 @@ export async function streakBrokenCron(): Promise<void> {
           notificationPreference: {
             select: {
               telegramEnabled: true,
-              streakAlertsEnabled: true,
+              streakBrokenEnabled: true,
               timezone: true,
             },
           },
@@ -226,46 +273,184 @@ export async function streakBrokenCron(): Promise<void> {
 
   for (const candidate of candidates) {
     const preferences = candidate.user.notificationPreference
-    if (!preferences?.telegramEnabled || !preferences.streakAlertsEnabled) continue
+    if (!preferences?.telegramEnabled || !preferences.streakBrokenEnabled) continue
     if (getMinutesInTimezone(new Date(), preferences.timezone) !== 8 * 60) continue
     await notificationService.emit(NotificationEvent.STREAK_BROKEN, candidate.userId)
+  }
+}
+
+export async function subscriptionExpiringCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
+  const now = new Date()
+  const preferences = await prisma.notificationPreference.findMany({
+    where: {
+      telegramEnabled: true,
+      subscriptionEnabled: true,
+    },
+    select: {
+      userId: true,
+      timezone: true,
+    },
+  })
+
+  for (const preference of preferences) {
+    if (getMinutesInTimezone(now, preference.timezone) !== 10 * 60) continue
+
+    const subscription = await prisma.subscription.findFirst({
+      where: {
+        userId: preference.userId,
+        status: { in: ['ACTIVE', 'TRIAL'] },
+        OR: [
+          { currentPeriodEnd: { not: null } },
+          { trialEndsAt: { not: null } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        currentPeriodEnd: true,
+        trialEndsAt: true,
+      },
+    })
+
+    const expiresAt = subscription?.currentPeriodEnd ?? subscription?.trialEndsAt
+    if (!expiresAt) continue
+
+    const hoursLeft = expiresAt.getTime() - now.getTime()
+    if (hoursLeft <= 0) continue
+
+    const daysLeft = Math.ceil(hoursLeft / (24 * 60 * 60 * 1000))
+    if (daysLeft !== 3 && daysLeft !== 1) continue
+
+    await notificationService.emit(NotificationEvent.SUBSCRIPTION_EXPIRING, preference.userId, {
+      expiresAt: expiresAt.toISOString(),
+      daysLeft,
+    })
+  }
+}
+
+export async function microTaskReminderCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
+  const now = new Date()
+
+  const tasks = await prisma.microTask.findMany({
+    where: {
+      status: 'active',
+      isCompleted: false,
+      dueAt: { not: null },
+    },
+    select: {
+      userId: true,
+      title: true,
+      dueAt: true,
+      stepsCompleted: true,
+      user: {
+        select: {
+          notificationPreference: {
+            select: {
+              telegramEnabled: true,
+              aiRemindersEnabled: true,
+              timezone: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  for (const task of tasks) {
+    const preferences = task.user.notificationPreference
+    if (!preferences?.telegramEnabled || !preferences.aiRemindersEnabled || !task.dueAt) continue
+
+    const started = Array.isArray(task.stepsCompleted) && task.stepsCompleted.some(Boolean)
+    const localMinutes = getMinutesInTimezone(now, preferences.timezone)
+    const msLeft = task.dueAt.getTime() - now.getTime()
+
+    if (!started && localMinutes === 14 * 60) {
+      await notificationService.sendMicroTaskReminder(task.userId, task.title, false)
+      continue
+    }
+
+    if (msLeft > 0 && msLeft <= 2 * 60 * 60 * 1000) {
+      await notificationService.sendMicroTaskReminder(task.userId, task.title, true)
+    }
+  }
+}
+
+export async function expireMicroTasksCron(): Promise<void> {
+  if (!(await ensureNotificationPreferenceTableAvailability())) return
+  const now = new Date()
+
+  const tasks = await prisma.microTask.findMany({
+    where: {
+      status: 'active',
+      isCompleted: false,
+      dueAt: { lt: now },
+    },
+    select: {
+      id: true,
+      userId: true,
+      title: true,
+    },
+  })
+
+  for (const task of tasks) {
+    await prisma.microTask.update({
+      where: { id: task.id },
+      data: { status: 'expired' },
+    })
+
+    await notificationService.sendExpiredTaskNotice(task.userId, task.title)
   }
 }
 
 export function startScheduler() {
   if (schedulerStarted) return
   schedulerStarted = true
+  schedulerStopping = false
 
   const timezone = process.env.TZ || 'Europe/Kyiv'
   startNotificationWorker()
 
   register(cron.schedule('* * * * *', () => {
-    setImmediate(() => dailyMorningCron().catch(console.error))
+    runScheduled(dailyMorningCron)
   }, { timezone }))
 
   register(cron.schedule('* * * * *', () => {
-    setImmediate(() => dailyEveningCron().catch(console.error))
+    runScheduled(dailyEveningCron)
   }, { timezone }))
 
   register(cron.schedule('0 * * * *', () => {
-    setImmediate(() => streakRiskCron().catch(console.error))
+    runScheduled(streakRiskCron)
   }, { timezone }))
 
   register(cron.schedule('0 19 * * 0', () => {
-    setImmediate(() => weeklySummaryCron().catch(console.error))
+    runScheduled(weeklySummaryCron)
   }, { timezone }))
 
   register(cron.schedule('0 * * * *', () => {
-    setImmediate(() => aiInactiveCron().catch(console.error))
+    runScheduled(aiInactiveCron)
   }, { timezone }))
 
   register(cron.schedule('* * * * *', () => {
-    setImmediate(() => streakBrokenCron().catch(console.error))
+    runScheduled(streakBrokenCron)
+  }, { timezone }))
+
+  register(cron.schedule('0 * * * *', () => {
+    runScheduled(subscriptionExpiringCron)
+  }, { timezone }))
+
+  register(cron.schedule('0 * * * *', () => {
+    runScheduled(microTaskReminderCron)
+  }, { timezone }))
+
+  register(cron.schedule('*/10 * * * *', () => {
+    runScheduled(expireMicroTasksCron)
   }, { timezone }))
 }
 
 export function stopScheduler() {
   if (!schedulerStarted) return
+  schedulerStopping = true
   for (const task of scheduledTasks.splice(0)) {
     task.stop()
     task.destroy()

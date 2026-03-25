@@ -1,13 +1,5 @@
 import type { JournalEvent } from '../types'
-
-const EVENT_DOT_STYLES: Record<JournalEvent['type'], string> = {
-  AI: 'bg-emerald-400',
-  REFLECTION: 'bg-sky-400',
-  ZOOM: 'bg-violet-400',
-  TASK: 'bg-blue-400',
-  STREAK: 'bg-red-400',
-  SUBSCRIPTION: 'bg-orange-400',
-}
+import { getJournalBadgeMeta, getJournalDisplayType } from '../eventPresentation'
 
 interface DayCellProps {
   date: Date
@@ -34,7 +26,7 @@ export default function DayCell({
   onSelect,
 }: DayCellProps) {
   const dateKey = toDateKey(date)
-  const uniqueTypes = [...new Set(events.map((event) => event.type))].slice(0, 3)
+  const uniqueTypes = [...new Set(events.map((event) => getJournalDisplayType(event)))].slice(0, 3)
 
   return (
     <button
@@ -68,7 +60,7 @@ export default function DayCell({
         {uniqueTypes.map((type) => (
           <span
             key={`${dateKey}-${type}`}
-            className={`h-2.5 w-2.5 rounded-full transition-transform duration-200 group-hover:scale-110 ${EVENT_DOT_STYLES[type]}`}
+            className={`h-2.5 w-2.5 rounded-full transition-transform duration-200 group-hover:scale-110 ${getJournalBadgeMeta({ id: '', type, date: '', title: '' }).dotClassName}`}
             aria-label={type}
           />
         ))}

@@ -28,6 +28,7 @@ export const dailyCycleApi = api.injectEndpoints({
         'GamificationProfile',
         'Streak',
         'Progress',
+        'MicroTasks',
       ],
     }),
 

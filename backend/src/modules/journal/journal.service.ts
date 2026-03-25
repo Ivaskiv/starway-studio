@@ -1,3 +1,4 @@
+import { NotificationChannel, NotificationType, NotificationStatus } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import type { JournalEvent } from './types.js'
 
@@ -40,6 +41,7 @@ async function getEventsForWindow(userId: string, start: Date, end: Date): Promi
     microTasks,
     streaks,
     subscriptions,
+    telegramNotifications,
   ] = await Promise.all([
     prisma.aIMentorMessage.findMany({
       where: {
@@ -139,6 +141,28 @@ async function getEventsForWindow(userId: string, start: Date, end: Date): Promi
         createdAt: true,
         trialEndsAt: true,
         currentPeriodEnd: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.notification.findMany({
+      where: {
+        userId,
+        channel: NotificationChannel.TELEGRAM,
+        status: NotificationStatus.SENT,
+        OR: [
+          { sentAt: { gte: start, lt: end } },
+          { createdAt: { gte: start, lt: end } },
+        ],
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        body: true,
+        templateKey: true,
+        sentAt: true,
+        createdAt: true,
+        data: true,
       },
       orderBy: { createdAt: 'desc' },
     }),
@@ -277,6 +301,44 @@ async function getEventsForWindow(userId: string, start: Date, end: Date): Promi
     return events
   })
 
+  const tgReminderEvents = telegramNotifications.map((notification) => {
+    const data = asRecord(notification.data)
+    const reminderType = notification.type ?? NotificationType.AI_REMINDER
+
+    const title = (() => {
+      switch (reminderType) {
+        case NotificationType.DAILY_MORNING:
+          return 'TG: ранкове нагадування'
+        case NotificationType.DAILY_EVENING:
+          return 'TG: вечірнє нагадування'
+        case NotificationType.STREAK_ALERT:
+          return 'TG: нагадування про стрік'
+        case NotificationType.LEVEL_UP:
+          return 'TG: повідомлення про рівень'
+        case NotificationType.WEEKLY_SUMMARY:
+          return 'TG: тижневий підсумок'
+        case NotificationType.SUBSCRIPTION:
+          return 'TG: нагадування про підписку'
+        case NotificationType.AI_REMINDER:
+        default:
+          return 'TG: нагадування від AI'
+      }
+    })()
+
+    return createEvent({
+      id: `tg:${notification.id}`,
+      type: 'TG_REMINDER',
+      date: (notification.sentAt ?? notification.createdAt).toISOString(),
+      title,
+      meta: {
+        notificationType: reminderType,
+        templateKey: notification.templateKey,
+        preview: notification.title || notification.body,
+        context: data?.event ?? null,
+      },
+    })
+  })
+
   return [
     ...aiEvents,
     ...reflectionEvents,
@@ -284,6 +346,7 @@ async function getEventsForWindow(userId: string, start: Date, end: Date): Promi
     ...taskEvents,
     ...streakEvents,
     ...subscriptionEvents,
+    ...tgReminderEvents,
   ].sort((a, b) => b.date.localeCompare(a.date))
 }
 

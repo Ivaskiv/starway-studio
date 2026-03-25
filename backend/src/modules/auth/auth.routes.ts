@@ -41,12 +41,22 @@ router.get('/telegram-link', authRequired, async (req: AuthenticatedRequest, res
     return res.status(401).json({ message: 'unauthorized' })
   }
 
-  const existing = await prisma.telegramLink.findFirst({ where: { userId } })
+  const [existing, user] = await Promise.all([
+    prisma.telegramLink.findFirst({ where: { userId, isActive: true } }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        telegramUserId: true,
+        telegramChatId: true,
+      },
+    }),
+  ])
   const { link } = await createTelegramBindingDeepLink(userId)
+  const linked = Boolean(existing || user?.telegramUserId || user?.telegramChatId)
 
   res.json({
     url: link,
-    linked: !!existing,
+    linked,
   })
 })
 

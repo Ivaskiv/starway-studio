@@ -240,21 +240,38 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
             </div>
           )}
 
-          <div className="mb-10 grid gap-6 md:grid-cols-3">
+          <div className="mb-10 grid items-start gap-6 md:grid-cols-3">
             {stepsWithDynamicCopy.map((item, index) => {
               const isActive = activeStep === item.id
+              const cascadeOffsetClass =
+                index === 0
+                  ? 'lg:mt-0'
+                  : index === 1
+                    ? 'lg:mt-10'
+                    : 'lg:mt-20'
 
               return (
-                <div key={item.id} className="relative group">
+                <div
+                  key={item.id}
+                  className={[
+                    'relative group transition-all duration-500',
+                    cascadeOffsetClass,
+                  ].join(' ')}
+                >
                   {index < stepsWithDynamicCopy.length - 1 && (
-                    <div className="absolute left-[calc(100%+12px)] top-9 z-10 hidden w-6 md:block">
+                    <div
+                      className={[
+                        'absolute left-[calc(100%+12px)] z-10 hidden w-6 md:block',
+                        index === 0 ? 'top-9 lg:top-14' : 'top-9 lg:top-[4.75rem]',
+                      ].join(' ')}
+                    >
                       <ArrowRight className="h-5 w-5 text-white/50" />
                     </div>
                   )}
 
                   <GlassCard
                     className={[
-                      'step-card flex min-h-[340px] flex-col transition-all duration-300',
+                      'step-card flex min-h-[220px] flex-col px-5 py-5 transition-all duration-300 sm:min-h-[250px] sm:px-6 sm:py-6 lg:min-h-[340px] lg:px-8 lg:py-8',
                       isActive
                         ? 'border-[rgba(var(--accent-soft-rgb))] bg-[rgba(var(--accent-rgb),0.08)] shadow-[0_0_0_1px_rgba(var(--accent-rgb),0.28),0_0_28px_rgba(var(--accent-rgb),0.18),0_18px_40px_rgba(0,0,0,0.22)]'
                         : 'cursor-pointer border-white/10 opacity-80 hover:opacity-100',
@@ -279,10 +296,10 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                       </span>
                     </h3>
 
-                    <p className="step-card-desc text-sm">{item.desc}</p>
+                    <p className="step-card-desc text-sm leading-relaxed lg:text-base">{item.desc}</p>
 
                     {item.id === 'register' && isActive && (
-                      <div className="mt-auto flex flex-col gap-4 pt-6">
+                      <div className="mt-auto flex flex-col gap-3 pt-4 sm:gap-4 sm:pt-5 lg:gap-4 lg:pt-6">
                         <div className="flex justify-center">
                           <Button
                             onClick={event => {
@@ -317,7 +334,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                     )}
 
                     {item.id === 'telegram' && isActive && (
-                      <div className="mt-auto flex flex-col gap-4 pt-6">
+                      <div className="mt-auto flex flex-col gap-3 pt-4 sm:gap-4 sm:pt-5 lg:gap-4 lg:pt-6">
                         {returnMessage && (
                           <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-4 py-3 text-center text-sm text-white/78">
                             {returnMessage}
@@ -388,7 +405,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
                     )}
 
                     {item.id === 'flow' && isActive && (
-                      <div className="mt-auto flex flex-col gap-4 pt-6">
+                      <div className="mt-auto flex flex-col gap-3 pt-4 sm:gap-4 sm:pt-5 lg:gap-4 lg:pt-6">
                         {hasAssistantSetup && (
                           <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-4 py-3 text-center text-sm text-white/78">
                             Усі дані для асистента вже є. Можеш продовжити роботу в кабінеті.

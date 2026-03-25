@@ -64,13 +64,14 @@ export default function Header({
   )
 
   const compactShellMode = miniAppMode || forceBurgerMenu
+  const hideTelegramGuestAuth = miniAppMode || isTelegramMiniAppAuthContext()
   const holdMiniAppGuestAuth =
-    miniAppMode &&
+    hideTelegramGuestAuth &&
     !isAuthenticated &&
     (authRestoreStatus === 'idle' ||
       authRestoreStatus === 'restoring' ||
       isAuthLoading ||
-      isTelegramMiniAppAuthContext())
+      hideTelegramGuestAuth)
   const viewRole = previewRole
   const [openDrop, setOpenDrop] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -177,7 +178,7 @@ export default function Header({
       )}
       <UserMenu variant={miniAppMode ? 'miniapp' : 'header'} />
     </>
-  ) : holdMiniAppGuestAuth ? (
+  ) : hideTelegramGuestAuth ? (
     <div className="hdr-auth-pending" aria-hidden="true" />
   ) : (
     renderGuestAuthButtons()
@@ -191,10 +192,11 @@ export default function Header({
       isAuthLoading,
       authRestoreStatus,
       holdMiniAppGuestAuth,
+      hideTelegramGuestAuth,
       userId: user?.id ?? null,
       email: user?.email ?? null,
     })
-  }, [authRestoreStatus, holdMiniAppGuestAuth, isAuthLoading, isAuthenticated, miniAppMode, user?.email, user?.id])
+  }, [authRestoreStatus, hideTelegramGuestAuth, holdMiniAppGuestAuth, isAuthLoading, isAuthenticated, miniAppMode, user?.email, user?.id])
 
   return (
     <header

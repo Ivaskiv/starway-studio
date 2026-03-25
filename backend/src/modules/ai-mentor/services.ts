@@ -159,9 +159,22 @@ export async function sendMessage(params: SendMessageDto): Promise<ChatResponse>
   const session = await getOrCreateSession(params.userId, params.sessionId);
   const userMessage = await logMessage({ sessionId: session.id, role: 'USER', text: params.message });
   const contextPrompt = await buildContextPrompt(params.userId)
+  const activeTasks = await prisma.microTask.findMany({
+    where: {
+      userId: params.userId,
+      status: 'active',
+      isCompleted: false,
+    },
+    orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }],
+    take: 3,
+    select: { title: true, why: true },
+  })
+  const taskPrompt = activeTasks.length
+    ? `Активні задачі юзера:\n${activeTasks.map(task => `- ${task.title}${task.why ? ` — ${task.why}` : ''}`).join('\n')}`
+    : 'Активних задач зараз немає.'
   const ai = await aiGenerate({
     prompt: `Прийми рішення по повідомленню користувача. Визнач розрив між станом і дією. Дай відповідь JSON: { "reply": "string", "actionables": ["string"] }. Повідомлення: ${params.message}`,
-    context: [contextPrompt],
+    context: [contextPrompt, taskPrompt],
   });
   const mentorMessage = await logMessage({ sessionId: session.id, role: 'MENTOR', text: ai.text });
   await rewardEngine.onMentorSessionCompleted(params.userId);
@@ -182,7 +195,7 @@ export async function getChatHistory(userId: string) {
 }
 
 export async function getMentorContext(userId: string): Promise<MentorChatContext> {
-  const [latestEntry, latestWheel, streak, primaryGoal] = await Promise.all([
+  const [latestEntry, latestWheel, streak, primaryGoal, activeTasks] = await Promise.all([
     prisma.dailyEntry.findFirst({
       where: { userId },
       orderBy: { date: 'desc' },
@@ -199,6 +212,12 @@ export async function getMentorContext(userId: string): Promise<MentorChatContex
       select: { current: true },
     }),
     getPrimaryGoal(userId),
+    prisma.microTask.findMany({
+      where: { userId, status: 'active', isCompleted: false },
+      orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }],
+      take: 3,
+      select: { title: true },
+    }),
   ]);
 
   const focus = pickFocusSphere(latestWheel?.scores as Record<string, unknown> | undefined);
@@ -209,6 +228,7 @@ export async function getMentorContext(userId: string): Promise<MentorChatContex
     wheelScore: focus?.score,
     primaryGoal: primaryGoal?.text ?? undefined,
     streakDays: streak?.current ?? undefined,
+    activeTasks: activeTasks.map(task => task.title),
   };
 }
 

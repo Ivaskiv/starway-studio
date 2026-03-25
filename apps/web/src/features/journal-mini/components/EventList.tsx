@@ -1,45 +1,10 @@
 import { MoonStar, SunMedium } from 'lucide-react'
 import type { JournalEvent } from '@/features/journal/types'
+import { getJournalBadgeMeta } from '@/features/journal/eventPresentation'
 
 interface EventListProps {
   dayLabel: string
   events: JournalEvent[]
-}
-
-const TYPE_BADGES: Record<JournalEvent['type'], { label: string; className: string }> = {
-  AI: {
-    label: 'AI Session',
-    className: 'bg-emerald-500/12 text-emerald-300 border-emerald-400/20',
-  },
-  REFLECTION: {
-    label: 'Reflection',
-    className: 'bg-sky-500/12 text-sky-300 border-sky-400/20',
-  },
-  ZOOM: {
-    label: 'Zoom',
-    className: 'bg-violet-500/12 text-violet-300 border-violet-400/20',
-  },
-  TASK: {
-    label: 'Practice',
-    className: 'bg-blue-500/12 text-blue-300 border-blue-400/20',
-  },
-  STREAK: {
-    label: 'Streak',
-    className: 'bg-red-500/12 text-red-300 border-red-400/20',
-  },
-  SUBSCRIPTION: {
-    label: 'Subscription',
-    className: 'bg-orange-500/12 text-orange-300 border-orange-400/20',
-  },
-}
-
-function getTypeLabel(event: JournalEvent) {
-  if (event.type !== 'REFLECTION') return TYPE_BADGES[event.type]
-  const period = typeof event.meta?.period === 'string' ? event.meta.period : null
-  return {
-    label: period === 'evening' ? 'Evening Reflection' : 'Morning Reflection',
-    className: TYPE_BADGES.REFLECTION.className,
-  }
 }
 
 function getEventTime(value: string) {
@@ -73,7 +38,7 @@ export default function EventList({ dayLabel, events }: EventListProps) {
       ) : (
         <div className="max-h-[38vh] space-y-2 overflow-y-auto">
           {orderedEvents.map((event) => {
-            const typeBadge = getTypeLabel(event)
+            const typeBadge = getJournalBadgeMeta(event)
             const time = getEventTime(event.date)
             const isEveningReflection =
               event.type === 'REFLECTION' && typeof event.meta?.period === 'string' && event.meta.period === 'evening'
@@ -99,7 +64,7 @@ export default function EventList({ dayLabel, events }: EventListProps) {
                   </div>
 
                   <span
-                    className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${typeBadge.className}`}
+                    className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${typeBadge.badgeClassName}`}
                   >
                     {typeBadge.label}
                   </span>

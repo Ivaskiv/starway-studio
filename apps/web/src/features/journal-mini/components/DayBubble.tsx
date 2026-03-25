@@ -1,13 +1,5 @@
 import type { JournalEvent } from '@/features/journal/types'
-
-const EVENT_DOT_STYLES: Record<JournalEvent['type'], string> = {
-  AI: 'bg-emerald-400',
-  REFLECTION: 'bg-sky-400',
-  ZOOM: 'bg-violet-400',
-  TASK: 'bg-blue-400',
-  STREAK: 'bg-red-400',
-  SUBSCRIPTION: 'bg-orange-400',
-}
+import { JOURNAL_DISPLAY_META, getJournalDisplayType } from '@/features/journal/eventPresentation'
 
 interface DayBubbleProps {
   date: Date
@@ -26,7 +18,7 @@ function toDateKey(date: Date) {
 
 export default function DayBubble({ date, events, isSelected, isToday, onSelect }: DayBubbleProps) {
   const dateKey = toDateKey(date)
-  const dots = [...new Set(events.map((event) => event.type))].slice(0, 2)
+  const dots = [...new Set(events.map((event) => getJournalDisplayType(event)))].slice(0, 2)
 
   return (
     <button
@@ -54,7 +46,7 @@ export default function DayBubble({ date, events, isSelected, isToday, onSelect 
       </span>
       <div className="mt-1.5 flex min-h-1.5 items-center gap-1">
         {dots.map((type) => (
-          <span key={`${dateKey}-${type}`} className={`h-1.5 w-1.5 rounded-full ${EVENT_DOT_STYLES[type]}`} />
+          <span key={`${dateKey}-${type}`} className={`h-1.5 w-1.5 rounded-full ${JOURNAL_DISPLAY_META[type].dotClassName}`} />
         ))}
       </div>
     </button>

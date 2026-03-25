@@ -7,8 +7,14 @@ export interface UpsertNotificationPreferenceInput {
   dailyMorningTime?: number
   dailyEveningTime?: number
   timezone?: string
+  dailyMorningEnabled?: boolean
+  dailyEveningEnabled?: boolean
+  levelUpEnabled?: boolean
+  streakRiskEnabled?: boolean
+  streakBrokenEnabled?: boolean
   streakAlertsEnabled?: boolean
   weeklySummaryEnabled?: boolean
+  subscriptionEnabled?: boolean
   aiRemindersEnabled?: boolean
 }
 
@@ -18,8 +24,14 @@ const DEFAULT_NOTIFICATION_PREFERENCE = {
   dailyMorningTime: 9 * 60,
   dailyEveningTime: 21 * 60,
   timezone: 'Europe/Kyiv',
+  dailyMorningEnabled: true,
+  dailyEveningEnabled: true,
+  levelUpEnabled: true,
+  streakRiskEnabled: true,
+  streakBrokenEnabled: true,
   streakAlertsEnabled: true,
   weeklySummaryEnabled: true,
+  subscriptionEnabled: true,
   aiRemindersEnabled: true,
 } as const
 

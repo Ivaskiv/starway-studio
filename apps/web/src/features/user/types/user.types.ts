@@ -35,6 +35,8 @@ export interface UserSettings {
       streakAlert?: boolean
       streakBroken?: boolean
       levelUp?: boolean
+      subscription?: boolean
+      aiReminders?: boolean
     }
   }
 }
@@ -72,6 +74,9 @@ export interface User {
   name:      string | null
   firstName: string | null
   lastName:  string | null
+  telegramUserId?: string | null
+  telegramUserName?: string | null
+  telegramChatId?: string | null
 
   role:        UserRole
   isAdmin:     boolean

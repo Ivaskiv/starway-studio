@@ -822,10 +822,19 @@ model MicroTask {
   expertId    String?
   title       String
   description String?
+  why         String?
+  steps       Json?
+  stepsCompleted Json?
   sphere      String?
+  priority    String    @default("medium")
+  status      String    @default("active")
+  xpReward    Int       @default(20)
+  daysToComplete Int    @default(1)
   isCompleted Boolean   @default(false)
   completedAt DateTime?
   dueAt       DateTime?
+  generatedFromEntryId String?
+  aiContext   String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -834,6 +843,8 @@ model MicroTask {
 
   @@index([userId])
   @@index([userId, isCompleted])
+  @@index([userId, status])
+  @@index([dueAt])
 }
 
 model DailyCycleLog {
@@ -1108,8 +1119,14 @@ model NotificationPreference {
   dailyMorningTime     Int      @default(540)
   dailyEveningTime     Int      @default(1260)
   timezone             String   @default("Europe/Kyiv")
+  dailyMorningEnabled  Boolean  @default(true)
+  dailyEveningEnabled  Boolean  @default(true)
+  levelUpEnabled       Boolean  @default(true)
+  streakRiskEnabled    Boolean  @default(true)
+  streakBrokenEnabled  Boolean  @default(true)
   streakAlertsEnabled  Boolean  @default(true)
   weeklySummaryEnabled Boolean  @default(true)
+  subscriptionEnabled  Boolean  @default(true)
   aiRemindersEnabled   Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt

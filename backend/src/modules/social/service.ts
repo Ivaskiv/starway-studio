@@ -46,11 +46,18 @@ export async function connectSocial(userId: string, data: SocialConnection): Pro
 
 export async function disconnectSocial(userId: string, provider: SocialProvider): Promise<void> {
   if (provider === 'telegram') {
+    await prisma.telegramLink.updateMany({
+      where: { userId },
+      data: { isActive: false },
+    }).catch(() => undefined)
+
     await prisma.user.update({
       where: { id: userId },
       data: {
+        telegramUserId: null,
         telegramUserName: null,
         telegramChatId: null,
+        telegramLinkedAt: null,
       },
     });
   }
