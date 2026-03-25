@@ -88,8 +88,8 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
   }
 
   const isActive  = trialEnd ? trialEnd > now : false
-  const daysLeft  = trialEnd ? Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / MS_PER_DAY)) : 0
   const currentDay = Math.min(TRIAL_DAYS, Math.max(1, Math.floor((now.getTime() - trialStart.getTime()) / MS_PER_DAY) + 1))
+  const daysLeft  = isActive ? Math.max(0, TRIAL_DAYS - currentDay) : 0
   const progress  = trialEnd
     ? Math.min(100, Math.max(0, Math.round(
         ((now.getTime() - trialStart.getTime()) / (trialEnd.getTime() - trialStart.getTime())) * 100

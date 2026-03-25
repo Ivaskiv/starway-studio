@@ -14,6 +14,7 @@
 import { prisma } from '../../db/client.js';
 import { STREAK_RULES, type StreakInfo, type StreakRuleKey } from './types.js';
 import { rewardEngine } from '../gamification/reward.engine.js';
+import { onStreakBroken, onStreakUpdate } from '../gamification/triggers.js';
 
 function diffDays(a: Date, b: Date): number {
   return Math.floor((a.getTime() - b.getTime()) / 86_400_000);
@@ -80,6 +81,7 @@ export async function registerStreakActivity(
     if (updated.current === 7) {
       await rewardEngine.onSevenDayStreak(userId);
     }
+    await onStreakUpdate({ userId, current: updated.current })
     return updated;
   }
 
@@ -88,6 +90,7 @@ export async function registerStreakActivity(
     where: { id: streak.id },
     data: { endAt: at },
   });
+  await onStreakBroken({ userId })
 
   return prisma.streak.create({
     data: {

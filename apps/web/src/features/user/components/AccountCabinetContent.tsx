@@ -1,8 +1,7 @@
 import { ROUTES } from '@/config/routes'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useAuth } from '@/features/auth/hooks/useAuth'
-import { useGetProfileQuery } from '@/features/gamification/services/gamification.api'
-import { useGetProgressQuery } from '@/features/progress/services/progress.api'
+import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api'
 import { useGetConnectionsQuery } from '@/features/social/services/social.api'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import { clampTrialDay, TRIAL_TOTAL_DAYS } from '@/features/trial/utils/trialProgress'
@@ -21,8 +20,7 @@ export default function AccountCabinetContent({
   const { user } = useAuth()
   const { accessControl } = useSystemState()
   const userId = user?.id ?? ''
-  const { data: profile } = useGetProfileQuery(undefined, { skip: !userId })
-  const { data: progress } = useGetProgressQuery(userId, { skip: !userId })
+  const { data: summary } = useGetSummaryQuery(undefined, { skip: !userId })
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !userId })
   const { data: connections } = useGetConnectionsQuery(undefined, { skip: !userId })
 
@@ -43,10 +41,10 @@ export default function AccountCabinetContent({
     : 'border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)]'
   const currentDay = clampTrialDay(trial?.currentDay)
   const stats = [
-    { label: 'BITMIND', value: profile?.bitMind ?? progress?.totalPoints ?? user.stats?.totalPoints ?? 0 },
-    { label: 'NEUROGEMS', value: profile?.neuroGems ?? 0 },
-    { label: 'Streak', value: profile?.currentStreakDays ?? progress?.streakDays ?? user.stats?.streakDays ?? 0 },
-    { label: 'Рівень', value: profile?.level ?? progress?.level ?? user.stats?.level ?? 1 },
+    { label: 'BITMIND', value: summary?.rewards.bitMind ?? 0 },
+    { label: 'NEUROGEMS', value: summary?.rewards.neuroGems ?? 0 },
+    { label: 'Streak', value: summary?.streak.current ?? 0 },
+    { label: 'Рівень', value: summary?.xp.level ?? 1 },
   ]
 
   return (

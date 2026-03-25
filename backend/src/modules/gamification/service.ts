@@ -1,7 +1,15 @@
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
-import { getXpToNextLevel, resolveLevel } from './level.system.js'
-import type { RewardPayload, GamificationProfileView } from './types.js'
+import { LEVELS, getXpToNextLevel, resolveLevel } from './level.system.js'
+import { onXpGained } from './triggers.js'
+import type {
+  RewardPayload,
+  GamificationEventType,
+  GamificationProfileView,
+  GamificationSummaryView,
+} from './types.js'
+import { getUserStreaks } from '../streak/service.js'
+import { rewardEngine } from './reward.engine.js'
 
 async function ensureProfile(userId: string) {
   return prisma.gamificationProfile.upsert({
@@ -11,17 +19,25 @@ async function ensureProfile(userId: string) {
   })
 }
 
+async function getDailyStreak(userId: string) {
+  const streaks = await getUserStreaks(userId)
+  return streaks.find(streak => streak.ruleKey === 'daily_checkin') ?? null
+}
+
+function isToday(date: Date) {
+  const now = new Date()
+  return date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate()
+}
+
 export async function getProfile(userId: string): Promise<GamificationProfileView> {
   await ensureProfile(userId)
   const profile = await prisma.gamificationProfile.findUnique({ where: { userId } })
   if (!profile) throw new Error('profile_not_found')
   const level = resolveLevel(profile.mindXP)
   const xpToNextLevel = getXpToNextLevel(profile.mindXP)
-  const streak = await prisma.streak.findFirst({
-    where: { userId, ruleKey: 'daily_checkin', endAt: null },
-    orderBy: { current: 'desc' },
-    select: { current: true },
-  })
+  const streak = await getDailyStreak(userId)
   return {
     ...profile,
     xpToNextLevel,
@@ -33,6 +49,10 @@ export async function getProfile(userId: string): Promise<GamificationProfileVie
 
 export async function applyReward(userId: string, reward: RewardPayload): Promise<GamificationProfileView> {
   await ensureProfile(userId)
+  const previous = await prisma.gamificationProfile.findUnique({
+    where: { userId },
+    select: { level: true, mindXP: true },
+  })
 
   const updateData: Prisma.GamificationProfileUpdateInput = {}
   if (reward.bitMind) updateData.bitMind = { increment: reward.bitMind }
@@ -45,12 +65,15 @@ export async function applyReward(userId: string, reward: RewardPayload): Promis
     await prisma.gamificationProfile.update({ where: { userId }, data: { level: level.level } })
     updated.level = level.level
   }
-  const xpToNextLevel = getXpToNextLevel(updated.mindXP)
-  const streak = await prisma.streak.findFirst({
-    where: { userId, ruleKey: 'daily_checkin', endAt: null },
-    orderBy: { current: 'desc' },
-    select: { current: true },
+  await onXpGained({
+    userId,
+    previousLevel: previous?.level ?? resolveLevel(previous?.mindXP ?? 0).level,
+    nextLevel: updated.level,
+    previousXp: previous?.mindXP ?? 0,
+    nextXp: updated.mindXP,
   })
+  const xpToNextLevel = getXpToNextLevel(updated.mindXP)
+  const streak = await getDailyStreak(userId)
   return {
     ...updated,
     xpToNextLevel,
@@ -61,15 +84,7 @@ export async function applyReward(userId: string, reward: RewardPayload): Promis
 }
 
 export async function getStreakSummary(userId: string) {
-  const streak = await prisma.streak.findFirst({
-    where: { userId, ruleKey: 'daily_checkin', endAt: null },
-    orderBy: { lastAt: 'desc' },
-    select: {
-      current: true,
-      longest: true,
-      totalDays: true,
-    },
-  })
+  const streak = await getDailyStreak(userId)
   const metric = await prisma.cycleStreakMetric.findUnique({
     where: { userId },
     select: {
@@ -84,6 +99,67 @@ export async function getStreakSummary(userId: string) {
     stabilityDays: metric?.daysStable ?? 0,
     drainDays: metric?.drainsCount ?? 0,
   }
+}
+
+export async function getSummary(userId: string): Promise<GamificationSummaryView> {
+  await ensureProfile(userId)
+  const [profile, streak] = await Promise.all([
+    prisma.gamificationProfile.findUnique({ where: { userId } }),
+    getDailyStreak(userId),
+  ])
+
+  if (!profile) {
+    throw new Error('profile_not_found')
+  }
+
+  const level = resolveLevel(profile.mindXP)
+  const nextLevel = LEVELS.find(item => item.level === level.level + 1) ?? null
+  const currentLevelXp = Math.max(0, profile.mindXP - level.xpThreshold)
+  const nextLevelXp = nextLevel ? Math.max(0, nextLevel.xpThreshold - level.xpThreshold) : 0
+  const lastActivityAt = streak?.lastAt ? new Date(streak.lastAt) : null
+  const streakAtRisk = Boolean(
+    streak?.current && streak.current > 3 && lastActivityAt && !isToday(lastActivityAt),
+  )
+
+  return {
+    streak: {
+      current: streak?.current ?? 0,
+      longest: streak?.longest ?? 0,
+      lastActivityAt: lastActivityAt?.toISOString() ?? null,
+    },
+    xp: {
+      total: profile.mindXP,
+      level: level.level,
+      currentLevelXp,
+      nextLevelXp,
+    },
+    rewards: {
+      bitMind: profile.bitMind,
+      neuroGems: profile.neuroGems,
+    },
+    flags: {
+      streakAtRisk,
+      levelUpAvailable: false,
+    },
+  }
+}
+
+export async function handleGamificationEvent(userId: string, event: GamificationEventType) {
+  switch (event) {
+    case 'DAILY_COMPLETED':
+      await rewardEngine.onDailyEntryCreated(userId)
+      break
+    case 'AI_MESSAGE_SENT':
+      await rewardEngine.onMentorSessionCompleted(userId)
+      break
+    case 'TASK_COMPLETED':
+      await rewardEngine.onMicroTaskCompleted(userId)
+      break
+    default:
+      throw new Error('unsupported_gamification_event')
+  }
+
+  return getSummary(userId)
 }
 
 export async function getLevelState(userId: string) {

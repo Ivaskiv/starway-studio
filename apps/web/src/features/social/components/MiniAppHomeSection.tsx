@@ -1,5 +1,10 @@
 import { BookOpen, Bot, Gem } from 'lucide-react'
 
+import GameBadge from '@/components/miniapp/GameBadge'
+import EventList from '@/features/journal-mini/components/EventList'
+import WeeklyStrip from '@/features/journal-mini/components/WeeklyStrip'
+import { useWeeklyJournal } from '@/features/journal-mini/hooks/useWeeklyJournal'
+
 interface MiniAppHomeSectionProps {
   hasAccess: boolean
   profileBitMind: number
@@ -23,6 +28,14 @@ export default function MiniAppHomeSection({
   onOpenTracker,
   onOpenLibrary,
 }: MiniAppHomeSectionProps) {
+  const { days, eventsByDate, selectedDay, setSelectedDay } = useWeeklyJournal()
+  const selectedDate = new Date(`${selectedDay}T12:00:00`)
+  const selectedDayLabel = selectedDate.toLocaleDateString('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+  })
+  const selectedEvents = eventsByDate[selectedDay] ?? []
+
   return (
     <div className="space-y-3 px-4 pt-5">
       {!hasAccess && (
@@ -36,6 +49,21 @@ export default function MiniAppHomeSection({
       )}
 
       <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2">
+          <GameBadge label="BITMIND" value={profileBitMind} variant="xp" />
+          <GameBadge label="Streak" value={profileStreak} variant="streak" />
+          <GameBadge label="Рівень" value={profileLevel} variant="level" />
+        </div>
+
+        <WeeklyStrip
+          days={days}
+          eventsByDate={eventsByDate}
+          selectedDay={selectedDay}
+          onSelectDay={setSelectedDay}
+        />
+
+        <EventList dayLabel={selectedDayLabel} events={selectedEvents} />
+
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
           <div className="mb-3 flex items-center gap-3">
             <span className="btn-icon h-11 w-11 text-[rgb(var(--accent-soft-rgb))]" aria-hidden="true">
@@ -46,20 +74,8 @@ export default function MiniAppHomeSection({
               <p className="text-xs text-[var(--text-muted)]">Персональний асистент</p>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: 'BITMIND', value: profileBitMind },
-              { label: 'Streak', value: profileStreak },
-              { label: 'Рівень', value: profileLevel },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] p-2 text-center"
-              >
-                <p className="text-base font-bold text-[var(--accent)]">{item.value}</p>
-                <p className="mt-0.5 text-[9px] text-[var(--text-muted)]">{item.label}</p>
-              </div>
-            ))}
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-2 text-xs text-[var(--text-muted)]">
+            Асистент уже бачить твій рівень, streak і прогрес AI Mentor.
           </div>
         </div>
 

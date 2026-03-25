@@ -24,6 +24,19 @@ export interface UserSettings {
   theme?:       string | null
   language?:    string | null
   bgColor?:     string | null
+  notifications?: {
+    enabled?: boolean
+    morningTime?: string | null
+    eveningTime?: string | null
+    types?: {
+      dailyMorning?: boolean
+      dailyEvening?: boolean
+      weeklySummary?: boolean
+      streakAlert?: boolean
+      streakBroken?: boolean
+      levelUp?: boolean
+    }
+  }
 }
 
 // ── Access ─────────────────────────────────────────────────────

@@ -58,6 +58,7 @@ export interface SafeUser {
     accentColor: string | null // ✅ ЗМІНЕНО: null замість undefined
     theme: string | null
     language: string | null
+    notifications?: Record<string, unknown>
   }
   lastLoginAt: string | null
   subscriptionStatus: 'active' | 'canceled' | 'past_due' | 'incomplete' | null

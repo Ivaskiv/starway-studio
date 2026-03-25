@@ -14,10 +14,16 @@ interface TrialLike {
 }
 
 interface ProfileLike {
-  bitMind?: number
-  level?: number
-  neuroGems?: number
-  currentStreakDays?: number
+  rewards?: {
+    bitMind?: number
+    neuroGems?: number
+  }
+  xp?: {
+    level?: number
+  }
+  streak?: {
+    current?: number
+  }
 }
 
 interface WheelScoreLike {
@@ -50,10 +56,10 @@ export function useMiniAppViewModel({
     const trialDay = clampTrialDay(trial?.currentDay ?? 0)
     const trackerProgress = getTrialCompletionPercent(trial?.currentDay ?? 0)
     const displayName = telegramUser?.first_name ?? userName
-    const profileStreak = profile?.currentStreakDays ?? 0
-    const profileBitMind = profile?.bitMind ?? 0
-    const profileLevel = profile?.level ?? 1
-    const profileNeuroGems = profile?.neuroGems ?? 0
+    const profileStreak = profile?.streak?.current ?? 0
+    const profileBitMind = profile?.rewards?.bitMind ?? 0
+    const profileLevel = profile?.xp?.level ?? 1
+    const profileNeuroGems = profile?.rewards?.neuroGems ?? 0
 
     const scoreById = new Map((latestWheel?.scores ?? []).map(item => [item.categoryId, item.score * 10]))
     const trackerData: MiniAppTrackerItem[] = [

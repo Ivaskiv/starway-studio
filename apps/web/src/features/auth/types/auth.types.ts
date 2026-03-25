@@ -55,6 +55,19 @@ export interface UpdateUserSettingsInput {
     accentColor?: string
     theme?: string
     language?: string
+    notifications?: {
+      enabled?: boolean
+      morningTime?: string | null
+      eveningTime?: string | null
+      types?: {
+        dailyMorning?: boolean
+        dailyEvening?: boolean
+        weeklySummary?: boolean
+        streakAlert?: boolean
+        streakBroken?: boolean
+        levelUp?: boolean
+      }
+    }
   }
 }
 

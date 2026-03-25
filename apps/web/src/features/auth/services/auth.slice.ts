@@ -36,7 +36,24 @@ const authSlice = createSlice({
     // Використовувати після PATCH /api/auth/settings
     updateUserSettings: (
       state,
-      { payload }: PayloadAction<{ accentColor?: string; language?: string; theme?: string }>,
+      { payload }: PayloadAction<{
+        accentColor?: string
+        language?: string
+        theme?: string
+        notifications?: {
+          enabled?: boolean
+          morningTime?: string | null
+          eveningTime?: string | null
+          types?: {
+            dailyMorning?: boolean
+            dailyEvening?: boolean
+            weeklySummary?: boolean
+            streakAlert?: boolean
+            streakBroken?: boolean
+            levelUp?: boolean
+          }
+        }
+      }>,
     ) => {
       if (!state.user) return;
       state.user.settings = { ...state.user?.settings, ...payload };

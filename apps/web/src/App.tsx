@@ -22,10 +22,12 @@ const StartFlowPage = lazy(() => import('@/pages/onboarding/StartFlowPage'));
 const ContinueFlowPage = lazy(() => import('@/pages/onboarding/ContinueFlowPage'));
 const Dashboard = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
 const Settings = lazy(() => import('@/features/settings/pages/SettingsPage'));
+const TelegramPage = lazy(() => import('@/features/telegram/pages/TelegramPage'));
 const Wheel = lazy(() => import('@/features/wheel/pages/WheelPage'));
 const WheelStart = lazy(() => import('@/features/wheel/pages/WheelStartPage'));
 const Progress = lazy(() => import('@/features/progress/pages/ProgressPage'));
 const DailyCycle = lazy(() => import('@/features/daily-cycle/pages/DailyCyclePage'));
+const Journal = lazy(() => import('@/features/journal/JournalPage'));
 const Vision = lazy(() => import('@/features/vision/pages/VisionPage'));
 const Goals = lazy(() => import('@/features/goals/pages/GoalsPage'));
 const TrialMirror = lazy(() => import('@/features/goals/pages/TrialMirrorPage'));
@@ -70,6 +72,7 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   { path: '/dashboard', element: <Dashboard />, ability: 'dashboard.view' },
   { path: '/dashboard/wheel', element: <Wheel />, ability: 'wheel.view' },
   { path: '/dashboard/cycle', element: <DailyCycle />, ability: 'dashboard.view' },
+  { path: '/dashboard/journal', element: <Journal />, ability: 'dashboard.view' },
   { path: '/dashboard/progress', element: <Progress />, ability: 'progress.view' },
   { path: '/dashboard/vision', element: <Vision />, ability: 'mentor.vision', showDeniedScreen: true },
   { path: '/dashboard/goals', element: <Goals />, ability: 'mentor.goals', showDeniedScreen: true },
@@ -84,6 +87,7 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   { path: '/dashboard/product-create', element: <ProductCreation />, ability: 'dashboard.view' },
   { path: '/dashboard/profile', element: <Profile />, ability: 'profile.view' },
   { path: '/dashboard/settings', element: <Settings />, ability: 'settings.manage' },
+  { path: '/dashboard/telegram', element: <TelegramPage />, ability: 'dashboard.view' },
   { path: '/dashboard/subscription', element: <Subscription />, ability: 'dashboard.view' },
   { path: '/dashboard/zoom', element: <Subscription />, ability: 'dashboard.view' },
   { path: '/dashboard/consultation', element: <Subscription />, ability: 'dashboard.view' },

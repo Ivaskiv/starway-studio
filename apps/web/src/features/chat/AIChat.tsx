@@ -58,7 +58,6 @@ export default function AIChat({
 }: AIChatProps) {
   const [messages, setMessages] = useState<AIMessage[]>([])
   const [draft, setDraft] = useState('')
-  const [xpToast, setXpToast] = useState<string | null>(null)
 
   const greeting = useMemo(() => buildGreeting(userName), [userName])
   const nextLevel = useMemo(() => getNextLevel(userLevel), [userLevel])
@@ -67,21 +66,12 @@ export default function AIChat({
     setMessages([{ id: `greeting-${userId}`, role: 'assistant', content: greeting }])
   }, [greeting, userId])
 
-  useEffect(() => {
-    if (!xpToast) return
-    const timer = window.setTimeout(() => setXpToast(null), 1800)
-    return () => window.clearTimeout(timer)
-  }, [xpToast])
-
-  const reward = () => setXpToast('+5 XP ✦')
-
   const pushUserAndAssistant = (userText: string, assistantText: string) => {
     setMessages(prev => [
       ...prev,
       { id: `user-${prev.length + 1}`, role: 'user', content: userText },
       { id: `assistant-${prev.length + 2}`, role: 'assistant', content: assistantText },
     ])
-    reward()
   }
 
   const handleQuickReply = (reply: (typeof QUICK_REPLIES)[number]) => {
@@ -156,12 +146,6 @@ export default function AIChat({
         </div>
 
         <div className="relative">
-          {xpToast && (
-            <div className="miniapp-aichat__toast" role="status" aria-live="polite">
-              {xpToast}
-            </div>
-          )}
-
           <div className="miniapp-aichat__input-wrap">
             <textarea
               value={draft}

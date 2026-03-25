@@ -47,7 +47,7 @@ function getPageContext(pathname: string, isDashboardShell: boolean): PageContex
     return {
       title: 'Продовжуй роботу',
       subtitle: 'Відкрий потрібний блок і зроби наступну дію без зайвих переходів.',
-      status: 'Starway dashboard',
+      // status: 'Starway dashboard',
     }
   }
 

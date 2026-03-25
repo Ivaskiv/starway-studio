@@ -8,11 +8,11 @@ import { useAbility } from '@/features/auth/utils/can'
 import { DailyCycleFlow } from '@/features/daily-cycle/pages/DailyCyclePage'
 import GamificationWidget from '@/features/gamification/components/GamificationWidget'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
+import { getTrialDaysLeft } from '@/features/trial/utils/trialProgress'
 import { WheelChart } from '@/features/wheel/components/WheelChart'
 import { WheelForm } from '@/features/wheel/components/WheelForm'
-import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
 import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
-import { hasSavedAccentColor } from '@/theme/accent.utils'
+import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
 import { GlassCard } from '@/ui'
 import {
   BarChart3,
@@ -21,8 +21,8 @@ import {
   RefreshCcw,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -72,30 +72,6 @@ const WHEEL_EMOJI_MAP = new Map(WHEEL_CATEGORIES.map(item => [item.id, item.emoj
 
 const formatWheelDate = (value: Date) =>
   value.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
-
-const LIQUID_FOOTER_BUTTON_BASE =
-  'w-full rounded-t-[18px] rounded-b-[22px] border-x border-b border-t-0 py-3 text-sm font-medium transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_14px_30px_rgba(0,0,0,0.12)]'
-
-const LIQUID_FOOTER_BUTTON_PRIMARY =
-  `${LIQUID_FOOTER_BUTTON_BASE} border-x-[rgba(var(--accent-rgb),0.18)] border-b-[rgba(255,255,255,0.12)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.88),rgba(var(--accent-rgb),0.72))] text-white hover:brightness-110`
-
-const LIQUID_FOOTER_BUTTON_TINT =
-  `${LIQUID_FOOTER_BUTTON_BASE} border-x-[rgba(var(--accent-rgb),0.16)] border-b-[rgba(255,255,255,0.10)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(var(--accent-rgb),0.07))] text-[var(--accent)] hover:bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.16),rgba(var(--accent-rgb),0.10))]`
-
-const LIQUID_FOOTER_BUTTON_ICE =
-  `${LIQUID_FOOTER_BUTTON_BASE} border-x-[rgba(var(--accent-rgb),0.14)] border-b-[rgba(255,255,255,0.10)] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.025))] text-[var(--text-secondary)] hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035))] hover:text-[var(--text-primary)]`
-
-const DASHBOARD_USER_CARD =
-  'overflow-hidden rounded-[24px] border border-[rgba(var(--accent-rgb),0.14)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.07),rgba(255,255,255,0.02)_18%,rgba(255,255,255,0.015)_100%)] shadow-[0_18px_48px_rgba(0,0,0,0.22),0_0_0_1px_rgba(var(--accent-rgb),0.04),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_-18px_30px_rgba(0,0,0,0.10)]'
-
-const DASHBOARD_USER_CARD_SOFT =
-  'overflow-hidden rounded-[22px] border border-[rgba(var(--accent-rgb),0.12)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.05),rgba(255,255,255,0.02)_22%,rgba(255,255,255,0.012)_100%)] shadow-[0_14px_36px_rgba(0,0,0,0.18),0_0_0_1px_rgba(var(--accent-rgb),0.03),inset_0_1px_0_rgba(255,255,255,0.06)]'
-
-const EDGE_ACTION_WRAP =
-  'border-t border-[rgba(255,255,255,0.06)] bg-[linear-gradient(180deg,rgba(255,255,255,0.025),rgba(255,255,255,0.01))] px-0 pb-0 pt-0'
-
-const EDGE_ACTION_TOP_WRAP =
-  'border-b border-[rgba(255,255,255,0.06)] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.012))]'
 
 // ─── StatsGrid ─────────────────────────────────────────────────────────────
 
@@ -165,6 +141,7 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
   const hasNoTrial      = !trial?.isActive && !hasEverStarted
   const totalDays = 7
   const currentDay = Math.min(7, Math.max(1, trial?.currentDay ?? 1))
+  const trialDaysLeft = trial?.isActive ? getTrialDaysLeft(currentDay) : 0
   const isJustStarted = (trial?.currentDay ?? 0) === 1 && (trial?.progress ?? 0) < 5
   const now = new Date()
   const isMorningDone = false
@@ -189,7 +166,7 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
       : 'pending'
 
   if (hasNoTrial) return (
-    <div className={DASHBOARD_USER_CARD_SOFT}>
+    <div className="dashboard-liquid-card--soft">
       <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(255,255,255,0.02))] p-5">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
           МІЙ ШЛЯХ
@@ -219,10 +196,10 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
             </div>
           ))}
         </div>
-        <div className={EDGE_ACTION_WRAP}>
+        <div className="dashboard-liquid-edge">
           <button
             type="button"
-            className={LIQUID_FOOTER_BUTTON_PRIMARY}
+            className="btn-liquid-dashboard btn-liquid-dashboard--primary"
             onClick={() => navigate('/dashboard/ai-mentor')}
           >
             ▶ Розпочати 7 днів безкоштовно
@@ -290,7 +267,7 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
         </div>
       )}
       {isTrialExpired && !isPaid && (
-        <div className={DASHBOARD_USER_CARD_SOFT}>
+        <div className="dashboard-liquid-card--soft">
           <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.12),rgba(255,255,255,0.02))] p-5">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
               ТВІЙ ШЛЯХ · ПАУЗА
@@ -320,10 +297,10 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
                 <span className="text-lg font-bold text-[var(--accent)]">{p.price}</span>
               </div>
             ))}
-            <div className={EDGE_ACTION_WRAP}>
+            <div className="dashboard-liquid-edge">
               <button
                 type="button"
-                className={LIQUID_FOOTER_BUTTON_PRIMARY}
+                className="btn-liquid-dashboard btn-liquid-dashboard--primary"
                 onClick={() => navigate('/dashboard/subscription')}
               >
                 Продовжити шлях →
@@ -332,14 +309,14 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
           </div>
         </div>
       )}
-      <div className={DASHBOARD_USER_CARD}>
+      <div className="dashboard-liquid-card">
         <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.18),rgba(255,255,255,0.02)_58%,rgba(255,255,255,0.01))] p-5">
           <div className="mb-4 border-b border-[rgba(255,255,255,0.06)] pb-4">
             <div className="flex items-center gap-3">
             <span className="text-2xl font-bold text-[var(--accent)]">🔥 {currentDay}</span>
             <div className="min-w-0">
               <p className="text-sm font-medium text-[var(--text-primary)]">день поспіль</p>
-              <p className="text-xs text-[var(--text-muted)]">День {currentDay} з {totalDays} · залишилось {trial?.daysLeft ?? 0} дн.</p>
+              <p className="text-xs text-[var(--text-muted)]">День {currentDay} з {totalDays} · залишилось {trialDaysLeft} дн.</p>
             </div>
             <div className="ml-auto overflow-x-auto pb-1">
               <div className="flex gap-2" style={{ width: 'max-content' }}>
@@ -454,11 +431,11 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
             </div>
           </div>
         )}
-        <div className={EDGE_ACTION_WRAP}>
+        <div>
           {isLocked ? (
             <button
               type="button"
-              className={LIQUID_FOOTER_BUTTON_TINT}
+              className="btn-liquid-dashboard btn-liquid-dashboard--tint"
               onClick={() => navigate('/dashboard/subscription')}
             >
               Розблокувати доступ →
@@ -466,7 +443,7 @@ function JourneySection({ onOpenWheelFrame }: { onOpenWheelFrame: () => void }) 
           ) : (
             <button
               type="button"
-              className={LIQUID_FOOTER_BUTTON_PRIMARY}
+              className="btn-liquid-dashboard btn-liquid-dashboard--primary"
               onClick={() => openTask(nextTask)}
             >
               ▶ Продовжити день
@@ -619,7 +596,7 @@ function WheelStatusNotice({ onOpenInline }: { onOpenInline: () => void }) {
   if (!needsWheel) return null
 
   return (
-    <div className={DASHBOARD_USER_CARD_SOFT}>
+    <div className="dashboard-liquid-card--soft">
       <div className="p-4">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
@@ -635,11 +612,11 @@ function WheelStatusNotice({ onOpenInline }: { onOpenInline: () => void }) {
           </p>
         </div>
       </div>
-        <div className={EDGE_ACTION_WRAP}>
+        <div >
         <button
           type="button"
           onClick={onOpenInline}
-          className={LIQUID_FOOTER_BUTTON_PRIMARY}
+          className="btn-liquid-dashboard btn-liquid-dashboard--primary"
         >
           Відкрити колесо →
         </button>
@@ -711,7 +688,7 @@ function WheelInlineFrame({
   }
 
   return (
-    <div className={`relative ${DASHBOARD_USER_CARD}`}>
+    <div className="dashboard-liquid-card relative">
       <button
         type="button"
         onClick={onClose}
@@ -720,7 +697,7 @@ function WheelInlineFrame({
       >
         <X className="h-4 w-4" />
       </button>
-      <div className={`flex flex-wrap items-start justify-between gap-3 p-5 ${EDGE_ACTION_TOP_WRAP}`}>
+      <div className="dashboard-liquid-edge--top flex flex-wrap items-start justify-between gap-3 p-5">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)]">
             КОЛЕСО БАЛАНСУ
@@ -833,11 +810,11 @@ function WheelInlineFrame({
         )}
       </div>
 
-      <div className={EDGE_ACTION_WRAP}>
+      <div className="dashboard-liquid-edge">
         <button
           type="button"
           onClick={onClose}
-          className={LIQUID_FOOTER_BUTTON_ICE}
+          className="btn-liquid-dashboard btn-liquid-dashboard--ice"
         >
           ↑ Згорнути вгору
         </button>
@@ -851,6 +828,7 @@ function WheelInlineFrame({
 export default function DashboardPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const dashboardUser = user as DashboardUser
   const userRole = useAppSelector(selectUserRole)
@@ -858,33 +836,44 @@ export default function DashboardPage() {
   const isSuperAdmin = role === 'SUPERADMIN'
   const isExpert = role === 'EXPERT' || role === 'SUPERADMIN'
   const name = dashboardUser?.firstName || dashboardUser?.name || 'Користувач'
-  const needsAccentSetup = !dashboardUser?.settings?.accentColor && !hasSavedAccentColor()
   const [activeTab, setActiveTab] = useState<'session' | 'progress'>('session')
   const [showWheelFrame, setShowWheelFrame] = useState(false)
+  const [showLevelUpCallout, setShowLevelUpCallout] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get('modal') !== 'level_up') {
+      setShowLevelUpCallout(false)
+      return
+    }
+
+    const timer = window.setTimeout(() => setShowLevelUpCallout(true), 400)
+    return () => window.clearTimeout(timer)
+  }, [location.search])
 
   return (
     <div className="space-y-6 p-6">
-      {needsAccentSetup && (
-        <GlassCard className="border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      {showLevelUpCallout ? (
+        <GlassCard className="border border-[rgba(var(--accent-rgb),0.22)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.14),rgba(255,255,255,0.03))] p-5">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
-                Налаштуй свій акцентний колір
-              </p>
-              <p className="mt-1 text-xs text-[var(--text-muted-light)]">
-                Обери колір у Налаштуваннях.
+              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">🌟 Новий рівень</p>
+              <p className="mt-2 text-lg font-semibold text-[var(--text-primary)]">Нові можливості вже відкриті</p>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Твій прогрес зафіксований. Переглянь сесію, прогрес і наступні кроки без зайвих переходів.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => navigate('/dashboard/settings?accent=1')}
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--glass-bg-hover)] transition-colors"
+              onClick={() => setShowLevelUpCallout(false)}
+              className="rounded-full border border-white/10 bg-white/5 p-2 text-[var(--text-secondary)] transition-colors hover:bg-white/10 hover:text-[var(--text-primary)]"
+              aria-label="Закрити повідомлення про новий рівень"
             >
-              Відкрити налаштування
+              <X className="h-4 w-4" />
             </button>
           </div>
         </GlassCard>
-      )}
+      ) : null}
 
       <Greeting name={name} isExpert={isExpert} isSuperAdmin={isSuperAdmin} />
 

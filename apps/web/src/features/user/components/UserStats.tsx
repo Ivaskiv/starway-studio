@@ -1,7 +1,7 @@
 //features/dashboard/blocks/user/UserStats.tsx
 
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { useGetProgressQuery } from '@/features/progress/services/progress.api';
+import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api';
 import { GlassCard } from '@/ui';
 import { Activity, Flame, Target } from 'lucide-react';
 
@@ -12,11 +12,11 @@ interface UserStatsProps {
 export default function UserStats({ userId }: UserStatsProps) {
   const { user } = useAuth();
   const id = userId || user?.id;
-  const { data } = useGetProgressQuery(id || '', { skip: !id });
+  const { data } = useGetSummaryQuery(undefined, { skip: !id });
 
-  const streak = data?.streakDays ?? 0;
-  const goals = data?.completedGoals ?? user?.stats?.completedBlocks ?? 0;
-  const sessions = data?.totalSessions ?? 0;
+  const streak = data?.streak.current ?? 0;
+  const goals = user?.stats?.completedBlocks ?? 0;
+  const sessions = user?.stats?.sessions ?? 0;
 
   return (
     <GlassCard className="p-6">

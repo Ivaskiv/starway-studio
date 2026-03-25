@@ -45,6 +45,7 @@ export const ROUTES = {
   WHEEL_START: '/wheel/start',
   CYCLE: '/dashboard/cycle',         // Daily cycle
   PROGRESS: '/dashboard/progress',   // Analytics
+  JOURNAL: '/dashboard/journal',
   STREAK: '/dashboard/streak',       // Streak tracker
   
   // ==========================================
@@ -183,6 +184,12 @@ export const ROUTE_METADATA: Record<RoutePath, {
   '/dashboard/progress': {
     title: 'Прогрес',
     description: 'Аналітика та статистика',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  '/dashboard/journal': {
+    title: 'Журнал',
+    description: 'Календар активностей і системних подій',
     requiresAuth: true,
     requiresPaid: false,
   },

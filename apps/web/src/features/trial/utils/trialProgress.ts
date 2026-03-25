@@ -11,3 +11,9 @@ export function getTrialCompletionPercent(value?: number | null) {
   if (!currentDay) return 0
   return Math.min(100, Math.round((currentDay / TRIAL_TOTAL_DAYS) * 100))
 }
+
+export function getTrialDaysLeft(value?: number | null) {
+  const currentDay = clampTrialDay(value)
+  if (!currentDay) return 0
+  return Math.max(0, TRIAL_TOTAL_DAYS - currentDay)
+}

@@ -1,5 +1,4 @@
 // frontend/src/features/settings/pages/SettingsPage.tsx
-import { Palette, Sparkles, SunMoon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useDispatch } from 'react-redux'
@@ -8,78 +7,117 @@ import { AppDispatch } from '@/app/store'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useUpdateUserSettingsMutation } from '@/features/auth/services/auth.api'
 import { updateUserSettings as updateUserSettingsState } from '@/features/auth/services/auth.slice'
-import { ThemeSettingsPanel } from '@/features/settings/components/ThemeSettingsPanel'
 import { cn } from '@/lib/utils'
-import { useThemeContext } from '@/theme/ThemeProvider'
-import {
-  applyAccentColor,
-  loadAccentColor,
-  loadUiMode,
-  saveAccentColor,
-  saveUiMode,
-  type UiMode,
-} from '@/theme/accent.utils'
 import { GlassCard } from '@/ui'
 
 export default function SettingsPage() {
   const { user } = useAuth()
   const dispatch = useDispatch<AppDispatch>()
-  const theme = useThemeContext()
   const [updateUserSettings, { isLoading }] = useUpdateUserSettingsMutation()
 
-  const defaultAccent = user?.settings?.accentColor ?? theme.accent ?? loadAccentColor()
-  const defaultMode: UiMode = (user?.settings?.theme as UiMode) ?? theme.mode ?? loadUiMode()
-  const [accent, setAccent] = useState(defaultAccent)
-  const [mode, setMode] = useState<UiMode>(defaultMode)
+  const defaultNotifications = useMemo(() => (user?.settings?.notifications ?? {
+    enabled: true,
+    morningTime: '09:00',
+    eveningTime: '21:00',
+    types: {
+      dailyMorning: true,
+      dailyEvening: true,
+      weeklySummary: true,
+      streakAlert: true,
+      streakBroken: true,
+      levelUp: true,
+    },
+  }), [user?.settings?.notifications])
   const [saved, setSaved] = useState({
-    accent: defaultAccent,
-    mode: defaultMode,
+    notificationsEnabled: defaultNotifications.enabled ?? true,
+    morningTime: defaultNotifications.morningTime ?? '09:00',
+    eveningTime: defaultNotifications.eveningTime ?? '21:00',
+    notificationTypes: {
+      dailyMorning: defaultNotifications.types?.dailyMorning ?? true,
+      dailyEvening: defaultNotifications.types?.dailyEvening ?? true,
+      weeklySummary: defaultNotifications.types?.weeklySummary ?? true,
+      streakAlert: defaultNotifications.types?.streakAlert ?? true,
+      streakBroken: defaultNotifications.types?.streakBroken ?? true,
+      levelUp: defaultNotifications.types?.levelUp ?? true,
+    },
+  })
+  const [notificationsEnabled, setNotificationsEnabled] = useState(defaultNotifications.enabled ?? true)
+  const [morningTime, setMorningTime] = useState(defaultNotifications.morningTime ?? '09:00')
+  const [eveningTime, setEveningTime] = useState(defaultNotifications.eveningTime ?? '21:00')
+  const [notificationTypes, setNotificationTypes] = useState({
+    dailyMorning: defaultNotifications.types?.dailyMorning ?? true,
+    dailyEvening: defaultNotifications.types?.dailyEvening ?? true,
+    weeklySummary: defaultNotifications.types?.weeklySummary ?? true,
+    streakAlert: defaultNotifications.types?.streakAlert ?? true,
+    streakBroken: defaultNotifications.types?.streakBroken ?? true,
+    levelUp: defaultNotifications.types?.levelUp ?? true,
   })
 
   useEffect(() => {
     if (!user) return
-    const savedAccent = user.settings?.accentColor ?? defaultAccent
-    const savedMode = (user.settings?.theme as UiMode) ?? defaultMode
-    setAccent(savedAccent)
-    setMode(savedMode)
-    setSaved({
-      accent: savedAccent,
-      mode: savedMode,
+    const nextNotifications = user.settings?.notifications ?? defaultNotifications
+    setNotificationsEnabled(nextNotifications.enabled ?? true)
+    setMorningTime(nextNotifications.morningTime ?? '09:00')
+    setEveningTime(nextNotifications.eveningTime ?? '21:00')
+    setNotificationTypes({
+      dailyMorning: nextNotifications.types?.dailyMorning ?? true,
+      dailyEvening: nextNotifications.types?.dailyEvening ?? true,
+      weeklySummary: nextNotifications.types?.weeklySummary ?? true,
+      streakAlert: nextNotifications.types?.streakAlert ?? true,
+      streakBroken: nextNotifications.types?.streakBroken ?? true,
+      levelUp: nextNotifications.types?.levelUp ?? true,
     })
-    applyAccentColor(savedAccent, savedMode)
-    theme.setAccent(savedAccent)
-    theme.setMode(savedMode)
-  }, [user, defaultAccent, defaultMode, theme])
+    setSaved({
+      notificationsEnabled: nextNotifications.enabled ?? true,
+      morningTime: nextNotifications.morningTime ?? '09:00',
+      eveningTime: nextNotifications.eveningTime ?? '21:00',
+      notificationTypes: {
+        dailyMorning: nextNotifications.types?.dailyMorning ?? true,
+        dailyEvening: nextNotifications.types?.dailyEvening ?? true,
+        weeklySummary: nextNotifications.types?.weeklySummary ?? true,
+        streakAlert: nextNotifications.types?.streakAlert ?? true,
+        streakBroken: nextNotifications.types?.streakBroken ?? true,
+        levelUp: nextNotifications.types?.levelUp ?? true,
+      },
+    })
+  }, [user, defaultNotifications])
 
   const hasChanges = useMemo(
     () =>
-      accent !== saved.accent ||
-      mode !== saved.mode,
-    [accent, mode, saved],
+      notificationsEnabled !== saved.notificationsEnabled ||
+      morningTime !== saved.morningTime ||
+      eveningTime !== saved.eveningTime ||
+      JSON.stringify(notificationTypes) !== JSON.stringify(saved.notificationTypes),
+    [saved, notificationsEnabled, morningTime, eveningTime, notificationTypes],
   )
-
-  const handleAccent = useCallback((hex: string) => {
-    setAccent(hex)
-    theme.setAccent(hex)
-    applyAccentColor(hex, mode)
-  }, [mode, theme])
-
-  const handleMode = useCallback((next: UiMode) => {
-    setMode(next)
-    theme.setMode(next)
-    applyAccentColor(accent, next)
-  }, [accent, theme])
 
   const handleSave = async () => {
     if (!user) return
     try {
       await updateUserSettings({
-        settings: { accentColor: accent, theme: mode },
+        settings: {
+          notifications: {
+            enabled: notificationsEnabled,
+            morningTime,
+            eveningTime,
+            types: notificationTypes,
+          },
+        },
       }).unwrap()
-      dispatch(updateUserSettingsState({ accentColor: accent, theme: mode }))
-      saveAccentColor(accent, mode)
-      saveUiMode(mode)
-      setSaved({ accent, mode })
+      dispatch(updateUserSettingsState({
+        notifications: {
+          enabled: notificationsEnabled,
+          morningTime,
+          eveningTime,
+          types: notificationTypes,
+        },
+      }))
+      setSaved({
+        notificationsEnabled,
+        morningTime,
+        eveningTime,
+        notificationTypes,
+      })
       toast.success('Налаштування збережено')
     } catch (error) {
       console.error('settings save failed', error)
@@ -88,11 +126,10 @@ export default function SettingsPage() {
   }
 
   const handleCancel = () => {
-    setAccent(saved.accent)
-    setMode(saved.mode)
-    theme.setAccent(saved.accent)
-    theme.setMode(saved.mode)
-    applyAccentColor(saved.accent, saved.mode)
+    setNotificationsEnabled(saved.notificationsEnabled)
+    setMorningTime(saved.morningTime)
+    setEveningTime(saved.eveningTime)
+    setNotificationTypes(saved.notificationTypes)
   }
 
   if (!user) {
@@ -114,10 +151,10 @@ export default function SettingsPage() {
               Налаштування
             </p>
             <h1 className="text-3xl font-black tracking-tight text-[var(--text-primary)] md:text-4xl">
-              Візуальна система Starway
+              Telegram нагадування
             </h1>
             <p className="mt-3 text-base leading-relaxed text-[var(--text-secondary)]">
-              Один центр керування темою, акцентом і glass-поверхнями. Без мовного перемикача, без зайвих технічних рішень, тільки український інтерфейс.
+              Керуйте ранковими й вечірніми нагадуваннями, тижневим звітом та системними сигналами в одному місці.
             </p>
           </div>
 
@@ -141,42 +178,90 @@ export default function SettingsPage() {
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <GlassCard className="ios-panel">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="ios-glass-soft p-4">
-              <div className="flex items-center gap-2 text-[var(--accent)]">
-                <Palette size={16} />
-                <span className="text-xs font-semibold uppercase tracking-widest">Accent</span>
-              </div>
-              <p className="mt-3 text-sm text-[var(--text-primary)]">{accent}</p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">Базове джерело кольору для glow, кнопок і highlights.</p>
-            </div>
-
-            <div className="ios-glass-soft p-4">
-              <div className="flex items-center gap-2 text-[var(--accent)]">
-                <SunMoon size={16} />
-                <span className="text-xs font-semibold uppercase tracking-widest">Режим</span>
-              </div>
-              <p className="mt-3 text-sm capitalize text-[var(--text-primary)]">{mode}</p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">Світлий або темний glass-корпус із однаковою структурою.</p>
-            </div>
-
-            <div className="ios-glass-soft p-4">
-              <div className="flex items-center gap-2 text-[var(--accent)]">
-                <Sparkles size={16} />
-                <span className="text-xs font-semibold uppercase tracking-widest">UI</span>
-              </div>
-              <p className="mt-3 text-sm text-[var(--text-primary)]">Liquid Glass</p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">Панелі, кнопки і поля синхронізовані в один iOS-подібний шар.</p>
-            </div>
+          <div className="max-w-2xl">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
+              Telegram Notifications
+            </p>
+            <h2 className="text-2xl font-black tracking-tight text-[var(--text-primary)]">
+              Нагадування і сигнали
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
+              Один блок для Telegram-нагадувань: ранковий старт, вечірній підсумок, тижневий звіт, streak alerts і level up.
+            </p>
           </div>
         </GlassCard>
 
-        <ThemeSettingsPanel
-          accent={accent}
-          mode={mode}
-          onAccentChange={handleAccent}
-          onModeChange={handleMode}
-        />
+        <GlassCard className="ios-panel space-y-5">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-4">
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Увімкнути TG нагадування</p>
+              <p className="text-xs text-[var(--text-muted)]">Працює для підключеного Telegram профілю.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNotificationsEnabled(value => !value)}
+              className={cn(
+                'rounded-full px-4 py-2 text-xs font-semibold transition-colors',
+                notificationsEnabled
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-secondary)]',
+              )}
+            >
+              {notificationsEnabled ? 'Увімкнено' : 'Вимкнено'}
+            </button>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-4">
+              <span className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Ранок</span>
+              <input
+                type="time"
+                value={morningTime}
+                onChange={(event) => setMorningTime(event.target.value)}
+                className="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              />
+            </label>
+
+            <label className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-4">
+              <span className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Вечір</span>
+              <input
+                type="time"
+                value={eveningTime}
+                onChange={(event) => setEveningTime(event.target.value)}
+                className="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              { key: 'dailyMorning', label: 'Ранкова рефлексія' },
+              { key: 'dailyEvening', label: 'Вечірній підсумок' },
+              { key: 'weeklySummary', label: 'Тижневий звіт' },
+              { key: 'streakAlert', label: 'Попередження про streak' },
+              { key: 'streakBroken', label: 'Відновлення після зриву' },
+              { key: 'levelUp', label: 'Новий рівень' },
+            ].map((item) => (
+              <label
+                key={item.key}
+                className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3"
+              >
+                <input
+                  type="checkbox"
+                  checked={notificationTypes[item.key as keyof typeof notificationTypes]}
+                  onChange={(event) => {
+                    setNotificationTypes(prev => ({
+                      ...prev,
+                      [item.key]: event.target.checked,
+                    }))
+                  }}
+                  className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-primary)]"
+                />
+                <span className="text-sm text-[var(--text-primary)]">{item.label}</span>
+              </label>
+            ))}
+          </div>
+        </GlassCard>
       </section>
     </div>
   )

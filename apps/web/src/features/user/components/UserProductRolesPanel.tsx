@@ -1,4 +1,5 @@
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api'
 import { useGetMyProductsQuery, useGetAllProductsQuery } from '@/features/products/services/products.api'
 import { useGetProgressQuery } from '@/features/progress/services/progress.api'
 import { GlassCard } from '@/ui'
@@ -27,6 +28,8 @@ export default function UserProductRolesPanel() {
 
   const { data: progress } =
     useGetProgressQuery(userId || '', { skip: !userId })
+  const { data: summary } =
+    useGetSummaryQuery(undefined, { skip: !userId })
 
   if (!userId) return null
 
@@ -39,9 +42,9 @@ export default function UserProductRolesPanel() {
   const memberProducts =
     myProducts.filter(p => !ownedIds.has(p.id))
 
-  const level = progress?.level ?? 1
-  const xp = progress?.totalXp ?? 0
-  const streak = progress?.streakDays ?? 0
+  const level = summary?.xp.level ?? progress?.level ?? 1
+  const xp = summary?.xp.total ?? progress?.totalXp ?? 0
+  const streak = summary?.streak.current ?? progress?.streakDays ?? 0
 
   return (
 

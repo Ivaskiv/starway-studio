@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { MiniAppChatMessage } from '@/features/social/types/miniapp'
 
@@ -8,16 +8,23 @@ const INITIAL_MESSAGES: MiniAppChatMessage[] = [
 
 interface UseMiniAppMentorChatOptions {
   userId: string
+  context?: string | null
 }
 
-export function useMiniAppMentorChat({ userId }: UseMiniAppMentorChatOptions) {
+const CONTEXT_PROMPTS: Record<string, string> = {
+  morning: 'Починаємо ранкову рефлексію. Яка твоя головна ціль на сьогодні?',
+  evening: 'Час підбити підсумок дня. Що сьогодні вдалось і що забереш у завтра?',
+}
+
+export function useMiniAppMentorChat({ userId, context }: UseMiniAppMentorChatOptions) {
   const [chatMessages, setChatMessages] = useState<MiniAppChatMessage[]>(INITIAL_MESSAGES)
   const [chatInput, setChatInput] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const handledContextRef = useRef<string | null>(null)
 
-  const sendMessage = async () => {
-    if (!chatInput.trim() || isSending) return
-    const text = chatInput.trim()
+  const sendTextMessage = async (rawText: string) => {
+    if (!rawText.trim() || isSending) return
+    const text = rawText.trim()
 
     setChatInput('')
     setChatMessages((messages) => [...messages, { role: 'user', text }])
@@ -57,6 +64,17 @@ export function useMiniAppMentorChat({ userId }: UseMiniAppMentorChatOptions) {
       setIsSending(false)
     }
   }
+
+  const sendMessage = async () => {
+    await sendTextMessage(chatInput)
+  }
+
+  useEffect(() => {
+    if (!context || !CONTEXT_PROMPTS[context]) return
+    if (handledContextRef.current === context) return
+    handledContextRef.current = context
+    void sendTextMessage(CONTEXT_PROMPTS[context])
+  }, [context])
 
   return {
     chatInput,

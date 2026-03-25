@@ -60,6 +60,7 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     visibleTo: ['USER'],
     items: [
       { id: 'cycle', label: 'Щоденний цикл', icon: '', path: '/dashboard/cycle', visibleTo: ['USER'] },
+      { id: 'journal', label: 'Журнал', icon: '', path: '/dashboard/journal', visibleTo: ['USER'] },
       { id: 'wheel', label: 'Колесо балансу', icon: '', path: '/dashboard/wheel', visibleTo: ['USER'] },
       { id: 'courses', label: 'Практики', icon: '', path: '/dashboard/courses', visibleTo: ['USER'] },
       { id: 'products', label: 'Продукти', icon: '', path: '/dashboard/products', visibleTo: ['USER'] },

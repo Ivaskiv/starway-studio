@@ -1,9 +1,9 @@
 import { Router } from 'express'
-import { authRequired } from '../auth/middleware/auth.js'
+import { authOrBotRequired } from '../auth/middleware/auth-or-bot.js'
 import { getUserState } from './controller.js'
 
 const router = Router()
 
-router.get('/state', authRequired, getUserState)
+router.get('/state', authOrBotRequired, getUserState)
 
 export default router

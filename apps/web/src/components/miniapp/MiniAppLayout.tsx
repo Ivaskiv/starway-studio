@@ -1,0 +1,127 @@
+import type { ReactNode } from 'react'
+import { useEffect, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+
+import BottomNav from '@/components/miniapp/BottomNav'
+import FloatingAIButton from '@/components/miniapp/FloatingAIButton'
+import type { MiniAppPageId } from '@/features/social/types/miniapp'
+
+type MiniAppLayoutProps = {
+  activeTab: MiniAppPageId
+  children: ReactNode
+}
+
+const START_PARAM_ROUTE_MAP: Record<string, string> = {
+  home: '/miniapp',
+  ai: '/miniapp/mentor',
+  ai_morning: '/miniapp/mentor?context=morning',
+  ai_evening: '/miniapp/mentor?context=evening',
+  assistant: '/miniapp/mentor',
+  tracker: '/miniapp/tracker',
+  library: '/miniapp/library',
+  profile: '/miniapp/profile',
+  subscription: '/dashboard/subscription',
+  level_up: '/dashboard?modal=level_up',
+}
+
+function getTelegramStartParam() {
+  const telegram = (window as {
+    Telegram?: {
+      WebApp?: {
+        onEvent?: (event: string, handler: () => void) => void
+        offEvent?: (event: string, handler: () => void) => void
+        initDataUnsafe?: {
+          start_param?: string
+        }
+      }
+    }
+  }).Telegram
+
+  const runtimeStartParam = telegram?.WebApp?.initDataUnsafe?.start_param?.trim()
+  if (runtimeStartParam) return runtimeStartParam
+
+  const search = new URLSearchParams(window.location.search)
+  return search.get('startapp')?.trim() ?? search.get('tgWebAppStartParam')?.trim() ?? ''
+}
+
+export default function MiniAppLayout({
+  activeTab,
+  children,
+}: MiniAppLayoutProps) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const handledRef = useRef(false)
+  const lastAppliedParamRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const telegram = (window as {
+      Telegram?: {
+        WebApp?: {
+          onEvent?: (event: string, handler: () => void) => void
+          offEvent?: (event: string, handler: () => void) => void
+        }
+      }
+    }).Telegram
+
+    const applyStartParam = () => {
+      const startParam = getTelegramStartParam()
+      const targetRoute = START_PARAM_ROUTE_MAP[startParam]
+
+      if (!startParam || !targetRoute) return
+
+      const currentRoute = `${location.pathname}${location.search}`
+      if (currentRoute === targetRoute) return
+      if (lastAppliedParamRef.current === startParam && location.pathname !== '/miniapp') return
+
+      lastAppliedParamRef.current = startParam
+      navigate(targetRoute, { replace: true })
+    }
+
+    if (!handledRef.current) {
+      handledRef.current = true
+      applyStartParam()
+    }
+
+    telegram?.WebApp?.onEvent?.('activated', applyStartParam)
+
+    return () => {
+      telegram?.WebApp?.offEvent?.('activated', applyStartParam)
+    }
+  }, [location.pathname, location.search, navigate])
+
+  return (
+    <div className="miniapp-page-shell mx-auto flex w-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      <div className="flex-1 overflow-y-auto pb-32">
+        {children}
+      </div>
+
+      {activeTab !== 'mentor' ? (
+        <FloatingAIButton
+          onOpenChat={() => navigate('/miniapp/mentor')}
+        />
+      ) : null}
+
+      <BottomNav
+        activeTab={activeTab === 'mentor' ? 'ai' : activeTab}
+        onTabChange={(tab) => {
+          switch (tab) {
+            case 'library':
+              navigate('/miniapp/library')
+              return
+            case 'ai':
+              navigate('/miniapp/mentor')
+              return
+            case 'tracker':
+              navigate('/miniapp/tracker')
+              return
+            case 'profile':
+              navigate('/miniapp/profile')
+              return
+            default:
+              navigate('/miniapp')
+          }
+        }}
+      />
+    </div>
+  )
+}

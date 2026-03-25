@@ -17,3 +17,30 @@ export interface StreakSummary {
   stabilityDays: number
   drainDays: number
 }
+
+export interface GamificationSummary {
+  streak: {
+    current: number
+    longest: number
+    lastActivityAt: string | null
+  }
+  xp: {
+    total: number
+    level: number
+    currentLevelXp: number
+    nextLevelXp: number
+  }
+  rewards: {
+    bitMind: number
+    neuroGems: number
+  }
+  flags: {
+    streakAtRisk: boolean
+    levelUpAvailable: boolean
+  }
+}
+
+export type GamificationEventType =
+  | 'DAILY_COMPLETED'
+  | 'AI_MESSAGE_SENT'
+  | 'TASK_COMPLETED'

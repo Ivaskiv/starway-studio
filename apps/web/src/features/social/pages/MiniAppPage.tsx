@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import type { RootState } from '@/app/store'
-import BottomNav from '@/components/miniapp/BottomNav'
+import MiniAppLayout from '@/components/miniapp/MiniAppLayout'
 import { EmailCompletionCard } from '@/features/auth/components/EmailCompletionCard'
 import { useUserState } from '@/features/auth/hooks/useUserState'
 import MiniAppHomeSection from '@/features/social/components/MiniAppHomeSection'
@@ -11,7 +11,7 @@ import MiniAppLibrarySection from '@/features/social/components/MiniAppLibrarySe
 import MiniAppMentorSection from '@/features/social/components/MiniAppMentorSection'
 import MiniAppProfileSection from '@/features/social/components/MiniAppProfileSection'
 import MiniAppTrackerSection from '@/features/social/components/MiniAppTrackerSection'
-import { useGetProfileQuery } from '@/features/gamification/services/gamification.api'
+import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api'
 import { useMiniAppMentorChat } from '@/features/social/hooks/useMiniAppMentorChat'
 import { useMiniAppTelegram } from '@/features/social/hooks/useMiniAppTelegram'
 import { useMiniAppViewModel } from '@/features/social/hooks/useMiniAppViewModel'
@@ -44,15 +44,22 @@ export default function MiniAppPage() {
     if (location.pathname.startsWith('/miniapp/profile')) return 'profile'
     return 'home'
   }, [location.pathname])
+  const mentorContext = useMemo(() => {
+    const search = new URLSearchParams(location.search)
+    return search.get('context')
+  }, [location.search])
 
   const user = useSelector((state: RootState) => state.auth.user)
   const userId = user?.id ?? ''
   const userName = user?.firstName ?? user?.name ?? 'Учень'
   const { emailCompletionRequired, refetch } = useUserState()
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !userId })
-  const { data: profile } = useGetProfileQuery(undefined, { skip: !userId })
+  const { data: summary } = useGetSummaryQuery(undefined, { skip: !userId })
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, { skip: !userId })
-  const { chatInput, chatMessages, isSending, sendMessage, setChatInput } = useMiniAppMentorChat({ userId })
+  const { chatInput, chatMessages, isSending, sendMessage, setChatInput } = useMiniAppMentorChat({
+    userId,
+    context: page === 'mentor' ? mentorContext : null,
+  })
   const { isBootstrappingAuth, telegramUser } = useMiniAppTelegram({
     page,
     onOpenMentor: () => navigate('/miniapp/mentor'),
@@ -60,15 +67,14 @@ export default function MiniAppPage() {
   })
   const view = useMiniAppViewModel({
     latestWheel,
-    profile,
+    profile: summary,
     telegramUser,
     trial,
     userName,
   })
 
   return (
-    <div className="miniapp-page-shell mx-auto flex w-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
-      <div className="flex-1 overflow-y-auto pb-32">
+    <MiniAppLayout activeTab={page}>
         {isBootstrappingAuth && !userId ? (
           <div className="px-4 pt-6">
             <div className="card-surface liquid-glass p-5 text-center">
@@ -123,29 +129,6 @@ export default function MiniAppPage() {
             displayName={view.displayName}
           />
         )}
-      </div>
-
-      <BottomNav
-        activeTab={page === 'mentor' ? 'ai' : page}
-        onTabChange={(tab) => {
-          switch (tab) {
-            case 'library':
-              navigate('/miniapp/library')
-              return
-            case 'ai':
-              navigate('/miniapp/mentor')
-              return
-            case 'tracker':
-              navigate('/miniapp/tracker')
-              return
-            case 'profile':
-              navigate('/miniapp/profile')
-              return
-            default:
-              navigate('/miniapp')
-          }
-        }}
-      />
-    </div>
+    </MiniAppLayout>
   )
 }

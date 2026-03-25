@@ -97,6 +97,7 @@ export const TAG_TYPES = [
   'MentorContext',
 'ZoomSession', 
 'ZoomAttendee', 
+'Journal',
 ] as const
 
 export type TagType = (typeof TAG_TYPES)[number]

@@ -1,11 +1,10 @@
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetTodayEntryQuery, useGetDailyHistoryQuery } from '@/features/daily-cycle/services/daily.api'
-import { useGetProfileQuery } from '@/features/gamification/services/gamification.api'
+import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api'
 import { useGetActiveMicroTasksQuery } from '@/features/microTask/api/api'
-import { useGetProgressQuery } from '@/features/progress/services/progress.api'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
-import { clampTrialDay, getTrialCompletionPercent, TRIAL_TOTAL_DAYS } from '@/features/trial/utils/trialProgress'
+import { clampTrialDay, getTrialCompletionPercent, getTrialDaysLeft, TRIAL_TOTAL_DAYS } from '@/features/trial/utils/trialProgress'
 import { useGetWheelHistoryQuery } from '@/features/wheel/services/wheel.api'
 import { GlassCard } from '@/ui'
 import { BarChart3, CheckCircle2, CircleDashed, Flame, ListTodo, Moon, Sparkles, SunMedium } from 'lucide-react'
@@ -25,8 +24,7 @@ export default function MentorProgressContent({
   const { user } = useAuth()
   const { accessControl } = useSystemState()
   const userId = user?.id ?? ''
-  const { data: progress } = useGetProgressQuery(userId, { skip: !userId })
-  const { data: profile } = useGetProfileQuery(undefined, { skip: !userId })
+  const { data: summary } = useGetSummaryQuery(undefined, { skip: !userId })
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !userId })
   const { data: todayEntry } = useGetTodayEntryQuery(undefined, { skip: !userId || accessControl?.hasRequiredContacts === false })
   const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, { skip: !userId || accessControl?.hasRequiredContacts === false })
@@ -35,7 +33,7 @@ export default function MentorProgressContent({
 
   const currentDay = clampTrialDay(trial?.currentDay)
   const trialProgress = getTrialCompletionPercent(trial?.currentDay)
-  const trialDaysLeft = Math.max(0, Math.min(TRIAL_TOTAL_DAYS, trial?.daysLeft ?? 0))
+  const trialDaysLeft = trial?.isActive ? getTrialDaysLeft(trial?.currentDay) : 0
   const totalSessions = dailyHistory.length
   const totalWheels = wheelHistory.length
   const activeMicroTasks = microTasks.filter(task => (task.status ?? 'PENDING') !== 'COMPLETED')
@@ -44,11 +42,14 @@ export default function MentorProgressContent({
   const hasMorningSession = Boolean(todayContent?.morning)
   const hasEveningSession = Boolean(todayContent?.evening)
   const reportsCount = Number(Boolean(trial?.hasDay4Mirror)) + Number(Boolean(trial?.hasDay7Mirror))
-  const level = profile?.level ?? progress?.level ?? user?.stats?.level ?? 1
-  const totalPoints = profile?.bitMind ?? progress?.totalPoints ?? user?.stats?.totalPoints ?? 0
-  const streak = profile?.currentStreakDays ?? progress?.streakDays ?? user?.stats?.streakDays ?? 0
-  const nextLevelXp = Math.max(100, level * 100)
-  const levelProgress = Math.min(100, Math.round((totalPoints / nextLevelXp) * 100))
+  const level = summary?.xp.level ?? 1
+  const totalPoints = summary?.rewards.bitMind ?? 0
+  const streak = summary?.streak.current ?? 0
+  const nextLevelXp = summary?.xp.nextLevelXp ?? 0
+  const currentLevelXp = summary?.xp.currentLevelXp ?? 0
+  const levelProgress = nextLevelXp > 0
+    ? Math.min(100, Math.round((currentLevelXp / nextLevelXp) * 100))
+    : 100
 
   const statCards = [
     { label: 'Рівень', value: level, icon: Sparkles },
@@ -141,7 +142,7 @@ export default function MentorProgressContent({
             <p className="text-sm text-[var(--text-muted)]">Усі ключові блоки AI Mentor на одній сторінці.</p>
           </div>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-muted)]">
-            До рівня: {Math.max(nextLevelXp - totalPoints, 0)} XP
+            До рівня: {Math.max(nextLevelXp - currentLevelXp, 0)} XP
           </div>
         </div>
 

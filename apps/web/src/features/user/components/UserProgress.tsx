@@ -1,6 +1,6 @@
 // frontend/src/features/dashboard/blocks/user/UserProgress.tsx
 import { useAuth }             from '@/features/auth/hooks/useAuth';
-import { useGetProgressQuery } from '@/features/progress/services/progress.api';
+import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api';
 import { GlassCard }           from '@/ui';
 import { Award, TrendingUp }   from 'lucide-react';
 
@@ -8,12 +8,13 @@ export default function UserProgress() {
   const { user } = useAuth();
   if (!user) return null;
 
-  const { data } = useGetProgressQuery(user.id, { skip: !user.id });
+  const { data } = useGetSummaryQuery(undefined, { skip: !user.id });
 
-  const level       = data?.level       ?? user.stats?.level       ?? 1;
-  const totalXp     = data?.totalXp     ?? user.stats?.totalPoints ?? 0;
-  const nextLevelXp = data?.nextLevelXp ?? Math.max(100, level * 100);
-  const progressPct = Math.min(100, Math.round((totalXp / nextLevelXp) * 100));
+  const level = data?.xp.level ?? user.stats?.level ?? 1;
+  const totalXp = data?.xp.total ?? 0;
+  const currentLevelXp = data?.xp.currentLevelXp ?? 0;
+  const nextLevelXp = data?.xp.nextLevelXp ?? 0;
+  const progressPct = nextLevelXp > 0 ? Math.min(100, Math.round((currentLevelXp / nextLevelXp) * 100)) : 100;
 
   return (
     <GlassCard className="p-6">
@@ -38,7 +39,7 @@ export default function UserProgress() {
           />
         </div>
         <p className="text-xs text-white/50 mt-2">
-          До наступного рівня: {Math.max(nextLevelXp - totalXp, 0)} XP
+          До наступного рівня: {Math.max(nextLevelXp - currentLevelXp, 0)} XP
         </p>
       </div>
     </GlassCard>

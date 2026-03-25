@@ -4,10 +4,10 @@ import 'dotenv/config'
 import { type Request, type Response } from 'express'
 import { createApp }                                           from './app.js'
 import { prisma, withRetry }                                   from './db/client.js'
-import { startDailyScheduler, stopDailyScheduler }             from './modules/daily-cycle/scheduler.js'
 import { registerDailyTelegramCommands }                       from './modules/daily-cycle/telegram.js'
 import { bot }                                                 from './lib/telegram.js'
 import { registerMentorBot }              from './modules/telegram-mentor/index.js'
+import { startScheduler, stopScheduler } from './services/scheduler/index.js'
 
 const PORT = Number(process.env.PORT) || 3001
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
@@ -164,7 +164,7 @@ async function bootstrap() {
     })
 
     // Запуск у фоні — не блокує сервер
-    startDailyScheduler()
+    startScheduler()
     startTelegramBot().catch((err: unknown) => console.error('⚠️ Telegram async error:', err))
 
     prismaKeepAliveInterval = setInterval(async () => {
@@ -220,7 +220,7 @@ async function shutdown(signal: string) {
     }
 
     try {
-      stopDailyScheduler()
+      stopScheduler()
     } catch {
       // silent
     }

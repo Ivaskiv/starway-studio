@@ -407,6 +407,19 @@ export type UpdateUserSettingsPayload = {
     accentColor?: string | null
     theme?: string | null
     language?: string | null
+    notifications?: {
+      enabled?: boolean
+      morningTime?: string | null
+      eveningTime?: string | null
+      types?: {
+        dailyMorning?: boolean
+        dailyEvening?: boolean
+        weeklySummary?: boolean
+        streakAlert?: boolean
+        streakBroken?: boolean
+        levelUp?: boolean
+      }
+    }
   }
 }
 
@@ -515,6 +528,9 @@ export function toSafeUser(user: UserWithSub): SafeUser {
       accentColor: typeof resolvedUi.accentColor === 'string' ? resolvedUi.accentColor : null,
       theme: typeof resolvedUi.theme === 'string' ? resolvedUi.theme : null,
       language: typeof resolvedUi.language === 'string' ? resolvedUi.language : null,
+      notifications: typeof resolvedUi.notifications === 'object' && resolvedUi.notifications !== null && !Array.isArray(resolvedUi.notifications)
+        ? resolvedUi.notifications as Record<string, unknown>
+        : undefined,
     },
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     subscriptionStatus: normalizeSubscriptionStatus(sub?.status ?? null),
