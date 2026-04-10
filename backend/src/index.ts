@@ -192,9 +192,26 @@ async function bootstrap() {
     })
   }
 
+  async function connectWithRetry(retries = 3, delay = 3000) {
+    for (let index = 0; index < retries; index += 1) {
+      try {
+        await withRetry(() => prisma.$connect())
+        console.log('✅ DB connected')
+        return
+      } catch (error: unknown) {
+        if (index < retries - 1) {
+          console.log(`⚠️ DB retry ${index + 1}/${retries}...`)
+          await new Promise<void>(resolve => setTimeout(resolve, delay))
+          continue
+        }
+        throw error
+      }
+    }
+  }
+
   try {
     console.log('🧪 [BOOT] Connecting to database...')
-    await withRetry(() => prisma.$connect())
+    await connectWithRetry()
 
     const result = await withRetry(() => prisma.$queryRaw`SELECT 1`)
     console.log('✅ [PRISMA] Database connected | Test query result:', result)
