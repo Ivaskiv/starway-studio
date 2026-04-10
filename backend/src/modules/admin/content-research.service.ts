@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { prisma } from '../../db/client.js'
 import { openai } from '../../lib/openai.js'
 
@@ -767,7 +767,7 @@ export async function refreshMarketResearch() {
             type: config.type,
             platform: config.platform,
             niche: 'coaching_personal_dev',
-            data: data as Prisma.InputJsonValue,
+            data: data as InputJsonValue,
             generatedAt: new Date(),
             validUntil,
             promptUsed: config.prompt.slice(0, 1000),

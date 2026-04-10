@@ -25,11 +25,14 @@
     "pnpm": ">=8.0.0"
   },
   "pnpm": {
-  "workspaces": [
-    "apps/*",
-    "packages/*",
-    "backend"
-  ]
-},
+    "overrides": {
+      "@types/express-serve-static-core": "4.19.8"
+    },
+    "workspaces": [
+      "apps/*",
+      "packages/*",
+      "backend"
+    ]
+  },
   "packageManager": "pnpm@8.15.0"
 }

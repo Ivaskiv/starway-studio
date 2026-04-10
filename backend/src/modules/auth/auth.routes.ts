@@ -1,6 +1,7 @@
 // backend/src/modules/auth/auth.routes.ts
 
 import { Router } from 'express'
+import type { RequestHandler } from 'express'
 import { register, login, social, telegram, refresh, logout, getMe, updateSettings } from './auth.controller.js'
 import { authRequired } from './middleware/auth.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
@@ -12,6 +13,7 @@ import { authLimiter } from '../../middleware/rateLimiter.js'
 
 const router = Router()
 export const telegramRouter = Router()
+const authLimiterHandler = authLimiter as unknown as RequestHandler
 
 function isTelegramInactiveError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -28,10 +30,10 @@ function isTelegramInactiveError(error: unknown): boolean {
   )
 }
 
-router.post('/register', authLimiter, register)
-router.post('/login', authLimiter, login)
-router.post('/social', authLimiter, social)
-router.post('/telegram', authLimiter, telegram)
+router.post('/register', authLimiterHandler, register)
+router.post('/login', authLimiterHandler, login)
+router.post('/social', authLimiterHandler, social)
+router.post('/telegram', authLimiterHandler, telegram)
 router.post('/refresh', refresh)
 router.post('/logout', authRequired, logout)
 router.get('/me', authRequired, getMe)
