@@ -14,12 +14,7 @@ import {
   scoresFromMap,
 } from './service.js'
 import {
-  wheelAnalysis,
-  lifeDiagnosis,
-  personalityProfile,
-  trajectoryPrediction,
-  actionPlan,
-  adaptiveMissions,
+  generateWheelInsights,
 } from './ai.js'
 import { sendWheelNotification } from './telegram.js'
 import type { WheelPDFData, WheelScore, WheelNotificationPayload } from './types.js'
@@ -349,23 +344,7 @@ export async function generateWheelPDFHandler(req: AuthenticatedRequest, res: Re
     const scores = scoresFromMap(entry.scores)
     const weakest = findWeakest(scores)
     const focus = findFocus(scores, weakest)
-    const [analysis, diagnosis, profile, trajectory, plan, missions] = await Promise.all([
-      wheelAnalysis(scores, weakest, focus),
-      lifeDiagnosis(weakest.categoryId, scores),
-      personalityProfile(scores),
-      trajectoryPrediction(scores),
-      actionPlan(weakest.categoryId),
-      adaptiveMissions(weakest.categoryId),
-    ])
-
-    const insights = {
-      analysis,
-      diagnosis,
-      personalityProfile: profile,
-      trajectoryPrediction: trajectory,
-      actionPlan: plan,
-      adaptiveMissions: missions,
-    }
+    const insights = await generateWheelInsights(userId, scores, weakest, focus)
 
     const pdfData: WheelPDFData = {
       userName: entry.user.firstName ?? entry.user.email ?? 'Користувач',
@@ -408,22 +387,7 @@ export async function sendWheelTelegramReminderHandler(req: AuthenticatedRequest
     const scores = scoresFromMap(entry.scores)
     const weakest = findWeakest(scores)
     const focus = findFocus(scores, weakest)
-    const [analysis, diagnosis, profile, trajectory, plan, missions] = await Promise.all([
-      wheelAnalysis(scores, weakest, focus),
-      lifeDiagnosis(weakest.categoryId, scores),
-      personalityProfile(scores),
-      trajectoryPrediction(scores),
-      actionPlan(weakest.categoryId),
-      adaptiveMissions(weakest.categoryId),
-    ])
-    const insights = {
-      analysis,
-      diagnosis,
-      personalityProfile: profile,
-      trajectoryPrediction: trajectory,
-      actionPlan: plan,
-      adaptiveMissions: missions,
-    }
+    const insights = await generateWheelInsights(userId, scores, weakest, focus)
 
     const pdfUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/api/wheel/${id}/pdf`
     const payload: WheelNotificationPayload = {

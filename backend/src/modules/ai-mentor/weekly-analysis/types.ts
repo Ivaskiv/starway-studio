@@ -4,6 +4,15 @@ export interface WeeklyRawData {
   userId:    string
   weekStart: Date
   weekEnd:   Date
+  trialStartedAt?: Date | null
+  trialEndsAt?: Date | null
+  userGoal?: string | null
+  accessState: 'trial' | 'active' | 'paused'
+  reflectionCount: number
+  sessionCount: number
+  wheelCheckins: number
+  morningReflections: string[]
+  eveningReflections: string[]
   dailyCycles: {
     date:    Date
     state:   string        // настрій/стан
@@ -20,6 +29,8 @@ export interface WeeklyRawData {
     title:     string
     completed: boolean
     skipped:   boolean
+    progressPercent?: number | null
+    daysToComplete?: number
   }[]
   mentorMessages: {
     role:    'user' | 'assistant'
@@ -41,6 +52,9 @@ export interface UserWeeklyReport {
   growthAreas:     string[] // де виросла
   struggleAreas:   string[] // де просіла
   completionRate:  number   // % виконаних мікрозадач
+  partialTaskCount?: number
+  averageTaskProgress?: number | null
+  slowProgressTaskCount?: number
   streakDays:      number
   wheelDelta:      { sphere: string; delta: number }[] // зміни у сферах
 
@@ -84,4 +98,11 @@ export interface MentorWeeklyProfile {
 export interface WeeklyAnalysisResult {
   userReport:    UserWeeklyReport
   mentorProfile: MentorWeeklyProfile
+  metrics: {
+    sessions: number
+    reflections: number
+    tasksDone: number
+    tasksTotal: number
+    wheels: number
+  }
 }

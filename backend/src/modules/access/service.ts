@@ -2,19 +2,32 @@
 import { prisma } from '../../db/client.js'
 import { getAllAbilities } from '../../modules/auth/abilities.js'
 import { isSuperAdminEmail } from '../../modules/auth/superadmin.js'
-import type { AccessControlState, AccessItem, UserAccessResult, UserSystemState } from './types.js'
+import { ensureOwnerExpertIdForUser } from '../experts/ownership.service.js'
+import {
+  PRODUCT_ACCESS_PRODUCTS,
+  PRODUCT_ACCESS_ROLES,
+  type AccessControlState,
+  type AccessItem,
+  type ProductAccessAssignment,
+  type ProductAccessProduct,
+  type ProductAccessRole,
+  type UserAccessResult,
+  type UserSystemState,
+} from './types.js'
 
 type AccessUserSnapshot = {
   id: string
   email: string | null
-  role: 'USER' | 'EXPERT' | 'SUPERADMIN'
+  role: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
   onboardingStage: string | null
   currentStep: string | null
   trialStartsAt: Date | null
   trialEndsAt: Date | null
+  telegramEnabled: boolean
   telegramUserId: string | null
   telegramChatId: string | null
   telegramLinkChatId: string | null
+  telegramLinkActive: boolean
   fivePointsEnrollment: {
     progress: unknown
     completedAt: Date | null
@@ -30,63 +43,162 @@ type AccessUserSnapshot = {
     status: string
     endsAt: Date | null
   } | null
+  productAccesses: ProductAccessAssignment[]
+}
+
+function isProductAccessTableMissing(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: string; message?: string; meta?: { table?: string } }
+  if (candidate.code !== 'P2021' && candidate.code !== 'P2022') return false
+  const message = String(candidate.message ?? '').toLowerCase()
+  const table = String(candidate.meta?.table ?? '').toLowerCase()
+  return table.includes('product_access') || message.includes('product_access')
+}
+
+function isProductAccessProduct(value: string): value is ProductAccessProduct {
+  return (PRODUCT_ACCESS_PRODUCTS as readonly string[]).includes(value)
+}
+
+function isProductAccessRole(value: string): value is ProductAccessRole {
+  return (PRODUCT_ACCESS_ROLES as readonly string[]).includes(value)
+}
+
+function resolveEffectiveRole(input: {
+  role: AccessUserSnapshot['role']
+  email: string | null
+  productAccesses: ProductAccessAssignment[]
+}): 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN' {
+  if (input.role === 'SUPERADMIN' || isSuperAdminEmail(input.email ?? '')) return 'SUPERADMIN'
+  if (input.role === 'ADMIN') return 'ADMIN'
+  if (input.role === 'EXPERT') return 'EXPERT'
+  if (input.productAccesses.some((item) => item.role === 'ADMIN')) return 'ADMIN'
+  if (input.productAccesses.some((item) => item.role === 'EXPERT')) return 'EXPERT'
+  return 'USER'
+}
+
+function shouldPromoteUserRole(currentRole: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN', targetRole: ProductAccessRole) {
+  if (currentRole === 'SUPERADMIN') return false
+  if (currentRole === 'ADMIN') return false
+  if (targetRole === 'ADMIN') return true
+  if (targetRole === 'EXPERT') return currentRole === 'USER'
+  return false
+}
+
+function toUserRole(targetRole: ProductAccessRole): 'EXPERT' | 'ADMIN' {
+  return targetRole === 'ADMIN' ? 'ADMIN' : 'EXPERT'
+}
+
+function buildProductAccessItems(assignments: ProductAccessAssignment[]): AccessItem[] {
+  const items: AccessItem[] = []
+
+  for (const assignment of assignments) {
+    if (assignment.product === 'AI_MENTOR') {
+      items.push(
+        { key: 'mentor.core', source: 'admin', expiresAt: null },
+        { key: 'products.manage', source: 'admin', expiresAt: null },
+        { key: 'admin.clients.view', source: 'admin', expiresAt: null },
+        { key: 'funnels.manage', source: 'admin', expiresAt: null },
+      )
+    }
+
+    if (assignment.product === 'AI_ASSISTANT') {
+      items.push(
+        { key: 'products.manage', source: 'admin', expiresAt: null },
+        { key: 'mentor.core', source: 'admin', expiresAt: null },
+      )
+    }
+  }
+
+  return items
 }
 
 
 async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      role: true,
-      onboardingStage: true,
-      currentStep: true,
-      trialStartsAt: true,
-      trialEndsAt: true,
-      telegramUserId: true,
-      telegramChatId: true,
-      telegramLinks: {
-        where: { isActive: true, chatId: { not: null } },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: {
-          chatId: true,
-        },
-      },
-
-      fivePointsEnrollment: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: {
-          progress: true,
-          completedAt: true,
-          createdAt: true,
-        },
-      },
-
-      subscriptions: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: {
-          status: true,
-          trialEndsAt: true,
-          currentPeriodEnd: true,
-          createdAt: true,
-        },
-      },
-
-      mentorships: {
-        where: { status: 'ACTIVE' },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: {
-          status: true,
-          endsAt: true,
-        },
+  const baseSelect = {
+    id: true,
+    email: true,
+    role: true,
+    onboardingStage: true,
+    currentStep: true,
+    trialStartsAt: true,
+    trialEndsAt: true,
+    telegramEnabled: true,
+    telegramUserId: true,
+    telegramChatId: true,
+    telegramLinks: {
+      where: { chatId: { not: null } },
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+      select: {
+        chatId: true,
+        isActive: true,
       },
     },
-  })
+    notificationPreference: {
+      select: {
+        telegramEnabled: true,
+      },
+    },
+
+    fivePointsEnrollment: {
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+      select: {
+        progress: true,
+        completedAt: true,
+        createdAt: true,
+      },
+    },
+
+    subscriptions: {
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+      select: {
+        status: true,
+        trialEndsAt: true,
+        currentPeriodEnd: true,
+        createdAt: true,
+      },
+    },
+
+    mentorships: {
+      where: { status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+      select: {
+        status: true,
+        endsAt: true,
+      },
+    },
+  }
+
+  let user: any = null
+
+  try {
+    user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        ...baseSelect,
+        productAccesses: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            userId: true,
+            product: true,
+            role: true,
+            createdAt: true,
+          },
+        },
+      } as any,
+    })
+  } catch (error) {
+    if (!isProductAccessTableMissing(error)) throw error
+
+    user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: baseSelect as any,
+    })
+  }
 
   if (!user) return null
 
@@ -97,14 +209,16 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
   return {
     id: user.id,
     email: user.email,
-    role: user.role as 'USER' | 'EXPERT' | 'SUPERADMIN',
+      role: user.role as 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN',
     onboardingStage: user.onboardingStage ?? null,
     currentStep: user.currentStep ?? null,
     trialStartsAt: user.trialStartsAt ?? null,
     trialEndsAt: user.trialEndsAt ?? null,
+    telegramEnabled: user.notificationPreference?.telegramEnabled ?? user.telegramEnabled ?? true,
     telegramUserId: user.telegramUserId ?? null,
     telegramChatId: user.telegramChatId ?? null,
     telegramLinkChatId: user.telegramLinks[0]?.chatId ?? null,
+    telegramLinkActive: user.telegramLinks[0]?.isActive ?? false,
     fivePointsEnrollment: leadEnrollment
       ? {
           progress: leadEnrollment.progress,
@@ -128,6 +242,25 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
           endsAt: mentorship.endsAt ?? null,
         }
       : null,
+    productAccesses: (user.productAccesses ?? []).flatMap((access: {
+      id: string
+      userId: string
+      product: string
+      role: string
+      createdAt: Date
+    }) => {
+      if (!isProductAccessProduct(access.product) || !isProductAccessRole(access.role)) {
+        return []
+      }
+
+      return [{
+        id: access.id,
+        userId: access.userId,
+        product: access.product,
+        role: access.role,
+        createdAt: access.createdAt,
+      }]
+    }),
   }
 }
 
@@ -200,16 +333,17 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
       : 'GUEST'
   const email = user.email ?? null
   const telegramId = user.telegramChatId ?? user.telegramUserId ?? user.telegramLinkChatId ?? null
+  const hasTelegramLinked = Boolean(telegramId)
   const hasRequiredContacts = isSuperAdmin || Boolean(
     email &&
-    !email.startsWith('telegram-guest-') &&
-    telegramId,
+    !email.startsWith('telegram-guest-'),
   )
 
-  if (!hasRequiredContacts && hasSubscription && process.env.NODE_ENV !== 'production') {
-    console.info('[access/state] CONTACT_REQUIRED snapshot', {
+  if (!hasTelegramLinked && hasSubscription && process.env.NODE_ENV !== 'production') {
+    console.info('[access/state] TELEGRAM_OPTIONAL snapshot', {
       userId: user.id,
       email,
+      telegramEnabled: user.telegramEnabled,
       telegramUserId: user.telegramUserId,
       telegramChatId: user.telegramChatId,
       telegramLinkChatId: user.telegramLinkChatId,
@@ -228,7 +362,119 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
     telegramId,
     email,
     hasRequiredContacts,
+    hasTelegramLinked,
+    telegramEnabled: user.telegramEnabled,
   }
+}
+
+export async function getUserProductAccesses(userId: string): Promise<ProductAccessAssignment[]> {
+  const rows = await prisma.productAccess.findMany({
+    where: { userId },
+    orderBy: [{ product: 'asc' }, { createdAt: 'desc' }],
+  }).catch((error: unknown) => {
+    if (isProductAccessTableMissing(error)) {
+      return []
+    }
+
+    throw error
+  })
+
+  return rows.flatMap((row) => {
+    if (!isProductAccessProduct(row.product) || !isProductAccessRole(row.role)) {
+      return []
+    }
+
+    return [{
+      id: row.id,
+      userId: row.userId,
+      product: row.product,
+      role: row.role,
+      createdAt: row.createdAt,
+    }]
+  })
+}
+
+export async function grantProductAccess(input: {
+  userId: string
+  product: ProductAccessProduct
+  role: ProductAccessRole
+}): Promise<ProductAccessAssignment> {
+  const currentUser = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: { role: true },
+  })
+
+  const assignment = await prisma.productAccess.upsert({
+    where: {
+      userId_product: {
+        userId: input.userId,
+        product: input.product,
+      },
+    },
+    update: {
+      role: input.role,
+    },
+    create: {
+      userId: input.userId,
+      product: input.product,
+      role: input.role,
+    },
+  }).catch((error: unknown) => {
+    if (isProductAccessTableMissing(error)) {
+      throw new Error('product_access_table_missing')
+    }
+
+    throw error
+  })
+
+  if (currentUser && shouldPromoteUserRole(currentUser.role as 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN', input.role)) {
+    await prisma.user.update({
+      where: { id: input.userId },
+      data: {
+        role: toUserRole(input.role),
+      },
+    })
+  }
+
+  if (input.role === 'EXPERT' || input.role === 'ADMIN') {
+    await ensureOwnerExpertIdForUser(input.userId).catch(() => null)
+  }
+
+  if (input.product === 'AI_MENTOR') {
+    await prisma.mentorConfig.upsert({
+      where: { userId: input.userId },
+      update: {},
+      create: { userId: input.userId },
+    }).catch(() => null)
+  }
+
+  return {
+    id: assignment.id,
+    userId: assignment.userId,
+    product: input.product,
+    role: input.role,
+    createdAt: assignment.createdAt,
+  }
+}
+
+export async function revokeProductAccess(input: {
+  userId: string
+  product: ProductAccessProduct
+}): Promise<void> {
+  await prisma.productAccess.delete({
+    where: {
+      userId_product: {
+        userId: input.userId,
+        product: input.product,
+      },
+    },
+  }).catch((error: unknown) => {
+    if (isProductAccessTableMissing(error)) {
+      throw new Error('product_access_table_missing')
+    }
+
+    throw error
+  })
 }
 
 export async function getUserAccess(userId: string): Promise<UserAccessResult> {
@@ -239,8 +485,13 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   const subscription = user.subscription
   const items: AccessItem[] = []
   const isSuperAdmin = isSuperAdminEmail(user.email ?? '')
+  const effectiveRole = resolveEffectiveRole({
+    role: user.role,
+    email: user.email,
+    productAccesses: user.productAccesses,
+  })
   const accessControl = await getAccessControlState(userId)
-  const canUseClientFeatures = accessControl.hasSubscription && accessControl.hasRequiredContacts
+  const canUseClientFeatures = accessControl.hasSubscription
 
   // ── SUPERADMIN ─────────────────────────────────────────────────────────────
   if (user.role === 'SUPERADMIN' || isSuperAdmin) {
@@ -248,9 +499,53 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
       role:      'SUPERADMIN',
       plan:      'paid',
       trialEnd:  null,
-      items:     [{ key: 'mentor.core', source: 'admin', expiresAt: null }],
+      items:     [
+        { key: 'mentor.core', source: 'admin', expiresAt: null },
+        { key: 'products.manage', source: 'admin', expiresAt: null },
+        { key: 'admin.clients.view', source: 'admin', expiresAt: null },
+        { key: 'admin.revenue.view', source: 'admin', expiresAt: null },
+        { key: 'admin.roles.manage', source: 'admin', expiresAt: null },
+        { key: 'funnels.manage', source: 'admin', expiresAt: null },
+      ],
       abilities: getAllAbilities(true),
     }
+  }
+
+  // ── EXPERT / ADMIN ────────────────────────────────────────────────────────
+  if (user.role === 'EXPERT' || user.role === 'ADMIN') {
+    const abilities = getAllAbilities(false)
+    abilities['mentor.core'] = true
+    abilities['products.manage'] = true
+    abilities['admin.clients.view'] = true
+    abilities['funnels.manage'] = true
+
+    if (user.role === 'ADMIN') {
+      abilities['admin.revenue.view'] = true
+      abilities['admin.roles.manage'] = true
+    }
+
+    return {
+      role: user.role,
+      plan: 'paid',
+      trialEnd: null,
+      items: [
+        { key: 'mentor.core', source: 'admin', expiresAt: null },
+        { key: 'products.manage', source: 'admin', expiresAt: null },
+        { key: 'admin.clients.view', source: 'admin', expiresAt: null },
+        { key: 'funnels.manage', source: 'admin', expiresAt: null },
+        ...(user.role === 'ADMIN'
+          ? [
+              { key: 'admin.revenue.view' as const, source: 'admin' as const, expiresAt: null },
+              { key: 'admin.roles.manage' as const, source: 'admin' as const, expiresAt: null },
+            ]
+          : []),
+      ],
+      abilities,
+    }
+  }
+
+  if (user.productAccesses.length > 0) {
+    items.push(...buildProductAccessItems(user.productAccesses))
   }
 
   // ── PAID ───────────────────────────────────────────────────────────────────
@@ -349,7 +644,7 @@ if (isMentorshipActive) {
     isPaidActive ? 'paid' : isTrialActive ? 'trial' : 'free'
 
   return {
-    role:     user.role,
+    role:     effectiveRole,
     plan,
     trialEnd: subscription?.trialEndsAt ?? user.trialEndsAt ?? null,
     items,
@@ -372,7 +667,7 @@ const PRODUCT_TEMPLATES: UserSystemState['products']['templates'] = [
   },
   {
     id:                'ai-mentor-basic',
-    name:              'AI Ментор',
+    name:              'ABsystem',
     result:            'Структурований цикл станів і звітів',
     modules:           ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
     finalStateExample: 'Щоденний цикл, дзеркала, місячний звіт',
@@ -406,6 +701,17 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
     })
     .catch((err: any) => {
       if (err?.code === 'P2021' || err?.code === 'P2022') return []
+      throw err
+    })
+
+  const latestSubscription = await prisma.subscription
+    .findFirst({
+      where:   isSuperAdmin ? undefined : { userId },
+      orderBy: { createdAt: 'desc' },
+      select:  { startsAt: true, createdAt: true },
+    })
+    .catch((err: any) => {
+      if (err?.code === 'P2021' || err?.code === 'P2022') return null
       throw err
     })
 
@@ -461,10 +767,10 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
     },
     aiModules: modules,
     permissions: {
-      role:               isSuperAdmin ? 'SUPERADMIN' : 'USER',
+      role:               isSuperAdmin ? 'SUPERADMIN' : access.role === 'ADMIN' ? 'ADMIN' : access.role === 'EXPERT' ? 'EXPERT' : 'USER',
       canCreateProducts:  isSuperAdmin || access.abilities['products.manage'] === true,
       canBypassTrial:     isSuperAdmin,
-      canSeeAdminTools:   isSuperAdmin,
+      canSeeAdminTools:   isSuperAdmin || access.role === 'EXPERT' || access.role === 'ADMIN',
     },
     trial: {
       isActive: access.plan === 'trial',
@@ -475,6 +781,7 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
       isActive:  access.plan === 'paid',
       status:    access.plan === 'paid' ? 'ACTIVE' : access.plan === 'trial' ? 'TRIAL' : null,
       expiresAt: trialEnd,
+      currentPeriodStart: latestSubscription?.startsAt ?? latestSubscription?.createdAt ?? null,
     },
     mentorship: {
   isActive: access.items.some(i => i.key === 'mentor.mentorship'),
@@ -483,7 +790,7 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
       showMyProductsSection,
       showCreateProductCta: !showMyProductsSection,
       showTemplatesSection:  true,
-      showAdminPanel:        isSuperAdmin,
+      showAdminPanel:        isSuperAdmin || access.role === 'EXPERT' || access.role === 'ADMIN',
     },
     meta: {
       version:   1,

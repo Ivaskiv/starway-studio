@@ -25,7 +25,7 @@ export async function handleMiniCourse(ctx: Context) {
     })
 
     await ctx.reply(
-      `🎁 Лідмагніт активовано! Перевір свою пошту або чат — скоро отримаєш міні-курс.\n${getMentorReturnDeeplink()}`,
+      `🎁 Практикум активовано! Перевір свою пошту або чат — скоро отримаєш міні-курс.\n${getMentorReturnDeeplink()}`,
       { reply_markup: continueToMentorKeyboard().reply_markup },
     )
   } catch (error) {

@@ -1,5 +1,6 @@
 import {
   NotificationChannel,
+  type Prisma,
   type Notification,
   NotificationStatus,
   NotificationType,
@@ -11,11 +12,26 @@ import { prisma } from '../../db/client.js'
 import { NotificationEvent } from './NotificationEvent.js'
 import { notificationDeliveryLayer } from './delivery/NotificationDeliveryLayer.js'
 import type { DeliveryMessage, DeliveryUser } from './delivery/types.js'
+import {
+  buildNotificationData,
+  getNotificationDuplicateWindowStart,
+  isCriticalNotificationTemplate,
+  resolveNotificationTemplateKey,
+  resolveNotificationType,
+} from './domain/notificationPolicy.js'
 import { notificationPreferenceRepository } from './repositories/NotificationPreferenceRepository.js'
-import { notificationRepository } from './repositories/NotificationRepository.js'
 import { notificationJobService } from './services/NotificationJobService.js'
 import { notificationRecordService } from './services/NotificationRecordService.js'
 import { LEVELS } from '../../modules/gamification/level.system.js'
+import { buildTelegramDeepLink, generateDeepLink } from '../../modules/deeplinks/service.js'
+import { getUserAccess } from '../../modules/access/service.js'
+import { isNotificationAllowedForUser } from '../../modules/flow-control/service.js'
+import { resolvePausedMentorContext } from './mentorLifecycle.js'
+import { buildNotificationContent } from '../../lib/notifications/templates.js'
+import {
+  canSendCrossChannelNotification,
+  markCrossChannelNotificationSent,
+} from '../../modules/user-state/crossChannelState.service.js'
 
 type EventPayload = Record<string, unknown>
 
@@ -39,10 +55,29 @@ const STREAK_MILESTONE_REWARDS: Record<number, { neuroGems: number; bitMind?: nu
   30: { neuroGems: 100, bitMind: 1 },
   100: { neuroGems: 300, bitMind: 3 },
 }
-const CRITICAL_TEMPLATE_PREFIXES = ['level_up_', 'streak_broken']
 
-const DEFAULT_FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173'
-const DEFAULT_MINIAPP_URL = (process.env.MINIAPP_URL ?? `${DEFAULT_FRONTEND_URL}/miniapp`).replace(/\/$/, '')
+const LOCAL_FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+const TELEGRAM_SAFE_FRONTEND_URL = (() => {
+  const configured = process.env.TELEGRAM_PUBLIC_FRONTEND_URL?.trim()
+    || process.env.PUBLIC_FRONTEND_URL?.trim()
+    || process.env.FRONTEND_URL?.trim()
+    || ''
+
+  try {
+    const url = new URL(configured)
+    if (url.protocol === 'https:' && !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)) {
+      return url.toString().replace(/\/$/, '')
+    }
+  } catch {
+    // fall through to hosted frontend fallback
+  }
+
+  return 'https://starway-frontend.vercel.app'
+})()
+const DEFAULT_MINIAPP_URL = (
+  process.env.MINIAPP_URL?.trim()
+  || `${TELEGRAM_SAFE_FRONTEND_URL}/miniapp`
+).replace(/\/$/, '')
 
 function minutesToDate(minutesFromMidnight: number, baseDate = new Date()) {
   const date = new Date(baseDate)
@@ -75,26 +110,54 @@ function buildMiniAppStartUrl(startapp: string) {
   return url.toString()
 }
 
-function eventToType(event: NotificationEvent): NotificationType {
-  switch (event) {
-    case NotificationEvent.DAILY_MORNING_DUE:
-      return NotificationType.DAILY_MORNING
-    case NotificationEvent.DAILY_EVENING_DUE:
-      return NotificationType.DAILY_EVENING
-    case NotificationEvent.STREAK_RISK:
-    case NotificationEvent.STREAK_MILESTONE:
-    case NotificationEvent.STREAK_BROKEN:
-      return NotificationType.STREAK_ALERT
-    case NotificationEvent.LEVEL_UP:
-    case NotificationEvent.NEAR_LEVEL_UP:
-      return NotificationType.LEVEL_UP
-    case NotificationEvent.WEEKLY_SUMMARY:
-      return NotificationType.WEEKLY_SUMMARY
-    case NotificationEvent.AI_INACTIVE:
-      return NotificationType.AI_REMINDER
-    case NotificationEvent.SUBSCRIPTION_EXPIRING:
-      return NotificationType.SUBSCRIPTION
+function buildTelegramSafeWebDeepLink(token: string, path?: string | null) {
+  const url = new URL(path ?? '/onboarding/continue', TELEGRAM_SAFE_FRONTEND_URL)
+  url.searchParams.set('dl', token)
+  return url.toString()
+}
+
+async function buildWebFlowUrl(input: {
+  userId: string
+  path: string
+  payload?: EventPayload
+}) {
+  try {
+    const link = await generateDeepLink({
+      userId: input.userId,
+      action: 'continue_flow',
+      source: 'telegram',
+      target: 'web',
+      path: input.path,
+      payload: input.payload as Prisma.InputJsonValue | undefined,
+    })
+    return buildTelegramSafeWebDeepLink(link.token, input.path)
+  } catch {
+    return `${TELEGRAM_SAFE_FRONTEND_URL}${input.path}`
   }
+}
+
+function buildMentorTelegramActions(input: {
+  miniAppUrl: string
+  webUrl: string
+  telegramCallback: string
+}) {
+  return [
+    {
+      text: '✦ Перейти в мініап',
+      url: input.miniAppUrl,
+      mode: 'web_app' as const,
+    },
+    {
+      text: '✦ Перейти для відповідей на сайт',
+      url: input.webUrl,
+      mode: 'url' as const,
+    },
+    {
+      text: '✦ Продовжити відповідати в Telegram',
+      url: input.telegramCallback,
+      mode: 'callback' as const,
+    },
+  ]
 }
 
 function toPersistedJobPayload(payload: unknown): PersistedJobPayload {
@@ -127,8 +190,39 @@ function buildWeeklySummaryPayload(payload?: EventPayload): WeeklySummaryPayload
   }
 }
 
-function isCriticalTemplateKey(templateKey: string) {
-  return CRITICAL_TEMPLATE_PREFIXES.some(prefix => templateKey.startsWith(prefix))
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+function buildTelegramCard(input: {
+  title: string
+  intro?: string
+  facts?: string[]
+  note?: string
+  closing?: string
+}) {
+  const lines: string[] = [`<b>${escapeHtml(input.title)}</b>`]
+
+  if (input.intro) {
+    lines.push('', escapeHtml(input.intro))
+  }
+
+  if (input.facts?.length) {
+    lines.push('', ...input.facts.map((fact) => `• ${escapeHtml(fact)}`))
+  }
+
+  if (input.note) {
+    lines.push('', `<blockquote>${escapeHtml(input.note)}</blockquote>`)
+  }
+
+  if (input.closing) {
+    lines.push('', escapeHtml(input.closing))
+  }
+
+  return lines.join('\n')
 }
 
 async function loadEligibleUsers(): Promise<Array<Pick<User, 'id' | 'firstName' | 'email' | 'telegramChatId' | 'telegramUserId'> & { telegramLinks: Array<{ chatId: string | null }> }>> {
@@ -176,49 +270,136 @@ async function loadDeliveryUser(userId: string): Promise<DeliveryUser | null> {
   })
 }
 
-function templateKeyForEvent(event: NotificationEvent, payload?: EventPayload) {
-  switch (event) {
-    case NotificationEvent.LEVEL_UP:
-      return `level_up_${Number(payload?.level ?? 0)}`
-    case NotificationEvent.NEAR_LEVEL_UP:
-      return `near_level_${String(payload?.nextLevel ?? 'unknown')}`
-    case NotificationEvent.STREAK_MILESTONE:
-      return `streak_${Number(payload?.current ?? 0)}`
-    case NotificationEvent.STREAK_BROKEN:
-      return 'streak_broken'
-    case NotificationEvent.STREAK_RISK:
-      return 'streak_risk'
-    case NotificationEvent.WEEKLY_SUMMARY:
-      return 'weekly_summary'
-    default:
-      return eventToType(event)
-  }
-}
-
 export class NotificationService {
+  private async hasMentorSessionAccess(userId: string): Promise<boolean> {
+    const [access, user] = await Promise.all([
+      getUserAccess(userId),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      }),
+    ])
+
+    if (user?.email?.startsWith('telegram-guest-')) {
+      return false
+    }
+
+    return Boolean(
+      access.abilities['mentor.daily'] === true ||
+      access.abilities['mentor.core'] === true,
+    )
+  }
+
+  private async shouldSuppressMentorTaskNotification(userId: string): Promise<boolean> {
+    return Boolean(await resolvePausedMentorContext(userId))
+  }
+
+  private async shouldSuppressMentorNotification(event: NotificationEvent, userId: string): Promise<boolean> {
+    if (
+      event !== NotificationEvent.DAILY_MORNING_DUE &&
+      event !== NotificationEvent.DAILY_EVENING_DUE &&
+      event !== NotificationEvent.AI_INACTIVE
+    ) {
+      return false
+    }
+
+    return !(await this.hasMentorSessionAccess(userId))
+  }
+
+  private buildImmediateJob(event: NotificationEvent, userId: string, payload?: EventPayload): NotificationJob {
+    const now = new Date()
+    return {
+      id: `instant:${event}:${userId}:${now.getTime()}`,
+      type: resolveNotificationType(event),
+      payload: ({
+        event,
+        userId,
+        payload: payload ?? {},
+      } satisfies PersistedJobPayload) as NotificationJob['payload'],
+      runAt: now,
+      status: 'DONE',
+      attempts: 0,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+  }
+
   private async sendDirectTelegramNotification(input: {
     userId: string
     type: NotificationType
     title: string
     body: string
+    telegramHtml?: string
     templateKey: string
     ctaText?: string
     ctaUrl?: string
+    ctaMode?: 'web_app' | 'url'
+    ctaActions?: Array<{
+      text: string
+      url: string
+      mode?: 'web_app' | 'url' | 'callback'
+    }>
     data?: EventPayload
     duplicateWindowStart?: Date
     isEnabled: (preferences: Awaited<ReturnType<typeof notificationPreferenceRepository.ensureForUser>>) => boolean
+    force?: boolean
+    requiresMentorAccess?: boolean
   }): Promise<boolean> {
     const user = await loadDeliveryUser(input.userId)
     if (!user) return false
 
-    const preferences = await notificationPreferenceRepository.ensureForUser(input.userId)
-    if (!preferences.telegramEnabled || !input.isEnabled(preferences)) {
+    if (input.requiresMentorAccess && !(await this.hasMentorSessionAccess(input.userId))) {
       return false
     }
 
+    const preferences = await notificationPreferenceRepository.ensureForUser(input.userId)
     const dayStart = startOfDay()
     const dayEnd = endOfDay()
     const duplicateWindowStart = input.duplicateWindowStart ?? dayStart
+    const message: DeliveryMessage = {
+      title: input.title,
+      body: input.body,
+      telegramHtml: input.telegramHtml,
+      ctaText: input.ctaText,
+      ctaUrl: input.ctaUrl,
+      ctaMode: input.ctaMode,
+      ctaActions: input.ctaActions,
+    }
+
+    const inAppDuplicate = await prisma.notification.findFirst({
+      where: {
+        userId: input.userId,
+        channel: NotificationChannel.IN_APP,
+        templateKey: input.templateKey,
+        createdAt: { gte: duplicateWindowStart, lt: dayEnd },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (!inAppDuplicate) {
+      await this.createNotification({
+        userId: input.userId,
+        type: input.type,
+        title: input.title,
+        body: input.body,
+        data: {
+          ...(input.data ?? {}),
+          ctaText: message.ctaText ?? null,
+          ctaUrl: message.ctaUrl ?? null,
+          ctaMode: message.ctaMode ?? null,
+          sourceChannel: 'telegram',
+        },
+        templateKey: input.templateKey,
+        channel: NotificationChannel.IN_APP,
+        status: NotificationStatus.SENT,
+      })
+      await notificationDeliveryLayer.sendInApp(user, message)
+    }
+
+    if (!preferences.telegramEnabled || (!input.force && !input.isEnabled(preferences))) {
+      return false
+    }
 
     const duplicate = await prisma.notification.findFirst({
       where: {
@@ -230,9 +411,9 @@ export class NotificationService {
       orderBy: { createdAt: 'desc' },
     })
 
-    if (duplicate) return false
+    if (duplicate && !input.force) return false
 
-    if (!isCriticalTemplateKey(input.templateKey)) {
+    if (!input.force && !isCriticalNotificationTemplate(input.templateKey)) {
       const todayCount = await prisma.notification.count({
         where: {
           userId: input.userId,
@@ -246,13 +427,6 @@ export class NotificationService {
       }
     }
 
-    const message: DeliveryMessage = {
-      title: input.title,
-      body: input.body,
-      ctaText: input.ctaText,
-      ctaUrl: input.ctaUrl,
-    }
-
     const sent = await notificationDeliveryLayer.sendTelegram(user, message)
 
     await this.createNotification({
@@ -260,7 +434,13 @@ export class NotificationService {
       type: input.type,
       title: input.title,
       body: input.body,
-      data: input.data,
+      data: {
+        ...(input.data ?? {}),
+        ctaText: message.ctaText ?? null,
+        ctaUrl: message.ctaUrl ?? null,
+        ctaMode: message.ctaMode ?? null,
+        sourceChannel: 'telegram',
+      },
       templateKey: input.templateKey,
       channel: NotificationChannel.TELEGRAM,
       status: sent ? NotificationStatus.SENT : NotificationStatus.FAILED,
@@ -271,7 +451,25 @@ export class NotificationService {
   }
 
   async emit(event: NotificationEvent, userId: string, payload?: EventPayload): Promise<NotificationJob> {
-    return this.enqueueJob(event, userId, new Date(), payload)
+    if (!(await isNotificationAllowedForUser(event, userId))) {
+      console.info('[notifications] skipped by lifecycle guard', {
+        event,
+        userId,
+      })
+      return this.buildImmediateJob(event, userId, payload)
+    }
+
+    const queueAvailable = await notificationJobService.isQueueAvailable().catch(() => false)
+    if (!queueAvailable) {
+      console.warn('[notifications] queue unavailable, fallback to immediate send', {
+        event,
+        userId,
+      })
+    }
+
+    const job = this.buildImmediateJob(event, userId, payload)
+    await this.processJob(job)
+    return job
   }
 
   async schedule(event: NotificationEvent, userId: string, runAt: Date, payload?: EventPayload): Promise<NotificationJob> {
@@ -298,11 +496,12 @@ export class NotificationService {
       templateKey: input.templateKey,
       channel: input.channel,
       status: input.status,
+      sentAt: input.sentAt ?? null,
     })
   }
 
   async enqueueJob(event: NotificationEvent, userId: string, runAt: Date, payload?: EventPayload): Promise<NotificationJob> {
-    return notificationJobService.enqueue(eventToType(event), {
+    return notificationJobService.enqueue(resolveNotificationType(event), {
       event,
       userId,
       payload: payload ?? {},
@@ -311,18 +510,65 @@ export class NotificationService {
 
   async processJob(job: NotificationJob): Promise<void> {
     const persisted = toPersistedJobPayload(job.payload)
+    if (!(await isNotificationAllowedForUser(persisted.event, persisted.userId))) {
+      console.info('[notifications] skipped queued job by lifecycle guard', {
+        event: persisted.event,
+        userId: persisted.userId,
+      })
+      return
+    }
+    if (!(await canSendCrossChannelNotification(persisted.userId, persisted.event))) {
+      console.info('[notifications] skipped queued job by cross-channel state', {
+        event: persisted.event,
+        userId: persisted.userId,
+      })
+      return
+    }
     const user = await loadDeliveryUser(persisted.userId)
 
     if (!user) {
       throw new Error('notification_user_not_found')
     }
 
-    const type = eventToType(persisted.event)
-    const templateKey = templateKeyForEvent(persisted.event, persisted.payload)
+    if (await this.shouldSuppressMentorNotification(persisted.event, user.id)) {
+      console.info('[notifications] skipped: mentor access inactive', {
+        event: persisted.event,
+        userId: user.id,
+      })
+      return
+    }
+
+    const type = resolveNotificationType(persisted.event)
+    const templateKey = resolveNotificationTemplateKey(persisted.event, persisted.payload)
     const preferences = await notificationPreferenceRepository.ensureForUser(user.id)
     const message = await this.buildMessage(persisted.event, user, persisted.payload)
     const dayStart = startOfDay()
     const dayEnd = endOfDay()
+
+    if (persisted.event === NotificationEvent.AI_INACTIVE) {
+      const actionableToday = await prisma.notification.findFirst({
+        where: {
+          userId: user.id,
+          channel: NotificationChannel.TELEGRAM,
+          createdAt: { gte: dayStart, lt: dayEnd },
+          OR: [
+            { type: NotificationType.DAILY_MORNING },
+            { type: NotificationType.DAILY_EVENING },
+            { templateKey: { startsWith: 'session_handoff_' } },
+            { templateKey: { startsWith: 'microtask_' } },
+            { templateKey: { startsWith: 'task_nudge_' } },
+          ],
+        },
+        select: { id: true },
+      })
+
+      if (actionableToday) {
+        console.info('[notifications] skipped: AI_INACTIVE conflicts with actionable reminder', {
+          userId: user.id,
+        })
+        return
+      }
+    }
 
     const inAppDuplicate = await prisma.notification.findFirst({
       where: {
@@ -340,12 +586,13 @@ export class NotificationService {
         type,
         title: message.title,
         body: message.body,
-        data: { event: persisted.event, ...(persisted.payload ?? {}) },
+        data: buildNotificationData(persisted.event, persisted.payload, message),
         templateKey,
         channel: NotificationChannel.IN_APP,
         status: NotificationStatus.SENT,
       })
       await notificationDeliveryLayer.sendInApp(user, message)
+      await markCrossChannelNotificationSent(user.id, persisted.event, 'site')
     }
 
     if (!preferences.telegramEnabled) {
@@ -356,9 +603,7 @@ export class NotificationService {
       return
     }
 
-    const duplicateWindowStart = persisted.event === NotificationEvent.WEEKLY_SUMMARY
-      ? new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
-      : dayStart
+    const duplicateWindowStart = getNotificationDuplicateWindowStart(persisted.event)
 
     const telegramDuplicate = await prisma.notification.findFirst({
       where: {
@@ -374,10 +619,15 @@ export class NotificationService {
     })
 
     if (telegramDuplicate) {
+      console.info('[notifications] telegram skipped: duplicate', {
+        event: persisted.event,
+        userId: user.id,
+        templateKey,
+      })
       return
     }
 
-    if (!isCriticalTemplateKey(templateKey)) {
+    if (!isCriticalNotificationTemplate(templateKey)) {
       const todayCount = await prisma.notification.count({
         where: {
           userId: user.id,
@@ -386,6 +636,12 @@ export class NotificationService {
         },
       })
       if (todayCount >= DAILY_LIMIT) {
+        console.info('[notifications] telegram skipped: daily limit reached', {
+          event: persisted.event,
+          userId: user.id,
+          templateKey,
+          todayCount,
+        })
         return
       }
     }
@@ -397,7 +653,7 @@ export class NotificationService {
       type,
       title: message.title,
       body: message.body,
-      data: { event: persisted.event, ...(persisted.payload ?? {}) },
+      data: buildNotificationData(persisted.event, persisted.payload, message),
       templateKey,
       channel: NotificationChannel.TELEGRAM,
       status: sent ? NotificationStatus.SENT : NotificationStatus.FAILED,
@@ -407,6 +663,14 @@ export class NotificationService {
     if (!sent) {
       throw new Error('notification_delivery_failed')
     }
+
+    await markCrossChannelNotificationSent(user.id, persisted.event, 'telegram')
+
+    console.info('[notifications] telegram sent', {
+      event: persisted.event,
+      userId: user.id,
+      templateKey,
+    })
   }
 
   async scheduleDailyMorningDue(): Promise<void> {
@@ -515,6 +779,10 @@ export class NotificationService {
   }
 
   async sendNewMicroTasks(userId: string, firstName: string, titles: string[]): Promise<void> {
+    if (await this.shouldSuppressMentorTaskNotification(userId)) {
+      return
+    }
+
     await this.sendDirectTelegramNotification({
       userId,
       type: NotificationType.AI_REMINDER,
@@ -526,29 +794,54 @@ export class NotificationService {
         '',
         'Почни з першого — він найважливіший.',
       ].join('\n'),
+      telegramHtml: buildTelegramCard({
+        title: '✦ AI склав твої завдання на сьогодні',
+        intro: `${firstName}, готово ${titles.length} мікрозавдання.`,
+        facts: titles.slice(0, 3),
+        note: 'Почни з першого — він зараз дасть найбільший рух.',
+      }),
       templateKey: `microtasks_${startOfDay().toISOString().slice(0, 10)}`,
       ctaText: '🗂 Відкрити завдання',
-      ctaUrl: buildMiniAppStartUrl('home'),
+      ctaUrl: buildMiniAppStartUrl('tasks'),
       data: { titles },
       isEnabled: preferences => preferences.aiRemindersEnabled,
+      requiresMentorAccess: true,
     })
   }
 
   async sendTaskCompleted(userId: string, taskTitle: string, xpReward: number): Promise<void> {
+    if (await this.shouldSuppressMentorTaskNotification(userId)) {
+      return
+    }
+
     await this.sendDirectTelegramNotification({
       userId,
       type: NotificationType.AI_REMINDER,
       title: '✅ Завдання виконано',
       body: `Ти закрив(ла) "${taskTitle}". +${xpReward} XP уже нараховано.`,
+      telegramHtml: buildTelegramCard({
+        title: '✅ Завдання виконано',
+        intro: 'Задачу зафіксовано як виконану.',
+        facts: [
+          taskTitle,
+          `Нараховано: +${xpReward} XP`,
+        ],
+        note: 'Один закритий крок підтримує ритм сильніше, ніж ідеальний план без дії.',
+      }),
       templateKey: `task_completed_${taskTitle.slice(0, 48)}`,
       ctaText: '📊 Мій прогрес',
       ctaUrl: buildMiniAppStartUrl('tracker'),
       data: { taskTitle, xpReward },
       isEnabled: preferences => preferences.aiRemindersEnabled,
+      requiresMentorAccess: true,
     })
   }
 
   async sendMicroTaskReminder(userId: string, taskTitle: string, dueSoon = false): Promise<void> {
+    if (await this.shouldSuppressMentorTaskNotification(userId)) {
+      return
+    }
+
     await this.sendDirectTelegramNotification({
       userId,
       type: NotificationType.AI_REMINDER,
@@ -556,30 +849,182 @@ export class NotificationService {
       body: dueSoon
         ? `Задача "${taskTitle}" добігає дедлайну. Краще закрити її зараз коротким ривком.`
         : `Задача "${taskTitle}" ще не почата. Один крок зараз збереже темп дня.`,
+      telegramHtml: buildTelegramCard({
+        title: dueSoon ? '⏰ Дедлайн уже близько' : '📌 Повернись до задачі',
+        intro: dueSoon
+          ? 'Час по цій задачі майже вичерпано.'
+          : 'Ця задача ще не почата, але день можна втримати одним кроком.',
+        facts: [taskTitle],
+        note: dueSoon
+          ? 'Краще закрити її зараз коротким ривком.'
+          : 'Один крок зараз збереже темп дня.',
+      }),
       templateKey: `${dueSoon ? 'microtask_due' : 'microtask_nudge'}_${taskTitle.slice(0, 40)}_${startOfDay().toISOString().slice(0, 10)}`,
       ctaText: '🗂 Відкрити завдання',
-      ctaUrl: buildMiniAppStartUrl('home'),
+      ctaUrl: buildMiniAppStartUrl('tasks'),
       data: { taskTitle, dueSoon },
       isEnabled: preferences => preferences.aiRemindersEnabled,
+      requiresMentorAccess: true,
     })
   }
 
   async sendExpiredTaskNotice(userId: string, taskTitle: string): Promise<void> {
+    if (await this.shouldSuppressMentorTaskNotification(userId)) {
+      return
+    }
+
     await this.sendDirectTelegramNotification({
       userId,
       type: NotificationType.AI_REMINDER,
       title: '📦 Дедлайн задачі минув',
       body: `Задача "${taskTitle}" перейшла в прострочені. На вечірній рефлексії можна буде або закрити її, або перепланувати.`,
+      telegramHtml: buildTelegramCard({
+        title: '📦 Дедлайн задачі минув',
+        intro: 'Одна із задач перейшла в прострочені.',
+        facts: [taskTitle],
+        note: 'На вечірній рефлексії її можна або закрити, або перепланувати без хаосу.',
+      }),
       templateKey: `microtask_expired_${taskTitle.slice(0, 40)}_${startOfDay().toISOString().slice(0, 10)}`,
       ctaText: '🌙 Вечірня рефлексія',
       ctaUrl: buildMiniAppStartUrl('ai_evening'),
       data: { taskTitle },
       isEnabled: preferences => preferences.aiRemindersEnabled,
+      requiresMentorAccess: true,
     })
   }
 
   async scheduleStreakBroken(userId: string): Promise<NotificationJob> {
     return this.schedule(NotificationEvent.STREAK_BROKEN, userId, nextMorningNine())
+  }
+
+  async sendDiagnosticEvent(event: NotificationEvent, userId: string, payload?: EventPayload): Promise<boolean> {
+    const user = await loadDeliveryUser(userId)
+    if (!user) {
+      throw new Error('notification_user_not_found')
+    }
+
+    const message = await this.buildMessage(event, user, payload)
+    const templateKey = `test_${resolveNotificationTemplateKey(event, payload)}_${Date.now()}`
+
+    const sent = await this.sendDirectTelegramNotification({
+      userId,
+      type: resolveNotificationType(event),
+      title: `🧪 Тест · ${message.title}`,
+      body: message.body,
+      telegramHtml: message.telegramHtml,
+      templateKey,
+      ctaText: message.ctaText,
+      ctaUrl: message.ctaUrl,
+      ctaMode: message.ctaMode,
+      ctaActions: message.ctaActions,
+      data: {
+        ...(payload ?? {}),
+        diagnostic: true,
+        sourceEvent: event,
+      },
+      isEnabled: () => true,
+      force: true,
+    })
+
+    if (!sent) {
+      throw new Error('notification_delivery_failed')
+    }
+
+    console.info('[notifications] diagnostic telegram sent', {
+      event,
+      userId,
+      templateKey,
+    })
+
+    return sent
+  }
+
+  async sendSessionHandoffNotification(input: {
+    userId: string
+    session: 'morning' | 'evening'
+    step?: number
+    answers?: Record<string, string>
+    date?: string
+  }): Promise<boolean> {
+    const startOfToday = startOfDay()
+    const dateKey = startOfToday.toISOString().slice(0, 10)
+    const sessionPath = input.session === 'evening'
+      ? '/dashboard/cycle?session=evening'
+      : '/dashboard/cycle?session=morning'
+    const miniAppUrl = buildMiniAppStartUrl(input.session === 'morning' ? 'ai_morning' : 'ai_evening')
+
+    let telegramUrl = ''
+    let webUrl = `${TELEGRAM_SAFE_FRONTEND_URL}${sessionPath}`
+    try {
+      const deepLink = await generateDeepLink({
+        userId: input.userId,
+        action: 'resume_task',
+        source: 'web',
+        target: 'telegram',
+        path: sessionPath,
+        payload: {
+          session: input.session,
+          step: Math.max(0, Number(input.step ?? 0)),
+          answers: input.answers ?? {},
+          date: input.date ?? new Date().toISOString(),
+        },
+      })
+      telegramUrl = buildTelegramDeepLink(deepLink.token)
+    } catch (error) {
+      console.warn('[notifications] failed to generate telegram resume deeplink, falling back to mini app', {
+        userId: input.userId,
+        session: input.session,
+        error: error instanceof Error ? error.message : 'unknown_error',
+      })
+    }
+
+    try {
+      const webLink = await generateDeepLink({
+        userId: input.userId,
+        action: 'continue_flow',
+        source: 'telegram',
+        target: 'web',
+        path: sessionPath,
+        payload: {
+          session: input.session,
+          step: Math.max(0, Number(input.step ?? 0)),
+          answers: input.answers ?? {},
+          date: input.date ?? new Date().toISOString(),
+        },
+      })
+      webUrl = buildTelegramSafeWebDeepLink(webLink.token, sessionPath)
+    } catch (error) {
+      console.warn('[notifications] failed to generate web session handoff deeplink, falling back to dashboard path', {
+        userId: input.userId,
+        session: input.session,
+        error: error instanceof Error ? error.message : 'unknown_error',
+      })
+    }
+
+    return this.sendDirectTelegramNotification({
+      userId: input.userId,
+      type: input.session === 'morning' ? NotificationType.DAILY_MORNING : NotificationType.DAILY_EVENING,
+      title: input.session === 'morning' ? '🌅 Ранкова рефлексія' : '🌙 Вечірній підсумок',
+      body: input.session === 'morning'
+        ? 'Сесія відкрита. Обери, де зручно відповісти: у mini app, на сайті або прямо тут у Telegram.'
+        : 'Вечірній блок відкрито. Обери, де зручно завершити його: у mini app, на сайті або прямо тут у Telegram.',
+      templateKey: `session_handoff_${input.session}_${dateKey}`,
+      ctaActions: buildMentorTelegramActions({
+        miniAppUrl,
+        webUrl,
+        telegramCallback: input.session === 'morning' ? 'resume_morning_session' : 'resume_evening_session',
+      }),
+      data: {
+        session: input.session,
+        step: input.step ?? 0,
+        answersCount: Object.keys(input.answers ?? {}).length,
+        date: input.date ?? new Date().toISOString(),
+      },
+      duplicateWindowStart: startOfToday,
+      isEnabled: preferences => input.session === 'morning'
+        ? preferences.dailyMorningEnabled
+        : preferences.dailyEveningEnabled,
+    })
   }
 
   private isEventEnabledByPreferences(
@@ -606,6 +1051,10 @@ export class NotificationService {
         return preferences.weeklySummaryEnabled
       case NotificationEvent.SUBSCRIPTION_EXPIRING:
         return preferences.subscriptionEnabled
+      case NotificationEvent.SUBSCRIPTION_EXPIRED:
+        return preferences.subscriptionEnabled
+      case NotificationEvent.POST_TRIAL_REPORTS:
+        return preferences.subscriptionEnabled
       default:
         return true
     }
@@ -616,24 +1065,105 @@ export class NotificationService {
 
     switch (event) {
       case NotificationEvent.DAILY_MORNING_DUE:
+      {
+        const sessionPath = '/dashboard/cycle?session=morning'
+        let webUrl = `${TELEGRAM_SAFE_FRONTEND_URL}${sessionPath}`
+        try {
+          const webLink = await generateDeepLink({
+            userId: user.id,
+            action: 'continue_flow',
+            source: 'telegram',
+            target: 'web',
+            path: sessionPath,
+            payload: {
+              session: 'morning',
+              step: 0,
+              date: new Date().toISOString(),
+            },
+          })
+          webUrl = buildTelegramSafeWebDeepLink(webLink.token, sessionPath)
+        } catch {
+          // fall back to direct dashboard path
+        }
+
         return {
           title: '🌅 Ранкова рефлексія',
-          body: `${firstName}, час зафіксувати стан і задати фокус на день.`,
-          ctaText: '✦ Почати рефлексію',
-          ctaUrl: buildMiniAppStartUrl('ai_morning'),
+          body: `${firstName}, час зафіксувати стан і задати фокус на день. Обери, де зручно продовжити.`,
+          telegramHtml: buildTelegramCard({
+            title: '🌅 Ранкова рефлексія',
+            intro: `${firstName}, час зафіксувати стан і задати фокус на день.`,
+            facts: [
+              'Сесія відкриє логіку наступних блоків',
+              'Почни там, де тобі зараз зручніше',
+            ],
+            note: 'Mini App, сайт і Telegram ведуть в одну й ту саму сесію.',
+          }),
+          ctaActions: buildMentorTelegramActions({
+            miniAppUrl: buildMiniAppStartUrl('ai_morning'),
+            webUrl,
+            telegramCallback: 'resume_morning_session',
+          }),
         }
+      }
       case NotificationEvent.DAILY_EVENING_DUE:
+      {
+        const sessionPath = '/dashboard/cycle?session=evening'
+        let webUrl = `${TELEGRAM_SAFE_FRONTEND_URL}${sessionPath}`
+        try {
+          const webLink = await generateDeepLink({
+            userId: user.id,
+            action: 'continue_flow',
+            source: 'telegram',
+            target: 'web',
+            path: sessionPath,
+            payload: {
+              session: 'evening',
+              step: 0,
+              date: new Date().toISOString(),
+            },
+          })
+          webUrl = buildTelegramSafeWebDeepLink(webLink.token, sessionPath)
+        } catch {
+          // fall back to direct dashboard path
+        }
+
         return {
           title: '🌙 Вечірній підсумок',
-          body: `${firstName}, одна коротка сесія зараз збере день в систему і підтримає ритм.`,
-          ctaText: '✦ Підбити підсумок',
-          ctaUrl: buildMiniAppStartUrl('ai_evening'),
+          body: `${firstName}, одна коротка сесія зараз збере день в систему і підтримає ритм. Обери, де зручно відповісти.`,
+          telegramHtml: buildTelegramCard({
+            title: '🌙 Вечірній підсумок',
+            intro: `${firstName}, одна коротка сесія зараз збере день в систему і підтримає ритм.`,
+            facts: [
+              'Підсумок дня закриває цикл',
+              'Від вечірньої сесії залежить чистота завтрашнього старту',
+            ],
+            note: 'Обери Mini App, сайт або Telegram і продовжуй без розриву.',
+          }),
+          ctaActions: buildMentorTelegramActions({
+            miniAppUrl: buildMiniAppStartUrl('ai_evening'),
+            webUrl,
+            telegramCallback: 'resume_evening_session',
+          }),
         }
+      }
       case NotificationEvent.STREAK_RISK: {
         const current = Number(payload?.current ?? 0)
+        const content = buildNotificationContent(NotificationEvent.STREAK_RISK, {
+          userName: firstName,
+          streakDays: current,
+        })
         return {
-          title: '⚡ Стрік під загрозою',
-          body: `${firstName}, стрік ${current} днів під загрозою. Зайди в Starway, щоб не втратити ритм.`,
+          title: content.title,
+          body: content.body,
+          telegramHtml: buildTelegramCard({
+            title: '⚡ Стрік під загрозою',
+            intro: `${firstName}, сьогодні ще можна втримати серію.`,
+            facts: [
+              `Поточний стрік: ${current} днів`,
+              'Одна коротка дія збереже ритм',
+            ],
+            note: 'Не треба робити все. Треба зробити один крок сьогодні.',
+          }),
           ctaText: '🔥 Зберегти стрік',
           ctaUrl: buildMiniAppStartUrl('tracker'),
         }
@@ -659,12 +1189,17 @@ export class NotificationService {
         }
       }
       case NotificationEvent.STREAK_BROKEN:
+      {
+        const content = buildNotificationContent(NotificationEvent.STREAK_BROKEN, {
+          userName: firstName,
+        })
         return {
-          title: '💔 Стрік перервався',
-          body: 'Серія перервалася, але ритм можна повернути. Почни з однієї короткої дії сьогодні.',
+          title: content.title,
+          body: content.body,
           ctaText: '💎 Відкрити трекер',
           ctaUrl: buildMiniAppStartUrl('tracker'),
         }
+      }
       case NotificationEvent.LEVEL_UP:
       {
         const nextLevel = LEVELS.find(level => level.level === Number(payload?.level ?? 1))
@@ -696,31 +1231,226 @@ export class NotificationService {
           ctaUrl: buildMiniAppStartUrl('tracker'),
         }
       case NotificationEvent.WEEKLY_SUMMARY: {
+        const reportsWebUrl = await buildWebFlowUrl({
+          userId: user.id,
+          path: '/dashboard/ai-mentor?section=reports',
+          payload: {
+            source: 'weekly_summary',
+            date: new Date().toISOString(),
+          },
+        })
         const summary = buildWeeklySummaryPayload(payload)
+        const content = buildNotificationContent(NotificationEvent.WEEKLY_SUMMARY, {
+          userName: firstName,
+          streakDays: summary.streak,
+          wheels: summary.wheels,
+          sessions: summary.sessions,
+        })
         return {
-          title: '📚 Тижневий підсумок',
-          body: `Стрік: ${summary.streak} · Колесо: ${summary.wheels} · Сесії: ${summary.sessions}. Відкрий лабораторію й рухайся далі по системі.`,
-          ctaText: '📚 Відкрити лабораторію',
-          ctaUrl: buildMiniAppStartUrl('library'),
+          title: content.title,
+          body: content.body,
+          telegramHtml: buildTelegramCard({
+            title: '📚 Тижневий підсумок',
+            intro: `${firstName}, твій тижневий зріз уже сформований.`,
+            facts: [
+              `Стрік: ${summary.streak}`,
+              `Колесо: ${summary.wheels}`,
+              `Сесії: ${summary.sessions}`,
+            ],
+            note: 'Подивись звіти, щоб зрозуміти динаміку за 7 днів і вирішити, який крок робити далі.',
+          }),
+          ctaActions: [
+            {
+              text: '✦ Відкрити в мініап',
+              url: buildMiniAppStartUrl('tracker'),
+              mode: 'web_app',
+            },
+            {
+              text: '✦ Відкрити всі звіти на сайті',
+              url: reportsWebUrl,
+              mode: 'url',
+            },
+          ],
         }
       }
       case NotificationEvent.AI_INACTIVE:
-        return {
-          title: '🤖 AI-нагадування',
-          body: 'Ти давно не заходила в AI flow. Повернись на одну коротку сесію і віднови темп.',
-          ctaText: '✦ Відкрити AI',
-          ctaUrl: buildMiniAppStartUrl('ai'),
+      {
+        const sessionPath = '/miniapp?startapp=ai'
+        let webUrl = `${TELEGRAM_SAFE_FRONTEND_URL}/dashboard/chat`
+        try {
+          const webLink = await generateDeepLink({
+            userId: user.id,
+            action: 'continue_flow',
+            source: 'telegram',
+            target: 'web',
+            path: '/dashboard/chat',
+            payload: {
+              source: 'ai_inactive',
+              date: new Date().toISOString(),
+            },
+          })
+          webUrl = buildTelegramSafeWebDeepLink(webLink.token, '/dashboard/chat')
+        } catch {
+          // fall back to direct dashboard path
         }
+
+        return {
+          title: '✦ Повернись в ABsystem',
+          body: 'Ти давно не поверталась до ABsystem. Обери, де зручно продовжити далі: у мініапі, на сайті або прямо тут у Telegram.',
+          telegramHtml: buildTelegramCard({
+            title: '✦ Повернись в ABsystem',
+            intro: `${firstName}, твій ритм зараз стоїть без руху.`,
+            facts: [
+              'Продовжити можна в мініапі',
+              'Або на сайті',
+              'Або прямо тут у Telegram',
+            ],
+            note: 'Повернись до одного наступного кроку, а не до хаосу.',
+          }),
+          ctaActions: buildMentorTelegramActions({
+            miniAppUrl: buildMiniAppStartUrl('ai'),
+            webUrl,
+            telegramCallback: 'continue_ai_mentor_chat',
+          }),
+        }
+      }
       case NotificationEvent.SUBSCRIPTION_EXPIRING:
       {
+        const subscriptionWebUrl = await buildWebFlowUrl({
+          userId: user.id,
+          path: '/dashboard/subscription',
+          payload: {
+            source: 'subscription_expiring',
+            date: new Date().toISOString(),
+          },
+        })
         const daysLeft = Number(payload?.daysLeft ?? 0)
+        const content = buildNotificationContent(NotificationEvent.SUBSCRIPTION_EXPIRING, {
+          userName: firstName,
+          daysUntilExpiry: daysLeft,
+        })
         return {
-          title: '💎 Підписка',
-          body: daysLeft > 0
-            ? `До завершення підписки залишилось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дні' : 'днів'}. Перевір доступ зараз, щоб не втратити прогрес, історію і AI-сесії.`
-            : 'Перевір підписку зараз, щоб не втратити прогрес, історію і AI-сесії.',
-          ctaText: '💎 Відкрити підписку',
-          ctaUrl: buildMiniAppStartUrl('subscription'),
+          title: content.title,
+          body: content.body,
+          telegramHtml: buildTelegramCard({
+            title: '💎 Підписка',
+            intro: daysLeft > 0
+              ? `${firstName}, до завершення доступу залишилось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дні' : 'днів'}.`
+              : `${firstName}, варто перевірити статус доступу зараз.`,
+            facts: [
+              'Прогрес і звіти збережені',
+              'AI-сесії залежать від активного доступу',
+            ],
+            note: 'Краще оновити доступ до паузи, а не після втрати ритму.',
+          }),
+          ctaActions: [
+            {
+              text: '✦ Відкрити в мініап',
+              url: buildMiniAppStartUrl('subscription'),
+              mode: 'web_app',
+            },
+            {
+              text: '✦ Відкрити підписку на сайті',
+              url: subscriptionWebUrl,
+              mode: 'url',
+            },
+          ],
+        }
+      }
+      case NotificationEvent.SUBSCRIPTION_EXPIRED:
+      {
+        const subscriptionWebUrl = await buildWebFlowUrl({
+          userId: user.id,
+          path: '/dashboard/subscription',
+          payload: {
+            source: 'subscription_expired',
+            date: new Date().toISOString(),
+          },
+        })
+        const daysSinceExpired = Number(payload?.daysSinceExpired ?? 0)
+        const previousPlan = String(payload?.previousPlan ?? 'trial')
+        const recoveryLine = daysSinceExpired <= 1
+          ? 'Щоб продовжити ранкові й вечірні сесії, віднови доступ зараз.'
+          : 'Ранкові та вечірні сесії залишаються на паузі, доки доступ не буде відновлено.'
+        const content = buildNotificationContent(NotificationEvent.SUBSCRIPTION_EXPIRED, {
+          userName: firstName,
+          previousPlan,
+        })
+
+        return {
+          title: content.title,
+          body: `${content.body.replace(/\.$/, '')} ${daysSinceExpired > 0 ? `${daysSinceExpired} дн. тому.` : 'Сьогодні.'} ${recoveryLine} Обери, де зручно подивитись плани і відновити доступ.`,
+          telegramHtml: buildTelegramCard({
+            title: previousPlan === 'trial' ? '💎 Тріал завершився' : '💎 Доступ завершився',
+            intro: `${firstName}, ${previousPlan === 'trial' ? 'пробний період завершився' : 'твій доступ завершився'} ${daysSinceExpired > 0 ? `${daysSinceExpired} дн. тому` : 'сьогодні'}.`,
+            facts: [
+              'Історія та звіти збережені',
+              'Ранкові й вечірні сесії зараз на паузі',
+            ],
+            note: recoveryLine,
+            closing: 'Обери, де зручно відкрити підписку і повернути доступ.',
+          }),
+          ctaActions: [
+            {
+              text: '✦ Обрати підписку в мініап',
+              url: buildMiniAppStartUrl('subscription'),
+              mode: 'web_app',
+            },
+            {
+              text: '✦ Обрати підписку на сайті',
+              url: subscriptionWebUrl,
+              mode: 'url',
+            },
+          ],
+        }
+      }
+      case NotificationEvent.POST_TRIAL_REPORTS:
+      {
+        const reportsWebUrl = await buildWebFlowUrl({
+          userId: user.id,
+          path: '/dashboard/ai-mentor?section=reports',
+          payload: {
+            source: 'post_trial_reports',
+            date: new Date().toISOString(),
+          },
+        })
+        const summary = buildWeeklySummaryPayload(payload)
+        const content = buildNotificationContent(NotificationEvent.POST_TRIAL_REPORTS, {
+          userName: firstName,
+          streakDays: summary.streak,
+          wheels: summary.wheels,
+          sessions: summary.sessions,
+        })
+        return {
+          title: content.title,
+          body: content.body,
+          telegramHtml: buildTelegramCard({
+            title: '📊 Твій рух за 7 днів',
+            intro: `${firstName}, після завершення trial у тебе вже є готовий зріз за 7 днів.`,
+            facts: [
+              `Стрік: ${summary.streak}`,
+              `Колесо: ${summary.wheels}`,
+              `Сесії: ${summary.sessions}`,
+            ],
+            note: 'У звітах ти побачиш: що вже зібрано, що зараз на паузі без підписки і що повернеться одразу після активації Premium.',
+          }),
+          ctaActions: [
+            {
+              text: '✦ Відкрити в мініап',
+              url: buildMiniAppStartUrl('tracker'),
+              mode: 'web_app',
+            },
+            {
+              text: '✦ Відкрити всі звіти на сайті',
+              url: reportsWebUrl,
+              mode: 'url',
+            },
+            {
+              text: '✦ Обрати підписку',
+              url: buildMiniAppStartUrl('subscription'),
+              mode: 'web_app',
+            },
+          ],
         }
       }
     }

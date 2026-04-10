@@ -1,8 +1,9 @@
 import type { Context } from 'telegraf'
 
 import { rewardEngine } from '../../gamification/reward.engine.js'
-import { saveDailySession } from '../../daily-cycle/service.js'
-import { openAppKeyboard } from '../keyboards.js'
+import { saveDailySession, getJournalDayAnchor } from '../../daily-cycle/service.js'
+import { saveDailyAnswer } from '../../daily-cycle/service.js'
+import { getSharedSessionState } from '../../daily-cycle/sessionSync.service.js'
 import {
   clearSession,
   getActiveQuestionSet,
@@ -15,6 +16,7 @@ import {
   updateSession,
 } from '../session.js'
 import type { SessionData } from '../types.js'
+import { getAccessAwareAppReplyMarkupForContext } from './start.js'
 
 type SessionKind = 'morning' | 'evening'
 
@@ -29,8 +31,9 @@ async function replyWithQuestion(ctx: Context, kind: SessionKind, index: number)
   ])
 
   if (!question) {
+    const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
     await ctx.reply('Не вдалося знайти питання. Спробуй ще раз через /start.', {
-      reply_markup: openAppKeyboard().reply_markup,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
   }
@@ -52,19 +55,38 @@ export async function startQuestionSession(ctx: Context, kind: SessionKind, init
 
   const userId = await getUserIdByChatId(chatId)
   if (!userId) {
+    const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
     await ctx.reply('Спершу підключи Telegram до акаунта Starway.', {
-      reply_markup: openAppKeyboard().reply_markup,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
   }
 
-  const nextData: SessionData = {
-    answers: initialData?.answers && typeof initialData.answers === 'object' ? initialData.answers : {},
-    [kind]: initialData?.[kind] && typeof initialData[kind] === 'object' ? initialData[kind] : {},
+  const targetDate = initialData?.journalDate && typeof initialData.journalDate === 'string'
+    ? initialData.journalDate
+    : getJournalDayAnchor(new Date()).toISOString()
+  const synced = await getSharedSessionState(userId, kind, targetDate)
+  const nextIndex = Math.max(initialStep, synced.lastQuestionIndex)
+
+  if (synced.completedAt) {
+    const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
+    await ctx.reply(
+      kind === 'morning'
+        ? '✅ Ранкова сесія вже завершена. Дані синхронізовані між каналами.'
+        : '✅ Вечірню сесію вже завершено. Дані синхронізовані між каналами.',
+      replyMarkup ? { reply_markup: replyMarkup } : undefined,
+    )
+    return
   }
 
-  await updateSession(userId, chatId, questionState(kind, initialStep), nextData, initialStep)
-  await replyWithQuestion(ctx, kind, initialStep)
+  const nextData: SessionData = {
+    answers: synced.answers,
+    journalDate: synced.date,
+    [kind]: synced.answers,
+  }
+
+  await updateSession(userId, chatId, questionState(kind, nextIndex), nextData, nextIndex)
+  await replyWithQuestion(ctx, kind, nextIndex)
 }
 
 export async function resumeQuestionSession(ctx: Context) {
@@ -75,8 +97,9 @@ export async function resumeQuestionSession(ctx: Context) {
   const parsed = session ? parseQuestionState(session.state) : null
 
   if (!session?.userId || !parsed) {
+    const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
     await ctx.reply('Активної сесії зараз немає. Відкрий Starway або напиши /morning чи /evening.', {
-      reply_markup: openAppKeyboard().reply_markup,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
   }
@@ -97,33 +120,44 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
     return
   }
 
-  const question = await getQuestion(kind, parsed.index)
+  const sessionDate =
+    typeof session.data?.journalDate === 'string'
+      ? session.data.journalDate
+      : getJournalDayAnchor(new Date()).toISOString()
+  const synced = await getSharedSessionState(session.userId, kind, sessionDate)
+  const currentIndex = synced.lastQuestionIndex
+  const question = await getQuestion(kind, currentIndex)
   if (!question) {
+    const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
     await ctx.reply('Не вдалося відновити питання. Спробуй ще раз через /start.', {
-      reply_markup: openAppKeyboard().reply_markup,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
   }
 
-  const currentAnswers =
-    session.data?.[kind] && typeof session.data[kind] === 'object'
-      ? { ...(session.data[kind] as Record<string, string>) }
-      : {}
-
   const mergedAnswers = {
-    ...currentAnswers,
+    ...synced.answers,
     [question.id]: normalizedAnswer,
   }
 
-  const nextData: SessionData = {
-    ...session.data,
-    answers: mergedAnswers,
-    [kind]: mergedAnswers,
-  }
-
-  const hasNext = await hasNextQuestion(kind, parsed.index)
+  const hasNext = await hasNextQuestion(kind, currentIndex)
   if (hasNext) {
-    const nextIndex = parsed.index + 1
+    const nextIndex = currentIndex + 1
+    await saveDailyAnswer(session.userId, {
+      entryId: synced.entryId,
+      session: kind,
+      questionId: question.id,
+      answer: normalizedAnswer,
+      date: synced.date,
+      lastQuestionIndex: nextIndex,
+      channel: 'tg',
+    })
+    const nextData: SessionData = {
+      ...session.data,
+      answers: mergedAnswers,
+      journalDate: synced.date,
+      [kind]: mergedAnswers,
+    }
     await updateSession(session.userId, chatId, questionState(kind, nextIndex), nextData, nextIndex)
     await replyWithQuestion(ctx, kind, nextIndex)
     return
@@ -132,17 +166,18 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
   await saveDailySession(session.userId, {
     session: kind,
     answers: mergedAnswers,
-    date: new Date().toISOString(),
+    date: synced.date,
+    channel: 'tg',
+    finalize: true,
   })
   await rewardEngine.onDailyEntryCreated(session.userId)
   await clearSession(session.userId, chatId)
+  const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
 
   await ctx.reply(
     kind === 'morning'
       ? '✅ Ранкова сесія збережена. Дані синхронізовані зі Starway.'
       : '✅ Вечірню рефлексію збережено. Дані синхронізовані зі Starway.',
-    {
-      reply_markup: openAppKeyboard().reply_markup,
-    },
+    replyMarkup ? { reply_markup: replyMarkup } : undefined,
   )
 }

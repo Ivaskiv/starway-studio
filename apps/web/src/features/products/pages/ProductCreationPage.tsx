@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useCreateProductMutation } from '@/features/products/services/products.api';
 import { ProductFormInputs } from '@/features/products/types/product.types';
 import { ModuleIntro } from '@/features/modules/components/ModuleIntro';
@@ -11,6 +12,7 @@ import { Button } from '@/ui/Button';
 import { GlassCard } from '@/ui/GlassCard';
 import { Input } from '@/ui/Input';
 import { Textarea } from '@/ui/Textarea';
+import { GenerationCurtain, useGenerationCurtain, withMinimumDelay } from '@/ui';
 
 function slugify(value: string, ownerEmail: string) {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -20,15 +22,24 @@ function slugify(value: string, ownerEmail: string) {
 
 export default function ProductCreationPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [createProduct, createState] = useCreateProductMutation();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [ownerEmail, setOwnerEmail] = useState(''); 
+  const curtainVisible = useGenerationCurtain(createState.isLoading, {
+    enterDelay: 140,
+    minVisibleMs: 1000,
+  });
 
   const code = useMemo(() => {
     if (!name || !ownerEmail) return '';
     return slugify(name, ownerEmail);
   }, [name, ownerEmail]);
+
+  if (String(user?.role ?? 'USER').toUpperCase() !== 'SUPERADMIN') {
+    return <Navigate to={ROUTES.PRODUCTS} replace />;
+  }
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -60,7 +71,7 @@ export default function ProductCreationPage() {
         modules: [],
         goals: [],
       };
-      await createProduct(payload).unwrap();
+      await withMinimumDelay(createProduct(payload).unwrap(), 900);
 
       toast.success(getToastMessage('module.productCreated'));
       navigate(ROUTES.PRODUCTS);
@@ -85,12 +96,17 @@ export default function ProductCreationPage() {
 
       <ModuleUsageCounter label="Створені продукти" used={name.trim() ? 1 : 0} total={1} />
 
-      <GlassCard className="p-5 md:p-6 space-y-4">
+      <GlassCard className="relative overflow-hidden p-5 md:p-6 space-y-4">
+        <GenerationCurtain
+          open={curtainVisible}
+          title="Збираємо продукт"
+          subtitle="Формуємо картку продукту, код і базову конфігурацію каталогу."
+        />
         <Input
           label="Назва продукту"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Наприклад: AI Mentor Starter"
+          placeholder="Наприклад: ABsystem Starter"
         />
 
         <Input

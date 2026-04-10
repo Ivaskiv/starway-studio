@@ -11,6 +11,8 @@ export interface UserSystemState {
     telegramId: string | null
     email: string | null
     hasRequiredContacts: boolean
+    hasTelegramLinked: boolean
+    telegramEnabled: boolean
   }
   products: {
     owned: Array<{ id: string; name: string; type?: string | null; status?: string | null }>
@@ -31,13 +33,13 @@ export interface UserSystemState {
     lockReason: 'TRIAL_EXPIRED' | 'NO_SUBSCRIPTION' | null
   }>
   permissions: {
-    role: 'USER' | 'SUPERADMIN'
+    role: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
     canCreateProducts: boolean
     canBypassTrial: boolean
     canSeeAdminTools: boolean
   }
   trial: { isActive: boolean; daysLeft: number; endsAt: string | null }
-  subscription: { isActive: boolean; status: string | null; expiresAt: string | null }
+  subscription: { isActive: boolean; status: string | null; expiresAt: string | null; currentPeriodStart: string | null }
   ui: {
     showMyProductsSection: boolean
     showCreateProductCta: boolean

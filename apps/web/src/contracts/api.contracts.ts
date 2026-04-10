@@ -6,6 +6,7 @@ export type AccessPlan = 'free' | 'trial' | 'paid';
 
 export interface SafeUserDTO {
   id: string;
+  expertId?: string | null;
   email: string | null;
   name: string | null;
   firstName: string | null;

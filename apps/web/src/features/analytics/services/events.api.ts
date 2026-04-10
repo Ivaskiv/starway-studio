@@ -6,6 +6,10 @@ export interface TrackFrontendEventInput {
   source: 'web' | 'miniapp'
   state?: string | null
   payload?: Record<string, unknown>
+  email?: string | null
+  utm_source?: string | null
+  utm_campaign?: string | null
+  product_id?: string | null
 }
 
 export const eventsApi = api.injectEndpoints({

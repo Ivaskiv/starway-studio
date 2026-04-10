@@ -1,6 +1,9 @@
+// apps/web/src/features/journal/components/DayDetails.tsx
 import type { ReactNode } from 'react'
 import { BellRing, Bot, CalendarCheck2, Flame, ListTodo, MoonStar, Sparkles, SunMedium, Video } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import type { JournalEvent } from '../types'
+import { getJournalBadgeMeta } from '../eventPresentation'
 
 interface DayDetailsProps {
   day: string
@@ -12,6 +15,12 @@ function parseDateKey(day: string) {
   return new Date(year, (month ?? 1) - 1, date ?? 1)
 }
 
+function buildCycleUrl(session: 'morning' | 'evening', dayKey: string) {
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const datePart = dayKey === todayKey ? '' : `&date=${dayKey}`
+  return `/dashboard/cycle?session=${session}${datePart}`
+}
+
 function getMetaNumber(event: JournalEvent, key: string) {
   const value = event.meta?.[key]
   return typeof value === 'number' ? value : 0
@@ -20,6 +29,11 @@ function getMetaNumber(event: JournalEvent, key: string) {
 function getMetaString(event: JournalEvent, key: string) {
   const value = event.meta?.[key]
   return typeof value === 'string' ? value : null
+}
+
+function getMetaBoolean(event: JournalEvent, key: string) {
+  const value = event.meta?.[key]
+  return typeof value === 'boolean' ? value : null
 }
 
 function EmptySection() {
@@ -34,13 +48,15 @@ function SectionCard({
   title,
   icon,
   events,
+  onOpenEvent,
 }: {
   title: string
   icon: ReactNode
   events: JournalEvent[]
+  onOpenEvent: (event: JournalEvent) => void
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+    <div className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[var(--bg-secondary)] p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-[rgb(var(--accent-soft-rgb))]">{icon}</span>
         <h4 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h4>
@@ -50,34 +66,65 @@ function SectionCard({
         <EmptySection />
       ) : (
         <div className="space-y-3">
-          {events.map((event) => (
-            <div key={event.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">{event.title}</p>
-                <span className="text-xs text-[var(--text-muted)]">
-                  {new Date(event.date).toLocaleTimeString('uk-UA', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-              </div>
-              {event.meta ? (
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
-                  {Object.entries(event.meta)
-                    .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
-                    .slice(0, 4)
-                    .map(([key, value]) => (
-                      <span
-                        key={`${event.id}-${key}`}
-                        className="rounded-full border border-[var(--border)] px-2.5 py-1"
-                      >
-                        {key}: {String(value)}
+          {events.map((event) => {
+            const badgeMeta = getJournalBadgeMeta(event)
+            const chips: string[] = []
+            const completed = getMetaBoolean(event, 'completed')
+            const skipped = getMetaBoolean(event, 'skipped')
+            const expired = getMetaBoolean(event, 'expired')
+            const sphere = getMetaString(event, 'sphere')
+            const xp = getMetaNumber(event, 'xp')
+
+            if (event.type === 'TASK') {
+              if (skipped) chips.push('Пропущено')
+              else if (expired) chips.push('Прострочено')
+              else if (completed) chips.push('Виконано')
+              else chips.push('Активно')
+            }
+
+            if (sphere) chips.push(sphere)
+            if (xp > 0) chips.push(`+${xp} XP`)
+
+            return (
+              <button
+                key={event.id}
+                type="button"
+                onClick={() => onOpenEvent(event)}
+                className="w-full rounded-2xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.18)] hover:bg-[rgba(255,255,255,0.03)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badgeMeta.badgeClassName}`}>
+                        {badgeMeta.label}
                       </span>
-                    ))}
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{event.title}</p>
+                    </div>
+
+                    {chips.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
+                        {chips.map((chip) => (
+                          <span
+                            key={`${event.id}-${chip}`}
+                            className="rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2.5 py-1"
+                          >
+                            {chip}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <span className="text-xs text-[var(--text-muted)]">
+                    {new Date(event.date).toLocaleTimeString('uk-UA', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
                 </div>
-              ) : null}
-            </div>
-          ))}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
@@ -85,6 +132,7 @@ function SectionCard({
 }
 
 export default function DayDetails({ day, events }: DayDetailsProps) {
+  const navigate = useNavigate()
   const formattedDay = parseDateKey(day).toLocaleDateString('uk-UA', {
     day: 'numeric',
     month: 'long',
@@ -99,13 +147,45 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
   const morningReflection = events.filter(
     (event) => event.type === 'REFLECTION' && getMetaString(event, 'period') === 'morning',
   )
-  const aiSession = events.filter((event) => event.type === 'AI')
+  const mentorSession = events.filter((event) => event.type === 'AI')
   const zoomSession = events.filter((event) => event.type === 'ZOOM')
   const eveningReflection = events.filter(
     (event) => event.type === 'REFLECTION' && getMetaString(event, 'period') === 'evening',
   )
+  const taskEvents = events.filter((event) => event.type === 'TASK')
   const subscriptionEvents = events.filter((event) => event.type === 'SUBSCRIPTION')
   const reminderEvents = events.filter((event) => event.type === 'TG_REMINDER')
+
+  const openEvent = (event: JournalEvent) => {
+    if (event.type === 'REFLECTION') {
+      const period = getMetaString(event, 'period')
+      navigate(period === 'evening' ? buildCycleUrl('evening', day) : buildCycleUrl('morning', day))
+      return
+    }
+
+    switch (event.type) {
+      case 'TASK':
+        navigate('/dashboard/microtasks')
+        return
+      case 'AI':
+        navigate('/dashboard/ai-mentor')
+        return
+      case 'ZOOM':
+        navigate('/dashboard/zoom')
+        return
+      case 'SUBSCRIPTION':
+        navigate('/dashboard/products')
+        return
+      case 'STREAK':
+        navigate('/dashboard/progress')
+        return
+      case 'TG_REMINDER':
+        navigate('/dashboard/ai-mentor')
+        return
+      default:
+        return
+    }
+  }
 
   return (
     <div className="dashboard-liquid-card h-full p-5 transition-all duration-300 ease-out xl:max-h-[calc(100vh-9rem)] xl:overflow-hidden">
@@ -147,26 +227,37 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
         </div>
 
         <div className="space-y-4">
-          <SectionCard title="Ранкова рефлексія" icon={<SunMedium className="h-4 w-4" />} events={morningReflection} />
-          <SectionCard title="AI сесія" icon={<Bot className="h-4 w-4" />} events={aiSession} />
-          <SectionCard title="Zoom сесія" icon={<Video className="h-4 w-4" />} events={zoomSession} />
-          <SectionCard title="Вечірній підсумок" icon={<MoonStar className="h-4 w-4" />} events={eveningReflection} />
+          <SectionCard title="Ранкова рефлексія" icon={<SunMedium className="h-4 w-4" />} events={morningReflection} onOpenEvent={openEvent} />
+          <SectionCard title="Мікрозавдання" icon={<ListTodo className="h-4 w-4" />} events={taskEvents} onOpenEvent={openEvent} />
+          <SectionCard title="Сесія з ментором" icon={<Bot className="h-4 w-4" />} events={mentorSession} onOpenEvent={openEvent} />
+          <SectionCard title="Zoom сесія" icon={<Video className="h-4 w-4" />} events={zoomSession} onOpenEvent={openEvent} />
+          <SectionCard title="Вечірній підсумок" icon={<MoonStar className="h-4 w-4" />} events={eveningReflection} onOpenEvent={openEvent} />
         </div>
 
         {subscriptionEvents.length > 0 || reminderEvents.length > 0 ? (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+          <div className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[var(--bg-secondary)] p-4">
             <div className="mb-2 flex items-center gap-2">
               <CalendarCheck2 className="h-4 w-4 text-[rgb(var(--accent-soft-rgb))]" />
               <h4 className="text-sm font-semibold text-[var(--text-primary)]">Системні події</h4>
             </div>
             <div className="space-y-2">
               {subscriptionEvents.map((event) => (
-                <div key={event.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-[var(--text-primary)]">
+                <button
+                  key={event.id}
+                  type="button"
+                  onClick={() => openEvent(event)}
+                  className="w-full rounded-2xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] px-4 py-3 text-left text-sm text-[var(--text-primary)] transition-all duration-200 hover:border-[rgba(var(--accent-rgb),0.18)] hover:bg-[rgba(255,255,255,0.03)]"
+                >
                   {event.title}
-                </div>
+                </button>
               ))}
               {reminderEvents.map((event) => (
-                <div key={event.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                <button
+                  key={event.id}
+                  type="button"
+                  onClick={() => openEvent(event)}
+                  className="w-full rounded-2xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] px-4 py-3 text-left transition-all duration-200 hover:border-[rgba(var(--accent-rgb),0.18)] hover:bg-[rgba(255,255,255,0.03)]"
+                >
                   <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                     <BellRing className="h-4 w-4 text-cyan-300" />
                     {event.title}
@@ -174,7 +265,7 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
                   {typeof event.meta?.preview === 'string' ? (
                     <p className="mt-2 text-xs leading-6 text-[var(--text-muted)]">{event.meta.preview}</p>
                   ) : null}
-                </div>
+                </button>
               ))}
             </div>
           </div>

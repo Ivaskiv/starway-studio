@@ -63,5 +63,5 @@ export interface PaymentData {
 
 /** Результат processPayment */
 export type PaymentResult =
-  | { status: 'approved'; userId: string; productId: string; enrollmentId: string }
+  | { status: 'approved'; userId: string; productId: string; enrollmentId: string | null; expertId: string | null }
   | { status: 'failed';   userId: string; reason: string };

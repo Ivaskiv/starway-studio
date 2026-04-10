@@ -21,7 +21,7 @@ export function HeroSection({ content, onPrimary, onSecondary }: HeroSectionProp
 
       <div className="liquid-actions">
         <button onClick={onPrimary} className="liquid-btn liquid-btn-primary">Пройти практикум</button>
-        <button onClick={onSecondary} className="liquid-btn liquid-btn-ghost">Створити свою AI-воронку</button>
+        <button onClick={onSecondary} className="liquid-btn liquid-btn-ghost">Створити свою воронку</button>
       </div>
     </section>
   );

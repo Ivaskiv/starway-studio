@@ -70,7 +70,7 @@ export async function ensureMentor(userId: string): Promise<UserAIMentor> {
       data: {
         expertId,
         slug: `mentor-${userId}`,
-        name: 'AI Mentor',
+        name: 'ABsystem',
         generatorConfig: {},
         runtimeConfig: {},
       },

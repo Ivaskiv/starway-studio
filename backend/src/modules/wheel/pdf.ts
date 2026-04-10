@@ -328,7 +328,7 @@ function drawFooter(doc: PDFDoc, pageNum: number) {
   line(doc, 48, y, 547, y, C.border)
   reg(doc)
   doc.fontSize(8).fillColor(C.dim)
-    .text('Starway Studio · AI Mentor Report · starway.ai · Конфіденційно', 48, y + 6, { width: 300 })
+    .text('Starway Studio · ABsystem Report · starway.ai · Конфіденційно', 48, y + 6, { width: 300 })
   doc.fontSize(8).fillColor(C.dim)
     .text(`Сторінка ${pageNum}`, 48, y + 6, { width: pageW, align: 'right' })
 }

@@ -20,7 +20,25 @@ export type AccessKey =
   | 'wheel.view'
   | 'progress.view'
   | 'products.manage'
-  | 'settings.manage';
+  | 'settings.manage'
+  | 'admin.clients.view'
+  | 'admin.revenue.view'
+  | 'admin.roles.manage'
+  | 'funnels.manage';
+
+export const PRODUCT_ACCESS_PRODUCTS = ['AI_MENTOR', 'AI_ASSISTANT'] as const;
+export type ProductAccessProduct = (typeof PRODUCT_ACCESS_PRODUCTS)[number];
+
+export const PRODUCT_ACCESS_ROLES = ['ADMIN', 'EXPERT'] as const;
+export type ProductAccessRole = (typeof PRODUCT_ACCESS_ROLES)[number];
+
+export interface ProductAccessAssignment {
+  id: string;
+  userId: string;
+  product: ProductAccessProduct;
+  role: ProductAccessRole;
+  createdAt: Date;
+}
 
 export interface AccessItem {
   key: AccessKey;
@@ -44,6 +62,7 @@ export type AccessBlockReason =
   | 'LEAD_FLOW_LOCK'
   | 'SUBSCRIPTION_REQUIRED'
   | 'CONTACT_REQUIRED'
+  | 'TELEGRAM_REQUIRED'
   | 'LEAD_ACCESS_REQUIRED';
 
 export interface AccessControlState {
@@ -55,6 +74,8 @@ export interface AccessControlState {
   telegramId: string | null;
   email: string | null;
   hasRequiredContacts: boolean;
+  hasTelegramLinked: boolean;
+  telegramEnabled: boolean;
 }
 
 export type ModuleAccessLevel = 'TRIAL' | 'PAID' | 'NONE';
@@ -86,7 +107,7 @@ export interface UserSystemState {
     lockReason: ModuleLockReason;
   }>;
   permissions: {
-    role: 'USER' | 'SUPERADMIN';
+    role: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN';
     canCreateProducts: boolean;
     canBypassTrial: boolean;
     canSeeAdminTools: boolean;
@@ -100,6 +121,7 @@ export interface UserSystemState {
     isActive: boolean;
     status: string | null;
     expiresAt: Date | null;
+    currentPeriodStart: Date | null;
   };
   mentorship: {
     isActive: boolean

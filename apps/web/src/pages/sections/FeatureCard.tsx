@@ -180,7 +180,7 @@ export function AIMentorModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const [messages, setMessages] = useState([
     {
       role:    'ai',
-      content: 'AI — не психолог і не чат. Я керуючий модуль, що веде вас по системі: СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.\n\nЗадайте питання або опишіть вашу ситуацію.',
+      content: 'Менторський контур — не психолог і не просто чат. Це керуючий модуль, що веде вас по системі: СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.\n\nЗадайте питання або опишіть вашу ситуацію.',
     },
   ])
   const [input, setInput] = useState('')
@@ -191,7 +191,7 @@ export function AIMentorModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     setTimeout(() => {
       setMessages(prev => [...prev, {
         role:    'ai',
-        content: 'Це демо-відповідь. В реальній версії тут буде інтеграція з AI API.',
+        content: 'Це демо-відповідь. У повній версії тут буде жива менторська взаємодія.',
       }])
     }, 800)
     setInput('')
@@ -204,7 +204,7 @@ export function AIMentorModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       <GlassCard className="w-full max-w-2xl max-h-[80vh] flex flex-col">
 
         <div className="flex items-center justify-between p-6 border-b border-white/10">
-          <h2 className="text-2xl font-bold">🤖 AI Ментор</h2>
+          <h2 className="text-2xl font-bold">🤖 ABsystem</h2>
           <button
             onClick={onClose}
             className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
@@ -217,7 +217,7 @@ export function AIMentorModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           {messages.map((msg, i) => (
             <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold flex-shrink-0 ${ACCENT_ICON_GRADIENT}`}>
-                {msg.role === 'ai' ? 'AI' : 'V'}
+                {msg.role === 'ai' ? 'M' : 'V'}
               </div>
               <div className={`max-w-[70%] p-3 rounded-xl ${msg.role === 'user' ? `${ACCENT_MESSAGE_USER} border` : 'bg-white/5'}`}>
                 <p className="whitespace-pre-line text-sm">{msg.content}</p>

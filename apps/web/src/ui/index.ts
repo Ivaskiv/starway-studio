@@ -20,6 +20,8 @@ export { PasswordStrength } from './PasswordStrength';
 export { CountdownTimer } from './CountdownTimer';
 export { ThemeSelector } from './ThemeSelector';
 export { default as EditableCard } from './EditableCard';
+export { InfoHint } from './InfoHint';
+export { GenerationCurtain, useGenerationCurtain, withMinimumDelay } from './GenerationCurtain';
 // export { ComponentsSuite } from './ComponentsSuite';
 
 export type { SelectOption, SelectProps } from './Select';

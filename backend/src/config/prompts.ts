@@ -1,5 +1,5 @@
 // backend/src/config/prompts.ts
-// Професійні промпти для AI Mentor
+// Професійні промпти для ABsystem
 
 export const AI_MENTOR_PROMPTS = {
   SYSTEM: `Ти — AI-ментор "Starway". Твоя місія: допомагати людям досягати цілей через мікродії.

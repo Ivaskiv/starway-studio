@@ -11,7 +11,7 @@ type AudienceModeSectionProps = {
 
 const USER_POINTS = [
   'Проходиш практикум 5 днів з чіткими щоденними кроками',
-  'Отримуєш AI-аналіз, прогрес, PDF-звіти та Telegram-нагадування',
+  'Отримуєш аналіз, прогрес, PDF-звіти та Telegram-нагадування',
   'Працюєш у miniapp без зайвих налаштувань і складних сценаріїв',
 ] as const;
 
@@ -30,7 +30,7 @@ export default function AudienceModeSection({ onAuthRequired }: AudienceModeSect
   const isSuperAdmin = user?.isSuperAdmin === true;
 
   const headline = useMemo(() => {
-    if (audience === 'owner') return 'Створи свій продукт і масштабуй через AI';
+    if (audience === 'owner') return 'Створи свій продукт і масштабуй через систему Starway';
     return '5 днів, щоб змінити основу щоденних рішень';
   }, [audience]);
 
@@ -124,7 +124,7 @@ export default function AudienceModeSection({ onAuthRequired }: AudienceModeSect
           <div className="mt-6 glass-card rounded-3xl p-6 border border-white/15">
             <h4 className="text-xl font-semibold mb-3">11 кроків створення системи</h4>
             <p className="text-white/70 leading-relaxed">
-              Продукт → контент → колесо балансу → AI-аналіз → звіти → Telegram → miniapp →
+              Продукт → контент → колесо балансу → аналіз стану → звіти → Telegram → miniapp →
               гейміфікація. Вся основна робота зібрана навколо core-модулів платформи.
             </p>
 

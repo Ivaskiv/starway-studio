@@ -9,13 +9,12 @@ interface MiniAppJournalSectionProps {
 export default function MiniAppJournalSection({
   showHeader = true,
 }: MiniAppJournalSectionProps) {
-  const { days, eventsByDate, selectedDay, setSelectedDay } = useWeeklyJournal()
+  const { days, dayStatesByDate, selectedDay, selectedDayState, setSelectedDay, isError } = useWeeklyJournal()
   const selectedDate = new Date(`${selectedDay}T12:00:00`)
   const selectedDayLabel = selectedDate.toLocaleDateString('uk-UA', {
     day: 'numeric',
     month: 'long',
   })
-  const selectedEvents = eventsByDate[selectedDay] ?? []
 
   return (
     <div className="space-y-3">
@@ -25,22 +24,28 @@ export default function MiniAppJournalSection({
             Журнал тижня
           </p>
           <h3 className="mt-1 text-base font-semibold text-[var(--text-primary)]">
-            Події, рефлексії й AI-сесії в одному блоці
+            Все важливе за тиждень в одному місці
           </h3>
           <p className="mt-1 text-xs leading-6 text-[var(--text-muted)]">
-            У Telegram показуємо компактний weekly strip і записи вибраного дня. Без місячної сітки.
+            Тут видно події, відповіді й короткі сигнали дня без зайвої великої сітки.
           </p>
+        </div>
+      ) : null}
+
+      {isError ? (
+        <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-xs leading-6 text-amber-100">
+          Не вдалося завантажити журнал. Перевір авторизацію або підключення і онови сторінку.
         </div>
       ) : null}
 
       <WeeklyStrip
         days={days}
-        eventsByDate={eventsByDate}
+        dayStatesByDate={dayStatesByDate}
         selectedDay={selectedDay}
         onSelectDay={setSelectedDay}
       />
 
-      <EventList dayLabel={selectedDayLabel} events={selectedEvents} />
+      <EventList dayLabel={selectedDayLabel} dayState={selectedDayState} />
     </div>
   )
 }

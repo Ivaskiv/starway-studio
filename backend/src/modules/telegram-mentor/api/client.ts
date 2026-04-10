@@ -7,6 +7,24 @@ type RequestOptions = {
   body?: Record<string, unknown>
 }
 
+function extractErrorMessage(data: unknown): string {
+  if (typeof data !== 'object' || data === null) {
+    return 'api_request_failed'
+  }
+
+  const payload = data as { message?: unknown; error?: unknown }
+
+  if (typeof payload.message === 'string') {
+    return payload.message
+  }
+
+  if (typeof payload.error === 'string') {
+    return payload.error
+  }
+
+  return 'api_request_failed'
+}
+
 async function request<T>(path: string, options: RequestOptions): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? 'GET',
@@ -18,10 +36,9 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
 
-  const data = await response.json().catch(() => ({}))
+  const data: unknown = await response.json().catch(() => null)
   if (!response.ok) {
-    const message = typeof data?.message === 'string' ? data.message : typeof data?.error === 'string' ? data.error : 'api_request_failed'
-    throw new Error(message)
+    throw new Error(extractErrorMessage(data))
   }
 
   return data as T

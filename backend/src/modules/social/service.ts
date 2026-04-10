@@ -54,6 +54,7 @@ export async function disconnectSocial(userId: string, provider: SocialProvider)
     await prisma.user.update({
       where: { id: userId },
       data: {
+        telegramEnabled: false,
         telegramUserId: null,
         telegramUserName: null,
         telegramChatId: null,

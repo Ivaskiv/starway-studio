@@ -13,6 +13,7 @@ export type UserRole = 'SUPERADMIN' | 'EXPERT' | 'USER' | 'ADMIN' | 'MENTOR' | '
 
 export interface User {
   id: string
+  expertId?: string | null
   email: string | null
   name: string | null
   firstName: string | null
@@ -22,6 +23,7 @@ export interface User {
   telegramUserId: string | null
   telegramUserName: string | null
   telegramChatId: string | null
+  telegramEnabled?: boolean
   lastLoginAt: Date | null
   createdAt: Date
   updatedAt: Date
@@ -37,6 +39,7 @@ export interface UserWithSub extends User {
 
 export interface SafeUser {
   id: string
+  expertId?: string | null
   email: string | null
   name: string | null
   firstName: string | null
@@ -44,6 +47,7 @@ export interface SafeUser {
   telegramUserId: string | null
   telegramUserName: string | null
   telegramChatId: string | null
+  telegramEnabled?: boolean
   role: UserRole // ✅ гарантовано сумісний з фронтендом
   isAdmin: boolean
   isSuperAdmin: boolean

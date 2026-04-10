@@ -1,3 +1,6 @@
+import { useAppSelector } from '@/app/hooks'
+import { selectCurrentUser } from '@/features/auth/services/auth.slice'
+import { useSendTrialExpiredFlowDiagnosticMutation } from '@/features/notifications/services/notifications.api'
 import { useMemo, useState } from 'react'
 import { Button, GlassCard } from '@/ui'
 import { CheckCircle2, Circle, CircleDashed, Code2, Flame, ShieldCheck, Sparkles, Target, Trophy, Zap } from 'lucide-react'
@@ -25,7 +28,7 @@ const tabs: Array<{ id: TabId; label: string }> = [
 ]
 
 const eventRows = [
-  ['🧠 AI-сесія', 'Фіксується автоматично після кожного AI чату. У journal іде як факт активності, а не окремий дубльований лог.', 'Зелений · auto'],
+  ['🧠 Сесія з ментором', 'Фіксується автоматично після кожного чату. У journal іде як факт активності, а не окремий дубльований лог.', 'Зелений · auto'],
   ['📹 Zoom-сесія', 'Адмін створює вручну. У journal потрапляє сама Zoom-подія, а TG нагадування про неї живе окремо як reminder.', 'Фіолетовий · scheduled'],
   ['✅ Практика / цикл', 'Щоденні практики, ранок і вечір входять в один display-клас “Практика”, щоб не плодити зайві кольори в календарі.', 'Блакитний · daily-cycle'],
   ['🔥 Streak-день', 'Показує факт безперервності. Milestone і risk повідомлення не дублюють streak-event, а читаються з gamification/notifications.', 'Червоний · gamification'],
@@ -65,7 +68,7 @@ const allPlans: Array<{ title: string; items: ChecklistItem[] }> = [
     items: [
       { id: 'deep-1', title: 'startapp → route map', status: 'done', percent: 100, note: 'MiniAppLayout уже читає start_param.' },
       { id: 'deep-2', title: 'activated re-check', status: 'done', percent: 92, note: 'Foreground return уже не губить сценарій.' },
-      { id: 'deep-3', title: 'AI context redirect', status: 'done', percent: 90, note: 'ai_morning / ai_evening вже автозапускають контекст.' },
+      { id: 'deep-3', title: 'Context redirect', status: 'done', percent: 90, note: 'ai_morning / ai_evening вже автозапускають контекст.' },
       { id: 'deep-4', title: 'level_up deep link', status: 'done', percent: 78, note: 'Є callout-flow, не повний modal-flow.' },
     ],
   },
@@ -111,8 +114,12 @@ function ChecklistIcon({ status }: { status: ItemStatus }) {
 }
 
 export default function TelegramPage() {
+  const currentUser = useAppSelector(selectCurrentUser)
   const [activeTab, setActiveTab] = useState<TabId>('map')
   const [checked, setChecked] = useState<Record<string, boolean>>({})
+  const [targetUserId, setTargetUserId] = useState('')
+  const [diagnosticStatus, setDiagnosticStatus] = useState<string | null>(null)
+  const [sendTrialExpiredFlowDiagnostic, { isLoading: isSendingTrialReplay }] = useSendTrialExpiredFlowDiagnosticMutation()
 
   const overview = useMemo(() => {
     const flat = allPlans.flatMap(section => section.items)
@@ -122,6 +129,25 @@ export default function TelegramPage() {
       total: flat.length,
     }
   }, [])
+
+  const handleReplayTrialExpiredFlow = async () => {
+    try {
+      setDiagnosticStatus(null)
+      const response = await sendTrialExpiredFlowDiagnostic({
+        userId: targetUserId.trim() || currentUser?.id,
+        previousPlan: 'trial',
+        daysSinceExpired: 1,
+        streak: 7,
+        wheels: 1,
+        sessions: 6,
+      }).unwrap()
+
+      setDiagnosticStatus(`Replay відправлено для userId ${response.userId}: ${response.scenarios.join(' → ')}`)
+    } catch (error) {
+      console.error(error)
+      setDiagnosticStatus('Не вдалося відправити replay post-trial flow')
+    }
+  }
 
   const tabContent = (() => {
     switch (activeTab) {
@@ -146,7 +172,7 @@ export default function TelegramPage() {
         return (
           <div className="grid gap-5 xl:grid-cols-3">
             {[
-              ['⚡', 'Дія юзера', ['рефлексія', 'AI повідомлення', 'практика', 'трекер']],
+              ['⚡', 'Дія юзера', ['рефлексія', 'повідомлення ментора', 'практика', 'трекер']],
               ['🎮', 'Gamification engine', ['rewardEngine', 'applyReward', 'onXpGained', 'onStreakUpdate']],
               ['📤', 'Outputs', ['DB update', 'in-app feedback', 'TG notify', 'summary revalidate']],
             ].map(([icon, title, points]) => (
@@ -338,6 +364,41 @@ NotificationService
         <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
           Один виклик у backend має запускати весь ланцюг: reward engine, streak update, level check, TG notification і frontend feedback. Логіка не повинна дублюватися між route-ами.
         </p>
+      </GlassCard>
+
+      <GlassCard className="p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">Replay сценаріїв</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">Post-trial Telegram flow</h2>
+            <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
+              Перевідправляє правильну послідовність повідомлень після завершення trial: спочатку про завершення доступу і вибір підписки, потім follow-up зі статистикою за 7 днів і переходом у звіти.
+            </p>
+          </div>
+
+          <div className="w-full max-w-xl space-y-3">
+            <input
+              value={targetUserId}
+              onChange={(event) => setTargetUserId(event.target.value)}
+              placeholder={currentUser?.id ? `Порожньо = поточний userId (${currentUser.id})` : 'Вкажіть userId для replay'}
+              className="w-full rounded-[18px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[rgba(var(--accent-rgb),0.22)]"
+            />
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                variant="solid"
+                onClick={handleReplayTrialExpiredFlow}
+                disabled={isSendingTrialReplay || (!currentUser?.id && !targetUserId.trim())}
+                className="rounded-[18px]"
+              >
+                {isSendingTrialReplay ? 'Відправляємо…' : 'Перевідправити post-trial flow'}
+              </Button>
+            </div>
+            {diagnosticStatus ? (
+              <p className="text-sm leading-7 text-[var(--text-secondary)]">{diagnosticStatus}</p>
+            ) : null}
+          </div>
+        </div>
       </GlassCard>
 
       {tabContent}

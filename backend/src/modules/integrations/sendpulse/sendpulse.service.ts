@@ -1,5 +1,6 @@
 const DEFAULT_SENDPULSE_API_URL = 'https://api.sendpulse.com'
 const DEFAULT_LEAD_MAGNET_TRIGGER = 'lidmagnet_start'
+const DEFAULT_LEAD_MAGNET_STOP_TRIGGER = 'lidmagnet_stop'
 const DEFAULT_LEAD_MAGNET_FLOW_ID = 'lead_magnet_1'
 const REQUEST_TIMEOUT_MS = 8_000
 const MAX_ATTEMPTS = 3
@@ -21,6 +22,7 @@ type SendPulseConfig = {
   apiUrl: string
   apiToken: string
   leadMagnetTrigger: string
+  leadMagnetStopTrigger: string
   leadMagnetFlowId: string
   botUsername: string
 }
@@ -40,6 +42,8 @@ function getSendPulseConfig(): SendPulseConfig {
       '',
     leadMagnetTrigger:
       process.env.SENDPULSE_LEADMAGNET_TRIGGER?.trim() ?? DEFAULT_LEAD_MAGNET_TRIGGER,
+    leadMagnetStopTrigger:
+      process.env.SENDPULSE_LEADMAGNET_STOP_TRIGGER?.trim() ?? DEFAULT_LEAD_MAGNET_STOP_TRIGGER,
     leadMagnetFlowId:
       process.env.SENDPULSE_LEADMAGNET_FLOW_ID?.trim() ?? DEFAULT_LEAD_MAGNET_FLOW_ID,
     botUsername: (process.env.TELEGRAM_BOT_USERNAME ?? 'Starway_byNadya_Bot')
@@ -242,10 +246,33 @@ export async function triggerLeadMagnet(telegramChatId: string): Promise<void> {
   }
 }
 
+export async function stopLeadMagnet(telegramChatId: string): Promise<boolean> {
+  try {
+    const config = getSendPulseConfig()
+
+    if (!config.apiToken || !config.leadMagnetStopTrigger) {
+      return false
+    }
+
+    return await requestWithResilience(config, {
+      name: 'trigger',
+      path: '/telegram/send',
+      body: {
+        chat_id: telegramChatId,
+        trigger: config.leadMagnetStopTrigger,
+      },
+    })
+  } catch (error) {
+    logger.error('[sendpulse-stop]', error)
+    return false
+  }
+}
+
 export const SendPulseService = {
   getMentorReturnDeeplink,
   sendMiniCourseViaSendPulse,
   startSendPulseFlow,
   triggerLeadMagnet,
+  stopLeadMagnet,
 }
 import { logger } from '../../../utils/logger.js'

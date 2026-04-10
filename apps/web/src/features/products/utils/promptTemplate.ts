@@ -15,7 +15,7 @@ const formatArray = (items?: string[]) =>
   items && items.length ? items.filter(Boolean).join(', ') : 'немає'
 
 export const DEFAULT_MENTOR_PROMPT_CONFIG: MentorPromptConfig = {
-  mentorName: 'AI Mentor',
+  mentorName: 'ABsystem',
   style: 'supportive',
   language: 'UA',
   signaturePhrase: 'Рухайся далі!',

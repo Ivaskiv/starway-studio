@@ -1,4 +1,5 @@
 import { api } from '@/services/api';
+import type { FunnelScreen, FunnelTargetSegment } from '@/features/funnels/types/funnel.types';
 
 type FunnelProduct = {
   id: string;
@@ -17,6 +18,12 @@ export type FunnelEntity = {
   createdAt: string;
   updatedAt: string;
   products: FunnelProduct[];
+  version?: string | null;
+  targetSegment?: FunnelTargetSegment | string | null;
+  definition?: Record<string, unknown>;
+  blueprint?: Record<string, unknown> | null;
+  stages?: Array<{ id: string; name: string }>;
+  screens?: FunnelScreen[];
 };
 
 export const funnelsApi = api.injectEndpoints({

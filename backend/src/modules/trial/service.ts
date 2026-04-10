@@ -9,6 +9,8 @@ import {
   User,
 } from '@starway/db/prisma-client'
 import { scheduleReminder }                                          from '../notifications/reminder.service.js'
+import { syncLifecycleForUser }                                      from '../flow-control/service.js'
+import { invalidateFunnelStage }                                     from '../../lib/funnel/getUserFunnelStage.js'
 import type { TrialStatus }                                          from './types.js'
 
 // ─────────────────────────────────────────────
@@ -38,13 +40,16 @@ export async function startTrial(userId: string): Promise<User> {
     throw new Error('TRIAL_ALREADY_USED')
   }
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: {
       trialStartsAt: new Date(),
       trialEndsAt:   new Date(Date.now() + TRIAL_DAYS * MS_PER_DAY),
     },
   })
+  await syncLifecycleForUser(userId)
+  await invalidateFunnelStage(userId)
+  return updated
 }
 
 // ─────────────────────────────────────────────

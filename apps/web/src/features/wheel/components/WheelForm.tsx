@@ -14,6 +14,7 @@ import { useTrackFrontendEventMutation } from '@/features/analytics/services/eve
 import { useCreateWheelAssessmentMutation } from '@/features/wheel/services/wheel.api'
 import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
 import { Button } from '@/ui/Button'
+import { GenerationCurtain, useGenerationCurtain, withMinimumDelay } from '@/ui'
 
 import { useWheelFlowState } from '../hooks/useWheelFlowState'
 import { ResultView } from './ResultView'
@@ -77,13 +78,16 @@ export const WheelForm = ({ userId, onComplete, onCancel, nextWheelAvailable }: 
   } = useWheelFlowState()
 
   const [saveWheel, { isLoading }] = useCreateWheelAssessmentMutation()
+  const curtainVisible = useGenerationCurtain(isLoading, {
+    enterDelay: 120,
+    minVisibleMs: 1100,
+  })
   const [trackFrontendEvent] = useTrackFrontendEventMutation()
 
   // ─────────────────────────────────────────────────────────
   // Step label
   // ─────────────────────────────────────────────────────────
   const stepLabel = useMemo(() => {
-    if (isIntroStep) return 'Вступ'
     if (isResultStep) return `Крок ${WHEEL_CATEGORIES.length} із ${WHEEL_CATEGORIES.length}`
     return `Крок ${step} із ${WHEEL_CATEGORIES.length}`
   }, [step, isIntroStep, isResultStep])
@@ -133,14 +137,17 @@ export const WheelForm = ({ userId, onComplete, onCancel, nextWheelAvailable }: 
     }
 
     try {
-      const result = await saveWheel({
-        userId: resolvedUserId,
-        scores: spheres.map(s => ({
-          categoryId: s.categoryId,
-          score: s.score ?? 1,
-          comment: s.comment || undefined,
-        })),
-      }).unwrap()
+      const result = await withMinimumDelay(
+        saveWheel({
+          userId: resolvedUserId,
+          scores: spheres.map(s => ({
+            categoryId: s.categoryId,
+            score: s.score ?? 1,
+            comment: s.comment || undefined,
+          })),
+        }).unwrap(),
+        1100,
+      )
 
       setGenerationsUsed(prev => prev + 1)
 
@@ -240,7 +247,12 @@ export const WheelForm = ({ userId, onComplete, onCancel, nextWheelAvailable }: 
       {/* Main card */}
       {/* ───────────────────────────────────────── */}
 
-      <div className="card-surface liquid-glass">
+      <div className="card-surface liquid-glass relative overflow-hidden">
+        <GenerationCurtain
+          open={curtainVisible}
+          title="Формуємо зріз колеса"
+          subtitle="Зберігаємо 8 сфер, рахуємо баланс і готуємо новий звіт для історії."
+        />
 
         <StepCard
           key={step}

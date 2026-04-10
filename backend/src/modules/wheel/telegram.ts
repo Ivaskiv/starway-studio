@@ -77,9 +77,6 @@ export async function sendWheelNotification(
 export async function registerMentorCommands(customBot: Telegraf = bot) {
   if (!process.env.TELEGRAM_BOT_TOKEN) return
   await customBot.telegram.setMyCommands([
-    { command: 'wheel', description: 'Запуск Колеса балансу' },
-    { command: 'diagnosis', description: 'Отримати коротку діагностику' },
-    { command: 'streak', description: 'Перевірити стрік' },
-    { command: 'report', description: 'Отримати PDF звіт' },
+    { command: 'privacy', description: 'Політика конфіденційності чат-бота' },
   ])
 }

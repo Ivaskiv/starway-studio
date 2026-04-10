@@ -6,10 +6,12 @@ import ProtectedRoute from '@/features/auth/components/ProtectedRoute';
 import { AuthRestoreProvider, type AuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext';
 import { selectIsAuthenticated } from '@/features/auth/services/auth.slice';
 import type { AccessKey } from '@/features/auth/types/auth.types';
-import { syncAuthSession } from '@/features/auth/utils/sessionSync';
+import { shouldAllowSessionProbeWithoutHint, syncAuthSession } from '@/features/auth/utils/sessionSync';
+import { getToken } from '@/features/auth/services/token';
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback';
 import MainLayout from '@/layout/MainLayout';
 import { useThemeContext } from '@/theme/ThemeProvider';
+import GlobalAssistant from '@/features/assistant/components/GlobalAssistant';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useDispatch, useSelector } from 'react-redux';
@@ -36,7 +38,7 @@ const Actions = lazy(() => import('@/features/actions/pages/ActionsPage'));
 const Courses = lazy(() => import('@/features/mini-courses/pages/CoursesPage'));
 const ProductInfo = lazy(() => import('@/features/mini-courses/pages/ProductInfoPage'));
 const Subscription = lazy(() => import('@/features/subscription/pages/SubscriptionPage'));
-const AIMentor = lazy(() => import('@/features/ai-mentor/pages/AIMentorPage'));
+const AiMentorDashboard = lazy(() => import('@/features/daily-cycle/pages/AiMentorDashboardPage'));
 const Products = lazy(() => import('@/features/products/pages/ProductsPage'));
 const ProductCreation = lazy(() => import('@/features/products/pages/ProductCreationPage'));
 const Profile = lazy(() => import('@/features/user/pages/UserProfilePage'));
@@ -47,7 +49,10 @@ const ResetPasswordPage = lazy(() => import('@/features/auth/pages/ResetPassword
 const SessionsPage = lazy(() => import('@/features/zoom/pages/SessionsPage'));
 const DevRoutes = lazy(() => import('@/pages/dev/DevRoutes'));
 const TransferOwnership = lazy(() => import('@/features/admin/pages/TransferOwnershipPage'));
+const MasterPanel = lazy(() => import('@/features/admin/pages/MasterPanelPage'));
+const AdminAnalytics = lazy(() => import('@/features/analytics/pages/AdminAnalytics'));
 const MiniAppPage = lazy(() => import('@/features/social/pages/MiniAppPage'));
+const NotificationsPage = lazy(() => import('@/features/notifications/pages/Notifications'));
 
 type RouteConfig = {
   path: string;
@@ -70,9 +75,13 @@ const PUBLIC_INFO_ROUTES = [
 
 const DASHBOARD_ROUTES: RouteConfig[] = [
   { path: '/dashboard', element: <Dashboard />, ability: 'dashboard.view' },
-  { path: '/dashboard/wheel', element: <Wheel />, ability: 'wheel.view' },
-  { path: '/dashboard/cycle', element: <DailyCycle />, ability: 'dashboard.view' },
-  { path: '/dashboard/journal', element: <Journal />, ability: 'dashboard.view' },
+  { path: '/dashboard/ai-mentor', element: <AiMentorDashboard />, ability: 'dashboard.view' },
+  { path: '/dashboard/cycle', element: <AiMentorDashboard />, ability: 'dashboard.view' },
+  { path: '/dashboard/wheel', element: <AiMentorDashboard />, ability: 'dashboard.view' },
+  { path: '/dashboard/journal', element: <AiMentorDashboard />, ability: 'dashboard.view' },
+  { path: '/dashboard/calendar', element: <AiMentorDashboard />, ability: 'dashboard.view' },
+  { path: '/dashboard/microtasks', element: <AiMentorDashboard />, ability: 'dashboard.view' },
+  { path: '/dashboard/tasks', element: <AiMentorDashboard />, ability: 'dashboard.view' },
   { path: '/dashboard/progress', element: <Progress />, ability: 'progress.view' },
   { path: '/dashboard/vision', element: <Vision />, ability: 'mentor.vision', showDeniedScreen: true },
   { path: '/dashboard/goals', element: <Goals />, ability: 'mentor.goals', showDeniedScreen: true },
@@ -80,13 +89,21 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   { path: '/dashboard/goals/weekly-mirror', element: <WeeklyMirror />, ability: 'mentor.goals', showDeniedScreen: true },
   { path: '/dashboard/actions', element: <Actions />, ability: 'mentor.actions', showDeniedScreen: true },
   { path: '/dashboard/courses', element: <Courses />, ability: 'dashboard.view' },
-  { path: '/dashboard/ai-mentor', element: <AIMentor />, ability: 'mentor.core' },
-  { path: '/dashboard/admin/transfer-ownership', element: <TransferOwnership />, ability: 'dashboard.view' },
+  { path: '/dashboard/ai-seo', element: <Navigate to="/dashboard?section=ai-seo" replace />, ability: 'products.manage' },
+  { path: '/dashboard/ads', element: <Navigate to="/dashboard?section=content" replace />, ability: 'products.manage' },
+  { path: '/dashboard/leadmagnet', element: <Navigate to="/dashboard?section=leadmagnet" replace />, ability: 'funnels.manage' },
+  { path: '/dashboard/students', element: <Navigate to="/dashboard?section=students" replace />, ability: 'admin.clients.view' },
+  { path: '/dashboard/admin/users', element: <Navigate to="/dashboard/students" replace />, ability: 'admin.clients.view' },
+  { path: '/dashboard/admin/revenue', element: <AdminAnalytics />, ability: 'admin.revenue.view' },
+  { path: '/dashboard/admin/studio', element: <MasterPanel />, ability: 'products.manage', showDeniedScreen: true },
+  { path: '/dashboard/admin/roles', element: <Navigate to="/dashboard/admin/transfer-ownership" replace />, ability: 'admin.roles.manage' },
+  { path: '/dashboard/admin/transfer-ownership', element: <TransferOwnership />, ability: 'admin.roles.manage' },
   { path: '/dashboard/sessions', element: <SessionsPage />, ability: 'dashboard.view' },
   { path: '/dashboard/products', element: <Products />, ability: 'dashboard.view' },
   { path: '/dashboard/product-create', element: <ProductCreation />, ability: 'dashboard.view' },
   { path: '/dashboard/profile', element: <Profile />, ability: 'profile.view' },
   { path: '/dashboard/settings', element: <Settings />, ability: 'settings.manage' },
+  { path: '/dashboard/notifications', element: <NotificationsPage />, ability: 'dashboard.view' },
   { path: '/dashboard/telegram', element: <TelegramPage />, ability: 'dashboard.view' },
   { path: '/dashboard/subscription', element: <Subscription />, ability: 'dashboard.view' },
   { path: '/dashboard/zoom', element: <Subscription />, ability: 'dashboard.view' },
@@ -94,7 +111,7 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   { path: '/dashboard/mentorship', element: <Subscription />, ability: 'dashboard.view' },
   { path: '/dashboard/mentor/landing', element: <MentorLanding />, ability: 'mentor.core' },
   { path: '/dashboard/mentor/setup', element: <MentorSetup />, ability: 'mentor.core' },
-  { path: '/dashboard/mentor/workspace', element: <AIMentor />, ability: 'mentor.core' },
+  { path: '/dashboard/mentor/workspace', element: <AiMentorDashboard />, ability: 'mentor.core' },
 ];
 
 interface AuthRestoreProps {
@@ -143,7 +160,9 @@ function AuthRestore({ children, onStatusChange }: AuthRestoreProps) {
     };
   }, [dispatch, onStatusChange, theme]);
 
-  if (status === 'idle' || status === 'restoring') {
+  const hasCachedSession = Boolean(getToken()) || shouldAllowSessionProbeWithoutHint()
+
+  if ((status === 'idle' || status === 'restoring') && !hasCachedSession) {
     return <LoadingFallback />;
   }
   return <>{children}</>;
@@ -184,7 +203,7 @@ export default function App() {
       <AuthRestoreProvider value={authRestoreStatus}>
         <AuthRestore onStatusChange={setAuthRestoreStatus}>
           <Toaster position="top-right" />
-          <Suspense fallback={<LoadingFallback />}>
+          <Suspense fallback={isAuthenticated ? null : <LoadingFallback />}>
             <Routes>
               <Route element={<MainLayout />}>
                 <Route path="/" element={<HomePage />} />
@@ -211,8 +230,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
 
-            {/* GlobalAssistant рендериться через createPortal в document.body — тимчасово вимкнено */}
-            {/* <GlobalAssistant /> */}
+            <GlobalAssistant />
           </Suspense>
         </AuthRestore>
       </AuthRestoreProvider>

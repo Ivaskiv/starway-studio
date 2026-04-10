@@ -6,6 +6,7 @@ import {
 } from '@starway/db/prisma-client'
 
 import { prisma } from '../../../db/client.js'
+import { cacheDel, cacheDelPattern, cacheGet, cacheSet } from '../../../lib/cache/index.js'
 
 export interface CreateNotificationInput {
   userId: string
@@ -20,9 +21,31 @@ export interface CreateNotificationInput {
   readAt?: Date | null
 }
 
+export interface ListNotificationsForUserOptions {
+  limit?: number
+  unreadOnly?: boolean
+  channels?: NotificationChannel[]
+}
+
 export class NotificationRepository {
+  private listCacheKey(userId: string) {
+    return `notifications:${userId}:list`
+  }
+
+  private unreadCacheKey(userId: string) {
+    return `notifications:${userId}:unread`
+  }
+
+  private async invalidateUserCache(userId: string) {
+    await Promise.all([
+      cacheDel(this.listCacheKey(userId)),
+      cacheDel(this.unreadCacheKey(userId)),
+      cacheDelPattern(`notifications:${userId}:`),
+    ])
+  }
+
   async create(input: CreateNotificationInput) {
-    return prisma.notification.create({
+    const created = await prisma.notification.create({
       data: {
         userId: input.userId,
         type: input.type,
@@ -37,17 +60,21 @@ export class NotificationRepository {
         templateKey: input.templateKey ?? input.type,
       },
     })
+    await this.invalidateUserCache(input.userId)
+    return created
   }
 
   async markAsRead(id: string) {
-    return prisma.notification.update({
+    const updated = await prisma.notification.update({
       where: { id },
       data: { readAt: new Date() },
     })
+    await this.invalidateUserCache(updated.userId)
+    return updated
   }
 
   async updateStatus(id: string, status: NotificationStatus, failureReason?: string | null) {
-    return prisma.notification.update({
+    const updated = await prisma.notification.update({
       where: { id },
       data: {
         status,
@@ -55,14 +82,54 @@ export class NotificationRepository {
         sentAt: status === NotificationStatus.SENT ? new Date() : undefined,
       },
     })
+    await this.invalidateUserCache(updated.userId)
+    return updated
   }
 
-  async listForUser(userId: string, limit = 50) {
-    return prisma.notification.findMany({
-      where: { userId },
+  async listForUser(userId: string, options: ListNotificationsForUserOptions = {}) {
+    const limit = options.limit ?? 50
+    const unreadOnly = options.unreadOnly ?? false
+    const channels = options.channels?.length ? options.channels : undefined
+    const cacheKey = unreadOnly ? this.unreadCacheKey(userId) : this.listCacheKey(userId)
+    const cached = await cacheGet<Awaited<ReturnType<typeof prisma.notification.findMany>>>(cacheKey)
+    if (cached && !channels) {
+      return cached.slice(0, limit)
+    }
+
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userId,
+        ...(unreadOnly ? { readAt: null } : {}),
+        ...(channels ? { channel: { in: channels } } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
     })
+    if (!channels) {
+      await cacheSet(cacheKey, notifications, 60)
+    }
+    return notifications
+  }
+
+  async markAllAsRead(userId: string) {
+    await prisma.notification.updateMany({
+      where: {
+        userId,
+        readAt: null,
+      },
+      data: {
+        readAt: new Date(),
+      },
+    })
+    await this.invalidateUserCache(userId)
+  }
+
+  async deleteForUser(id: string, userId: string) {
+    const deleted = await prisma.notification.delete({
+      where: { id, userId },
+    })
+    await this.invalidateUserCache(userId)
+    return deleted
   }
 
   async findByTypeForDay(userId: string, type: NotificationType, dayStart: Date, dayEnd: Date) {

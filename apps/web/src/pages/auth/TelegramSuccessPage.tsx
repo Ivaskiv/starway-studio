@@ -1,16 +1,20 @@
 import { ROUTES } from '@/config/routes'
 import { useUserState } from '@/features/auth/hooks/useUserState'
+import { useGetWebMapQuery } from '@/features/web-map/services/web-map.api'
 import { Button } from '@/ui'
 import { CheckCircle2 } from 'lucide-react'
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-function resolveFallbackRoute(step: string): string {
+function resolveFallbackRoute(step: string, hasWebMap: boolean): string {
   if (step === 'WHEEL') {
     return ROUTES.WHEEL_START
   }
 
   if (step === 'DAILY_MORNING') {
+    if (!hasWebMap) {
+      return ROUTES.VISION
+    }
     return ROUTES.DASHBOARD
   }
 
@@ -21,6 +25,9 @@ export default function TelegramSuccessPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { step, isLoading, refetch, isAuthenticated } = useUserState()
+  const { data: webMap } = useGetWebMapQuery(undefined, {
+    skip: !isAuthenticated,
+  })
 
   useEffect(() => {
     void refetch()
@@ -50,12 +57,12 @@ export default function TelegramSuccessPage() {
 
     if (step !== 'START_FLOW') {
       const timer = window.setTimeout(() => {
-        navigate(resolveFallbackRoute(step), { replace: true })
+        navigate(resolveFallbackRoute(step, Boolean(webMap)), { replace: true })
       }, 1200)
 
       return () => window.clearTimeout(timer)
     }
-  }, [isAuthenticated, isLoading, location.search, navigate, step])
+  }, [isAuthenticated, isLoading, location.search, navigate, step, webMap])
 
   if (isLoading) {
     return (

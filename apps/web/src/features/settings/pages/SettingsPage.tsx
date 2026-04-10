@@ -1,8 +1,8 @@
 // frontend/src/features/settings/pages/SettingsPage.tsx
+import { Link as LinkIcon, RefreshCw, Smartphone, Unlink2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useDispatch } from 'react-redux'
-import { Link as LinkIcon, RefreshCw, Smartphone, Unlink2 } from 'lucide-react'
 
 import { AppDispatch } from '@/app/store'
 import { useAuth } from '@/features/auth/hooks/useAuth'
@@ -19,7 +19,9 @@ export default function SettingsPage() {
   const [triggerTelegramLink, telegramLinkRequest] = useLazyGetTelegramLinkUrlQuery()
   const [disconnectSocial, { isLoading: isDisconnecting }] = useDisconnectSocialMutation()
   const [deepLink, setDeepLink] = useState<string | null>(null)
+  const [linkExpiresAt, setLinkExpiresAt] = useState<string | null>(null)
   const [isWaitingForTelegram, setIsWaitingForTelegram] = useState(false)
+  const [linkClock, setLinkClock] = useState(() => Date.now())
   const hasTelegramIdentity = Boolean(user?.telegramChatId || user?.telegramUserId || user?.telegramUserName)
   const telegramStatusQuery = useGetTelegramStatusQuery(undefined, {
     skip: !user,
@@ -110,9 +112,36 @@ export default function SettingsPage() {
     if (!isWaitingForTelegram || !telegramLinked) return
 
     setIsWaitingForTelegram(false)
+    setLinkExpiresAt(null)
     void dispatch(authApi.endpoints.getMe.initiate(undefined, { forceRefetch: true, subscribe: false }))
     toast.success('Telegram підключено')
   }, [dispatch, isWaitingForTelegram, telegramLinked])
+
+  useEffect(() => {
+    if (!isWaitingForTelegram || !linkExpiresAt) return
+
+    const expiresAt = new Date(linkExpiresAt).getTime()
+    if (Number.isNaN(expiresAt)) return
+
+    const tick = () => {
+      setLinkClock(Date.now())
+      if (Date.now() < expiresAt) return
+      setIsWaitingForTelegram(false)
+      setDeepLink(null)
+      setLinkExpiresAt(null)
+      toast.error('Magic Link протух. Згенеруйте нове Telegram-посилання.')
+    }
+
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [isWaitingForTelegram, linkExpiresAt])
+
+  const secondsUntilLinkExpiry = useMemo(() => {
+    if (!linkExpiresAt) return null
+    const diff = Math.max(0, Math.floor((new Date(linkExpiresAt).getTime() - linkClock) / 1000))
+    return diff
+  }, [linkClock, linkExpiresAt])
 
   const hasChanges = useMemo(
     () =>
@@ -168,6 +197,8 @@ export default function SettingsPage() {
     try {
       const result = await triggerTelegramLink().unwrap()
       setDeepLink(result.url)
+      setLinkExpiresAt(result.expiresAt)
+      setLinkClock(Date.now())
       setIsWaitingForTelegram(true)
 
       if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
@@ -195,6 +226,7 @@ export default function SettingsPage() {
     try {
       await disconnectSocial({ provider: 'telegram' }).unwrap()
       setDeepLink(null)
+      setLinkExpiresAt(null)
       setIsWaitingForTelegram(false)
       await telegramStatusQuery.refetch()
       void dispatch(authApi.endpoints.getMe.initiate(undefined, { forceRefetch: true, subscribe: false }))
@@ -218,7 +250,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
       <section className="ios-panel">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
               Налаштування
@@ -231,7 +263,7 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[164px] sm:items-stretch lg:self-start">
             <button onClick={handleCancel} className="ios-button-secondary">
               Скинути
             </button>
@@ -265,7 +297,7 @@ export default function SettingsPage() {
         </GlassCard>
 
         <GlassCard className="ios-panel space-y-5">
-          <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-secondary)] p-5">
+          <div className="rounded-3xl border border-[var(--border)] p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--accent)]">
@@ -281,6 +313,11 @@ export default function SettingsPage() {
                       : 'Акаунт прив’язаний, але бот зараз неактивний. Можна швидко підключити знову.'
                     : 'Натисніть кнопку, відкрийте бота і підтвердіть прив’язку. Сайт сам побачить підключення без перезавантаження.'}
                 </p>
+                {!telegramLinked && deepLink ? (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Magic Link активний {secondsUntilLinkExpiry !== null ? `ще ${secondsUntilLinkExpiry} с` : 'тимчасово'}.
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -373,7 +410,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <p className="mt-3 text-xs text-[var(--text-muted)]">
-                  Посилання діє 15 хвилин. Після підтвердження на сайті статус оновиться автоматично.
+                  Посилання діє 15 хвилин. Після підтвердження ботом сайт сам оновить статус без перезавантаження.
                 </p>
               </div>
             )}
@@ -429,7 +466,7 @@ export default function SettingsPage() {
               { key: 'streakBroken', label: 'Відновлення після зриву' },
               { key: 'levelUp', label: 'Новий рівень' },
               { key: 'subscription', label: 'Підписка і білінг' },
-              { key: 'aiReminders', label: 'AI сесії та мікрозадачі' },
+              { key: 'aiReminders', label: 'Сесії з ментором та мікрозадачі' },
             ].map((item) => (
               <label
                 key={item.key}

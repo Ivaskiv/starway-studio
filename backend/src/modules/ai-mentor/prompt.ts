@@ -24,7 +24,7 @@ const STYLE_DESCRIPTIONS: Record<NonNullable<MentorConfigPayload['style']>, stri
 }
 
 const DEFAULT_CONFIG: MentorConfigPayload = {
-  name: 'AI Mentor',
+  name: 'ABsystem',
   style: 'supportive',
   language: 'UA',
   signaturePhrase: 'Хай буде дія!',
@@ -49,7 +49,7 @@ function toLanguageLabel(lang?: string) {
 export function buildSystemPrompt(mentorConfig?: MentorConfigPayload) {
   void mentorConfig
   return [
-    'Ти — AI ментор Starway. Керуючий модуль.',
+    'Ти — ABsystem Starway. Керуючий модуль.',
     'Тон: жорстка ясність. Без підтримки. Без мотивації.',
     'Методологія: СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.',
     'При зливі: фіксуй зраду рішенню явно.',
@@ -58,7 +58,7 @@ export function buildSystemPrompt(mentorConfig?: MentorConfigPayload) {
 }
 
 export async function buildContextPrompt(userId: string) {
-  const [user, userMentor, primaryGoal, entries] = await Promise.all([
+  const [user, userMentor, primaryGoal, entries, annualMap] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -89,11 +89,29 @@ export async function buildContextPrompt(userId: string) {
         dayFact: true,
       },
     }),
+    prisma.annualStrategyMap.findUnique({
+      where: { userId },
+      include: {
+        goals: {
+          orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+        },
+        monthlyReviews: {
+          orderBy: [{ year: 'desc' }, { month: 'desc' }],
+          take: 1,
+        },
+      },
+    }),
   ])
 
   const trialDay = user?.trialStartsAt && user.trialEndsAt
     ? Math.max(1, Math.floor((Date.now() - user.trialStartsAt.getTime()) / 86400000) + 1)
     : null
+
+  const mainMapGoal =
+    annualMap?.goals.find(goal => goal.id === annualMap.mainGoalId)
+    ?? annualMap?.goals[0]
+    ?? null
+  const latestMonthlyReview = annualMap?.monthlyReviews[0] ?? null
 
   return JSON.stringify({
     currentState: userMentor?.currentState ?? user?.currentState ?? null,
@@ -108,6 +126,18 @@ export async function buildContextPrompt(userId: string) {
       choice: entry.choice,
       dayFact: entry.dayFact,
     })),
+    webMap: annualMap
+      ? {
+          identityStatement: annualMap.identityStatement ?? null,
+          mainGoal: mainMapGoal?.title ?? null,
+          goals: annualMap.goals.map(goal => ({
+            title: goal.title,
+            progress: goal.progress ?? 0,
+            status: goal.status ?? 'active',
+          })),
+          monthlyFocus: latestMonthlyReview?.nextMonthRec ?? latestMonthlyReview?.aiAnalysis ?? null,
+        }
+      : null,
   })
 }
 

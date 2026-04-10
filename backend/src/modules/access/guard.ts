@@ -9,6 +9,58 @@ type LeadAccessOptions = {
   allowStart?: boolean
 }
 
+type ClientAccessOptions = {
+  requiresTelegram?: boolean
+}
+
+async function enforceClientAccess(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+  options: ClientAccessOptions = {},
+) {
+  if (!req.user?.id) {
+    return res.status(401).json({ error: 'unauthorized' })
+  }
+
+  req.accessControl = req.accessControl ?? await getAccessControlState(req.user.id)
+  const access = req.accessControl
+
+  if (access.currentFlow === 'lead-magnet') {
+    return sendForbidden(
+      req,
+      res,
+      'LEAD_FLOW_LOCK',
+      'Завершіть практикум, щоб рухатись далі',
+    )
+  }
+
+  if (!access.hasSubscription) {
+    return sendForbidden(
+      req,
+      res,
+      'SUBSCRIPTION_REQUIRED',
+      'Subscription required',
+    )
+  }
+
+  if (options.requiresTelegram && !access.hasTelegramLinked) {
+    return sendForbidden(
+      req,
+      res,
+      'TELEGRAM_REQUIRED',
+      'Telegram connection required for this feature',
+    )
+  }
+
+  if (!access.hasTelegramLinked) {
+    logger.info(`[AccessGuard] allow_without_telegram ${req.method} ${req.originalUrl} user=${req.user.id}`)
+  }
+
+  logDecision(req, 'allow')
+  return next()
+}
+
 function logDecision(req: AuthenticatedRequest, decision: 'allow' | 'block', reason?: AccessBlockReason) {
   const access = req.accessControl
   logger.info(
@@ -79,45 +131,27 @@ export function requireLeadAccess(options: LeadAccessOptions = {}) {
   }
 }
 
-export async function requireClientAccess(
+type RequireClientAccess = {
+  (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<unknown>
+  (options?: ClientAccessOptions): (req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<unknown>
+}
+
+type ClientAccessMiddleware = (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
-) {
-  if (!req.user?.id) {
-    return res.status(401).json({ error: 'unauthorized' })
+) => Promise<unknown>
+
+export const requireClientAccess: RequireClientAccess = ((
+  reqOrOptions: AuthenticatedRequest | ClientAccessOptions,
+  res?: Response,
+  next?: NextFunction,
+): Promise<unknown> | ClientAccessMiddleware => {
+  if (res && next) {
+    return enforceClientAccess(reqOrOptions as AuthenticatedRequest, res, next)
   }
 
-  req.accessControl = req.accessControl ?? await getAccessControlState(req.user.id)
-  const access = req.accessControl
-
-  if (access.currentFlow === 'lead-magnet') {
-    return sendForbidden(
-      req,
-      res,
-      'LEAD_FLOW_LOCK',
-      'Завершіть практикум, щоб рухатись далі',
-    )
-  }
-
-  if (!access.hasSubscription) {
-    return sendForbidden(
-      req,
-      res,
-      'SUBSCRIPTION_REQUIRED',
-      'Subscription required',
-    )
-  }
-
-  if (!access.hasRequiredContacts) {
-    return sendForbidden(
-      req,
-      res,
-      'CONTACT_REQUIRED',
-      'Email and Telegram are required',
-    )
-  }
-
-  logDecision(req, 'allow')
-  return next()
-}
+  const options = reqOrOptions as ClientAccessOptions | undefined
+  return async (req: AuthenticatedRequest, response: Response, nextFn: NextFunction) =>
+    enforceClientAccess(req, response, nextFn, options)
+}) as RequireClientAccess

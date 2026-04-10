@@ -31,6 +31,7 @@ export interface RegisterInput {
 export interface LoginInput {
   email: string;
   password: string;
+  expertId?: string;
 }
 
 export interface UpdateUserSettingsInput {
@@ -80,6 +81,7 @@ export interface PrismaUserWithRelations {
   name: string | null
   firstName: string | null
   lastName: string | null
+  expertId?: string | null
   role: UserRole
   passwordHash: string | null
   lastLoginAt: Date | null

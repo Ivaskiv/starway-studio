@@ -4,6 +4,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useUserState } from '@/features/auth/hooks/useUserState'
 import { useGetTelegramLinkUrlQuery } from '@/features/auth/services/auth.api'
 import { useStartFlowMutation } from '@/features/auth/services/user-state.api'
+import { useGetWebMapQuery } from '@/features/web-map/services/web-map.api'
 import { hasPaidAccess } from '@/features/user/types/user.types'
 import { Button } from '@/ui'
 import { useEffect } from 'react'
@@ -88,6 +89,9 @@ export function MentorFlowCard({ onRequireAuth, autoRedirectWheel = true, onCont
     botActive,
   } = useUserState()
   const [startFlow, { isLoading: isStarting }] = useStartFlowMutation()
+  const { data: webMap } = useGetWebMapQuery(undefined, {
+    skip: !isAuthenticated || emailCompletionRequired,
+  })
 
   const { data: telegramLinkData, isFetching: isTelegramLinkLoading } = useGetTelegramLinkUrlQuery(undefined, {
     skip: !isAuthenticated || emailCompletionRequired,
@@ -239,10 +243,17 @@ export function MentorFlowCard({ onRequireAuth, autoRedirectWheel = true, onCont
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[rgb(var(--accent-soft-rgb))]">
           Поточний крок
         </p>
-        <h2 className="mt-3 text-2xl font-bold text-white">Daily cycle</h2>
+        <h2 className="mt-3 text-2xl font-bold text-white">{webMap ? 'Daily cycle' : 'Точка Б'}</h2>
         <p className="mt-2 text-sm leading-6 text-white/65">
-          Щоденний цикл активний. Відповідай на ранкові та вечірні питання в Telegram.
+          {webMap
+            ? 'Щоденний цикл активний. Відповідай на ранкові та вечірні питання в Telegram.'
+            : 'Після колеса спершу відкрий Точка Б, зафіксуй річну карту і тільки тоді переходь у щоденний цикл.'}
         </p>
+        {!webMap && (
+          <div className="mt-6">
+            <Button onClick={() => navigate(ROUTES.VISION)}>Відкрити Точка Б</Button>
+          </div>
+        )}
       </div>
     )
   }

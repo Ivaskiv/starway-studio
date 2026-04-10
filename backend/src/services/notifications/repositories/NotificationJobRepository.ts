@@ -67,6 +67,10 @@ function buildSyntheticJob(
 }
 
 export class NotificationJobRepository {
+  async isAvailable() {
+    return ensureNotificationJobTableAvailability()
+  }
+
   async create(input: CreateNotificationJobInput) {
     if (!(await ensureNotificationJobTableAvailability())) {
       return buildSyntheticJob(input.type, input.payload, input.runAt)

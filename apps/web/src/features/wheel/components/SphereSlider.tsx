@@ -37,6 +37,7 @@ export const SphereSlider = ({
       <textarea
         value={comment}
         onChange={(event) => onCommentChange(event.target.value)}
+        onKeyDown={(event) => event.stopPropagation()}
         placeholder="Коротко: чому така оцінка?"
         rows={3}
         className="w-full rounded-xl border border-[color:rgba(var(--glass-border-rgb),0.28)] bg-[color:rgba(var(--ambient-rgb-2),0.36)] px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-[color:rgba(var(--accent-rgb),0.55)] focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.2)]"

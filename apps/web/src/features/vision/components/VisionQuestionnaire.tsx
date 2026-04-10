@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useCreateVisionMutation } from '../services/vision.api';
-import { Button, GlassCard, Textarea } from '@/ui';
+import { Button, GenerationCurtain, GlassCard, Textarea, useGenerationCurtain, withMinimumDelay } from '@/ui';
 import { toast } from 'react-hot-toast';
 import { Sparkles } from 'lucide-react';
 
@@ -19,6 +19,10 @@ export function VisionQuestionnaire({ onComplete }: VisionQuestionnaireProps) {
   const [pointB, setPointB] = useState('');
 
   const [createVision, { isLoading }] = useCreateVisionMutation();
+  const curtainVisible = useGenerationCurtain(isLoading, {
+    enterDelay: 160,
+    minVisibleMs: 1100,
+  });
 
   const handleSubmit = async () => {
     if (!idealLife.trim() || !noLongerNormal.trim() || !pointB.trim()) {
@@ -27,11 +31,14 @@ export function VisionQuestionnaire({ onComplete }: VisionQuestionnaireProps) {
     }
 
     try {
-      const result = await createVision({
-        idealLife: idealLife.trim(),
-        noLongerNormal: noLongerNormal.trim(),
-        pointB: pointB.trim()
-      }).unwrap();
+      const result = await withMinimumDelay(
+        createVision({
+          idealLife: idealLife.trim(),
+          noLongerNormal: noLongerNormal.trim(),
+          pointB: pointB.trim()
+        }).unwrap(),
+        950,
+      );
 
       toast.success('Vision statement створено! ✨');
       onComplete?.(result.id);
@@ -42,7 +49,12 @@ export function VisionQuestionnaire({ onComplete }: VisionQuestionnaireProps) {
 
   return (
     <div className="space-y-6">
-      <GlassCard className="p-6">
+      <GlassCard className="relative overflow-hidden p-6">
+        <GenerationCurtain
+          open={curtainVisible}
+          title="Формуємо vision statement"
+          subtitle="Збираємо опорні сенси, точку Б і критерії переходу без втрати твоїх відповідей."
+        />
         <div className="flex items-center gap-3 mb-6">
           <Sparkles className="w-8 h-8 text-purple-400" />
           <div>
@@ -113,7 +125,7 @@ export function VisionQuestionnaire({ onComplete }: VisionQuestionnaireProps) {
             size="lg"
             className="bg-gradient-to-r from-purple-500 to-pink-500"
           >
-            {isLoading ? 'AI створює vision...' : 'Створити vision statement'}
+            {isLoading ? 'Формуємо vision...' : 'Створити vision statement'}
           </Button>
         </div>
       </GlassCard>
@@ -121,7 +133,7 @@ export function VisionQuestionnaire({ onComplete }: VisionQuestionnaireProps) {
       {/* Info */}
       <GlassCard className="p-4">
         <p className="text-white/70 text-sm">
-          💡 Vision statement — це твоє бачення ідеального життя, яке AI сформулює на основі твоїх відповідей. 
+          💡 Vision statement — це твоє бачення ідеального життя, яке буде сформульоване на основі твоїх відповідей. 
           Воно стане основою для визначення цілей та усвідомлених виборів.
         </p>
       </GlassCard>

@@ -40,7 +40,7 @@ export function PatternAnalysis({ statePattern, mainDrain }: PatternAnalysisProp
         <div className="mt-4 p-3 bg-white/5 rounded-lg border border-white/10">
           <p className="text-white/70 text-sm">
             💡 Ці патерни допомагають зрозуміти, що потребує уваги. 
-            AI буде враховувати це у рекомендаціях.
+            Система буде враховувати це у рекомендаціях.
           </p>
         </div>
       </div>

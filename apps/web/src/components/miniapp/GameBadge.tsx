@@ -1,4 +1,5 @@
 import { Flame, Gem, Sparkles } from 'lucide-react'
+import { InfoHint } from '@/ui'
 
 type GameBadgeVariant = 'streak' | 'xp' | 'level'
 
@@ -6,6 +7,8 @@ interface GameBadgeProps {
   label: string
   value: string | number
   variant?: GameBadgeVariant
+  description?: string
+  instruction?: string
 }
 
 const ICONS = {
@@ -18,6 +21,8 @@ export default function GameBadge({
   label,
   value,
   variant = 'xp',
+  description,
+  instruction,
 }: GameBadgeProps) {
   const Icon = ICONS[variant]
 
@@ -27,7 +32,17 @@ export default function GameBadge({
         <Icon className="h-4 w-4" />
       </span>
       <div className="min-w-0">
-        <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
+          {description ? (
+            <InfoHint
+              label={label}
+              description={description}
+              instruction={instruction}
+              align="left"
+            />
+          ) : null}
+        </div>
         <p className="text-sm font-semibold text-[var(--text-primary)]">{value}</p>
       </div>
     </div>

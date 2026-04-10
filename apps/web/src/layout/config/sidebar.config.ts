@@ -41,7 +41,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
     ability: 'dashboard.view',
   },
   {
-    label: 'AI Mentor',
+    label: 'ABsystem',
     path: '/dashboard/ai-mentor',
     ability: 'ai.use',
     badge: 'pro',

@@ -11,6 +11,9 @@ import { attachEmailToUser, resolveOrCreateTelegramGuestUser } from '../user/ide
 import { findLinkedUserId } from '../telegram-mentor/services/linking.service.js'
 import { verifyTelegramInitData } from './telegram.js'
 import { AuthServiceError } from './auth.errors.js'
+import { assignUserToExpert, resolveDefaultMentorOwnerExpertId } from '../experts/ownership.service.js'
+import { cacheGet, cacheSet } from '../../lib/cache/index.js'
+import { invalidateUserCache } from '../../lib/db/userCache.js'
 
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
@@ -26,6 +29,29 @@ function getEnv(name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET'): string {
 
 function normalizeEmail(email: string): string {
   return String(email ?? '').trim().toLowerCase()
+}
+
+async function validateExpertId(expertId: string | null | undefined): Promise<string | null> {
+  const value = String(expertId ?? '').trim()
+  if (!value) return null
+
+  const expert = await prisma.expert.findUnique({
+    where: { id: value },
+    select: { id: true },
+  }).catch(() => null)
+
+  return expert?.id ?? null
+}
+
+async function resolveRequestedExpertId(expertId: string | null | undefined): Promise<string | null> {
+  try {
+    const explicitExpertId = await validateExpertId(expertId)
+    if (explicitExpertId) return explicitExpertId
+    return await resolveDefaultMentorOwnerExpertId()
+  } catch (error) {
+    console.warn('[AuthService] resolveRequestedExpertId fallback to null', error)
+    return null
+  }
 }
 
 function toAuthServiceError(error: unknown, fallbackCode = 'auth_internal_error'): AuthServiceError {
@@ -67,6 +93,7 @@ const USER_BASE_SELECT = Prisma.validator<Prisma.UserSelect>()({
   name: true,
   firstName: true,
   lastName: true,
+  expertId: true,
   role: true,
   passwordHash: true,
   telegramUserId: true,
@@ -144,6 +171,7 @@ type SocialAuthInput = {
   email?: string | null
   name?: string | null
   username?: string | null
+  expertId?: string | null
 }
 
 // ── Хешування пароля ──────────────────
@@ -299,6 +327,7 @@ function toUserWithSub(baseUser: PrismaUserBase, decorations: UserDecorations): 
     name: baseUser.name,
     firstName: baseUser.firstName,
     lastName: baseUser.lastName,
+    expertId: baseUser.expertId,
     role: baseUser.role,
     passwordHash: baseUser.passwordHash,
     telegramUserId: baseUser.telegramUserId,
@@ -350,10 +379,16 @@ async function ensureSuperAdminRoleForRecord(user: PrismaUserBase): Promise<Pris
 // ── Пошук користувача за ID ───────────────
 export async function findUserById(id: string): Promise<UserWithSub | null> {
   try {
+    const cacheKey = `auth:full-user:${id}`
+    const cached = await cacheGet<UserWithSub | null>(cacheKey)
+    if (cached !== null) return cached
+
     const user = await findRawUserById(id)
     if (!user) return null
     const normalizedUser = await ensureSuperAdminRoleForRecord(user)
-    return hydrateUser(normalizedUser)
+    const hydrated = await hydrateUser(normalizedUser)
+    await cacheSet(cacheKey, hydrated, 300)
+    return hydrated
   } catch (error) {
     throw toAuthServiceError(error, 'find_user_by_id_failed')
   }
@@ -447,6 +482,7 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
         data: {
           firstName: payload.firstName ?? undefined,
           lastName: payload.lastName ?? undefined,
+          telegramEnabled: notificationPayload?.enabled ?? undefined,
           uiSettings: uiPayload,
         },
       })
@@ -493,6 +529,8 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
         })
       }
     })
+
+    await invalidateUserCache(userId)
 
     const updated = await findUserById(userId)
     if (!updated) throw new AuthServiceError('user_not_found_after_update', 404)
@@ -560,6 +598,8 @@ export function toSafeUser(user: UserWithSub): SafeUser {
     telegramUserId: user.telegramUserId,
     telegramUserName: user.telegramUserName,
     telegramChatId: user.telegramChatId,
+    telegramEnabled: user.telegramEnabled,
+    expertId: user.expertId ?? null,
     role: user.role,
     isAdmin: user.role === 'SUPERADMIN' || isSuperAdmin,
     isSuperAdmin,
@@ -617,10 +657,36 @@ export async function markUserLoggedIn(userId: string): Promise<void> {
   }
 }
 
+export async function createSessionForUserId(userId: string): Promise<AuthTokensPayload> {
+  try {
+    await markUserLoggedIn(userId)
+
+    const freshUser = await findUserById(userId)
+    if (!freshUser) {
+      throw new AuthServiceError('user_not_found', 404)
+    }
+
+    const accessToken = generateAccessToken({ id: freshUser.id, role: freshUser.role, email: freshUser.email } as AuthUser)
+    const refreshToken = generateRefreshToken(freshUser.id)
+    await storeRefreshToken(freshUser.id, refreshToken)
+
+    return {
+      user: toSafeUser(freshUser),
+      accessToken,
+      refreshToken,
+      needsProfile: !freshUser.name,
+      expiresIn: 15 * 60,
+    }
+  } catch (error) {
+    throw toAuthServiceError(error, 'create_session_failed')
+  }
+}
+
 export async function registerUser(input: {
   email: string
   password: string
   name?: string | null
+  expertId?: string | null
 }): Promise<AuthTokensPayload> {
   const email = normalizeEmail(input.email)
   const password = String(input.password ?? '')
@@ -630,6 +696,10 @@ export async function registerUser(input: {
   }
 
   try {
+    const initialRole = isSuperAdminEmail(email) ? 'SUPERADMIN' : 'USER'
+    const validatedExpertId = initialRole === 'USER'
+      ? await resolveRequestedExpertId(input.expertId)
+      : await validateExpertId(input.expertId)
     const existing = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
@@ -640,7 +710,6 @@ export async function registerUser(input: {
     }
 
     const passwordHash = await hashPassword(password)
-    const initialRole = isSuperAdminEmail(email) ? 'SUPERADMIN' : 'USER'
 
     const createdUser = await prisma.user.create({
       data: {
@@ -648,6 +717,7 @@ export async function registerUser(input: {
         passwordHash,
         name: input.name?.trim() || null,
         role: initialRole,
+        expertId: validatedExpertId,
       },
       select: { id: true },
     })
@@ -679,6 +749,7 @@ export async function registerUser(input: {
 export async function loginUser(input: {
   email: string
   password: string
+  expertId?: string | null
 }): Promise<AuthTokensPayload> {
   const email = normalizeEmail(input.email)
   const password = String(input.password ?? '')
@@ -703,24 +774,23 @@ export async function loginUser(input: {
       throw new AuthServiceError('invalid_credentials', 401)
     }
 
-    await markUserLoggedIn(user.id)
+    try {
+      const resolvedExpertId =
+        user.role === 'USER'
+          ? await resolveRequestedExpertId(input.expertId)
+          : await validateExpertId(input.expertId)
 
-    const freshUser = await findUserById(user.id)
-    if (!freshUser) {
-      throw new AuthServiceError('user_not_found', 404)
+      if (resolvedExpertId) {
+        await assignUserToExpert(user.id, resolvedExpertId)
+      }
+    } catch (error) {
+      console.warn('[AuthService] login expert assignment skipped', {
+        userId: user.id,
+        error,
+      })
     }
 
-    const accessToken = generateAccessToken({ id: freshUser.id, role: freshUser.role, email: freshUser.email } as AuthUser)
-    const refreshToken = generateRefreshToken(freshUser.id)
-    await storeRefreshToken(freshUser.id, refreshToken)
-
-    return {
-      user: toSafeUser(freshUser),
-      accessToken,
-      refreshToken,
-      needsProfile: !freshUser.name,
-      expiresIn: 15 * 60,
-    }
+    return createSessionForUserId(user.id)
   } catch (error) {
     throw toAuthServiceError(error, 'login_failed')
   }
@@ -744,17 +814,26 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
         throw new AuthServiceError('missing_fields', 400)
       }
 
+      const initialRole = isSuperAdminEmail(email) ? 'SUPERADMIN' : 'USER'
+      const validatedExpertId = initialRole === 'USER'
+        ? await resolveRequestedExpertId(input.expertId)
+        : await validateExpertId(input.expertId)
+
       const existing = await findUserByEmail(email)
       if (existing?.id) {
         userId = existing.id
+        if (validatedExpertId && existing.role === 'USER') {
+          await assignUserToExpert(existing.id, validatedExpertId)
+        }
       } else {
         const created = await prisma.user.create({
           data: {
             email,
             name: input.name?.trim() || null,
             firstName: input.name?.trim() || null,
-            role: isSuperAdminEmail(email) ? 'SUPERADMIN' : 'USER',
+            role: initialRole,
             lastLoginAt: new Date(),
+            expertId: validatedExpertId,
           },
           select: { id: true },
         })
@@ -767,6 +846,7 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
     } else {
       const telegramUserId = externalId
       const telegramUserName = input.username?.trim() || null
+      const validatedExpertId = await resolveRequestedExpertId(input.expertId)
       const linkedUserId = await findLinkedUserId({
         chatId: telegramUserId,
         telegramUserId,
@@ -775,6 +855,9 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
 
       if (linkedUserId) {
         userId = linkedUserId
+        if (validatedExpertId) {
+          await assignUserToExpert(linkedUserId, validatedExpertId)
+        }
       } else {
         const createdUserId = await resolveOrCreateTelegramGuestUser({
           linkedUserId: null,
@@ -785,6 +868,9 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
         })
         userId = createdUserId
         isNewUser = true
+        if (validatedExpertId) {
+          await assignUserToExpert(createdUserId, validatedExpertId)
+        }
       }
     }
 
@@ -792,25 +878,12 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
       throw new AuthServiceError('user_creation_failed', 500)
     }
 
-    await markUserLoggedIn(userId)
-
-    const freshUser = await findUserById(userId)
-    if (!freshUser) {
-      throw new AuthServiceError('user_not_found', 404)
-    }
-
-    const accessToken = generateAccessToken({ id: freshUser.id, role: freshUser.role, email: freshUser.email } as AuthUser)
-    const refreshToken = generateRefreshToken(freshUser.id)
-    await storeRefreshToken(freshUser.id, refreshToken)
+    const session = await createSessionForUserId(userId)
 
     return {
-      user: toSafeUser(freshUser),
-      accessToken,
-      refreshToken,
-      needsProfile: !freshUser.name,
-      needsCompletion: !freshUser.email || !freshUser.name,
+      ...session,
+      needsCompletion: !session.user.email || !session.user.name,
       isNewUser,
-      expiresIn: 15 * 60,
     }
   } catch (error) {
     throw toAuthServiceError(error, 'social_login_failed')

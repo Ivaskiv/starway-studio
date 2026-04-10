@@ -38,7 +38,7 @@ export default function FloatingAIButton({
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-bold text-[var(--text-primary)]">Starway AI</p>
+            <p className="text-sm font-bold text-[var(--text-primary)]">Starway Mentor</p>
             <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
               {userName
                 ? `${userName}, можеш відкрити чат або повернутися пізніше.`
@@ -81,12 +81,12 @@ export default function FloatingAIButton({
         type="button"
         onClick={() => setOpen(value => !value)}
         className="miniapp-floating-ai__button"
-        aria-label={open ? 'Сховати AI-підказку' : 'Відкрити AI-підказку'}
+        aria-label={open ? 'Сховати підказку ментора' : 'Відкрити підказку ментора'}
       >
         <span className="miniapp-floating-ai__shine" aria-hidden="true" />
         <span className="miniapp-floating-ai__content">
           <Bot className="h-[18px] w-[18px]" />
-          <span className="text-sm font-bold">AI</span>
+          <span className="text-sm font-bold">Mentor</span>
           <ChevronRight className={cn('h-4 w-4 transition-transform', open && 'rotate-90')} />
         </span>
       </button>

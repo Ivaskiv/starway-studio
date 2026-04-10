@@ -4,6 +4,7 @@ import { checkQuota, decrementQuota } from '../quota/service.js'
 import { buildSystemPrompt, buildContextPrompt, buildTaskPrompt, MentorConfigPayload } from './prompt.js'
 import { GenerationIntent, GenerationRequest, GenerationResponse } from './types.js'
 import { GenerationType } from '@starway/db/prisma-client'
+import { runGuardedAiTask, stableHash } from '../../services/aiGuard.service.js'
 
 const openAi = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
@@ -45,25 +46,42 @@ function safeParseJson(text: string) {
   }
 }
 
-async function callOpenAi(system: string, context: string, task: string) {
-  const completion = await openAi.chat.completions.create({
-    model: MODEL,
-    temperature: 0.35,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: context },
-      { role: 'user', content: task },
-    ],
-    max_tokens: 800,
-  })
+async function callOpenAi(system: string, context: string, task: string, userId: string) {
+  const message = await runGuardedAiTask(
+    {
+      userId,
+      source: 'mentor-generation',
+      label: 'mentor-generation',
+      payloadHash: stableHash({ system, context, task }),
+      throttleMs: 10_000,
+      duplicateWindowMs: 10 * 60_000,
+    },
+    async () => {
+      const completion = await openAi.chat.completions.create({
+        model: MODEL,
+        temperature: 0.35,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: context },
+          { role: 'user', content: task },
+        ],
+        max_tokens: 800,
+      })
 
-  const message = completion.choices[0]?.message?.content ?? ''
-  const parsed = safeParseJson(message.trim())
+      return {
+        text: completion.choices[0]?.message?.content ?? '',
+        usage: completion.usage,
+      }
+    },
+    () => ({ text: '', usage: undefined }),
+  )
+
+  const parsed = safeParseJson(message.text.trim())
 
   return {
-    text: message,
+    text: message.text,
     parsed,
-    usage: completion.usage,
+    usage: message.usage,
   }
 }
 
@@ -78,7 +96,7 @@ export async function generatePayload(request: GenerationRequest): Promise<Gener
   const systemPrompt = buildSystemPrompt(config)
   const contextPrompt = await buildContextPrompt(request.userId)
   const taskPrompt = buildTaskPrompt(request.type, request.params)
-  const response = await callOpenAi(systemPrompt, contextPrompt, taskPrompt)
+  const response = await callOpenAi(systemPrompt, contextPrompt, taskPrompt, request.userId)
 
   await decrementQuota({
     userId: request.userId,

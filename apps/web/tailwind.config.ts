@@ -21,6 +21,16 @@ const config: Config = {
           DEFAULT: 'rgb(var(--icon-rgb)/<alpha-value>)',
         },
         glass: 'rgba(255,255,255,0.08)',
+        adminSidebar: {
+          bg: 'var(--admin-sidebar-bg)',
+          border: 'var(--admin-sidebar-border)',
+          textMuted: 'var(--admin-sidebar-text-muted)',
+          textSecondary: 'var(--admin-sidebar-text-secondary)',
+          textPrimary: 'var(--admin-sidebar-text-primary)',
+          itemHover: 'var(--admin-sidebar-item-hover)',
+          itemActive: 'var(--admin-sidebar-item-active)',
+          accentBorder: 'var(--admin-sidebar-accent-border)',
+        },
       },
       fontFamily: {
         display: ['Inter','system-ui','sans-serif'],

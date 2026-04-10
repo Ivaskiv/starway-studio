@@ -34,7 +34,7 @@ function UpcomingCard({
   const cfg = STATUS_CONFIG[session.status];
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.04] backdrop-blur-xl p-6 mb-6">
+    <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.04] p-6">
       {/* glow */}
       <div className="pointer-events-none absolute -top-16 -right-16 w-56 h-56 rounded-full bg-[rgb(var(--accent-rgb))] opacity-[0.07] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-12 -left-12 w-40 h-40 rounded-full bg-teal-400 opacity-[0.05] blur-3xl" />

@@ -1,5 +1,5 @@
 import { api } from '@/services/api'
-import type { JournalEvent } from './types'
+import type { JournalResponse } from './types'
 
 export type JournalQueryParams =
   | { month: number; year: number; startDate?: never; endDate?: never }
@@ -7,20 +7,26 @@ export type JournalQueryParams =
 
 export const journalApi = api.injectEndpoints({
   endpoints: (builder) => ({
-    getJournalEvents: builder.query<JournalEvent[], JournalQueryParams>({
+    getJournalEvents: builder.query<JournalResponse, JournalQueryParams>({
       query: (params) => ({
         url: '/journal',
         params,
       }),
-      transformResponse: (response: { success: boolean; events: JournalEvent[] }) => response.events,
+      transformResponse: (response: { success: boolean } & JournalResponse) => ({
+        events: response.events,
+        days: response.days,
+      }),
       providesTags: ['Journal'],
     }),
-    getJournalRange: builder.query<JournalEvent[], { start: string; end: string }>({
+    getJournalRange: builder.query<JournalResponse, { start: string; end: string }>({
       query: ({ start, end }) => ({
         url: '/journal/range',
         params: { startDate: start, endDate: end },
       }),
-      transformResponse: (response: { success: boolean; events: JournalEvent[] }) => response.events,
+      transformResponse: (response: { success: boolean } & JournalResponse) => ({
+        events: response.events,
+        days: response.days,
+      }),
       providesTags: ['Journal'],
     }),
   }),

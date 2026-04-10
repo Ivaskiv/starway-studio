@@ -52,11 +52,15 @@ export interface DailyCycleEntry {
   id: string
   userId: string
   date: string
+  status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'COMPLETED_LATE' | 'PARTIAL' | 'SKIPPED'
   state: DailyState
   drain?: DailyDrain
   choice: DailyChoice
   dayFact: string
+  aiAnalysis?: string | null
   microSupport?: string
+  lateCompletedAt?: string | null
+  canCatchUpUntil?: string | null
   content?: Record<string, unknown> | null
   createdAt: string
   updatedAt?: string
@@ -69,6 +73,7 @@ export interface DailyCycleInput {
   choice: DailyChoice
   dayFact: string
   microSupport?: string
+  finalize?: boolean
 }
 
 /* ── DTO з бекенду (legacy, тільки для daily.service) ── */

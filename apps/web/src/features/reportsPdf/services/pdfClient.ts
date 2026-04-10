@@ -1,5 +1,4 @@
 // frontend/src/features/reportsPdf/services/pdfClient.ts
-import { PDFDocument } from 'pdf-lib'
 import type { TDocumentDefinitions } from 'pdfmake/interfaces'
 
 async function getPdfMake() {
@@ -24,20 +23,4 @@ export const getPdfAsBlob = async (docDefinition: TDocumentDefinitions): Promise
       reject(err)
     }
   })
-}
-
-export async function loadPdfFromUrl(url: string): Promise<PDFDocument> {
-  const res = await fetch(url)
-  if (!res.ok) {
-    throw new Error(`Failed to load PDF template: ${res.status} ${res.statusText}`)
-  }
-  const bytes = await res.arrayBuffer()
-  return PDFDocument.load(bytes)
-}
-
-export const savePdfAsBlob = async (doc: PDFDocument): Promise<Blob> => {
-  const bytes = await doc.save()
-  const normalized = new Uint8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
-  const buffer = normalized.buffer as ArrayBuffer
-  return new Blob([buffer], { type: 'application/pdf' })
 }

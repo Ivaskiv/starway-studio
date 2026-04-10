@@ -7,6 +7,7 @@ import { Response, NextFunction } from 'express';
 import { startTrial, getTrialStatus, generateTrialMirror } from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';
+import { getContentAttributionEventPayload } from '../events/contentAttribution.service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 
 export async function startTrialHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -16,6 +17,7 @@ export async function startTrialHandler(req: AuthenticatedRequest, res: Response
 
     const user = await startTrial(userId);
     const state = await resolveUserState(userId).catch(() => null)
+    const attributionPayload = await getContentAttributionEventPayload(userId)
     await trackEvent({
       userId,
       type: 'web_trial_started',
@@ -24,6 +26,7 @@ export async function startTrialHandler(req: AuthenticatedRequest, res: Response
       payload: {
         currentState: user.currentState ?? null,
         currentStep: user.currentStep ?? null,
+        ...(attributionPayload ?? {}),
       },
     })
     return res.status(200).json(user);

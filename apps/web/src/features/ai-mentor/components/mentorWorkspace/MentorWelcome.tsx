@@ -2,7 +2,7 @@
 
 export default function MentorChat() {
   return (
-    <div className="relative p-8 rounded-3xl backdrop-blur-2xl bg-white/5 border border-white/10 shadow-[0_0_60px_rgba(0,0,0,0.4)] text-white">
+    <div className="relative rounded-3xl border border-white/10 bg-white/5 p-8 text-white shadow-[0_0_60px_rgba(0,0,0,0.4)]">
 
       {/* Background glow layers */}
       <div className="absolute -top-24 -right-24 w-80 h-80 bg-purple-500/20 blur-3xl rounded-full pointer-events-none" />
@@ -15,14 +15,14 @@ export default function MentorChat() {
 
         <div className="space-y-3">
           <h2 className="text-2xl font-semibold tracking-tight bg-gradient-to-r from-white via-white/90 to-white/70 bg-clip-text text-transparent">
-            👋 Привіт. Я твій AI-ментор.
+            👋 Привіт. Я твій ментор.
           </h2>
           <p className="text-white/60 leading-relaxed">
             Я допоможу тобі розкласти хаос у голові на чіткий план дій.
           </p>
         </div>
 
-        <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl space-y-3">
+        <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-6">
           <p className="text-sm uppercase tracking-wider text-white/40">
             Я можу допомогти:
           </p>
@@ -35,7 +35,7 @@ export default function MentorChat() {
           </ul>
         </div>
 
-        <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl space-y-4">
+        <div className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-6">
           <p className="text-sm uppercase tracking-wider text-white/40">
             Щоб почати, напиши:
           </p>

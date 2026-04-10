@@ -5,7 +5,10 @@ import {
   type NotificationType,
 } from '@starway/db/prisma-client'
 
-import { notificationRepository } from '../repositories/NotificationRepository.js'
+import {
+  notificationRepository,
+  type ListNotificationsForUserOptions,
+} from '../repositories/NotificationRepository.js'
 
 export interface CreateNotificationRecordInput {
   userId: string
@@ -16,6 +19,7 @@ export interface CreateNotificationRecordInput {
   templateKey?: string
   channel?: NotificationChannel
   status?: NotificationStatus
+  sentAt?: Date | null
 }
 
 export class NotificationRecordService {
@@ -35,8 +39,16 @@ export class NotificationRecordService {
     return notificationRepository.updateStatus(id, NotificationStatus.FAILED, error)
   }
 
-  async listForUser(userId: string, limit?: number): Promise<Notification[]> {
-    return notificationRepository.listForUser(userId, limit)
+  async listForUser(userId: string, options?: ListNotificationsForUserOptions): Promise<Notification[]> {
+    return notificationRepository.listForUser(userId, options)
+  }
+
+  async markAllAsRead(userId: string): Promise<void> {
+    await notificationRepository.markAllAsRead(userId)
+  }
+
+  async deleteForUser(id: string, userId: string): Promise<Notification> {
+    return notificationRepository.deleteForUser(id, userId)
   }
 }
 

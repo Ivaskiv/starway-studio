@@ -6,6 +6,8 @@ export interface LoginInput {
   email: string
   password: string
   expertId?: string
+  companyWebsite?: string
+  turnstileToken?: string
 }
 
 export interface CheckUserExistsInput {
@@ -23,6 +25,8 @@ export interface RegisterInput {
   name?: string
   role?: UserRole
   expertId?: string
+  companyWebsite?: string
+  turnstileToken?: string
 }
 
 export interface ForgotPasswordInput {
@@ -124,6 +128,10 @@ export type AccessKey =
   | 'progress.view'
   | 'products.manage'
   | 'settings.manage'
+  | 'admin.clients.view'
+  | 'admin.revenue.view'
+  | 'admin.roles.manage'
+  | 'funnels.manage'
   | 'dashboard'
   | 'mentor'
   | 'vision'

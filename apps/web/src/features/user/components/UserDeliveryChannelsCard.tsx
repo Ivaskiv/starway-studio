@@ -1,4 +1,5 @@
-import { useGenerateTelegramLinkMutation, useGetConnectionsQuery } from '@/features/social/services/social.api'
+import { useLazyGetTelegramLinkUrlQuery, useGetTelegramStatusQuery } from '@/features/auth/services/auth.api'
+import { useGetConnectionsQuery } from '@/features/social/services/social.api'
 import { Button, GlassCard } from '@/ui'
 import { BellRing, ExternalLink, Send, Smartphone } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -9,23 +10,20 @@ export default function UserDeliveryChannelsCard() {
   const navigate = useNavigate()
 
   const { data } = useGetConnectionsQuery()
-
-  const [generateTelegramLink, { isLoading }] =
-    useGenerateTelegramLinkMutation()
+  const [triggerTelegramLink, { isFetching: isLoading }] = useLazyGetTelegramLinkUrlQuery()
+  const { data: telegramStatus } = useGetTelegramStatusQuery()
 
   const telegram =
     (data?.connections || []).find(c => c.provider === 'telegram')
 
-  const isTelegramLinked = Boolean(telegram)
+  const isTelegramLinked = Boolean(telegramStatus?.linked ?? telegram)
+  const isTelegramActive = Boolean(telegramStatus?.botActive ?? isTelegramLinked)
 
   const handleTelegram = async () => {
     try {
-
-      const result = await generateTelegramLink().unwrap()
-
-      window.open(result.link, '_blank', 'noopener,noreferrer')
-
-      toast.success('Відкрийте Telegram бота і натисніть Start.')
+      const result = await triggerTelegramLink().unwrap()
+      window.open(result.url, '_blank', 'noopener,noreferrer')
+      toast.success(isTelegramActive ? 'Відкрийте Telegram і продовжіть у боті.' : 'Відкрийте Telegram бота і натисніть Start.')
 
     } catch (error: any) {
 
@@ -38,7 +36,7 @@ export default function UserDeliveryChannelsCard() {
   }
 
   return (
-    <GlassCard className="p-6 border-[var(--glass-border)] bg-[var(--glass-bg)] backdrop-blur-xl">
+    <GlassCard className="p-6 border-[var(--glass-border)] bg-[var(--glass-bg)]">
 
       <h3 className="text-lg font-semibold text-white flex items-center gap-2">
         <BellRing className="w-5 h-5 text-[rgb(var(--accent-rgb))]" />
@@ -54,7 +52,7 @@ export default function UserDeliveryChannelsCard() {
         >
           <span className="flex items-center gap-2">
             <Send className="w-4 h-4" />
-            {isTelegramLinked ? 'Оновити Telegram' : 'Підключити Telegram'}
+            {isTelegramLinked ? (isTelegramActive ? 'Відкрити Telegram' : 'Підключити знову') : 'Підключити Telegram'}
           </span>
           <ExternalLink className="w-4 h-4" />
         </Button>
@@ -88,7 +86,7 @@ export default function UserDeliveryChannelsCard() {
           Telegram:
           {' '}
           {isTelegramLinked
-            ? `підключено (${telegram?.username ? '@' + telegram.username : 'linked'})`
+            ? `${isTelegramActive ? 'підключено' : 'потребує оновлення'} (${telegram?.username ? '@' + telegram.username : 'linked'})`
             : 'не підключено'}
         </p>
       </div>

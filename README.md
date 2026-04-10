@@ -129,8 +129,8 @@ TELEGRAM_BOT_TOKEN=your-token
 
 Run migrations:
 ```bash
-npm run prisma:migrate
-npm run prisma:generate
+pnpm --filter @starway/db run prisma:migrate:deploy
+pnpm prisma:generate
 ```
 
 Start dev server:
@@ -164,7 +164,7 @@ npm run dev
 
 ## 📊 Features
 
-- ✅ AI Mentor Chat (GPT-4)
+- ✅ ABsystem Chat (GPT-4)
 - ✅ Wheel of Life Balance
 - ✅ Daily Cycle Tracking
 - ✅ Vision & Goals Setting

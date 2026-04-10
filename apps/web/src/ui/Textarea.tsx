@@ -15,7 +15,7 @@ const heights: Record<Required<TextareaProps>['size'], string> = {
   lg: 'min-h-[200px]',
 };
 
-export const Textarea = ({ label, value, error, helperText, size = 'md', isLoading, className, ...props }: TextareaProps) => {
+export const Textarea = ({ label, value, error, helperText, size = 'md', isLoading, className, onKeyDown, ...props }: TextareaProps) => {
   const disabled = isLoading || props.disabled;
 
   return (
@@ -24,8 +24,12 @@ export const Textarea = ({ label, value, error, helperText, size = 'md', isLoadi
       <textarea
         disabled={disabled}
         value={value}
+        onKeyDown={(event) => {
+          onKeyDown?.(event)
+          event.stopPropagation()
+        }}
         className={cn(
-          'glass-field w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] px-3 py-3 text-[var(--text-primary)] leading-relaxed shadow-[0_12px_30px_rgba(var(--accent-rgb),0.2)] transition duration-200',
+          'glass-field w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] px-3 py-3 text-[var(--text-field)] leading-relaxed shadow-[0_12px_30px_rgba(var(--accent-rgb),0.2)] transition duration-200 placeholder:text-[var(--text-field-placeholder)]',
           heights[size],
           error && 'border-[var(--accent)] focus:border-[var(--accent)] focus:ring-[var(--accent)]',
           disabled && 'opacity-60 cursor-not-allowed',

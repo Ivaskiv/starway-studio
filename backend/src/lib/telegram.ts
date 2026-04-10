@@ -9,7 +9,7 @@ if (!process.env.TELEGRAM_BOT_TOKEN) {
 }
 
 export const bot: Telegraf = new Telegraf(process.env.TELEGRAM_BOT_TOKEN ?? 'disabled')
-const LAST_MESSAGE_TTL_MS = 10 * 60 * 1000
+const LAST_MESSAGE_TTL_MS = 6 * 60 * 60 * 1000
 const lastMessageHashes = new Map<string, { hash: string; sentAt: number }>()
 
 const getBotLink = () =>

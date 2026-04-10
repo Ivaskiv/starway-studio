@@ -174,7 +174,7 @@ export interface AddProductMemberRequest {
   role: LocalProductRole;
 }
 
-/* ====== AI Mentor / Wheel ====== */
+/* ====== ABsystem / Wheel ====== */
 export type DailyFrequency = 'once_daily' | 'twice_daily';
 
 export interface AIMentorSettings {

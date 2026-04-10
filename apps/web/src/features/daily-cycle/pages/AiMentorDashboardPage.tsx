@@ -1,4 +1,12 @@
 // apps/web/src/features/daily-cycle/components/AiMentorDashboard.tsx
+/*
+ * AUDIT (confirm block / незакритий вчорашній день)
+ * - Today entry points live here: active day card, "Почати ранок", "Мікрозавдання", "Вечір".
+ * - Existing yesterday/catchup logic already lived here and in `useDailyCycle`.
+ * - Existing skip API already exists via `useSkipPreviousDayMutation` -> POST `/daily/skip`.
+ * - Existing modal wrapper already exists in the app: `BaseModal`.
+ * - This file now hosts one shared `useTodayGuard` instance so confirm UI is not duplicated.
+ */
 
 import { useAppSelector } from '@/app/hooks'
 import { useAuth } from '@/features/auth/hooks/useAuth'
@@ -13,8 +21,13 @@ import ExpiredTrialModal from '@/features/daily-cycle/components/ExpiredTrialMod
 import ReportsTabContent from '@/features/daily-cycle/components/ReportsTabContent'
 import CycleProgressPanel from '@/features/daily-cycle/components/CycleProgressPanel'
 import CycleQuickActions from '@/features/daily-cycle/components/CycleQuickActions'
+import CycleDayReportModal from '@/features/daily-cycle/components/CycleDayReportModal'
 import CycleStepCards, { type CycleStepCardItem } from '@/features/daily-cycle/components/CycleStepCards'
+import WheelMonthlyBoard from '@/features/daily-cycle/components/WheelMonthlyBoard'
+import { BaseModal } from '@/features/modals/BaseModal'
 import { useGetDailyHistoryQuery, useGetTodayEntryQuery, useSkipPreviousDayMutation, useSubmitDailyCycleMutation } from '@/features/daily-cycle/services/daily.api'
+import { useTodayGuard } from '@/features/daily-cycle/hooks/useDailyCycle'
+import type { DailyCycleEntry } from '@/features/daily-cycle/types/daily.types'
 import JournalPage from '@/features/journal/JournalPage'
 import { MicroTaskList } from '@/features/microTask/components/MicroTaskList'
 import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
@@ -31,7 +44,7 @@ import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
 import { useGetUpcomingSessionQuery } from '@/features/zoom/services/zoom.api'
 import { GlassCard } from '@/ui'
 import { ArrowUp, BellRing, BookOpen, CheckCircle2, Crosshair, Download, LayoutGrid, MoonStar, Plus, RefreshCcw, SunMedium, Target, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import toast from 'react-hot-toast'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DailyCycleFlow } from './DailyCyclePage'
@@ -47,6 +60,8 @@ type DashboardUser = {
     accentColor?: string
   }
 }
+
+type RecoveryBlockedIntent = 'active_day' | 'morning' | 'tasks' | 'evening'
 
 const TRIAL_PROGRESS_CLASS: Record<number, string> = {
   1: 'w-[14%]',
@@ -85,10 +100,37 @@ function formatCompactDate(value: Date) {
   ].join('.')
 }
 
+function formatVerboseDate(value: Date | string) {
+  const date = typeof value === 'string' ? new Date(value) : value
+  return date.toLocaleDateString('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 function formatCompactDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split('-').map(Number)
   if (!year || !month || !day) return dateKey
   return formatCompactDate(new Date(year, month - 1, day))
+}
+
+function buildJournalDayUrl(dayDateKey: string) {
+  return `/dashboard/journal?date=${dayDateKey}`
+}
+
+function getCycleProgressRingMetrics(percentValue: number) {
+  const percent = Math.max(0, Math.min(100, Math.round(percentValue)))
+  const radius = 68
+  const circumference = 2 * Math.PI * radius
+  const dashOffset = circumference * (1 - percent / 100)
+
+  return {
+    percent,
+    radius,
+    circumference,
+    dashOffset,
+  }
 }
 
 function isWheelDue(lastWheelDate: Date | null, now: Date) {
@@ -117,6 +159,7 @@ type DailyHistoryEntryLike = {
   id?: string
   date: Date | string
   status?: string
+  aiAnalysis?: string | null
   lateCompletedAt?: string | null
   canCatchUpUntil?: string | null
   content?: unknown
@@ -131,6 +174,8 @@ type DailyHistoryProgress = {
   hasProgress: boolean
   completed: boolean
   completedLate: boolean
+  unfinishedStepCount: number
+  incompleteMicroTaskCount: number
 }
 
 type TimelineDayPresentation = {
@@ -144,12 +189,26 @@ type TimelineDayPresentation = {
   isRecoveryTargetDay: boolean
   canResumeDay: boolean
   recoverySessionForDay: 'morning' | 'evening' | null
+  unfinishedStepCount: number
+  incompleteMicroTaskCount: number
   dayTone: TimelineDayTone
   dayLabel: string
-  dayDots: string[]
+  dayDots: TimelineDot[]
 }
 
-function getDailyHistoryProgress(entry: DailyHistoryEntryLike) {
+type TimelineDot = {
+  colorClass: string
+  label: string
+  tooltip: string
+}
+
+function getDailyHistoryProgress(
+  entry: DailyHistoryEntryLike,
+  taskStats?: {
+    incompleteMicroTaskCount?: number
+    totalMicroTaskCount?: number
+  },
+) {
   const content = entry.content && typeof entry.content === 'object' && !Array.isArray(entry.content)
     ? entry.content as Record<string, unknown>
     : null
@@ -174,15 +233,27 @@ function getDailyHistoryProgress(entry: DailyHistoryEntryLike) {
     || content?.completedLate === true
     || (finalizedAt && toDateKey(finalizedAt) !== toDateKey(entry.date))
   )
+  const incompleteMicroTaskCount = Math.max(0, taskStats?.incompleteMicroTaskCount ?? 0)
+  const hasTaskProgress = (taskStats?.totalMicroTaskCount ?? 0) > 0
+  const morningDone = typeof morningMeta?.completedAt === 'string'
+  const eveningDone = typeof eveningMeta?.completedAt === 'string'
+  const tasksDone = hasTaskProgress && incompleteMicroTaskCount === 0
+  const analysisDone = completed || completedLate || Boolean(finalizedAt)
+  const unfinishedStepCount = [morningDone, tasksDone, eveningDone, analysisDone].reduce(
+    (sum, done) => sum + (done ? 0 : 1),
+    0,
+  )
 
   return {
-    morningDone: typeof morningMeta?.completedAt === 'string',
-    eveningDone: typeof eveningMeta?.completedAt === 'string',
+    morningDone,
+    eveningDone,
     finalizedAt,
     skipped,
-    hasProgress: morningStarted || eveningStarted || completed || completedLate || skipped,
+    hasProgress: morningStarted || eveningStarted || completed || completedLate || skipped || hasTaskProgress,
     completed,
     completedLate,
+    unfinishedStepCount,
+    incompleteMicroTaskCount,
   }
 }
 
@@ -216,14 +287,17 @@ function getTimelineDayPresentation(options: {
   const skipped = Boolean(dayProgress?.skipped)
   const completed = Boolean(dayProgress?.completed)
   const completedLate = Boolean(dayProgress?.completedLate)
+  const unfinishedStepCount = dayProgress?.unfinishedStepCount ?? 0
+  const incompleteMicroTaskCount = dayProgress?.incompleteMicroTaskCount ?? 0
   const matchesRecoveryTarget = dayDateKey === (recoveryDateKey ?? recoveryTargetDateKey)
   const isRecoveryTargetDay = Boolean(
     dayDateKey === yesterdayDateKey
-    && !skipped
     && !finalizedAt
     && !isFutureDate
     && !isCurrentDate
-    && (matchesRecoveryTarget || hasProgress),
+    && !completed
+    && !completedLate
+    && (matchesRecoveryTarget || hasProgress || Boolean(dayProgress)),
   )
   const canResumeDay = isRecoveryTargetDay
   const recoverySessionForDay: 'morning' | 'evening' | null = isRecoveryTargetDay
@@ -236,7 +310,16 @@ function getTimelineDayPresentation(options: {
           : 'morning')
     : null
 
-  const missed = Boolean(skipped && !isCurrentDate && !isFutureDate && !isRecoveryTargetDay)
+  const staleIncomplete = Boolean(
+    !isCurrentDate
+    && !isFutureDate
+    && dayDateKey < yesterdayDateKey
+    && hasProgress
+    && !completed
+    && !completedLate
+    && !finalizedAt
+  )
+  const missed = Boolean((skipped || staleIncomplete) && !isCurrentDate && !isFutureDate && !isRecoveryTargetDay)
   const partial = Boolean(
     !active
     && !isFutureDate
@@ -265,6 +348,8 @@ function getTimelineDayPresentation(options: {
     isRecoveryTargetDay,
     canResumeDay,
     recoverySessionForDay,
+    unfinishedStepCount,
+    incompleteMicroTaskCount,
     dayTone,
     dayLabel: getTimelineDayLabel({ tone: dayTone, isCompletedLate: completedLate }),
     dayDots: getTimelineDots({
@@ -274,6 +359,31 @@ function getTimelineDayPresentation(options: {
       eveningDone: Boolean(dayProgress?.eveningDone),
     }),
   } satisfies TimelineDayPresentation
+}
+
+function getEntryTaskStats(entry: DailyHistoryEntryLike, tasks: MicroTaskItem[]) {
+  const dateKey = toDateKey(entry.date)
+  const sourceEntryIds = getEntrySourceIds(entry)
+
+  const relatedTasks = tasks.filter((task) => {
+    const createdDateKey = task.createdAt?.slice(0, 10) ?? null
+    const completedDateKey = task.completedAt?.slice(0, 10) ?? null
+    const dueDateKey = task.dueAt?.slice(0, 10) ?? task.expiresAt?.slice(0, 10) ?? null
+    const belongsToEntry = task.generatedFromEntryId ? sourceEntryIds.includes(task.generatedFromEntryId) : false
+
+    return createdDateKey === dateKey
+      || completedDateKey === dateKey
+      || dueDateKey === dateKey
+      || belongsToEntry
+  })
+
+  return {
+    totalMicroTaskCount: relatedTasks.length,
+    incompleteMicroTaskCount: relatedTasks.filter((task) => {
+      const status = task.status ?? 'PENDING'
+      return status !== 'COMPLETED' && !task.completedAt
+    }).length,
+  }
 }
 
 function getEntryContent(entry: DailyHistoryEntryLike | undefined | null) {
@@ -348,7 +458,7 @@ function getTimelineDayLabel(options: {
   const { tone, isCompletedLate } = options
 
   if (tone === 'active') return 'активно'
-  if (tone === 'partial') return 'очікує завершення'
+  if (tone === 'partial') return 'очікує'
   if (tone === 'done') return isCompletedLate ? 'вик. невч.' : 'готово'
   if (tone === 'missed') return 'пропущено'
   if (tone === 'future') return 'далі'
@@ -409,26 +519,79 @@ function getTimelineDots(options: {
   const { tone, morningDone, hasStarted, eveningDone } = options
 
   if (tone === 'missed' || tone === 'future') {
-    return ['bg-white/15', 'bg-white/15', 'bg-white/15']
+    if (tone === 'missed') {
+      return [
+        { colorClass: 'bg-rose-400', label: 'Ранок', tooltip: 'День пропущено: ранкова сесія не завершена вчасно.' },
+        { colorClass: 'bg-rose-400', label: 'Мікрозавдання', tooltip: 'День пропущено: мікрозавдання не були закриті.' },
+        { colorClass: 'bg-rose-400', label: 'Вечір', tooltip: 'День пропущено: вечірній підсумок не завершено.' },
+      ] satisfies TimelineDot[]
+    }
+
+    return [
+      { colorClass: 'bg-white/15', label: 'Ранок', tooltip: 'Ранкова сесія ще попереду.' },
+      { colorClass: 'bg-white/15', label: 'Мікрозавдання', tooltip: 'Мікрозавдання для цього дня ще попереду.' },
+      { colorClass: 'bg-white/15', label: 'Вечір', tooltip: 'Вечірній підсумок для цього дня ще попереду.' },
+    ] satisfies TimelineDot[]
   }
 
   if (tone === 'done') {
-    return ['bg-emerald-400', 'bg-amber-300', 'bg-cyan-400']
+    return [
+      { colorClass: 'bg-emerald-400', label: 'Ранок', tooltip: 'Ранкова сесія завершена.' },
+      { colorClass: 'bg-amber-300', label: 'Мікрозавдання', tooltip: 'Мікрозавдання дня закриті.' },
+      { colorClass: 'bg-cyan-400', label: 'Вечір', tooltip: 'Вечірній підсумок завершений.' },
+    ] satisfies TimelineDot[]
   }
 
   if (tone === 'active') {
     return [
-      morningDone ? 'bg-emerald-400' : 'bg-sky-400',
-      hasStarted ? 'bg-amber-300' : 'bg-white/15',
-      eveningDone ? 'bg-cyan-400' : 'bg-white/15',
-    ]
+      {
+        colorClass: morningDone ? 'bg-emerald-400' : 'bg-sky-400',
+        label: 'Ранок',
+        tooltip: morningDone ? 'Ранкова сесія завершена.' : 'Ранкова сесія активна або в процесі.',
+      },
+      {
+        colorClass: hasStarted ? 'bg-amber-300' : 'bg-white/15',
+        label: 'Мікрозавдання',
+        tooltip: hasStarted ? 'У дні вже є прогрес або відкриті задачі.' : 'Мікрозавдання ще не відкриті.',
+      },
+      {
+        colorClass: eveningDone ? 'bg-cyan-400' : 'bg-white/15',
+        label: 'Вечір',
+        tooltip: eveningDone ? 'Вечірній підсумок завершений.' : 'Вечірній підсумок ще не закрито.',
+      },
+    ] satisfies TimelineDot[]
   }
 
   return [
-    morningDone ? 'bg-emerald-400' : 'bg-white/15',
-    hasStarted ? 'bg-amber-300' : 'bg-white/15',
-    eveningDone ? 'bg-cyan-400' : 'bg-white/15',
-  ]
+    {
+      colorClass: morningDone ? 'bg-emerald-400' : 'bg-white/15',
+      label: 'Ранок',
+      tooltip: morningDone ? 'Ранкова сесія завершена.' : 'Ранкова сесія ще не завершена.',
+    },
+    {
+      colorClass: hasStarted ? 'bg-amber-300' : 'bg-white/15',
+      label: 'Мікрозавдання',
+      tooltip: hasStarted ? 'У день уже є незавершений прогрес.' : 'Мікрозавдання ще не відкриті.',
+    },
+    {
+      colorClass: eveningDone ? 'bg-cyan-400' : 'bg-white/15',
+      label: 'Вечір',
+      tooltip: eveningDone ? 'Вечірній підсумок завершений.' : 'Вечірній підсумок ще не завершено.',
+    },
+  ] satisfies TimelineDot[]
+}
+
+function getSessionAnswers(content: Record<string, unknown> | null, session: 'morning' | 'evening') {
+  const source = content?.[session]
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return []
+
+  return Object.entries(source as Record<string, unknown>)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim().length > 0)
+    .map(([question, answer]) => ({
+      id: `${session}-${question}`,
+      question,
+      answer,
+    }))
 }
 
 type AiMentorDashboardTab =
@@ -566,6 +729,18 @@ function buildManualMicroTask(userId: string, dateKey: string, text: string): Mi
   }
 }
 
+function getMicrotaskProgressToast(action: 'done' | 'skipped', remainingCount: number) {
+  if (remainingCount > 0) {
+    return action === 'done'
+      ? `Завдання виконано. Залишилось ще ${remainingCount}.`
+      : `Завдання пропущено. Залишилось ще ${remainingCount}.`
+  }
+
+  return action === 'done'
+    ? 'Усі мікрозавдання на сьогодні закрито.'
+    : 'Усі мікрозавдання на сьогодні вирішено.'
+}
+
 function serializeMicroTaskList(tasks: MicroTaskItem[]) {
   return tasks
     .filter(task => task.status !== 'COMPLETED')
@@ -614,6 +789,7 @@ function CycleSummaryCard({
   onStartMorningSession,
   onStartEveningSession,
   onOpenRecoveryDay,
+  onTryOpenToday,
   onShowTasks,
   onShowReports,
   onCloseMorningSession,
@@ -624,6 +800,7 @@ function CycleSummaryCard({
   onSkipPreviousDay,
   openDayNoticeKey,
   setOpenDayNoticeKey,
+  recoveryPromptDateKey,
   recoveryDateKey,
   recoveryTargetDateKey,
   recoveryTargetSession,
@@ -634,12 +811,18 @@ function CycleSummaryCard({
   hasMorningAnswers,
   hasActiveMicroTasks,
   hasTasksToday,
+  todayMicroTaskCount,
+  activeTodayMicroTaskCount,
+  completedTodayMicroTaskCount,
+  resumeIntentAfterRecovery,
+  onConsumeResumeIntent,
 }: {
   onLockedOpen: () => void
   onOpenWheelFrame: () => void
   onStartMorningSession: () => void
   onStartEveningSession: () => void
   onOpenRecoveryDay: (dateKey: string, session: 'morning' | 'evening') => void
+  onTryOpenToday: (onProceed: () => void) => void
   onShowTasks: () => void
   onShowReports: () => void
   onCloseMorningSession: () => void
@@ -650,6 +833,7 @@ function CycleSummaryCard({
   onSkipPreviousDay: (dateKey: string) => void
   openDayNoticeKey: string | null
   setOpenDayNoticeKey: Dispatch<SetStateAction<string | null>>
+  recoveryPromptDateKey: string | null
   recoveryDateKey: string | null
   recoveryTargetDateKey: string | null
   recoveryTargetSession: 'morning' | 'evening' | null
@@ -660,6 +844,11 @@ function CycleSummaryCard({
   hasMorningAnswers: boolean
   hasActiveMicroTasks: boolean
   hasTasksToday: boolean
+  todayMicroTaskCount: number
+  activeTodayMicroTaskCount: number
+  completedTodayMicroTaskCount: number
+  resumeIntentAfterRecovery: RecoveryBlockedIntent | null
+  onConsumeResumeIntent: () => void
 }) {
   const { user } = useAuth()
   const { dayNumber: journeyDay, journeySteps, currentStep } = useUserProgress()
@@ -690,15 +879,17 @@ function CycleSummaryCard({
   }, [currentDay, timelineAnchorDate])
   const { data: dailyHistory = [], refetch: refetchDailyHistory } = useGetDailyHistoryQuery(undefined, { skip: !userId })
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', { skip: !userId })
+  const { tasks: cycleMicroTasks } = useMicroTasks()
+  const [reportDayKey, setReportDayKey] = useState<string | null>(null)
 
   const historyByDate = useMemo(() => {
     return dailyHistory.reduce<Record<string, DailyHistoryProgress>>((acc, entry) => {
       const key = toDateKey(entry.date)
-      acc[key] = getDailyHistoryProgress(entry)
+      acc[key] = getDailyHistoryProgress(entry, getEntryTaskStats(entry, cycleMicroTasks))
 
       return acc
     }, {})
-  }, [dailyHistory])
+  }, [cycleMicroTasks, dailyHistory])
   const recoveryTarget = useMemo(
     () => getLatestRecoveryTarget(dailyHistory, todayDateKey),
     [dailyHistory, todayDateKey],
@@ -724,7 +915,6 @@ function CycleSummaryCard({
     }))
   }, [journeySteps])
   const isActivePeriod = showMorningSession || showEveningSession || hasMorningProgress || hasMorningAnswers || hasActiveMicroTasks
-  const recoveryBannerDateLabel = formatCompactDateKey(recoveryDateKey ?? recoveryTargetDateKey ?? todayDateKey)
   const currentCycleStepIndex = ({
     wheel: 1,
     morning: 1,
@@ -750,6 +940,21 @@ function CycleSummaryCard({
     if (dayProgress.hasProgress) return 1
     return 0
   })
+  const taskCardBadge = activeTodayMicroTaskCount > 0 ? `${activeTodayMicroTaskCount} завдання` : undefined
+  const isTaskStepActive = currentStep === 'tasks' || (hasMorningAnswers && !showMorningSession && !showEveningSession && (hasActiveMicroTasks || hasTasksToday))
+  const isEveningStepActive = currentStep === 'evening'
+    || (hasMorningAnswers && !hasActiveMicroTasks && !showMorningSession && !showEveningSession && cycleFlowSteps[2]?.status !== 'done')
+  const analysisReady = cycleFlowSteps[3]?.status === 'active' || cycleFlowSteps[3]?.status === 'done'
+  const visualCycleStepIndex = analysisReady
+    ? 4
+    : (showEveningSession || isEveningStepActive)
+      ? 3
+      : (hasMorningAnswers || hasMorningProgress || isTaskStepActive || currentCycleStepIndex >= 2)
+        ? 2
+        : 1
+  const completedTodayStepCount = completedCycleStepsCount
+  const progressPercent = Math.round((completedTodayStepCount / 4) * 100)
+  const progressRing = getCycleProgressRingMetrics(progressPercent)
   const stepCards: CycleStepCardItem[] = [
     {
       number: 1,
@@ -761,26 +966,29 @@ function CycleSummaryCard({
       ctaLabel: cycleFlowSteps[0]?.status === 'done' ? 'Відкрити' : 'Почати ▶',
       statusText: hasMorningProgress ? 'Є прогрес у сесії' : 'Займе 2 хв',
       showArrow: true,
+      iconToneClass: 'border-[rgba(55,138,221,0.18)] bg-[rgba(55,138,221,0.14)] text-[#8DC4FF]',
       onClick: () => (isLocked ? onLockedOpen() : onStartMorningSession()),
     },
     {
       number: 2,
       icon: <ArrowUp className="h-6 w-6" />,
       title: 'Мікрозавдання',
-      subtitle: hasActiveMicroTasks ? 'Є активні задачі' : hasTasksToday ? 'Є задачі на день' : 'Очікує',
+      subtitle: activeTodayMicroTaskCount > 0 ? `${activeTodayMicroTaskCount} завдання` : hasTasksToday ? 'Є задачі на день' : 'Очікує',
       checks: ['Персональні задачі', 'Трекер прогресу', 'Швидке завершення'],
       status: (
         cycleFlowSteps[1]?.status === 'done'
           ? 'completed'
-          : cycleFlowSteps[1]?.status === 'active'
+          : isTaskStepActive || cycleFlowSteps[1]?.status === 'active'
             ? 'active'
             : hasMorningAnswers
               ? 'waiting'
               : 'locked'
       ),
       ctaLabel: hasMorningAnswers ? 'Виконати' : 'Стане доступно 🔒',
-      statusText: hasActiveMicroTasks ? 'Є активні задачі' : hasTasksToday ? 'Готово до відкриття' : '0 / 0',
-      badge: hasActiveMicroTasks ? 'Є задачі' : undefined,
+      statusText: `${completedTodayMicroTaskCount} / ${Math.max(todayMicroTaskCount, activeTodayMicroTaskCount, hasTasksToday ? 1 : 0)}`,
+      badge: taskCardBadge,
+      iconToneClass: 'border-[rgba(239,159,39,0.18)] bg-[rgba(239,159,39,0.14)] text-[#F2B24B]',
+      badgeToneClass: 'border-[rgba(55,138,221,0.24)] bg-[rgba(55,138,221,0.12)] text-[#78B9FF]',
       showArrow: true,
       onClick: () => (isLocked ? onLockedOpen() : onShowTasks()),
     },
@@ -793,14 +1001,15 @@ function CycleSummaryCard({
       status: (
         cycleFlowSteps[2]?.status === 'done'
           ? 'completed'
-          : cycleFlowSteps[2]?.status === 'active'
+          : isEveningStepActive || cycleFlowSteps[2]?.status === 'active'
             ? 'active'
             : hasMorningAnswers
               ? 'waiting'
               : 'locked'
       ),
       ctaLabel: hasMorningAnswers ? 'Почати ▶' : 'Стане доступно 🔒',
-      statusText: hasMorningAnswers ? 'Готовий після задач' : 'Заблоковано',
+      statusText: hasMorningAnswers ? (hasActiveMicroTasks ? 'Стане доступно 🔒' : 'Займе 2 хв') : 'Заблоковано',
+      iconToneClass: 'border-[rgba(129,105,255,0.18)] bg-[rgba(129,105,255,0.12)] text-[#A48BFF]',
       showArrow: true,
       onClick: () => (isLocked ? onLockedOpen() : onStartEveningSession()),
     },
@@ -821,6 +1030,7 @@ function CycleSummaryCard({
       ),
       ctaLabel: cycleFlowSteps[3]?.status === 'active' ? 'Відкрити' : 'Стане доступно 🔒',
       statusText: cycleFlowSteps[3]?.status === 'active' ? 'Готово до перегляду' : 'Заблоковано',
+      iconToneClass: 'border-[rgba(74,163,104,0.18)] bg-[rgba(74,163,104,0.12)] text-[#71C58A]',
       onClick: () => (isLocked ? onLockedOpen() : onShowReports()),
     },
   ]
@@ -852,100 +1062,144 @@ function CycleSummaryCard({
   ]
   const progressMetrics = [
     { value: String(currentDay), label: 'день' },
-    { value: String(currentCycleStepIndex), label: 'крок', sublabel: 'з 4' },
+    { value: String(visualCycleStepIndex), label: 'крок', sublabel: 'з 4' },
     { value: `${monthPercent}%`, label: 'місяць', color: '#378ADD' },
     { value: `+${xpToday}`, label: 'XP', color: '#EF9F27' },
   ]
+  const reportEntry = useMemo(
+    () => dailyHistory.find((entry) => reportDayKey && toDateKey(entry.date) === reportDayKey) ?? null,
+    [dailyHistory, reportDayKey],
+  )
+  const reportContent = useMemo(() => getEntryContent(reportEntry), [reportEntry])
+  const reportEntryIds = useMemo(() => getEntrySourceIds(reportEntry), [reportEntry])
+  const reportTasks = useMemo(() => {
+    if (!reportDayKey) return []
+
+    return cycleMicroTasks.filter((task) => {
+      const createdDateKey = task.createdAt?.slice(0, 10) ?? null
+      const completedDateKey = task.completedAt?.slice(0, 10) ?? null
+      const dueDateKey = task.dueAt?.slice(0, 10) ?? task.expiresAt?.slice(0, 10) ?? null
+      const belongsToEntry = task.generatedFromEntryId ? reportEntryIds.includes(task.generatedFromEntryId) : false
+
+      return createdDateKey === reportDayKey
+        || completedDateKey === reportDayKey
+        || dueDateKey === reportDayKey
+        || belongsToEntry
+    })
+  }, [cycleMicroTasks, reportDayKey, reportEntryIds])
+  const reportMorningAnswers = useMemo(() => getSessionAnswers(reportContent, 'morning'), [reportContent])
+  const reportEveningAnswers = useMemo(() => getSessionAnswers(reportContent, 'evening'), [reportContent])
+
+  useEffect(() => {
+    if (resumeIntentAfterRecovery !== 'active_day') return
+    if (recoveryPromptDateKey || recoveryTargetDateKey) return
+
+    setReportDayKey(todayDateKey)
+    onConsumeResumeIntent()
+  }, [onConsumeResumeIntent, recoveryPromptDateKey, recoveryTargetDateKey, resumeIntentAfterRecovery, todayDateKey])
 
   return (
     <div className="dashboard-liquid-card--soft !overflow-visible">
-      <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.18),rgba(255,255,255,0.02)_58%,rgba(255,255,255,0.01))] p-5">
-        <div className="mb-4 border-b border-[rgba(255,255,255,0.06)] pb-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl font-bold text-[var(--accent)]">🔥 {currentDay}</span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">
-                    День {currentDay} з {totalDays}
-                  </p>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    {recoveryTarget
-                      ? `Незавершений день · ${formatCompactDateKey(recoveryTarget.dateKey)}`
-                      : isPaidCycle
-                        ? `Новий місячний цикл · ${formatCompactDate(new Date())}`
-                        : currentDay >= totalDays
-                          ? 'Почни новий місячний цикл'
-                          : `Потік дня активний · ${formatCompactDate(new Date())}`}
+      <div className="bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.16),rgba(255,255,255,0.02)_58%,rgba(255,255,255,0.01))] p-4">
+        <div className="mb-3 border-b border-[rgba(255,255,255,0.06)] pb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--accent-soft-rgb))]">
+                ABsystem
+              </p>
+              <h2 className="mt-3 text-[1.85rem] font-black leading-[0.96] tracking-[-0.03em] text-[var(--text-primary)] sm:text-[2.15rem] lg:text-[2.35rem] xl:text-[2.55rem]">
+                Продовжуй роботу
+              </h2>
+              <p className="mt-2.5 max-w-[42rem] text-[0.92rem] leading-5 text-[var(--text-secondary)] sm:text-[0.96rem] sm:leading-6">
+                Відкрий потрібний блок і зроби наступну дію без зайвих переходів.
+              </p>
+              <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:flex xl:flex-wrap">
+                <div className="inline-flex min-h-[54px] min-w-0 items-center gap-3 rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(10,16,28,0.64)] px-4">
+                  <span className="text-[1.3rem] sm:text-[1.45rem]">🔥</span>
+                  <div>
+                    <p className="text-[1.2rem] font-bold leading-none text-[var(--text-primary)] sm:text-[1.35rem]">{currentDay}</p>
+                    <p className="mt-0.5 text-[0.88rem] font-semibold text-[var(--text-primary)] sm:text-[0.92rem]">День {currentDay} з {totalDays}</p>
+                  </div>
+                </div>
+                <div className="inline-flex min-h-[54px] min-w-0 items-center gap-3 rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(10,16,28,0.64)] px-4 sm:col-span-2 xl:min-w-[290px]">
+                  <span className="h-5 w-5 flex-shrink-0 rounded-full bg-[radial-gradient(circle_at_30%_30%,#8E68FF,#378ADD_70%)] sm:h-6 sm:w-6" />
+                  <p className="truncate text-[0.88rem] font-semibold text-[var(--text-primary)] sm:text-[0.92rem]">
+                    {isPaidCycle ? 'Новий місячний цикл' : 'Новий тижневий цикл'} · {formatCompactDate(new Date())}
                   </p>
                 </div>
+                <div className="inline-flex min-h-[54px] min-w-0 items-center gap-3 rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(10,16,28,0.64)] px-4 sm:max-w-[190px]">
+                  <span className="text-[1.2rem] sm:text-[1.35rem]">🪴</span>
+                  <p className="text-[0.88rem] font-semibold text-[var(--text-primary)] sm:text-[0.92rem]">Учень</p>
+                </div>
               </div>
-              {/* <p className="mt-3 max-w-2xl text-sm text-[var(--text-muted)]">
-                Відкривай потрібний день і рухайся далі.
-              </p> */}
             </div>
-            <div className="ml-auto flex flex-col items-end gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
-                🌱 Учень
-              </span>
+
+            <div className="flex justify-start lg:min-w-[156px] lg:justify-end xl:min-w-[196px]">
+              <div className="relative flex h-[132px] w-[132px] items-center justify-center sm:h-[148px] sm:w-[148px] xl:h-[176px] xl:w-[176px]">
+                <svg viewBox="0 0 180 180" className="h-full w-full">
+                  <circle
+                    cx="90"
+                    cy="90"
+                    r={progressRing.radius}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.08)"
+                    strokeWidth="9"
+                  />
+                  <circle
+                    cx="90"
+                    cy="90"
+                    r={progressRing.radius}
+                    fill="none"
+                    stroke="#63A8FF"
+                    strokeWidth="9"
+                    strokeLinecap="round"
+                    strokeDasharray={progressRing.circumference}
+                    strokeDashoffset={progressRing.dashOffset}
+                    transform="rotate(-90 90 90)"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <p className="text-[0.8rem] font-semibold text-[var(--text-primary)] sm:text-[0.88rem] xl:text-[0.95rem]">Крок {visualCycleStepIndex} з 4</p>
+                  <p className="mt-1 text-[2.35rem] font-black leading-none text-[var(--text-primary)] sm:text-[2.6rem] xl:mt-1.5 xl:text-[3.15rem]">{progressRing.percent}%</p>
+                  <p className="mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.1em] text-[var(--text-secondary)] sm:text-[0.78rem] xl:mt-2 xl:text-[0.82rem]">виконано</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {(recoveryDateKey ?? recoveryTargetDateKey) && (recoveryDateKey ? (showEveningSession ? 'evening' : 'morning') : recoveryTargetSession) ? (
-          <div className="mb-4 flex justify-center">
-            <div className="w-full max-w-2xl rounded-3xl border border-[rgba(250,204,21,0.22)] bg-[rgba(250,204,21,0.10)] px-5 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgb(250,204,21)]">
-                Спочатку заверш вчора
-              </p>
-              <p className="mt-1 text-base font-semibold text-[var(--text-primary)]">
-                День {recoveryBannerDateLabel} ще не закрито.
-              </p>
-              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)]">
-                Повернись у вчорашню сесію з місця зупинки або пропусти цей день. Після пропуску повернутися до нього більше не вийде.
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => onOpenRecoveryDay(
-                    recoveryDateKey ?? recoveryTargetDateKey ?? todayDateKey,
-                    recoveryDateKey
-                      ? (showEveningSession ? 'evening' : 'morning')
-                      : (recoveryTargetSession ?? 'morning'),
-                  )}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[rgba(250,204,21,0.28)] bg-[rgba(250,204,21,0.16)] px-4 py-2 text-sm font-semibold text-[rgb(250,204,21)] transition-colors hover:border-[rgba(250,204,21,0.38)] hover:bg-[rgba(250,204,21,0.22)]"
-                >
-                  Завершити вчорашній день
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSkipPreviousDay(recoveryDateKey ?? recoveryTargetDateKey ?? todayDateKey)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[rgba(255,255,255,0.14)] bg-[rgba(255,255,255,0.06)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:border-[rgba(255,255,255,0.22)] hover:bg-[rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Пропустити
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mb-4 overflow-x-auto overflow-y-visible pb-6">
-          <div className="flex w-max gap-2">
+        <div className="mb-3 overflow-x-auto overflow-y-visible pt-1.5 pb-4">
+          <div className="flex w-max gap-2 px-1.5">
               {Array.from({ length: totalDays }).map((_, index) => {
                 const day = index + 1
                 const dayDate = new Date(timelineStartDate)
                 dayDate.setDate(timelineStartDate.getDate() + index)
                 const dayDateKey = toDateKey(dayDate)
                 const dayProgress = historyByDate[dayDateKey]
+                  ?? (
+                    dayDateKey === yesterdayDateKey && recoveryTargetDateKey === yesterdayDateKey
+                      ? {
+                          morningDone: false,
+                          eveningDone: false,
+                          finalizedAt: null,
+                          skipped: false,
+                          hasProgress: false,
+                          completed: false,
+                          completedLate: false,
+                          unfinishedStepCount: 4,
+                          incompleteMicroTaskCount: 0,
+                        } satisfies DailyHistoryProgress
+                      : undefined
+                  )
                 const active = day === currentDay
                 const {
                   hasProgress,
                   finalizedAt,
-                  canResumeDay,
-                  recoverySessionForDay,
                   isRecoveryTargetDay,
                   completed,
                   completedLate,
+                  unfinishedStepCount,
+                  incompleteMicroTaskCount,
                   dayTone,
                   dayLabel,
                   dayDots,
@@ -967,124 +1221,120 @@ function CycleSummaryCard({
                 <button
                   key={day}
                   type="button"
-                  disabled={!active && !canResumeDay}
+                  disabled={dayDateKey > todayDateKey}
                   className={[
-                    'relative flex w-[77px] flex-shrink-0 flex-col items-center justify-center overflow-visible rounded-2xl px-[11px] py-2.5 text-center transition-all disabled:cursor-default',
+                    'relative flex h-[156px] w-[72px] flex-shrink-0 flex-col overflow-visible rounded-[18px] px-[10px] py-2.5 text-center transition-all disabled:cursor-default',
                     isBellOpen ? 'z-30' : 'z-0',
                     getTimelineCardClass(dayTone),
-                    active || canResumeDay ? 'cursor-pointer hover:border-amber-300/50' : '',
+                    dayDateKey <= todayDateKey ? 'cursor-pointer hover:border-amber-300/50' : '',
                   ].join(' ')}
                   onClick={() => {
-                    if (canResumeDay && recoverySessionForDay) {
-                      console.info('[AiMentorDashboard] open day card recovery', {
-                        dayDateKey,
-                        recoverySessionForDay,
-                        canResumeDay,
-                        hasProgress,
-                        finalizedAt,
-                        recoveryDateKey,
-                        recoveryTargetDateKey,
-                        recoveryTargetSession,
-                      })
-                      onOpenRecoveryDay(dayDateKey, recoverySessionForDay)
+                    if (dayDateKey > todayDateKey) return
+                    if (active) {
+                      onTryOpenToday(() => setReportDayKey(dayDateKey))
                       return
                     }
-
-                    if (!active) return
-
-                    if (hasActiveMicroTasks) {
-                      onShowTasks()
-                      return
-                    }
-
-                    if (hasMorningAnswers) {
-                      onShowTasks()
-                      return
-                    }
-
-                    if (hasMorningProgress) {
-                      onStartEveningSession()
-                      return
-                    }
-
-                    onStartMorningSession()
+                    setReportDayKey(dayDateKey)
                   }}
                 >
                   {hasBellNotice ? (
-                    <span
-                      role="button"
-                      tabIndex={-1}
-                      aria-label="Незавершений день"
-                      title="Незавершений день"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        console.info('[AiMentorDashboard] recovery bell toggled', {
-                          dayDateKey,
-                          isRecoveryTargetDay,
-                          hasProgress,
-                          finalizedAt,
-                          recoverySessionForDay,
-                        })
-                        setOpenDayNoticeKey(current => current === dayDateKey ? null : dayDateKey)
-                      }}
-                      className={[
-                        'absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border transition-all',
-                        isBellOpen
-                          ? 'border-[rgba(var(--accent-rgb),0.32)] bg-[rgba(var(--accent-rgb),0.14)] text-[rgb(var(--accent-soft-rgb))]'
-                          : 'border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] text-[var(--text-muted)] hover:text-[var(--text-primary)]',
-                      ].join(' ')}
-                    >
-                      <BellRing className="h-3 w-3" />
+                    <span className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-end px-2">
+                      <span
+                        role="button"
+                        tabIndex={-1}
+                        aria-label="Незавершений день"
+                        title="Незавершений день"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          console.info('[AiMentorDashboard] recovery bell toggled', {
+                            dayDateKey,
+                            isRecoveryTargetDay,
+                            hasProgress,
+                            finalizedAt,
+                          })
+                          setOpenDayNoticeKey(current => current === dayDateKey ? null : dayDateKey)
+                        }}
+                        className={[
+                          'pointer-events-auto relative inline-flex h-5 w-5 items-center justify-center rounded-full border transition-all',
+                          isBellOpen
+                            ? 'border-[rgba(var(--accent-rgb),0.32)] bg-[rgba(var(--accent-rgb),0.14)] text-[rgb(var(--accent-soft-rgb))]'
+                            : 'border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] text-[var(--text-muted)] hover:text-[var(--text-primary)]',
+                        ].join(' ')}
+                      >
+                        <BellRing className="h-3 w-3" />
+                        <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-[14px] min-w-[14px] items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold leading-none text-slate-950">
+                          {unfinishedStepCount}
+                        </span>
+                      </span>
                     </span>
                   ) : null}
                   {isBellOpen ? (
-                    <div className="absolute left-1/2 top-[calc(100%+0.5rem)] z-50 w-56 -translate-x-1/2 rounded-xl border border-[rgba(var(--accent-rgb),0.2)] bg-[rgba(10,14,24,0.98)] px-3 py-2 text-left text-[11px] leading-4 text-[var(--text-primary)] shadow-[0_18px_36px_rgba(0,0,0,0.28)]">
-                      Залишились незавершені кроки. Повернись сюди, щоб дозавершити вчорашній день.
+                    <div className="absolute right-0 top-[calc(100%+0.45rem)] z-50 w-56 rounded-xl border border-[rgba(var(--accent-rgb),0.2)] bg-[rgba(10,14,24,0.98)] px-3 py-2 text-left text-[11px] leading-4 text-[var(--text-primary)] shadow-[0_18px_36px_rgba(0,0,0,0.28)]">
+                      Залишилось {unfinishedStepCount} незавершені кроки{incompleteMicroTaskCount > 0 ? ` і ${incompleteMicroTaskCount} мікрозавдання` : ''}. Повернись сюди, щоб дозавершити вчорашній день.
                     </div>
                   ) : null}
-                  <div
-                      className={[
-                        'inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold leading-none',
-                        getTimelineDigitClass(dayTone),
-                    ].join(' ')}
-                  >
-                    {day}
-                  </div>
-                  <div className={['mt-2 min-h-[11px] text-[9px] font-semibold uppercase tracking-[0.12em]', getTimelineLabelClass(dayTone)].join(' ')}>
-                    {dayLabel}
-                  </div>
-                  {canResumeDay ? (
-                    <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-200">
-                      Натисни, щоб продовжити
-                    </div>
-                  ) : null}
-                  <div className="group relative mt-2 flex items-center justify-center gap-1.5">
-                    {dayDots.map((dotClassName, dotIndex) => (
-                      <span
-                        key={`${dayDateKey}-dot-${dotIndex}`}
+                  <div className="flex h-full min-h-0 flex-1 flex-col justify-between">
+                    <div className="flex min-h-[70px] flex-col items-center justify-start">
+                      <div
                         className={[
-                          'h-2.5 w-2.5 rounded-full transition-transform duration-200 group-hover:scale-110',
-                          dotClassName,
+                          'inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold leading-none',
+                          getTimelineDigitClass(dayTone),
                         ].join(' ')}
-                      />
-                    ))}
-                    {active ? (
-                      <span className="group/tooltip relative ml-1 inline-flex items-center">
-                        <button
-                          type="button"
-                          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/12 text-emerald-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-                          aria-label="Активний день готовий до перегляду"
-                        >
-                          <CheckCircle2 className="h-3 w-3" />
-                        </button>
-                        <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-44 -translate-x-1/2 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(11,16,30,0.96)] px-2 py-1.5 text-[10px] text-[var(--text-secondary)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] group-hover/tooltip:block">
-                          Сьогодні активний день: дивись, що вже готово, і переходь до наступного кроку.
-                        </span>
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-medium text-[rgb(var(--accent-soft-rgb))]">
-                    {formatCompactDateKey(dayDateKey)}
+                      >
+                        {day}
+                      </div>
+                      <div className="mt-2 flex h-[28px] items-start justify-center overflow-hidden">
+                        <div className={['max-w-full text-[9px] font-semibold uppercase tracking-[0.12em] leading-[1.15]', getTimelineLabelClass(dayTone)].join(' ')}>
+                          {dayLabel}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex min-h-[70px] flex-col justify-end">
+                      <div className="group relative flex min-h-[18px] items-center justify-center gap-1.5">
+                        {dayDots.map((dot, dotIndex) => (
+                          <span key={`${dayDateKey}-dot-${dotIndex}`} className="group/dot relative inline-flex">
+                            <span
+                              className={[
+                                'h-2.5 w-2.5 flex-shrink-0 rounded-full transition-transform duration-200 group-hover:scale-110',
+                                dot.colorClass,
+                              ].join(' ')}
+                              aria-label={`${dot.label}: ${dot.tooltip}`}
+                            />
+                            <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-36 -translate-x-1/2 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(11,16,30,0.96)] px-2 py-1.5 text-[10px] text-[var(--text-secondary)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] group-hover/dot:block">
+                              <strong className="block text-[var(--text-primary)]">{dot.label}</strong>
+                              {dot.tooltip}
+                            </span>
+                          </span>
+                        ))}
+                        {active ? (
+                          <span className="group/tooltip relative ml-1 inline-flex items-center">
+                            <button
+                              type="button"
+                              className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/12 text-emerald-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                              aria-label="Активний день готовий до перегляду"
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                            </button>
+                            <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-44 -translate-x-1/2 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(11,16,30,0.96)] px-2 py-1.5 text-[10px] text-[var(--text-secondary)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] group-hover/tooltip:block">
+                              Сьогодні активний день: дивись, що вже готово, і переходь до наступного кроку.
+                            </span>
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 min-h-[16px] text-[10px] font-medium text-[rgb(var(--accent-soft-rgb))]">
+                        {formatCompactDateKey(dayDateKey)}
+                      </div>
+                      {isRecoveryTargetDay ? (
+                        <div className="mt-1 h-[30px] overflow-hidden text-[9px] leading-3 text-amber-100/85">
+                          {incompleteMicroTaskCount > 0
+                            ? `${incompleteMicroTaskCount} мікрозавд. ще відкриті`
+                            : ''}
+                        </div>
+                      ) : (
+                        <div className="mt-1 h-[30px]" />
+                      )}
+                    </div>
                   </div>
                 </button>
               )
@@ -1092,24 +1342,41 @@ function CycleSummaryCard({
           </div>
         </div>
 
+        <div className="mb-3 flex items-center justify-between gap-4 border-t border-[rgba(255,255,255,0.06)] pt-3.5">
+          <div>
+            <p className="text-[0.98rem] font-semibold text-[var(--text-primary)]">
+              Крок {visualCycleStepIndex} з 4 · {cycleFlowSteps[visualCycleStepIndex - 1]?.label ?? 'Ранок'}
+            </p>
+          </div>
+          <div className="flex min-w-[160px] items-center gap-3">
+            <div className="h-1.5 flex-1 rounded-full bg-[rgba(255,255,255,0.08)]">
+              <div
+                className="h-full rounded-full bg-[#378ADD] transition-all"
+                style={{ width: `${progressRing.percent}%` }}
+              />
+            </div>
+            <span className="text-[0.86rem] font-semibold text-[rgb(var(--accent-soft-rgb))]">{progressRing.percent}%</span>
+          </div>
+        </div>
+
         <div className="mb-3">
           <CycleStepCards items={stepCards} />
         </div>
 
-        <div className="mb-3 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-5 py-4">
+        <div className="mb-3 rounded-[22px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-4 py-3.5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
-              <svg width="44" height="44" viewBox="0 0 44 44" className="flex-shrink-0">
+              <svg width="40" height="40" viewBox="0 0 44 44" className="flex-shrink-0">
                 <circle cx="22" cy="22" r="16" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
                 <circle cx="22" cy="22" r="16" fill="none" stroke="#378ADD" strokeWidth="4" strokeLinecap="round" strokeDasharray="34 100" transform="rotate(-90 22 22)" />
                 <circle cx="22" cy="22" r="16" fill="none" stroke="#7CDB8B" strokeWidth="4" strokeLinecap="round" strokeDasharray="22 100" transform="rotate(12 22 22)" />
                 <circle cx="22" cy="22" r="16" fill="none" stroke="#8E68FF" strokeWidth="4" strokeLinecap="round" strokeDasharray="18 100" transform="rotate(112 22 22)" />
               </svg>
               <div>
-                <p className="text-lg font-semibold text-[var(--text-primary)]">
+                <p className="text-[1rem] font-semibold text-[var(--text-primary)]">
                   {wheelDue ? 'Оновити колесо балансу' : 'Колесо балансу актуальне'}
                 </p>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                <p className="mt-1 text-[0.85rem] text-[var(--text-secondary)]">
                   {wheelDue
                     ? 'Відкрий баланс сфер і зроби 1 крок до гармонії.'
                     : `Останнє оновлення ${lastWheelDate ? formatWheelDate(lastWheelDate) : 'нещодавно'}.`}
@@ -1126,7 +1393,7 @@ function CycleSummaryCard({
                 }
                 onOpenWheelFrame()
               }}
-              className="inline-flex min-h-[40px] items-center justify-center rounded-lg bg-[#378ADD] px-4 py-2 text-sm font-semibold text-white transition-all hover:brightness-110"
+              className="inline-flex min-h-[38px] items-center justify-center rounded-lg bg-[#378ADD] px-4 py-2 text-[0.86rem] font-semibold text-white transition-all hover:brightness-110"
             >
               Оновити
             </button>
@@ -1163,6 +1430,17 @@ function CycleSummaryCard({
             <CycleProgressPanel metrics={progressMetrics} points={chartPoints} />
           </div>
         )}
+
+        {reportDayKey ? (
+          <CycleDayReportModal
+            dateKey={reportDayKey}
+            entry={reportEntry}
+            morningAnswers={reportMorningAnswers}
+            eveningAnswers={reportEveningAnswers}
+            tasks={reportTasks}
+            onClose={() => setReportDayKey(null)}
+          />
+        ) : null}
       </div>
     </div>
   )
@@ -1182,7 +1460,10 @@ function JourneySection({
   onOpenRecoveryDay: (dateKey: string, session: 'morning' | 'evening') => void
 }) {
   const { user } = useAuth()
-  const { dayNumber: journeyDay } = useUserProgress()
+  const {
+    dayNumber: journeyDay,
+    journeySteps,
+  } = useUserProgress()
   const { accessControl, subscription, getModuleAccess } = useSystemState()
   const { data: trial, isLoading } = useGetTrialStatusQuery()
   const navigate = useNavigate()
@@ -1733,7 +2014,7 @@ function JourneySection({
                                   : 'День ще не активовано.'
                       }
                       className={[
-                        'relative w-[56px] flex-shrink-0 overflow-visible rounded-2xl px-2.5 py-2 text-center transition-all',
+                        'relative flex h-[112px] w-[56px] flex-shrink-0 flex-col justify-between overflow-visible rounded-2xl px-2.5 py-2 text-center transition-all',
                         isLocked
                           ? 'bg-[rgba(255,255,255,0.02)] opacity-25 grayscale cursor-not-allowed'
                           : [
@@ -1741,43 +2022,56 @@ function JourneySection({
                             'shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]',
                           ].join(' ')
                         ,
-                        canResumeDay ? 'cursor-pointer hover:border-amber-300/50' : '',
+                        dayDateKey <= todayDateKey ? 'cursor-pointer hover:border-amber-300/50' : '',
                       ].join(' ')}
                       onClick={() => {
-                        if (canResumeDay) {
-                          onOpenRecoveryDay(dayDateKey, 'evening')
-                        }
+                        if (dayDateKey > todayDateKey || isLocked) return
+                        navigate(buildJournalDayUrl(dayDateKey))
                       }}
                     >
-                      <div
-                      className={[
-                        'text-sm font-semibold leading-none',
-                        dayTone === 'active'
-                          ? 'text-[var(--accent)]'
-                          : dayTone === 'partial'
-                            ? 'text-[rgb(250,204,21)]'
-                            : dayTone === 'done'
-                              ? 'text-[var(--color-success)]'
-                              : dayTone === 'missed'
-                                ? 'text-[rgb(248,113,113)]'
-                                : 'text-[var(--text-muted)]'
-                        ].join(' ')}
-                      >
-                        {day}
-                      </div>
-                      <div className={['mt-1 min-h-[18px] text-[8px] font-semibold uppercase leading-[1.05]', getTimelineLabelClass(dayTone)].join(' ')}>
-                      {dayLabel}
-                      </div>
-                      <div className="mt-0.5 text-[8px] font-medium text-[rgb(var(--accent-soft-rgb))]">
-                        {formatCompactDateKey(dayDateKey)}
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-center gap-1">
-                        {dayDots.map((dotClassName, dotIndex) => (
-                          <span
-                            key={`${dayDateKey}-mini-dot-${dotIndex}`}
-                            className={['h-1.5 w-1.5 rounded-full', dotClassName].join(' ')}
-                          />
-                        ))}
+                      <div className="flex h-full min-h-0 flex-1 flex-col justify-between">
+                        <div className="flex min-h-[48px] flex-col items-center justify-start">
+                          <div
+                            className={[
+                              'text-sm font-semibold leading-none',
+                              dayTone === 'active'
+                                ? 'text-[var(--accent)]'
+                                : dayTone === 'partial'
+                                  ? 'text-[rgb(250,204,21)]'
+                                  : dayTone === 'done'
+                                    ? 'text-[var(--color-success)]'
+                                    : dayTone === 'missed'
+                                      ? 'text-[rgb(248,113,113)]'
+                                      : 'text-[var(--text-muted)]',
+                            ].join(' ')}
+                          >
+                            {day}
+                          </div>
+                          <div className="mt-1 flex h-[18px] items-start justify-center overflow-hidden">
+                            <div className={['max-w-full text-[8px] font-semibold uppercase leading-[1.05]', getTimelineLabelClass(dayTone)].join(' ')}>
+                              {dayLabel}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex min-h-[30px] flex-col justify-end">
+                          <div className="flex min-h-[12px] items-center justify-center gap-1">
+                            {dayDots.map((dot, dotIndex) => (
+                              <span key={`${dayDateKey}-mini-dot-${dotIndex}`} className="group/dot relative inline-flex">
+                                <span
+                                  className={['h-1.5 w-1.5 flex-shrink-0 rounded-full', dot.colorClass].join(' ')}
+                                  aria-label={`${dot.label}: ${dot.tooltip}`}
+                                />
+                                <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-32 -translate-x-1/2 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(11,16,30,0.96)] px-2 py-1.5 text-[10px] text-[var(--text-secondary)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] group-hover/dot:block">
+                                  <strong className="block text-[var(--text-primary)]">{dot.label}</strong>
+                                  {dot.tooltip}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-1 min-h-[14px] text-[8px] font-medium text-[rgb(var(--accent-soft-rgb))]">
+                            {formatCompactDateKey(dayDateKey)}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )
@@ -2270,6 +2564,7 @@ export default function AiMentorDashboardPage() {
   const location = useLocation()
   const { accessControl, subscription, getModuleAccess } = useSystemState()
   const dashboardUser = user as DashboardUser
+  const userId = dashboardUser?.id
   const { data: trial } = useGetTrialStatusQuery()
   const { data: todayEntry, refetch: refetchTodayEntry } = useGetTodayEntryQuery(undefined, {
     skip: !dashboardUser?.id,
@@ -2279,11 +2574,11 @@ export default function AiMentorDashboardPage() {
   })
   const currentDateKey = toDateKey(new Date())
   const yesterdayDateKey = useMemo(() => getRelativeDateKey(currentDateKey, -1), [currentDateKey])
-  const recoveryTarget = useMemo(
+  const rawRecoveryTarget = useMemo(
     () => getLatestRecoveryTarget(dailyHistory, currentDateKey),
     [dailyHistory, currentDateKey],
   )
-  const { dayNumber: journeyDay } = useUserProgress()
+  const { dayNumber: journeyDay, journeySteps } = useUserProgress()
   const {
     tasks: microTasks,
     isFetching: isFetchingMicroTasks,
@@ -2319,8 +2614,12 @@ export default function AiMentorDashboardPage() {
   const [hasRegeneratedMicroTasks, setHasRegeneratedMicroTasks] = useState(false)
   const [microtaskPromptIntent, setMicrotaskPromptIntent] = useState<MicrotaskPromptIntent | null>(null)
   const [microtaskPromptStage, setMicrotaskPromptStage] = useState<MicrotaskPromptStage>('choice')
-  const [microtaskNotice, setMicrotaskNotice] = useState<string | null>(null)
+  const [, setMicrotaskNotice] = useState<string | null>(null)
   const [openDayNoticeKey, setOpenDayNoticeKey] = useState<string | null>(null)
+  const [recoveryPromptDateKey, setRecoveryPromptDateKey] = useState<string | null>(null)
+  const [recoveryBlockedIntent, setRecoveryBlockedIntent] = useState<RecoveryBlockedIntent | null>(null)
+  const [resumeIntentAfterRecovery, setResumeIntentAfterRecovery] = useState<RecoveryBlockedIntent | null>(null)
+  const [optimisticTaskState, setOptimisticTaskState] = useState<Record<string, Partial<MicroTaskItem>>>({})
   const regenerationTimerRef = useRef<number | null>(null)
   const regenerationTickerRef = useRef<number | null>(null)
   const microtaskNoticeTimerRef = useRef<number | null>(null)
@@ -2365,6 +2664,23 @@ export default function AiMentorDashboardPage() {
     () => getMorningMeta(microtaskContextEntry?.content),
     [microtaskContextEntry],
   )
+  const applyOptimisticTask = (task: MicroTaskItem) => {
+    const override = optimisticTaskState[task.id]
+    if (!override) return task
+
+    const mergedMeta = override.meta && typeof override.meta === 'object' && !Array.isArray(override.meta)
+      ? {
+          ...(task.meta && typeof task.meta === 'object' && !Array.isArray(task.meta) ? task.meta : {}),
+          ...override.meta,
+        }
+      : task.meta
+
+    return {
+      ...task,
+      ...override,
+      meta: mergedMeta,
+    }
+  }
   const visibleMicroTasks = useMemo(() => {
     const dayTasks = microTasks.filter(task => {
       const createdDateKey = typeof task.createdAt === 'string' ? task.createdAt.slice(0, 10) : null
@@ -2383,8 +2699,33 @@ export default function AiMentorDashboardPage() {
       if (seen.has(task.id)) return false
       seen.add(task.id)
       return true
-    })
-  }, [activeMicrotaskDateKey, manualMicroTask, microTasks, microtaskContextEntryIds])
+    }).map(applyOptimisticTask)
+  }, [activeMicrotaskDateKey, manualMicroTask, microTasks, microtaskContextEntryIds, optimisticTaskState])
+  const todayMicroTasks = useMemo(() => {
+    const todayEntryIds = todayEntry?.id ? [todayEntry.id] : []
+
+    return microTasks
+      .filter((task) => {
+        const createdDateKey = typeof task.createdAt === 'string' ? task.createdAt.slice(0, 10) : null
+        if (createdDateKey === todayDateKey) return true
+        if (task.generatedFromEntryId && todayEntryIds.includes(task.generatedFromEntryId)) return true
+        return false
+      })
+      .map(applyOptimisticTask)
+  }, [applyOptimisticTask, microTasks, todayDateKey, todayEntry?.id])
+  const activeTodayMicroTasks = useMemo(
+    () => todayMicroTasks.filter(task => (task.status ?? 'PENDING') === 'PENDING' || (task.status === 'manual' && (task.meta as Record<string, unknown> | undefined)?.uiStatus !== 'done' && (task.meta as Record<string, unknown> | undefined)?.uiStatus !== 'skipped')),
+    [todayMicroTasks],
+  )
+  const completedTodayMicroTasks = useMemo(
+    () => todayMicroTasks.filter(task => {
+      const manualUiStatus = task.meta && typeof task.meta === 'object' && !Array.isArray(task.meta)
+        ? (task.meta as Record<string, unknown>).uiStatus
+        : null
+      return task.status === 'COMPLETED' || (task.status === 'manual' && manualUiStatus === 'done')
+    }),
+    [todayMicroTasks],
+  )
   const visibleMicroTaskProgress = useMemo(() => {
     const isDone = (task: MicroTaskItem) => {
       const manualUiStatus = task.meta && typeof task.meta === 'object' && !Array.isArray(task.meta)
@@ -2409,11 +2750,7 @@ export default function AiMentorDashboardPage() {
     return {
       activeCount,
       completedCount,
-      message: activeCount > 0
-        ? `Ви виконали завдання. До вечірньої сесії ще залишилося ${activeCount}.`
-        : completedCount > 0
-          ? 'Мікрозавдання виконані. Очікуйте вечірню сесію.'
-          : null,
+      message: null,
     }
   }, [visibleMicroTasks])
   const hasActiveMicroTasks = visibleMicroTaskProgress.activeCount > 0
@@ -2422,6 +2759,63 @@ export default function AiMentorDashboardPage() {
   const hasMorningAnswers = Boolean(morningAnswers && Object.keys(morningAnswers).length > 0)
   const hasServerRegeneratedMicroTasks = typeof morningMeta?.microTasksRegeneratedAt === 'string'
   const canContinueToEvening = Boolean(hasMorningAnswers || visibleMicroTasks.length > 0)
+  const canRegenerateTasks = hasRegenEligibleTasks && !hasRegeneratedMicroTasks && !hasServerRegeneratedMicroTasks && !isRegeneratingMicroTasks
+  const taskDaySteps = useMemo(() => (
+    journeySteps
+      .filter(step => step.id !== 'wheel')
+      .map(step => ({
+        id: step.id === 'report' ? 'analysis' : step.id,
+        label: step.id === 'report' ? 'Аналіз дня' : step.label,
+        status: step.status,
+      }))
+  ), [journeySteps])
+  const completedTaskDaySteps = taskDaySteps.filter(step => step.status === 'done').length
+  const taskProgressPercent = Math.round((completedTaskDaySteps / 4) * 100)
+  const taskRingRadius = 15
+  const taskRingCircumference = 2 * Math.PI * taskRingRadius
+  const taskRingOffset = taskRingCircumference * (1 - taskProgressPercent / 100)
+  const taskXpToday = visibleMicroTasks.reduce((sum, task) => {
+    const manualUiStatus = task.meta && typeof task.meta === 'object' && !Array.isArray(task.meta)
+      ? (task.meta as Record<string, unknown>).uiStatus
+      : null
+    const isDone = task.status === 'COMPLETED' || (task.status === 'manual' && manualUiStatus === 'done')
+    return isDone ? sum + (task.xpReward ?? 20) : sum
+  }, 0)
+  const allTasksResolved = visibleMicroTasks.length > 0 && visibleMicroTaskProgress.activeCount === 0
+  const yesterdayEntry = useMemo(
+    () => dailyHistory.find((entry) => toDateKey(entry.date) === yesterdayDateKey) ?? null,
+    [dailyHistory, yesterdayDateKey],
+  )
+  const yesterdayProgress = useMemo(
+    () => (yesterdayEntry ? getDailyHistoryProgress(yesterdayEntry, getEntryTaskStats(yesterdayEntry, microTasks)) : null),
+    [microTasks, yesterdayEntry],
+  )
+  const recoveryTarget = useMemo(() => {
+    const unfinishedYesterday = !yesterdayProgress
+      || (
+        !yesterdayProgress.completed
+        && !yesterdayProgress.completedLate
+        && !yesterdayProgress.skipped
+        && !yesterdayProgress.finalizedAt
+      )
+
+    if (currentDay > 1 && unfinishedYesterday) {
+      return {
+        dateKey: yesterdayDateKey,
+        session: (yesterdayProgress?.morningDone ? 'evening' : 'morning') as 'morning' | 'evening',
+      }
+    }
+
+    return rawRecoveryTarget
+  }, [currentDay, rawRecoveryTarget, yesterdayDateKey, yesterdayProgress])
+  const hasPendingYesterdayGate = useMemo(
+    () => (
+      recoveryTarget?.dateKey === yesterdayDateKey
+      || recoveryPromptDateKey === yesterdayDateKey
+      || cycleRecoveryDateKey === yesterdayDateKey
+    ),
+    [cycleRecoveryDateKey, recoveryPromptDateKey, recoveryTarget?.dateKey, yesterdayDateKey],
+  )
   const openDashboardTab = (
     tab: AiMentorDashboardTab,
     options?: {
@@ -2464,6 +2858,7 @@ export default function AiMentorDashboardPage() {
     setShowMorningSession(false)
     setShowEveningSession(false)
     setOpenDayNoticeKey(null)
+    setRecoveryPromptDateKey(null)
     openDashboardTab('microtasks', { dateKey })
   }
 
@@ -2471,7 +2866,48 @@ export default function AiMentorDashboardPage() {
     setShowMorningSession(false)
     setShowEveningSession(false)
     setOpenDayNoticeKey(null)
+    setRecoveryPromptDateKey(null)
     openDashboardTab('reports')
+  }
+
+  const openTodayAfterRecoveryDecision = (intent: RecoveryBlockedIntent | null) => {
+    switch (intent) {
+      case 'active_day':
+        setResumeIntentAfterRecovery('active_day')
+        setShowMorningSession(false)
+        setShowEveningSession(false)
+        openDashboardTab('cycle', { replace: true })
+        return
+      case 'tasks':
+        openMicrotasksTab()
+        return
+      case 'evening':
+        setCycleRecoveryDateKey(null)
+        setRecoveryPromptDateKey(null)
+        setOpenDayNoticeKey(null)
+        setShowMorningSession(false)
+        setShowEveningSession(true)
+        openDashboardTab('cycle', { session: 'evening' })
+        return
+      case 'morning':
+      default:
+        setCycleRecoveryDateKey(null)
+        setRecoveryPromptDateKey(null)
+        setOpenDayNoticeKey(null)
+        setShowEveningSession(false)
+        setShowMorningSession(true)
+        openDashboardTab('cycle', { session: 'morning' })
+    }
+  }
+
+  const openRecoveryPrompt = (dateKey: string, intent: RecoveryBlockedIntent = 'morning') => {
+    setOpenDayNoticeKey(dateKey)
+    setRecoveryPromptDateKey(dateKey)
+    setRecoveryBlockedIntent(intent)
+    setCycleRecoveryDateKey(dateKey)
+    setShowMorningSession(false)
+    setShowEveningSession(false)
+    openDashboardTab('cycle', { replace: true })
   }
 
   const openRecoveryDay = (dateKey: string, session: 'morning' | 'evening') => {
@@ -2504,6 +2940,8 @@ export default function AiMentorDashboardPage() {
       && (recoveryProgress?.morningDone || recoveryHasMorningAnswers || recoveryHasTasks)
     ) {
       setOpenDayNoticeKey(null)
+      setRecoveryPromptDateKey(null)
+      setRecoveryBlockedIntent(null)
       setCycleRecoveryDateKey(dateKey)
       setShowMorningSession(false)
       setShowEveningSession(false)
@@ -2512,31 +2950,85 @@ export default function AiMentorDashboardPage() {
     }
 
     setOpenDayNoticeKey(null)
+    setRecoveryPromptDateKey(null)
+    setRecoveryBlockedIntent(null)
     setCycleRecoveryDateKey(dateKey)
     setShowMorningSession(session === 'morning')
     setShowEveningSession(session === 'evening')
     openDashboardTab('cycle', { session, dateKey })
   }
   const handleSkipPreviousDay = async (dateKey: string) => {
-    const confirmed = window.confirm(
-      `Після пропуску дня ${formatCompactDateKey(dateKey)} ти більше не зможеш повернутися до його завершення. Відкрити сьогоднішній день?`,
-    )
-    if (!confirmed) return
-
     try {
       await skipPreviousDay({ date: `${dateKey}T12:00:00.000Z` }).unwrap()
       await refetchDailyHistory()
+      const nextIntent = recoveryBlockedIntent
       setCycleRecoveryDateKey(null)
+      setRecoveryPromptDateKey(null)
+      setRecoveryBlockedIntent(null)
       setOpenDayNoticeKey(null)
       setShowMorningSession(false)
       setShowEveningSession(false)
-      toast.success('Вчорашній день пропущено. Відкриваємо сьогоднішній.')
-      openDashboardTab('cycle', { session: 'morning' })
+      toast.success('Вчорашній день пропущено.')
+      openTodayAfterRecoveryDecision(nextIntent)
     } catch (error) {
       console.error('[AiMentorDashboard] skipPreviousDay failed', { dateKey, error })
       toast.error('Не вдалося пропустити вчорашній день.')
     }
   }
+  const handleCatchupFromTodayGuard = useCallback((yesterdayDay: DailyCycleEntry) => {
+    const dayKey = toDateKey(yesterdayDay.date)
+    const recoveryContent = getEntryContent(yesterdayDay)
+    const hasMorningDone = hasSessionAnswers(recoveryContent, 'morning')
+      || Boolean(
+        recoveryContent?.morningMeta
+        && typeof recoveryContent.morningMeta === 'object'
+        && !Array.isArray(recoveryContent.morningMeta)
+        && typeof (recoveryContent.morningMeta as Record<string, unknown>).completedAt === 'string',
+      )
+
+    openRecoveryDay(dayKey, hasMorningDone ? 'evening' : 'morning')
+  }, [openRecoveryDay])
+
+  const {
+    blockState: todayGuardBlockState,
+    tryOpenToday,
+    handleCatchup: handleTodayGuardCatchup,
+    handleSkipYesterday: handleTodayGuardSkip,
+    handleDismiss: handleTodayGuardDismiss,
+  } = useTodayGuard({
+    days: dailyHistory,
+    userId: userId ?? '',
+    isEnabled: Boolean(userId) && !isExpert && !isSuperAdmin,
+    hasTodayWork: Boolean(todayEntry) || todayMicroTasks.length > 0,
+    onCatchupDay: handleCatchupFromTodayGuard,
+  })
+  const todayGuardYesterdayProgress = useMemo(() => {
+    if (!todayGuardBlockState.yesterdayDay) return null
+
+    return getDailyHistoryProgress(
+      todayGuardBlockState.yesterdayDay,
+      getEntryTaskStats(todayGuardBlockState.yesterdayDay, microTasks),
+    )
+  }, [microTasks, todayGuardBlockState.yesterdayDay])
+  const todayGuardStepSummary = useMemo(() => {
+    if (!todayGuardBlockState.yesterdayDay || !todayGuardYesterdayProgress) return []
+
+    const content = getEntryContent(todayGuardBlockState.yesterdayDay)
+    const hasAnalysis = Boolean(
+      todayGuardBlockState.yesterdayDay.aiAnalysis?.trim()
+      || (content && typeof content.analysisGeneratedAt === 'string'),
+    )
+    const tasksDone = todayGuardYesterdayProgress.incompleteMicroTaskCount === 0
+      && todayGuardYesterdayProgress.hasProgress
+
+    return [
+      { id: 'morning', label: 'Ранок', done: todayGuardYesterdayProgress.morningDone },
+      { id: 'tasks', label: 'Мікрозавдання', done: tasksDone },
+      { id: 'evening', label: 'Вечір', done: todayGuardYesterdayProgress.eveningDone },
+      { id: 'analysis', label: 'Аналіз', done: hasAnalysis },
+    ]
+  }, [todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
+
   const openEveningSession = () => {
     console.info('[AiMentorDashboard] openEveningSession', {
       recoveryTargetDateKey: recoveryTarget?.dateKey ?? null,
@@ -2551,6 +3043,7 @@ export default function AiMentorDashboardPage() {
     }
 
     setCycleRecoveryDateKey(null)
+    setRecoveryPromptDateKey(null)
     setOpenDayNoticeKey(null)
     setShowMorningSession(false)
     setShowEveningSession(true)
@@ -2730,7 +3223,7 @@ export default function AiMentorDashboardPage() {
     setMicrotaskPromptStage('edit')
   }
 
-  const handleCompleteMicroTask = (taskId: string) => {
+  const handleCompleteMicroTask = async (taskId: string) => {
     const manualTask = visibleMicroTasks.find(task => task.id === taskId && task.status === 'manual')
     if (manualTask) {
       if (manualTask.persist === false) {
@@ -2744,32 +3237,49 @@ export default function AiMentorDashboardPage() {
         }
         setManualMicroTask(updated)
         saveManualMicroTask(dashboardUser?.id ?? 'guest', activeMicrotaskDateKey, updated)
-        announceMicrotaskProgress(
-          visibleMicroTaskProgress.activeCount > 1
-            ? `Ви виконали завдання. До вечірньої сесії ще залишилося ${visibleMicroTaskProgress.activeCount - 1}.`
-            : 'Мікрозавдання виконані. Очікуйте вечірню сесію.',
-        )
+        announceMicrotaskProgress(getMicrotaskProgressToast('done', visibleMicroTaskProgress.activeCount - 1))
         return
       }
 
       void completeTask(taskId)
-      announceMicrotaskProgress(
-        visibleMicroTaskProgress.activeCount > 1
-          ? `Ви виконали завдання. До вечірньої сесії ще залишилося ${visibleMicroTaskProgress.activeCount - 1}.`
-          : 'Мікрозавдання виконані. Очікуйте вечірню сесію.',
-      )
+      announceMicrotaskProgress(getMicrotaskProgressToast('done', visibleMicroTaskProgress.activeCount - 1))
       return
     }
 
-    void completeTask(taskId)
-    announceMicrotaskProgress(
-      visibleMicroTaskProgress.activeCount > 1
-        ? `Ви виконали завдання. До вечірньої сесії ще залишилося ${visibleMicroTaskProgress.activeCount - 1}.`
-        : 'Мікрозавдання виконані. Очікуйте вечірню сесію.',
-    )
+    const previousTask = visibleMicroTasks.find(task => task.id === taskId)
+    if (!previousTask) return
+
+    const optimisticCompletedAt = new Date().toISOString()
+    setOptimisticTaskState(prev => ({
+      ...prev,
+      [taskId]: {
+        status: 'COMPLETED',
+        completedAt: optimisticCompletedAt,
+      },
+    }))
+    announceMicrotaskProgress(getMicrotaskProgressToast('done', visibleMicroTaskProgress.activeCount - 1))
+
+    try {
+      await completeTask(taskId).unwrap()
+    } catch (error) {
+      console.error('[AiMentorDashboard] complete microtask failed', error)
+      setOptimisticTaskState(prev => {
+        const next = { ...prev }
+        delete next[taskId]
+        return next
+      })
+      toast.error('Не вдалося позначити завдання виконаним.')
+      return
+    }
+
+    setOptimisticTaskState(prev => {
+      const next = { ...prev }
+      delete next[taskId]
+      return next
+    })
   }
 
-  const handleSkipMicroTask = (taskId: string) => {
+  const handleSkipMicroTask = async (taskId: string) => {
     const manualTask = visibleMicroTasks.find(task => task.id === taskId && task.status === 'manual')
     if (manualTask) {
       if (manualTask.persist === false) {
@@ -2786,29 +3296,44 @@ export default function AiMentorDashboardPage() {
           setManualMicroTask(null)
           saveManualMicroTask(dashboardUser?.id ?? 'guest', activeMicrotaskDateKey, null)
         }, 1500)
-        announceMicrotaskProgress(
-          visibleMicroTaskProgress.activeCount > 1
-            ? `Завдання пропущено. До вечірньої сесії ще залишилося ${visibleMicroTaskProgress.activeCount - 1}.`
-            : 'Мікрозавдання завершені. Очікуйте вечірню сесію.',
-        )
+        announceMicrotaskProgress(getMicrotaskProgressToast('skipped', visibleMicroTaskProgress.activeCount - 1))
         return
       }
 
       void skipTask(taskId)
-      announceMicrotaskProgress(
-        visibleMicroTaskProgress.activeCount > 1
-          ? `Завдання пропущено. До вечірньої сесії ще залишилося ${visibleMicroTaskProgress.activeCount - 1}.`
-          : 'Мікрозавдання завершені. Очікуйте вечірню сесію.',
-      )
+      announceMicrotaskProgress(getMicrotaskProgressToast('skipped', visibleMicroTaskProgress.activeCount - 1))
       return
     }
 
-    void skipTask(taskId)
-    announceMicrotaskProgress(
-      visibleMicroTaskProgress.activeCount > 1
-        ? `Завдання пропущено. До вечірньої сесії ще залишилося ${visibleMicroTaskProgress.activeCount - 1}.`
-        : 'Мікрозавдання завершені. Очікуйте вечірню сесію.',
-    )
+    const previousTask = visibleMicroTasks.find(task => task.id === taskId)
+    if (!previousTask) return
+
+    setOptimisticTaskState(prev => ({
+      ...prev,
+      [taskId]: {
+        status: 'skipped',
+      },
+    }))
+    announceMicrotaskProgress(getMicrotaskProgressToast('skipped', visibleMicroTaskProgress.activeCount - 1))
+
+    try {
+      await skipTask(taskId).unwrap()
+    } catch (error) {
+      console.error('[AiMentorDashboard] skip microtask failed', error)
+      setOptimisticTaskState(prev => {
+        const next = { ...prev }
+        delete next[taskId]
+        return next
+      })
+      toast.error('Не вдалося пропустити завдання.')
+      return
+    }
+
+    setOptimisticTaskState(prev => {
+      const next = { ...prev }
+      delete next[taskId]
+      return next
+    })
   }
 
   useEffect(() => {
@@ -2912,6 +3437,45 @@ export default function AiMentorDashboardPage() {
     openRecoveryDay,
     showEveningSession,
     showMorningSession,
+  ])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const requestedSession = params.get('session')
+    const isCycleSessionRoute = activeTab === 'cycle' && (requestedSession === 'morning' || requestedSession === 'evening')
+
+    if (!isCycleSessionRoute) return
+    if (!hasPendingYesterdayGate) return
+    if (cycleRecoveryDateKey === yesterdayDateKey && recoveryPromptDateKey === yesterdayDateKey) return
+
+    setShowMorningSession(false)
+    setShowEveningSession(false)
+    openRecoveryPrompt(yesterdayDateKey, requestedSession === 'evening' ? 'evening' : 'morning')
+  }, [
+    activeTab,
+    cycleRecoveryDateKey,
+    hasPendingYesterdayGate,
+    location.search,
+    openRecoveryPrompt,
+    recoveryPromptDateKey,
+    yesterdayDateKey,
+  ])
+
+  useEffect(() => {
+    if (!hasPendingYesterdayGate) return
+    if (!showMorningSession && !showEveningSession) return
+    if (cycleRecoveryDateKey === yesterdayDateKey) return
+
+    setShowMorningSession(false)
+    setShowEveningSession(false)
+    openRecoveryPrompt(yesterdayDateKey, showEveningSession ? 'evening' : 'morning')
+  }, [
+    cycleRecoveryDateKey,
+    hasPendingYesterdayGate,
+    openRecoveryPrompt,
+    showEveningSession,
+    showMorningSession,
+    yesterdayDateKey,
   ])
 
   useEffect(() => {
@@ -3025,10 +3589,16 @@ export default function AiMentorDashboardPage() {
                   </div>
                 </div>
               ) : (
-                <WheelInlineFrame
-                  isOpen
-                  onClose={() => openDashboardTab('session')}
-                />
+                <>
+                  <WheelMonthlyBoard
+                    onOpenInline={() => setShowWheelFrame(true)}
+                    onOpenReports={openReportsTab}
+                  />
+                  <WheelInlineFrame
+                    isOpen={showWheelFrame}
+                    onClose={() => setShowWheelFrame(false)}
+                  />
+                </>
               )}
             </div>
           )}
@@ -3037,16 +3607,22 @@ export default function AiMentorDashboardPage() {
               <CycleSummaryCard
                 onLockedOpen={() => setIsExpiredTrialModalOpen(true)}
                 onOpenWheelFrame={() => setShowWheelFrame(true)}
-                onStartMorningSession={() => {
+                onStartMorningSession={() => tryOpenToday(() => {
+                  setRecoveryPromptDateKey(null)
                   setOpenDayNoticeKey(null)
                   setCycleRecoveryDateKey(null)
                   setShowEveningSession(false)
                   setShowMorningSession(true)
                   openDashboardTab('cycle', { session: 'morning' })
-                }}
-                onStartEveningSession={openEveningSession}
+                })}
+                onStartEveningSession={() => tryOpenToday(() => {
+                  openEveningSession()
+                })}
                 onOpenRecoveryDay={openRecoveryDay}
-                onShowTasks={openMicrotasksTab}
+                onTryOpenToday={tryOpenToday}
+                onShowTasks={() => tryOpenToday(() => {
+                  openMicrotasksTab()
+                })}
                 onShowReports={openReportsTab}
                 recoveryTargetDateKey={recoveryTarget?.dateKey ?? null}
                 recoveryTargetSession={recoveryTarget?.session ?? null}
@@ -3106,6 +3682,7 @@ export default function AiMentorDashboardPage() {
                 }}
                 openDayNoticeKey={openDayNoticeKey}
                 setOpenDayNoticeKey={setOpenDayNoticeKey}
+                recoveryPromptDateKey={recoveryPromptDateKey}
                 recoveryDateKey={cycleRecoveryDateKey}
                 yesterdayDateKey={yesterdayDateKey}
                 showMorningSession={showMorningSession}
@@ -3114,6 +3691,11 @@ export default function AiMentorDashboardPage() {
                 hasMorningAnswers={hasMorningAnswers}
                 hasActiveMicroTasks={hasActiveMicroTasks}
                 hasTasksToday={hasTasksToday}
+                todayMicroTaskCount={todayMicroTasks.length}
+                activeTodayMicroTaskCount={activeTodayMicroTasks.length}
+                completedTodayMicroTaskCount={completedTodayMicroTasks.length}
+                resumeIntentAfterRecovery={resumeIntentAfterRecovery}
+                onConsumeResumeIntent={() => setResumeIntentAfterRecovery(null)}
               />
             </div>
           )}
@@ -3250,38 +3832,6 @@ export default function AiMentorDashboardPage() {
                 </div>
               ) : null}
 
-              {recoveryTarget?.dateKey && recoveryTarget.session ? (
-                <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200">
-                        Спочатку заверш вчора
-                      </p>
-                      <p className="mt-1 text-sm text-[var(--text-primary)]">
-                        День {formatCompactDateKey(recoveryTarget.dateKey)} ще не закрито. Заверши його або пропусти, щоб перейти до сьогодні.
-                      </p>
-                    </div>
-                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                      <button
-                        type="button"
-                        className="btn-liquid-dashboard btn-liquid-dashboard--primary w-full sm:w-auto"
-                        onClick={() => openRecoveryDay(recoveryTarget.dateKey, recoveryTarget.session ?? 'morning')}
-                      >
-                        Завершити вчорашній день
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-liquid-dashboard btn-liquid-dashboard--ice w-full sm:w-auto"
-                        disabled={isSkippingPreviousDay}
-                        onClick={() => void handleSkipPreviousDay(recoveryTarget.dateKey)}
-                      >
-                        {isSkippingPreviousDay ? 'Пропускаємо...' : 'Пропустити'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
               {isPausedTrial ? (
                 <div className="dashboard-liquid-card--soft p-5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgb(var(--accent-soft-rgb))]">
@@ -3312,6 +3862,54 @@ export default function AiMentorDashboardPage() {
                 </div>
               ) : (
                 <>
+                  <div
+                    data-testid="day-progress"
+                    className="grid gap-4 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.035)] p-4 lg:grid-cols-[1fr_auto] lg:items-center"
+                  >
+                    <div className="flex flex-wrap items-center gap-3">
+                      {taskDaySteps.map((step) => (
+                        <div
+                          key={step.id}
+                          className={[
+                            'inline-flex min-h-[48px] items-center gap-2 rounded-[16px] border px-4 py-2 text-sm font-semibold transition-colors',
+                            step.status === 'done'
+                              ? 'border-[rgba(29,158,117,0.3)] bg-[rgba(29,158,117,0.15)] text-[#1D9E75]'
+                              : step.status === 'active'
+                                ? 'border-[#378ADD] bg-[rgba(55,138,221,0.15)] text-[#378ADD]'
+                                : 'border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] text-[rgba(255,255,255,0.3)]',
+                          ].join(' ')}
+                        >
+                          <span>{step.status === 'done' ? '✓' : step.status === 'active' ? '▶' : '🔒'}</span>
+                          {step.label}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-5 lg:justify-end">
+                      <div className="text-right">
+                        <p className="text-[2rem] font-black leading-none text-[#F2B24B]">+{taskXpToday}</p>
+                        <p className="mt-1 text-sm font-semibold text-[var(--text-muted)]">XP сьогодні</p>
+                      </div>
+                      <div className="relative flex h-12 w-12 items-center justify-center">
+                        <svg viewBox="0 0 40 40" className="h-12 w-12 -rotate-90">
+                          <circle cx="20" cy="20" r={taskRingRadius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
+                          <circle
+                            cx="20"
+                            cy="20"
+                            r={taskRingRadius}
+                            fill="none"
+                            stroke="#378ADD"
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={taskRingCircumference}
+                            strokeDashoffset={taskRingOffset}
+                          />
+                        </svg>
+                        <span className="absolute text-sm font-bold text-[var(--text-primary)]">{taskProgressPercent}%</span>
+                      </div>
+                    </div>
+                  </div>
+
                   {!hasTasksToday ? (
                     <div className="dashboard-liquid-card--soft p-5">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgb(var(--accent-soft-rgb))]">
@@ -3346,13 +3944,24 @@ export default function AiMentorDashboardPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-                          Мікрозавдання
-                        </p>
-                        <p className="mt-1 text-sm text-[var(--text-muted)]">
-                          Завдання формуються асинхронно після ранкової сесії. Тут вони оновлюються автоматично без перезавантаження.
-                        </p>
+                      <div
+                        data-testid="ai-banner"
+                        className="grid gap-3 rounded-[24px] border border-[rgba(55,138,221,0.28)] bg-[rgba(21,40,72,0.35)] px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center"
+                      >
+                        <div className="flex min-w-0 items-start gap-4">
+                          <span className="mt-1 inline-flex h-3 w-3 flex-shrink-0 rounded-full bg-[#378ADD] shadow-[0_0_0_6px_rgba(55,138,221,0.14)] animate-pulse" />
+                          <p className="text-base font-medium leading-7 text-[var(--text-primary)]">
+                            AI сформував <strong>{visibleMicroTasks.length} завдання</strong> на основі ранкової рефлексії
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-liquid-dashboard btn-liquid-dashboard--ice w-full sm:w-auto"
+                          onClick={() => openMicrotaskPrompt('regenerate')}
+                          disabled={!canRegenerateTasks}
+                        >
+                          ↺ Перегенерувати
+                        </button>
                       </div>
                       {isRegeneratingMicroTasks ? (
                         <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.22)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.11),rgba(255,255,255,0.03))] p-4">
@@ -3405,70 +4014,78 @@ export default function AiMentorDashboardPage() {
                           </button>
                         </div>
                       ) : null}
-                      {microtaskNotice ? (
-                        <div className="rounded-2xl border border-[rgba(var(--accent-soft-rgb),0.18)] bg-[rgba(var(--accent-rgb),0.08)] px-4 py-3 text-sm text-[var(--text-primary)]">
-                          {microtaskNotice}
-                        </div>
-                      ) : visibleMicroTaskProgress.message ? (
-                        <div className="rounded-2xl border border-[rgba(var(--accent-soft-rgb),0.18)] bg-[rgba(var(--accent-rgb),0.08)] px-4 py-3 text-sm text-[var(--text-primary)]">
-                          {visibleMicroTaskProgress.message}
-                        </div>
-                      ) : null}
-                      {isFetchingMicroTasks && visibleMicroTasks.length === 0 ? (
-                        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-5 text-center">
-                          <p className="text-sm text-[var(--text-muted)]">Оновлюємо мікрозавдання...</p>
-                        </div>
-                      ) : (
-                        <div className={isRegeneratingMicroTasks ? 'pointer-events-none opacity-60' : ''}>
-                          <MicroTaskList
-                            tasks={visibleMicroTasks}
-                            title="Активні та завершені задачі"
-                            onComplete={handleCompleteMicroTask}
-                            onDelete={taskId => {
-                              void deleteTask(taskId)
-                            }}
-                            onSkip={handleSkipMicroTask}
-                            onSetProgress={(taskId, progressPercent) => {
-                              void updateProgress(taskId, progressPercent)
-                            }}
-                            onToggleStep={(taskId, stepIndex, done) => {
-                              const manual = visibleMicroTasks.find(task => task.id === taskId && task.status === 'manual')
-                              if (manual) {
-                                const nextSteps = Array.isArray(manual.stepsCompleted) ? [...manual.stepsCompleted] : []
-                                nextSteps[stepIndex] = done
-                                const updated: MicroTaskItem = {
-                                  ...manual,
-                                  stepsCompleted: nextSteps,
-                                }
-                                setManualMicroTask(updated)
-                                saveManualMicroTask(dashboardUser?.id ?? 'guest', activeMicrotaskDateKey, updated)
-                                return
+                      <div className={isRegeneratingMicroTasks ? 'pointer-events-none opacity-60' : ''}>
+                        <MicroTaskList
+                          tasks={visibleMicroTasks}
+                          isLoading={isFetchingMicroTasks}
+                          activeEmptyText="Задачі ще формуються AI після ранкової сесії"
+                          title="Активні та завершені задачі"
+                          onComplete={handleCompleteMicroTask}
+                          onDelete={taskId => {
+                            void deleteTask(taskId)
+                          }}
+                          onSkip={handleSkipMicroTask}
+                          onSetProgress={(taskId, progressPercent) => {
+                            void updateProgress(taskId, progressPercent)
+                          }}
+                          onToggleStep={(taskId, stepIndex, done) => {
+                            const manual = visibleMicroTasks.find(task => task.id === taskId && task.status === 'manual')
+                            if (manual) {
+                              const nextSteps = Array.isArray(manual.stepsCompleted) ? [...manual.stepsCompleted] : []
+                              nextSteps[stepIndex] = done
+                              const updated: MicroTaskItem = {
+                                ...manual,
+                                stepsCompleted: nextSteps,
                               }
-                              void updateStep(taskId, stepIndex, done)
-                            }}
-                          />
-                        </div>
-                      )}
-                      {canContinueToEvening ? (
-                        <div className="grid gap-3 rounded-2xl border border-[rgba(var(--accent-rgb),0.14)] bg-[rgba(var(--accent-rgb),0.06)] px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                              setManualMicroTask(updated)
+                              saveManualMicroTask(dashboardUser?.id ?? 'guest', activeMicrotaskDateKey, updated)
+                              return
+                            }
+                            void updateStep(taskId, stepIndex, done)
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={openEditMicrotaskList}
+                        className="w-full rounded-[20px] border border-dashed border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.02)] px-4 py-3 text-left text-sm font-medium text-[var(--text-secondary)] transition-colors hover:border-[rgba(255,255,255,0.24)] hover:text-[var(--text-primary)]"
+                      >
+                        + Написати власне завдання
+                      </button>
+                      {canContinueToEvening && !showEveningSession ? (
+                        <div
+                          data-testid="next-step-cta"
+                          className={[
+                            'grid gap-3 rounded-2xl px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center',
+                            allTasksResolved
+                              ? 'border border-[rgba(29,158,117,0.24)] bg-[rgba(29,158,117,0.10)]'
+                              : 'border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)]',
+                          ].join(' ')}
+                        >
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-[var(--text-primary)]">
-                              {visibleMicroTaskProgress.activeCount > 0
-                                ? `Ви виконали завдання. До вечірньої сесії ще залишилося ${visibleMicroTaskProgress.activeCount}.`
-                                : 'Мікрозавдання зібрані. Очікуйте вечірню сесію.'}
+                              {allTasksResolved
+                                ? 'Мікрозавдання зібрані. Збережи ритм.'
+                                : `Ще ${visibleMicroTaskProgress.activeCount} завдань чекають завершення.`}
                             </p>
                             <p className="mt-1 text-xs text-[var(--text-muted)]">
-                              {visibleMicroTaskProgress.activeCount > 0
-                                ? 'Доведи решту до кінця або переходь далі, якщо вже достатньо виконано.'
-                                : 'Збережи ритм і закрий день вечірньою сесією.'}
+                              {allTasksResolved
+                                ? 'Заверши день вечірньою сесією і отримай AI-аналіз.'
+                                : 'Закрий або пропусти активні завдання, щоб перейти до вечірньої сесії.'}
                             </p>
                           </div>
                           <button
                             type="button"
-                            className="btn-liquid-dashboard btn-liquid-dashboard--primary w-full sm:w-auto"
+                            className={[
+                              'btn-liquid-dashboard w-full sm:w-auto',
+                              allTasksResolved
+                                ? 'btn-liquid-dashboard--primary'
+                                : 'btn-liquid-dashboard--ice opacity-70',
+                            ].join(' ')}
                             onClick={openEveningSession}
+                            disabled={!allTasksResolved}
                           >
-                            {visibleMicroTaskProgress.activeCount > 0 ? 'Продовжити' : 'Перейти до вечора'}
+                            Перейти до вечора
                           </button>
                         </div>
                       ) : null}
@@ -3500,6 +4117,86 @@ export default function AiMentorDashboardPage() {
           </div>
         </div>
       )}
+
+      <BaseModal
+        isOpen={todayGuardBlockState.isOpen}
+        onClose={handleTodayGuardDismiss}
+        overlayClassName="bg-[rgba(6,10,18,0.78)]"
+        panelClassName="max-w-[34rem] rounded-[24px] border border-yellow-300/45 bg-[linear-gradient(180deg,rgba(250,204,21,0.14),rgba(18,24,36,0.98)_42%,rgba(10,14,24,0.98))] p-0 shadow-[0_30px_90px_rgba(0,0,0,0.38)]"
+      >
+        <div
+          data-testid="yesterday-confirm-block"
+          className="rounded-[24px] border border-yellow-300/25 bg-[rgba(250,204,21,0.05)] p-5"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-yellow-300">
+                Вчорашній день не закрито
+              </p>
+              <p className="mt-1 text-lg font-semibold text-yellow-50">
+                {todayGuardBlockState.yesterdayDay ? formatVerboseDate(todayGuardBlockState.yesterdayDay.date) : 'Учора'}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-yellow-50/85">
+                Спочатку заверши вчорашній день або свідомо пропусти його. Повернутися до нього після пропуску більше не вийде.
+              </p>
+            </div>
+            <button
+              type="button"
+              data-testid="dismiss-btn"
+              onClick={handleTodayGuardDismiss}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[var(--text-muted)] transition-colors hover:bg-white/10 hover:text-[var(--text-primary)]"
+              aria-label="Закрити"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {todayGuardStepSummary.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {todayGuardStepSummary.map((step) => (
+                <span
+                  key={step.id}
+                  className={[
+                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-medium',
+                    step.done
+                      ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                      : 'border-white/10 bg-white/5 text-white/55',
+                  ].join(' ')}
+                >
+                  {step.label} {step.done ? '✓' : '✗'}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-4 rounded-2xl border border-yellow-300/18 bg-yellow-300/10 px-4 py-3 text-sm text-yellow-50/90">
+            Якщо обереш пропуск, вчорашній день одразу стане історією без можливості відповісти пізніше.
+          </div>
+
+          <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              data-testid="catchup-confirm-btn"
+              onClick={handleTodayGuardCatchup}
+              className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-yellow-300 bg-yellow-300/14 px-4 py-2 text-sm font-semibold text-yellow-300 transition-colors hover:bg-yellow-300/20"
+            >
+              🕐 Завершити вчора
+            </button>
+            <button
+              type="button"
+              data-testid="skip-yesterday-btn"
+              onClick={() => {
+                void handleTodayGuardSkip().catch(() => {
+                  toast.error('Не вдалося пропустити вчорашній день.')
+                })
+              }}
+              className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-white/12 bg-white/5 px-4 py-2 text-sm font-semibold text-white/55 transition-colors hover:border-white/18 hover:bg-white/8 hover:text-white/75"
+            >
+              Пропустити вчора
+            </button>
+          </div>
+        </div>
+      </BaseModal>
 
       <ExpiredTrialModal
         isOpen={isExpiredTrialModalOpen}

@@ -80,7 +80,7 @@ export default function BecomeExpertSection() {
         <div>
           <h3 className="text-lg font-semibold text-[color:var(--text-primary)]">🤖 Стати ментором</h3>
           <p className="text-sm text-[color:var(--text-secondary)] mt-1">
-            Підключи власного Telegram-бота і з'явись у списку менторів. Твої студенти зможуть отримати AI-ментора від тебе.
+            Підключи власного Telegram-бота і з'явись у списку менторів. Твої студенти зможуть отримати ментора від тебе.
           </p>
         </div>
         <button
@@ -98,7 +98,7 @@ export default function BecomeExpertSection() {
       <div>
         <h3 className="text-lg font-semibold text-[color:var(--text-primary)]">🤖 Підключення бота</h3>
         <p className="text-sm text-[color:var(--text-secondary)] mt-1">
-          Отримай токен від <strong>@BotFather</strong> та заповни форму. Ми з'єднаємо твій AI-бот з платформою.
+          Отримай токен від <strong>@BotFather</strong> та заповни форму. Ми з'єднаємо твій бот з платформою.
         </p>
       </div>
 

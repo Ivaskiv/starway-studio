@@ -82,7 +82,7 @@ async function generateBannerForSegment(
         content: `Створи рекламний банер.
 ${segmentPrompts[segment]}
 Дані платформи: ${JSON.stringify(data)}
-Продукт: Starway — AI ментор.
+Продукт: Starway — ABsystem.
 
 JSON:
 {
@@ -101,13 +101,13 @@ JSON:
       headline: typeof parsed.headline === 'string' ? parsed.headline : 'Starway. Від стану до результату.',
       subheadline: typeof parsed.subheadline === 'string'
         ? parsed.subheadline
-        : 'AI ментор який веде, а не мотивує.',
+        : 'ABsystem який веде, а не мотивує.',
       ctaText: typeof parsed.ctaText === 'string' ? parsed.ctaText : 'Спробувати',
     }
   } catch {
     return {
       headline: 'Starway. Від стану до результату.',
-      subheadline: 'AI ментор який веде, а не мотивує.',
+      subheadline: 'ABsystem який веде, а не мотивує.',
       ctaText: 'Спробувати',
     }
   }

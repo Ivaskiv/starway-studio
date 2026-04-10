@@ -4,38 +4,47 @@ import { useAttachEmailMutation } from '@/features/auth/services/auth.api'
 import { selectUserRole } from '@/features/auth/services/auth.slice'
 import { MicroTaskList } from '@/features/microTask/components/MicroTaskList'
 import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
+import { useUserProgress } from '@/features/user/hooks/useUserProgress'
+import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetTrialStatusQuery, useStartTrialMutation } from '@/features/trial/services/trial.api'
 
 import { useMentorAccess } from '../hooks/useMentorAccess'
 
 import MentorLocked from '../components/MentorLocked'
 import MentorWorkspace from '../components/mentorWorkspace/MentorWorkspace'
+import TelegramEnhancementBanner from '../components/TelegramEnhancementBanner'
 
 import AIMentorChat from '../components/AIMentorChat'
 import GamificationWidget from '@/features/gamification/components/GamificationWidget'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useGetTelegramStatusQuery } from '@/features/auth/services/auth.api'
 
 function DailyStatusBar() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { data: trial } = useGetTrialStatusQuery()
+  const { dayNumber: journeyDay } = useUserProgress()
+  const { accessControl, subscription } = useSystemState()
   const {
     tasks: microTasks,
     completeTask,
+    deleteTask,
     skipTask,
+    updateProgress,
     updateStep,
   } = useMicroTasks()
 
   const now = new Date()
   const hour = now.getHours()
-  const currentDay = trial?.currentDay ?? 0
-  const isActive = trial?.isActive ?? false
+  const currentDay = journeyDay || (trial?.currentDay ?? 0)
+  const isActive = Boolean(trial?.isActive || trial?.isPaid || subscription?.isActive || accessControl?.hasSubscription)
 
   const items = [
     {
       icon: '🌞',
       label: 'Ранкові питання',
-      sub: '6 питань · ~5 хв',
+      sub: '6 + 4 питань · ~5 хв',
       available: hour >= 9 && isActive,
       done: false,
       path: '/dashboard/cycle?session=morning',
@@ -62,6 +71,17 @@ function DailyStatusBar() {
   ] as const
 
   const activeTasks = microTasks.filter(t => (t.status ?? 'PENDING') === 'PENDING')
+  const microTasksRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get('section') !== 'tasks') return
+
+    microTasksRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }, [location.search])
 
   return (
     <div className="space-y-3">
@@ -106,7 +126,11 @@ function DailyStatusBar() {
       </div>
 
       {isActive && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+        <div
+          id="mentor-microtasks"
+          ref={microTasksRef}
+          className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4"
+        >
           <div className="mb-3 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
               Мікрозавдання
@@ -122,8 +146,14 @@ function DailyStatusBar() {
             onComplete={id => {
               void completeTask(id)
             }}
+            onDelete={id => {
+              void deleteTask(id)
+            }}
             onSkip={id => {
               void skipTask(id)
+            }}
+            onSetProgress={(taskId, progressPercent) => {
+              void updateProgress(taskId, progressPercent)
             }}
             onToggleStep={(taskId, stepIndex, done) => {
               void updateStep(taskId, stepIndex, done)
@@ -148,6 +178,9 @@ export default function AIMentorPage() {
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false)
   const showAsUser = !isSuperAdmin || previewAsUser
   const { data: trial } = useGetTrialStatusQuery()
+  const { data: telegramStatus } = useGetTelegramStatusQuery(undefined, {
+    skip: !showAsUser,
+  })
   const { tasks: microTasks, isFetching: isFetchingMicroTasks } = useMicroTasks()
   const [startTrial] = useStartTrialMutation()
   const [attachEmail] = useAttachEmailMutation()
@@ -210,9 +243,16 @@ export default function AIMentorPage() {
         </div>
       )}
 
+      {showAsUser && (
+        <TelegramEnhancementBanner
+          botActive={telegramStatus?.botActive ?? false}
+          linked={telegramStatus?.linked ?? false}
+        />
+      )}
+
       <div className="flex flex-wrap gap-2">
         {[
-          { id: 'session', label: 'Сесія', active: true },
+          { id: 'session', label: 'Мій шлях', active: true },
           { id: 'wheel', label: 'Колесо', path: ROUTES.WHEEL },
           { id: 'report', label: 'Звіт', path: ROUTES.PROGRESS },
           { id: 'progress', label: 'Прогрес', path: ROUTES.PROGRESS },
@@ -242,10 +282,10 @@ export default function AIMentorPage() {
           </p>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             {pendingTaskCount > 0
-              ? `AI уже підготував ${pendingTaskCount} активних мікрозавдання.`
+              ? `Ментор уже підготував ${pendingTaskCount} активних мікрозавдання.`
               : isFetchingMicroTasks
                 ? 'Оновлюємо мікрозавдання після ранкової сесії...'
-                : 'AI ще допрацьовує мікрозавдання. Зазвичай вони з’являються за 5–15 секунд.'}
+                : 'Ще формуємо мікрозавдання. Зазвичай вони з’являються за 5–15 секунд.'}
           </p>
           <p className="mt-2 text-xs text-[var(--text-muted)]">
             Джерело: {source || 'невідомо'}
@@ -302,14 +342,14 @@ export default function AIMentorPage() {
             <div className="mb-6 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)]">
               <div className="p-6">
                 <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-                  AI МЕНТОР
+                  МЕНТОР
                 </p>
                 <h2 className="text-xl font-bold text-[var(--text-primary)]">
                   Персональний коуч 24/7
                 </h2>
                 <p className="mt-2 text-sm text-[var(--text-muted)]">
                   Ранкові питання, вечірні афірмації, колесо балансу,
-                  мікрозавдання та AI аналіз твого стану.
+                  мікрозавдання та глибокий аналіз твого стану.
                 </p>
                 <div className="mt-4 grid grid-cols-3 gap-3">
                   {[

@@ -37,7 +37,7 @@ export default function RequestsCollector({ onClose, sessionId }: RequestsCollec
 
   if (sent) {
     return (
-      <div className="rounded-2xl border border-teal-400/25 bg-teal-400/[0.06] backdrop-blur-xl p-6 text-center">
+      <div className="rounded-2xl border border-teal-400/25 bg-teal-400/[0.06] p-6 text-center">
         <div className="text-3xl mb-3">✦</div>
         <p className="text-[14px] font-semibold text-teal-200 mb-1">Запит надіслано!</p>
         <p className="text-[12px] text-white/40 mb-4">Ментор відповість протягом 24 годин</p>
@@ -52,7 +52,7 @@ export default function RequestsCollector({ onClose, sessionId }: RequestsCollec
   }
 
   return (
-    <div className="rounded-2xl border border-white/[0.1] bg-white/[0.03] backdrop-blur-xl p-5 relative overflow-hidden">
+    <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.03] p-5">
       {/* accent glow */}
       <div className="pointer-events-none absolute -top-8 -right-8 w-32 h-32 rounded-full bg-[rgb(var(--accent-rgb))] opacity-[0.06] blur-2xl" />
 
@@ -102,6 +102,7 @@ export default function RequestsCollector({ onClose, sessionId }: RequestsCollec
         <textarea
           value={question}
           onChange={e => setQuestion(e.target.value)}
+          onKeyDown={(event) => event.stopPropagation()}
           rows={2}
           placeholder="Що саме хочеш опрацювати?"
           className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-[rgba(var(--accent-rgb),0.4)] transition-colors resize-none"

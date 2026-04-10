@@ -46,7 +46,7 @@ export function useOwnerIntakeForm() {
       const funnelPayload = toOwnerIntakeFunnelPayload(values);
       const funnel = await generateOwnerFunnel(funnelPayload).unwrap();
 
-      toast.success('Створено продукт і AI-воронку для вибраного owner.');
+      toast.success('Створено продукт і воронку для вибраного owner.');
 
       return {
         productId: product.id,

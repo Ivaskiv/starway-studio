@@ -2,18 +2,13 @@ import type { Prisma, UserBalanceEntry } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { createWheelPDF } from './pdf.js'
 import {
-  wheelAnalysis,
-  lifeDiagnosis,
-  personalityProfile,
-  trajectoryPrediction,
-  actionPlan,
-  adaptiveMissions,
+  generateWheelInsights,
 } from './ai.js'
 import { sendWheelNotification } from './telegram.js'
 import { rewardEngine } from '../gamification/reward.engine.js'
 import { getProfile, getStreakSummary, getLevelState } from '../gamification/service.js'
 import { registerStreakActivity } from '../streak/service.js'
-import { updateUserState } from '../ai-mentor/state.service.js'
+import { isOpenAIQuotaError, updateUserState } from '../ai-mentor/state.service.js'
 import type {
   WheelAnalytics,
   WheelGamificationSnapshot,
@@ -50,6 +45,7 @@ export interface WheelWorkflowResult {
 const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_REGEN_COUNT = 3
 const APP_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+const processedWheelWorkflowIds = new Set<string>()
 
 const SCORE_ERROR = 'wheel_invalid_spheres_set'
 
@@ -296,23 +292,8 @@ export async function executeWheelWorkflow(options: WheelWorkflowOptions): Promi
   const weakest = findWeakest(scores)
   const focus = findFocus(scores, weakest)
 
-  const [analysis, diagnosis, profile, trajectory, plan, missions] = await Promise.all([
-    wheelAnalysis(scores, weakest, focus),
-    lifeDiagnosis(weakest.categoryId, scores),
-    personalityProfile(scores),
-    trajectoryPrediction(scores),
-    actionPlan(weakest.categoryId),
-    adaptiveMissions(weakest.categoryId),
-  ])
-
-  const insights: WheelInsights = {
-    analysis,
-    diagnosis,
-    personalityProfile: profile,
-    trajectoryPrediction: trajectory,
-    actionPlan: plan,
-    adaptiveMissions: missions,
-  }
+  const insights = await generateWheelInsights(userId, scores, weakest, focus)
+  const analysis = insights.analysis
 
   const cooldownBeforeSave = await getWheelCooldown(userId)
 
@@ -383,24 +364,40 @@ export async function executeWheelWorkflow(options: WheelWorkflowOptions): Promi
     gamification,
   })
 
-  const sideEffects = await Promise.allSettled([
-    addWheelMicroTasks(userId, weakest),
-    registerStreakActivity(userId, expertId, 'wheel_activity'),
-    rewardEngine.onWheelCompleted(userId),
-    updateUserState({
+  if (processedWheelWorkflowIds.has(entry.id)) {
+    console.warn('[wheel] side effects already processed, skipping', {
       userId,
-      source: 'wheel',
-      answers: {
-        weakestSphere: weakest.categoryId,
-        focusSphere: focus.categoryId,
-        scores: JSON.stringify(scores),
-        analysis: JSON.stringify(analysis),
-      },
-    }),
-  ])
-  for (const sideEffect of sideEffects) {
-    if (sideEffect.status === 'rejected') {
-      console.error('Wheel side effect error', sideEffect.reason)
+      entryId: entry.id,
+    })
+  } else {
+    processedWheelWorkflowIds.add(entry.id)
+
+    const sideEffects = await Promise.allSettled([
+      addWheelMicroTasks(userId, weakest),
+      registerStreakActivity(userId, expertId, 'wheel_activity'),
+      rewardEngine.onWheelCompleted(userId),
+      updateUserState({
+        userId,
+        source: 'wheel',
+        answers: {
+          weakestSphere: weakest.categoryId,
+          focusSphere: focus.categoryId,
+          scores: JSON.stringify(scores),
+          analysis: JSON.stringify(analysis),
+        },
+      }),
+    ])
+    for (const sideEffect of sideEffects) {
+      if (sideEffect.status === 'rejected') {
+        if (isOpenAIQuotaError(sideEffect.reason)) {
+          console.warn('[updateUserState] skipped enrichment due to OpenAI quota', {
+            userId,
+            source: 'wheel',
+          })
+          continue
+        }
+        console.error('Wheel side effect error', sideEffect.reason)
+      }
     }
   }
 

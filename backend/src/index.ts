@@ -1,6 +1,8 @@
 // backend/src/index.ts
 
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { type Request, type Response } from 'express'
 import { createApp }                                           from './app.js'
 import { prisma, withRetry }                                   from './db/client.js'
@@ -9,10 +11,17 @@ import { bot }                                                 from './lib/teleg
 import { registerMentorBot }              from './modules/telegram-mentor/index.js'
 import { startScheduler, stopScheduler } from './services/scheduler/index.js'
 
+const currentFilePath = fileURLToPath(import.meta.url)
+const currentDirPath = dirname(currentFilePath)
+
+loadEnv({ path: resolve(currentDirPath, '../../.env') })
+
 const PORT = Number(process.env.PORT) || 3001
+const HOST = process.env.HOST || '127.0.0.1'
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT !== 'false'
 const TELEGRAM_POLLING_ENABLED = process.env.TELEGRAM_POLLING_ENABLED === 'true'
+  || (!TELEGRAM_WEBHOOK_URL && process.env.NODE_ENV !== 'production' && process.env.TELEGRAM_POLLING_ENABLED !== 'false')
 const MINIAPP_URL = process.env.MINIAPP_URL?.trim() || 'https://starway-frontend.vercel.app/miniapp'
 const MINIAPP_VERSION = process.env.MINIAPP_VERSION?.trim() || 'dev'
 
@@ -21,6 +30,7 @@ let server: ReturnType<typeof app.listen> | null = null
 let telegramRunningMode: 'webhook' | 'polling' | null = null
 let isShuttingDown = false
 let prismaKeepAliveInterval: NodeJS.Timeout | null = null
+let databaseReady = false
 
 function isTelegramPollingConflict(error: unknown): boolean {
   if (typeof error === 'object' && error !== null && 'response' in error) {
@@ -65,16 +75,38 @@ async function startTelegramBot() {
       console.log('🤖 [Telegram] Checking bot identity...')
       const me = await bot.telegram.getMe()
       console.log(`🤖 [Telegram] Bot: @${me.username} (id: ${me.id})`)
-      const menuMiniAppUrl = new URL(MINIAPP_URL)
-      menuMiniAppUrl.searchParams.set('v', MINIAPP_VERSION)
       await bot.telegram.setChatMenuButton({
         menuButton: {
-          type: 'web_app',
-          text: 'Відкрити Starway',
-          web_app: { url: menuMiniAppUrl.toString() },
+          type: 'default',
         },
       }).catch((error) => {
-        console.warn('⚠️ [Telegram] Failed to set chat menu button:', error)
+        console.warn('⚠️ [Telegram] Failed to reset chat menu button:', error)
+      })
+      await bot.telegram.setMyCommands([
+        { command: 'privacy', description: 'Політика конфіденційності чат-бота' },
+      ]).catch((error) => {
+        console.warn('⚠️ [Telegram] Failed to set global commands:', error)
+      })
+      await bot.telegram.setMyCommands([
+        { command: 'privacy', description: 'Політика конфіденційності чат-бота' },
+      ], {
+        scope: { type: 'all_private_chats' },
+      }).catch((error) => {
+        console.warn('⚠️ [Telegram] Failed to set private chat commands:', error)
+      })
+      await bot.telegram.setMyCommands([
+        { command: 'privacy', description: 'Політика конфіденційності чат-бота' },
+      ], {
+        scope: { type: 'all_group_chats' },
+      }).catch((error) => {
+        console.warn('⚠️ [Telegram] Failed to set group chat commands:', error)
+      })
+      await bot.telegram.setMyCommands([
+        { command: 'privacy', description: 'Політика конфіденційності чат-бота' },
+      ], {
+        scope: { type: 'all_chat_administrators' },
+      }).catch((error) => {
+        console.warn('⚠️ [Telegram] Failed to set admin chat commands:', error)
       })
 
       const webhookInfoBefore = await bot.telegram.getWebhookInfo()
@@ -137,21 +169,17 @@ async function startTelegramBot() {
 // BOOTSTRAP
 // ─────────────────────────────────────────────
 async function bootstrap() {
-  try {
-    console.log('🧪 [BOOT] Connecting to database...')
-    await withRetry(() => prisma.$connect())
+  const startHttpServer = () => {
+    if (server) return
 
-    const result = await withRetry(() => prisma.$queryRaw`SELECT 1`)
-    console.log('✅ [PRISMA] Database connected | Test query result:', result)
-
-    server = app.listen(PORT, () => {
+    server = app.listen(PORT, HOST, () => {
       trackConnections()
       console.log('\n🚀 Starway Studio Backend')
-      console.log(`🌐 Server: http://localhost:${PORT}`)
-      console.log(`📍 Health: http://localhost:${PORT}/health`)
-      console.log(`🔐 Auth: http://localhost:${PORT}/api/auth`)
-      console.log(`🎯 Access: http://localhost:${PORT}/api/access`)
-      console.log(`🤖 Mentor: http://localhost:${PORT}/api/mentor\n`)
+      console.log(`🌐 Server: http://${HOST}:${PORT}`)
+      console.log(`📍 Health: http://${HOST}:${PORT}/health`)
+      console.log(`🔐 Auth: http://${HOST}:${PORT}/api/auth`)
+      console.log(`🎯 Access: http://${HOST}:${PORT}/api/access`)
+      console.log(`🤖 Mentor: http://${HOST}:${PORT}/api/mentor\n`)
     })
 
     server.on('error', (error: NodeJS.ErrnoException) => {
@@ -162,6 +190,16 @@ async function bootstrap() {
       console.error('❌ Server error:', error)
       process.exit(1)
     })
+  }
+
+  try {
+    console.log('🧪 [BOOT] Connecting to database...')
+    await withRetry(() => prisma.$connect())
+
+    const result = await withRetry(() => prisma.$queryRaw`SELECT 1`)
+    console.log('✅ [PRISMA] Database connected | Test query result:', result)
+    databaseReady = true
+    startHttpServer()
 
     // Запуск у фоні — не блокує сервер
     startScheduler()
@@ -177,8 +215,9 @@ async function bootstrap() {
     prismaKeepAliveInterval.unref()
 
   } catch (err: unknown) {
-    console.error('❌ [BOOT ERROR]', err)
-    process.exit(1)
+    console.warn('⚠️ [BOOT] Database unavailable, starting API in degraded mode', err)
+    databaseReady = false
+    startHttpServer()
   }
 }
 

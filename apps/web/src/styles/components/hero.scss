@@ -151,9 +151,28 @@
 .feature-card-compact {
   padding: 1.25rem;
   min-height: 180px;
-  background: rgba(var(--accent-rgb), 0.04);
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
-  box-shadow: 0 20px 40px rgba(var(--accent-rgb), 0.2);
+}
+
+.landing-auth-surface {
+  border: 1px solid rgba(var(--accent-soft-rgb), 0.32) !important;
+  background: linear-gradient(180deg, rgba(7, 13, 28, 0.96), rgba(9, 16, 34, 0.94)) !important;
+  box-shadow:
+    0 0 0 1px rgba(var(--accent-rgb), 0.18),
+    0 0 28px rgba(var(--accent-rgb), 0.14),
+    0 18px 40px rgba(0, 0, 0, 0.24) !important;
+}
+
+.landing-auth-surface::before {
+  display: none;
+}
+
+.landing-auth-surface::after {
+  inset: 1px;
+  border-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.feature-card-compact {
+  min-height: 180px;
 }
 .feature-icon {
   width: 48px;
@@ -162,8 +181,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 30% 30%, rgba(var(--accent-soft-rgb), 0.3), rgba(var(--accent-rgb), 0.1));
-  box-shadow: 0 15px 40px rgba(var(--accent-rgb), 0.35);
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)),
+    linear-gradient(145deg, rgba(12, 22, 44, 0.96), rgba(18, 32, 62, 0.9));
+  color: rgb(var(--accent-soft-rgb));
+  box-shadow:
+    0 14px 34px rgba(4, 10, 24, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .feature-card-title {
   font-size: 1.2rem;
@@ -197,8 +222,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  background: rgba(var(--accent-rgb), 0.05);
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
 }
 .step-card__badge {
   width: 38px;

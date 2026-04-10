@@ -47,7 +47,7 @@ export function ContrastView({ before, after }: ContrastViewProps) {
 
       <div className="mt-4 p-3 bg-white/5 rounded-lg border border-white/10">
         <p className="text-white/70 text-sm text-center">
-          ✨ Бачиш різницю? Це результат усвідомлених виборів з AI-ментором
+          ✨ Бачиш різницю? Це результат усвідомлених виборів із ментором
         </p>
       </div>
     </GlassCard>

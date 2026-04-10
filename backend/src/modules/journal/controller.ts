@@ -13,12 +13,12 @@ export async function getJournalEventsHandler(req: AuthenticatedRequest, res: Re
   const month = Number(req.query.month)
 
   try {
-    const events =
+    const journal =
       startDate && endDate
         ? await getEventsForRange(req.user.id, startDate, endDate)
         : await getEventsByMonth(req.user.id, year, month)
 
-    return res.json({ success: true, events })
+    return res.json({ success: true, ...journal })
   } catch (error) {
     if (
       error instanceof Error &&

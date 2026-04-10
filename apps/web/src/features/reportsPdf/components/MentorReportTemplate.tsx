@@ -36,9 +36,9 @@ export const MentorReportTemplate: React.FC<MentorReportTemplateProps> = ({
         
         {/* Header */}
         <div className="relative z-10">
-          <div className="glassmorphism-card p-8 backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl">
+          <div className="glassmorphism-card p-8 bg-white/10 border border-white/20 rounded-3xl">
             <h1 className="text-6xl font-bold text-white mb-4">
-              AI-МЕНТОР
+              МЕНТОР
             </h1>
             <p className="text-2xl text-purple-200">
               Звіт про твій стан
@@ -70,7 +70,7 @@ export const MentorReportTemplate: React.FC<MentorReportTemplateProps> = ({
 
         {/* Footer */}
         <div className="relative z-10">
-          <div className="glassmorphism-card p-6 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl">
+          <div className="glassmorphism-card p-6 bg-white/10 border border-white/20 rounded-2xl">
             <p className="text-white/60 text-sm">
               Користувач: <span className="text-white font-mono">{userId}</span>
             </p>
@@ -90,7 +90,7 @@ export const MentorReportTemplate: React.FC<MentorReportTemplateProps> = ({
       {/* ═══════════════════════════════════════════════════════════ */}
       {wheelData && wheelData.length > 0 && (
         <div className="page-break h-[297mm] flex flex-col gap-8 pt-12">
-          <div className="glassmorphism-card p-8 backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl">
+          <div className="glassmorphism-card p-8 bg-white/10 border border-white/20 rounded-3xl">
             <h2 className="text-4xl font-bold text-white mb-6">
               🎯 Колесо балансу
             </h2>
@@ -107,7 +107,7 @@ export const MentorReportTemplate: React.FC<MentorReportTemplateProps> = ({
           </div>
 
           {/* Найслабша сфера */}
-          <div className="glassmorphism-card p-6 backdrop-blur-xl bg-red-500/20 border border-red-400/30 rounded-2xl">
+          <div className="glassmorphism-card p-6 bg-red-500/20 border border-red-400/30 rounded-2xl">
             <h3 className="text-xl font-semibold text-red-200 mb-2">
               ⚠️ Зона уваги
             </h3>
@@ -122,7 +122,7 @@ export const MentorReportTemplate: React.FC<MentorReportTemplateProps> = ({
       {/* PAGE 3 — ANSWERS */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="page-break h-[297mm] flex flex-col gap-6 pt-12">
-        <div className="glassmorphism-card p-8 backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl">
+        <div className="glassmorphism-card p-8 bg-white/10 border border-white/20 rounded-3xl">
           <h2 className="text-4xl font-bold text-white mb-6">
             📝 Твої відповіді
           </h2>
@@ -143,7 +143,7 @@ export const MentorReportTemplate: React.FC<MentorReportTemplateProps> = ({
       {/* PAGE 4 — DECISIONS */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="page-break h-[297mm] flex flex-col gap-6 pt-12">
-        <div className="glassmorphism-card p-8 backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl">
+        <div className="glassmorphism-card p-8 bg-white/10 border border-white/20 rounded-3xl">
           <h2 className="text-4xl font-bold text-white mb-6">
             ⚡ Рішення системи
           </h2>
@@ -161,7 +161,7 @@ export const MentorReportTemplate: React.FC<MentorReportTemplateProps> = ({
         </div>
 
         {/* Call to Action */}
-        <div className="glassmorphism-card p-6 backdrop-blur-xl bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-400/30 rounded-2xl">
+        <div className="glassmorphism-card p-6 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-400/30 rounded-2xl">
           <h3 className="text-2xl font-bold text-white mb-2">
             🚀 Наступний крок
           </h3>
@@ -184,7 +184,7 @@ const MetricCard: React.FC<{
   max: number;
   color: string;
 }> = ({ label, value, max, color }) => (
-  <div className="glassmorphism-card p-6 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl">
+  <div className="glassmorphism-card p-6 bg-white/10 border border-white/20 rounded-2xl">
     <p className="text-white/60 text-sm mb-2">{label}</p>
     <div className="flex items-baseline gap-2">
       <span className="text-4xl font-bold text-white">{value}</span>
@@ -212,7 +212,7 @@ const WheelItem: React.FC<{
   };
 
   return (
-    <div className="glassmorphism-card p-4 backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl">
+    <div className="glassmorphism-card p-4 bg-white/5 border border-white/10 rounded-xl">
       <div className="flex justify-between items-center mb-2">
         <span className="text-white font-medium">{area}</span>
         <span className="text-2xl font-bold text-white">{score}</span>
@@ -231,7 +231,7 @@ const AnswerRow: React.FC<{
   questionId: string;
   value: string | number;
 }> = ({ questionId, value }) => (
-  <div className="glassmorphism-card p-4 backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl flex justify-between items-center">
+  <div className="glassmorphism-card p-4 bg-white/5 border border-white/10 rounded-xl flex justify-between items-center">
     <span className="text-white/80">{questionId}</span>
     <span className="text-white font-semibold font-mono">{value}</span>
   </div>
@@ -253,7 +253,7 @@ const DecisionCard: React.FC<{
   };
 
   return (
-    <div className={`glassmorphism-card p-5 backdrop-blur-xl bg-gradient-to-r ${getTypeColor(type)} border rounded-xl`}>
+    <div className={`glassmorphism-card p-5 bg-gradient-to-r ${getTypeColor(type)} border rounded-xl`}>
       <div className="flex items-start gap-3">
         <span className="px-3 py-1 bg-white/20 rounded-lg text-xs font-bold text-white uppercase">
           {type}

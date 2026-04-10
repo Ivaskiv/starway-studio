@@ -68,8 +68,8 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
     });
 
     const polygonFillA  = `rgba(var(--accent-soft-rgb),0.44)`;
-    const polygonFillB  = `rgba(var(--accent-rgb),0.16)`;
-    const polygonStroke = `rgba(var(--accent-rgb),0.92)`;
+    const polygonFillB  = `rgba(var(--accent-rgb),0.22)`;
+    const polygonStroke = `rgba(var(--accent-rgb),0.96)`;
     const gradientId    = `wheel-gradient-${size}-${Math.round(avgScore * 10)}`;
     const glowId        = `wheel-glow-${size}-${Math.round(avgScore * 10)}`;
 
@@ -95,14 +95,36 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
 
     const fontSize  = Math.max(8.5, size * 0.042);
     const emojiSize = Math.max(11, size * 0.055);
+    const ringValues = Array.from({ length: rings }, (_, ring) => Math.round(((ring + 1) * 10) / rings));
+    const ringGapPx = Math.max(22, size * 0.11);
+    const ringGuides = ringValues.map((value, index) => {
+      const radius = (outerRadius / rings) * (index + 1);
+      const circumference = 2 * Math.PI * radius;
+      const gapAngle = (ringGapPx / circumference) * Math.PI * 2;
+      const startAngle = -Math.PI / 2 + gapAngle / 2;
+      const endAngle = (Math.PI * 3) / 2 - gapAngle / 2;
+
+      const startX = sc + radius * Math.cos(startAngle);
+      const startY = sc + radius * Math.sin(startAngle);
+      const endX = sc + radius * Math.cos(endAngle);
+      const endY = sc + radius * Math.sin(endAngle);
+
+      return {
+        value,
+        radius,
+        d: `M ${startX} ${startY} A ${radius} ${radius} 0 1 1 ${endX} ${endY}`,
+        labelY: sc - radius + 4,
+      };
+    });
 
     return (
-      <div className="relative flex items-center justify-center">
+      <div className="relative flex w-full items-center justify-center">
         <svg
-          width={svgSize}
-          height={svgSize}
+          width="100%"
+          height="100%"
           viewBox={`0 0 ${svgSize} ${svgSize}`}
-          className="overflow-visible"
+          preserveAspectRatio="xMidYMid meet"
+          className="h-auto w-full overflow-visible"
         >
           <defs>
             <radialGradient id={gradientId} cx="50%" cy="45%" r="58%">
@@ -124,19 +146,29 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
           {/* base glow ring */}
           <circle cx={sc} cy={sc} r={outerRadius + 8} fill="none" stroke="rgba(var(--accent-rgb),0.2)" strokeWidth={1} />
 
-          {/* concentric rings */}
-          {Array.from({ length: rings }).map((_, ring) => {
-            const r = (outerRadius / rings) * (ring + 1);
-            return (
-              <circle
-                key={`ring-${ring}`}
-                cx={sc} cy={sc} r={r}
+          {/* concentric guides with top gap and labels */}
+          {ringGuides.map((ring, index) => (
+            <g key={`ring-${ring.value}`}>
+              <path
+                d={ring.d}
                 fill="none"
-                stroke={ring === rings - 1 ? 'rgba(var(--accent-soft-rgb),0.44)' : 'rgba(var(--accent-rgb),0.2)'}
-                strokeWidth={ring === rings - 1 ? 1.2 : 1}
+                stroke={index === ringGuides.length - 1 ? 'rgba(var(--accent-soft-rgb),0.48)' : 'rgba(var(--accent-rgb),0.2)'}
+                strokeWidth={index === ringGuides.length - 1 ? 1.2 : 1}
+                strokeLinecap="round"
               />
-            );
-          })}
+              <text
+                x={sc}
+                y={ring.labelY}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={Math.max(9, size * 0.034)}
+                fill="rgba(255,255,255,0.56)"
+                className="select-none"
+              >
+                {ring.value}
+              </text>
+            </g>
+          ))}
 
           {/* axis lines */}
           {axisPoints.map((ap, i) => (
@@ -153,7 +185,7 @@ export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
             points={scorePoints.map(p => `${p.x},${p.y}`).join(' ')}
             fill={`url(#${gradientId})`}
             stroke={polygonStroke}
-            strokeWidth={2.2}
+            strokeWidth={2.8}
             filter={`url(#${glowId})`}
           />
 

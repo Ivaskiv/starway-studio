@@ -9,7 +9,7 @@ export default function UserProducts() {
   const products = data ?? [];
 
   return (
-<GlassCard className="p-6 border-[var(--glass-border)] bg-[var(--glass-bg)] backdrop-blur-xl">
+<GlassCard className="p-6 border-[var(--glass-border)] bg-[var(--glass-bg)]">
         <h3 className="text-lg font-semibold mb-3 text-white flex items-center gap-2">
         <Package className="w-5 h-5 text-white/85" />
         Ваші продукти

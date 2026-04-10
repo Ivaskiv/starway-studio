@@ -1,4 +1,3 @@
-// fix style $100k — premium slider tuned to the liquid-glass system
 import { cn } from '@/lib/utils';
 import { forwardRef, InputHTMLAttributes, useEffect, useMemo, useRef, useState } from 'react';
 

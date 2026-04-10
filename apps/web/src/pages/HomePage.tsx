@@ -14,14 +14,17 @@ import {
 } from '@/pages/sections'
 import StatsSection from '@/pages/sections/StatsSection'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
 
 export default function HomePage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
-  const { step, emailCompletionRequired, isAuthenticated } = useUserState()
+  const {
+    emailCompletionRequired,
+    isAuthenticated,
+  } = useUserState()
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register')
   const howItWorksRef = useRef<HTMLElement | null>(null)
@@ -40,6 +43,14 @@ export default function HomePage() {
     }
   }, [searchParams, setSearchParams])
 
+  const resolveResumeRoute = () => {
+    if (!user?.id) {
+      return ROUTES.HOME
+    }
+
+    return ROUTES.DASHBOARD
+  }
+
   const handleGetStarted = () => {
     if (!user) {
       openAuth()
@@ -51,22 +62,21 @@ export default function HomePage() {
       return
     }
 
-    if (isAuthenticated && step === 'START_FLOW') {
-      navigate(ROUTES.ONBOARDING_START)
+    if (!isAuthenticated) {
+      openAuth()
       return
     }
 
-    if (isAuthenticated && step === 'WHEEL') {
-      navigate(ROUTES.WHEEL_START)
-      return
-    }
-
-    navigate(ROUTES.DASHBOARD ?? '/dashboard')
+    navigate(resolveResumeRoute())
   }
   const handleLearnMore = () => { howItWorksRef.current?.scrollIntoView({ behavior: 'smooth' }) }
   const handleSelectPlan = () => {
     if (user) navigate('/dashboard/subscription')
     else openAuth()
+  }
+
+  if (isAuthenticated && !emailCompletionRequired) {
+    return <Navigate to={resolveResumeRoute()} replace />
   }
 
   return (

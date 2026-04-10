@@ -15,6 +15,77 @@ import type {
   TrialProgress
 } from '../types/mentor.types';
 
+export interface WeeklyReportItem {
+  id: string
+  weekStart: string
+  weekEnd: string
+  overallScore: number | null
+  completionRate: number | null
+  streakDays: number | null
+  nextWeekFocus: string | null
+  pdfUrl: string | null
+}
+
+export interface WeeklyReportFull extends WeeklyReportItem {
+  metrics?: {
+    sessions?: number | null
+    reflections?: number | null
+    tasksDone?: number | null
+    tasksTotal?: number | null
+    wheels?: number | null
+    streakDays?: number | null
+  } | null
+  topInsights?: string[] | null
+  growthAreas?: string[] | null
+  struggleAreas?: string[] | null
+  wheelDelta?: Array<{ sphere: string; delta: number }> | null
+  summaryText?: string | null
+  motivationText?: string | null
+  nextWeekTasks?: string[] | null
+  analysis?: Record<string, unknown> | null
+}
+
+export interface MonthlyConversationHighlight {
+  id: string
+  title: string
+  updatedAt: string
+  preview: string
+  messageCount: number
+}
+
+export interface MonthlyGoalItem {
+  text: string
+  isPrimary: boolean
+}
+
+export interface MonthlySubscriptionSummary {
+  status: string
+  planCode: string
+  trialEndsAt: string | null
+  currentPeriodEnd: string | null
+  autoRenew: boolean
+}
+
+export interface MonthlyZoomSummaryItem {
+  topic: string
+  scheduledAt: string
+  status: string
+  attended: boolean
+  note: unknown
+}
+
+export interface MonthlyConversationSummary {
+  totalConversations: number
+  totalMessages: number
+  userMessages: number
+  assistantMessages: number
+  topThemes: string[]
+  recentHighlights: MonthlyConversationHighlight[]
+  goals?: MonthlyGoalItem[]
+  subscription?: MonthlySubscriptionSummary | null
+  zoomSummary?: MonthlyZoomSummaryItem[]
+}
+
 interface MentorMessageRequest {
   message: string;
   history: { role: 'user' | 'assistant'; content: string }[];
@@ -151,6 +222,30 @@ export const mentorApi = api.injectEndpoints({
       invalidatesTags: ['MentorContext'],
     }),
 
+    getMyWeeklyReport: builder.query<WeeklyReportFull | null, void>({
+      query: () => '/mentor/my-report',
+      transformResponse: (response: { report: WeeklyReportFull | null }) => response.report ?? null,
+      providesTags: ['Progress'],
+    }),
+
+    getMyWeeklyReports: builder.query<WeeklyReportItem[], void>({
+      query: () => '/mentor/my-reports',
+      transformResponse: (response: { reports: WeeklyReportItem[] }) => response.reports ?? [],
+      providesTags: ['Progress'],
+    }),
+
+    getWeeklyReportById: builder.query<WeeklyReportFull | null, string>({
+      query: reportId => `/mentor/my-reports/${reportId}`,
+      transformResponse: (response: { report: WeeklyReportFull | null }) => response.report ?? null,
+      providesTags: ['Progress'],
+    }),
+
+    getMonthlyConversationSummary: builder.query<MonthlyConversationSummary | null, void>({
+      query: () => '/mentor/monthly-context',
+      transformResponse: (response: { summary: MonthlyConversationSummary | null }) => response.summary ?? null,
+      providesTags: ['Progress'],
+    }),
+
   }),
   
   overrideExisting: false,
@@ -175,7 +270,12 @@ export const {
   useStartTrialMutation,
   useCompleteTrialDayMutation,
   useGetMentorContextQuery,
-  useSendMentorMessageMutation
+  useSendMentorMessageMutation,
+  useGetMyWeeklyReportQuery,
+  useGetMyWeeklyReportsQuery,
+  useGetWeeklyReportByIdQuery,
+  useLazyGetWeeklyReportByIdQuery,
+  useGetMonthlyConversationSummaryQuery,
 } = mentorApi;
 
 export default mentorApi;

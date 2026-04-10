@@ -3,6 +3,10 @@ import { type NotificationJob, type NotificationType } from '@starway/db/prisma-
 import { notificationJobRepository } from '../repositories/NotificationJobRepository.js'
 
 export class NotificationJobService {
+  async isQueueAvailable(): Promise<boolean> {
+    return notificationJobRepository.isAvailable()
+  }
+
   async enqueue(type: NotificationType, payload: Record<string, unknown>, runAt: Date): Promise<NotificationJob> {
     return notificationJobRepository.create({
       type,

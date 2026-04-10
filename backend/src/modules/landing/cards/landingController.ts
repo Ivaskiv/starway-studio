@@ -50,6 +50,38 @@ export async function addLandingCard(req: Request, res: Response) {
   res.json({ card: newCard });
 }
 
+export async function createLeadMagnetLandingCard(params: {
+  userId: string
+  title: string
+  url: string
+  price?: number
+}) {
+  const id = `${Date.now()}`
+  const card = {
+    id,
+    userId: params.userId,
+    title: params.title,
+    url: params.url,
+    price: params.price ?? 0,
+  }
+  landingDB.push(card)
+  const state = await resolveUserState(params.userId).catch(() => null)
+  await trackEvent({
+    userId: params.userId,
+    type: 'web_landing_card_created',
+    source: 'web',
+    state,
+    payload: {
+      landingId: id,
+      title: params.title,
+      url: params.url,
+      price: card.price,
+      source: 'lead_magnet_builder',
+    },
+  })
+  return card
+}
+
 export async function updateLandingCard(req: Request, res: Response) {
   const { id, title, price, userId } = req.body;
   const card = landingDB.find(l => l.id === id);

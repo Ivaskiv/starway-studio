@@ -19,7 +19,7 @@ export default function Modules() {
 
   const categories: { value: ModuleCategory | 'all'; label: string }[] = [
     { value: 'all', label: 'Всі категорії' },
-    { value: 'ai', label: '🤖 AI' },
+    { value: 'ai', label: '🤖 Ментор' },
     { value: 'automation', label: '⚡ Автоматизація' },
     { value: 'content', label: '📚 Контент' },
     { value: 'analytics', label: '📊 Аналітика' },

@@ -45,7 +45,7 @@ export function PrimaryGoalSelector({ goals, selectedIndex, onChange }: PrimaryG
               </div>
               {selectedIndex === index && (
                 <div className="text-white/80 text-sm mt-1">
-                  ✦ Це твоя головна ціль. AI буде перевіряти всі вибори відносно неї.
+                  ✦ Це твоя головна ціль. Система буде звіряти всі вибори відносно неї.
                 </div>
               )}
             </div>
@@ -56,7 +56,7 @@ export function PrimaryGoalSelector({ goals, selectedIndex, onChange }: PrimaryG
       <div className="mt-4 p-3 bg-white/5 rounded-lg border border-white/10">
         <p className="text-white/70 text-sm">
           💡 <strong>Primary goal</strong> - це ціль №1, на яку ти фокусуєшся. 
-          AI буде аналізувати кожен твій вибір: чи веде він до цієї цілі.
+          Ми будемо аналізувати кожен твій вибір: чи веде він до цієї цілі.
         </p>
       </div>
     </div>

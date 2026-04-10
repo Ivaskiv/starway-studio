@@ -21,7 +21,7 @@ const typeConfig: Record<
   SequencerProductType,
   { icon: keyof typeof LucideIcons; color: string; label: string }
 > = {
-  'lead-magnet': { icon: 'Gift', color: 'blue', label: 'Лід-магніт' },
+  'lead-magnet': { icon: 'Gift', color: 'blue', label: 'Практикум (free)' },
   tripwire: { icon: 'Zap', color: 'purple', label: 'Tripwire' },
   core: { icon: 'DollarSign', color: 'green', label: 'Core' },
   upsell: { icon: 'TrendingUp', color: 'orange', label: 'Upsell' },
@@ -32,7 +32,7 @@ const typeConfig: Record<
 
 export default function ProductSequencer() {
   const [products, setProducts] = useState<SequencerProduct[]>([
-    { id: '1', name: 'Лід-магніт', price: 0, type: 'lead-magnet', order: 1 },
+    { id: '1', name: 'Практикум (free)', price: 0, type: 'lead-magnet', order: 1 },
     { id: '2', name: 'Tripwire', price: 99, type: 'tripwire', order: 2 },
     { id: '3', name: 'Core продукт', price: 1200, type: 'core', order: 3 },
     { id: '4', name: 'Upsell', price: 2500, type: 'upsell', order: 4 },

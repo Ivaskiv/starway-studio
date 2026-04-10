@@ -73,6 +73,7 @@ model User {
   telegramUserId   String?   @unique
   telegramUserName String?   @unique
   telegramChatId   String?
+  telegramEnabled  Boolean   @default(true)
   telegramLinkedAt DateTime?
   passwordHash     String?
   uiSettings       Json?
@@ -94,6 +95,9 @@ model User {
   trialStartsAt DateTime? // Дата початку пробного періоду
   // @deprecated — використовуй funnelState для lifecycle логіки
   trialEndsAt   DateTime? // Дата закінчення пробного періоду
+  funnelStage   UserFunnelStage @default(LEAD)
+  funnelUpdatedAt DateTime?
+  leadMagnetSentAt DateTime?
 
   role      Role      @default(USER)
   deletedAt DateTime?
@@ -144,6 +148,7 @@ model User {
   affiliateLinks       AffiliateLink[]
   expertProfile        ExpertProfile?         @relation("ExpertProfile")
   productSubscriptions ProductSubscription[]
+  productAccesses      ProductAccess[]
   deepLinkTokens       DeepLinkToken[]
 
   assistantSessions   AssistantSession[]
@@ -155,6 +160,9 @@ model User {
   contentItems    ContentItem[]
   funnelLeads     FunnelLead[]
   events          Event[]
+  voiceEntries    VoiceEntry[]
+  userMemory      UserMemory?
+  annualStrategyMap AnnualStrategyMap?
 
   userFunnelProgress     UserFunnelStageProgress[]
   userVideoProgress      UserVideoStageProgress[]
@@ -167,6 +175,7 @@ model User {
   @@index([expertId, email])
   @@index([expertId, deletedAt])
   @@index([expertId, createdAt])
+  @@index([funnelStage])
 }
 
 model ExpertProfile {
@@ -275,6 +284,21 @@ model BannerGeneration {
   ctaText     String
   rawData     Json
   createdAt   DateTime @default(now())
+}
+
+model MarketResearchCache {
+  id          String   @id @default(cuid())
+  type        String
+  niche       String   @default("coaching_personal_dev")
+  platform    String
+  data        Json
+  generatedAt DateTime @default(now())
+  validUntil  DateTime
+  promptUsed  String?
+  model       String   @default("gpt-4o-mini")
+
+  @@index([type, platform])
+  @@index([validUntil])
 }
 
 // @deprecated — використовуй funnelState для lifecycle логіки
@@ -471,6 +495,20 @@ model ProductSubscription {
 
   @@unique([userId, productId])
   @@map("product_subscriptions")
+}
+
+model ProductAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  product   String
+  role      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, product])
+  @@index([product, role])
+  @@map("product_access")
 }
 
 enum CTAType {
@@ -798,6 +836,7 @@ model DailyEntry {
   userId       String
   expertId     String
   date         DateTime
+  status       DayStatus   @default(PENDING)
   content      Json        @default("{}")
   state        DailyState  @default(STABILITY)
   choice       DailyChoice @default(CONFIRMED_OLD)
@@ -805,6 +844,8 @@ model DailyEntry {
   dayFact      String?
   aiAnalysis   String?
   microSupport Json?
+  lateCompletedAt DateTime?
+  canCatchUpUntil DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -814,6 +855,7 @@ model DailyEntry {
   @@unique([userId, date])
   @@index([expertId, userId])
   @@index([userId, date])
+  @@index([userId, status])
 }
 
 model MicroTask {
@@ -944,6 +986,34 @@ model Streak {
   @@index([userId, expertId])
 }
 
+model VoiceEntry {
+  id         String         @id @default(uuid())
+  userId     String
+  text       String         @db.Text
+  state      DailyState     @default(NEUTRAL)
+  intensity  Int            @default(1)
+  confidence Float?
+  type       VoiceEntryType
+  source     String         @default("voice")
+  decision   Json           @default("{}")
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, state, createdAt])
+}
+
+model UserMemory {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  summary   Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ДОДАТИ ці дві моделі до існуючої schema.prisma
 // Після моделей Streak або Subscription
@@ -1037,6 +1107,72 @@ model WheelAssessment {
 
   @@index([userId])
   @@index([expertId, userId])
+}
+
+model AnnualStrategyMap {
+  id             String                  @id @default(cuid())
+  userId         String                  @unique
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year           Int
+  vision         String?                 @db.Text
+  identityStatement String?              @db.Text
+  mainGoalId     String?
+  status         String                  @default("draft")
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  goals          StrategyGoal[]
+  monthlyReviews MonthlyStrategyReview[]
+
+  @@index([year])
+  @@index([status])
+}
+
+model StrategyGoal {
+  id             String            @id @default(cuid())
+  mapId          String
+  map            AnnualStrategyMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  sphere         String
+  order          Int               @default(0)
+  isMain         Boolean           @default(false)
+  title          String
+  description    String?           @db.Text
+  actions        String[]          @default([])
+  monthlyActions Json
+  progress       Int               @default(0)
+  status         String            @default("active")
+  targetMonth    Int?
+  priority       Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([mapId, priority])
+  @@index([mapId, order])
+  @@index([sphere])
+  @@index([status])
+}
+
+model MonthlyStrategyReview {
+  id               String            @id @default(cuid())
+  mapId            String
+  map              AnnualStrategyMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  month            Int
+  year             Int
+  focus            String?
+  actions          String[]          @default([])
+  goalIds          String[]          @default([])
+  status           String            @default("planned")
+  aiAnalysis       String?           @db.Text
+  doneActions      String[]          @default([])
+  missedActions    String[]          @default([])
+  completedActions String[]          @default([])
+  skippedActions   String[]          @default([])
+  nextStepsByAi    Json?
+  nextMonthRec     String?           @db.Text
+  createdAt        DateTime          @default(now())
+
+  @@unique([mapId, month, year])
+  @@index([year, month])
+  @@index([status])
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1559,6 +1695,14 @@ enum SubscriptionStatus {
   EXPIRED
 }
 
+enum UserFunnelStage {
+  ANONYMOUS
+  LEAD
+  TRIAL
+  PAID
+  CHURNED
+}
+
 enum PaymentStatus {
   PENDING
   SUCCESS
@@ -1625,6 +1769,11 @@ enum DailyState {
   NEUTRAL
 }
 
+enum VoiceEntryType {
+  TELEGRAM_VOICE
+  TELEGRAM_AUDIO
+}
+
 enum DailyChoice {
   CONFIRMED_OLD
   CHOSE_NEW
@@ -1662,6 +1811,7 @@ enum NotificationType {
   WEEKLY_SUMMARY
   AI_REMINDER
   SUBSCRIPTION
+  MISSED_DAY_CATCHUP
 }
 
 enum NotificationStatus {
@@ -1675,6 +1825,15 @@ enum NotificationJobStatus {
   PROCESSING
   DONE
   FAILED
+}
+
+enum DayStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  COMPLETED_LATE
+  PARTIAL
+  SKIPPED
 }
 
 enum ZoomStatus {

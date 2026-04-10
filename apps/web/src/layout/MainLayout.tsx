@@ -2,13 +2,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
+import BottomNav from '@/components/miniapp/BottomNav'
 import AuthModal from '@/features/auth/components/AuthModal'
+import DeepLinkAuthBridge from '@/features/auth/components/DeepLinkAuthBridge'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
-import BottomNav from '@/components/miniapp/BottomNav'
-import FloatingAIButton from '@/components/miniapp/FloatingAIButton'
 import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
+import Breadcrumb from '@/layout/Breadcrumb'
 import Footer from '@/layout/Footer'
 import Header from '@/layout/Header'
 import Sidebar from '@/layout/Sidebar'
@@ -29,32 +30,21 @@ function getPageContext(pathname: string, isDashboardShell: boolean): PageContex
   if (pathname === '/' || pathname === '/dashboard' || pathname === '/miniapp') return null
 
   const contexts: Array<[RegExp, PageContext]> = [
-    [/^\/dashboard\/cycle/, { title: 'Пройди чекін', subtitle: 'Відповідай на питання і рухайся до наступного кроку.', status: 'Сесія в процесі' }],
+    // [/^\/dashboard\/cycle/, { title: '', subtitle: '', status: 'Сесія в процесі' }],
     [/^\/dashboard\/ai-mentor/, { title: 'Відкрий асистента', subtitle: 'Постав запит або пройди коротку сесію.', status: 'Асистент готовий' }],
     [/^\/dashboard\/wheel/, { title: 'Оціни свій стан', subtitle: 'Пройди колесо балансу і знайди точку фокусу.', status: 'Крок самодіагностики' }],
     [/^\/dashboard\/progress/, { title: 'Подивись прогрес', subtitle: 'Оціни динаміку і обери, що робити далі.', status: 'Аналітика доступна' }],
     [/^\/dashboard\/profile/, { title: 'Мій профіль', subtitle: 'Перевір канали доступу та основні дані акаунта.', status: 'Профіль активний' }],
+    [/^\/dashboard\/notifications/, { title: 'Сценарії повідомлень', subtitle: 'Перевір логіку Telegram, trial, win-back і renewal в одному місці.', status: 'Notification preview' }],
     [/^\/dashboard\/subscription/, { title: 'Онови доступ', subtitle: 'Подивись план і виріши, як рухатись далі.', status: 'Доступ і плани' }],
-    [/^\/dashboard\/(courses|products|vision|goals|actions)/, { title: 'Обери наступний крок', subtitle: 'Відкрий матеріал або інструмент, який рухає тебе далі.', status: 'Каталог доступний' }],
+    [/^\/dashboard\/(courses|products|vision|goals|actions)/, { title: 'Обери наступний крок', subtitle: 'Відкрий матеріал або інструмент, який рухає тебе далі.', status: 'Інструменти доступні' }],
     [/^\/subscription/, { title: 'Обери доступ', subtitle: 'Подивись умови і відкрий наступний рівень системи.', status: 'Плани Starway' }],
     [/^\/profile/, { title: 'Керуй профілем', subtitle: 'Онови дані і продовжуй роботу без зайвих кроків.', status: 'Профіль відкрито' }],
   ]
 
   const match = contexts.find(([pattern]) => pattern.test(pathname))
   if (match) return match[1]
-
-  if (isDashboardShell && pathname.startsWith('/dashboard/')) {
-    return {
-      title: 'Продовжуй роботу',
-      subtitle: 'Відкрий потрібний блок і зроби наступну дію без зайвих переходів.',
-      // status: 'Starway dashboard',
-    }
-  }
-
-  return {
-    title: 'Продовжуй далі',
-    subtitle: 'На цьому екрані є все потрібне для наступної дії.',
-  }
+  return null
 }
 
 function PageIntro({
@@ -67,8 +57,12 @@ function PageIntro({
   return (
     <div className="flex items-start justify-between gap-4 px-3 py-4">
       <div className="min-w-0">
-        <h1 className="text-lg font-bold text-[var(--text-primary)]">{context.title}</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">{context.subtitle}</p>
+        {context.title?.trim() ? (
+          <h1 className="text-lg font-bold text-[var(--text-primary)]">{context.title}</h1>
+        ) : null}
+        {context.subtitle?.trim() ? (
+          <p className="mt-1 text-sm text-[var(--text-muted)]">{context.subtitle}</p>
+        ) : null}
         {context.status ? (
           <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--accent-soft-rgb))]">
             {context.status}
@@ -104,10 +98,18 @@ export default function MainLayout({
   const { navigateTo } = useSmartNavigation()
 
   const isMiniAppContext = isTelegramMiniAppContext(location.pathname)
+  const isStandaloneMiniAppRoute = location.pathname.startsWith('/miniapp')
   const miniAppRouteTarget = useMemo(() => {
     if (!isMiniAppContext) return null
 
     if (location.pathname === '/dashboard') return '/miniapp'
+    if (location.pathname.startsWith('/dashboard/cycle')) {
+      const search = new URLSearchParams(location.search)
+      const session = search.get('session')
+      if (session === 'evening') return '/miniapp/mentor?context=evening'
+      if (session === 'morning') return '/miniapp/mentor?context=morning'
+      return '/miniapp/mentor'
+    }
     if (location.pathname.startsWith('/dashboard/ai-mentor')) return '/miniapp/mentor'
     if (location.pathname.startsWith('/dashboard/progress')) return '/miniapp/tracker'
     if (location.pathname.startsWith('/dashboard/journal')) return '/miniapp/journal'
@@ -231,12 +233,23 @@ export default function MainLayout({
     }
   }
 
+  if (isStandaloneMiniAppRoute) {
+    return (
+      <>
+        <DeepLinkAuthBridge />
+        <Outlet />
+      </>
+    )
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // DASHBOARD + LOGGED-IN LAYOUT
   // ─────────────────────────────────────────────────────────────────────────
   if (shouldUseDashboardShell) {
     return (
-      <div className="flex h-screen overflow-hidden">
+      <>
+        <DeepLinkAuthBridge />
+        <div className="flex h-screen overflow-hidden">
 
         {shouldShowSidebar && (
           <Sidebar
@@ -266,6 +279,7 @@ export default function MainLayout({
               </>
             ) : (
               <div className="flex min-h-full flex-col">
+                <Breadcrumb />
                 {pageContext ? (
                   <PageIntro
                     context={pageContext}
@@ -280,10 +294,6 @@ export default function MainLayout({
 
           {shouldShowMiniAppNav && (
             <>
-              <FloatingAIButton
-                onOpenChat={() => navigateTo('/dashboard/ai-mentor', { requiresAuth: true })}
-                userName={user?.name ?? user?.firstName ?? undefined}
-              />
               <BottomNav
                 activeTab={activeMiniAppTab}
                 onTabChange={handleMiniAppTabChange}
@@ -298,7 +308,8 @@ export default function MainLayout({
           onClose={() => setAuthModalOpen(false)}
           defaultMode={authMode}
         />
-      </div>
+        </div>
+      </>
     )
   }
 
@@ -306,7 +317,9 @@ export default function MainLayout({
   // PUBLIC / LANDING LAYOUT
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans">
+    <>
+      <DeepLinkAuthBridge />
+      <div className="min-h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans">
 
       {/* ── ВИПРАВЛЕНО: передаємо authCallbacks ── */}
       <Header
@@ -336,6 +349,7 @@ export default function MainLayout({
         onClose={() => setAuthModalOpen(false)}
         defaultMode={authMode}
       />
-    </div>
+      </div>
+    </>
   )
 }

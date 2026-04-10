@@ -30,7 +30,7 @@ function AccessDeniedScreen({ ability }: { ability: AccessKey }) {
   const isContactBlocked = accessControl?.accessLevel === 'CLIENT' && accessControl?.hasRequiredContacts === false;
   const title = isLeadLocked ? 'Завершіть практикум' : isContactBlocked ? 'Додайте контакти' : 'Оформіть підписку';
   const description = isLeadLocked
-    ? 'Зараз активний lead magnet. Завершіть практикум, щоб відкрити наступні модулі.'
+    ? 'Зараз активний практикум. Завершіть його, щоб відкрити наступні модулі.'
     : isContactBlocked
       ? 'Щоб користуватись платними модулями, додайте email і Telegram у профілі.'
       : `Для доступу до ${ability} потрібна активна підписка`;
@@ -101,6 +101,9 @@ export function ProtectedRoute({
   }
 
   if (isAuthPending || !isAccessReady || isLoading) {
+    if (isAuthenticated) {
+      return <>{children}</>;
+    }
     // Wait until auth + access resolve before making ability decisions
     return <LoadingFallback />;
   }

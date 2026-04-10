@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import BottomNav from '@/components/miniapp/BottomNav'
-import FloatingAIButton from '@/components/miniapp/FloatingAIButton'
 import type { MiniAppPageId } from '@/features/social/types/miniapp'
 
 type MiniAppLayoutProps = {
@@ -16,13 +15,14 @@ const START_PARAM_ROUTE_MAP: Record<string, string> = {
   ai: '/miniapp/mentor',
   ai_morning: '/miniapp/mentor?context=morning',
   ai_evening: '/miniapp/mentor?context=evening',
+  tasks: '/miniapp/mentor?section=tasks',
   assistant: '/miniapp/mentor',
   tracker: '/miniapp/tracker',
   journal: '/miniapp/journal',
   library: '/miniapp/library',
   profile: '/miniapp/profile',
-  subscription: '/dashboard/subscription',
-  level_up: '/dashboard?modal=level_up',
+  subscription: '/miniapp/profile?panel=subscription',
+  level_up: '/miniapp/profile?panel=level_up',
 }
 
 function getTelegramStartParam() {
@@ -95,12 +95,6 @@ export default function MiniAppLayout({
       <div className="flex-1 overflow-y-auto pb-32">
         {children}
       </div>
-
-      {activeTab !== 'mentor' ? (
-        <FloatingAIButton
-          onOpenChat={() => navigate('/miniapp/mentor')}
-        />
-      ) : null}
 
       <BottomNav
         activeTab={activeTab === 'mentor' ? 'ai' : activeTab === 'journal' ? 'home' : activeTab}

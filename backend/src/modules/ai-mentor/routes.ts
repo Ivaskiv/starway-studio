@@ -13,6 +13,7 @@ router.use(requireClientAccess);
 router.get('/session/:sessionId?', aiController.getSession);
 router.get('/history',             aiController.getHistory);
 router.get('/context',             aiController.getContext);
+router.get('/insight',             aiController.getInstantInsight);
 
 router.get('/daily-entry',         aiController.listDailyEntries);
 router.get('/daily-entry/latest',  aiController.latestDailyEntry);
@@ -24,8 +25,12 @@ router.post('/wheel',              aiController.processWheel);
 router.get('/trial/status',        aiController.getTrialStatus);
 router.get('/paid/status',         aiController.getPaidStatus);
 router.get('/micro-tasks',         aiController.getMicroTasks);
+router.post('/micro-tasks/manual', aiController.createManualMicroTask);
+router.post('/micro-tasks/replace', aiController.replaceManualMicroTasks);
+router.delete('/micro-tasks/:id',  aiController.deleteMicroTaskController);
 router.patch('/micro-tasks/:id/complete', aiController.completeMicroTask);
 router.patch('/micro-tasks/:id/skip',     aiController.skipMicroTask);
+router.patch('/micro-tasks/:id/progress', aiController.updateMicroTaskProgressController);
 router.patch('/micro-tasks/:id/step',     aiController.updateMicroTaskStepController);
 
 router.get('/setup/progress',              aiController.getOnboardingStage);

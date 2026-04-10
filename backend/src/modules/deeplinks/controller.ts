@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import type { Prisma } from '@starway/db/prisma-client'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
+import { createSessionForUserId } from '../auth/auth.service.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import {
   buildTelegramDeepLink,
@@ -22,6 +23,13 @@ const ALLOWED_ACTIONS: ReadonlySet<DeepLinkAction> = new Set([
 
 const ALLOWED_SOURCES: ReadonlySet<DeepLinkSource> = new Set(['telegram', 'web', 'miniapp'])
 const ALLOWED_TARGETS: ReadonlySet<DeepLinkTarget> = new Set(['telegram', 'web', 'miniapp'])
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  path: '/',
+  maxAge: 30 * 24 * 60 * 60 * 1000,
+} as const
 
 function isJsonObject(value: unknown): value is Prisma.JsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -89,6 +97,37 @@ export async function resolveDeepLinkHandler(req: Request, res: Response) {
     ok: true,
     link: resolved,
     state,
+    telegramUrl: buildTelegramDeepLink(resolved.token),
+    webUrl: buildWebDeepLink(resolved.token, resolved.path),
+  })
+}
+
+export async function resolveDeepLinkSessionHandler(req: Request, res: Response) {
+  const body = req.body
+  const token = typeof body?.token === 'string' ? body.token : ''
+  const consume = typeof body?.consume === 'boolean' ? body.consume : true
+
+  if (!token) {
+    return res.status(400).json({ error: 'token_required' })
+  }
+
+  const resolved = await resolveDeepLinkToken({ token, consume })
+  if (!resolved) {
+    return res.status(404).json({ error: 'invalid_or_expired_token' })
+  }
+
+  const session = await createSessionForUserId(resolved.userId)
+  const state = await resolveUserState(resolved.userId).catch(() => null)
+
+  res.cookie('refreshToken', session.refreshToken, COOKIE_OPTIONS)
+
+  return res.json({
+    ok: true,
+    link: resolved,
+    state,
+    user: session.user,
+    accessToken: session.accessToken,
+    expiresIn: session.expiresIn,
     telegramUrl: buildTelegramDeepLink(resolved.token),
     webUrl: buildWebDeepLink(resolved.token, resolved.path),
   })

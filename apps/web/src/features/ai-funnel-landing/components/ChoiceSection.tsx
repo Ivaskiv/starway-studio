@@ -13,7 +13,7 @@ export function ChoiceSection({ onChoose }: ChoiceSectionProps) {
         <button onClick={() => onChoose('user')} className="liquid-btn liquid-btn-primary">Почати як користувач</button>
       </article>
       <article className="glass-panel">
-        <h3>Я власник AI-воронки</h3>
+        <h3>Я власник воронки</h3>
         <p>Створюю свої продукти, сценарії та miniapp за модульною схемою.</p>
         <button onClick={() => onChoose('builder')} className="liquid-btn liquid-btn-ghost">Почати як власник</button>
       </article>

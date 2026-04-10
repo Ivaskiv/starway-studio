@@ -9,6 +9,11 @@ export interface TrackEventInput {
   source: EventSource
   state?: string | null
   payload?: Prisma.InputJsonValue
+  email?: string | null
+  utmSource?: string | null
+  utmCampaign?: string | null
+  productId?: string | null
+  upsertUser?: boolean
 }
 
 export interface TrackQuestionEventInput {
@@ -47,15 +52,90 @@ function isMissingEventTableError(error: unknown): boolean {
   return table.includes('Event')
 }
 
+function normalizeEmail(value: string | null | undefined): string | null {
+  const email = String(value ?? '').trim().toLowerCase()
+  return email || null
+}
+
+function buildTrackingPayload(input: TrackEventInput): Prisma.InputJsonValue | undefined {
+  const tracking: Prisma.JsonObject = {
+    ...(input.email ? { email: normalizeEmail(input.email) } : {}),
+    ...(input.utmSource ? { utmSource: input.utmSource } : {}),
+    ...(input.utmCampaign ? { utmCampaign: input.utmCampaign } : {}),
+    ...(input.productId ? { productId: input.productId } : {}),
+  }
+
+  const hasTrackingFields = Object.keys(tracking).length > 0
+
+  if (!hasTrackingFields && input.payload === undefined) {
+    return undefined
+  }
+
+  const payload = typeof input.payload === 'object' && input.payload !== null && !Array.isArray(input.payload)
+    ? { ...(input.payload as Prisma.JsonObject) }
+    : {}
+
+  if (hasTrackingFields) {
+    payload.tracking = tracking
+  }
+
+  return payload as Prisma.InputJsonValue
+}
+
+async function resolveTrackingUserId(input: TrackEventInput): Promise<string | null> {
+  if (input.userId) return input.userId
+
+  const normalizedEmail = normalizeEmail(input.email)
+  if (!normalizedEmail || !input.upsertUser) return null
+
+  const existing = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true },
+  }).catch(() => null)
+
+  if (existing?.id) {
+    return existing.id
+  }
+
+  const created = await prisma.user.create({
+    data: {
+      email: normalizedEmail,
+      name: normalizedEmail.split('@')[0] || 'Lead user',
+      passwordHash: `lead-${Date.now().toString(36)}`,
+      onboardingStage: 'lead_magnet',
+      settings: {
+        tracking: {
+          utmSource: input.utmSource ?? null,
+          utmCampaign: input.utmCampaign ?? null,
+          productId: input.productId ?? null,
+        },
+      },
+    },
+    select: { id: true },
+  }).catch(() => null)
+
+  return created?.id ?? null
+}
+
+export async function trackLeadEnteredApp(input: TrackEventInput): Promise<void> {
+  const userId = await resolveTrackingUserId({ ...input, upsertUser: true })
+  await trackEvent({
+    ...input,
+    userId,
+    type: 'lead_entered_app',
+  })
+}
+
 export async function trackEvent(input: TrackEventInput): Promise<void> {
   try {
+    const payload = buildTrackingPayload(input)
     await prisma.event.create({
       data: {
         ...(input.userId ? { userId: input.userId } : {}),
         type: input.type,
         source: input.source,
         ...(input.state ? { state: input.state } : {}),
-        ...(input.payload !== undefined ? { payload: input.payload } : {}),
+        ...(payload !== undefined ? { payload } : {}),
       },
     })
   } catch (error) {

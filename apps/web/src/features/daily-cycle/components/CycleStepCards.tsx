@@ -14,6 +14,8 @@ export interface CycleStepCardItem {
   statusText: string
   badge?: string
   showArrow?: boolean
+  iconToneClass?: string
+  badgeToneClass?: string
   onClick: () => void
 }
 
@@ -53,6 +55,8 @@ function getStatusIcon(status: CycleStepCardStatus) {
 
 function CycleStepCard({ item }: { item: CycleStepCardItem }) {
   const tone = STEP_CARD_STYLES[item.status]
+  const iconToneClass = item.iconToneClass ?? tone.iconWrap
+  const badgeToneClass = item.badgeToneClass ?? 'border-[rgba(55,138,221,0.24)] bg-[rgba(55,138,221,0.12)] text-[#78B9FF]'
 
   return (
     <button
@@ -60,7 +64,7 @@ function CycleStepCard({ item }: { item: CycleStepCardItem }) {
       data-testid={`step-card-${item.number}`}
       onClick={item.onClick}
       className={[
-        'relative min-h-[308px] rounded-[24px] px-5 py-5 text-left transition-all',
+        'relative min-h-[252px] rounded-[22px] px-4 py-4 text-left transition-all',
         'flex h-full flex-col',
         'shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
         tone.shell,
@@ -75,22 +79,22 @@ function CycleStepCard({ item }: { item: CycleStepCardItem }) {
       <div className="flex items-start justify-between gap-3">
         <span className="text-sm font-semibold text-[var(--text-muted)]">{item.number}</span>
         {item.badge ? (
-          <span className="rounded-full border border-[rgba(55,138,221,0.24)] bg-[rgba(55,138,221,0.12)] px-2.5 py-1 text-[11px] font-semibold text-[#78B9FF]">
+          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badgeToneClass}`}>
             {item.badge}
           </span>
         ) : null}
       </div>
 
-      <div className={`mt-5 flex h-14 w-14 items-center justify-center rounded-full border ${tone.iconWrap}`}>
+      <div className={`mt-3.5 flex h-[46px] w-[46px] items-center justify-center rounded-full border ${iconToneClass}`}>
         {item.icon}
       </div>
 
-      <h3 className="mt-5 break-words text-lg font-semibold leading-tight text-[var(--text-primary)]">{item.title}</h3>
-      <p className="mt-1.5 text-[1.05rem] text-[var(--text-secondary)]">{item.subtitle}</p>
+      <h3 className="mt-3.5 break-words text-[1.2rem] font-semibold leading-tight text-[var(--text-primary)]">{item.title}</h3>
+      <p className="mt-1 text-[0.85rem] text-[var(--text-secondary)]">{item.subtitle}</p>
 
-      <ul className="mt-5 space-y-2">
+      <ul className="mt-3.5 space-y-1">
         {item.checks.map((check) => (
-          <li key={check} className="flex items-start gap-2 text-[14px] leading-5 text-[var(--text-secondary)]">
+          <li key={check} className="flex items-start gap-2 text-[11px] leading-[1.25rem] text-[var(--text-secondary)]">
             <span className="mt-[2px] inline-flex h-4 w-4 flex-shrink-0 items-center justify-center text-[var(--text-muted)]">
               <Check className="h-3 w-3" />
             </span>
@@ -99,11 +103,11 @@ function CycleStepCard({ item }: { item: CycleStepCardItem }) {
         ))}
       </ul>
 
-      <div className="mt-auto pt-7 space-y-3">
-        <div className={`inline-flex min-h-[44px] w-full items-center justify-center rounded-[12px] border px-4 text-base font-semibold ${tone.cta}`}>
+      <div className="mt-auto pt-4 space-y-2.5">
+        <div className={`inline-flex min-h-[40px] w-full items-center justify-center rounded-[12px] border px-4 text-[0.88rem] font-semibold ${tone.cta}`}>
           {item.ctaLabel}
         </div>
-        <div className={`flex items-center gap-2 text-sm font-medium ${tone.status}`}>
+        <div className={`flex items-center gap-2 text-[11px] font-medium ${tone.status}`}>
           {getStatusIcon(item.status)}
           <span>{item.statusText}</span>
         </div>

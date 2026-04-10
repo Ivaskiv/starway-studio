@@ -32,6 +32,20 @@ export interface DailyEntryForAi {
     answer: string;
   }[];
 }
+
+export interface SaveDailyAnswerInput {
+  entryId?: string;
+  session: 'morning' | 'evening';
+  questionId: string;
+  answer: string;
+  date: string;
+  lastQuestionIndex: number;
+  channel?: 'tg' | 'miniapp' | 'web';
+}
+
+export interface SkipDailyEntryInput {
+  date: string;
+}
 // ======================================================
 // DTO З ФРОНТА (БЕЗ userId, date, id)
 // ======================================================
@@ -44,6 +58,7 @@ export interface DailyEntryDTO {
   microSupport?: MicroSupportItem[];
   answers?: DailyAnswerInput[];
   expertId?: string;
+  finalize?: boolean;
 }
 
 // ======================================================
@@ -60,6 +75,7 @@ export interface DailyEntryInput {
   answers?: DailyAnswerInput[];
   microSupport?: JsonMicroSupport;
   date?: string | Date; // щоб можна було передавати строку з фронта
+  finalize?: boolean;
 }
 
 export interface UpsertDailyEntryInput extends DailyEntryInput {

@@ -32,7 +32,7 @@ export const NAVIGATION: NavMenu[] = [
         pages: [
           {
             id:          'platform-mentor',
-            label:       'AI Ментор',
+            label:       'ABsystem',
             icon:        '🤖',
             description: 'Персональний ментор на базі GPT-4',
             path:        '/platform/mentor',
@@ -82,7 +82,7 @@ export const NAVIGATION: NavMenu[] = [
             id:          'programs-premium',
             label:       'Premium',
             icon:        '✦',
-            description: 'AI Ментор · Цілі · Zoom · Курси',
+            description: 'ABsystem · Цілі · Zoom · Курси',
             path:        '/programs/premium',
           },
         ],

@@ -16,10 +16,24 @@ export function useLeadMagnetRegistration() {
     if (!name.trim() || !phone.trim()) return
 
     try {
+      const search = new URLSearchParams(window.location.search)
+      const expertId =
+        search.get('expertId')?.trim() ||
+        window.localStorage.getItem('expertId')?.trim() ||
+        import.meta.env.VITE_EXPERT_ID?.trim() ||
+        undefined
+      const utmSource = search.get('utm_source')?.trim() || search.get('utmSource')?.trim() || undefined
+      const utmCampaign = search.get('utm_campaign')?.trim() || search.get('utmCampaign')?.trim() || undefined
+      const productId = search.get('product_id')?.trim() || search.get('productId')?.trim() || undefined
+
       const result = await register({
         name: name.trim(),
         phone: phone.trim(),
         packageType: selectedPackage,
+        ...(expertId ? { expertId } : {}),
+        ...(utmSource ? { utm_source: utmSource } : {}),
+        ...(utmCampaign ? { utm_campaign: utmCampaign } : {}),
+        ...(productId ? { product_id: productId } : {}),
       }).unwrap()
 
       // Зберігаємо токен і юзера в Redux

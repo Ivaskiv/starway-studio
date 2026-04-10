@@ -1,5 +1,5 @@
 // frontend/src/features/user/components/ProfileHero.tsx
-import { useAuth }   from '@/features/auth/hooks/useAuth'
+import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import { GlassCard } from '@/ui'
@@ -7,7 +7,7 @@ import { Crown }     from 'lucide-react'
 
 export default function ProfileHero() {
   const { user } = useAuth()
-  const { accessControl } = useSystemState()
+  const { accessControl, subscription } = useSystemState()
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !user?.id })
   if (!user) return null
 
@@ -17,8 +17,8 @@ export default function ProfileHero() {
     ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}`
     : user.name ?? 'Користувач'
 
-  const isPaid = Boolean(user.access?.isPaid)
-  const isTrial = Boolean(trial?.isActive || user.access?.isTrial || (accessControl?.hasSubscription && !isPaid))
+  const isPaid = Boolean(user.access?.isPaid || subscription?.isActive || accessControl?.hasSubscription)
+  const isTrial = !isPaid && Boolean(trial?.isActive || user.access?.isTrial)
   const planLabel =
     isPaid ? 'Pro'
     : isTrial ? 'Trial'
@@ -44,7 +44,7 @@ export default function ProfileHero() {
             {displayName}
           </h2>
           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${planClass} flex items-center gap-1`}>
-            {user.access?.isPaid && <Crown className="w-3 h-3" />}
+            {isPaid && <Crown className="w-3 h-3" />}
             {planLabel}
           </span>
         </div>

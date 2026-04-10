@@ -1,4 +1,5 @@
 import { api } from '@/services/api'
+import type { User } from '@/features/user/types/user.types'
 
 interface ResolveDeepLinkResponse {
   ok: boolean
@@ -14,6 +15,12 @@ interface ResolveDeepLinkResponse {
   state: string | null
   telegramUrl: string
   webUrl: string
+}
+
+interface RestoreDeepLinkSessionResponse extends ResolveDeepLinkResponse {
+  user: User
+  accessToken: string
+  expiresIn: number
 }
 
 interface GenerateDeepLinkResponse {
@@ -56,10 +63,18 @@ export const deeplinksApi = api.injectEndpoints({
         body,
       }),
     }),
+    restoreDeepLinkSession: builder.mutation<RestoreDeepLinkSessionResponse, { token: string; consume?: boolean }>({
+      query: body => ({
+        url: '/deeplinks/resolve-session',
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
 })
 
 export const {
   useGenerateDeepLinkMutation,
   useResolveDeepLinkMutation,
+  useRestoreDeepLinkSessionMutation,
 } = deeplinksApi

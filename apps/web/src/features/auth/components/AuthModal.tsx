@@ -1,7 +1,6 @@
 // frontend/src/features/auth/components/AuthModal.tsx
 import { X } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
-import { Button } from '@/ui'
 import { useAuth } from '../hooks/useAuth'
 import { LoginForm } from './LoginForm'
 import { RegisterForm } from './RegisterForm'
@@ -43,10 +42,10 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
   const handleSocial = async (provider: 'google' | 'telegram') => {
     setIsProcessing(true)
     try {
-      const result = await loginWithSocial(provider)
+      await loginWithSocial(provider)
       toast.success(getToastMessage('auth.socialSuccess', lang))
       onClose()
-      await postAuthNavigate({ email: result.email ?? null })
+      await postAuthNavigate()
     } catch (err) {
       const message = err instanceof Error && err.message.includes('VITE_GOOGLE_CLIENT_ID not configured')
         ? getToastMessage('auth.socialGoogleNotConfigured', lang)
@@ -78,25 +77,14 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gradient-radial from-white/12 via-black/46 to-black/62 backdrop-blur-xl supports-[backdrop-filter]:bg-black/32 animate-fadeIn"
+      className="modal-overlay animate-fadeIn"
       onClick={onClose}
     >
       <div
         className="relative w-full max-w-md animate-scaleFadeIn"
         onClick={e => e.stopPropagation()}
       >
-        {/* Outer accent aura separates the modal from the blurred background. */}
-        <div className="pointer-events-none absolute -inset-8 rounded-[40px] bg-[radial-gradient(circle_at_50%_0%,rgba(var(--accent-rgb),.34),rgba(var(--accent-rgb),.14)_24%,transparent_68%)] blur-3xl opacity-95" />
-        <div className="pointer-events-none absolute -inset-3 rounded-[34px] bg-[radial-gradient(circle_at_50%_100%,rgba(36,58,118,.2),transparent_62%)] blur-2xl opacity-80" />
-        <div className="pointer-events-none absolute -inset-px rounded-[30px] bg-[linear-gradient(135deg,rgba(255,255,255,.24)0%,rgba(36,58,118,.42)18%,rgba(255,255,255,.08)38%,rgba(255,255,255,.05)62%,rgba(var(--accent-rgb),.18)82%,rgba(255,255,255,.12)100%)] opacity-75" />
-
-        {/* Semi-transparent gradient keeps background visible; backdrop blur softens the page behind the modal. */}
-        <div className="relative overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(155deg,rgba(255,255,255,.16)0%,rgba(255,255,255,.08)14%,rgba(255,255,255,.03)34%,rgba(10,12,18,.72)60%,rgba(7,8,12,.88)100%)] shadow-[0_1px_0_rgba(255,255,255,.24)_inset,0_-1px_0_rgba(0,0,0,.34)_inset,0_24px_80px_rgba(0,0,0,.58),0_12px_34px_rgba(0,0,0,.34),0_0_72px_rgba(36,58,118,.26)] backdrop-blur-2xl">
-          {/* Refraction layers create the liquid-glass / icy transparency effect. */}
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,.16)0%,rgba(255,255,255,.05)18%,transparent_42%,rgba(255,255,255,.03)100%)]" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,.26),rgba(var(--accent-rgb),.18)_26%,transparent_72%)] blur-xl" />
-          <div className="pointer-events-none absolute -left-12 top-10 h-40 w-24 rotate-[18deg] bg-[linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,0))] opacity-70 blur-lg" />
-          <div className="pointer-events-none absolute -right-10 bottom-8 h-32 w-20 -rotate-[16deg] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),.2),rgba(255,255,255,0))] opacity-60 blur-lg" />
+        <div className="auth-modal-shell relative overflow-hidden rounded-[30px]">
           <div className="pointer-events-none absolute inset-[1px] rounded-[29px] border border-[rgba(255,255,255,.05)]" />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/85 to-transparent opacity-80" />
 
@@ -122,30 +110,29 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
               <RegisterForm key={`register-${formKey.current}`} onSwitch={switchMode} onSuccess={handleRegisterSuccess} />
             )}
 
-            {/* Social buttons */}
             {showSocialSection && (
               <>
-                <div className="relative flex items-center my-4">
+                {/* <div className="relative flex items-center my-4">
                   <span className="px-3 text-xs text-white/40">або продовжити через</span>
                   <div className="absolute inset-0 flex items-center">
                     <div className="flex-1 h-px bg-white/8"></div>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                </div> */}
+                {/* <div className="grid grid-cols-2 gap-3">
                   {showGoogleSocial ? (
                     <Button variant="outline" onClick={() => handleSocial('google')} disabled={isProcessing}>Google</Button>
                   ) : <div />}
                   {showTelegramSocial ? (
                     <Button variant="outline" onClick={() => handleSocial('telegram')} disabled={isProcessing}>Telegram</Button>
                   ) : <div />}
-                </div>
+                </div> */}
               </>
             )}
           </div>
 
           {/* Processing overlay */}
           {isProcessing && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[linear-gradient(180deg,rgba(9,10,16,.82),rgba(7,8,12,.9))] backdrop-blur-md rounded-[30px] z-20">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-[30px] bg-[linear-gradient(180deg,rgba(9,10,16,.88),rgba(7,8,12,.94))] z-20">
               <div className="w-11 h-11 border-3 border-[rgb(var(--accent-rgb))] border-t-transparent rounded-full animate-spin shadow-[0_0_24px_rgba(var(--accent-rgb),.28)]" />
               <p className="text-white/70 text-sm">Обробка...</p>
             </div>

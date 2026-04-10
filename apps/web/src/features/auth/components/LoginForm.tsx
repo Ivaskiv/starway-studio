@@ -13,6 +13,12 @@ import { useState }             from 'react'
 import toast                    from 'react-hot-toast'
 import { useNavigate }          from 'react-router-dom'
 
+function getTurnstileToken() {
+  if (typeof window === 'undefined') return ''
+  const tokenFromWindow = (window as Window & { __STARWAY_TURNSTILE_TOKEN__?: string }).__STARWAY_TURNSTILE_TOKEN__
+  return String(tokenFromWindow ?? '').trim()
+}
+
 interface Props {
   onSuccess: () => void
   onSwitch: () => void
@@ -46,19 +52,26 @@ export function LoginForm({
   )
 
   const form = useForm({
-    defaultValues: { email: initialEmail, password: initialPassword, remember: true },
+    defaultValues: { email: initialEmail, password: initialPassword, remember: true, companyWebsite: '' },
     onSubmit: async ({ value }) => {
       try {
         const expertId = resolveExpertId()
         await login({
           email: value.email.trim(),
           password: value.password,
+          companyWebsite: value.companyWebsite,
+          turnstileToken: getTurnstileToken(),
           ...(expertId ? { expertId } : {}),
         }).unwrap()
         toast.success(getToastMessage('auth.loginSuccess', lang))
         onSuccess()
       } catch (err: any) {
         const message =
+          err?.data?.error === 'bot_detected'
+            ? 'Схоже на автоматичну спробу. Спробуй ще раз.'
+            : err?.data?.error === 'human_verification_required' || err?.data?.error === 'human_verification_failed'
+              ? 'Потрібно підтвердити, що ти не бот.'
+            :
           err?.data?.error === 'invalid_credentials'
             ? getToastMessage('auth.loginInvalidCredentials', lang)
             : err?.data?.message || getToastMessage('auth.loginFailed', lang)
@@ -112,6 +125,19 @@ export function LoginForm({
   return (
     <FormLayout title="Увійти" subtitle="Введіть ваші дані">
       <form onSubmit={e => { e.preventDefault(); form.handleSubmit() }} className="flex flex-col gap-4">
+
+        <form.Field name="companyWebsite">
+          {field => (
+            <input
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              value={field.state.value}
+              onChange={e => field.handleChange(e.target.value)}
+              className="absolute left-[-9999px] top-0 h-0 w-0 opacity-0 pointer-events-none"
+            />
+          )}
+        </form.Field>
 
         <form.Field
           name="email"

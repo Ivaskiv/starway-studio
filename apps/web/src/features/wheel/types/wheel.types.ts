@@ -235,7 +235,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     to: '/dashboard/ai-mentor',
     icon: Sparkles,
-    label: 'AI Ментор',
+    label: 'ABsystem',
     ability: ABILITIES.AI_USE,
   },
   {

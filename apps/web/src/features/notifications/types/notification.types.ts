@@ -1,17 +1,24 @@
-import { Ability } from '@/features/auth/permissions/abilities';
+export interface NotificationPayload {
+  event?: string | null;
+  ctaText?: string | null;
+  ctaUrl?: string | null;
+  sourceChannel?: string | null;
+  [key: string]: unknown;
+}
 
 export interface Notification {
   id: string;
   userId: string;
-  type: 'info' | 'success' | 'warning' | 'achievement' | 'reminder' | 'system';
+  type: string;
   title: string;
-  message: string;
-  icon?: string;
-  actionUrl?: string;
-  isRead: boolean;
+  body: string;
+  data?: NotificationPayload | null;
+  channel?: 'TELEGRAM' | 'IN_APP' | 'EMAIL';
+  status?: 'PENDING' | 'SENT' | 'FAILED';
+  templateKey?: string | null;
+  readAt?: string | null;
+  sentAt?: string | null;
   createdAt: string;
-  description?: string;
-  ability?: Ability;
 }
 
 export interface NotificationsState {

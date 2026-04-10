@@ -1,7 +1,7 @@
 import type { Request } from 'express'
 
-import { prisma } from '../../db/client.js'
-import type { AuthUser } from '../../types/globalTypes.js'
+import type { AuthUser, UserRole } from '../../types/globalTypes.js'
+import { getCachedAuthUser } from '../../lib/db/userCache.js'
 import { findLinkedUserId } from '../telegram-mentor/services/linking.service.js'
 import { verifyAccessToken } from './auth.service.js'
 import { verifyTelegramInitData } from './telegram.js'
@@ -9,16 +9,14 @@ import { verifyTelegramInitData } from './telegram.js'
 const BOT_SECRET = process.env.INTERNAL_BOT_API_SECRET || process.env.TELEGRAM_BOT_TOKEN || ''
 
 async function findAuthUserByUserId(userId: string): Promise<AuthUser | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, role: true, email: true },
-  })
+  const user = await getCachedAuthUser(userId)
 
   if (!user) return null
   return {
     id: user.id,
-    role: user.role,
+    role: user.role as UserRole,
     email: user.email,
+    expertId: user.expertId ?? null,
   }
 }
 
@@ -66,7 +64,8 @@ export async function getServerUser(
 
   if (header?.startsWith('Bearer ')) {
     const token = header.slice('Bearer '.length).trim()
-    return verifyAccessToken(token) as AuthUser
+    const authUser = verifyAccessToken(token) as AuthUser
+    return findAuthUserByUserId(authUser.id)
   }
 
   if (header?.startsWith('tma ')) {

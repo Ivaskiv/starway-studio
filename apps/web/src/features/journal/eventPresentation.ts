@@ -16,7 +16,7 @@ export const JOURNAL_DISPLAY_META: Record<JournalDisplayType, {
   AI: {
     dotClassName: 'bg-emerald-400',
     badgeClassName: 'bg-emerald-500/12 text-emerald-300 border-emerald-400/20',
-    label: 'AI сесія',
+    label: 'Сесія з ментором',
   },
   ZOOM: {
     dotClassName: 'bg-violet-400',

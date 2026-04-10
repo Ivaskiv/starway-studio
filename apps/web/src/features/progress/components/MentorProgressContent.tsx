@@ -1,21 +1,19 @@
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
-import { useGetTodayEntryQuery, useGetDailyHistoryQuery } from '@/features/daily-cycle/services/daily.api'
+import { useGetDailyHistoryQuery } from '@/features/daily-cycle/services/daily.api'
 import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api'
 import { useGetActiveMicroTasksQuery } from '@/features/microTask/api/api'
+import { getMicroTaskSphereMeta } from '@/features/microTask/utils/sphereMeta'
+import { useUserProgress } from '@/features/user/hooks/useUserProgress'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
-import { clampTrialDay, getTrialCompletionPercent, getTrialDaysLeft, TRIAL_TOTAL_DAYS } from '@/features/trial/utils/trialProgress'
+import { getTrialDaysLeft, TRIAL_TOTAL_DAYS } from '@/features/trial/utils/trialProgress'
 import { useGetWheelHistoryQuery } from '@/features/wheel/services/wheel.api'
 import { GlassCard } from '@/ui'
 import { BarChart3, CheckCircle2, CircleDashed, Flame, ListTodo, Moon, Sparkles, SunMedium } from 'lucide-react'
+import { useMemo } from 'react'
 
 interface MentorProgressContentProps {
   compact?: boolean
-}
-
-type DailyContent = {
-  morning?: Record<string, string>
-  evening?: Record<string, string>
 }
 
 export default function MentorProgressContent({
@@ -26,21 +24,31 @@ export default function MentorProgressContent({
   const userId = user?.id ?? ''
   const { data: summary } = useGetSummaryQuery(undefined, { skip: !userId })
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !userId })
-  const { data: todayEntry } = useGetTodayEntryQuery(undefined, { skip: !userId || accessControl?.hasRequiredContacts === false })
-  const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, { skip: !userId || accessControl?.hasRequiredContacts === false })
-  const { data: wheelHistory = [] } = useGetWheelHistoryQuery({ userId, limit: 12 }, { skip: !userId || accessControl?.hasRequiredContacts === false })
-  const { data: microTasks = [] } = useGetActiveMicroTasksQuery(undefined, { skip: !userId || accessControl?.hasRequiredContacts === false })
+  const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, { skip: !userId })
+  const { data: wheelHistory = [] } = useGetWheelHistoryQuery({ userId, limit: 12 }, { skip: !userId })
+  const { data: microTasks = [] } = useGetActiveMicroTasksQuery(undefined, { skip: !userId })
+  const { journeySteps, dayNumber } = useUserProgress()
 
-  const currentDay = clampTrialDay(trial?.currentDay)
-  const trialProgress = getTrialCompletionPercent(trial?.currentDay)
+  const isPaidCycle = Boolean(trial?.isPaid || accessControl?.hasSubscription)
+  const currentDay = dayNumber || Math.max(0, trial?.currentDay ?? 0)
+  const journeyTotalDays = isPaidCycle ? 30 : TRIAL_TOTAL_DAYS
+  const trialProgress = journeyTotalDays > 0
+    ? Math.min(100, Math.round((currentDay / journeyTotalDays) * 100))
+    : 0
   const trialDaysLeft = trial?.isActive ? getTrialDaysLeft(trial?.currentDay) : 0
   const totalSessions = dailyHistory.length
   const totalWheels = wheelHistory.length
   const activeMicroTasks = microTasks.filter(task => (task.status ?? 'PENDING') !== 'COMPLETED')
   const completedMicroTasks = microTasks.filter(task => (task.status ?? 'PENDING') === 'COMPLETED')
-  const todayContent = (todayEntry?.content ?? null) as DailyContent | null
-  const hasMorningSession = Boolean(todayContent?.morning)
-  const hasEveningSession = Boolean(todayContent?.evening)
+  const journeyStepMap = useMemo(() => new Map(journeySteps.map(step => [step.id, step])), [journeySteps])
+  const tasksBySphere = activeMicroTasks.reduce<Record<string, number>>((acc, task) => {
+    const key = task.sphere ?? 'general'
+    acc[key] = (acc[key] ?? 0) + 1
+    return acc
+  }, {})
+  const focusSpheres = Object.entries(tasksBySphere)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, compact ? 3 : 5)
   const reportsCount = Number(Boolean(trial?.hasDay4Mirror)) + Number(Boolean(trial?.hasDay7Mirror))
   const level = summary?.xp.level ?? 1
   const totalPoints = summary?.rewards.bitMind ?? 0
@@ -59,11 +67,11 @@ export default function MentorProgressContent({
   ]
 
   const mentorBlocks = [
-    { label: 'Ранкова сесія', value: hasMorningSession ? 'Готово' : 'Ще ні', sub: 'Щоденний check-in', icon: SunMedium, done: hasMorningSession },
-    { label: 'Вечірня сесія', value: hasEveningSession ? 'Готово' : 'Ще ні', sub: 'Рефлексія дня', icon: Moon, done: hasEveningSession },
-    { label: 'Колесо балансу', value: totalWheels, sub: 'Усього заповнень', icon: BarChart3, done: totalWheels > 0 },
-    { label: 'Мікрозавдання', value: `${completedMicroTasks.length}/${microTasks.length}`, sub: `${activeMicroTasks.length} активних`, icon: ListTodo, done: activeMicroTasks.length === 0 && microTasks.length > 0 },
-    { label: 'AI звіти', value: reportsCount, sub: 'Дзеркала 4/7 дня', icon: Sparkles, done: reportsCount > 0 },
+    { label: 'Ранкова сесія', value: journeyStepMap.get('morning')?.status === 'done' ? 'Готово' : 'Ще ні', sub: 'Щоденний check-in', icon: SunMedium, done: journeyStepMap.get('morning')?.status === 'done' },
+    { label: 'Вечірня сесія', value: journeyStepMap.get('evening')?.status === 'done' ? 'Готово' : 'Ще ні', sub: 'Рефлексія дня', icon: Moon, done: journeyStepMap.get('evening')?.status === 'done' },
+    { label: 'Колесо балансу', value: totalWheels, sub: 'Усього заповнень', icon: BarChart3, done: journeyStepMap.get('wheel')?.status === 'done' },
+    { label: 'Мікрозавдання', value: `${completedMicroTasks.length}/${microTasks.length}`, sub: `${activeMicroTasks.length} активних`, icon: ListTodo, done: journeyStepMap.get('tasks')?.status === 'done' },
+    { label: 'Звіти', value: reportsCount, sub: 'Дзеркала 4/7 дня', icon: Sparkles, done: journeyStepMap.get('report')?.status !== 'locked' },
   ]
 
   return (
@@ -72,10 +80,10 @@ export default function MentorProgressContent({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-[rgb(var(--accent-soft-rgb))]">
-              AI Mentor Progress
+              ABsystem Progress
             </p>
             <h3 className="mt-1 text-xl font-semibold text-[var(--text-primary)]">
-              День {currentDay || '—'} з {TRIAL_TOTAL_DAYS}
+              День {currentDay || '—'} з {journeyTotalDays}
             </h3>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               {trial?.isActive ? `Залишилось ${trialDaysLeft} дн.` : accessControl?.hasSubscription ? 'Доступ активний' : 'Тріал не активний'}
@@ -139,7 +147,7 @@ export default function MentorProgressContent({
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h4 className="text-base font-semibold text-[var(--text-primary)]">Структура прогресу</h4>
-            <p className="text-sm text-[var(--text-muted)]">Усі ключові блоки AI Mentor на одній сторінці.</p>
+            <p className="text-sm text-[var(--text-muted)]">Усі ключові блоки ABsystem на одній сторінці.</p>
           </div>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-muted)]">
             До рівня: {Math.max(nextLevelXp - currentLevelXp, 0)} XP
@@ -177,10 +185,42 @@ export default function MentorProgressContent({
           ))}
         </div>
 
+        {focusSpheres.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Сфери у фокусі</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Активні мікрозавдання вже мапляться на відповідні грані трекера.
+                </p>
+              </div>
+              <span className="rounded-full bg-[rgba(var(--accent-rgb),0.12)] px-2.5 py-1 text-[10px] font-semibold text-[var(--accent)]">
+                {activeMicroTasks.length} активних
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {focusSpheres.map(([sphere, count]) => {
+                const meta = getMicroTaskSphereMeta(sphere)
+                return (
+                  <span
+                    key={sphere}
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-tertiary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]"
+                  >
+                    <span>{meta.emoji}</span>
+                    <span>{meta.label}</span>
+                    <span className="text-[var(--accent)]">{count}</span>
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {!accessControl?.hasSubscription && !trial?.isActive ? (
           <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-muted)]">
             <CircleDashed className="h-4 w-4" />
-            Підключи тріал або підписку, щоб прогрес оновлювався по всіх модулях.
+            Історія збережена. Нові дії потребують активного доступу, але пройдене лишається видимим.
           </div>
         ) : null}
       </GlassCard>

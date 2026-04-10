@@ -230,7 +230,7 @@ export function ThemeSettingsPanel({
                     )}
                   </div>
 
-                  <div className="mt-3 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3 shadow-[inset_0_1px_0_var(--glass-highlight)] backdrop-blur-[var(--blur-soft)]">
+                  <div className="mt-3 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3 shadow-[inset_0_1px_0_var(--glass-highlight)]">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
                       Поточне значення
                     </p>

@@ -8,6 +8,12 @@ import toast                    from 'react-hot-toast'
 import { useRegisterMutation }  from '../services/auth.api'
 import { FormLayout }           from './FormLayout'
 
+function getTurnstileToken() {
+  if (typeof window === 'undefined') return ''
+  const tokenFromWindow = (window as Window & { __STARWAY_TURNSTILE_TOKEN__?: string }).__STARWAY_TURNSTILE_TOKEN__
+  return String(tokenFromWindow ?? '').trim()
+}
+
 interface Props {
   email?:    string
   name?:     string
@@ -42,18 +48,26 @@ export function RegisterForm({ email: initialEmail = '', name: initialName = '',
   const isSocialEmail = !!initialEmail
 
   const form = useForm({
-    defaultValues: { name: initialName, email: initialEmail, password: '', confirmPassword: '' },
+    defaultValues: { name: initialName, email: initialEmail, password: '', confirmPassword: '', companyWebsite: '' },
     onSubmit: async ({ value }) => {
       try {
         const response = await registerUser({
-          email: value.email.trim(), password: value.password, name: value.name.trim(),
+          email: value.email.trim(),
+          password: value.password,
+          name: value.name.trim(),
+          companyWebsite: value.companyWebsite,
+          turnstileToken: getTurnstileToken(),
         }).unwrap()
         toast.success(getToastMessage('auth.registerSuccess', lang))
         if (response.accessToken) onSuccess({ email: value.email, password: value.password })
         else onSuccess()
       } catch (err: any) {
         toast.error(
-          err?.data?.error === 'email_already_registered'
+          err?.data?.error === 'bot_detected'
+            ? 'Схоже на автоматичну спробу. Спробуй ще раз.'
+            : err?.data?.error === 'human_verification_required' || err?.data?.error === 'human_verification_failed'
+              ? 'Потрібно підтвердити, що ти не бот.'
+            : err?.data?.error === 'email_already_registered'
             ? getToastMessage('auth.registerEmailExists', lang)
             : err?.data?.message || getToastMessage('auth.registerFailed', lang),
         )
@@ -67,6 +81,19 @@ export function RegisterForm({ email: initialEmail = '', name: initialName = '',
       subtitle={isSocialEmail ? 'Ми отримали ваші дані з соцмережі' : 'Заповніть форму для реєстрації'}
     >
       <form onSubmit={e => { e.preventDefault(); e.stopPropagation(); form.handleSubmit() }} className="space-y-4">
+
+        <form.Field name="companyWebsite">
+          {field => (
+            <input
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              value={field.state.value}
+              onChange={e => field.handleChange(e.target.value)}
+              className="absolute left-[-9999px] top-0 h-0 w-0 opacity-0 pointer-events-none"
+            />
+          )}
+        </form.Field>
 
         {/* Name */}
         <form.Field name="name" validators={{ onBlur: ({ value }) =>

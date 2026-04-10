@@ -3,13 +3,32 @@ import { prisma } from '../../db/client.js'
 import { serverError } from '../../utils/serverError.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { assignUserToExpert, resolveDefaultMentorOwnerExpertId } from '../experts/ownership.service.js'
+import { trackEvent } from '../events/service.js'
+import { syncLifecycleForUser } from '../flow-control/service.js'
+
+async function resolveExpertId(expertId: string | null | undefined): Promise<string | null> {
+  const value = String(expertId ?? '').trim()
+  if (!value) return null
+
+  const expert = await prisma.expert.findUnique({
+    where: { id: value },
+    select: { id: true },
+  }).catch(() => null)
+
+  return expert?.id ?? null
+}
 
 export async function registerLeadMagnet(req: Request, res: Response) {
-  const { name, phone, email, packageType = 'free' } = req.body as {
+  const { name, phone, email, packageType = 'free', expertId, utm_source, utm_campaign, product_id } = req.body as {
     name: string
     phone?: string
     email?: string
     packageType?: 'free' | 'trial' | 'paid'
+    expertId?: string
+    utm_source?: string
+    utm_campaign?: string
+    product_id?: string
   }
 
   if (!name || (!phone && !email)) {
@@ -17,6 +36,8 @@ export async function registerLeadMagnet(req: Request, res: Response) {
   }
 
   try {
+    const validatedExpertId = await resolveExpertId(expertId)
+    const resolvedOwnerExpertId = validatedExpertId ?? await resolveDefaultMentorOwnerExpertId()
     // Генеруємо email якщо немає (phone-only реєстрація)
     const userEmail = email ?? `${phone?.replace(/\D/g, '')}@starway.app`
 
@@ -31,9 +52,36 @@ export async function registerLeadMagnet(req: Request, res: Response) {
           name,
           passwordHash,
           onboardingStage: 'lead_magnet',
+          expertId: resolvedOwnerExpertId ?? undefined,
         },
       })
     }
+
+    if (resolvedOwnerExpertId && user.expertId !== resolvedOwnerExpertId) {
+      await assignUserToExpert(user.id, resolvedOwnerExpertId)
+      user = await prisma.user.findUnique({ where: { id: user.id } })
+    }
+
+    if (!user) {
+      return res.status(500).json({ error: 'leadmagnet_user_not_found_after_assignment' })
+    }
+
+    const effectiveExpertId = resolvedOwnerExpertId ?? user.expertId ?? null
+
+    await trackEvent({
+      userId: user.id,
+      type: 'lead_entered_app',
+      source: 'web',
+      state: packageType === 'trial' ? 'in_trial' : 'lead_magnet',
+      payload: {
+        email: user.email,
+        utm_source: utm_source ?? null,
+        utm_campaign: utm_campaign ?? null,
+        product_id: product_id ?? null,
+        expertId: effectiveExpertId,
+        packageType,
+      },
+    })
 
     // Якщо trial — активуємо 7-денний trial
     if (packageType === 'trial') {
@@ -52,6 +100,7 @@ export async function registerLeadMagnet(req: Request, res: Response) {
             status: 'TRIAL',
             planCode: 'trial_7d',
             trialEndsAt: trialEnd,
+            expertId: effectiveExpertId ?? undefined,
           },
         })
       } else {
@@ -61,10 +110,13 @@ export async function registerLeadMagnet(req: Request, res: Response) {
             status: 'TRIAL',
             planCode: 'trial_7d',
             trialEndsAt: trialEnd,
+            expertId: effectiveExpertId ?? undefined,
           },
         })
       }
     }
+
+    await syncLifecycleForUser(user.id)
 
     // Видаємо токен щоб одразу залогінити
     const accessToken = jwt.sign(

@@ -28,10 +28,10 @@ export default function MentorLanding() {
         <div className="text-center mb-12">
           <Sparkles className="w-16 h-16 mx-auto mb-4 text-purple-400" />
           <h1 className="text-5xl font-bold text-white mb-4">
-            AI-Ментор: Зоряний Шлях
+            Ментор: Зоряний Шлях
           </h1>
           <p className="text-xl text-white/70">
-            Система для усвідомленого життя з підтримкою штучного інтелекту
+            Система для усвідомленого життя з щоденною менторською підтримкою
           </p>
         </div>
 
@@ -43,7 +43,7 @@ export default function MentorLanding() {
               Колесо балансу
             </h3>
             <p className="text-white/70">
-              Оціни 8 сфер життя та отримай персоналізований аналіз від AI
+              Оціни 8 сфер життя та отримай персоналізований аналіз
             </p>
           </GlassCard>
 
@@ -70,7 +70,7 @@ export default function MentorLanding() {
           <GlassCard className="p-6">
             <Sparkles className="w-10 h-10 text-yellow-400 mb-3" />
             <h3 className="text-xl font-semibold text-white mb-2">
-              Персоналізований AI
+              Персональний ментор
             </h3>
             <p className="text-white/70">
               Ментор адаптується до твоїх цілей та стилю спілкування
@@ -97,7 +97,7 @@ export default function MentorLanding() {
             <Step
               number={3}
               title="Почни щоденний цикл"
-              description="AI буде підтримувати тебе щодня"
+              description="Менторський контур буде підтримувати тебе щодня"
             />
           </div>
         </GlassCard>
@@ -111,7 +111,7 @@ export default function MentorLanding() {
           >
             {progress?.currentStep === 'complete' 
               ? 'Перейти до ментора' 
-              : 'Створити AI-ментора'}
+              : 'Створити ментора'}
           </Button>
           <p className="text-white/50 text-sm mt-4">
             Займе лише 8 хвилин • Безкоштовно 7 днів

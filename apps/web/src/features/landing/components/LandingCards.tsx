@@ -18,7 +18,7 @@ type LandingCardsProps = {
 
 const DEMO_CARDS: LandingCard[] = [
   { id: 'demo-hero', title: 'Warm Welcome Page', url: 'https://demo.ai/landing/hero', price: 0 },
-  { id: 'demo-automation', title: 'AI Funnel Builder', url: 'https://demo.ai/landing/funnel', price: 49 },
+  { id: 'demo-automation', title: 'Funnel Builder', url: 'https://demo.ai/landing/funnel', price: 49 },
   { id: 'demo-membership', title: 'Premium Membership', url: 'https://demo.ai/landing/premium', price: 99 },
 ];
 

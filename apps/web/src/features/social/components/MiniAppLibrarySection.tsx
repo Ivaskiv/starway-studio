@@ -9,7 +9,10 @@ interface MiniAppLibrarySectionProps {
 export default function MiniAppLibrarySection({ items }: MiniAppLibrarySectionProps) {
   return (
     <div className="space-y-4 px-4 pt-6">
-      <h2 className="text-xl font-bold text-[var(--text-primary)]">Бібліотека</h2>
+      <div className="space-y-1">
+        <h2 className="text-xl font-bold text-[var(--text-primary)]">Матеріали</h2>
+        <p className="text-sm text-[var(--text-secondary)]">Тут усе, що вже доступно тобі зараз у Starway.</p>
+      </div>
       <div className="space-y-3">
         {items.map((item) => (
           <div

@@ -40,7 +40,11 @@ export type AccessKey =
   | 'profile'
   | 'settings'
   | 'products.manage'
-  | 'settings.manage';
+  | 'settings.manage'
+  | 'admin.clients.view'
+  | 'admin.revenue.view'
+  | 'admin.roles.manage'
+  | 'funnels.manage';
 
 /**
  * План користувача
@@ -154,15 +158,18 @@ const mentorAbilities: AccessKey[] = [
   'mentor.mentorship',
   'ai.basic',
   'ai.deep',
-
   'ai.pdf',
   'ai.export',
+  'products.manage',
+  'admin.clients.view',
+  'funnels.manage',
 ]
 
 const adminAbilities: AccessKey[] = [
   ...mentorAbilities,
-  'products.manage',
   'settings.manage',
+  'admin.revenue.view',
+  'admin.roles.manage',
 ]
 
 export const ROLE_ABILITIES: Record<UserRole, AccessKey[]> = {

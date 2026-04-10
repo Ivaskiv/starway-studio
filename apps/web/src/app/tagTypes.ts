@@ -70,6 +70,7 @@ export const TAG_TYPES = [
   'MentorAccess', 'Onboarding',
   'AdminSettings',
   'AdminProducts',
+  'PromptVersions',
   'Daily', 'DailyCycle', 'Streak',
   'Trial',
   'Mirror',
@@ -98,6 +99,8 @@ export const TAG_TYPES = [
 'ZoomSession', 
 'ZoomAttendee', 
 'Journal',
+  'WebMap',
+  'WebMapDailyQuestion',
 ] as const
 
 export type TagType = (typeof TAG_TYPES)[number]

@@ -6,8 +6,10 @@ import {
 } from '@starway/db/prisma-client'
 import { openai } from '../../lib/openai.js'
 import { ensureMentor, ensureUserExpertId } from './helpers.js'
+import { runGuardedAiTask } from '../../services/aiGuard.service.js'
+export { isOpenAIQuotaError } from '../../services/aiGuard.service.js'
 
-type StateSource = 'morning' | 'evening' | 'wheel' | 'leadmagnet' | 'daily'
+type StateSource = 'morning' | 'evening' | 'wheel' | 'leadmagnet' | 'daily' | 'voice'
 
 type StateContextRecord = Record<string, unknown>
 
@@ -218,43 +220,95 @@ function normalizeActionType(value: string | null): RankedMicroAction['type'] {
   }
 }
 
+function createFallbackNormalizedState(
+  previousState: StateContextRecord | null,
+  input: {
+    source: StateSource
+    answers: Record<string, string>
+  },
+): Omit<UserAIMentorState, 'userId' | 'lastAnalyzedAt' | 'context' | 'source'> {
+  const previousCurrentState = normalizeEnum(
+    getString(previousState?.currentState ?? previousState?.state),
+    STATE_VALUES,
+  )
+  const previousClarityLevel = normalizeEnum(
+    getString(previousState?.clarityLevel),
+    CLARITY_VALUES,
+  )
+  const previousStage = normalizeEnum(
+    getString(previousState?.stage ?? previousState?.currentStage),
+    STAGE_VALUES,
+  )
+
+  return {
+    currentState: previousCurrentState ?? 'clarity',
+    behaviorPattern: getString(previousState?.behaviorPattern),
+    clarityLevel: previousClarityLevel ?? 'MEDIUM',
+    stage: previousStage ?? 'DECISION',
+    insight: 'AI-аналіз тимчасово недоступний. Відповіді збережено без втрати даних.',
+    blocker: getString(previousState?.blocker) ?? null,
+    realGoal: getString(previousState?.realGoal) ?? getString(input.answers.goal) ?? null,
+    recommendedFocus: getString(previousState?.recommendedFocus)
+      ?? getString(input.answers.nextAction)
+      ?? 'Заверши поточний крок',
+  }
+}
+
 async function analyzeState(input: {
+  userId: string
   previousState: StateContextRecord | null
   source: StateSource
   answers: Record<string, string>
 }): Promise<Omit<UserAIMentorState, 'userId' | 'lastAnalyzedAt' | 'context' | 'source'>> {
   const systemPrompt = input.previousState ? PROMPT_2 : PROMPT_1
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.2,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          source: input.source,
-          previousState: input.previousState,
-          answers: input.answers,
-        }),
+  const fallback = createFallbackNormalizedState(input.previousState, input)
+
+  return runGuardedAiTask(
+    {
+      userId: input.userId,
+      source: `state:${input.source}`,
+      label: 'state-analysis',
+      payload: {
+        source: input.source,
+        previousState: input.previousState,
+        answers: input.answers,
       },
-    ],
-    max_tokens: 300,
-  })
+    },
+    async () => {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              source: input.source,
+              previousState: input.previousState,
+              answers: input.answers,
+            }),
+          },
+        ],
+        max_tokens: 300,
+      })
 
-  const rawContent = completion.choices[0]?.message?.content ?? '{}'
-  const parsed = JSON.parse(rawContent) as Record<string, unknown>
+      const rawContent = completion.choices[0]?.message?.content ?? '{}'
+      const parsed = JSON.parse(rawContent) as Record<string, unknown>
 
-  return {
-    currentState: normalizeEnum(getString(parsed.currentState) ?? getString(parsed.state), STATE_VALUES),
-    behaviorPattern: getString(parsed.behaviorPattern),
-    clarityLevel: normalizeEnum(getString(parsed.clarityLevel), CLARITY_VALUES),
-    stage: normalizeEnum(getString(parsed.currentStage) ?? getString(parsed.stage), STAGE_VALUES),
-    insight: getString(parsed.insight),
-    blocker: getString(parsed.blocker),
-    realGoal: getString(parsed.realGoal),
-    recommendedFocus: getString(parsed.recommendedFocus) ?? getString(parsed.nextAction),
-  }
+      return {
+        currentState: normalizeEnum(getString(parsed.currentState) ?? getString(parsed.state), STATE_VALUES),
+        behaviorPattern: getString(parsed.behaviorPattern),
+        clarityLevel: normalizeEnum(getString(parsed.clarityLevel), CLARITY_VALUES),
+        stage: normalizeEnum(getString(parsed.currentStage) ?? getString(parsed.stage), STAGE_VALUES),
+        insight: getString(parsed.insight),
+        blocker: getString(parsed.blocker),
+        realGoal: getString(parsed.realGoal),
+        recommendedFocus: getString(parsed.recommendedFocus) ?? getString(parsed.nextAction),
+      }
+    },
+    () => fallback,
+  )
 }
 
 async function logStateToDailyEntry(input: {
@@ -331,8 +385,10 @@ export async function updateUserState(input: StateInput): Promise<UserAIMentorSt
     previousContext.normalizedState as Prisma.JsonValue | undefined,
   ) as StateContextRecord
 
+  const previousStateForFallback = Object.keys(previousNormalized).length > 0 ? previousNormalized : null
   const normalized = await analyzeState({
-    previousState: Object.keys(previousNormalized).length > 0 ? previousNormalized : null,
+    userId: input.userId,
+    previousState: previousStateForFallback,
     source: input.source,
     answers: input.answers,
   })
@@ -424,30 +480,48 @@ export async function generateMicroActions(userId: string): Promise<MicroActions
     select: { goals: true },
   })
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.2,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: PROMPT_4 },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          currentState: userMentor.currentState,
-          stage: userMentor.stage,
-          clarityLevel: userMentor.clarityLevel,
-          blocker: userMentor.blocker,
-          behaviorPattern: userMentor.behaviorPattern,
-          primaryGoal: primaryGoal?.goals ?? null,
-        }),
+  const parsed = await runGuardedAiTask(
+    {
+      userId,
+      source: 'micro-actions',
+      label: 'micro-actions',
+      payload: {
+        currentState: userMentor.currentState,
+        stage: userMentor.stage,
+        clarityLevel: userMentor.clarityLevel,
+        blocker: userMentor.blocker,
+        behaviorPattern: userMentor.behaviorPattern,
+        primaryGoal: primaryGoal?.goals ?? null,
       },
-    ],
-    max_tokens: 500,
-  })
+    },
+    async () => {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: PROMPT_4 },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              currentState: userMentor.currentState,
+              stage: userMentor.stage,
+              clarityLevel: userMentor.clarityLevel,
+              blocker: userMentor.blocker,
+              behaviorPattern: userMentor.behaviorPattern,
+              primaryGoal: primaryGoal?.goals ?? null,
+            }),
+          },
+        ],
+        max_tokens: 500,
+      })
 
-  const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as {
-    actions?: Array<Record<string, unknown>>
-  }
+      return JSON.parse(completion.choices[0]?.message?.content ?? '{}') as {
+        actions?: Array<Record<string, unknown>>
+      }
+    },
+    () => ({ actions: [] as Array<Record<string, unknown>> }),
+  )
 
   const actions = (parsed.actions ?? []).slice(0, 3).map((item, index) => ({
     rank: ([1, 2, 3][index] ?? 3) as 1 | 2 | 3,
@@ -476,29 +550,48 @@ export async function detectRegression(userId: string): Promise<RegressionResult
     },
   })
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.2,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: PROMPT_3 },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          last7Entries: entries.map(entry => ({
-            date: entry.date.toISOString(),
-            state: entry.state,
-            choice: entry.choice,
-            dayFact: entry.dayFact,
-            aiAnalysis: entry.aiAnalysis,
-          })),
-        }),
+  const parsed = await runGuardedAiTask(
+    {
+      userId,
+      source: 'regression',
+      label: 'regression-detection',
+      payload: {
+        last7Entries: entries.map(entry => ({
+          date: entry.date.toISOString(),
+          state: entry.state,
+          choice: entry.choice,
+          dayFact: entry.dayFact,
+          aiAnalysis: entry.aiAnalysis,
+        })),
       },
-    ],
-    max_tokens: 250,
-  })
+    },
+    async () => {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: PROMPT_3 },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              last7Entries: entries.map(entry => ({
+                date: entry.date.toISOString(),
+                state: entry.state,
+                choice: entry.choice,
+                dayFact: entry.dayFact,
+                aiAnalysis: entry.aiAnalysis,
+              })),
+            }),
+          },
+        ],
+        max_tokens: 250,
+      })
 
-  const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as Record<string, unknown>
+      return JSON.parse(completion.choices[0]?.message?.content ?? '{}') as Record<string, unknown>
+    },
+    () => ({ interventionNeeded: false, suggestedMessage: '' }),
+  )
   const interventionNeeded = parsed.interventionNeeded === true
   const suggestedMessage = getString(parsed.suggestedMessage) ?? ''
 

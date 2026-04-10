@@ -1,7 +1,7 @@
 import { DailyChoice, DailyDrain, DailyState } from "@/modules/daily-cycle/types.js";
 
 /**
- * 📐 AI Mentor types
+ * 📐 ABsystem types
  * Centralizes DTOs and domain models for trial/paid/onboarding/chat/daily/wheel flows.
  */
 export type OnboardingStage = 'ENTRY' | 'CHOICE' | 'ACTIONS' | 'GOAL' | 'VISION' | 'COMPLETED';
@@ -16,8 +16,8 @@ export interface StageConfig {
 export const STAGE_CONFIGS: Record<OnboardingStage, StageConfig> = {
   ENTRY: {
     title: 'Вітання',
-    description: 'Знайомство з AI Ментором',
-    prompt: 'Привіт! Я твій AI Ментор. Я скажу суворі правди, але тільки після запитання.',
+    description: 'Знайомство з ABsystemом',
+    prompt: 'Привіт! Я твій ABsystem. Я скажу суворі правди, але тільки після запитання.',
     nextStage: 'CHOICE',
   },
   CHOICE: {
@@ -78,6 +78,7 @@ export interface SessionContext {
 export interface AIGenerationRequest {
   prompt: string;
   context?: string[];
+  userId?: string;
 }
 
 export interface AIGenerationResponse {

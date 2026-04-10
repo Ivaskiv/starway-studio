@@ -15,7 +15,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/dashboard', icon: Home, label: 'Кабінет', key: 'dashboard.view' },
   // { path: '/dashboard/wheel', icon: Target, label: 'Колесо балансу', key: 'wheel.view' },
   { path: '/dashboard/products', icon: Package, label: 'Продукти', key: 'products.manage', isPremium: true },
-  { path: '/dashboard/mentor', icon: MessageCircle, label: 'AI Ментор', key: 'mentor.core', isPremium: true },
+  { path: '/dashboard/mentor', icon: MessageCircle, label: 'ABsystem', key: 'mentor.core', isPremium: true },
   { path: '/dashboard/profile', icon: User, label: 'Профіль', key: 'profile.view' },
   { path: '/dashboard/progress', icon: TrendingUp, label: 'Прогрес', key: 'progress.view' },
   { path: '/dashboard/settings', icon: Settings, label: 'Налаштування', key: 'settings.manage' },
@@ -29,6 +29,6 @@ export const FOOTER_LINKS = {
   ],
   tools: [
     { label: 'Колесо балансу', path: '/dashboard/wheel' },
-    { label: 'AI Ментор', path: '/dashboard/ai-mentor' },
+    { label: 'ABsystem', path: '/dashboard/ai-mentor' },
   ],
 };

@@ -16,13 +16,13 @@ const PLANS: Plan[] = [
   {
     name: 'Free', price: '0', period: 'назавжди', popular: false,
     desc: 'Спробуйте базові функції без карти',
-    features: ['Колесо балансу (1/місяць)', 'Щоденний цикл', 'Базова аналітика', 'AI Ментор (обмежено)'],
+    features: ['Колесо балансу (1/місяць)', 'Щоденний цикл', 'Базова аналітика', 'ABsystem (обмежено)'],
     cta: 'Почати безкоштовно',
   },
   {
     name: 'Premium', price: '33', period: 'на місяць', popular: true,
     desc: 'Повний доступ до всіх модулів',
-    features: ['Все з Free +', 'Необмежений AI Ментор', 'Бачення + Цілі', 'Zoom-сесії (щотижня)', 'Консультації', 'Пріоритетна підтримка'],
+    features: ['Все з Free +', 'Необмежений ABsystem', 'Точка Б + Цілі', 'Zoom-сесії (щотижня)', 'Консультації', 'Пріоритетна підтримка'],
     cta: 'Спробувати 7 днів безкоштовно',
   },
 ];
@@ -62,9 +62,9 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
               )}
 
               <GlassCard
-                className={`p-8 h-full transition-all duration-300 hover:scale-[1.02] ${
+                className={`landing-auth-surface h-full p-8 transition-all duration-300 hover:scale-[1.02] ${
                   plan.popular
-                    ? 'border-[rgba(var(--accent-rgb),0.40)] shadow-[0_24px_60px_rgba(var(--accent-rgb),0.10)]'
+                    ? 'shadow-[0_0_0_1px_rgba(var(--accent-rgb),0.24),0_0_32px_rgba(var(--accent-rgb),0.18),0_24px_60px_rgba(0,0,0,0.24)]'
                     : ''
                 }`}
               >

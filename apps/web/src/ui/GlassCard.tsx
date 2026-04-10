@@ -15,10 +15,10 @@ export type Variant =
   | 'muted';
 
 const blurMap: Record<Blur, string> = {
-  sm: 'backdrop-blur-[10px]',
-  md: 'backdrop-blur-[14px]',
-  lg: 'backdrop-blur-[18px]',
-  xl: 'backdrop-blur-[24px]',
+  sm: '',
+  md: '',
+  lg: '',
+  xl: '',
 };
 
 const variantClasses: Record<Variant, string> = {

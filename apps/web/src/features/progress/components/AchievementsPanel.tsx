@@ -113,7 +113,7 @@ export default function Achievements() {
               {/* Lock overlay */}
               {!achievement.unlocked && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
                     <svg
                       className="w-4 h-4 text-white/60"
                       fill="none"

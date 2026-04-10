@@ -112,6 +112,17 @@ export async function generateDeepLink(input: GenerateDeepLinkInput): Promise<Re
   const expiresAt = new Date(Date.now() + (input.expiresInSeconds ?? DEFAULT_TTL_SECONDS) * 1000)
   let link: DeepLinkToken
 
+  if (input.action === 'bind_telegram') {
+    await prisma.deepLinkToken.deleteMany({
+      where: {
+        userId: input.userId,
+        action: 'bind_telegram',
+        target: 'telegram',
+        consumedAt: null,
+      },
+    }).catch(() => undefined)
+  }
+
   try {
     link = await deepLinkTokenDelegate.create({
       data: {
@@ -178,6 +189,10 @@ export async function resolveDeepLinkToken(input: ResolveDeepLinkInput): Promise
     return null
   }
 
+  if (link.consumedAt) {
+    return null
+  }
+
   if (link.expiresAt.getTime() <= Date.now()) {
     return null
   }
@@ -221,7 +236,7 @@ export async function resolveDeepLinkToken(input: ResolveDeepLinkInput): Promise
   return serializeResolvedLink(resolved)
 }
 
-export async function createTelegramBindingDeepLink(userId: string): Promise<{ link: string; expiresIn: number; token: string }> {
+export async function createTelegramBindingDeepLink(userId: string): Promise<{ link: string; expiresIn: number; expiresAt: string; token: string }> {
   const generated = await generateDeepLink({
     userId,
     action: 'bind_telegram',
@@ -235,5 +250,6 @@ export async function createTelegramBindingDeepLink(userId: string): Promise<{ l
     link: buildTelegramDeepLink(generated.token),
     token: generated.token,
     expiresIn: DEFAULT_TTL_SECONDS,
+    expiresAt: generated.expiresAt,
   }
 }

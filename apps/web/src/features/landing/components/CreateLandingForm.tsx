@@ -112,18 +112,18 @@ export default function CreateLandingForm({ userId }: CreateLandingFormProps) {
 
       <div className="space-y-1">
         <label className="text-xs font-semibold text-[var(--text-muted)]" htmlFor="landing-product">
-          Оберіть продукт або AI-воронку
+          Оберіть продукт або воронку
         </label>
         <Select
           id="landing-product"
-          title="Оберіть продукт або AI-воронку"
-          aria-label="Оберіть продукт або AI-воронку"
+          title="Оберіть продукт або воронку"
+          aria-label="Оберіть продукт або воронку"
           value={selectedProductId}
           onChange={event => setSelectedProductId(event.target.value)}
           className="w-full p-2 border rounded border-[var(--border)] bg-[var(--bg-primary)] focus:border-[var(--accent)] focus:outline-none"
         >
           <option value="" disabled>
-            Оберіть продукт / AI-воронку
+            Оберіть продукт / воронку
           </option>
           {products.map(product => (
             <option key={product.id} value={product.id}>

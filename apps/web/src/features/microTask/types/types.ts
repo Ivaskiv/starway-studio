@@ -3,7 +3,7 @@
 import { DecisionSource } from '@/features/ai-engine/decisions/types/decisions.types';
 import { WheelArea } from '@/features/wheel/types/wheel.types';
 
-export type MicroTaskStatus = 'PENDING' | 'COMPLETED' | 'skipped' | 'expired';
+export type MicroTaskStatus = 'PENDING' | 'COMPLETED' | 'skipped' | 'expired' | 'manual';
 
 export type MicroTaskSource = (typeof MICRO_TASK_SOURCES)[number];
 
@@ -32,6 +32,7 @@ export interface MicroTask {
   dueAt?: string;
 
   type?: 'actionable' | 'reflection'; // для AI або follow-up
+  taskKind?: 'manual' | 'auto';
   persist?: boolean; // якщо true → зберігаємо в БД
 
   source: DecisionSource;
@@ -47,6 +48,15 @@ export interface MicroTask {
   completedAt?: string;
   createdAt?: string;
   expiresAt?: string;
+  generatedFromEntryId?: string;
+  progressPercent?: number | null;
+  aiContext?: string | null;
+  schedule?: {
+    isMultiDay: boolean;
+    currentDay: number;
+    totalDays: number;
+    label?: string | null;
+  };
 
   // вплив на колесо / інші системи
   wheelImpact?: {

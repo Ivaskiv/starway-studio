@@ -1,6 +1,8 @@
 import bcrypt from 'bcryptjs';
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
 import jwt from 'jsonwebtoken';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   DailyChoice,
   DailyState,
@@ -29,6 +31,11 @@ type SeedUserInput = {
   subscriptionStatus: SubscriptionStatusType;
   trialDays?: number;
 };
+
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDirPath = dirname(currentFilePath);
+
+loadEnv({ path: resolve(currentDirPath, '../../../.env') });
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required for seed');
@@ -228,7 +235,7 @@ const existingSub = await prisma.subscription.findFirst({ where: { userId: user.
       runtimeConfig: { promptVersion: 1, rules: ['short actionable advice', 'no medical/legal claims'] },
     },
   });
-  console.log(`✅ AI Mentor: ${aiMentor.slug}`);
+  console.log(`✅ ABsystem: ${aiMentor.slug}`);
 
   // 9. BalanceWheelConfig
   let balanceConfig = await prisma.balanceWheelConfig.findFirst({

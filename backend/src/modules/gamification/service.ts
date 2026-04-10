@@ -24,6 +24,82 @@ async function getDailyStreak(userId: string) {
   return streaks.find(streak => streak.ruleKey === 'daily_checkin') ?? null
 }
 
+function startOfUtcDay(value: Date) {
+  return Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())
+}
+
+function diffCalendarUtcDays(left: Date, right: Date) {
+  return Math.round((startOfUtcDay(left) - startOfUtcDay(right)) / 86_400_000)
+}
+
+async function getDailyEntryStreak(userId: string) {
+  const entries = await prisma.dailyEntry.findMany({
+    where: { userId },
+    orderBy: { date: 'desc' },
+    select: {
+      date: true,
+      status: true,
+      lateCompletedAt: true,
+      content: true,
+    },
+    take: 120,
+  })
+
+  const finalizedEntries = entries.filter((entry) => {
+    const content = entry.content && typeof entry.content === 'object' && !Array.isArray(entry.content)
+      ? entry.content as Record<string, unknown>
+      : null
+
+    const finalizedAt = typeof content?.finalizedAt === 'string' ? content.finalizedAt : null
+    const completedLate = entry.status === 'COMPLETED_LATE'
+      || entry.lateCompletedAt !== null
+      || content?.completedLate === true
+
+    return (entry.status === 'COMPLETED' || Boolean(finalizedAt)) && !completedLate
+  })
+
+  if (!finalizedEntries.length) {
+    return {
+      current: 0,
+      longest: 0,
+      lastAt: null as Date | null,
+    }
+  }
+
+  const uniqueDates = finalizedEntries.reduce<Date[]>((acc, entry) => {
+    if (!acc.some(item => startOfUtcDay(item) === startOfUtcDay(entry.date))) {
+      acc.push(entry.date)
+    }
+    return acc
+  }, [])
+
+  let current = 1
+  for (let index = 1; index < uniqueDates.length; index += 1) {
+    if (diffCalendarUtcDays(uniqueDates[index - 1], uniqueDates[index]) === 1) {
+      current += 1
+      continue
+    }
+    break
+  }
+
+  let longest = 1
+  let running = 1
+  for (let index = 1; index < uniqueDates.length; index += 1) {
+    if (diffCalendarUtcDays(uniqueDates[index - 1], uniqueDates[index]) === 1) {
+      running += 1
+      longest = Math.max(longest, running)
+    } else {
+      running = 1
+    }
+  }
+
+  return {
+    current,
+    longest,
+    lastAt: uniqueDates[0] ?? null,
+  }
+}
+
 function isToday(date: Date) {
   const now = new Date()
   return date.getFullYear() === now.getFullYear()
@@ -84,7 +160,10 @@ export async function applyReward(userId: string, reward: RewardPayload): Promis
 }
 
 export async function getStreakSummary(userId: string) {
-  const streak = await getDailyStreak(userId)
+  const [streak, entryStreak] = await Promise.all([
+    getDailyStreak(userId),
+    getDailyEntryStreak(userId),
+  ])
   const metric = await prisma.cycleStreakMetric.findUnique({
     where: { userId },
     select: {
@@ -92,9 +171,11 @@ export async function getStreakSummary(userId: string) {
       drainsCount: true,
     },
   })
+  const resolvedCurrent = Math.max(streak?.current ?? 0, entryStreak.current)
+  const resolvedLongest = Math.max(streak?.longest ?? 0, entryStreak.longest)
   return {
-    currentStreak: streak?.current ?? 0,
-    longestStreak: streak?.longest ?? 0,
+    currentStreak: resolvedCurrent,
+    longestStreak: resolvedLongest,
     totalDays: streak?.totalDays ?? 0,
     stabilityDays: metric?.daysStable ?? 0,
     drainDays: metric?.drainsCount ?? 0,
@@ -103,9 +184,10 @@ export async function getStreakSummary(userId: string) {
 
 export async function getSummary(userId: string): Promise<GamificationSummaryView> {
   await ensureProfile(userId)
-  const [profile, streak] = await Promise.all([
+  const [profile, streak, entryStreak] = await Promise.all([
     prisma.gamificationProfile.findUnique({ where: { userId } }),
     getDailyStreak(userId),
+    getDailyEntryStreak(userId),
   ])
 
   if (!profile) {
@@ -116,15 +198,18 @@ export async function getSummary(userId: string): Promise<GamificationSummaryVie
   const nextLevel = LEVELS.find(item => item.level === level.level + 1) ?? null
   const currentLevelXp = Math.max(0, profile.mindXP - level.xpThreshold)
   const nextLevelXp = nextLevel ? Math.max(0, nextLevel.xpThreshold - level.xpThreshold) : 0
-  const lastActivityAt = streak?.lastAt ? new Date(streak.lastAt) : null
+  const resolvedCurrent = Math.max(streak?.current ?? 0, entryStreak.current)
+  const resolvedLongest = Math.max(streak?.longest ?? 0, entryStreak.longest)
+  const streakLastAt = streak?.lastAt ? new Date(streak.lastAt) : null
+  const lastActivityAt = [streakLastAt, entryStreak.lastAt].filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0] ?? null
   const streakAtRisk = Boolean(
-    streak?.current && streak.current > 3 && lastActivityAt && !isToday(lastActivityAt),
+    resolvedCurrent > 3 && lastActivityAt && !isToday(lastActivityAt),
   )
 
   return {
     streak: {
-      current: streak?.current ?? 0,
-      longest: streak?.longest ?? 0,
+      current: resolvedCurrent,
+      longest: resolvedLongest,
       lastActivityAt: lastActivityAt?.toISOString() ?? null,
     },
     xp: {

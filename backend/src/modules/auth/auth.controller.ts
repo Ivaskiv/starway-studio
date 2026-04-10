@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import type { AuthenticatedRequest, AuthUser } from '../../types/globalTypes.js'
 import { withRetry } from '../../db/client.js'
 import { AuthServiceError } from './auth.errors.js'
+import { assertHumanVerification } from './humanVerification.js'
 
 import {
   findRefreshToken,
@@ -47,8 +48,13 @@ function sendControllerError(res: Response, error: unknown) {
 // ── REGISTER ──────────────────────────────
 export async function register(req: Request, res: Response) {
   try {
-    const { email, password, name } = req.body ?? {}
-    const result = await registerUser({ email, password, name })
+    const { email, password, name, expertId, companyWebsite, turnstileToken } = req.body ?? {}
+    await assertHumanVerification({
+      honeypot: companyWebsite,
+      turnstileToken,
+      ip: req.ip,
+    })
+    const result = await registerUser({ email, password, name, expertId })
 
     res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
 
@@ -66,8 +72,13 @@ export async function register(req: Request, res: Response) {
 // ── LOGIN ─────────────────────────────────
 export async function login(req: Request, res: Response) {
   try {
-    const { email, password } = req.body ?? {}
-    const result = await loginUser({ email, password })
+    const { email, password, expertId, companyWebsite, turnstileToken } = req.body ?? {}
+    await assertHumanVerification({
+      honeypot: companyWebsite,
+      turnstileToken,
+      ip: req.ip,
+    })
+    const result = await loginUser({ email, password, expertId })
 
     res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
 
@@ -84,13 +95,14 @@ export async function login(req: Request, res: Response) {
 
 export async function social(req: Request, res: Response) {
   try {
-    const { provider, externalId, email, name, username } = req.body ?? {}
+    const { provider, externalId, email, name, username, expertId } = req.body ?? {}
     const result = await socialLoginUser({
       provider,
       externalId,
       email,
       name,
       username,
+      expertId,
     })
 
     res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)

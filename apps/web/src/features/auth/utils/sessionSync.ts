@@ -63,19 +63,16 @@ function isLikelyTelegramMiniAppRuntime(): boolean {
     search.has('tgWebAppStartParam')
 
   const hasTelegramWebAppObject = Boolean(
-    (window as { Telegram?: { WebApp?: { initDataUnsafe?: unknown } } }).Telegram?.WebApp,
+    (window as { Telegram?: { WebApp?: { initDataUnsafe?: unknown; initData?: string } } }).Telegram?.WebApp,
   )
-
-  const ua = window.navigator.userAgent.toLowerCase()
-  const isTelegramUserAgent = ua.includes('telegram')
-  const isTelegramReferrer = document.referrer.includes('t.me')
+  const hasInitData = Boolean(
+    (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim(),
+  )
 
   return Boolean(
     window.location.pathname.startsWith('/miniapp') ||
-    hasTelegramWebAppObject ||
     hasTelegramQueryHints ||
-    isTelegramUserAgent ||
-    isTelegramReferrer,
+    (hasTelegramWebAppObject && hasInitData),
   )
 }
 

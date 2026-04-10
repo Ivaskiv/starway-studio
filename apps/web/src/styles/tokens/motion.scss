@@ -15,6 +15,7 @@
 @keyframes modalIn      { from { opacity: 0; transform: scale(.94) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes overlayIn    { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fade-up      { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes hook-pop     { 0% { opacity: .72; transform: scale(.985); } 60% { opacity: 1; transform: scale(1.015); } 100% { opacity: 1; transform: scale(1); } }
 
 // ── Glow / pulse ─────────────────────────────────────────────
 @keyframes pulse-glow {
@@ -56,6 +57,7 @@
 .animate-scale-in     { animation: scaleIn     var(--duration-fast)      var(--ease-spring) both; }
 .animate-modal-in     { animation: modalIn     180ms                     var(--ease-spring) both; }
 .animate-pulse-glow   { animation: pulse-glow  2.5s ease-in-out infinite; }
+.animate-hook-pop     { animation: hook-pop    220ms var(--ease-spring) both; }
 
 .hero-progress-bar    { animation: heroProgress 8s linear forwards; }
 .hero-slider-dot--active { animation: heroDotPulse 1.8s ease-in-out infinite; }

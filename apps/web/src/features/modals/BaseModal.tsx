@@ -9,6 +9,7 @@ interface BaseModalProps {
   children: ReactNode
   overlayClassName?: string
   containerClassName?: string
+  panelClassName?: string
 }
 
 export function BaseModal({
@@ -17,6 +18,7 @@ export function BaseModal({
   children,
   overlayClassName,
   containerClassName,
+  panelClassName,
 }: BaseModalProps) {
   useLockBodyScroll(isOpen)
 
@@ -33,7 +35,7 @@ export function BaseModal({
       >
         {/* Overlay */}
         <div
-          className={`absolute inset-0 bg-black/70 backdrop-blur-sm ${
+          className={`absolute inset-0 bg-black/80 ${
             overlayClassName ?? ''
           }`}
           onClick={onClose}
@@ -41,9 +43,10 @@ export function BaseModal({
 
         {/* Контент модалки */}
         <div
-          className="relative z-10 w-full max-w-lg
-                     bg-slate-900 rounded-xl p-6
-                     transition-opacity duration-300 opacity-100"
+          className={`relative z-10 w-full transition-opacity duration-300 opacity-100 ${
+            panelClassName ??
+            'max-w-lg bg-slate-900 rounded-xl p-6'
+          }`}
         >
           {children}
         </div>

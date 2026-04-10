@@ -62,7 +62,13 @@ export async function miniAppFetch<T>(path: string, options: RequestInit = {}): 
   })
 
   if (!response.ok) {
-    throw new Error(`API error ${response.status}`)
+    const payload = await response.json().catch(() => null) as { error?: unknown; message?: unknown } | null
+    const details = typeof payload?.message === 'string'
+      ? payload.message
+      : typeof payload?.error === 'string'
+        ? payload.error
+        : `API error ${response.status}`
+    throw new Error(details)
   }
 
   return response.json() as Promise<T>

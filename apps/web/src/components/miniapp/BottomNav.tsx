@@ -150,7 +150,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'library', label: 'Бібліотека', Icon: LibraryIcon },
   { id: 'ai', label: 'Асистент', Icon: AIIcon },
   { id: 'tracker', label: 'Трекер', Icon: TrackerIcon },
-  { id: 'profile', label: 'Профіль', Icon: ProfileIcon },
+  { id: 'profile', label: 'Я', Icon: ProfileIcon },
 ]
 
 export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {

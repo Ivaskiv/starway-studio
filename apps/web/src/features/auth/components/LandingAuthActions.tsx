@@ -16,8 +16,8 @@ export function LandingAuthActions({ onEmailLogin }: Props) {
   const handleSocialLogin = async (provider: 'google' | 'telegram') => {
     setPendingProvider(provider)
     try {
-      const result = await loginWithSocial(provider)
-      await postAuthNavigate({ email: result.email ?? null })
+      await loginWithSocial(provider)
+      await postAuthNavigate()
     } catch (error) {
       console.error('[LandingAuthActions] social login failed', error)
       toast.error(provider === 'google' ? 'Не вдалося увійти через Google' : 'Не вдалося увійти через Telegram')

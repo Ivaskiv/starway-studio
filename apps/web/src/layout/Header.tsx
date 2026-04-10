@@ -2,14 +2,21 @@
 import { NAVIGATION, type NavMenu } from '@/core/navigation/navigation.registry'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useAuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext'
+import {
+  useGetNotificationsQuery,
+  useMarkAllNotificationsReadMutation,
+  useMarkNotificationReadMutation,
+} from '@/features/notifications/services/notifications.api'
 import { selectCurrentUser, selectIsAuthenticated, selectIsLoading } from '@/features/auth/services/auth.slice'
 import { isTelegramMiniAppAuthContext } from '@/features/auth/utils/sessionSync'
+import type { Notification } from '@/features/notifications/types/notification.types'
 import type { UserRole } from '@/features/user/types/user.types'
 import { UserMenu } from '@/features/user/userMenu/UserMenu'
 import { useGetWheelCooldownQuery } from '@/features/wheel/services/wheel.api'
 import type { SidebarNavItem } from '@/layout/Sidebar'
 import { SIDEBAR_NAV, isVisibleFor } from '@/layout/Sidebar'
 import type { LayoutSharedProps } from '@/layout/types/layout.types'
+import StarwayMark from '@/ui/StarwayMark'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -18,8 +25,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 type ViewRole = 'user' | 'expert' | 'superadmin'
 
 const ROLE_NAV: Record<ViewRole, string[]> = {
-  superadmin: NAVIGATION.map(m => m.id),
-  expert:     ['platform', 'programs', 'learning'],
+  superadmin: NAVIGATION.filter(m => m.id !== 'platform').map(m => m.id),
+  expert:     ['programs', 'learning'],
   user:       ['programs', 'learning'],
 }
 
@@ -75,6 +82,32 @@ export default function Header({
   const viewRole = previewRole
   const [openDrop, setOpenDrop] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
+    typeof document === 'undefined' ? true : !document.hidden,
+  )
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsDocumentVisible(!document.hidden)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
+
+  const {
+    data: notifications = [],
+  } = useGetNotificationsQuery(
+    { limit: 12 },
+    {
+      skip: !isAuthenticated || !user?.id || miniAppMode || !isDocumentVisible,
+      pollingInterval: 60_000,
+      refetchOnFocus: false,
+      refetchOnReconnect: true,
+    },
+  )
+  const [markNotificationRead] = useMarkNotificationReadMutation()
+  const [markAllNotificationsRead] = useMarkAllNotificationsReadMutation()
 
   const normalizeRole = useCallback((value: string): UserRole => {
     const normalized = value.toUpperCase()
@@ -105,6 +138,61 @@ export default function Header({
   }, [currentRole, isAuthenticated])
 
   const go = useCallback((p: string) => navigate(p), [navigate])
+  const unreadNotifications = useMemo(
+    () => notifications.filter((notification) => !notification.readAt),
+    [notifications],
+  )
+  const unreadCount = unreadNotifications.length
+
+  const resolveNotificationTarget = useCallback((notification: Notification): string => {
+    const templateKey = notification.templateKey ?? ''
+    const type = notification.type ?? ''
+    const event = String(notification.data?.event ?? '')
+
+    if (
+      templateKey.includes('daily_') ||
+      templateKey.includes('microtask_') ||
+      templateKey.includes('task_completed') ||
+      event.includes('MICRO') ||
+      type === 'AI_REMINDER'
+    ) {
+      return '/dashboard/ai-mentor'
+    }
+
+    if (templateKey.includes('weekly') || templateKey.includes('level') || templateKey.includes('streak')) {
+      return '/dashboard/progress'
+    }
+
+    if (templateKey.includes('subscription') || type === 'SUBSCRIPTION') {
+      return '/dashboard/subscription'
+    }
+
+    if (type === 'DAILY_MORNING' || type === 'DAILY_EVENING') {
+      return '/dashboard/cycle'
+    }
+
+    return '/dashboard/journal'
+  }, [])
+
+  const handleNotificationClick = useCallback(async (notification: Notification) => {
+    try {
+      if (!notification.readAt) {
+        await markNotificationRead(notification.id).unwrap()
+      }
+    } catch (error) {
+      console.warn('[Header] failed to mark notification as read', error)
+    }
+
+    const target = resolveNotificationTarget(notification)
+    console.info('[Header] notification click', {
+      notificationId: notification.id,
+      type: notification.type,
+      templateKey: notification.templateKey ?? null,
+      target,
+    })
+    setOpenDrop(null)
+    navigate(target)
+  }, [markNotificationRead, navigate, resolveNotificationTarget])
 
   const filteredNav = useMemo<NavMenu[]>(() => {
     const allowed = ROLE_NAV[viewRole]
@@ -171,14 +259,69 @@ export default function Header({
   const AuthControls = isAuthenticated ? (
     <>
       {!miniAppMode && (
-        <button className="hdr-notif" aria-label="Сповіщення">
-          🔔
-          <span className="hdr-notif-dot" aria-label="2 непрочитані">2</span>
-        </button>
+        <div className="relative">
+          <button
+            className="hdr-notif"
+            aria-label="Сповіщення"
+            type="button"
+            onClick={() => setOpenDrop((value) => value === 'notifications' ? null : 'notifications')}
+          >
+            🔔
+            {unreadCount > 0 ? (
+              <span className="hdr-notif-dot" aria-label={`${unreadCount} непрочитаних`}>
+                {Math.min(unreadCount, 99)}
+              </span>
+            ) : null}
+          </button>
+          {openDrop === 'notifications' ? (
+            <div className="absolute right-0 top-[calc(100%+10px)] z-[120] w-[360px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[22px] border border-[rgba(255,255,255,0.12)] bg-[rgba(8,12,20,0.98)] shadow-[0_18px_60px_rgba(0,0,0,0.48)]">
+              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">Сповіщення</p>
+                  <p className="text-[11px] text-white/55">
+                    {unreadCount > 0 ? `${unreadCount} нових` : 'Усе прочитано'}
+                  </p>
+                </div>
+                {unreadCount > 0 ? (
+                  <button
+                    type="button"
+                    className="text-[11px] font-semibold text-[rgb(var(--accent-soft-rgb))]"
+                    onClick={async () => {
+                      if (!user?.id) return
+                      await markAllNotificationsRead().unwrap()
+                    }}
+                  >
+                    Прочитати все
+                  </button>
+                ) : null}
+              </div>
+              <div className="max-h-[420px] overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="px-4 py-5 text-sm text-white/60">
+                    Тут з’являться ранкові, вечірні, менторські й системні повідомлення.
+                  </div>
+                ) : notifications.map((notification) => (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    onClick={() => { void handleNotificationClick(notification) }}
+                    className={`flex w-full items-start gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors hover:bg-white/5 ${notification.readAt ? 'opacity-75' : ''}`}
+                  >
+                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${notification.readAt ? 'bg-white/20' : 'bg-red-500'}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-white">{notification.title}</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-white/65">{notification.body}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
       )}
       <UserMenu variant={miniAppMode ? 'miniapp' : 'header'} />
     </>
-  ) : hideTelegramGuestAuth ? (
+  ) : miniAppMode || hideTelegramGuestAuth ? (
     <div className="hdr-auth-pending" aria-hidden="true" />
   ) : (
     renderGuestAuthButtons()
@@ -214,7 +357,7 @@ export default function Header({
             aria-label="Перейти на головну сторінку"
             type="button"
           >
-            <span className="hdr-logo-gem" aria-hidden="true">⭐</span>
+            <StarwayMark size={28} className="hdr-logo-gem" />
             <span>Starway</span>
           </button>
         </div>
@@ -385,7 +528,7 @@ export default function Header({
           )}
 
           {/* Гостьові кнопки в бургері */}
-          {!isAuthenticated && (
+          {!isAuthenticated && !hideTelegramGuestAuth && (
             <div className="hdr-bmenu-auth">
               {renderGuestAuthButtons(() => setMobileOpen(false))}
             </div>

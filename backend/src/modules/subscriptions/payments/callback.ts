@@ -6,9 +6,13 @@ import type { Request, Response } from 'express';
 import { prisma } from '../../../db/client.js';
 import type { PaymentCallbackData } from '../types.js';
 import { trackEvent } from '../../events/service.js';
+import { getContentAttributionEventPayload } from '../../events/contentAttribution.service.js';
 import { resolveUserState } from '../../telegram-mentor/handlers/start.js';
 import { processPayment } from './business.js';
 import { verifySignature } from './crypto.js';
+import { runWeeklyAnalysis } from '../../ai-mentor/weekly-analysis/service.js';
+import { notificationService } from '../../../services/notifications/NotificationService.js';
+import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js';
 
 /** WayForPay callback handler — публічний ендпоінт (без authRequired) */
 export async function wayForPayCallback(req: Request, res: Response) {
@@ -56,18 +60,21 @@ export async function wayForPayCallback(req: Request, res: Response) {
 
     const result = await processPayment({ userId, productId, amount, payRef });
     const state = await resolveUserState(userId).catch(() => null);
+    const attributionPayload = await getContentAttributionEventPayload(userId);
 
     // Логуємо в PaymentLog незалежно від результату
-    await prisma.paymentLog.create({
-      data: {
-        userId,
-        expertId:   productId, // тимчасово — productId як expertId поки не маємо expertId в callback
-        amountCents: Math.round(amount * 100),
-        currency:   data.currency ?? 'EUR',
-        status:     result.status === 'approved' ? 'SUCCESS' : 'FAILED',
-        metadata:   { payRef, transaction_id: data.transaction_id ?? null, result },
-      },
-    });
+    if (result.status === 'approved' && result.expertId) {
+      await prisma.paymentLog.create({
+        data: {
+          userId,
+          expertId: result.expertId,
+          amountCents: Math.round(amount * 100),
+          currency: data.currency ?? 'EUR',
+          status: 'SUCCESS',
+          metadata: { payRef, transaction_id: data.transaction_id ?? null, result },
+        },
+      });
+    }
 
     await trackEvent({
       userId,
@@ -80,8 +87,28 @@ export async function wayForPayCallback(req: Request, res: Response) {
         amount,
         transactionId: data.transaction_id ?? null,
         transactionStatus: data.transaction_status,
+        ...(attributionPayload ?? {}),
       },
     });
+
+    if (result.status === 'approved') {
+      setImmediate(() => {
+        void (async () => {
+          try {
+            const generated = await runWeeklyAnalysis(userId)
+            if (!generated) return
+
+            await notificationService.emit(NotificationEvent.WEEKLY_SUMMARY, userId, {
+              streak: generated.userReport.streakDays,
+              wheels: generated.metrics.wheels,
+              sessions: generated.metrics.sessions,
+            })
+          } catch (generationError) {
+            console.error('⚠️ Weekly report generation after payment failed', generationError)
+          }
+        })()
+      })
+    }
 
     return res.status(200).send('OK');
   } catch (err) {

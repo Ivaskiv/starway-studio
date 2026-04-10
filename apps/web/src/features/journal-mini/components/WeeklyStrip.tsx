@@ -1,9 +1,9 @@
 import DayBubble from './DayBubble'
-import type { JournalEvent } from '@/features/journal/types'
+import type { JournalDayState } from '@/features/journal/types'
 
 interface WeeklyStripProps {
   days: Date[]
-  eventsByDate: Record<string, JournalEvent[]>
+  dayStatesByDate: Record<string, JournalDayState>
   selectedDay: string
   onSelectDay: (dateKey: string) => void
 }
@@ -15,7 +15,7 @@ function toDateKey(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-export default function WeeklyStrip({ days, eventsByDate, selectedDay, onSelectDay }: WeeklyStripProps) {
+export default function WeeklyStrip({ days, dayStatesByDate, selectedDay, onSelectDay }: WeeklyStripProps) {
   const todayKey = toDateKey(new Date())
 
   return (
@@ -27,7 +27,7 @@ export default function WeeklyStrip({ days, eventsByDate, selectedDay, onSelectD
             <DayBubble
               key={dateKey}
               date={day}
-              events={eventsByDate[dateKey] ?? []}
+              dayState={dayStatesByDate[dateKey]}
               isSelected={selectedDay === dateKey}
               isToday={todayKey === dateKey}
               onSelect={onSelectDay}

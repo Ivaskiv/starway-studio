@@ -2,19 +2,20 @@
 import { ROUTES } from '@/config/routes'
 import AuthModal from '@/features/auth/components/AuthModal'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
+import StarwayMark from '@/ui/StarwayMark'
 import { Facebook, Github, Instagram, Twitter, Youtube } from 'lucide-react'
 import { useState } from 'react'
 
 const FOOTER_LINKS = {
   learning: [
     { label: 'Всі курси',       path: ROUTES.PRODUCTS      },
-    { label: 'AI Ментор',       path: ROUTES.AI_MENTOR     },
+    { label: 'Ментор',         path: ROUTES.AI_MENTOR     },
     { label: 'Колесо балансу',  path: ROUTES.WHEEL         },
     { label: 'Прогрес',         path: ROUTES.PROGRESS      },
   ],
   tools: [
     { label: 'Щоденний цикл',   path: ROUTES.CYCLE         },
-    { label: 'Бачення життя',   path: ROUTES.VISION        },
+    { label: 'Точка Б',         path: ROUTES.VISION        },
     { label: 'Цілі',            path: ROUTES.GOALS         },
     { label: 'Підписка',        path: ROUTES.SUBSCRIPTION  },
   ],
@@ -75,9 +76,7 @@ export default function Footer() {
             onClick={() => navigateTo('/')}
             className="flex items-center gap-2.5 rounded-xl px-1 py-1 focus:outline-none"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[rgb(var(--accent-rgb))] to-[rgb(var(--accent-strong-rgb))] flex items-center justify-center text-sm font-bold text-white shadow-[var(--shadow-glow)]">
-              ✦
-            </div>
+            <StarwayMark size={32} />
             <span className="text-[15px] font-extrabold text-[color:var(--text-primary)]">Starway</span>
           </button>
 

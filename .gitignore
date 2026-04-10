@@ -2,8 +2,10 @@
 # 📦 DEPENDENCIES
 # ============================================
 node_modules/
+html/
 .pnp/
 .pnpm-store/
+
 
 # ============================================
 # 🏗️ BUILD OUTPUTS
@@ -82,3 +84,4 @@ cloudflared.log
 ngrok.yml
 
 .DS_Store
+

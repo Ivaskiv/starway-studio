@@ -27,7 +27,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(({ options, siz
       ref={ref}
       disabled={disabled}
       className={cn(
-        'glass-field w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] px-3 py-2 text-[var(--text-primary)] shadow-[0_10px_30px_rgba(var(--accent-rgb),0.2)] transition duration-200',
+        'glass-field w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] px-3 py-2 text-[var(--text-field)] shadow-[0_10px_30px_rgba(var(--accent-rgb),0.2)] transition duration-200',
         heights[size],
         error ? 'border-[var(--accent)]' : '',
         disabled && 'opacity-60 cursor-not-allowed',
@@ -35,7 +35,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(({ options, siz
       {...props}
     >
       {options?.map((option) => (
-        <option key={option.value} value={option.value} className="bg-[var(--glass-bg)] text-[var(--text-primary)]">
+        <option key={option.value} value={option.value} className="bg-[var(--glass-bg)] text-[var(--text-field)]">
           {option.label}
         </option>
       ))}

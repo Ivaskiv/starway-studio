@@ -62,7 +62,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ open, onClose }) =
           <button className="text-white/50" onClick={onClose}>✕</button>
         </div>
         <p className="text-sm text-white/60">
-          Додаткові пакети відкривають нові можливості для AI-ментору. Платіж через WayForPay зручним способом.
+          Додаткові пакети відкривають нові можливості для ментора. Платіж через WayForPay зручним способом.
         </p>
         <div className="grid grid-cols-1 gap-3">
           {PACKAGES.map(pkg => (

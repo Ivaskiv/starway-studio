@@ -8,8 +8,11 @@ import { createWheelAssessment } from '../wheel/controller.js';
 import type { StreamChatMessage } from './types.js';
 import {
   completeMicroTask as completeRichMicroTask,
+  createMicroTask,
+  deleteMicroTask,
   listMicroTasksForUser,
   skipMicroTask as skipRichMicroTask,
+  updateMicroTaskProgress,
   updateMicroTaskStep,
 } from '../microTask/service.js';
 
@@ -26,7 +29,7 @@ const safeHandler = (fn: (req: AuthenticatedRequest, res: Response) => Promise<v
     try {
       await fn(req, res);
     } catch (error) {
-      console.error('[AI Mentor]', error);
+      console.error('[ABsystem]', error);
       res.status(500).json({ error: 'server_error', message: (error as Error).message });
     }
   };
@@ -98,6 +101,13 @@ export const getContext = safeHandler(async (req, res) => {
     },
   })
   res.json(context);
+});
+
+export const getInstantInsight = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res);
+  if (!userId) return;
+  const insight = await aiService.getInstantInsight(userId);
+  res.json(insight);
 });
 
 export const getContextByUserId = safeHandler(async (req, res) => {
@@ -184,6 +194,136 @@ export const getMicroTasks = safeHandler(async (req, res) => {
   res.json(tasks)
 })
 
+export const createManualMicroTask = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const title = String(req.body.title ?? '').trim()
+  const description = String(req.body.description ?? '').trim()
+  if (!title) {
+    res.status(400).json({ error: 'title_required' })
+    return
+  }
+
+  const dueDate = req.body.dueDate ? new Date(req.body.dueDate) : new Date()
+  if (Number.isNaN(dueDate.getTime())) {
+    res.status(400).json({ error: 'invalid_due_date' })
+    return
+  }
+
+  const replaceExisting = Boolean(req.body.replaceExisting)
+  const replaceDateKey = typeof req.body.date === 'string' ? req.body.date.trim() : ''
+
+  if (replaceExisting && replaceDateKey) {
+    const dayStart = new Date(`${replaceDateKey}T00:00:00.000Z`)
+    if (!Number.isNaN(dayStart.getTime())) {
+      const nextDay = new Date(dayStart)
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+
+      await prisma.microTask.deleteMany({
+        where: {
+          userId,
+          status: { in: ['active', 'manual', 'skipped', 'expired'] },
+          createdAt: {
+            gte: dayStart,
+            lt: nextDay,
+          },
+        },
+      })
+    }
+  }
+
+  const created = await createMicroTask({
+    userId,
+    expertId: req.user?.expertId ?? null,
+    title,
+    description: description || undefined,
+    why: String(req.body.why ?? 'Створено вручну на сьогодні').trim() || 'Створено вручну на сьогодні',
+    steps: Array.isArray(req.body.steps) ? req.body.steps.filter((step: unknown): step is string => typeof step === 'string') : [],
+    sphere: 'manual',
+    priority: 'medium',
+    status: 'manual',
+    xpReward: 10,
+    daysToComplete: 1,
+    dueDate,
+    aiContext: JSON.stringify({
+      source: 'manual',
+      createdAt: new Date().toISOString(),
+    }),
+  })
+
+  res.json(created)
+})
+
+export const replaceManualMicroTasks = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const dateKey = typeof req.body.date === 'string' ? req.body.date.trim() : ''
+  const rawTasks = Array.isArray(req.body.tasks)
+    ? req.body.tasks.filter((task: unknown): task is string => typeof task === 'string')
+    : []
+  const tasks = rawTasks
+    .map((task: string) => task.trim())
+    .filter((task: string) => task.length > 0)
+    .slice(0, 7)
+
+  if (!dateKey) {
+    res.status(400).json({ error: 'date_required' })
+    return
+  }
+
+  if (!tasks.length) {
+    res.status(400).json({ error: 'tasks_required' })
+    return
+  }
+
+  const dayStart = new Date(`${dateKey}T00:00:00.000Z`)
+  if (Number.isNaN(dayStart.getTime())) {
+    res.status(400).json({ error: 'invalid_date' })
+    return
+  }
+
+  const nextDay = new Date(dayStart)
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+  const dueDate = new Date(`${dateKey}T23:59:00.000Z`)
+
+  await prisma.microTask.deleteMany({
+    where: {
+      userId,
+      status: { in: ['active', 'manual', 'skipped', 'expired'] },
+      createdAt: {
+        gte: dayStart,
+        lt: nextDay,
+      },
+    },
+  })
+
+  const created = await Promise.all(tasks.map((taskTitle: string) => (
+    createMicroTask({
+      userId,
+      expertId: req.user?.expertId ?? null,
+      title: taskTitle,
+      description: taskTitle,
+      why: 'Оновлено вручну на сьогодні',
+      steps: [],
+      sphere: 'manual',
+      priority: 'medium',
+      status: 'manual',
+      xpReward: 10,
+      daysToComplete: 1,
+      dueDate,
+      aiContext: JSON.stringify({
+        source: 'manual_replace',
+        createdAt: new Date().toISOString(),
+        dateKey,
+      }),
+    })
+  )))
+
+  res.json(created)
+})
+
 export const completeMicroTask = safeHandler(async (req, res) => {
   const userId = requireUser(req, res)
   if (!userId) return
@@ -200,6 +340,36 @@ export const skipMicroTask = safeHandler(async (req, res) => {
 
   const { id } = req.params
   await skipRichMicroTask(id, userId)
+
+  res.json({ ok: true })
+})
+
+export const updateMicroTaskProgressController = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const { id } = req.params
+  const progressPercent = Number(req.body.progressPercent)
+
+  const updated = await updateMicroTaskProgress(id, userId, progressPercent)
+  if (!updated) {
+    res.status(404).json({ error: 'task_not_found' })
+    return
+  }
+
+  res.json({ ok: true })
+})
+
+export const deleteMicroTaskController = safeHandler(async (req, res) => {
+  const userId = requireUser(req, res)
+  if (!userId) return
+
+  const { id } = req.params
+  const deleted = await deleteMicroTask(id, userId)
+  if (!deleted) {
+    res.status(404).json({ error: 'task_not_found' })
+    return
+  }
 
   res.json({ ok: true })
 })

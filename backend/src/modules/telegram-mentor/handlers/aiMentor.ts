@@ -1,9 +1,14 @@
 import type { Context } from 'telegraf'
 import { getSession } from '../session.js'
 import { sendEntryOffer, sendStateMenu } from './start.js'
+import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
 
 export async function handleAIMentor(ctx: Context) {
   if (process.env.APP_MODE === 'LM_ONLY') {
+    return
+  }
+
+  if (await renderDecisionUnlessAllowed(ctx, 'ai_mentor_requested', ['show_product', 'resume_session'])) {
     return
   }
 

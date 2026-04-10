@@ -13,7 +13,7 @@ export default function MarketplaceCardsSection() {
     <section className="py-8">
       <div className="mx-auto max-w-[1600px] px-6">
         <div className="rounded-2xl border border-[color:var(--border-primary)] bg-[color:var(--glass-bg)] p-6">
-          <h2 className="mb-6 text-2xl font-bold">AI Marketplace</h2>
+          <h2 className="mb-6 text-2xl font-bold">Marketplace рішень</h2>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {products.map((p) => (
               <div

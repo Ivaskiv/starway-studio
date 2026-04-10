@@ -6,6 +6,9 @@
 import { useAppSelector }   from '@/app/hooks'
 import { useTrackFrontendEventMutation } from '@/features/analytics/services/events.api'
 import { selectCurrentUser } from '@/features/auth/services/auth.slice'
+import { usePermissions } from '@/hooks/usePermissions'
+import { SUBSCRIPTION_BADGE_CLASS, SUBSCRIPTION_PLANS, type SubscriptionPlan } from '@/features/subscription/constants/plans'
+import { initiateSubscriptionCheckout, runSuperadminSubscriptionTest } from '@/features/subscription/utils/subscriptionCheckout'
 import { hasPaidAccess }    from '@/features/auth/utils/access.utils'
 import {
   ArrowRight, BookOpen, Brain,
@@ -13,54 +16,20 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-interface Plan {
-  id:            string
-  name:          string
-  price:         number
-  period:        string
-  originalPrice?: number
-  features:      string[]
-  badge?:        string
-  badgeColor?:   'blue' | 'purple' | 'amber'
-  highlighted?:  boolean
-}
-
-const PLANS: Plan[] = [
-  {
-    id: 'monthly', name: 'Місячна', price: 299, period: 'міс',
-    badge: 'Популярний', badgeColor: 'blue',
-    features: ['AI Ментор без обмежень','Всі курси та матеріали','Щоденні сесії','Telegram нагадування','Статистика та аналітика'],
-  },
-  {
-    id: 'yearly', name: 'Річна', price: 199, period: 'міс',
-    originalPrice: 299, highlighted: true,
-    badge: 'Економія 33%', badgeColor: 'purple',
-    features: ['Все з місячної підписки','Пріоритетна підтримка','Ранній доступ до нових курсів','Ексклюзивні матеріали','Знижка на наставництво'],
-  },
-  {
-    id: 'yearly_plus', name: 'Річна + Наставник', price: 499, period: 'міс',
-    badge: 'Преміум', badgeColor: 'amber',
-    features: ['Все з річної підписки','Особистий наставник','4 Zoom-сесії на місяць','Персональний план розвитку','Прямий контакт у Telegram','VIP чат спільноти'],
-  },
-]
-
-const BADGE_STYLES = {
-  blue:   'border border-[rgba(255,255,255,0.24)] bg-gradient-to-r from-[#3d8dff] via-[#5fa7ff] to-[#3674e0] text-white shadow-[0_10px_28px_rgba(40,104,214,0.35),inset_0_1px_0_rgba(255,255,255,0.24)]',
-  purple: 'border border-[rgba(255,255,255,0.24)] bg-gradient-to-r from-[#d94cff] via-[#9d5bff] to-[#d44fd8] text-white shadow-[0_10px_28px_rgba(162,76,255,0.35),inset_0_1px_0_rgba(255,255,255,0.24)]',
-  amber:  'border border-[rgba(255,255,255,0.24)] bg-gradient-to-r from-[#ffb347] via-[#ff9a3d] to-[#ffb84d] text-[#fff8ef] shadow-[0_10px_28px_rgba(255,163,71,0.35),inset_0_1px_0_rgba(255,255,255,0.24)]',
-}
-
 export default function SubscriptionPage() {
   // ── ВИПРАВЛЕНО: читаємо з store — без мережевого запиту ─────────────────
   const user = useAppSelector(selectCurrentUser)
+  const { canManageRoles } = usePermissions()
 
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isTestProcessing, setIsTestProcessing] = useState(false)
+  const [testStatus, setTestStatus] = useState<string | null>(null)
   const [showTrial,    setShowTrial]    = useState(false)
   const [trackFrontendEvent] = useTrackFrontendEventMutation()
   const hasSubscription = hasPaidAccess(user)
 
   useEffect(() => {
-    setTimeout(() => setShowTrial(true), 10)
+    const timer = window.setTimeout(() => setShowTrial(true), 10)
     void trackFrontendEvent({
       userId: user?.id ?? null,
       type: 'web_subscription_page_viewed',
@@ -70,6 +39,8 @@ export default function SubscriptionPage() {
         hasSubscription,
       },
     })
+
+    return () => window.clearTimeout(timer)
   }, [hasSubscription, trackFrontendEvent, user?.id, user?.subscriptionStatus])
 
   const trialDaysLeft = user?.access?.trialEnd
@@ -77,67 +48,146 @@ export default function SubscriptionPage() {
     : 0
 
   const handleSubscribe = async (planId: string) => {
-    setIsProcessing(true)
-    void trackFrontendEvent({
-      userId: user?.id ?? null,
-      type: 'web_subscription_cta_clicked',
-      source: 'web',
-      state: user?.subscriptionStatus ?? null,
-      payload: {
-        planId,
-      },
-    })
-    console.log('Subscribe to:', planId)
-    setTimeout(() => setIsProcessing(false), 1500)
+    try {
+      setIsProcessing(true)
+      void trackFrontendEvent({
+        userId: user?.id ?? null,
+        type: 'web_subscription_cta_clicked',
+        source: 'web',
+        state: user?.subscriptionStatus ?? null,
+        payload: {
+          planId,
+        },
+      })
+
+      await initiateSubscriptionCheckout(planId)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setIsProcessing(false)
+    }
   }
+
+  const handleSuperadminTrialTest = async () => {
+    try {
+      setIsTestProcessing(true)
+      setTestStatus(null)
+      const data = await runSuperadminSubscriptionTest('trial')
+      setTestStatus(`Тестовий trial активовано до ${new Date(data.trialEndsAt).toLocaleDateString('uk-UA')}`)
+    } catch (error) {
+      console.error(error)
+      setTestStatus('Не вдалося запустити тестовий trial')
+    } finally {
+      setIsTestProcessing(false)
+    }
+  }
+
+  const handleSuperadminPaymentTest = async (planId: string) => {
+    try {
+      setIsTestProcessing(true)
+      setTestStatus(null)
+      const data = await runSuperadminSubscriptionTest(planId)
+      setTestStatus(`Тестову оплату активовано: ${data.planCode} до ${new Date(data.currentPeriodEnd).toLocaleDateString('uk-UA')}`)
+    } catch (error) {
+      console.error(error)
+      setTestStatus('Не вдалося активувати тестову оплату')
+    } finally {
+      setIsTestProcessing(false)
+    }
+  }
+
+  const BENEFITS = [
+    { icon: Brain, title: 'ABsystem', desc: 'Персональний помічник 24/7' },
+    { icon: BookOpen, title: 'Всі курси', desc: '5+ преміум курсів' },
+    { icon: MessageCircle, title: 'Підтримка', desc: 'Швидка відповідь' },
+    { icon: Users, title: 'Спільнота', desc: 'Доступ до чату' },
+  ]
 
   return (
     <div className="space-y-12 max-w-7xl mx-auto px-4 py-10">
 
       {/* Header */}
       <div className="text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-400 text-sm mb-4">
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[rgba(var(--accent-rgb),0.18)] bg-[rgba(var(--accent-rgb),0.12)] px-4 py-2 text-sm text-[rgb(var(--accent-soft-rgb))]">
           <Crown className="w-4 h-4" />
           Premium підписка
         </div>
-        <h1 className="text-3xl md:text-4xl font-bold text-white mb-3 bg-gradient-to-r from-white via-purple-200 to-white bg-clip-text text-transparent">
+        <h1 className="mb-3 text-3xl font-medium text-[var(--text-primary)] md:text-4xl">
           Розблокуй повний потенціал
         </h1>
-        <p className="text-white/60 max-w-lg mx-auto">
-          Отримай необмежений доступ до AI-ментора, всіх курсів та персональної підтримки
+        <p className="mx-auto max-w-lg text-[var(--text-muted)]">
+          Отримай необмежений доступ до ментора, всіх курсів та персональної підтримки
         </p>
       </div>
 
       {/* Trial Banner */}
       {!hasSubscription && trialDaysLeft > 0 && (
         <div className={[
-          'relative overflow-hidden p-6 rounded-2xl text-center',
-          'bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10',
-          'border border-amber-500/30 transition-all duration-500',
+          'rounded-[24px] border border-[rgba(255,188,102,0.18)] bg-[rgba(255,188,102,0.08)] p-6 text-center transition-all duration-500',
           showTrial ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-5',
         ].join(' ')}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(251,146,60,0.15),transparent_70%)]" />
-          <p className="text-amber-400 relative z-10 flex items-center justify-center gap-2">
+          <p className="flex items-center justify-center gap-2 text-[#ffd18f]">
             <span className="text-2xl">⏰</span>
             <span>
               Безкоштовний період закінчується через{' '}
-              <strong className="text-amber-300">{trialDaysLeft} днів</strong>
+              <strong className="text-[#ffe0b4]">{trialDaysLeft} днів</strong>
             </span>
           </p>
         </div>
       )}
 
+      {canManageRoles && (
+        <div className="dashboard-liquid-card overflow-hidden p-0">
+          <div className="dashboard-liquid-edge--top border-b border-[var(--border)] px-6 py-5">
+            <h2 className="text-xl font-medium text-[var(--text-primary)]">SUPERADMIN · тест доступу</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
+              Тут можна безпечно програти post-trial сценарій: ще раз увімкнути trial або тестово активувати paid-доступ для перевірки WayForPay та lifecycle-повідомлень.
+            </p>
+          </div>
+          <div className="space-y-4 px-6 py-5">
+            {testStatus ? (
+              <p className="text-sm text-[rgb(var(--accent-soft-rgb))]">{testStatus}</p>
+            ) : null}
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleSuperadminTrialTest}
+                disabled={isTestProcessing}
+                className="rounded-[18px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] disabled:opacity-60"
+              >
+                Ще один trial
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSuperadminPaymentTest('monthly')}
+                disabled={isTestProcessing}
+                className="rounded-[18px] border border-[rgba(var(--accent-rgb),0.22)] bg-[rgba(var(--accent-rgb),0.12)] px-4 py-3 text-sm font-medium text-[rgb(var(--accent-soft-rgb))] disabled:opacity-60"
+              >
+                Оплатити · test monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSuperadminPaymentTest('yearly')}
+                disabled={isTestProcessing}
+                className="rounded-[18px] border border-[rgba(var(--accent-rgb),0.22)] bg-[rgba(var(--accent-rgb),0.12)] px-4 py-3 text-sm font-medium text-[rgb(var(--accent-soft-rgb))] disabled:opacity-60"
+              >
+                Оплатити · test yearly
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Active subscription */}
       {hasSubscription && (
-        <div className="relative overflow-hidden p-8 rounded-2xl text-center border border-green-500/30 bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-green-500/10">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(34,197,94,0.15),transparent_70%)]" />
-          <div className="relative z-10">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-[0_20px_60px_rgba(34,197,94,0.4)]">
+        <div className="dashboard-liquid-card overflow-hidden p-0 text-center">
+          <div className="dashboard-liquid-edge--top px-8 py-8">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-[22px] border border-emerald-400/20 bg-emerald-500/12">
               <Check className="w-10 h-10 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Підписка активна</h2>
-            <p className="text-white/70">
-              Твій план: <strong className="text-green-400">{user?.subscriptionPlan}</strong>
+            <h2 className="mb-2 text-2xl font-medium text-[var(--text-primary)]">Підписка активна</h2>
+            <p className="text-[var(--text-secondary)]">
+              Твій план: <strong className="text-emerald-300">{user?.subscriptionPlan}</strong>
             </p>
           </div>
         </div>
@@ -146,55 +196,48 @@ export default function SubscriptionPage() {
       {/* Pricing Cards */}
       {!hasSubscription && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {PLANS.map(plan => (
+          {SUBSCRIPTION_PLANS.map((plan: SubscriptionPlan) => (
             <div
               key={plan.id}
               className={[
-                'relative flex h-full flex-col rounded-2xl px-6 pb-6 pt-8 transition-all duration-300',
+                'dashboard-liquid-card relative flex h-full flex-col overflow-visible px-6 pb-6 pt-8 transition-all duration-300',
                 plan.highlighted
-                  ? 'bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-purple-500/15 border-2 border-purple-500/40 shadow-[0_20px_80px_rgba(168,85,247,0.35)]'
-                  : 'bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-white/[0.07] border border-white/[0.1]',
-                'hover:scale-[1.02] hover:shadow-[0_20px_80px_rgba(var(--accent-rgb),0.3)]',
+                  ? 'border-[rgba(181,120,255,0.18)] bg-[rgba(181,120,255,0.06)]'
+                  : '',
+                'hover:-translate-y-1',
               ].join(' ')}
             >
-              <div className={[
-                'absolute inset-0 rounded-2xl opacity-0 hover:opacity-100 transition-opacity duration-300',
-                plan.highlighted
-                  ? 'bg-[radial-gradient(circle_at_50%_50%,rgba(168,85,247,0.15),transparent_70%)]'
-                  : 'bg-[radial-gradient(circle_at_50%_50%,rgba(var(--accent-rgb),0.1),transparent_70%)]',
-              ].join(' ')} />
-
               {plan.badge && (
                 <span className={[
-                  'absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-4 py-1.5 rounded-full text-[12px] font-semibold tracking-[0.02em] z-10',
-                  BADGE_STYLES[plan.badgeColor || 'blue'],
+                  'absolute -top-3.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-4 py-1.5 text-[12px] font-medium tracking-[0.02em]',
+                  SUBSCRIPTION_BADGE_CLASS[plan.badgeColor || 'blue'],
                 ].join(' ')}>
                   {plan.badge}
                 </span>
               )}
 
-              <div className="relative z-10 flex h-full flex-col">
-                <h3 className="text-xl font-bold text-[color:var(--text-primary)] mb-4">{plan.name}</h3>
+              <div className="flex h-full flex-col">
+                <h3 className="mb-4 text-xl font-medium text-[var(--text-primary)]">{plan.name}</h3>
 
                 <div className="flex items-baseline gap-2 mb-6">
                   {plan.originalPrice && (
-                    <span className="text-base text-[color:var(--text-muted)] line-through opacity-60">
+                    <span className="text-base text-[var(--text-muted)] line-through opacity-60">
                       ₴{plan.originalPrice}
                     </span>
                   )}
-                  <span className="text-5xl font-bold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+                  <span className="text-5xl font-medium text-[var(--text-primary)]">
                     ₴{plan.price}
                   </span>
-                  <span className="text-[color:var(--text-muted)] text-sm">/{plan.period}</span>
+                  <span className="text-sm text-[var(--text-muted)]">/{plan.period}</span>
                 </div>
 
                 <ul className="mb-8 flex-1 space-y-3">
                   {plan.features.map((feature, i) => (
                     <li key={i} className="flex items-start gap-2.5">
-                      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center mt-0.5">
+                      <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500/14">
                         <Check className="w-3 h-3 text-green-400" />
                       </div>
-                      <span className="text-[color:var(--text-secondary)] text-sm leading-relaxed">{feature}</span>
+                      <span className="text-sm leading-relaxed text-[var(--text-secondary)]">{feature}</span>
                     </li>
                   ))}
                 </ul>
@@ -203,11 +246,11 @@ export default function SubscriptionPage() {
                   onClick={() => handleSubscribe(plan.id)}
                   disabled={isProcessing}
                   className={[
-                    'mt-auto flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-semibold text-white transition-all duration-300',
+                    'mt-auto flex w-full items-center justify-center gap-2 rounded-[18px] px-6 py-3.5 font-medium transition-colors duration-300',
                     plan.highlighted
-                      ? 'bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 hover:shadow-[0_8px_32px_rgba(168,85,247,0.5)]'
-                      : 'bg-gradient-to-r from-[color:var(--accent)] to-[color:var(--accent-strong)] hover:shadow-[0_8px_32px_rgba(var(--accent-rgb),0.5)]',
-                    'hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100',
+                      ? 'border border-[rgba(181,120,255,0.22)] bg-[rgba(181,120,255,0.16)] text-[#e2d0ff]'
+                      : 'btn-liquid-dashboard--ice text-[var(--text-primary)]',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
                   ].join(' ')}
                 >
                   {isProcessing ? 'Обробка...' : 'Обрати план'}
@@ -220,24 +263,29 @@ export default function SubscriptionPage() {
       )}
 
       {/* Benefits */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { icon: Brain,         title: 'AI Ментор',  desc: 'Персональний помічник 24/7', color: 'from-purple-500 to-pink-500'   },
-          { icon: BookOpen,      title: 'Всі курси',  desc: '5+ преміум курсів',          color: 'from-blue-500 to-cyan-500'     },
-          { icon: MessageCircle, title: 'Підтримка',  desc: 'Швидка відповідь',           color: 'from-green-500 to-emerald-500' },
-          { icon: Users,         title: 'Спільнота',  desc: 'Доступ до чату',             color: 'from-amber-500 to-orange-500'  },
-        ].map((item, i) => (
-          <div
-            key={i}
-            className="relative overflow-hidden p-5 rounded-xl bg-gradient-to-br from-white/[0.05] to-white/[0.02] border border-white/[0.1] hover:border-white/[0.2] transition-all duration-300 group"
-          >
-            <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mx-auto mb-3 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-              <item.icon className="w-6 h-6 text-white" />
+      <div className="dashboard-liquid-card overflow-hidden p-0">
+        <div className="grid gap-0 sm:grid-cols-2 lg:grid-cols-4">
+          {BENEFITS.map((item, i) => (
+            <div
+              key={item.title}
+              className={[
+                'flex items-start gap-3 px-5 py-5',
+                'border-t border-[var(--border)] sm:border-t-0',
+                i % 2 === 1 ? 'sm:border-l sm:border-[var(--border)]' : '',
+                i >= 2 ? 'lg:border-t lg:border-[var(--border)]' : '',
+                i === 1 || i === 3 ? 'lg:border-l lg:border-[var(--border)]' : '',
+              ].join(' ')}
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-[rgba(var(--accent-rgb),0.16)] bg-[rgba(var(--accent-rgb),0.12)] text-[rgb(var(--accent-soft-rgb))]">
+                <item.icon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">{item.title}</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">{item.desc}</p>
+              </div>
             </div>
-            <p className="text-white font-semibold mb-1">{item.title}</p>
-            <p className="text-white/50 text-sm">{item.desc}</p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
     </div>

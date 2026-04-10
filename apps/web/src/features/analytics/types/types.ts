@@ -160,10 +160,27 @@ export interface AnalyticsInsightCount {
   count: number
 }
 
+export interface AnalyticsTrackingIntegrity {
+  isDisconnected: boolean
+  coreProblem: string
+  weakestStep: 'lead_magnet_to_app_entry' | 'lead_magnet_to_wheel' | 'wheel_to_trial' | 'trial_to_engagement' | 'trial_to_purchase'
+  conversion: number
+  sampleSize: number
+  reasons: string[]
+  actions: string[]
+  worstSource: string | null
+  sourceConversion: number
+  leadUsers: number
+  appUsers: number
+  matchedUsers: number
+  unlinkedEvents: number
+}
+
 export interface AnalyticsInsights {
   topIntents: AnalyticsInsightCount[]
   topProblems: AnalyticsInsightCount[]
   topCategories: AnalyticsInsightCount[]
+  trackingIntegrity?: AnalyticsTrackingIntegrity | null
 }
 
 

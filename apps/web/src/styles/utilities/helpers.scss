@@ -102,6 +102,8 @@
   display: inline-flex;
   align-items: flex-end;
   padding-bottom: .25rem;
+  border-radius: 1rem;
+  background: transparent;
 }
 
 .app-tab {
@@ -125,13 +127,13 @@
 .app-tab-active {
   color: var(--text-primary);
   border-color: rgba(var(--accent-rgb), .42);
-  background: rgba(var(--accent-rgb), .20);
+  background: rgba(var(--accent-rgb), .14);
   box-shadow: 0 4px 12px rgba(var(--accent-rgb), .18);
 }
 
 .app-tab-inactive {
   color: var(--text-secondary);
-  background: rgba(255,255,255,.07);
+  background: rgba(255,255,255,.04);
   border-color: rgba(255,255,255,.18);
 }
 

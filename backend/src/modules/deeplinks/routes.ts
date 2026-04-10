@@ -4,6 +4,7 @@ import {
   generateDeepLinkHandler,
   generateTelegramBindingHandler,
   resolveDeepLinkHandler,
+  resolveDeepLinkSessionHandler,
 } from './controller.js'
 
 const router = Router()
@@ -11,5 +12,6 @@ const router = Router()
 router.post('/generate', authRequired, generateDeepLinkHandler)
 router.get('/telegram', authRequired, generateTelegramBindingHandler)
 router.post('/resolve', resolveDeepLinkHandler)
+router.post('/resolve-session', resolveDeepLinkSessionHandler)
 
 export default router

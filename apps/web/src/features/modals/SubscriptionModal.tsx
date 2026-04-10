@@ -16,7 +16,8 @@ export function SubscriptionModal({ isOpen, onClose }: SubscriptionModalProps) {
   useEffect(() => {
     if (isOpen) {
       // tiny delay щоб Tailwind transition спрацював
-      setTimeout(() => setIsVisible(true), 10)
+      const timer = window.setTimeout(() => setIsVisible(true), 10)
+      return () => window.clearTimeout(timer)
     } else {
       setIsVisible(false)
     }

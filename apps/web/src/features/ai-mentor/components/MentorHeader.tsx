@@ -19,7 +19,7 @@ export default function MentorHeader({ level, isOnboarding, progress }: MentorHe
         <div className="flex items-center gap-3">
           <Sparkles className="w-8 h-8 text-purple-400" />
           <div>
-            <h1 className="text-2xl font-bold text-white">AI-Ментор</h1>
+            <h1 className="text-2xl font-bold text-white">Ментор</h1>
             <p className="text-white/60 text-sm">
               {level === 'trial' && `Trial • ${7 - Math.floor(progress / 14)} днів залишилось`}
               {level === 'paid' && 'Повний доступ'}

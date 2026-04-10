@@ -14,7 +14,7 @@ export const AdminDashboard = () => {
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">Мої продукти</h1>
-        <p className="text-gray-400">Керуйте своїми AI-продуктами</p>
+        <p className="text-gray-400">Керуйте своїми продуктами</p>
       </div>
 
       {/* Create Product Button */}

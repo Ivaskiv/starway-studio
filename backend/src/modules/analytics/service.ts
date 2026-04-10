@@ -89,6 +89,23 @@ export interface AIInsights {
   topIntents: InsightCount[]
   topProblems: InsightCount[]
   topCategories: InsightCount[]
+  trackingIntegrity?: TrackingIntegrity | null
+}
+
+export interface TrackingIntegrity {
+  isDisconnected: boolean
+  coreProblem: string
+  weakestStep: 'lead_magnet_to_app_entry' | 'lead_magnet_to_wheel' | 'wheel_to_trial' | 'trial_to_engagement' | 'trial_to_purchase'
+  conversion: number
+  sampleSize: number
+  reasons: string[]
+  actions: string[]
+  worstSource: string | null
+  sourceConversion: number
+  leadUsers: number
+  appUsers: number
+  matchedUsers: number
+  unlinkedEvents: number
 }
 
 function getPeriodRange(period: Period = '30d'): PeriodRange {
@@ -123,6 +140,23 @@ function getStringField(payload: Prisma.JsonValue | null, key: string): string |
   return typeof value === 'string' ? value : null
 }
 
+function getTrackingPayload(payload: Prisma.JsonValue | null): Prisma.JsonObject | null {
+  if (!isObject(payload)) {
+    return null
+  }
+
+  const tracking = 'tracking' in payload ? payload.tracking : null
+  return isObject(tracking ?? null) ? (tracking as Prisma.JsonObject) : null
+}
+
+function getTrackingIdentity(payload: Prisma.JsonValue | null): string | null {
+  const tracking = getTrackingPayload(payload)
+  const directEmail = getStringField(payload, 'email')
+  const trackingEmail = tracking ? getStringField(tracking as Prisma.JsonValue, 'email') : null
+  const identity = String(directEmail ?? trackingEmail ?? '').trim().toLowerCase()
+  return identity || null
+}
+
 function getDistinctUserCount(values: Array<string | null | undefined>): number {
   return new Set(values.filter((value): value is string => Boolean(value))).size
 }
@@ -144,6 +178,207 @@ function toRankedCounts(map: Map<string, number>, limit: number): InsightCount[]
 
 function isLeadMagnetState(state: string | null): boolean {
   return typeof state === 'string' && state.startsWith('lm_')
+}
+
+const APP_ENTRY_EVENT_TYPES = new Set([
+  'lead_entered_app',
+  'miniapp_opened',
+  'web_onboarding_started',
+  'telegram_start',
+  'web_app_opened',
+])
+
+function normalizeSourceLabel(value: string | null | undefined): string {
+  const source = String(value ?? '').trim()
+  return source || 'unknown'
+}
+
+function humanizeTrackingSource(value: string | null | undefined): string {
+  const source = String(value ?? '').trim()
+  if (!source) return 'Невідоме джерело'
+
+  const normalized = source.toLowerCase()
+
+  if (normalized === 'telegram-router') return 'Telegram router'
+  if (normalized === 'telegram') return 'Telegram'
+  if (normalized === 'miniapp') return 'Mini app'
+  if (normalized === 'web') return 'Web'
+  if (normalized === 'sendpulse_or_external') return 'SendPulse / external'
+  if (normalized === 'lead_entered_app') return 'Вхід у продукт'
+  if (normalized === 'user_inactive') return 'Неактивний користувач'
+
+  if (/^[0-9a-f]{24,}$/.test(normalized) || /^[0-9a-f-]{32,}$/.test(normalized)) {
+    return 'Лід-магніт без назви'
+  }
+
+  return source
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .map((word) => word ? word.charAt(0).toUpperCase() + word.slice(1) : word)
+    .join(' ')
+}
+
+function buildDisconnectedTrackingIntegrity(params: {
+  leadUsers: number
+  appUsers: number
+  matchedUsers: number
+  worstSource: string | null
+  sourceConversion: number
+  unlinkedEvents: number
+}): TrackingIntegrity {
+  return {
+    isDisconnected: true,
+    coreProblem: 'відсутній зв’язок між lead magnet і продуктом',
+    weakestStep: 'lead_magnet_to_app_entry',
+    conversion: 0,
+    sampleSize: params.leadUsers,
+    reasons: [
+      'користувачі з lead magnet не передаються в продукт',
+      'немає user matching (email / utm / id)',
+      'дані з різних систем не зв’язані',
+    ],
+    actions: [
+      'передавати email або user_id при переході в продукт',
+      "додати подію 'lead_entered_app'",
+      'зв’язати SendPulse / Telegram / Web через єдиний user_id',
+    ],
+    worstSource: params.worstSource,
+    sourceConversion: params.sourceConversion,
+    leadUsers: params.leadUsers,
+    appUsers: params.appUsers,
+    matchedUsers: params.matchedUsers,
+    unlinkedEvents: params.unlinkedEvents,
+  }
+}
+
+async function getTrackingIntegrity(period: Period = '30d'): Promise<TrackingIntegrity | null> {
+  const { start } = getPeriodRange(period)
+
+  const [leads, appEntryEvents] = await Promise.all([
+    prisma.funnelLead.findMany({
+      where: { createdAt: { gte: start } },
+      select: {
+        userId: true,
+        source: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            telegramUserId: true,
+            telegramChatId: true,
+          },
+        },
+      },
+    }),
+    prisma.event.findMany({
+      where: {
+        createdAt: { gte: start },
+        type: { in: [...APP_ENTRY_EVENT_TYPES] },
+      },
+      select: {
+        userId: true,
+        type: true,
+        source: true,
+        payload: true,
+      },
+    }),
+  ])
+
+  const leadIdentities = new Set(
+    leads
+      .map((lead) => {
+        const leadEmail = lead.user?.email ? normalizeSourceLabel(lead.user.email).toLowerCase() : null
+        return lead.userId ?? leadEmail
+      })
+      .filter((value): value is string => Boolean(value)),
+  )
+  const appIdentities = new Set(
+    appEntryEvents
+      .map((event) => event.userId ?? getTrackingIdentity(event.payload))
+      .filter((value): value is string => Boolean(value)),
+  )
+  const matchedIdentities = new Set([...leadIdentities].filter((identity) => appIdentities.has(identity)))
+  const unlinkedAppEntryEvents = appEntryEvents.filter((event) => !event.userId && !getTrackingIdentity(event.payload)).length
+
+  const sourceStats = new Map<string, { leads: Set<string>; appUsers: Set<string> }>()
+  for (const lead of leads) {
+    const source = normalizeSourceLabel(lead.source)
+    const bucket = sourceStats.get(source) ?? { leads: new Set<string>(), appUsers: new Set<string>() }
+    const identity = lead.userId ?? (lead.user?.email ? normalizeSourceLabel(lead.user.email).toLowerCase() : null)
+    if (identity) {
+      bucket.leads.add(identity)
+    }
+    sourceStats.set(source, bucket)
+  }
+  for (const event of appEntryEvents) {
+    const identity = event.userId ?? getTrackingIdentity(event.payload)
+    if (!identity) continue
+    for (const [source, bucket] of sourceStats.entries()) {
+      if (bucket.leads.has(identity)) {
+        bucket.appUsers.add(identity)
+        sourceStats.set(source, bucket)
+      }
+    }
+  }
+
+  const rankedSources = [...sourceStats.entries()]
+    .map(([source, bucket]) => ({
+      source: humanizeTrackingSource(source),
+      leads: bucket.leads.size,
+      conversion: safeRate(bucket.appUsers.size, bucket.leads.size),
+    }))
+    .filter((item) => item.leads >= 10 || item.conversion < 100)
+    .sort((left, right) => left.conversion - right.conversion || right.leads - left.leads)
+
+  const worstSource = rankedSources[0] ?? null
+  const disconnected = leadIdentities.size > 0 && matchedIdentities.size === 0
+
+  if (disconnected) {
+    return buildDisconnectedTrackingIntegrity({
+      leadUsers: leadIdentities.size,
+      appUsers: appIdentities.size,
+      matchedUsers: matchedIdentities.size,
+      worstSource: worstSource?.source ?? null,
+      sourceConversion: worstSource?.conversion ?? 0,
+      unlinkedEvents: unlinkedAppEntryEvents,
+    })
+  }
+
+  if (leadIdentities.size === 0 && appIdentities.size === 0) {
+    return null
+  }
+
+  const matchedRate = safeRate(matchedIdentities.size, Math.max(1, leadIdentities.size))
+
+  return {
+    isDisconnected: false,
+    coreProblem: matchedIdentities.size > 0 ? 'трафік і продукт вже зв’язані' : 'немає стабільного потоку нових користувачів',
+    weakestStep: matchedIdentities.size > 0 ? 'lead_magnet_to_wheel' : 'lead_magnet_to_app_entry',
+    conversion: matchedRate,
+    sampleSize: leadIdentities.size,
+    reasons: matchedIdentities.size > 0
+      ? ['є зв’язок між lead magnet і продуктом', 'дані не виглядають розірваними']
+      : [
+          'користувачі з lead magnet не передаються в продукт',
+          'немає user matching (email / utm / id)',
+          'дані з різних систем не зв’язані',
+        ],
+    actions: matchedIdentities.size > 0
+      ? ['продовжити підсилювати наступний bottleneck', 'підняти конверсію на слабкому кроці']
+      : [
+          'передавати email або user_id при переході в продукт',
+          "додати подію 'lead_entered_app'",
+          'зв’язати SendPulse / Telegram / Web через єдиний user_id',
+        ],
+    worstSource: worstSource?.source ?? null,
+    sourceConversion: worstSource?.conversion ?? 0,
+    leadUsers: leadIdentities.size,
+    appUsers: appIdentities.size,
+    matchedUsers: matchedIdentities.size,
+    unlinkedEvents: unlinkedAppEntryEvents,
+  }
 }
 
 function hasWheelSignal(event: { type: string; payload: Prisma.JsonValue | null }): boolean {
@@ -529,5 +764,6 @@ export async function getAIInsights(period: Period = '30d', limit = 8): Promise<
     topIntents: toRankedCounts(intents, limit),
     topProblems: toRankedCounts(problems, limit),
     topCategories: toRankedCounts(categories, limit),
+    trackingIntegrity: await getTrackingIntegrity(period),
   }
 }

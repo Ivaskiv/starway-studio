@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { AvaHead } from './AvaAssistant';
 // import { AssistantStepCard } from './AssistantStepCard'
 import type { AssistantStep } from '../types/assistant.types';
+import type { AssistantMode } from '../lib/assistantBridge';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
+type AssistantModeTab = { id: AssistantMode; label: string }
+type AssistantGuideSection = { title: string; points: readonly string[] }
+type AssistantQuickAction = { id: string; label: string; description: string; action: string }
 
 interface Props {
   isOpen: boolean
@@ -18,11 +22,21 @@ interface Props {
   mode?: 'floating' | 'chat-only' | 'static'
   showClose?: boolean
   className?: string
+  titleOverride?: string
+  statusOverride?: string
+  inputPlaceholder?: string
+  modeTabs?: AssistantModeTab[]
+  activeMode?: AssistantMode
+  onModeChange?: (mode: AssistantMode) => void
+  guideSections?: readonly AssistantGuideSection[]
+  quickActions?: readonly AssistantQuickAction[]
+  suggestionsOverride?: readonly { icon: string; text: string }[]
+  hideInput?: boolean
 }
 
 const SUGGESTIONS_AUTH = [
   { icon: '→', text: 'Який мій наступний крок?' },
-  { icon: '→', text: 'Як налаштувати AI-воронку?' },
+  { icon: '→', text: 'Як налаштувати воронку?' },
   { icon: '→', text: 'Що таке продюсер-асистент?' },
   { icon: '→', text: 'Як зростати швидше?' },
 ]
@@ -30,7 +44,7 @@ const SUGGESTIONS_AUTH = [
 const SUGGESTIONS_GUEST = [
   { icon: '→', text: 'Як працює платформа?' },
   { icon: '→', text: 'Що таке колесо балансу?' },
-  { icon: '→', text: 'Як запустити AI-воронку?' },
+  { icon: '→', text: 'Як запустити воронку?' },
   { icon: '→', text: 'Що входить у підписку?' },
 ]
 
@@ -46,6 +60,16 @@ export function AssistantPanel({
   mode = 'floating',
   showClose = true,
   className,
+  titleOverride,
+  statusOverride,
+  inputPlaceholder,
+  modeTabs = [],
+  activeMode = 'chat',
+  onModeChange,
+  guideSections = [],
+  quickActions = [],
+  suggestionsOverride,
+  hideInput = false,
 }: Props) {
   const [input, setInput] = useState('')
   const [activeTab, setActiveTab] = useState<'chat' | 'steps'>('chat')
@@ -54,8 +78,8 @@ export function AssistantPanel({
 
   const isGuestMode = mode === 'chat-only'
   const hasSteps = steps.length > 0
-  const showTabs = mode === 'floating' && hasSteps
-  const SUGGESTIONS = isGuestMode ? SUGGESTIONS_GUEST : SUGGESTIONS_AUTH
+  const showTabs = mode === 'floating' && (modeTabs.length > 1 || hasSteps)
+  const SUGGESTIONS = suggestionsOverride ?? (isGuestMode ? SUGGESTIONS_GUEST : SUGGESTIONS_AUTH)
   const readyCount = steps.filter(s => s.status === 'ready').length
 
   useEffect(() => {
@@ -63,7 +87,9 @@ export function AssistantPanel({
   }, [messages, isOpen])
 
   useEffect(() => {
-    if (isOpen) setTimeout(() => textareaRef.current?.focus(), 120)
+    if (!isOpen) return
+    const timer = window.setTimeout(() => textareaRef.current?.focus(), 120)
+    return () => window.clearTimeout(timer)
   }, [isOpen])
 
   if (!isOpen) return null
@@ -123,9 +149,9 @@ export function AssistantPanel({
           <AvaHead width={38} />
         </div>
         <div className="ap-notion__info">
-          <p className="ap-notion__name">Starway AI</p>
+          <p className="ap-notion__name">{titleOverride ?? 'Starway Mentor'}</p>
           <p className="ap-notion__status">
-            {isGuestMode ? 'запитуй будь-що' : 'онлайн'}
+            {statusOverride ?? (isGuestMode ? 'запитуй будь-що' : 'онлайн')}
           </p>
         </div>
         <div className="ap-notion__actions-row">
@@ -144,12 +170,24 @@ export function AssistantPanel({
       {/* ── Вкладки ── */}
       {showTabs && (
         <div className="ap-notion__tabs">
-          <button
-            className={`ap-notion__tab ${activeTab === 'chat' ? 'ap-notion__tab--active' : ''}`}
-            onClick={() => setActiveTab('chat')}
-          >
-            Чат
-          </button>
+          {modeTabs.length > 0 ? (
+            modeTabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={`ap-notion__tab ${activeMode === tab.id ? 'ap-notion__tab--active' : ''}`}
+                onClick={() => onModeChange?.(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))
+          ) : (
+            <button
+              className={`ap-notion__tab ${activeTab === 'chat' ? 'ap-notion__tab--active' : ''}`}
+              onClick={() => setActiveTab('chat')}
+            >
+              Чат
+            </button>
+          )}
           {/* <button
             className={`ap-notion__tab ${activeTab === 'steps' ? 'ap-notion__tab--active' : ''}`}
             onClick={() => setActiveTab('steps')}
@@ -164,7 +202,40 @@ export function AssistantPanel({
 
       {/* ── Тіло ── */}
       <div className="ap-notion__body">
-        {showTabs && activeTab === 'steps' ? (
+        {activeMode === 'sales_guide' ? (
+          <div className="space-y-3 p-4">
+            {guideSections.map((section) => (
+              <div key={section.title} className="rounded-[14px] border border-white/10 bg-white/5 px-4 py-3">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">{section.title}</p>
+                <div className="mt-2 space-y-2">
+                  {section.points.map((point) => (
+                    <p key={point} className="text-[13px] leading-6 text-[var(--text-muted)]">
+                      {point}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : activeMode === 'quick_actions' ? (
+          <div className="ap-notion__empty">
+            <p className="ap-notion__empty-title">Швидкі дії</p>
+            <div className="ap-notion__suggestions">
+              {quickActions.map((action) => (
+                <button
+                  key={action.id}
+                  className="ap-notion__suggestion"
+                  onClick={() => onAction?.(action.action)}
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-[var(--text-primary)]">{action.label}</div>
+                    <div className="mt-1 text-xs text-[var(--text-muted)]">{action.description}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : showTabs && activeTab === 'steps' ? (
           /* Steps tab */
           <div className="ap-notion__steps">
             {nextAction && (
@@ -187,7 +258,7 @@ export function AssistantPanel({
               </p>
               {isGuestMode && (
                 <p className="ap-notion__empty-hint">
-                  Зареєструйся щоб отримати персонального AI-продюсера
+                  Зареєструйся щоб отримати персонального асистента
                 </p>
               )}
               <div className="ap-notion__suggestions">
@@ -231,6 +302,7 @@ export function AssistantPanel({
       </div>
 
       {/* ── Інпут ── */}
+      {!hideInput ? (
       <div className="ap-notion__input">
         <div className="ap-notion__input-row">
           <textarea
@@ -239,12 +311,13 @@ export function AssistantPanel({
             rows={1}
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={isGuestMode ? 'Запитай про платформу...' : 'Запитай AI...'}
+            placeholder={inputPlaceholder ?? (isGuestMode ? 'Запитай про платформу...' : 'Запитай ментора...')}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 handleSend()
               }
+              e.stopPropagation()
             }}
           />
           <button
@@ -257,6 +330,7 @@ export function AssistantPanel({
           </button>
         </div>
       </div>
+      ) : null}
 
     </div>
   )
@@ -323,9 +397,10 @@ function InputRow({ input, setInput, onSend, isSending, textareaRef, isGuest }: 
         rows={1}
         value={input}
         onChange={e => setInput(e.target.value)}
-        placeholder={isGuest ? 'Запитай про платформу...' : 'Запитай AI...'}
+        placeholder={isGuest ? 'Запитай про платформу...' : 'Запитай ментора...'}
         onKeyDown={e => {
           if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend() }
+          e.stopPropagation()
         }}
       />
       <button

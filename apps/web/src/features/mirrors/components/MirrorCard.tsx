@@ -30,7 +30,7 @@ export function MirrorCard({ mirror }: MirrorCardProps) {
       <div className="mb-6">
         <h4 className="text-white font-medium mb-3 flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-purple-400" />
-          Аналіз AI
+          Аналіз
         </h4>
         <div className="bg-white/5 rounded-lg p-4 border border-white/10">
           <p className="text-white/90 leading-relaxed whitespace-pre-line">

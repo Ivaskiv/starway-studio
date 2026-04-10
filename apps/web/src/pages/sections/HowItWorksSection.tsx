@@ -33,7 +33,7 @@ const STEP_CONFIG: Record<StepId, Step> = {
   },
   flow: {
     id: 'flow',
-    title: 'Колесо та AI flow',
+    title: 'Колесо та менторський шлях',
     desc: 'Переходь до колеса балансу і далі рухайся по системі крок за кроком.',
     icon: Sparkles,
   },
@@ -271,10 +271,10 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
 
                   <GlassCard
                     className={[
-                      'step-card flex min-h-[220px] flex-col px-5 py-5 transition-all duration-300 sm:min-h-[250px] sm:px-6 sm:py-6 lg:min-h-[340px] lg:px-8 lg:py-8',
+                      'landing-auth-surface step-card flex min-h-[220px] flex-col px-5 py-5 transition-all duration-300 sm:min-h-[250px] sm:px-6 sm:py-6 lg:min-h-[340px] lg:px-8 lg:py-8',
                       isActive
-                        ? 'border-[rgba(var(--accent-soft-rgb))] bg-[rgba(var(--accent-rgb),0.08)] shadow-[0_0_0_1px_rgba(var(--accent-rgb),0.28),0_0_28px_rgba(var(--accent-rgb),0.18),0_18px_40px_rgba(0,0,0,0.22)]'
-                        : 'cursor-pointer border-white/10 opacity-80 hover:opacity-100',
+                        ? 'shadow-[0_0_0_1px_rgba(var(--accent-rgb),0.28),0_0_28px_rgba(var(--accent-rgb),0.18),0_18px_40px_rgba(0,0,0,0.22)]'
+                        : 'cursor-pointer opacity-90 hover:opacity-100',
                     ].join(' ')}
                     onClick={isActive ? undefined : () => openStep(item.id)}
                   >

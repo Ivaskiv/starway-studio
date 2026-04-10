@@ -1,10 +1,19 @@
 // backend/src/modules/telegram-mentor/keyboards.ts
 import { Markup } from 'telegraf'
-import type { ReplyKeyboardMarkup } from '@telegraf/types'
 
 type InlineKeyboard = ReturnType<typeof Markup.inlineKeyboard>
+type InlineKeyboardButton =
+  | { text: string; callback_data: string }
+  | { text: string; url: string }
+  | { text: string; web_app: { url: string } }
 
-const appBaseUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+const appBaseUrl = (
+  process.env.TELEGRAM_PUBLIC_FRONTEND_URL?.trim()
+  || process.env.PUBLIC_FRONTEND_URL?.trim()
+  || process.env.MINIAPP_URL?.trim()
+  || process.env.FRONTEND_URL?.trim()
+  || 'https://starway-frontend.vercel.app/miniapp'
+).replace(/\/$/, '')
 const miniAppVersion = process.env.MINIAPP_VERSION?.trim() || 'dev'
 
 function isTelegramSafeUrl(value: string): boolean {
@@ -32,17 +41,22 @@ export function getTelegramAppUrl(path = '/miniapp'): string | null {
   return url.toString()
 }
 
-const persistentKeyboard: ReplyKeyboardMarkup = {
-  keyboard: [
-    ['🤖 AI Ментор', '📊 Мій стан'],
-    ['🎯 Моя ціль', '💬 Підтримка'],
-  ],
-  resize_keyboard: true,
-  is_persistent: true,
-}
+function appButton(
+  label: string,
+  url: string | null,
+  fallbackCallbackData = 'return_main_menu',
+): InlineKeyboardButton {
+  if (url) {
+    return {
+      text: label,
+      web_app: { url },
+    }
+  }
 
-export const mainMenuKeyboard = {
-  reply_markup: persistentKeyboard,
+  return {
+    text: '← Повернутись',
+    callback_data: fallbackCallbackData,
+  }
 }
 
 export const supportMenuKeyboard: InlineKeyboard = Markup.inlineKeyboard([
@@ -78,19 +92,25 @@ export function continueOrRestartKeyboard(): InlineKeyboard {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback('▶️ Продовжити', 'continue_ai_mentor'),
-      appUrl
-        ? Markup.button.url('🔄 Почати заново', appUrl)
-        : Markup.button.callback('🔄 Почати заново', 'restart_flow'),
+      appButton('🔄 Почати заново', appUrl, 'restart_flow'),
     ],
   ])
 }
 
-export function openAppKeyboard(): InlineKeyboard {
-  const appUrl = getTelegramAppUrl()
-  return openUrlKeyboard(appUrl, '🌐 Відкрити додаток')
+export function openAppKeyboard(path = '/miniapp', label = '🌐 Відкрити додаток'): InlineKeyboard {
+  const appUrl = getTelegramAppUrl(path)
+  return Markup.inlineKeyboard([
+    [appButton(label, appUrl)],
+  ])
 }
 
 export function openUrlKeyboard(url: string | null, label = '🌐 Відкрити додаток'): InlineKeyboard {
+  if (url && isTelegramSafeUrl(url)) {
+    return Markup.inlineKeyboard([
+      [{ text: label, web_app: { url } }],
+    ])
+  }
+
   return Markup.inlineKeyboard([
     [
       url
@@ -126,9 +146,7 @@ export function trialExpiredKeyboard(): InlineKeyboard {
   const appUrl = getTelegramAppUrl()
   return Markup.inlineKeyboard([
     [
-      appUrl
-        ? Markup.button.url('🚀 Отримати доступ', appUrl)
-        : Markup.button.callback('🚀 Отримати доступ', 'return_main_menu'),
+      appButton('🚀 Отримати доступ', appUrl),
       Markup.button.callback('🧭 Знайти точки опори', 'open_lidmagnet'),
     ],
   ])
@@ -137,7 +155,7 @@ export function trialExpiredKeyboard(): InlineKeyboard {
 export function subscribedKeyboard(): InlineKeyboard {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback('🤖 AI Ментор', 'continue_ai_mentor'),
+      Markup.button.callback('🤖 ABsystem', 'continue_ai_mentor'),
       Markup.button.callback('📊 Мій стан', 'open_status'),
     ],
   ])

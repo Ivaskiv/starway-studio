@@ -31,7 +31,7 @@ ${input.targetAudience ? `Цільова аудиторія: ${input.targetAudie
   "concept": "Короткий опис концепції воронки",
   "stages": [
     {
-      "name": "Лід-магніт",
+      "name": "Практикум (free)",
       "action": "Підписка на email",
       "headline": "Отримайте безкоштовний гайд",
       "cta": "Завантажити зараз",
@@ -76,7 +76,7 @@ ${input.targetAudience ? `Цільова аудиторія: ${input.targetAudie
       concept: input.userPrompt,
       stages: [
         {
-          name: 'Лід-магніт',
+          name: 'Практикум (free)',
           action: 'Підписка',
           headline: 'Отримайте безкоштовний ресурс',
           cta: 'Завантажити',

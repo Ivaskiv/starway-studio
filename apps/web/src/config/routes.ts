@@ -46,6 +46,9 @@ export const ROUTES = {
   CYCLE: '/dashboard/cycle',         // Daily cycle
   PROGRESS: '/dashboard/progress',   // Analytics
   JOURNAL: '/dashboard/journal',
+  CALENDAR: '/dashboard/calendar',
+  MICROTASKS: '/dashboard/microtasks',
+  TASKS: '/dashboard/tasks',
   STREAK: '/dashboard/streak',       // Streak tracker
   
   // ==========================================
@@ -65,6 +68,7 @@ export const ROUTES = {
   PROFILE: '/dashboard/profile',
   SETTINGS: '/dashboard/settings',
   SUBSCRIPTION: '/dashboard/subscription',
+  NOTIFICATIONS: '/dashboard/notifications',
   
   // ==========================================
   // PRODUCTS & MARKETPLACE
@@ -76,6 +80,7 @@ export const ROUTES = {
   AI_PRODUCER_CONSOLE: '/dashboard/products',
   AI_PRODUCER_ASSISTANT: '/dashboard/products',
   ADMIN_ROLES: '/dashboard/admin/roles',
+  ADMIN_STUDIO: '/dashboard/admin/studio',
   DEV_ROUTES: '/dev/routes',
 
 } as const;
@@ -143,23 +148,23 @@ export const ROUTE_METADATA: Record<RoutePath, {
     requiresPaid: false,
   },
   '/dashboard/ai-mentor': {
-    title: 'AI Ментор',
-    description: 'Інтелектуальний асистент для досягнення цілей',
+    title: 'ABsystem',
+    description: 'Менторський простір для досягнення цілей',
     requiresAuth: true,
     requiresPaid: false,
   },
   '/dashboard/mentor/landing': {
-    title: 'AI Ментор - Вітання',
+    title: 'ABsystem - Вітання',
     requiresAuth: true,
     requiresPaid: false,
   },
   '/dashboard/mentor/setup': {
-    title: 'AI Ментор - Налаштування',
+    title: 'ABsystem - Налаштування',
     requiresAuth: true,
     requiresPaid: false,
   },
   '/dashboard/mentor/workspace': {
-    title: 'AI Ментор - Робоча область',
+    title: 'ABsystem - Робоча область',
     requiresAuth: true,
     requiresPaid: false,
   },
@@ -193,14 +198,29 @@ export const ROUTE_METADATA: Record<RoutePath, {
     requiresAuth: true,
     requiresPaid: false,
   },
+  '/dashboard/calendar': {
+    title: 'Календар',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  '/dashboard/microtasks': {
+    title: 'Мікрозавдання',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  '/dashboard/tasks': {
+    title: 'Мікрозавдання',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
   '/dashboard/streak': {
     title: 'Streak',
     requiresAuth: true,
     requiresPaid: false,
   },
   '/dashboard/vision': {
-    title: 'Бачення життя',
-    description: 'Визначте вашу точку Б',
+    title: 'Точка Б',
+    description: 'Сформуйте вашу точку Б',
     requiresAuth: true,
     requiresPaid: true,
   },
@@ -244,6 +264,11 @@ export const ROUTE_METADATA: Record<RoutePath, {
     requiresAuth: true,
     requiresPaid: false,
   },
+  '/dashboard/notifications': {
+    title: 'Повідомлення',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
   '/dashboard/subscription': {
     title: 'Підписка',
     requiresAuth: true,
@@ -261,6 +286,11 @@ export const ROUTE_METADATA: Record<RoutePath, {
   },
   '/dashboard/admin/roles': {
     title: 'Управління ролями',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  '/dashboard/admin/studio': {
+    title: 'Master Panel',
     requiresAuth: true,
     requiresPaid: false,
   },

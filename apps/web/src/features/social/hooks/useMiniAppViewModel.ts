@@ -13,6 +13,11 @@ interface TrialLike {
   currentDay?: number
 }
 
+interface SubscriptionLike {
+  isActive?: boolean
+  currentPeriodStart?: string | null
+}
+
 interface ProfileLike {
   rewards?: {
     bitMind?: number
@@ -41,7 +46,17 @@ interface UseMiniAppViewModelOptions {
   profile?: ProfileLike | null
   telegramUser?: TelegramUserLike | null
   trial?: TrialLike | null
+  subscription?: SubscriptionLike | null
   userName: string
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+function getMonthlyDay(startAt?: string | null) {
+  if (!startAt) return 1
+  const started = new Date(startAt)
+  if (Number.isNaN(started.getTime())) return 1
+  return Math.max(1, Math.floor((Date.now() - started.getTime()) / MS_PER_DAY) + 1)
 }
 
 export function useMiniAppViewModel({
@@ -49,12 +64,19 @@ export function useMiniAppViewModel({
   profile,
   telegramUser,
   trial,
+  subscription,
   userName,
 }: UseMiniAppViewModelOptions) {
   return useMemo(() => {
-    const hasAccess = (trial?.isActive ?? false) || (trial?.isPaid ?? false)
-    const trialDay = clampTrialDay(trial?.currentDay ?? 0)
-    const trackerProgress = getTrialCompletionPercent(trial?.currentDay ?? 0)
+    const isPaidCycle = Boolean(subscription?.isActive || trial?.isPaid)
+    const hasAccess = (trial?.isActive ?? false) || (trial?.isPaid ?? false) || isPaidCycle
+    const paidCycleDay = getMonthlyDay(subscription?.currentPeriodStart)
+    const trialDay = isPaidCycle
+      ? paidCycleDay
+      : clampTrialDay(trial?.currentDay ?? 0)
+    const trackerProgress = isPaidCycle
+      ? Math.min(100, Math.round((trialDay / 30) * 100))
+      : getTrialCompletionPercent(trial?.currentDay ?? 0)
     const displayName = telegramUser?.first_name ?? userName
     const profileStreak = profile?.streak?.current ?? 0
     const profileBitMind = profile?.rewards?.bitMind ?? 0
@@ -82,5 +104,5 @@ export function useMiniAppViewModel({
       trackerProgress,
       trialDay,
     }
-  }, [latestWheel, profile, telegramUser, trial, userName])
+  }, [latestWheel, profile, subscription?.currentPeriodStart, subscription?.isActive, telegramUser, trial, userName])
 }

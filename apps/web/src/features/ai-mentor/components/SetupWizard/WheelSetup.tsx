@@ -19,7 +19,7 @@ export function WheelSetup({ onComplete }: WheelSetupProps) {
     <div>
       <h2 className="text-2xl font-bold text-white mb-4">Крок 1: Колесо балансу</h2>
       <p className="text-white/70 mb-6">
-        Оціни кожну сферу життя від 1 до 10. Це допоможе AI зрозуміти твій поточний стан.
+        Оціни кожну сферу життя від 1 до 10. Це допоможе точніше визначити твій поточний стан.
       </p>
       <WheelForm onComplete={handleComplete} />
     </div>

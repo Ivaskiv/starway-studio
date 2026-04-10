@@ -16,7 +16,7 @@ export default function VisionStep() {
     }
 
     await submit({ stage: 'vision', answer }).unwrap();
-    toast.success('Бачення збережено. Переходимо до цілі.');
+    toast.success('Точку Б збережено. Переходимо до цілі.');
     setValue('');
   };
 
@@ -28,7 +28,7 @@ export default function VisionStep() {
 
       <p className="text-sm text-white/60">
         Опиши, ким ти хочеш стати через 1 рік.
-        Без фільтрів. AI підлаштується.
+        Без фільтрів. Ми підлаштуємо маршрут під твої відповіді.
       </p>
 
       <Textarea

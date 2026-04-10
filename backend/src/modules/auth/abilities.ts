@@ -20,6 +20,8 @@ export const ABILITIES = {
   AI_BASIC: 'ai.basic',
   AI_DEEP: 'ai.deep',
   ADMIN_CLIENTS_VIEW: 'admin.clients.view',
+  ADMIN_REVENUE_VIEW: 'admin.revenue.view',
+  ADMIN_ROLES_MANAGE: 'admin.roles.manage',
 } as const;
 
 export type Ability = (typeof ABILITIES)[keyof typeof ABILITIES];
@@ -40,6 +42,8 @@ export function getAllAbilities(isSuperAdmin: boolean) {
     baseAbilities['mentor.core'] = true
     baseAbilities['products.manage'] = true
     baseAbilities['admin.clients.view'] = true
+    baseAbilities['admin.revenue.view'] = true
+    baseAbilities['admin.roles.manage'] = true
   }
 
   return baseAbilities
@@ -58,11 +62,15 @@ export function resolveUserAbilities(user: { role: UserRole }): Ability[] {
   ]
 
   if (user.role === 'EXPERT' || user.role === 'SUPERADMIN') {
-    abilities.push(ABILITIES.AI_USE, ABILITIES.MENTOR_CORE)
+    abilities.push(
+      ABILITIES.AI_USE,
+      ABILITIES.MENTOR_CORE,
+      ABILITIES.PRODUCTS_MANAGE,
+      ABILITIES.ADMIN_CLIENTS_VIEW,
+    )
   }
   if (user.role === 'SUPERADMIN') {
-    abilities.push(ABILITIES.PRODUCTS_MANAGE)
-    abilities.push(ABILITIES.ADMIN_CLIENTS_VIEW)
+    abilities.push(ABILITIES.ADMIN_REVENUE_VIEW, ABILITIES.ADMIN_ROLES_MANAGE)
   }
 
   return [...new Set(abilities)]

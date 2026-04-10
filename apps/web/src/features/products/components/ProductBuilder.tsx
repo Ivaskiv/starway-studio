@@ -18,6 +18,7 @@ import { Input } from '@/ui/Input';
 import { Label } from '@/ui/Label';
 import { Select } from '@/ui/Select';
 import { Textarea } from '@/ui/Textarea';
+import { GenerationCurtain, useGenerationCurtain, withMinimumDelay } from '@/ui';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -71,6 +72,10 @@ const ProductBuilder: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const systemPrompt = useMemo(() => generateSystemPrompt(mentorConfig), [mentorConfig]);
+  const curtainVisible = useGenerationCurtain(isLoading, {
+    enterDelay: 140,
+    minVisibleMs: 1050,
+  });
 
   const handleChange = <K extends keyof ProductFormInputs>(key: K, value: ProductFormInputs[K]) => {
     setProductForm(prev => ({ ...prev, [key]: value }));
@@ -85,7 +90,7 @@ const ProductBuilder: React.FC = () => {
         { ...productForm, mentorConfig, systemPrompt },
         user.id,
       );
-      const result = await createProduct(payload).unwrap();
+      const result = await withMinimumDelay(createProduct(payload).unwrap(), 950);
       navigate(`/admin/products/${result.id}/edit`);
     } catch (error) {
       console.error('Error creating product:', error);
@@ -101,7 +106,12 @@ const ProductBuilder: React.FC = () => {
   }, [mentorConfig, systemPrompt]);
 
   return (
-    <div className="space-y-6 p-6 bg-gray-900 rounded-xl text-white">
+    <div className="relative space-y-6 rounded-xl bg-gray-900 p-6 text-white">
+      <GenerationCurtain
+        open={curtainVisible}
+        title="Публікуємо конфігурацію продукту"
+        subtitle="Зберігаємо тип, інтеграції, mentor-config і готовий system prompt."
+      />
       <h2 className="text-2xl font-bold mb-4">Створення продукту</h2>
 
       {/* Назва */}

@@ -93,9 +93,9 @@ export default function AIChat({
     <div className="ios-glass overflow-hidden">
       <div className="border-b border-[var(--glass-border)] px-4 py-4">
         <div className="flex items-center gap-3">
-          <span className="miniapp-aichat__avatar" aria-hidden="true">AI</span>
+          <span className="miniapp-aichat__avatar" aria-hidden="true">M</span>
           <div className="min-w-0">
-            <p className="truncate text-base font-bold text-[var(--text-primary)]">Starway AI</p>
+            <p className="truncate text-base font-bold text-[var(--text-primary)]">Starway Mentor</p>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-xs font-semibold text-[rgb(var(--accent-soft-rgb))]">● Онлайн</span>
               <span className="text-xs font-semibold text-[var(--text-secondary)]">{userLevel}</span>
@@ -155,6 +155,7 @@ export default function AIChat({
                   event.preventDefault()
                   handleSend()
                 }
+                event.stopPropagation()
               }}
               placeholder="Напиши, що зараз у фокусі..."
               rows={1}

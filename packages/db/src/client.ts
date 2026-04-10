@@ -1,13 +1,33 @@
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { PrismaClient } from '../generated/prisma/index.js'
+
+const currentFilePath = fileURLToPath(import.meta.url)
+const currentDirPath = dirname(currentFilePath)
+
+loadEnv({ path: resolve(currentDirPath, '../../../.env') })
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+function isRecoverableConnectionMessage(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('error in postgresql connection') ||
+    normalized.includes('connection closed') ||
+    normalized.includes('kind: closed') ||
+    normalized.includes('server closed the connection')
+  )
+}
+
 const prismaClientSingleton = () =>
   new PrismaClient({
-    log: ['error', 'warn'],
+    log: [
+      { emit: 'event', level: 'error' },
+      { emit: 'stdout', level: 'warn' },
+    ],
     datasources: {
       db: {
         url: process.env.DATABASE_URL,
@@ -16,6 +36,13 @@ const prismaClientSingleton = () =>
   })
 
 export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
+
+;(prisma as any).$on('error', (event: { message: string }) => {
+  if (isRecoverableConnectionMessage(event.message)) {
+    return
+  }
+  console.error('prisma:error', event.message)
+})
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
@@ -34,13 +61,7 @@ function isRecoverableConnectionError(error: unknown): boolean {
     return false
   }
 
-  const message = error.message.toLowerCase()
-  return (
-    message.includes('error in postgresql connection') ||
-    message.includes('connection closed') ||
-    message.includes('kind: closed') ||
-    message.includes('server closed the connection')
-  )
+  return isRecoverableConnectionMessage(error.message)
 }
 
 async function reconnectPrisma() {

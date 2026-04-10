@@ -70,6 +70,7 @@ export interface ProductMember {
 // ── Core User ──────────────────────────────────────────────────
 export interface User {
   id:        string
+  expertId?: string | null
   email:     string | null
   name:      string | null
   firstName: string | null
@@ -77,6 +78,7 @@ export interface User {
   telegramUserId?: string | null
   telegramUserName?: string | null
   telegramChatId?: string | null
+  telegramEnabled?: boolean
 
   role:        UserRole
   isAdmin:     boolean
@@ -107,6 +109,7 @@ export interface RegisterRequest {
   email:     string
   password:  string
   name?:     string
+  expertId?: string
   role?:     UserRole
 }
 

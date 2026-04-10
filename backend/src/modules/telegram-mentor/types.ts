@@ -22,6 +22,9 @@ export interface SessionData {
   // Відповіді на питання: 'morning_q1' → 'відповідь юзера'
   answers?:     Record<string, string>
 
+  // Який день треба зберегти в journal, навіть якщо сесія завершиться пізніше
+  journalDate?: string
+
   // Ранковий/вечірній чекіни
   morning?:     Record<string, string>
   evening?:     Record<string, string>

@@ -31,7 +31,7 @@ export default function GoalStep() {
         onChange={(e) => setValue(e.target.value)}
         rows={4}
         className="w-full glass-field"
-        placeholder="Приклад: за 90 днів запустити 1 AI-воронку, отримати 30 заявок і 10 оплат."
+        placeholder="Приклад: за 90 днів запустити 1 воронку, отримати 30 заявок і 10 оплат."
       />
 
       <div className="flex justify-end">

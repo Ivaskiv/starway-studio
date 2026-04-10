@@ -8,7 +8,7 @@ export function BuilderGuideSection({ steps }: BuilderGuideSectionProps) {
       <h2 className="liquid-h2">Для власника: старт конструктора (11 кроків)</h2>
       <article className="glass-panel">
         <p className="mb-3">
-          Кожен крок має <strong>3 AI-генерації</strong>. Невикористані генерації переносяться на наступний крок.
+          Кожен крок має <strong>3 генерації</strong>. Невикористані генерації переносяться на наступний крок.
           Підсумок: власне колесо, автоматичний аналіз, звіти, Telegram і miniapp.
         </p>
         <ol className="liquid-list liquid-ordered">

@@ -1,9 +1,8 @@
-import type { JournalEvent } from '@/features/journal/types'
-import { JOURNAL_DISPLAY_META, getJournalDisplayType } from '@/features/journal/eventPresentation'
+import type { JournalDayState } from '@/features/journal/types'
 
 interface DayBubbleProps {
   date: Date
-  events: JournalEvent[]
+  dayState?: JournalDayState
   isSelected: boolean
   isToday: boolean
   onSelect: (dateKey: string) => void
@@ -16,9 +15,9 @@ function toDateKey(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-export default function DayBubble({ date, events, isSelected, isToday, onSelect }: DayBubbleProps) {
+export default function DayBubble({ date, dayState, isSelected, isToday, onSelect }: DayBubbleProps) {
   const dateKey = toDateKey(date)
-  const dots = [...new Set(events.map((event) => getJournalDisplayType(event)))].slice(0, 2)
+  const summary = dayState?.summary ?? { completed: 0, pending: 0, missed: 0 }
 
   return (
     <button
@@ -45,9 +44,9 @@ export default function DayBubble({ date, events, isSelected, isToday, onSelect 
         {date.getDate()}
       </span>
       <div className="mt-1.5 flex min-h-1.5 items-center gap-1">
-        {dots.map((type) => (
-          <span key={`${dateKey}-${type}`} className={`h-1.5 w-1.5 rounded-full ${JOURNAL_DISPLAY_META[type].dotClassName}`} />
-        ))}
+        <span className={`h-1.5 w-1.5 rounded-full ${summary.completed > 0 ? 'bg-emerald-400' : 'bg-white/10'}`} />
+        <span className={`h-1.5 w-1.5 rounded-full ${summary.pending > 0 ? 'bg-amber-300' : 'bg-white/10'}`} />
+        <span className={`h-1.5 w-1.5 rounded-full ${summary.missed > 0 ? 'bg-rose-400' : 'bg-white/10'}`} />
       </div>
     </button>
   )

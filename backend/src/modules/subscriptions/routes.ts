@@ -4,7 +4,13 @@
 
 import { authRequired } from '../../modules/auth/middleware/auth.js';
 import { Router } from 'express';
-import { getSubscriptionStatus, listSubscriptions } from './controller.js';
+import {
+  activateSuperadminPaymentTestHandler,
+  getSubscriptionStatus,
+  initiateSubscriptionPaymentHandler,
+  listSubscriptions,
+  startSuperadminTrialTestHandler,
+} from './controller.js';
 import { wayForPayCallback } from './payments/callback.js';
 
 const router = Router();
@@ -14,5 +20,8 @@ router.post('/payments/wayforpay/callback', wayForPayCallback);
 
 router.get('/status', authRequired, getSubscriptionStatus);
 router.get('/',       authRequired, listSubscriptions);
+router.post('/payments/wayforpay/initiate', authRequired, initiateSubscriptionPaymentHandler);
+router.post('/test/superadmin/trial', authRequired, startSuperadminTrialTestHandler);
+router.post('/test/superadmin/payment', authRequired, activateSuperadminPaymentTestHandler);
 
 export default router;

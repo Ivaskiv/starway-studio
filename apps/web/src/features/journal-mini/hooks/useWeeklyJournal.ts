@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useGetJournalRangeQuery } from '@/features/journal/journal.api'
-import type { JournalEvent } from '@/features/journal/types'
-
-function toDateKey(value: Date | string) {
-  const date = typeof value === 'string' ? new Date(value) : value
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
+import type { JournalDayState } from '@/features/journal/types'
+import { toDateKey } from '@/features/journal/utils'
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
@@ -16,6 +9,37 @@ function startOfDay(date: Date) {
 
 function endOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+}
+
+function createFallbackDayState(dateKey: string): JournalDayState {
+  return {
+    date: `${dateKey}T12:00:00.000Z`,
+    dateKey,
+    hasEntry: false,
+    events: [],
+    reflection: {
+      morning: { status: 'pending', event: null },
+      evening: { status: 'pending', event: null },
+    },
+    microTasks: {
+      status: 'awaiting',
+      items: [],
+      activeCount: 0,
+      completedCount: 0,
+      missedCount: 0,
+    },
+    zoomSessions: {
+      status: 'empty',
+      items: [],
+    },
+    systemSignals: [],
+    summary: {
+      xp: 0,
+      completed: 0,
+      pending: 2,
+      missed: 0,
+    },
+  }
 }
 
 export function useWeeklyJournal() {
@@ -27,7 +51,7 @@ export function useWeeklyJournal() {
   }, [today])
   const end = useMemo(() => endOfDay(today), [today])
 
-  const { data = [], isFetching, isLoading } = useGetJournalRangeQuery(
+  const { data, isFetching, isLoading, error } = useGetJournalRangeQuery(
     {
       start: start.toISOString(),
       end: end.toISOString(),
@@ -49,28 +73,28 @@ export function useWeeklyJournal() {
 
   const [selectedDay, setSelectedDay] = useState<string>(() => toDateKey(today))
 
-  const groupedEventsByDay = useMemo(() => {
-    return data.reduce<Record<string, JournalEvent[]>>((acc, event) => {
-      const key = toDateKey(event.date)
-      if (!acc[key]) acc[key] = []
-      acc[key].push(event)
+  const dayStatesByDate = useMemo(() => {
+    return (data?.days ?? []).reduce<Record<string, JournalDayState>>((acc, day) => {
+      acc[day.dateKey] = day
       return acc
     }, {})
-  }, [data])
+  }, [data?.days])
 
   useEffect(() => {
     const todayKey = toDateKey(today)
-    const sortedKeys = Object.keys(groupedEventsByDay).sort()
+    const sortedKeys = Object.keys(dayStatesByDate).sort()
     const fallbackKey = sortedKeys[sortedKeys.length - 1] ?? todayKey
-    setSelectedDay((current) => (groupedEventsByDay[current] || current === todayKey ? current : fallbackKey))
-  }, [groupedEventsByDay, today])
+    setSelectedDay((current) => (dayStatesByDate[current] || current === todayKey ? current : fallbackKey))
+  }, [dayStatesByDate, today])
 
   return {
     days,
-    eventsByDate: groupedEventsByDay,
+    dayStatesByDate,
     isFetching,
     isLoading,
+    isError: Boolean(error),
     selectedDay,
+    selectedDayState: dayStatesByDate[selectedDay] ?? createFallbackDayState(selectedDay),
     setSelectedDay,
   }
 }

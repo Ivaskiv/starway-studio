@@ -2,20 +2,32 @@ import { ROUTES } from '@/config/routes'
 import { EmailCompletionCard } from '@/features/auth/components/EmailCompletionCard'
 import { useResolveDeepLinkMutation } from '@/features/auth/services/deeplinks.api'
 import { useUserState } from '@/features/auth/hooks/useUserState'
+import { useGetWebMapQuery } from '@/features/web-map/services/web-map.api'
 import { Button } from '@/ui'
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-function resolveStepRoute(step: string): string {
+function resolveStepRoute(step: string, hasWebMap: boolean): string {
   if (step === 'START_FLOW' || step === 'WHEEL') {
     return ROUTES.WHEEL_START
   }
 
   if (step === 'DAILY_MORNING') {
+    if (!hasWebMap) {
+      return ROUTES.VISION
+    }
     return ROUTES.DASHBOARD
   }
 
   return ROUTES.HOME
+}
+
+function resolveDeepLinkFallbackRoute(path: string | null, step: string, hasWebMap: boolean) {
+  if (path?.startsWith('/miniapp')) {
+    return path
+  }
+
+  return resolveStepRoute(step, hasWebMap)
 }
 
 export default function ContinueFlowPage() {
@@ -23,13 +35,21 @@ export default function ContinueFlowPage() {
   const location = useLocation()
   const [resolveDeepLink] = useResolveDeepLinkMutation()
   const { isAuthenticated, isLoading, step, emailCompletionRequired, refetch } = useUserState()
+  const { data: webMap } = useGetWebMapQuery(undefined, {
+    skip: !isAuthenticated || emailCompletionRequired,
+  })
 
   useEffect(() => {
+    const token = new URLSearchParams(location.search).get('dl')
+
     if (isLoading) {
       return
     }
 
     if (!isAuthenticated) {
+      if (token) {
+        return
+      }
       navigate(ROUTES.LOGIN, { replace: true })
       return
     }
@@ -38,7 +58,6 @@ export default function ContinueFlowPage() {
       return
     }
 
-    const token = new URLSearchParams(location.search).get('dl')
     if (token) {
       void resolveDeepLink({ token, consume: true })
         .unwrap()
@@ -48,16 +67,16 @@ export default function ContinueFlowPage() {
             return
           }
 
-          navigate(resolveStepRoute(step), { replace: true })
+          navigate(resolveDeepLinkFallbackRoute(result.link.path, step, Boolean(webMap)), { replace: true })
         })
         .catch(() => {
-          navigate(resolveStepRoute(step), { replace: true })
+          navigate(resolveStepRoute(step, Boolean(webMap)), { replace: true })
         })
       return
     }
 
-    navigate(resolveStepRoute(step), { replace: true })
-  }, [emailCompletionRequired, isAuthenticated, isLoading, location.search, navigate, resolveDeepLink, step])
+    navigate(resolveStepRoute(step, Boolean(webMap)), { replace: true })
+  }, [emailCompletionRequired, isAuthenticated, isLoading, location.search, navigate, resolveDeepLink, step, webMap])
 
   if (emailCompletionRequired) {
     return (

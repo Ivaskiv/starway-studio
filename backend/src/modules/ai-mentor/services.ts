@@ -10,8 +10,10 @@ import { buildContextPrompt, buildSystemPrompt } from './prompt.js';
 import {
   detectRegression as detectRegressionState,
   generateMicroActions as generateMicroActionsState,
+  isOpenAIQuotaError,
   updateUserState,
 } from './state.service.js';
+import { runGuardedAiTask, stableHash } from '../../services/aiGuard.service.js';
 import {
   SendMessageDto,
   ChatResponse,
@@ -80,21 +82,34 @@ function pickFocusSphere(scores: Record<string, unknown> | null | undefined) {
 
 async function aiGenerate(prompt: AIGenerationRequest): Promise<AIGenerationResponse> {
   const contextPrompt = prompt.context?.join('\n') ?? ''
-  const result = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.35,
-    messages: [
-      { role: 'system', content: buildSystemPrompt() },
-      {
-        role: 'user',
-        content: contextPrompt
-          ? `КОНТЕКСТ:\n${contextPrompt}\n\nЗАПИТ:\n${prompt.prompt}`
-          : prompt.prompt,
-      },
-    ],
-    max_tokens: 400,
-  });
-  const text = result.choices[0]?.message?.content ?? '';
+  const text = await runGuardedAiTask(
+    {
+      userId: prompt.userId ?? `system:${stableHash({ contextPrompt, prompt: prompt.prompt }).slice(0, 12)}`,
+      source: 'mentor-generate',
+      label: 'mentor-generate',
+      payloadHash: stableHash({ contextPrompt, prompt: prompt.prompt }),
+      throttleMs: 10_000,
+      duplicateWindowMs: 10 * 60_000,
+    },
+    async () => {
+      const result = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        temperature: 0.35,
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          {
+            role: 'user',
+            content: contextPrompt
+              ? `КОНТЕКСТ:\n${contextPrompt}\n\nЗАПИТ:\n${prompt.prompt}`
+              : prompt.prompt,
+          },
+        ],
+        max_tokens: 400,
+      });
+      return result.choices[0]?.message?.content ?? '';
+    },
+    () => '',
+  )
   return { text, summary: text.split('\n')[0] ?? '', tone: 'harsh' };
 }
 
@@ -173,6 +188,7 @@ export async function sendMessage(params: SendMessageDto): Promise<ChatResponse>
     ? `Активні задачі юзера:\n${activeTasks.map(task => `- ${task.title}${task.why ? ` — ${task.why}` : ''}`).join('\n')}`
     : 'Активних задач зараз немає.'
   const ai = await aiGenerate({
+    userId: params.userId,
     prompt: `Прийми рішення по повідомленню користувача. Визнач розрив між станом і дією. Дай відповідь JSON: { "reply": "string", "actionables": ["string"] }. Повідомлення: ${params.message}`,
     context: [contextPrompt, taskPrompt],
   });
@@ -230,6 +246,23 @@ export async function getMentorContext(userId: string): Promise<MentorChatContex
     streakDays: streak?.current ?? undefined,
     activeTasks: activeTasks.map(task => task.title),
   };
+}
+
+export async function getInstantInsight(userId: string): Promise<{ title: string; insight: string }> {
+  const context = await getMentorContext(userId)
+
+  const insight = context.primaryGoal
+    ? `Твій фокус зараз — ${context.primaryGoal}. Наступний крок буде найсильнішим, якщо ти закріпиш його однією дією сьогодні.`
+    : context.focusSphere
+      ? `Найбільше уваги зараз просить сфера "${context.focusSphere}". Один малий рух у цій зоні дасть найшвидший ефект.`
+      : context.lastState
+        ? `Твій поточний стан: ${context.lastState}. Зафіксуй один конкретний крок, щоб перетворити цей стан у результат.`
+        : 'Твій перший інсайт готовий: відкрий ABsystem і зроби один маленький крок, щоб запустити ритм дня.'
+
+  return {
+    title: 'Перший інсайт готовий',
+    insight,
+  }
 }
 
 export async function getMentorExtendedContext(userId: string): Promise<MentorExtendedContext> {
@@ -398,6 +431,7 @@ export async function submitDailyCycle(input: DailyCycleInput): Promise<DailyCyc
   });
   const contextPrompt = await buildContextPrompt(input.userId)
   const analysis = await aiGenerate({
+    userId: input.userId,
     prompt: `Аналіз циклу: ${JSON.stringify(input)}`,
     context: [contextPrompt],
   });
@@ -427,7 +461,17 @@ export async function submitDailyCycle(input: DailyCycleInput): Promise<DailyCyc
       factOfDay: input.dayFact ?? '',
       drain: input.drain ?? '',
     },
-  }).catch(error => console.error('[updateUserState]', error))
+  }).catch(error => {
+    if (isOpenAIQuotaError(error)) {
+      console.warn('[updateUserState] skipped enrichment due to OpenAI quota', {
+        userId: input.userId,
+        source: 'daily',
+      })
+      return
+    }
+
+    console.error('[updateUserState]', error)
+  })
   // fix etap6: recompute derived streak metrics and trigger AI check-in reminders
   await calculateStreak(input.userId);
   await triggerAICheckIn(input.userId);
@@ -502,7 +546,7 @@ export async function processWheel(userId: string, scores: WheelScore[]): Promis
 
 export async function submitPaidModule(userId: string, module: string, payload: Record<string, unknown>) {
   await assertPaid(userId, module);
-  return aiGenerate({ prompt: `${module}: ${JSON.stringify(payload)}` });
+  return aiGenerate({ userId, prompt: `${module}: ${JSON.stringify(payload)}` });
 }
 
 export async function generateAffirmation(type: 'morning' | 'evening'): Promise<AffirmationDto> {
@@ -624,17 +668,10 @@ export async function generateWeeklyReport(
     'Тон: підтримуючий, конкретний, без загальних фраз.',
   ].join('\n');
 
-  const analysisResult = await openai.chat.completions.create({
-    model:       'gpt-4o-mini',
-    temperature: 0.4,
-    max_tokens:  500,
-    messages: [
-      { role: 'system', content: 'Відповідай тільки українською. Без markdown.' },
-      { role: 'user',   content: analysisPrompt },
-    ],
-  });
-
-  const analysis = analysisResult.choices[0]?.message?.content?.trim() ?? '';
+  const analysis = (await aiGenerate({
+    userId,
+    prompt: analysisPrompt,
+  })).text.trim();
 
   const heroVariants: WeeklyReportData['heroVariants'] = []
   const adTexts: WeeklyReportData['adTexts'] = {

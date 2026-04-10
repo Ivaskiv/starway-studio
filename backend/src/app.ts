@@ -1,14 +1,21 @@
 // backend/src/app.ts
+import { config as loadEnv } from 'dotenv'
 import express, {
   type NextFunction,
   type Request,
   type Response,
 } from 'express';
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-import 'dotenv/config';
 import morgan from 'morgan';
+
+const currentFilePath = fileURLToPath(import.meta.url)
+const currentDirPath = dirname(currentFilePath)
+
+loadEnv({ path: resolve(currentDirPath, '../../.env') })
 
 // Routes
 import accessRoutes from './modules/access/routes.js';
@@ -31,8 +38,10 @@ import landingRoutes from './modules/landing/routes.js';
 import leadMagnetRoutes from './modules/lead-magnet/routes.js';
 import mentorshipRoutes from './modules/mentorship/routes.js';
 import miniCoursesRoutes from './modules/mini-courses/routes.js';
+import notificationsRoutes from './modules/notifications/routes.js';
 import onboardingRoutes from './modules/onboarding/routes.js';
 import journalRoutes from './modules/journal/routes.js';
+import mentorWeeklyAnalysisRoutes from './modules/ai-mentor/weekly-analysis/routes.js';
 import productMembersRoutes from './modules/product-members/routes.js';
 import productsRoutes from './modules/products/routes.js';
 import progressRoutes from './modules/progress/routes.js';
@@ -46,7 +55,9 @@ import userStateRoutes from './modules/user-state/routes.js';
 import userRoutes from './modules/user/routes.js';
 import visionRoutes from './modules/vision/routes.js';
 import wheelRoutes from './modules/wheel/routes.js';
+import webMapRouter from './modules/web-map/web-map.router.js';
 import zoomRoutes from './modules/zoom/routes.js';
+import { securityHeaders } from './middleware/securityHeaders.js';
 
 export function createApp() {
   const app = express();
@@ -72,6 +83,7 @@ app.use(
   }),
 );
 app.options('*', cors());
+  app.use(securityHeaders)
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -107,8 +119,10 @@ app.options('*', cors());
   app.use('/api/products', productsRoutes);
   app.use('/api/product-members', productMembersRoutes);
   app.use('/api/progress', progressRoutes);
+  app.use('/api/notifications', notificationsRoutes);
 
 app.use('/api/mentor', mentorRoutes);
+app.use('/api/mentor', mentorWeeklyAnalysisRoutes);
 app.use('/api/aIMentor', mentorRoutes);
   app.use('/api/ai', aiRoutes);
   app.use('/api/onboarding', onboardingRoutes);
@@ -137,6 +151,7 @@ app.use('/api/lead-magnet', leadMagnetRoutes)
   app.use('/api/users', userRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/daily', dailyRoutes);
+  app.use('/api/web-map', webMapRouter);
 
   // =====================
   // 404

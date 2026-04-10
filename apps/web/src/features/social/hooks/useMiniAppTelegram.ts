@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useState } from 'react'
 
+import { useAuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import type { MiniAppPageId } from '@/features/social/types/miniapp'
 
@@ -36,6 +37,7 @@ export function useMiniAppTelegram({
   page,
 }: UseMiniAppTelegramOptions) {
   const { isAuthenticated, loginWithSocial, loginWithTelegramMiniApp } = useAuth()
+  const authRestoreStatus = useAuthRestoreStatus()
   const autoLoginAttemptedRef = useRef(false)
   const [isBootstrappingAuth, setIsBootstrappingAuth] = useState(false)
 
@@ -68,6 +70,18 @@ export function useMiniAppTelegram({
   const telegramUser = typeof Telegram === 'undefined' ? null : Telegram.WebApp.initDataUnsafe.user
   const allowDevFallback =
     import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  const isAwaitingRestore = !isAuthenticated && (authRestoreStatus === 'idle' || authRestoreStatus === 'restoring')
+
+  useEffect(() => {
+    if (isAwaitingRestore) {
+      setIsBootstrappingAuth(true)
+      return
+    }
+
+    if (!autoLoginAttemptedRef.current) {
+      setIsBootstrappingAuth(false)
+    }
+  }, [isAwaitingRestore])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -80,6 +94,7 @@ export function useMiniAppTelegram({
       return
     }
 
+    if (isAwaitingRestore) return
     if (!telegramUser?.id) return
     if (autoLoginAttemptedRef.current) return
 
@@ -102,6 +117,7 @@ export function useMiniAppTelegram({
 
     void loginPromise
       .then((result) => {
+        setIsBootstrappingAuth(false)
         if (import.meta.env.DEV) {
           console.info('[miniapp/auth] Telegram auto-login success', {
             email: result.email ?? null,
@@ -115,7 +131,7 @@ export function useMiniAppTelegram({
         autoLoginAttemptedRef.current = false
         setIsBootstrappingAuth(false)
       })
-  }, [allowDevFallback, isAuthenticated, loginWithSocial, loginWithTelegramMiniApp, telegramInitData, telegramUser?.id])
+  }, [allowDevFallback, isAuthenticated, isAwaitingRestore, loginWithSocial, loginWithTelegramMiniApp, telegramInitData, telegramUser?.id])
 
   return {
     isBootstrappingAuth,

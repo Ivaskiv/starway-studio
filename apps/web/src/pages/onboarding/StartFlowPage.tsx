@@ -3,9 +3,11 @@ import { useTrackFrontendEventMutation } from '@/features/analytics/services/eve
 import { EmailCompletionCard } from '@/features/auth/components/EmailCompletionCard'
 import { useUserState } from '@/features/auth/hooks/useUserState'
 import { useGetTelegramLinkUrlQuery } from '@/features/auth/services/auth.api'
+import { useGetWebMapQuery } from '@/features/web-map/services/web-map.api'
 import { Button } from '@/ui'
 import { ArrowRight, MessageCircle, Waypoints } from 'lucide-react'
 import { useEffect } from 'react'
+import { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const FLOW_STEPS = [
@@ -27,6 +29,10 @@ export default function StartFlowPage() {
   const navigate = useNavigate()
   const { isAuthenticated, step, emailCompletionRequired, refetch } = useUserState()
   const [trackFrontendEvent] = useTrackFrontendEventMutation()
+  const leadEntryTrackedRef = useRef(false)
+  const { data: webMap } = useGetWebMapQuery(undefined, {
+    skip: !isAuthenticated || emailCompletionRequired,
+  })
 
   const { data: telegramLinkData, isFetching: isTelegramLinkLoading } = useGetTelegramLinkUrlQuery(undefined, {
     skip: !isAuthenticated || emailCompletionRequired,
@@ -42,8 +48,13 @@ export default function StartFlowPage() {
 
     if (step === 'WHEEL') {
       navigate(ROUTES.WHEEL_START, { replace: true })
+      return
     }
-  }, [emailCompletionRequired, isAuthenticated, navigate, step])
+
+    if (step === 'DAILY_MORNING' && !webMap) {
+      navigate(ROUTES.VISION, { replace: true })
+    }
+  }, [emailCompletionRequired, isAuthenticated, navigate, step, webMap])
 
   useEffect(() => {
     if (!isAuthenticated || emailCompletionRequired) {
@@ -56,6 +67,25 @@ export default function StartFlowPage() {
       source: 'web',
       state: step,
       payload: {
+        step,
+      },
+    })
+  }, [emailCompletionRequired, isAuthenticated, step, trackFrontendEvent])
+
+  useEffect(() => {
+    if (!isAuthenticated || emailCompletionRequired || leadEntryTrackedRef.current) {
+      return
+    }
+
+    leadEntryTrackedRef.current = true
+    void trackFrontendEvent({
+      userId: null,
+      type: 'lead_entered_app',
+      source: 'web',
+      state: step,
+      email: null,
+      payload: {
+        entry: 'web_start_flow',
         step,
       },
     })

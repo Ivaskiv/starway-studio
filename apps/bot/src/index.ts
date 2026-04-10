@@ -1,9 +1,16 @@
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { prisma } from '../../../backend/src/db/client.js'
 import { registerDailyTelegramCommands } from '../../../backend/src/modules/daily-cycle/telegram.js'
 import { registerMentorBot } from '../../../backend/src/modules/telegram-mentor/index.js'
 import { bot } from '../../../backend/src/lib/telegram.js'
+
+const currentFilePath = fileURLToPath(import.meta.url)
+const currentDirPath = dirname(currentFilePath)
+
+loadEnv({ path: resolve(currentDirPath, '../../../.env') })
 
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
 

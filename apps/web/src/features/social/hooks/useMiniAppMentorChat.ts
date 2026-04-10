@@ -33,25 +33,33 @@ export function useMiniAppMentorChat({ userId, context }: UseMiniAppMentorChatOp
 
     try {
       const data = await miniAppFetch<{
+        message?: string
         mentorMessage?: { content?: string }
         reply?: string
-      }>('/api/mentor/chat', {
+      }>('/api/assistant/chat', {
         method: 'POST',
-        body: JSON.stringify({ message: text, userId }),
+        body: JSON.stringify({ message: text }),
       })
 
       const reply =
+        data.message ??
         data.mentorMessage?.content ??
         data.reply ??
         'Дякую за твою відповідь 🌱'
 
       setChatMessages((messages) => [...messages, { role: 'ai', text: reply }])
-    } catch {
+    } catch (error) {
+      console.error('[MiniAppMentorChat] assistant unavailable', {
+        userId,
+        context,
+        message: text,
+        error: error instanceof Error ? error.message : String(error),
+      })
       setChatMessages((messages) => [
         ...messages,
         {
           role: 'ai',
-          text: 'Зараз не можу відповісти. Спробуй пізніше.',
+          text: 'Асистент тимчасово недоступний. Спробуй через кілька хвилин.',
         },
       ])
     } finally {

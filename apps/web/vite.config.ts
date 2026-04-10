@@ -5,7 +5,7 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:3001';
+  const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3001';
   const tunnelUrl = env.VITE_DEV_TUNNEL_URL?.trim();
   const tunnel = tunnelUrl ? new URL(tunnelUrl) : null;
   const hmrHost = env.VITE_HMR_HOST?.trim() || tunnel?.hostname || 'localhost';

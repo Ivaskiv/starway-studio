@@ -10,8 +10,8 @@ export async function assistantChat(userId:string,message:string){
   generateWeeklyInsight(userId),
  ])
 
- return {
-  message:'',
+  return {
+  message: buildAssistantMessage(message, nextProduct, weeklyInsight),
   meta:{
    userMessage:message,
    profile,
@@ -19,6 +19,40 @@ export async function assistantChat(userId:string,message:string){
    weeklyInsight,
   }
  }
+}
+
+function buildAssistantMessage(
+  message: string,
+  nextProduct: { productId: string; name: string; reason: string } | null,
+  weeklyInsight: Record<string, unknown>,
+) {
+  const normalized = message.trim().toLowerCase()
+  const summary = typeof weeklyInsight.summary === 'string' ? weeklyInsight.summary : null
+  const nextOffer = typeof weeklyInsight.nextOffer === 'string' ? weeklyInsight.nextOffer : null
+
+  if (normalized.includes('наступ') || normalized.includes('далі')) {
+    if (nextProduct) {
+      return `Твій найкращий наступний крок зараз — ${nextProduct.name}. Якщо хочеш, я можу ще розкласти, чому саме він.`
+    }
+
+    if (summary) {
+      return `Зараз я бачу таку картину: ${summary}`
+    }
+  }
+
+  if (normalized.includes('контент') || normalized.includes('продаж') || normalized.includes('cta')) {
+    return 'Для продажного контенту завжди тримай маршрут таким: hook → довіра → CTA → DM → bot → trial → оплата.'
+  }
+
+  if (nextOffer) {
+    return `Ось що я рекомендую врахувати зараз: ${nextOffer}`
+  }
+
+  if (summary) {
+    return summary
+  }
+
+  return 'Я можу підказати, що робити далі, який інструмент Starway відкрити і як зібрати контент у логіку продажу.'
 }
 
 export async function buildUserProfile(userId: string) {

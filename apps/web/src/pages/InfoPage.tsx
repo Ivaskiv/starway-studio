@@ -6,7 +6,7 @@ import { useLocation } from 'react-router-dom'
 
 const CONTENT: Record<string, { title: string; description: string }> = {
   '/help':     { title: 'Допомога',              description: 'Оберіть потрібний розділ у навігації або зверніться в підтримку для консультації.' },
-  '/about':    { title: 'Про Starway',            description: 'Starway Studio допомагає будувати стабільний прогрес через AI-інструменти та освітні модулі.' },
+  '/about':    { title: 'Про Starway',            description: 'Starway Studio допомагає будувати стабільний прогрес через менторські інструменти та освітні модулі.' },
   '/blog':     { title: 'Блог',                  description: 'Оновлення, кейси студентів і практичні матеріали скоро будуть доступні у цьому розділі.' },
   '/careers':  { title: "Кар'єра",               description: 'Ми розвиваємо продуктову команду. Напишіть нам, якщо хочете працювати разом.' },
   '/contact':  { title: 'Контакти',              description: 'Питання щодо продукту та партнерства можна надіслати через форму підтримки.' },

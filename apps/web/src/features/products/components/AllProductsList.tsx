@@ -44,7 +44,7 @@ export default function AllProductsList() {
             >
               <div className="h-40 bg-gradient-to-br from-orange-500/20 to-pink-500/20 flex items-center justify-center relative">
                 {!hasAccess && (
-                  <div className="absolute inset-0 backdrop-blur-sm bg-black/50 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                     <Lock className="w-12 h-12 text-white/60" />
                   </div>
                 )}

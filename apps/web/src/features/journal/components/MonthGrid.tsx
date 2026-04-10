@@ -1,3 +1,4 @@
+// apps/web/src/features/journal/components/MonthGrid.tsx
 import DayCell from './DayCell'
 import type { JournalEvent } from '../types'
 
@@ -35,6 +36,7 @@ function buildCalendarDays(month: number, year: number) {
 }
 
 interface MonthGridProps {
+  compact?: boolean
   events: JournalEvent[]
   eventsByDate: Record<string, JournalEvent[]>
   month: number
@@ -44,6 +46,7 @@ interface MonthGridProps {
 }
 
 export default function MonthGrid({
+  compact = false,
   events,
   eventsByDate,
   month,
@@ -55,8 +58,8 @@ export default function MonthGrid({
   const todayKey = toDateKey(new Date())
 
   return (
-    <div className="space-y-4 transition-all duration-300 ease-out">
-      <div className="grid grid-cols-7 gap-2">
+    <div className={compact ? 'space-y-3 transition-all duration-300 ease-out' : 'space-y-4 transition-all duration-300 ease-out'}>
+      <div className={compact ? 'grid grid-cols-7 gap-1.5' : 'grid grid-cols-7 gap-2'}>
         {WEEK_DAYS.map((day) => (
           <div key={day} className="px-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgb(var(--accent-soft-rgb))]">
             {day}
@@ -64,12 +67,13 @@ export default function MonthGrid({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
+      <div className={compact ? 'grid grid-cols-7 gap-1.5' : 'grid grid-cols-7 gap-2'}>
         {cells.map((date) => {
           const dateKey = toDateKey(date)
           return (
             <DayCell
               key={dateKey}
+              compact={compact}
               date={date}
               events={eventsByDate[dateKey] ?? []}
               isCurrentMonth={date.getMonth() === month - 1}

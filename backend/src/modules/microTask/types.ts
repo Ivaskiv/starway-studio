@@ -1,5 +1,5 @@
 // backend/src/modules/microTask/types.ts
-export type MicroTaskStatus = 'active' | 'done' | 'expired' | 'skipped';
+export type MicroTaskStatus = 'active' | 'done' | 'expired' | 'skipped' | 'manual';
 export type MicroTaskPriority = 'high' | 'medium' | 'low';
 
 export interface MicroTask {
@@ -17,9 +17,13 @@ export interface MicroTask {
   source: string;
   linkedQuestionId?: string;
   status: MicroTaskStatus;
+  taskKind?: 'manual' | 'auto';
   createdAt: Date;
+  generatedFromEntryId?: string | null;
   expiresAt?: Date;
   completedAt?: Date;
+  progressPercent?: number | null;
+  aiContext?: string | null;
 }
 
 export interface MicroTaskResponse {

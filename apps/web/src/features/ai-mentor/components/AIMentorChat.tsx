@@ -225,7 +225,10 @@ export default function AIMentorChat() {
             rows={1}
             disabled={!isReady}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(event) => {
+              handleKeyDown(event)
+              event.stopPropagation()
+            }}
             aria-label="Повідомлення ментору"
           />
 

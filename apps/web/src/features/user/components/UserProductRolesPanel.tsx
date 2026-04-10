@@ -48,9 +48,9 @@ export default function UserProductRolesPanel() {
 
   return (
 
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
-      <GlassCard className="p-6 border-[rgba(var(--accent-rgb),0.35)] bg-[var(--glass-bg)] backdrop-blur-xl">
+      <GlassCard className="h-full p-6 border-[rgba(var(--accent-rgb),0.35)] bg-[var(--glass-bg)]">
 
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
           <Crown className="w-5 h-5 text-amber-300" />
@@ -89,7 +89,7 @@ export default function UserProductRolesPanel() {
 
       </GlassCard>
 
-      <GlassCard className="p-6 border-[var(--glass-border)] bg-[var(--glass-bg)] backdrop-blur-xl">
+      <GlassCard className="h-full p-6 border-[var(--glass-border)] bg-[var(--glass-bg)]">
 
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
           <UserCheck className="w-5 h-5 text-cyan-300" />

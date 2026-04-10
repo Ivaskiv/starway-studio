@@ -12,7 +12,7 @@
 // ║    · Backend знає які продукти куплені                           ║
 // ║    · Sidebar фільтрує за isPaid (локально)                      ║
 // ║                                                                  ║
-// ║  Тому AI Ментор, Колесо, Воронка — це НЕ пункти хедера,        ║
+// ║  Тому ABsystem, Колесо, Воронка — це НЕ пункти хедера,        ║
 // ║  а лише посилання на лендинг-секції для незалогінених.          ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
@@ -77,8 +77,8 @@ export const HEADER_MENU: MenuItem[] = [
       {
         id:          'platform-mentor',
         path:        '/#ai-mentor',
-        label:       'AI Ментор',
-        description: 'Персональний ментор на базі GPT-4',
+        label:       'ABsystem',
+        description: 'Персональний менторський контур для щоденної підтримки',
         icon:        Bot,
       },
       {
@@ -126,7 +126,7 @@ export const HEADER_MENU: MenuItem[] = [
         id:           'prog-premium',
         path:         ROUTES.SUBSCRIPTION,
         label:        'Premium',
-        description:  'AI Ментор · Цілі · Zoom · Курси',
+        description:  'ABsystem · Цілі · Zoom · Курси',
         icon:         Star,
         badge:        'Pro',
         badgeVariant: 'paid',
@@ -181,10 +181,10 @@ export const SIDEBAR_MENU: MenuItem[] = [
     label: 'Кабінет', icon: Home, showInSidebar: true,
   },
 
-  // ── AI-інструменти ───────────────────────────────────────────
+  // ── Менторські інструменти ───────────────────────────────────
   {
     id: 'ai-mentor', path: ROUTES.AI_MENTOR,
-    label: 'AI Ментор', icon: Bot, showInSidebar: true,
+    label: 'ABsystem', icon: Bot, showInSidebar: true,
   },
 
   // ── Free ─────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ export const SIDEBAR_MENU: MenuItem[] = [
   // ── Paid (видно, але locked якщо !isPaid) ────────────────────
   {
     id: 'vision', path: ROUTES.VISION,
-    label: 'Бачення', icon: Eye, showInSidebar: true,
+    label: 'Точка Б', icon: Eye, showInSidebar: true,
     requiresPaid: true, badge: 'Pro', badgeVariant: 'paid',
   },
   {
@@ -236,7 +236,7 @@ export const SIDEBAR_MENU: MenuItem[] = [
 
 export const USER_MENU: MenuItem[] = [
   { id: 'profile',       path: ROUTES.PROFILE,                  label: 'Мій профіль',   icon: User,        showInUserMenu: true },
-  { id: 'notifications', path: '/dashboard/notifications',      label: 'Повідомлення',  icon: Bell,        showInUserMenu: true, badge: 0 },
+  { id: 'notifications', path: ROUTES.NOTIFICATIONS,            label: 'Повідомлення',  icon: Bell,        showInUserMenu: true, badge: 0 },
   { id: 'subscription',  path: ROUTES.SUBSCRIPTION,             label: 'Підписка',      icon: CreditCard,  showInUserMenu: true },
   { id: 'settings',      path: ROUTES.SETTINGS,                 label: 'Налаштування',  icon: Settings,    showInUserMenu: true },
   { id: 'help',          path: ROUTES.HELP,                     label: 'Підтримка',     icon: HelpCircle,  showInUserMenu: true, dividerBefore: true },

@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGetSetupProgressQuery } from '../../services/setup.api';
 import { WheelSetup } from './WheelSetup';
 import { QuestionsSetup } from './QuestionsSetup';
-import { GlassCard } from '@/ui';
+import { GenerationCurtain, GlassCard, useGenerationCurtain } from '@/ui';
 
 interface SetupWizardProps {
   embedded?: boolean;
@@ -18,6 +18,10 @@ interface SetupWizardProps {
 export function SetupWizard({ embedded = false }: SetupWizardProps) {
   const navigate = useNavigate();
   const { data: progress, isLoading } = useGetSetupProgressQuery();
+  const curtainVisible = useGenerationCurtain(isLoading, {
+    enterDelay: 120,
+    minVisibleMs: 700,
+  });
   
   const [currentStep, setCurrentStep] = useState<'wheel' | 'questions'>(
     progress?.currentStep === 'complete' 
@@ -70,7 +74,12 @@ export function SetupWizard({ embedded = false }: SetupWizardProps) {
         </div>
 
         {/* Step Content */}
-        <GlassCard className={embedded ? 'p-6' : 'p-8'}>
+        <GlassCard className={`relative overflow-hidden ${embedded ? 'p-6' : 'p-8'}`}>
+          <GenerationCurtain
+            open={curtainVisible}
+            title="Готуємо ABsystem onboarding"
+            subtitle="Підтягуємо прогрес налаштування, щоб продовжити з точного кроку."
+          />
           {currentStep === 'wheel' && (
             <WheelSetup onComplete={handleWheelComplete} />
           )}

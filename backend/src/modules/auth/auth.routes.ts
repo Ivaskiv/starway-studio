@@ -6,7 +6,9 @@ import { authRequired } from './middleware/auth.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { prisma } from '../../db/client.js'
 import { bot } from '../../lib/telegram.js'
+import { getCachedUser, invalidateUserCache } from '../../lib/db/userCache.js'
 import { createTelegramBindingDeepLink } from '../deeplinks/service.js'
+import { authLimiter } from '../../middleware/rateLimiter.js'
 
 const router = Router()
 export const telegramRouter = Router()
@@ -26,10 +28,10 @@ function isTelegramInactiveError(error: unknown): boolean {
   )
 }
 
-router.post('/register', register)
-router.post('/login', login)
-router.post('/social', social)
-router.post('/telegram', telegram)
+router.post('/register', authLimiter, register)
+router.post('/login', authLimiter, login)
+router.post('/social', authLimiter, social)
+router.post('/telegram', authLimiter, telegram)
 router.post('/refresh', refresh)
 router.post('/logout', authRequired, logout)
 router.get('/me', authRequired, getMe)
@@ -43,20 +45,62 @@ router.get('/telegram-link', authRequired, async (req: AuthenticatedRequest, res
 
   const [existing, user] = await Promise.all([
     prisma.telegramLink.findFirst({ where: { userId, isActive: true } }),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        telegramUserId: true,
-        telegramChatId: true,
-      },
-    }),
+    getCachedUser(userId),
   ])
-  const { link } = await createTelegramBindingDeepLink(userId)
+  const { link, expiresIn, expiresAt } = await createTelegramBindingDeepLink(userId)
   const linked = Boolean(existing || user?.telegramUserId || user?.telegramChatId)
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? 'StarwayMentorBot'
 
   res.json({
     url: link,
     linked,
+    retryAvailable: linked,
+    expiresIn,
+    expiresAt,
+    botUsername,
+  })
+})
+
+telegramRouter.post('/retry-link', authRequired, async (req: AuthenticatedRequest, res) => {
+  const userId = req.user?.id
+  if (!userId) {
+    return res.status(401).json({ message: 'unauthorized' })
+  }
+
+  const [user, existing] = await Promise.all([
+    getCachedUser(userId),
+    prisma.telegramLink.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { telegramEnabled: true },
+  })
+
+  await prisma.notificationPreference.upsert({
+    where: { userId },
+    create: {
+      userId,
+      telegramEnabled: true,
+    },
+    update: {
+      telegramEnabled: true,
+    },
+  }).catch(() => undefined)
+
+  const { link, expiresIn, expiresAt } = await createTelegramBindingDeepLink(userId)
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? 'StarwayMentorBot'
+
+  return res.json({
+    url: link,
+    linked: Boolean(existing || user?.telegramUserId || user?.telegramChatId),
+    retryAvailable: true,
+    expiresIn,
+    expiresAt,
+    botUsername,
   })
 })
 
@@ -66,13 +110,7 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
     return res.status(401).json({ message: 'unauthorized' })
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      telegramUserId: true,
-      telegramChatId: true,
-    },
-  })
+  const user = await getCachedUser(userId)
 
   const link = await prisma.telegramLink.findFirst({
     where: { userId },
@@ -93,6 +131,8 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
     return res.json({
       linked: hasTelegramIdentity,
       botActive: hasTelegramIdentity,
+      retryAvailable: hasTelegramIdentity,
+      telegramEnabled: user?.telegramEnabled ?? true,
     })
   }
 
@@ -112,6 +152,8 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
     return res.json({
       linked: true,
       botActive: link.isActive === true && Boolean(link.chatId) && Boolean(process.env.TELEGRAM_BOT_TOKEN),
+      retryAvailable: true,
+      telegramEnabled: user?.telegramEnabled ?? true,
     })
   }
 
@@ -133,6 +175,8 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
     return res.json({
       linked: true,
       botActive: true,
+      retryAvailable: true,
+      telegramEnabled: user?.telegramEnabled ?? true,
     })
   } catch (error: unknown) {
     if (isTelegramInactiveError(error)) {
@@ -140,10 +184,13 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
         where: { id: link.id },
         data: { isActive: false },
       })
+      await invalidateUserCache(userId)
 
       return res.json({
         linked: true,
         botActive: false,
+        retryAvailable: true,
+        telegramEnabled: user?.telegramEnabled ?? true,
       })
     }
 
@@ -152,6 +199,8 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
     return res.json({
       linked: true,
       botActive: true,
+      retryAvailable: true,
+      telegramEnabled: user?.telegramEnabled ?? true,
     })
   }
 })

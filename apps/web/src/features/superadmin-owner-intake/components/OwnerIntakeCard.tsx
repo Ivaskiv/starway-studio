@@ -49,7 +49,7 @@ export default function OwnerIntakeCard() {
             <p className="text-xs uppercase tracking-[0.22em] text-emerald-300/80 mb-2">Superadmin</p>
             <h3 className="text-2xl font-semibold text-white">Створення продукту/воронки для іншого owner</h3>
             <p className="text-white/65 mt-2 max-w-3xl">
-              Заповніть owner intake шаблон. Після збереження система створить продукт і AI-воронку
+              Заповніть owner intake шаблон. Після збереження система створить продукт і воронку
               від імені вибраного власника.
             </p>
           </div>
@@ -80,7 +80,7 @@ export default function OwnerIntakeCard() {
             placeholder="practice-5-points"
           />
           <Field
-            label="Назва AI-воронки"
+            label="Назва воронки"
             required
             value={values.funnelName}
             onChange={(value) => updateField('funnelName', value)}
@@ -140,6 +140,7 @@ export default function OwnerIntakeCard() {
             <textarea
               value={values.productDescription}
               onChange={(e) => updateField('productDescription', e.target.value)}
+              onKeyDown={(event) => event.stopPropagation()}
               className="glass-field min-h-[92px] rounded-xl"
               placeholder="Короткий зміст цінності продукту"
             />
@@ -150,6 +151,7 @@ export default function OwnerIntakeCard() {
             <textarea
               value={values.initialProducts}
               onChange={(e) => updateField('initialProducts', e.target.value)}
+              onKeyDown={(event) => event.stopPropagation()}
               className="glass-field min-h-[92px] rounded-xl"
               placeholder="Діагностика, Практикум 5 днів, Zoom супровід"
             />

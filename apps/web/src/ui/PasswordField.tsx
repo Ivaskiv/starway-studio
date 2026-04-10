@@ -27,7 +27,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(({
           type={fieldType}
           disabled={disabled}
           className={cn(
-            'glass-field w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] text-[var(--text-primary)] px-3 py-2 shadow-[0_10px_30px_rgba(var(--accent-rgb),0.25)] transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.25)]',
+            'glass-field w-full rounded-[16px] border border-[var(--border-primary)] bg-[var(--glass-bg)] text-[var(--text-field)] placeholder:text-[var(--text-field-placeholder)] px-3 py-2 shadow-[0_10px_30px_rgba(var(--accent-rgb),0.25)] transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[color:rgba(var(--accent-rgb),0.25)]',
             error && 'border-[var(--accent)]',
             disabled && 'opacity-60 cursor-not-allowed'
           )}

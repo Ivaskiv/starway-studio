@@ -1,0 +1,33 @@
+ALTER TABLE "AnnualStrategyMap"
+  ADD COLUMN IF NOT EXISTS "identityStatement" TEXT,
+  ADD COLUMN IF NOT EXISTS "mainGoalId" TEXT,
+  ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'draft';
+
+CREATE INDEX IF NOT EXISTS "AnnualStrategyMap_status_idx"
+  ON "AnnualStrategyMap"("status");
+
+ALTER TABLE "StrategyGoal"
+  ADD COLUMN IF NOT EXISTS "order" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "isMain" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "actions" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "progress" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'active',
+  ADD COLUMN IF NOT EXISTS "targetMonth" INTEGER;
+
+CREATE INDEX IF NOT EXISTS "StrategyGoal_mapId_order_idx"
+  ON "StrategyGoal"("mapId", "order");
+
+CREATE INDEX IF NOT EXISTS "StrategyGoal_status_idx"
+  ON "StrategyGoal"("status");
+
+ALTER TABLE "MonthlyStrategyReview"
+  ADD COLUMN IF NOT EXISTS "focus" TEXT,
+  ADD COLUMN IF NOT EXISTS "actions" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "goalIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'planned',
+  ADD COLUMN IF NOT EXISTS "doneActions" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "missedActions" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "nextMonthRec" TEXT;
+
+CREATE INDEX IF NOT EXISTS "MonthlyStrategyReview_status_idx"
+  ON "MonthlyStrategyReview"("status");

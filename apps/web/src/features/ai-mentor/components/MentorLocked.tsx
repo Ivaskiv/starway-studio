@@ -14,7 +14,7 @@ export default function MentorLocked() {
     <GlassCard className="p-12 text-center">
       <Lock className="w-16 h-16 mx-auto mb-4 text-white/30" />
       <h2 className="text-2xl font-bold text-white mb-3">
-        AI-Ментор недоступний
+        Ментор недоступний
       </h2>
       <p className="text-white/70 mb-6 max-w-md mx-auto">
         Почни безкоштовний 7-денний trial або оформи підписку

@@ -52,7 +52,7 @@ export function EmailCompletionCard({ onCompleted }: Props) {
         </p>
         <h2 className="text-2xl font-bold text-white">Введіть email</h2>
         <p className="text-sm leading-6 text-white/65">
-          Потрібно додати email перед продовженням шляху в AI-менторі.
+          Потрібно додати email перед продовженням шляху в менторі.
         </p>
       </div>
 

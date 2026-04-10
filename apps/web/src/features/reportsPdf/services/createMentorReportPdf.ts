@@ -1,190 +1,119 @@
-// frontend/src/features/reportsPdf/services/createMentorReportPdf.ts
-// Генерує PDF звіту AI-ментора (БЕЗ КЛАСІВ, БЕЗ THIS)
+import type { TDocumentDefinitions } from 'pdfmake/interfaces'
 
-import { AnswerInput, Decision } from '@/features/daily-cycle/questions/types/questions.types';
-import { loadPdfFromUrl, savePdfAsBlob } from './pdfClient';
+import type { AnswerInput, Decision } from '@/features/daily-cycle/questions/types/questions.types'
 
-/**
- * 🎨 Генерація PDF звіту AI-ментора
- *
- * АСОЦІАЦІЯ: Як заповнити бланк у банку
- * - Береш порожній бланк (шаблон)
- * - Заповнюєш свої дані (answers, decisions)
- * - Віддаєш готовий документ
- *
- * КРОК 1: Завантажуємо шаблон PDF
- * КРОК 2: Додаємо текст на сторінки
- * КРОК 3: Зберігаємо як Blob
- */
+import { getPdfAsBlob } from './pdfClient'
 
 interface MentorReportInput {
-  userId: string;
-  answers: AnswerInput[];
-  decisions: Decision[];
+  userId: string
+  answers: AnswerInput[]
+  decisions: Decision[]
   metrics: {
-    stability: number; // 0-10
-    drains: number; // 0-10
-    consistency: number; // 0-10
-  };
+    stability: number
+    drains: number
+    consistency: number
+  }
   wheelData?: Array<{
-    area: string;
-    score: number;
-  }>;
+    area: string
+    score: number
+  }>
 }
 
 export const createMentorReportPdf = async (input: MentorReportInput): Promise<Blob> => {
-  const { userId, answers, decisions, metrics, wheelData } = input;
+  const { userId, answers, decisions, metrics, wheelData } = input
 
-  // 1️⃣ Завантажуємо шаблон PDF
-  const doc = await loadPdfFromUrl('/pdfs/mentor-report-template.pdf');
-
-  // Отримуємо сторінки
-  const pages = doc.getPages();
-  const coverPage = pages[0]; // Обкладинка
-  const contentPage = pages[1]; // Контент
-
-  // 2️⃣ COVER PAGE (сторінка 1)
-  let y = 700;
-
-  coverPage.drawText('AI-МЕНТОР', {
-    x: 50,
-    y,
-    size: 32,
-  });
-
-  y -= 50;
-
-  coverPage.drawText(`Користувач: ${userId}`, {
-    x: 50,
-    y,
-    size: 14,
-  });
-
-  y -= 30;
-
-  coverPage.drawText(`Дата: ${new Date().toLocaleDateString('uk-UA')}`, {
-    x: 50,
-    y,
-    size: 12,
-  });
-
-  // 3️⃣ CONTENT PAGE (сторінка 2)
-  y = 750;
-
-  /* ═══════════════════════════════════════════════════════════
-     БЛОК: МЕТРИКИ
-  ═══════════════════════════════════════════════════════════ */
-  contentPage.drawText('📊 МЕТРИКИ', {
-    x: 50,
-    y,
-    size: 18,
-  });
-
-  y -= 30;
-
-  contentPage.drawText(`Стабільність: ${metrics.stability}/10`, {
-    x: 60,
-    y,
-    size: 12,
-  });
-
-  y -= 20;
-
-  contentPage.drawText(`Злив енергії: ${metrics.drains}/10`, {
-    x: 60,
-    y,
-    size: 12,
-  });
-
-  y -= 20;
-
-  contentPage.drawText(`Послідовність: ${metrics.consistency}/10`, {
-    x: 60,
-    y,
-    size: 12,
-  });
-
-  /* ═══════════════════════════════════════════════════════════
-     БЛОК: КОЛЕСО БАЛАНСУ
-  ═══════════════════════════════════════════════════════════ */
-  if (wheelData && wheelData.length > 0) {
-    y -= 40;
-
-    contentPage.drawText('🎯 КОЛЕСО БАЛАНСУ', {
-      x: 50,
-      y,
-      size: 18,
-    });
-
-    y -= 30;
-
-    wheelData.forEach(item => {
-      contentPage.drawText(`• ${item.area}: ${item.score}/10`, {
-        x: 60,
-        y,
-        size: 11,
-      });
-      y -= 18;
-    });
+  const docDefinition: TDocumentDefinitions = {
+    pageSize: 'A4',
+    pageMargins: [24, 22, 24, 22],
+    content: [
+      { text: 'Звіт ABsystem', style: 'title' },
+      {
+        columns: [
+          { text: `Користувач: ${userId}`, style: 'meta' },
+          { text: `Дата: ${new Date().toLocaleDateString('uk-UA')}`, alignment: 'right', style: 'meta' },
+        ],
+      },
+      {
+        margin: [0, 18, 0, 0],
+        table: {
+          widths: ['*', '*', '*'],
+          body: [[
+            { stack: [{ text: String(metrics.stability), style: 'metricValue' }, { text: 'Стабільність', style: 'metricLabel' }], style: 'metricBox' },
+            { stack: [{ text: String(metrics.drains), style: 'metricValue' }, { text: 'Злив енергії', style: 'metricLabel' }], style: 'metricBox' },
+            { stack: [{ text: String(metrics.consistency), style: 'metricValue' }, { text: 'Послідовність', style: 'metricLabel' }], style: 'metricBox' },
+          ]],
+        },
+        layout: 'noBorders',
+      },
+      ...(wheelData?.length
+        ? [
+            { text: 'Колесо балансу', style: 'sectionTitle', margin: [0, 18, 0, 8] as [number, number, number, number] },
+            {
+              table: {
+                widths: ['*', 'auto'],
+                body: wheelData.map(item => [
+                  { text: item.area, style: 'body' },
+                  { text: `${item.score}/10`, style: 'bodyStrong' },
+                ]),
+              },
+              layout: {
+                hLineColor: () => '#E4E7EC',
+                vLineColor: () => '#E4E7EC',
+                paddingLeft: () => 10,
+                paddingRight: () => 10,
+                paddingTop: () => 8,
+                paddingBottom: () => 8,
+              },
+            },
+          ]
+        : []),
+      { text: 'Відповіді', style: 'sectionTitle', margin: [0, 18, 0, 8] as [number, number, number, number] },
+      {
+        table: {
+          widths: ['auto', '*'],
+          body: answers.length > 0
+            ? answers.map(answer => [
+                { text: answer.questionId, style: 'bodyMuted' },
+                { text: String(answer.value ?? '—'), style: 'body' },
+              ])
+            : [[{ text: 'Немає відповідей', colSpan: 2, style: 'bodyMuted' }, {}]],
+        },
+        layout: {
+          hLineColor: () => '#E4E7EC',
+          vLineColor: () => '#E4E7EC',
+          paddingLeft: () => 10,
+          paddingRight: () => 10,
+          paddingTop: () => 8,
+          paddingBottom: () => 8,
+        },
+      },
+      { text: 'Рішення системи', style: 'sectionTitle', margin: [0, 18, 0, 8] as [number, number, number, number] },
+      {
+        ul: decisions.length > 0
+          ? decisions.map(decision => ({
+              text: `[${decision.type}] ${decision.supportMessage ?? `Рішення #${decision.id.slice(0, 8)}`}`,
+              style: 'body',
+            }))
+          : [{ text: 'Рішень для звіту поки немає.', style: 'bodyMuted' }],
+      },
+    ],
+    pageBreakBefore: () => false,
+    styles: {
+      title: { fontSize: 22, bold: true, color: '#101828' },
+      meta: { fontSize: 10.5, color: '#667085' },
+      sectionTitle: { fontSize: 13, bold: true, color: '#111827' },
+      metricBox: { fillColor: '#F8FAFC' },
+      metricValue: { fontSize: 18, bold: true, color: '#101828' },
+      metricLabel: { margin: [0, 4, 0, 0], fontSize: 10, color: '#667085' },
+      body: { fontSize: 10.5, color: '#344054', lineHeight: 1.35 },
+      bodyStrong: { fontSize: 10.5, bold: true, color: '#101828' },
+      bodyMuted: { fontSize: 10.5, color: '#667085' },
+    },
+    defaultStyle: {
+      fontSize: 10.5,
+      color: '#344054',
+    },
   }
 
-  /* ═══════════════════════════════════════════════════════════
-     БЛОК: ВІДПОВІДІ
-  ═══════════════════════════════════════════════════════════ */
-  y -= 30;
-
-  contentPage.drawText('📝 ТВОЇ ВІДПОВІДІ', {
-    x: 50,
-    y,
-    size: 18,
-  });
-
-  y -= 30;
-
-  answers.forEach(answer => {
-    const text = `• ${answer.questionId}: ${String(answer.value)}`;
-    contentPage.drawText(text, {
-      x: 60,
-      y,
-      size: 11,
-    });
-    y -= 18;
-
-    // Якщо виходить за межі — додати нову сторінку
-    if (y < 100) {
-      doc.addPage();
-      y = 750;
-    }
-  });
-
-  /* ═══════════════════════════════════════════════════════════
-     БЛОК: РІШЕННЯ СИСТЕМИ
-  ═══════════════════════════════════════════════════════════ */
-  y -= 30;
-
-  contentPage.drawText('⚡ РІШЕННЯ СИСТЕМИ', {
-    x: 50,
-    y,
-    size: 18,
-  });
-
-  y -= 30;
-
-  decisions.forEach(decision => {
-    const text = `→ [${decision.type.toUpperCase()}] ${
-      decision.supportMessage ?? `Рішення #${decision.id.slice(0, 8)}`
-    }`;
-
-    contentPage.drawText(text, {
-      x: 60,
-      y,
-      size: 11,
-    });
-    y -= 20;
-  });
-
-  // 4️⃣ Зберігаємо як Blob
-  const blob = await savePdfAsBlob(doc);
-
-  return blob;
-};
+  return getPdfAsBlob(docDefinition)
+}

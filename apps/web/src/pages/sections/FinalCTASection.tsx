@@ -37,7 +37,7 @@ export function FinalCTASection({ onGetStarted }: FinalCTASectionProps) {
 
             <p className="text-xl text-white/50 mb-10 max-w-xl mx-auto">
               Приєднуйся до <strong className="text-white">1,247+</strong> користувачів,
-              які вже змінюють своє життя з AI Ментором
+              які вже змінюють своє життя з ABsystemом
             </p>
 
             <button

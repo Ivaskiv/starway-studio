@@ -5,6 +5,10 @@ export interface LeadMagnetRegisterRequest {
   phone?: string
   email?: string
   packageType: 'free' | 'trial' | 'paid'
+  expertId?: string
+  utm_source?: string
+  utm_campaign?: string
+  product_id?: string
 }
 
 export interface LeadMagnetRegisterResponse {

@@ -1,11 +1,12 @@
 // backend/src/modules/telegram-mentor/handlers/tasks.ts
 
 import type { Context } from 'telegraf'
-import { prisma } from '../../../db/client.js'
 import { trackEvent } from '../../events/service.js'
+import { completeMicroTask, listMicroTasksForUser } from '../../microTask/service.js'
 import { getUserIdByChatId } from '../session.js'
 import { taskDoneKeyboard } from '../keyboards.js'
 import { sendEntryOffer, sendStateMenu } from './start.js'
+import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
 
 export async function handleTasks(ctx: Context) {
   if (process.env.APP_MODE === 'LM_ONLY') {
@@ -15,6 +16,10 @@ export async function handleTasks(ctx: Context) {
   }
 
   try {
+    if (await renderDecisionUnlessAllowed(ctx, 'tasks_requested', ['show_product', 'resume_session'])) {
+      return
+    }
+
     const chatId = String(ctx.chat?.id)
     const userId = await getUserIdByChatId(chatId)
     if (!userId) {
@@ -29,16 +34,15 @@ export async function handleTasks(ctx: Context) {
       state: 'day',
     })
 
-    const tasks = await prisma.microTask.findMany({
-      where:   { userId, isCompleted: false },
-      orderBy: { dueAt: 'asc' },
-      take:    5,
-    }).catch((error) => {
+    const [activeTasks, allTasks] = await Promise.all([
+      listMicroTasksForUser(userId, 'active').then(rows => rows.slice(0, 5)),
+      listMicroTasksForUser(userId, 'all'),
+    ]).catch((error) => {
       console.error('[TelegramMentor] tasks query failed', error)
-      return []
+      return [[], []] as const
     })
 
-    if (!tasks.length) {
+    if (!activeTasks.length) {
       await ctx.reply(
         '✅ Активних завдань немає.\n\nПройди ранковий чекін /morning — отримаєш нові.',
         {
@@ -53,18 +57,24 @@ export async function handleTasks(ctx: Context) {
       return
     }
 
-    await ctx.reply(`📋 *Твої завдання (${tasks.length}):*`, {
+    const completedCount = allTasks.filter(task => task.status === 'COMPLETED').length
+    const missedCount = allTasks.filter(task => task.status === 'skipped' || task.status === 'expired').length
+
+    await ctx.reply(`📋 *Активні завдання (${activeTasks.length})*\nВиконано: ${completedCount} · Пропущено: ${missedCount}`, {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [[{ text: '📊 Мій стан', callback_data: 'open_status' }]],
       },
     })
 
-    for (const task of tasks) {
+    for (const task of activeTasks) {
       const due = task.dueAt
         ? `\n⏰ До: ${new Date(task.dueAt).toLocaleDateString('uk-UA')}`
         : ''
-      await ctx.reply(`▸ ${task.title}${due}`, { reply_markup: taskDoneKeyboard(task.id).reply_markup })
+      const schedule = task.schedule?.isMultiDay && task.schedule.label
+        ? `\n🗓 ${task.schedule.label}`
+        : ''
+      await ctx.reply(`▸ ${task.title}${schedule}${due}`, { reply_markup: taskDoneKeyboard(task.id).reply_markup })
     }
   } catch (error) {
     console.error('[TelegramMentor] tasks error:', error)
@@ -91,10 +101,7 @@ export async function handleTaskDone(ctx: Context, taskId: string) {
   if (!userId) return
 
   try {
-    await prisma.microTask.update({
-      where: { id: taskId },
-      data:  { isCompleted: true, completedAt: new Date() },
-    })
+    await completeMicroTask(taskId, userId)
     await trackEvent({
       userId,
       type: 'telegram_task_completed',

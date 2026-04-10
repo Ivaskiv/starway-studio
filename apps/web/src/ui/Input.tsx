@@ -72,6 +72,7 @@ export const Input = forwardRef<HTMLInputElement, Props>(
               hasRight ? 'pr-11' : 'pr-4',
               error    && 'input-glass--error',
               disabled && 'opacity-60 cursor-not-allowed',
+              'text-[var(--text-field)] placeholder:text-[var(--text-field-placeholder)]',
               className,
             )}
             {...props}

@@ -10,7 +10,7 @@ import {
   useGenerateQuestionsVariantsMutation,
   useSetupQuestionsMutation,
 } from '../../services/setup.api';
-import { Button, GlassCard, Input, Select } from '@/ui';
+import { Button, GenerationCurtain, GlassCard, Input, Select, useGenerationCurtain, withMinimumDelay } from '@/ui';
 import { toast } from 'react-hot-toast';
 import { Sparkles } from 'lucide-react';
 
@@ -29,6 +29,10 @@ export function QuestionsSetup({ onComplete }: QuestionsSetupProps) {
   const [setupQuestions, { isLoading: isSaving }] = useSetupQuestionsMutation();
   const [generateQuestions, { isLoading: isGenerating }] = useGenerateQuestionsVariantsMutation();
   const [completeSetup, { isLoading: isCompleting }] = useCompleteSetupMutation();
+  const curtainVisible = useGenerationCurtain(isSaving || isGenerating || isCompleting, {
+    enterDelay: 140,
+    minVisibleMs: 950,
+  });
 
   const handleAddQuestion = () => {
     setCustomQuestions([...customQuestions, '']);
@@ -54,13 +58,16 @@ export function QuestionsSetup({ onComplete }: QuestionsSetupProps) {
       // Filter empty questions
       const filtered = customQuestions.filter(q => q.trim().length > 0);
 
-      await setupQuestions({
-        frequency,
-        customQuestions: filtered.length > 0 ? filtered : undefined,
-        telegramContact: telegramContact.trim(),
-      }).unwrap();
+      await withMinimumDelay(
+        setupQuestions({
+          frequency,
+          customQuestions: filtered.length > 0 ? filtered : undefined,
+          telegramContact: telegramContact.trim(),
+        }).unwrap(),
+        800,
+      );
 
-      await completeSetup().unwrap();
+      await withMinimumDelay(completeSetup().unwrap(), 700);
 
       toast.success('Налаштування завершено!');
       onComplete();
@@ -76,30 +83,38 @@ export function QuestionsSetup({ onComplete }: QuestionsSetupProps) {
     }
 
     try {
-      const res = await generateQuestions({
-        frequency,
-        goal: goalContext,
-        audience: audienceContext,
-        tone: 'коротко, структуровано, практично',
-      }).unwrap();
+      const res = await withMinimumDelay(
+        generateQuestions({
+          frequency,
+          goal: goalContext,
+          audience: audienceContext,
+          tone: 'коротко, структуровано, практично',
+        }).unwrap(),
+        950,
+      );
 
       const first = res?.variants?.[0];
       if (!first) {
-        toast.error('AI не повернув варіанти');
+        toast.error('Не вдалося сформувати варіанти');
         return;
       }
 
       const merged = [...(first.morningQuestions || []), ...(first.eveningQuestions || [])].slice(0, 6);
       setCustomQuestions(merged.length ? merged : ['']);
       setRemainingGenerations(prev => Math.max(0, prev - 1));
-      toast.success('AI згенерував питання. Можеш відредагувати вручну.');
+      toast.success('Питання сформовано. Можеш відредагувати вручну.');
     } catch {
       toast.error('Не вдалося згенерувати питання');
     }
   };
 
   return (
-    <div>
+    <div className="relative">
+      <GenerationCurtain
+        open={curtainVisible}
+        title={isGenerating ? 'Генеруємо питання' : 'Фіналізуємо onboarding'}
+        subtitle="Збираємо частоту, Telegram-контакт і варіанти питань без втрати ручних правок."
+      />
       <h2 className="text-2xl font-bold text-white mb-4">Крок 2: Налаштування питань</h2>
       <p className="text-white/70 mb-6">
         Обери коли хочеш отримувати питання та додай власні (опціонально).
@@ -150,7 +165,7 @@ export function QuestionsSetup({ onComplete }: QuestionsSetupProps) {
               className="bg-gradient-to-r from-purple-500 to-pink-500"
             >
               <Sparkles className="w-3.5 h-3.5 mr-1" />
-              AI генерація ({remainingGenerations})
+              Сформувати ({remainingGenerations})
             </Button>
           </div>
         </div>

@@ -39,6 +39,17 @@ async function refreshAccessState(dispatch: AppDispatch) {
 export interface TelegramStatusResponse {
   linked: boolean
   botActive: boolean
+  retryAvailable?: boolean
+  telegramEnabled?: boolean
+}
+
+export interface TelegramLinkResponse {
+  url: string
+  linked: boolean
+  retryAvailable?: boolean
+  expiresIn: number
+  expiresAt: string
+  botUsername: string
 }
 
 export const authApi = api.injectEndpoints({
@@ -93,12 +104,16 @@ export const authApi = api.injectEndpoints({
       },
     }),
 
-    getTelegramLinkUrl: builder.query<{ url: string; linked: boolean }, void>({
+    getTelegramLinkUrl: builder.query<TelegramLinkResponse, void>({
       query: () => '/auth/telegram-link',
     }),
 
     getTelegramStatus: builder.query<TelegramStatusResponse, void>({
       query: () => '/telegram/status',
+    }),
+
+    retryTelegramLink: builder.mutation<TelegramLinkResponse, void>({
+      query: () => ({ url: '/telegram/retry-link', method: 'POST' }),
     }),
 
     logout: builder.mutation<LogoutResponseDTO, void>({
@@ -159,6 +174,7 @@ export const {
   useGetTelegramLinkUrlQuery,
   useLazyGetTelegramLinkUrlQuery,
   useGetTelegramStatusQuery,
+  useRetryTelegramLinkMutation,
   useLogoutMutation,
   useForgotPasswordMutation,
   useResetPasswordMutation,

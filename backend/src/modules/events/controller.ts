@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import type { Prisma } from '@starway/db/prisma-client'
-import { trackEvent } from './service.js'
+import { trackEvent, trackLeadEnteredApp } from './service.js'
 
 const ALLOWED_SOURCES = new Set(['telegram', 'web', 'miniapp'])
 
@@ -19,6 +19,10 @@ export async function ingestEvent(req: Request, res: Response) {
   const source = typeof body.source === 'string' ? body.source : ''
   const state = typeof body.state === 'string' ? body.state : null
   const userId = typeof body.userId === 'string' ? body.userId : null
+  const email = typeof body.email === 'string' ? body.email : null
+  const utmSource = typeof body.utm_source === 'string' ? body.utm_source : typeof body.utmSource === 'string' ? body.utmSource : null
+  const utmCampaign = typeof body.utm_campaign === 'string' ? body.utm_campaign : typeof body.utmCampaign === 'string' ? body.utmCampaign : null
+  const productId = typeof body.product_id === 'string' ? body.product_id : typeof body.productId === 'string' ? body.productId : null
   const payload = isJsonObject(body.payload) ? body.payload : {}
 
   if (!type) {
@@ -29,13 +33,24 @@ export async function ingestEvent(req: Request, res: Response) {
     return res.status(400).json({ error: 'invalid_source' })
   }
 
-  await trackEvent({
+  const trackInput = {
     userId,
     type,
     source: source as 'telegram' | 'web' | 'miniapp',
     state,
     payload,
-  })
+    email,
+    utmSource,
+    utmCampaign,
+    productId,
+    upsertUser: !userId && Boolean(email),
+  }
+
+  if (type === 'lead_entered_app') {
+    await trackLeadEnteredApp(trackInput)
+  } else {
+    await trackEvent(trackInput)
+  }
 
   return res.json({ ok: true })
 }

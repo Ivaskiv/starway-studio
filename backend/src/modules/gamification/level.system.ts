@@ -2,7 +2,7 @@ import { LevelDefinition } from './types.js'
 
 export const LEVELS: LevelDefinition[] = [
   { level: 1, title: 'Seeker', xpThreshold: 0, unlocks: ['Навчання базовим практикам'] },
-  { level: 2, title: 'Explorer', xpThreshold: 120, unlocks: ['Рекомендації AI Mentor'] },
+  { level: 2, title: 'Explorer', xpThreshold: 120, unlocks: ['Рекомендації ABsystem'] },
   { level: 3, title: 'Thinker', xpThreshold: 300, unlocks: ['Щоденні інсайти'] },
   { level: 4, title: 'Builder', xpThreshold: 600, unlocks: ['Протиперсоналізовані мікрозавдання'] },
   { level: 5, title: 'Strategist', xpThreshold: 1000, unlocks: ['AI сценарії Wheel + Decisions'] },

@@ -12,6 +12,49 @@ export interface AdminProduct {
   revenue: number;
 }
 
+export interface PromptVersionRecord {
+  id: string;
+  name: string;
+  version: number;
+  content: string;
+  parsedContent?: unknown;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface PromptImpactDependencyCard {
+  name: string;
+  severity: 'high' | 'medium' | 'low';
+  reason: string;
+  affectedPrompts: string[];
+}
+
+export interface PromptImpactCheck {
+  title: string;
+  body: string;
+  tone: 'info' | 'warning' | 'success';
+}
+
+export interface PromptImpactAnalysisRecord {
+  ok?: boolean;
+  promptName: string;
+  promptVersion: number;
+  promptVersionId: string;
+  summary: string;
+  recommendation: string;
+  warnings: string[];
+  dependencies: PromptImpactDependencyCard[];
+  checks: PromptImpactCheck[];
+  analyzedAt: string;
+}
+
+export interface CompatibilityCheckRequest {
+  type: 'compatibility_check'
+  item: Record<string, unknown>
+  relatedItems: Array<Record<string, unknown>>
+  checkRules: string[]
+}
+
 export const adminApi = api.injectEndpoints({
   endpoints: builder => ({
     getAdminSettings: builder.query<AdminSettings, string>({
@@ -26,6 +69,59 @@ export const adminApi = api.injectEndpoints({
       query: () => '/admin/products',
       providesTags: ['AdminProducts'],
     }),
+
+    getPromptVersions: builder.query<{ prompts: PromptVersionRecord[] }, { name?: string } | void>({
+      query: (args) => ({
+        url: '/admin/prompts',
+        params: args?.name ? { name: args.name } : undefined,
+      }),
+      providesTags: ['PromptVersions'],
+    }),
+
+    createPromptVersion: builder.mutation<
+      { prompt: PromptVersionRecord },
+      { name: string; content: string; isActive?: boolean }
+    >({
+      query: (body) => ({
+        url: '/admin/prompts',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['PromptVersions'],
+    }),
+
+    activatePromptVersion: builder.mutation<{ ok: boolean; id: string }, string>({
+      query: (id) => ({
+        url: `/admin/prompts/${id}/activate`,
+        method: 'PUT',
+      }),
+      invalidatesTags: ['PromptVersions'],
+    }),
+
+    deletePromptVersion: builder.mutation<{ ok: boolean }, string>({
+      query: (id) => ({
+        url: `/admin/prompts/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['PromptVersions'],
+    }),
+
+    analyzePromptImpact: builder.mutation<PromptImpactAnalysisRecord, { promptName: string }>({
+      query: (body) => ({
+        url: '/admin/prompts/analyze-impact',
+        method: 'POST',
+        body,
+      }),
+    }),
+
+    runCompatibilityCheck: builder.mutation<PromptImpactAnalysisRecord, CompatibilityCheckRequest>({
+      query: (body) => ({
+        url: '/admin/prompts/analyze-impact',
+        method: 'POST',
+        body,
+      }),
+    }),
+
     updateAdminSettings: builder.mutation<AdminSettings, { adminId: string; settings: AdminSettings }>({
       query: ({ adminId, settings }) => ({
         url: `/admin/${adminId}/settings`,
@@ -41,4 +137,10 @@ export const {
   useGetAdminSettingsQuery,
   useUpdateAdminSettingsMutation,
   useGetAdminProductsQuery,
+  useGetPromptVersionsQuery,
+  useCreatePromptVersionMutation,
+  useActivatePromptVersionMutation,
+  useDeletePromptVersionMutation,
+  useAnalyzePromptImpactMutation,
+  useRunCompatibilityCheckMutation,
 } = adminApi;
