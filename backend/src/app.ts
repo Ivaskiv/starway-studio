@@ -61,28 +61,29 @@ import { securityHeaders } from './middleware/securityHeaders.js';
 
 export function createApp() {
   const app = express();
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'https://starway-frontend.vercel.app',
+    process.env.FRONTEND_URL?.trim(),
+  ].filter((origin): origin is string => Boolean(origin));
+
+  const corsOptions = cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('CORS blocked'));
+    },
+    credentials: true,
+  });
 
   // =====================
   // Middleware
   // =====================
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      const allowedOrigins = [
-        'http://localhost:5173',
-        'https://starway-frontend.vercel.app',
-      ];
-
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('CORS blocked'));
-      }
-    },
-    credentials: true,
-  }),
-);
-app.options('*', cors());
+  app.use(corsOptions);
+  app.options('*', corsOptions);
   app.use(securityHeaders)
 
   app.use(express.json({ limit: '10mb' }));

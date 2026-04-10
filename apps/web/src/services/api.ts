@@ -34,12 +34,33 @@ type AuthUserWithExpert = User & {
   expertId?: string | null;
 };
 
-const getApiBaseUrl = (): string => {
-  if (import.meta.env.DEV) return '/api';
-  return import.meta.env.VITE_API_URL ?? 'https://starway-backend.vercel.app/api';
+type ApiMode = 'auto' | 'local' | 'remote';
+
+const DEFAULT_REMOTE_API_URL = 'https://starway-backend.vercel.app/api';
+
+const getApiMode = (): ApiMode => {
+  const rawMode = import.meta.env.VITE_API_MODE?.trim().toLowerCase();
+  if (rawMode === 'local' || rawMode === 'remote') return rawMode;
+  return 'auto';
 };
 
+const getApiBaseUrl = (): string => {
+  const mode = getApiMode();
+  const remoteUrl = import.meta.env.VITE_API_URL?.trim() || DEFAULT_REMOTE_API_URL;
+
+  if (mode === 'local') return '/api';
+  if (mode === 'remote') return remoteUrl;
+  if (import.meta.env.DEV) return '/api';
+  return remoteUrl;
+};
+
+const API_MODE = getApiMode();
 const API_BASE_URL = getApiBaseUrl();
+
+console.info('[api] configuration', {
+  mode: API_MODE,
+  baseUrl: API_BASE_URL,
+});
 
 const REFRESH_IGNORED_PATHS = new Set([
   '/auth/login',
