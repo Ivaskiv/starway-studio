@@ -28,6 +28,12 @@ type ChatMessage = {
   content: string
 }
 
+type WheelScoreEntry = [string, number]
+
+type MutationErrorPayload = {
+  error?: string
+}
+
 const MONTH_NAMES = [
   'Січень',
   'Лютий',
@@ -65,6 +71,21 @@ function getWheelScoresHash(scores: Record<string, number>) {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}:${value}`)
     .join('|')
+}
+
+function getMutationErrorMessage(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('data' in error)) {
+    return null
+  }
+
+  const payload = (error as { data?: unknown }).data
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  return typeof (payload as MutationErrorPayload).error === 'string'
+    ? (payload as MutationErrorPayload).error ?? null
+    : null
 }
 
 function extractAssistantText(payload: unknown): string {
@@ -188,14 +209,14 @@ export default function VisionPage() {
   const currentMonthPlan = useMemo(() => getCurrentMonthPlan(webMap ?? null), [webMap])
   const wheelScores = useMemo(() => buildWheelScoreMap(latestWheel ?? null), [latestWheel])
   const wheelScoresHash = useMemo(() => getWheelScoresHash(wheelScores), [wheelScores])
-  const wheelScoreEntries = useMemo(
+  const wheelScoreEntries = useMemo<WheelScoreEntry[]>(
     () =>
       Object.entries(wheelScores)
         .sort((left, right) => left[1] - right[1])
         .slice(0, 8),
     [wheelScores],
   )
-  const weakSphereKeys = useMemo(
+  const weakSphereKeys = useMemo<Set<string>>(
     () => new Set(wheelScoreEntries.slice(0, 3).map(([sphere]) => sphere)),
     [wheelScoreEntries],
   )
@@ -206,7 +227,7 @@ export default function VisionPage() {
   )
 
   const completedGoals = useMemo(
-    () => webMap?.goals.filter(goal => goal.status === 'completed').length ?? 0,
+    () => webMap?.goals.filter((goal: WebMapGoal) => goal.status === 'completed').length ?? 0,
     [webMap],
   )
 
@@ -219,14 +240,14 @@ export default function VisionPage() {
   }, [currentMonthPlan])
 
   const analysisStreak = useMemo(() => getAnalysisStreak(webMap?.months ?? []), [webMap])
-  const archivedAnalyses = useMemo(
-    () => (webMap?.months ?? []).filter(month => Boolean(month.aiAnalysis)).sort((left, right) => (right.year - left.year) || (right.month - left.month)),
+  const archivedAnalyses = useMemo<MonthPlan[]>(
+    () => (webMap?.months ?? []).filter((month: MonthPlan) => Boolean(month.aiAnalysis)).sort((left: MonthPlan, right: MonthPlan) => (right.year - left.year) || (right.month - left.month)),
     [webMap],
   )
 
   useEffect(() => {
     if (!webMap?.identityStatement) return
-    setChatMessages(current =>
+    setChatMessages((current: ChatMessage[]) =>
       current.length > 0
         ? current
         : [
@@ -242,7 +263,7 @@ export default function VisionPage() {
   useEffect(() => {
     if (!webMap) return
     setGoalDrafts(
-      webMap.goals.reduce<Record<string, number>>((acc, goal) => {
+      webMap.goals.reduce<Record<string, number>>((acc: Record<string, number>, goal: WebMapGoal) => {
         acc[goal.id] = goal.progress
         return acc
       }, {}),
@@ -267,13 +288,7 @@ export default function VisionPage() {
       setGeneratedPreview(map)
       setSetupStep('confirm')
     } catch (error) {
-      const message = error && typeof error === 'object' && 'data' in error
-        ? (() => {
-            const data = (error as { data?: unknown }).data
-            if (!data || typeof data !== 'object' || !('error' in data)) return null
-            return typeof (data as { error?: unknown }).error === 'string' ? (data as { error: string }).error : null
-          })()
-        : null
+      const message = getMutationErrorMessage(error)
       if (message === 'WEB_MAP_EXISTS') {
         await refetch()
         setSetupStep('wheel')
@@ -311,14 +326,14 @@ export default function VisionPage() {
       content: trimmed,
     }
 
-    setChatMessages(current => [...current, userMessage])
+    setChatMessages((current: ChatMessage[]) => [...current, userMessage])
     setChatInput('')
 
     await wait(600)
 
     try {
       const response = await sendAssistantMessage({ message: trimmed }).unwrap()
-      setChatMessages(current => [
+      setChatMessages((current: ChatMessage[]) => [
         ...current,
         {
           id: `assistant-${Date.now()}`,
@@ -327,7 +342,7 @@ export default function VisionPage() {
         },
       ])
     } catch {
-      setChatMessages(current => [
+      setChatMessages((current: ChatMessage[]) => [
         ...current,
         {
           id: `assistant-error-${Date.now()}`,
@@ -444,34 +459,35 @@ export default function VisionPage() {
 
                 <div className="mt-5 space-y-3">
                   {wheelScoreEntries.length > 0 ? (
-                    wheelScoreEntries.map(([sphere, score]) => {
+                    wheelScoreEntries.map(([sphere, score]: WheelScoreEntry) => {
                       const isWeak = weakSphereKeys.has(sphere)
                       return (
-                      <div
-                        key={sphere}
-                        className={[
-                          'rounded-2xl border p-3',
-                          isWeak
-                            ? 'border-[color:rgba(var(--accent-rgb),0.24)] bg-[color:rgba(var(--accent-rgb),0.08)]'
-                            : 'border-white/10 bg-white/[0.03]',
-                        ].join(' ')}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-medium text-white">
-                              {WHEEL_CATEGORY_MAP.get(sphere)?.nameUk ?? sphere}
+                        <div
+                          key={sphere}
+                          className={[
+                            'rounded-2xl border p-3',
+                            isWeak
+                              ? 'border-[color:rgba(var(--accent-rgb),0.24)] bg-[color:rgba(var(--accent-rgb),0.08)]'
+                              : 'border-white/10 bg-white/[0.03]',
+                          ].join(' ')}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-white">
+                                {WHEEL_CATEGORY_MAP.get(sphere)?.nameUk ?? sphere}
+                              </div>
+                              <div className="text-xs text-white/45">
+                                {isWeak ? 'Найслабша сфера, яку варто підсилити в карті року' : 'Сфера теж враховується в побудові карти року'}
+                              </div>
                             </div>
-                            <div className="text-xs text-white/45">
-                              {isWeak ? 'Найслабша сфера, яку варто підсилити в карті року' : 'Сфера теж враховується в побудові карти року'}
+                            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-semibold text-white">
+                              {score}/10
                             </div>
                           </div>
-                          <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-semibold text-white">
-                            {score}/10
-                          </div>
+                          <Progress value={score * 10} size="sm" className="mt-3" />
                         </div>
-                        <Progress value={score * 10} size="sm" className="mt-3" />
-                      </div>
-                    )})
+                      )
+                    })
                   ) : (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-white/55">
                       Спочатку заповни колесо балансу. Після цього AI зможе сформувати карту року на базі слабких сфер.
@@ -511,7 +527,7 @@ export default function VisionPage() {
                       <p className="mt-2 text-sm leading-6 text-white">{generatedPreview.identityStatement}</p>
                     </div>
                     <div className="space-y-3">
-                      {generatedPreview.goals.map(goal => (
+                      {generatedPreview.goals.map((goal: WebMapGoal) => (
                         <div key={goal.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                           <div className="text-sm font-semibold text-white">{goal.title}</div>
                           <div className="mt-1 text-xs leading-5 text-white/55">{goal.description}</div>
@@ -626,7 +642,7 @@ export default function VisionPage() {
 
           {activeTab === 'goals' ? (
             <div className="space-y-4">
-              {webMap.goals.map(goal => {
+              {webMap.goals.map((goal: WebMapGoal) => {
                 const tone = getGoalStatusTone(goal.status)
                 const isExpanded = expandedGoalId === goal.id
                 const isMainGoal = goal.id === webMap.mainGoalId || goal.isMain
@@ -668,7 +684,7 @@ export default function VisionPage() {
                         <div className="space-y-2">
                           <div className="text-xs uppercase tracking-[0.18em] text-white/40">Напрями дій</div>
                           <ul className="space-y-2">
-                            {goal.actions.map(action => (
+                            {goal.actions.map((action: string) => (
                               <li key={action} className="flex items-start gap-2 text-sm leading-6 text-white/70">
                                 <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
                                 <span>{action}</span>
@@ -689,8 +705,8 @@ export default function VisionPage() {
                             step={5}
                             value={draftValue}
                             label="Оновити прогрес"
-                            onValueChange={value => {
-                              setGoalDrafts(current => ({
+                            onValueChange={(value: number) => {
+                              setGoalDrafts((current: Record<string, number>) => ({
                                 ...current,
                                 [goal.id]: value,
                               }))
@@ -707,7 +723,7 @@ export default function VisionPage() {
                               variant="outline"
                               color="white"
                               onClick={() =>
-                                setGoalDrafts(current => ({
+                                setGoalDrafts((current: Record<string, number>) => ({
                                   ...current,
                                   [goal.id]: goal.progress,
                                 }))
@@ -730,7 +746,7 @@ export default function VisionPage() {
               {Array.from({ length: 12 }).map((_, index) => {
                 const monthNumber = index + 1
                 const monthPlan =
-                  webMap.months.find(item => item.month === monthNumber && item.year === webMap.year)
+                  webMap.months.find((item: MonthPlan) => item.month === monthNumber && item.year === webMap.year)
                   ?? null
                 const isCurrent = monthNumber === new Date().getMonth() + 1
 
@@ -759,7 +775,7 @@ export default function VisionPage() {
                     </div>
 
                     <ul className="mt-4 space-y-2 text-sm text-white/60">
-                      {(monthPlan?.actions ?? []).slice(0, 3).map(action => (
+                      {(monthPlan?.actions ?? []).slice(0, 3).map((action: string) => (
                         <li key={action} className="flex items-start gap-2">
                           <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
                           <span>{action}</span>
@@ -794,7 +810,7 @@ export default function VisionPage() {
                     Запустити аналіз зараз
                   </Button>
                 </div>
-                {archivedAnalyses.map(month => (
+                {archivedAnalyses.map((month: MonthPlan) => (
                   <GlassCard key={month.id} className="border-white/10 bg-[rgba(10,16,31,0.88)] p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -814,7 +830,7 @@ export default function VisionPage() {
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                         <div className="text-xs uppercase tracking-[0.18em] text-white/40">На треку</div>
                         <ul className="mt-3 space-y-2 text-sm text-white/65">
-                          {month.doneActions.length > 0 ? month.doneActions.map(item => (
+                          {month.doneActions.length > 0 ? month.doneActions.map((item: string) => (
                             <li key={item} className="flex items-start gap-2">
                               <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" />
                               <span>{item}</span>
@@ -825,7 +841,7 @@ export default function VisionPage() {
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                         <div className="text-xs uppercase tracking-[0.18em] text-white/40">Потрібна увага</div>
                         <ul className="mt-3 space-y-2 text-sm text-white/65">
-                          {month.missedActions.length > 0 ? month.missedActions.map(item => (
+                          {month.missedActions.length > 0 ? month.missedActions.map((item: string) => (
                             <li key={item} className="flex items-start gap-2">
                               <TrendingUp className="mt-0.5 h-4 w-4 text-rose-400" />
                               <span>{item}</span>
@@ -886,7 +902,7 @@ export default function VisionPage() {
                 </div>
 
                 <div className="mt-4 h-[28rem] space-y-3 overflow-y-auto rounded-[24px] border border-white/10 bg-[rgba(7,12,24,0.86)] p-4">
-                  {chatMessages.map(message => (
+                  {chatMessages.map((message: ChatMessage) => (
                     <div
                       key={message.id}
                       className={[

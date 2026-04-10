@@ -68,7 +68,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
   }
 
   const switchMode = () => {
-    setMode(prev => prev === 'login' ? 'register' : 'login')
+    setMode((prev: Mode) => (prev === 'login' ? 'register' : 'login'))
     setLoginPrefill(null)
     formKey.current += 1
   }

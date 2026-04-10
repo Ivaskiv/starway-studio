@@ -24,5 +24,12 @@
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
   },
+  "pnpm": {
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "backend"
+  ]
+},
   "packageManager": "pnpm@8.15.0"
 }
