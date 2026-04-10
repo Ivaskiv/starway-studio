@@ -274,6 +274,11 @@ export default function VisionPage() {
             return typeof (data as { error?: unknown }).error === 'string' ? (data as { error: string }).error : null
           })()
         : null
+      if (message === 'WEB_MAP_EXISTS') {
+        await refetch()
+        setSetupStep('wheel')
+        return
+      }
       setGenerationError(message ?? 'Карту не вдалося створити. Спробуй ще раз за мить.')
       setSetupStep('wheel')
     }

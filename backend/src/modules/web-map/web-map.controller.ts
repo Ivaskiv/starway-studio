@@ -39,6 +39,9 @@ export async function generateWebMapHandler(req: AuthenticatedRequest, res: Resp
     return res.status(201).json({ map })
   } catch (error) {
     console.error('[web-map] generateWebMapHandler', error)
+    if (error instanceof Error && error.message === 'WEB_MAP_EXISTS') {
+      return res.status(409).json({ error: error.message })
+    }
     return res.status(500).json({ error: error instanceof Error ? error.message : 'unknown_error' })
   }
 }

@@ -720,7 +720,7 @@ export async function webMapMonthStartReminderCron(): Promise<void> {
       buttons: [
         {
           label: 'Відкрити план місяця',
-          url: `${process.env.WEBAPP_URL}/web-map`,
+          url: `${process.env.WEBAPP_URL}/dashboard/vision`,
         },
       ],
     }).catch(error => {
@@ -780,7 +780,7 @@ export async function webMapBehindGoalsCron(): Promise<void> {
         buttons: [
           {
             label: 'Відкрити карту',
-            url: `${process.env.WEBAPP_URL}/web-map`,
+            url: `${process.env.WEBAPP_URL}/dashboard/vision`,
           },
         ],
       }).catch(() => undefined)

@@ -94,6 +94,8 @@ type TelegramButton = {
   url: string
 }
 
+const WEB_MAP_DASHBOARD_PATH = '/dashboard/vision'
+
 function stripJsonFences(value: string): string {
   return value.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
 }
@@ -642,11 +644,11 @@ export async function runMonthlyAnalysis(userId: string): Promise<WebMapMonth | 
     buttons: [
       {
         label: 'Повний аналіз',
-        url: `${process.env.WEBAPP_URL}/web-map?tab=analysis`,
+        url: `${process.env.WEBAPP_URL}${WEB_MAP_DASHBOARD_PATH}?tab=analysis`,
       },
       {
         label: `План на ${getMonthLabel(nextMonth)}`,
-        url: `${process.env.WEBAPP_URL}/web-map?tab=coach`,
+        url: `${process.env.WEBAPP_URL}${WEB_MAP_DASHBOARD_PATH}?tab=coach`,
       },
     ],
   })
