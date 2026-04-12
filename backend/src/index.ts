@@ -17,11 +17,11 @@ const currentDirPath = dirname(currentFilePath)
 loadEnv({ path: resolve(currentDirPath, '../../.env') })
 
 const PORT = Number(process.env.PORT) || 3001
-const HOST = process.env.HOST || '127.0.0.1'
+const isProduction = process.env.NODE_ENV === 'production'
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT !== 'false'
 const TELEGRAM_POLLING_ENABLED = process.env.TELEGRAM_POLLING_ENABLED === 'true'
-  || (!TELEGRAM_WEBHOOK_URL && process.env.NODE_ENV !== 'production' && process.env.TELEGRAM_POLLING_ENABLED !== 'false')
+  || (!TELEGRAM_WEBHOOK_URL && !isProduction && process.env.TELEGRAM_POLLING_ENABLED !== 'false')
 const MINIAPP_URL = process.env.MINIAPP_URL?.trim() || 'https://starway-frontend.vercel.app/miniapp'
 const MINIAPP_VERSION = process.env.MINIAPP_VERSION?.trim() || 'dev'
 
@@ -53,10 +53,19 @@ if (START_TELEGRAM_BOT && process.env.TELEGRAM_BOT_TOKEN && TELEGRAM_WEBHOOK_URL
   console.log('🔗 Telegram webhook route: POST /api/telegram/webhook')
 }
 
+app.get('/', (_req, res) => {
+  res.status(200).send('OK')
+})
+
 // ─────────────────────────────────────────────
 // TELEGRAM
 // ─────────────────────────────────────────────
 async function startTelegramBot() {
+  if (isProduction) {
+    console.log('🤖 Telegram: production mode (no polling)')
+    return
+  }
+
   if (!START_TELEGRAM_BOT) {
     console.log('🤖 Telegram skipped in backend (START_TELEGRAM_BOT=false)')
     return
@@ -172,14 +181,9 @@ async function bootstrap() {
   const startHttpServer = () => {
     if (server) return
 
-    server = app.listen(PORT, HOST, () => {
+    server = app.listen(PORT, '0.0.0.0', () => {
       trackConnections()
-      console.log('\n🚀 Starway Studio Backend')
-      console.log(`🌐 Server: http://${HOST}:${PORT}`)
-      console.log(`📍 Health: http://${HOST}:${PORT}/health`)
-      console.log(`🔐 Auth: http://${HOST}:${PORT}/api/auth`)
-      console.log(`🎯 Access: http://${HOST}:${PORT}/api/access`)
-      console.log(`🤖 Mentor: http://${HOST}:${PORT}/api/mentor\n`)
+      console.log(`🚀 Server running on port ${PORT} (${process.env.NODE_ENV || 'development'})`)
     })
 
     server.on('error', (error: NodeJS.ErrnoException) => {
@@ -209,33 +213,34 @@ async function bootstrap() {
     }
   }
 
-  try {
-    console.log('🧪 [BOOT] Connecting to database...')
-    await connectWithRetry()
+  startHttpServer()
 
-    const result = await withRetry(() => prisma.$queryRaw`SELECT 1`)
-    console.log('✅ [PRISMA] Database connected | Test query result:', result)
-    databaseReady = true
-    startHttpServer()
+  void (async () => {
+    try {
+      console.log('🧪 [BOOT] Connecting to database...')
+      await connectWithRetry()
 
-    // Запуск у фоні — не блокує сервер
-    startScheduler()
-    startTelegramBot().catch((err: unknown) => console.error('⚠️ Telegram async error:', err))
+      const result = await withRetry(() => prisma.$queryRaw`SELECT 1`)
+      console.log('✅ [PRISMA] Database connected | Test query result:', result)
+      databaseReady = true
 
-    prismaKeepAliveInterval = setInterval(async () => {
-      try {
-        await withRetry(() => prisma.$queryRaw`SELECT 1`)
-      } catch {
-        await withRetry(() => prisma.$connect()).catch(() => undefined)
-      }
-    }, 30 * 60 * 1000)
-    prismaKeepAliveInterval.unref()
+      startScheduler()
 
-  } catch (err: unknown) {
-    console.warn('⚠️ [BOOT] Database unavailable, starting API in degraded mode', err)
-    databaseReady = false
-    startHttpServer()
-  }
+      prismaKeepAliveInterval = setInterval(async () => {
+        try {
+          await withRetry(() => prisma.$queryRaw`SELECT 1`)
+        } catch {
+          await withRetry(() => prisma.$connect()).catch(() => undefined)
+        }
+      }, 30 * 60 * 1000)
+      prismaKeepAliveInterval.unref()
+    } catch (err: unknown) {
+      console.warn('⚠️ [BOOT] Database unavailable, API continues in degraded mode', err)
+      databaseReady = false
+    }
+  })()
+
+  startTelegramBot().catch((err: unknown) => console.error('⚠️ Telegram async error:', err))
 }
 
 bootstrap()
