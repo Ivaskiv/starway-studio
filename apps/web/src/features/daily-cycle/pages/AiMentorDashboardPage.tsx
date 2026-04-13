@@ -43,6 +43,7 @@ import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/whee
 import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types'
 import { useGetUpcomingSessionQuery } from '@/features/zoom/services/zoom.api'
 import { GlassCard } from '@/ui'
+import { format, subDays } from 'date-fns'
 import { ArrowUp, BellRing, BookOpen, CheckCircle2, Crosshair, Download, LayoutGrid, MoonStar, Plus, RefreshCcw, SunMedium, Target, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import toast from 'react-hot-toast'
@@ -168,7 +169,9 @@ type DailyHistoryEntryLike = {
 
 type DailyHistoryProgress = {
   morningDone: boolean
+  tasksDone: boolean
   eveningDone: boolean
+  analysisDone: boolean
   finalizedAt: string | null
   skipped: boolean
   hasProgress: boolean
@@ -246,7 +249,9 @@ function getDailyHistoryProgress(
 
   return {
     morningDone,
+    tasksDone,
     eveningDone,
+    analysisDone,
     finalizedAt,
     skipped,
     hasProgress: morningStarted || eveningStarted || completed || completedLate || skipped || hasTaskProgress,
@@ -287,8 +292,15 @@ function getTimelineDayPresentation(options: {
   const skipped = Boolean(dayProgress?.skipped)
   const completed = Boolean(dayProgress?.completed)
   const completedLate = Boolean(dayProgress?.completedLate)
+  const morningDone = Boolean(dayProgress?.morningDone)
+  const tasksDone = Boolean(dayProgress?.tasksDone)
+  const eveningDone = Boolean(dayProgress?.eveningDone)
+  const analysisDone = Boolean(dayProgress?.analysisDone)
   const unfinishedStepCount = dayProgress?.unfinishedStepCount ?? 0
   const incompleteMicroTaskCount = dayProgress?.incompleteMicroTaskCount ?? 0
+  const doneCount = completed || completedLate
+    ? 4
+    : [morningDone, tasksDone, eveningDone, analysisDone].filter(Boolean).length
   const matchesRecoveryTarget = dayDateKey === (recoveryDateKey ?? recoveryTargetDateKey)
   const isRecoveryTargetDay = Boolean(
     dayDateKey === yesterdayDateKey
@@ -319,20 +331,24 @@ function getTimelineDayPresentation(options: {
     && !completedLate
     && !finalizedAt
   )
-  const missed = Boolean((skipped || staleIncomplete) && !isCurrentDate && !isFutureDate && !isRecoveryTargetDay)
+  const missed = Boolean(
+    !active
+    && !isCurrentDate
+    && !isFutureDate
+    && ((skipped || staleIncomplete) || doneCount === 0),
+  )
   const partial = Boolean(
     !active
     && !isFutureDate
-    && !completed
-    && !completedLate
     && !missed
-    && (isRecoveryTargetDay || hasProgress),
+    && doneCount > 0
+    && doneCount < 4,
   )
   const dayTone = getTimelineDayTone({
     isActive: active,
     isFuture: isFutureDate,
-    isCompleted: completed,
-    isCompletedLate: completedLate,
+    isCompleted: doneCount === 4,
+    isCompletedLate: false,
     isPartial: partial,
     isMissed: missed,
   })
@@ -455,11 +471,11 @@ function getTimelineDayLabel(options: {
   tone: TimelineDayTone
   isCompletedLate: boolean
 }) {
-  const { tone, isCompletedLate } = options
+  const { tone } = options
 
   if (tone === 'active') return 'активно'
   if (tone === 'partial') return 'очікує'
-  if (tone === 'done') return isCompletedLate ? 'вик. невч.' : 'готово'
+  if (tone === 'done') return '✓✓✓'
   if (tone === 'missed') return 'пропущено'
   if (tone === 'future') return 'далі'
   return ''
@@ -1180,7 +1196,9 @@ function CycleSummaryCard({
                     dayDateKey === yesterdayDateKey && recoveryTargetDateKey === yesterdayDateKey
                       ? {
                           morningDone: false,
+                          tasksDone: false,
                           eveningDone: false,
+                          analysisDone: false,
                           finalizedAt: null,
                           skipped: false,
                           hasProgress: false,
@@ -3028,6 +3046,18 @@ export default function AiMentorDashboardPage() {
       { id: 'analysis', label: 'Аналіз', done: hasAnalysis },
     ]
   }, [todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
+  const handleFinishYesterday = useCallback(() => {
+    const yesterdayDate = todayGuardBlockState.yesterdayDay?.date
+      ? new Date(todayGuardBlockState.yesterdayDay.date)
+      : subDays(new Date(), 1)
+    const yesterday = format(yesterdayDate, 'yyyy-MM-dd')
+    const resumeSession: 'morning' | 'evening' = todayGuardYesterdayProgress?.morningDone
+      ? (todayGuardYesterdayProgress.tasksDone && !todayGuardYesterdayProgress.eveningDone ? 'evening' : 'morning')
+      : 'morning'
+
+    handleTodayGuardDismiss()
+    navigate(`/dashboard/cycle?date=${yesterday}&session=${resumeSession}&resume=true`)
+  }, [handleTodayGuardDismiss, navigate, todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
 
   const openEveningSession = () => {
     console.info('[AiMentorDashboard] openEveningSession', {
@@ -4177,7 +4207,7 @@ export default function AiMentorDashboardPage() {
             <button
               type="button"
               data-testid="catchup-confirm-btn"
-              onClick={handleTodayGuardCatchup}
+              onClick={handleFinishYesterday}
               className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-yellow-300 bg-yellow-300/14 px-4 py-2 text-sm font-semibold text-yellow-300 transition-colors hover:bg-yellow-300/20"
             >
               🕐 Завершити вчора

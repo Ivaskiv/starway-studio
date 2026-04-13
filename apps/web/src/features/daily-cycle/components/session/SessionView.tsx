@@ -14,6 +14,7 @@ const MotionDiv = motion.div as ComponentType<MotionDivProps>
 interface SessionViewProps {
   session: 'morning' | 'evening'
   dayNumber: number
+  displayDate?: string
   recoveryLabel?: string | null
   current: number
   total: number
@@ -34,6 +35,7 @@ interface SessionViewProps {
 export function SessionView({
   session,
   dayNumber,
+  displayDate,
   recoveryLabel,
   current,
   total,
@@ -57,6 +59,7 @@ export function SessionView({
       <SessionHeader
         session={session}
         dayNumber={dayNumber}
+        displayDate={displayDate}
         recoveryLabel={recoveryLabel}
         current={current}
         total={total}

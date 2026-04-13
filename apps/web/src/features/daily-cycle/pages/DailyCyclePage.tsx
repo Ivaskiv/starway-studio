@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { format, parseISO } from 'date-fns'
+import { uk } from 'date-fns/locale'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { X } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -267,6 +269,7 @@ export function DailyCycleFlow({
   onOpenProgress,
 }: DailyCycleFlowProps) {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const userId = useSelector((state: RootState) => state.auth.user?.id ?? '')
   const { data: trial } = useGetTrialStatusQuery()
   const { dayNumber: journeyDay } = useUserProgress()
@@ -291,6 +294,7 @@ export function DailyCycleFlow({
   const yesterdayDateKey = useMemo(() => getDateKey(-1), [])
   const sessionFromUrl = new URLSearchParams(window.location.search).get('session')
   const dateFromUrl = new URLSearchParams(window.location.search).get('date')
+  const resumeFromUrl = searchParams.get('resume') === 'true'
   const urlDateKey = dateFromUrl && /^\d{4}-\d{2}-\d{2}$/.test(dateFromUrl) ? dateFromUrl : null
   const requestedDateKey = initialDateKey ?? recoveryDateKey ?? urlDateKey
   const isHistoricalLockedDate = Boolean(requestedDateKey && requestedDateKey < yesterdayDateKey)
@@ -633,9 +637,16 @@ export function DailyCycleFlow({
       const initialStep = shouldPreferServerState
         ? sessionResumeIndex
         : (draft?.step ?? sessionResumeIndex ?? 0)
+      const firstIncompleteQuestion = (
+        session === 'morning'
+          ? morningQuestionSeed
+          : draft?.questions && draft.questions.length > 0
+            ? draft.questions
+            : EVENING_QUESTIONS
+      ).findIndex(question => !(initialAnswers[question.id] ?? '').trim())
 
       setAnswers(initialAnswers)
-      setStep(initialStep)
+      setStep(resumeFromUrl && firstIncompleteQuestion >= 0 ? firstIncompleteQuestion : initialStep)
       setQuestionSnapshot(
         session === 'morning'
           ? morningQuestionSeed
@@ -645,7 +656,7 @@ export function DailyCycleFlow({
       )
       lastSyncedSessionRef.current = syncKey
     }
-  }, [dateKey, morningQuestionSeed, recoveryMode, session, sessionAlreadyCompleted, sessionAnswersFromContent, sessionResumeIndex, userId])
+  }, [dateKey, morningQuestionSeed, recoveryMode, resumeFromUrl, session, sessionAlreadyCompleted, sessionAnswersFromContent, sessionResumeIndex, userId])
 
   useEffect(() => {
     if (!cycleState.hasUnfinishedYesterday || recoveryMode || initialDateKey) return
@@ -1049,6 +1060,10 @@ export function DailyCycleFlow({
   const recoveryHeaderLabel = recoveryMode
     ? `Завершення вчорашнього дня · ${formatCompactDateKey(dateKey)}`
     : null
+  const dateParam = searchParams.get('date')
+  const displayDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+    ? format(parseISO(dateParam), 'd MMMM yyyy', { locale: uk })
+    : format(new Date(), 'd MMMM yyyy', { locale: uk })
 
   return (
     <div className={shellClassName}>
@@ -1211,6 +1226,7 @@ export function DailyCycleFlow({
       <SessionView
         session={session}
         dayNumber={displayedDayNumber}
+        displayDate={displayDate}
         recoveryLabel={recoveryHeaderLabel}
         current={step + 1}
         total={questions.length}

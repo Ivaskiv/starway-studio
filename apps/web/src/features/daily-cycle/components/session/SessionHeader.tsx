@@ -3,6 +3,7 @@ import { MoonStar, SunMedium } from 'lucide-react'
 interface SessionHeaderProps {
   session: 'morning' | 'evening'
   dayNumber: number
+  displayDate?: string
   current: number
   total: number
   progress: number
@@ -23,7 +24,7 @@ const PROGRESS_WIDTH = [
   'w-full',
 ] as const
 
-export function SessionHeader({ session, dayNumber, current, total, progress, recoveryLabel }: SessionHeaderProps) {
+export function SessionHeader({ session, dayNumber, displayDate, current, total, progress, recoveryLabel }: SessionHeaderProps) {
   const widthClass = PROGRESS_WIDTH[Math.max(0, Math.min(10, Math.round(progress / 10)))]
 
   return (
@@ -37,6 +38,11 @@ export function SessionHeader({ session, dayNumber, current, total, progress, re
           <h2 className="mt-2 text-xl font-semibold text-white">
             {session === 'morning' ? 'Почни день з ясного фокусу' : 'Підсумуй день спокійно'}
           </h2>
+          {displayDate ? (
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {displayDate}
+            </p>
+          ) : null}
           <p className="mt-1.5 text-sm text-white/60">
             Питання {current} з {total}
           </p>
