@@ -11,7 +11,6 @@ import type { RootState } from '@/app/store';
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice';
 import type { User } from '@/features/user/types/user.types';
 import { TAG_TYPES } from '@/app/tagTypes';
-import { getTelegramMiniAppAuthHeader } from '@/lib/miniapp/apiClient';
 
 type ApiTagType = (typeof TAG_TYPES)[number];
 
@@ -56,6 +55,28 @@ const getApiBaseUrl = (): string => {
 
 const API_MODE = getApiMode();
 const API_BASE_URL = getApiBaseUrl();
+
+export const resolveApiUrl = (path: string): string => {
+  if (/^https?:\/\//i.test(path)) return path;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (API_BASE_URL === '/api') return normalizedPath;
+  return `${API_BASE_URL}${normalizedPath}`;
+};
+
+const getTelegramMiniAppAuthHeader = () => {
+  if (typeof window === 'undefined') return null;
+
+  const initData = (window as {
+    Telegram?: {
+      WebApp?: {
+        initData?: string
+      }
+    }
+  }).Telegram?.WebApp?.initData?.trim();
+
+  if (!initData) return null;
+  return `tma ${initData}`;
+};
 
 console.info('[api] configuration', {
   mode: API_MODE,

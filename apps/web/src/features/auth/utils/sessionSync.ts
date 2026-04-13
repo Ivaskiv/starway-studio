@@ -3,6 +3,7 @@ import { accessApi } from '@/features/auth/services/accessApi'
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice'
 import { getToken, hasSessionHint } from '@/features/auth/services/token'
 import type { User } from '@/features/user/types/user.types'
+import { resolveApiUrl } from '@/services/api'
 import { DEFAULT_ACCENT, normalizeUiMode, type UiMode } from '@/theme/accent.utils'
 
 const BAD_COLORS = new Set([
@@ -166,12 +167,12 @@ export async function syncAuthSession({
 
   if (canTryRefresh) {
     try {
-      const refreshRes = await fetch('/api/auth/refresh', {
+      const refreshRes = await fetch(resolveApiUrl('/auth/refresh'), {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
       })
-
+      
       if (refreshRes.ok) {
         const refreshData = await refreshRes.json()
         const refreshedUser = (refreshData.user ?? null) as User | null
@@ -197,7 +198,7 @@ export async function syncAuthSession({
 
   if (token) {
     try {
-      const meRes = await fetch('/api/auth/me', {
+      const meRes = await fetch(resolveApiUrl('/auth/me'), {
         method: 'GET',
         credentials: 'include',
         cache: 'no-store',
@@ -234,7 +235,7 @@ export async function syncAuthSession({
   const telegramInitData = getTelegramRuntimeInitData()
   if (telegramUser?.id && telegramInitData && isLikelyTelegramMiniAppRuntime()) {
     try {
-      const socialRes = await fetch('/api/auth/telegram', {
+      const socialRes = await fetch(resolveApiUrl('/auth/telegram'), {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
@@ -272,7 +273,7 @@ export async function syncAuthSession({
 
   if (telegramUser?.id && !telegramInitData && isLikelyTelegramMiniAppRuntime() && isTelegramDevFallbackAllowed()) {
     try {
-      const socialRes = await fetch('/api/auth/social', {
+      const socialRes = await fetch(resolveApiUrl('/auth/social'), {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',

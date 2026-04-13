@@ -1,5 +1,6 @@
 import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
 import { getToken } from '@/features/auth/services/token'
+import { resolveApiUrl } from '@/services/api'
 
 export function getTelegramMiniAppInitData() {
   if (typeof window === 'undefined') return ''
@@ -54,8 +55,9 @@ export function createAppRequestHeaders(headersInit?: HeadersInit, hasBody = fal
 
 export async function miniAppFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = createAppRequestHeaders(options.headers, Boolean(options.body))
+  const url = resolveApiUrl(path)
 
-  const response = await fetch(path, {
+  const response = await fetch(url, {
     ...options,
     credentials: 'include',
     headers,

@@ -2,6 +2,7 @@
 
 import { prisma } from '../../db/client.js'
 import {
+  Channel,
   DayStatus,
   DailyChoice,
   DailyDrain,
@@ -108,6 +109,12 @@ async function ensureYesterdayResolvedForToday(userId: string, date: Date): Prom
 
 const toPrismaJson = (value: unknown): Prisma.InputJsonValue =>
   JSON.parse(JSON.stringify(value))
+
+const toDailySessionChannel = (channel?: 'tg' | 'miniapp' | 'web'): Channel => {
+  if (channel === 'tg') return Channel.TELEGRAM
+  if (channel === 'miniapp') return Channel.MINIAPP
+  return Channel.WEB
+}
 
 function syncUserStateFromEntry(entry: {
   userId: string
@@ -419,6 +426,14 @@ export async function saveDailyAnswer(
     ...sessionAnswers,
     [data.questionId]: data.answer,
   })
+  const dailySessionAnswers = Object.entries({
+    ...sessionAnswers,
+    [data.questionId]: data.answer,
+  }).map(([questionId, answer]) => ({
+    session: data.session,
+    questionId,
+    answer,
+  }))
   const content = mergeSessionMeta(contentWithAnswer, data.session, {
     lastQuestionIndex: data.lastQuestionIndex,
     updatedAt: new Date().toISOString(),
@@ -445,6 +460,29 @@ export async function saveDailyAnswer(
     update: {
       status: DayStatus.IN_PROGRESS,
       content,
+    },
+  })
+
+  await prisma.dailySession.upsert({
+    where: {
+      userId_date_channel: {
+        userId,
+        date: dateObj.toISOString().slice(0, 10),
+        channel: toDailySessionChannel(data.channel),
+      },
+    },
+    update: {
+      entryId: entry.id,
+      lastQuestionIndex: data.lastQuestionIndex,
+      answers: toPrismaJson(dailySessionAnswers),
+    },
+    create: {
+      userId,
+      entryId: entry.id,
+      date: dateObj.toISOString().slice(0, 10),
+      channel: toDailySessionChannel(data.channel),
+      lastQuestionIndex: data.lastQuestionIndex,
+      answers: toPrismaJson(dailySessionAnswers),
     },
   })
 

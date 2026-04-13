@@ -76,7 +76,11 @@ const normalizeWheel = (raw: any): WheelAssessment => {
     gaps: weakest ? [weakest.categoryId] : [],
     createdAt: String(raw?.createdAt ?? new Date().toISOString()),
     completedAt: raw?.updatedAt ? String(raw.updatedAt) : undefined,
-    notes: raw?.analysis ? String(raw.analysis) : undefined,
+    notes: raw?.note != null
+      ? String(raw.note)
+      : raw?.analysis != null
+        ? String(raw.analysis)
+        : undefined,
   };
 };
 
@@ -107,6 +111,7 @@ export const wheelApi = api.injectEndpoints({
         if (!payload?.wheel) return { data: null };
         return { data: normalizeWheel(payload.wheel) };
       },
+      keepUnusedDataFor: 300,
       providesTags: ['Wheel'],
     }),
 

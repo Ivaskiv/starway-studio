@@ -63,6 +63,12 @@ type DashboardUser = {
 }
 
 type RecoveryBlockedIntent = 'active_day' | 'morning' | 'tasks' | 'evening'
+type CurrentFlowStep = 'morning' | 'tasks' | 'evening' | 'analysis'
+type CurrentFlow =
+  | { mode: 'blocked'; dateKey: string; step: CurrentFlowStep }
+  | { mode: 'recovery'; dateKey: string; step: CurrentFlowStep }
+  | { mode: 'today'; dateKey: string; step: CurrentFlowStep }
+  | { mode: 'history'; dateKey: string; step: 'analysis' }
 
 const TRIAL_PROGRESS_CLASS: Record<number, string> = {
   1: 'w-[14%]',
@@ -432,6 +438,106 @@ function getLatestRecoveryTarget(
   }
 
   return null
+}
+
+function getFirstIncompleteStep(progress?: DailyHistoryProgress | null): CurrentFlowStep {
+  if (!progress?.morningDone) return 'morning'
+  if (!progress?.tasksDone) return 'tasks'
+  if (!progress?.eveningDone) return 'evening'
+  return 'analysis'
+}
+
+function getTodayStep(options: {
+  showMorningSession: boolean
+  showEveningSession: boolean
+  hasMorningAnswers: boolean
+  hasTasksToday: boolean
+  hasActiveMicroTasks: boolean
+}): CurrentFlowStep {
+  const {
+    showMorningSession,
+    showEveningSession,
+    hasMorningAnswers,
+    hasTasksToday,
+    hasActiveMicroTasks,
+  } = options
+
+  if (showMorningSession) return 'morning'
+  if (showEveningSession) return 'evening'
+  if (!hasMorningAnswers) return 'morning'
+  if (!hasTasksToday || hasActiveMicroTasks) return 'tasks'
+  return 'evening'
+}
+
+function resolveCurrentFlow(options: {
+  todayDateKey: string
+  yesterdayDateKey: string
+  reportDayKey: string | null
+  cycleRecoveryDateKey: string | null
+  recoveryPromptDateKey: string | null
+  recoveryTargetDateKey: string | null
+  showMorningSession: boolean
+  showEveningSession: boolean
+  hasMorningAnswers: boolean
+  hasTasksToday: boolean
+  hasActiveMicroTasks: boolean
+  yesterdayProgress: DailyHistoryProgress | null
+  activeRecoveryProgress: DailyHistoryProgress | null
+}): CurrentFlow {
+  const {
+    todayDateKey,
+    yesterdayDateKey,
+    reportDayKey,
+    cycleRecoveryDateKey,
+    recoveryPromptDateKey,
+    recoveryTargetDateKey,
+    showMorningSession,
+    showEveningSession,
+    hasMorningAnswers,
+    hasTasksToday,
+    hasActiveMicroTasks,
+    yesterdayProgress,
+    activeRecoveryProgress,
+  } = options
+
+  if (reportDayKey) {
+    return { mode: 'history', dateKey: reportDayKey, step: 'analysis' }
+  }
+
+  if (
+    recoveryPromptDateKey === yesterdayDateKey
+    || (!cycleRecoveryDateKey && recoveryTargetDateKey === yesterdayDateKey)
+  ) {
+    return {
+      mode: 'blocked',
+      dateKey: yesterdayDateKey,
+      step: getFirstIncompleteStep(yesterdayProgress),
+    }
+  }
+
+  if (cycleRecoveryDateKey) {
+    return {
+      mode: 'recovery',
+      dateKey: cycleRecoveryDateKey,
+      step: showMorningSession
+        ? 'morning'
+        : showEveningSession
+          ? 'evening'
+          : getFirstIncompleteStep(activeRecoveryProgress),
+    }
+  }
+
+  return {
+    mode: 'today',
+    dateKey: todayDateKey,
+    step: getTodayStep({
+      showMorningSession,
+      showEveningSession,
+      hasMorningAnswers,
+      hasTasksToday,
+      hasActiveMicroTasks,
+    }),
+  }
 }
 
 type TimelineDayTone = 'active' | 'done' | 'partial' | 'missed' | 'future'
@@ -822,6 +928,8 @@ function CycleSummaryCard({
   completedTodayMicroTaskCount,
   resumeIntentAfterRecovery,
   onConsumeResumeIntent,
+  fillDate,
+  setFillDate,
 }: {
   onLockedOpen: () => void
   onOpenWheelFrame: () => void
@@ -856,6 +964,8 @@ function CycleSummaryCard({
   completedTodayMicroTaskCount: number
   resumeIntentAfterRecovery: RecoveryBlockedIntent | null
   onConsumeResumeIntent: () => void
+  fillDate: string | null
+  setFillDate: Dispatch<SetStateAction<string | null>>
 }) {
   const { user } = useAuth()
   const { dayNumber: journeyDay, journeySteps, currentStep } = useUserProgress()
@@ -1256,6 +1366,7 @@ function CycleSummaryCard({
                       && dayProgress
                       && [dayProgress.morningDone, dayProgress.tasksDone, dayProgress.eveningDone, dayProgress.analysisDone].filter(Boolean).length < 4
                     ) {
+                      setFillDate(format(new Date(dayDate), 'dd.MM.yyyy'))
                       onOpenFirstIncompleteRecoveryStep(dayDateKey, dayProgress)
                       return
                     }
@@ -1263,7 +1374,7 @@ function CycleSummaryCard({
                   }}
                 >
                   {fillDate ? (
-                    <span className="absolute right-1 top-1 text-[10px] leading-none text-[var(--text-muted)]">
+                    <span className="pointer-events-none absolute right-1 top-1 text-[10px] leading-none text-[var(--text-muted)]">
                       {fillDate}
                     </span>
                   ) : null}
@@ -1482,12 +1593,18 @@ function JourneySection({
   onOpenMicroTasks,
   onLockedOpen,
   onOpenRecoveryDay,
+  onOpenFirstIncompleteRecoveryStep,
+  fillDate,
+  setFillDate,
 }: {
   onOpenWheelFrame: () => void
   onOpenCycle: (session: 'morning' | 'evening') => void
   onOpenMicroTasks: () => void
   onLockedOpen: () => void
   onOpenRecoveryDay: (dateKey: string, session: 'morning' | 'evening') => void
+  onOpenFirstIncompleteRecoveryStep: (dateKey: string, progress?: DailyHistoryProgress | null) => void
+  fillDate: string | null
+  setFillDate: Dispatch<SetStateAction<string | null>>
 }) {
   const { user } = useAuth()
   const {
@@ -2056,9 +2173,23 @@ function JourneySection({
                       ].join(' ')}
                       onClick={() => {
                         if (dayDateKey > todayDateKey || isLocked) return
+                        if (
+                          dayDateKey < todayDateKey
+                          && dayProgress
+                          && [dayProgress.morningDone, dayProgress.tasksDone, dayProgress.eveningDone, dayProgress.analysisDone].filter(Boolean).length < 4
+                        ) {
+                          setFillDate(format(new Date(dayDate), 'dd.MM.yyyy'))
+                          onOpenFirstIncompleteRecoveryStep(dayDateKey, dayProgress)
+                          return
+                        }
                         navigate(buildJournalDayUrl(dayDateKey))
                       }}
                     >
+                      {fillDate ? (
+                        <span className="pointer-events-none absolute right-1 top-1 text-[10px] leading-none text-[var(--text-muted)]">
+                          {fillDate}
+                        </span>
+                      ) : null}
                       <div className="flex h-full min-h-0 flex-1 flex-col justify-between">
                         <div className="flex min-h-[48px] flex-col items-center justify-start">
                           <div
@@ -2818,6 +2949,12 @@ export default function AiMentorDashboardPage() {
     return isDone ? sum + (task.xpReward ?? 20) : sum
   }, 0)
   const allTasksResolved = visibleMicroTasks.length > 0 && visibleMicroTaskProgress.activeCount === 0
+  const dailyProgressByDate = useMemo(() => {
+    return dailyHistory.reduce<Record<string, DailyHistoryProgress>>((acc, entry) => {
+      acc[toDateKey(entry.date)] = getDailyHistoryProgress(entry, getEntryTaskStats(entry, microTasks))
+      return acc
+    }, {})
+  }, [dailyHistory, microTasks])
   const yesterdayEntry = useMemo(
     () => dailyHistory.find((entry) => toDateKey(entry.date) === yesterdayDateKey) ?? null,
     [dailyHistory, yesterdayDateKey],
@@ -2852,6 +2989,38 @@ export default function AiMentorDashboardPage() {
     ),
     [cycleRecoveryDateKey, recoveryPromptDateKey, recoveryTarget?.dateKey, yesterdayDateKey],
   )
+  const activeRecoveryProgress = useMemo(
+    () => (cycleRecoveryDateKey ? dailyProgressByDate[cycleRecoveryDateKey] ?? null : null),
+    [cycleRecoveryDateKey, dailyProgressByDate],
+  )
+  const currentFlow = useMemo(() => resolveCurrentFlow({
+    todayDateKey,
+    yesterdayDateKey,
+    reportDayKey: null,
+    cycleRecoveryDateKey,
+    recoveryPromptDateKey,
+    recoveryTargetDateKey: recoveryTarget?.dateKey ?? null,
+    showMorningSession,
+    showEveningSession,
+    hasMorningAnswers,
+    hasTasksToday,
+    hasActiveMicroTasks,
+    yesterdayProgress,
+    activeRecoveryProgress,
+  }), [
+    activeRecoveryProgress,
+    cycleRecoveryDateKey,
+    hasActiveMicroTasks,
+    hasMorningAnswers,
+    hasTasksToday,
+    recoveryPromptDateKey,
+    recoveryTarget?.dateKey,
+    showEveningSession,
+    showMorningSession,
+    todayDateKey,
+    yesterdayDateKey,
+    yesterdayProgress,
+  ])
   const openDashboardTab = (
     tab: AiMentorDashboardTab,
     options?: {
@@ -2890,6 +3059,35 @@ export default function AiMentorDashboardPage() {
     })
   }
 
+  const openFlowStep = useCallback((flow: Extract<CurrentFlow, { mode: 'today' | 'recovery' }>) => {
+    const isRecoveryFlow = flow.mode === 'recovery' && flow.dateKey !== todayDateKey
+    setOpenDayNoticeKey(null)
+    setRecoveryPromptDateKey(null)
+    setRecoveryBlockedIntent(null)
+    setCycleRecoveryDateKey(isRecoveryFlow ? flow.dateKey : null)
+
+    if (flow.step === 'tasks') {
+      setShowMorningSession(false)
+      setShowEveningSession(false)
+      openDashboardTab('microtasks', { dateKey: isRecoveryFlow ? flow.dateKey : null })
+      return
+    }
+
+    if (flow.step === 'analysis') {
+      setShowMorningSession(false)
+      setShowEveningSession(false)
+      openDashboardTab('reports')
+      return
+    }
+
+    setShowMorningSession(flow.step === 'morning')
+    setShowEveningSession(flow.step === 'evening')
+    openDashboardTab('cycle', {
+      session: flow.step === 'morning' ? 'morning' : 'evening',
+      dateKey: isRecoveryFlow ? flow.dateKey : null,
+    })
+  }, [openDashboardTab, todayDateKey])
+
   const openMicrotasksTab = (dateKey?: string | null) => {
     setShowMorningSession(false)
     setShowEveningSession(false)
@@ -2909,30 +3107,27 @@ export default function AiMentorDashboardPage() {
   const openTodayAfterRecoveryDecision = (intent: RecoveryBlockedIntent | null) => {
     switch (intent) {
       case 'active_day':
-        setResumeIntentAfterRecovery('active_day')
-        setShowMorningSession(false)
-        setShowEveningSession(false)
-        openDashboardTab('cycle', { replace: true })
+        openResolvedFlow({
+          mode: 'today',
+          dateKey: todayDateKey,
+          step: getTodayStep({
+            showMorningSession: false,
+            showEveningSession: false,
+            hasMorningAnswers,
+            hasTasksToday,
+            hasActiveMicroTasks,
+          }),
+        })
         return
       case 'tasks':
-        openMicrotasksTab()
+        openResolvedFlow({ mode: 'today', dateKey: todayDateKey, step: 'tasks' })
         return
       case 'evening':
-        setCycleRecoveryDateKey(null)
-        setRecoveryPromptDateKey(null)
-        setOpenDayNoticeKey(null)
-        setShowMorningSession(false)
-        setShowEveningSession(true)
-        openDashboardTab('cycle', { session: 'evening' })
+        openResolvedFlow({ mode: 'today', dateKey: todayDateKey, step: 'evening' })
         return
       case 'morning':
       default:
-        setCycleRecoveryDateKey(null)
-        setRecoveryPromptDateKey(null)
-        setOpenDayNoticeKey(null)
-        setShowEveningSession(false)
-        setShowMorningSession(true)
-        openDashboardTab('cycle', { session: 'morning' })
+        openResolvedFlow({ mode: 'today', dateKey: todayDateKey, step: 'morning' })
     }
   }
 
@@ -2945,6 +3140,20 @@ export default function AiMentorDashboardPage() {
     setShowEveningSession(false)
     openDashboardTab('cycle', { replace: true })
   }
+
+  const openResolvedFlow = useCallback((flow: CurrentFlow) => {
+    if (flow.mode === 'blocked') {
+      openRecoveryPrompt(flow.dateKey, flow.step === 'evening' ? 'evening' : 'morning')
+      return
+    }
+
+    if (flow.mode === 'history') {
+      openDashboardTab('reports')
+      return
+    }
+
+    openFlowStep(flow)
+  }, [openDashboardTab, openFlowStep, openRecoveryPrompt])
 
   const openRecoveryDay = (dateKey: string, session: 'morning' | 'evening') => {
     const recoveryEntry = dailyHistory.find(entry => toDateKey(entry.date) === dateKey)
@@ -2975,23 +3184,11 @@ export default function AiMentorDashboardPage() {
       session === 'morning'
       && (recoveryProgress?.morningDone || recoveryHasMorningAnswers || recoveryHasTasks)
     ) {
-      setOpenDayNoticeKey(null)
-      setRecoveryPromptDateKey(null)
-      setRecoveryBlockedIntent(null)
-      setCycleRecoveryDateKey(dateKey)
-      setShowMorningSession(false)
-      setShowEveningSession(false)
-      openMicrotasksTab(dateKey)
+      openResolvedFlow({ mode: 'recovery', dateKey, step: 'tasks' })
       return
     }
 
-    setOpenDayNoticeKey(null)
-    setRecoveryPromptDateKey(null)
-    setRecoveryBlockedIntent(null)
-    setCycleRecoveryDateKey(dateKey)
-    setShowMorningSession(session === 'morning')
-    setShowEveningSession(session === 'evening')
-    openDashboardTab('cycle', { session, dateKey })
+    openResolvedFlow({ mode: 'recovery', dateKey, step: session })
   }
   const handleSkipPreviousDay = async (dateKey: string) => {
     try {
@@ -3014,17 +3211,13 @@ export default function AiMentorDashboardPage() {
   }
   const handleCatchupFromTodayGuard = useCallback((yesterdayDay: DailyCycleEntry) => {
     const dayKey = toDateKey(yesterdayDay.date)
-    const recoveryContent = getEntryContent(yesterdayDay)
-    const hasMorningDone = hasSessionAnswers(recoveryContent, 'morning')
-      || Boolean(
-        recoveryContent?.morningMeta
-        && typeof recoveryContent.morningMeta === 'object'
-        && !Array.isArray(recoveryContent.morningMeta)
-        && typeof (recoveryContent.morningMeta as Record<string, unknown>).completedAt === 'string',
-      )
-
-    openRecoveryDay(dayKey, hasMorningDone ? 'evening' : 'morning')
-  }, [openRecoveryDay])
+    const progress = getDailyHistoryProgress(yesterdayDay, getEntryTaskStats(yesterdayDay, microTasks))
+    openResolvedFlow({
+      mode: 'recovery',
+      dateKey: dayKey,
+      step: getFirstIncompleteStep(progress),
+    })
+  }, [microTasks, openResolvedFlow])
 
   const {
     blockState: todayGuardBlockState,
@@ -3066,35 +3259,25 @@ export default function AiMentorDashboardPage() {
     ]
   }, [todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
   const openFirstIncompleteRecoveryStep = useCallback((dateKey: string, progress?: DailyHistoryProgress | null) => {
-    const firstIncompleteStep = !progress?.morningDone
-      ? 'morning'
-      : !progress.tasksDone
-        ? 'tasks'
-        : !progress.eveningDone || !progress.analysisDone
-          ? 'evening'
-          : 'morning'
-
-    if (firstIncompleteStep === 'tasks') {
-      setOpenDayNoticeKey(null)
-      setRecoveryPromptDateKey(null)
-      setRecoveryBlockedIntent(null)
-      setCycleRecoveryDateKey(dateKey)
-      setShowMorningSession(false)
-      setShowEveningSession(false)
-      openMicrotasksTab(dateKey)
-      return
-    }
-
-    openRecoveryDay(dateKey, firstIncompleteStep === 'morning' ? 'morning' : 'evening')
-  }, [openMicrotasksTab, openRecoveryDay])
+    openResolvedFlow({
+      mode: 'recovery',
+      dateKey,
+      step: getFirstIncompleteStep(progress),
+    })
+  }, [openResolvedFlow])
   const handleFinishYesterday = useCallback(() => {
     const yesterdayDate = todayGuardBlockState.yesterdayDay?.date
       ? new Date(todayGuardBlockState.yesterdayDay.date)
       : subDays(new Date(), 1)
-    setFillDate(format(subDays(new Date(), 1), 'dd.MM.yyyy'))
+    const yesterdayDateKey = format(yesterdayDate, 'yyyy-MM-dd')
+    setFillDate(format(yesterdayDate, 'dd.MM.yyyy'))
     handleTodayGuardDismiss()
-    openFirstIncompleteRecoveryStep(format(yesterdayDate, 'yyyy-MM-dd'), todayGuardYesterdayProgress)
-  }, [handleTodayGuardDismiss, openFirstIncompleteRecoveryStep, todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
+    openResolvedFlow({
+      mode: 'recovery',
+      dateKey: yesterdayDateKey,
+      step: getFirstIncompleteStep(todayGuardYesterdayProgress),
+    })
+  }, [handleTodayGuardDismiss, openResolvedFlow, todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
 
   const openEveningSession = () => {
     console.info('[AiMentorDashboard] openEveningSession', {
@@ -3105,16 +3288,11 @@ export default function AiMentorDashboardPage() {
       hasRecoveryTarget: Boolean(recoveryTarget),
     })
     if (recoveryTarget?.session === 'evening') {
-      openRecoveryDay(recoveryTarget.dateKey, 'evening')
+      openResolvedFlow({ mode: 'recovery', dateKey: recoveryTarget.dateKey, step: 'evening' })
       return
     }
 
-    setCycleRecoveryDateKey(null)
-    setRecoveryPromptDateKey(null)
-    setOpenDayNoticeKey(null)
-    setShowMorningSession(false)
-    setShowEveningSession(true)
-    openDashboardTab('cycle', { session: 'evening' })
+    openResolvedFlow({ mode: 'today', dateKey: todayDateKey, step: 'evening' })
   }
   const microtaskPromptActive = Boolean(microtaskPromptIntent)
   const microtaskPromptTitle = 'Мікрозавдання на сьогодні'
@@ -3622,6 +3800,9 @@ export default function AiMentorDashboardPage() {
                 onOpenMicroTasks={openMicrotasksTab}
                 onLockedOpen={() => setIsExpiredTrialModalOpen(true)}
                 onOpenRecoveryDay={openRecoveryDay}
+                onOpenFirstIncompleteRecoveryStep={openFirstIncompleteRecoveryStep}
+                fillDate={fillDate}
+                setFillDate={setFillDate}
               />
             </div>
           )}
@@ -3705,9 +3886,10 @@ export default function AiMentorDashboardPage() {
                 onOpenMicroTasks={openMicrotasksTab}
                 onOpenProgress={openReportsTab}
                 onComplete={async () => {
-                  const isRecoveryCompletion = Boolean(cycleRecoveryDateKey ?? recoveryTarget?.dateKey)
+                  const isRecoveryCompletion = currentFlow.mode === 'recovery'
                   console.info('[AiMentorDashboard] cycle recovery completion', {
                     isRecoveryCompletion,
+                    currentFlow,
                     cycleRecoveryDateKey,
                     recoveryTargetDateKey: recoveryTarget?.dateKey ?? null,
                     recoveryTargetSession: recoveryTarget?.session ?? null,
@@ -3728,19 +3910,21 @@ export default function AiMentorDashboardPage() {
                     // keep the cycle summary moving even if refresh fails
                   }
                   if (isRecoveryCompletion) {
-                    console.info('[AiMentorDashboard] opening today morning after recovery finish', {
-                      todayDateKey,
+                    const nextTodayStep = getTodayStep({
+                      showMorningSession: false,
+                      showEveningSession: false,
                       hasMorningAnswers,
                       hasTasksToday,
                       hasActiveMicroTasks,
                     })
-                    if (hasMorningAnswers) {
-                      openMicrotasksTab()
-                      return
-                    }
-                    setShowMorningSession(true)
-                    setShowEveningSession(false)
-                    openDashboardTab('cycle', { session: 'morning' })
+                    console.info('[AiMentorDashboard] opening today flow after recovery finish', {
+                      todayDateKey,
+                      nextTodayStep,
+                      hasMorningAnswers,
+                      hasTasksToday,
+                      hasActiveMicroTasks,
+                    })
+                    openResolvedFlow({ mode: 'today', dateKey: todayDateKey, step: nextTodayStep })
                     return
                   }
                   openDashboardTab('cycle')
@@ -3764,6 +3948,8 @@ export default function AiMentorDashboardPage() {
                 completedTodayMicroTaskCount={completedTodayMicroTasks.length}
                 resumeIntentAfterRecovery={resumeIntentAfterRecovery}
                 onConsumeResumeIntent={() => setResumeIntentAfterRecovery(null)}
+                fillDate={fillDate}
+                setFillDate={setFillDate}
               />
             </div>
           )}
