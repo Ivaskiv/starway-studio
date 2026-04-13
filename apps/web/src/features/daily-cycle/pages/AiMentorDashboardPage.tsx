@@ -116,6 +116,12 @@ function formatCompactDateKey(dateKey: string) {
   return formatCompactDate(new Date(year, month - 1, day))
 }
 
+function formatVerboseDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  if (!year || !month || !day) return dateKey
+  return formatVerboseDate(new Date(year, month - 1, day))
+}
+
 function buildJournalDayUrl(dayDateKey: string) {
   return `/dashboard/journal?date=${dayDateKey}`
 }
@@ -322,36 +328,16 @@ function getTimelineDayPresentation(options: {
           : 'morning')
     : null
 
-  const staleIncomplete = Boolean(
-    !isCurrentDate
-    && !isFutureDate
-    && dayDateKey < yesterdayDateKey
-    && hasProgress
-    && !completed
-    && !completedLate
-    && !finalizedAt
-  )
-  const missed = Boolean(
-    !active
-    && !isCurrentDate
-    && !isFutureDate
-    && ((skipped || staleIncomplete) || doneCount === 0),
-  )
-  const partial = Boolean(
-    !active
-    && !isFutureDate
-    && !missed
-    && doneCount > 0
-    && doneCount < 4,
-  )
   const dayTone = getTimelineDayTone({
-    isActive: active,
-    isFuture: isFutureDate,
-    isCompleted: doneCount === 4,
-    isCompletedLate: false,
-    isPartial: partial,
-    isMissed: missed,
+    dayDateKey,
+    todayDateKey,
+    morningDone,
+    tasksDone,
+    eveningDone,
+    analysisDone,
   })
+  const missed = dayTone === 'missed'
+  const partial = dayTone === 'partial'
 
   return {
     hasProgress,
@@ -451,20 +437,23 @@ function getLatestRecoveryTarget(
 type TimelineDayTone = 'active' | 'done' | 'partial' | 'missed' | 'future'
 
 function getTimelineDayTone(options: {
-  isActive: boolean
-  isFuture: boolean
-  isCompleted: boolean
-  isCompletedLate: boolean
-  isPartial: boolean
-  isMissed: boolean
+  dayDateKey: string
+  todayDateKey: string
+  morningDone: boolean
+  tasksDone: boolean
+  eveningDone: boolean
+  analysisDone: boolean
 }) {
-  const { isActive, isFuture, isCompleted, isCompletedLate, isPartial, isMissed } = options
+  const { dayDateKey, todayDateKey, morningDone, tasksDone, eveningDone, analysisDone } = options
+  const isPast = dayDateKey < todayDateKey
+  const isToday = dayDateKey === todayDateKey
+  const doneCount = [morningDone, tasksDone, eveningDone, analysisDone].filter(Boolean).length
 
-  if (isActive) return 'active' satisfies TimelineDayTone
-  if (isCompleted || isCompletedLate) return 'done' satisfies TimelineDayTone
-  if (isPartial) return 'partial' satisfies TimelineDayTone
-  if (isMissed) return 'missed' satisfies TimelineDayTone
-  return 'future' satisfies TimelineDayTone
+  if (isToday) return 'active' satisfies TimelineDayTone
+  if (!isPast) return 'future' satisfies TimelineDayTone
+  if (doneCount === 4) return 'done' satisfies TimelineDayTone
+  if (doneCount > 0) return 'partial' satisfies TimelineDayTone
+  return 'missed' satisfies TimelineDayTone
 }
 
 function getTimelineDayLabel(options: {
@@ -476,7 +465,7 @@ function getTimelineDayLabel(options: {
   if (tone === 'active') return 'активно'
   if (tone === 'partial') return 'очікує'
   if (tone === 'done') return '✓✓✓'
-  if (tone === 'missed') return 'пропущено'
+  if (tone === 'missed') return '---'
   if (tone === 'future') return 'далі'
   return ''
 }
@@ -805,6 +794,7 @@ function CycleSummaryCard({
   onStartMorningSession,
   onStartEveningSession,
   onOpenRecoveryDay,
+  onOpenFirstIncompleteRecoveryStep,
   onTryOpenToday,
   onShowTasks,
   onShowReports,
@@ -838,6 +828,7 @@ function CycleSummaryCard({
   onStartMorningSession: () => void
   onStartEveningSession: () => void
   onOpenRecoveryDay: (dateKey: string, session: 'morning' | 'evening') => void
+  onOpenFirstIncompleteRecoveryStep: (dateKey: string, progress?: DailyHistoryProgress | null) => void
   onTryOpenToday: (onProceed: () => void) => void
   onShowTasks: () => void
   onShowReports: () => void
@@ -913,6 +904,11 @@ function CycleSummaryCard({
   const recoverySession = recoveryDateKey
     ? (showEveningSession ? 'evening' : 'morning')
     : recoveryTarget?.session ?? null
+  const activeCycleDateKey = recoveryDateKey ?? recoveryTargetDateKey ?? todayDateKey
+  const activeCycleDateLabel = useMemo(
+    () => formatVerboseDateKey(activeCycleDateKey),
+    [activeCycleDateKey],
+  )
 
   const lastWheelDate = latestWheel
     ? new Date(latestWheel.completedAt ?? latestWheel.createdAt)
@@ -1135,6 +1131,9 @@ function CycleSummaryCard({
                   <div>
                     <p className="text-[1.2rem] font-bold leading-none text-[var(--text-primary)] sm:text-[1.35rem]">{currentDay}</p>
                     <p className="mt-0.5 text-[0.88rem] font-semibold text-[var(--text-primary)] sm:text-[0.92rem]">День {currentDay} з {totalDays}</p>
+                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                      {activeCycleDateLabel}
+                    </p>
                   </div>
                 </div>
                 <div className="inline-flex min-h-[54px] min-w-0 items-center gap-3 rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(10,16,28,0.64)] px-4 sm:col-span-2 xl:min-w-[290px]">
@@ -1250,6 +1249,14 @@ function CycleSummaryCard({
                     if (dayDateKey > todayDateKey) return
                     if (active) {
                       onTryOpenToday(() => setReportDayKey(dayDateKey))
+                      return
+                    }
+                    if (
+                      dayDateKey < todayDateKey
+                      && dayProgress
+                      && [dayProgress.morningDone, dayProgress.tasksDone, dayProgress.eveningDone, dayProgress.analysisDone].filter(Boolean).length < 4
+                    ) {
+                      onOpenFirstIncompleteRecoveryStep(dayDateKey, dayProgress)
                       return
                     }
                     setReportDayKey(dayDateKey)
@@ -2660,6 +2667,11 @@ export default function AiMentorDashboardPage() {
     if (!requestedDateKey) return todayDateKey
     return requestedDateKey
   }, [activeTab, location.search, todayDateKey])
+  const activeMicrotaskDateLabel = useMemo(() => {
+    const [year, month, day] = activeMicrotaskDateKey.split('-').map(Number)
+    if (!year || !month || !day) return activeMicrotaskDateKey
+    return formatVerboseDate(new Date(year, month - 1, day))
+  }, [activeMicrotaskDateKey])
   const microtaskContextEntry = useMemo(() => {
     if (activeMicrotaskDateKey === todayDateKey) {
       return todayEntry ?? dailyHistory.find(entry => toDateKey(entry.date) === activeMicrotaskDateKey) ?? null
@@ -3046,18 +3058,35 @@ export default function AiMentorDashboardPage() {
       { id: 'analysis', label: 'Аналіз', done: hasAnalysis },
     ]
   }, [todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
+  const openFirstIncompleteRecoveryStep = useCallback((dateKey: string, progress?: DailyHistoryProgress | null) => {
+    const firstIncompleteStep = !progress?.morningDone
+      ? 'morning'
+      : !progress.tasksDone
+        ? 'tasks'
+        : !progress.eveningDone || !progress.analysisDone
+          ? 'evening'
+          : 'morning'
+
+    if (firstIncompleteStep === 'tasks') {
+      setOpenDayNoticeKey(null)
+      setRecoveryPromptDateKey(null)
+      setRecoveryBlockedIntent(null)
+      setCycleRecoveryDateKey(dateKey)
+      setShowMorningSession(false)
+      setShowEveningSession(false)
+      openMicrotasksTab(dateKey)
+      return
+    }
+
+    openRecoveryDay(dateKey, firstIncompleteStep === 'morning' ? 'morning' : 'evening')
+  }, [openMicrotasksTab, openRecoveryDay])
   const handleFinishYesterday = useCallback(() => {
     const yesterdayDate = todayGuardBlockState.yesterdayDay?.date
       ? new Date(todayGuardBlockState.yesterdayDay.date)
       : subDays(new Date(), 1)
-    const yesterday = format(yesterdayDate, 'yyyy-MM-dd')
-    const resumeSession: 'morning' | 'evening' = todayGuardYesterdayProgress?.morningDone
-      ? (todayGuardYesterdayProgress.tasksDone && !todayGuardYesterdayProgress.eveningDone ? 'evening' : 'morning')
-      : 'morning'
-
     handleTodayGuardDismiss()
-    navigate(`/dashboard/cycle?date=${yesterday}&session=${resumeSession}&resume=true`)
-  }, [handleTodayGuardDismiss, navigate, todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
+    openFirstIncompleteRecoveryStep(format(yesterdayDate, 'yyyy-MM-dd'), todayGuardYesterdayProgress)
+  }, [handleTodayGuardDismiss, openFirstIncompleteRecoveryStep, todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
 
   const openEveningSession = () => {
     console.info('[AiMentorDashboard] openEveningSession', {
@@ -3649,6 +3678,7 @@ export default function AiMentorDashboardPage() {
                   openEveningSession()
                 })}
                 onOpenRecoveryDay={openRecoveryDay}
+                onOpenFirstIncompleteRecoveryStep={openFirstIncompleteRecoveryStep}
                 onTryOpenToday={tryOpenToday}
                 onShowTasks={() => tryOpenToday(() => {
                   openMicrotasksTab()
@@ -3892,6 +3922,14 @@ export default function AiMentorDashboardPage() {
                 </div>
               ) : (
                 <>
+                  <div className="rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgb(var(--accent-soft-rgb))]">
+                      Дата циклу
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
+                      {activeMicrotaskDateLabel}
+                    </p>
+                  </div>
                   <div
                     data-testid="day-progress"
                     className="grid gap-4 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.035)] p-4 lg:grid-cols-[1fr_auto] lg:items-center"
