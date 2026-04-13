@@ -8,6 +8,7 @@ export interface CycleStepCardItem {
   icon: ReactNode
   title: string
   subtitle: string
+  topRightText?: string
   checks: string[]
   status: CycleStepCardStatus
   ctaLabel: string
@@ -78,11 +79,18 @@ function CycleStepCard({ item }: { item: CycleStepCardItem }) {
 
       <div className="flex items-start justify-between gap-3">
         <span className="text-sm font-semibold text-[var(--text-muted)]">{item.number}</span>
-        {item.badge ? (
-          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badgeToneClass}`}>
-            {item.badge}
-          </span>
-        ) : null}
+        <div className="flex flex-col items-end gap-1">
+          {item.topRightText ? (
+            <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+              {item.topRightText}
+            </span>
+          ) : null}
+          {item.badge ? (
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badgeToneClass}`}>
+              {item.badge}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className={`mt-3.5 flex h-[46px] w-[46px] items-center justify-center rounded-full border ${iconToneClass}`}>

@@ -2,14 +2,15 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { User, UserRole } from '@/features/user/types/user.types';
 import type { AuthState } from '@/features/auth/types/auth.types';
-import { getToken, saveToken, removeToken } from './token';
+import { getStoredUser, getToken, saveStoredUser, saveToken, removeToken } from './token';
 
 const token = getToken();
+const storedUser = getStoredUser<User>();
 const initialState: AuthState = {
-  user: null,
-  role: null,
+  user: storedUser,
+  role: storedUser?.role ?? null,
   accessToken: token,
-  status: token ? 'loading' : 'guest',
+  status: token && storedUser ? 'authenticated' : token ? 'loading' : 'guest',
 };
 
 const authSlice = createSlice({
@@ -23,6 +24,7 @@ const authSlice = createSlice({
       state.accessToken = payload.accessToken;
       state.status      = 'authenticated';
       saveToken(payload.accessToken);
+      saveStoredUser(payload.user);
     },
 
     // Оновлення user без зміни токена (getMe, profile edit)
@@ -30,6 +32,7 @@ const authSlice = createSlice({
       state.user   = { ...state.user, ...payload };
       state.role   = payload.role ?? state.role;
       state.status = 'authenticated';
+      if (state.user) saveStoredUser(state.user);
     },
 
     // ✅ Оновлення тільки settings — НЕ торкається role/id/email
@@ -59,11 +62,13 @@ const authSlice = createSlice({
     ) => {
       if (!state.user) return;
       state.user.settings = { ...state.user?.settings, ...payload };
+      saveStoredUser(state.user);
     },
 
     setUserRole: (state, { payload }: PayloadAction<UserRole>) => {
       if (state.user) state.user.role = payload;
       state.role = payload;
+      if (state.user) saveStoredUser(state.user);
     },
 
     setLoading: (state) => { state.status = 'loading'; },

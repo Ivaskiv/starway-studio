@@ -252,7 +252,7 @@ function getDailyHistoryProgress(
   const hasTaskProgress = (taskStats?.totalMicroTaskCount ?? 0) > 0
   const morningDone = typeof morningMeta?.completedAt === 'string'
   const eveningDone = typeof eveningMeta?.completedAt === 'string'
-  const tasksDone = hasTaskProgress && incompleteMicroTaskCount === 0
+  const tasksDone = completed || completedLate || (hasTaskProgress && incompleteMicroTaskCount === 0)
   const analysisDone = completed || completedLate || Boolean(finalizedAt)
   const unfinishedStepCount = [morningDone, tasksDone, eveningDone, analysisDone].reduce(
     (sum, done) => sum + (done ? 0 : 1),
@@ -1083,6 +1083,7 @@ function CycleSummaryCard({
       icon: <SunMedium className="h-6 w-6" />,
       title: 'Ранок',
       subtitle: 'Сесія дня',
+      topRightText: activeCycleDateLabel,
       checks: ['Ранкова рефлексія', 'Колесо балансу', 'Налаштування фокусу'],
       status: cycleFlowSteps[0]?.status === 'done' ? 'completed' : cycleFlowSteps[0]?.status === 'active' ? 'active' : 'waiting',
       ctaLabel: cycleFlowSteps[0]?.status === 'done' ? 'Відкрити' : 'Почати ▶',
@@ -1140,6 +1141,7 @@ function CycleSummaryCard({
       icon: <LayoutGrid className="h-6 w-6" />,
       title: 'Аналіз дня',
       subtitle: 'Після вечора',
+      topRightText: activeCycleDateLabel,
       checks: ['Колесо балансу', 'Статистика дня', 'Інсайти'],
       status: (
         cycleFlowSteps[3]?.status === 'done'
