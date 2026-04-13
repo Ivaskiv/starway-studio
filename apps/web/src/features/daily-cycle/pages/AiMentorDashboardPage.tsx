@@ -1262,6 +1262,11 @@ function CycleSummaryCard({
                     setReportDayKey(dayDateKey)
                   }}
                 >
+                  {fillDate ? (
+                    <span className="absolute right-1 top-1 text-[10px] leading-none text-[var(--text-muted)]">
+                      {fillDate}
+                    </span>
+                  ) : null}
                   {hasBellNotice ? (
                     <span className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-end px-2">
                       <span
@@ -2644,6 +2649,7 @@ export default function AiMentorDashboardPage() {
   const [recoveryPromptDateKey, setRecoveryPromptDateKey] = useState<string | null>(null)
   const [recoveryBlockedIntent, setRecoveryBlockedIntent] = useState<RecoveryBlockedIntent | null>(null)
   const [resumeIntentAfterRecovery, setResumeIntentAfterRecovery] = useState<RecoveryBlockedIntent | null>(null)
+  const [fillDate, setFillDate] = useState<string | null>(null)
   const [optimisticTaskState, setOptimisticTaskState] = useState<Record<string, Partial<MicroTaskItem>>>({})
   const regenerationTimerRef = useRef<number | null>(null)
   const regenerationTickerRef = useRef<number | null>(null)
@@ -2998,6 +3004,7 @@ export default function AiMentorDashboardPage() {
       setOpenDayNoticeKey(null)
       setShowMorningSession(false)
       setShowEveningSession(false)
+      setFillDate(format(new Date(), 'dd.MM.yyyy'))
       toast.success('Вчорашній день пропущено.')
       openTodayAfterRecoveryDecision(nextIntent)
     } catch (error) {
@@ -3084,6 +3091,7 @@ export default function AiMentorDashboardPage() {
     const yesterdayDate = todayGuardBlockState.yesterdayDay?.date
       ? new Date(todayGuardBlockState.yesterdayDay.date)
       : subDays(new Date(), 1)
+    setFillDate(format(subDays(new Date(), 1), 'dd.MM.yyyy'))
     handleTodayGuardDismiss()
     openFirstIncompleteRecoveryStep(format(yesterdayDate, 'yyyy-MM-dd'), todayGuardYesterdayProgress)
   }, [handleTodayGuardDismiss, openFirstIncompleteRecoveryStep, todayGuardBlockState.yesterdayDay, todayGuardYesterdayProgress])
