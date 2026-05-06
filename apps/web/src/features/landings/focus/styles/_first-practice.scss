@@ -4,16 +4,19 @@
 
 .focus-first-practice-wrap {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
-  gap: var(--space-2xl);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-lg);
   align-items: start;
+  max-width: 760px;
+  margin: 0 auto;
 }
 
 /* ─── HEADER (ліва колонка) ─── */
 
 .focus-first-practice-header {
-  position: sticky;
-  top: 100px;
+  position: static;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .focus-first-practice-copy {
@@ -21,7 +24,7 @@
   font-size: var(--fs-body);
   line-height: 1.75;
   color: var(--focus-text-muted);
-  max-width: 440px;
+  max-width: 100%;
 }
 
 /* ─── BODY (права колонка) ─── */
@@ -30,6 +33,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 /* ─── LIST ─── */
@@ -93,6 +99,9 @@
     linear-gradient(135deg, rgba(74, 126, 191, 0.09) 0%, rgba(74, 126, 191, 0.03) 100%);
   position: relative;
   overflow: hidden;
+  max-width: 560px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .focus-first-practice-cta::before {
@@ -133,10 +142,12 @@
 
 @media (max-width: 1100px) {
   .focus-first-practice-wrap {
-    grid-template-columns: 1fr;
-    gap: clamp(28px, 5vw, 48px);
+    gap: var(--space-md);
   }
 
-  .focus-first-practice-header { position: static; }
-  .focus-first-practice-copy   { max-width: 100%; }
+  .focus-first-practice-header,
+  .focus-first-practice-body,
+  .focus-first-practice-cta {
+    max-width: 100%;
+  }
 }

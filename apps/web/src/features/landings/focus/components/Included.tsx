@@ -1,7 +1,7 @@
 import { BookText, Bot, CalendarDays, Gem, MessagesSquare, Video } from 'lucide-react'
 
-import { FOCUS_PAGE } from '@/features/landings/focus/utils/focus.content'
 import { FOCUS_PAYMENT_URL } from '../utils/constants'
+import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
 
 const includedIcons = [MessagesSquare, Video, CalendarDays, Bot, BookText]
 

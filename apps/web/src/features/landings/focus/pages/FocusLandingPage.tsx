@@ -8,9 +8,13 @@ import Pricing from '../components/Pricing'
 import Problem from '../components/Problem'
 
 import AboutFocus from '@/features/landings/focus/components/AboutFocus'
-import { FOCUS_PAGE } from '@/features/landings/focus/utils/focus.content'
-import { useScrollReveal } from '../hooks/useScrollReveal'
+import Fit from '@/features/landings/focus/components/Fit'
+import Mechanism from '@/features/landings/focus/components/Mechanism'
 import Nav from '@/features/landings/focus/components/Nav'
+import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
+import { useScrollReveal } from '../hooks/useScrollReveal'
+import Subscription from '@/features/landings/focus/components/Subscription'
+import Final from '@/features/landings/focus/components/Final'
 
 export default function FocusLandingPage() {
   const pageRef = useScrollReveal()
@@ -19,18 +23,16 @@ export default function FocusLandingPage() {
   return (
     <div ref={pageRef} className="focus-page focus-page-scroll">
       <Nav />
-
       <Hero />
-
       <AboutFocus />
-
       <Problem />
-
       <HowItWorks />
-
       <Included />
-
+      <Mechanism />
+      <Fit />
+      <Subscription />
       <FirstPractice />
+      <Final />
 
       <section id="weekly-loop" className="focus-section focus-reveal stack" data-reveal>
         <div className="focus-container stack">

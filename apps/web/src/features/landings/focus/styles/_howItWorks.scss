@@ -4,7 +4,7 @@
 /* ─── SECTION HEADER ─── */
 
 .focus-how-header {
-  margin-bottom: 0;
+  margin-bottom: clamp(36px, 4vw, 56px);
 }
 
 /* ─── TWO-COLUMN SPLIT LAYOUT ─── */
@@ -215,6 +215,7 @@
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--color-accent-subtitle);
+  white-space: nowrap;
 }
 
 /* ─── HOW STEPS ─── */
@@ -430,7 +431,7 @@
    RESPONSIVE
 ───────────────────────────── */
 
-@media (max-width: 1100px) {
+@media (max-width: 1024px) {
   .focus-how-split           { gap: clamp(24px, 3.5vw, 48px); }
   .focus-pipeline-node       { width: 48px; height: 48px; }
   .focus-pipeline-track      { top: 24px; }
@@ -462,7 +463,83 @@
   .focus-pipeline-outcome-text { white-space: normal; }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 400px) {
   .focus-how-flow-side--left,
   .focus-how-flow-side--right { display: none; }
+}
+
+/* ─── STEP CARDS GRID ─── */
+
+.focus-how-steps-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.8vw, 14px);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* кожен рядок — flex, залишок автоматично центрується */
+.focus-how-steps-row {
+  display: flex;
+  justify-content: center;
+  gap: clamp(10px, 1.8vw, 14px);
+  flex-wrap: nowrap;
+}
+
+.focus-how-step-card {
+  flex: 1;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1vw, 10px);
+  padding: clamp(16px, 2.5vw, 24px);
+  border-radius: var(--focus-radius);
+  text-align: center;
+  transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+}
+
+.focus-how-step-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--focus-blue-border);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(74, 126, 191, 0.1);
+}
+
+.focus-how-step-card .focus-step-title {
+  font-family: var(--font-heading);
+  font-size: clamp(13px, 1.8vw, 17px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-main);
+  line-height: 1.2;
+}
+
+.focus-how-step-card .focus-step-copy {
+  font-family: var(--font-sans);
+  font-size: clamp(12px, 1.4vw, 14px);
+  color: var(--focus-text-muted);
+  line-height: 1.55;
+}
+
+/* tablet: 2 cols max */
+@media (max-width: 900px) {
+  .focus-how-step-card {
+    max-width: 320px;
+  }
+}
+
+/* mobile: stack vertically */
+@media (max-width: 560px) {
+  .focus-how-steps-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .focus-how-step-card {
+    max-width: 100%;
+    text-align: left;
+  }
 }

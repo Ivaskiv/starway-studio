@@ -1,4 +1,4 @@
-import { FOCUS_PAGE } from '@/features/landings/focus/utils/focus.content'
+import { FOCUS_PAGE } from "@/features/landings/focus/content/focus.content"
 
 export default function Footer() {
   const { brand, accent, copy } = FOCUS_PAGE.footer

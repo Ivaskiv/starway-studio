@@ -1,4 +1,4 @@
-import { FOCUS_PAGE } from '@/features/landings/focus/utils/focus.content'
+import { FOCUS_PAGE } from "@/features/landings/focus/content/focus.content"
 
 export default function AboutFocus() {
   const { subtitlesection, title, text, note } = FOCUS_PAGE.aboutfocus

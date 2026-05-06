@@ -1,4 +1,4 @@
-import { FOCUS_PAGE } from '@/features/landings/focus/utils/focus.content'
+import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
 import { FOCUS_PAYMENT_URL } from '../utils/constants'
 
 export default function CTA() {
