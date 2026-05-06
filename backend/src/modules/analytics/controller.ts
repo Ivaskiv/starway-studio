@@ -5,6 +5,7 @@ import {
   getAIInsights,
   getConversionRates,
   getDropOffPoints,
+  getFounderAnalytics,
   getFunnelStats,
   getLiveActivity,
   getOverviewStats,
@@ -225,6 +226,17 @@ export async function getInsights(req: Request, res: Response) {
   } catch (error) {
     console.error('Analytics insights error', error)
     return res.status(500).json({ error: 'analytics_insights_failed' })
+  }
+}
+
+export async function getFounder(req: Request, res: Response) {
+  try {
+    const period = getRequestedPeriod(req.query.period)
+    const founder = await getFounderAnalytics(period)
+    return res.json(founder)
+  } catch (error) {
+    console.error('Analytics founder error', error)
+    return res.status(500).json({ error: 'analytics_founder_failed' })
   }
 }
 

@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import BottomNav from '@/components/miniapp/BottomNav'
+import DashboardSideRails from '@/layout/DashboardSideRails'
 import type { MiniAppPageId } from '@/features/social/types/miniapp'
 
 type MiniAppLayoutProps = {
@@ -92,8 +93,13 @@ export default function MiniAppLayout({
 
   return (
     <div className="miniapp-page-shell mx-auto flex w-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
-      <div className="flex-1 overflow-y-auto pb-32">
-        {children}
+      <div className="mx-auto flex w-full max-w-[980px] min-w-0 items-start gap-3">
+        <div className="hidden md:block md:pt-4">
+          <DashboardSideRails />
+        </div>
+        <div className="min-w-0 flex-1 overflow-y-auto pb-32">
+          {children}
+        </div>
       </div>
 
       <BottomNav

@@ -9,7 +9,7 @@ import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import { getTrialDaysLeft, TRIAL_TOTAL_DAYS } from '@/features/trial/utils/trialProgress'
 import { useGetWheelHistoryQuery } from '@/features/wheel/services/wheel.api'
 import { GlassCard } from '@/ui'
-import { BarChart3, CheckCircle2, CircleDashed, Flame, ListTodo, Moon, Sparkles, SunMedium } from 'lucide-react'
+import { BarChart3, CheckCircle2, CircleDashed, Flame, ListTodo, Orbit, Sparkles, SunMedium, Target } from 'lucide-react'
 import { useMemo } from 'react'
 
 interface MentorProgressContentProps {
@@ -20,16 +20,22 @@ export default function MentorProgressContent({
   compact = false,
 }: MentorProgressContentProps) {
   const { user } = useAuth()
-  const { accessControl } = useSystemState()
+  const { accessControl, subscription } = useSystemState()
   const userId = user?.id ?? ''
   const { data: summary } = useGetSummaryQuery(undefined, { skip: !userId })
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !userId })
   const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, { skip: !userId })
   const { data: wheelHistory = [] } = useGetWheelHistoryQuery({ userId, limit: 12 }, { skip: !userId })
   const { data: microTasks = [] } = useGetActiveMicroTasksQuery(undefined, { skip: !userId })
-  const { journeySteps, dayNumber } = useUserProgress()
+  const { journeyMilestones, dayNumber } = useUserProgress()
 
-  const isPaidCycle = Boolean(trial?.isPaid || accessControl?.hasSubscription)
+  const hasPremiumAccess = Boolean(
+    subscription?.isActive
+    || accessControl?.hasSubscription
+    || trial?.isPaid
+    || trial?.isActive,
+  )
+  const isPaidCycle = Boolean(subscription?.isActive || accessControl?.hasSubscription || trial?.isPaid)
   const currentDay = dayNumber || Math.max(0, trial?.currentDay ?? 0)
   const journeyTotalDays = isPaidCycle ? 30 : TRIAL_TOTAL_DAYS
   const trialProgress = journeyTotalDays > 0
@@ -40,7 +46,7 @@ export default function MentorProgressContent({
   const totalWheels = wheelHistory.length
   const activeMicroTasks = microTasks.filter(task => (task.status ?? 'PENDING') !== 'COMPLETED')
   const completedMicroTasks = microTasks.filter(task => (task.status ?? 'PENDING') === 'COMPLETED')
-  const journeyStepMap = useMemo(() => new Map(journeySteps.map(step => [step.id, step])), [journeySteps])
+  const journeyStepMap = useMemo(() => new Map(journeyMilestones.map(step => [step.id, step])), [journeyMilestones])
   const tasksBySphere = activeMicroTasks.reduce<Record<string, number>>((acc, task) => {
     const key = task.sphere ?? 'general'
     acc[key] = (acc[key] ?? 0) + 1
@@ -67,11 +73,11 @@ export default function MentorProgressContent({
   ]
 
   const mentorBlocks = [
-    { label: 'Ранкова сесія', value: journeyStepMap.get('morning')?.status === 'done' ? 'Готово' : 'Ще ні', sub: 'Щоденний check-in', icon: SunMedium, done: journeyStepMap.get('morning')?.status === 'done' },
-    { label: 'Вечірня сесія', value: journeyStepMap.get('evening')?.status === 'done' ? 'Готово' : 'Ще ні', sub: 'Рефлексія дня', icon: Moon, done: journeyStepMap.get('evening')?.status === 'done' },
-    { label: 'Колесо балансу', value: totalWheels, sub: 'Усього заповнень', icon: BarChart3, done: journeyStepMap.get('wheel')?.status === 'done' },
-    { label: 'Мікрозавдання', value: `${completedMicroTasks.length}/${microTasks.length}`, sub: `${activeMicroTasks.length} активних`, icon: ListTodo, done: journeyStepMap.get('tasks')?.status === 'done' },
-    { label: 'Звіти', value: reportsCount, sub: 'Дзеркала 4/7 дня', icon: Sparkles, done: journeyStepMap.get('report')?.status !== 'locked' },
+    { label: 'Точка запуску', value: journeyStepMap.get('entry')?.status === 'done' ? 'Готово' : 'Ще ні', sub: 'Фіксація старту', icon: SunMedium, done: journeyStepMap.get('entry')?.status === 'done' },
+    { label: 'Колесо балансу', value: totalWheels, sub: 'Усього заповнень', icon: Orbit, done: journeyStepMap.get('wheel')?.status === 'done' },
+    { label: 'WEB-Карта', value: journeyStepMap.get('web_map')?.status === 'done' ? 'Готово' : 'Ще ні', sub: 'Звʼязки та ресурси', icon: BarChart3, done: journeyStepMap.get('web_map')?.status === 'done' },
+    { label: 'ABsystem', value: journeyStepMap.get('absystem')?.status === 'done' ? 'Готово' : 'Ще ні', sub: 'Ціль і вибір', icon: Target, done: journeyStepMap.get('absystem')?.status === 'done' },
+    { label: 'Щоденний цикл', value: journeyStepMap.get('daily_cycle')?.status === 'done' ? 'Готово' : 'Ще ні', sub: `${activeMicroTasks.length} активних · ${completedMicroTasks.length}/${microTasks.length}`, icon: ListTodo, done: journeyStepMap.get('daily_cycle')?.status === 'done' || journeyStepMap.get('daily_cycle')?.status === 'active' },
   ]
 
   return (
@@ -86,7 +92,11 @@ export default function MentorProgressContent({
               День {currentDay || '—'} з {journeyTotalDays}
             </h3>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              {trial?.isActive ? `Залишилось ${trialDaysLeft} дн.` : accessControl?.hasSubscription ? 'Доступ активний' : 'Тріал не активний'}
+              {trial?.isActive
+                ? `Залишилось ${trialDaysLeft} дн.`
+                : hasPremiumAccess
+                  ? 'Доступ активний'
+                  : 'Тріал не активний'}
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3 text-right">
@@ -217,7 +227,7 @@ export default function MentorProgressContent({
           </div>
         )}
 
-        {!accessControl?.hasSubscription && !trial?.isActive ? (
+        {!hasPremiumAccess ? (
           <div className="mt-4 flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-muted)]">
             <CircleDashed className="h-4 w-4" />
             Історія збережена. Нові дії потребують активного доступу, але пройдене лишається видимим.

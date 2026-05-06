@@ -3,12 +3,11 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Provider } from 'react-redux';
 // import { GoogleOAuthProvider } from '@react-oauth/google'
-import { Toaster } from 'react-hot-toast';
 
 import { initTheme } from '@/theme/accent.utils';
+import { AppToaster } from '@/shared/Toast';
 import App from './App';
 import { store } from './app/store';
-import { TOASTER_CONFIG } from './app/config/toaster';
 import { enableMiniAppDevReload } from './dev/enableMiniAppDevReload';
 import './styles/index.scss';
 import { ThemeProvider } from './theme/ThemeProvider';
@@ -26,7 +25,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <Provider store={store}>
         <ThemeProvider>
-          <Toaster {...TOASTER_CONFIG} />
+          <AppToaster />
           <App />
         </ThemeProvider>
       </Provider>

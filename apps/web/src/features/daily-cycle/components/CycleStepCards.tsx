@@ -17,6 +17,7 @@ export interface CycleStepCardItem {
   showArrow?: boolean
   iconToneClass?: string
   badgeToneClass?: string
+  recoveryTone?: boolean
   onClick: () => void
 }
 
@@ -49,7 +50,7 @@ const STEP_CARD_STYLES: Record<CycleStepCardStatus, { shell: string; iconWrap: s
 
 function getStatusIcon(status: CycleStepCardStatus) {
   if (status === 'completed') return <Check className="h-3.5 w-3.5" />
-  if (status === 'locked') return <Lock className="h-3.5 w-3.5" />
+  if (status === 'locked') return <TimerReset className="h-3.5 w-3.5" />
   if (status === 'active') return <Play className="h-3.5 w-3.5 fill-current" />
   return <TimerReset className="h-3.5 w-3.5" />
 }
@@ -58,6 +59,9 @@ function CycleStepCard({ item }: { item: CycleStepCardItem }) {
   const tone = STEP_CARD_STYLES[item.status]
   const iconToneClass = item.iconToneClass ?? tone.iconWrap
   const badgeToneClass = item.badgeToneClass ?? 'border-[rgba(55,138,221,0.24)] bg-[rgba(55,138,221,0.12)] text-[#78B9FF]'
+  const recoveryShellClass = item.recoveryTone
+    ? 'border-[1.5px] border-[rgba(242,178,75,0.5)] shadow-[0_0_0_1px_rgba(242,178,75,0.12),0_12px_28px_rgba(0,0,0,0.16)]'
+    : ''
 
   return (
     <button
@@ -69,6 +73,7 @@ function CycleStepCard({ item }: { item: CycleStepCardItem }) {
         'flex h-full flex-col',
         'shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
         tone.shell,
+        recoveryShellClass,
       ].join(' ')}
     >
       {item.showArrow ? (
@@ -78,19 +83,21 @@ function CycleStepCard({ item }: { item: CycleStepCardItem }) {
       ) : null}
 
       <div className="flex items-start justify-between gap-3">
-        <span className="text-sm font-semibold text-[var(--text-muted)]">{item.number}</span>
-        <div className="flex flex-col items-end gap-1">
-          {item.topRightText ? (
-            <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-              {item.topRightText}
-            </span>
-          ) : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {String(item.number).padStart(2, '0')}
+          </span>
           {item.badge ? (
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badgeToneClass}`}>
               {item.badge}
             </span>
           ) : null}
         </div>
+        {item.topRightText ? (
+          <span className="text-right text-[11px] font-medium text-[var(--text-secondary)]">
+            {item.topRightText}
+          </span>
+        ) : null}
       </div>
 
       <div className={`mt-3.5 flex h-[46px] w-[46px] items-center justify-center rounded-full border ${iconToneClass}`}>

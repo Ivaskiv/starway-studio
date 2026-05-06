@@ -3,26 +3,26 @@ import { ROUTES } from '@/config/routes'
 import AuthModal from '@/features/auth/components/AuthModal'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
 import StarwayMark from '@/ui/StarwayMark'
-import { Facebook, Github, Instagram, Twitter, Youtube } from 'lucide-react'
+import { Instagram, Youtube } from 'lucide-react'
 import { useState } from 'react'
 
 const FOOTER_LINKS = {
   learning: [
     { label: 'Всі курси',       path: ROUTES.PRODUCTS      },
-    { label: 'Ментор',         path: ROUTES.AI_MENTOR     },
-    { label: 'Колесо балансу',  path: ROUTES.WHEEL         },
-    { label: 'Прогрес',         path: ROUTES.PROGRESS      },
+    // { label: 'Ментор',         path: ROUTES.AI_MENTOR     },
+    // { label: 'Колесо балансу',  path: ROUTES.WHEEL         },
+    // { label: 'Журнал',          path: ROUTES.JOURNAL       },
   ],
   tools: [
-    { label: 'Щоденний цикл',   path: ROUTES.CYCLE         },
+    // { label: 'Щоденний цикл',   path: ROUTES.CYCLE         },
     { label: 'Точка Б',         path: ROUTES.VISION        },
     { label: 'Цілі',            path: ROUTES.GOALS         },
     { label: 'Підписка',        path: ROUTES.SUBSCRIPTION  },
   ],
   company: [
     { label: 'Про нас',         path: '/about'             },
-    { label: 'Блог',            path: '/blog'              },
-    { label: "Кар'єра",         path: '/careers'           },
+    // { label: 'Блог',            path: '/blog'              },
+    // { label: "Кар'єра",         path: '/careers'           },
     { label: 'Контакти',        path: '/contact'           },
   ],
   support: [
@@ -34,11 +34,10 @@ const FOOTER_LINKS = {
 }
 
 const SOCIALS = [
-  { icon: Facebook,  href: 'https://facebook.com',  label: 'Facebook'  },
+  // { icon: Facebook,  href: 'https://facebook.com',  label: 'Facebook'  },
   { icon: Instagram, href: 'https://instagram.com', label: 'Instagram' },
-  { icon: Twitter,   href: 'https://twitter.com',   label: 'Twitter'   },
+  // { icon: Twitter,   href: 'https://twitter.com',   label: 'Twitter'   },
   { icon: Youtube,   href: 'https://youtube.com',   label: 'YouTube'   },
-  { icon: Github,    href: 'https://github.com',    label: 'GitHub'    },
 ]
 
 export default function Footer() {

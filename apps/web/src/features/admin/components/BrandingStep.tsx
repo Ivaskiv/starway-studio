@@ -3,7 +3,7 @@
 import { Button, Input, Label, Textarea } from '@/ui';
 import { Upload } from 'lucide-react';
 import React from 'react';
-import './BrandingStep.css';
+import './BrandingStep.scss';
 
 interface BrandingStepProps {
   data: any;

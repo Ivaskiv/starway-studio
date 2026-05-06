@@ -58,36 +58,52 @@ export const authApi = api.injectEndpoints({
     login: builder.mutation<AuthSuccessResponseDTO, LoginInput>({
       query: body => ({ url: '/auth/login', method: 'POST', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        const { data } = await queryFulfilled
-        dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
-        await refreshAccessState(dispatch)
+        try {
+          const { data } = await queryFulfilled
+          dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken, refreshToken: data.refreshToken }))
+          await refreshAccessState(dispatch)
+        } catch (error) {
+          console.warn('[auth.api] login failed:', error)
+        }
       },
     }),
 
     register: builder.mutation<AuthSuccessResponseDTO, RegisterInput>({
       query: body => ({ url: '/auth/register', method: 'POST', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        const { data } = await queryFulfilled
-        dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
-        await refreshAccessState(dispatch)
+        try {
+          const { data } = await queryFulfilled
+          dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken, refreshToken: data.refreshToken }))
+          await refreshAccessState(dispatch)
+        } catch (error) {
+          console.warn('[auth.api] register failed:', error)
+        }
       },
     }),
 
     socialAuth: builder.mutation<SocialAuthResponseDTO, SocialAuthApiInput>({
       query: body => ({ url: '/auth/social', method: 'POST', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        const { data } = await queryFulfilled
-        dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
-        await refreshAccessState(dispatch)
+        try {
+          const { data } = await queryFulfilled
+          dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken, refreshToken: data.refreshToken }))
+          await refreshAccessState(dispatch)
+        } catch (error) {
+          console.warn('[auth.api] socialAuth failed:', error)
+        }
       },
     }),
 
     telegramMiniAppAuth: builder.mutation<SocialAuthResponseDTO & { token: string }, TelegramMiniAppAuthInput>({
       query: body => ({ url: '/auth/telegram', method: 'POST', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        const { data } = await queryFulfilled
-        dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken }))
-        await refreshAccessState(dispatch)
+        try {
+          const { data } = await queryFulfilled
+          dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken, refreshToken: data.refreshToken }))
+          await refreshAccessState(dispatch)
+        } catch (error) {
+          console.warn('[auth.api] telegramMiniAppAuth failed:', error)
+        }
       },
     }),
 

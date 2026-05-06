@@ -1,0 +1,22 @@
+/* ============================================================
+   index.scss — FOCUS LANDING ENTRY POINT
+   ============================================================ */
+
+@use './_variables.scss';
+@use './_glass.scss';
+@use './_animations.scss';
+@use './_layout.scss';
+@use './_typography.scss';
+@use './_first-practice.scss';
+@use './_topics.scss';
+
+@use './components/_buttons.scss';
+@use './components/_cards.scss';
+@use './components/_lists.scss';
+
+@use './_hero.scss';
+@use './_reviews.scss';
+@use './_break.scss';
+
+/* Google Fonts — після @use (Sass вимога) */
+@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Oswald:wght@200..700&family=Manrope:wght@400;500;600;700;800&display=swap');

@@ -56,13 +56,13 @@ export default function ActionsPage() {
         </GlassCard>
       ) : (
         <GlassCard className="p-5">
-          <p className="text-white/80">Доступ активний. Продовжуй і дивись динаміку у прогресі.</p>
+          <p className="text-white/80">Доступ активний. Продовжуй і дивись динаміку в журналі шляху.</p>
           <button
             type="button"
-            onClick={() => navigate(ROUTES.PROGRESS)}
+            onClick={() => navigate(ROUTES.JOURNAL)}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400"
           >
-            Відкрити прогрес
+            Відкрити журнал
             <ArrowRight className="w-4 h-4" />
           </button>
         </GlassCard>

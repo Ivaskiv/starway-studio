@@ -25,7 +25,7 @@ export function BottomNavBar({
   const navigate = useNavigate()
 
   return (
-    <div className="glass-card flex items-center justify-between gap-3 px-4 py-3">
+    <div className="glass-card flex items-center justify-between gap-3 px-4 py-2.5">
       <button
         type="button"
         className="nav-btn-back"
@@ -39,7 +39,7 @@ export function BottomNavBar({
         {backLabel}
       </button>
 
-      <p className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-white/60">
+      <p className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-white/50">
         {centerText ?? ''}
       </p>
 

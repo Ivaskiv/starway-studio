@@ -1,0 +1,149 @@
+// apps/web/src/features/landings/focus/styles/components/_buttons.scss
+
+/* ─── SHARED BASE ─── */
+
+.focus-btn-primary,
+.focus-btn-ghost,
+.focus-nav-cta {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ─── PRIMARY ─── */
+
+.focus-btn-primary,
+.focus-nav-cta {
+  border: 0;
+  background: var(--color-accent-subtitle);
+  color: #fff;
+}
+
+.focus-nav-cta {
+  padding: clamp(10px, 2.4vw, 12px) clamp(18px, 4vw, 22px);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.focus-btn-primary {
+  padding: 0 clamp(16px, 3vw, 28px);
+  font-size: var(--fs-button);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.focus-btn-primary,
+.focus-btn-ghost {
+  min-height: clamp(44px, 6vw, 54px);
+}
+
+.focus-nav-cta:hover,
+.focus-btn-primary:hover {
+  background: var(--focus-blue-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(74, 126, 191, 0.35);
+}
+
+.focus-nav-cta:active,
+.focus-btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ─── GHOST ─── */
+
+.focus-btn-ghost {
+  padding: 0 clamp(16px, 3vw, 28px);
+  border: 1px solid var(--focus-card-border);
+  border-radius: var(--focus-radius-pill);
+  background: transparent;
+  color: var(--focus-text-muted);
+  font-size: var(--fs-button);
+  font-weight: 600;
+}
+
+.focus-btn-ghost:hover {
+  border-color: var(--focus-blue-border);
+  color: var(--focus-blue);
+}
+
+/* ─── MODIFIERS ─── */
+
+.focus-btn-full { width: 100%; }
+
+/* ─── ICONS ─── */
+
+.focus-inline-icon {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.focus-icon {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  opacity: 0.8;
+}
+
+.focus-btn-primary:hover .focus-icon,
+.focus-btn-primary:hover .focus-inline-icon,
+.focus-problem-item:hover .focus-icon,
+.focus-included-card:hover .focus-icon,
+.focus-reviews-card:hover .focus-icon {
+  opacity: 1;
+}
+
+/* ─── CTA BUTTON ─── */
+
+.focus-cta-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 560px);
+  padding: 0 clamp(20px, 4vw, 40px);
+  min-height: clamp(44px, 6vw, 56px);
+  font-size: var(--fs-body);
+  border-radius: 15px;
+}
+
+/* ─────────────────────────────
+   RESPONSIVE
+───────────────────────────── */
+
+@media (max-width: 680px) {
+  .focus-btn-primary,
+  .focus-btn-ghost { justify-content: center; }
+}
+
+@media (max-width: 480px) {
+  .focus-btn-primary {
+    max-width: 100%;
+  }
+
+  .focus-btn-ghost {
+    padding-inline: clamp(16px, 4vw, 20px);
+  }
+
+  .focus-cta-primary {
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .focus-btn-primary,
+  .focus-btn-ghost {
+    min-height: clamp(44px, 6vw, 50px);
+  }
+}

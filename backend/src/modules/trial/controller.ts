@@ -4,11 +4,12 @@
  */
 
 import { Response, NextFunction } from 'express';
-import { startTrial, getTrialStatus, generateTrialMirror } from './service.js';
+import { startTrial, generateTrialMirror, getTrialStatus } from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';
 import { getContentAttributionEventPayload } from '../events/contentAttribution.service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
+import { prisma } from '../../db/client.js'
 
 export async function startTrialHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
@@ -49,8 +50,8 @@ export async function getTrialStatusHandler(req: AuthenticatedRequest, res: Resp
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const status = await getTrialStatus(userId)
 
-    const status = await getTrialStatus(userId);
     const state = await resolveUserState(userId).catch(() => null)
     await trackEvent({
       userId,
@@ -60,9 +61,29 @@ export async function getTrialStatusHandler(req: AuthenticatedRequest, res: Resp
       payload: {
         active: status.isActive,
         daysLeft: status.daysLeft,
+        onboardingCompleted: status.onboardingCompleted,
+        dailyCycleStarted: status.dailyCycleStarted,
       },
     })
-    return res.status(200).json(status);
+    return res.status(200).json({
+      isActive: status.isActive,
+      daysUsed: status.daysUsed,
+      daysTotal: status.daysTotal,
+      onboardingCompleted: status.onboardingCompleted,
+      dailyCycleStarted: status.dailyCycleStarted,
+      userId: status.userId,
+      isPaid: status.isPaid,
+      startedAt: status.startedAt ? status.startedAt.toISOString() : null,
+      endsAt: status.endsAt ? status.endsAt.toISOString() : null,
+      daysLeft: status.daysLeft,
+      currentDay: status.currentDay,
+      totalDays: status.daysTotal,
+      onboardingDay: status.daysUsed,
+      progress: status.progress,
+      status: status.status,
+      hasDay4Mirror: status.hasDay4Mirror,
+      hasDay7Mirror: status.hasDay7Mirror,
+    });
   } catch (error: any) {
     console.error('[TrialController] getStatus error:', error);
     next(error);

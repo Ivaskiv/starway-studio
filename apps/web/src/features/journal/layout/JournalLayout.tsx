@@ -68,6 +68,11 @@ export default function JournalLayout(props: JournalLayoutProps) {
   const areTasksDone = hasTaskProgress && selectedDayState.microTasks.activeCount === 0 && selectedDayState.microTasks.missedCount === 0;
   const progress = getProgress(selectedDayState);
   const dayLabel = getDayLabel(dayLogic.selectedDate, dayLogic.todayKey, dayLogic.yesterdayKey);
+  const stepDateLabel = dayLogic.selectedDate.toLocaleDateString('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 
   const steps = [
     {
@@ -241,9 +246,12 @@ export default function JournalLayout(props: JournalLayoutProps) {
                         <Icon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38">{step.number}</span>
-                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${step.badgeClassName}`}>{step.badge}</span>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38">{step.number}</span>
+                            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${step.badgeClassName}`}>{step.badge}</span>
+                          </div>
+                          <span className="text-[11px] font-medium text-[var(--text-secondary)]">{stepDateLabel}</span>
                         </div>
                         <h3 className="mt-2 text-lg font-semibold text-[var(--text-primary)]">{step.title}</h3>
                         <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">{step.description}</p>

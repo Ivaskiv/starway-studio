@@ -6,6 +6,7 @@ import {
   getBannerGenerations,
   getDashboardStats,
   getFunnel,
+  getFounder,
   getInsights,
   getJourney,
   getLive,
@@ -19,6 +20,7 @@ const router = Router()
 router.get('/stats', authRequired, productOwnerGuard, getDashboardStats)
 router.get('/overview', authRequired, getOverview)
 router.get('/funnel', authRequired, getFunnel)
+router.get('/founder', authRequired, getFounder)
 router.get('/questions', authRequired, getQuestions)
 router.get('/retention', authRequired, getRetention)
 router.get('/insights', authRequired, getInsights)

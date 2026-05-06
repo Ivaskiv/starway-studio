@@ -124,15 +124,25 @@ export function resolveSegments(
   const isWheelRoute = pathname === '/wheel' || pathname === '/dashboard/wheel' || (pathname === DASHBOARD_ROOT && section === 'wheel')
   const isJournalRoute = pathname === '/journal' || pathname === '/dashboard/journal' || pathname === '/dashboard/calendar' || (pathname === DASHBOARD_ROOT && section === 'journal')
   const isPracticumRoute = pathname === '/practicums' || pathname === '/dashboard/courses' || pathname.startsWith('/practicums/') || pathname.startsWith('/dashboard/courses/')
-  const isReportsRoute = pathname === '/reports/weekly' || pathname === '/reports/monthly' || pathname === '/reports/all' || pathname === '/dashboard/progress' || (pathname === DASHBOARD_ROOT && section === 'reports')
+  const isReportsRoute = pathname === '/reports/weekly' || pathname === '/reports/monthly' || pathname === '/reports/all' || pathname === '/dashboard/progress' || pathname === '/dashboard/journal' || (pathname === DASHBOARD_ROOT && section === 'reports')
   const isProfileRoute = pathname === '/profile' || pathname === '/dashboard/profile' || (pathname === DASHBOARD_ROOT && section === 'profile')
   const isProductsRoute = pathname === '/products' || pathname === '/dashboard/products' || pathname.startsWith('/dashboard/products/')
-  if (isDashboardRoot) return []
+  if (isDashboardRoot) {
+    return [createSegment('Мій кабінет')]
+  }
 
   if (isWheelRoute) {
     return [
       createSegment('Мій шлях', DASHBOARD_ROOT),
       createSegment('Колесо балансу'),
+    ]
+  }
+
+  if (pathname === '/wheel/start') {
+    return [
+      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Колесо балансу', '/dashboard/wheel'),
+      createSegment('Старт'),
     ]
   }
 
@@ -189,6 +199,27 @@ export function resolveSegments(
     ]
   }
 
+  if (pathname === '/dashboard/goals') {
+    return [
+      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Цілі'),
+    ]
+  }
+
+  if (pathname === '/dashboard/vision') {
+    return [
+      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('WEB-Карта'),
+    ]
+  }
+
+  if (pathname === '/dashboard/actions') {
+    return [
+      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Дії'),
+    ]
+  }
+
   if (pathname === '/journal/zoom') {
     return [
       createSegment('Мій шлях', DASHBOARD_ROOT),
@@ -224,27 +255,48 @@ export function resolveSegments(
 
   if (pathname === '/reports/weekly') {
     return [
-      createSegment('Мої звіти', '/dashboard/progress'),
+      createSegment('Шлях', '/dashboard/journal'),
       createSegment('Тижневий'),
     ]
   }
 
   if (pathname === '/reports/monthly') {
     return [
-      createSegment('Мої звіти', '/dashboard/progress'),
+      createSegment('Шлях', '/dashboard/journal'),
       createSegment('Місячний'),
     ]
   }
 
   if (isReportsRoute) {
     return [
-      createSegment('Мої звіти', '/dashboard/progress'),
+      createSegment('Шлях', '/dashboard/journal'),
       createSegment('Загальний'),
     ]
   }
 
   if (isProfileRoute) {
     return [createSegment('Профіль')]
+  }
+
+  if (pathname === '/dashboard/settings') {
+    return [
+      createSegment('Профіль', '/dashboard/profile'),
+      createSegment('Налаштування'),
+    ]
+  }
+
+  if (pathname === '/dashboard/subscription') {
+    return [
+      createSegment('Мій кабінет', DASHBOARD_ROOT),
+      createSegment('Підписка'),
+    ]
+  }
+
+  if (pathname === '/dashboard/notifications') {
+    return [
+      createSegment('Мій кабінет', DASHBOARD_ROOT),
+      createSegment('Сповіщення'),
+    ]
   }
 
   if (isContentRoute) {

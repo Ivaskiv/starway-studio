@@ -1,35 +1,39 @@
 export type WheelSphereId =
-  | 'money'
-  | 'realization'
+  | 'finance'
+  | 'career'
   | 'relationships'
   | 'energy'
   | 'freedom'
-  | 'innerSupport'
+  | 'mind'
   | 'health'
-  | 'growth'
+  | 'selfDevelopment'
 
 export const WHEEL_SPHERES: WheelSphereId[] = [
-  'money',
-  'realization',
+  'finance',
+  'career',
   'relationships',
   'energy',
   'freedom',
-  'innerSupport',
+  'mind',
   'health',
-  'growth',
+  'selfDevelopment',
 ]
+
+export function isWheelSphereId(value: unknown): value is WheelSphereId {
+  return typeof value === 'string' && WHEEL_SPHERES.some((id) => id === value)
+}
 
 export const FIXED_SPHERES = [...WHEEL_SPHERES]
 
 export const SPHERE_LABELS: Record<WheelSphereId, string> = {
-  money: 'Гроші',
-  realization: 'Реалізація',
+  finance: 'Гроші',
+  career: 'Реалізація',
   relationships: 'Відносини',
   energy: 'Енергія/Тіло',
   freedom: 'Свобода/Час',
-  innerSupport: 'Внутрішня опора',
+  mind: 'Духовність',
   health: "Здоров'я",
-  growth: 'Розвиток',
+  selfDevelopment: 'Розвиток',
 }
 
 export interface WheelConfigItem {
@@ -40,14 +44,14 @@ export interface WheelConfigItem {
 }
 
 export const WHEEL_CONFIG: WheelConfigItem[] = [
-  { id: 'money', label: 'Гроші', emoji: '💰', description: 'Фінансова стабільність' },
-  { id: 'realization', label: 'Реалізація', emoji: '🎯', description: "Кар'єра та досягнення" },
+  { id: 'finance', label: 'Гроші', emoji: '💰', description: 'Фінансова стабільність' },
+  { id: 'career', label: 'Реалізація', emoji: '🎯', description: "Кар'єра та досягнення" },
   { id: 'relationships', label: 'Відносини', emoji: '❤️', description: "Сім'я та друзі" },
   { id: 'energy', label: 'Енергія', emoji: '⚡', description: 'Фізична форма' },
   { id: 'freedom', label: 'Свобода', emoji: '🕊️', description: 'Час для себе' },
-  { id: 'innerSupport', label: 'Внутрішня опора', emoji: '🧘', description: 'Спокій та впевненість' },
+  { id: 'mind', label: 'Духовність', emoji: '🧘', description: 'Спокій та впевненість' },
   { id: 'health', label: "Здоров'я", emoji: '🏥', description: "Фізичне здоров'я" },
-  { id: 'growth', label: 'Розвиток', emoji: '📚', description: 'Навчання та зростання' },
+  { id: 'selfDevelopment', label: 'Розвиток', emoji: '📚', description: 'Навчання та зростання' },
 ]
 
 export interface WheelScore {

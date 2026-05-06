@@ -75,6 +75,11 @@ export interface User {
   name:      string | null
   firstName: string | null
   lastName:  string | null
+
+  // ✅ ДОДАЙ ОЦЕ
+  createdAt?: string
+  updatedAt?: string
+
   telegramUserId?: string | null
   telegramUserName?: string | null
   telegramChatId?: string | null
@@ -92,7 +97,6 @@ export interface User {
 
   lastLoginAt: string | null
 
-  // Backend може повертати string — залишаємо сумісним
   subscriptionStatus?: SubscriptionStatus | string | null
   subscriptionPlan?:   PlanType | string | null
 

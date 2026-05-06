@@ -1,940 +1,522 @@
-import { CheckCircle2, ChevronDown, Lock, MessageCircle, Sparkles, Target, TrendingUp } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useReducer } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { CheckCircle2, Lock, Sparkles } from 'lucide-react'
 
 import { ROUTES } from '@/config/routes'
-import { useSendAssistantMessageMutation } from '@/features/assistant/services/assistant.api'
-import { useAccess } from '@/features/auth/hooks/useAccess'
+import { cn } from '@/lib/utils'
+import { useAppFlowStore } from '@/features/app/useAppFlowStore'
+import { useTrackFrontendEventMutation } from '@/features/analytics/services/events.api'
 import { useAuth } from '@/features/auth/hooks/useAuth'
-import { useGetVisionQuery } from '@/features/vision/services/vision.api'
-import {
-  type MonthPlan,
-  type WebMap,
-  type WebMapGoal,
-  useGenerateWebMapMutation,
-  useGetWebMapQuery,
-  useRunMonthlyAnalysisMutation,
-  useUpdateGoalProgressMutation,
-} from '@/features/web-map/services/web-map.api'
-import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
-import { WHEEL_CATEGORY_MAP, type WheelAssessment } from '@/features/wheel/types/wheel.types'
-import { Button, GlassCard, Progress, Slider, Textarea } from '@/ui'
-import { useNavigate } from 'react-router-dom'
+import { dashboardDesignSystem } from '@/styles/design-system'
+import { getProgressWidthClass } from '@/features/wheel/utils/progressBar'
+import type { MonthPlan, WebMapGoal } from '@/features/web-map/services/web-map.api'
+import { useUpdateGoalProgressMutation } from '@/features/web-map/services/web-map.api'
 
-type ActiveTab = 'goals' | 'months' | 'analysis' | 'coach'
-type SetupStep = 'wheel' | 'generating' | 'confirm'
-type ChatMessage = {
-  id: string
-  role: 'assistant' | 'user'
-  content: string
+import { CoachTab } from '../components/tabs/CoachTab'
+import { VisionSystemGraph } from '../components/VisionSystemGraph'
+import { GoalsTab } from '../components/tabs/GoalsTab'
+import { MonthsTab } from '../components/tabs/MonthsTab'
+import { useVisionPage } from '../hooks/useVisionPage'
+import type { ActiveTab } from '../types/vision.types'
+
+type VisionEvent =
+  | { type: 'FOCUS_SET'; sphere: string | null }
+  | { type: 'HOVER_SET'; sphere: string | null }
+  | { type: 'GOAL_SET'; goalId: string | null }
+  | { type: 'MONTH_PLAN_SET'; plan: MonthPlan | null }
+  | { type: 'DAY_ACTION_SET'; action: string | null }
+  | { type: 'DAY_RESULT_SET'; result: 'done' | 'not_started' | 'postponed' | 'dropped' | null }
+  | { type: 'DATA_UPDATE'; data: { weakestSphere: string | null; goalId: string | null; plan: MonthPlan | null; action: string | null } }
+
+type VisionState = {
+  activeSphere: string | null
+  hoveredSphere: string | null
+  goalId: string | null
+  monthPlan: MonthPlan | null
+  dayAction: string | null
+  dayResult: 'done' | 'not_started' | 'postponed' | 'dropped' | null
+  skipHistory: Array<'not_started' | 'postponed' | 'dropped'>
 }
 
-type WheelScoreEntry = [string, number]
-
-type MutationErrorPayload = {
-  error?: string
-}
-
-const MONTH_NAMES = [
-  'Січень',
-  'Лютий',
-  'Березень',
-  'Квітень',
-  'Травень',
-  'Червень',
-  'Липень',
-  'Серпень',
-  'Вересень',
-  'Жовтень',
-  'Листопад',
-  'Грудень',
+const TAB_LABELS: Array<{ id: ActiveTab; label: string }> = [
+  { id: 'goals', label: 'Цілі' },
+  { id: 'months', label: 'Місяці' },
+  { id: 'analysis', label: 'Аналіз' },
+  { id: 'coach', label: 'Коуч' },
 ]
-
-const QUICK_PROMPTS = [
-  'Що я маю зробити сьогодні?',
-  'Аналіз мого прогресу',
-  'Переглянути план наступного місяця',
-  'Де я зараз буксую?',
-]
-
-function formatMonthLabel(month: number) {
-  return MONTH_NAMES[month - 1] ?? `Місяць ${month}`
+const USER_IDENTITY_KEY = 'starway_user_identity_v1'
+const USER_IDENTITY_LOCK_KEY = 'starway_user_identity_locked_v1'
+const IMPACT_MAP: Record<string, string[]> = {
+  finance: ['freedom', 'mind'],
+  career: ['finance', 'selfDevelopment'],
+  relationships: ['energy', 'mind'],
+  energy: ['career', 'selfDevelopment'],
+  freedom: ['energy', 'relationships'],
+  mind: ['freedom', 'career'],
+  health: ['energy', 'freedom'],
+  selfDevelopment: ['career', 'finance'],
+}
+const initialState: VisionState = {
+  activeSphere: null,
+  hoveredSphere: null,
+  goalId: null,
+  monthPlan: null,
+  dayAction: null,
+  dayResult: null,
+  skipHistory: [],
 }
 
-function wait(ms: number) {
-  return new Promise(resolve => {
-    window.setTimeout(resolve, ms)
-  })
-}
+const visionTokens = dashboardDesignSystem.vision
 
-function getWheelScoresHash(scores: Record<string, number>) {
-  return Object.entries(scores)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}:${value}`)
-    .join('|')
-}
-
-function getMutationErrorMessage(error: unknown): string | null {
-  if (!error || typeof error !== 'object' || !('data' in error)) {
-    return null
-  }
-
-  const payload = (error as { data?: unknown }).data
-  if (!payload || typeof payload !== 'object') {
-    return null
-  }
-
-  return typeof (payload as MutationErrorPayload).error === 'string'
-    ? (payload as MutationErrorPayload).error ?? null
-    : null
-}
-
-function extractAssistantText(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') {
-    return 'Я підготував коротку відповідь по твоїй карті. Спробуй ще раз, якщо хочеш глибший розбір.'
-  }
-
-  const candidate = payload as Record<string, unknown>
-  return typeof candidate.message === 'string'
-    ? candidate.message
-    : 'Я підготував коротку відповідь по твоїй карті. Спробуй ще раз, якщо хочеш глибший розбір.'
-}
-
-function getGoalStatusTone(status: WebMapGoal['status']) {
-  switch (status) {
-    case 'on_track':
-      return {
-        badge: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-        bar: 'from-emerald-500 to-emerald-400',
-        label: 'На треку',
-      }
-    case 'behind':
-      return {
-        badge: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
-        bar: 'from-rose-500 to-rose-400',
-        label: 'Відстає',
-      }
-    case 'completed':
-      return {
-        badge: 'border-white/15 bg-white/5 text-white/65',
-        bar: 'from-white/40 to-white/25',
-        label: 'Завершено',
-      }
-    default:
-      return {
-        badge: 'border-[color:rgba(var(--accent-rgb),0.28)] bg-[color:rgba(var(--accent-rgb),0.12)] text-[var(--accent)]',
-        bar: 'from-[var(--accent-soft)] to-[var(--accent)]',
-        label: 'В процесі',
-      }
+function visionReducer(state: VisionState, event: VisionEvent): VisionState {
+  switch (event.type) {
+    case 'FOCUS_SET': return { ...state, activeSphere: event.sphere }
+    case 'HOVER_SET': return { ...state, hoveredSphere: event.sphere }
+    case 'GOAL_SET': return { ...state, goalId: event.goalId }
+    case 'MONTH_PLAN_SET': return { ...state, monthPlan: event.plan }
+    case 'DAY_ACTION_SET': return { ...state, dayAction: event.action }
+    case 'DAY_RESULT_SET':
+      return event.result && event.result !== 'done'
+        ? { ...state, dayResult: event.result, skipHistory: [...state.skipHistory.slice(-6), event.result] }
+        : { ...state, dayResult: event.result }
+    case 'DATA_UPDATE':
+      return { ...state, activeSphere: state.activeSphere ?? event.data.weakestSphere, goalId: state.goalId ?? event.data.goalId, monthPlan: state.monthPlan ?? event.data.plan, dayAction: state.dayAction ?? event.data.action }
+    default: return state
   }
 }
 
-function getMonthStatusTone(status: MonthPlan['status'], isCurrent: boolean) {
-  if (isCurrent) {
-    return 'border-[color:rgba(var(--accent-rgb),0.45)] bg-[rgba(11,19,43,0.92)]'
-  }
-
-  if (status === 'done') {
-    return 'border-emerald-500/30 bg-emerald-500/5'
-  }
-
-  if (status === 'skipped') {
-    return 'border-rose-500/30 bg-rose-500/5'
-  }
-
-  return 'border-white/10 bg-[rgba(10,16,31,0.82)]'
+function mapSphereToGoal(sphere: string | null, goals: WebMapGoal[]) {
+  if (!sphere) return goals[0] ?? null
+  return goals.find((goal) => goal.sphere === sphere) ?? goals[0] ?? null
 }
 
-function buildWheelScoreMap(wheel: WheelAssessment | null): Record<string, number> {
-  if (!wheel) {
-    return {}
-  }
-
-  return wheel.scores.reduce<Record<string, number>>((acc, score) => {
-    acc[score.categoryId] = score.score
-    return acc
-  }, {})
+function buildMonthPlan(goal: WebMapGoal | null, plans: MonthPlan[]) {
+  if (!goal) return plans[0] ?? null
+  return plans.find((plan) => plan.goalIds.includes(goal.id)) ?? plans[0] ?? null
 }
 
-function getCurrentMonthPlan(map: WebMap | null): MonthPlan | null {
-  if (!map) return null
-  const now = new Date()
-  const month = now.getMonth() + 1
-  const year = now.getFullYear()
-  return map.months.find(item => item.month === month && item.year === year) ?? null
+function pickTodayAction(plan: MonthPlan | null, goal: WebMapGoal | null) {
+  if (plan?.actions.length) return plan.actions[new Date().getDate() % plan.actions.length] ?? plan.actions[0] ?? null
+  return goal?.actions[0] ?? null
 }
 
-function getAnalysisStreak(months: MonthPlan[]) {
-  const sorted = [...months].sort((left, right) => (right.year - left.year) || (right.month - left.month))
-  let streak = 0
-  for (const month of sorted) {
-    if (!month.aiAnalysis) break
-    streak += 1
-  }
-  return streak
-}
-
-function getGoalMonthFocus(goalId: string, month: MonthPlan | null) {
-  if (!month) return 'Фокус з’явиться після формування поточного місяця.'
-  if (month.goalIds.includes(goalId)) {
-    return month.focus ?? 'Ціль уже в роботі цього місяця.'
-  }
-  return month.focus ?? 'Фокус ще не призначено.'
-}
+const Card = memo(function Card({ title, description, tone = 'default' }: { title: string; description: string; tone?: 'default' | 'critical' | 'success' }) {
+  return (
+    <div className={['rounded-3xl border p-4', tone === 'critical' ? 'border-rose-500/20 bg-rose-500/10' : tone === 'success' ? 'border-emerald-500/20 bg-emerald-500/10' : visionTokens.defaultCard].join(' ')}>
+      <p className="text-xs uppercase tracking-[0.22em] text-white/45">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-white/78">{description}</p>
+    </div>
+  )
+})
 
 export default function VisionPage() {
-  const navigate = useNavigate()
   const { user } = useAuth()
-  const { can } = useAccess()
-  const locked = !can('mentor.vision')
-  const coachRef = useRef<HTMLDivElement | null>(null)
+  const vm = useVisionPage()
+  const navigate = useNavigate()
+  const completeVision = useAppFlowStore((s) => s.completeVision)
+  const [state, dispatch] = useReducer(visionReducer, initialState)
+  const [updateGoalProgress, updateGoalProgressState] = useUpdateGoalProgressMutation()
+  const [trackFrontendEvent] = useTrackFrontendEventMutation()
+  const storedIdentity = typeof window !== 'undefined'
+    ? window.localStorage.getItem(USER_IDENTITY_KEY)?.trim() ?? ''
+    : ''
+  const identityLocked = typeof window !== 'undefined'
+    ? window.localStorage.getItem(USER_IDENTITY_LOCK_KEY) === 'true'
+    : false
 
-  const { data: vision } = useGetVisionQuery(undefined, { skip: locked })
-  const { data: webMap, isLoading: isWebMapLoading, refetch } = useGetWebMapQuery(undefined, { skip: locked })
-  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(user?.id ?? '', { skip: !user?.id || locked })
-
-  const [generateWebMap, { isLoading: isGeneratingMap }] = useGenerateWebMapMutation()
-  const [updateGoalProgress, { isLoading: isUpdatingGoal }] = useUpdateGoalProgressMutation()
-  const [runMonthlyAnalysis, { isLoading: isRunningAnalysis }] = useRunMonthlyAnalysisMutation()
-  const [sendAssistantMessage, { isLoading: isCoachLoading }] = useSendAssistantMessageMutation()
-
-  const [activeTab, setActiveTab] = useState<ActiveTab>('goals')
-  const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null)
-  const [setupStep, setSetupStep] = useState<SetupStep>('wheel')
-  const [generatedPreview, setGeneratedPreview] = useState<WebMap | null>(null)
-  const [generationError, setGenerationError] = useState<string | null>(null)
-  const [chatInput, setChatInput] = useState('')
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [goalDrafts, setGoalDrafts] = useState<Record<string, number>>({})
-
-  const currentMonthPlan = useMemo(() => getCurrentMonthPlan(webMap ?? null), [webMap])
-  const wheelScores = useMemo(() => buildWheelScoreMap(latestWheel ?? null), [latestWheel])
-  const wheelScoresHash = useMemo(() => getWheelScoresHash(wheelScores), [wheelScores])
-  const wheelScoreEntries = useMemo<WheelScoreEntry[]>(
-    () =>
-      Object.entries(wheelScores)
-        .sort((left, right) => left[1] - right[1])
-        .slice(0, 8),
-    [wheelScores],
+  const wheelScores = useMemo(() => vm.latestWheel?.scores ?? [], [vm.latestWheel])
+  const weakestSphere = useMemo(() => [...wheelScores].sort((a, b) => a.score - b.score)[0]?.categoryId ?? null, [wheelScores])
+  const systemScore = useMemo(() => {
+    if (!wheelScores.length) return 0
+    const values = wheelScores.map((item) => item.score)
+    return 10 - (Math.max(...values) - Math.min(...values))
+  }, [wheelScores])
+  const goal = useMemo(() => mapSphereToGoal(state.activeSphere ?? weakestSphere, vm.goals.goals), [state.activeSphere, vm.goals.goals, weakestSphere])
+  const monthPlan = useMemo(() => buildMonthPlan(goal, vm.months.months), [goal, vm.months.months])
+  const todayAction = useMemo(() => pickTodayAction(monthPlan, goal), [goal, monthPlan])
+  const impactChain = useMemo(() => IMPACT_MAP[state.activeSphere ?? weakestSphere ?? ''] ?? [], [state.activeSphere, weakestSphere])
+  const shouldShowUpgradeCta = Boolean(vm.trialActive && !vm.subscriptionActive && (vm.trial?.daysLeft ?? 0) <= 1)
+  const orderedGoals = useMemo(
+    () => [...vm.goals.goals].sort((a, b) => a.order - b.order),
+    [vm.goals.goals]
   )
-  const weakSphereKeys = useMemo<Set<string>>(
-    () => new Set(wheelScoreEntries.slice(0, 3).map(([sphere]) => sphere)),
-    [wheelScoreEntries],
-  )
-
-  const mainGoal = useMemo(
-    () => webMap?.goals.find(goal => goal.id === webMap.mainGoalId) ?? webMap?.goals.find(goal => goal.isMain) ?? null,
-    [webMap],
-  )
-
+  const currentStepIndex = useMemo(() => {
+    const nextIndex = orderedGoals.findIndex((item) => item.progress < 100)
+    return nextIndex >= 0 ? nextIndex : Math.max(orderedGoals.length - 1, 0)
+  }, [orderedGoals])
   const completedGoals = useMemo(
-    () => webMap?.goals.filter((goal: WebMapGoal) => goal.status === 'completed').length ?? 0,
-    [webMap],
+    () => orderedGoals.filter((item) => item.progress >= 100).length,
+    [orderedGoals]
   )
+  const completionPercent = orderedGoals.length
+    ? Math.round((completedGoals / orderedGoals.length) * 100)
+    : 0
+  const completionWidthClass = getProgressWidthClass(completionPercent)
+  const currentIdentity = identityLocked && storedIdentity ? storedIdentity : vm.header.identity?.trim() ?? storedIdentity
+  const { userBehavior } = vm.progress
+  const system = vm.webMap?.system ?? null
+  const handleCompleteGoal = async (goalItem: WebMapGoal) => {
+    if (goalItem.progress >= 100 || updateGoalProgressState.isLoading) return
 
-  const monthCompletion = useMemo(() => {
-    if (!currentMonthPlan || currentMonthPlan.actions.length === 0) {
-      return 0
-    }
-
-    return Math.round((currentMonthPlan.doneActions.length / currentMonthPlan.actions.length) * 100)
-  }, [currentMonthPlan])
-
-  const analysisStreak = useMemo(() => getAnalysisStreak(webMap?.months ?? []), [webMap])
-  const archivedAnalyses = useMemo<MonthPlan[]>(
-    () => (webMap?.months ?? []).filter((month: MonthPlan) => Boolean(month.aiAnalysis)).sort((left: MonthPlan, right: MonthPlan) => (right.year - left.year) || (right.month - left.month)),
-    [webMap],
-  )
-
-  useEffect(() => {
-    if (!webMap?.identityStatement) return
-    setChatMessages((current: ChatMessage[]) =>
-      current.length > 0
-        ? current
-        : [
-            {
-              id: 'intro',
-              role: 'assistant',
-              content: `Ти в кінці ${webMap.year}: ${webMap.identityStatement}`,
-            },
-          ],
-    )
-  }, [webMap])
-
-  useEffect(() => {
-    if (!webMap) return
-    setGoalDrafts(
-      webMap.goals.reduce<Record<string, number>>((acc: Record<string, number>, goal: WebMapGoal) => {
-        acc[goal.id] = goal.progress
-        return acc
-      }, {}),
-    )
-  }, [webMap])
-
-  async function handleGenerateMap() {
-    if (Object.keys(wheelScores).length === 0) return
-    if (!user?.id) return
-
-    const generationKey = `web-map:generation:${user.id}`
-    const lastGeneratedHash = window.sessionStorage.getItem(generationKey)
-    if (lastGeneratedHash === wheelScoresHash && !generatedPreview) {
-      return
-    }
-
-    setGenerationError(null)
-    setSetupStep('generating')
     try {
-      const map = await generateWebMap({ wheelScores }).unwrap()
-      window.sessionStorage.setItem(generationKey, wheelScoresHash)
-      setGeneratedPreview(map)
-      setSetupStep('confirm')
-    } catch (error) {
-      const message = getMutationErrorMessage(error)
-      if (message === 'WEB_MAP_EXISTS') {
-        await refetch()
-        setSetupStep('wheel')
-        return
+      await updateGoalProgress({
+        id: goalItem.id,
+        progress: 100,
+        status: 'completed',
+      }).unwrap()
+      if (completedGoals === 0) {
+        void trackFrontendEvent({
+          userId: user?.id ?? null,
+          type: 'founder_web_map_first_step_completed',
+          source: 'web',
+          state: 'vision',
+        })
       }
-      setGenerationError(message ?? 'Карту не вдалося створити. Спробуй ще раз за мить.')
-      setSetupStep('wheel')
-    }
-  }
-
-  async function handleConfirmGeneratedMap() {
-    await refetch()
-    setGeneratedPreview(null)
-    setSetupStep('wheel')
-  }
-
-  async function handleGoalProgressSave(goalId: string, nextProgress: number, currentStatus: WebMapGoal['status']) {
-    const nextStatus: WebMapGoal['status'] =
-      nextProgress >= 100 ? 'completed' : currentStatus === 'behind' ? 'behind' : currentStatus === 'on_track' ? 'on_track' : 'active'
-
-    await updateGoalProgress({
-      id: goalId,
-      progress: nextProgress,
-      status: nextStatus,
-    }).unwrap()
-  }
-
-  async function handleCoachPrompt(message: string) {
-    const trimmed = message.trim()
-    if (!trimmed) return
-
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: trimmed,
-    }
-
-    setChatMessages((current: ChatMessage[]) => [...current, userMessage])
-    setChatInput('')
-
-    await wait(600)
-
-    try {
-      const response = await sendAssistantMessage({ message: trimmed }).unwrap()
-      setChatMessages((current: ChatMessage[]) => [
-        ...current,
-        {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          content: extractAssistantText(response),
-        },
-      ])
     } catch {
-      setChatMessages((current: ChatMessage[]) => [
-        ...current,
-        {
-          id: `assistant-error-${Date.now()}`,
-          role: 'assistant',
-          content: 'Зараз відповідь AI-коуча недоступна. Спробуй ще раз за мить.',
-        },
-      ])
+      // keep page stable; mutation errors already handled elsewhere if needed
     }
   }
 
-  if (locked) {
+  useEffect(() => {
+    dispatch({ type: 'DATA_UPDATE', data: { weakestSphere, goalId: goal?.id ?? null, plan: monthPlan, action: todayAction } })
+  }, [goal?.id, monthPlan, todayAction, weakestSphere])
+
+  useEffect(() => {
+    if (!vm.webMap || vm.isDraft || vm.locked) return
+    void trackFrontendEvent({
+      userId: user?.id ?? null,
+      type: 'founder_web_map_opened',
+      source: 'web',
+      state: 'vision',
+    })
+  }, [trackFrontendEvent, user?.id, vm.isDraft, vm.locked, vm.webMap])
+
+  if (vm.locked) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Точка Б</h1>
-          <p className="mt-2 text-white/60">Тут живе твоя річна карта: цілі, фокус по місяцях і AI-аналіз руху.</p>
-        </div>
-
-        <GlassCard className="border-white/10 p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.18em] text-white/50">
-                <Lock className="h-3.5 w-3.5" />
-                Premium модуль
-              </div>
-              <h2 className="text-2xl font-semibold text-white">WEB-Карта 2026</h2>
-              <p className="max-w-2xl text-sm leading-6 text-white/65">
-                Після колеса балансу ти бачиш головну ціль року, план по місяцях, архів AI-аналізів і живий AI-коуч у одному місці.
-              </p>
-            </div>
-            <Target className="h-5 w-5 text-white/45" />
-          </div>
-
-          <div className="mt-6">
-            <Button onClick={() => navigate(`${ROUTES.SUBSCRIPTION}?from=${encodeURIComponent(ROUTES.VISION)}`)}>
-              Відкрити доступ
-            </Button>
-          </div>
-        </GlassCard>
+      <div className={visionTokens.section}>
+        <p className={visionTokens.overline}>Доступ потрібен</p>
+        <h1 className={visionTokens.titleLg}>WEB-Карта доступна після підключення доступу</h1>
+        <p className={visionTokens.body}>
+          Тут відкривається наступний крок після цілей: місячний фокус, щоденна дія і системний ритм.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate(ROUTES.SUBSCRIPTION)}
+          className="hero-cta-primary mt-6 rounded-2xl px-5 py-3 text-sm font-medium"
+        >
+          Переглянути плани доступу
+        </button>
       </div>
+    )
+  }
+  if (vm.loading) return <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-white">Завантаження...</div>
+  if (!vm.webMap || vm.isDraft) {
+    return (
+      <vm.Setup
+        onComplete={() => {
+          completeVision()
+        }}
+      />
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--accent)]/80">Точка Б</div>
-        <h1 className="text-3xl font-bold text-white md:text-[2.4rem]">WEB-Карта 2026</h1>
-        <p className="max-w-3xl text-sm leading-6 text-white/60">
-          Тут живе річна стратегія: головна ціль, 5 опорних цілей, місячний фокус і чесний AI-аналіз того, де ти реально рухаєшся, а де пробуксовуєш.
-        </p>
+    <div className={visionTokens.shell}>
+      {shouldShowUpgradeCta ? (
+        <section className={visionTokens.trialBanner}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className={visionTokens.microLabel}>Trial добігає кінця</p>
+              <p className={visionTokens.body}>Залишився {vm.trial?.daysLeft ?? 0} день. Щоб не втратити доступ до WEB-Карти та наступних кроків, продовжи доступ зараз.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.SUBSCRIPTION)}
+              className={visionTokens.ctaSoft}
+            >
+              Переглянути плани доступу
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      <section className={visionTokens.section}>
+        <p className={visionTokens.overline}>Твоя карта розвитку</p>
+        <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <h1 className={visionTokens.titleLg}>Побудована на основі твого стану та цілей</h1>
+            <p className={visionTokens.body}>
+              Твоя система нестабільна через сферу «{goal?.title ?? weakestSphere ?? 'сфера'}». Почни звідси.
+            </p>
+          </div>
+
+          <div className={visionTokens.pillLg}>
+            <div className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-white/40" />
+              <span>Редагування завершено</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="flex items-center justify-between text-sm text-white/70">
+            <span>Прогрес карти</span>
+            <span>{completedGoals}/{orderedGoals.length || 0} · Імпульс {userBehavior.momentumLevel}%</span>
+          </div>
+          <div className={visionTokens.progressTrack}>
+            <div className={[visionTokens.progressFill, completionWidthClass].join(' ')} />
+          </div>
+          {userBehavior.riskLevel !== 'low' ? (
+            <p className="mt-3 text-xs text-white/60">
+              {userBehavior.riskLevel === 'high'
+                ? 'Прогрес починає руйнуватись. Повернись до одного наступного кроку сьогодні.'
+                : 'Ти близько до втрати ритму. Один крок зараз збереже темп.'}
+            </p>
+          ) : userBehavior.momentumLevel >= 70 ? (
+            <p className="mt-3 text-xs text-emerald-300/80">
+              Ти в потоці. Саме зараз найкраще рухатись далі.
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      <section className={visionTokens.section}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className={visionTokens.overlineSoft}>Шлях змін</p>
+            <h2 className={visionTokens.titleMd}>Від слабкої точки до стабільної системи</h2>
+          </div>
+          <div className={visionTokens.pill}>
+            {completionPercent}% виконано
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-4 xl:flex-row xl:items-stretch">
+          {orderedGoals.map((goalItem, index) => {
+            const isCurrent = index === currentStepIndex
+            const isDone = goalItem.progress >= 100
+            const isFuture = index > currentStepIndex && !isDone
+            const tag = index === 0 ? 'today' : index === 1 ? 'week' : 'month'
+
+            return (
+              <div key={goalItem.id} className="flex min-w-0 flex-1 items-stretch gap-4">
+                <article
+                  className={[
+                    'relative flex flex-1 flex-col rounded-2xl border p-4 transition-all duration-200',
+                    isCurrent
+                      ? visionTokens.currentCard
+                      : isDone
+                        ? visionTokens.doneCard
+                        : visionTokens.defaultCard,
+                    isFuture ? 'opacity-70' : '',
+                  ].join(' ')}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/45">
+                        {tag === 'today' ? 'Сьогодні' : tag === 'week' ? 'Цього тижня' : 'До місяця'}
+                      </p>
+                      <h3 className={visionTokens.titleSm}>
+                        {goalItem.title}
+                      </h3>
+                    </div>
+                    {isDone ? (
+                      <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-300" />
+                    ) : (
+                      <div className="rounded-full border border-white/10 px-2 py-1 text-xs text-white/55">
+                        {isCurrent ? 'Активна' : 'Далі'}
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="mt-3 flex-1 text-sm leading-6 text-white/70">
+                    {goalItem.description || 'Крок у карті розвитку, зібраний з колеса, цілей і місячного фокусу.'}
+                  </p>
+
+                  {isDone ? (
+                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-emerald-300/80">
+                      Система стала стабільнішою
+                    </p>
+                  ) : isCurrent ? (
+                    <p className={cn('mt-3 text-xs uppercase tracking-[0.18em]', visionTokens.microLabel)}>
+                      Це активний крок прямо зараз
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    disabled={!isCurrent || isDone || updateGoalProgressState.isLoading}
+                    onClick={() => handleCompleteGoal(goalItem)}
+                    className={[
+                      'mt-4 rounded-2xl px-4 py-3 text-sm font-medium transition-colors',
+                      isCurrent && !isDone
+                        ? 'hero-cta-primary'
+                        : 'border border-white/10 bg-white/[0.04] text-white/55',
+                    ].join(' ')}
+                  >
+                    {isDone
+                      ? 'Виконано'
+                      : currentIdentity && isCurrent
+                        ? `Це робить тебе ${currentIdentity}`
+                        : 'Виконати'}
+                  </button>
+                </article>
+
+                {index < orderedGoals.length - 1 ? (
+                  <div className="hidden xl:flex xl:w-10 xl:items-center xl:justify-center">
+                    <div className="h-px w-full bg-white/10" />
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <div className={visionTokens.section}>
+          <div className="space-y-4">
+            <div>
+              <p className={visionTokens.overlineSoft}>WEB graph</p>
+              <h2 className={visionTokens.titleMd}>Центр системи та гілки переходу</h2>
+            </div>
+            <VisionSystemGraph system={system} goals={orderedGoals} />
+          </div>
+        </div>
+        <div className="space-y-4">
+          <Card title="Система" description={`${systemScore.toFixed(1)}/10 · найслабша зона ${weakestSphere ?? 'ще не визначена'}`} />
+          <Card title="Impact chain" description={impactChain.length ? impactChain.join(' → ') : 'Сфокусуйся на сфері, щоб побачити наслідки.'} tone="critical" />
+          <Card title="Фокус" description={goal?.title ?? system?.orchestrator.recommendedFocus ?? 'Натисни на сектор колеса й обери 1 сферу фокусу.'} tone="success" />
+          <Card title="Обмеження" description={system?.orchestrator.primaryConstraint ?? 'Після генерації тут зʼявиться головне вузьке місце системи.'} tone="critical" />
+          <Card title="Daily cycle" description={system?.dailyCycle.prompt ?? 'Після генерації система підкаже, який вузол відстежувати в daily cycle.'} />
+          <Card title="Seed example" description={`Health ${system?.seed.scoreFrom ?? 4}→${system?.seed.scoreTo ?? 7} · ${system?.seed.timeframeMonths ?? 3}м · ${system?.seed.solutions.join(', ') ?? ''}`} />
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className={cn('space-y-4', visionTokens.section)}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className={visionTokens.overlineSoft}>Growth loop</p>
+              <h2 className={visionTokens.titleMd}>{goal?.title ?? 'Обери фокус'}</h2>
+            </div>
+            <button type="button" onClick={() => dispatch({ type: 'GOAL_SET', goalId: goal?.id ?? null })} className={visionTokens.chipActive}>
+              Обрати фокус
+            </button>
+          </div>
+
+          <Card title="Місячний план" description={monthPlan?.focus ?? 'План ще не визначений. Система візьме першу дію з активної цілі.'} />
+
+          <div className={visionTokens.sectionSoft}>
+            <p className="text-xs uppercase tracking-[0.22em] text-white/45">Ранок</p>
+            <p className="mt-2 text-base font-medium text-white">{state.dayAction ?? 'Одна дія на день ще не визначена'}</p>
+            <button type="button" onClick={() => dispatch({ type: 'DAY_ACTION_SET', action: todayAction })} className="hero-cta-primary mt-4 h-11 w-full rounded-2xl">
+              Почати
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card title="День" description={state.dayResult ? 'Результат вже зафіксований. Система бачить твій патерн.' : 'Якщо дія зависає до вечора, система маркує це як ризик зриву.'} tone={state.dayResult ? 'default' : 'critical'} />
+            <div className={visionTokens.sectionSoft}>
+              <p className="text-xs uppercase tracking-[0.22em] text-white/45">Вечір</p>
+              <p className="mt-2 text-sm text-white/72">Ти зробила дію?</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <button type="button" onClick={() => dispatch({ type: 'DAY_RESULT_SET', result: 'done' })} className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-white">Зроблено</button>
+                <button type="button" onClick={() => dispatch({ type: 'DAY_RESULT_SET', result: 'not_started' })} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white">Не почала</button>
+                <button type="button" onClick={() => dispatch({ type: 'DAY_RESULT_SET', result: 'postponed' })} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white">Відклала</button>
+                <button type="button" onClick={() => dispatch({ type: 'DAY_RESULT_SET', result: 'dropped' })} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white">Кинула</button>
+              </div>
+            </div>
+          </div>
+
+          {state.skipHistory.length >= 3 ? (
+            <Card title="Патерн" description="Ти відкладаєш системно. Це зупиняє систему раніше, ніж вона доходить до результату." tone="critical" />
+          ) : null}
+        </div>
+
+        <div className="space-y-4">
+          <Card title="Сьогодні" description={todayAction ?? 'Одна дія зʼявиться після вибору фокусу.'} tone="success" />
+          <Card title="Ланцюг впливу" description={impactChain.length ? `Це б'є по: ${impactChain.join(', ')}` : 'Після вибору фокусу тут зʼявиться ланцюг наслідків.'} />
+        </div>
+      </section>
+
+      <section className={visionTokens.section}>
+        <p className={visionTokens.overline}>WEB-Карта</p>
+        <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-3xl font-semibold text-white">WEB-Карта {vm.header.year ?? new Date().getFullYear()}</h2>
+            <p className="mt-2 max-w-3xl text-sm text-white/70">{vm.header.identity ?? 'Сформуй систему цілей, місячних фокусів і точок контролю.'}</p>
+            <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/40">
+              Редагування після першого збереження закрите
+            </p>
+            {currentIdentity ? (
+              <p className="mt-3 text-sm text-white/64">
+                Система веде тебе як {currentIdentity}.
+              </p>
+            ) : null}
+          </div>
+          <div className={visionTokens.pillLg}>
+            <div>Головна ціль</div>
+            <div className="mt-1 font-medium text-white">{vm.header.mainGoal?.title ?? 'Ще не визначена'}</div>
+          </div>
+        </div>
+      </section>
+
+      <section className={visionTokens.section}>
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className={visionTokens.overline}>AI Рекомендації</p>
+            <h2 className={visionTokens.titleMd}>Закритий шар адаптації</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.SUBSCRIPTION)}
+            className="hero-cta-primary"
+          >
+            Відкрити повністю
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          {[
+            'Оптимальний порядок дій',
+            'Ризики якщо ігнорувати',
+            'Прогноз через 14 днів',
+          ].map((item) => (
+            <div key={item} className={visionTokens.aiCard}>
+              <div className={visionTokens.aiOverlayTop} />
+              <div className={visionTokens.aiOverlayBase} />
+              <div className="relative">
+                <div className="flex items-center gap-2 text-white/60">
+                  <Sparkles className="h-4 w-4" />
+                  <span className="text-sm">{item}</span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-white/42">
+                  Доступно після відкриття повного доступу та AI-підказок для карти.
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="flex flex-wrap gap-2">
+        {TAB_LABELS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => vm.setTab(tab.id)}
+            className={[visionTokens.tabButtonBase, vm.activeTab === tab.id ? visionTokens.tabButtonActive : visionTokens.tabButtonIdle].join(' ')}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {isWebMapLoading ? (
-        <GlassCard className="border-white/10 p-6">
-          <div className="animate-pulse space-y-4">
-            <div className="h-6 w-44 rounded-full bg-white/10" />
-            <div className="grid gap-3 md:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-24 rounded-2xl border border-white/10 bg-white/5" />
-              ))}
-            </div>
-          </div>
-        </GlassCard>
-      ) : !webMap || webMap.status === 'draft' ? (
-        <GlassCard className="border-[color:rgba(var(--accent-rgb),0.22)] bg-[rgba(10,16,31,0.92)] p-6">
-          <div className="mx-auto max-w-5xl space-y-6">
-            <div className="space-y-3 text-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[color:rgba(var(--accent-rgb),0.22)] bg-[color:rgba(var(--accent-rgb),0.08)] px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--accent)]">
-                <Sparkles className="h-3.5 w-3.5" />
-                Стратегічний шар
-              </div>
-              <h2 className="text-3xl font-semibold text-white">WEB-Карта 2026 у Точка Б</h2>
-              <p className="mx-auto max-w-2xl text-sm leading-6 text-white/60">
-                Після колеса балансу AI збирає головну ціль року, 5 вимірювальних цілей і фокус перших місяців. Усе це потім підтягується в щоденний цикл і AI-аналіз.
-              </p>
-            </div>
-
-            <div className="grid gap-3 rounded-[24px] border border-white/10 bg-[rgba(7,12,24,0.82)] p-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-[color:rgba(var(--accent-rgb),0.24)] bg-[color:rgba(var(--accent-rgb),0.08)] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--accent)]/80">Крок 1</div>
-                <div className="mt-2 text-base font-semibold text-white">Колесо балансу</div>
-                <p className="mt-1 text-sm leading-5 text-white/55">Перший вхід і далі 1-го числа кожного місяця.</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Крок 2</div>
-                <div className="mt-2 text-base font-semibold text-white">Точка Б · WEB-Карта</div>
-                <p className="mt-1 text-sm leading-5 text-white/55">Обовʼязково після першого колеса: identity, 5 цілей і фокус місяців.</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Крок 3</div>
-                <div className="mt-2 text-base font-semibold text-white">Щоденний цикл</div>
-                <p className="mt-1 text-sm leading-5 text-white/55">Ранок → мікрозавдання → вечір → аналіз, уже в контексті карти року.</p>
-              </div>
-            </div>
-
-            {generationError ? (
-              <div className="rounded-[24px] border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm leading-6 text-rose-100">
-                {generationError}
-              </div>
-            ) : null}
-
-            <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-              <div className="rounded-[28px] border border-white/10 bg-[rgba(7,12,24,0.88)] p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-white/40">Крок 1</div>
-                    <h3 className="mt-2 text-xl font-semibold text-white">Результати колеса</h3>
-                  </div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/55">
-                    {Object.keys(wheelScores).length > 0 ? 'Колесо знайдено' : 'Очікуємо колесо'}
-                  </div>
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  {wheelScoreEntries.length > 0 ? (
-                    wheelScoreEntries.map(([sphere, score]: WheelScoreEntry) => {
-                      const isWeak = weakSphereKeys.has(sphere)
-                      return (
-                        <div
-                          key={sphere}
-                          className={[
-                            'rounded-2xl border p-3',
-                            isWeak
-                              ? 'border-[color:rgba(var(--accent-rgb),0.24)] bg-[color:rgba(var(--accent-rgb),0.08)]'
-                              : 'border-white/10 bg-white/[0.03]',
-                          ].join(' ')}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-medium text-white">
-                                {WHEEL_CATEGORY_MAP.get(sphere)?.nameUk ?? sphere}
-                              </div>
-                              <div className="text-xs text-white/45">
-                                {isWeak ? 'Найслабша сфера, яку варто підсилити в карті року' : 'Сфера теж враховується в побудові карти року'}
-                              </div>
-                            </div>
-                            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-semibold text-white">
-                              {score}/10
-                            </div>
-                          </div>
-                          <Progress value={score * 10} size="sm" className="mt-3" />
-                        </div>
-                      )
-                    })
-                  ) : (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-white/55">
-                      Спочатку заповни колесо балансу. Після цього AI зможе сформувати карту року на базі слабких сфер.
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Button onClick={handleGenerateMap} loading={isGeneratingMap || setupStep === 'generating'} disabled={Object.keys(wheelScores).length === 0}>
-                    Сформувати карту з AI
-                  </Button>
-                  <Button variant="outline" color="white" onClick={() => navigate(ROUTES.WHEEL)}>
-                    Перейти до колеса
-                  </Button>
-                </div>
-              </div>
-
-              <div className="rounded-[28px] border border-white/10 bg-[rgba(7,12,24,0.88)] p-5">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/40">
-                  Крок {setupStep === 'confirm' ? '3' : setupStep === 'generating' ? '2' : '2'}
-                </div>
-                <h3 className="mt-2 text-xl font-semibold text-white">
-                  {setupStep === 'confirm' ? 'Підтвердження карти' : setupStep === 'generating' ? 'AI формує карту' : 'Що зʼявиться після генерації'}
-                </h3>
-
-                {setupStep === 'generating' ? (
-                  <div className="mt-5 space-y-4">
-                    <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-[var(--accent)]" />
-                    <p className="text-sm leading-6 text-white/60">
-                      AI формує identity, 5 вимірювальних цілей і перші місяці фокусу. Це не fullscreen blocking overlay, а вбудований крок прямо в Точка Б.
-                    </p>
-                  </div>
-                ) : setupStep === 'confirm' && generatedPreview ? (
-                  <div className="mt-5 space-y-4">
-                    <div className="rounded-2xl border border-[color:rgba(var(--accent-rgb),0.22)] bg-[color:rgba(var(--accent-rgb),0.08)] p-4">
-                      <div className="text-xs uppercase tracking-[0.18em] text-[var(--accent)]/80">Identity</div>
-                      <p className="mt-2 text-sm leading-6 text-white">{generatedPreview.identityStatement}</p>
-                    </div>
-                    <div className="space-y-3">
-                      {generatedPreview.goals.map((goal: WebMapGoal) => (
-                        <div key={goal.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                          <div className="text-sm font-semibold text-white">{goal.title}</div>
-                          <div className="mt-1 text-xs leading-5 text-white/55">{goal.description}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                      <Button onClick={handleConfirmGeneratedMap}>Підтвердити та відкрити карту</Button>
-                      <Button variant="outline" color="white" onClick={() => setSetupStep('wheel')}>
-                        Переглянути ще раз
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-5 space-y-4 text-sm leading-6 text-white/60">
-                    <p>1. AI сформує identity statement: ким ти є наприкінці року.</p>
-                    <p>2. Розкладе 5 цілей: одна головна, решта підтримують її.</p>
-                    <p>3. Даcть фокус перших місяців, а потім щомісяця чесно аналізуватиме, де ти рухаєшся, а де філониш.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </GlassCard>
-      ) : (
-        <>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <GlassCard className="border-white/10 bg-[rgba(10,16,31,0.88)] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/40">Місяць</div>
-              <div className="mt-3 text-2xl font-semibold text-white">{formatMonthLabel((currentMonthPlan?.month ?? new Date().getMonth() + 1))}</div>
-              <div className="mt-1 text-sm text-white/55">
-                {(currentMonthPlan?.month ?? new Date().getMonth() + 1)}/12
-              </div>
-            </GlassCard>
-
-            <GlassCard className="border-white/10 bg-[rgba(10,16,31,0.88)] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/40">Цілей виконано</div>
-              <div className="mt-3 text-2xl font-semibold text-white">{completedGoals}/5</div>
-              <div className="mt-1 text-sm text-white/55">З головною ціллю в центрі карти</div>
-            </GlassCard>
-
-            <GlassCard className="border-white/10 bg-[rgba(10,16,31,0.88)] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/40">Дій цього місяця</div>
-              <div className="mt-3 text-2xl font-semibold text-white">{monthCompletion}%</div>
-              <div className="mt-1 text-sm text-white/55">
-                {currentMonthPlan?.doneActions.length ?? 0}/{currentMonthPlan?.actions.length ?? 0} виконано
-              </div>
-            </GlassCard>
-
-            <GlassCard className="border-white/10 bg-[rgba(10,16,31,0.88)] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/40">Streak аналізу</div>
-              <div className="mt-3 text-2xl font-semibold text-white">{analysisStreak}</div>
-              <div className="mt-1 text-sm text-white/55">Місяців поспіль з AI-коментарем</div>
-            </GlassCard>
-          </div>
-
-          <GlassCard className="border-[color:rgba(var(--accent-rgb),0.28)] bg-[rgba(8,15,31,0.94)] p-6">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-[var(--accent)]/80">Головна ціль 2026</div>
-                <h2 className="max-w-3xl text-3xl font-semibold leading-tight text-white">
-                  {mainGoal?.title ?? 'Головна ціль ще формується'}
-                </h2>
-                <p className="max-w-3xl text-sm leading-6 text-white/60">
-                  {vision?.statement ?? webMap.identityStatement ?? 'Це центр карти: саме ця ціль тягне інші рішення, місячний фокус і щоденні дії.'}
-                </p>
-              </div>
-
-              <Button
-                variant="outline"
-                className="shrink-0 border-[color:rgba(var(--accent-rgb),0.24)] text-[var(--accent)]"
-                onClick={() => {
-                  setActiveTab('coach')
-                  coachRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                }}
-              >
-                AI веде по карті
-              </Button>
-            </div>
-
-            <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-              <div className="space-y-2">
-                <Progress value={mainGoal?.progress ?? 0} size="md" />
-                <div className="text-sm text-white/50">Прогрес головної цілі оновлюється через картки нижче.</div>
-              </div>
-              <div className="text-right text-3xl font-semibold text-white">{mainGoal?.progress ?? 0}%</div>
-            </div>
-          </GlassCard>
-
-          <div className="flex flex-wrap gap-2">
-            {([
-              ['goals', 'Цілі'],
-              ['months', 'Місяці'],
-              ['analysis', 'Аналіз'],
-              ['coach', 'AI-коуч'],
-            ] as Array<[ActiveTab, string]>).map(([tabId, label]) => (
-              <button
-                key={tabId}
-                type="button"
-                onClick={() => setActiveTab(tabId)}
-                className={[
-                  'rounded-full border px-4 py-2 text-sm font-medium transition-colors',
-                  activeTab === tabId
-                    ? 'border-[color:rgba(var(--accent-rgb),0.34)] bg-[color:rgba(var(--accent-rgb),0.12)] text-[var(--accent)]'
-                    : 'border-white/10 bg-white/[0.03] text-white/60 hover:text-white',
-                ].join(' ')}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {activeTab === 'goals' ? (
-            <div className="space-y-4">
-              {webMap.goals.map((goal: WebMapGoal) => {
-                const tone = getGoalStatusTone(goal.status)
-                const isExpanded = expandedGoalId === goal.id
-                const isMainGoal = goal.id === webMap.mainGoalId || goal.isMain
-                const draftValue = goalDrafts[goal.id] ?? goal.progress
-
-                return (
-                  <GlassCard
-                    key={goal.id}
-                    className={[
-                      'border bg-[rgba(10,16,31,0.88)] p-5 transition-colors',
-                      isMainGoal ? 'border-[color:rgba(var(--accent-rgb),0.42)]' : 'border-white/10',
-                    ].join(' ')}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setExpandedGoalId(isExpanded ? null : goal.id)}
-                      className="flex w-full items-start justify-between gap-4 text-left"
-                    >
-                      <div className="space-y-2">
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/40">
-                          Ціль {goal.order}{isMainGoal ? ' · Головна' : ''}
-                        </div>
-                        <h3 className="text-xl font-semibold text-white">{goal.title}</h3>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <div className={`rounded-full border px-3 py-1 text-xs font-medium ${tone.badge}`}>{tone.label}</div>
-                        <div className="text-sm font-semibold text-white">{draftValue}%</div>
-                        <ChevronDown className={`h-4 w-4 text-white/45 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                      </div>
-                    </button>
-
-                    <Progress value={draftValue} size="sm" className="mt-4" />
-
-                    {isExpanded ? (
-                      <div className="mt-5 space-y-5">
-                        <div className="text-sm leading-6 text-white/65">{goal.description ?? 'Опис цілі з’явиться після наступного оновлення карти.'}</div>
-
-                        <div className="space-y-2">
-                          <div className="text-xs uppercase tracking-[0.18em] text-white/40">Напрями дій</div>
-                          <ul className="space-y-2">
-                            {goal.actions.map((action: string) => (
-                              <li key={action} className="flex items-start gap-2 text-sm leading-6 text-white/70">
-                                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                                <span>{action}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                          <div className="text-xs uppercase tracking-[0.18em] text-white/40">Місячний фокус</div>
-                          <div className="mt-2 text-sm leading-6 text-white/70">{getGoalMonthFocus(goal.id, currentMonthPlan)}</div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <Slider
-                            min={0}
-                            max={100}
-                            step={5}
-                            value={draftValue}
-                            label="Оновити прогрес"
-                            onValueChange={(value: number) => {
-                              setGoalDrafts((current: Record<string, number>) => ({
-                                ...current,
-                                [goal.id]: value,
-                              }))
-                            }}
-                          />
-                          <div className="flex flex-wrap gap-3">
-                            <Button
-                              loading={isUpdatingGoal}
-                              onClick={() => handleGoalProgressSave(goal.id, draftValue, goal.status)}
-                            >
-                              Зберегти прогрес
-                            </Button>
-                            <Button
-                              variant="outline"
-                              color="white"
-                              onClick={() =>
-                                setGoalDrafts((current: Record<string, number>) => ({
-                                  ...current,
-                                  [goal.id]: goal.progress,
-                                }))
-                              }
-                            >
-                              Скасувати
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </GlassCard>
-                )
-              })}
-            </div>
-          ) : null}
-
-          {activeTab === 'months' ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 12 }).map((_, index) => {
-                const monthNumber = index + 1
-                const monthPlan =
-                  webMap.months.find((item: MonthPlan) => item.month === monthNumber && item.year === webMap.year)
-                  ?? null
-                const isCurrent = monthNumber === new Date().getMonth() + 1
-
-                return (
-                  <GlassCard
-                    key={monthNumber}
-                    className={[
-                      'border p-5',
-                      getMonthStatusTone(monthPlan?.status ?? 'planned', isCurrent),
-                    ].join(' ')}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/40">Місяць {monthNumber}</div>
-                        <h3 className="mt-2 text-lg font-semibold text-white">{formatMonthLabel(monthNumber)}</h3>
-                      </div>
-                      {isCurrent ? (
-                        <div className="rounded-full border border-[color:rgba(var(--accent-rgb),0.22)] bg-[color:rgba(var(--accent-rgb),0.1)] px-3 py-1 text-xs text-[var(--accent)]">
-                          Поточний
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="mt-4 text-sm leading-6 text-white/65">
-                      {monthPlan?.focus ?? 'Фокус сформується після AI-аналізу або під час запуску наступного місяця.'}
-                    </div>
-
-                    <ul className="mt-4 space-y-2 text-sm text-white/60">
-                      {(monthPlan?.actions ?? []).slice(0, 3).map((action: string) => (
-                        <li key={action} className="flex items-start gap-2">
-                          <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                          <span>{action}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    {monthPlan?.aiAnalysis ? (
-                      <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/40">AI-аналіз</div>
-                        <div className="mt-2 text-sm leading-6 text-white/65">{monthPlan.aiAnalysis}</div>
-                      </div>
-                    ) : null}
-                  </GlassCard>
-                )
-              })}
-            </div>
-          ) : null}
-
-          {activeTab === 'analysis' ? (
-            archivedAnalyses.length > 0 ? (
-              <div className="space-y-4">
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    color="white"
-                    loading={isRunningAnalysis}
-                    onClick={async () => {
-                      await runMonthlyAnalysis().unwrap()
-                    }}
-                  >
-                    Запустити аналіз зараз
-                  </Button>
-                </div>
-                {archivedAnalyses.map((month: MonthPlan) => (
-                  <GlassCard key={month.id} className="border-white/10 bg-[rgba(10,16,31,0.88)] p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/40">AI-звіт</div>
-                        <h3 className="mt-2 text-lg font-semibold text-white">
-                          {formatMonthLabel(month.month)} {month.year}
-                        </h3>
-                      </div>
-                      <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/55">
-                        {month.status === 'done' ? 'Закрито' : 'В роботі'}
-                      </div>
-                    </div>
-
-                    <p className="mt-4 text-sm leading-6 text-white/70">{month.aiAnalysis}</p>
-
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/40">На треку</div>
-                        <ul className="mt-3 space-y-2 text-sm text-white/65">
-                          {month.doneActions.length > 0 ? month.doneActions.map((item: string) => (
-                            <li key={item} className="flex items-start gap-2">
-                              <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" />
-                              <span>{item}</span>
-                            </li>
-                          )) : <li>Ще немає зафіксованих сильних сигналів.</li>}
-                        </ul>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/40">Потрібна увага</div>
-                        <ul className="mt-3 space-y-2 text-sm text-white/65">
-                          {month.missedActions.length > 0 ? month.missedActions.map((item: string) => (
-                            <li key={item} className="flex items-start gap-2">
-                              <TrendingUp className="mt-0.5 h-4 w-4 text-rose-400" />
-                              <span>{item}</span>
-                            </li>
-                          )) : <li>Критичних відставань поки не видно.</li>}
-                        </ul>
-                      </div>
-                    </div>
-                  </GlassCard>
-                ))}
-              </div>
-            ) : (
-              <GlassCard className="border-white/10 bg-[rgba(10,16,31,0.88)] p-6 text-center">
-                <h3 className="text-xl font-semibold text-white">Аналіз з’явиться після завершення першого місяця</h3>
-                <p className="mt-3 text-sm leading-6 text-white/60">
-                  Коли перший місяць буде закрито, AI збере прогрес по карті, покаже що реально рухається і де з’являється саботаж.
-                </p>
-              </GlassCard>
-            )
-          ) : null}
-
-          {activeTab === 'coach' ? (
-            <div ref={coachRef} className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-              <GlassCard className="border-white/10 bg-[rgba(10,16,31,0.88)] p-5">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/40">Швидкі дії</div>
-                <h3 className="mt-2 text-2xl font-semibold text-white">AI-коуч по карті</h3>
-                <p className="mt-3 text-sm leading-6 text-white/60">
-                  Став коротке запитання по карті року, поточному місяцю або тому, де саме ти пробуксовуєш.
-                </p>
-
-                <div className="mt-5 grid gap-2">
-                  {QUICK_PROMPTS.map(prompt => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-white/70 transition-colors hover:border-[color:rgba(var(--accent-rgb),0.22)] hover:text-white"
-                      onClick={() => {
-                        void handleCoachPrompt(prompt)
-                      }}
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-5 rounded-2xl border border-[color:rgba(var(--accent-rgb),0.18)] bg-[color:rgba(var(--accent-rgb),0.08)] p-4">
-                  <div className="text-xs uppercase tracking-[0.18em] text-[var(--accent)]/80">Точка Б</div>
-                  <p className="mt-2 text-sm leading-6 text-white/70">
-                    {webMap.identityStatement ?? vision?.statement ?? 'Identity statement зʼявиться після генерації карти.'}
-                  </p>
-                </div>
-              </GlassCard>
-
-              <GlassCard className="border-white/10 bg-[rgba(10,16,31,0.88)] p-5">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-white/40">
-                  <MessageCircle className="h-4 w-4" />
-                  Живий чат
-                </div>
-
-                <div className="mt-4 h-[28rem] space-y-3 overflow-y-auto rounded-[24px] border border-white/10 bg-[rgba(7,12,24,0.86)] p-4">
-                  {chatMessages.map((message: ChatMessage) => (
-                    <div
-                      key={message.id}
-                      className={[
-                        'max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6',
-                        message.role === 'assistant'
-                          ? 'border border-white/10 bg-white/[0.03] text-white/75'
-                          : 'ml-auto border border-[color:rgba(var(--accent-rgb),0.22)] bg-[color:rgba(var(--accent-rgb),0.12)] text-white',
-                      ].join(' ')}
-                    >
-                      {message.content}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  <Textarea
-                    value={chatInput}
-                    onChange={event => setChatInput(event.target.value)}
-                    placeholder="Напиши питання до AI-коуча по своїй карті..."
-                    className="min-h-[110px]"
-                  />
-                  <div className="flex justify-end">
-                    <Button loading={isCoachLoading} onClick={() => { void handleCoachPrompt(chatInput) }}>
-                      Надіслати
-                    </Button>
-                  </div>
-                </div>
-              </GlassCard>
-            </div>
-          ) : null}
-        </>
-      )}
+      {vm.activeTab === 'goals' && <GoalsTab {...vm.goals} />}
+      {vm.activeTab === 'months' && <MonthsTab {...vm.months} />}
+      {vm.activeTab === 'analysis' && <Card title="Аналіз місяця" description={vm.analysis.currentMonth?.aiAnalysis ?? 'Аналіз зʼявиться після запуску місячного огляду.'} />}
+      {vm.activeTab === 'coach' && <CoachTab {...vm.coach} />}
     </div>
   )
 }

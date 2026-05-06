@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js'
-import { StageStatus, User } from '@starway/db/prisma-client'
+import { Prisma, StageStatus, User } from '@starway/db/prisma-client'
 
 // fix etap2: payload for first-login handling via web/telegram flows
 export interface FirstLoginPayload {
@@ -11,6 +11,63 @@ export interface FirstLoginPayload {
   initialFunnelSlug?: string
   initialVideoSlug?: string
   initialMiniCourseSlug?: string
+}
+
+function isMissingStructureError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === 'P2021' || error.code === 'P2022')
+  )
+}
+
+async function createUserCompat(payload: FirstLoginPayload, now: Date) {
+  try {
+    return await prisma.user.create({
+      data: {
+        email: payload.email,
+        expertId: payload.expertId,
+        role: 'USER',
+        lastLoginAt: now,
+        telegramUserId: payload.telegramUserId ?? null,
+        telegramChatId: payload.telegramChatId ?? null,
+        telegramUserName: payload.telegramUserName ?? null,
+      },
+    })
+  } catch (error) {
+    if (!isMissingStructureError(error)) throw error
+
+    const id = crypto.randomUUID()
+    const rows = await prisma.$queryRawUnsafe<User[]>(
+      `
+        INSERT INTO "User" (
+          "id",
+          "email",
+          "expertId",
+          "role",
+          "lastLoginAt",
+          "telegramUserId",
+          "telegramChatId",
+          "telegramUserName",
+          "createdAt",
+          "updatedAt"
+        )
+        VALUES ($1, $2, $3, CAST($4 AS "Role"), $5, $6, $7, $8, NOW(), NOW())
+        RETURNING *
+      `,
+      id,
+      payload.email,
+      payload.expertId ?? null,
+      'USER',
+      now,
+      payload.telegramUserId ?? null,
+      payload.telegramChatId ?? null,
+      payload.telegramUserName ?? null,
+    )
+
+    const created = rows[0]
+    if (!created) throw error
+    return created
+  }
 }
 
 // fix etap2: seed every stage progress for the user to give AI/mini-app deterministic state
@@ -46,17 +103,12 @@ export async function handleFirstLogin(payload: FirstLoginPayload): Promise<User
           telegramUserName: telegramData?.telegramUserName ?? undefined,
         },
       })
-    : await prisma.user.create({
-        data: {
-          email: payload.email,
-          expertId: payload.expertId,
-          role: 'USER',
-          lastLoginAt: now,
-          telegramUserId: telegramData?.telegramUserId,
-          telegramChatId: telegramData?.telegramChatId,
-          telegramUserName: telegramData?.telegramUserName,
-        },
-      })
+    : await createUserCompat({
+        ...payload,
+        telegramUserId: telegramData?.telegramUserId,
+        telegramChatId: telegramData?.telegramChatId,
+        telegramUserName: telegramData?.telegramUserName,
+      }, now)
 
   await prisma.userProgress.upsert({
     where: { userId: user.id },

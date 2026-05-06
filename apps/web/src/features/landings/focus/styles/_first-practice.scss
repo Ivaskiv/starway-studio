@@ -1,0 +1,142 @@
+// apps/web/src/features/landings/focus/styles/_first-practice.scss
+
+/* ─── WRAP — двоколонковий layout ─── */
+
+.focus-first-practice-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
+  gap: var(--space-2xl);
+  align-items: start;
+}
+
+/* ─── HEADER (ліва колонка) ─── */
+
+.focus-first-practice-header {
+  position: sticky;
+  top: 100px;
+}
+
+.focus-first-practice-copy {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: 1.75;
+  color: var(--focus-text-muted);
+  max-width: 440px;
+}
+
+/* ─── BODY (права колонка) ─── */
+
+.focus-first-practice-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* ─── LIST ─── */
+
+.focus-first-practice-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.focus-first-practice-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: var(--focus-radius-sm);
+  border: 1px solid var(--focus-card-border);
+  background: var(--focus-card);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  color: var(--focus-text-muted);
+  line-height: 1.55;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.25s ease, color 0.25s ease, background 0.25s ease;
+}
+
+.focus-first-practice-item::before {
+  content: '→';
+  flex-shrink: 0;
+  color: var(--focus-blue);
+  font-weight: 700;
+  font-size: var(--fs-body);
+}
+
+.focus-first-practice-item::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  pointer-events: none;
+}
+
+.focus-first-practice-item:hover {
+  border-color: var(--focus-blue-border);
+  color: var(--focus-text);
+  background: rgba(74, 126, 191, 0.05);
+}
+
+/* ─── CTA BLOCK ─── */
+
+.focus-first-practice-cta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  border-radius: var(--focus-radius);
+  border: 1px solid var(--focus-blue-border);
+  background:
+    linear-gradient(135deg, rgba(74, 126, 191, 0.09) 0%, rgba(74, 126, 191, 0.03) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.focus-first-practice-cta::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(74, 126, 191, 0.6), transparent);
+  pointer-events: none;
+}
+
+.focus-first-practice-cta::after {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 200px; height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(74, 126, 191, 0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.focus-first-practice-price {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.focus-first-practice-note {
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  color: var(--focus-text-dim);
+  letter-spacing: 0.03em;
+}
+
+/* ─────────────────────────────
+   RESPONSIVE
+───────────────────────────── */
+
+@media (max-width: 1100px) {
+  .focus-first-practice-wrap {
+    grid-template-columns: 1fr;
+    gap: clamp(28px, 5vw, 48px);
+  }
+
+  .focus-first-practice-header { position: static; }
+  .focus-first-practice-copy   { max-width: 100%; }
+}

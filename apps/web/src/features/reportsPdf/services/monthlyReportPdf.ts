@@ -46,7 +46,7 @@ const STATE_LABEL_MAP: Record<number, string> = {
   1: 'Напруга',
   2: 'Страх',
   3: 'Стабільність',
-  4: 'Внутрішня опора',
+  4: 'Духовність',
 }
 
 function buildStateTrendSvg(points: MonthlyReportPdfInput['trendPoints']) {

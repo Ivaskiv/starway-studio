@@ -9,6 +9,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
 import type { RootState } from '@/app/store';
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice';
+import { getRefreshToken } from '@/features/auth/services/token';
 import type { User } from '@/features/user/types/user.types';
 import { TAG_TYPES } from '@/app/tagTypes';
 
@@ -26,6 +27,7 @@ type QueryParams = Record<string, QueryValue>;
 
 type RefreshResponse = {
   accessToken: string;
+  refreshToken?: string;
   user: User;
 };
 
@@ -59,7 +61,7 @@ const API_BASE_URL = getApiBaseUrl();
 export const resolveApiUrl = (path: string): string => {
   if (/^https?:\/\//i.test(path)) return path;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  if (API_BASE_URL === '/api') return normalizedPath;
+  if (API_BASE_URL === '/api') return `/api${normalizedPath}`;
   return `${API_BASE_URL}${normalizedPath}`;
 };
 
@@ -152,18 +154,29 @@ const refreshAccessToken = async (
   api: BaseQueryApi,
   extraOptions: object,
 ): Promise<boolean> => {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    api.dispatch(clearAuth());
+    if (import.meta.env.DEV) {
+      console.info('[api] skip refresh: no refresh token');
+    }
+    return false;
+  }
+
   const refreshResponse = await rawBaseQuery(
     {
       url: '/auth/refresh',
       method: 'POST',
+      body: { refreshToken },
+      headers: { 'x-refresh-token': refreshToken },
     },
     api,
     extraOptions,
   );
 
   if (refreshResponse.data) {
-    const { accessToken, user } = refreshResponse.data as RefreshResponse;
-    api.dispatch(setCredentials({ user, accessToken }));
+    const { accessToken, refreshToken, user } = refreshResponse.data as RefreshResponse;
+    api.dispatch(setCredentials({ user, accessToken, refreshToken }));
     return true;
   }
 
@@ -211,6 +224,11 @@ export const baseQueryWithReauth: BaseQueryFn<
 
   const state = api.getState() as RootState;
   if (!getAccessToken(state)) {
+    api.dispatch(clearAuth());
+    return result;
+  }
+
+  if (!getRefreshToken()) {
     api.dispatch(clearAuth());
     return result;
   }

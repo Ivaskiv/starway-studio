@@ -1,0 +1,142 @@
+// apps/web/src/features/landings/focus/styles/_glass.scss
+// Zero backdrop-filter (Safari rule)
+// Глибина через: gradient layers + shadow stacking + borders
+
+/* ─── SCSS VARS ─── */
+$glass-bg:            rgba(255, 255, 255, 0.04);
+$glass-bg-strong:     rgba(255, 255, 255, 0.07);
+$glass-border:        rgba(255, 255, 255, 0.08);
+$glass-border-strong: rgba(255, 255, 255, 0.16);
+$glass-border-ice:    rgba(74, 126, 191, 0.28);
+$glass-radius:        24px;
+$glass-radius-sm:     16px;
+$glass-shadow:
+  0 10px 40px rgba(0, 0, 0, 0.25),
+  inset 0 1px 0 rgba(255, 255, 255, 0.07);
+
+/* ─── MIXINS ─── */
+
+@mixin glass-base {
+  position: relative;
+  overflow: hidden;
+  background: $glass-bg;
+  border: 1px solid $glass-border;
+  border-radius: $glass-radius;
+  box-shadow: $glass-shadow;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.07) 0%,
+      transparent 45%,
+      rgba(74, 126, 191, 0.04) 100%
+    );
+    border-radius: inherit;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  }
+}
+
+@mixin glass-strong {
+  background: $glass-bg-strong;
+  border-color: $glass-border-strong;
+  box-shadow:
+    0 16px 56px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(74, 126, 191, 0.06);
+}
+
+@mixin glass-ice-accent {
+  border-left: 2px solid $glass-border-ice;
+  border-radius: 0 $glass-radius-sm $glass-radius-sm 0;
+}
+
+@mixin glass-shimmer {
+  &::before {
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.07) 0%, transparent 0%);
+    transition: background 0s;
+  }
+  &:hover::before {
+    background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.1) 50%, transparent 80%);
+  }
+}
+
+@mixin glass-hover {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  &:hover {
+    border-color: rgba(74, 126, 191, 0.35);
+    box-shadow:
+      0 0 32px rgba(74, 126, 191, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* ─── UTILITY CLASSES ─── */
+
+.focus-glass {
+  @include glass-base;
+  @include glass-hover;
+}
+
+.focus-glass-strong {
+  @include glass-base;
+  @include glass-strong;
+}
+
+.focus-quote-glass {
+  position: relative;
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-style: italic;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.focus-glass-item {
+  background: $glass-bg;
+  border: 1px solid $glass-border;
+  border-radius: $glass-radius-sm;
+  transition: background 0.2s ease, border-color 0.2s ease;
+
+  &:hover {
+    background: $glass-bg-strong;
+    border-color: $glass-border-strong;
+  }
+}
+
+.focus-card {
+  padding: var(--space-lg);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.focus-btn-glass {
+  @include glass-base;
+  @include glass-shimmer;
+
+  border-radius: 999px;
+  padding: 10px 18px;
+
+  &:hover {
+    background: $glass-bg-strong;
+    border-color: $glass-border-strong;
+  }
+}

@@ -15,13 +15,17 @@ export interface TrialMirror {
 }
 
 export interface TrialStatus {
-userId:        string
+  userId: string
   isActive:      boolean
   isPaid:        boolean
   startedAt:     Date | null
   endsAt:        Date | null
   daysLeft:      number
   currentDay:    number
+  daysUsed:      number
+  daysTotal:     number
+  onboardingCompleted: boolean
+  dailyCycleStarted: boolean
   progress:      number        // % прогресу (0–100)
   status:        string | null // 'active' | 'expired' | 'completed' | null
   hasDay4Mirror: boolean

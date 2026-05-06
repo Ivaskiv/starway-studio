@@ -1,0 +1,142 @@
+// apps/web/src/features/landings/focus/styles/_break.scss
+// НЕ перевизначає: padding, шрифти, заголовки, body-text
+
+/* ─── SECTION ─── */
+
+.focus-break {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(74, 126, 191, 0.06) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(74, 126, 191, 0.03) 0%, transparent 60%);
+}
+
+/* ─── AMBIENT GLOW ─── */
+
+.focus-break-glow {
+  position: absolute;
+  top: 30%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(74, 126, 191, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+  animation: focus-node-breathe 6s ease-in-out infinite;
+}
+
+/* ─── DIVIDER ─── */
+
+.focus-break-divider {
+  width: 48px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(74, 126, 191, 0.5), transparent);
+}
+
+/* ─── QUOTE ─── */
+
+.focus-break .focus-quote-glass {
+  max-width: 520px;
+  text-align: left;
+  margin-bottom: 0;
+}
+
+/* ─── SHIFTS ─── */
+
+.focus-break-shifts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.focus-break-shift {
+  display: grid;
+  grid-template-columns: 1fr 32px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-radius: var(--focus-radius-sm);
+  border: 1px solid var(--focus-card-border);
+  background: var(--focus-card);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.focus-break-shift::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  pointer-events: none;
+}
+
+.focus-break-shift::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.focus-break-shift:hover {
+  border-color: rgba(74, 126, 191, 0.28);
+  box-shadow: 0 0 20px rgba(74, 126, 191, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.focus-break-shift-from,
+.focus-break-shift-to {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.focus-break-shift-to {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.focus-break-shift-label {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.focus-break-shift-label--dim    { color: var(--focus-text-dim); }
+.focus-break-shift-label--bright { color: rgba(74, 160, 255, 0.7); }
+
+.focus-break-shift-text p {
+  font-size: clamp(13px, 1.4vw, 15px);
+  color: var(--focus-text-muted);
+  line-height: 1.4;
+}
+
+.focus-break-shift-text--bright {
+  color: var(--color-text-main);
+  font-weight: 600;
+}
+
+.focus-break-shift-arrow {
+  text-align: center;
+  font-size: 15px;
+  color: rgba(74, 126, 191, 0.55);
+  animation: focus-float-x 2.4s ease-in-out infinite;
+  line-height: 1;
+}
+
+/* ─────────────────────────────
+   RESPONSIVE
+───────────────────────────── */
+
+@media (max-width: 480px) {
+  .focus-break-shift {
+    grid-template-columns: 1fr 24px 1fr;
+    padding: 12px 14px;
+    gap: 6px;
+  }
+
+  .focus-break-shift-text { font-size: 12px; }
+}

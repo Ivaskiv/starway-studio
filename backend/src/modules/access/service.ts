@@ -2,6 +2,7 @@
 import { prisma } from '../../db/client.js'
 import { getAllAbilities } from '../../modules/auth/abilities.js'
 import { isSuperAdminEmail } from '../../modules/auth/superadmin.js'
+import { getTrialStatus } from '../trial/service.js'
 import { ensureOwnerExpertIdForUser } from '../experts/ownership.service.js'
 import {
   PRODUCT_ACCESS_PRODUCTS,
@@ -298,6 +299,7 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
   }
 
   const now = new Date()
+  const trial = await getTrialStatus(userId)
   const isSuperAdmin = user.role === 'SUPERADMIN' || isSuperAdminEmail(user.email ?? '')
   const subscription = user.subscription
   const leadEnrollment = user.fivePointsEnrollment
@@ -309,10 +311,7 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
     subscription?.status === 'TRIAL' &&
     !!subscription.trialEndsAt &&
     subscription.trialEndsAt > now
-  const isUserTrialActive =
-    !!user.trialStartsAt &&
-    !!user.trialEndsAt &&
-    user.trialEndsAt > now
+  const isUserTrialActive = trial.isActive
   const hasSubscription = isSuperAdmin || isPaidActive || isSubscriptionTrialActive || isUserTrialActive
   const hasLeadMagnet = Boolean(
     leadEnrollment?.completedAt ||
@@ -482,6 +481,7 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
   if (!user) throw new Error('User not found')
 
   const now          = new Date()
+  const trialStatus = await getTrialStatus(userId)
   const subscription = user.subscription
   const items: AccessItem[] = []
   const isSuperAdmin = isSuperAdminEmail(user.email ?? '')
@@ -581,15 +581,12 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
         !!subscription.trialEndsAt &&
         subscription.trialEndsAt > now
       ) ||
-      (!!user.trialStartsAt && !!user.trialEndsAt && user.trialEndsAt > now)
+      trialStatus.isActive
     )
 
   if (isTrialActive && canUseClientFeatures) {
-    const expiresAt = subscription?.trialEndsAt ?? user.trialEndsAt ?? null
-    const trialStartAt = subscription?.createdAt ?? user.trialStartsAt ?? null
-    const trialDay = trialStartAt
-      ? Math.floor((now.getTime() - trialStartAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
-      : null
+    const expiresAt = trialStatus.endsAt
+    const trialDay = trialStatus.currentDay
     const wheelAllowed = trialDay === 1
     items.push(
       { key: 'mentor.daily',   source: 'trial', expiresAt },
@@ -646,7 +643,7 @@ if (isMentorshipActive) {
   return {
     role:     effectiveRole,
     plan,
-    trialEnd: subscription?.trialEndsAt ?? user.trialEndsAt ?? null,
+    trialEnd: trialStatus.endsAt,
     items,
     abilities,
   }
@@ -678,6 +675,7 @@ const PRODUCT_TEMPLATES: UserSystemState['products']['templates'] = [
 export async function getUserSystemState(userId: string): Promise<UserSystemState> {
   const access      = await getUserAccess(userId)
   const accessControl = await getAccessControlState(userId)
+  const trialStatus = await getTrialStatus(userId)
   const now         = new Date()
   const isSuperAdmin = String(access.role).toUpperCase() === 'SUPERADMIN'
 
@@ -727,10 +725,6 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
   })
 
   const trialEnd = access.trialEnd
-  const trialDaysLeft =
-    trialEnd && trialEnd > now
-      ? Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-      : 0
 
   const modules: UserSystemState['aiModules'] = [
     'WHEEL_OF_BALANCE',
@@ -773,8 +767,8 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
       canSeeAdminTools:   isSuperAdmin || access.role === 'EXPERT' || access.role === 'ADMIN',
     },
     trial: {
-      isActive: access.plan === 'trial',
-      daysLeft: trialDaysLeft,
+      isActive: trialStatus.isActive,
+      daysLeft: trialStatus.daysLeft,
       endsAt:   trialEnd,
     },
     subscription: {

@@ -2,6 +2,7 @@
 import { NAVIGATION, type NavMenu } from '@/core/navigation/navigation.registry'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useAuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext'
+import { hasKnownUser } from '@/features/auth/services/token'
 import {
   useGetNotificationsQuery,
   useMarkAllNotificationsReadMutation,
@@ -72,6 +73,7 @@ export default function Header({
 
   const compactShellMode = miniAppMode || forceBurgerMenu
   const hideTelegramGuestAuth = miniAppMode || isTelegramMiniAppAuthContext()
+  const shouldHideRegisterButton = hasKnownUser()
   const holdMiniAppGuestAuth =
     hideTelegramGuestAuth &&
     !isAuthenticated &&
@@ -160,7 +162,7 @@ export default function Header({
     }
 
     if (templateKey.includes('weekly') || templateKey.includes('level') || templateKey.includes('streak')) {
-      return '/dashboard/progress'
+      return '/dashboard/journal'
     }
 
     if (templateKey.includes('subscription') || type === 'SUBSCRIPTION') {
@@ -242,17 +244,19 @@ export default function Header({
       >
         Увійти
       </button>
-      <button
-        className="hdr-btn-accent"
-        onClick={() => {
-          onRegisterClick?.()
-          onAfterClick?.()
-        }}
-        aria-label="Реєстрація"
-        type="button"
-      >
-        Реєстрація
-      </button>
+      {!shouldHideRegisterButton ? (
+        <button
+          className="hdr-btn-accent"
+          onClick={() => {
+            onRegisterClick?.()
+            onAfterClick?.()
+          }}
+          aria-label="Реєстрація"
+          type="button"
+        >
+          Реєстрація
+        </button>
+      ) : null}
     </>
   )
 

@@ -1,6 +1,7 @@
 // backend/src/index.ts
 
 import { config as loadEnv } from 'dotenv'
+import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { type Request, type Response } from 'express'
@@ -13,8 +14,14 @@ import { startScheduler, stopScheduler } from './services/scheduler/index.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
-
-loadEnv({ path: resolve(currentDirPath, '../../.env') })
+const backendEnvPath = resolve(currentDirPath, '../.env')
+const rootEnvPath = resolve(currentDirPath, '../../.env')
+if (existsSync(rootEnvPath)) {
+  loadEnv({ path: rootEnvPath })
+}
+if (existsSync(backendEnvPath)) {
+  loadEnv({ path: backendEnvPath, override: true })
+}
 
 const PORT = Number(process.env.PORT) || 3001
 const isProduction = process.env.NODE_ENV === 'production'
@@ -31,6 +38,31 @@ let telegramRunningMode: 'webhook' | 'polling' | null = null
 let isShuttingDown = false
 let prismaKeepAliveInterval: NodeJS.Timeout | null = null
 let databaseReady = false
+
+function describeDatabaseTarget(databaseUrl: string | undefined) {
+  if (!databaseUrl) {
+    return {
+      configured: false,
+      host: 'missing',
+      port: 'missing',
+    }
+  }
+
+  try {
+    const parsed = new URL(databaseUrl)
+    return {
+      configured: true,
+      host: parsed.hostname || 'unknown',
+      port: parsed.port || 'default',
+    }
+  } catch {
+    return {
+      configured: true,
+      host: 'invalid-url',
+      port: 'invalid-url',
+    }
+  }
+}
 
 function isTelegramPollingConflict(error: unknown): boolean {
   if (typeof error === 'object' && error !== null && 'response' in error) {
@@ -217,7 +249,8 @@ async function bootstrap() {
 
   void (async () => {
     try {
-      console.log('🧪 [BOOT] Connecting to database...')
+      const databaseTarget = describeDatabaseTarget(process.env.DATABASE_URL?.trim())
+      console.log('🧪 [BOOT] Connecting to database...', databaseTarget)
       await connectWithRetry()
 
       const result = await withRetry(() => prisma.$queryRaw`SELECT 1`)
@@ -235,7 +268,10 @@ async function bootstrap() {
       }, 30 * 60 * 1000)
       prismaKeepAliveInterval.unref()
     } catch (err: unknown) {
-      console.warn('⚠️ [BOOT] Database unavailable, API continues in degraded mode', err)
+      console.warn('⚠️ [BOOT] Database unavailable, API continues in degraded mode', {
+        target: describeDatabaseTarget(process.env.DATABASE_URL?.trim()),
+        error: err instanceof Error ? err.message : err,
+      })
       databaseReady = false
     }
   })()

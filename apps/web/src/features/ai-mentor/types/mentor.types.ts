@@ -121,9 +121,9 @@ export interface MentorReply {
   savedAt?: string
 }
 export interface WheelContextData {
-  scores: Record<WheelSphere, number>;
-  weakestSphere: WheelSphere;
-  focusSphere: WheelSphere;
+  scores: Record<WheelSphereId, number>;
+  weakestSphere: WheelSphereId;
+  focusSphere: WheelSphereId;
   imbalanceScore: number;
   lastUpdated: string;
 }
@@ -140,20 +140,12 @@ export interface PatternData {
 // WHEEL MODULE TYPES (модуль A)
 // ============================================================================
 
-export type WheelSphere =
-  | 'money' // гроші
-  | 'realization' // реалізація
-  | 'relationships' // відносини
-  | 'energy' // енергія / тіло
-  | 'freedom' // свобода / час
-  | 'support'; // внутрішня опора
-
 export interface WheelAssessment {
   id: string;
   userId: string;
-  scores: Record<WheelSphere, number>;
-  weakestSphere: WheelSphere;
-  focusSphere: WheelSphere;
+  scores: Record<WheelSphereId, number>;
+  weakestSphere: WheelSphereId;
+  focusSphere: WheelSphereId;
   imbalanceScore: number;
   aiAnalysis: string;
   createdAt: string;
@@ -242,7 +234,7 @@ export interface MirrorReport {
   analysis: {
     statePattern: string;
     mainDrain: DailyDrain;
-    sphereImbalance: WheelSphere | null;
+    sphereImbalance: WheelSphereId | null;
     stabilityTrend: 'improving' | 'declining' | 'stable';
   };
   aiInsight: string;
@@ -457,3 +449,4 @@ export interface AIResponse {
 // ✅ Trial/Paid логіка
 // ✅ Onboarding 72 год
 // ✅ Type guards і константи
+import type { WheelSphereId } from '@/features/wheel/types/wheel.types'

@@ -39,13 +39,17 @@ export function buildNotificationContent(
   switch (type) {
     case NotificationEvent.DAILY_MORNING_DUE:
       return {
-        title: '🌅 Ранкова рефлексія',
-        body: `${userName}, час зафіксувати стан і задати фокус на день. Обери, де зручно продовжити.`,
+        title: '🌅 Твій фокус',
+        body: `${userName}, твій фокус на зараз — один короткий крок, який займе близько 2 хвилин. Продовж у Telegram або повернись у систему.`,
+        ctaText: 'Відкрити систему',
+        ctaUrl: '/dashboard?from=tg&step=cycle',
       }
     case NotificationEvent.DAILY_EVENING_DUE:
       return {
-        title: '🌙 Вечірній підсумок',
-        body: `${userName}, одна коротка сесія зараз збере день в систему і підтримає ритм. Обери, де зручно відповісти.`,
+        title: '🌙 Що було найцінніше сьогодні?',
+        body: `${userName}, коротка вечірня відповідь зараз збере день в систему і підтримає твій ритм без хаосу.`,
+        ctaText: 'Завершити день',
+        ctaUrl: '/dashboard?from=tg&step=cycle',
       }
     case NotificationEvent.STREAK_RISK:
       return {
@@ -74,8 +78,8 @@ export function buildNotificationContent(
       return {
         title: '💎 Підписка',
         body: daysLeft > 0
-          ? `До завершення підписки залишилось ${daysLeft} ${pluralizeDays(daysLeft)}. Перевір доступ зараз, щоб не втратити прогрес, історію і сесії.`
-          : 'Перевір підписку зараз, щоб не втратити прогрес, історію і сесії.',
+          ? `Твоя WEB-Карта вже готова приблизно на 70%. До завершення підписки залишилось ${daysLeft} ${pluralizeDays(daysLeft)} — закріпи систему, поки фокус ще живий.`
+          : 'Твоя WEB-Карта вже готова приблизно на 70%. Закріпи систему зараз, щоб не втратити прогрес, історію і сесії.',
       }
     }
     case NotificationEvent.SUBSCRIPTION_EXPIRED: {

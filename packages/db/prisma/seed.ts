@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { config as loadEnv } from 'dotenv';
+import { existsSync } from 'node:fs';
 import jwt from 'jsonwebtoken';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,8 +35,14 @@ type SeedUserInput = {
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const currentDirPath = dirname(currentFilePath);
-
-loadEnv({ path: resolve(currentDirPath, '../../../.env') });
+const backendEnvPath = resolve(currentDirPath, '../../../backend/.env');
+const rootEnvPath = resolve(currentDirPath, '../../../.env');
+if (existsSync(rootEnvPath)) {
+  loadEnv({ path: rootEnvPath });
+}
+if (existsSync(backendEnvPath)) {
+  loadEnv({ path: backendEnvPath, override: true });
+}
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required for seed');

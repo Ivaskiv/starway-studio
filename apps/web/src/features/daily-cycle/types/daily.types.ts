@@ -57,13 +57,28 @@ export interface DailyCycleEntry {
   drain?: DailyDrain
   choice: DailyChoice
   dayFact: string
-  aiAnalysis?: string | null
+  aiAnalysis?: string | Record<string, unknown> | null
   microSupport?: string
   lateCompletedAt?: string | null
   canCatchUpUntil?: string | null
   content?: Record<string, unknown> | null
   createdAt: string
   updatedAt?: string
+}
+
+export type DayAnalysis = {
+  energy_level: 'high' | 'medium' | 'low'
+  focus_level: 'high' | 'medium' | 'low'
+  drain_level: 'high' | 'medium' | 'low'
+  main_insight: string
+  what_worked: string[]
+  active_pattern: {
+    title: string
+    description: string
+  }
+  energy_drain_summary: string
+  drain_chips: string[]
+  tomorrow: string[]
 }
 
 /* ── Input (у БД) ── */

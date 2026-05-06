@@ -27,8 +27,8 @@ interface Props {
 }
 type Mode = 'login' | 'forgot'
 
-const PRIMARY_AUTH_BUTTON_CLASS = 'rounded-[14px] border border-[rgba(var(--accent-rgb),0.42)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.34),rgba(36,58,118,0.58))] text-white shadow-[0_20px_45px_rgba(0,0,0,0.45),0_0_24px_rgba(var(--accent-rgb),0.22)] transition-all duration-200 hover:-translate-y-[2px] hover:border-[rgba(var(--accent-rgb),0.58)] hover:bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.42),rgba(36,58,118,0.72))] hover:shadow-[0_24px_54px_rgba(0,0,0,0.48),0_0_30px_rgba(var(--accent-rgb),0.28)] active:translate-y-0 active:shadow-[0_10px_20px_rgba(0,0,0,0.45),0_0_18px_rgba(var(--accent-rgb),0.2)]'
-const SECONDARY_AUTH_BUTTON_CLASS = 'rounded-[14px] border border-white/18 bg-white/8 text-[color:var(--text-primary)] shadow-[0_20px_45px_rgba(0,0,0,0.45)] transition-all duration-200 hover:-translate-y-[2px] hover:bg-white/15 hover:border-white/24 active:translate-y-0 active:shadow-[0_10px_20px_rgba(0,0,0,0.45)]'
+const PRIMARY_AUTH_BUTTON_CLASS = 'rounded-xl border border-white/10 bg-[#1E293B] px-5 py-2.5 font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-[#243041] active:scale-[0.98] active:bg-[#0F172A] disabled:cursor-not-allowed disabled:opacity-40'
+const SECONDARY_AUTH_BUTTON_CLASS = 'rounded-xl border border-white/12 bg-transparent px-5 py-2.5 font-medium text-white/70 transition-all duration-200 hover:scale-[1.02] hover:bg-white/5 hover:text-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40'
 
 export function LoginForm({
   onSuccess,
@@ -71,6 +71,8 @@ export function LoginForm({
             ? 'Схоже на автоматичну спробу. Спробуй ще раз.'
             : err?.data?.error === 'human_verification_required' || err?.data?.error === 'human_verification_failed'
               ? 'Потрібно підтвердити, що ти не бот.'
+            : err?.data?.error === 'auth_db_unavailable'
+              ? 'Сервер тимчасово не має доступу до бази даних. Спробуй трохи пізніше.'
             :
           err?.data?.error === 'invalid_credentials'
             ? getToastMessage('auth.loginInvalidCredentials', lang)

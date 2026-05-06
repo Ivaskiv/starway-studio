@@ -177,7 +177,7 @@ export default function DayDetails({ day, events }: DayDetailsProps) {
         navigate('/dashboard/products')
         return
       case 'STREAK':
-        navigate('/dashboard/progress')
+        navigate('/dashboard/journal')
         return
       case 'TG_REMINDER':
         navigate('/dashboard/ai-mentor')

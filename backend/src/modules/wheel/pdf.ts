@@ -1,8 +1,8 @@
 import PDFDocument from 'pdfkit'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import type { WheelPDFData, WheelScore, WheelSphereId } from './types.js'
-import { SPHERE_LABELS, WHEEL_SPHERES } from './types.js'
+import type { WheelPDFData, WheelScore } from './types.js'
+import { SPHERE_LABELS, WHEEL_SPHERES, isWheelSphereId } from './types.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -97,7 +97,7 @@ function fillPageBackground(doc: PDFDoc) {
 }
 
 function labelForSphere(value: string) {
-  return SPHERE_LABELS[value as WheelSphereId] ?? value
+  return isWheelSphereId(value) ? SPHERE_LABELS[value] : value
 }
 
 // ─────────────────────────────────────────────────────────
@@ -366,7 +366,7 @@ export async function createWheelPDF(data: WheelPDFData): Promise<Buffer> {
   const orderedScores: WheelScore[] = WHEEL_SPHERES
     .map(id => data.scores.find(s => s.categoryId === id) ?? { categoryId: id, score: 0 })
     .filter(s => s.score > 0 || data.scores.length === 0)
-    .concat(data.scores.filter(s => !WHEEL_SPHERES.includes(s.categoryId as any)))
+    .concat(data.scores.filter(s => !WHEEL_SPHERES.some(id => id === s.categoryId)))
 
   const scores    = orderedScores.length ? orderedScores : data.scores
   const sorted    = [...scores].sort((a, b) => a.score - b.score)

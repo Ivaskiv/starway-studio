@@ -46,10 +46,10 @@ export default function TrialMirrorPage() {
           </button>
           <button
             type="button"
-            onClick={() => navigate(ROUTES.PROGRESS)}
+            onClick={() => navigate(ROUTES.JOURNAL)}
             className="rounded-lg border border-white/20 bg-transparent px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/5"
           >
-            Перейти до прогресу
+            Перейти до журналу
           </button>
         </div>
       </GlassCard>

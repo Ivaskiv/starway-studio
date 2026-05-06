@@ -71,8 +71,8 @@ export default function CyclePaused({ onRecover, onOpenProgress }: CyclePausedPr
         </p>
         <div className="mt-4 h-2 rounded-full bg-[rgba(255,255,255,0.08)]">
           <div
-            className="h-full rounded-full bg-[rgb(248,113,113)] transition-all"
-            style={{ width: `${progress}%` }}
+            data-progress={progress}
+            className="dc-progress-fill dc-progress-fill--danger h-full rounded-full transition-all"
           />
         </div>
       </div>

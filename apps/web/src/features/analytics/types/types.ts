@@ -183,6 +183,47 @@ export interface AnalyticsInsights {
   trackingIntegrity?: AnalyticsTrackingIntegrity | null
 }
 
+export interface FounderFunnelStep {
+  key: string
+  label: string
+  users: number
+  conversionRate: number
+  dropOffRate: number
+  avgHoursToNext: number
+  lastActionBeforeExit: string
+}
+
+export interface FounderRetentionStats {
+  day1: number
+  day3: number
+  avgStreak: number
+  actionsPerUser: number
+}
+
+export interface FounderBehaviorStats {
+  firstActionCompletionRate: number
+  stuckUsersRate: number
+  weakestPoint: string
+  heuristic: string
+  suggestion: string
+}
+
+export interface FounderChannelStats {
+  webUsers: number
+  miniAppUsers: number
+  telegramUsers: number
+  webOnlyUsers: number
+  telegramReturnRate: number
+  miniAppEngagementRate: number
+}
+
+export interface FounderAnalytics {
+  funnel: FounderFunnelStep[]
+  retention: FounderRetentionStats
+  behavior: FounderBehaviorStats
+  channels: FounderChannelStats
+}
+
 
 // frontend/src/services/stats.api.ts
 // import { api } from './api'

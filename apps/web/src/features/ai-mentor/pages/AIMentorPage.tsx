@@ -377,7 +377,7 @@ export default function AIMentorPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate('/dashboard/subscription')}
+                    onClick={() => navigate('/dashboard')}
                     className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--glass-bg-hover)]"
                   >
                     Обрати план

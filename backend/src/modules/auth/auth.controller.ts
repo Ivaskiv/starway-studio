@@ -6,8 +6,6 @@ import { assertHumanVerification } from './humanVerification.js'
 
 import {
   findRefreshToken,
-  findUserById,
-  getCurrentUser,
   loginUser,
   socialLoginUser,
   telegramMiniAppLoginUser,
@@ -15,6 +13,7 @@ import {
   generateAccessToken,
   generateRefreshToken,
   removeRefreshToken,
+  resolveSafeUserById,
   registerUser,
   storeRefreshToken,
   toSafeUser,
@@ -29,20 +28,39 @@ const COOKIE_OPTIONS = {
   maxAge: 30 * 24 * 60 * 60 * 1000,
 } as const
 
+function resolveRefreshToken(req: Request): string | null {
+  const cookieToken = String(req.cookies?.refreshToken ?? '').trim()
+  if (cookieToken) return cookieToken
+
+  const headerToken = String(req.headers['x-refresh-token'] ?? '').trim()
+  if (headerToken) return headerToken
+
+  const authHeader = String(req.headers.authorization ?? '').trim()
+  if (authHeader.startsWith('Bearer ')) {
+    const bearerToken = authHeader.slice('Bearer '.length).trim()
+    if (bearerToken) return bearerToken
+  }
+
+  const bodyToken = String(req.body?.refreshToken ?? '').trim()
+  return bodyToken || null
+}
+
 function sendControllerError(res: Response, error: unknown) {
+  console.error('[auth.controller] unexpected error', error instanceof Error ? error.stack : error)
+
   if (error instanceof AuthServiceError) {
     if (error.code === 'user_not_registered') {
       return res.status(error.status).json({
+        success: false,
         message: 'Користувач ще не зареєстрований',
         action: 'showRegisterForm',
+        error: error.code,
       })
     }
 
-    return res.status(error.status).json({ error: error.code })
+    return res.status(error.status).json({ success: false, error: error.code })
   }
-
-  console.error('[auth.controller] unexpected error', error)
-  return res.status(500).json({ error: 'internal_error' })
+  return res.status(400).json({ success: false, error: 'internal_error' })
 }
 
 // ── REGISTER ──────────────────────────────
@@ -61,6 +79,7 @@ export async function register(req: Request, res: Response) {
     return res.status(201).json({
       user: result.user,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       needsProfile: result.needsProfile,
       expiresIn: result.expiresIn,
     })
@@ -85,11 +104,28 @@ export async function login(req: Request, res: Response) {
     return res.json({
       user: result.user,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       needsProfile: result.needsProfile,
       expiresIn: result.expiresIn,
     })
   } catch (error) {
-    return sendControllerError(res, error)
+    console.error('LOGIN ERROR:', error)
+    console.error('[auth.controller] login failed', error instanceof Error ? error.stack : error)
+
+    if (error instanceof AuthServiceError) {
+      if (error.code === 'user_not_registered') {
+        return res.status(error.status).json({
+          success: false,
+          message: 'Користувач ще не зареєстрований',
+          action: 'showRegisterForm',
+          error: error.code,
+        })
+      }
+
+      return res.status(error.status).json({ success: false, error: error.code })
+    }
+
+    return res.status(500).json({ success: false, error: 'login_failed' })
   }
 }
 
@@ -110,6 +146,7 @@ export async function social(req: Request, res: Response) {
     return res.json({
       user: result.user,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       needsProfile: result.needsProfile,
       expiresIn: result.expiresIn,
       isNewUser: result.isNewUser,
@@ -130,6 +167,7 @@ export async function telegram(req: Request, res: Response) {
     return res.json({
       token: result.accessToken,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       user: result.user,
       needsProfile: result.needsProfile,
       expiresIn: result.expiresIn,
@@ -143,28 +181,34 @@ export async function telegram(req: Request, res: Response) {
 
 // ── REFRESH ───────────────────────────────
 export async function refresh(req: Request, res: Response) {
-  const token = req.cookies.refreshToken
-  if (!token) return res.status(401).json({ error: 'no_refresh_token' })
+  const token = resolveRefreshToken(req)
+  if (!token) return res.status(401).json({ success: false, error: 'no_refresh_token' })
 
   try {
-    verifyRefreshToken(token)
+    const decoded = verifyRefreshToken(token)
+    console.log('[AUTH][REFRESH]', { tokenPresent: true, userId: decoded?.id ?? null })
     const exists = await withRetry(() => findRefreshToken(token))
-    if (!exists) return res.status(401).json({ error: 'invalid_refresh' })
+    if (!exists) return res.status(401).json({ success: false, error: 'invalid_refresh' })
+    if (exists.userId !== decoded.id) {
+      return res.status(401).json({ success: false, error: 'refresh_user_mismatch' })
+    }
 
-    const user = await withRetry(() => findUserById(exists.userId))
-    if (!user) return res.status(401).json({ error: 'user_not_found' })
+    const user = await withRetry(() => resolveSafeUserById(exists.userId))
+    if (!user) return res.status(401).json({ success: false, error: 'user_not_found' })
 
     const newAccess = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
     const newRefresh = generateRefreshToken(user.id)
     await withRetry(() => storeRefreshToken(user.id, newRefresh))
     await withRetry(() => removeRefreshToken(token))
     res.cookie('refreshToken', newRefresh, COOKIE_OPTIONS)
-    return res.json({ accessToken: newAccess, user: toSafeUser(user) })
+    return res.json({ accessToken: newAccess, refreshToken: newRefresh, user })
   } catch (error) {
+    console.error('[auth.controller] refresh failed', error instanceof Error ? error.stack : error)
+
     if (error instanceof AuthServiceError) {
-      return res.status(error.status).json({ error: error.code })
+      return res.status(Math.min(error.status, 401)).json({ success: false, error: error.code })
     }
-    return res.status(401).json({ error: 'invalid_refresh' })
+    return res.status(401).json({ success: false, error: 'refresh_failed' })
   }
 }
 
@@ -189,12 +233,16 @@ export async function logout(req: Request, res: Response) {
 // ── GET ME ────────────────────────────────
 export async function getMe(req: AuthenticatedRequest, res: Response) {
   try {
-    const user = await getCurrentUser({
-      userId: req.user?.id,
-      email: req.user?.email,
-    })
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, error: 'unauthorized' })
+    }
 
-    return res.json({ user: toSafeUser(user) })
+    const user = await resolveSafeUserById(req.user.id)
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'user_not_found' })
+    }
+
+    return res.json({ user })
   } catch (error) {
     return sendControllerError(res, error)
   }

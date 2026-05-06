@@ -1,53 +1,41 @@
-import React, { useEffect, useRef } from 'react';
-
-interface Props {
-  value: number;
-  onChange: (value: number) => void;
-  color?: string;
+interface ScoreSliderProps {
+  value: number
+  onChange: (value: number) => void
+  tone: 'critical' | 'warning' | 'good'
+  testId?: string
 }
 
-export const ScoreSlider = React.memo(({ value, onChange, color }: Props) => {
-  const safeValue = Math.min(10, Math.max(1, value));
-  const pct = ((safeValue - 1) / 9) * 100;
-  const sliderColor = color ?? 'rgba(var(--accent-rgb),0.94)';
-  const fillRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+const toneClassMap = {
+  critical: 'accent-[rgb(226,75,74)]',
+  warning: 'accent-[rgb(239,159,39)]',
+  good: 'accent-[rgb(29,158,117)]',
+} as const
 
-  useEffect(() => {
-    if (!fillRef.current) return
-    fillRef.current.style.width = `${pct}%`
-    fillRef.current.style.background = `linear-gradient(90deg, rgba(var(--accent-soft-rgb),0.88) 0%, ${sliderColor} 72%, rgba(var(--on-accent-rgb),0.9) 100%)`
-    fillRef.current.style.boxShadow = '0 0 16px rgba(var(--accent-rgb),0.42)'
-  }, [pct, sliderColor])
-
-  useEffect(() => {
-    if (!inputRef.current) return
-    inputRef.current.style.setProperty('--thumb-color', sliderColor)
-  }, [sliderColor])
-
-  return (
-    <div className="relative mt-2">
-      <div className="pointer-events-none absolute inset-0 flex items-center">
-        <div className="h-2.5 w-full rounded-full bg-white/10 border border-white/15 overflow-hidden">
-          {/* fix code_x: custom fill layer removes native white track tail and keeps glassmorphism transparency. */}
-        <div ref={fillRef} className="h-full rounded-full transition-[width] duration-300 ease-out relative">
-          <span className="absolute inset-0 wheel-slider-shimmer" />
-        </div>
-      </div>
-      </div>
-
-      <input
-        type="range"
-        min={1}
-        max={10}
-        value={safeValue}
-        onChange={(e) => onChange(Number(e.target.value))}
-        aria-label="Оцінка сфери від 1 до 10"
-        ref={inputRef}
-        className="wheel-score-slider relative z-10 w-full cursor-pointer"
-      />
+export const ScoreSlider = ({ value, onChange, tone, testId }: ScoreSliderProps) => (
+  <div className="space-y-3">
+    <input
+      type="range"
+      min={0}
+      max={10}
+      step={1}
+      value={value}
+      onChange={event => onChange(Number(event.target.value))}
+      aria-label="Оцінка сфери від 0 до 10"
+      data-testid={testId}
+      className={`h-2.5 w-full cursor-pointer rounded-full bg-white/10 ${toneClassMap[tone]}`}
+    />
+    <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+      <span>0</span>
+      <span>1</span>
+      <span>2</span>
+      <span>3</span>
+      <span>4</span>
+      <span>5</span>
+      <span>6</span>
+      <span>7</span>
+      <span>8</span>
+      <span>9</span>
+      <span>10</span>
     </div>
-  );
-});
-
-ScoreSlider.displayName = 'ScoreSlider';
+  </div>
+)

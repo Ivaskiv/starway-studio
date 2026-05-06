@@ -121,9 +121,11 @@ npm install
 
 Create `.env`:
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/starway
+DATABASE_URL="postgresql://postgres:YOUR_SUPABASE_DB_PASSWORD_URLENCODED@db.YOUR_PROJECT_REF.supabase.co:5432/postgres?sslmode=require"
+DIRECT_URL="postgresql://postgres:YOUR_SUPABASE_DB_PASSWORD_URLENCODED@db.YOUR_PROJECT_REF.supabase.co:5432/postgres?sslmode=require"
 OPENAI_API_KEY=sk-...
-JWT_SECRET=your-secret
+JWT_ACCESS_SECRET=your-access-secret
+JWT_REFRESH_SECRET=your-refresh-secret
 TELEGRAM_BOT_TOKEN=your-token
 ```
 

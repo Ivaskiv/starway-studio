@@ -26,10 +26,42 @@ export interface DailyAnswerInput {
   question: string;
   answer: string;
 }
+
+export interface DayAnalysisResult {
+  energy_level?: 'high' | 'medium' | 'low';
+  focus_level?: 'high' | 'medium' | 'low';
+  drain_level?: 'high' | 'medium' | 'low';
+  main_insight: string;
+  what_worked?: string[];
+  active_pattern?: {
+    title?: string;
+    description?: string;
+  };
+  energy_drain_summary?: string;
+  drain_chips?: string[];
+  tomorrow?: string[];
+}
+
 export interface DailyEntryForAi {
-  answers: {
-    question: string;
-    answer: string;
+  date: string;
+  morning: {
+    identity?: string;
+    qualities?: string;
+    focus?: string;
+    state?: string;
+    worthy?: string;
+    goals?: string[];
+  };
+  evening: {
+    win?: string;
+    energy_in?: string;
+    energy_out?: string;
+    program?: string;
+    power_source?: string;
+  };
+  tasks: {
+    text: string;
+    completed: boolean;
   }[];
 }
 

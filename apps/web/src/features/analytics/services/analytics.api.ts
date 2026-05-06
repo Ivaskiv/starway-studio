@@ -12,6 +12,7 @@ import { api } from '@/services/api'
 import type {
   AnalyticsData,
   AnalyticsFunnel,
+  FounderAnalytics,
   AnalyticsInsights,
   AnalyticsLiveEvent,
   AnalyticsOverview,
@@ -111,6 +112,14 @@ export const analyticsApi = api.injectEndpoints({
       }),
       providesTags: ['Analytics'],
     }),
+
+    getFounderAnalytics: builder.query<FounderAnalytics, { period?: '7d' | '30d' | '90d' }>({
+      query: ({ period = '30d' } = {}) => ({
+        url: '/analytics/founder',
+        params: { period },
+      }),
+      providesTags: ['Analytics'],
+    }),
   }),
 })
 
@@ -124,4 +133,5 @@ export const {
   useGetAnalyticsLiveQuery,
   useGetAnalyticsRetentionQuery,
   useGetAnalyticsInsightsQuery,
+  useGetFounderAnalyticsQuery,
 } = analyticsApi

@@ -23,10 +23,11 @@ import { useQueueItems } from '../hooks/useQueueItems'
 import {
   type ContentStudioStep,
 } from '../config/contentStudio.config'
+import type { ContentItemType } from '../types/contentStudio.types'
 import { buildContentStudioStepDefinitions } from '../config/contentStudio.steps'
 import { ContentStudioHeader } from './ContentStudioHeader'
 import { ContentStudioOverview } from './ContentStudioOverview'
-import { ContentStudioStepBody } from './ContentStudioStepBody'
+import ContentStudioStepBody from './ContentStudioStepBody'
 import { useContentStudioPanelState } from '../hooks/useContentStudioPanelState'
 import { useContentStudioDerived } from '../hooks/useContentStudioDerived'
 
@@ -447,7 +448,10 @@ export default function ContentStudioPanel({
               isStrategyReady={strategyReady}
               dispatch={dispatch}
               generateContentImages={generateContentImages}
-              runGenerate={async (formats, allowWithoutStrategy) => (await handleRunGenerate(formats, allowWithoutStrategy)) ?? undefined}
+              runGenerate={async (
+                formats: readonly ContentItemType[],
+                allowWithoutStrategy: boolean,
+              ) => (await handleRunGenerate(formats, allowWithoutStrategy)) ?? undefined}
               refreshResearch={refreshResearch}
               openStep={openStep}
               activeGroup={activeGroup}
@@ -550,7 +554,7 @@ export default function ContentStudioPanel({
               imageBusyItemId={imageBusyItemId}
               isGenerating={isGenerating}
               setReflection={setReflection}
-              dispatchUpdateProduct={(value) => dispatch(updateInputs({ product: [value] }))}
+              dispatchUpdateProduct={(value: string) => dispatch(updateInputs({ product: [value] }))}
               handlePlatformChange={handlePlatformChange}
               updateInputField={updateStudioInput}
               setAdMessageGoal={setAdMessageGoal}

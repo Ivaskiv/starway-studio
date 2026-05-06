@@ -52,11 +52,6 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
     ability: 'wheel.view',
   },
   {
-    label: 'My Progress',
-    path: '/dashboard/progress',
-    ability: 'progress.view',
-  },
-  {
     label: 'Profile',
     path: '/dashboard/profile',
     ability: 'profile.view',

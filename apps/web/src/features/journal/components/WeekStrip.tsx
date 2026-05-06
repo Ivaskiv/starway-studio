@@ -65,13 +65,19 @@ export default function WeekStrip({ selectedDay, daysByDate, onSelectDay }: Week
   const weekDays = getWeekDays(selectedDay);
 
   return (
-    <section className="glass-card overflow-hidden border border-[rgba(92,136,255,0.12)] bg-[linear-gradient(180deg,rgba(38,72,148,0.24),rgba(9,16,34,0.9))] p-4 shadow-[0_18px_44px_rgba(8,15,32,0.24)] sm:p-5">
-      <div className="flex items-center justify-end gap-2">
+    <section className="overflow-hidden rounded-[26px] border border-[rgba(255,255,255,0.06)] bg-[rgba(14,20,34,0.98)] p-4 shadow-[0_18px_40px_rgba(4,10,22,0.24)] sm:p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[13px] font-semibold uppercase tracking-[0.18em] text-white/42">Тиждень</p>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            {parseDateKey(selectedDay).toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' })}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => onSelectDay(toDateKey(addDays(parseDateKey(selectedDay), -7)))}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(92,136,255,0.12)] bg-white/[0.04] text-white/68 transition hover:bg-white/[0.08]"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(255,255,255,0.08)] bg-white/[0.04] text-white/68 transition hover:bg-white/[0.08]"
             aria-label="Попередній тиждень"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -80,7 +86,7 @@ export default function WeekStrip({ selectedDay, daysByDate, onSelectDay }: Week
           <button
             type="button"
             onClick={() => onSelectDay(toDateKey(addDays(parseDateKey(selectedDay), 7)))}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(92,136,255,0.12)] bg-white/[0.04] text-white/68 transition hover:bg-white/[0.08]"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(255,255,255,0.08)] bg-white/[0.04] text-white/68 transition hover:bg-white/[0.08]"
             aria-label="Наступний тиждень"
           >
             <ChevronRight className="h-4 w-4" />
@@ -88,7 +94,7 @@ export default function WeekStrip({ selectedDay, daysByDate, onSelectDay }: Week
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-7 gap-[10px]">
+      <div className="mt-5 grid grid-cols-7 gap-3">
         {weekDays.map((date) => {
           const dateKey = toDateKey(date);
           const day = daysByDate[dateKey] ?? null;
@@ -102,22 +108,19 @@ export default function WeekStrip({ selectedDay, daysByDate, onSelectDay }: Week
               type="button"
               onClick={() => onSelectDay(dateKey)}
               className={[
-                'group relative rounded-[20px] border bg-[rgba(11,18,34,0.88)] px-[15px] py-4 text-left shadow-[0_8px_22px_rgba(5,10,22,0.14)] outline-none transition-all duration-200',
+                'group relative min-h-[136px] rounded-[20px] border bg-[rgba(17,24,40,0.96)] px-[15px] py-4 text-left shadow-[0_10px_24px_rgba(5,10,22,0.18)] outline-none transition-all duration-200',
                 isSelected
-                  ? 'border-[rgba(119,164,255,0.28)] bg-[rgba(16,28,54,0.96)] shadow-[0_0_0_1px_rgba(119,164,255,0.16),0_14px_32px_rgba(15,34,70,0.24)]'
-                  : 'border-[rgba(92,136,255,0.08)] hover:border-[rgba(119,164,255,0.16)] hover:bg-[rgba(15,22,40,0.94)] hover:shadow-[0_12px_28px_rgba(15,34,70,0.18)] focus-visible:border-[rgba(119,164,255,0.2)] focus-visible:shadow-[0_0_0_1px_rgba(119,164,255,0.1),0_14px_32px_rgba(15,34,70,0.22)]',
+                  ? 'border-[rgba(81,138,255,0.9)] bg-[rgba(16,28,54,0.98)] shadow-[0_0_0_1px_rgba(129,174,255,0.22),0_14px_32px_rgba(15,34,70,0.24)]'
+                  : 'border-[rgba(255,255,255,0.05)] hover:border-[rgba(119,164,255,0.16)] hover:bg-[rgba(18,26,44,0.96)] hover:shadow-[0_12px_28px_rgba(15,34,70,0.18)] focus-visible:border-[rgba(119,164,255,0.2)] focus-visible:shadow-[0_0_0_1px_rgba(119,164,255,0.1),0_14px_32px_rgba(15,34,70,0.22)]',
               ].join(' ')}
             >
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/42">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-white/42">
                   {date.toLocaleDateString('uk-UA', { weekday: 'short' })}
                 </p>
-                <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${isToday ? 'border-[rgba(119,164,255,0.18)] bg-[rgba(119,164,255,0.12)] text-[rgb(var(--accent-soft-rgb))]' : 'border-[rgba(92,136,255,0.08)] bg-white/[0.03] text-white/52'}`}>
-                  {isToday ? 'Сьогодні' : `${day?.summary.xp ?? 0} XP`}
-                </span>
               </div>
 
-              <p className="mt-3 text-[1.95rem] font-semibold leading-none text-white">
+              <p className="mt-3 text-[2.1rem] font-semibold leading-none text-white">
                 {date.getDate()}
               </p>
 
@@ -131,8 +134,8 @@ export default function WeekStrip({ selectedDay, daysByDate, onSelectDay }: Week
                 ))}
               </div>
 
-              <p className="mt-3 text-[11px] leading-5 text-white/42">
-                {buildCardSummary(day, date)}
+              <p className="mt-2 text-[1.1rem] font-semibold leading-none text-[rgb(96,165,250)]">
+                {day?.summary.xp ? `+${day.summary.xp}` : '—'}
               </p>
 
               <span className="pointer-events-none absolute inset-0 rounded-[20px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" />

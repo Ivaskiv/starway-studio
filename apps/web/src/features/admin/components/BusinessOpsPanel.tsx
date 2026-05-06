@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 
-import { useGetAnalyticsLiveQuery, useGetAnalyticsOverviewQuery } from '@/features/analytics/services/analytics.api'
+import { useGetAnalyticsLiveQuery, useGetAnalyticsOverviewQuery, useGetFounderAnalyticsQuery } from '@/features/analytics/services/analytics.api'
 import { InfoHint } from '@/ui'
 import { useGetOwnershipQuery } from '../services/ownership.api'
 import {
@@ -34,6 +34,7 @@ export default function BusinessOpsPanel() {
   const [draftName, setDraftName] = useState('')
   const { data: overview } = useGetAnalyticsOverviewQuery({ period: '30d' })
   const { data: live } = useGetAnalyticsLiveQuery({ limit: 12 })
+  const { data: founder } = useGetFounderAnalyticsQuery({ period: '30d' })
   const { data: ownership } = useGetOwnershipQuery()
   const { data: questionSets = [], isLoading: questionSetsLoading } = useGetQuestionSetsQuery()
   const [createQuestionSet, { isLoading: creatingSet }] = useCreateQuestionSetMutation()
@@ -41,6 +42,10 @@ export default function BusinessOpsPanel() {
   const [deleteQuestionSet, { isLoading: deletingSet }] = useDeleteQuestionSetMutation()
 
   const activeSet = questionSets.find((set) => set.isActive) ?? null
+  const weakestFounderStep = useMemo(
+    () => founder?.funnel.slice(1).sort((left, right) => left.conversionRate - right.conversionRate)[0] ?? null,
+    [founder?.funnel]
+  )
 
   const handleCreateSet = async () => {
     const name = draftName.trim()
@@ -84,6 +89,85 @@ export default function BusinessOpsPanel() {
       </div>
 
       <div className="dashboard-responsive-split--wide">
+        <div className="dashboard-liquid-card p-5">
+          <div className="flex items-center gap-2">
+            <p className={EYEBROW_CLASS}>Founder mode</p>
+            <InfoHint
+              label="Founder mode"
+              description="Retention і drop-off по реальному survival funnel: wheel → goals → web map → first action → day 2."
+              instruction="Цей блок показує не кліки, а точки, де користувачі реально випадають із продукту."
+            />
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <div className="rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Funnel</p>
+              <div className="mt-4 space-y-3">
+                {(founder?.funnel ?? []).map((step) => (
+                  <div
+                    key={step.key}
+                    className="flex items-start justify-between gap-4 rounded-[14px] border-b border-[rgba(255,255,255,0.05)] pb-3 last:border-b-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[var(--text-primary)]">{step.label}</p>
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        {step.users} users · avg {step.avgHoursToNext}h · last action {step.lastActionBeforeExit}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{step.conversionRate}%</p>
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">drop {step.dropOffRate}%</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {weakestFounderStep ? (
+                <div className="mt-4 rounded-[14px] border border-[rgba(245,201,74,0.2)] bg-[rgba(245,201,74,0.06)] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[rgb(245,201,74)]">Weakest point</p>
+                  <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">{weakestFounderStep.label}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Retention</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <InfoRow label="D1 retention" value={`${founder?.retention.day1 ?? 0}%`} />
+                  <InfoRow label="D3 retention" value={`${founder?.retention.day3 ?? 0}%`} />
+                  <InfoRow label="Avg streak" value={String(founder?.retention.avgStreak ?? 0)} />
+                  <InfoRow label="Actions / user" value={String(founder?.retention.actionsPerUser ?? 0)} />
+                </div>
+              </div>
+
+              <div className="rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Behavior</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <InfoRow label="First action completed" value={`${founder?.behavior.firstActionCompletionRate ?? 0}%`} />
+                  <InfoRow label="Stuck users" value={`${founder?.behavior.stuckUsersRate ?? 0}%`} />
+                </div>
+                <div className="mt-4 rounded-[14px] border border-[rgba(var(--accent-rgb),0.12)] bg-[rgba(var(--accent-rgb),0.08)] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[rgb(var(--accent-soft-rgb))]">{founder?.behavior.weakestPoint ?? '—'}</p>
+                  <p className="mt-2 text-sm text-[var(--text-primary)]">{founder?.behavior.heuristic ?? '—'}</p>
+                  <p className="mt-2 text-sm text-[var(--text-secondary)]">{founder?.behavior.suggestion ?? '—'}</p>
+                </div>
+              </div>
+
+              <div className="rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Channels</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <InfoRow label="Web users" value={String(founder?.channels.webUsers ?? 0)} />
+                  <InfoRow label="Mini app users" value={String(founder?.channels.miniAppUsers ?? 0)} />
+                  <InfoRow label="Telegram users" value={String(founder?.channels.telegramUsers ?? 0)} />
+                  <InfoRow label="Web-only users" value={String(founder?.channels.webOnlyUsers ?? 0)} />
+                  <InfoRow label="Telegram return rate" value={`${founder?.channels.telegramReturnRate ?? 0}%`} />
+                  <InfoRow label="Mini app engagement" value={`${founder?.channels.miniAppEngagementRate ?? 0}%`} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="dashboard-liquid-card p-5">
           <div className="flex items-center gap-2">
             <p className={EYEBROW_CLASS}>Системний зріз</p>

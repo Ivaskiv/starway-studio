@@ -1,6 +1,7 @@
 import { useAppSelector } from '@/app/hooks'
 import { useMemo } from 'react';
 
+import { getCoreAccess } from '@/features/auth/selectors/getCoreAccess';
 import { useGetMySystemStateQuery } from '@/features/auth/services/accessApi';
 
 type ModuleId = 'AI_GENERATOR' | 'AI_FUNNEL' | 'AI_MENTOR' | 'WHEEL_OF_BALANCE';
@@ -27,6 +28,12 @@ export function useSystemState() {
   const getModuleAccess = (moduleId: ModuleId) =>
     moduleMap.get(moduleId) || { isLocked: true, accessLevel: 'NONE' as const, lockReason: 'NO_SUBSCRIPTION' as const };
 
+  const { trialActive, subscriptionActive, hasCoreAccess } = getCoreAccess({
+    trial: state?.trial,
+    subscription: state?.subscription,
+    accessControl: state?.accessControl,
+  })
+
   return {
     ...query,
     state,
@@ -40,6 +47,9 @@ export function useSystemState() {
     trial: state?.trial,
     subscription: state?.subscription,
     accessControl: state?.accessControl,
+    trialActive,
+    subscriptionActive,
+    hasCoreAccess,
     getModuleAccess,
   };
 }

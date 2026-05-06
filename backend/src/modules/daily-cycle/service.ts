@@ -2,7 +2,6 @@
 
 import { prisma } from '../../db/client.js'
 import {
-  Channel,
   DayStatus,
   DailyChoice,
   DailyDrain,
@@ -27,10 +26,17 @@ import {
   setCachedTodayEntry,
 } from '../../lib/db/dailyCache.js'
 import { cacheDel, cacheGet, cacheSet } from '../../lib/cache/index.js'
-import { assertRecoverableDate } from './recoveryPolicy.js'
+import { assertRecoverableDate, getRecoveryPolicy } from './recoveryPolicy.js'
 import { updateCrossChannelUserState } from '../user-state/crossChannelState.service.js'
 
 const JOURNAL_TIMEZONE = 'Europe/Kyiv'
+const dailySessionDelegate = (
+  prisma as unknown as {
+    dailySession?: {
+      upsert: (args: unknown) => Promise<unknown>
+    }
+  }
+).dailySession
 
 const todayRange = () => {
   const start = new Date()
@@ -110,10 +116,10 @@ async function ensureYesterdayResolvedForToday(userId: string, date: Date): Prom
 const toPrismaJson = (value: unknown): Prisma.InputJsonValue =>
   JSON.parse(JSON.stringify(value))
 
-const toDailySessionChannel = (channel?: 'tg' | 'miniapp' | 'web'): Channel => {
-  if (channel === 'tg') return Channel.TELEGRAM
-  if (channel === 'miniapp') return Channel.MINIAPP
-  return Channel.WEB
+const toDailySessionChannel = (channel?: 'tg' | 'miniapp' | 'web'): 'TELEGRAM' | 'MINIAPP' | 'WEB' => {
+  if (channel === 'tg') return 'TELEGRAM'
+  if (channel === 'miniapp') return 'MINIAPP'
+  return 'WEB'
 }
 
 function syncUserStateFromEntry(entry: {
@@ -269,17 +275,13 @@ export async function getOrCreateTodayEntry(userId: string, expertId: string): P
 
 export async function getDailyEntryForDate(userId: string, dateInput: string): Promise<DailyEntryRow | null> {
   const date = getJournalDayAnchor(dateInput)
-  assertRecoverableDate(date)
-  const entry = await getCachedEntryByDate(userId, date)
-  const resolvedEntry = (entry ?? null) as DailyEntryRow | null
-
-  if (
-    resolvedEntry?.status === DayStatus.SKIPPED
-    && resolvedEntry.canCatchUpUntil
-    && new Date() > new Date(resolvedEntry.canCatchUpUntil)
-  ) {
+  const recoveryPolicy = getRecoveryPolicy(date)
+  if (!recoveryPolicy.isRecoverable) {
     throw new Error('daily_recovery_forbidden')
   }
+
+  const entry = await getCachedEntryByDate(userId, date)
+  const resolvedEntry = (entry ?? null) as DailyEntryRow | null
 
   return resolvedEntry
 }
@@ -378,6 +380,19 @@ function getSessionMeta(
     : {}
 }
 
+function getContentRecord(content: unknown): Record<string, unknown> {
+  return content && typeof content === 'object' && !Array.isArray(content)
+    ? content as Record<string, unknown>
+    : {}
+}
+
+function getAnswerRecord(content: Record<string, unknown>, key: 'morning' | 'evening') {
+  const value = content[key]
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, string>
+    : {}
+}
+
 export async function saveDailyAnswer(
   userId: string,
   data: SaveDailyAnswerInput,
@@ -463,28 +478,30 @@ export async function saveDailyAnswer(
     },
   })
 
-  await prisma.dailySession.upsert({
-    where: {
-      userId_date_channel: {
+  if (dailySessionDelegate) {
+    await dailySessionDelegate.upsert({
+      where: {
+        userId_date_channel: {
+          userId,
+          date: dateObj.toISOString().slice(0, 10),
+          channel: toDailySessionChannel(data.channel),
+        },
+      },
+      update: {
+        entryId: entry.id,
+        lastQuestionIndex: data.lastQuestionIndex,
+        answers: toPrismaJson(dailySessionAnswers),
+      },
+      create: {
         userId,
+        entryId: entry.id,
         date: dateObj.toISOString().slice(0, 10),
         channel: toDailySessionChannel(data.channel),
+        lastQuestionIndex: data.lastQuestionIndex,
+        answers: toPrismaJson(dailySessionAnswers),
       },
-    },
-    update: {
-      entryId: entry.id,
-      lastQuestionIndex: data.lastQuestionIndex,
-      answers: toPrismaJson(dailySessionAnswers),
-    },
-    create: {
-      userId,
-      entryId: entry.id,
-      date: dateObj.toISOString().slice(0, 10),
-      channel: toDailySessionChannel(data.channel),
-      lastQuestionIndex: data.lastQuestionIndex,
-      answers: toPrismaJson(dailySessionAnswers),
-    },
-  })
+    })
+  }
 
   await invalidateDayCache(userId, dateObj)
   await invalidateDailyHistoryCache(userId)
@@ -529,18 +546,66 @@ export async function saveDailySession(
 
   const existingEntry = await prisma.dailyEntry.findUnique({
     where: { userId_date: { userId, date: dateObj } },
-    select: { id: true, content: true },
+    select: { id: true, content: true, status: true, createdAt: true },
   })
 
   const contentBase = mergeSessionContent(existingEntry?.content, data.session, data.answers)
+  const contentBaseRecord = getContentRecord(contentBase)
+  const morningAnswers = getAnswerRecord(contentBaseRecord, 'morning')
+  const eveningAnswers = getAnswerRecord(contentBaseRecord, 'evening')
+  const dayStart = new Date(dateObj)
+  dayStart.setUTCHours(0, 0, 0, 0)
+  const dayEnd = new Date(dayStart)
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1)
+  const dayTasks = existingEntry?.id
+    ? await prisma.microTask.findMany({
+        where: {
+          userId,
+          OR: [
+            { generatedFromEntryId: existingEntry.id },
+            {
+              createdAt: {
+                gte: dayStart,
+                lt: dayEnd,
+              },
+            },
+          ],
+        },
+        select: {
+          title: true,
+          status: true,
+          isCompleted: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+    : []
   const analysisPayload = data.finalize && data.session === 'evening'
     ? await generateDailyAiAnalysis({
-        answers: Object.entries(data.answers).map(([question, answer]) => ({
-          question,
-          answer,
+        date: dateObj.toISOString().slice(0, 10),
+        morning: {
+          identity: morningAnswers.identity,
+          qualities: morningAnswers.qualities,
+          focus: morningAnswers.focus,
+          state: morningAnswers.state,
+          worthy: morningAnswers.worthy ?? morningAnswers.worthiness,
+          goals: typeof morningAnswers.goals === 'string'
+            ? morningAnswers.goals.split(/[\n,/]/).map(item => item.trim()).filter(Boolean).slice(0, 3)
+            : [],
+        },
+        evening: {
+          win: eveningAnswers.win,
+          energy_in: eveningAnswers.energy_in ?? eveningAnswers.energyGain,
+          energy_out: eveningAnswers.energy_out ?? eveningAnswers.energyDrain,
+          program: eveningAnswers.program ?? eveningAnswers.pattern,
+          power_source: eveningAnswers.power_source ?? eveningAnswers.source,
+        },
+        tasks: dayTasks.map(task => ({
+          text: task.title,
+          completed: task.isCompleted || task.status === 'done',
         })),
       }, userId)
     : null
+  const serializedAnalysis = analysisPayload ? JSON.stringify(analysisPayload) : null
   const contentWithMeta = mergeSessionMeta(contentBase, data.session, {
     lastQuestionIndex: Math.max(0, Object.keys(data.answers ?? {}).length - 1),
     ...(data.channel ? { activeChannel: data.channel, lastAnsweredAt: new Date().toISOString() } : {}),
@@ -552,8 +617,8 @@ export async function saveDailySession(
         finalizedAt: new Date().toISOString(),
         finalizedSession: data.session,
         completedLate: recoveryPolicy.isYesterday,
-        analysis: analysisPayload?.analysis ?? null,
-        analysisGeneratedAt: analysisPayload?.analysis ? new Date().toISOString() : null,
+        analysis: analysisPayload ?? null,
+        analysisGeneratedAt: analysisPayload ? new Date().toISOString() : null,
       })
     : contentWithMeta
 
@@ -589,7 +654,7 @@ export async function saveDailySession(
       state: DailyState.STABILITY,
       choice: DailyChoice.CONFIRMED_OLD,
       dayFact,
-      aiAnalysis: analysisPayload?.analysis ?? null,
+      aiAnalysis: serializedAnalysis,
       microSupport: Prisma.JsonNull,
       lateCompletedAt: data.finalize && data.session === 'evening' && recoveryPolicy.isYesterday ? new Date() : null,
       canCatchUpUntil: null,
@@ -598,7 +663,7 @@ export async function saveDailySession(
       status: nextStatus,
       content,
       dayFact,
-      aiAnalysis: analysisPayload?.analysis ?? null,
+      aiAnalysis: serializedAnalysis,
       lateCompletedAt: data.finalize && data.session === 'evening' && recoveryPolicy.isYesterday ? new Date() : undefined,
       canCatchUpUntil: data.finalize && data.session === 'evening' ? null : undefined,
     },
@@ -621,6 +686,24 @@ export async function saveDailySession(
     }, data.channel === 'tg' ? 'telegram' : data.channel)
   }
 
+  if (
+    data.finalize
+    && data.session === 'evening'
+    && (nextStatus === DayStatus.COMPLETED || nextStatus === DayStatus.COMPLETED_LATE)
+    && existingEntry?.status !== DayStatus.COMPLETED
+    && existingEntry?.status !== DayStatus.COMPLETED_LATE
+  ) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        onboardingStartedAt: existingEntry?.createdAt ?? new Date(),
+      },
+      select: { id: true },
+    }).catch((error: any) => {
+      if (error?.code !== 'P2022') throw error
+    })
+  }
+
   if (data.finalize) {
     console.info('[DailyCycle] finalize saved', {
       userId,
@@ -629,7 +712,7 @@ export async function saveDailySession(
       finalizedAt: new Date().toISOString(),
       completedLate: recoveryPolicy.isYesterday,
       entryId: entry.id,
-      hasAnalysis: Boolean(analysisPayload?.analysis),
+      hasAnalysis: Boolean(analysisPayload),
     })
   }
 

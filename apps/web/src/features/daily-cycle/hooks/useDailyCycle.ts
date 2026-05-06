@@ -11,6 +11,8 @@ import { useGetDailyHistoryQuery, useGetTodayEntryQuery } from '../services/dail
 import { DEFAULT_DAILY_CHOICE, DEFAULT_DAILY_STATE, type DailyCycleEntry } from '../types/daily.types'
 import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
 import { useSkipPreviousDayMutation } from '../services/daily.api'
+import { getDailyHistoryProgress, getEntryTaskStats } from '../utils/dashboard.utils'
+import type { MicroTask as MicroTaskItem } from '@/features/microTask/types/types'
 
 export type ActiveStep =
   | { step: 'morning'; resumeFrom: number }
@@ -103,6 +105,7 @@ export function getYesterdayBlockState(
   userId: string,
   today: Date = new Date(),
   hasTodayWork = false,
+  tasks: MicroTaskItem[] = [],
 ): YesterdayBlockState {
   const yesterday = new Date(today)
   yesterday.setDate(today.getDate() - 1)
@@ -135,7 +138,10 @@ export function getYesterdayBlockState(
     }
   }
 
-  const unresolvedYesterdayDay = yesterdayDays.find((entry) => !isEntryClosed(entry)) ?? null
+  const unresolvedYesterdayDay = yesterdayDays.find((entry) => {
+    const progress = getDailyHistoryProgress(entry, getEntryTaskStats(entry, tasks))
+    return !(progress.morningDone && progress.tasksDone && progress.eveningDone)
+  }) ?? null
 
   if (!unresolvedYesterdayDay) {
     return { shouldBlock: false, yesterdayDay: null }
@@ -149,6 +155,7 @@ type UseTodayGuardParams = {
   userId: string
   isEnabled: boolean
   hasTodayWork?: boolean
+  tasks?: MicroTaskItem[]
   onCatchupDay: (day: DailyCycleEntry) => void
 }
 
@@ -157,6 +164,7 @@ export function useTodayGuard({
   userId,
   isEnabled,
   hasTodayWork = false,
+  tasks = [],
   onCatchupDay,
 }: UseTodayGuardParams) {
   const [skipPreviousDay] = useSkipPreviousDayMutation()
@@ -172,7 +180,7 @@ export function useTodayGuard({
       return
     }
 
-    const nextState = getYesterdayBlockState(days, userId, new Date(), hasTodayWork)
+    const nextState = getYesterdayBlockState(days, userId, new Date(), hasTodayWork, tasks)
 
     if (!nextState.shouldBlock || !nextState.yesterdayDay) {
       onProceed()

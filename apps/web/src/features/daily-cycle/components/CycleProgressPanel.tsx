@@ -5,6 +5,20 @@ type Metric = {
   color?: string
 }
 
+function getMetricColorClass(color?: string) {
+  switch (color) {
+    case '#378ADD':
+      return 'dc-metric-value--blue'
+    case '#EF9F27':
+      return 'dc-metric-value--gold'
+    case '#F87171':
+    case '#f87171':
+      return 'dc-metric-value--danger'
+    default:
+      return 'text-[var(--text-primary)]'
+  }
+}
+
 function buildPath(values: Array<number | null>, width: number, height: number) {
   const defined = values
     .map((value, index) => ({ value, index }))
@@ -52,7 +66,7 @@ export default function CycleProgressPanel({
                 index < metrics.length - 1 ? 'xl:after:absolute xl:after:right-0 xl:after:top-1 xl:after:h-12 xl:after:w-px xl:after:bg-[rgba(255,255,255,0.08)]' : '',
               ].join(' ')}
             >
-              <div className="text-[1.65rem] font-semibold leading-none" style={{ color: metric.color ?? 'var(--text-primary)' }}>
+              <div className={`text-[1.65rem] font-semibold leading-none ${getMetricColorClass(metric.color)}`}>
                 {metric.value}
               </div>
               <div className="mt-1 flex items-end gap-1 text-[12px] text-[var(--text-secondary)]">

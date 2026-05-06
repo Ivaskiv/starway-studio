@@ -17,6 +17,7 @@ import {
   completeMicroTask,
   getDailyEntryHistory,
 } from './service.js';
+import { getRecoveryPolicy } from './recoveryPolicy.js';
 import { rewardEngine } from '../gamification/reward.engine.js';
 import { ensureUserExpertId } from '../ai-mentor/helpers.js';
 
@@ -111,20 +112,30 @@ export async function upsertEntry(req: AuthenticatedRequest, res: Response) {
         channel: payload.channel,
       })
       const regenerateMicroTasks = Boolean(payload.regenerateMicroTasks)
+      const recoveryPolicy = getRecoveryPolicy(payload.date)
+      const shouldGenerateMorningTasks = payload.session === 'morning' && !recoveryPolicy.isYesterday
       if (!isFinalize && !regenerateMicroTasks) {
         await rewardEngine.onDailyEntryCreated(user.id);
       }
-      if (isFinalize && payload.session === 'morning') {
+      if (isFinalize && shouldGenerateMorningTasks) {
         void queueMorningMicroTaskGeneration(user.id, entry.id)
+      }
+      if (isFinalize && payload.session === 'evening') {
+        console.info('[DailyCycle] finalize evening requested, resolving microtasks before response', {
+          userId: user.id,
+          date: payload.date,
+          entryId: entry.id,
+        })
+        await resolveEveningMicroTasks(user.id, payload.date)
       }
       if (isFinalize) {
         res.json(entry);
         return;
       }
       if (payload.session === 'morning') {
-        if (regenerateMicroTasks) {
+        if (regenerateMicroTasks && shouldGenerateMorningTasks) {
           await regenerateMorningMicroTaskGeneration(user.id, entry.id)
-        } else {
+        } else if (shouldGenerateMorningTasks) {
           queueMorningMicroTaskGeneration(user.id, entry.id)
         }
       } else {

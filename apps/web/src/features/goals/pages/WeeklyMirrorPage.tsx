@@ -44,10 +44,10 @@ export default function WeeklyMirrorPage() {
           </button>
           <button
             type="button"
-            onClick={() => navigate(ROUTES.PROGRESS)}
+            onClick={() => navigate(ROUTES.JOURNAL)}
             className="rounded-lg border border-white/20 bg-transparent px-4 py-2 text-sm font-medium text-white/85 hover:bg-white/5"
           >
-            Відкрити аналітику
+            Відкрити журнал
           </button>
         </div>
       </GlassCard>

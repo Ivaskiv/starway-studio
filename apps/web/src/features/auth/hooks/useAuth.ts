@@ -90,7 +90,7 @@ export function useAuth() {
     }
     if (meError) {
       const status = (meRawError as any)?.status
-      if (status !== 401) {
+      if (status === 401 || status === 403) {
         dispatch(clearAuth())
         removeToken()
       }

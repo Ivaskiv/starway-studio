@@ -1,0 +1,345 @@
+// apps/web/src/features/landings/focus/styles/components/_cards.scss
+@use '../_glass.scss' as *;
+
+/* ─── BASE ─── */
+
+.focus-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-lg);
+  transition: all 0.25s ease;
+}
+
+.focus-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+.focus-card-content {
+  flex-grow: 1;
+}
+
+/* ─── GLASS EXTENDS ─── */
+
+.focus-topic-pill,
+.focus-included-card,
+.focus-pricing-card,
+.focus-modal-panel,
+.focus-reviews-placeholder,
+.focus-how-visual,
+.focus-about-photo,
+.focus-problem-item,
+.focus-first-practice-item {
+  @extend .focus-glass-item;
+}
+
+.focus-how-visual,
+.focus-reviews-card,
+.focus-video-card,
+.focus-pricing-card,
+.focus-cta-card,
+.focus-first-practice-card,
+.focus-reviews-frame,
+.focus-split-card {
+  @extend .focus-glass;
+}
+
+.focus-reviews-card--featured,
+.focus-pricing-card-popular,
+.focus-included-card-highlight {
+  @extend .focus-glass-strong;
+}
+
+/* ─── POSITION RESET ─── */
+
+.focus-included-card,
+.focus-pricing-card,
+.focus-reviews-card,
+.focus-cta-card,
+.focus-first-practice-card,
+.focus-how-visual,
+.focus-modal-panel {
+  position: relative;
+}
+
+/* ─── ABOUT PHOTO ─── */
+
+.focus-about-photo {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 5;
+  color: var(--focus-text-dim);
+  font-size: 80px;
+  background: var(--focus-bg-secondary);
+}
+
+.focus-about-photo::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 50%;
+  background: linear-gradient(to top, var(--focus-bg-secondary), transparent);
+}
+
+.focus-about-photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+}
+
+/* ─── INCLUDED CARD ─── */
+
+.focus-included-card-highlight {
+  border-color: var(--focus-blue-border);
+  background: var(--focus-blue-light);
+}
+
+.focus-included-title-highlight {
+  color: var(--focus-blue);
+}
+
+/* ─── PRICING CARD ─── */
+
+.focus-pricing-card-popular {
+  border-color: var(--focus-blue);
+  background: linear-gradient(135deg, rgba(74, 126, 191, 0.14) 0%, rgba(74, 126, 191, 0.05) 100%);
+  box-shadow: 0 0 60px rgba(74, 126, 191, 0.12);
+}
+
+/* ─── FIRST PRACTICE CARD ─── */
+
+.focus-first-practice-card {
+  max-width: 80rem;
+  margin: 0 auto;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ─── REVIEWS FRAME ─── */
+
+.focus-reviews-frame {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: clamp(32px, 5vw, 56px);
+  border-radius: var(--focus-radius-2xl);
+  background:
+    linear-gradient(180deg, rgba(17, 20, 31, 0.98) 0%, rgba(14, 17, 27, 0.98) 100%),
+    radial-gradient(circle at top right, rgba(74, 126, 191, 0.08), transparent 36%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    var(--focus-shadow-depth);
+}
+
+/* ─── REVIEWS CARD ─── */
+
+.focus-reviews-card {
+  min-height: 100%;
+  padding: 32px 32px 30px;
+  border-radius: var(--focus-radius-xl);
+  background: linear-gradient(180deg, rgba(24, 27, 39, 0.96), rgba(20, 23, 34, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    var(--focus-shadow-card);
+}
+
+.focus-reviews-card--featured {
+  background: linear-gradient(180deg, rgba(18, 23, 38, 0.98), rgba(15, 19, 33, 0.98));
+  border-color: rgba(74, 126, 191, 0.56);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px rgba(74, 126, 191, 0.14),
+    0 22px 48px rgba(6, 11, 22, 0.2);
+}
+
+/* ─── VIDEO CARD ─── */
+
+.focus-video-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 268px;
+  padding: 0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(24, 27, 39, 0.92), rgba(21, 24, 35, 0.92));
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.focus-video-card.is-active {
+  border-color: rgba(74, 126, 191, 0.72);
+  box-shadow:
+    inset 0 0 0 1px rgba(74, 126, 191, 0.28),
+    0 12px 30px rgba(9, 16, 29, 0.28);
+}
+
+/* ─── HOVER LIFTS ─── */
+
+.focus-video-card:hover,
+.focus-topic-pill:hover {
+  transform: translateY(-2px);
+}
+
+/* ─── CTA CARD ─── */
+
+.focus-cta-card {
+  overflow: hidden;
+  max-width: 760px;
+  margin: 0 auto;
+  width: 100%;
+  border: 1px solid var(--focus-blue-border);
+}
+
+.focus-cta-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 500px;
+  height: 300px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ─── MODAL ─── */
+
+.focus-modal-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.focus-modal-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.focus-modal-panel {
+  width: 100%;
+  max-width: 440px;
+  padding: 48px;
+  border-radius: var(--focus-radius-xl);
+  background: var(--focus-bg-secondary);
+  transform: translateY(20px) scale(0.97);
+  transition: all 0.3s ease;
+}
+
+.focus-modal-overlay.is-open .focus-modal-panel {
+  transform: translateY(0) scale(1);
+}
+
+/* ─── SPLIT CARD ─── */
+
+.focus-split-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-radius: var(--focus-radius-xl);
+  overflow: hidden;
+  min-height: 340px;
+}
+
+.focus-split-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 255, 255, 0.35) 20%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0.35) 80%,
+    transparent
+  );
+  z-index: 10;
+}
+
+.focus-split-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(10, 12, 24, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.focus-split-left,
+.focus-split-right {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(24px, 4vw, 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.focus-split-left {
+  padding-right: clamp(24px, 3.6vw, 36px);
+  align-items: flex-end;
+  text-align: right;
+  background:
+    radial-gradient(ellipse at 20% 80%, rgba(20, 30, 60, 0.95), transparent 65%),
+    radial-gradient(ellipse at 80% 20%, rgba(10, 15, 35, 0.9), transparent 60%),
+    linear-gradient(155deg, #0c0e1a, #090b14);
+}
+
+.focus-split-right {
+  padding-left: clamp(24px, 3.6vw, 36px);
+  background:
+    radial-gradient(ellipse at 80% 20%, rgba(74, 126, 191, 0.18), transparent 55%),
+    radial-gradient(ellipse at 20% 80%, rgba(50, 90, 180, 0.12), transparent 60%),
+    linear-gradient(145deg, #0e1220, #0b0e1a);
+}
+
+.focus-split-right::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  background:
+    repeating-linear-gradient(72deg, transparent, transparent 28px, rgba(255, 255, 255, 0.8) 28px, rgba(255, 255, 255, 0.8) 29px),
+    repeating-linear-gradient(-72deg, transparent, transparent 28px, rgba(255, 255, 255, 0.5) 28px, rgba(255, 255, 255, 0.5) 29px);
+  pointer-events: none;
+}
+
+.focus-split-footnote {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 24px;
+  color: rgba(240, 240, 245, 0.28);
+}
+
+.focus-split-footnote span {
+  color: rgba(74, 160, 255, 0.55);
+}
+
+/* ─────────────────────────────
+   RESPONSIVE
+───────────────────────────── */
+
+@media (max-width: 680px) {
+  .focus-split-card          { grid-template-columns: 1fr; }
+  .focus-split-left          { align-items: flex-start; text-align: left; }
+  .focus-split-pills         { justify-content: flex-start; }
+  .focus-split-line          { display: none; }
+}

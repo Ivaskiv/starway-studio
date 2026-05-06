@@ -12,6 +12,7 @@
   "dependencies": {
     "@neondatabase/serverless": "^0.9.0",
     "@starway/db": "workspace:*",
+    "@supabase/supabase-js": "^2.105.1",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

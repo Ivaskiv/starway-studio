@@ -1,293 +1,284 @@
-// frontend/src/features/subscription/pages/SubscriptionPage.tsx
-// FIX: useGetMeQuery → useAppSelector(selectCurrentUser)
-// Причина: useGetMeQuery в 3 місцях → паралельні 401 → множинні refresh
-// selectCurrentUser читає з Redux store — без мережевого запиту
-
-import { useAppSelector }   from '@/app/hooks'
-import { useTrackFrontendEventMutation } from '@/features/analytics/services/events.api'
-import { selectCurrentUser } from '@/features/auth/services/auth.slice'
-import { usePermissions } from '@/hooks/usePermissions'
-import { SUBSCRIPTION_BADGE_CLASS, SUBSCRIPTION_PLANS, type SubscriptionPlan } from '@/features/subscription/constants/plans'
-import { initiateSubscriptionCheckout, runSuperadminSubscriptionTest } from '@/features/subscription/utils/subscriptionCheckout'
-import { hasPaidAccess }    from '@/features/auth/utils/access.utils'
-import {
-  ArrowRight, BookOpen, Brain,
-  Check, Crown, MessageCircle, Users,
-} from 'lucide-react'
+import { ROUTES } from '@/config/routes'
+import { useSystemState } from '@/features/auth/hooks/useSystemState'
+import { consumePostPaymentRedirect, POST_PAYMENT_REDIRECT_KEY } from '@/features/paywall/usePaywall'
+import { useCreatePaymentMutation, useGetSubscriptionQuery } from '@/features/subscription/services/billing.api'
+import { SUBSCRIPTION_BADGE_CLASS, SUBSCRIPTION_PLANS } from '@/features/subscription/constants/plans'
+import { useStartTrialMutation, useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
+import { useUserProgress } from '@/features/user/hooks/useUserProgress'
+import { WHEEL_TEXTS } from '@/features/wheel/constants/texts'
+import { submitWayForPayForm } from '@/features/subscription/utils/wayforpayCheckout'
+import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 
 export default function SubscriptionPage() {
-  // ── ВИПРАВЛЕНО: читаємо з store — без мережевого запиту ─────────────────
-  const user = useAppSelector(selectCurrentUser)
-  const { canManageRoles } = usePermissions()
+  const navigate = useNavigate()
+  const { onboardingState } = useUserProgress()
+  const { hasCoreAccess: systemHasCoreAccess, subscriptionActive: systemSubscriptionActive, trialActive } = useSystemState()
+  const { data: trial } = useGetTrialStatusQuery()
+  const { data: subscriptionStatus } = useGetSubscriptionQuery()
+  const [startTrial, startTrialState] = useStartTrialMutation()
+  const [createPayment, createPaymentState] = useCreatePaymentMutation()
+  const [paymentFailed, setPaymentFailed] = useState(false)
 
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [isTestProcessing, setIsTestProcessing] = useState(false)
-  const [testStatus, setTestStatus] = useState<string | null>(null)
-  const [showTrial,    setShowTrial]    = useState(false)
-  const [trackFrontendEvent] = useTrackFrontendEventMutation()
-  const hasSubscription = hasPaidAccess(user)
+  const subscriptionActive = Boolean(
+    systemSubscriptionActive || subscriptionStatus?.subscription?.status === 'ACTIVE'
+  )
+  const hasCoreAccess = Boolean(systemHasCoreAccess || subscriptionActive)
+  const isTrialActive = Boolean(trialActive && !subscriptionActive)
+  const isTrialExpired = Boolean(
+    !hasCoreAccess
+    && !trialActive
+    && ((trial?.currentDay ?? 0) > 0 || trial?.startedAt),
+  )
+  const trialDaysLeft = Math.max(0, trial?.daysLeft ?? 0)
+  const pricingOptions = SUBSCRIPTION_PLANS.map((plan) => {
+    if (plan.id === 'monthly') {
+      return {
+        ...plan,
+        displayName: 'Starter',
+        eyebrow: 'Якір',
+        subtitle: 'Для тих, хто ще не готовий збирати систему повністю.',
+        dayPrice: `€${(33 / 30).toFixed(1)} / день`,
+        cta: subscriptionActive ? 'Повернутись у дашборд' : 'Рухатись далі',
+      }
+    }
+
+    if (plan.id === 'yearly') {
+      return {
+        ...plan,
+        displayName: 'Growth',
+        eyebrow: 'Найчастіший вибір',
+        subtitle: 'WEB-Карта, щоденний цикл, Telegram і аналітика без розриву.',
+        dayPrice: `€${(199 / 30).toFixed(1)} / день`,
+        cta: subscriptionActive ? 'Повернутись у дашборд' : 'Зібрати систему',
+      }
+    }
+
+    return {
+      ...plan,
+      displayName: 'Architect',
+      eyebrow: 'Для тих, хто не хоче гальмувати',
+      subtitle: 'Усе разом із Zoom-сесіями, супроводом і преміальним ритмом.',
+      dayPrice: `€${(499 / 30).toFixed(1)} / день`,
+      cta: subscriptionActive ? 'Повернутись у дашборд' : 'Продовжити розвиток',
+    }
+  })
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setShowTrial(true), 10)
-    void trackFrontendEvent({
-      userId: user?.id ?? null,
-      type: 'web_subscription_page_viewed',
-      source: 'web',
-      state: user?.subscriptionStatus ?? null,
-      payload: {
-        hasSubscription,
-      },
-    })
+    if (hasCoreAccess || isTrialActive || isTrialExpired || !onboardingState.isNewUser) return
+    startTrial().catch(() => undefined)
+  }, [hasCoreAccess, isTrialActive, isTrialExpired, onboardingState.isNewUser, startTrial])
 
-    return () => window.clearTimeout(timer)
-  }, [hasSubscription, trackFrontendEvent, user?.id, user?.subscriptionStatus])
+  useEffect(() => {
+    if (!subscriptionActive) return
+    const redirectPath = consumePostPaymentRedirect()
+    navigate(redirectPath ?? ROUTES.CYCLE, { replace: true })
+  }, [navigate, subscriptionActive])
 
-  const trialDaysLeft = user?.access?.trialEnd
-    ? Math.max(0, Math.ceil((new Date(user.access.trialEnd).getTime() - Date.now()) / 86_400_000))
-    : 0
+  const handleStartTrial = async () => {
+    if (!hasCoreAccess && !isTrialActive && !isTrialExpired) {
+      try {
+        await startTrial().unwrap()
+      } catch {
+        // no-op, user may already have active/used trial
+      }
+    }
 
-  const handleSubscribe = async (planId: string) => {
+    navigate(onboardingState.isOnboardingComplete ? ROUTES.DASHBOARD : `${ROUTES.DASHBOARD}?focusStep=1`)
+  }
+
+  const handleUpgrade = async () => {
+    setPaymentFailed(false)
     try {
-      setIsProcessing(true)
-      void trackFrontendEvent({
-        userId: user?.id ?? null,
-        type: 'web_subscription_cta_clicked',
-        source: 'web',
-        state: user?.subscriptionStatus ?? null,
-        payload: {
-          planId,
-        },
-      })
-
-      await initiateSubscriptionCheckout(planId)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setIsProcessing(false)
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(POST_PAYMENT_REDIRECT_KEY, ROUTES.CYCLE)
+      }
+      const response = await createPayment({ plan: 'monthly', variant: 'A' }).unwrap()
+      submitWayForPayForm(response.paymentUrl, response.payment)
+    } catch {
+      setPaymentFailed(true)
     }
   }
 
-  const handleSuperadminTrialTest = async () => {
-    try {
-      setIsTestProcessing(true)
-      setTestStatus(null)
-      const data = await runSuperadminSubscriptionTest('trial')
-      setTestStatus(`Тестовий trial активовано до ${new Date(data.trialEndsAt).toLocaleDateString('uk-UA')}`)
-    } catch (error) {
-      console.error(error)
-      setTestStatus('Не вдалося запустити тестовий trial')
-    } finally {
-      setIsTestProcessing(false)
-    }
-  }
-
-  const handleSuperadminPaymentTest = async (planId: string) => {
-    try {
-      setIsTestProcessing(true)
-      setTestStatus(null)
-      const data = await runSuperadminSubscriptionTest(planId)
-      setTestStatus(`Тестову оплату активовано: ${data.planCode} до ${new Date(data.currentPeriodEnd).toLocaleDateString('uk-UA')}`)
-    } catch (error) {
-      console.error(error)
-      setTestStatus('Не вдалося активувати тестову оплату')
-    } finally {
-      setIsTestProcessing(false)
-    }
-  }
-
-  const BENEFITS = [
-    { icon: Brain, title: 'ABsystem', desc: 'Персональний помічник 24/7' },
-    { icon: BookOpen, title: 'Всі курси', desc: '5+ преміум курсів' },
-    { icon: MessageCircle, title: 'Підтримка', desc: 'Швидка відповідь' },
-    { icon: Users, title: 'Спільнота', desc: 'Доступ до чату' },
-  ]
+  const statusCopy = subscriptionActive
+    ? 'У тебе відкритий повний доступ до системи. Можна повертатись у дашборд і продовжувати цикл.'
+    : isTrialActive
+      ? WHEEL_TEXTS.subscription.activeCopy
+      : isTrialExpired
+        ? WHEEL_TEXTS.subscription.expiredCopy
+        : WHEEL_TEXTS.subscription.readyCopy
 
   return (
-    <div className="space-y-12 max-w-7xl mx-auto px-4 py-10">
-
-      {/* Header */}
-      <div className="text-center">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[rgba(var(--accent-rgb),0.18)] bg-[rgba(var(--accent-rgb),0.12)] px-4 py-2 text-sm text-[rgb(var(--accent-soft-rgb))]">
-          <Crown className="w-4 h-4" />
-          Premium підписка
-        </div>
-        <h1 className="mb-3 text-3xl font-medium text-[var(--text-primary)] md:text-4xl">
-          Розблокуй повний потенціал
-        </h1>
-        <p className="mx-auto max-w-lg text-[var(--text-muted)]">
-          Отримай необмежений доступ до ментора, всіх курсів та персональної підтримки
-        </p>
-      </div>
-
-      {/* Trial Banner */}
-      {!hasSubscription && trialDaysLeft > 0 && (
-        <div className={[
-          'rounded-[24px] border border-[rgba(255,188,102,0.18)] bg-[rgba(255,188,102,0.08)] p-6 text-center transition-all duration-500',
-          showTrial ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-5',
-        ].join(' ')}>
-          <p className="flex items-center justify-center gap-2 text-[#ffd18f]">
-            <span className="text-2xl">⏰</span>
-            <span>
-              Безкоштовний період закінчується через{' '}
-              <strong className="text-[#ffe0b4]">{trialDaysLeft} днів</strong>
-            </span>
+    <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-5">
+        <section className="glass-card border border-[rgba(92,136,255,0.18)] bg-[linear-gradient(180deg,rgba(42,77,155,0.38),rgba(11,19,37,0.94))] px-5 py-6 shadow-[0_28px_80px_rgba(8,15,32,0.42)] sm:px-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgb(var(--accent-soft-rgb))]">
+            Підписка
           </p>
-        </div>
-      )}
-
-      {canManageRoles && (
-        <div className="dashboard-liquid-card overflow-hidden p-0">
-          <div className="dashboard-liquid-edge--top border-b border-[var(--border)] px-6 py-5">
-            <h2 className="text-xl font-medium text-[var(--text-primary)]">SUPERADMIN · тест доступу</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
-              Тут можна безпечно програти post-trial сценарій: ще раз увімкнути trial або тестово активувати paid-доступ для перевірки WayForPay та lifecycle-повідомлень.
+          <h1 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">Який рівень змін ти хочеш?</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/72">
+            Не вибір функцій, а вибір того, наскільки глибоко ти хочеш зібрати свою систему. Без системи ти повернешся в хаос.
+          </p>
+          {isTrialActive ? (
+            <p className="mt-3 text-sm font-medium text-[#f5be37]">
+              Залишилось {trialDaysLeft} дні
             </p>
-          </div>
-          <div className="space-y-4 px-6 py-5">
-            {testStatus ? (
-              <p className="text-sm text-[rgb(var(--accent-soft-rgb))]">{testStatus}</p>
-            ) : null}
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleSuperadminTrialTest}
-                disabled={isTestProcessing}
-                className="rounded-[18px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] disabled:opacity-60"
-              >
-                Ще один trial
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSuperadminPaymentTest('monthly')}
-                disabled={isTestProcessing}
-                className="rounded-[18px] border border-[rgba(var(--accent-rgb),0.22)] bg-[rgba(var(--accent-rgb),0.12)] px-4 py-3 text-sm font-medium text-[rgb(var(--accent-soft-rgb))] disabled:opacity-60"
-              >
-                Оплатити · test monthly
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSuperadminPaymentTest('yearly')}
-                disabled={isTestProcessing}
-                className="rounded-[18px] border border-[rgba(var(--accent-rgb),0.22)] bg-[rgba(var(--accent-rgb),0.12)] px-4 py-3 text-sm font-medium text-[rgb(var(--accent-soft-rgb))] disabled:opacity-60"
-              >
-                Оплатити · test yearly
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          ) : null}
+        </section>
 
-      {/* Active subscription */}
-      {hasSubscription && (
-        <div className="dashboard-liquid-card overflow-hidden p-0 text-center">
-          <div className="dashboard-liquid-edge--top px-8 py-8">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-[22px] border border-emerald-400/20 bg-emerald-500/12">
-              <Check className="w-10 h-10 text-white" />
-            </div>
-            <h2 className="mb-2 text-2xl font-medium text-[var(--text-primary)]">Підписка активна</h2>
-            <p className="text-[var(--text-secondary)]">
-              Твій план: <strong className="text-emerald-300">{user?.subscriptionPlan}</strong>
-            </p>
-          </div>
-        </div>
-      )}
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="grid gap-4 lg:grid-cols-3">
+            {pricingOptions.map((plan) => {
+              const isGrowth = plan.displayName === 'Growth'
+              const isArchitect = plan.displayName === 'Architect'
+              const badgeClass = plan.badgeColor ? SUBSCRIPTION_BADGE_CLASS[plan.badgeColor] : ''
 
-      {/* Pricing Cards */}
-      {!hasSubscription && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {SUBSCRIPTION_PLANS.map((plan: SubscriptionPlan) => (
-            <div
-              key={plan.id}
-              className={[
-                'dashboard-liquid-card relative flex h-full flex-col overflow-visible px-6 pb-6 pt-8 transition-all duration-300',
-                plan.highlighted
-                  ? 'border-[rgba(181,120,255,0.18)] bg-[rgba(181,120,255,0.06)]'
-                  : '',
-                'hover:-translate-y-1',
-              ].join(' ')}
-            >
-              {plan.badge && (
-                <span className={[
-                  'absolute -top-3.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-4 py-1.5 text-[12px] font-medium tracking-[0.02em]',
-                  SUBSCRIPTION_BADGE_CLASS[plan.badgeColor || 'blue'],
-                ].join(' ')}>
-                  {plan.badge}
-                </span>
-              )}
-
-              <div className="flex h-full flex-col">
-                <h3 className="mb-4 text-xl font-medium text-[var(--text-primary)]">{plan.name}</h3>
-
-                <div className="flex items-baseline gap-2 mb-6">
-                  {plan.originalPrice && (
-                    <span className="text-base text-[var(--text-muted)] line-through opacity-60">
-                      ₴{plan.originalPrice}
-                    </span>
-                  )}
-                  <span className="text-5xl font-medium text-[var(--text-primary)]">
-                    ₴{plan.price}
-                  </span>
-                  <span className="text-sm text-[var(--text-muted)]">/{plan.period}</span>
-                </div>
-
-                <ul className="mb-8 flex-1 space-y-3">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500/14">
-                        <Check className="w-3 h-3 text-green-400" />
-                      </div>
-                      <span className="text-sm leading-relaxed text-[var(--text-secondary)]">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <button
-                  onClick={() => handleSubscribe(plan.id)}
-                  disabled={isProcessing}
+              return (
+                <article
+                  key={plan.id}
                   className={[
-                    'mt-auto flex w-full items-center justify-center gap-2 rounded-[18px] px-6 py-3.5 font-medium transition-colors duration-300',
-                    plan.highlighted
-                      ? 'border border-[rgba(181,120,255,0.22)] bg-[rgba(181,120,255,0.16)] text-[#e2d0ff]'
-                      : 'btn-liquid-dashboard--ice text-[var(--text-primary)]',
-                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    'glass-card rounded-[26px] border bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(18,22,31,0.96))] p-5 shadow-[0_22px_56px_rgba(8,15,32,0.3)]',
+                    isGrowth ? 'border-[rgba(245,190,55,0.24)]' : 'border-[var(--border-primary)]',
                   ].join(' ')}
                 >
-                  {isProcessing ? 'Обробка...' : 'Обрати план'}
-                  <ArrowRight className="w-4 h-4" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--accent-soft-rgb))]">
+                        {plan.eyebrow}
+                      </p>
+                      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">{plan.displayName}</h2>
+                    </div>
+                    {plan.badge ? (
+                      <span className={['inline-flex rounded-full px-3 py-1 text-[11px] font-semibold', badgeClass].join(' ')}>
+                        {isGrowth ? 'Найчастіший вибір' : plan.badge}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-3 text-sm leading-6 text-white/72">
+                    {plan.subtitle}
+                  </p>
+
+                  <div className="mt-5">
+                    <div className="text-4xl font-semibold tracking-tight text-white">
+                      €{plan.price}
+                      <span className="ml-2 text-sm text-white/35">/ міс</span>
+                    </div>
+                    <div className="mt-1 text-sm text-white/45">{plan.dayPrice}</div>
+                  </div>
+
+                  <div className="mt-5 space-y-2">
+                    {plan.features.slice(0, isArchitect ? 6 : 5).map((feature) => (
+                      <div key={feature} className="flex items-start gap-2 text-sm leading-6 text-white/70">
+                        <span className="mt-1 text-[rgb(45,212,191)]">✓</span>
+                        <span>{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-6">
+                    <button
+                      type="button"
+                      onClick={
+                        subscriptionActive
+                          ? () => navigate(ROUTES.DASHBOARD)
+                          : isGrowth
+                            ? handleUpgrade
+                            : plan.id === 'monthly'
+                              ? handleUpgrade
+                              : () => navigate(ROUTES.SUBSCRIPTION)
+                      }
+                      disabled={createPaymentState.isLoading && !subscriptionActive}
+                      className={[
+                        'w-full rounded-[16px] px-4 py-3 text-sm font-semibold transition-colors duration-150 disabled:cursor-wait disabled:opacity-60',
+                        isGrowth
+                          ? 'bg-[#1C2B4A] text-white hover:bg-[#24365F]'
+                          : 'border border-white/10 bg-white/6 text-white/78 hover:bg-white/10',
+                      ].join(' ')}
+                    >
+                      {createPaymentState.isLoading && !subscriptionActive && (isGrowth || plan.id === 'monthly')
+                        ? 'Переходимо до оплати…'
+                        : plan.cta}
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+
+            {paymentFailed || createPaymentState.isError ? (
+              <div className="lg:col-span-3 rounded-[16px] border border-rose-500/20 bg-rose-500/[0.06] p-4">
+                <p className="text-sm text-white/78">
+                  Не вдалося перейти до оплати. Спробуй ще раз, і ми повернемо тебе в щоденний цикл після успіху.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleUpgrade}
+                  className="mt-3 text-sm font-semibold text-rose-300 transition-colors duration-150 hover:text-white"
+                >
+                  Спробувати ще раз
                 </button>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ) : null}
+          </div>
 
-      {/* Benefits */}
-      <div className="dashboard-liquid-card overflow-hidden p-0">
-        <div className="grid gap-0 sm:grid-cols-2 lg:grid-cols-4">
-          {BENEFITS.map((item, i) => (
-            <div
-              key={item.title}
-              className={[
-                'flex items-start gap-3 px-5 py-5',
-                'border-t border-[var(--border)] sm:border-t-0',
-                i % 2 === 1 ? 'sm:border-l sm:border-[var(--border)]' : '',
-                i >= 2 ? 'lg:border-t lg:border-[var(--border)]' : '',
-                i === 1 || i === 3 ? 'lg:border-l lg:border-[var(--border)]' : '',
-              ].join(' ')}
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-[rgba(var(--accent-rgb),0.16)] bg-[rgba(var(--accent-rgb),0.12)] text-[rgb(var(--accent-soft-rgb))]">
-                <item.icon className="h-5 w-5" />
+          <aside className="glass-card rounded-[26px] border border-[var(--border-primary)] bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(18,22,31,0.96))] p-5 shadow-[0_22px_56px_rgba(8,15,32,0.3)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--accent-soft-rgb))]">
+              Доступ
+            </p>
+            <div className="mt-4 space-y-3 text-sm text-white/70">
+              <div className="flex items-center justify-between gap-3 rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-3">
+                <span>Стан</span>
+                <span className="font-semibold text-white">
+                  {subscriptionActive
+                    ? WHEEL_TEXTS.subscription.paidStatus
+                    : isTrialActive
+                      ? WHEEL_TEXTS.subscription.trialStatus
+                      : isTrialExpired
+                        ? WHEEL_TEXTS.subscription.expiredStatus
+                        : WHEEL_TEXTS.subscription.startingStatus}
+                </span>
               </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--text-primary)]">{item.title}</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">{item.desc}</p>
+              <div className="flex items-center justify-between gap-3 rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-3">
+                <span>{WHEEL_TEXTS.subscription.trialLabel}</span>
+                <span className="font-semibold text-white">
+                  {isTrialActive
+                    ? WHEEL_TEXTS.subscription.trialLeft(trialDaysLeft)
+                    : isTrialExpired
+                      ? WHEEL_TEXTS.subscription.expiredStatus
+                      : WHEEL_TEXTS.subscription.autostart}
+                </span>
+              </div>
+              <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-3 text-white/60">
+                {statusCopy}
+              </div>
+              <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-3 text-white/60">
+                Без системи ти повернешся в хаос. Тут ти обираєш не ціну, а те, наскільки сильно хочеш закріпити новий ритм.
               </div>
             </div>
-          ))}
+
+            <button
+              type="button"
+              onClick={handleStartTrial}
+              disabled={startTrialState.isLoading}
+              className="mt-5 w-full rounded-[16px] border border-white/10 bg-white/6 px-4 py-3 text-sm font-semibold text-white/78 transition-colors duration-150 hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
+            >
+              {startTrialState.isLoading
+                ? WHEEL_TEXTS.subscription.startTrialLoading
+                : WHEEL_TEXTS.subscription.startTrial}
+            </button>
+          </aside>
+        </section>
+
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.DASHBOARD)}
+            className="text-sm text-white/40 transition-colors duration-150 hover:text-white/64"
+          >
+            Назад до дашборду
+          </button>
         </div>
       </div>
-
-    </div>
+    </main>
   )
 }

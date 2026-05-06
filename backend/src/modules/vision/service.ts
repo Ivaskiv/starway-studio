@@ -1,29 +1,35 @@
-// backend/src/modules/vision/service.ts
-/**
- * Vision Service 
- */
+import { prisma } from '../../db/client.js'
+import { openai } from '../../lib/openai.js'
+import { updateUserState } from '../../core/orchestrator/userState.js'
+import { VisionAnswers, type VisionStatement } from './types.js'
+import {
+  buildFallbackVisionSystem,
+  normalizeVisionSystem,
+  parseVisionAiPayload,
+  parseVisionSystemContent,
+  parseWheelScores,
+  serializeVisionSystemContent,
+  type VisionQuestionnairePayload,
+  type VisionSystem,
+} from './system.js'
 
-import { prisma } from '../../db/client.js';
-import { openai } from '../../lib/openai.js';
-import { VisionAnswers, VisionStatement } from './types.js';
-
-type QuestionnairePayload = {
-  idealLife: string;
-  noLongerNormal: string;
-  pointB: string;
-};
+type QuestionnairePayload = VisionQuestionnairePayload
 
 function buildQuestionnaire(answers: VisionAnswers): QuestionnairePayload {
   return {
     idealLife: answers.idealLife,
     noLongerNormal: answers.noLongerNormal,
     pointB: answers.pointB,
-  };
+  }
 }
 
-function mapVision(vision: Awaited<ReturnType<typeof prisma.visionStatement.findFirst>>) {
-  if (!vision) return null;
-  const questionnaire = (vision.questionnaire ?? {}) as QuestionnairePayload;
+function buildVisionResponse(
+  vision: Awaited<ReturnType<typeof prisma.visionStatement.findFirst>>,
+  system: VisionSystem | null,
+) {
+  if (!vision) return null
+  const questionnaire = (vision.questionnaire ?? {}) as QuestionnairePayload
+
   return {
     id: vision.id,
     userId: vision.userId,
@@ -32,97 +38,226 @@ function mapVision(vision: Awaited<ReturnType<typeof prisma.visionStatement.find
     noLongerNormal: questionnaire.noLongerNormal || '',
     pointB: questionnaire.pointB || '',
     createdAt: vision.createdAt,
-  };
+    system,
+  }
+}
+
+async function getLatestWheelScores(userId: string) {
+  const latest = await prisma.userBalanceEntry.findFirst({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    select: { scores: true },
+  })
+
+  return parseWheelScores(latest?.scores ?? null)
+}
+
+async function aiGenerateVisionSystem(
+  answers: VisionAnswers,
+  wheelScores: Array<{ categoryId: string; score: number }>,
+) {
+  const prompt = `
+Ти — системний AI-архітектор для життєвої WEB-карти.
+Поверни ТІЛЬКИ JSON без markdown.
+
+Вхідні дані:
+${JSON.stringify({ answers, wheelScores }, null, 2)}
+
+Побудуй систему, а не просто текст. Поверни JSON формату:
+{
+  "statement": "2-3 речення",
+  "identityStatement": "Я ...",
+  "mainGoalSphere": "health | career | relationships | energy | freedom | mind | selfDevelopment | finance",
+  "dailyPrompt": "Яка одна дія сьогодні ...",
+  "goals": [
+    {
+      "sphere": "health",
+      "title": "коротка назва",
+      "description": "що саме змінюється",
+      "actions": ["3 короткі дії"],
+      "factors": ["2-3 фактори"],
+      "resources": ["2-3 ресурси"],
+      "constraints": ["2-3 обмеження"],
+      "solutions": ["2-3 рішення"],
+      "scoreFrom": 4,
+      "scoreTo": 7,
+      "timeframeMonths": 3
+    }
+  ]
+}
+
+Правила:
+- Українською
+- 3-5 goals
+- goals мають бути системними і конкретними
+- хоча б одна goal має бути пов'язана зі слабкою сферою з wheelScores
+- якщо health релевантна, включи seed-приклад переходу 4→7 за 3 місяці
+`.trim()
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.7,
+    max_tokens: 1800,
+  })
+
+  return response.choices[0]?.message?.content?.trim() ?? ''
+}
+
+function enrichOrchestrator(system: VisionSystem, userId: string): VisionSystem {
+  const userState = updateUserState({
+    userId,
+    completedGoals: 0,
+    goalsTotal: system.goals.length,
+    churnSignals: system.goals.flatMap((goal) => goal.constraints),
+    behaviorTags: [
+      'vision_system_ready',
+      system.mainGoalSphere ? `focus:${system.mainGoalSphere}` : null,
+    ].filter((tag): tag is string => Boolean(tag)),
+  })
+
+  return {
+    ...system,
+    orchestrator: {
+      ...system.orchestrator,
+      behaviorTags: userState.behaviorTags,
+      stage: userState.stage,
+    },
+  }
+}
+
+async function upsertVisionWebMap(userId: string, system: VisionSystem) {
+  const year = new Date().getFullYear()
+
+  return prisma.annualStrategyMap.upsert({
+    where: { userId },
+    create: {
+      userId,
+      year,
+      vision: system.statement,
+      goals: {
+        create: system.goals.map((goal, index) => ({
+          sphere: goal.sphere,
+          title: goal.title,
+          description: JSON.stringify({
+            summary: goal.description,
+            factors: goal.factors,
+            resources: goal.resources,
+            constraints: goal.constraints,
+            solutions: goal.solutions,
+            scoreFrom: goal.scoreFrom,
+            scoreTo: goal.scoreTo,
+            timeframeMonths: goal.timeframeMonths,
+          }),
+          monthlyActions: goal.actions,
+          priority: index,
+        })),
+      },
+    },
+    update: {
+      year,
+      vision: system.statement,
+      monthlyReviews: { deleteMany: {} },
+      goals: {
+        deleteMany: {},
+        create: system.goals.map((goal, index) => ({
+          sphere: goal.sphere,
+          title: goal.title,
+          description: JSON.stringify({
+            summary: goal.description,
+            factors: goal.factors,
+            resources: goal.resources,
+            constraints: goal.constraints,
+            solutions: goal.solutions,
+            scoreFrom: goal.scoreFrom,
+            scoreTo: goal.scoreTo,
+            timeframeMonths: goal.timeframeMonths,
+          }),
+          monthlyActions: goal.actions,
+          priority: index,
+        })),
+      },
+    },
+    include: {
+      goals: { orderBy: { priority: 'asc' } },
+      monthlyReviews: true,
+    },
+  })
+}
+
+async function generateVisionSystem(userId: string, answers: VisionAnswers) {
+  const wheelScores = await getLatestWheelScores(userId)
+  const raw = await aiGenerateVisionSystem(answers, wheelScores).catch(() => '')
+  const parsed = parseVisionAiPayload(raw)
+  const normalized = normalizeVisionSystem(answers, wheelScores, parsed)
+  return enrichOrchestrator(normalized, userId)
 }
 
 export async function createVisionStatement(
   userId: string,
-  answers: VisionAnswers
+  answers: VisionAnswers,
 ): Promise<VisionStatement> {
-  const statement = await aiGenerateVision(answers);
-  const questionnaireData = buildQuestionnaire(answers);
+  const questionnaireData = buildQuestionnaire(answers)
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true },
-  });
-  if (!user) throw new Error('user_not_found');
+  })
+  if (!user) throw new Error('user_not_found')
+
+  const system = await generateVisionSystem(userId, answers)
+  await upsertVisionWebMap(userId, system)
 
   const vision = await prisma.visionStatement.create({
     data: {
       userId,
-      statement,
+      statement: system.statement,
+      title: 'vision-system',
+      content: serializeVisionSystemContent(system),
       questionnaire: questionnaireData,
     },
-  });
+  })
 
-  return {
-    id: vision.id,
-    userId: vision.userId,
-    statement: vision.statement,
-    idealLife: answers.idealLife,
-    noLongerNormal: answers.noLongerNormal,
-    pointB: answers.pointB,
-    createdAt: vision.createdAt,
-  };
+  return buildVisionResponse(vision, system) as VisionStatement
 }
 
 export async function getLatestVision(userId: string): Promise<VisionStatement | null> {
   const vision = await prisma.visionStatement.findFirst({
     where: { userId },
     orderBy: { createdAt: 'desc' },
-  });
-  return mapVision(vision);
+  })
+
+  const system = parseVisionSystemContent(vision?.content ?? null)
+  return buildVisionResponse(vision, system) as VisionStatement | null
 }
 
 export async function updateVisionStatement(
   id: string,
-  answers: VisionAnswers
+  answers: VisionAnswers,
 ): Promise<VisionStatement> {
-  const statement = await aiGenerateVision(answers);
-  const questionnaireData = buildQuestionnaire(answers);
+  const current = await prisma.visionStatement.findUnique({
+    where: { id },
+    select: { id: true, userId: true },
+  })
+  if (!current) throw new Error('vision_not_found')
+
+  const questionnaireData = buildQuestionnaire(answers)
+  const system = await generateVisionSystem(current.userId, answers)
+  await upsertVisionWebMap(current.userId, system)
 
   const vision = await prisma.visionStatement.update({
     where: { id },
     data: {
-      statement,
+      statement: system.statement,
+      title: 'vision-system',
+      content: serializeVisionSystemContent(system),
       questionnaire: questionnaireData,
     },
-  });
+  })
 
-  return {
-    id: vision.id,
-    userId: vision.userId,
-    statement: vision.statement,
-    idealLife: answers.idealLife,
-    noLongerNormal: answers.noLongerNormal,
-    pointB: answers.pointB,
-    createdAt: vision.createdAt,
-  };
+  return buildVisionResponse(vision, system) as VisionStatement
 }
 
-async function aiGenerateVision(answers: VisionAnswers): Promise<string> {
-  const prompt = `На основі відповідей створи vision statement (2-3 речення, українською):
-
-Ідеальне життя через 5 років: ${answers.idealLife}
-Що більше не норма: ${answers.noLongerNormal}
-Точка Б (де хочу бути): ${answers.pointB}
-
-Створи vision statement який:
-- Мотивує та надихає
-- Конкретний та зрозумілий
-- Від першої особи ("Я живу...")
-- 2-3 речення максимум
-
-ТІЛЬКИ текст vision statement, без пояснень.`;
-
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.8,
-    max_tokens: 200
-  });
-
-  return response.choices[0]?.message?.content?.trim() ||
-    'Я живу життям, яке обираю, з усвідомленістю та внутрішньою опорою.';
+export function buildVisionSystemFallback(answers: VisionAnswers) {
+  return buildFallbackVisionSystem(answers, [])
 }

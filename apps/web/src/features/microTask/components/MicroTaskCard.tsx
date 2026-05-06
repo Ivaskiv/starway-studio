@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { BadgeCheck, Clock3, ExternalLink, MessageCircle, PencilLine, Smartphone, Sparkles, Target, Trash2, X } from 'lucide-react'
 import { useGenerateDeepLinkMutation } from '@/features/auth/services/deeplinks.api'
 import type { MicroTask, MicroTaskStatus } from '../types/types'
-import { getMicroTaskSphereMeta } from '../utils/sphereMeta'
+import { getMicroTaskSphereMeta, safeText } from '../utils/sphereMeta'
 
 const STATUS_CONFIG: Record<
   MicroTaskStatus,
@@ -57,6 +57,7 @@ interface Props {
   onComplete: () => void
   onSkip?: () => void
   onDelete?: () => void
+  onEdit?: () => void
   onSetProgress?: (progressPercent: number) => void
   onToggleStep?: (stepIndex: number, done: boolean) => void
 }
@@ -179,7 +180,7 @@ function getCategoryTone(label: string) {
   return 'border-[rgba(55,138,221,0.24)] bg-[rgba(55,138,221,0.12)] text-[#73B6FF]'
 }
 
-export function MicroTaskCard({ task, onComplete, onSkip, onDelete, onSetProgress, onToggleStep }: Props) {
+export function MicroTaskCard({ task, onComplete, onSkip, onDelete, onEdit, onSetProgress, onToggleStep }: Props) {
   const navigate = useNavigate()
   const [generateDeepLink, { isLoading: isGeneratingTelegramLink }] = useGenerateDeepLinkMutation()
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -210,13 +211,7 @@ export function MicroTaskCard({ task, onComplete, onSkip, onDelete, onSetProgres
   const metaInsight = task.meta && typeof task.meta === 'object' && !Array.isArray(task.meta)
     ? (task.meta as Record<string, unknown>).insight
     : null
-  const insight = typeof metaInsight === 'string' && metaInsight.trim().length > 0
-    ? metaInsight.trim()
-    : task.aiContext?.trim()
-      ? task.aiContext.trim()
-      : task.why?.trim()
-        ? task.why.trim()
-        : null
+  const insight = safeText(metaInsight) || safeText(task.why) || safeText(task.aiContext) || null
 
   const expiresAt = task.dueAt ? new Date(task.dueAt) : task.expiresAt ? new Date(task.expiresAt) : null
   const now = new Date()
@@ -409,7 +404,7 @@ export function MicroTaskCard({ task, onComplete, onSkip, onDelete, onSetProgres
     toast.success(`Збережено ${normalized}%`)
   }
 
-  const taskTitle = stripTaskPrefix(task.title)
+  const taskTitle = safeText(stripTaskPrefix(task.title))
 
   return (
     <>
@@ -432,19 +427,37 @@ export function MicroTaskCard({ task, onComplete, onSkip, onDelete, onSetProgres
           <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgb(255,173,74),rgba(255,173,74,0.35))]" />
         )}
 
-        {onDelete && canMutate ? (
-          <button
-            type="button"
-            aria-label="Видалити"
-            title="Видалити"
-            className="absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] text-[var(--text-muted)] transition-colors hover:border-[rgba(255,92,92,0.28)] hover:bg-[rgba(255,92,92,0.12)] hover:text-[rgb(255,92,92)]"
-            onClick={(event) => {
-              event.stopPropagation()
-              onDelete()
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+        {(onEdit || onDelete) && canMutate ? (
+          <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
+            {onEdit ? (
+              <button
+                type="button"
+                aria-label="Редагувати"
+                title="Редагувати"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] text-[var(--text-muted)] transition-colors hover:border-[rgba(55,138,221,0.28)] hover:bg-[rgba(55,138,221,0.12)] hover:text-[#73B6FF]"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onEdit()
+                }}
+              >
+                <PencilLine className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            {onDelete ? (
+              <button
+                type="button"
+                aria-label="Видалити"
+                title="Видалити"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] text-[var(--text-muted)] transition-colors hover:border-[rgba(255,92,92,0.28)] hover:bg-[rgba(255,92,92,0.12)] hover:text-[rgb(255,92,92)]"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onDelete()
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <div className={[
@@ -467,14 +480,14 @@ export function MicroTaskCard({ task, onComplete, onSkip, onDelete, onSetProgres
                     <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${categoryTone}`}>
                       {sphereMeta.label}
                     </span>
-                    <span className="text-[11px] text-[var(--text-muted)]">
+                    <span className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-2.5 py-1 text-[11px] text-[var(--text-muted)]">
                       {createdLabel ? `${sourceLabel} · ${createdLabel}` : sourceLabel}
                     </span>
                   </div>
 
                   <p
                     className={[
-                      'mt-3 line-clamp-2 text-[14px] font-semibold leading-[1.35]',
+                      'tc-title mt-3 line-clamp-2 text-[18px] font-semibold leading-[1.35]',
                       isCompleted ? 'text-[var(--text-muted)] line-through' : 'text-[var(--text-primary)]',
                     ].join(' ')}
                   >
@@ -500,7 +513,7 @@ export function MicroTaskCard({ task, onComplete, onSkip, onDelete, onSetProgres
               </div>
 
               {insight ? (
-                <p className="mt-2 line-clamp-1 text-[12px] leading-5 text-[var(--text-muted)]">
+                <p className="tc-insight mt-2">
                   {insight}
                 </p>
               ) : null}
@@ -508,8 +521,8 @@ export function MicroTaskCard({ task, onComplete, onSkip, onDelete, onSetProgres
               {hasSteps ? (
                 <div className="mt-3 space-y-1">
                   {task.steps!.slice(0, 3).map((step, index) => (
-                    <p key={`${task.id}-step-${index}`} className="text-[11px] leading-5 text-[var(--text-secondary)]">
-                      <span className="mr-1 text-[11px] text-[var(--text-muted)]">{index + 1}</span>
+                    <p key={`${task.id}-step-${index}`} className="text-[12px] leading-6 text-[var(--text-secondary)]">
+                      <span className="mr-2 text-[11px] font-semibold text-[var(--text-muted)]">{index + 1}</span>
                       {step}
                     </p>
                   ))}

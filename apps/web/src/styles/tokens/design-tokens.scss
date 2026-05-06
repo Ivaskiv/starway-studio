@@ -5,6 +5,9 @@
 // ══════════════════════════════════════════════════════════════
 
 :root {
+  --accent-purple: #312145;
+  --accent-pink: #4a2f63;
+  --accent-blue: #1f4f8f;
   --accent-h: 220;
   --accent-s: 79%;
   --accent-l: 48%;
@@ -55,12 +58,12 @@
   --border-strong:   rgba(255,255,255,0.075);
 
   // ── Glass backgrounds ────────────────────────────────────────
-  --glass-bg:         hsl(0 0% 100% / 0.09);
-  --glass-bg-hover:   hsl(0 0% 100% / 0.14);
-  --glass-border:     hsl(0 0% 100% / 0.14);
-  --glass-highlight:  hsl(0 0% 100% / 0.38);
-  --glass-shadow:     hsl(var(--accent-h) 80% 60% / 0.24);
-  --bg-secondary:     hsl(220 24% 12% / 0.62);
+  --glass-bg:         rgba(255, 255, 255, 0.04);
+  --glass-bg-hover:   rgba(255, 255, 255, 0.08);
+  --glass-border:     rgba(255, 255, 255, 0.08);
+  --glass-highlight:  rgba(255, 255, 255, 0.22);
+  --glass-shadow:     rgba(31, 79, 143, 0.18);
+  --bg-secondary:     #111827;
   --blur-strong:      26px;
   --blur-soft:        18px;
 
@@ -99,8 +102,8 @@
   --accent-muted-rgb:  45, 95, 196;
   --on-accent:         #f0f6ff;
 
-  --bg-primary:  #03050d;
-  --bg-glass:    #060a18;
+  --bg-primary:  #0b0f1a;
+  --bg-glass:    #0f1724;
 
   --text-primary:     hsl(220 45% 95%);
   --text-secondary:   hsl(216 32% 83%);
@@ -121,25 +124,33 @@
   --shadow-base: rgba(3,5,13,0.85);
   --card-blue-surface:
     linear-gradient(
-      180deg,
-      rgba(42, 78, 148, 0.92) 0%,
-      rgba(26, 48, 90, 0.82) 14%,
-      rgba(14, 23, 40, 0.98) 34%,
-      rgba(8, 13, 24, 0.99) 100%
-    );
+      135deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.03) 22%,
+      rgba(74, 47, 99, 0.10) 52%,
+      rgba(31, 79, 143, 0.08) 100%
+    ),
+    linear-gradient(180deg, rgba(14, 18, 32, 0.92) 0%, rgba(9, 13, 24, 0.96) 100%);
   --card-blue-surface-soft:
     linear-gradient(
-      180deg,
-      rgba(38, 72, 136, 0.86) 0%,
-      rgba(22, 40, 76, 0.78) 12%,
-      rgba(12, 20, 36, 0.97) 32%,
-      rgba(9, 14, 24, 0.99) 100%
-    );
-  --card-blue-surface-deep: linear-gradient(180deg, rgba(26, 54, 108, 0.78) 0%, rgba(15, 28, 52, 0.84) 10%, rgba(8, 13, 24, 0.98) 28%, rgba(8, 13, 24, 0.99) 100%);
-  --card-blue-border: rgba(92, 144, 255, 0.18);
-  --card-blue-highlight: rgba(171, 210, 255, 0.18);
+      135deg,
+      rgba(255, 255, 255, 0.07) 0%,
+      rgba(74, 47, 99, 0.08) 38%,
+      rgba(31, 79, 143, 0.07) 100%
+    ),
+    linear-gradient(180deg, rgba(16, 20, 35, 0.90) 0%, rgba(10, 14, 26, 0.94) 100%);
+  --card-blue-surface-deep:
+    linear-gradient(
+      135deg,
+      rgba(49, 33, 69, 0.12) 0%,
+      rgba(74, 47, 99, 0.06) 35%,
+      rgba(31, 79, 143, 0.10) 100%
+    ),
+    linear-gradient(180deg, rgba(12, 16, 29, 0.94) 0%, rgba(7, 10, 18, 0.98) 100%);
+  --card-blue-border: rgba(255, 255, 255, 0.10);
+  --card-blue-highlight: rgba(255, 255, 255, 0.16);
 
-  --accent-gradient: linear-gradient(135deg, var(--accent-soft) 0%, var(--accent) 50%, var(--accent-strong) 100%);
+  --accent-gradient: linear-gradient(90deg, var(--accent-purple) 0%, var(--accent-pink) 50%, var(--accent-blue) 100%);
 
   // ── Admin sidebar tokens ───────────────────────────────────
   --admin-sidebar-bg: #0f1117;

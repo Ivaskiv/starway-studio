@@ -1,0 +1,21 @@
+{
+  "name": "ФОКУС — Надя",
+  "short_name": "ФОКУС",
+  "description": "Живі Zoom-практики про рішення, гроші, напругу та конкретний вибір на тиждень.",
+  "start_url": "/focus",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "icons": [
+    {
+      "src": "/focus-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/focus/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

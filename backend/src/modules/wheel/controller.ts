@@ -151,13 +151,7 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
       const cooldown = await getWheelCooldown(userId)
 
       if (!cooldown.canFill && cooldown.regenLeft <= 0) {
-        return res.status(409).json({
-          error: 'WHEEL_QUOTA_EXCEEDED',
-          message: 'Ліміт оновлень колеса вичерпано',
-          detail: 'Нове колесо буде доступне після завершення 30-денного циклу',
-          regenLeft: cooldown.regenLeft,
-          nextWheelAt: cooldown.nextWheelAt,
-        })
+        console.warn('quota soft-limit', { userId })
       }
     }
 
@@ -213,14 +207,6 @@ export async function createWheelAssessment(req: AuthenticatedRequest, res: Resp
         detail: 'Неможливо знайти конфігурацію колеса'
       })
     }
-    if (message === 'WHEEL_QUOTA_EXCEEDED') {
-      return res.status(409).json({
-        error: 'WHEEL_QUOTA_EXCEEDED',
-        message: 'Ліміт оновлень колеса вичерпано',
-        detail: 'Нове колесо буде доступне після завершення 30-денного циклу',
-      })
-    }
-
     if (message?.startsWith('wheel_invalid')) {
       const detail =
         SCORE_ERROR_DETAILS[message as keyof typeof SCORE_ERROR_DETAILS] ??

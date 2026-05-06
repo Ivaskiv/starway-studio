@@ -1,16 +1,24 @@
 import { config as loadEnv } from 'dotenv'
+import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PrismaClient } from '../generated/prisma/index.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
-
-loadEnv({ path: resolve(currentDirPath, '../../../.env') })
+const backendEnvPath = resolve(currentDirPath, '../../../backend/.env')
+const rootEnvPath = resolve(currentDirPath, '../../../.env')
+if (existsSync(rootEnvPath)) {
+  loadEnv({ path: rootEnvPath })
+}
+if (existsSync(backendEnvPath)) {
+  loadEnv({ path: backendEnvPath, override: true })
+}
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
+const databaseUrl = process.env.DATABASE_URL?.trim()
 
 function isRecoverableConnectionMessage(message: string): boolean {
   const normalized = message.toLowerCase()
@@ -30,7 +38,7 @@ const prismaClientSingleton = () =>
     ],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: databaseUrl,
       },
     },
   })
@@ -46,6 +54,10 @@ export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
+}
+
+if (!databaseUrl) {
+  console.warn('[db] DATABASE_URL is not configured; Prisma will remain unavailable until env is loaded correctly')
 }
 
 function isPrismaP1001(error: unknown): error is { code: string } {

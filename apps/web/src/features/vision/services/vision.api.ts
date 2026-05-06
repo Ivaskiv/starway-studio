@@ -14,7 +14,7 @@ export const visionApi = api.injectEndpoints({
         method: 'POST',
         body
       }),
-      invalidatesTags: ['Vision', 'Onboarding']
+      invalidatesTags: ['Vision', 'Onboarding', 'WebMap']
     }),
 
     getVision: builder.query<VisionStatement | null, void>({
@@ -28,7 +28,7 @@ export const visionApi = api.injectEndpoints({
         method: 'PUT',
         body
       }),
-      invalidatesTags: ['Vision']
+      invalidatesTags: ['Vision', 'WebMap']
     })
   })
 });

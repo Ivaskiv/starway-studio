@@ -24,7 +24,7 @@ function stateLabel(state: DailyState) {
     case 'STABILITY':
       return 'Стабільність'
     case 'INNER_SUPPORT':
-      return 'Внутрішня опора'
+      return 'Духовність'
     default:
       return 'Нейтрально'
   }

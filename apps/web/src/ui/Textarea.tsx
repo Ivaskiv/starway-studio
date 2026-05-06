@@ -7,6 +7,7 @@ export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextArea
   helperText?: string;
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
+  ref?: React.Ref<HTMLTextAreaElement>;
 }
 
 const heights: Record<Required<TextareaProps>['size'], string> = {
@@ -15,7 +16,7 @@ const heights: Record<Required<TextareaProps>['size'], string> = {
   lg: 'min-h-[200px]',
 };
 
-export const Textarea = ({ label, value, error, helperText, size = 'md', isLoading, className, onKeyDown, ...props }: TextareaProps) => {
+export const Textarea = ({ label, value, error, helperText, size = 'md', isLoading, className, onKeyDown, ref, ...props }: TextareaProps) => {
   const disabled = isLoading || props.disabled;
 
   return (

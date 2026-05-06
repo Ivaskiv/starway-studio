@@ -1,5 +1,6 @@
 // frontend/src/features/products/components/AllProductsList.tsx
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useSystemState } from '@/features/auth/hooks/useSystemState';
 import { useGetAllProductsQuery } from '@/features/products/services/products.api';
 import { Product } from '@/features/products/types/product.types';
 import { Button, GlassCard } from '@/ui';
@@ -7,12 +8,19 @@ import { Lock } from 'lucide-react';
 
 export default function AllProductsList() {
   const { user } = useAuth();
+  const { subscription, accessControl, trial } = useSystemState();
   const { data: products = [], isLoading } = useGetAllProductsQuery();
+  const hasPaidAccess = Boolean(
+    subscription?.isActive ||
+    accessControl?.hasSubscription ||
+    trial?.isActive
+  );
 
   const hasAccessToPremium = (product: Product) => {
     const isPremium = product.price > 0;
     if (!isPremium) return true;
     return (
+      hasPaidAccess ||
       user?.id === product.creatorId ||
       user?.role === 'SUPERADMIN' ||
       user?.role === 'ADMIN'

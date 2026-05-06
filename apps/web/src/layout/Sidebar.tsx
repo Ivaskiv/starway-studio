@@ -2,12 +2,33 @@
 // ─── ВИПРАВЛЕНО: рядки 324 і 327 — lowercase → UPPERCASE ролі ────────────────
 // Всі інші рядки — БЕЗ ЗМІН
 import { useMemo } from 'react'
+import {
+  ArrowRightLeft,
+  Banknote,
+  BookOpen,
+  Brain,
+  Clock3,
+  CreditCard,
+  Home,
+  Magnet,
+  Megaphone,
+  Package,
+  Puzzle,
+  Send,
+  Settings,
+  Shield,
+  Sparkles,
+  Target,
+  User,
+  Users,
+  Video,
+  type LucideIcon,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useLocation } from 'react-router-dom'
 
 import { ROUTES } from '@/config/routes'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
-import WebMapWidget from '@/features/vision/components/WebMapWidget'
 import type { UserRole } from '@/features/user/types/user.types'
 import { UserMenu } from '@/features/user/userMenu/UserMenu'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
@@ -18,7 +39,7 @@ import { useMediaQuery } from '@/features/media/services/media.api'
 export interface SidebarNavItem {
   id: string
   label: string
-  icon: string
+  icon: LucideIcon | null
   path: string
   visibleTo: UserRole[]
   indentLevel?: number
@@ -42,8 +63,7 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: null,
     visibleTo: [],
     items: [
-      { id: 'dashboard', label: 'Кабінет', icon: '', path: '/dashboard', visibleTo: [] },
-      { id: 'progress', label: 'Прогрес', icon: '', path: '/dashboard/progress', visibleTo: [] },
+      { id: 'dashboard', label: 'Кабінет', icon: Home, path: '/dashboard', visibleTo: [] },
     ],
   },
   {
@@ -51,15 +71,14 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Мій розвиток',
     visibleTo: ['USER'],
     items: [
-      { id: 'absystem', label: 'ABsystem', icon: '', path: '/dashboard/ai-mentor', visibleTo: ['USER'] },
-      { id: 'wheel', label: 'Колесо балансу', icon: '', path: '/dashboard/wheel', visibleTo: ['USER'], indentLevel: 1 },
-      { id: 'point-b', label: 'Точка Б', icon: '', path: '/dashboard/vision', visibleTo: ['USER'], indentLevel: 1 },
-      { id: 'cycle', label: 'Щоденний цикл', icon: '', path: '/dashboard/cycle', visibleTo: ['USER'], indentLevel: 1 },
-      { id: 'journal', label: 'Журнал', icon: '', path: '/dashboard/journal', visibleTo: ['USER'] },
-      { id: 'courses', label: 'Практики', icon: '', path: '/dashboard/courses', visibleTo: ['USER'] },
-      { id: 'products', label: 'Продукти', icon: '', path: '/dashboard/products', visibleTo: ['USER'] },
-      { id: 'zoom', label: 'Zoom-сесії', icon: '', path: '/dashboard/zoom', visibleTo: ['USER'] },
-      { id: 'subscription', label: 'Підписка', icon: '', path: '/dashboard/subscription', visibleTo: ['USER'] },
+      // { id: 'absystem', label: 'ABsystem', icon: Sparkles, path: '/dashboard/ai-mentor', visibleTo: ['USER'] },
+      { id: 'wheel', label: 'Колесо балансу', icon: Target, path: '/dashboard/wheel', visibleTo: ['USER'] },
+      { id: 'cycle', label: 'Щоденний цикл', icon: Clock3, path: '/dashboard/cycle', visibleTo: ['USER']},
+      { id: 'journal', label: 'Журнал', icon: BookOpen, path: '/dashboard/journal', visibleTo: ['USER'] },
+      { id: 'courses', label: 'Практики', icon: Puzzle, path: '/dashboard/courses', visibleTo: ['USER'] },
+      { id: 'products', label: 'Продукти', icon: Package, path: '/dashboard/products', visibleTo: ['USER'] },
+      { id: 'zoom', label: 'Zoom-сесії', icon: Video, path: '/dashboard/zoom', visibleTo: ['USER'] },
+      { id: 'subscription', label: 'Підписка', icon: CreditCard, path: '/dashboard/subscription', visibleTo: ['USER'] },
     ],
   },
   {
@@ -67,8 +86,8 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'AI Система',
     visibleTo: ['EXPERT', 'SUPERADMIN'],
     items: [
-      { id: 'ai-seo', label: 'AI SEO', icon: '', path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'ads', label: 'Реклама', icon: '', path: '/dashboard/ads', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ai-seo', label: 'AI SEO', icon: Brain, path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ads', label: 'Реклама', icon: Megaphone, path: '/dashboard/ads', visibleTo: ['EXPERT', 'SUPERADMIN'] },
     ],
   },
   {
@@ -76,10 +95,10 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Продукти',
     visibleTo: ['EXPERT', 'SUPERADMIN'],
     items: [
-      { id: 'my-products', label: 'Мої продукти', icon: '', path: '/dashboard/products', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'leadmagnet', label: 'Лідмагніти', icon: '', path: '/dashboard/leadmagnet', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'telegram', label: 'Telegram', icon: '', path: '/dashboard/telegram', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'students', label: 'Учні', icon: '', path: '/dashboard/students', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'my-products', label: 'Мої продукти', icon: Package, path: '/dashboard/products', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'leadmagnet', label: 'Лідмагніти', icon: Magnet, path: '/dashboard/leadmagnet', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'telegram', label: 'Telegram', icon: Send, path: '/dashboard/telegram', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'students', label: 'Учні', icon: Users, path: '/dashboard/students', visibleTo: ['EXPERT', 'SUPERADMIN'] },
     ],
   },
   {
@@ -87,8 +106,8 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Акаунт',
     visibleTo: [],
     items: [
-      { id: 'profile', label: 'Профіль', icon: '👤', path: '/dashboard/profile', visibleTo: [] },
-      { id: 'settings', label: 'Налаштування', icon: '⚙️', path: '/dashboard/settings', visibleTo: [] },
+      { id: 'profile', label: 'Профіль', icon: User, path: '/dashboard/profile', visibleTo: [] },
+      { id: 'settings', label: 'Налаштування', icon: Settings, path: '/dashboard/settings', visibleTo: [] },
     ],
   },
   {
@@ -97,10 +116,10 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     visibleTo: ['SUPERADMIN'],
     accent: true,
     items: [
-      { id: 'users', label: 'Всі користувачі', icon: '', path: '/dashboard/admin/users', visibleTo: ['SUPERADMIN'] },
-      { id: 'revenue', label: 'Revenue', icon: '', path: '/dashboard/admin/revenue', visibleTo: ['SUPERADMIN'] },
-      { id: 'roles', label: 'Ролі юзерів', icon: '', path: '/dashboard/admin/roles', visibleTo: ['SUPERADMIN'] },
-      { id: 'transfer', label: 'Transfer', icon: '', path: '/dashboard/admin/transfer-ownership', visibleTo: ['SUPERADMIN'] },
+      { id: 'users', label: 'Всі користувачі', icon: Users, path: '/dashboard/admin/users', visibleTo: ['SUPERADMIN'] },
+      { id: 'revenue', label: 'Revenue', icon: Banknote, path: '/dashboard/admin/revenue', visibleTo: ['SUPERADMIN'] },
+      { id: 'roles', label: 'Ролі юзерів', icon: Shield, path: '/dashboard/admin/roles', visibleTo: ['SUPERADMIN'] },
+      { id: 'transfer', label: 'Transfer', icon: ArrowRightLeft, path: '/dashboard/admin/transfer-ownership', visibleTo: ['SUPERADMIN'] },
     ],
   },
 ]
@@ -205,12 +224,13 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
         {item.icon ? (
           <span
             className={[
-              'select-none text-center leading-none',
-              collapsed ? 'text-[20px]' : 'text-[14px]',
+              'flex shrink-0 items-center justify-center',
+              collapsed ? 'h-5 w-5' : 'h-4 w-4',
               isActive ? 'text-[rgb(var(--accent-rgb))]' : isLocked ? 'text-[var(--text-subtle)]' : 'text-[var(--text-muted)]',
             ].join(' ')}
+            aria-hidden="true"
           >
-            {item.icon}
+            <item.icon className="h-full w-full stroke-[1.9]" />
           </span>
         ) : null}
 
@@ -284,12 +304,10 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
   }
 
   const showUpgradeBanner = currentRole === 'USER' && !hasPremium && !collapsed
-  const showWebMapWidget = currentRole === 'USER' && !collapsed
-
   return (
     <aside
       className={[
-        'dashboard-sidebar relative flex h-screen flex-shrink-0 flex-col overflow-visible border-r border-[var(--border-primary)] bg-[var(--bg-secondary)]',
+        'dashboard-sidebar relative z-20 flex h-screen flex-shrink-0 flex-col overflow-visible border-r border-[var(--border-primary)] bg-[var(--bg-secondary)]',
         'transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
         collapsed ? 'w-[68px]' : 'w-[232px]',
       ].join(' ')}
@@ -301,8 +319,6 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
         ].join(' ')}
       >
         {SIDEBAR_NAV.map(renderSection)}
-
-        {showWebMapWidget ? <WebMapWidget /> : null}
 
         {showUpgradeBanner ? (
           <div className="mx-0 my-3 rounded-xl border border-[rgba(var(--accent-rgb),0.25)] bg-[rgba(var(--accent-rgb),0.06)] p-3.5">

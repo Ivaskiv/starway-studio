@@ -818,15 +818,15 @@ export class NotificationService {
       userId,
       type: NotificationType.AI_REMINDER,
       title: '✅ Завдання виконано',
-      body: `Ти закрив(ла) "${taskTitle}". +${xpReward} XP уже нараховано.`,
+      body: `Ти закрив(ла) "${taskTitle}". +${xpReward} XP 🔥 Наступний крок уже готовий.`,
       telegramHtml: buildTelegramCard({
         title: '✅ Завдання виконано',
-        intro: 'Задачу зафіксовано як виконану.',
+        intro: 'Крок зафіксовано в системі.',
         facts: [
           taskTitle,
           `Нараховано: +${xpReward} XP`,
         ],
-        note: 'Один закритий крок підтримує ритм сильніше, ніж ідеальний план без дії.',
+        note: 'Наступний крок: запланувати зустріч або закріпити рух у системі.',
       }),
       templateKey: `task_completed_${taskTitle.slice(0, 48)}`,
       ctaText: '📊 Мій прогрес',
@@ -948,9 +948,7 @@ export class NotificationService {
   }): Promise<boolean> {
     const startOfToday = startOfDay()
     const dateKey = startOfToday.toISOString().slice(0, 10)
-    const sessionPath = input.session === 'evening'
-      ? '/dashboard/cycle?session=evening'
-      : '/dashboard/cycle?session=morning'
+    const sessionPath = '/dashboard?from=tg&step=cycle'
     const miniAppUrl = buildMiniAppStartUrl(input.session === 'morning' ? 'ai_morning' : 'ai_evening')
 
     let telegramUrl = ''
@@ -1004,10 +1002,10 @@ export class NotificationService {
     return this.sendDirectTelegramNotification({
       userId: input.userId,
       type: input.session === 'morning' ? NotificationType.DAILY_MORNING : NotificationType.DAILY_EVENING,
-      title: input.session === 'morning' ? '🌅 Ранкова рефлексія' : '🌙 Вечірній підсумок',
+      title: input.session === 'morning' ? '🌅 Твій фокус' : '🌙 Що було найцінніше сьогодні?',
       body: input.session === 'morning'
-        ? 'Сесія відкрита. Обери, де зручно відповісти: у mini app, на сайті або прямо тут у Telegram.'
-        : 'Вечірній блок відкрито. Обери, де зручно завершити його: у mini app, на сайті або прямо тут у Telegram.',
+        ? 'Один короткий крок уже визначений. Обери, де зручно продовжити: у mini app, на сайті або прямо тут у Telegram.'
+        : 'Закрий день одним коротким підсумком. Обери, де зручно завершити цикл: у mini app, на сайті або прямо тут у Telegram.',
       templateKey: `session_handoff_${input.session}_${dateKey}`,
       ctaActions: buildMentorTelegramActions({
         miniAppUrl,
@@ -1066,7 +1064,7 @@ export class NotificationService {
     switch (event) {
       case NotificationEvent.DAILY_MORNING_DUE:
       {
-        const sessionPath = '/dashboard/cycle?session=morning'
+        const sessionPath = '/dashboard?from=tg&step=cycle'
         let webUrl = `${TELEGRAM_SAFE_FRONTEND_URL}${sessionPath}`
         try {
           const webLink = await generateDeepLink({
@@ -1087,16 +1085,16 @@ export class NotificationService {
         }
 
         return {
-          title: '🌅 Ранкова рефлексія',
-          body: `${firstName}, час зафіксувати стан і задати фокус на день. Обери, де зручно продовжити.`,
+          title: '🌅 Твій фокус',
+          body: `${firstName}, твій фокус уже визначений. Один короткий крок зараз збере день у систему.`,
           telegramHtml: buildTelegramCard({
-            title: '🌅 Ранкова рефлексія',
-            intro: `${firstName}, час зафіксувати стан і задати фокус на день.`,
+            title: '🌅 Твій фокус',
+            intro: `${firstName}, один короткий крок зараз збере день у систему.`,
             facts: [
-              'Сесія відкриє логіку наступних блоків',
               'Почни там, де тобі зараз зручніше',
+              'Mini App, сайт і Telegram ведуть в одну дію',
             ],
-            note: 'Mini App, сайт і Telegram ведуть в одну й ту саму сесію.',
+            note: 'Telegram тут не для нагадування, а для продовження дії.',
           }),
           ctaActions: buildMentorTelegramActions({
             miniAppUrl: buildMiniAppStartUrl('ai_morning'),
@@ -1107,7 +1105,7 @@ export class NotificationService {
       }
       case NotificationEvent.DAILY_EVENING_DUE:
       {
-        const sessionPath = '/dashboard/cycle?session=evening'
+        const sessionPath = '/dashboard?from=tg&step=cycle'
         let webUrl = `${TELEGRAM_SAFE_FRONTEND_URL}${sessionPath}`
         try {
           const webLink = await generateDeepLink({
@@ -1128,14 +1126,14 @@ export class NotificationService {
         }
 
         return {
-          title: '🌙 Вечірній підсумок',
-          body: `${firstName}, одна коротка сесія зараз збере день в систему і підтримає ритм. Обери, де зручно відповісти.`,
+          title: '🌙 Що було найцінніше сьогодні?',
+          body: `${firstName}, один короткий підсумок зараз закриє день у систему і підтримає ритм.`,
           telegramHtml: buildTelegramCard({
-            title: '🌙 Вечірній підсумок',
-            intro: `${firstName}, одна коротка сесія зараз збере день в систему і підтримає ритм.`,
+            title: '🌙 Що було найцінніше сьогодні?',
+            intro: `${firstName}, один короткий підсумок зараз закриє день у систему і підтримає ритм.`,
             facts: [
               'Підсумок дня закриває цикл',
-              'Від вечірньої сесії залежить чистота завтрашнього старту',
+              'Завтрашній старт стає чистішим після короткої вечірньої фіксації',
             ],
             note: 'Обери Mini App, сайт або Telegram і продовжуй без розриву.',
           }),

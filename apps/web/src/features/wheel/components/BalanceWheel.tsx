@@ -1,261 +1,167 @@
-import { cn } from '@/lib/utils'
-import { WheelScore } from '@/features/wheel/types/wheel.types';
-import React, { memo, useMemo } from 'react';
+import { memo } from 'react'
 
-// ─────────────────────────────────────────────────────────
-// Єдиний маппінг categoryId → назва + емодзі
-// Ключі відповідають WHEEL_CATEGORIES (активний фронт)
-// TODO: після міграції бекенду замінити на LIFE_SPHERES ключі
-// ─────────────────────────────────────────────────────────
-const SPHERE_META: Record<string, { label: string; emoji: string }> = {
-  money:        { label: 'Фінанси',    emoji: '💰'  },
-  realization:  { label: 'Реалізація', emoji: '🎯'  },
-  relationships:{ label: 'Стосунки',   emoji: '❤️'  },
-  energy:       { label: 'Енергія',    emoji: '⚡'  },
-  freedom:      { label: 'Свобода',    emoji: '🕊️' },
-  innerSupport: { label: 'Опора',      emoji: '🧘'  },
-  health:       { label: "Здоров'я",   emoji: '🏥'  },
-  growth:       { label: 'Розвиток',   emoji: '📚'  },
-};
+import { WHEEL_GUIDE_PHRASES, getWheelCategoryById } from '@/features/wheel/constants/wheelContent'
+import type { WheelScore, WheelSphereId } from '@/features/wheel/types/wheel.types'
 
 interface BalanceWheelProps {
-  scores: WheelScore[];
-  size?: number;
-  interactive?: boolean;
-  onCategoryClick?: (id: string) => void;
+  scores: WheelScore[]
+  size?: number
+  activeCategoryId?: WheelSphereId | null
 }
 
-export const BalanceWheel: React.FC<BalanceWheelProps> = memo(
-  ({ scores, size = 300, interactive = false, onCategoryClick }) => {
-    const outerRadius = size * 0.42;
-    const textRadius  = outerRadius + size * 0.085;
-    const rings       = 5;
-    const numPoints   = scores.length;
-    const angleStep   = (2 * Math.PI) / numPoints;
+const polar = (cx: number, cy: number, radius: number, angle: number) => ({
+  x: cx + radius * Math.cos(angle),
+  y: cy + radius * Math.sin(angle),
+})
 
-    const avgScore = useMemo(
-      () => (scores.length ? scores.reduce((sum, s) => sum + s.score, 0) / scores.length : 0),
-      [scores],
-    );
+const arcPath = (cx: number, cy: number, innerRadius: number, outerRadius: number, startAngle: number, endAngle: number) => {
+  const innerStart = polar(cx, cy, innerRadius, startAngle)
+  const outerStart = polar(cx, cy, outerRadius, startAngle)
+  const outerEnd = polar(cx, cy, outerRadius, endAngle)
+  const innerEnd = polar(cx, cy, innerRadius, endAngle)
+  const largeArc = endAngle - startAngle <= Math.PI ? 0 : 1
 
-    const scoreToAccent = (score: number) => {
-      const alpha = 0.34 + (Math.max(1, Math.min(10, score)) - 1) * 0.06;
-      return `rgba(var(--accent-rgb),${alpha.toFixed(2)})`;
-    };
+  return [
+    `M ${innerStart.x} ${innerStart.y}`,
+    `L ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
+    'Z',
+  ].join(' ')
+}
 
-    const svgPadding = size * 0.18;
-    const svgSize    = size + svgPadding * 2;
-    const sc         = svgSize / 2;
+const ringLabelOffsets = [0.24, 0.4, 0.56, 0.72] as const
 
-    const axisPoints = scores.map((_, i) => {
-      const angle = i * angleStep - Math.PI / 2;
-      return {
-        x: sc + outerRadius * Math.cos(angle),
-        y: sc + outerRadius * Math.sin(angle),
-      };
-    });
+export const BalanceWheel = memo(({ scores, size = 360, activeCategoryId = null }: BalanceWheelProps) => {
+  const center = size / 2
+  const ringCount = 10
+  const outerRadius = size * 0.33
+  const sectorAngle = (Math.PI * 2) / Math.max(scores.length, 1)
+  const labelRadius = outerRadius + size * 0.15
+  const separatorRadius = outerRadius + size * 0.08
+  const guideFontSize = Math.max(12, Math.round(size * 0.036))
+  const labelFontSize = Math.max(11, Math.round(size * 0.03))
 
-    const scorePoints = scores.map((s, i) => {
-      const angle = i * angleStep - Math.PI / 2;
-      const r     = (Math.max(1, s.score) / 10) * outerRadius;
-      return {
-        categoryId: s.categoryId,
-        score:      s.score,
-        angle,
-        x: sc + r * Math.cos(angle),
-        y: sc + r * Math.sin(angle),
-      };
-    });
+  return (
+    <div className="relative mx-auto w-full max-w-[420px]">
+      <svg viewBox={`0 0 ${size} ${size}`} className="h-auto w-full overflow-visible" role="img" aria-label="Колесо балансу">
+        <defs>
+          <radialGradient id="wheelGlassGlow" cx="50%" cy="50%" r="58%">
+            <stop offset="0%" stopColor="rgba(86,136,255,0.24)" />
+            <stop offset="70%" stopColor="rgba(86,136,255,0.06)" />
+            <stop offset="100%" stopColor="rgba(86,136,255,0)" />
+          </radialGradient>
+        </defs>
 
-    const polygonFillA  = `rgba(var(--accent-soft-rgb),0.44)`;
-    const polygonFillB  = `rgba(var(--accent-rgb),0.22)`;
-    const polygonStroke = `rgba(var(--accent-rgb),0.96)`;
-    const gradientId    = `wheel-gradient-${size}-${Math.round(avgScore * 10)}`;
-    const glowId        = `wheel-glow-${size}-${Math.round(avgScore * 10)}`;
+        <circle cx={center} cy={center} r={outerRadius + 18} fill="url(#wheelGlassGlow)" />
 
-    const uid = useMemo(() => Math.random().toString(36).slice(2, 7), []);
+        {Array.from({ length: ringCount }, (_, index) => {
+          const radius = ((index + 1) / ringCount) * outerRadius
+          return (
+            <circle
+              key={`ring-${index + 1}`}
+              cx={center}
+              cy={center}
+              r={radius}
+              fill="none"
+              stroke={index === ringCount - 1 ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.08)'}
+              strokeWidth={1}
+            />
+          )
+        })}
 
-    const arcSpanRad = angleStep * 0.68;
+        {Array.from({ length: ringCount }, (_, index) => (
+          <text
+            key={`scale-${index + 1}`}
+            x={center}
+            y={center - ((index + 1) / ringCount) * outerRadius + 10}
+            fill="rgba(255,255,255,0.34)"
+            fontSize="8"
+            textAnchor="middle"
+          >
+            {index + 1}
+          </text>
+        ))}
 
-    const labelArcs = scores.map((s, i) => {
-      const angle      = i * angleStep - Math.PI / 2;
-      const startAngle = angle - arcSpanRad / 2;
-      const endAngle   = angle + arcSpanRad / 2;
+        {scores.map((score, index) => {
+          const category = getWheelCategoryById(score.categoryId)
+          const startAngle = index * sectorAngle - Math.PI / 2 - sectorAngle / 2
+          const endAngle = startAngle + sectorAngle
+          const guideAngle = startAngle + sectorAngle / 2
+          const fillRadius = (Math.max(0, Math.min(10, score.score)) / ringCount) * outerRadius
+          const labelPoint = polar(center, center, labelRadius, guideAngle)
+          const labelRotation = (guideAngle * 180) / Math.PI + 90
+          const guideRotation = (guideAngle * 180) / Math.PI + 180
+          const active = activeCategoryId === score.categoryId
+          const guidePhrases = WHEEL_GUIDE_PHRASES[score.categoryId] ?? []
 
-      const x1 = sc + textRadius * Math.cos(startAngle);
-      const y1 = sc + textRadius * Math.sin(startAngle);
-      const x2 = sc + textRadius * Math.cos(endAngle);
-      const y2 = sc + textRadius * Math.sin(endAngle);
-
-      const d     = `M ${x1} ${y1} A ${textRadius} ${textRadius} 0 0 1 ${x2} ${y2}`;
-      const label = SPHERE_META[s.categoryId]?.label ?? s.categoryId;
-
-      return { id: `arc-${uid}-${i}`, d, label };
-    });
-
-    const fontSize  = Math.max(8.5, size * 0.042);
-    const emojiSize = Math.max(11, size * 0.055);
-    const ringValues = Array.from({ length: rings }, (_, ring) => Math.round(((ring + 1) * 10) / rings));
-    const ringGapPx = Math.max(22, size * 0.11);
-    const ringGuides = ringValues.map((value, index) => {
-      const radius = (outerRadius / rings) * (index + 1);
-      const circumference = 2 * Math.PI * radius;
-      const gapAngle = (ringGapPx / circumference) * Math.PI * 2;
-      const startAngle = -Math.PI / 2 + gapAngle / 2;
-      const endAngle = (Math.PI * 3) / 2 - gapAngle / 2;
-
-      const startX = sc + radius * Math.cos(startAngle);
-      const startY = sc + radius * Math.sin(startAngle);
-      const endX = sc + radius * Math.cos(endAngle);
-      const endY = sc + radius * Math.sin(endAngle);
-
-      return {
-        value,
-        radius,
-        d: `M ${startX} ${startY} A ${radius} ${radius} 0 1 1 ${endX} ${endY}`,
-        labelY: sc - radius + 4,
-      };
-    });
-
-    return (
-      <div className="relative flex w-full items-center justify-center">
-        <svg
-          width="100%"
-          height="100%"
-          viewBox={`0 0 ${svgSize} ${svgSize}`}
-          preserveAspectRatio="xMidYMid meet"
-          className="h-auto w-full overflow-visible"
-        >
-          <defs>
-            <radialGradient id={gradientId} cx="50%" cy="45%" r="58%">
-              <stop offset="0%" stopColor={polygonFillA} />
-              <stop offset="100%" stopColor={polygonFillB} />
-            </radialGradient>
-            <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="7" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            {labelArcs.map(arc => (
-              <path key={arc.id} id={arc.id} d={arc.d} fill="none" />
-            ))}
-          </defs>
-
-          {/* base glow ring */}
-          <circle cx={sc} cy={sc} r={outerRadius + 8} fill="none" stroke="rgba(var(--accent-rgb),0.2)" strokeWidth={1} />
-
-          {/* concentric guides with top gap and labels */}
-          {ringGuides.map((ring, index) => (
-            <g key={`ring-${ring.value}`}>
+          return (
+            <g key={score.categoryId}>
               <path
-                d={ring.d}
-                fill="none"
-                stroke={index === ringGuides.length - 1 ? 'rgba(var(--accent-soft-rgb),0.48)' : 'rgba(var(--accent-rgb),0.2)'}
-                strokeWidth={index === ringGuides.length - 1 ? 1.2 : 1}
-                strokeLinecap="round"
+                d={arcPath(center, center, 0, fillRadius, startAngle, endAngle)}
+                fill={category?.color ?? '#5b7cff'}
+                fillOpacity={active ? 0.28 : 0.16}
+                className="transition-all duration-200"
               />
+              <line
+                x1={center}
+                y1={center}
+                x2={polar(center, center, outerRadius, startAngle).x}
+                y2={polar(center, center, outerRadius, startAngle).y}
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth={1}
+              />
+              <g transform={`rotate(${guideRotation} ${center} ${center})`}>
+                {ringLabelOffsets.map((offset, phraseIndex) => (
+                  <text
+                    key={`${score.categoryId}-${phraseIndex}`}
+                    x={center}
+                    y={center - outerRadius * (0.9 - offset * 0.48)}
+                    fill="rgba(255,255,255,0.28)"
+                    fontSize={guideFontSize}
+                    fontWeight="600"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                  >
+                    {guidePhrases[phraseIndex] ?? ''}
+                  </text>
+                ))}
+              </g>
               <text
-                x={sc}
-                y={ring.labelY}
+                x={labelPoint.x}
+                y={labelPoint.y}
+                fill={active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.72)'}
+                fontSize={labelFontSize}
+                fontWeight="600"
                 textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={Math.max(9, size * 0.034)}
-                fill="rgba(255,255,255,0.56)"
-                className="select-none"
+                dominantBaseline="middle"
+                transform={`rotate(${labelRotation} ${labelPoint.x} ${labelPoint.y})`}
               >
-                {ring.value}
+                {category?.nameUk ?? score.categoryId}
               </text>
             </g>
-          ))}
+          )
+        })}
 
-          {/* axis lines */}
-          {axisPoints.map((ap, i) => (
-            <line key={`axis-${i}`} x1={sc} y1={sc} x2={ap.x} y2={ap.y} stroke="rgba(var(--accent-rgb),0.28)" strokeWidth={1} />
-          ))}
+        {scores.map((_, index) => {
+          const separatorAngle = index * sectorAngle - Math.PI / 2
+          const point = polar(center, center, separatorRadius, separatorAngle)
+          return (
+            <circle
+              key={`separator-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r={3}
+              fill="rgb(92 136 255 / 0.92)"
+            />
+          )
+        })}
 
-          {/* outer boundary dots */}
-          {axisPoints.map((ap, i) => (
-            <circle key={`axis-dot-${i}`} cx={ap.x} cy={ap.y} r={2.8} fill="rgba(var(--accent-soft-rgb),0.96)" />
-          ))}
+        <circle cx={center} cy={center} r={6} fill="rgba(255,255,255,0.9)" />
+      </svg>
+    </div>
+  )
+})
 
-          {/* data polygon */}
-          <polygon
-            points={scorePoints.map(p => `${p.x},${p.y}`).join(' ')}
-            fill={`url(#${gradientId})`}
-            stroke={polygonStroke}
-            strokeWidth={2.8}
-            filter={`url(#${glowId})`}
-          />
-
-          {/* score points — емодзі на точці полігону */}
-          {scorePoints.map((p, i) => {
-            const c     = scoreToAccent(p.score);
-            const emoji = SPHERE_META[p.categoryId]?.emoji ?? '✨';
-
-            return (
-              <g
-                key={`point-${i}`}
-                className={cn('wheel-point', interactive ? 'wheel-point-interactive' : 'wheel-point-default')}
-                onClick={() => interactive && onCategoryClick?.(p.categoryId)}
-              >
-                <circle
-                  cx={p.x} cy={p.y} r={15}
-                  fill="rgba(var(--ambient-rgb-2),0.65)"
-                  stroke={`rgba(var(--accent-rgb),${(0.28 + p.score * 0.05).toFixed(2)})`}
-                  strokeWidth={1.5}
-                />
-                <circle cx={p.x} cy={p.y} r={8} fill={c} stroke="rgba(var(--on-accent-rgb),0.85)" strokeWidth={1.8} />
-                <text
-                  x={p.x} y={p.y + 0.5}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize={emojiSize}
-                  className="pointer-events-none select-none"
-                >
-                  {emoji}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* center orb */}
-          <circle cx={sc} cy={sc} r={17} fill="rgba(var(--accent-rgb),0.24)" stroke="rgba(var(--accent-soft-rgb),0.64)" />
-          <circle cx={sc} cy={sc} r={5.5} fill="rgba(var(--on-accent-rgb),0.95)" />
-
-          {/* текст по дузі */}
-          {labelArcs.map((arc, i) => (
-            <text
-              key={`label-${i}`}
-              fontSize={fontSize}
-              fontWeight={500}
-              fill="rgba(255,255,255,0.7)"
-              letterSpacing="0.04em"
-            >
-              <textPath href={`#${arc.id}`} startOffset="50%" textAnchor="middle">
-                {arc.label}
-              </textPath>
-            </text>
-          ))}
-
-          {/* крапки-роздільники між секторами */}
-          {scores.map((_, i) => {
-            const angle = (i + 0.5) * angleStep - Math.PI / 2;
-            return (
-              <circle
-                key={`sep-${i}`}
-                cx={sc + textRadius * Math.cos(angle)}
-                cy={sc + textRadius * Math.sin(angle)}
-                r={1.8}
-                fill="rgba(var(--accent-soft-rgb),0.5)"
-              />
-            );
-          })}
-        </svg>
-      </div>
-    );
-  },
-);
-
-BalanceWheel.displayName = 'BalanceWheel';
+BalanceWheel.displayName = 'BalanceWheel'

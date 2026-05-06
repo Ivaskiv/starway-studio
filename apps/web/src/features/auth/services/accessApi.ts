@@ -1,6 +1,15 @@
 import { api } from '@/services/api'
 import type { UserAccessResult } from '@/features/auth/types/auth.types'
 
+export type TrialStatus = {
+  funnelStage: string
+  currentDay: number
+  totalDays: number
+  daysLeft: number
+  onboardingDay: number
+  isActive: boolean
+}
+
 export interface UserSystemState {
   accessControl: {
     accessLevel: 'GUEST' | 'LEAD' | 'CLIENT'
@@ -60,7 +69,12 @@ export const accessApi = api.injectEndpoints({
       query: () => '/access/state',
       providesTags: ['Access', 'Products'],
     }),
+    getTrialStatus: builder.query<TrialStatus, void>({
+      query: () => '/trial/status',
+      keepUnusedDataFor: 60,
+      providesTags: ['TrialStatus'],
+    }),
   }),
 })
 
-export const { useGetMyAccessQuery, useGetMySystemStateQuery } = accessApi
+export const { useGetMyAccessQuery, useGetMySystemStateQuery, useGetTrialStatusQuery } = accessApi

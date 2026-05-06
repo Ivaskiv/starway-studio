@@ -21,7 +21,7 @@ import type {
   WheelInsights,
   WheelCooldownStatus,
 } from './types.js'
-import { FIXED_SPHERES, SPHERE_LABELS, WHEEL_SPHERES } from './types.js'
+import { FIXED_SPHERES, SPHERE_LABELS, WHEEL_SPHERES, isWheelSphereId } from './types.js'
 
 export interface WheelWorkflowOptions {
   userId: string
@@ -61,15 +61,26 @@ export function validateScores(scores: WheelScore[]) {
 }
 
 export function scoresToMap(scores: WheelScore[]): WheelScoreMap {
+  const scoreMap: WheelScoreMap = {
+    finance: 0,
+    career: 0,
+    relationships: 0,
+    energy: 0,
+    freedom: 0,
+    mind: 0,
+    health: 0,
+    selfDevelopment: 0,
+  }
+
   return scores.reduce((acc, score) => {
     acc[score.categoryId] = score.score
     return acc
-  }, {} as WheelScoreMap)
+  }, scoreMap)
 }
 
 function extractRegenCount(value: unknown): number {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return 0
-  const raw = (value as Record<string, unknown>).__regenCount
+  const raw = Reflect.get(value, '__regenCount')
   const parsed = Number(raw ?? 0)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
@@ -81,11 +92,24 @@ function buildStoredScoreMap(scores: WheelScore[], regenCount: number): Prisma.I
   } satisfies Prisma.JsonObject
 }
 
+function createZeroScoreMap(): Record<WheelSphereId, number> {
+  return {
+    finance: 0,
+    career: 0,
+    relationships: 0,
+    energy: 0,
+    freedom: 0,
+    mind: 0,
+    health: 0,
+    selfDevelopment: 0,
+  }
+}
+
 export function scoresFromMap(value: unknown): WheelScore[] {
   if (!value || typeof value !== 'object') return []
   return WHEEL_SPHERES.map(id => ({
     categoryId: id,
-    score: Number((value as Record<string, number>)[id]) || 0,
+    score: Number(Reflect.get(value, id) ?? 0) || 0,
   }))
 }
 
@@ -154,7 +178,7 @@ export function getWheelHistory(userId: string, limit = 10) {
 export async function getWheelAnalytics(userId: string): Promise<WheelAnalytics> {
   const entries = await getWheelHistory(userId, 30)
   if (!entries.length) {
-    const zeroMap = WHEEL_SPHERES.reduce((acc, id) => ({ ...acc, [id]: 0 }), {} as Record<WheelSphereId, number>)
+    const zeroMap = createZeroScoreMap()
     return {
       totalAssessments: 0,
       averageScores: zeroMap,
@@ -164,7 +188,7 @@ export async function getWheelAnalytics(userId: string): Promise<WheelAnalytics>
     }
   }
 
-  const sum: Record<WheelSphereId, number> = WHEEL_SPHERES.reduce((acc, id) => ({ ...acc, [id]: 0 }), {} as Record<WheelSphereId, number>)
+  const sum = createZeroScoreMap()
   const weakestHistory: WheelSphereId[] = []
   const focusHistory: WheelSphereId[] = []
 
@@ -179,10 +203,10 @@ export async function getWheelAnalytics(userId: string): Promise<WheelAnalytics>
     focusHistory.push(focus.categoryId)
   }
 
-  const averageScores: Record<WheelSphereId, number> = WHEEL_SPHERES.reduce((acc, id) => {
+  const averageScores = WHEEL_SPHERES.reduce((acc, id) => {
     acc[id] = Number((sum[id] / entries.length).toFixed(1))
     return acc
-  }, {} as Record<WheelSphereId, number>)
+  }, createZeroScoreMap())
 
   const balanceIndex = Math.round((Object.values(averageScores).reduce((total, score) => total + score, 0) / (WHEEL_SPHERES.length * 10)) * 100)
 
@@ -199,12 +223,15 @@ export async function getWheelAnalytics(userId: string): Promise<WheelAnalytics>
     items.reduce((acc, id) => {
       acc[id] = (acc[id] ?? 0) + 1
       return acc
-    }, {} as Record<WheelSphereId, number>)
+    }, createZeroScoreMap())
 
   const weakestCounts = countById(weakestHistory)
   const focusCounts = countById(focusHistory)
   const pickTop = (counts: Record<WheelSphereId, number>) =>
-    (Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] as WheelSphereId | undefined)
+    Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => id)
+      .find((id): id is WheelSphereId => isWheelSphereId(id))
 
   return {
     totalAssessments: entries.length,
@@ -255,14 +282,14 @@ function buildNotificationPayload(params: {
 }
 
 const MICROTASK_TEMPLATES: Record<WheelSphereId, string[]> = {
-  money: ['Записати всі витрати сьогодні', 'Перевірити підписки'],
-  realization: ['Зробити крок у проєкті', 'Написати план наступного тижня'],
+  finance: ['Записати всі витрати сьогодні', 'Перевірити підписки'],
+  career: ['Зробити крок у проєкті', 'Написати план наступного тижня'],
   relationships: ['Написати вдячність близькому', 'Запланувати короткий дзвінок'],
   energy: ['Прогулянка 20 хвилин', 'Приділити увагу сну'],
   freedom: ['Виділити час для улюбленого хобі', 'Запланувати день без нагадувань'],
-  innerSupport: ['Записати 3 цінності', 'Скласти список підтримки'],
+  mind: ['Записати 3 цінності', 'Скласти список підтримки'],
   health: ['Пити воду кожну годину', 'Розтяжка 10 хвилин'],
-  growth: ['Прочитати короткий матеріал', 'Зареєструватися на майстерню'],
+  selfDevelopment: ['Прочитати короткий матеріал', 'Зареєструватися на майстерню'],
 }
 
 export async function addWheelMicroTasks(userId: string, weakest: WheelScore) {
@@ -298,7 +325,7 @@ export async function executeWheelWorkflow(options: WheelWorkflowOptions): Promi
   const cooldownBeforeSave = await getWheelCooldown(userId)
 
   if (!bypassCooldown && !cooldownBeforeSave.canFill && cooldownBeforeSave.regenLeft <= 0) {
-    throw new Error('WHEEL_QUOTA_EXCEEDED')
+    console.warn('quota soft-limit', { userId })
   }
 
   let entry: UserBalanceEntry

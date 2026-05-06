@@ -2,7 +2,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { User, UserRole } from '@/features/user/types/user.types';
 import type { AuthState } from '@/features/auth/types/auth.types';
-import { getStoredUser, getToken, saveStoredUser, saveToken, removeToken } from './token';
+import { getStoredUser, getToken, saveRefreshToken, saveStoredUser, saveToken, removeToken } from './token';
 
 const token = getToken();
 const storedUser = getStoredUser<User>();
@@ -18,12 +18,13 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     // Після логіну / restore — повний об'єкт
-    setCredentials: (state, { payload }: PayloadAction<{ user: User; accessToken: string }>) => {
+    setCredentials: (state, { payload }: PayloadAction<{ user: User; accessToken: string; refreshToken?: string }>) => {
       state.user        = payload.user;
       state.role        = payload.user.role;
       state.accessToken = payload.accessToken;
       state.status      = 'authenticated';
       saveToken(payload.accessToken);
+      if (payload.refreshToken) saveRefreshToken(payload.refreshToken);
       saveStoredUser(payload.user);
     },
 

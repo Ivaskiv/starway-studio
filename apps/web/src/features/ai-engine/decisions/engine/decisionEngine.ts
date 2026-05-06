@@ -116,7 +116,7 @@ export const useQuestions = (options: UseQuestionsOptions) => {
             { area: 'Відносини', score: 8 },
             { area: 'Енергія', score: 7 },
             { area: 'Свобода', score: 5 },
-            { area: 'Внутрішня опора', score: 6 },
+            { area: 'Духовність', score: 6 },
           ],
         });
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
 import type { AppDispatch } from '@/app/store'
@@ -11,19 +11,44 @@ const AUTH_STORAGE_KEYS = new Set([
   'starway_access_token',
   'starway_session_hint',
 ])
+const SYNC_COOLDOWN_MS = 1500
 
 export function useAuthSessionSync(enabled: boolean) {
   const dispatch = useDispatch<AppDispatch>()
-  const theme = useThemeContext()
+  const { setAccent, setMode, setBgColor } = useThemeContext()
+  const theme = useMemo(
+    () => ({
+      setAccent,
+      setMode,
+      setBgColor,
+    }),
+    [setAccent, setMode, setBgColor],
+  )
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const syncInFlightRef = useRef(false)
+  const lastSyncStartedAtRef = useRef(0)
 
-  const runSync = useCallback(async () => {
+  const runSync = useCallback(async (reason: 'storage' | 'focus' | 'visibility') => {
     if (!enabled || syncInFlightRef.current) return
 
+    const now = Date.now()
+    if (now - lastSyncStartedAtRef.current < SYNC_COOLDOWN_MS) {
+      if (import.meta.env.DEV) {
+        console.info('[useAuthSessionSync] skip', {
+          reason,
+          sinceLastSyncMs: now - lastSyncStartedAtRef.current,
+        })
+      }
+      return
+    }
+
     syncInFlightRef.current = true
+    lastSyncStartedAtRef.current = now
 
     try {
+      if (import.meta.env.DEV) {
+        console.info('[useAuthSessionSync] run', { reason })
+      }
       await syncAuthSession({
         allowRefreshWithoutHint: true,
         dispatch,
@@ -33,6 +58,13 @@ export function useAuthSessionSync(enabled: boolean) {
       syncInFlightRef.current = false
     }
   }, [dispatch, enabled, theme])
+
+  useEffect(() => {
+    if (!enabled) return
+    // AuthRestore has just completed a session sync, so suppress the immediate
+    // focus/visibility follow-up pass that commonly fires on initial page load.
+    lastSyncStartedAtRef.current = Date.now()
+  }, [enabled])
 
   useEffect(() => {
     if (!enabled) return
@@ -46,17 +78,17 @@ export function useAuthSessionSync(enabled: boolean) {
         return
       }
 
-      void runSync()
+      void runSync('storage')
     }
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        void runSync()
+        void runSync('visibility')
       }
     }
 
     const handleFocus = () => {
-      void runSync()
+      void runSync('focus')
     }
 
     window.addEventListener('storage', handleStorage)

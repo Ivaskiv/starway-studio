@@ -9,19 +9,19 @@ import type {
   DailyChoice,
   DailyDrain,
   DailyState,
-  WheelSphere,
 } from '../types/mentor.types';
+import type { WheelSphereId } from '@/features/wheel/types/wheel.types';
 
 // ============================================================================
 // WHEEL SPHERES (модуль A)
 // ============================================================================
 
-export const WHEEL_SPHERES: Record<WheelSphere, { label: string; description: string }> = {
-  money: {
+export const WHEEL_SPHERES: Record<WheelSphereId, { label: string; description: string }> = {
+  finance: {
     label: 'Гроші',
     description: 'Фінансова стабільність та достаток',
   },
-  realization: {
+  career: {
     label: 'Реалізація',
     description: 'Професійні досягнення та самореалізація',
   },
@@ -37,9 +37,17 @@ export const WHEEL_SPHERES: Record<WheelSphere, { label: string; description: st
     label: 'Свобода / Час',
     description: 'Часові ресурси та особиста автономія',
   },
-  support: {
-    label: 'Внутрішня опора',
+  mind: {
+    label: 'Внутрішня опора / Сила внутрішнього світу / Духовність',
     description: 'Психологічна стійкість та впевненість',
+  },
+  health: {
+    label: 'Здоровʼя',
+    description: 'Фізичний та ментальний стан',
+  },
+  selfDevelopment: {
+    label: 'Розвиток',
+    description: 'Навчання, зростання та нові навички',
   },
 };
 
@@ -54,7 +62,7 @@ export const DAILY_STATES: Record<DailyState, { label: string; emoji: string }> 
   tension: { label: 'Напруга', emoji: '😰' },
   fear: { label: 'Страх', emoji: '😨' },
   stability: { label: 'Стабільність', emoji: '😌' },
-  innerSupport: { label: 'Внутрішня опора', emoji: '💪' },
+  innerSupport: { label: 'Духовність', emoji: '💪' },
 };
 
 export const DAILY_DRAINS: Record<DailyDrain, { label: string; emoji: string }> = {

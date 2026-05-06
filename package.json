@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.1.0",
+    "@types/pg": "^8.20.0",
     "concurrently": "^8.2.2",
     "typescript": "^5.3.3"
   },
@@ -34,5 +35,9 @@
       "backend"
     ]
   },
-  "packageManager": "pnpm@8.15.0"
+  "packageManager": "pnpm@8.15.0",
+  "dependencies": {
+    "lucide-react": "^1.14.0",
+    "pg": "^8.20.0"
+  }
 }

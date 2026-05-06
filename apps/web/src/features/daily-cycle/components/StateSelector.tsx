@@ -15,7 +15,7 @@ const STATES: { value: DailyState; label: string; emoji: string; color: string }
   { value: 'напруга', label: 'Напруга', emoji: '😰', color: 'from-red-500 to-orange-500' },
   { value: 'страх', label: 'Страх', emoji: '😨', color: 'from-purple-500 to-pink-500' },
   { value: 'стабільність', label: 'Стабільність', emoji: '😌', color: 'from-blue-500 to-cyan-500' },
-  { value: 'внутрішня опора', label: 'Внутрішня опора', emoji: '💪', color: 'from-green-500 to-emerald-500' }
+  { value: 'внутрішня опора', label: 'Духовність', emoji: '💪', color: 'from-green-500 to-emerald-500' }
 ];
 
 export function StateSelector({ value, onChange }: StateSelectorProps) {

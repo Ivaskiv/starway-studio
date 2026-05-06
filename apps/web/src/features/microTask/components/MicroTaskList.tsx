@@ -10,12 +10,14 @@ interface Props {
   onComplete: (taskId: string) => void
   onSkip?: (taskId: string) => void
   onDelete?: (taskId: string) => void
+  onEdit?: (taskId: string) => void
   onSetProgress?: (taskId: string, progressPercent: number) => void
   onToggleStep?: (taskId: string, stepIndex: number, done: boolean) => void
   title?: string
   pageSize?: number
   isLoading?: boolean
   activeEmptyText?: string
+  xpBadgeText?: string | null
 }
 
 type TaskStatusFilter = 'active' | 'done' | 'missed' | 'all'
@@ -59,12 +61,14 @@ export function MicroTaskList({
   onComplete,
   onSkip,
   onDelete,
+  onEdit,
   onSetProgress,
   onToggleStep,
   title,
   pageSize = 6,
   isLoading = false,
   activeEmptyText = 'Задачі ще формуються AI після ранкової сесії',
+  xpBadgeText,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>('active')
   const [sphereFilter, setSphereFilter] = useState<string>('all')
@@ -171,17 +175,25 @@ export function MicroTaskList({
           </div>
         </div>
 
-        {!isLoading ? (
-          <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
-            <span>
-              Показано {pagedTasks.length} з {filteredTasks.length}
-            </span>
-            <span>
+      </div>
+
+      {!isLoading ? (
+        <div className="count-row">
+          <span className="text-xs text-[var(--text-muted)]">
+            Показано {filteredTasks.length} з {tasks.length}
+          </span>
+          <div className="flex items-center gap-3">
+            {xpBadgeText ? (
+              <span className="rounded-full border border-[rgba(239,159,39,0.24)] bg-[rgba(239,159,39,0.12)] px-3 py-1 text-xs font-semibold text-[#F2B24B]">
+                {xpBadgeText}
+              </span>
+            ) : null}
+            <span className="text-xs text-[var(--text-muted)]">
               Сторінка {page} з {totalPages}
             </span>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="grid gap-3">
@@ -216,6 +228,7 @@ export function MicroTaskList({
               onComplete={() => onComplete(task.id)}
               onSkip={onSkip ? () => onSkip(task.id) : undefined}
               onDelete={onDelete ? () => onDelete(task.id) : undefined}
+              onEdit={onEdit ? () => onEdit(task.id) : undefined}
               onSetProgress={onSetProgress ? (progressPercent) => onSetProgress(task.id, progressPercent) : undefined}
               onToggleStep={onToggleStep ? (stepIndex, done) => onToggleStep(task.id, stepIndex, done) : undefined}
             />

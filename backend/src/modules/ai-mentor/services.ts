@@ -55,7 +55,7 @@ const STATE_LABELS: Record<DailyState, string> = {
   TENSION: 'Напруга',
   FEAR: 'Страх',
   STABILITY: 'Стабільність',
-  INNER_SUPPORT: 'Внутрішня опора',
+  INNER_SUPPORT: 'Духовність',
 };
 
 const getStateLabel = (state?: DailyState): string | undefined => {

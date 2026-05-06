@@ -1,0 +1,184 @@
+// apps/web/src/features/landings/focus/styles/_topics.scss
+// Keyframes focus-orbit-cw, focus-float-x → _animations.scss
+
+/* ─── PIPELINE ─── */
+
+.focus-pipeline {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+
+.focus-pipeline-track {
+  position: absolute;
+  top: 32px;
+  left: 32px;
+  right: 32px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(74, 126, 191, 0.5),
+    rgba(74, 126, 191, 0.15) 50%,
+    rgba(74, 126, 191, 0.5)
+  );
+  z-index: 0;
+  transform: translateY(-50%);
+}
+
+.focus-pipeline-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.focus-pipeline-node {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.focus-pipeline-node-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.10), transparent 55%),
+    rgba(74, 126, 191, 0.10);
+  border: 1px solid rgba(74, 126, 191, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 24px rgba(74, 126, 191, 0.18),
+    0 8px 24px rgba(0, 0, 0, 0.3);
+  transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.focus-pipeline-item:hover .focus-pipeline-node-glass {
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 55%),
+    rgba(74, 126, 191, 0.22);
+  border-color: rgba(74, 126, 191, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    0 0 40px rgba(74, 126, 191, 0.40),
+    0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.focus-pipeline-node-ring {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(74, 126, 191, 0.18);
+  animation: focus-orbit-cw 8s linear infinite;
+}
+
+.focus-pipeline-node-num {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: rgba(74, 160, 255, 0.9);
+  line-height: 1;
+}
+
+.focus-pipeline-arrow {
+  position: absolute;
+  top: 32px;
+  right: -10px;
+  transform: translateY(-50%);
+  z-index: 4;
+  font-size: 22px;
+  color: rgba(74, 126, 191, 0.6);
+  animation: focus-float-x 2.2s ease-in-out infinite;
+  pointer-events: none;
+  line-height: 1;
+}
+
+.focus-pipeline-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 5px;
+  padding: 0 8px;
+}
+
+.focus-pipeline-label-title {
+  font-family: var(--font-heading);
+  font-size: clamp(11px, 1.1vw, 13px);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-text-main);
+  line-height: 1.25;
+}
+
+.focus-pipeline-label-sub {
+  font-family: var(--font-sans);
+  font-size: clamp(11px, 1vw, 12.5px);
+  color: var(--focus-text-muted);
+  line-height: 1.45;
+}
+
+.focus-pipeline-outcome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: clamp(20px, 2.5vw, 28px);
+  margin-bottom: clamp(28px, 3.5vw, 44px);
+  padding: 13px 28px;
+  border-radius: var(--focus-radius-pill);
+  border: 1px solid rgba(74, 126, 191, 0.22);
+  background:
+    linear-gradient(135deg, rgba(74, 126, 191, 0.08) 0%, transparent 70%),
+    rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.focus-pipeline-outcome-arrow {
+  font-size: 17px;
+  color: rgba(74, 160, 255, 0.7);
+  animation: focus-float-x 2.2s ease-in-out infinite;
+}
+
+.focus-pipeline-outcome-text {
+  font-family: var(--font-heading);
+  font-size: clamp(11px, 1.1vw, 13px);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-accent-subtitle);
+}
+
+/* ─────────────────────────────
+   RESPONSIVE
+───────────────────────────── */
+
+@media (max-width: 900px) {
+  .focus-pipeline-node      { width: 52px; height: 52px; }
+  .focus-pipeline-track     { top: 26px; }
+  .focus-pipeline-arrow     { top: 26px; font-size: 18px; }
+  .focus-pipeline-node-num  { font-size: 15px; }
+}
+
+@media (max-width: 480px) {
+  .focus-pipeline           { flex-wrap: wrap; justify-content: center; gap: 20px 0; }
+  .focus-pipeline-track     { display: none; }
+  .focus-pipeline-item      { flex: 0 0 50%; max-width: 50%; }
+  .focus-pipeline-arrow     { display: none; }
+  .focus-pipeline-outcome   { text-align: center; padding: 13px 20px; }
+}

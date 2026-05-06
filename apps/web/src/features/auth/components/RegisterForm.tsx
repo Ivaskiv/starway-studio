@@ -21,7 +21,7 @@ interface Props {
   onSuccess: (credentials?: { email: string; password: string }) => void
 }
 
-const PRIMARY_AUTH_BUTTON_CLASS = 'rounded-[14px] border border-[rgba(var(--accent-rgb),0.42)] bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.34),rgba(36,58,118,0.58))] text-white shadow-[0_20px_45px_rgba(0,0,0,0.45),0_0_24px_rgba(var(--accent-rgb),0.22)] transition-all duration-200 hover:-translate-y-[2px] hover:border-[rgba(var(--accent-rgb),0.58)] hover:bg-[linear-gradient(180deg,rgba(var(--accent-rgb),0.42),rgba(36,58,118,0.72))] hover:shadow-[0_24px_54px_rgba(0,0,0,0.48),0_0_30px_rgba(var(--accent-rgb),0.28)] active:translate-y-0 active:shadow-[0_10px_20px_rgba(0,0,0,0.45),0_0_18px_rgba(var(--accent-rgb),0.2)]'
+const PRIMARY_AUTH_BUTTON_CLASS = 'rounded-xl border border-white/10 bg-[#1E293B] px-5 py-2.5 font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-[#243041] active:scale-[0.98] active:bg-[#0F172A] disabled:cursor-not-allowed disabled:opacity-40'
 
 function validateEmail(value: string) {
   if (!value) return 'Email обовʼязковий'
@@ -58,7 +58,6 @@ export function RegisterForm({ email: initialEmail = '', name: initialName = '',
           companyWebsite: value.companyWebsite,
           turnstileToken: getTurnstileToken(),
         }).unwrap()
-        toast.success(getToastMessage('auth.registerSuccess', lang))
         if (response.accessToken) onSuccess({ email: value.email, password: value.password })
         else onSuccess()
       } catch (err: any) {

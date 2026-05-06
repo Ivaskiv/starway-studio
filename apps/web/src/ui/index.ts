@@ -2,7 +2,8 @@
 export { Icon } from './Icon';
 export { Input } from './Input';
 export { Button } from './Button';
-export { GlassCard, GlassCard as Card } from './GlassCard';
+export { GlassCard } from './GlassCard';
+export { Card } from './Card';
 export { Select } from './Select';
 export { Textarea } from './Textarea';
 export { Checkbox } from './Checkbox';
@@ -12,6 +13,7 @@ export { Alert } from './Alert';
 export { Progress } from './Progress';
 export { Slider } from './Slider';
 export { Skeleton } from './Skeleton';
+export { Tabs } from './Tabs';
 export { default as FormField } from './FormField';
 export { FormFieldController } from './FormFieldController';
 export { ErrorAlert } from './ErrorAlert';

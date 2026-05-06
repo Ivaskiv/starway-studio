@@ -1,7 +1,5 @@
 // features/wheel/index.ts
 
-// ============ TYPES ============
-
 // ============ API ============
 export * from './services/wheel.api';
 
@@ -17,8 +15,6 @@ export { ScoreSlider } from './components/ScoreSlider';
 export { SphereSlider } from './components/SphereSlider';
 export { WheelForm } from './components/WheelForm';
 export { BalanceWheel } from './components/BalanceWheel';
-export { WheelChart } from './components/WheelChart';
-export { WheelTabs } from './components/WheelTabs';
 export { WheelAnalysis } from './components/WheelAnalysis';
 export { WheelFooter } from './components/WheelFooter';
 export { StepCard } from './components/StepCard';

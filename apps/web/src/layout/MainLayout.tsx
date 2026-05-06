@@ -5,7 +5,9 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import BottomNav from '@/components/miniapp/BottomNav'
 import AuthModal from '@/features/auth/components/AuthModal'
 import DeepLinkAuthBridge from '@/features/auth/components/DeepLinkAuthBridge'
-import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useAppSelector } from '@/app/hooks'
+import { resolvePreferredAuthMode } from '@/features/auth/services/token'
+import { selectIsAuthenticated } from '@/features/auth/services/auth.slice'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
@@ -30,14 +32,15 @@ function getPageContext(pathname: string, isDashboardShell: boolean): PageContex
   if (pathname === '/' || pathname === '/dashboard' || pathname === '/miniapp') return null
 
   const contexts: Array<[RegExp, PageContext]> = [
-    // [/^\/dashboard\/cycle/, { title: '', subtitle: '', status: 'Сесія в процесі' }],
+    [/^\/dashboard\/cycle/, { title: '', subtitle: '', status: 'Сесія в процесі' }],
     [/^\/dashboard\/ai-mentor/, { title: 'Відкрий асистента', subtitle: 'Постав запит або пройди коротку сесію.', status: 'Асистент готовий' }],
     [/^\/dashboard\/wheel/, { title: 'Оціни свій стан', subtitle: 'Пройди колесо балансу і знайди точку фокусу.', status: 'Крок самодіагностики' }],
-    [/^\/dashboard\/progress/, { title: 'Подивись прогрес', subtitle: 'Оціни динаміку і обери, що робити далі.', status: 'Аналітика доступна' }],
+    [/^\/dashboard\/progress/, { title: 'Шлях', subtitle: 'Подивись ритм дня, події та наступний крок в одному просторі.', status: 'Журнал і прогрес' }],
+    [/^\/dashboard\/journal/, { title: 'Шлях', subtitle: 'Подивись ритм дня, події та наступний крок в одному просторі.', status: 'Журнал і прогрес' }],
     [/^\/dashboard\/profile/, { title: 'Мій профіль', subtitle: 'Перевір канали доступу та основні дані акаунта.', status: 'Профіль активний' }],
-    [/^\/dashboard\/notifications/, { title: 'Сценарії повідомлень', subtitle: 'Перевір логіку Telegram, trial, win-back і renewal в одному місці.', status: 'Notification preview' }],
+    [/^\/dashboard\/notifications/, { title: 'Сценарії повідомлень', subtitle: 'Перевір логіку Telegram, trial, win-back і renewal в одному місці.', }],
     [/^\/dashboard\/subscription/, { title: 'Онови доступ', subtitle: 'Подивись план і виріши, як рухатись далі.', status: 'Доступ і плани' }],
-    [/^\/dashboard\/(courses|products|vision|goals|actions)/, { title: 'Обери наступний крок', subtitle: 'Відкрий матеріал або інструмент, який рухає тебе далі.', status: 'Інструменти доступні' }],
+    [/^\/dashboard\/(courses|products|vision|goals|actions)/, { title: 'Обери наступний крок', subtitle: '', status: 'Крок самодіагностики' }],
     [/^\/subscription/, { title: 'Обери доступ', subtitle: 'Подивись умови і відкрий наступний рівень системи.', status: 'Плани Starway' }],
     [/^\/profile/, { title: 'Керуй профілем', subtitle: 'Онови дані і продовжуй роботу без зайвих кроків.', status: 'Профіль відкрито' }],
   ]
@@ -85,15 +88,20 @@ export default function MainLayout({
 }: MainLayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
+  const isEmbeddedFrame = useMemo(
+    () => new URLSearchParams(location.search).get('embedded') === '1',
+    [location.search],
+  )
 
   const [collapsed,   setCollapsed]   = useState(false)
   const [view,        setView]        = useState<AppView>('navigation')
   const [previewRole, setPreviewRole] = useState<PreviewRole>('user')
-  const [authMode,    setAuthMode]    = useState<'login' | 'register'>('login')
+  const [authMode,    setAuthMode]    = useState<'login' | 'register'>(resolvePreferredAuthMode('login'))
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [isCompactViewport, setIsCompactViewport] = useState(false)
 
-  const { user, isAuthenticated } = useAuth()
+  const user = useAppSelector((state) => state.auth.user)
+  const isAuthenticated = useAppSelector(selectIsAuthenticated)
   const { state } = useSystemState()
   const { navigateTo } = useSmartNavigation()
 
@@ -111,8 +119,7 @@ export default function MainLayout({
       return '/miniapp/mentor'
     }
     if (location.pathname.startsWith('/dashboard/ai-mentor')) return '/miniapp/mentor'
-    if (location.pathname.startsWith('/dashboard/progress')) return '/miniapp/tracker'
-    if (location.pathname.startsWith('/dashboard/journal')) return '/miniapp/journal'
+    if (location.pathname.startsWith('/dashboard/progress') || location.pathname.startsWith('/dashboard/journal')) return '/miniapp/tracker'
     if (location.pathname.startsWith('/dashboard/profile') || location.pathname.startsWith('/dashboard/settings')) return '/miniapp/profile'
     if (
       location.pathname.startsWith('/dashboard/courses') ||
@@ -140,11 +147,11 @@ export default function MainLayout({
   // ── ВИПРАВЛЕНО: callbacks для Header ────────────────────────────────────
   const authCallbacks = {
     onLoginClick: () => {
-      setAuthMode('login')
+      setAuthMode(resolvePreferredAuthMode('login'))
       setAuthModalOpen(true)
     },
     onRegisterClick: () => {
-      setAuthMode('register')
+      setAuthMode(resolvePreferredAuthMode('register'))
       setAuthModalOpen(true)
     },
   }
@@ -185,8 +192,8 @@ export default function MainLayout({
   }, [])
 
   const shouldUseDashboardShell = dashboard || isAuthenticated
-  const shouldShowSidebar = shouldUseDashboardShell && !isMiniAppContext && !isCompactViewport
-  const shouldShowMiniAppNav = shouldUseDashboardShell && isMiniAppContext && !location.pathname.startsWith('/miniapp')
+  const shouldShowSidebar = shouldUseDashboardShell && !isEmbeddedFrame && !isMiniAppContext && !isCompactViewport
+  const shouldShowMiniAppNav = shouldUseDashboardShell && !isEmbeddedFrame && isMiniAppContext && !location.pathname.startsWith('/miniapp')
   const isHomePage = location.pathname === '/'
 
   const activeMiniAppTab = (() => {
@@ -199,7 +206,7 @@ export default function MainLayout({
     ) {
       return 'ai' as const
     }
-    if (location.pathname.startsWith('/dashboard/progress')) {
+    if (location.pathname.startsWith('/dashboard/progress') || location.pathname.startsWith('/dashboard/journal')) {
       return 'tracker' as const
     }
     if (
@@ -223,7 +230,7 @@ export default function MainLayout({
         navigateTo('/dashboard/ai-mentor', { requiresAuth: true })
         return
       case 'tracker':
-        navigateTo('/dashboard/progress', { requiresAuth: true })
+        navigateTo('/dashboard/journal', { requiresAuth: true })
         return
       case 'profile':
         navigateTo('/dashboard/profile', { requiresAuth: true })
@@ -261,33 +268,34 @@ export default function MainLayout({
         )}
 
         <div className="flex flex-col flex-1 min-w-0">
-          {/* ── ВИПРАВЛЕНО: передаємо authCallbacks ── */}
-          <Header
-            {...layoutControls}
-            {...authCallbacks}
-            forceBurgerMenu={isMiniAppContext || isCompactViewport}
-            miniAppMode={isMiniAppContext}
-          />
+          {!isEmbeddedFrame ? (
+            <Header
+              {...layoutControls}
+              {...authCallbacks}
+              forceBurgerMenu={isMiniAppContext || isCompactViewport}
+              miniAppMode={isMiniAppContext}
+            />
+          ) : null}
 
-          <div className="flex-1 overflow-y-auto">
+          <div className={`flex-1 ${isEmbeddedFrame ? 'overflow-hidden' : 'overflow-y-auto'}`}>
             {isHomePage ? (
               <>
-                <main className="min-h-screen">
+                <main className={isEmbeddedFrame ? 'h-full' : 'min-h-screen'}>
                   <Outlet />
                 </main>
-                {!isMiniAppContext && <Footer />}
+                {!isMiniAppContext && !isEmbeddedFrame ? <Footer /> : null}
               </>
             ) : (
               <div className="flex min-h-full flex-col">
-                <Breadcrumb />
-                {pageContext ? (
+                {!isEmbeddedFrame ? <Breadcrumb /> : null}
+                {pageContext && !isEmbeddedFrame ? (
                   <PageIntro
                     context={pageContext}
                     onBack={() => navigateTo('/dashboard', { requiresAuth: true })}
                   />
                 ) : null}
-                <main className={`min-h-[60vh] flex-1 px-3 ${shouldShowMiniAppNav ? 'pb-32' : 'pb-6'}`}><Outlet /></main>
-                {!isMiniAppContext && <Footer />}
+                <main className={isEmbeddedFrame ? 'h-full flex-1' : `min-h-[60vh] flex-1 px-3 ${shouldShowMiniAppNav ? 'pb-32' : 'pb-6'}`}><Outlet /></main>
+                {!isMiniAppContext && !isEmbeddedFrame ? <Footer /> : null}
               </div>
             )}
           </div>
@@ -328,6 +336,8 @@ export default function MainLayout({
         forceBurgerMenu={isMiniAppContext || isCompactViewport}
         miniAppMode={isMiniAppContext}
       />
+
+      {!isHomePage ? <Breadcrumb /> : null}
 
       {!isHomePage && pageContext ? (
         <div className="mx-auto w-full max-w-7xl px-5 sm:px-6">

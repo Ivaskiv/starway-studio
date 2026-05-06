@@ -13,7 +13,9 @@ services:
         sync: false
       - key: DIRECT_URL
         sync: false
-      - key: JWT_SECRET
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
         sync: false
       - key: OPENAI_API_KEY
         sync: false

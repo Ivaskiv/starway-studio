@@ -6,7 +6,6 @@ import { Prisma } from '@starway/db/prisma-client'
 import { isSuperAdminEmail } from './superadmin.js'
 import { resolveUserAbilities, ABILITIES } from './abilities.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
-import { startTrial } from '../trial/service.js'
 import { attachEmailToUser, resolveOrCreateTelegramGuestUser } from '../user/identity.service.js'
 import { findLinkedUserId } from '../telegram-mentor/services/linking.service.js'
 import { verifyTelegramInitData } from './telegram.js'
@@ -18,8 +17,8 @@ import { invalidateUserCache } from '../../lib/db/userCache.js'
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
 const REFRESH_SECRET = getEnv('JWT_REFRESH_SECRET')
-const ACCESS_EXPIRES = '15m'
-const REFRESH_EXPIRES = '30d'
+const ACCESS_EXPIRES = process.env.JWT_EXPIRES_IN?.trim() || '15m'
+const REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES_IN?.trim() || '30d'
 
 function getEnv(name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET'): string {
   const value = process.env[name]
@@ -65,7 +64,7 @@ function toAuthServiceError(error: unknown, fallbackCode = 'auth_internal_error'
       return new AuthServiceError('auth_schema_mismatch', 500, 'Auth schema mismatch')
     }
     if (error.code === 'P2002') {
-      return new AuthServiceError('email_exists', 400, 'Email already exists')
+      return new AuthServiceError('email_already_registered', 400, 'Email already exists')
     }
   }
 
@@ -87,6 +86,68 @@ function isMissingStructureError(error: unknown): boolean {
   )
 }
 
+async function createUserCompat(input: {
+  email: string
+  passwordHash?: string | null
+  name?: string | null
+  firstName?: string | null
+  role: 'USER' | 'SUPERADMIN'
+  expertId?: string | null
+  lastLoginAt?: Date | null
+}): Promise<{ id: string }> {
+  try {
+    return await prisma.user.create({
+      data: {
+        email: input.email,
+        passwordHash: input.passwordHash ?? null,
+        name: input.name ?? null,
+        firstName: input.firstName ?? null,
+        role: input.role,
+        expertId: input.expertId ?? null,
+        lastLoginAt: input.lastLoginAt ?? null,
+      },
+      select: { id: true },
+    })
+  } catch (error) {
+    if (!isMissingStructureError(error)) throw error
+
+    const id = crypto.randomUUID()
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `
+        INSERT INTO "User" (
+          "id",
+          "email",
+          "passwordHash",
+          "name",
+          "firstName",
+          "role",
+          "expertId",
+          "lastLoginAt",
+          "createdAt",
+          "updatedAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, CAST($6 AS "Role"), $7, $8, NOW(), NOW())
+        RETURNING "id"
+      `,
+      id,
+      input.email,
+      input.passwordHash ?? null,
+      input.name ?? null,
+      input.firstName ?? null,
+      input.role,
+      input.expertId ?? null,
+      input.lastLoginAt ?? null,
+    )
+
+    const createdId = rows[0]?.id
+    if (!createdId) {
+      throw error
+    }
+
+    return { id: createdId }
+  }
+}
+
 const USER_BASE_SELECT = Prisma.validator<Prisma.UserSelect>()({
   id: true,
   email: true,
@@ -99,6 +160,7 @@ const USER_BASE_SELECT = Prisma.validator<Prisma.UserSelect>()({
   telegramUserId: true,
   telegramUserName: true,
   telegramChatId: true,
+  telegramEnabled: true,
   lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
@@ -181,10 +243,16 @@ export const comparePassword = (password: string, hash: string) =>
 
 // ── Генерація та перевірка токенів ───
 export function generateAccessToken(payload: AuthUser) {
+  if (!ACCESS_SECRET) {
+    throw new AuthServiceError('jwt_access_secret_missing', 500, 'JWT access secret missing')
+  }
   return jwt.sign(payload, ACCESS_SECRET, { expiresIn: ACCESS_EXPIRES })
 }
 
 export function generateRefreshToken(userId: string) {
+  if (!REFRESH_SECRET) {
+    throw new AuthServiceError('jwt_refresh_secret_missing', 500, 'JWT refresh secret missing')
+  }
   return jwt.sign({ id: userId, jti: crypto.randomUUID() }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES })
 }
 
@@ -333,6 +401,7 @@ function toUserWithSub(baseUser: PrismaUserBase, decorations: UserDecorations): 
     telegramUserId: baseUser.telegramUserId,
     telegramUserName: baseUser.telegramUserName,
     telegramChatId: baseUser.telegramChatId,
+    telegramEnabled: baseUser.telegramEnabled,
     lastLoginAt: baseUser.lastLoginAt,
     createdAt: baseUser.createdAt,
     updatedAt: baseUser.updatedAt,
@@ -363,12 +432,86 @@ async function findRawUserByEmail(email: string): Promise<PrismaUserBase | null>
   })
 }
 
+function toSafeUserFromBase(user: PrismaUserBase): SafeUser {
+  const isSuperAdmin = user.email ? isSuperAdminEmail(user.email) : false
+  const abilities = isSuperAdmin
+    ? Object.values(ABILITIES)
+    : resolveUserAbilities({ role: user.role })
+  const resolvedUi = user.uiSettings && typeof user.uiSettings === 'object' && !Array.isArray(user.uiSettings)
+    ? user.uiSettings as Record<string, unknown>
+    : {}
+  const notifications = (
+    typeof resolvedUi.notifications === 'object' &&
+    resolvedUi.notifications !== null &&
+    !Array.isArray(resolvedUi.notifications)
+  )
+    ? resolvedUi.notifications as Record<string, unknown>
+    : undefined
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    telegramUserId: user.telegramUserId,
+    telegramUserName: user.telegramUserName,
+    telegramChatId: user.telegramChatId,
+    telegramEnabled: user.telegramEnabled,
+    expertId: user.expertId ?? null,
+    role: user.role,
+    isAdmin: user.role === 'SUPERADMIN' || isSuperAdmin,
+    isSuperAdmin,
+    abilities,
+    access: {
+      plan: 'free',
+      isPaid: false,
+      isTrial: false,
+      trialEnd: null,
+    },
+    stats: {
+      totalPoints: 0,
+      completedBlocks: 0,
+      level: 1,
+    },
+    settings: {
+      accentColor: typeof resolvedUi.accentColor === 'string' ? resolvedUi.accentColor : null,
+      theme: typeof resolvedUi.theme === 'string' ? resolvedUi.theme : null,
+      language: typeof resolvedUi.language === 'string' ? resolvedUi.language : null,
+      notifications,
+    },
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+    subscriptionStatus: null,
+    subscriptionPlan: null,
+    trialEndsAt: null,
+    isTrialActive: false,
+  }
+}
+
+export async function resolveSafeUserById(id: string): Promise<SafeUser | null> {
+  const baseUser = await findRawUserById(id)
+  if (!baseUser) return null
+
+  try {
+    const hydrated = await hydrateUser(baseUser)
+    return toSafeUser(hydrated)
+  } catch (error) {
+    console.warn('[AuthService] resolveSafeUserById fallback to base user', {
+      userId: id,
+      error,
+    })
+    return toSafeUserFromBase(baseUser)
+  }
+}
+
 async function ensureSuperAdminRoleForRecord(user: PrismaUserBase): Promise<PrismaUserBase> {
   if (!isSuperAdminEmail(user.email) || user.role === 'SUPERADMIN') return user
   try {
     await prisma.user.update({
       where: { id: user.id },
       data: { role: 'SUPERADMIN' },
+      // важливо: не повертати всі поля (інакше при schema mismatch падає P2022)
+      select: { id: true },
     })
     return { ...user, role: 'SUPERADMIN' }
   } catch (error) {
@@ -470,7 +613,7 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
           throw new AuthServiceError('invalid_email', 400)
         }
         if (error instanceof Error && error.message === 'IDENTITY_MERGE_CONFLICT') {
-          throw new AuthServiceError('email_exists', 400)
+          throw new AuthServiceError('email_already_registered', 400)
         }
         throw error
       }
@@ -651,6 +794,8 @@ export async function markUserLoggedIn(userId: string): Promise<void> {
     await prisma.user.update({
       where: { id: userId },
       data: { lastLoginAt: new Date() },
+      // важливо: не повертати всі поля (інакше при schema mismatch падає P2022)
+      select: { id: true },
     })
   } catch (error) {
     throw toAuthServiceError(error, 'mark_user_logged_in_failed')
@@ -661,23 +806,35 @@ export async function createSessionForUserId(userId: string): Promise<AuthTokens
   try {
     await markUserLoggedIn(userId)
 
-    const freshUser = await findUserById(userId)
-    if (!freshUser) {
+    const baseUser = await findRawUserById(userId)
+    if (!baseUser) {
+      throw new AuthServiceError('user_not_found', 404)
+    }
+    if (!baseUser.email) {
+      throw new AuthServiceError('user_email_missing', 500, 'User email missing')
+    }
+
+    const safeUser = await resolveSafeUserById(userId)
+    if (!safeUser) {
       throw new AuthServiceError('user_not_found', 404)
     }
 
-    const accessToken = generateAccessToken({ id: freshUser.id, role: freshUser.role, email: freshUser.email } as AuthUser)
-    const refreshToken = generateRefreshToken(freshUser.id)
-    await storeRefreshToken(freshUser.id, refreshToken)
+    const accessToken = generateAccessToken({ id: baseUser.id, role: baseUser.role, email: baseUser.email } as AuthUser)
+    const refreshToken = generateRefreshToken(baseUser.id)
+    await storeRefreshToken(baseUser.id, refreshToken)
 
     return {
-      user: toSafeUser(freshUser),
+      user: safeUser,
       accessToken,
       refreshToken,
-      needsProfile: !freshUser.name,
+      needsProfile: !baseUser.name,
       expiresIn: 15 * 60,
     }
   } catch (error) {
+    console.error('[AuthService] createSessionForUserId failed', {
+      userId,
+      error: error instanceof Error ? error.stack : error,
+    })
     throw toAuthServiceError(error, 'create_session_failed')
   }
 }
@@ -706,20 +863,17 @@ export async function registerUser(input: {
     })
 
     if (existing) {
-      throw new AuthServiceError('email_exists', 400)
+      throw new AuthServiceError('email_already_registered', 400)
     }
 
     const passwordHash = await hashPassword(password)
 
-    const createdUser = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        name: input.name?.trim() || null,
-        role: initialRole,
-        expertId: validatedExpertId,
-      },
-      select: { id: true },
+    const createdUser = await createUserCompat({
+      email,
+      passwordHash,
+      name: input.name?.trim() || null,
+      role: initialRole,
+      expertId: validatedExpertId,
     })
 
     const user = await findUserById(createdUser.id)
@@ -730,10 +884,6 @@ export async function registerUser(input: {
     const accessToken = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
     const refreshToken = generateRefreshToken(user.id)
     await storeRefreshToken(user.id, refreshToken)
-    await startTrial(createdUser.id).catch(err =>
-      console.error('[Auth] startTrial failed:', err)
-    )
-
     return {
       user: toSafeUser(user),
       accessToken,
@@ -759,7 +909,7 @@ export async function loginUser(input: {
   }
 
   try {
-    const user = await findUserByEmail(email)
+    const user = await findRawUserByEmail(email)
 
     if (!user) {
       throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
@@ -792,6 +942,10 @@ export async function loginUser(input: {
 
     return createSessionForUserId(user.id)
   } catch (error) {
+    console.error('[AuthService] loginUser failed', {
+      email,
+      error: error instanceof Error ? error.stack : error,
+    })
     throw toAuthServiceError(error, 'login_failed')
   }
 }
@@ -826,22 +980,16 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
           await assignUserToExpert(existing.id, validatedExpertId)
         }
       } else {
-        const created = await prisma.user.create({
-          data: {
-            email,
-            name: input.name?.trim() || null,
-            firstName: input.name?.trim() || null,
-            role: initialRole,
-            lastLoginAt: new Date(),
-            expertId: validatedExpertId,
-          },
-          select: { id: true },
+        const created = await createUserCompat({
+          email,
+          name: input.name?.trim() || null,
+          firstName: input.name?.trim() || null,
+          role: initialRole,
+          lastLoginAt: new Date(),
+          expertId: validatedExpertId,
         })
         userId = created.id
         isNewUser = true
-        await startTrial(created.id).catch(err =>
-          console.error('[Auth] startTrial failed for social login:', err)
-        )
       }
     } else {
       const telegramUserId = externalId

@@ -342,6 +342,25 @@ function buildTaskNudgeTemplateKey(signature: string, dateKey = getUtcDayKey()) 
   return `task_nudge_${dateKey}_${signature || 'single'}`
 }
 
+async function hasAnyTaskNudgeForDay(userId: string, dateKey = getUtcDayKey()): Promise<boolean> {
+  const existing = await prisma.notification.findFirst({
+    where: {
+      userId,
+      channel: NotificationChannel.TELEGRAM,
+      templateKey: {
+        startsWith: `task_nudge_${dateKey}_`,
+      },
+      createdAt: {
+        gte: startOfUtcDay(),
+        lt: endOfUtcDay(),
+      },
+    },
+    select: { id: true },
+  })
+
+  return Boolean(existing)
+}
+
 function escapeHtml(value: string) {
   return value
     .replaceAll('&', '&amp;')
@@ -351,20 +370,20 @@ function escapeHtml(value: string) {
 
 function buildNudgeMessage(task: Task): string {
   return [
-    '<b>⚠️ Поверни одну дію</b>',
+    '<b>Збережи ритм одним кроком</b>',
     '',
-    'Ось один крок, який поверне тебе в процес:',
+    'Ось дія, яка поверне тебе в процес без перевантаження:',
     '',
     `<blockquote>${escapeHtml(task.title)}</blockquote>`,
     '',
-    'Не треба рятувати весь день. Поверни тільки наступну дію.',
+    'Це займе приблизно 2 хвилини. Не потрібно рятувати весь день — достатньо повернути наступний крок.',
   ].join('\n')
 }
 
 function buildNudgeRecord(task: Task) {
   return {
-    title: '⚠️ Потрібен один наступний крок',
-    body: `Повернись до однієї дії сьогодні: ${task.title}`,
+    title: 'Поверни один крок і збережи ритм',
+    body: `Займе 2 хвилини: ${task.title}`,
   }
 }
 
@@ -485,6 +504,10 @@ export async function processNudges(userId: string, ctx?: Context): Promise<void
   const dateKey = getUtcDayKey()
   const wave = nudgeCount + 1
   if (hasWaveNudgeForDay(carrier.notes, wave, dateKey)) {
+    return
+  }
+
+  if (!ctx?.chat?.id && await hasAnyTaskNudgeForDay(userId, dateKey)) {
     return
   }
 

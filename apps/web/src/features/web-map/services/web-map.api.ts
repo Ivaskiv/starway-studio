@@ -1,44 +1,144 @@
 import { api } from '@/services/api'
 
-export interface WebMapGoal {
+// ── Base ──────────────────────────────────────────────────────
+export interface BaseEntity {
   id: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+// ── Statuses ──────────────────────────────────────────────────
+export type GoalStatus = 'active' | 'on_track' | 'behind' | 'completed'
+export type MonthStatus = 'planned' | 'active' | 'done' | 'skipped'
+export type WebMapStatus = 'draft' | 'active' | 'completed'
+
+// ── Goal ──────────────────────────────────────────────────────
+export interface WebMapGoal extends BaseEntity {
   order: number
   isMain: boolean
   sphere: string
+
   title: string
   description?: string | null
   actions: string[]
+  factors?: string[]
+  resources?: string[]
+  constraints?: string[]
+  solutions?: string[]
+  scoreFrom?: number | null
+  scoreTo?: number | null
+  timeframeMonths?: number | null
+
   progress: number
-  status: 'active' | 'on_track' | 'behind' | 'completed'
+  status: GoalStatus
+
   targetMonth?: number | null
 }
 
-export interface MonthPlan {
+export interface WebMapGraphNode {
   id: string
+  label: string
+  kind: 'center' | 'goal' | 'factor' | 'resource' | 'constraint' | 'solution'
+  parentId?: string | null
+  sphere?: string | null
+  description?: string | null
+}
+
+export interface WebMapGraphEdge {
+  id: string
+  source: string
+  target: string
+  label?: string | null
+}
+
+export interface WebMapSeed {
+  title: string
+  scoreFrom: number
+  scoreTo: number
+  timeframeMonths: number
+  factors: string[]
+  resources: string[]
+  constraints: string[]
+  solutions: string[]
+}
+
+export interface WebMapSystemGoal {
+  sphere: string
+  title: string
+  description: string
+  actions: string[]
+  factors: string[]
+  resources: string[]
+  constraints: string[]
+  solutions: string[]
+  scoreFrom?: number | null
+  scoreTo?: number | null
+  timeframeMonths?: number | null
+}
+
+export interface WebMapSystem {
+  statement: string
+  identityStatement: string
+  mainGoalSphere?: string | null
+  goals: WebMapSystemGoal[]
+  graph: {
+    nodes: WebMapGraphNode[]
+    edges: WebMapGraphEdge[]
+  }
+  dailyCycle: {
+    trackedNodeIds: string[]
+    primaryNodeId?: string | null
+    prompt: string
+  }
+  orchestrator: {
+    constraints: string[]
+    resources: string[]
+    primaryConstraint?: string | null
+    recommendedFocus: string
+    behaviorTags: string[]
+    stage: string
+  }
+  seed: WebMapSeed
+}
+
+// ── Month ─────────────────────────────────────────────────────
+export interface MonthPlan extends BaseEntity {
   month: number
   year: number
+
   focus?: string | null
+
   actions: string[]
   goalIds: string[]
-  status: 'planned' | 'active' | 'done' | 'skipped'
+
+  status: MonthStatus
+
   aiAnalysis?: string | null
+
   doneActions: string[]
   missedActions: string[]
+
+  // optional розширення (з бекенду може приходити)
   nextMonthRec?: string | null
-  completedActions: string[]
-  skippedActions: string[]
+  completedActions?: string[]
+  skippedActions?: string[]
 }
 
-export interface WebMap {
-  id: string
+// ── WebMap ────────────────────────────────────────────────────
+export interface WebMap extends BaseEntity {
   year: number
+
   identityStatement?: string | null
   mainGoalId?: string | null
-  status: 'draft' | 'active' | 'completed'
+
+  status: WebMapStatus
+
   goals: WebMapGoal[]
   months: MonthPlan[]
+  system?: WebMapSystem | null
 }
 
+// ── API Types ─────────────────────────────────────────────────
 type GetWebMapResponse = {
   map: WebMap | null
 }
@@ -54,7 +154,7 @@ type GenerateWebMapResponse = {
 type UpdateGoalProgressRequest = {
   id: string
   progress: number
-  status?: WebMapGoal['status']
+  status?: GoalStatus
 }
 
 type UpdateGoalProgressResponse = {
@@ -72,6 +172,7 @@ type DailyQuestionResponse = {
   } | null
 }
 
+// ── API ───────────────────────────────────────────────────────
 export const webMapApi = api.injectEndpoints({
   endpoints: builder => ({
     getWebMap: builder.query<WebMap | null, void>({

@@ -1,3 +1,7 @@
+import { ROUTES } from '@/config/routes'
+import { useAppFlowStore } from '@/features/app/useAppFlowStore'
+import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
+import { useUserProgress } from '@/features/user/hooks/useUserProgress'
 import { useAppSelector } from '@/app/hooks'
 import { selectCurrentUser } from '@/features/auth/services/auth.slice'
 import { useSendTrialExpiredFlowDiagnosticMutation } from '@/features/notifications/services/notifications.api'
@@ -5,6 +9,7 @@ import { useMemo, useState } from 'react'
 import { Button, GlassCard } from '@/ui'
 import { CheckCircle2, Circle, CircleDashed, Code2, Flame, ShieldCheck, Sparkles, Target, Trophy, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useNavigate } from 'react-router-dom'
 
 type TabId = 'map' | 'engine' | 'levels' | 'streak' | 'code' | 'spam' | 'checklist'
 type ItemStatus = 'done' | 'partial' | 'pending'
@@ -115,11 +120,22 @@ function ChecklistIcon({ status }: { status: ItemStatus }) {
 
 export default function TelegramPage() {
   const currentUser = useAppSelector(selectCurrentUser)
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabId>('map')
   const [checked, setChecked] = useState<Record<string, boolean>>({})
   const [targetUserId, setTargetUserId] = useState('')
   const [diagnosticStatus, setDiagnosticStatus] = useState<string | null>(null)
+  const [completionFeedback, setCompletionFeedback] = useState<string | null>(null)
   const [sendTrialExpiredFlowDiagnostic, { isLoading: isSendingTrialReplay }] = useSendTrialExpiredFlowDiagnosticMutation()
+  const { tasks, completeTask } = useMicroTasks({ skip: !currentUser?.id })
+  const { currentStep } = useUserProgress()
+  const lastAction = useAppFlowStore((s) => s.lastAction)
+  const todayCompleted = useAppFlowStore((s) => s.todayCompleted)
+  const setTodayCompleted = useAppFlowStore((s) => s.setTodayCompleted)
+  const setLastAction = useAppFlowStore((s) => s.setLastAction)
+
+  const activeTask = tasks.find(task => (task.status ?? 'PENDING') === 'PENDING') ?? null
+  const todayFocus = activeTask?.title || lastAction || 'Один короткий крок, який тримає ритм системи'
 
   const overview = useMemo(() => {
     const flat = allPlans.flatMap(section => section.items)
@@ -146,6 +162,20 @@ export default function TelegramPage() {
     } catch (error) {
       console.error(error)
       setDiagnosticStatus('Не вдалося відправити replay post-trial flow')
+    }
+  }
+
+  const handleCompleteToday = async () => {
+    try {
+      if (activeTask) {
+        await completeTask(activeTask.id).unwrap()
+      }
+      setTodayCompleted(true)
+      setLastAction(todayFocus)
+      setCompletionFeedback('+20 XP 🔥 Наступний крок: запланувати зустріч')
+    } catch (error) {
+      console.error(error)
+      setCompletionFeedback('Не вдалося зафіксувати виконання. Спробуй ще раз.')
     }
   }
 
@@ -339,6 +369,49 @@ NotificationService
 
   return (
     <div className="space-y-6">
+      <GlassCard className="p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">Telegram як продовження системи</p>
+            <h1 className="mt-2 text-3xl font-semibold text-[var(--text-primary)]">Сьогоднішній фокус</h1>
+            <p className="mt-3 text-lg text-[var(--text-primary)]">{todayFocus}</p>
+            <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
+              {todayCompleted
+                ? 'Крок уже зафіксований. Повернись у цикл, щоб закріпити рух далі.'
+                : `Поточний етап: ${currentStep === 'tasks' ? 'Дія' : currentStep === 'vision' ? 'WEB-Карта' : currentStep === 'goals' ? 'Цілі' : currentStep === 'cycle' ? 'Щоденний цикл' : 'Колесо'}. Telegram тут не для нагадування, а для продовження дії.`}
+            </p>
+          </div>
+
+          <div className="w-full max-w-sm space-y-3">
+            <Button
+              type="button"
+              onClick={() => void handleCompleteToday()}
+              className="hero-cta-primary w-full"
+              disabled={todayCompleted}
+            >
+              {todayCompleted ? 'Виконано сьогодні ✅' : 'Виконано ✅'}
+            </Button>
+
+            <Button
+              type="button"
+              variant="glass"
+              onClick={() => navigate(`${ROUTES.DASHBOARD}?from=tg&step=cycle`)}
+              className="hero-cta-secondary w-full"
+            >
+              Повернутись у систему
+            </Button>
+
+            {completionFeedback ? (
+              <p className="text-sm leading-7 text-[var(--text-secondary)]">{completionFeedback}</p>
+            ) : null}
+
+            <p className="text-xs text-[var(--text-muted)]">
+              WEB-Карта готова на 70%. Наступна цінність відкривається, коли дія зафіксована в ритмі.
+            </p>
+          </div>
+        </div>
+      </GlassCard>
+
       <GlassCard className="p-6">
         <div className="flex flex-wrap gap-3">
           {tabs.map(tab => (

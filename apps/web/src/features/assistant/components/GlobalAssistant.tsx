@@ -50,7 +50,7 @@ export default function GlobalAssistant() {
       case 'open_morning': navigate('/dashboard/cycle?session=morning'); break
       case 'open_evening': navigate('/dashboard/cycle?session=evening'); break
       case 'open_wheel': navigate('/dashboard/wheel'); break
-      case 'open_progress': navigate('/dashboard/progress'); break
+      case 'open_progress': navigate('/dashboard/journal'); break
       case 'open_students': navigate('/dashboard/students'); break
       case 'open_system': navigate('/dashboard?section=system'); break
       case 'open_telegram': navigate('/dashboard/telegram'); break

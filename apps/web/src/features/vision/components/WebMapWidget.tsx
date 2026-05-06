@@ -1,5 +1,6 @@
 import { ROUTES } from '@/config/routes'
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { dashboardDesignSystem } from '@/styles/design-system'
 import { useGetWebMapQuery } from '@/features/web-map/services/web-map.api'
 import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
@@ -10,6 +11,7 @@ function getCurrentMonthLabel() {
 }
 
 export default function WebMapWidget() {
+  const visionTokens = dashboardDesignSystem.vision
   const { user } = useAuth()
   const { navigateTo } = useSmartNavigation()
   const { data: map } = useGetWebMapQuery(undefined, { skip: !user?.id })
@@ -28,33 +30,33 @@ export default function WebMapWidget() {
     <button
       type="button"
       onClick={() => navigateTo(hasWheel ? ROUTES.VISION : ROUTES.WHEEL, { requiresAuth: true })}
-      className="mt-4 w-full rounded-2xl border border-[var(--border-primary)] bg-[rgba(10,16,31,0.82)] p-3 text-left transition-colors hover:border-[rgba(var(--accent-rgb),0.26)] hover:bg-[rgba(12,19,36,0.94)]"
+      className={visionTokens.widgetButton}
     >
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgb(var(--accent-soft-rgb))]">
+      <div className={visionTokens.widgetLabel}>
         Точка Б
       </div>
 
       {!hasWheel ? (
         <div className="mt-2 space-y-2">
-          <div className="text-sm font-semibold text-[var(--text-primary)]">Спочатку пройди колесо</div>
-          <div className="text-xs leading-5 text-[var(--text-muted)]">
+          <div className={visionTokens.widgetTitle}>Спочатку пройди колесо</div>
+          <div className={visionTokens.widgetText}>
             Перший крок після реєстрації — колесо балансу. Потім AI збере річну карту і вже після цього цикл піде по ланцюгу стан → ціль → вибір → рішення → дія.
           </div>
-          <div className="text-[11px] font-medium text-[var(--accent)]">Відкрити колесо →</div>
+          <div className={visionTokens.widgetLink}>Відкрити колесо →</div>
         </div>
       ) : !hasMap ? (
         <div className="mt-2 space-y-2">
-          <div className="text-sm font-semibold text-[var(--text-primary)]">Сформуй WEB-Карту 2026</div>
-          <div className="text-xs leading-5 text-[var(--text-muted)]">
+          <div className={visionTokens.widgetTitle}>Сформуй WEB-Карту 2026</div>
+          <div className={visionTokens.widgetText}>
             Колесо вже є. Наступний крок — зібрати Точка Б, головну ціль року та фокус по місяцях.
           </div>
-          <div className="text-[11px] font-medium text-[var(--accent)]">Відкрити Точка Б →</div>
+          <div className={visionTokens.widgetLink}>Відкрити Точка Б →</div>
         </div>
       ) : (
         <div className="mt-2 space-y-3">
           <div>
-            <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{mainGoal?.title ?? 'Головна ціль формується'}</div>
-            <div className="mt-1 truncate text-xs text-[var(--text-muted)]">
+            <div className={visionTokens.widgetTitle}>{mainGoal?.title ?? 'Головна ціль формується'}</div>
+            <div className={visionTokens.widgetText}>
               Фокус {getCurrentMonthLabel()}: {currentMonthPlan?.focus ?? 'онови фокус місяця'}
             </div>
           </div>
@@ -62,12 +64,12 @@ export default function WebMapWidget() {
           <Progress value={mainGoal?.progress ?? 0} size="sm" />
 
           {behindCount > 0 ? (
-            <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/25 bg-rose-500/8 px-2.5 py-1 text-[11px] text-rose-300">
+            <div className={visionTokens.widgetBadge}>
               <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
               Відстає: {behindCount}
             </div>
           ) : (
-            <div className="text-[11px] text-[var(--text-muted)]">Місячний контур активний</div>
+            <div className={visionTokens.widgetMeta}>Місячний контур активний</div>
           )}
         </div>
       )}

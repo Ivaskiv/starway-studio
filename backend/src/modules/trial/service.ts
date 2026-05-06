@@ -17,10 +17,56 @@ import type { TrialStatus }                                          from './typ
 // CONSTANTS
 // ─────────────────────────────────────────────
 
-const TRIAL_DAYS        = 7
+const TRIAL_DAYS        = 4
 const MS_PER_DAY        = 1000 * 60 * 60 * 24
 const CTA_TRIGGER_PCT   = 80   // % прогресу тріалу для CTA
 const CTA_DELAY_MS      = 60 * 60 * 1000   // 1 год до нагадування
+
+function clampInt(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, Math.floor(value)))
+}
+
+function buildSafeTrialStatus(userId: string): TrialStatus {
+  return {
+    userId,
+    isActive: true,
+    isPaid: false,
+    startedAt: null,
+    endsAt: null,
+    daysLeft: TRIAL_DAYS,
+    currentDay: 1,
+    daysUsed: 0,
+    daysTotal: TRIAL_DAYS,
+    onboardingCompleted: false,
+    dailyCycleStarted: false,
+    progress: 0,
+    status: 'TRIAL',
+    hasDay4Mirror: false,
+    hasDay7Mirror: false,
+  }
+}
+
+function isMissingUserColumn(error: unknown, columnName: string) {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: string; meta?: { column?: string } }
+  return candidate.code === 'P2022' && String(candidate.meta?.column ?? '') === `User.${columnName}`
+}
+
+async function findUserCompat(userId: string): Promise<User | null> {
+  try {
+    return await prisma.user.findUnique({
+      where: { id: userId },
+    })
+  } catch (error) {
+    if (!isMissingUserColumn(error, 'onboardingDay')) throw error
+
+    const rows = await prisma.$queryRawUnsafe<User[]>(
+      'SELECT * FROM "User" WHERE "id" = $1 LIMIT 1',
+      userId,
+    )
+    return rows[0] ?? null
+  }
+}
 
 // ─────────────────────────────────────────────
 // START TRIAL
@@ -29,7 +75,7 @@ const CTA_DELAY_MS      = 60 * 60 * 1000   // 1 год до нагадуванн
 export async function startTrial(userId: string): Promise<User> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, trialStartsAt: true, role: true },
+    select: { email: true, trialStartsAt: true, trialEndsAt: true, role: true },
   })
 
   if (user?.email?.startsWith('telegram-guest-')) {
@@ -37,16 +83,45 @@ export async function startTrial(userId: string): Promise<User> {
   }
 
   if (user?.trialStartsAt && user?.role !== 'SUPERADMIN') {
+    if (user.trialEndsAt && user.trialEndsAt > new Date()) {
+      const activeTrialUser = await findUserCompat(userId)
+      if (!activeTrialUser) {
+        throw new Error('TRIAL_ALREADY_USED')
+      }
+      return activeTrialUser
+    }
+
     throw new Error('TRIAL_ALREADY_USED')
   }
 
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      trialStartsAt: new Date(),
-      trialEndsAt:   new Date(Date.now() + TRIAL_DAYS * MS_PER_DAY),
-    },
-  })
+  const trialStartsAt = new Date()
+  const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * MS_PER_DAY)
+
+  let updated: User | null = null
+  try {
+    updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        trialStartsAt,
+        trialEndsAt,
+      },
+    })
+  } catch (error) {
+    if (!isMissingUserColumn(error, 'onboardingDay')) throw error
+
+    await prisma.$executeRawUnsafe(
+      'UPDATE "User" SET "trialStartsAt" = $1, "trialEndsAt" = $2 WHERE "id" = $3',
+      trialStartsAt,
+      trialEndsAt,
+      userId,
+    )
+
+    updated = await findUserCompat(userId)
+  }
+
+  if (!updated) {
+    throw new Error('TRIAL_START_FAILED')
+  }
   await syncLifecycleForUser(userId)
   await invalidateFunnelStage(userId)
   return updated
@@ -57,10 +132,16 @@ export async function startTrial(userId: string): Promise<User> {
 // ─────────────────────────────────────────────
 
 export async function getTrialStatus(userId: string): Promise<TrialStatus> {
-  const [user, activeSub, mirrors] = await Promise.all([
+  const [user, activeSub, mirrors, latestDailyCycleLog] = await Promise.all([
     prisma.user.findUnique({
       where:  { id: userId },
-      select: { trialStartsAt: true, trialEndsAt: true },
+      select: {
+        createdAt: true,
+        onboardingStartedAt: true,
+        onboardingStage: true,
+        trialStartsAt: true,
+        trialEndsAt: true,
+      },
     }),
     prisma.subscription.findFirst({
       where:   { userId, status: { in: ['TRIAL', 'ACTIVE'] } },
@@ -70,47 +151,58 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
       where: { userId },
       select: { day: true },
     }),
+    prisma.dailyCycleLog.findFirst({
+      where: { userId },
+      orderBy: { date: 'asc' },
+      select: { id: true, date: true },
+    }),
   ])
 
-  const trialStart = user?.trialStartsAt
-  const trialEnd   = activeSub?.trialEndsAt ?? user?.trialEndsAt
-  const now        = new Date()
-
-  if (!trialStart) {
-    return {
-      userId,
-      isActive:      false,
-      isPaid:        activeSub?.status === 'ACTIVE',
-      startedAt:     null,
-      endsAt:        null,
-      daysLeft:      0,
-      currentDay:    0,
-      progress:      0,
-      status:        activeSub?.status ?? null,
-      hasDay4Mirror: false,
-      hasDay7Mirror: false,
-    }
+  if (!user) {
+    return buildSafeTrialStatus(userId)
   }
 
-  const isActive  = trialEnd ? trialEnd > now : false
-  const currentDay = Math.min(TRIAL_DAYS, Math.max(1, Math.floor((now.getTime() - trialStart.getTime()) / MS_PER_DAY) + 1))
-  const daysLeft  = isActive ? Math.max(0, TRIAL_DAYS - currentDay) : 0
-  const progress  = trialEnd
-    ? Math.min(100, Math.max(0, Math.round(
-        ((now.getTime() - trialStart.getTime()) / (trialEnd.getTime() - trialStart.getTime())) * 100
-      )))
+  const now = new Date()
+  const daysTotal = Math.max(1, TRIAL_DAYS)
+  const startedAt = user.trialStartsAt ?? user.onboardingStartedAt ?? user.createdAt
+  const rawDaysUsed = startedAt
+    ? Math.max(0, Math.floor((now.getTime() - startedAt.getTime()) / MS_PER_DAY))
     : 0
+  const daysUsed = clampInt(rawDaysUsed, 0, daysTotal)
+  const currentDay = clampInt(daysUsed + 1, 1, daysTotal)
+  const onboardingCompleted = user.onboardingStage === 'COMPLETED'
+  const dailyCycleStarted = Boolean(latestDailyCycleLog)
+  const canExpireByBusinessRule = onboardingCompleted && dailyCycleStarted
+  const isPaid = activeSub?.status === 'ACTIVE'
+  const trialExpiredByDays = rawDaysUsed >= daysTotal
+  const isActive = !isPaid && (!canExpireByBusinessRule || !trialExpiredByDays)
+  const daysLeft = isActive
+    ? Math.max(1, daysTotal - daysUsed)
+    : Math.max(0, daysTotal - daysUsed)
+  const progress = Math.min(100, Math.max(0, Math.round((daysUsed / daysTotal) * 100)))
+  const endsAt = canExpireByBusinessRule && startedAt
+    ? new Date(startedAt.getTime() + daysTotal * MS_PER_DAY)
+    : null
+  const status = isPaid
+    ? 'ACTIVE'
+    : isActive
+      ? 'TRIAL'
+      : 'EXPIRED'
 
   return {
     userId,
     isActive,
-    isPaid:        activeSub?.status === 'ACTIVE',
-    startedAt:     trialStart,
-    endsAt:        trialEnd ?? null,
+    isPaid,
+    startedAt,
+    endsAt,
     daysLeft,
     currentDay,
+    daysUsed,
+    daysTotal,
+    onboardingCompleted,
+    dailyCycleStarted,
     progress,
-    status:        activeSub?.status ?? null,
+    status,
     hasDay4Mirror: mirrors.some(m => m.day === 4),
     hasDay7Mirror: mirrors.some(m => m.day === 7),
   }

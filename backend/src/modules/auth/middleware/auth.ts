@@ -10,12 +10,21 @@ export async function authRequired(
 ) {
   try {
     const user = await getServerUser(req)
+    const header = String(req.headers.authorization ?? '')
+    const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : null
+    console.log('[AUTH]', {
+      token: token ? `${token.slice(0, 12)}...` : null,
+      userId: user?.id ?? null,
+      path: req.path,
+      method: req.method,
+    })
     if (!user) {
       return res.status(401).json({ error: 'unauthorized' })
     }
     req.user = user
     next()
-  } catch {
+  } catch (error) {
+    console.error('[AUTH] middleware failed', error instanceof Error ? error.stack : error)
     return res.status(401).json({ error: 'invalid_token' })
   }
 }

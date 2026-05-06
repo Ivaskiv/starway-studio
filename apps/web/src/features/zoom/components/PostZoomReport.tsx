@@ -10,7 +10,7 @@ const SPHERE_LABELS: Record<string, string> = {
   relationships:     'Відносини',
   energy_body:       'Енергія/Тіло',
   freedom_time:      'Свобода/Час',
-  inner_support:     'Внутрішня опора',
+  inner_support:     'Духовність',
   environment:       'Оточення',
   meaning_direction: 'Сенс/Напрямок',
 };

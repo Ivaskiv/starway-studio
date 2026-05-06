@@ -18,14 +18,17 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
 
   const [mode, setMode] = useState<Mode>(defaultMode)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [loginPrefill, setLoginPrefill] = useState<{ email: string; password: string } | null>(null)
   const formKey = useRef(0)
 
   useEffect(() => {
+    if (isOpen) {
+      setMode(defaultMode)
+      return
+    }
+
     if (!isOpen) {
       setMode(defaultMode)
       setIsProcessing(false)
-      setLoginPrefill(null)
       formKey.current += 1
     }
   }, [isOpen, defaultMode])
@@ -60,16 +63,14 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
   const showTelegramSocial = canUseSocialProvider('telegram')
   const showSocialSection = showGoogleSocial || showTelegramSocial
 
-  const handleRegisterSuccess = (credentials?: { email: string; password: string }) => {
-    setMode('login')
-    setLoginPrefill(credentials ?? null)
-    formKey.current += 1
+  const handleRegisterSuccess = () => {
     toast.success(getToastMessage('auth.registerSuccess', lang))
+    onClose()
+    void postAuthNavigate()
   }
 
   const switchMode = () => {
     setMode((prev: Mode) => (prev === 'login' ? 'register' : 'login'))
-    setLoginPrefill(null)
     formKey.current += 1
   }
 
@@ -103,8 +104,6 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
                 key={`login-${formKey.current}`}
                 onSwitch={switchMode}
                 onSuccess={() => { onClose(); void postAuthNavigate() }}
-                initialEmail={loginPrefill?.email}
-                initialPassword={loginPrefill?.password}
               />
             ) : (
               <RegisterForm key={`register-${formKey.current}`} onSwitch={switchMode} onSuccess={handleRegisterSuccess} />

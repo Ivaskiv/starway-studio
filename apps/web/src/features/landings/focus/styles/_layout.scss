@@ -1,0 +1,436 @@
+// apps/web/src/features/landings/focus/styles/_layout.scss
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ─── PAGE / LAYOUT ─── */
+
+.focus-layout {
+  min-height: 100vh;
+  background: var(--focus-bg);
+}
+
+.focus-layout__main {
+  min-height: 100vh;
+}
+
+.focus-section-skeleton {
+  min-height: 240px;
+}
+
+.focus-page {
+  box-sizing: border-box;
+}
+
+.focus-page {
+  position: relative;
+  min-height: 100vh;
+  padding-inline: 0;
+  background: var(--focus-bg);
+  color: var(--focus-text);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+.focus-page :where(
+  section,
+  footer,
+  nav,
+  [class*='grid'],
+  [class*='card'],
+  .focus-hero-inner,
+  .focus-hero-body,
+  .focus-hero-media,
+  .focus-nav-pill,
+  .focus-topics-header,
+  .focus-footer,
+  .focus-problem-item,
+  .focus-step,
+  .focus-how-visual-price
+) {
+  min-width: 0;
+}
+
+.focus-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.025;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.focus-page section,
+.focus-page footer,
+.focus-page nav {
+  position: relative;
+  z-index: 1;
+}
+
+.focus-page section,
+.focus-page footer {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+}
+
+.focus-container,
+.focus-page section > :where(div, article, aside, header),
+.focus-page footer > :where(div, p, nav) {
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: clamp(16px, 4vw, 40px);
+}
+
+.focus-page img {
+  max-width: 100%;
+  height: auto;
+}
+
+.focus-page a              { color: inherit; text-decoration: none; }
+.focus-page button,
+.focus-page input          { font: inherit; }
+.focus-page h1, .focus-page h2,
+.focus-page h3, .focus-page h4,
+.focus-page p, .focus-page ul { margin: 0; }
+.focus-page ul             { padding: 0; list-style: none; }
+
+/* ─── SECTION ─── */
+
+.focus-section {
+  width: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--content-space);
+  padding-block: var(--section-space);
+}
+
+.section {
+  padding-block: var(--section-space);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--content-space);
+}
+
+.stack-lg {
+  gap: var(--space-lg);
+}
+
+.focus-section > * {
+  width: 100%;
+}
+
+.focus-section-secondary {
+  background: var(--focus-bg-secondary);
+}
+
+.section-dark {
+  background: var(--focus-bg);
+}
+
+.section-glass {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)),
+    var(--focus-bg);
+}
+
+.section-glow {
+  background:
+    radial-gradient(circle at 70% 30%, rgba(74,126,191,0.12), transparent 60%),
+    var(--focus-bg);
+}
+
+#hero,
+#pricing,
+.focus-footer {
+  background: var(--focus-bg);
+}
+
+#about,
+#included,
+#cta {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)),
+    var(--focus-bg);
+}
+
+#problem,
+#weekly-loop {
+  background: var(--focus-bg);
+}
+
+#how,
+#topics {
+  background:
+    radial-gradient(circle at 70% 30%, rgba(74,126,191,0.12), transparent 60%),
+    var(--focus-bg);
+}
+
+/* ─── NAV ─── */
+
+.focus-nav {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-sm) var(--container-pad);
+  background: rgba(10, 10, 15, 0.85);
+  /* єдиний виняток для backdrop-filter */
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ─── HERO ─── */
+
+.focus-hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.focus-hero-grid {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  margin: 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+/* ─── FLEX GROUPS ─── */
+
+.focus-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.focus-topics-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-md);
+}
+
+.focus-cta-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-xs);
+  font-family: var(--font-display);
+}
+
+.focus-cta-meta-line {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: rgba(240, 240, 245, 0.38);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.focus-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--container-pad);
+  border-top: 1px solid var(--focus-card-border);
+}
+
+/* ─── GRID SYSTEMS ─── */
+
+.focus-problem-grid,
+.focus-topics-grid,
+.focus-included-grid,
+.focus-how-grid,
+.focus-about-grid,
+.focus-first-practice-grid,
+.focus-pricing-grid {
+  display: grid;
+}
+
+.focus-problem-grid {
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+  justify-items: center;
+  gap: clamp(12px, 2vw, 16px);
+}
+
+.focus-how-grid,
+.focus-about-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-xl);
+  align-items: center;
+}
+
+.focus-topics-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-sm);
+}
+
+.focus-included-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-md);
+}
+
+.focus-first-practice-grid,
+.focus-first-practice-card {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-xl);
+  align-items: center;
+}
+
+.focus-pricing-header {
+  text-align: center;
+}
+
+.focus-pricing-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-md);
+  max-width: min(100%, 860px);
+  margin: 0 auto;
+}
+
+/* ─── HERO STATS ─── */
+
+.focus-hero-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  overflow: hidden;
+  width: min(100%, 720px);
+}
+
+/* ─── CTA ─── */
+
+.focus-cta {
+  text-align: center;
+}
+
+/* ─────────────────────────────
+   RESPONSIVE
+───────────────────────────── */
+
+@media (max-width: 1100px) {
+  .focus-how-grid,
+  .focus-about-grid,
+  .focus-first-practice-card,
+  .focus-first-practice-grid {
+    grid-template-columns: 1fr;
+    gap: clamp(28px, 4vw, 48px);
+  }
+
+  .focus-included-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+}
+
+@media (max-width: 900px) {
+  .focus-section {
+    padding-block: clamp(56px, 9vw, 96px);
+  }
+
+  .focus-footer {
+    padding-block: var(--space-md);
+  }
+
+  .focus-pricing-grid {
+    gap: 24px;
+    max-width: 480px;
+  }
+
+  .focus-topics-header {
+    align-items: flex-start;
+  }
+
+  .focus-nav {
+    padding-block: 12px;
+  }
+}
+
+@media (max-width: 680px) {
+  .focus-hero {
+    min-height: 100svh;
+    align-items: flex-start;
+  }
+
+  .focus-hero-grid {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* OTHER SECTIONS */
+  .focus-topics-header,
+  .focus-cta-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .focus-problem-grid,
+  .focus-topics-grid,
+  .focus-included-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .focus-section {
+    padding-block: clamp(48px, 10vw, 72px);
+  }
+
+  .focus-hero-meta {
+    grid-template-columns: 1fr;
+    width: 100%;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  .focus-included-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .focus-footer {
+    flex-direction: column;
+    text-align: center;
+    padding-block: 24px;
+  }
+
+  .focus-cta-meta {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .focus-nav {
+    padding-inline: 12px;
+  }
+}

@@ -1,14 +1,23 @@
-// apps/web/src/features/journal/JournalPage.tsx
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+
+import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api'
+import JournalDashboardHeader from '@/features/journal/components/JournalDashboardHeader'
+import JournalFeed from '@/features/journal/components/JournalFeed'
 import { useJournal } from './hooks/useJournal';
 
 import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp';
 import JournalLayout from '@/features/journal/layout/JournalLayout';
+import ProgressPanel from '@/components/layout/ProgressPanel';
+import { useUserProgress } from '@/features/user/hooks/useUserProgress'
 
 export default function JournalPage({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth()
+  const { data: summary } = useGetSummaryQuery(undefined, { skip: !user?.id })
+  const { dayNumber } = useUserProgress()
 
   const journal = useJournal();
 
@@ -18,11 +27,11 @@ export default function JournalPage({ compact = false }: { compact?: boolean }) 
     navigate('/miniapp/journal', { replace: true });
   }, [location.pathname, navigate]);
 
-  return (
-    <main className={compact ? 'min-h-screen p-0' : 'min-h-screen px-4 py-5 sm:px-6'}>
-      <div className="mx-auto flex max-w-6xl flex-col gap-5">
+  if (compact) {
+    return (
+      <main className="min-h-screen p-0">
         <JournalLayout
-          compact={compact}
+          compact
           month={journal.month}
           year={journal.year}
           events={journal.events}
@@ -43,6 +52,30 @@ export default function JournalPage({ compact = false }: { compact?: boolean }) 
           onNextMonth={journal.nextMonth}
           onSelectDay={journal.setSelectedDay}
         />
+      </main>
+    )
+  }
+
+  return (
+    <main className="min-h-screen bg-[rgba(7,10,18,0.98)] py-4">
+      <div className="mx-auto flex w-full max-w-[1390px] min-w-0 items-start gap-3">
+        <div className="min-w-0 flex-1 space-y-4">
+          <JournalDashboardHeader
+            dayNumber={dayNumber}
+            totalDays={30}
+            streak={summary?.streak.current ?? 0}
+            xpTotal={summary?.xp.total ?? 0}
+            level={summary?.xp.level ?? 1}
+          />
+          <div className="flex min-w-0 items-start gap-3">
+            <JournalFeed
+              dayStatesByDate={journal.daysByDate}
+              selectedDay={journal.selectedDay}
+              onSelectDay={journal.setSelectedDay}
+            />
+            <ProgressPanel dayStatesByDate={journal.daysByDate} />
+          </div>
+        </div>
       </div>
     </main>
   );

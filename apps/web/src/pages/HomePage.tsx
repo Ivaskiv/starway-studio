@@ -1,8 +1,9 @@
 // frontend/src/pages/HomePage.tsx
 import { ROUTES } from '@/config/routes'
+import { useAppSelector } from '@/app/hooks'
 import AuthModal from '@/features/auth/components/AuthModal'
 import { LandingAuthActions } from '@/features/auth/components/LandingAuthActions'
-import { useAuth } from '@/features/auth/hooks/useAuth'
+import { resolvePreferredAuthMode } from '@/features/auth/services/token'
 import { useUserState } from '@/features/auth/hooks/useUserState'
 import {
   FeaturesSection,
@@ -20,17 +21,17 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 export default function HomePage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user } = useAuth()
+  const user = useAppSelector((state) => state.auth.user)
   const {
     emailCompletionRequired,
     isAuthenticated,
   } = useUserState()
   const [authOpen, setAuthOpen] = useState(false)
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('register')
+  const [authMode, setAuthMode] = useState<'login' | 'register'>(resolvePreferredAuthMode())
   const howItWorksRef = useRef<HTMLElement | null>(null)
 
-  const openAuth = (mode: 'login' | 'register' = 'register') => {
-    setAuthMode(mode)
+  const openAuth = (mode?: 'login' | 'register') => {
+    setAuthMode(resolvePreferredAuthMode(mode))
     setAuthOpen(true)
   }
 

@@ -40,8 +40,9 @@ export function getDayStatus(
   )
   const morningDone = hasCompletedAt(content, 'morningMeta')
   const eveningDone = hasCompletedAt(content, 'eveningMeta')
+  const aiAnalysisText = typeof entry.aiAnalysis === 'string' ? entry.aiAnalysis : ''
   const analysisDone = Boolean(
-    entry.aiAnalysis?.trim()
+    aiAnalysisText.trim()
     || (typeof content?.analysisGeneratedAt === 'string' && content.analysisGeneratedAt),
   )
   const allTasksDone = tasks.length > 0 && tasks.every(task => task.status === 'COMPLETED')

@@ -8,6 +8,10 @@ import { api } from '@/services/api';
 export interface TrialStatus {
   userId: string;
   isActive: boolean;
+  daysUsed: number;
+  daysTotal: number;
+  onboardingCompleted: boolean;
+  dailyCycleStarted: boolean;
   isPaid: boolean;
   startedAt: string | null;
   endsAt: string | null;

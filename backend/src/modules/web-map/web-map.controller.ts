@@ -7,6 +7,7 @@ import {
   runMonthlyAnalysis,
   updateGoalProgress,
 } from './web-map.service.js'
+import { toMonthPlan, toWebMap } from './utils/mappers.js'
 
 export async function getWebMapHandler(req: AuthenticatedRequest, res: Response) {
   try {
@@ -16,10 +17,10 @@ export async function getWebMapHandler(req: AuthenticatedRequest, res: Response)
     }
 
     const map = await getWebMap(userId)
-    return res.status(200).json({ map })
+    return res.status(200).json({ map: map ? toWebMap(map) : null })
   } catch (error) {
-    console.error('[web-map] getWebMapHandler', error)
-    return res.status(500).json({ error: error instanceof Error ? error.message : 'unknown_error' })
+    console.error('[web-map]', error)
+    return res.status(200).json({ map: null })
   }
 }
 
@@ -36,7 +37,7 @@ export async function generateWebMapHandler(req: AuthenticatedRequest, res: Resp
     }
 
     const map = await createWebMapFromAI(userId, wheelScores as Record<string, number>)
-    return res.status(201).json({ map })
+    return res.status(201).json({ map: toWebMap(map) })
   } catch (error) {
     console.error('[web-map] generateWebMapHandler', error)
     if (error instanceof Error && error.message === 'WEB_MAP_EXISTS') {
@@ -62,7 +63,22 @@ export async function updateGoalProgressHandler(req: AuthenticatedRequest, res: 
     }
 
     const goal = await updateGoalProgress(goalId, progress, status)
-    return res.status(200).json({ goal })
+    return res.status(200).json({
+      goal: {
+        id: goal.id,
+        createdAt: goal.createdAt?.toISOString?.() ?? undefined,
+        updatedAt: goal.updatedAt?.toISOString?.() ?? undefined,
+        order: goal.order ?? goal.priority ?? 0,
+        isMain: Boolean(goal.isMain),
+        sphere: goal.sphere,
+        title: goal.title,
+        description: goal.description ?? null,
+        actions: goal.actions ?? goal.monthlyActions ?? [],
+        progress: goal.progress ?? 0,
+        status: goal.status as 'active' | 'on_track' | 'behind' | 'completed',
+        targetMonth: goal.targetMonth ?? null,
+      },
+    })
   } catch (error) {
     console.error('[web-map] updateGoalProgressHandler', error)
     return res.status(500).json({ error: error instanceof Error ? error.message : 'unknown_error' })
@@ -77,7 +93,7 @@ export async function runMonthlyAnalysisHandler(req: AuthenticatedRequest, res: 
     }
 
     const monthPlan = await runMonthlyAnalysis(userId)
-    return res.status(200).json({ monthPlan })
+    return res.status(200).json({ monthPlan: monthPlan ? toMonthPlan(monthPlan) : null })
   } catch (error) {
     console.error('[web-map] runMonthlyAnalysisHandler', error)
     return res.status(500).json({ error: error instanceof Error ? error.message : 'unknown_error' })

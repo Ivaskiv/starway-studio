@@ -5,6 +5,7 @@ import express, {
   type Request,
   type Response,
 } from 'express';
+import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -14,8 +15,14 @@ import morgan from 'morgan';
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
-
-loadEnv({ path: resolve(currentDirPath, '../../.env') })
+const backendEnvPath = resolve(currentDirPath, '../.env')
+const rootEnvPath = resolve(currentDirPath, '../../.env')
+if (existsSync(rootEnvPath)) {
+  loadEnv({ path: rootEnvPath })
+}
+if (existsSync(backendEnvPath)) {
+  loadEnv({ path: backendEnvPath, override: true })
+}
 
 // Routes
 import accessRoutes from './modules/access/routes.js';
@@ -23,12 +30,15 @@ import adminRoutes from './modules/admin/routes.js';
 import affiliateRoutes from "./modules/affiliate/routes.js";
 import aiRoutes from './modules/ai/routes.js';
 import mentorRoutes from './modules/ai-mentor/routes.js';
+import mentorDebugRoutes from './modules/mentor/mentor.debug.router.js';
 import analyticsRoutes from './modules/analytics/routes.js';
 import assistantRoutes from './modules/assistant/routes.js';
+import billingRoutes from './modules/billing/billing.module.js';
 import authRoutes, { telegramRouter } from './modules/auth/auth.routes.js';
 import consultationRoutes from './modules/consultation/routes.js';
 import dailyRoutes from './modules/daily-cycle/routes.js';
 import deeplinkRoutes from './modules/deeplinks/routes.js';
+import dbAuditRouter from './modules/debug/db.audit.router.js';
 import eventsRoutes from './modules/events/routes.js';
 import expertsRoutes from './modules/experts/routes.js';
 import fivePointsRoutes from './modules/five-points/routes.js';
@@ -61,15 +71,31 @@ import { securityHeaders } from './middleware/securityHeaders.js';
 
 export function createApp() {
   const app = express();
+  const isProduction = process.env.NODE_ENV === 'production'
   const allowedOrigins = [
     'http://localhost:5173',
+    'http://127.0.0.1:5173',
     'https://starway-frontend.vercel.app',
     process.env.FRONTEND_URL?.trim(),
   ].filter((origin): origin is string => Boolean(origin));
+  const localNetworkOriginPattern = /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:5173$/
 
   const corsOptions = cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const isDevLocalOrigin =
+        !isProduction && (
+          allowedOrigins.includes(origin) ||
+          localNetworkOriginPattern.test(origin)
+        )
+
+      const isKnownOrigin = allowedOrigins.includes(origin)
+
+      if (isKnownOrigin || isDevLocalOrigin) {
         callback(null, true);
         return;
       }
@@ -77,6 +103,7 @@ export function createApp() {
       callback(new Error('CORS blocked'));
     },
     credentials: true,
+    optionsSuccessStatus: 204,
   });
 
   // =====================
@@ -121,6 +148,8 @@ export function createApp() {
   app.use('/api/product-members', productMembersRoutes);
   app.use('/api/progress', progressRoutes);
   app.use('/api/notifications', notificationsRoutes);
+  app.use('/debug', mentorDebugRoutes);
+  app.use('/debug', dbAuditRouter);
 
 app.use('/api/mentor', mentorRoutes);
 app.use('/api/mentor', mentorWeeklyAnalysisRoutes);
@@ -149,6 +178,7 @@ app.use('/api/lead-magnet', leadMagnetRoutes)
   app.use('/api/subscriptions', subscriptionsRoutes);
   app.use('/api/landing', landingRoutes);
   app.use('/api/assistant', assistantRoutes)
+  app.use('/api/billing', billingRoutes)
   app.use('/api/users', userRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/daily', dailyRoutes);

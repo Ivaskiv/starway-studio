@@ -1,13 +1,16 @@
 import { useMemo } from 'react';
 
-import { WHEEL_CATEGORIES } from '@/features/wheel/types/wheel.types';
+import {
+  WHEEL_CATEGORIES,
+  type WheelSphereId,
+} from '@/features/wheel/types/wheel.types';
 import { Button } from '@/ui/Button';
 
 import { WheelChart } from './WheelChart';
 
 interface ResultViewProps {
   scores: Array<{
-    categoryId: string;
+    categoryId: WheelSphereId;
     score: number | null;
     comment: string;
   }>;
@@ -45,7 +48,14 @@ export const ResultView = ({
 
   return (
     <div className="space-y-4">
-      <WheelChart scores={scores} size={320} />
+      <WheelChart
+        scores={scores.map((item) => ({
+          categoryId: item.categoryId,
+          score: item.score ?? 1,
+          comment: item.comment,
+        }))}
+        size={320}
+      />
 
       <div className="rounded-xl border border-[color:rgba(var(--glass-border-rgb),0.24)] bg-[color:rgba(var(--ambient-rgb-2),0.34)] p-4">
         <p className="text-sm text-white/70">

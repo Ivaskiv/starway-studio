@@ -2,7 +2,11 @@ import {
   CreateWheelAssessmentInput,
   WheelAnalysis,
   WheelAssessment,
+  type WheelSphereId,
   WHEEL_CATEGORIES,
+  isWheelSphereId,
+  normalizeWheelAnalysis,
+  normalizeWheelAssessment,
 } from '@/features/wheel/types/wheel.types';
 import { api } from '@/services/api';
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query';
@@ -21,23 +25,45 @@ type WheelHistoryResponse = {
   wheels: unknown[];
 };
 
-type WheelScoreMap = Record<string, { score: number; comment?: string }>;
+type WheelScoreMap = Partial<Record<WheelSphereId, { score: number; note?: string; comment?: string }>>;
+
+type ResultWithStatus = {
+  status?: number | string
+}
+
+function getCategoryId(value: unknown) {
+  return isWheelSphereId(value) ? value : null
+}
+
+function getResultStatus(value: unknown) {
+  return value && typeof value === 'object'
+    ? Reflect.get(value, 'status')
+    : undefined
+}
 
 const buildScoreMap = (value: unknown): WheelScoreMap => {
   const map: WheelScoreMap = {};
   if (Array.isArray(value)) {
     for (const item of value) {
-      const categoryId = String(item?.categoryId ?? '').trim();
+      const categoryId = getCategoryId(
+        typeof item === 'object' && item !== null ? Reflect.get(item, 'categoryId') : undefined
+      );
       if (!categoryId) continue;
-      const parsedScore = Number(item?.score ?? 0);
+      const parsedScore = Number(
+        typeof item === 'object' && item !== null ? Reflect.get(item, 'score') : 0
+      );
       if (!Number.isFinite(parsedScore)) continue;
+      const note = typeof item === 'object' && item !== null ? Reflect.get(item, 'note') : undefined
+      const comment = typeof item === 'object' && item !== null ? Reflect.get(item, 'comment') : undefined
       map[categoryId] = {
         score: parsedScore,
-        comment: item?.comment ? String(item.comment) : undefined,
+        note: typeof note === 'string' ? note : typeof comment === 'string' ? comment : undefined,
+        comment: typeof comment === 'string' ? comment : undefined,
       };
     }
   } else if (value && typeof value === 'object') {
     for (const [key, rawScore] of Object.entries(value)) {
+      if (!isWheelSphereId(key)) continue
       const score = Number(rawScore ?? 0);
       if (!Number.isFinite(score)) continue;
       map[key] = { score };
@@ -54,11 +80,14 @@ const findFocus = (scores: WheelAssessment['scores'], weakest: WheelAssessment['
   return candidates.sort((a, b) => b.score - a.score)[0] ?? weakest;
 };
 
-const normalizeWheel = (raw: any): WheelAssessment => {
-  const scoreMap = buildScoreMap(raw?.scores);
+const normalizeWheel = (raw: unknown): WheelAssessment => {
+  const scoreMap = buildScoreMap(
+    typeof raw === 'object' && raw !== null ? Reflect.get(raw, 'scores') : undefined
+  );
   const scores = WHEEL_CATEGORIES.map(category => ({
     categoryId: category.id,
     score: Math.max(0, Math.min(10, Number(scoreMap[category.id]?.score ?? 0))),
+    note: scoreMap[category.id]?.note ?? scoreMap[category.id]?.comment,
     comment: scoreMap[category.id]?.comment,
   }));
   const totalScore = scores.reduce((sum, item) => sum + item.score, 0);
@@ -66,22 +95,23 @@ const normalizeWheel = (raw: any): WheelAssessment => {
   const weakest = scores.length ? findWeakest(scores) : null;
   const focus = weakest && scores.length ? findFocus(scores, weakest) : null;
 
-  return {
-    id: String(raw?.id ?? ''),
-    userId: String(raw?.userId ?? ''),
+  return normalizeWheelAssessment({
+    id: typeof raw === 'object' && raw !== null ? Reflect.get(raw, 'id') : '',
+    userId: typeof raw === 'object' && raw !== null ? Reflect.get(raw, 'userId') : '',
     scores,
     totalScore,
     averageScore,
     strengths: focus ? [focus.categoryId] : [],
     gaps: weakest ? [weakest.categoryId] : [],
-    createdAt: String(raw?.createdAt ?? new Date().toISOString()),
-    completedAt: raw?.updatedAt ? String(raw.updatedAt) : undefined,
-    notes: raw?.note != null
-      ? String(raw.note)
-      : raw?.analysis != null
-        ? String(raw.analysis)
+    createdAt:
+      typeof raw === 'object' && raw !== null ? Reflect.get(raw, 'createdAt') : new Date().toISOString(),
+    completedAt:
+      typeof raw === 'object' && raw !== null ? Reflect.get(raw, 'updatedAt') : undefined,
+    notes:
+      typeof raw === 'object' && raw !== null
+        ? Reflect.get(raw, 'note') ?? Reflect.get(raw, 'analysis')
         : undefined,
-  };
+  });
 };
 
 export const wheelApi = api.injectEndpoints({
@@ -94,7 +124,7 @@ export const wheelApi = api.injectEndpoints({
       queryFn: async (_userId, _api, _extraOptions, fetchWithBQ) => {
         const result = await fetchWithBQ({ url: '/wheel/latest' });
         if ('error' in result) {
-          const status = (result.error as { status?: number }).status;
+          const status = getResultStatus(result.error);
           if (import.meta.env.DEV && status === 403) {
             console.info('[wheel/latest] blocked', {
               status,
@@ -107,9 +137,13 @@ export const wheelApi = api.injectEndpoints({
         return { error };
         }
 
-        const payload = result.data as { wheel?: unknown | null };
-        if (!payload?.wheel) return { data: null };
-        return { data: normalizeWheel(payload.wheel) };
+        const payload =
+          result.data && typeof result.data === 'object'
+            ? result.data
+            : null;
+        const wheel = payload ? Reflect.get(payload, 'wheel') : null
+        if (!wheel) return { data: null };
+        return { data: normalizeWheel(wheel) };
       },
       keepUnusedDataFor: 300,
       providesTags: ['Wheel'],
@@ -156,13 +190,14 @@ export const wheelApi = api.injectEndpoints({
       query: () => ({
         url: '/wheel/analytics',
       }),
-      transformResponse: (response: { analytics: WheelAnalysis }) => response.analytics,
+      transformResponse: (response: { analytics: unknown }) =>
+        normalizeWheelAnalysis(response.analytics),
       providesTags: ['WheelAnalysis'],
     }),
 
     sendWheelTelegramReminder: builder.mutation<{ success: boolean; message?: string }, string>({
       query: wheelId => ({
-        url: `/wheel/${wheelId}/remind-telegram`,
+        url: `/wheel/${wheelId}/telegram-reminder`,
         method: 'POST',
       }),
     }),

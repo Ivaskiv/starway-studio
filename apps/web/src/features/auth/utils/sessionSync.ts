@@ -1,7 +1,7 @@
 import type { AppDispatch } from '@/app/store'
 import { accessApi } from '@/features/auth/services/accessApi'
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice'
-import { getToken, hasSessionHint } from '@/features/auth/services/token'
+import { getRefreshToken, getToken, hasSessionHint } from '@/features/auth/services/token'
 import type { User } from '@/features/user/types/user.types'
 import { resolveApiUrl } from '@/services/api'
 import { DEFAULT_ACCENT, normalizeUiMode, type UiMode } from '@/theme/accent.utils'
@@ -130,6 +130,21 @@ function isTelegramDevFallbackAllowed(): boolean {
   return import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 }
 
+async function readJsonSafely(response: Response) {
+  if (!response.ok) {
+    console.warn('[sessionSync] request failed', response.status)
+    return null
+  }
+
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    console.warn('[sessionSync] unexpected response type', contentType)
+    return null
+  }
+
+  return response.json()
+}
+
 export function isTelegramMiniAppAuthContext(): boolean {
   return isLikelyTelegramMiniAppRuntime()
 }
@@ -143,6 +158,16 @@ export async function syncAuthSession({
   dispatch,
   theme,
 }: SyncAuthSessionOptions): Promise<boolean> {
+  if (import.meta.env.DEV) {
+    console.info('[sessionSync] start', {
+      allowRefreshWithoutHint,
+      hasToken: Boolean(getToken()),
+      hasRefreshToken: Boolean(getRefreshToken()),
+      hasSessionHint: hasSessionHint(),
+      isTelegramRuntime: isLikelyTelegramMiniAppRuntime(),
+    })
+  }
+
   const token = getToken()
   const canTryRefresh =
     allowRefreshWithoutHint ||
@@ -167,16 +192,24 @@ export async function syncAuthSession({
 
   if (canTryRefresh) {
     try {
+      const refreshToken = getRefreshToken()
       const refreshRes = await fetch(resolveApiUrl('/auth/refresh'), {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
+        headers: refreshToken
+          ? {
+              'Content-Type': 'application/json',
+              'x-refresh-token': refreshToken,
+            }
+          : undefined,
+        body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
       })
-      
-      if (refreshRes.ok) {
-        const refreshData = await refreshRes.json()
+      const refreshData = await readJsonSafely(refreshRes)
+      if (refreshData) {
         const refreshedUser = (refreshData.user ?? null) as User | null
         const refreshedToken = typeof refreshData.accessToken === 'string' ? refreshData.accessToken : null
+        const refreshedRefreshToken = typeof refreshData.refreshToken === 'string' ? refreshData.refreshToken : undefined
 
         if (refreshedUser && refreshedToken) {
           if (import.meta.env.DEV) {
@@ -185,7 +218,7 @@ export async function syncAuthSession({
               email: refreshedUser.email ?? null,
             })
           }
-          dispatch(setCredentials({ user: refreshedUser, accessToken: refreshedToken }))
+          dispatch(setCredentials({ user: refreshedUser, accessToken: refreshedToken, refreshToken: refreshedRefreshToken }))
           applyUserTheme(theme, refreshedUser)
           await refreshAccessState(dispatch)
           return true
@@ -207,8 +240,8 @@ export async function syncAuthSession({
         },
       })
 
-      if (meRes.ok) {
-        const meData = await meRes.json()
+      const meData = await readJsonSafely(meRes)
+      if (meData) {
         const restoredUser = (meData.user ?? null) as User | null
 
         if (restoredUser) {
@@ -247,8 +280,8 @@ export async function syncAuthSession({
         }),
       })
 
-      if (socialRes.ok) {
-        const socialData = await socialRes.json()
+      const socialData = await readJsonSafely(socialRes)
+      if (socialData) {
         const socialUser = (socialData.user ?? null) as User | null
         const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null
 
@@ -288,8 +321,8 @@ export async function syncAuthSession({
         }),
       })
 
-      if (socialRes.ok) {
-        const socialData = await socialRes.json()
+      const socialData = await readJsonSafely(socialRes)
+      if (socialData) {
         const socialUser = (socialData.user ?? null) as User | null
         const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null
 
