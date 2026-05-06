@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken'
+import jwt, { type SignOptions } from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { prisma } from '../../db/client.js'
 import type { AuthUser, SafeUser, UserWithSub } from '../../types/globalTypes.js'
@@ -17,8 +17,8 @@ import { invalidateUserCache } from '../../lib/db/userCache.js'
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
 const REFRESH_SECRET = getEnv('JWT_REFRESH_SECRET')
-const ACCESS_EXPIRES = process.env.JWT_EXPIRES_IN?.trim() || '15m'
-const REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES_IN?.trim() || '30d'
+const ACCESS_EXPIRES = (process.env.JWT_EXPIRES_IN?.trim() || '15m') as SignOptions['expiresIn']
+const REFRESH_EXPIRES = (process.env.JWT_REFRESH_EXPIRES_IN?.trim() || '30d') as SignOptions['expiresIn']
 
 function getEnv(name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET'): string {
   const value = process.env[name]

@@ -7,8 +7,8 @@ type StrategyGoalLike = {
   sphere: string
   title: string
   description?: string | null
-  actions?: string[] | null
-  monthlyActions?: string[] | null
+  actions?: unknown
+  monthlyActions?: unknown
   progress?: number | null
   status?: string | null
   targetMonth?: number | null
@@ -20,6 +20,10 @@ type StrategyGoalLike = {
   scoreFrom?: number | null
   scoreTo?: number | null
   timeframeMonths?: number | null
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
 type MonthlyReviewLike = {
@@ -101,7 +105,7 @@ export function toWebMap(map: StrategyMapLike) {
       sphere: goal.sphere,
       title: goal.title,
       description: goal.description ?? null,
-      actions: goal.actions ?? goal.monthlyActions ?? [],
+      actions: toStringArray(goal.actions ?? goal.monthlyActions),
       progress: goal.progress ?? 0,
       status: (goal.status ?? 'active') as 'active' | 'on_track' | 'behind' | 'completed',
       targetMonth: goal.targetMonth ?? null,

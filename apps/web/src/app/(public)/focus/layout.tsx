@@ -1,6 +1,6 @@
-import FocusShellLayout from '@/features/landings/focus/pages/FoсusLayout'
+import FocusShellLayout from '@/features/landings/focus/pages/FocusLayout'
 import type { ReactNode } from 'react'
-import styles from './styles/focus.module.scss'
+import styles from './styles/focus.module.css'
 
 type FocusRouteLayoutProps = {
   children: ReactNode

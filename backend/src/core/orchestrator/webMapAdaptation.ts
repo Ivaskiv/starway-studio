@@ -279,10 +279,10 @@ export async function runWebMapAdaptationIfEligible(
   }
 
   const payload = await buildPayload(userId, input)
-  if (!canRunAI(payload)) {
+  if (!payload || !canRunAI(payload)) {
     return buildFallbackLocalLogic(payload?.userActivity ?? normalizeUserActivity(input.userActivity))
   }
-  const safePayload = payload
+  const safePayload: NormalizedPayload = payload
 
   const payloadHash = hashPayload(safePayload)
   const throttle = shouldThrottle(userId, payloadHash)

@@ -18,8 +18,8 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 const HomePage = lazy(() => import('@/pages/HomePage'));
 // const FocusLayout = lazy(() => import('@/app/(public)/focus/layout'));
 // const FocusLandingPage = lazy(() => import('@/app/(public)/focus/page'));
-const FocusLayout = lazy(() => import('@/features/landings/focus/pages/FoсusLayout'))
-const FocusLandingPage = lazy(() => import('@/features/landings/focus/pages/FoсusLandingPage'))
+const FocusLayout = lazy(() => import('@/features/landings/focus/pages/FocusLayout'))
+const FocusLandingPage = lazy(() => import('@/features/landings/focus/pages/FocusLandingPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const TelegramSuccessPage = lazy(() => import('@/pages/auth/TelegramSuccessPage'));
 const StartFlowPage = lazy(() => import('@/pages/onboarding/StartFlowPage'));

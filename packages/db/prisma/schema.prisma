@@ -990,6 +990,9 @@ model AnnualStrategyMap {
   userId         String                  @unique
   year           Int
   vision         String?
+  identityStatement String?
+  mainGoalId     String?
+  status         String                  @default("draft")
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @default(now()) @updatedAt
   user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1005,14 +1008,22 @@ model StrategyGoal {
   sphere         String
   title          String
   description    String?
+  actions        Json?
   monthlyActions Json
   priority       Int               @default(0)
+  order          Int               @default(0)
+  isMain         Boolean           @default(false)
+  progress       Int               @default(0)
+  status         String            @default("active")
+  targetMonth    Int?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @default(now()) @updatedAt
   map            AnnualStrategyMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
+  @@index([mapId, order])
   @@index([mapId, priority])
   @@index([sphere])
+  @@index([status])
 }
 
 model MonthlyStrategyReview {
@@ -1020,15 +1031,24 @@ model MonthlyStrategyReview {
   mapId            String
   month            Int
   year             Int
+  focus            String?
+  actions          String[]          @default([])
+  goalIds          String[]          @default([])
+  status           String            @default("planned")
   aiAnalysis       String?
+  doneActions      String[]          @default([])
+  missedActions    String[]          @default([])
   completedActions String[]          @default([])
   skippedActions   String[]          @default([])
   nextStepsByAi    Json?
+  nextMonthRec     String?
   createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @default(now()) @updatedAt
   map              AnnualStrategyMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
   @@unique([mapId, month, year])
   @@index([year, month])
+  @@index([status])
 }
 
 model Mentorship {

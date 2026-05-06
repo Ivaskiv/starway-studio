@@ -2,6 +2,7 @@
 # 📦 DEPENDENCIES
 # ============================================
 node_modules/
+**/node_modules/
 html/
 .pnp/
 .pnpm-store/
@@ -11,6 +12,7 @@ html/
 # 🏗️ BUILD OUTPUTS
 # ============================================
 dist/
+apps/web/dist/
 build/
 .vercel_build_output/
 
@@ -38,6 +40,7 @@ build/
 # 💻 OPERATING SYSTEM
 # ============================================
 .DS_Store
+**/.DS_Store
 
 # ============================================
 # 🚀 DEPLOYMENT
@@ -87,12 +90,18 @@ ngrok.yml
 
 # AI / models
 *.bin
+*.onnx
+*.pt
+*.ckpt
 
 # videos
 *.mp4
 *.wav
+*.m4a
+*.aiff
 video-hooks/output/
 video-hooks/input/
+video-hooks/models/
 
 # dumps
 *.sql
@@ -106,6 +115,8 @@ video-hooks/input/
 # CACHE
 # ============================================
 .cache/
+.vite/
+**/.vite/
 tmp/
 temp/
 

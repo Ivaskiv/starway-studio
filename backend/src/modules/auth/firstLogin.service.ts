@@ -98,16 +98,16 @@ export async function handleFirstLogin(payload: FirstLoginPayload): Promise<User
         where: { id: existing.id },
         data: {
           lastLoginAt: now,
-          telegramUserId: telegramData?.telegramUserId ?? undefined,
-          telegramChatId: telegramData?.telegramChatId ?? undefined,
-          telegramUserName: telegramData?.telegramUserName ?? undefined,
+          telegramUserId: telegramData?.telegramUserId || undefined,
+          telegramChatId: telegramData?.telegramChatId || undefined,
+          telegramUserName: telegramData?.telegramUserName || undefined,
         },
       })
     : await createUserCompat({
         ...payload,
-        telegramUserId: telegramData?.telegramUserId,
-        telegramChatId: telegramData?.telegramChatId,
-        telegramUserName: telegramData?.telegramUserName,
+        telegramUserId: telegramData?.telegramUserId || undefined,
+        telegramChatId: telegramData?.telegramChatId || undefined,
+        telegramUserName: telegramData?.telegramUserName || undefined,
       }, now)
 
   await prisma.userProgress.upsert({

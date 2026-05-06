@@ -1,4 +1,5 @@
 import { prisma } from '../../db/client.js'
+import { Prisma } from '@starway/db/prisma-client'
 import { processPayment } from '../subscriptions/payments/business.js'
 import { verifySignature } from '../subscriptions/payments/crypto.js'
 import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js'
@@ -15,6 +16,10 @@ type BillingWebhookResult = {
   ok: boolean
   subscription?: UserSubscription
   duplicate?: boolean
+}
+
+function toInputJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
 function toSubscription(userId: string, plan: BillingPlan, expiresAt: Date): UserSubscription {
@@ -47,13 +52,13 @@ async function storeRawWebhookEvent(input: {
       userId: input.userId,
       amountCents: Math.round(input.amount * 100),
       currency: input.payload.currency ?? 'EUR',
-      metadata: {
+      metadata: toInputJson({
         kind: 'billing_webhook',
         provider: 'wayforpay',
         plan: input.plan,
         payRef: input.orderReference,
         payload: input.payload,
-      },
+      }),
     },
   })
 }
