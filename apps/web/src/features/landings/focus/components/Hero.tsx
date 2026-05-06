@@ -3,6 +3,7 @@ import { FOCUS_PAYMENT_URL } from '../utils/constants'
 
 export default function Hero() {
   const raw = FOCUS_PAGE.hero.title
+
   const lines = (Array.isArray(raw) ? raw : [raw])
     .flatMap((c) => String(c).split('\n'))
     .map((l) => l.trim())
@@ -14,29 +15,46 @@ export default function Hero() {
   return (
     <section id="hero" className="focus-hero">
 
-      {/* cover photo — CSS background */}
-      <div className="focus-hero-bg" aria-hidden="true" />
+      {/* cinematic background */}
+      <div
+        className="focus-hero-bg"
+        aria-hidden="true"
+      />
 
-      {/* top: ЩОТИЖНЕВА ПРАКТИКА + перетвори */}
+      {/* top */}
       <div className="focus-hero-top">
-        <h1 className="focus-hero-title-main">{titleMain}</h1>
+
+        <h1 className="focus-hero-title-main">
+          {titleMain}
+        </h1>
+
         {titleRest && (
-          <p className="focus-hero-title-accent">{titleRest}</p>
+          <p className="focus-hero-title-accent">
+            {titleRest}
+          </p>
         )}
+
       </div>
 
-      {/* spacer — фото видно по центру */}
+      {/* spacer */}
       <div className="focus-hero-spacer" />
 
-      {/* bottom: підпис → панель → trust */}
+      {/* bottom */}
       <div className="focus-hero-bottom">
 
-        <div className="focus-hero-sig" aria-label="ФОКУС by Надя">
+        <div
+          className="focus-hero-sig"
+          aria-label="ФОКУС by Надя"
+        >
           ФОКУС <span>by</span> <strong>Надя</strong>
         </div>
 
         <div className="focus-hero-panel">
-          <p className="focus-hero-subtitle">{FOCUS_PAGE.hero.subtitle}</p>
+
+          <p className="focus-hero-subtitle">
+            {FOCUS_PAGE.hero.subtitle}
+          </p>
+
           <a
             className="focus-btn-primary focus-hero-cta-btn"
             href={FOCUS_PAYMENT_URL}
@@ -45,23 +63,27 @@ export default function Hero() {
           >
             {FOCUS_PAGE.hero.cta}
           </a>
+
         </div>
 
         <div className="focus-hero-trust">
+
           <span className="focus-hero-trust-item">
             <span className="focus-hero-trust-dot" />
             <strong>15 €</strong>&nbsp;/ місяць
           </span>
+
           <span className="focus-hero-trust-item">
             <span className="focus-hero-trust-dot" />
             <strong>4</strong>&nbsp;живі Zoom-практики
           </span>
+
           <span className="focus-hero-trust-item">
             <span className="focus-hero-trust-dot" />
             Старт&nbsp;<strong>11 травня</strong>
           </span>
-        </div>
 
+        </div>
       </div>
     </section>
   )

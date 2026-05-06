@@ -165,10 +165,13 @@
 .focus-pipeline-label {
   display: flex;
   flex-direction: column;
+
   align-items: center;
   text-align: center;
-  gap: 3px;
-  padding: 0 4px;
+
+  gap: 8px;
+
+  padding: 0 8px;
 }
 
 .focus-pipeline-label-title {

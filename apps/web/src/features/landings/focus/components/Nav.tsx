@@ -1,15 +1,12 @@
-import { FOCUS_PAGE } from "@/features/landings/focus/content/focus.content";
-
 export default function Nav() {
   return (
-    <nav className="focus-nav">
+    <nav className="focus-nav" aria-label="Головна навігація">
       <div className="focus-nav-pill">
         <span className="focus-nav-pill-dot" aria-hidden="true" />
         <span className="focus-nav-pill-text">
-          {FOCUS_PAGE.nav.pill}
+          Старт — 11 травня · Zoom щопонеділка
         </span>
       </div>
-
     </nav>
   )
 }

@@ -8,13 +8,13 @@ import Pricing from '../components/Pricing'
 import Problem from '../components/Problem'
 
 import AboutFocus from '@/features/landings/focus/components/AboutFocus'
+import Final from '@/features/landings/focus/components/Final'
 import Fit from '@/features/landings/focus/components/Fit'
 import Mechanism from '@/features/landings/focus/components/Mechanism'
 import Nav from '@/features/landings/focus/components/Nav'
+import Subscription from '@/features/landings/focus/components/Subscription'
 import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
 import { useScrollReveal } from '../hooks/useScrollReveal'
-import Subscription from '@/features/landings/focus/components/Subscription'
-import Final from '@/features/landings/focus/components/Final'
 
 export default function FocusLandingPage() {
   const pageRef = useScrollReveal()
