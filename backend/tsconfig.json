@@ -4,15 +4,18 @@
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
-    "types": ["node", "vitest"],
+    "types": ["node"],
     "moduleResolution": "NodeNext",
-    "composite": true,
+    "composite": false,
+    "declaration": false,
+"declarationMap": false,
     "rootDir": ".",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "outDir": "./dist",
     "sourceMap": true,
+    
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["../packages/shared/src/*"]
