@@ -1,28 +1,31 @@
 import type { Context } from 'telegraf'
 
 import { bot } from '../../lib/telegram.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { trackDmStartFromContent } from '../events/contentAttribution.service.js'
 import { guard } from './core/guard.middleware.js'
 import { handleChat } from './handlers/chat.js'
 import { handleEvening } from './handlers/evening.js'
-import { handleMorning, resumeQuestionSession } from './handlers/morning.js'
+import { handleMorning } from './handlers/morning.js'
 import { handlePrivacy } from './handlers/privacy.js'
 import { handleStatus } from './handlers/status.js'
 import { handleVoice } from './handlers/voice.js'
 import { getSession, parseQuestionState } from './session.js'
 import { handleEveningAnswer } from './handlers/evening.js'
 import { handleMorningAnswer } from './handlers/morning.js'
-import { getAccessAwareAppReplyMarkupForContext, handleStart, sendStateMenu } from './handlers/start.js'
-import { handleTasks } from './handlers/tasks.js'
+import { getAccessAwareAppReplyMarkupForContext, handleStart } from './handlers/start.js'
 import { logger } from '../../utils/logger.js'
 import { resolveLinkedUserIdFromContext } from './core/state.service.js'
-import { startLeadMagnet } from './flows/leadMagnet.flow.js'
-import { dismissNudges } from './services/nudge.service.js'
 import { resolveDecision, shouldRenderDecisionBeforeTransport } from '../../core/decision/decision.resolver.js'
 import { renderTelegram } from './renderers/decisionTelegram.js'
+import { dispatchTelegramCallbackEvent } from './services/telegram-event-bus.service.js'
 
 let mentorBotRegistered = false
 const processedUpdates = new Set<number>()
+
+interface MentorBotRegistrationOptions {
+  product?: string
+}
 
 async function handleTextMessage(ctx: Context) {
   if (!('message' in ctx) || !ctx.message || !('text' in ctx.message)) {
@@ -65,18 +68,25 @@ async function handleTextMessage(ctx: Context) {
   await handleChat(ctx, text)
 }
 
-async function renderDecisionForContext(
-  ctx: Context,
-  userId: string | null,
-  event: string,
-  payload?: Record<string, unknown>,
-): Promise<boolean> {
-  const firstName = ctx.from?.first_name ?? 'Привіт'
-  const { decision } = await resolveDecision(userId, event, payload)
-  return renderTelegram(ctx, decision, firstName)
+function isStaleCallback(ctx: Context, maxAgeMs = 2 * 60 * 60 * 1000): boolean {
+  if (!('callbackQuery' in ctx) || !ctx.callbackQuery || !('message' in ctx.callbackQuery)) {
+    return false
+  }
+
+  const message = ctx.callbackQuery.message
+  if (!message || typeof message !== 'object' || !('date' in message)) {
+    return false
+  }
+
+  const messageDate = Number((message as { date?: number }).date ?? 0) * 1000
+  if (!Number.isFinite(messageDate) || messageDate <= 0) {
+    return false
+  }
+
+  return Date.now() - messageDate > maxAgeMs
 }
 
-export async function registerMentorBot() {
+export async function registerMentorBot(_options?: MentorBotRegistrationOptions) {
   if (mentorBotRegistered) return
   mentorBotRegistered = true
 
@@ -131,130 +141,16 @@ export async function registerMentorBot() {
 
   bot.on('callback_query', async (ctx) => {
     const action = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const userId = (ctx.state as { userId?: string | null }).userId ?? null
-
     try {
-      if (action === 'start_trial') {
-        if (!(await renderDecisionForContext(ctx, userId, 'trial_offer_requested'))) {
-          if (userId) {
-            await sendStateMenu(ctx, userId)
-          }
-        }
-        await ctx.answerCbQuery('Показую наступний крок').catch(() => undefined)
+      if (isStaleCallback(ctx)) {
+        await ctx.answerCbQuery().catch(() => undefined)
         return
       }
 
-      if (action === 'open_status') {
-        const { decision } = await resolveDecision(userId, 'status_requested')
-        if (decision.nextAction === 'bind_user') {
-          await renderTelegram(ctx, decision, ctx.from?.first_name ?? 'Привіт')
-        } else {
-          await handleStatus(ctx)
-        }
-        await ctx.answerCbQuery('Оновлюю стан').catch(() => undefined)
-        return
+      const handled = await dispatchTelegramCallbackEvent(ctx, action)
+      if (!handled) {
+        await ctx.answerCbQuery('Відкрий Mini App для продовження').catch(() => undefined)
       }
-
-      if (action === 'waitlist_early_access') {
-        if (!(await renderDecisionForContext(ctx, userId, 'waitlist_requested'))) {
-          if (userId) {
-            await sendStateMenu(ctx, userId)
-          }
-        }
-        await ctx.answerCbQuery('Оновлюю доступний сценарій').catch(() => undefined)
-        return
-      }
-
-      if (action === 'continue_ai_mentor') {
-        await resumeQuestionSession(ctx)
-        await ctx.answerCbQuery('Продовжуємо сесію').catch(() => undefined)
-        return
-      }
-
-      if (action === 'resume_morning_session') {
-        await handleMorning(ctx)
-        await ctx.answerCbQuery('Відкриваю ранкову сесію').catch(() => undefined)
-        return
-      }
-
-      if (action === 'resume_evening_session') {
-        await handleEvening(ctx)
-        await ctx.answerCbQuery('Відкриваю вечірню сесію').catch(() => undefined)
-        return
-      }
-
-      if (action === 'continue_ai_mentor_chat') {
-        await ctx.reply('👇 Напиши питання ABsystemу в поле вводу нижче, і я продовжу розмову тут у Telegram.')
-        await ctx.answerCbQuery('Продовжуємо в Telegram').catch(() => undefined)
-        return
-      }
-
-      if (action === 'continue_task') {
-        await handleTasks(ctx)
-        await ctx.answerCbQuery('Показую пріоритетне завдання').catch(() => undefined)
-        return
-      }
-
-      if (action === 'dismiss_task') {
-        if (userId) {
-          await dismissNudges(userId)
-        }
-        await ctx.answerCbQuery('Добре, поки без нагадувань').catch(() => undefined)
-        return
-      }
-
-      if (action === 'lm_continue') {
-        const chatId = String(ctx.chat?.id ?? '')
-        const session = chatId ? await getSession(chatId) : null
-        if (chatId && session?.userId) {
-          const started = await startLeadMagnet(session.userId, chatId, 'telegram_resume')
-          if (!started) {
-            await sendStateMenu(ctx, session.userId)
-            await ctx.answerCbQuery('Доступний актуальний сценарій').catch(() => undefined)
-            return
-          }
-        }
-        if (session?.userId) {
-          await sendStateMenu(ctx, session.userId)
-        }
-        await ctx.answerCbQuery('Запускаю практикум').catch(() => undefined)
-        return
-      }
-
-      if (action === 'lm_continue_material') {
-        const chatId = String(ctx.chat?.id ?? '')
-        const userId = (ctx.state as { userId?: string | null }).userId ?? null
-        if (chatId && userId) {
-          const started = await startLeadMagnet(userId, chatId, 'telegram_resume_material')
-          if (!started) {
-            await sendStateMenu(ctx, userId)
-            await ctx.answerCbQuery('Доступний актуальний сценарій').catch(() => undefined)
-            return
-          }
-        }
-        await ctx.answerCbQuery('Запускаю матеріал').catch(() => undefined)
-        return
-      }
-
-      if (action === 'return_main_menu') {
-        const chatId = String(ctx.chat?.id ?? '')
-        const session = chatId ? await getSession(chatId) : null
-        const targetUserId = session?.userId ?? userId
-        if (targetUserId) {
-          if (!(await renderDecisionForContext(ctx, targetUserId, 'menu_open'))) {
-            await sendStateMenu(ctx, targetUserId)
-          }
-        } else {
-          const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-          await ctx.reply('Starway підключено. Відкрий Mini App для продовження.', {
-            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-          })
-        }
-        await ctx.answerCbQuery('Готово').catch(() => undefined)
-        return
-      }
-
-      await ctx.answerCbQuery('Відкрий Mini App для продовження').catch(() => undefined)
     } catch (error) {
       logger.error('[telegram-thin-client:callback]', error)
       await ctx.answerCbQuery('Не вдалося відновити сесію').catch(() => undefined)
@@ -265,7 +161,7 @@ export async function registerMentorBot() {
     void (async () => {
       logger.error('[telegram-thin-client:catch]', err)
       const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-      await ctx.reply('Сталася помилка. Відкрий Mini App для продовження.', {
+      await ctx.reply('Спробуй ще раз за хвилину.', {
         ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
       }).catch(() => undefined)
     })()

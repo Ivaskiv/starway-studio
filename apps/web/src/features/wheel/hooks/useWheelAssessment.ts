@@ -1,4 +1,5 @@
 // frontend/src/features/wheel/hooks/useWheelAssessment.ts
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext';
 import { sendTelegramMessage } from '@/features/social/services/telegram.service';
 import {
   useCreateWheelAssessmentMutation,
@@ -13,13 +14,14 @@ interface UseWheelAssessmentOptions {
 }
 
 export const useWheelAssessment = ({ userId, telegramChatId }: UseWheelAssessmentOptions) => {
+  const { appState: sessionStatus } = useSessionOrchestrator();
   const {
     data: assessment,
     isLoading,
     isError,
     refetch,
   } = useGetLatestWheelAssessmentQuery(userId, {
-    skip: !userId,
+    skip: sessionStatus !== 'authenticated' || !userId,
   });
 
   const [createAssessment, { isLoading: isCreating }] = useCreateWheelAssessmentMutation();

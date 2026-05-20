@@ -1,5 +1,12 @@
 import crypto from 'node:crypto'
+
 import { runQueuedAiTask } from './aiQueue.service.js'
+import {
+  runtimeRedisDel,
+  runtimeRedisGet,
+  runtimeRedisSet,
+  runtimeRedisSetNx,
+} from '../core/runtime/runtimeRedis.js'
 
 export interface AiGuardDescriptor {
   userId: string
@@ -20,12 +27,7 @@ type FallbackFactory<T> = (error?: unknown) => T | Promise<T>
 const DEFAULT_THROTTLE_MS = 60_000
 const DEFAULT_DUPLICATE_WINDOW_MS = 10 * 60_000
 const DEFAULT_DISABLE_COOLDOWN_MS = 60 * 60_000
-
-const lastCallAtByUser = new Map<string, number>()
-const lastPayloadByUser = new Map<string, { hash: string; at: number; source: string }>()
-const disabledUntilByUser = new Map<string, number>()
-const activeLocksByUser = new Set<string>()
-const inflightByKey = new Map<string, Promise<unknown>>()
+const REDIS_TTL_PADDING_MS = 15_000
 
 function stableSerialize(value: unknown): string {
   if (value === null || value === undefined) return 'null'
@@ -54,28 +56,63 @@ export function isOpenAIQuotaError(error: unknown) {
   return record.code === 'insufficient_quota' || record.status === 429
 }
 
-function disableAiForUser(userId: string, ttlMs = DEFAULT_DISABLE_COOLDOWN_MS) {
-  const disabledUntil = Date.now() + ttlMs
-  disabledUntilByUser.set(userId, disabledUntil)
-  return disabledUntil
-}
-
-function isTemporarilyDisabled(userId: string) {
-  const disabledUntil = disabledUntilByUser.get(userId) ?? 0
-  return disabledUntil > Date.now() ? disabledUntil : null
-}
-
 function logGuardEvent(
   level: 'info' | 'warn',
   message: string,
   meta: Record<string, unknown>,
 ) {
+  const safeMeta = Object.fromEntries(
+    Object.entries(meta)
+      .filter(([key]) => !['prompt', 'contextPrompt', 'payload', 'context', 'messages', 'raw', 'memory', 'response', 'token'].includes(key))
+      .map(([key, value]) => [key, typeof value === 'string' && value.length > 160 ? `${value.slice(0, 157)}...` : value]),
+  )
+
   if (level === 'warn') {
-    console.warn(message, meta)
+    console.warn(message, safeMeta)
     return
   }
 
-  console.info(message, meta)
+  console.info(message, safeMeta)
+}
+
+async function getRedisNumber(key: string): Promise<number> {
+  const raw = await runtimeRedisGet<string>(key).catch(() => null)
+  const value = Number(raw ?? 0)
+  return Number.isFinite(value) ? value : 0
+}
+
+async function isTemporarilyDisabled(userId: string): Promise<number | null> {
+  const disabledUntil = await getRedisNumber(`ai:disable:${userId}`)
+  return disabledUntil > Date.now() ? disabledUntil : null
+}
+
+async function getLastCallAt(userId: string): Promise<number> {
+  return getRedisNumber(`ai:lastcall:${userId}`)
+}
+
+async function getLastPayload(userId: string, source: string): Promise<{ hash: string; at: number; source: string } | null> {
+  const raw = await runtimeRedisGet<string>(`ai:lastpayload:${userId}:${source}`).catch(() => null)
+  if (!raw) return null
+  const [hash, at] = raw.split('|')
+  const parsedAt = Number(at ?? 0)
+  if (!hash || !Number.isFinite(parsedAt)) return null
+  return { hash, at: parsedAt, source }
+}
+
+async function claimAiLock(key: string, ttlMs: number): Promise<boolean> {
+  return runtimeRedisSetNx(`ai:lock:${key}`, '1', Math.max(1, Math.ceil(ttlMs / 1000)))
+}
+
+async function releaseAiLock(key: string): Promise<void> {
+  await runtimeRedisDel(`ai:lock:${key}`)
+}
+
+async function setThrottleState(userId: string, source: string, payloadHash: string, timestamp: number, throttleMs: number, duplicateWindowMs: number, disableCooldownMs: number): Promise<void> {
+  await Promise.all([
+    runtimeRedisSet(`ai:lastcall:${userId}`, String(timestamp), Math.max(1, Math.ceil(disableCooldownMs / 1000))),
+    runtimeRedisSet(`ai:lastpayload:${userId}:${source}`, `${payloadHash}|${timestamp}`, Math.max(1, Math.ceil(duplicateWindowMs / 1000))),
+    runtimeRedisSet(`ai:disable:${userId}`, String(timestamp + disableCooldownMs), Math.max(1, Math.ceil(disableCooldownMs / 1000))),
+  ])
 }
 
 export async function runGuardedAiTask<T>(
@@ -91,7 +128,7 @@ export async function runGuardedAiTask<T>(
   const label = descriptor.label ?? descriptor.source
   const now = Date.now()
 
-  const disabledUntil = isTemporarilyDisabled(descriptor.userId)
+  const disabledUntil = await isTemporarilyDisabled(descriptor.userId)
   if (disabledUntil) {
     logGuardEvent('warn', '[AI Guard] skipped (disabled)', {
       userId: descriptor.userId,
@@ -102,7 +139,7 @@ export async function runGuardedAiTask<T>(
     return fallback()
   }
 
-  const lastCallAt = lastCallAtByUser.get(descriptor.userId) ?? 0
+  const lastCallAt = await getLastCallAt(descriptor.userId)
   if (now - lastCallAt < throttleMs) {
     logGuardEvent('warn', '[AI Guard] skipped (throttle)', {
       userId: descriptor.userId,
@@ -113,7 +150,7 @@ export async function runGuardedAiTask<T>(
     return fallback()
   }
 
-  const lastPayload = lastPayloadByUser.get(descriptor.userId)
+  const lastPayload = await getLastPayload(descriptor.userId, descriptor.source)
   if (
     lastPayload
     && lastPayload.source === descriptor.source
@@ -129,18 +166,9 @@ export async function runGuardedAiTask<T>(
     return fallback()
   }
 
-  const existing = inflightByKey.get(key)
-  if (existing) {
-    logGuardEvent('warn', '[AI Guard] skipped (duplicate in-flight)', {
-      userId: descriptor.userId,
-      source: descriptor.source,
-      label,
-    })
-    return existing as Promise<T>
-  }
-
-  if (activeLocksByUser.has(descriptor.userId)) {
-    logGuardEvent('warn', '[AI Guard] skipped (user locked)', {
+  const lockAcquired = await claimAiLock(key, duplicateWindowMs + REDIS_TTL_PADDING_MS)
+  if (!lockAcquired) {
+    logGuardEvent('warn', '[AI Guard] skipped (locked)', {
       userId: descriptor.userId,
       source: descriptor.source,
       label,
@@ -148,16 +176,9 @@ export async function runGuardedAiTask<T>(
     return fallback()
   }
 
-  lastCallAtByUser.set(descriptor.userId, now)
-  lastPayloadByUser.set(descriptor.userId, {
-    hash: payloadHash,
-    at: now,
-    source: descriptor.source,
-  })
+  await setThrottleState(descriptor.userId, descriptor.source, payloadHash, now, throttleMs, duplicateWindowMs, disableCooldownMs)
 
-  activeLocksByUser.add(descriptor.userId)
-
-  const promise = (async () => {
+  try {
     logGuardEvent('info', '[AI Guard] started', {
       userId: descriptor.userId,
       source: descriptor.source,
@@ -165,53 +186,49 @@ export async function runGuardedAiTask<T>(
       payloadHash,
     })
 
-    try {
-      const result = await runQueuedAiTask(task, {
-        label,
-        retries: descriptor.retries ?? 1,
-        baseDelayMs: descriptor.baseDelayMs ?? 500,
-      })
+    const result = await runQueuedAiTask(task, {
+      label,
+      retries: descriptor.retries ?? 1,
+      baseDelayMs: descriptor.baseDelayMs ?? 500,
+    })
 
-      logGuardEvent('info', '[AI Guard] finished', {
+    logGuardEvent('info', '[AI Guard] finished', {
+      userId: descriptor.userId,
+      source: descriptor.source,
+      label,
+    })
+
+    return result
+  } catch (error) {
+    if (isOpenAIQuotaError(error)) {
+      const until = Date.now() + disableCooldownMs
+      await runtimeRedisSet(`ai:disable:${descriptor.userId}`, String(until), Math.max(1, Math.ceil(disableCooldownMs / 1000)))
+      logGuardEvent('warn', '[AI Guard] quota disabled', {
         userId: descriptor.userId,
         source: descriptor.source,
         label,
+        disabledUntil: new Date(until).toISOString(),
       })
-
-      return result
-    } catch (error) {
-      if (isOpenAIQuotaError(error)) {
-        const until = disableAiForUser(descriptor.userId, disableCooldownMs)
-        logGuardEvent('warn', '[AI Guard] quota disabled', {
-          userId: descriptor.userId,
-          source: descriptor.source,
-          label,
-          disabledUntil: new Date(until).toISOString(),
-        })
-      } else {
-        logGuardEvent('warn', '[AI Guard] failed, using fallback', {
-          userId: descriptor.userId,
-          source: descriptor.source,
-          label,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-
-      return fallback(error)
-    } finally {
-      activeLocksByUser.delete(descriptor.userId)
-      inflightByKey.delete(key)
+    } else {
+      logGuardEvent('warn', '[AI Guard] failed, using fallback', {
+        userId: descriptor.userId,
+        source: descriptor.source,
+        label,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
-  })()
 
-  inflightByKey.set(key, promise)
-  return promise
+    return fallback(error)
+  } finally {
+    await releaseAiLock(key)
+  }
 }
 
-export function getAiGuardStatus(userId: string) {
+export async function getAiGuardStatus(userId: string) {
+  const disabledUntil = await isTemporarilyDisabled(userId)
   return {
-    isDisabled: Boolean(isTemporarilyDisabled(userId)),
-    lastCallAt: lastCallAtByUser.get(userId) ?? null,
-    hasLock: activeLocksByUser.has(userId),
+    isDisabled: Boolean(disabledUntil),
+    lastCallAt: await getLastCallAt(userId),
+    hasLock: false,
   }
 }

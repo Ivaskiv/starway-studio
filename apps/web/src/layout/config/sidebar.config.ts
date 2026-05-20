@@ -4,6 +4,7 @@
 //! рішення приймає useAbility()
 
 import { Ability } from "@/features/auth/permissions/abilities";
+import { ROUTES } from '@/config/routes';
 
 
 
@@ -37,30 +38,30 @@ export interface SidebarItem {
 export const SIDEBAR_ITEMS: SidebarItem[] = [
   {
     label: 'Dashboard',
-    path: '/dashboard',
+    path: ROUTES.DASHBOARD,
     ability: 'dashboard.view',
   },
   {
     label: 'ABsystem',
-    path: '/dashboard/ai-mentor',
+    path: ROUTES.AI_MENTOR,
     ability: 'ai.use',
     badge: 'pro',
   },
   {
     label: 'Wheel of Balance',
-    path: '/dashboard/wheel',
+    path: ROUTES.WHEEL,
     ability: 'wheel.view',
   },
   {
     label: 'Profile',
-    path: '/dashboard/profile',
+    path: ROUTES.PROFILE,
     ability: 'profile.view',
   },
 
   // admin+
   {
     label: 'Products',
-    path: '/dashboard/products',
+    path: ROUTES.PRODUCTS,
     ability: 'products.manage',
   },
   // {
@@ -80,7 +81,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // },
   {
     label: 'Settings',
-    path: '/dashboard/settings',
+    path: ROUTES.SETTINGS,
     ability: 'settings.manage',
   },
 

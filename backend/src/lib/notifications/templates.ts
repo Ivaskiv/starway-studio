@@ -1,12 +1,19 @@
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+export type { AbTestFollowupTimerId } from '@/products/ab-system/content/abTest.followups.js'
+import { resolveAbTestFollowupCopy, type AbTestFollowupTimerId } from '@/products/ab-system/content/abTest.followups.js'
+import type { AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
 
-type NotificationTemplateKey = NotificationEvent | 'MISSED_DAY_CATCHUP'
+type NotificationTemplateKey = NotificationEvent | 'MISSED_DAY_CATCHUP' | AbTestFollowupTimerId
 
 type NotificationContext = {
   userName?: string
+  resultKey?: AbTestResultKey | null
   streakDays?: number
   tasksLeft?: number
   daysUntilExpiry?: number
+  paymentUrl?: string | null
+  renewalUrl?: string | null
   weakSphere?: string
   dayNumber?: number
   level?: number
@@ -15,6 +22,11 @@ type NotificationContext = {
   wheels?: number
   sessions?: number
   previousPlan?: string
+  comebackKey?: string | null
+  lastAction?: string | null
+  dailyCycles?: number
+  decisions?: number
+  referralUrl?: string | null
 }
 
 export interface NotificationContent {
@@ -22,12 +34,6 @@ export interface NotificationContent {
   body: string
   ctaText?: string
   ctaUrl?: string
-}
-
-function pluralizeDays(value: number) {
-  if (value === 1) return 'день'
-  if (value >= 2 && value <= 4) return 'дні'
-  return 'днів'
 }
 
 export function buildNotificationContent(
@@ -74,21 +80,21 @@ export function buildNotificationContent(
         body: `Стрік: ${ctx.streakDays ?? 0} · Колесо: ${ctx.wheels ?? 0} · Сесії: ${ctx.sessions ?? 0}. Подивись звіти, щоб зрозуміти динаміку за 7 днів і вирішити, який крок робити далі.`,
       }
     case NotificationEvent.SUBSCRIPTION_EXPIRING: {
-      const daysLeft = ctx.daysUntilExpiry ?? 0
+      const billing = absystemContent.BILLING.SUB_EXPIRING
       return {
         title: '💎 Підписка',
-        body: daysLeft > 0
-          ? `Твоя WEB-Карта вже готова приблизно на 70%. До завершення підписки залишилось ${daysLeft} ${pluralizeDays(daysLeft)} — закріпи систему, поки фокус ще живий.`
-          : 'Твоя WEB-Карта вже готова приблизно на 70%. Закріпи систему зараз, щоб не втратити прогрес, історію і сесії.',
+        body: billing.text,
+        ctaText: billing.cta,
+        ctaUrl: ctx.renewalUrl ?? ctx.paymentUrl ?? undefined,
       }
     }
     case NotificationEvent.SUBSCRIPTION_EXPIRED: {
-      const previousPlan = ctx.previousPlan ?? 'trial'
+      const billing = absystemContent.BILLING.SUB_EXPIRED
       return {
-        title: previousPlan === 'trial' ? '💎 Тріал завершився' : '💎 Доступ завершився',
-        body: previousPlan === 'trial'
-          ? `${userName}, пробний період завершився. Історія збережена, а доступ можна відновити у будь-який момент.`
-          : `${userName}, твій доступ завершився. Історія збережена, а доступ можна відновити у будь-який момент.`,
+        title: '💎 Доступ завершився',
+        body: billing.text,
+        ctaText: billing.cta,
+        ctaUrl: ctx.renewalUrl ?? ctx.paymentUrl ?? undefined,
       }
     }
     case NotificationEvent.LEVEL_UP:
@@ -106,13 +112,79 @@ export function buildNotificationContent(
     case NotificationEvent.AI_INACTIVE:
       return {
         title: '✦ Повернись в ABsystem',
-        body: 'Ти давно не поверталась до ABsystem. Обери, де зручно продовжити далі.',
+        body: 'Ти давно не поверталась до ABsystem. Повернись у ритм там, де зручно продовжити далі.',
       }
+    case NotificationEvent.ABSYSTEM_COMEBACK: {
+      const comebackKey = ctx.comebackKey ?? 'GAP_1_3'
+      if (typeof comebackKey === 'string' && comebackKey.startsWith('WINBACK_')) {
+        const flow = absystemContent.WINBACK[comebackKey as keyof typeof absystemContent.WINBACK]
+        const resolved = typeof flow === 'function'
+          ? flow(Number(ctx.dailyCycles ?? 0), Number(ctx.decisions ?? 0))
+          : flow
+
+        return {
+          title: resolved.title,
+          body: resolved.text,
+          ctaText: resolved.cta,
+          ctaUrl: ctx.renewalUrl ?? ctx.paymentUrl ?? undefined,
+        }
+      }
+
+      if (comebackKey === 'REFERRAL') {
+        const referral = absystemContent.REFERRAL
+        return {
+          title: referral.title,
+          body: referral.text,
+          ctaText: referral.cta,
+          ctaUrl: ctx.referralUrl ?? undefined,
+        }
+      }
+
+      const flow = absystemContent.COMEBACK_FLOWS[comebackKey as keyof typeof absystemContent.COMEBACK_FLOWS]
+      const resolved = typeof flow === 'function'
+        ? flow(ctx.lastAction ?? 'твій наступний крок')
+        : flow
+
+      return {
+        title: comebackKey === 'GAP_30_NO_SUB' ? 'Повернення після паузи' : 'Повернення в рух',
+        body: resolved.text,
+        ctaText: resolved.cta,
+        ctaUrl: resolved.ctaUrl ?? undefined,
+      }
+    }
     case NotificationEvent.POST_TRIAL_REPORTS:
       return {
         title: '📊 Твій рух за 7 днів',
         body: `Стрік: ${ctx.streakDays ?? 0} · Колесо: ${ctx.wheels ?? 0} · Сесії: ${ctx.sessions ?? 0}. У звітах ти побачиш що вже зібрано, що зараз на паузі і що повернеться після активації доступу.`,
       }
+    case 'RESULT_FOLLOWUP_24H':
+    case 'RESULT_FOLLOWUP_48H':
+    case 'RESULT_FOLLOWUP_72H':
+    case 'RESULT_DOJIM_24H':
+    case 'RESULT_DOJIM_48H':
+    case 'RESULT_DOJIM_72H':
+    case 'RESULT_DOJIM_5D':
+    case 'RESULT_DOJIM_7D':
+    case 'PAYMENT_REMINDER_24H':
+    case 'PAYMENT_REMINDER_48H':
+    case 'PAYMENT_REMINDER_72H':
+    case 'PAYMENT_REMINDER_5D':
+    case 'PAYMENT_REMINDER_7D':
+    case 'ZOOM_REMINDER_24H':
+    case 'ZOOM_REMINDER_2H':
+    case 'PLATFORM_INVITE_AFTER_ZOOM_1':
+    case 'PLATFORM_INVITE_AFTER_ZOOM_2': {
+      const copy = resolveAbTestFollowupCopy(type as AbTestFollowupTimerId, ctx.resultKey ?? null)
+      const isPlainReminder = type === 'ZOOM_REMINDER_24H'
+        || type === 'ZOOM_REMINDER_2H'
+        || type === 'PLATFORM_INVITE_AFTER_ZOOM_1'
+        || type === 'PLATFORM_INVITE_AFTER_ZOOM_2'
+      return {
+        title: copy.title,
+        body: isPlainReminder ? copy.body : `${userName}, ${copy.body}`,
+        ctaText: copy.cta,
+      }
+    }
     default:
       return {
         title: 'Starway',

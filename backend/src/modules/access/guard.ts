@@ -31,7 +31,7 @@ async function enforceClientAccess(
       req,
       res,
       'LEAD_FLOW_LOCK',
-      'Завершіть практикум, щоб рухатись далі',
+      'Спочатку завершуємо поточний практикум, а потім відкриваємо наступний крок',
     )
   }
 
@@ -40,7 +40,7 @@ async function enforceClientAccess(
       req,
       res,
       'SUBSCRIPTION_REQUIRED',
-      'Subscription required',
+      'Щоб відкрити цю частину, потрібно відновити доступ',
     )
   }
 
@@ -49,7 +49,7 @@ async function enforceClientAccess(
       req,
       res,
       'TELEGRAM_REQUIRED',
-      'Telegram connection required for this feature',
+      'Потрібно підключити Telegram, щоб продовжити',
     )
   }
 
@@ -126,7 +126,7 @@ export function requireLeadAccess(options: LeadAccessOptions = {}) {
       req,
       res,
       'LEAD_ACCESS_REQUIRED',
-      'Завершіть практикум, щоб продовжити цей маршрут',
+      'Поверніться до практикуму, щоб продовжити цей маршрут',
     )
   }
 }

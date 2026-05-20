@@ -1,22 +1,89 @@
-/* ============================================================
-   index.scss — FOCUS LANDING ENTRY POINT
-   ============================================================ */
+// apps/web/src/features/landings/focus/styles/index.scss
 
-@use './_variables.scss';
-@use './_glass.scss';
-@use './_animations.scss';
-@use './_layout.scss';
-@use './_typography.scss';
-@use './_first-practice.scss';
-@use './_topics.scss';
+// ═══════════════════════════════════════════════════════
+// 1. FOUNDATION
+// Токени, змінні, typography, mixins
+// ═══════════════════════════════════════════════════════
 
-@use './components/_buttons.scss';
-@use './components/_cards.scss';
-@use './components/_lists.scss';
+@use './variables';
+@use './break';
+@use './mixins';
+@use './typography';
 
-@use './_hero.scss';
-@use './_reviews.scss';
-@use './_break.scss';
+// ═══════════════════════════════════════════════════════
+// 2. UTILITIES
+// ═══════════════════════════════════════════════════════
 
-/* Google Fonts — після @use (Sass вимога) */
+@use './utilities/index' as *;
+
+// ═══════════════════════════════════════════════════════
+// 3. FOUNDATION INDEX
+// ═══════════════════════════════════════════════════════
+
+@use './foundation/index' as *;
+
+// ═══════════════════════════════════════════════════════
+// 4. LAYOUT
+// Глобальні layout системи
+// ═══════════════════════════════════════════════════════
+
+@use './layout';
+@use './layout-presets';
+
+// ═══════════════════════════════════════════════════════
+// 5. OBJECTS
+// Ambient / surfaces / reusable objects
+// ═══════════════════════════════════════════════════════
+
+@use './objects/index' as *;
+
+// ═══════════════════════════════════════════════════════
+// 6. COMPONENTS
+// Базові reusable UI
+// ═══════════════════════════════════════════════════════
+
+@use './components/index' as *;
+
+// ═══════════════════════════════════════════════════════
+// 7. SECTION COMPONENTS
+// Окремі стилі секцій
+// ═══════════════════════════════════════════════════════
+
+@use './hero';
+@use './about';
+@use './problem';
+@use './difference';
+@use './fit';
+@use './glass';
+@use './first-practice';
+@use './howItWorks';
+@use './animations';
+// @use './feedback';
+@use './included';
+@use './welcome-practice';
+
+// ═══════════════════════════════════════════════════════
+// 8. FONTS
+// ═══════════════════════════════════════════════════════
+
 @import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Oswald:wght@200..700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+// ═══════════════════════════════════════════════════════
+// 9. LANDING-SPECIFIC GLOBAL OVERRIDES
+// ═══════════════════════════════════════════════════════
+
+// Приховати глобальний AI assistant overlay
+body:has(.focus-layout) {
+  .assistant-overlay,
+  .assistant-panel-wrap,
+  .ava-bubble {
+    display: none;
+  }
+}
+
+// DOCS(18.05.2026): AI Sales Assistant Sidebar Icon - Gemini
+body:has(.dashboard-root) {
+  .sidebar-menu-item__icon--ai-assistant {
+    color: var(--color-gold); // Приклад: золотий колір
+  }
+}

@@ -1,176 +1,107 @@
-import { FOCUS_PAGE } from "@/features/landings/focus/content/focus.content"
+import {
+  CalendarDays,
+  ClipboardCheck,
+  MessagesSquare,
+  Rocket,
+  Target,
+} from 'lucide-react'
 
-type FocusStep = {
-  title: string
-  text: string
-}
+import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
 
-function chunkSteps(
-  steps: FocusStep[],
-  cols: number
-): FocusStep[][] {
-
-  const rows: FocusStep[][] = []
-
-  let i = 0
-
-  while (i < steps.length) {
-    rows.push(steps.slice(i, i + cols))
-    i += cols
-  }
-
-  return rows
-}
+const STEP_ICONS = [CalendarDays, Target, ClipboardCheck, MessagesSquare, Rocket]
 
 export default function HowItWorks() {
-
-  const {
-    subtitlesection,
-    title,
-    steps,
-    note,
-  } = FOCUS_PAGE.how
-
+  const { subtitlesection, title, steps, note } = FOCUS_PAGE.how
   const total = steps.length
-
-  function getCols(n: number): number {
-    for (const c of [4, 3, 2]) {
-      if (n % c === 0) return c
-      if (n % c !== 1) return c
-    }
-
-    return 3
-  }
-
-  const desktopCols = getCols(total)
-
-  const rows = chunkSteps(
-    steps,
-    desktopCols
-  )
 
   return (
     <section
       id="how"
-      className="focus-section"
+      className="focus-section o-ambient o-ambient--center"
       data-reveal
     >
-
+      {/* HEADER */}
       <div
         className="focus-container stack focus-reveal"
         data-reveal
         data-reveal-delay="1"
       >
+        <div className="focus-section-eyebrow">{subtitlesection}</div>
 
-        {/* header */}
-        <div className="focus-how-header stack">
+        <h2 className="focus-section-title" data-reveal data-reveal-delay="2">
+          {title}
+        </h2>
+      </div>
 
-          <div className="focus-section-eyebrow">
-            {subtitlesection}
-          </div>
+      {/* MAIN GRID */}
+      <div
+        className="focus-container focus-reveal"
+        data-reveal
+        data-reveal-delay="3"
+      >
+        <div className="focus-pipeline" aria-label={title}>
+          {steps.map((step, i) => {
+            const Icon = STEP_ICONS[i] ?? Target
 
-          <h2
-            className="focus-section-title"
-            data-reveal
-            data-reveal-delay="2"
-          >
-            {title}
-          </h2>
+            return (
+              <div
+                key={step.title}
+                className="focus-pipeline-step-wrap"
+                data-reveal
+                data-reveal-delay={String(i + 2)}
+              >
+                <article className="focus-pipeline-item focus-pipeline-card">
+                  <div className="focus-pipeline-step-badge" aria-hidden="true">
+                    {String(i + 1).padStart(2, '0')}
+                  </div>
 
-        </div>
+                  <div className="focus-pipeline-step-icon" aria-hidden="true">
+                    <Icon className="focus-pipeline-step-icon-svg" />
+                  </div>
 
-        {/* pipeline */}
-        <div
-          className="focus-pipeline focus-reveal"
-          aria-hidden="true"
-        >
+                  <div className="focus-pipeline-label">
+                    <strong className="focus-pipeline-label-title focus-note-primary">
+                      {step.title}
+                    </strong>
+                    <span className="focus-pipeline-label-sub focus-note-secondary">
+                      {step.text}
+                    </span>
+                  </div>
+                </article>
 
-          <div className="focus-pipeline-track" />
-
-          {steps.map((step, i) => (
-
-            <div
-              key={step.title}
-              className="focus-pipeline-item"
-            >
-
-              <div className="focus-pipeline-node">
-
-                <div className="focus-pipeline-node-glass">
-                  <div className="focus-pipeline-node-ring" />
-                </div>
-
-                <span className="focus-pipeline-node-num">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-
+                {i < total - 1 && (
+                  <div className="focus-pipeline-connector" aria-hidden="true">
+                    <span className="focus-pipeline-connector-line" />
+                    <span className="focus-pipeline-connector-arrow">→</span>
+                  </div>
+                )}
               </div>
+            )
+          })}
+        </div>
 
-<div className="focus-pipeline-label">
+        {/* NOTE */}
+        {note && (
+          <div
+            className="focus-about-note-row focus-reveal"
+            data-reveal
+            data-reveal-delay="4"
+          >
+            <div className="focus-quote-glass">
+              <div className="focus-note">
+                <p className="focus-note-primary">
+                  {note[0]}
+                </p>
 
-  <strong className="focus-pipeline-label-title">
-    {step.title}
-  </strong>
-
-  <span className="focus-pipeline-label-copy">
-
-    <span className="focus-pipeline-label-dot" />
-
-    {step.text}
-
-  </span>
-
-</div>
-              {i < total - 1 && (
-                <div
-                  className="focus-pipeline-arrow"
-                  aria-hidden="true"
-                >
-                  ›
-                </div>
-              )}
-
+                {note[1] && (
+                  <p className="focus-note-secondary">
+                    {note[1]}
+                  </p>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
-
-
-        {/* outcome */}
-        <div className="focus-pipeline-outcome focus-reveal">
-
-          <span className="focus-pipeline-outcome-arrow">
-            →
-          </span>
-
-          <span className="focus-pipeline-outcome-text">
-            Ти йдеш з рішенням, а не з розумінням
-          </span>
-
-        </div>
-
-        {/* note */}
-        <div
-          className="focus-problem-core-wrap focus-reveal"
-          data-reveal
-          data-reveal-delay="3"
-        >
-
-          <div className="focus-quote-glass focus-glass">
-
-            <p>
-              {note.map((line, i) => (
-                <span key={i}>
-                  {line}
-                  {i < note.length - 1
-                    ? <br />
-                    : null}
-                </span>
-              ))}
-            </p>
-
           </div>
-        </div>
-
+        )}
       </div>
     </section>
   )

@@ -170,6 +170,7 @@ export const wheelApi = api.injectEndpoints({
       query: () => ({
         url: '/wheel/cooldown',
       }),
+      keepUnusedDataFor: 300,
       providesTags: ['WheelCooldown'],
     }),
 

@@ -4,19 +4,19 @@
 
 import crypto from 'crypto';
 import type { PaymentData } from '../types.js';
+import { getWayForPayCallbackUrl } from './callbackUrl.js';
 
-const MERCHANT_ACCOUNT  = process.env.WAYFORPAY_MERCHANT_ACCOUNT  ?? '';
+const MERCHANT_ACCOUNT  = process.env.WAYFORPAY_MERCHANT_ACCOUNT  ?? process.env.WAYFORPAY_MERCHANT ?? '';
 const MERCHANT_DOMAIN   = process.env.WAYFORPAY_MERCHANT_DOMAIN   ?? '';
-const MERCHANT_SECRET   = process.env.WAYFORPAY_SECRET_KEY        ?? '';
-const CALLBACK_URL      = process.env.WAYFORPAY_CALLBACK_URL      ?? '';
+const MERCHANT_SECRET   = process.env.WAYFORPAY_SECRET_KEY        ?? process.env.WAYFORPAY_SECRET ?? '';
 
 /** Генерує HMAC-MD5 підпис для ініціалізаційного запиту WayForPay */
-export function generatePaymentSignature(data: PaymentData): string {
+export function generatePaymentSignature(data: PaymentData, orderDate: number): string {
   const str = [
     MERCHANT_ACCOUNT,
     MERCHANT_DOMAIN,
     data.payRef,
-    Math.floor(Date.now() / 1000).toString(),
+    orderDate.toString(),
     data.amount.toString(),
     data.currency ?? 'EUR',
     ...(data.product_name  ?? [data.productId]),
@@ -35,7 +35,7 @@ export function buildPaymentRequest(data: PaymentData): Record<string, unknown> 
   const productPrices = data.product_price ?? [data.amount];
   const productCounts = data.product_count ?? [1];
 
-  const signature = generatePaymentSignature(data);
+  const signature = generatePaymentSignature(data, orderDate);
 
   return {
     transactionType:  'CREATE_INVOICE',
@@ -44,7 +44,7 @@ export function buildPaymentRequest(data: PaymentData): Record<string, unknown> 
     merchantSignature: signature,
     apiVersion:        1,
     language:          'UK',
-    serviceUrl:        CALLBACK_URL,
+    serviceUrl:        getWayForPayCallbackUrl(),
     orderReference:    data.payRef,
     orderDate,
     amount:            data.amount,

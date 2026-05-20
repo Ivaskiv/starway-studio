@@ -1,6 +1,9 @@
 import type { Context } from 'telegraf'
+import { stankeyContent } from '@/products/stankey/config/stankey.content.js'
 import { startLeadMagnet } from '../flows/leadMagnet.flow.js'
 import { sendEntryOffer, sendStateMenu, resolveLinkedUserIdFromContext } from './start.js'
+import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
+import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
 
 export async function handleLidmagnet(ctx: Context) {
   const telegramId = String(ctx.from?.id ?? '')
@@ -21,10 +24,14 @@ export async function handleLidmagnet(ctx: Context) {
       await sendEntryOffer(ctx)
       return
     }
-    await ctx.reply('🎁 Запит прийнято. Якщо SendPulse налаштований правильно, гайд прийде наступним повідомленням.', {
+    const relationship = await resolveRelationshipMemory(userId, 'stankey').catch(() => null)
+    const copy = buildRecoveryCopy('question_missing', resolveConversationProfile('stankey'), {
+      relationship,
+    })
+    await ctx.reply(`${copy.title}\n${copy.body}\n\n${stankeyContent.telegram.product.lidmagnetAccepted}`, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🎁 Продовжити практикум', callback_data: 'lm_continue_material' }],
+          [{ text: stankeyContent.telegram.buttons.continueMaterial, callback_data: 'lm_continue_material' }],
         ],
       },
     })

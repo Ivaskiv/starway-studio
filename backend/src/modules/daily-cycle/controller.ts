@@ -5,6 +5,7 @@ import { getCachedTodayEntry } from '../../lib/db/dailyCache.js';
 
 import {
   getDailyEntryForDate,
+  getHistoricalDailyEntryForDate,
   getOrCreateTodayEntry,
   upsertDailyEntry,
   saveDailySession,
@@ -56,7 +57,13 @@ export async function getToday(req: AuthenticatedRequest, res: Response) {
 
     const rawDate = typeof req.query.date === 'string' ? req.query.date.trim() : ''
     if (rawDate) {
-      const entry = await getDailyEntryForDate(user.id, rawDate)
+      const entry = await getDailyEntryForDate(user.id, rawDate).catch(async (error) => {
+        if (error instanceof Error && error.message === 'daily_recovery_forbidden') {
+          return getHistoricalDailyEntryForDate(user.id, rawDate)
+        }
+
+        throw error
+      })
       return res.json(entry)
     }
 

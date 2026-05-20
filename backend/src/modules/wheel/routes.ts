@@ -3,6 +3,7 @@
 import { Router } from 'express'
 import { requireClientAccess } from '../access/guard.js'
 import { authRequired } from '../../modules/auth/middleware/auth.js'
+import { requireBehavioralReadAccess } from '../../core/access/behavioralAccess.js'
 
 import {
   createWheelAssessment,
@@ -16,48 +17,47 @@ import {
 
 const router = Router()
 router.use(authRequired)
-router.use(requireClientAccess)
 
 /**
  * Create wheel
  * POST /api/wheel
  */
-router.post('/', createWheelAssessment)
+router.post('/', requireClientAccess, createWheelAssessment)
 
 /**
  * Cooldown status
  * GET /api/wheel/cooldown
  */
-router.get('/cooldown', getWheelCooldownHandler)
+router.get('/cooldown', requireBehavioralReadAccess('wheel_cooldown'), getWheelCooldownHandler)
 
 /**
  * Wheel history
  * GET /api/wheel/history?limit=10
  */
-router.get('/history', getWheelHistoryHandler)
+router.get('/history', requireBehavioralReadAccess('wheel_history'), getWheelHistoryHandler)
 
 /**
  * Latest wheel
  * GET /api/wheel/latest
  */
-router.get('/latest', getLatestWheelHandler)
+router.get('/latest', requireBehavioralReadAccess('wheel_latest'), getLatestWheelHandler)
 
 /**
  * Analytics
  * GET /api/wheel/analytics
  */
-router.get('/analytics', getWheelAnalyticsHandler)
+router.get('/analytics', requireBehavioralReadAccess('wheel_analytics'), getWheelAnalyticsHandler)
 
 /**
  * Telegram reminder
  * POST /api/wheel/:id/telegram-reminder
  */
-router.post('/:id/telegram-reminder', sendWheelTelegramReminderHandler)
+router.post('/:id/telegram-reminder', requireClientAccess, sendWheelTelegramReminderHandler)
 
 /**
  * Download PDF report
  * GET /api/wheel/:id/pdf
  */
-router.get('/:id/pdf', generateWheelPDFHandler)
+router.get('/:id/pdf', requireClientAccess, generateWheelPDFHandler)
 
 export default router

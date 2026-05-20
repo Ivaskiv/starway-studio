@@ -1,0 +1,109 @@
+@use 'mixins' as *;
+
+/* =========================================================
+   INCLUDED SECTION
+========================================================= */
+.focus-included-card {
+  display: flex;
+
+  align-items: center;
+
+  gap: var(--space-md);
+
+  width: 100%;
+
+  min-height: clamp(96px, 10vw, 112px);
+
+  padding: var(--card-padding-sm);
+
+  background: linear-gradient(
+    180deg,
+    var(--focus-surface-bg-strong) 0%,
+    var(--focus-surface-bg) 100%
+  );
+
+  border-color: var(--focus-border-soft);
+
+  transition:
+    transform .2s ease,
+    border-color .2s ease,
+    box-shadow .2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+
+    border-color: var(--focus-surface-border-strong);
+
+    box-shadow: var(--focus-surface-shadow-strong);
+  }
+}
+
+.focus-included-card-content {
+  flex: 1;
+
+  min-width: 0;
+}
+
+.focus-included-title,
+.focus-included-copy {
+  margin: 0;
+}
+
+.focus-included-copy {
+  max-width: 56ch;
+}
+
+.focus-included-card:hover .focus-item-num {
+  color: #fafafa;
+
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(228, 231, 236, 0.96) 100%
+  );
+
+  border-color: rgba(255, 255, 255, 0.92);
+
+  transform: translateY(1px) scale(0.985);
+
+  box-shadow:
+    inset 0 2px 6px rgba(251, 250, 250, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+.focus-included-grid {
+  display: grid;
+
+  gap: clamp(14px, 1.8vw, 22px);
+
+  width: 100%;
+}
+
+#included {
+  .focus-container.stack {
+    gap: clamp(14px, 1.8vw, 24px);
+  }
+
+  .focus-section-title {
+    max-width: 12ch;
+
+    line-height: 0.92;
+
+    letter-spacing: 0.02em;
+  }
+
+  .l-section-grid--2col {
+    gap: var(--space-md);
+  }
+}
+
+@include below('phablet') {
+  .focus-included-grid {
+    gap: 14px;
+  }
+
+  .focus-included-card {
+    align-items: flex-start;
+  }
+}

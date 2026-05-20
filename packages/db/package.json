@@ -4,16 +4,25 @@
   "private": true,
   "type": "module",
   "prisma": {
-    "schema": "prisma/schema.prisma"
+    "schema": "prisma/schema.prisma",
+    "seed": "tsx prisma/seed.ts"
   },
   "main": "./dist/client.js",
   "types": "./dist/client.d.ts",
   "exports": {
-    ".": "./dist/client.js",
-    "./prisma-client": "./generated/prisma/index.js"
+    ".": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./prisma-client": {
+      "types": "./generated/client/index.d.ts",
+      "import": "./generated/client/index.js"
+    }
   },
   "scripts": {
     "prisma:generate": "pnpm exec prisma generate --schema ./prisma/schema.prisma",
+    "prisma:db:push": "pnpm exec prisma db push --schema ./prisma/schema.prisma",
+    "prisma:migrate": "pnpm exec prisma migrate dev --schema ./prisma/schema.prisma",
     "prisma:migrate:deploy": "pnpm exec prisma migrate deploy --schema ./prisma/schema.prisma",
     "build": "pnpm run prisma:generate && tsc -p tsconfig.json",
     "clean": "rm -rf dist",
@@ -24,7 +33,11 @@
     "dotenv": "^16.6.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.1.0",
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
     "prisma": "5.22.0",
     "typescript": "^5.9.3"
   }

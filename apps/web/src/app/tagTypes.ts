@@ -101,6 +101,9 @@ export const TAG_TYPES = [
 'Journal',
   'WebMap',
   'WebMapDailyQuestion',
+  'Lexicon',
+  'CampaignMemory',
+  'Platform',
 ] as const
 
 export type TagType = (typeof TAG_TYPES)[number]

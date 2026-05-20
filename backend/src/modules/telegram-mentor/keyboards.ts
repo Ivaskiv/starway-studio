@@ -1,5 +1,7 @@
 // backend/src/modules/telegram-mentor/keyboards.ts
 import { Markup } from 'telegraf'
+import { resolveTelegramWebappBaseUrl } from '../../config/webapp.js'
+import { stankeyContent } from '@/products/stankey/config/stankey.content.js'
 
 type InlineKeyboard = ReturnType<typeof Markup.inlineKeyboard>
 type InlineKeyboardButton =
@@ -7,14 +9,21 @@ type InlineKeyboardButton =
   | { text: string; url: string }
   | { text: string; web_app: { url: string } }
 
-const appBaseUrl = (
-  process.env.TELEGRAM_PUBLIC_FRONTEND_URL?.trim()
-  || process.env.PUBLIC_FRONTEND_URL?.trim()
-  || process.env.MINIAPP_URL?.trim()
-  || process.env.FRONTEND_URL?.trim()
-  || 'https://starway-frontend.vercel.app/miniapp'
-).replace(/\/$/, '')
 const miniAppVersion = process.env.MINIAPP_VERSION?.trim() || 'dev'
+const isDevRuntime = process.env.NODE_ENV !== 'production'
+const DEV_TEST_PAYMENT_URL = 'https://secure.wayforpay.com/button/bcd1a02457187'
+const DEV_TEST_PAYMENT_BUTTON = {
+  text: '🧪 Тестова оплата 1 грн',
+  url: DEV_TEST_PAYMENT_URL,
+} as const
+
+function getAppBaseUrl(): string {
+  return resolveTelegramWebappBaseUrl()
+}
+
+function isLocalhostHost(hostname: string): boolean {
+  return ['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname)
+}
 
 function isTelegramSafeUrl(value: string): boolean {
   try {
@@ -23,14 +32,28 @@ function isTelegramSafeUrl(value: string): boolean {
       return false
     }
 
-    return !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)
+    return !isLocalhostHost(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isDevLocalUrl(value: string): boolean {
+  if (!isDevRuntime) {
+    return false
+  }
+
+  try {
+    const url = new URL(value)
+    return ['http:', 'https:'].includes(url.protocol) && isLocalhostHost(url.hostname)
   } catch {
     return false
   }
 }
 
 export function getTelegramAppUrl(path = '/miniapp'): string | null {
-  if (!isTelegramSafeUrl(appBaseUrl)) {
+  const appBaseUrl = getAppBaseUrl()
+  if (!isTelegramSafeUrl(appBaseUrl) && !isDevLocalUrl(appBaseUrl)) {
     return null
   }
 
@@ -41,12 +64,21 @@ export function getTelegramAppUrl(path = '/miniapp'): string | null {
   return url.toString()
 }
 
+const telegramCopy = stankeyContent.telegram
+
 function appButton(
   label: string,
   url: string | null,
   fallbackCallbackData = 'return_main_menu',
 ): InlineKeyboardButton {
   if (url) {
+    if (isDevLocalUrl(url)) {
+      return {
+        text: label,
+        url,
+      }
+    }
+
     return {
       text: label,
       web_app: { url },
@@ -54,36 +86,65 @@ function appButton(
   }
 
   return {
-    text: '← Повернутись',
+    text: telegramCopy.buttons.back,
     callback_data: fallbackCallbackData,
   }
 }
 
+function isPaymentButton(button: InlineKeyboardButton): boolean {
+  if ('callback_data' in button) {
+    return button.callback_data === 'open_paid_checkout'
+      || button.callback_data.startsWith('pay_stankey_')
+      || button.callback_data.startsWith('open_focus_payment')
+  }
+
+  if ('url' in button) {
+    return button.url.includes('wayforpay.com')
+      || button.url.includes('/payments/wayforpay/checkout/')
+  }
+
+  return false
+}
+
+// TEMP DEV(18.05.2026): test payment button — Codex
+export function withDevTestPaymentButton<T extends InlineKeyboardButton>(
+  rows: T[][],
+): Array<Array<T | typeof DEV_TEST_PAYMENT_BUTTON>> {
+  if (!isDevRuntime || !rows.some((row) => row.some(isPaymentButton))) {
+    return rows
+  }
+
+  return [
+    ...rows,
+    [DEV_TEST_PAYMENT_BUTTON],
+  ]
+}
+
 export const supportMenuKeyboard: InlineKeyboard = Markup.inlineKeyboard([
-  [Markup.button.callback('🔒 Політика', 'open_privacy')],
-  [Markup.button.callback('← Повернутись', 'return_main_menu')],
+  [Markup.button.callback(telegramCopy.buttons.privacy, 'open_privacy')],
+  [Markup.button.callback(telegramCopy.buttons.back, 'return_main_menu')],
 ])
 
 export const cancelKeyboard: InlineKeyboard = Markup.inlineKeyboard([
-  [Markup.button.callback('← Повернутись', 'return_main_menu')],
+  [Markup.button.callback(telegramCopy.buttons.back, 'return_main_menu')],
 ])
 
 export const yesNoKeyboard: InlineKeyboard = Markup.inlineKeyboard([
   [
-    Markup.button.callback('✅ Виконано', 'task_done'),
-    Markup.button.callback('⏭ Пропустити', 'task_skip'),
+    Markup.button.callback(telegramCopy.buttons.taskCompleted, 'task_done'),
+    Markup.button.callback(telegramCopy.buttons.taskSkip, 'task_skip'),
   ],
 ])
 
 export function taskDoneKeyboard(taskId: string): InlineKeyboard {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('✅ Зроблено', `done_${taskId}`)],
+    [Markup.button.callback(telegramCopy.buttons.taskDone, `done_${taskId}`)],
   ])
 }
 
 export function continueToMentorKeyboard(): InlineKeyboard {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('💬 Продовжити в Ментор', 'continue_ai_mentor')],
+    [Markup.button.callback(telegramCopy.buttons.continueInMentor, 'continue_ai_mentor')],
   ])
 }
 
@@ -91,20 +152,20 @@ export function continueOrRestartKeyboard(): InlineKeyboard {
   const appUrl = getTelegramAppUrl()
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback('▶️ Продовжити', 'continue_ai_mentor'),
-      appButton('🔄 Почати заново', appUrl, 'restart_flow'),
+      Markup.button.callback(telegramCopy.buttons.continue, 'continue_ai_mentor'),
+      appButton(telegramCopy.buttons.restart, appUrl, 'restart_flow'),
     ],
   ])
 }
 
-export function openAppKeyboard(path = '/miniapp', label = '🌐 Відкрити додаток'): InlineKeyboard {
+export function openAppKeyboard(path = '/miniapp', label: string = telegramCopy.buttons.openApp): InlineKeyboard {
   const appUrl = getTelegramAppUrl(path)
   return Markup.inlineKeyboard([
     [appButton(label, appUrl)],
   ])
 }
 
-export function openUrlKeyboard(url: string | null, label = '🌐 Відкрити додаток'): InlineKeyboard {
+export function openUrlKeyboard(url: string | null, label: string = telegramCopy.buttons.openApp): InlineKeyboard {
   if (url && isTelegramSafeUrl(url)) {
     return Markup.inlineKeyboard([
       [{ text: label, web_app: { url } }],
@@ -113,50 +174,52 @@ export function openUrlKeyboard(url: string | null, label = '🌐 Відкрит
 
   return Markup.inlineKeyboard([
     [
-      url
+      url && (isDevLocalUrl(url) || isTelegramSafeUrl(url))
         ? Markup.button.url(label, url)
-        : Markup.button.callback('← Повернутись', 'return_main_menu'),
+        : Markup.button.callback(telegramCopy.buttons.back, 'return_main_menu'),
     ],
   ])
 }
 
 export function aiMentorStartKeyboard(): InlineKeyboard {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('✨ Розпочати', 'start_trial')],
+    [Markup.button.callback(telegramCopy.buttons.start, 'start_trial')],
   ])
 }
 
 export function leadMagnetChoiceKeyboard(): InlineKeyboard {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('🎯 Дізнатись свій стан', 'start_wheel')],
-    [Markup.button.callback('✨ Спробувати 7 днів', 'start_trial')],
+    [Markup.button.callback(telegramCopy.buttons.discoverState, 'start_wheel')],
+    [Markup.button.callback(telegramCopy.buttons.trySevenDays, 'start_trial')],
   ])
 }
 
 export function trialActiveKeyboard(): InlineKeyboard {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback('📋 Моє завдання', 'open_tasks'),
-      Markup.button.callback('📊 Мій стан', 'open_status'),
+      Markup.button.callback(telegramCopy.buttons.myTask, 'open_tasks'),
+      Markup.button.callback(telegramCopy.buttons.myState, 'open_status'),
     ],
   ])
 }
 
 export function trialExpiredKeyboard(): InlineKeyboard {
-  const appUrl = getTelegramAppUrl()
-  return Markup.inlineKeyboard([
+  return Markup.inlineKeyboard(withDevTestPaymentButton([
     [
-      appButton('🚀 Отримати доступ', appUrl),
-      Markup.button.callback('🧭 Знайти точки опори', 'open_lidmagnet'),
+      Markup.button.callback(telegramCopy.buttons.pay, 'open_paid_checkout'),
+      Markup.button.callback(telegramCopy.buttons.getAccess, 'open_paid_checkout'),
     ],
-  ])
+    [
+      Markup.button.callback(telegramCopy.buttons.openLidmagnet, 'open_lidmagnet'),
+    ],
+  ]))
 }
 
 export function subscribedKeyboard(): InlineKeyboard {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback('🤖 ABsystem', 'continue_ai_mentor'),
-      Markup.button.callback('📊 Мій стан', 'open_status'),
+      Markup.button.callback(telegramCopy.buttons.mentor, 'continue_ai_mentor'),
+      Markup.button.callback(telegramCopy.buttons.myState, 'open_status'),
     ],
   ])
 }

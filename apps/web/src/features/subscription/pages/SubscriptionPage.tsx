@@ -1,9 +1,12 @@
+import { useAppSelector } from '@/app/hooks'
 import { ROUTES } from '@/config/routes'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
+import { selectIsAuthenticated } from '@/features/auth/services/auth.slice'
 import { consumePostPaymentRedirect, POST_PAYMENT_REDIRECT_KEY } from '@/features/paywall/usePaywall'
-import { useCreatePaymentMutation, useGetSubscriptionQuery } from '@/features/subscription/services/billing.api'
+import { ProductRoomCard } from '@/features/subscription/components/StankeyRoomCard'
+import { useCreatePaymentMutation, useCreateProductPaymentMutation, useGetSubscriptionQuery } from '@/features/subscription/services/billing.api'
 import { SUBSCRIPTION_BADGE_CLASS, SUBSCRIPTION_PLANS } from '@/features/subscription/constants/plans'
-import { useStartTrialMutation, useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
+import { useStartTrialMutation } from '@/features/trial/services/trial.api'
 import { useUserProgress } from '@/features/user/hooks/useUserProgress'
 import { WHEEL_TEXTS } from '@/features/wheel/constants/texts'
 import { submitWayForPayForm } from '@/features/subscription/utils/wayforpayCheckout'
@@ -12,25 +15,28 @@ import { useEffect, useState } from 'react'
 
 export default function SubscriptionPage() {
   const navigate = useNavigate()
-  const { onboardingState } = useUserProgress()
-  const { hasCoreAccess: systemHasCoreAccess, subscriptionActive: systemSubscriptionActive, trialActive } = useSystemState()
-  const { data: trial } = useGetTrialStatusQuery()
-  const { data: subscriptionStatus } = useGetSubscriptionQuery()
+  const isAuthenticated = useAppSelector(selectIsAuthenticated)
+  const { onboardingState, trialStatus } = useUserProgress()
+  const { hasCoreAccess: systemHasCoreAccess, subscriptionActive: systemSubscriptionActive, trialActive, subscription } = useSystemState()
+  const { data: subscriptionDashboard } = useGetSubscriptionQuery(undefined, { skip: !isAuthenticated })
   const [startTrial, startTrialState] = useStartTrialMutation()
   const [createPayment, createPaymentState] = useCreatePaymentMutation()
+  const [createProductPayment, createProductPaymentState] = useCreateProductPaymentMutation()
   const [paymentFailed, setPaymentFailed] = useState(false)
 
+  const stankeyRoom = subscriptionDashboard?.productRooms?.find((room) => room.key === 'STANKEY') ?? null
+
   const subscriptionActive = Boolean(
-    systemSubscriptionActive || subscriptionStatus?.subscription?.status === 'ACTIVE'
+    systemSubscriptionActive || subscription?.status === 'ACTIVE'
   )
   const hasCoreAccess = Boolean(systemHasCoreAccess || subscriptionActive)
   const isTrialActive = Boolean(trialActive && !subscriptionActive)
   const isTrialExpired = Boolean(
     !hasCoreAccess
     && !trialActive
-    && ((trial?.currentDay ?? 0) > 0 || trial?.startedAt),
+    && ((trialStatus?.currentDay ?? 0) > 0 || trialStatus?.startedAt),
   )
-  const trialDaysLeft = Math.max(0, trial?.daysLeft ?? 0)
+  const trialDaysLeft = Math.max(0, trialStatus?.daysLeft ?? 0)
   const pricingOptions = SUBSCRIPTION_PLANS.map((plan) => {
     if (plan.id === 'monthly') {
       return {
@@ -65,9 +71,9 @@ export default function SubscriptionPage() {
   })
 
   useEffect(() => {
-    if (hasCoreAccess || isTrialActive || isTrialExpired || !onboardingState.isNewUser) return
+    if (!isAuthenticated || hasCoreAccess || isTrialActive || isTrialExpired || !onboardingState.isNewUser) return
     startTrial().catch(() => undefined)
-  }, [hasCoreAccess, isTrialActive, isTrialExpired, onboardingState.isNewUser, startTrial])
+  }, [hasCoreAccess, isAuthenticated, isTrialActive, isTrialExpired, onboardingState.isNewUser, startTrial])
 
   useEffect(() => {
     if (!subscriptionActive) return
@@ -75,8 +81,19 @@ export default function SubscriptionPage() {
     navigate(redirectPath ?? ROUTES.CYCLE, { replace: true })
   }, [navigate, subscriptionActive])
 
+  const openRuntimeTarget = (target: string | null | undefined) => {
+    if (!target) return
+
+    if (/^https?:\/\//i.test(target)) {
+      window.location.assign(target)
+      return
+    }
+
+    navigate(target)
+  }
+
   const handleStartTrial = async () => {
-    if (!hasCoreAccess && !isTrialActive && !isTrialExpired) {
+    if (isAuthenticated && !hasCoreAccess && !isTrialActive && !isTrialExpired) {
       try {
         await startTrial().unwrap()
       } catch {
@@ -98,6 +115,49 @@ export default function SubscriptionPage() {
     } catch {
       setPaymentFailed(true)
     }
+  }
+
+  const handleStankeyPrimaryAction = async () => {
+    if (!stankeyRoom) return
+
+    const opensRoom = (
+      stankeyRoom.state === 'active'
+      || stankeyRoom.state === 'trial'
+      || stankeyRoom.state === 'onboarding-started'
+      || stankeyRoom.behaviorPolicy.primaryCta === 'reopen'
+      || stankeyRoom.activationState === 'gifted'
+      || stankeyRoom.activationState === 'bonus'
+    )
+
+    if (opensRoom) {
+      openRuntimeTarget(stankeyRoom.openUrl ?? stankeyRoom.progressUrl)
+      return
+    }
+
+    try {
+      setPaymentFailed(false)
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(POST_PAYMENT_REDIRECT_KEY, ROUTES.SUBSCRIPTION)
+      }
+      const response = await createProductPayment({
+        productId: 'stankey',
+        planCode: 'monthly',
+      }).unwrap()
+      submitWayForPayForm(response.paymentUrl, response.payment)
+    } catch {
+      setPaymentFailed(true)
+    }
+  }
+
+  const handleStankeySecondaryAction = () => {
+    if (!stankeyRoom) return
+
+    if (stankeyRoom.state === 'inactive') {
+      openRuntimeTarget(stankeyRoom.openUrl ?? ROUTES.DASHBOARD)
+      return
+    }
+
+    openRuntimeTarget(stankeyRoom.progressUrl ?? stankeyRoom.openUrl)
   }
 
   const statusCopy = subscriptionActive
@@ -128,6 +188,19 @@ export default function SubscriptionPage() {
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="grid gap-4 lg:grid-cols-3">
+            {stankeyRoom ? (
+              <div className="lg:col-span-3">
+                <ProductRoomCard
+                  productId="STANKEY"
+                  room={stankeyRoom}
+                  productProgress={subscriptionDashboard?.productProgress ?? null}
+                  isBusy={createProductPaymentState.isLoading}
+                  onPrimaryAction={handleStankeyPrimaryAction}
+                  onSecondaryAction={handleStankeySecondaryAction}
+                />
+              </div>
+            ) : null}
+
             {pricingOptions.map((plan) => {
               const isGrowth = plan.displayName === 'Growth'
               const isArchitect = plan.displayName === 'Architect'

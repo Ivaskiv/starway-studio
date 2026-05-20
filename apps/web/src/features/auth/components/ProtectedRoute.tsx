@@ -1,23 +1,23 @@
 // frontend/src/features/auth/components/ProtectedRoute.tsx
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback';
 import { Button } from '@/ui';
-import { useGetMySystemStateQuery } from '@/features/auth/services/accessApi';
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext';
+import { useSystemState } from '@/features/auth/hooks/useSystemState';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuthRestoreStatus } from '../context/AuthRestoreContext';
 import { useAccess } from '../hooks/useAccess';
 import { selectIsAuthenticated } from '../services/auth.slice';
 import type { AccessKey } from '../types/auth.types';
-import { useEffect } from 'react';
 
-const DEV_BYPASS = import.meta.env.VITE_AUTH_BYPASS === 'true';
+const DEV_BYPASS = import.meta.env.DEV || import.meta.env.VITE_AUTH_BYPASS === 'true';
 
 interface ProtectedRouteProps {
   children: ReactNode;
   ability: AccessKey; // що перевіряємо
-  redirectTo?: string; // куди редіректити без доступу
   showDeniedScreen?: boolean; // показати екран чи просто редірект
 }
 
@@ -30,9 +30,8 @@ const abilityLabelMap: Partial<Record<AccessKey, string>> = {
 function AccessDeniedScreen({ ability }: { ability: AccessKey }) {
   const navigate = useNavigate();
   const { trialEnd, plan } = useAccess();
-  const { data: systemState } = useGetMySystemStateQuery();
+  const { accessControl } = useSystemState();
   const trialEnded = !!trialEnd && new Date(trialEnd).getTime() <= Date.now() && plan === 'free';
-  const accessControl = systemState?.accessControl;
   const isLeadLocked = accessControl?.currentFlow === 'lead-magnet';
   const isContactBlocked = accessControl?.accessLevel === 'CLIENT' && accessControl?.hasRequiredContacts === false;
   const abilityLabel = abilityLabelMap[ability] ?? 'цього модуля';
@@ -95,9 +94,13 @@ function AccessDeniedScreen({ ability }: { ability: AccessKey }) {
 export function ProtectedRoute({
   children,
   ability,
-  redirectTo = '/dashboard',
   showDeniedScreen = false,
 }: ProtectedRouteProps) {
+  const {
+    openAuthModal,
+    openProtectedAccessModal,
+    routeReady,
+  } = useSessionOrchestrator()
   const authStatus = useAuthRestoreStatus();
   const isAuthReady = authStatus === 'ready';
   const isAuthPending = authStatus === 'idle' || authStatus === 'restoring';
@@ -116,32 +119,45 @@ export function ProtectedRoute({
     })
   }, [ability, authStatus, isAuthenticated, isAuthPending, isAccessReady, isLoading])
 
- // DEV MODE — бачиш ВСЕ
+  useEffect(() => {
+    if (DEV_BYPASS) return
+    if (isAuthenticated) return
+    if (isAuthPending) return
+
+    openAuthModal({
+      mode: 'login',
+      reason: 'protected_route',
+    })
+  }, [isAuthenticated, isAuthPending, openAuthModal])
+
+  useEffect(() => {
+    if (DEV_BYPASS) return
+    if (!isAuthenticated || isLoading || !isAccessReady) return
+    if (can(ability)) return
+    if (showDeniedScreen) return
+
+    openProtectedAccessModal({
+      title: 'Доступ ще не відкритий',
+      message: 'Цей модуль стане доступним після активації підписки або завершення обовʼязкового кроку доступу.',
+      ctaLabel: 'Перейти до доступу',
+      ctaPath: '/dashboard/subscription',
+    })
+  }, [ability, can, isAccessReady, isAuthenticated, isLoading, openProtectedAccessModal, showDeniedScreen])
+
   if (DEV_BYPASS) {
     return <>{children}</>;
   }
 
-  if (isAuthPending || !isAccessReady || isLoading) {
+  if (isAuthPending || !isAccessReady || isLoading || !routeReady) {
     return <LoadingFallback />;
   }
 
   if (!isAuthenticated) {
-    // Guests should not reach protected routes
-    return <Navigate to="/" replace />;
+    return <LoadingFallback />;
   }
 
   if (!can(ability)) {
-    // fix code_x: prevent redirect loop when fallback redirect equals current protected route.
-    const sameTarget = typeof window !== 'undefined' && window.location.pathname === redirectTo;
-    if (sameTarget) {
-      return showDeniedScreen ? <AccessDeniedScreen ability={ability} /> : <Navigate to="/" replace />;
-    }
-
-    return showDeniedScreen ? (
-      <AccessDeniedScreen ability={ability} />
-    ) : (
-      <Navigate to={redirectTo} replace />
-    );
+    return showDeniedScreen ? <AccessDeniedScreen ability={ability} /> : <LoadingFallback />;
   }
   return <>{children}</>;
 }

@@ -1,61 +1,72 @@
-import { BookText, Bot, CalendarDays, Gem, MessagesSquare, Video } from 'lucide-react'
-
-import { FOCUS_PAYMENT_URL } from '../utils/constants'
 import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
-
-const includedIcons = [MessagesSquare, Video, CalendarDays, Bot, BookText]
+import { handleFocusPaymentClick } from '@/features/subscription/utils/openExternalPaymentUrl'
+import { FOCUS_PAYMENT_URL } from '../content/constants'
 
 type FocusIncludedItem = [string, string]
 
 export default function Included() {
-  const { subtitlesection, title, cta } = FOCUS_PAGE.included
+  const { subtitlesection, title, cta, note } = FOCUS_PAGE.included
   const items = FOCUS_PAGE.included.items as FocusIncludedItem[]
 
   return (
-    <section id="included" className="focus-section focus-section-secondary stack" data-reveal>
-      <div className="focus-container focus-reveal stack" data-reveal data-reveal-delay="1">
-        <div className="focus-section-eyebrow focus-hero-stat-top">{subtitlesection}</div>
+    <section
+      id="included"
+      className="focus-section o-ambient o-ambient--center"
+      data-reveal
+    >
+      {/* HEADER */}
+      <div
+        className="focus-container stack focus-reveal"
+        data-reveal
+        data-reveal-delay="1"
+      >
+        <div className="focus-section-eyebrow">{subtitlesection}</div>
+
         <h2 className="focus-section-title" data-reveal data-reveal-delay="2">
           {title}
         </h2>
       </div>
 
-      <div className="focus-container focus-included-grid focus-reveal" data-reveal data-reveal-delay="3">
-        {items.map((item: FocusIncludedItem, index: number) => {
-          const Icon = includedIcons[index] ?? MessagesSquare
-          const cardTitle = item[0] ?? ''
-          const cardText = item[1] ?? ''
+      <div
+        className="focus-container focus-reveal stack-xl"
+        data-reveal
+        data-reveal-delay="3"
+      >
+        <div className="focus-included-grid">
+          {items.map((item: FocusIncludedItem, index: number) => {
+            const cardTitle = item[0] ?? ''
+            const cardText = item[1] ?? ''
+            const bodyText = cardText || ''
 
-          return (
-            <div key={cardTitle} className="focus-included-card focus-card">
-              <div className="focus-included-icon">
-                <Icon className="focus-icon" aria-hidden="true" />
+            return (
+              <div key={cardTitle} className="focus-card focus-included-card">
+                <span className="focus-item-num" aria-hidden="true">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+
+                <div className="focus-card-content focus-included-card-content">
+                  <h4 className="focus-included-title focus-note-primary">
+                    {cardTitle}
+                  </h4>
+                  {bodyText ? (
+                    <p className="focus-included-copy">
+                      {bodyText}
+                    </p>
+                  ) : null}
+                </div>
               </div>
-
-              <div className="focus-card-content">
-                <h4 className="focus-included-title">{cardTitle}</h4>
-                {cardText ? <p className="focus-included-copy">{cardText}</p> : null}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="focus-container focus-problem-core-wrap focus-reveal" data-reveal data-reveal-delay="3">
-        <div className="focus-included-card focus-included-card-highlight focus-card">
-          <div className="focus-included-icon">
-            <Gem className="focus-icon" aria-hidden="true" />
-          </div>
-
-          <a
-            className="focus-btn-primary focus-btn-full focus-card-cta"
-            href={FOCUS_PAYMENT_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {cta}
-          </a>
+            )
+          })}
         </div>
+        <a
+          className="focus-btn-primary focus-btn-full"
+          href={FOCUS_PAYMENT_URL}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => handleFocusPaymentClick(event, FOCUS_PAYMENT_URL)}
+        >
+          {cta}
+        </a>
       </div>
     </section>
   )

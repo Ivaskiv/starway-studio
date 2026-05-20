@@ -15,6 +15,7 @@ declare const Telegram:
           show: () => void
           hide: () => void
           onClick: (callback: () => void) => void
+          offClick?: (callback: () => void) => void
         }
         initData: string
         initDataUnsafe: {
@@ -50,18 +51,22 @@ export function useMiniAppTelegram({
   useEffect(() => {
     if (typeof Telegram === 'undefined') return
 
-    Telegram.WebApp.MainButton.setText(page === 'mentor' ? 'Відкрити асистента' : 'Відкрити Starway')
-    Telegram.WebApp.MainButton.onClick(() => {
+    const handleMainButtonClick = () => {
       if (page === 'mentor') {
         onOpenMentor()
         return
       }
 
       onOpenStarway()
-    })
+    }
+
+    Telegram.WebApp.MainButton.setText(page === 'mentor' ? 'Відкрити асистента' : 'Відкрити Starway')
+    Telegram.WebApp.MainButton.offClick?.(handleMainButtonClick)
+    Telegram.WebApp.MainButton.onClick(handleMainButtonClick)
     Telegram.WebApp.MainButton.show()
 
     return () => {
+      Telegram.WebApp.MainButton.offClick?.(handleMainButtonClick)
       Telegram.WebApp.MainButton.hide()
     }
   }, [onOpenMentor, onOpenStarway, page])

@@ -1,5 +1,17 @@
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
+import { enrichCanonicalFlowOrchestrationEvent } from '../../core/state-machine/flowOrchestrationFoundation.js'
+import { enrichCanonicalCtaMessageEvent } from '../../core/state-machine/ctaFoundation.js'
+import { enrichCanonicalSecurityEvent } from '../../core/state-machine/securityFoundation.js'
+import { enrichBehavioralEvent } from '../analytics/behavioral.js'
+import {
+  buildRuntimeTelemetry,
+  claimRuntimeEventReplay,
+  withRuntimeAdvisoryLock,
+  type RuntimeTelemetry,
+} from '../../core/runtime/runtimeIdempotency.js'
+import { buildRuntimeResilienceSnapshot } from '../../core/runtime/runtimeResilience.js'
+import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 
 export type EventSource = 'telegram' | 'web' | 'miniapp'
 
@@ -14,6 +26,9 @@ export interface TrackEventInput {
   utmCampaign?: string | null
   productId?: string | null
   upsertUser?: boolean
+  runtime?: Partial<RuntimeTelemetry> & {
+    replay_window_ms?: number
+  }
 }
 
 export interface TrackQuestionEventInput {
@@ -35,6 +50,19 @@ export interface RecentUserEvent {
 }
 
 let hasWarnedAboutMissingEventTable = false
+const EVENT_IDEMPOTENCY_TTL_MS = 10 * 60_000
+const RESILIENCE_EVENT_PREFIXES = ['payment_', 'billing_', 'callback_', 'FLOW_', 'CTA_']
+const RESILIENCE_EVENT_TYPES = new Set([
+  'payment_success',
+  'payment_failed',
+  'payment_callback_replay_attempt',
+  'payment_callback_invalid_signature',
+  'billing_webhook_invalid',
+  'callback_replay_attempt',
+  'CTA_CLICKED',
+  'FLOW_TRIGGERED',
+  'FLOW_SKIPPED',
+])
 
 function isPrismaKnownError(error: unknown): error is { code?: string; meta?: unknown } {
   return typeof error === 'object' && error !== null
@@ -52,6 +80,10 @@ function isMissingEventTableError(error: unknown): boolean {
   return table.includes('Event')
 }
 
+function isJsonObject(value: unknown): value is Prisma.JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
 function normalizeEmail(value: string | null | undefined): string | null {
   const email = String(value ?? '').trim().toLowerCase()
   return email || null
@@ -65,21 +97,94 @@ function buildTrackingPayload(input: TrackEventInput): Prisma.InputJsonValue | u
     ...(input.productId ? { productId: input.productId } : {}),
   }
 
-  const hasTrackingFields = Object.keys(tracking).length > 0
-
-  if (!hasTrackingFields && input.payload === undefined) {
-    return undefined
-  }
-
-  const payload = typeof input.payload === 'object' && input.payload !== null && !Array.isArray(input.payload)
+  const rawPayload = typeof input.payload === 'object' && input.payload !== null && !Array.isArray(input.payload)
     ? { ...(input.payload as Prisma.JsonObject) }
     : {}
 
-  if (hasTrackingFields) {
+  const behavioral = enrichBehavioralEvent({
+    type: input.type,
+    state: input.state,
+    payload: rawPayload,
+  })
+  const canonicalFoundation = enrichCanonicalCtaMessageEvent({
+    type: input.type,
+    state: input.state,
+    payload: behavioral.payload,
+  })
+  const flowOrchestration = enrichCanonicalFlowOrchestrationEvent({
+    type: input.type,
+    state: input.state,
+    payload: canonicalFoundation.payload,
+  })
+  const securityFoundation = enrichCanonicalSecurityEvent({
+    type: input.type,
+    state: input.state,
+    payload: flowOrchestration.payload,
+    tenantId: input.productId ?? null,
+    userId: input.userId ?? null,
+    productId: input.productId ?? null,
+  })
+
+  const payload = {
+    ...securityFoundation.payload,
+  }
+
+  if (Object.keys(tracking).length > 0) {
     payload.tracking = tracking
   }
 
+  payload.behavioral = behavioral.behavioral
+
+  if (canonicalFoundation.canonical) {
+    payload.cta_message = canonicalFoundation.canonical
+  }
+
+  if (flowOrchestration.canonical) {
+    payload.flow_orchestration = flowOrchestration.canonical
+  }
+
+  if (securityFoundation.canonical) {
+    payload.security = securityFoundation.canonical
+  }
+
   return payload as Prisma.InputJsonValue
+}
+
+function buildRuntimePayload(input: TrackEventInput, basePayload: Prisma.JsonValue | null | undefined): RuntimeTelemetry {
+  const security = isJsonObject(basePayload) && isJsonObject(basePayload.security)
+    ? basePayload.security
+    : null
+  const requestFingerprint = security && typeof security.request_fingerprint === 'string'
+    ? security.request_fingerprint
+    : null
+
+  return buildRuntimeTelemetry({
+    scope: 'event',
+    type: input.type,
+    source: input.source,
+    userId: input.userId ?? null,
+    state: input.state ?? null,
+    tenantId: input.productId ?? null,
+    payload: basePayload ?? null,
+    requestFingerprint,
+    correlationId: input.runtime?.correlation_id ?? null,
+    requestId: input.runtime?.request_id ?? null,
+    flowExecutionId: input.runtime?.flow_execution_id ?? null,
+    replayTraceId: input.runtime?.replay_trace_id ?? null,
+    runtimeStage: input.runtime?.runtime_stage ?? input.state ?? input.type,
+    orchestrationPath: input.runtime?.orchestration_path,
+    retryAttempt: input.runtime?.retry_attempt ?? 0,
+    replayReason: input.runtime?.replay_reason ?? null,
+    executionLatencyMs: input.runtime?.execution_latency_ms ?? null,
+    queueLatencyMs: input.runtime?.queue_latency_ms ?? null,
+    deliveryLatencyMs: input.runtime?.delivery_latency_ms ?? null,
+    handlerDurationMs: input.runtime?.handler_duration_ms ?? null,
+    failureClassification: input.runtime?.failure_classification ?? null,
+  })
+}
+
+function shouldAssessRuntimeResilience(input: TrackEventInput): boolean {
+  return RESILIENCE_EVENT_TYPES.has(input.type) || RESILIENCE_EVENT_PREFIXES.some(prefix => input.type.startsWith(prefix))
 }
 
 async function resolveTrackingUserId(input: TrackEventInput): Promise<string | null> {
@@ -129,14 +234,87 @@ export async function trackLeadEnteredApp(input: TrackEventInput): Promise<void>
 export async function trackEvent(input: TrackEventInput): Promise<void> {
   try {
     const payload = buildTrackingPayload(input)
-    await prisma.event.create({
-      data: {
-        ...(input.userId ? { userId: input.userId } : {}),
+    const runtime = buildRuntimePayload(input, payload as Prisma.JsonValue | null | undefined)
+    const resilience = shouldAssessRuntimeResilience(input)
+      ? await buildRuntimeResilienceSnapshot({
+          scope: 'event',
+          type: input.type,
+          source: input.source,
+          userId: input.userId ?? null,
+          state: input.state ?? null,
+          tenantId: input.productId ?? null,
+          requestFingerprint: runtime.request_id,
+          runtimeStage: runtime.runtime_stage,
+          includeDiagnostics: false,
+        }).catch(() => null)
+      : null
+    await withRuntimeAdvisoryLock({
+      scope: 'event',
+      type: input.type,
+      source: input.source,
+      userId: input.userId ?? null,
+      state: input.state ?? null,
+      tenantId: input.productId ?? null,
+      requestFingerprint: runtime.request_id,
+      runtimeStage: runtime.runtime_stage,
+    }, async () => {
+      const fence = await claimRuntimeEventReplay({
+        scope: 'event',
         type: input.type,
         source: input.source,
-        ...(input.state ? { state: input.state } : {}),
-        ...(payload !== undefined ? { payload } : {}),
-      },
+        userId: input.userId ?? null,
+        state: input.state ?? null,
+        tenantId: input.productId ?? null,
+        payload: {
+          ...(payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Prisma.JsonObject : {}),
+          runtime: {
+            ...runtime,
+            ...(resilience ? { resilience } : {}),
+          },
+        } as Prisma.JsonValue,
+        requestFingerprint: runtime.request_id,
+        ttlMs: input.runtime?.replay_window_ms ?? EVENT_IDEMPOTENCY_TTL_MS,
+      })
+
+      if (fence.duplicate) {
+        return
+      }
+
+      const outbox = await enqueueRuntimeOutboxItem({
+        scope: 'event',
+        type: input.type,
+        source: input.source,
+        userId: input.userId ?? null,
+        state: input.state ?? null,
+        tenantId: input.productId ?? null,
+        payload: {
+          ...(payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Prisma.JsonObject : {}),
+          runtime: {
+            ...runtime,
+            ...(resilience ? { resilience } : {}),
+          },
+        } as Prisma.InputJsonValue,
+        runtime: {
+          correlationId: runtime.correlation_id,
+          requestId: runtime.request_id,
+          flowExecutionId: runtime.flow_execution_id,
+          replayTraceId: runtime.replay_trace_id,
+          runtimeStage: runtime.runtime_stage,
+          orchestrationPath: runtime.orchestration_path,
+          retryAttempt: runtime.retry_attempt,
+          replayReason: runtime.replay_reason,
+          executionLatencyMs: runtime.execution_latency_ms,
+          queueLatencyMs: runtime.queue_latency_ms,
+          deliveryLatencyMs: runtime.delivery_latency_ms,
+          handlerDurationMs: runtime.handler_duration_ms,
+          failureClassification: runtime.failure_classification,
+          requestFingerprint: runtime.request_id,
+        },
+      })
+
+      if (outbox.duplicate) {
+        return
+      }
     })
   } catch (error) {
     if (isMissingEventTableError(error)) {

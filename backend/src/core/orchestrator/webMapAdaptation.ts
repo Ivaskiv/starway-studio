@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 
 import { openai } from '../../lib/openai.js'
 import { getWebMap } from '../../modules/web-map/web-map.service.js'
+import { runRegisteredAiTask } from '../../services/aiTaskRunner.service.js'
+import { resolveAiModel } from '../../platform/ai.registry.js'
 
 type WebMapLike = {
   id?: string
@@ -229,7 +231,7 @@ ${JSON.stringify(payload)}
 `.trim()
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: resolveAiModel('web_map_adaptation'),
     temperature: 0.2,
     max_tokens: 1200,
     messages: [{ role: 'user', content: prompt }],
@@ -300,7 +302,18 @@ export async function runWebMapAdaptationIfEligible(
   }
 
   try {
-    const result = await runAI(safePayload)
+    const result = await runRegisteredAiTask(
+      'web_map_adaptation',
+      {
+        userId,
+        source: 'web-map-adaptation',
+        label: 'web-map-adaptation',
+        payloadHash,
+        payload: safePayload,
+      },
+      () => runAI(safePayload),
+      () => buildFallbackLocalLogic(safePayload.userActivity),
+    )
     markAdaptationRun(userId, payloadHash)
     return result
   } catch (error) {

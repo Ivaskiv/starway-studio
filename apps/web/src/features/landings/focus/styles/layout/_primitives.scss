@@ -1,0 +1,166 @@
+@use '../mixins' as *;
+
+/* ─── STACK OWNERS INTERNAL SPACING ONLY ─── */
+
+.l-stack,
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap-fluid);
+}
+
+.l-stack-sm,
+.stack-sm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap-sm);
+}
+
+.l-stack-md,
+.stack-md {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap-md);
+}
+
+.l-stack-lg,
+.stack-lg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap-lg);
+}
+
+.l-stack-xl,
+.stack-xl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap-xl);
+}
+
+/* ─── CLUSTER / GRID / SPLIT OWN STRUCTURE ONLY ─── */
+
+.l-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cluster-gap-md);
+}
+
+.l-grid {
+  display: grid;
+  gap: var(--grid-gap-md);
+}
+
+.l-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--grid-gap-lg);
+  align-items: center;
+}
+
+.l-split--hero {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 42vw);
+  gap: var(--hero-split-gap);
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION GRID SYSTEM
+// Usage:  <div class="l-section-grid l-section-grid--split">
+//           <div class="l-content-stage l-stack-lg">…</div>
+//           <div class="l-media-stage">…</div>
+//         </div>
+//
+// Changing ONE mixin in _mixins.scss updates every
+// section that uses these classes simultaneously.
+// ═══════════════════════════════════════════════════════
+
+.l-section-grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  gap: var(--grid-gap-md);
+}
+
+// 2-col → 1-col at laptop breakpoint
+.l-section-grid--split {
+  @include grid-split;
+}
+
+// Content-heavy col + slightly larger media col
+.l-section-grid--media {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: var(--space-fluid-xl);
+  width: 100%;
+  min-width: 0;
+
+  @include below('laptop') {
+    grid-template-columns: 1fr;
+    gap: var(--grid-gap-split-collapsed);
+  }
+}
+
+// Auto-fit cards (min-width via --lp-min or default 260px)
+.l-section-grid--cards {
+  @include grid-cards;
+}
+
+// Fixed 2-col → 1-col at phablet
+.l-section-grid--2col {
+  @include grid-2col;
+}
+
+// Centered narrow column (problem lists, single-column headers)
+.l-section-grid--centered {
+  display: grid;
+  max-width: 48rem;
+  margin-inline: auto;
+  justify-items: center;
+  gap: var(--stack-gap-md);
+}
+
+// ═══════════════════════════════════════════════════════
+// CONTENT / MEDIA STAGES
+// ═══════════════════════════════════════════════════════
+
+// Content column: owns its internal vertical rhythm
+.l-content-stage {
+  @include content-stage;
+}
+
+// Media column: positional container only
+.l-media-stage {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+
+// ═══════════════════════════════════════════════════════
+// OVERLAY SYSTEM
+// ═══════════════════════════════════════════════════════
+
+.l-overlay-surface {
+  position: relative;
+  overflow: hidden;
+}
+
+.l-overlay-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: var(--card-padding);
+}
+
+// ═══════════════════════════════════════════════════════
+// FLOW PRIMITIVE — horizontal wrap row
+// ═══════════════════════════════════════════════════════
+
+.l-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--stack-gap-sm);
+}

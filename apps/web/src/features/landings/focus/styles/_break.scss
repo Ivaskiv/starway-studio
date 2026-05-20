@@ -1,5 +1,5 @@
 // apps/web/src/features/landings/focus/styles/_break.scss
-// НЕ перевизначає: padding, шрифти, заголовки, body-text
+@use 'mixins' as *;
 
 /* ─── SECTION ─── */
 
@@ -7,8 +7,8 @@
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(74, 126, 191, 0.06) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(74, 126, 191, 0.03) 0%, transparent 60%);
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(74, 126, 191, 0.05) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(74, 126, 191, 0.025) 0%, transparent 60%);
 }
 
 /* ─── AMBIENT GLOW ─── */
@@ -20,7 +20,7 @@
   width: 500px;
   height: 500px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(74, 126, 191, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(74, 126, 191, 0.06) 0%, transparent 70%);
   pointer-events: none;
   animation: focus-node-breathe 6s ease-in-out infinite;
 }
@@ -36,9 +36,9 @@
 /* ─── QUOTE ─── */
 
 .focus-break .focus-quote-glass {
-  max-width: 520px;
   text-align: left;
   margin-bottom: 0;
+  max-width: 100%;
 }
 
 /* ─── SHIFTS ─── */
@@ -46,7 +46,7 @@
 .focus-break-shifts {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-sm-tight);
   max-width: 640px;
 }
 
@@ -54,43 +54,43 @@
   display: grid;
   grid-template-columns: 1fr 32px 1fr;
   align-items: center;
-  gap: 8px;
-  padding: 16px 20px;
-  border-radius: var(--focus-radius-sm);
-  border: 1px solid var(--focus-card-border);
-  background: var(--focus-card);
+  gap: var(--space-2xs);
+  padding: var(--card-padding);
+  border-radius: var(--surface-radius-sm);
+  border: 1px solid var(--focus-surface-border);
+  background: var(--focus-surface-bg);
   position: relative;
   overflow: hidden;
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
-}
 
-.focus-break-shift::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
-  pointer-events: none;
-}
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    pointer-events: none;
+  }
 
-.focus-break-shift::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, transparent 50%);
-  pointer-events: none;
-}
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, transparent 50%);
+    pointer-events: none;
+  }
 
-.focus-break-shift:hover {
-  border-color: rgba(74, 126, 191, 0.28);
-  box-shadow: 0 0 20px rgba(74, 126, 191, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  &:hover {
+    border-color: var(--focus-surface-border-strong);
+    box-shadow: var(--focus-surface-shadow);
+  }
 }
 
 .focus-break-shift-from,
 .focus-break-shift-to {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-xxs);
 }
 
 .focus-break-shift-to {
@@ -103,13 +103,13 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+
+  &--dim    { color: var(--focus-text-dim); }
+  &--bright { color: rgba(74, 160, 255, 0.7); }
 }
 
-.focus-break-shift-label--dim    { color: var(--focus-text-dim); }
-.focus-break-shift-label--bright { color: rgba(74, 160, 255, 0.7); }
-
 .focus-break-shift-text p {
-  font-size: clamp(13px, 1.4vw, 15px);
+  font-size: var(--fs-shift-text);
   color: var(--focus-text-muted);
   line-height: 1.4;
 }
@@ -121,22 +121,20 @@
 
 .focus-break-shift-arrow {
   text-align: center;
-  font-size: 15px;
+  font-size: var(--fs-button);
   color: rgba(74, 126, 191, 0.55);
   animation: focus-float-x 2.4s ease-in-out infinite;
   line-height: 1;
 }
 
-/* ─────────────────────────────
-   RESPONSIVE
-───────────────────────────── */
+/* ─── RESPONSIVE ─── */
 
-@media (max-width: 480px) {
+@include below('mobile') {
   .focus-break-shift {
     grid-template-columns: 1fr 24px 1fr;
-    padding: 12px 14px;
-    gap: 6px;
+    padding: calc(var(--card-padding) * 0.75);
+    gap: var(--space-3xs);
   }
 
-  .focus-break-shift-text { font-size: 12px; }
+  .focus-break-shift-text { font-size: var(--fs-small); }
 }

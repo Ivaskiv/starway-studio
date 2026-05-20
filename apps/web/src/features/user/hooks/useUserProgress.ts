@@ -1,4 +1,5 @@
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetTodayEntryQuery, useGetDailyHistoryQuery } from '@/features/daily-cycle/services/daily.api'
 import { useGetGoalsQuery } from '@/features/goals/services/goals.api'
@@ -84,17 +85,25 @@ function getPaidCycleDay(startAt?: string | null) {
 
 export function useUserProgress() {
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { hasCoreAccess, subscriptionActive, trialActive, subscription } = useSystemState()
   const userId = user?.id ?? ''
-  const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !userId })
-  const canLoadJourney = Boolean(userId)
-  const { data: wheelSnapshot } = useGetLatestWheelAssessmentQuery(userId, { skip: !canLoadJourney })
-  const { data: webMap } = useGetWebMapQuery(undefined, { skip: !canLoadJourney })
-  const { data: goalsSet } = useGetGoalsQuery(undefined, { skip: !canLoadJourney })
-  const { data: todayEntry } = useGetTodayEntryQuery(undefined, { skip: !canLoadJourney })
-  const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, { skip: !canLoadJourney })
-  const { data: upcomingZoom } = useGetUpcomingSessionQuery(undefined, { skip: !canLoadJourney })
-  const { tasks: microTasks = [] } = useMicroTasks({ skip: !canLoadJourney })
+  const lightQueryOptions = {
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMountOrArgChange: false,
+  } as const
+  const { data: trial } = useGetTrialStatusQuery(undefined, { skip: shouldSkipProtectedQueries || !userId, ...lightQueryOptions })
+  const canLoadLightJourney = Boolean(userId) && !shouldSkipProtectedQueries
+  const canLoadDeepJourney = Boolean(userId && (hasCoreAccess || trialActive || subscriptionActive)) && !shouldSkipProtectedQueries
+  const { data: wheelSnapshot } = useGetLatestWheelAssessmentQuery(userId, { skip: !canLoadLightJourney, ...lightQueryOptions })
+  const { data: webMap } = useGetWebMapQuery(undefined, { skip: !canLoadDeepJourney })
+  const { data: goalsSet } = useGetGoalsQuery(undefined, { skip: !canLoadDeepJourney })
+  const { data: todayEntry } = useGetTodayEntryQuery(undefined, { skip: !canLoadDeepJourney })
+  const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, { skip: !canLoadDeepJourney })
+  const { data: upcomingZoom } = useGetUpcomingSessionQuery(undefined, { skip: !canLoadDeepJourney })
+  const { tasks: microTasks = [] } = useMicroTasks({ skip: !canLoadDeepJourney })
 
   return useMemo(() => {
     const coreProgress = getUserProgress({
@@ -230,7 +239,6 @@ export function useUserProgress() {
       todayEntry?.createdAt,
       lastDailyHistoryDate?.updatedAt,
       lastDailyHistoryDate?.createdAt,
-      wheelSnapshot?.updatedAt,
       wheelSnapshot?.completedAt,
       wheelSnapshot?.createdAt,
       webMap?.updatedAt,
@@ -256,6 +264,8 @@ export function useUserProgress() {
     const momentumLevel = Math.max(0, Math.min(100, baseMomentum))
 
     return {
+      wheelSnapshot,
+      webMap,
       journeySteps,
       journeyMilestones,
       journeyCurrentStep,
@@ -287,6 +297,7 @@ export function useUserProgress() {
         && upcomingZoom.status === 'SCHEDULED'
         && upcomingZoom.scheduledAt.slice(0, 10) === todayKey(),
       ),
+      trialStatus: trial ?? null,
     }
   }, [
     dailyHistory.length,
@@ -307,6 +318,7 @@ export function useUserProgress() {
     wheelSnapshot,
     upcomingZoom?.scheduledAt,
     upcomingZoom?.status,
+    trial,
   ])
 }
 

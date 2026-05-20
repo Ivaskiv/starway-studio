@@ -1,0 +1,7 @@
+@use '../mixins' as *;
+
+.o-flow,
+.focus-flow-list {
+  @include flex-col(var(--stack-gap-sm));
+  max-width: 520px;
+}

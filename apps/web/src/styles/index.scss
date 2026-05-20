@@ -23,6 +23,7 @@
 @use "./components/modal";         // modal-overlay, modal-glass, modal-close
 @use "./components/stats";         // stat-* (якщо є окремі стилі)
 @use "./components/badges";        // badge-* (якщо є окремі стилі)
+@use "./components/ab-test";       // [DESIGN] AB test liquid glass
 @use "./components/weeklyReportCard";
 @use "./components/notifications-preview";
 @use "./components/content-preview";
@@ -38,6 +39,7 @@
 @use "./components/assistantBubble"; // .ava-bubble, .ap-*
 @use "./components/userMenu";    // .user-menu-*
 @use "./components/liquid-landing";     
+@use "../features/ai-assistant/styles/aiAssistant";
 // ── 6. Utilities ─────────────────────────────────────────────
 @use "./utilities/effects";
 @use "./utilities/liquid";
@@ -285,8 +287,8 @@
     @apply relative overflow-hidden rounded-[24px] border text-[var(--text-primary)] transition-all duration-300;
     border-color: var(--glass-border);
     background: var(--card-blue-surface);
-    backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
     box-shadow:
       0 18px 48px rgba(0,0,0,0.24),
       0 0 32px rgba(31,79,143,0.14),
@@ -316,8 +318,8 @@
     @apply relative overflow-hidden rounded-[20px] border text-[var(--text-primary)] transition-all duration-300;
     border-color: var(--glass-border);
     background: var(--card-blue-surface-soft);
-    backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
     box-shadow:
       0 14px 32px rgba(0,0,0,0.18),
       0 0 26px rgba(31,79,143,0.10),

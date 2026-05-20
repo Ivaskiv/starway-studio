@@ -74,3 +74,19 @@ export async function resolveUserState(userId: string): Promise<UserState> {
       return 'WAITLIST'
   }
 }
+
+export async function isExplicitWaitlistUser(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      onboardingStage: true,
+      currentStep: true,
+    },
+  })
+
+  if (!user) {
+    return false
+  }
+
+  return isWaitlistFlag(user.onboardingStage) || isWaitlistFlag(user.currentStep)
+}

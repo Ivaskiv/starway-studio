@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 
 import { ArrowUp, LayoutGrid, MoonStar, SunMedium } from 'lucide-react'
 
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import CycleDayReportModal from '@/features/daily-cycle/components/CycleDayReportModal'
@@ -104,6 +105,8 @@ export default function CycleSummaryCard(props: Props) {
   } = props
 
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { dayNumber: journeyDay } = useUserProgress()
   const { data: trial, isLoading } = useGetTrialStatusQuery()
   const { accessControl, subscription, getModuleAccess } = useSystemState()
@@ -130,8 +133,12 @@ export default function CycleSummaryCard(props: Props) {
     return start
   }, [currentDay, timelineAnchorDate])
 
-  const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, { skip: !userId })
-  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', { skip: !userId })
+  const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, {
+    skip: shouldSkipProtectedQueries || !userId,
+  })
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', {
+    skip: shouldSkipProtectedQueries || !userId,
+  })
   const { tasks: cycleMicroTasks } = useMicroTasks()
   const embeddedFlowRef = useRef<HTMLDivElement | null>(null)
 

@@ -1,0 +1,61 @@
+@use "mixins" as *;
+
+#problem .focus-problem-content {
+  min-width: 0;
+}
+
+#problem .focus-problem-list {
+  width: 100%;
+  max-width: 100%;
+}
+
+#problem .focus-problem-list > * + * {
+  margin-top: var(--space-xs);
+}
+
+#problem .focus-problem-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 3.5rem;
+  padding: var(--space-sm) var(--card-padding);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.018) 100%
+  );
+}
+
+#problem .focus-problem-item__marker {
+  flex-shrink: 0;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.95) 0%, rgba(90, 150, 255, 0.75) 45%, rgba(74, 126, 191, 0.22) 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 18px rgba(74, 126, 191, 0.18);
+}
+
+#problem .focus-problem-item__text {
+  color: var(--focus-text);
+  line-height: var(--lh-loose);
+}
+
+#problem .focus-quote-wrap {
+  width: 100%;
+  max-width: 100%;
+  margin-top: var(--stack-gap-lg);
+}
+
+#problem .focus-quote-glass {
+  text-align: left;
+}
+
+@include below("phablet") {
+  #problem .focus-problem-item {
+    padding: var(--space-xs) var(--space-sm);
+  }
+}

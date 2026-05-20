@@ -1,11 +1,7 @@
-import { createContext, useContext } from 'react'
+import { useSessionOrchestrator, type AuthRestoreStatus } from '@/features/auth/context/SessionOrchestratorContext'
 
-export type AuthRestoreStatus = 'idle' | 'restoring' | 'ready' | 'failed'
+export type { AuthRestoreStatus }
 
-const AuthRestoreContext = createContext<AuthRestoreStatus>('idle')
-
-export const AuthRestoreProvider = AuthRestoreContext.Provider
-
-export function useAuthRestoreStatus() {
-  return useContext(AuthRestoreContext)
+export function useAuthRestoreStatus(): AuthRestoreStatus {
+  return useSessionOrchestrator().authRestoreStatus
 }

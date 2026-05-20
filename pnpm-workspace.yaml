@@ -2,3 +2,4 @@ packages:
   - 'backend'
   - 'apps/*'
   - 'packages/*'
+  - 'video-hooks'

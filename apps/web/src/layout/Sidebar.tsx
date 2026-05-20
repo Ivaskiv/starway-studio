@@ -1,7 +1,7 @@
 // frontend/src/layout/Sidebar.tsx
 // ─── ВИПРАВЛЕНО: рядки 324 і 327 — lowercase → UPPERCASE ролі ────────────────
 // Всі інші рядки — БЕЗ ЗМІН
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import {
   ArrowRightLeft,
   Banknote,
@@ -27,7 +27,7 @@ import {
 import toast from 'react-hot-toast'
 import { useLocation } from 'react-router-dom'
 
-import { ROUTES } from '@/config/routes'
+import { ROUTE_METADATA, ROUTES, normalizeDashboardRoutePath, toAppRoutePath } from '@/config/routes'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import type { UserRole } from '@/features/user/types/user.types'
 import { UserMenu } from '@/features/user/userMenu/UserMenu'
@@ -63,7 +63,8 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: null,
     visibleTo: [],
     items: [
-      { id: 'dashboard', label: 'Кабінет', icon: Home, path: '/dashboard', visibleTo: [] },
+      { id: 'dashboard', label: 'Кабінет', icon: Home, path: ROUTES.DASHBOARD, visibleTo: [] },
+      { id: 'ab-test', label: 'AB тест', icon: Sparkles, path: ROUTES.AB_TEST, visibleTo: [], highlight: true, badge: 'NEW' },
     ],
   },
   {
@@ -72,13 +73,13 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     visibleTo: ['USER'],
     items: [
       // { id: 'absystem', label: 'ABsystem', icon: Sparkles, path: '/dashboard/ai-mentor', visibleTo: ['USER'] },
-      { id: 'wheel', label: 'Колесо балансу', icon: Target, path: '/dashboard/wheel', visibleTo: ['USER'] },
-      { id: 'cycle', label: 'Щоденний цикл', icon: Clock3, path: '/dashboard/cycle', visibleTo: ['USER']},
-      { id: 'journal', label: 'Журнал', icon: BookOpen, path: '/dashboard/journal', visibleTo: ['USER'] },
-      { id: 'courses', label: 'Практики', icon: Puzzle, path: '/dashboard/courses', visibleTo: ['USER'] },
-      { id: 'products', label: 'Продукти', icon: Package, path: '/dashboard/products', visibleTo: ['USER'] },
-      { id: 'zoom', label: 'Zoom-сесії', icon: Video, path: '/dashboard/zoom', visibleTo: ['USER'] },
-      { id: 'subscription', label: 'Підписка', icon: CreditCard, path: '/dashboard/subscription', visibleTo: ['USER'] },
+      { id: 'wheel', label: 'Колесо балансу', icon: Target, path: ROUTES.WHEEL, visibleTo: ['USER'] },
+      { id: 'cycle', label: 'Щоденний цикл', icon: Clock3, path: ROUTES.CYCLE, visibleTo: ['USER']},
+      { id: 'journal', label: 'Журнал', icon: BookOpen, path: ROUTES.JOURNAL, visibleTo: ['USER'] },
+      { id: 'courses', label: 'Практики', icon: Puzzle, path: ROUTES.COURSES, visibleTo: ['USER'] },
+      { id: 'products', label: 'Продукти', icon: Package, path: ROUTES.PRODUCTS, visibleTo: ['USER'] },
+      { id: 'zoom', label: 'Zoom-сесії', icon: Video, path: ROUTES.ZOOM, visibleTo: ['USER'] },
+      { id: 'subscription', label: 'Підписка', icon: CreditCard, path: ROUTES.SUBSCRIPTION, visibleTo: ['USER'] },
     ],
   },
   {
@@ -86,8 +87,8 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'AI Система',
     visibleTo: ['EXPERT', 'SUPERADMIN'],
     items: [
-      { id: 'ai-seo', label: 'AI SEO', icon: Brain, path: '/dashboard/ai-seo', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'ads', label: 'Реклама', icon: Megaphone, path: '/dashboard/ads', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ai-seo', label: 'AI SEO', icon: Brain, path: `${ROUTES.DASHBOARD}?section=ai-seo`, visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'ads', label: 'Реклама', icon: Megaphone, path: `${ROUTES.DASHBOARD}?section=content`, visibleTo: ['EXPERT', 'SUPERADMIN'] },
     ],
   },
   {
@@ -95,10 +96,10 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Продукти',
     visibleTo: ['EXPERT', 'SUPERADMIN'],
     items: [
-      { id: 'my-products', label: 'Мої продукти', icon: Package, path: '/dashboard/products', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'leadmagnet', label: 'Лідмагніти', icon: Magnet, path: '/dashboard/leadmagnet', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'telegram', label: 'Telegram', icon: Send, path: '/dashboard/telegram', visibleTo: ['EXPERT', 'SUPERADMIN'] },
-      { id: 'students', label: 'Учні', icon: Users, path: '/dashboard/students', visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'my-products', label: 'Мої продукти', icon: Package, path: ROUTES.PRODUCTS, visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'leadmagnet', label: 'Лідмагніти', icon: Magnet, path: `${ROUTES.DASHBOARD}?section=leadmagnet`, visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'telegram', label: 'Telegram', icon: Send, path: `${ROUTES.DASHBOARD}?section=telegram`, visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'students', label: 'Учні', icon: Users, path: `${ROUTES.DASHBOARD}?section=students`, visibleTo: ['EXPERT', 'SUPERADMIN'] },
     ],
   },
   {
@@ -106,20 +107,21 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
     label: 'Акаунт',
     visibleTo: [],
     items: [
-      { id: 'profile', label: 'Профіль', icon: User, path: '/dashboard/profile', visibleTo: [] },
-      { id: 'settings', label: 'Налаштування', icon: Settings, path: '/dashboard/settings', visibleTo: [] },
+      { id: 'profile', label: 'Профіль', icon: User, path: ROUTES.PROFILE, visibleTo: [] },
+      { id: 'settings', label: 'Налаштування', icon: Settings, path: ROUTES.SETTINGS, visibleTo: [] },
     ],
   },
   {
     id: 'admin',
     label: 'SuperAdmin',
-    visibleTo: ['SUPERADMIN'],
+    visibleTo: ['SUPERADMIN', 'ADMIN', 'EXPERT'],
     accent: true,
     items: [
-      { id: 'users', label: 'Всі користувачі', icon: Users, path: '/dashboard/admin/users', visibleTo: ['SUPERADMIN'] },
-      { id: 'revenue', label: 'Revenue', icon: Banknote, path: '/dashboard/admin/revenue', visibleTo: ['SUPERADMIN'] },
-      { id: 'roles', label: 'Ролі юзерів', icon: Shield, path: '/dashboard/admin/roles', visibleTo: ['SUPERADMIN'] },
-      { id: 'transfer', label: 'Transfer', icon: ArrowRightLeft, path: '/dashboard/admin/transfer-ownership', visibleTo: ['SUPERADMIN'] },
+      { id: 'ai-assistant', label: 'ДНК STARWAY', icon: Sparkles, path: '/admin/ai-assistant', visibleTo: ['SUPERADMIN', 'ADMIN', 'EXPERT'] },
+      { id: 'users', label: 'Всі користувачі', icon: Users, path: `${ROUTES.DASHBOARD}?section=students`, visibleTo: ['SUPERADMIN'] },
+      { id: 'revenue', label: 'Revenue', icon: Banknote, path: toAppRoutePath('/dashboard/admin/revenue'), visibleTo: ['SUPERADMIN'] },
+      { id: 'roles', label: 'Ролі юзерів', icon: Shield, path: ROUTES.ADMIN_ROLES, visibleTo: ['SUPERADMIN'] },
+      { id: 'transfer', label: 'Transfer', icon: ArrowRightLeft, path: toAppRoutePath('/dashboard/admin/transfer-ownership'), visibleTo: ['SUPERADMIN'] },
     ],
   },
 ]
@@ -135,10 +137,11 @@ export function isVisibleFor(visibleTo: UserRole[], role: UserRole): boolean {
   return visibleTo.length === 0 || visibleTo.includes(role)
 }
 
-export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarProps) {
+const Sidebar = memo(function Sidebar({ collapsed, onToggle, previewRole }: SidebarProps) {
   const { state } = useSystemState()
-  const { navigateTo } = useSmartNavigation()
+  const { navigateTo, isNavigationLocked } = useSmartNavigation()
   const { pathname } = useLocation()
+  const normalizedPathname = useMemo(() => normalizeDashboardRoutePath(pathname), [pathname])
   const isMobile = useMediaQuery('(max-width:768px)')
 
   const hasPremium = Boolean(state?.subscription?.isActive)
@@ -170,7 +173,13 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
   }, [previewRole, state])
 
   const handleNav = (path: string) => {
-    navigateTo(path, { requiresAuth: true })
+    const rawPath = path.split('?')[0] ?? path
+    const normalizedPath = normalizeDashboardRoutePath(rawPath)
+    const requiresAuth = ROUTE_METADATA[normalizedPath as keyof typeof ROUTE_METADATA]?.requiresAuth ?? (
+      normalizedPath.startsWith('/dashboard') || normalizedPath.startsWith('/admin')
+    )
+
+    navigateTo(path, { requiresAuth })
     if (isMobile) onToggle()
   }
 
@@ -184,15 +193,17 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
     if (item.requiresEnrollment && !enrollments.includes(item.requiresEnrollment)) return null
 
     const isLocked = Boolean(item.requiresPaid && !hasPremium && currentRole !== 'SUPERADMIN')
-    const isActive = item.path === '/dashboard'
-      ? pathname === '/dashboard'
-      : pathname === item.path || pathname.startsWith(item.path + '/')
+    const itemPathname = normalizeDashboardRoutePath(item.path.split('?')[0] ?? item.path)
+    const isActive = itemPathname === '/dashboard'
+      ? normalizedPathname === '/dashboard'
+      : normalizedPathname === itemPathname || normalizedPathname.startsWith(itemPathname + '/')
     const isNested = (item.indentLevel ?? 0) > 0
 
     return (
       <button
         key={item.id}
         title={collapsed ? item.label : undefined}
+        disabled={isNavigationLocked}
         onClick={() => isLocked ? handleLocked(item.path) : handleNav(item.path)}
         className={[
           'relative mb-0.5 flex w-full items-center rounded-xl transition-all duration-200',
@@ -205,6 +216,8 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
             ? 'border border-transparent font-semibold text-[var(--text-primary)] underline decoration-[1px] decoration-[rgba(var(--accent-rgb),0.68)] underline-offset-[6px]'
             : isLocked
               ? 'cursor-not-allowed border border-transparent text-[var(--text-subtle)] opacity-50'
+              : isNavigationLocked
+                ? 'cursor-wait border border-transparent text-[var(--text-subtle)] opacity-55'
               : 'border border-transparent text-[var(--text-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--text-primary)] hover:underline hover:decoration-[1px] hover:decoration-[rgba(var(--accent-rgb),0.42)] hover:underline-offset-[6px]',
         ].join(' ')}
       >
@@ -356,3 +369,6 @@ export default function Sidebar({ collapsed, onToggle, previewRole }: SidebarPro
     </aside>
   )
 }
+)
+
+export default Sidebar

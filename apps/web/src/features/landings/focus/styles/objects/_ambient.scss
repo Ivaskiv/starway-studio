@@ -1,0 +1,70 @@
+// apps/web/src/features/landings/focus/styles/objects/_ambient.scss
+//
+// Reusable ambient background system.
+// Add .o-ambient + a single modifier class to any
+// section that has no hero image.
+//
+// Modifier classes describe the visual character,
+// not which specific section it is.
+// Changing a modifier here updates every user of it.
+//
+// REQUIRES: the host element must be position:relative
+// (all .focus-section elements already satisfy this).
+
+.o-ambient::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url('../assets/hero-bg-bubbles.jpeg');
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: 0.04;
+  mix-blend-mode: screen;
+  transform-origin: center;
+}
+
+// ── MODIFIERS ────────────────────────────────────────────
+// Each modifier sets a unique rotation / scale / position
+// so adjacent sections never look like copy-paste.
+
+// Upper-right crop, slight clockwise tilt
+.o-ambient--right::after {
+  background-size: 140% auto;
+  background-position: 80% 15%;
+  opacity: 0.06;
+  transform: rotate(12deg) scale(1.1);
+}
+
+// Lower-left crop, counter-clockwise tilt
+.o-ambient--left::after {
+  background-size: 120% auto;
+  background-position: 20% 75%;
+  opacity: 0.05;
+  transform: rotate(-8deg) scale(1.15);
+}
+
+// Centered, inverted — balanced atmosphere
+.o-ambient--center::after {
+  background-size: 150% auto;
+  background-position: 55% 45%;
+  opacity: 0.055;
+  transform: rotate(180deg) scale(1.2);
+}
+
+// Lower-center, steep counter-clockwise — softest touch
+.o-ambient--soft::after {
+  background-size: 130% auto;
+  background-position: 35% 65%;
+  opacity: 0.045;
+  transform: rotate(-18deg) scale(1.08);
+}
+
+// Upper-right, gentle tilt, wide zoom — cinematic finale
+.o-ambient--cinematic::after {
+  background-size: 160% auto;
+  background-position: 70% 25%;
+  opacity: 0.05;
+  transform: rotate(5deg) scale(1.25);
+}

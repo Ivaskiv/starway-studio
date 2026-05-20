@@ -2,6 +2,10 @@ import { prisma } from "../../db/client.js"
 import { openai } from '../../lib/openai.js'
 import { buildUserProfile as buildUserProfileEngine } from './engine.js'
 import { suggestNextProduct as suggestNextProductEngine } from './recommendation.js'
+import { runRegisteredAiTask } from '../../services/aiTaskRunner.service.js'
+import { stableHash } from '../../services/aiGuard.service.js'
+import { resolveAiModel } from '../../platform/ai.registry.js'
+import { humanizeUpgradeLabel } from '../../core/state-machine/conversationPresentation.js'
 
 export async function assistantChat(userId:string,message:string){
  const [profile, nextProduct, weeklyInsight] = await Promise.all([
@@ -32,7 +36,7 @@ function buildAssistantMessage(
 
   if (normalized.includes('наступ') || normalized.includes('далі')) {
     if (nextProduct) {
-      return `Твій найкращий наступний крок зараз — ${nextProduct.name}. Якщо хочеш, я можу ще розкласти, чому саме він.`
+      return `Твій найкращий наступний крок зараз — ${humanizeUpgradeLabel(nextProduct.name)}. Якщо хочеш, я ще коротко поясню, чому саме він.`
     }
 
     if (summary) {
@@ -41,18 +45,18 @@ function buildAssistantMessage(
   }
 
   if (normalized.includes('контент') || normalized.includes('продаж') || normalized.includes('cta')) {
-    return 'Для продажного контенту завжди тримай маршрут таким: hook → довіра → CTA → DM → bot → trial → оплата.'
+    return 'Для продажного контенту тримай маршрут простим: hook → довіра → CTA → розмова → тест → оплата.'
   }
 
   if (nextOffer) {
-    return `Ось що я рекомендую врахувати зараз: ${nextOffer}`
+    return `Ось що я рекомендую врахувати зараз: ${humanizeUpgradeLabel(nextOffer)}`
   }
 
   if (summary) {
     return summary
   }
 
-  return 'Я можу підказати, що робити далі, який інструмент Starway відкрити і як зібрати контент у логіку продажу.'
+  return 'Я можу підказати, що робити далі, який інструмент Starway відкрити і як зібрати контент у зрозумілу дію.'
 }
 
 export async function buildUserProfile(userId: string) {
@@ -169,28 +173,53 @@ export async function generateWeeklyInsight(userId: string) {
       stage: typeof item.stage === 'string' ? item.stage : null,
     }))
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.3,
-    response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: 'Ти — аналітичний meta-layer Starway. Поверни JSON тижневого звіту: { "summary": "string", "risk": "LOW|MEDIUM|HIGH", "pattern": "string", "nextOffer": "string" }. Тільки українська.',
+  return runRegisteredAiTask(
+    'assistant_weekly_insight',
+    {
+      userId,
+      source: 'assistant-weekly-insight',
+      label: 'assistant-weekly-insight',
+      payloadHash: stableHash({
+        currentState: userMentor?.currentState ?? null,
+        behaviorPattern: userMentor?.behaviorPattern ?? null,
+        stage: userMentor?.stage ?? null,
+        blocker: userMentor?.blocker ?? null,
+        last7States,
+      }),
+      payload: {
+        currentState: userMentor?.currentState ?? null,
+        behaviorPattern: userMentor?.behaviorPattern ?? null,
+        stage: userMentor?.stage ?? null,
+        blocker: userMentor?.blocker ?? null,
+        stateHistoryHash: stableHash(last7States),
       },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          currentState: userMentor?.currentState ?? null,
-          behaviorPattern: userMentor?.behaviorPattern ?? null,
-          stage: userMentor?.stage ?? null,
-          blocker: userMentor?.blocker ?? null,
-          last7States,
-        }),
-      },
-    ],
-    max_tokens: 400,
-  })
+    },
+    async () => {
+      const completion = await openai.chat.completions.create({
+        model: resolveAiModel('assistant_weekly_insight'),
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: 'Ти — аналітичний meta-layer Starway. Поверни JSON тижневого звіту: { "summary": "string", "risk": "LOW|MEDIUM|HIGH", "pattern": "string", "nextOffer": "string" }. Тільки українська.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              currentState: userMentor?.currentState ?? null,
+              behaviorPattern: userMentor?.behaviorPattern ?? null,
+              stage: userMentor?.stage ?? null,
+              blocker: userMentor?.blocker ?? null,
+              last7States,
+            }),
+          },
+        ],
+        max_tokens: 400,
+      })
 
-  return JSON.parse(completion.choices[0]?.message?.content ?? '{}') as Record<string, unknown>
+      return JSON.parse(completion.choices[0]?.message?.content ?? '{}') as Record<string, unknown>
+    },
+    () => ({}),
+  )
 }

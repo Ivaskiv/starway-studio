@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  output   = "../generated/client"
 }
 
 datasource db {
@@ -83,6 +83,10 @@ model User {
   funnelUpdatedAt        DateTime?
   leadMagnetSentAt       DateTime?
   telegramEnabled        Boolean                       @default(true)
+  lifecycleState         String                        @default("new")
+  testResultType         String?
+  focusPaid              Boolean                       @default(false)
+  onboardingDone         Boolean                       @default(false)
   aiConversations        AIConversation[]
   aiMemory               AIMemory[]
   aiRecommendations      AIRecommendation[]
@@ -144,6 +148,7 @@ model User {
   productAccesses        ProductAccess[]
   productSubscriptions   ProductSubscription[]
   trialMirrors           TrialMirror[]
+  aiWorkspace            UserAiWorkspace?
 
   @@unique([expertId, telegramUserId])
   @@index([expertId])
@@ -422,7 +427,9 @@ model ProductSubscription {
   status      String    @default("trial")
   trialEndsAt DateTime?
   expiresAt   DateTime?
-  paidAt      DateTime?
+  paidAt                  DateTime?
+  focusWelcomedAt         DateTime?
+  focusChannelInviteLink  String?
   amount      Float?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -444,6 +451,22 @@ model ProductAccess {
   @@unique([userId, product])
   @@index([product, role])
   @@map("product_access")
+}
+
+model AccessGrant {
+  id          String    @id @default(cuid())
+  productId   String
+  grantType   String
+  code        String    @unique
+  expiresAt   DateTime?
+  usageLimit  Int       @default(1)
+  usedCount   Int       @default(0)
+  createdBy   String
+  boundUserId String?
+  createdAt   DateTime  @default(now())
+
+  @@index([productId, grantType])
+  @@index([boundUserId])
 }
 
 model AIRecommendation {
@@ -483,16 +506,18 @@ model Reminder {
 }
 
 model PaymentLog {
-  id          String        @id @default(uuid())
-  userId      String
-  expertId    String
-  amountCents Int
-  currency    String        @default("EUR")
-  status      PaymentStatus
-  metadata    Json          @default("{}")
-  createdAt   DateTime      @default(now())
-  expert      Expert        @relation(fields: [expertId], references: [id])
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String        @id @default(uuid())
+  userId         String
+  expertId       String
+  amountCents    Int
+  currency       String        @default("EUR")
+  status         PaymentStatus
+  metadata       Json          @default("{}")
+  createdAt      DateTime      @default(now())
+  orderReference String?       @unique
+  processedAt    DateTime?     @db.Timestamp(6)
+  expert         Expert        @relation(fields: [expertId], references: [id])
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([expertId, createdAt])
@@ -986,18 +1011,18 @@ model WheelAssessment {
 }
 
 model AnnualStrategyMap {
-  id             String                  @id @default(cuid())
-  userId         String                  @unique
-  year           Int
-  vision         String?
+  id                String                  @id @default(cuid())
+  userId            String                  @unique
+  year              Int
+  vision            String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @default(now()) @updatedAt
   identityStatement String?
-  mainGoalId     String?
-  status         String                  @default("draft")
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @default(now()) @updatedAt
-  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  monthlyReviews MonthlyStrategyReview[]
-  goals          StrategyGoal[]
+  mainGoalId        String?
+  status            String                  @default("draft")
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthlyReviews    MonthlyStrategyReview[]
+  goals             StrategyGoal[]
 
   @@index([year])
 }
@@ -1008,16 +1033,16 @@ model StrategyGoal {
   sphere         String
   title          String
   description    String?
-  actions        Json?
   monthlyActions Json
   priority       Int               @default(0)
-  order          Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @default(now()) @updatedAt
+  actions        Json?
   isMain         Boolean           @default(false)
+  order          Int               @default(0)
   progress       Int               @default(0)
   status         String            @default("active")
   targetMonth    Int?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @default(now()) @updatedAt
   map            AnnualStrategyMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
   @@index([mapId, order])
@@ -1031,18 +1056,18 @@ model MonthlyStrategyReview {
   mapId            String
   month            Int
   year             Int
-  focus            String?
-  actions          String[]          @default([])
-  goalIds          String[]          @default([])
-  status           String            @default("planned")
   aiAnalysis       String?
-  doneActions      String[]          @default([])
-  missedActions    String[]          @default([])
   completedActions String[]          @default([])
   skippedActions   String[]          @default([])
   nextStepsByAi    Json?
-  nextMonthRec     String?
   createdAt        DateTime          @default(now())
+  actions          String[]          @default([])
+  doneActions      String[]          @default([])
+  focus            String?
+  goalIds          String[]          @default([])
+  missedActions    String[]          @default([])
+  nextMonthRec     String?
+  status           String            @default("planned")
   updatedAt        DateTime          @default(now()) @updatedAt
   map              AnnualStrategyMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
@@ -1523,6 +1548,31 @@ model Event {
   @@index([state, createdAt])
 }
 
+model RuntimeOutbox {
+  id          String              @id @default(uuid())
+  scope       String
+  type        String
+  source      String
+  userId      String?
+  state       String?
+  tenantId    String?
+  payload     Json                @default("{}")
+  status      RuntimeOutboxStatus @default(PENDING)
+  runAt       DateTime            @default(now())
+  attempts    Int                 @default(0)
+  lockedAt    DateTime?
+  lockedBy    String?
+  dedupeKey   String              @unique
+  lastError   String?
+  processedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status, runAt])
+  @@index([scope, type, status])
+  @@index([userId, createdAt])
+}
+
 enum CTAType {
   TELEGRAM
   MINI_APP
@@ -1731,6 +1781,13 @@ enum NotificationJobStatus {
   FAILED
 }
 
+enum RuntimeOutboxStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
 enum DayStatus {
   PENDING
   IN_PROGRESS
@@ -1745,4 +1802,89 @@ enum ZoomStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+}
+
+model UserAiWorkspace {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isActive             Boolean            @default(false)
+  allowedModels        String[]           @default(["gpt-4o"])
+  maxTokensPerMonth    Int                @default(500000)
+  usedTokensThisMonth  Int                @default(0)
+  activeProfileId      String?
+  activeProfile        AiBehaviorProfile? @relation(fields: [activeProfileId], references: [id])
+  generations          SalesAssistantGeneration[]
+  updatedAt            DateTime           @updatedAt
+}
+
+model AiBehaviorProfile {
+  id                 String              @id @default(cuid())
+  key                String              @unique
+  name               String
+  description        String?
+  systemAnchor       String              @db.Text
+  supportedOutputs   String[]
+  supportedProtocols Json
+  workspaces         UserAiWorkspace[]
+  tooltips           AiTooltip[]
+  createdAt          DateTime            @default(now())
+}
+
+model AiTooltip {
+  id         String            @id @default(cuid())
+  profileId  String
+  profile    AiBehaviorProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  elementKey String
+  title      String
+  whatItDoes String            @db.Text
+  howToUse   String            @db.Text
+
+  @@unique([profileId, elementKey])
+}
+
+model SalesAssistantGeneration {
+  id          String          @id @default(cuid())
+  workspaceId String
+  workspace   UserAiWorkspace @relation(fields: [workspaceId], references: [id])
+  contentType String
+  modelUsed   String
+  protocol    String?
+  userContext String          @db.Text
+  request     String          @db.Text
+  result      String          @db.Text
+  tokensUsed  Int             @default(0)
+  createdAt   DateTime        @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([contentType])
+}
+
+enum LexType {
+  REQUIRED
+  FORBIDDEN
+}
+
+model Lexicon {
+  id         String   @id @default(cuid())
+  profileKey String
+  type       LexType
+  word       String
+  addedBy    String
+  createdAt  DateTime @default(now())
+
+  @@index([profileKey, type])
+}
+
+model CampaignMemory {
+  id            String   @id @default(cuid())
+  userId        String
+  launchContext String
+  audienceTemp  String
+  objections    String
+  resistance    String
+  isActive      Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, isActive])
 }

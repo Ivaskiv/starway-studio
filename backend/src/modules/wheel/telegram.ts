@@ -3,10 +3,9 @@ import { bot } from '../../lib/telegram.js'
 import { SPHERE_LABELS } from './types.js'
 import type { WheelNotificationPayload } from './types.js'
 import type { Telegraf } from 'telegraf'
+import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
 
-const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME ?? 'Starway_byNadya_Bot'
-
-const getBotLink = () => `https://t.me/${BOT_USERNAME}`
+const getBotLink = () => requireTelegramBotConfig('wheel bot link').botLink
 
 export interface TelegramSendResult {
   ok: boolean
@@ -21,9 +20,7 @@ export async function sendWheelNotification(
   wheelId: string,
   payload: WheelNotificationPayload
 ): Promise<TelegramSendResult> {
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    return { ok: false, reason: 'TELEGRAM_BOT_TOKEN is not configured' }
-  }
+  requireTelegramBotConfig('wheel notification')
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -75,7 +72,7 @@ export async function sendWheelNotification(
 }
 
 export async function registerMentorCommands(customBot: Telegraf = bot) {
-  if (!process.env.TELEGRAM_BOT_TOKEN) return
+  requireTelegramBotConfig('wheel command registration')
   await customBot.telegram.setMyCommands([
     { command: 'privacy', description: 'Політика конфіденційності чат-бота' },
   ])

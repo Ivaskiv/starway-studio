@@ -2,7 +2,7 @@ import { config as loadEnv } from 'dotenv'
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PrismaClient } from '../generated/prisma/index.js'
+import { PrismaClient } from '../generated/client/index.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)

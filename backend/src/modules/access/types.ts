@@ -65,6 +65,47 @@ export type AccessBlockReason =
   | 'TELEGRAM_REQUIRED'
   | 'LEAD_ACCESS_REQUIRED';
 
+export type AccessMode = 'ACTIVE' | 'CONTINUITY' | 'LOCKED';
+
+export type ProductStage =
+  | 'test'
+  | 'focus'
+  | 'absystem_ai'
+  | 'paused'
+  | 'returning'
+  | 'strategic'
+  | 'personal_program'
+  | 'unknown';
+
+export type BehavioralResource =
+  | 'wheel_history'
+  | 'wheel_latest'
+  | 'wheel_cooldown'
+  | 'wheel_analytics'
+  | 'daily_history'
+  | 'daily_today'
+  | 'goals'
+  | 'goals_primary'
+  | 'progress'
+  | 'continuity_artifacts'
+  | 'weekly_reports'
+  | 'ai_chat'
+  | 'ai_generation'
+  | 'daily_write'
+  | 'wheel_write'
+  | 'goals_write'
+  | 'progress_write'
+  | 'mentor_chat';
+
+export interface BehavioralAccessResolution {
+  mode: AccessMode;
+  stage: ProductStage;
+  resource: BehavioralResource;
+  hasContinuityArtifacts: boolean;
+  hasActiveAccess: boolean;
+  reason: string;
+}
+
 export interface AccessControlState {
   accessLevel: AccessLevel;
   currentFlow: CurrentFlow;

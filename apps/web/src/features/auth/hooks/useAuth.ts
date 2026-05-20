@@ -7,7 +7,6 @@
 // Повертає user, isAuthenticated, loginWithCredentials тощо.
 import type { AppDispatch } from '@/app/store'
 import {
-  useGetMeQuery,
   useLoginMutation,
   useLogoutMutation,
   useRegisterMutation,
@@ -15,20 +14,17 @@ import {
   useTelegramMiniAppAuthMutation,
 } from '@/features/auth/services/auth.api'
 import {
-  clearAuth,
   selectCurrentUser,
   selectIsAuthenticated,
   selectIsLoading,
   setCredentials,
 } from '@/features/auth/services/auth.slice'
-import { accessApi } from '@/features/auth/services/accessApi'
-import { getToken, removeToken } from '@/features/auth/services/token'
+import { removeToken } from '@/features/auth/services/token'
 import type { SocialAuthApiInput, SocialAuthResult } from '@/features/auth/types/auth.types'
 import type { SocialPlatform } from '@/features/social/types/social.types'
 import type { RegisterRequest, User } from '@/features/user/types/user.types'
 import { DEFAULT_ACCENT, normalizeUiMode } from '@/theme/accent.utils'
 import { useThemeContext } from '@/theme/ThemeProvider'
-import { useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
 
@@ -63,39 +59,17 @@ export function useAuth() {
   const [telegramMiniAppAuth] = useTelegramMiniAppAuthMutation()
   const [logoutMutation]   = useLogoutMutation()
 
-  const hasToken = !!getToken()
   const canUseSocialProvider = (provider: SocialPlatform) => {
     if (provider === 'google') return true
     if (provider === 'telegram') return Boolean(getTelegramRuntimeAuthData()) && !isTelegramMiniAppContext()
     return false
   }
 
-  const { data: meData, isError: meError, error: meRawError } = useGetMeQuery(undefined, {
-    skip: !hasToken || isAuthenticated || isLoading,
-  })
-
   const finalizeAuth = (nextUser: User, accessToken: string) => {
     dispatch(setCredentials({ user: nextUser, accessToken }))
     theme.setAccent(safeAccent(nextUser.settings?.accentColor))
     if (nextUser.settings?.theme) theme.setMode(normalizeUiMode(nextUser.settings.theme))
-    void dispatch(accessApi.endpoints.getMyAccess.initiate(undefined, { forceRefetch: true, subscribe: false }))
-    void dispatch(accessApi.endpoints.getMySystemState.initiate(undefined, { forceRefetch: true, subscribe: false }))
   }
-
-  useEffect(() => {
-    if (meData?.user) {
-      const token = getToken()
-      if (token) finalizeAuth(toUser(meData.user), token)
-      return
-    }
-    if (meError) {
-      const status = (meRawError as any)?.status
-      if (status === 401 || status === 403) {
-        dispatch(clearAuth())
-        removeToken()
-      }
-    }
-  }, [meData?.user, meError, meRawError, dispatch, theme])
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -145,7 +119,7 @@ export function useAuth() {
 
   const logout = async () => {
     try { await logoutMutation().unwrap() }
-    finally { dispatch(clearAuth()); removeToken() }
+    finally { removeToken() }
   }
 
   const loginWithTelegramMiniApp = async (initData: string): Promise<SocialAuthResult> => {

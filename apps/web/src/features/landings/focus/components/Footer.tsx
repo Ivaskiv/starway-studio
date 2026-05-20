@@ -6,12 +6,14 @@ export default function Footer() {
 
   return (
     <footer className="focus-footer">
+      {/* SECTION CONTENT START */}
       <div className="focus-nav-logo">
         {brandStart}
         <span className="focus-nav-logo-accent">{accent}</span>
         {brandEnd}
       </div>
       <p className="focus-footer-copy">{copy}</p>
+      {/* SECTION CONTENT END */}
     </footer>
   )
 }

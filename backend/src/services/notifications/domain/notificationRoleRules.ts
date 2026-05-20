@@ -17,6 +17,7 @@ const USER_NOTIFICATION_EVENTS = new Set<NotificationEvent>([
   NotificationEvent.SUBSCRIPTION_EXPIRING,
   NotificationEvent.SUBSCRIPTION_EXPIRED,
   NotificationEvent.POST_TRIAL_REPORTS,
+  NotificationEvent.AB_TEST_FOLLOWUP,
 ])
 
 export function isNotificationRoleAllowed(event: NotificationEvent, role: string | null | undefined): boolean {

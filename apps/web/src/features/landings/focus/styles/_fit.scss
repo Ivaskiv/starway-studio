@@ -1,0 +1,325 @@
+// apps/web/src/features/landings/focus/styles/_fit.scss
+
+@use 'mixins' as *;
+
+// ──────────────────────────────────────────────
+// FIT CARD
+// ──────────────────────────────────────────────
+
+.fit-card {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+
+  isolation: isolate;
+
+  overflow: visible;
+
+  z-index: 1;
+
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.055) 0%,
+    rgba(255, 255, 255, 0.018) 100%
+  );
+
+  border: 1px solid rgba(255, 255, 255, 0.13);
+
+  border-top-color: rgba(88, 146, 255, 0.55);
+
+  border-radius: var(--focus-surface-radius);
+
+  box-shadow:
+    inset 0 1px 0 rgba(74, 126, 191, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 16px 40px rgba(0, 0, 0, 0.32);
+
+  transition:
+    transform 0.28s ease,
+    border-color 0.28s ease,
+    box-shadow 0.28s ease,
+    z-index 0s linear;
+
+  &::before {
+    content: '';
+
+    position: absolute;
+
+    top: -1px;
+    left: 12px;
+    right: 12px;
+
+    height: 4px;
+
+    z-index: 20;
+
+    pointer-events: none;
+
+    border-radius: 999px;
+
+    opacity: 0.92;
+
+    background: linear-gradient(
+      90deg,
+      rgba(88, 146, 255, 0) 0%,
+      rgba(88, 146, 255, 0.72) 18%,
+      rgba(140, 190, 255, 1) 50%,
+      rgba(88, 146, 255, 0.72) 82%,
+      rgba(88, 146, 255, 0) 100%
+    );
+
+    box-shadow:
+      0 0 12px rgba(88, 146, 255, 0.65),
+      0 0 28px rgba(88, 146, 255, 0.35),
+      0 0 42px rgba(88, 146, 255, 0.18);
+  }
+
+  &:hover {
+    transform: translateY(-6px);
+
+    z-index: 30;
+
+    border-color: rgba(255, 255, 255, 0.24);
+
+    border-top-color: rgba(140, 190, 255, 0.95);
+
+    box-shadow:
+      inset 0 1px 0 rgba(120, 170, 255, 0.32),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 24px 56px rgba(0, 0, 0, 0.42),
+      0 0 34px rgba(88, 146, 255, 0.18),
+      0 0 64px rgba(88, 146, 255, 0.08);
+
+    &::before {
+      opacity: 1;
+
+      box-shadow:
+        0 0 16px rgba(88, 146, 255, 0.82),
+        0 0 38px rgba(88, 146, 255, 0.48),
+        0 0 58px rgba(88, 146, 255, 0.22);
+    }
+  }
+}
+
+// ──────────────────────────────────────────────
+// BODY RESET
+// reset centralized .ls-body only for fit cards
+// ──────────────────────────────────────────────
+
+.fit-card .ls-body {
+  display: flex;
+
+  flex-direction: row;
+
+  align-items: flex-start;
+
+  gap: clamp(12px, 1.6vw, 18px);
+
+  width: 100%;
+  min-width: 0;
+
+  padding: clamp(14px, 1.8vw, 18px) clamp(16px, 2vw, 22px);
+
+  flex: unset;
+}
+
+// ──────────────────────────────────────────────
+// MEDIA
+// ──────────────────────────────────────────────
+
+.fit-card .ls-media {
+  position: relative;
+
+  width: 100%;
+  min-width: 0;
+
+  flex: 1;
+
+  min-height: var(--fit-media-generic-min-h);
+
+  overflow: hidden;
+
+  background: var(--focus-bg-secondary);
+
+  border-radius: inherit;
+
+  picture {
+    position: absolute;
+    inset: 0;
+
+    display: block;
+
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// ──────────────────────────────────────────────
+// MEDIA RADIUS VIA CHESS LAYOUT
+// ──────────────────────────────────────────────
+
+.lp-chess > *:nth-child(odd) .ls-media {
+  border-radius: var(--focus-surface-radius) var(--focus-surface-radius) 0 0;
+}
+
+.lp-chess > *:nth-child(even) .ls-media {
+  border-radius: 0 0 var(--focus-surface-radius) var(--focus-surface-radius);
+}
+
+@include below('tablet') {
+  .lp-chess > *:nth-child(odd) .ls-media,
+  .lp-chess > *:nth-child(even) .ls-media {
+    border-radius: 0 0 var(--focus-surface-radius) var(--focus-surface-radius);
+  }
+}
+
+// ──────────────────────────────────────────────
+// IMAGE
+// ──────────────────────────────────────────────
+
+.fit-card-img {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+  object-position: center center;
+
+  transition:
+    transform 0.45s ease,
+    filter 0.45s ease,
+    box-shadow 0.45s ease;
+
+  will-change: transform;
+}
+
+.fit-card:hover .fit-card-img {
+  transform: scale(1.03);
+
+  filter: brightness(1.04) contrast(1.03);
+
+  box-shadow:
+    0 0 28px rgba(255, 255, 255, 0.1),
+    0 0 60px rgba(255, 255, 255, 0.04);
+}
+
+// ──────────────────────────────────────────────
+// TEXT
+// ──────────────────────────────────────────────
+
+.fit-card-text {
+  flex: 1;
+
+  min-width: 0;
+
+  padding-top: 2px;
+
+  font-family: var(--font-sans);
+
+  font-size: var(--fs-fit-card-text);
+
+  line-height: 1.45;
+
+  color: var(--focus-text);
+
+  overflow-wrap: break-word;
+}
+
+// ──────────────────────────────────────────────
+// NUMBER MICROINTERACTION
+// ──────────────────────────────────────────────
+
+.focus-item-num {
+  margin-top: 2px;
+
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.fit-card .focus-item-num {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 18px rgba(0, 0, 0, 0.28),
+    0 0 18px rgba(116, 170, 255, 0.08);
+}
+
+.fit-card:hover .focus-item-num {
+  transform: translateY(2px) scale(0.985);
+
+  border-color: rgba(116, 170, 255, 0.24);
+
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.025) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+
+  box-shadow:
+    inset 0 3px 10px rgba(0, 0, 0, 0.42),
+    inset 0 1px 2px rgba(255, 255, 255, 0.04),
+    0 2px 6px rgba(0, 0, 0, 0.24),
+    0 0 12px rgba(116, 170, 255, 0.1);
+}
+
+// ──────────────────────────────────────────────
+// RESPONSIVE
+// ──────────────────────────────────────────────
+
+@include below('tablet') {
+  .fit-card .ls-body {
+    padding: clamp(12px, 3vw, 16px) clamp(14px, 4vw, 18px);
+  }
+}
+
+@include below('phablet') {
+  .fit-card-text {
+    line-height: 1.4;
+  }
+}
+
+#fit .focus-container {
+  overflow: visible;
+}
+
+#fit .lp-chess {
+  padding-top: clamp(14px, 2vw, 22px);
+}
+// ──────────────────────────────────────────────
+// LAST ODD CARD FULL WIDTH
+// ──────────────────────────────────────────────
+
+.lp-chess--fit {
+  > *:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+
+    .ls-media {
+      min-height:
+        clamp(320px, 42vw, 520px);
+    }
+
+    .fit-card-text {
+      max-width:
+        72ch;
+    }
+  }
+
+  @include below('tablet') {
+    > *:last-child:nth-child(odd) {
+      grid-column: auto;
+
+      .ls-media {
+        min-height:
+          var(--fit-media-generic-min-h);
+      }
+    }
+  }
+}

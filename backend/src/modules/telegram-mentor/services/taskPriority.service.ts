@@ -1,4 +1,7 @@
 import { openai } from '../../../lib/openai.js'
+import { runRegisteredAiTask } from '../../../services/aiTaskRunner.service.js'
+import { stableHash } from '../../../services/aiGuard.service.js'
+import { resolveAiModel } from '../../../platform/ai.registry.js'
 
 export type Task = {
   id: string
@@ -13,7 +16,7 @@ type PriorityContext = {
   lastActivityHours: number
 }
 
-const MODEL = process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini'
+const MODEL = process.env.OPENAI_MODEL?.trim() || resolveAiModel('task_priority')
 
 export function calculateBaseScore(task: Task): number {
   let score = 0
@@ -59,37 +62,54 @@ export async function pickBestTask(tasks: Task[], context: PriorityContext): Pro
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: MODEL,
-      temperature: 0,
-      max_tokens: 8,
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'Choose ONLY ONE task index.',
-            'Priority: action > goal > identity.',
-            'If the user is inactive, choose the easiest task to restart momentum.',
-            'Return ONLY the index number.',
-          ].join(' '),
+    const content = await runRegisteredAiTask(
+      'task_priority',
+      {
+        userId: stableHash({ context, tasks }).slice(0, 24),
+        source: 'task-priority',
+        label: 'task-priority',
+        payloadHash: stableHash({ context, tasks }),
+        payload: {
+          contextHash: stableHash(context),
+          taskIds: tasks.map(task => task.id),
+          taskCount: tasks.length,
         },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            context,
-            tasks: tasks.map((task, index) => ({
-              index,
-              title: task.title,
-              type: task.type,
-              overdueHours: task.overdueHours,
-              createdAt: task.createdAt.toISOString(),
-            })),
-          }),
-        },
-      ],
-    })
+      },
+      async () => {
+        const completion = await openai.chat.completions.create({
+          model: MODEL,
+          temperature: 0,
+          max_tokens: 8,
+          messages: [
+            {
+              role: 'system',
+              content: [
+                'Choose ONLY ONE task index.',
+                'Priority: action > goal > identity.',
+                'If the user is inactive, choose the easiest task to restart momentum.',
+                'Return ONLY the index number.',
+              ].join(' '),
+            },
+            {
+              role: 'user',
+              content: JSON.stringify({
+                context,
+                tasks: tasks.map((task, index) => ({
+                  index,
+                  title: task.title,
+                  type: task.type,
+                  overdueHours: task.overdueHours,
+                  createdAt: task.createdAt.toISOString(),
+                })),
+              }),
+            },
+          ],
+        })
 
-    const content = completion.choices[0]?.message?.content
+        return completion.choices[0]?.message?.content ?? ''
+      },
+      () => '',
+    )
     const index = parseTaskIndex(content, tasks.length)
     if (index !== null) {
       return tasks[index]

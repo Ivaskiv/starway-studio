@@ -1,4 +1,5 @@
 import { useAppSelector } from '@/app/hooks'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { selectUserRole } from '@/features/auth/services/auth.slice'
@@ -139,6 +140,7 @@ export function ExpertStatsSection({ isSuperAdmin }: { isSuperAdmin: boolean }) 
 
 export function WheelStatusNotice({ onOpenInline }: { onOpenInline: () => void }) {
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
   const { accessControl, subscription } = useSystemState()
   const { data: trial } = useGetTrialStatusQuery()
   const userId = user?.id
@@ -148,7 +150,7 @@ export function WheelStatusNotice({ onOpenInline }: { onOpenInline: () => void }
     || accessControl?.hasSubscription
   )
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', {
-    skip: !userId || !hasWheelAccess,
+    skip: sessionStatus !== 'authenticated' || !userId || !hasWheelAccess,
   })
 
   if (!hasWheelAccess) return null
@@ -203,6 +205,7 @@ export function WheelInlineFrame({
   onClose: () => void
 }) {
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
   const accessToken = useAppSelector(state => state.auth.accessToken)
   const userId = user?.id
 
@@ -211,7 +214,7 @@ export function WheelInlineFrame({
     isLoading,
     refetch,
   } = useGetLatestWheelAssessmentQuery(userId ?? '', {
-    skip: !userId || !isOpen,
+    skip: sessionStatus !== 'authenticated' || !userId || !isOpen,
     refetchOnFocus: true,
     pollingInterval: isOpen ? 30_000 : 0,
   })

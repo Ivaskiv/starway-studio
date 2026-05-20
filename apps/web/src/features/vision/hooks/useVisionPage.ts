@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
@@ -12,16 +13,22 @@ import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/whee
 
 export function useVisionPage() {
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { hasCoreAccess, subscriptionActive, trialActive } = useSystemState()
   const progress = useUserProgress()
   const { coreProgress } = progress
-  const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !user?.id })
+  const { data: trial } = useGetTrialStatusQuery(undefined, {
+    skip: shouldSkipProtectedQueries || !user?.id,
+  })
   const hardPaywallLocked = coreProgress.cycleDays >= 3 && !subscriptionActive
   const locked = hardPaywallLocked
 
-  const { data: webMap, isLoading } = useGetWebMapQuery(undefined, { skip: locked })
+  const { data: webMap, isLoading } = useGetWebMapQuery(undefined, {
+    skip: shouldSkipProtectedQueries || locked,
+  })
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(user?.id ?? '', {
-    skip: !user?.id || locked,
+    skip: shouldSkipProtectedQueries || !user?.id || locked,
   })
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('goals')

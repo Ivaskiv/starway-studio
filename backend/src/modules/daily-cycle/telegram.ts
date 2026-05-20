@@ -8,6 +8,9 @@ import type { Context } from 'telegraf';
 import { prisma } from '../../db/client.js';
 import { checkDailyAccess } from './subscription.js';
 import type { DailyCheckUser } from './subscription.js'; // імпорт типу
+import { buildRecoveryCopy, resolveConversationProfile } from '../../core/state-machine/conversationPresentation.js';
+import { resolveRelationshipMemory } from '../../core/memory/relationshipMemory.js';
+import { absystemContent } from '@/products/absystem/config/absystem.content.js';
 
 let dailyCommandsRegistered = false;
 
@@ -34,7 +37,8 @@ export function registerDailyTelegramCommands() {
     });
 
     if (!user) {
-      await ctx.reply('❌ Користувача не знайдено');
+      const copy = buildRecoveryCopy('session_expired', resolveConversationProfile('absystem'))
+      await ctx.reply(`${absystemContent.dailyCycle.command.missingProfile}\n${copy.body}`);
       return;
     }
 
@@ -47,14 +51,18 @@ export function registerDailyTelegramCommands() {
     const access = checkDailyAccess(checkUser);
 
     if (!access.canCreateEntry) {
-      await ctx.reply('⛔️ Доступ закінчився. Оформи підписку.');
+      const relationship = await resolveRelationshipMemory(user.id, 'absystem').catch(() => null)
+      const copy = buildRecoveryCopy('payment_interrupted', resolveConversationProfile('absystem'), {
+        relationship,
+      })
+      await ctx.reply(`${absystemContent.dailyCycle.command.accessDenied}\n${copy.body}`);
       return;
     }
 
     const appUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    await ctx.reply('📝 Заповни Daily у веб-додатку.', {
+    await ctx.reply(absystemContent.dailyCycle.command.webApp, {
       reply_markup: {
-        inline_keyboard: [[{ text: 'ВІДКРИТИ', url: `${appUrl}/dashboard/cycle` }]],
+        inline_keyboard: [[{ text: absystemContent.dailyCycle.command.open, url: `${appUrl}/dashboard/cycle` }]],
       }
     });
   });
@@ -91,7 +99,7 @@ export async function sendMorningQuestion() {
 
       await sendDedupedTelegramMessage(
         user.telegramUserId!,
-        `🌅 Ранкові питання готові!\nВідкрий /daily`
+        absystemContent.dailyCycle.morning
       );
 
       sentCount++;
@@ -134,7 +142,7 @@ export async function sendEveningQuestion() {
 
       await sendDedupedTelegramMessage(
         user.telegramUserId!,
-        `🌙 Вечірній чекін.\nНе забудь завершити Daily 👉 /daily`
+        absystemContent.dailyCycle.evening
       );
 
       sentCount++;

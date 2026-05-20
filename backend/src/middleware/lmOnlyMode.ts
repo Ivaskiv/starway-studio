@@ -1,10 +1,6 @@
 import type { Context, MiddlewareFn } from 'telegraf'
 import { isLeadMagnetActive, resolveLinkedUserIdFromContext, resolveUserState } from '../modules/telegram-mentor/handlers/start.js'
-
-function isLmOnlyModeEnabled(): boolean {
-  // [LM_ONLY_MODE] added
-  return process.env.APP_MODE === 'LM_ONLY'
-}
+import { isLmOnlyModeEnabled } from '../modules/telegram-mentor/runtime.js'
 
 async function resolveLmState(ctx: Context): Promise<string | null> {
   const userId = await resolveLinkedUserIdFromContext(ctx)

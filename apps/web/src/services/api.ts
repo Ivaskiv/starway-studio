@@ -97,6 +97,12 @@ const NO_REFRESH_URLS = [
   '/telegram/status',
   '/analytics/stats',
   '/user/state',
+  '/access/me',
+  '/access/state',
+  '/products/my',
+  '/trial/status',
+  '/wheel/latest',
+  '/wheel/cooldown',
 ];
 
 const getAuthUser = (state: RootState): AuthUserWithExpert | null =>
@@ -155,21 +161,24 @@ const refreshAccessToken = async (
   extraOptions: object,
 ): Promise<boolean> => {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) {
-    api.dispatch(clearAuth());
-    if (import.meta.env.DEV) {
-      console.info('[api] skip refresh: no refresh token');
-    }
-    return false;
+  const refreshArgs = refreshToken
+    ? {
+        url: '/auth/refresh',
+        method: 'POST',
+        body: { refreshToken },
+        headers: { 'x-refresh-token': refreshToken },
+      }
+    : {
+        url: '/auth/refresh',
+        method: 'POST',
+      };
+
+  if (!refreshToken && import.meta.env.DEV) {
+    console.info('[api] trying cookie-only refresh');
   }
 
   const refreshResponse = await rawBaseQuery(
-    {
-      url: '/auth/refresh',
-      method: 'POST',
-      body: { refreshToken },
-      headers: { 'x-refresh-token': refreshToken },
-    },
+    refreshArgs,
     api,
     extraOptions,
   );
@@ -223,12 +232,10 @@ export const baseQueryWithReauth: BaseQueryFn<
   }
 
   const state = api.getState() as RootState;
-  if (!getAccessToken(state)) {
-    api.dispatch(clearAuth());
-    return result;
-  }
+  const accessToken = getAccessToken(state);
+  const refreshToken = getRefreshToken();
 
-  if (!getRefreshToken()) {
+  if (!accessToken && !refreshToken) {
     api.dispatch(clearAuth());
     return result;
   }
@@ -277,6 +284,7 @@ export const api = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithReauth,
   tagTypes: TAG_TYPES,
+  keepUnusedDataFor: 300,
   refetchOnFocus: false,
   refetchOnReconnect: false,
   endpoints: () => ({}),

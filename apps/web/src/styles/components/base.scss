@@ -36,8 +36,8 @@
   border-radius:    18px;
   background:       var(--card-blue-surface-soft);
   border:           1px solid var(--glass-border);
-  backdrop-filter:  blur(24px);
   -webkit-backdrop-filter: blur(24px);
+  backdrop-filter:  blur(24px);
   box-shadow:
     0 22px 48px rgba(0,0,0,0.36),
     0 0 40px rgba(31,79,143,0.16),
@@ -95,8 +95,8 @@
   padding:       1.5rem;
   border:        1px solid var(--glass-border);
   background:    var(--card-blue-surface);
-  backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
   box-shadow:
     0 1px 0 rgba(255,255,255,0.14) inset,
     0 18px 44px rgba(0,0,0,0.34),
@@ -142,8 +142,8 @@
     var(--glass-bg);
   border:      1px solid var(--glass-border);
   border-radius: 12px;
-  backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
   box-shadow:
     0 8px 24px rgba(0,0,0,0.22),
     0 0 20px rgba(31,79,143,0.12),

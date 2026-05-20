@@ -10,6 +10,7 @@ import { bot } from '../../lib/telegram.js'
 import { getCachedUser, invalidateUserCache } from '../../lib/db/userCache.js'
 import { createTelegramBindingDeepLink } from '../deeplinks/service.js'
 import { authLimiter } from '../../middleware/rateLimiter.js'
+import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
 
 const router = Router()
 export const telegramRouter = Router()
@@ -51,7 +52,7 @@ router.get('/telegram-link', authRequired, async (req: AuthenticatedRequest, res
   ])
   const { link, expiresIn, expiresAt } = await createTelegramBindingDeepLink(userId)
   const linked = Boolean(existing || user?.telegramUserId || user?.telegramChatId)
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? 'StarwayMentorBot'
+  const botUsername = requireTelegramBotConfig('telegram link response').username
 
   res.json({
     url: link,
@@ -94,7 +95,7 @@ telegramRouter.post('/retry-link', authRequired, async (req: AuthenticatedReques
   }).catch(() => undefined)
 
   const { link, expiresIn, expiresAt } = await createTelegramBindingDeepLink(userId)
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? 'StarwayMentorBot'
+  const botUsername = requireTelegramBotConfig('telegram retry-link response').username
 
   return res.json({
     url: link,
@@ -138,7 +139,7 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
     })
   }
 
-  if (link.isActive !== true || !link.chatId || !process.env.TELEGRAM_BOT_TOKEN) {
+  if (link.isActive !== true || !link.chatId || !requireTelegramBotConfig('telegram status response').token) {
     if (process.env.NODE_ENV !== 'production') {
       console.info('[telegram/status] link snapshot', {
         userId,
@@ -148,12 +149,12 @@ telegramRouter.get('/status', authRequired, async (req: AuthenticatedRequest, re
         linkChatId: link.chatId ?? null,
         linkActive: link.isActive,
         linked: true,
-        botActive: link.isActive === true && Boolean(link.chatId) && Boolean(process.env.TELEGRAM_BOT_TOKEN),
+        botActive: link.isActive === true && Boolean(link.chatId) && Boolean(requireTelegramBotConfig('telegram status response').token),
       })
     }
     return res.json({
       linked: true,
-      botActive: link.isActive === true && Boolean(link.chatId) && Boolean(process.env.TELEGRAM_BOT_TOKEN),
+      botActive: link.isActive === true && Boolean(link.chatId) && Boolean(requireTelegramBotConfig('telegram status response').token),
       retryAvailable: true,
       telegramEnabled: user?.telegramEnabled ?? true,
     })

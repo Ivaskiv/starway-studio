@@ -1,0 +1,138 @@
+@use 'mixins' as *;
+
+.welcome-practice-card {
+  position: relative;
+
+  width: 100%;
+
+  border-radius:
+    clamp(28px, 3vw, 36px);
+
+  padding:
+    clamp(28px, 4vw, 52px);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(10, 12, 20, 0.98) 0%,
+      rgba(5, 7, 14, 1) 100%
+    );
+
+  border:
+    1px solid rgba(255, 255, 255, 0.1);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 24px 80px rgba(0, 0, 0, 0.42);
+}
+
+.welcome-practice-body {
+  max-width: 720px;
+}
+
+.welcome-practice-title {
+  max-width: 14ch;
+
+  text-transform: uppercase;
+}
+
+.welcome-practice-copy {
+  color: var(--focus-text);
+}
+
+.welcome-practice-list {
+  display: flex;
+
+  flex-direction: column;
+
+  gap:
+    clamp(18px, 2vw, 24px);
+}
+
+.welcome-practice-item {
+  display: flex;
+
+  align-items: center;
+
+  gap: 18px;
+
+  color: var(--focus-text);
+}
+
+.welcome-practice-marker {
+  width: 22px;
+  height: 2px;
+
+  border-radius: 999px;
+
+  flex-shrink: 0;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(70, 130, 255, 1) 0%,
+      rgba(126, 178, 255, 1) 100%
+    );
+
+  box-shadow:
+    0 0 12px rgba(70, 130, 255, 0.42);
+}
+
+.welcome-practice-divider {
+  width: 100%;
+  height: 1px;
+
+  background:
+    rgba(255, 255, 255, 0.08);
+}
+
+.welcome-practice-meeting {
+  display: flex;
+
+  align-items: center;
+
+  gap: 18px;
+
+  color: var(--focus-text);
+}
+
+.welcome-practice-meeting-icon {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  width: 64px;
+  height: 64px;
+
+  border-radius: 18px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(18, 24, 42, 0.96) 0%,
+      rgba(8, 12, 24, 1) 100%
+    );
+
+  border:
+    1px solid rgba(92, 150, 255, 0.28);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 18px rgba(66, 120, 255, 0.12);
+}
+
+@include below('phablet') {
+  .welcome-practice-card {
+    padding:
+      clamp(22px, 6vw, 30px);
+  }
+
+  .welcome-practice-meeting {
+    align-items: flex-start;
+  }
+
+  .welcome-practice-title {
+    max-width: 100%;
+  }
+}

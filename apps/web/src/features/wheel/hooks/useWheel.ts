@@ -1,5 +1,6 @@
 // frontend/src/features/wheel/hooks/useWheel.ts
 import { useEffect, useState } from 'react';
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext';
 import { useCreateWheelAssessmentMutation, useGetLatestWheelAssessmentQuery } from '@/features/wheel/api';
 import { WheelAssessment, WheelScore } from '../types/wheel.types';
 
@@ -51,8 +52,9 @@ async function saveWheelCache(userId: string, value: WheelAssessment) {
 }
 
 export const useWheel = (userId: string) => {
+  const { appState: sessionStatus } = useSessionOrchestrator()
   const { data: latest, isLoading } = useGetLatestWheelAssessmentQuery(userId, {
-    skip: !userId,
+    skip: sessionStatus !== 'authenticated' || !userId,
   });
   const [createWheel] = useCreateWheelAssessmentMutation();
   const [cachedLatest, setCachedLatest] = useState<WheelAssessment | null>(null)

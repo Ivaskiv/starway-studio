@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import type { DeepLinkToken, Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { trackEvent } from '../events/service.js'
+import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
 import type {
   DeepLinkAction,
   DeepLinkSource,
@@ -30,7 +31,7 @@ function getFrontendBaseUrl(): string {
 }
 
 function getBotUsername(): string {
-  return process.env.TELEGRAM_BOT_USERNAME ?? 'StarwayMentorBot'
+  return requireTelegramBotConfig('deeplink service').username
 }
 
 function isPrismaKnownError(error: unknown): error is { code?: string; meta?: unknown } {

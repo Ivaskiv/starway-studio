@@ -1,0 +1,246 @@
+@use 'sass:map';
+
+// apps/web/src/features/landings/focus/styles/_mixins.scss
+// ═══════════════════════════════════════════════════════
+// @forward variables → файли що роблять @use 'mixins'
+// отримують і міксіни, і змінні — один рядок замість двох
+// ═══════════════════════════════════════════════════════
+
+@forward 'variables';
+
+// ─── BREAKPOINTS ─────────────────────────────────────────
+$bp: (
+  'mobile-xs': 360px,
+  'mobile':    480px,
+  'phablet':   680px,
+  'tablet':    900px,
+  'laptop':   1100px,
+  'desktop':  1280px,
+);
+
+@mixin below($name) {
+  @media (max-width: #{map.get($bp, $name)}) { @content; }
+}
+
+@mixin above($name) {
+  @media (min-width: #{map.get($bp, $name) + 1px}) { @content; }
+}
+
+@mixin between($from, $to) {
+  @media (min-width: #{map.get($bp, $from) + 1px}) and (max-width: #{map.get($bp, $to)}) {
+    @content;
+  }
+}
+
+// ─── RETINA ──────────────────────────────────────────────
+
+@mixin retina-bg($path, $ext: 'webp') {
+  background-image: url('#{$path}.#{$ext}');
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    background-image: url('#{$path}@2x.#{$ext}');
+  }
+}
+
+@mixin hero-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+}
+
+@mixin hero-visual-img($max-h: 46svh) {
+  width: 100%;
+  height: auto;
+  max-height: $max-h;
+  object-fit: contain;
+  object-position: center top;
+  display: block;
+}
+
+// ─── GLASS / BLUR ────────────────────────────────────────
+// -webkit- першим (webhint css-prefix-order)
+
+@mixin glass-blur($amount: 16px, $saturate: 160%) {
+  -webkit-backdrop-filter: blur($amount) saturate($saturate);
+  backdrop-filter: blur($amount) saturate($saturate);
+}
+
+@mixin glass-surface($opacity: 0.035) {
+  background: rgba(255, 255, 255, $opacity);
+  border: 1px solid var(--focus-surface-border);
+  box-shadow: var(--focus-surface-shadow);
+}
+
+// ─── LAYOUT ──────────────────────────────────────────────
+
+@mixin focus-container {
+  width: 100%;
+  max-width: min(100%, var(--container-max));
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
+  box-sizing: border-box;
+}
+
+@mixin focus-section($gap: var(--focus-space-stack)) {
+  width: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+  padding-block: var(--focus-space-section);
+  overflow-x: hidden;
+  > * { width: 100%; }
+}
+
+// ─── GRID ────────────────────────────────────────────────
+
+@mixin focus-grid($min-col: 240px, $gap: var(--space-sm)) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, $min-col), 1fr));
+  gap: $gap;
+}
+
+@mixin focus-grid-2col($gap: var(--space-xl)) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $gap;
+  align-items: center;
+
+  @include below('laptop') {
+    grid-template-columns: 1fr;
+    gap: var(--grid-gap-split-collapsed);
+  }
+}
+
+@mixin focus-grid-fixed-2($gap: var(--space-sm)) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $gap;
+
+  @include below('phablet') { grid-template-columns: 1fr; }
+}
+
+// ─── CENTRALIZED SECTION GRID PRESETS ────────────────────
+// ONE mixin → ALL matching sections update in sync.
+// Sections reference these → no more per-section grid chaos.
+
+@mixin grid-split($gap: var(--space-fluid-xl)) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: $gap;
+  width: 100%;
+  min-width: 0;
+
+  @include below('laptop') {
+    grid-template-columns: 1fr;
+    gap: var(--grid-gap-split-collapsed);
+  }
+}
+
+@mixin grid-cards($min: 260px, $gap: var(--grid-gap-md)) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, $min), 1fr));
+  gap: $gap;
+  width: 100%;
+  min-width: 0;
+}
+
+@mixin grid-2col($gap: var(--grid-gap-sm)) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $gap;
+  width: 100%;
+  min-width: 0;
+
+  @include below('phablet') {
+    grid-template-columns: 1fr;
+  }
+}
+
+@mixin content-stage($gap: var(--stack-gap-lg)) {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+// ─── CARD ────────────────────────────────────────────────
+
+@mixin focus-glass-card($hover: true) {
+  background: var(--focus-surface-bg);
+  border: 1px solid var(--focus-surface-border);
+  border-radius: var(--focus-surface-radius);
+  box-shadow: var(--focus-surface-shadow);
+  padding: var(--focus-card-padding);
+
+  @if $hover {
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+    &:hover {
+      transform: translateY(-2px);
+      border-color: var(--focus-surface-border-strong);
+      box-shadow: var(--focus-surface-shadow-strong);
+    }
+  }
+}
+
+// ─── FLEX HELPERS ────────────────────────────────────────
+
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin flex-col($gap: var(--space-sm)) {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+}
+
+// ─── TYPOGRAPHY ──────────────────────────────────────────
+
+@mixin focus-eyebrow {
+  font-family: var(--font-heading);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-accent-subtitle);
+}
+
+@mixin focus-section-title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-section-title);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.03em;
+  color: var(--color-text-main);
+  line-height: 1.06;
+  text-transform: uppercase;
+  max-width: 700px;
+}
+
+// ─── TEXT UTILS ──────────────────────────────────────────
+
+@mixin text-clamp($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// DOCS(18.05.2026): AI Sales Assistant Sidebar Icon - Gemini
+@mixin ai-assistant-icon-styles {
+  color: var(--color-gold); // Приклад: золотий колір
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.6)); // Приклад: золота тінь
+}

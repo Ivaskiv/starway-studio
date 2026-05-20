@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import { useGetAnalyticsFunnelQuery, useGetAnalyticsInsightsQuery, useGetAnalyticsOverviewQuery } from '@/features/analytics/services/analytics.api'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useGetMyProductsQuery } from '@/features/products/services/products.api'
 import { SalesFlowSimulator } from '@/features/content-preview'
@@ -44,7 +45,11 @@ export default function ContentStudioPanel({
 }) {
   const dispatch = useAppDispatch()
   const { user } = useAuth()
-  const { data: myProducts = [] } = useGetMyProductsQuery(undefined, { skip: !user?.id })
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
+  const { data: myProducts = [] } = useGetMyProductsQuery(undefined, {
+    skip: shouldSkipProtectedQueries || !user?.id,
+  })
   const { data: analyticsInsights = null } = useGetAnalyticsInsightsQuery(
     { period: '30d', limit: 8 },
     { skip: !user?.id },

@@ -1,5 +1,6 @@
 import BusinessOpsPanel from '@/features/admin/components/BusinessOpsPanel'
 import UsersInsightsPanel from '@/features/admin/components/UsersInsightsPanel'
+import { ROUTES, toAppRoutePath } from '@/config/routes'
 import { InfoHint } from '@/ui'
 import { Target, TrendingUp, Users, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -31,6 +32,7 @@ export default function ExpertDashboardView({
   onGenerateCard: (card: MarketingCardConfig) => void
 }) {
   const navigate = useNavigate()
+  const dashboardSectionPath = (sectionName: string) => `${ROUTES.DASHBOARD}?section=${sectionName}`
   const isSuperAdmin = currentRole === 'SUPERADMIN'
   const isAdmin = currentRole === 'ADMIN'
   const heroTitle = isSuperAdmin ? 'Бізнес-режим' : isAdmin ? 'Операційний режим' : 'Коуч-режим'
@@ -163,27 +165,27 @@ export default function ExpertDashboardView({
                   icon={<Users className="h-4 w-4 text-[var(--accent)]" />}
                   label={isAdmin ? 'Система' : 'Користувачі'}
                   sub={isAdmin ? 'Користувачі, ownership, question sets, activity log' : 'Живий список, ризики, активність, наступні дії'}
-                  onClick={() => navigate(isAdmin ? '/dashboard?section=system' : '/dashboard/students')}
+                  onClick={() => navigate(isAdmin ? dashboardSectionPath('system') : dashboardSectionPath('students'))}
                 />
                 <QuickAction
                   icon={<Zap className="h-4 w-4 text-[var(--accent)]" />}
                   label="Content Machine"
                   sub="CM v2, сценарії, ads і публікація в одному місці"
-                  onClick={() => navigate('/dashboard?section=content')}
+                  onClick={() => navigate(dashboardSectionPath('content'))}
                 />
                 {!isAdmin ? (
                   <QuickAction
                     icon={<Target className="h-4 w-4 text-[var(--accent)]" />}
                     label="Воронка"
                     sub="D0 → D14 з умовами і шаблонами"
-                    onClick={() => navigate('/dashboard/leadmagnet')}
+                    onClick={() => navigate(dashboardSectionPath('leadmagnet'))}
                   />
                 ) : null}
                 <QuickAction
                   icon={<TrendingUp className="h-4 w-4 text-[var(--accent)]" />}
                   label="Аналітика"
                   sub={isSuperAdmin ? 'Конверсія, retention, revenue' : isAdmin ? 'Системні сигнали і жива активність' : 'Основні показники руху'}
-                  onClick={() => navigate(isSuperAdmin ? '/dashboard/admin/revenue' : isAdmin ? '/dashboard?section=system' : '/dashboard?section=ai-seo')}
+                  onClick={() => navigate(isSuperAdmin ? toAppRoutePath('/dashboard/admin/revenue') : isAdmin ? dashboardSectionPath('system') : dashboardSectionPath('ai-seo'))}
                 />
               </div>
             </div>

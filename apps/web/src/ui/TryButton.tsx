@@ -2,6 +2,7 @@
 // fix style $100k — premium try button with modal fallback
 import { ReactNode, useState } from 'react';
 import { useAppSelector } from '@/app/hooks';
+import { ROUTES } from '@/config/routes';
 import AuthModal from '@/features/auth/components/AuthModal';
 import { Button } from '@/ui';
 import { useNavigate } from 'react-router-dom';
@@ -23,7 +24,7 @@ export function TryButton({ children, className, size = 'lg', color = 'accent' }
       setAuthModalOpen(true);
       return;
     }
-    navigate('/dashboard');
+    navigate(ROUTES.DASHBOARD);
   };
 
   return (

@@ -37,6 +37,7 @@ export const trialApi = api.injectEndpoints({
     // Get trial status
     getTrialStatus: builder.query<TrialStatus, void>({
       query: () => '/trial/status',
+      keepUnusedDataFor: 600,
       providesTags: ['Trial']
     }),
 

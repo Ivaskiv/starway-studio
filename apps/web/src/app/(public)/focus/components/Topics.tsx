@@ -1,2 +1,3 @@
-export { default } from '@/features/landings/focus/components/Topics';
-
+export default function Topics() {
+  return null
+}

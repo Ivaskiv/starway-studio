@@ -23,6 +23,7 @@ export const productsApi = api.injectEndpoints({
 
     getMyProducts: builder.query<Product[], void>({
       query: () => '/products/my',
+      keepUnusedDataFor: 600,
       providesTags: result =>
         result
           ? [...result.map(p => ({ type: 'Products' as const, id: p.id })), { type: 'Products', id: 'LIST' }]

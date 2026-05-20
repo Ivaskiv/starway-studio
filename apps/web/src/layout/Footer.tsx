@@ -20,6 +20,7 @@ const FOOTER_LINKS = {
     { label: 'Підписка',        path: ROUTES.SUBSCRIPTION  },
   ],
   company: [
+    { label: 'AB тест',        path: ROUTES.AB_TEST        },
     { label: 'Про нас',         path: '/about'             },
     // { label: 'Блог',            path: '/blog'              },
     // { label: "Кар'єра",         path: '/careers'           },

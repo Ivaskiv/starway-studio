@@ -17,6 +17,8 @@ import {
 } from '../session.js'
 import type { SessionData } from '../types.js'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
+import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
+import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
 
 type SessionKind = 'morning' | 'evening'
 
@@ -24,7 +26,7 @@ function getSessionTitle(kind: SessionKind): string {
   return kind === 'morning' ? '🌅 Ранкова сесія' : '🌙 Вечірня рефлексія'
 }
 
-async function replyWithQuestion(ctx: Context, kind: SessionKind, index: number) {
+async function replyWithQuestion(ctx: Context, kind: SessionKind, index: number, userId?: string | null) {
   const [question, questionSet] = await Promise.all([
     getQuestion(kind, index),
     getActiveQuestionSet(),
@@ -32,7 +34,13 @@ async function replyWithQuestion(ctx: Context, kind: SessionKind, index: number)
 
   if (!question) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply('Не вдалося знайти питання. Спробуй ще раз через /start.', {
+    const relationship = userId
+      ? await resolveRelationshipMemory(userId, 'stankey').catch(() => null)
+      : null
+    const copy = buildRecoveryCopy('question_missing', resolveConversationProfile('stankey'), {
+      relationship,
+    })
+    await ctx.reply(`${copy.title}\n${copy.body}`, {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
@@ -56,7 +64,10 @@ export async function startQuestionSession(ctx: Context, kind: SessionKind, init
   const userId = await getUserIdByChatId(chatId)
   if (!userId) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply('Спершу підключи Telegram до акаунта Starway.', {
+    const copy = buildRecoveryCopy('session_expired', resolveConversationProfile('stankey'), {
+      nextStep: 'підключити Telegram до акаунта Starway',
+    })
+    await ctx.reply(`${copy.title}\n${copy.body}`, {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
@@ -86,7 +97,7 @@ export async function startQuestionSession(ctx: Context, kind: SessionKind, init
   }
 
   await updateSession(userId, chatId, questionState(kind, nextIndex), nextData, nextIndex)
-  await replyWithQuestion(ctx, kind, nextIndex)
+  await replyWithQuestion(ctx, kind, nextIndex, userId)
 }
 
 export async function resumeQuestionSession(ctx: Context) {
@@ -98,13 +109,20 @@ export async function resumeQuestionSession(ctx: Context) {
 
   if (!session?.userId || !parsed) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply('Активної сесії зараз немає. Відкрий Starway або напиши /morning чи /evening.', {
+    const relationship = session?.userId
+      ? await resolveRelationshipMemory(session.userId, 'stankey').catch(() => null)
+      : null
+    const copy = buildRecoveryCopy('flow_interrupted', resolveConversationProfile('stankey'), {
+      step: 'morning_q1',
+      relationship,
+    })
+    await ctx.reply(`${copy.title}\n${copy.body}`, {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
   }
 
-  await replyWithQuestion(ctx, parsed.type, parsed.index)
+  await replyWithQuestion(ctx, parsed.type, parsed.index, session.userId)
 }
 
 export async function answerQuestion(ctx: Context, kind: SessionKind, answer: string) {
@@ -129,7 +147,14 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
   const question = await getQuestion(kind, currentIndex)
   if (!question) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply('Не вдалося відновити питання. Спробуй ще раз через /start.', {
+    const relationship = session?.userId
+      ? await resolveRelationshipMemory(session.userId, 'stankey').catch(() => null)
+      : null
+    const copy = buildRecoveryCopy('question_missing', resolveConversationProfile('stankey'), {
+      context: kind === 'morning' ? 'ранкова сесія' : 'вечірня рефлексія',
+      relationship,
+    })
+    await ctx.reply(`${copy.title}\n${copy.body}`, {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
     return
@@ -159,7 +184,7 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
       [kind]: mergedAnswers,
     }
     await updateSession(session.userId, chatId, questionState(kind, nextIndex), nextData, nextIndex)
-    await replyWithQuestion(ctx, kind, nextIndex)
+    await replyWithQuestion(ctx, kind, nextIndex, session.userId)
     return
   }
 
@@ -174,10 +199,10 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
   await clearSession(session.userId, chatId)
   const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
 
-  await ctx.reply(
-    kind === 'morning'
-      ? '✅ Ранкова сесія збережена. Дані синхронізовані зі Starway.'
-      : '✅ Вечірню рефлексію збережено. Дані синхронізовані зі Starway.',
+    await ctx.reply(
+      kind === 'morning'
+        ? '✅ Ранковий крок збережено. Я залишив наступну дію на місці.'
+        : '✅ Вечірню дію збережено. Історію дня підхоплено без втрат.',
     replyMarkup ? { reply_markup: replyMarkup } : undefined,
   )
 }

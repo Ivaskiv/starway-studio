@@ -2,12 +2,14 @@ import { openai } from '../../../lib/openai.js'
 import { buildContextPrompt, buildSystemPrompt } from '../../ai-mentor/prompt.js'
 import { PROMPT_INITIAL, PROMPT_UPDATE } from '../../ai-mentor/state.service.js'
 import { getRecentUserEvents } from '../../events/service.js'
+import { stankeyPrompts } from '@/products/stankey/config/stankey.prompts.js'
 import type { RouterContext } from '../router/context.js'
 import type { Intent } from '../router/intent.js'
 import type { RoleConfig, RoleResult } from './base.role.js'
+import { isLmOnlyModeEnabled } from '../runtime.js'
 
 export const mentorRoleConfig: RoleConfig = {
-  systemPrompt: [buildSystemPrompt(), PROMPT_INITIAL, PROMPT_UPDATE].join('\n\n'),
+  systemPrompt: [buildSystemPrompt(), stankeyPrompts.mentor.system, PROMPT_INITIAL, PROMPT_UPDATE].filter(Boolean).join('\n\n'),
   temperature: 0.4,
   maxTokens: 500,
 }
@@ -39,7 +41,7 @@ function buildModePrompt(context: RouterContext, intent: Intent): string {
 }
 
 export async function runMentorRole(context: RouterContext, intent: Intent): Promise<RoleResult> {
-  if (process.env.APP_MODE === 'LM_ONLY') {
+  if (isLmOnlyModeEnabled()) {
     // [LM_ONLY_MODE] AI disabled during funnel-only phase.
     return {
       reply: 'Зараз доступний тільки безкоштовний практикум. Заверши його, щоб рухатись далі.',

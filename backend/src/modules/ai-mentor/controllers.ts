@@ -6,6 +6,7 @@ import { trackEvent, trackQuestionEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 import { createWheelAssessment } from '../wheel/controller.js';
 import type { StreamChatMessage } from './types.js';
+import { detectStateInstability, sendStateCourseOffer } from '@/products/ab-system/telegram/abTest.service.js';
 import {
   completeMicroTask as completeRichMicroTask,
   createMicroTask,
@@ -590,5 +591,8 @@ export const weeklyReportHandler = safeHandler(async (req, res) => {
     : undefined;
 
   const report = await aiService.generateWeeklyReport(userId, productId)
+  if (await detectStateInstability(userId).catch(() => false)) {
+    await sendStateCourseOffer(userId).catch(() => undefined)
+  }
   res.json(report);
 });

@@ -1,40 +1,50 @@
-import { FOCUS_PAGE } from "@/features/landings/focus/content/focus.content"
-import { FOCUS_PAYMENT_URL } from "../utils/constants"
+import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
+import { handleFocusPaymentClick } from '@/features/subscription/utils/openExternalPaymentUrl'
+import { FOCUS_PAYMENT_URL } from '../content/constants'
 
 export default function Final() {
   const { subtitlesection, title, text, bullets, cta } = FOCUS_PAGE.final
 
   return (
-    <section id="final" className="focus-section stack">
+    // o-ambient--cinematic: upper-right, gentle tilt, wide zoom — cinematic finale
+    <section
+      id="final"
+      className="focus-section stack o-ambient o-ambient--cinematic"
+    >
       <div className="focus-container focus-final-wrap focus-reveal stack">
+        {/* SECTION CONTENT START */}
         <div className="focus-section-eyebrow">{subtitlesection}</div>
         <h2 className="focus-section-title">{title}</h2>
 
         <div className="focus-final-body stack">
           {text.map((line: string, i: number) => (
-            <p key={i} className="focus-about-copy">{line}</p>
+            <p key={i} className="focus-body-copy">
+              {line}
+            </p>
           ))}
 
-          <div className="focus-problem-flow stack">
+          {/* CARD ITEMS START */}
+          <div className="focus-flow-list stack">
             {bullets.map((item: string) => (
-              <div key={item} className="focus-problem-line focus-glass-item">
-                <span className="focus-problem-bullet">—</span>
-                <p className="focus-problem-text">{item}</p>
+              <div key={item} className="focus-flow-item">
+                <span className="focus-flow-item__bullet">—</span>
+                <p className="focus-flow-item__text">{item}</p>
               </div>
             ))}
           </div>
+          {/* CARD ITEMS END */}
 
-          <div className="focus-final-cta">
-            <a
-              className="focus-btn-primary"
-              href={FOCUS_PAYMENT_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {cta}
-            </a>
-          </div>
+          <a
+            className="focus-btn-primary focus-btn-full"
+            href={FOCUS_PAYMENT_URL}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => handleFocusPaymentClick(event, FOCUS_PAYMENT_URL)}
+          >
+            {cta}
+          </a>
         </div>
+        {/* SECTION CONTENT END */}
       </div>
     </section>
   )

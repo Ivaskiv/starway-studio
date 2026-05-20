@@ -7,19 +7,16 @@ import JourneyPathBoard, {
   type JourneyStep,
   type JourneyStepId,
 } from '@/features/dashboard/components/JourneyPathBoard'
-import { BaseModal } from '@/features/modals/BaseModal'
-import { dashboardDesignSystem } from '@/styles/design-system'
 import UnifiedDailyJourneyCard, {
   type UnifiedDailyJourneyStep,
 } from '@/features/dashboard/components/UnifiedDailyJourneyCard'
 import type { MarketingCardConfig } from '@/features/dashboard/types/dashboard.types'
 import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api'
-import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
-import { cn } from '@/lib/utils'
-import { Card } from '@/ui'
+import { BaseModal } from '@/features/modals/BaseModal'
 import { useUserProgress } from '@/features/user/hooks/useUserProgress'
-import { useGetWebMapQuery } from '@/features/web-map/services/web-map.api'
-import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
+import { cn } from '@/lib/utils'
+import { dashboardDesignSystem } from '@/styles/design-system'
+import { Card } from '@/ui'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -30,7 +27,8 @@ function resolveProducerSection(pathname: string, search: string) {
   if (section) return section
   if (pathname === '/dashboard/students') return 'students'
   if (pathname === '/dashboard/leadmagnet') return 'leadmagnet'
-  if (pathname === '/dashboard/ai-seo' || pathname === '/dashboard/ads') return 'ai-seo'
+  if (pathname === '/dashboard/ai-seo' || pathname === '/dashboard/ads')
+    return 'ai-seo'
   if (pathname === '/dashboard/admin/studio') return 'content'
   return 'overview'
 }
@@ -48,16 +46,32 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const { pathname, search } = useLocation()
   const navigate = useNavigate()
-  const { subscriptionActive, trialActive } = useSystemState()
-  const { currentStep, weeklyReportAvailable, coreProgress } = useUserProgress()
-  const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !user?.id })
-  const { data: summary } = useGetSummaryQuery(undefined, { skip: !user?.id })
-  const { data: weeklyReport } = useGetMyWeeklyReportQuery(undefined, { skip: !user?.id })
-  const { data: wheel } = useGetLatestWheelAssessmentQuery(user?.id ?? '', { skip: !user?.id })
-  const { data: webMap } = useGetWebMapQuery(undefined, { skip: !user?.id })
+  const { subscriptionActive, trialActive, trial } = useSystemState()
+  const {
+    currentStep,
+    weeklyReportAvailable,
+    coreProgress,
+    wheelSnapshot,
+    webMap,
+    trialStatus,
+  } = useUserProgress()
+  const canLoadDeepInsights = Boolean(
+    user?.id && (subscriptionActive || trialActive)
+  )
+  const { data: summary } = useGetSummaryQuery(undefined, {
+    skip: !canLoadDeepInsights,
+  })
+  const { data: weeklyReport } = useGetMyWeeklyReportQuery(undefined, {
+    skip: !canLoadDeepInsights,
+  })
   const [expandedStep, setExpandedStep] = useState<JourneyStepId | null>(null)
-  const [paywallContext, setPaywallContext] = useState<JourneyStepId | null>(null)
-  const [modalRoute, setModalRoute] = useState<{ route: string; title: string } | null>(null)
+  const [paywallContext, setPaywallContext] = useState<JourneyStepId | null>(
+    null
+  )
+  const [modalRoute, setModalRoute] = useState<{
+    route: string
+    title: string
+  } | null>(null)
 
   const role = String(user?.role ?? 'USER').toUpperCase()
   const isProducerView = ['EXPERT', 'ADMIN', 'SUPERADMIN'].includes(role)
@@ -98,6 +112,247 @@ export default function DashboardPage() {
     })
   }, [trial, subscriptionActive, trialActive])
 
+  // [FIX] All derived vars and useMemo hooks moved above early returns — Rules of Hooks
+  const displayName = user?.firstName || user?.name || 'TESTUser' // [FIX] moved above early returns
+  const { streakCount, totalXp, level } = useMemo(
+    () => ({
+      streakCount: summary?.streak.current ?? 0,
+      totalXp: summary?.xp.total ?? 0,
+      level: summary?.xp.level ?? 1,
+    }),
+    [summary]
+  )
+
+  const trialMetrics = useMemo(() => {
+    const maxTrialDays = 4
+    return {
+      total: Math.min(
+        maxTrialDays,
+        Math.max(1, trialStatus?.daysTotal ?? maxTrialDays)
+      ),
+      current: Math.min(
+        maxTrialDays,
+        Math.max(1, trialStatus?.currentDay ?? (trialStatus?.daysUsed ?? 0) + 1)
+      ),
+      left: Math.max(0, trialStatus?.daysLeft ?? 0),
+      expired: !subscriptionActive && trialStatus?.isActive === false,
+    }
+  }, [trialStatus, subscriptionActive])
+
+  const progress = useMemo(
+    () => ({
+      hasWheel: coreProgress?.wheelDone ?? false,
+      hasGoals: coreProgress?.goalsDone ?? false,
+      hasVision: coreProgress?.visionDone ?? false,
+      hasCycle: (coreProgress?.cycleDays ?? 0) > 0,
+      hasWebMapAccess: subscriptionActive || trialActive,
+    }),
+    [coreProgress, subscriptionActive, trialActive]
+  )
+
+  const completedCoreSteps = Object.values(progress).filter(Boolean).length
+
+  const orderedGoals = useMemo(
+    () =>
+      [...(webMap?.goals ?? [])].sort(
+        (left, right) => left.order - right.order
+      ),
+    [webMap?.goals]
+  ) // [FIX] moved above early returns
+  const journeyCoreSteps: JourneyStep[] = [
+    // [FIX] moved above early returns
+    {
+      id: 'wheel',
+      title: 'Колесо балансу',
+      hint: STEP_HINTS.wheel,
+      route: ROUTES.WHEEL,
+      status: progress.hasWheel ? 'done' : 'active',
+    },
+    {
+      id: 'goals',
+      title: 'Цілі',
+      hint: STEP_HINTS.goals,
+      route: ROUTES.GOALS,
+      status: !progress.hasWheel ? 'locked' : 'active',
+    },
+    {
+      id: 'vision',
+      title: 'Web Map',
+      hint: STEP_HINTS.vision,
+      route: ROUTES.VISION,
+      status: !progress.hasGoals
+        ? 'locked'
+        : progress.hasVision
+          ? 'done'
+          : progress.hasWebMapAccess
+            ? 'active'
+            : 'locked',
+    },
+    {
+      id: 'cycle',
+      title: 'Щоденний цикл',
+      hint: STEP_HINTS.cycle,
+      route: ROUTES.CYCLE,
+      status: !progress.hasVision
+        ? 'locked'
+        : progress.hasCycle
+          ? 'done'
+          : 'locked',
+    },
+  ] // [FIX] moved above early returns
+  const unifiedSteps = useMemo<UnifiedDailyJourneyStep[]>(() => {
+    // [FIX] moved above early returns
+    const decisionActive = weeklyReportAvailable
+    const progressActive = progress.hasCycle || weeklyReportAvailable
+
+    return [
+      {
+        id: 'wheel',
+        title: 'Діагностика',
+        description: 'Колесо балансу',
+        xp: 50,
+        status: progress.hasWheel ? 'done' : 'active',
+        statusLabel: progress.hasWheel ? '✔' : 'Зараз',
+        onClick: () => {
+          if (!wheelSnapshot) {
+            navigate(ROUTES.WHEEL_START)
+            return
+          }
+          setPaywallContext(null)
+          setExpandedStep('wheel')
+        },
+      },
+      {
+        id: 'goals',
+        title: 'Вибір',
+        description: 'Фокус і цілі',
+        xp: 40,
+        status: !progress.hasWheel
+          ? 'locked'
+          : progress.hasGoals
+            ? 'done'
+            : 'active',
+        statusLabel: !progress.hasWheel
+          ? 'Заблоковано'
+          : progress.hasGoals
+            ? '✔'
+            : 'Зараз',
+        onClick: () => {
+          if (!progress.hasWheel) {
+            setPaywallContext('goals')
+            return
+          }
+          if (progress.hasGoals) {
+            navigate(ROUTES.VISION)
+            return
+          }
+          navigate(ROUTES.GOALS)
+        },
+      },
+      {
+        id: 'morning',
+        title: 'Ранок',
+        description: 'Старт дня',
+        xp: 20,
+        status: !progress.hasGoals
+          ? 'locked'
+          : currentStep === 'morning'
+            ? 'active'
+            : progress.hasCycle
+              ? 'done'
+              : 'locked',
+        statusLabel: !progress.hasGoals
+          ? 'Заблоковано'
+          : currentStep === 'morning'
+            ? 'Зараз'
+            : progress.hasCycle
+              ? '✔'
+              : '—',
+        onClick: () => {
+          if (!progress.hasGoals) {
+            setPaywallContext('cycle')
+            return
+          }
+          navigate(`${ROUTES.CYCLE}?session=morning`)
+        },
+      },
+      {
+        id: 'task',
+        title: 'Задача',
+        description: 'Дія дня',
+        xp: 15,
+        status: !progress.hasGoals
+          ? 'locked'
+          : currentStep === 'tasks'
+            ? 'active'
+            : currentStep === 'evening' || currentStep === 'report'
+              ? 'done'
+              : 'locked',
+        statusLabel: !progress.hasGoals
+          ? 'Заблоковано'
+          : currentStep === 'tasks'
+            ? 'Зараз'
+            : currentStep === 'evening' || currentStep === 'report'
+              ? '✔'
+              : '—',
+        onClick: () => {
+          if (!progress.hasGoals) {
+            setPaywallContext('cycle')
+            return
+          }
+          navigate(ROUTES.MICROTASKS)
+        },
+      },
+      {
+        id: 'evening',
+        title: 'Вечір',
+        description: 'Завершення дня',
+        xp: 15,
+        status: !progress.hasGoals
+          ? 'locked'
+          : currentStep === 'evening' || currentStep === 'report'
+            ? 'active'
+            : 'locked',
+        statusLabel: !progress.hasGoals
+          ? 'Заблоковано'
+          : currentStep === 'evening' || currentStep === 'report'
+            ? 'Зараз'
+            : '—',
+        onClick: () => {
+          if (!progress.hasGoals) {
+            setPaywallContext('cycle')
+            return
+          }
+          navigate(`${ROUTES.CYCLE}?session=evening`)
+        },
+      },
+      ...(progressActive
+        ? [
+            {
+              id: 'progress',
+              title: 'Прогрес',
+              description: 'Перші результати',
+              status: weeklyReportAvailable ? 'done' : 'active',
+              statusLabel: weeklyReportAvailable ? '✔' : 'Зараз',
+              onClick: () => navigate(ROUTES.PROGRESS),
+            } satisfies UnifiedDailyJourneyStep,
+          ]
+        : []),
+      ...(decisionActive
+        ? [
+            {
+              id: 'decision',
+              title: 'Рішення',
+              description: 'Твій наступний крок',
+              status: 'active',
+              statusLabel: 'Зараз',
+              onClick: () => navigate(ROUTES.SUBSCRIPTION),
+            } satisfies UnifiedDailyJourneyStep,
+          ]
+        : []),
+    ]
+  }, [currentStep, navigate, progress, weeklyReportAvailable, wheelSnapshot]) // [FIX] moved above early returns
+
   if (!user) {
     return <div className="p-6 text-sm text-white/70">Loading user...</div>
   }
@@ -122,49 +377,22 @@ export default function DashboardPage() {
     )
   }
 
-  const displayName = user?.firstName || user?.name || 'TESTUser'
-  const streakCount = summary?.streak.current ?? 0
-  const totalXp = summary?.xp.total ?? 0
-  const level = summary?.xp.level ?? 1
-  const maxTrialDays = 4
-  const trialDaysTotal = Math.min(maxTrialDays, Math.max(1, trial?.daysTotal ?? maxTrialDays))
-  const currentTrialDay = Math.min(maxTrialDays, Math.max(1, trial?.currentDay ?? (trial?.daysUsed ?? 0) + 1))
-  const trialDaysLeft = Math.max(0, trial?.daysLeft ?? 0)
-  const trialExpired = !subscriptionActive && trial?.isActive === false
-
-  const hasWheel = coreProgress?.wheelDone ?? false
-  const hasGoals = coreProgress?.goalsDone ?? false
-  const hasVision = coreProgress?.visionDone ?? false
-  const hasCycle = (coreProgress?.cycleDays ?? 0) > 0
-  const hasWebMapAccess = subscriptionActive || trialActive
-  const completedCoreSteps = [hasWheel, hasGoals, hasVision, hasCycle].filter(Boolean).length
-  const orderedGoals = useMemo(
-    () => [...(webMap?.goals ?? [])].sort((left, right) => left.order - right.order),
-    [webMap?.goals],
+  const trialProgressPercent = Math.max(
+    0,
+    Math.min(100, Math.round((completedCoreSteps / 4) * 100))
   )
 
-  const journeyCoreSteps: JourneyStep[] = [
-    { id: 'wheel', title: 'Колесо балансу', hint: STEP_HINTS.wheel, route: ROUTES.WHEEL, status: hasWheel ? 'done' : 'active' },
-    { id: 'goals', title: 'Цілі', hint: STEP_HINTS.goals, route: ROUTES.GOALS, status: !hasWheel ? 'locked' : 'active' },
-    { id: 'vision', title: 'Web Map', hint: STEP_HINTS.vision, route: ROUTES.VISION, status: !hasGoals ? 'locked' : hasVision ? 'done' : hasWebMapAccess ? 'active' : 'locked' },
-    { id: 'cycle', title: 'Щоденний цикл', hint: STEP_HINTS.cycle, route: ROUTES.CYCLE, status: !hasVision ? 'locked' : hasCycle ? 'done' : 'locked' },
-  ]
-const trialProgressPercent = Math.max(
-  0,
-  Math.min(100, Math.round((completedCoreSteps / 4) * 100))
-)
+  const trialProgressWidthClass =
+    trialProgressPercent === 0
+      ? 'w-0'
+      : trialProgressPercent <= 25
+        ? 'w-1/4'
+        : trialProgressPercent <= 50
+          ? 'w-1/2'
+          : trialProgressPercent <= 75
+            ? 'w-3/4'
+            : 'w-full'
 
-const trialProgressWidthClass =
-  trialProgressPercent === 0
-    ? 'w-0'
-    : trialProgressPercent <= 25
-    ? 'w-1/4'
-    : trialProgressPercent <= 50
-    ? 'w-1/2'
-    : trialProgressPercent <= 75
-    ? 'w-3/4'
-    : 'w-full'
-    
   const handleToggleJourneyStep = (id: JourneyStepId) => {
     const step = journeyCoreSteps.find((item) => item.id === id)
     if (!step) return
@@ -179,125 +407,19 @@ const trialProgressWidthClass =
     })
   }
 
-  const unifiedSteps = useMemo<UnifiedDailyJourneyStep[]>(() => {
-    const decisionActive = weeklyReportAvailable
-    const progressActive = hasCycle || weeklyReportAvailable
+  const lockedTitle =
+    paywallContext === 'vision'
+      ? '✦ Web Map доступний у Pro'
+      : paywallContext === 'cycle'
+        ? '✦ Щоденний цикл доступний у Pro'
+        : '✦ Повний шлях доступний у Pro'
 
-    return [
-      {
-        id: 'wheel',
-        title: 'Діагностика',
-        description: 'Колесо балансу',
-        xp: 50,
-        status: hasWheel ? 'done' : 'active',
-        statusLabel: hasWheel ? '✔' : 'Зараз',
-        onClick: () => {
-          if (!wheel) {
-            navigate(ROUTES.WHEEL_START)
-            return
-          }
-          setPaywallContext(null)
-          setExpandedStep('wheel')
-        },
-      },
-      {
-        id: 'goals',
-        title: 'Вибір',
-        description: 'Фокус і цілі',
-        xp: 40,
-        status: !hasWheel ? 'locked' : hasGoals ? 'done' : 'active',
-        statusLabel: !hasWheel ? 'Заблоковано' : hasGoals ? '✔' : 'Зараз',
-        onClick: () => {
-          if (!hasWheel) {
-            setPaywallContext('goals')
-            return
-          }
-          if (hasGoals) {
-            navigate(ROUTES.VISION)
-            return
-          }
-          navigate(ROUTES.GOALS)
-        },
-      },
-      {
-        id: 'morning',
-        title: 'Ранок',
-        description: 'Старт дня',
-        xp: 20,
-        status: !hasGoals ? 'locked' : currentStep === 'morning' ? 'active' : hasCycle ? 'done' : 'locked',
-        statusLabel: !hasGoals ? 'Заблоковано' : currentStep === 'morning' ? 'Зараз' : hasCycle ? '✔' : '—',
-        onClick: () => {
-          if (!hasGoals) {
-            setPaywallContext('cycle')
-            return
-          }
-          navigate(`${ROUTES.CYCLE}?session=morning`)
-        },
-      },
-      {
-        id: 'task',
-        title: 'Задача',
-        description: 'Дія дня',
-        xp: 15,
-        status: !hasGoals ? 'locked' : currentStep === 'tasks' ? 'active' : currentStep === 'evening' || currentStep === 'report' ? 'done' : 'locked',
-        statusLabel: !hasGoals ? 'Заблоковано' : currentStep === 'tasks' ? 'Зараз' : currentStep === 'evening' || currentStep === 'report' ? '✔' : '—',
-        onClick: () => {
-          if (!hasGoals) {
-            setPaywallContext('cycle')
-            return
-          }
-          navigate(ROUTES.MICROTASKS)
-        },
-      },
-      {
-        id: 'evening',
-        title: 'Вечір',
-        description: 'Завершення дня',
-        xp: 15,
-        status: !hasGoals ? 'locked' : currentStep === 'evening' || currentStep === 'report' ? 'active' : 'locked',
-        statusLabel: !hasGoals ? 'Заблоковано' : currentStep === 'evening' || currentStep === 'report' ? 'Зараз' : '—',
-        onClick: () => {
-          if (!hasGoals) {
-            setPaywallContext('cycle')
-            return
-          }
-          navigate(`${ROUTES.CYCLE}?session=evening`)
-        },
-      },
-      ...(progressActive
-        ? [{
-            id: 'progress',
-            title: 'Прогрес',
-            description: 'Перші результати',
-            status: weeklyReportAvailable ? 'done' : 'active',
-            statusLabel: weeklyReportAvailable ? '✔' : 'Зараз',
-            onClick: () => navigate(ROUTES.PROGRESS),
-          } satisfies UnifiedDailyJourneyStep]
-        : []),
-      ...(decisionActive
-        ? [{
-            id: 'decision',
-            title: 'Рішення',
-            description: 'Твій наступний крок',
-            status: 'active',
-            statusLabel: 'Зараз',
-            onClick: () => navigate(ROUTES.SUBSCRIPTION),
-          } satisfies UnifiedDailyJourneyStep]
-        : []),
-    ]
-  }, [currentStep, hasCycle, hasGoals, hasWheel, navigate, weeklyReportAvailable, wheel])
-
-  const lockedTitle = paywallContext === 'vision'
-    ? '✦ Web Map доступний у Pro'
-    : paywallContext === 'cycle'
-      ? '✦ Щоденний цикл доступний у Pro'
-      : '✦ Повний шлях доступний у Pro'
-
-  const lockedText = paywallContext === 'vision'
-    ? "Стратегічна карта зв'язків між сферами."
-    : paywallContext === 'cycle'
-      ? 'Ранок → задача → вечір → паттерн.'
-      : 'Розблокуй повний маршрут, щоб перейти від інсайту до стабільної системи дій.'
+  const lockedText =
+    paywallContext === 'vision'
+      ? "Стратегічна карта зв'язків між сферами."
+      : paywallContext === 'cycle'
+        ? 'Ранок → задача → вечір → паттерн.'
+        : 'Розблокуй повний маршрут, щоб перейти від інсайту до стабільної системи дій.'
 
   try {
     // SAFE: previous layout fallback can be restored by replacing only the user-dashboard branch below.
@@ -311,15 +433,22 @@ const trialProgressWidthClass =
 
             <div className="min-w-[160px] flex-1">
               <p className="mb-0.5 text-sm font-medium text-[var(--text-primary)]">
-                {trialExpired ? 'ABsystem Premium — Trial завершено' : `ABsystem Premium — ${trialDaysLeft} день безкоштовно`}
+                {trialMetrics.expired
+                  ? 'ABsystem Premium — Trial завершено'
+                  : `ABsystem Premium — ${trialMetrics.left} день безкоштовно`}
               </p>
               <p className="mb-1.5 text-xs text-[var(--text-muted)]">
-                {trialExpired
+                {trialMetrics.expired
                   ? `${completedCoreSteps}/4 кроки відкрито`
-                  : `День ${currentTrialDay} з ${trialDaysTotal} · ${completedCoreSteps}/4 кроки відкрито`}
+                  : `День ${trialMetrics.current} з ${trialMetrics.total} · ${completedCoreSteps}/4 кроки відкрито`}
               </p>
               <div className="h-[3px] rounded-full bg-white/8">
-                <div className={['h-[3px] rounded-full bg-[#fbbf24] transition-all duration-700', trialProgressWidthClass].join(' ')} />
+                <div
+                  className={[
+                    'h-[3px] rounded-full bg-[#fbbf24] transition-all duration-700',
+                    trialProgressWidthClass,
+                  ].join(' ')}
+                />
               </div>
             </div>
 
@@ -339,10 +468,14 @@ const trialProgressWidthClass =
               displayName={displayName}
               streakCount={streakCount}
               totalXp={totalXp}
-              trialLabel={trialExpired ? 'Trial завершено' : `Trial · день ${currentTrialDay} з ${trialDaysTotal}`}
-              currentDay={currentTrialDay}
-              totalDays={trialDaysTotal}
-              daysLeft={trialDaysLeft}
+              trialLabel={
+                trialMetrics.expired
+                  ? 'Trial завершено'
+                  : `Trial · день ${trialMetrics.current} з ${trialMetrics.total}`
+              }
+              currentDay={trialMetrics.current}
+              totalDays={trialMetrics.total}
+              daysLeft={trialMetrics.left}
               steps={unifiedSteps}
             />
           ) : null}
@@ -351,8 +484,12 @@ const trialProgressWidthClass =
             <Card className="rounded-2xl border-[rgba(251,191,36,.18)] bg-[rgba(251,191,36,.06)] px-3 py-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex-1">
-                  <p className="mb-0.5 text-sm font-medium text-[#fbbf24]">{lockedTitle}</p>
-                  <p className="text-xs leading-snug text-[var(--text-muted)]">{lockedText}</p>
+                  <p className="mb-0.5 text-sm font-medium text-[#fbbf24]">
+                    {lockedTitle}
+                  </p>
+                  <p className="text-xs leading-snug text-[var(--text-muted)]">
+                    {lockedText}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -370,14 +507,16 @@ const trialProgressWidthClass =
             expandedStep={expandedStep}
             onToggleStep={handleToggleJourneyStep}
             onLockedStep={(id) => setPaywallContext(id)}
-            wheel={wheel}
+            wheel={wheelSnapshot}
             goals={orderedGoals}
           />
 
           <div className="grid gap-3 md:grid-cols-2">
             <Card className="rounded-2xl border-[var(--border)] bg-[var(--bg-secondary)] p-4">
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-[.12em] text-[var(--text-muted)]">01 · Ритм</span>
+                <span className="text-[10px] uppercase tracking-[.12em] text-[var(--text-muted)]">
+                  01 · Ритм
+                </span>
                 <span className="rounded-full bg-emerald-600/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
                   Активно
                 </span>
@@ -385,16 +524,28 @@ const trialProgressWidthClass =
               <div className="h-[2px] rounded-full bg-white/8">
                 <div className="h-[2px] w-[18%] rounded-full bg-[#4f8ef7]" />
               </div>
-              <p className="mt-4 text-[10px] uppercase tracking-[.16em] text-[rgb(var(--accent-soft-rgb))]">Ритм</p>
-              <h3 className="mt-2 text-lg font-medium text-[var(--text-primary)]">Твій темп сьогодні</h3>
+              <p className="mt-4 text-[10px] uppercase tracking-[.16em] text-[rgb(var(--accent-soft-rgb))]">
+                Ритм
+              </p>
+              <h3 className="mt-2 text-lg font-medium text-[var(--text-primary)]">
+                Твій темп сьогодні
+              </h3>
               <div className="mt-4 grid grid-cols-3 gap-3">
-                {[{ label: 'XP', value: totalXp }, { label: 'Серія', value: streakCount }, { label: 'Рівень', value: level }].map((item) => (
+                {[
+                  { label: 'XP', value: totalXp },
+                  { label: 'Серія', value: streakCount },
+                  { label: 'Рівень', value: level },
+                ].map((item) => (
                   <Card
                     key={item.label}
                     className="rounded-xl border-[rgba(var(--accent-rgb),0.14)] bg-[rgba(var(--accent-rgb),0.08)] px-2 py-3 text-center shadow-none"
                   >
-                    <div className="text-2xl font-semibold text-[var(--text-primary)]">{item.value}</div>
-                    <div className="mt-1 text-[11px] uppercase tracking-[.18em] text-[var(--text-muted)]">{item.label}</div>
+                    <div className="text-2xl font-semibold text-[var(--text-primary)]">
+                      {item.value}
+                    </div>
+                    <div className="mt-1 text-[11px] uppercase tracking-[.18em] text-[var(--text-muted)]">
+                      {item.label}
+                    </div>
                   </Card>
                 ))}
               </div>
@@ -402,7 +553,9 @@ const trialProgressWidthClass =
 
             <Card className="rounded-2xl border-[var(--border)] bg-[var(--bg-secondary)] p-4">
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-[.12em] text-[var(--text-muted)]">02 · Контекст</span>
+                <span className="text-[10px] uppercase tracking-[.12em] text-[var(--text-muted)]">
+                  02 · Контекст
+                </span>
                 <span className="rounded-full bg-emerald-600/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
                   {weeklyReportAvailable ? 'Готово' : 'Активно'}
                 </span>
@@ -410,17 +563,25 @@ const trialProgressWidthClass =
               <div className="h-[2px] rounded-full bg-white/8">
                 <div className="h-[2px] w-[35%] rounded-full bg-[#4f8ef7]" />
               </div>
-              <p className="mt-4 text-[10px] uppercase tracking-[.16em] text-[rgb(var(--accent-soft-rgb))]">Тиждень</p>
+              <p className="mt-4 text-[10px] uppercase tracking-[.16em] text-[rgb(var(--accent-soft-rgb))]">
+                Тиждень
+              </p>
               <h3 className="mt-2 text-lg font-medium text-[var(--text-primary)]">
-                {weeklyReportAvailable ? 'Тижневий звіт доступний' : 'Звіт відкриється після 7 днів'}
+                {weeklyReportAvailable
+                  ? 'Тижневий звіт доступний'
+                  : 'Звіт відкриється після 7 днів'}
               </h3>
               <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
-                {weeklyReport?.summaryText?.trim() || 'Тиждень був тихішим, але система зберегла контекст і напрям.'}
+                {weeklyReport?.summaryText?.trim() ||
+                  'Тиждень був тихішим, але система зберегла контекст і напрям.'}
               </p>
               <button
                 type="button"
                 onClick={() => navigate(ROUTES.PROGRESS)}
-                className={cn(dashboardDesignSystem.buttons.ghost, 'mt-4 h-11 min-w-0 w-fit rounded-xl px-4 py-2 text-sm')}
+                className={cn(
+                  dashboardDesignSystem.buttons.ghost,
+                  'mt-4 h-11 min-w-0 w-fit rounded-xl px-4 py-2 text-sm'
+                )}
               >
                 Відкрити звіт
               </button>

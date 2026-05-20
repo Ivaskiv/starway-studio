@@ -6,6 +6,7 @@ import { trackEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 import { serverError } from '../../utils/serverError.js';
 import { socialService } from '../../modules/social/service.js';
+import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js';
 
 // ================= GET CONNECTIONS =================
 export async function getConnections(req: AuthenticatedRequest, res: Response) {
@@ -133,7 +134,7 @@ export async function telegramLink(req:AuthenticatedRequest, res: Response) {
       });
     }
 
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'StarwayMentorBot';
+      const botUsername = requireTelegramBotConfig('social telegram connect').username;
     const { link, expiresIn } = await socialService.generateTelegramLink(userId, botUsername);
     const state = await resolveUserState(userId).catch(() => null)
 

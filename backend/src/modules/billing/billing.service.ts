@@ -7,6 +7,8 @@ import type { PaymentCallbackData } from '../subscriptions/types.js'
 
 import type { BillingPlan, UserSubscription } from './subscription.entity.js'
 
+const BILLING_CALLBACK_URL = process.env.BILLING_CALLBACK_URL ?? process.env.WAYFORPAY_CALLBACK_URL ?? ''
+
 const BILLING_CATALOG: Record<BillingPlan, { amount: number; durationDays: number; label: string }> = {
   monthly: { amount: 299, durationDays: 30, label: 'Starway Monthly' },
   yearly: { amount: 199, durationDays: 365, label: 'Starway Yearly' },
@@ -74,6 +76,7 @@ export async function createPayment(userId: string, plan: BillingPlan, variant: 
     payRef: orderReference,
     product_name: [selectedPlan.label],
   })
+  payment.serviceUrl = BILLING_CALLBACK_URL
 
   return {
     paymentUrl: 'https://secure.wayforpay.com/pay',

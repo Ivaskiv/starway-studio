@@ -1,3 +1,5 @@
+import { requireTelegramBotConfig } from '../../telegram-mentor/runtime/botConfig.js'
+
 const DEFAULT_SENDPULSE_API_URL = 'https://api.sendpulse.com'
 const DEFAULT_LEAD_MAGNET_TRIGGER = 'lidmagnet_start'
 const DEFAULT_LEAD_MAGNET_STOP_TRIGGER = 'lidmagnet_stop'
@@ -46,9 +48,7 @@ function getSendPulseConfig(): SendPulseConfig {
       process.env.SENDPULSE_LEADMAGNET_STOP_TRIGGER?.trim() ?? DEFAULT_LEAD_MAGNET_STOP_TRIGGER,
     leadMagnetFlowId:
       process.env.SENDPULSE_LEADMAGNET_FLOW_ID?.trim() ?? DEFAULT_LEAD_MAGNET_FLOW_ID,
-    botUsername: (process.env.TELEGRAM_BOT_USERNAME ?? 'Starway_byNadya_Bot')
-      .replace(/\s+#.*$/, '')
-      .trim(),
+    botUsername: requireTelegramBotConfig('sendpulse config').username.replace(/\s+#.*$/, '').trim(),
   }
 }
 

@@ -5,8 +5,8 @@
 import crypto from 'crypto';
 import type { PaymentCallbackData } from '../types.js';
 
-const MERCHANT_ACCOUNT = process.env.WAYFORPAY_MERCHANT_ACCOUNT ?? '';
-const MERCHANT_SECRET  = process.env.WAYFORPAY_SECRET_KEY       ?? '';
+const MERCHANT_ACCOUNT = process.env.WAYFORPAY_MERCHANT_ACCOUNT ?? process.env.WAYFORPAY_MERCHANT ?? '';
+const MERCHANT_SECRET  = process.env.WAYFORPAY_SECRET_KEY       ?? process.env.WAYFORPAY_SECRET ?? '';
 
 /** Будує рядок підпису за специфікацією WayForPay та хешує HMAC-MD5 */
 export function generateSignature(data: PaymentCallbackData): string {

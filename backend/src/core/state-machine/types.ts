@@ -10,10 +10,7 @@ export type UserStep =
   | 'WHEEL'
   | 'DAILY_MORNING'
 
-export type UserEvent =
-  | 'TELEGRAM_LINKED'
-  | 'FLOW_STARTED'
-  | 'WHEEL_COMPLETED'
+export type UserEvent = 'TELEGRAM_LINKED' | 'FLOW_STARTED' | 'WHEEL_COMPLETED'
 
 export interface StateTransitionResult {
   state: UserState

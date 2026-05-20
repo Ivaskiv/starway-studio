@@ -1,0 +1,148 @@
+// apps/web/src/features/landings/focus/styles/_about.scss
+
+@use 'mixins' as *;
+
+#about {
+  overflow: hidden;
+}
+
+// ─────────────────────────────────────
+// LAYOUT
+// ─────────────────────────────────────
+
+.focus-about-shell {
+  position: relative;
+
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(320px, 42%);
+
+  align-items: center;
+
+  gap: clamp(20px, 3vw, 48px);
+
+  padding-block: clamp(20px, 3vw, 40px);
+
+  min-width: 0;
+}
+
+.focus-about-content {
+  min-width: 0;
+}
+
+.focus-about-content .focus-card {
+  gap: clamp(12px, 1.6vh, 18px);
+}
+
+// ─────────────────────────────────────
+// IMAGE
+// ─────────────────────────────────────
+
+.focus-about-image-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  min-width: 0;
+  width: 100%;
+}
+
+.focus-about-image-wrap picture {
+  display: block;
+  width: 100%;
+}
+
+.focus-about-image {
+  display: block;
+
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+
+  object-fit: contain;
+  object-position: center bottom;
+
+  border-radius: var(--surface-radius);
+
+  border-top:
+    1px solid rgba(255, 255, 255, 0.9);
+
+  border-right:
+    1px solid rgba(255, 255, 255, 0.75);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.01) 42%,
+      rgba(255, 255, 255, 0.03) 100%
+    );
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 12px 40px rgba(82, 140, 255, 0.14),
+    0 28px 80px rgba(0, 0, 0, 0.42);
+
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+// ─────────────────────────────────────
+// NOTE
+// ─────────────────────────────────────
+
+.focus-about-note-row {
+  grid-column: 1 / -1;
+}
+
+// ─────────────────────────────────────
+// TABLET
+// ─────────────────────────────────────
+
+@include below('tablet') {
+  .focus-about-shell {
+    grid-template-columns: 1fr 340px;
+
+    gap: 24px;
+  }
+
+  .focus-about-image {
+    max-width: 360px;
+  }
+}
+
+// ─────────────────────────────────────
+// MOBILE
+// ─────────────────────────────────────
+
+@include below('phablet') {
+  .focus-about-shell {
+    grid-template-columns: 1fr;
+
+    gap: 20px;
+  }
+
+  .focus-about-content {
+    order: 1;
+  }
+
+  .focus-about-image-wrap {
+    order: 2;
+  }
+
+  .focus-about-image {
+    max-width: min(72vw, 340px);
+  }
+}
+
+// ─────────────────────────────────────
+// XS
+// ─────────────────────────────────────
+
+@include below('mobile-xs') {
+  .focus-about-image {
+    max-width: min(78vw, 280px);
+  }
+}

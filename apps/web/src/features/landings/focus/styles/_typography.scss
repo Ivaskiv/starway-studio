@@ -1,186 +1,101 @@
-// apps/web/src/features/landings/focus/styles/_typography.scss
+/* apps/web/src/features/landings/focus/styles/_typography.scss */
 
-.focus-page h1,
-.focus-page h2,
-.focus-page h3 {
-  font-family: var(--font-heading);
-  letter-spacing: 0.04em;
+@use 'mixins' as *;
+
+.focus-page {
+  h1,
+  h2,
+  h3,
+  h4,
+  p {
+    margin: 0;
+    min-width: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+
+    color: var(--focus-text);
+
+    overflow-wrap: anywhere;
+
+    word-break: normal;
+  }
+
+  p {
+    font-family: var(--font-sans);
+
+    font-size: var(--fs-body);
+
+    line-height: var(--lh-loose);
+
+    letter-spacing: -.01em;
+
+    color: var(--focus-text-muted);
+
+    overflow-wrap: anywhere;
+  }
 }
 
-.focus-page h1 { font-size: var(--fs-h1); line-height: 1.1; }
-.focus-page h2 { font-size: var(--fs-h2); line-height: var(--lh-normal); }
-.focus-page h3 { font-size: var(--fs-h3); line-height: var(--lh-normal); }
-.focus-page p  { font-size: var(--fs-body); }
+.focus-page h1 {
+  width: min(50vw, 14ch);
 
-/* ─── NAV ─── */
+  margin-inline: auto;
 
-.focus-nav-logo {
-  color: var(--focus-text);
-  font-size: var(--fs-h3);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  animation: focus-blink 3s ease-in-out infinite;
+  font-size: var(--fs-h1);
+
+  font-weight: var(--fw-bold);
+
+  line-height: .9;
+
+  letter-spacing: .02em;
 }
 
-.focus-nav-logo-accent {
-  color: rgba(74, 127, 191, 1);
-}
-
-/* ─── SECTION LABELS ─── */
-
-.focus-section-eyebrow {
-  font-family: var(--font-heading);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--c-accent-subtitle);
-}
-
-.focus-subtitle {
-  font-family: var(--font-heading);
-  font-size: var(--fs-h3);
-  letter-spacing: 0.04em;
-  color: var(--color-text-subtitle);
-}
-
-/* ─── HEADINGS ─── */
-
-.focus-hero .focus-hero-title {
-  font-size: var(--fs-display);
-  line-height: var(--lh-tight);
-  text-transform: uppercase;
-}
-
-.focus-section-title {
-  font-family: var(--font-sans);
+.focus-page h2 {
   font-size: var(--fs-h2);
-  letter-spacing: 0.04em;
-  color: var(--color-text-main);
-  max-width: 720px;
-  line-height: var(--lh-normal);
+
+  font-weight: var(--fw-bold);
+
+  line-height: 1.08;
+
+  letter-spacing: .02em;
 }
+
+.focus-page h3 {
+  font-size: var(--fs-h3);
+
+  font-weight: var(--fw-semibold);
+
+  line-height: 1.12;
+
+  letter-spacing: .015em;
+}
+
+.focus-page h4 {
+  font-size: var(--fs-h4);
+
+  font-weight: var(--fw-semibold);
+
+  line-height: 1.18;
+
+  letter-spacing: .01em;
+}
+
+// helpers
 
 .focus-section-title-centered {
-  margin-right: auto;
-  margin-left: auto;
+  margin-inline: auto;
+
+  text-align: center;
 }
 
-.focus-break-lead {
-  font-family: var(--font-heading);
-  font-size: var(--fs-h3);
-  letter-spacing: 0.04em;
-}
+// responsive
 
-.focus-hero .focus-hero-subtitle {
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  font-weight: 400;
-  line-height: var(--lh-loose);
-  letter-spacing: 0.01em;
-  color: var(--focus-text-muted);
-  max-width: 100%;
-}
-
-/* ─── BODY TEXT ─── */
-
-.focus-hero-support-text,
-.focus-problem-intro,
-.focus-about-copy,
-.focus-first-practice-copy,
-.focus-included-copy,
-.focus-pricing-description,
-.focus-reviews-copy,
-.focus-reviews-intro,
-.focus-break-body,
-.focus-pricing-subtitle,
-.focus-pricing-bottom-text,
-.focus-topic-side-note,
-.focus-step-copy,
-.focus-how-visual-list-item {
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--lh-loose);
-  color: var(--focus-text-muted);
-}
-
-.focus-pricing-subtitle,
-.focus-break-body,
-.focus-reviews-intro,
-.focus-problem-after,
-.focus-pricing-bottom-text {
-  max-width: 720px;
-}
-
-/* ─── ACCENT TEXT ─── */
-
-.focus-break-lead,
-.focus-pricing-bottom-accent,
-.focus-pricing-decision,
-.focus-reviews-summary-value {
-  font-family: var(--font-heading);
-  color: var(--color-text-main);
-  letter-spacing: 0.04em;
-}
-
-.focus-problem-copy,
-.focus-included-copy {
-  font-size: var(--fs-body);
-  line-height: 1.65;
-}
-
-.focus-title-accent {
-  color: var(--color-accent-subtitle);
-}
-
-.focus-footer-copy {
-  font-size: var(--fs-small);
-  line-height: var(--lh-loose);
-  color: var(--focus-text-muted);
-}
-
-.focus-cta-eyebrow {
-  overflow-wrap: normal;
-  word-break: keep-all;
-  font-size: var(--fs-h2);
-  font-weight: 600;
-  color: var(--color-accent-subtitle);
-}
-
-/* ─── BRAND SIGNATURE (FOCUS by Надя) ─── */
-
-.focus-brand-signature {
-  font-family: 'Great Vibes', cursive;
-  font-size: clamp(14px, 4vw, 18px);
-  line-height: 1.1;
-  letter-spacing: 0.04em;
-  color: var(--color-text-main);
-  opacity: 0.9;
-  display: inline-block;
-  transform: rotate(-1deg);
-}
-
-/* "by" — не головний */
-.focus-brand-signature span {
-  font-size: 0.65em;
-  opacity: 0.6;
-  margin: 0 6px;
-  letter-spacing: 0.08em;
-  transform: skewX(-6deg);
-}
-
-/* "Надя" — акцент */
-.focus-brand-signature strong {
-  font-weight: 400;
-  opacity: 1;
-}
-
-@media (max-width: 680px) {
-  .focus-page h1,
-  .focus-page h2,
-  .focus-page h3,
-  .focus-page p {
-    text-align: left;
+@include below('tablet') {
+  .focus-page h1 {
+    font-size: var(--fs-h1-tablet);
   }
 }

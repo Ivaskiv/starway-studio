@@ -1,4 +1,5 @@
 import { useUserState } from '@/features/auth/hooks/useUserState'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetTelegramLinkUrlQuery } from '@/features/auth/services/auth.api'
 import { useAppSelector } from '@/app/hooks'
@@ -42,6 +43,8 @@ const STEP_CONFIG: Record<StepId, Step> = {
 export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }) {
   const navigate = useNavigate()
   const user = useAppSelector(state => state.auth.user)
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const userWithTelegram = user as (typeof user & { telegramUserId?: string | null; telegramChatId?: string | null }) | null
   const { accessControl } = useSystemState()
   const {
@@ -58,7 +61,7 @@ export function HowItWorksSection({ onGetStarted }: { onGetStarted: () => void }
   })
   const isMentorClient = accessControl?.accessLevel === 'CLIENT' && accessControl?.currentFlow === 'mentor'
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(user?.id ?? '', {
-    skip: !isAuthenticated || !user?.id || (!isMentorClient && !(accessControl?.hasRequiredContacts ?? false)),
+    skip: shouldSkipProtectedQueries || !user?.id || (!isMentorClient && !(accessControl?.hasRequiredContacts ?? false)),
   })
 
   const hasTelegramIdentity = useMemo(() => {

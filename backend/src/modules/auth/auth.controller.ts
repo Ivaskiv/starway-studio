@@ -3,6 +3,7 @@ import type { AuthenticatedRequest, AuthUser } from '../../types/globalTypes.js'
 import { withRetry } from '../../db/client.js'
 import { AuthServiceError } from './auth.errors.js'
 import { assertHumanVerification } from './humanVerification.js'
+import { buildClearSecureCookieOptions, buildSecureCookieOptions } from '../../core/state-machine/securityFoundation.js'
 
 import {
   findRefreshToken,
@@ -20,13 +21,45 @@ import {
   verifyRefreshToken,
 } from './auth.service.js'
 
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-  path: '/',
-  maxAge: 30 * 24 * 60 * 60 * 1000,
-} as const
+type RefreshSessionResult = {
+  accessToken: string
+  refreshToken: string
+  user: Awaited<ReturnType<typeof resolveSafeUserById>>
+}
+
+const inFlightRefreshSessions = new Map<string, Promise<RefreshSessionResult>>()
+const recentRefreshSessions = new Map<string, { expiresAt: number; result: RefreshSessionResult }>()
+const REFRESH_GRACE_WINDOW_MS = 5_000
+const MAX_RECENT_REFRESH_SESSIONS = 100
+
+function pruneRecentRefreshSessions() {
+  const now = Date.now()
+
+  for (const [key, value] of recentRefreshSessions.entries()) {
+    if (value.expiresAt <= now) {
+      recentRefreshSessions.delete(key)
+    }
+  }
+
+  while (recentRefreshSessions.size > MAX_RECENT_REFRESH_SESSIONS) {
+    const oldestKey = recentRefreshSessions.keys().next().value
+    if (!oldestKey) return
+    recentRefreshSessions.delete(oldestKey)
+  }
+}
+
+function getRecentRefreshSession(token: string): RefreshSessionResult | null {
+  pruneRecentRefreshSessions()
+  const cached = recentRefreshSessions.get(token)
+  if (!cached) return null
+  if (cached.expiresAt <= Date.now()) {
+    recentRefreshSessions.delete(token)
+    return null
+  }
+  return cached.result
+}
+
+const COOKIE_OPTIONS = buildSecureCookieOptions()
 
 function resolveRefreshToken(req: Request): string | null {
   const cookieToken = String(req.cookies?.refreshToken ?? '').trim()
@@ -187,21 +220,60 @@ export async function refresh(req: Request, res: Response) {
   try {
     const decoded = verifyRefreshToken(token)
     console.log('[AUTH][REFRESH]', { tokenPresent: true, userId: decoded?.id ?? null })
-    const exists = await withRetry(() => findRefreshToken(token))
-    if (!exists) return res.status(401).json({ success: false, error: 'invalid_refresh' })
-    if (exists.userId !== decoded.id) {
-      return res.status(401).json({ success: false, error: 'refresh_user_mismatch' })
+
+    const recent = getRecentRefreshSession(token)
+    if (recent) {
+      res.cookie('refreshToken', recent.refreshToken, COOKIE_OPTIONS)
+      return res.json(recent)
     }
 
-    const user = await withRetry(() => resolveSafeUserById(exists.userId))
-    if (!user) return res.status(401).json({ success: false, error: 'user_not_found' })
+    const cached = inFlightRefreshSessions.get(token)
+    if (cached) {
+      const shared = await cached
+      res.cookie('refreshToken', shared.refreshToken, COOKIE_OPTIONS)
+      return res.json(shared)
+    }
 
-    const newAccess = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
-    const newRefresh = generateRefreshToken(user.id)
-    await withRetry(() => storeRefreshToken(user.id, newRefresh))
-    await withRetry(() => removeRefreshToken(token))
-    res.cookie('refreshToken', newRefresh, COOKIE_OPTIONS)
-    return res.json({ accessToken: newAccess, refreshToken: newRefresh, user })
+    const refreshPromise = (async (): Promise<RefreshSessionResult> => {
+      const exists = await withRetry(() => findRefreshToken(token))
+      if (!exists) {
+        throw new AuthServiceError('invalid_refresh', 401, 'Refresh token not found')
+      }
+      if (exists.userId !== decoded.id) {
+        throw new AuthServiceError('refresh_user_mismatch', 401, 'Refresh token user mismatch')
+      }
+
+      const user = await withRetry(() => resolveSafeUserById(exists.userId))
+      if (!user) {
+        throw new AuthServiceError('user_not_found', 401, 'User not found')
+      }
+
+      const newAccess = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
+      const newRefresh = generateRefreshToken(user.id)
+      await withRetry(() => storeRefreshToken(user.id, newRefresh))
+      await withRetry(() => removeRefreshToken(token))
+
+      return {
+        accessToken: newAccess,
+        refreshToken: newRefresh,
+        user,
+      }
+    })()
+
+    inFlightRefreshSessions.set(token, refreshPromise)
+
+    try {
+      const shared = await refreshPromise
+      pruneRecentRefreshSessions()
+      recentRefreshSessions.set(token, {
+        expiresAt: Date.now() + REFRESH_GRACE_WINDOW_MS,
+        result: shared,
+      })
+      res.cookie('refreshToken', shared.refreshToken, COOKIE_OPTIONS)
+      return res.json(shared)
+    } finally {
+      inFlightRefreshSessions.delete(token)
+    }
   } catch (error) {
     console.error('[auth.controller] refresh failed', error instanceof Error ? error.stack : error)
 
@@ -219,10 +291,7 @@ export async function logout(req: Request, res: Response) {
     if (token) await removeRefreshToken(token)
 
     res.clearCookie('refreshToken', {
-      path: '/',
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      ...buildClearSecureCookieOptions(),
     })
     return res.sendStatus(204)
   } catch (error) {

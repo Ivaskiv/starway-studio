@@ -1,6 +1,7 @@
 import { ROUTES } from '@/config/routes'
 import { useAccess } from '@/features/auth/hooks/useAccess'
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetMyProductsQuery } from '@/features/products/services/products.api'
 import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
@@ -199,8 +200,12 @@ function ProducerProductCard({
 export default function ProductsPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { plan, isPaid } = useAccess()
-  const { data: myProducts = [] } = useGetMyProductsQuery()
+  const { data: myProducts = [] } = useGetMyProductsQuery(undefined, {
+    skip: shouldSkipProtectedQueries,
+  })
   const { counts, accessControl, subscription } = useSystemState()
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !user?.id })
 

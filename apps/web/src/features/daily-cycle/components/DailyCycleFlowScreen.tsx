@@ -4,6 +4,7 @@ import { uk } from 'date-fns/locale'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import toast from 'react-hot-toast'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useGetTelegramLinkUrlQuery, useGetTelegramStatusQuery } from '@/features/auth/services/auth.api'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGenerateDeepLinkMutation } from '@/features/auth/services/deeplinks.api'
@@ -62,9 +63,13 @@ export function DailyCycleFlow({
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const userId = useSelector((state: RootState) => state.auth.user?.id ?? '')
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { data: trial } = useGetTrialStatusQuery()
   const { dayNumber: journeyDay, coreProgress } = useUserProgress()
-  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, { skip: !userId })
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, {
+    skip: shouldSkipProtectedQueries || !userId,
+  })
   const { accessControl, subscription, getModuleAccess } = useSystemState()
   const hardPaywallReached = coreProgress.cycleDays >= 3 && !subscription?.isActive
   const hasAccess = !hardPaywallReached && Boolean(

@@ -1,5 +1,4 @@
 // frontend/src/features/auth/services/auth.api.ts
-import type { AppDispatch } from '@/app/store'
 import type {
   AuthSuccessResponseDTO,
   ForgotPasswordResponseDTO,
@@ -9,7 +8,6 @@ import type {
   SocialAuthResponseDTO,
   UpdateSettingsResponseDTO,
 } from '@/contracts/api.contracts'
-import { accessApi } from '@/features/auth/services/accessApi'
 import type { User } from '@/features/user/types/user.types'
 import { api } from '@/services/api'
 import type {
@@ -22,19 +20,6 @@ import type {
   UpdateUserSettingsInput,
 } from '../types/auth.types'
 import { clearAuth, setCredentials, updateUser, updateUserSettings } from './auth.slice'
-
-const ACCESS_REFRESH_OPTIONS = {
-  forceRefetch: true,
-  subscribe: false,
-} as const
-
-async function refreshAccessState(dispatch: AppDispatch) {
-  try {
-    await dispatch(accessApi.endpoints.getMyAccess.initiate(undefined, ACCESS_REFRESH_OPTIONS)).unwrap()
-  } catch (error) {
-    console.warn('[auth.api] Failed to refresh access state', error)
-  }
-}
 
 export interface TelegramStatusResponse {
   linked: boolean
@@ -61,7 +46,6 @@ export const authApi = api.injectEndpoints({
         try {
           const { data } = await queryFulfilled
           dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken, refreshToken: data.refreshToken }))
-          await refreshAccessState(dispatch)
         } catch (error) {
           console.warn('[auth.api] login failed:', error)
         }
@@ -74,7 +58,6 @@ export const authApi = api.injectEndpoints({
         try {
           const { data } = await queryFulfilled
           dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken, refreshToken: data.refreshToken }))
-          await refreshAccessState(dispatch)
         } catch (error) {
           console.warn('[auth.api] register failed:', error)
         }
@@ -87,7 +70,6 @@ export const authApi = api.injectEndpoints({
         try {
           const { data } = await queryFulfilled
           dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken, refreshToken: data.refreshToken }))
-          await refreshAccessState(dispatch)
         } catch (error) {
           console.warn('[auth.api] socialAuth failed:', error)
         }
@@ -100,7 +82,6 @@ export const authApi = api.injectEndpoints({
         try {
           const { data } = await queryFulfilled
           dispatch(setCredentials({ user: data.user as unknown as User, accessToken: data.accessToken, refreshToken: data.refreshToken }))
-          await refreshAccessState(dispatch)
         } catch (error) {
           console.warn('[auth.api] telegramMiniAppAuth failed:', error)
         }
@@ -109,6 +90,7 @@ export const authApi = api.injectEndpoints({
 
     getMe: builder.query<MeResponseDTO, void>({
       query: () => '/auth/me',
+      keepUnusedDataFor: 300,
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled
@@ -122,10 +104,12 @@ export const authApi = api.injectEndpoints({
 
     getTelegramLinkUrl: builder.query<TelegramLinkResponse, void>({
       query: () => '/auth/telegram-link',
+      keepUnusedDataFor: 300,
     }),
 
     getTelegramStatus: builder.query<TelegramStatusResponse, void>({
       query: () => '/telegram/status',
+      keepUnusedDataFor: 300,
     }),
 
     retryTelegramLink: builder.mutation<TelegramLinkResponse, void>({

@@ -1,723 +1,114 @@
 // apps/web/src/features/landings/focus/styles/components/_lists.scss
+@use '../mixins' as *;
 
-/* ─── PROBLEM LIST ─── */
+// ─── SHARED LIST LAYOUTS ─────────────────────────────────
 
-.focus-problem-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 14px 0;
-}
-
-.focus-problem-item-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--focus-radius-pill);
-  background: var(--focus-blue-light);
-  border: 1px solid var(--focus-blue-border);
-}
-
-/* ─── INCLUDED ICON ─── */
-
-.focus-included-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  background: var(--focus-blue-light);
-  border: 1px solid var(--focus-blue-border);
-}
-
-/* ─── HOW STEPS ─── */
-
-.focus-step {
-  display: flex;
-  gap: 20px;
-  padding: 24px 0;
-  border-bottom: 1px solid var(--focus-card-border);
-}
-
-.focus-step:last-child { border-bottom: 0; }
-
-.focus-step-number {
-  min-width: 28px;
-  padding-top: 4px;
-  color: var(--focus-blue);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.focus-step-title {
-  font-size: 17px;
-  font-weight: 700;
-  transition: color 0.3s;
-}
-
-/* ─── HOW VISUAL TAG ─── */
-
-.focus-how-visual-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid var(--focus-blue-border);
-  border-radius: var(--focus-radius-pill);
-  background: var(--focus-blue-light);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--focus-blue);
-}
-
-/* ─── HOW VISUAL LIST ─── */
-
-.focus-how-visual-list,
 .focus-pricing-features,
-.focus-first-practice-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.focus-how-visual-list { gap: 12px; }
-
-.focus-how-visual-list-item,
-.focus-first-practice-item,
-.focus-pricing-features-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.focus-how-visual-list-item::before,
-.focus-first-practice-item::before {
-  content: '→';
-  flex-shrink: 0;
-  color: var(--focus-blue);
-  font-weight: 700;
-}
-
-.focus-pricing-features-item::before {
-  content: '✓';
-  flex-shrink: 0;
-  color: var(--focus-blue);
-  font-weight: 700;
-}
-
-/* ─── HOW VISUAL PRICE ─── */
-
-.focus-how-visual-price {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  padding-top: 28px;
-  border-top: 1px solid var(--focus-card-border);
-  gap: 16px;
-}
-
-.focus-price-amount {
-  font-size: 36px;
-  font-weight: 800;
-}
-
-/* ─── TOPIC PILL ─── */
-
-.focus-topic-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 20px;
-  border-radius: var(--focus-radius-sm);
-  transition: all 0.3s ease;
-}
-
-/* ─── FIRST PRACTICE LIST ─── */
-
-.focus-first-practice-list { gap: 12px; }
-
-.focus-first-practice-item {
-  padding: 16px 18px;
-  border-radius: var(--focus-radius-sm);
-  color: var(--focus-text-muted);
-  font-size: 14px;
-  transition: all 0.25s;
-}
-
-.focus-first-practice-item:hover {
-  border-color: var(--focus-blue-border);
-  color: var(--focus-text);
-}
-
-/* ─── PRICING ─── */
-
-.focus-pricing-badge {
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 5px 16px;
-  border-radius: var(--focus-radius-pill);
-  background: var(--focus-blue);
-  color: #fff;
-  white-space: nowrap;
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.focus-pricing-plan {
-  font-size: var(--fs-small);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.focus-pricing-tier {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: var(--focus-blue);
-  color: #fff;
-  font-size: var(--fs-small);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.focus-pricing-price {
-  font-size: clamp(36px, 8vw, 52px);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.focus-pricing-description {
-  padding-bottom: var(--space-lg);
-  border-bottom: 1px solid var(--focus-card-border);
-  font-size: var(--fs-body);
-  line-height: 1.65;
-}
-
-.focus-pricing-day {
-  color: rgba(74, 160, 255, 0.85);
-  font-size: var(--fs-small);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.focus-pricing-decision {
-  font-size: var(--fs-h3);
-  line-height: 1.3;
+.focus-detail-list {
+  @include flex-col;
 }
 
 .focus-pricing-features {
   gap: var(--space-xs);
 }
+.focus-detail-list {
+  gap: var(--space-3xs);
+}
 
+// ─── SHARED FLEX ITEMS ───────────────────────────────────
+
+.focus-first-practice-item,
+.focus-pricing-features-item,
+.focus-list-item {
+  display: flex;
+}
+
+.focus-first-practice-item,
 .focus-pricing-features-item {
-  font-size: var(--fs-body);
-  line-height: 1.5;
-}
-
-.focus-pricing-trust {
-  color: rgba(240, 240, 245, 0.42);
-  font-size: var(--fs-small);
-  line-height: 1.5;
-}
-
-.focus-pricing-bottom {
-  max-width: 640px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.focus-pricing-bottom-text { margin: 0 auto; text-align: center; }
-
-.focus-pricing-bottom-accent {
-  font-size: clamp(18px, 2vw, 22px);
-  line-height: 1.4;
-  text-align: center;
-}
-
-/* ─── CTA TEXT ─── */
-
-.focus-cta-title {
-  position: relative;
-  font-family: var(--font-heading);
-  font-size: clamp(64px, 12vw, 108px);
-  font-weight: 700;
-  line-height: 0.97;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
-  color: var(--color-text-main);
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.focus-cta-copy {
-  position: relative;
-  max-width: 500px;
-  margin: 0 auto;
-  color: var(--focus-text-muted);
-  font-size: var(--fs-body);
-  line-height: 1.7;
-}
-
-.focus-cta-meta-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--fs-small);
-}
-
-.focus-cta-meta-item::before {
-  content: '·';
-  color: var(--focus-blue);
-  font-size: 18px;
-}
-
-/* ─── SPLIT ELEMENTS ─── */
-
-.focus-split-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: var(--focus-radius-pill);
-  font-family: var(--font-heading);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.focus-split-tag--dim {
-  background: rgba(30, 50, 100, 0.4);
-  border: 1px solid rgba(60, 90, 160, 0.3);
-  color: rgba(100, 140, 220, 0.7);
-}
-
-.focus-split-tag--bright {
-  background: rgba(74, 126, 191, 0.2);
-  border: 1px solid rgba(74, 126, 191, 0.5);
-  color: rgba(140, 190, 255, 0.9);
-}
-
-.focus-split-title {
-  font-family: var(--font-heading);
-  font-size: clamp(22px, 3vw, 36px);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  line-height: 1.1;
-}
-
-.focus-split-title--dim    { color: rgba(180, 195, 230, 0.45); }
-.focus-split-title--bright { color: #f0f0f5; }
-
-.focus-split-desc {
-  font-family: var(--font-sans);
-  font-size: clamp(13px, 1.3vw, 15px);
-  line-height: 1.7;
-}
-
-.focus-split-desc--dim    { color: rgba(180, 195, 230, 0.32); }
-.focus-split-desc--bright { color: rgba(240, 240, 245, 0.65); }
-
-.focus-split-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  justify-content: flex-end;
-}
-
-.focus-split-right .focus-split-pills { justify-content: flex-start; }
-
-.focus-mpill {
-  padding: 6px 14px;
-  border-radius: var(--focus-radius-pill);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  transition: all 0.2s;
-  cursor: default;
-}
-
-.focus-mpill--dim {
-  background: rgba(30, 50, 100, 0.25);
-  border: 1px solid rgba(60, 90, 160, 0.18);
-  color: rgba(120, 150, 210, 0.45);
-}
-
-.focus-mpill--bright {
-  background: rgba(74, 126, 191, 0.10);
-  border: 1px solid rgba(74, 126, 191, 0.22);
-  color: rgba(74, 160, 255, 0.75);
-}
-
-.focus-mpill--bright:hover {
-  background: rgba(74, 126, 191, 0.20);
-  border-color: rgba(74, 126, 191, 0.45);
-  color: rgba(200, 225, 255, 0.95);
-  transform: translateY(-1px);
-}
-
-/* ─── PROBLEM FLOW ─── */
-
-.focus-problem-flow {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  width: 100%;
-  max-width: 520px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.focus-problem-line {
-  display: flex;
   align-items: flex-start;
-  gap: 10px;
-  opacity: 0.85;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  gap: var(--space-2xs);
 }
 
-.focus-problem-line:hover {
-  opacity: 1;
-  transform: translateX(4px);
-}
-
-.focus-problem-bullet {
-  color: var(--focus-blue);
-  font-weight: 700;
-}
-
-.focus-problem-text {
-  font-size: 15px;
-  line-height: 1.55;
-}
-
-.focus-problem-core-wrap {
-  max-width: 520px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.focus-problem-core {
-  padding: 18px 20px;
-  border-radius: 16px;
-}
-
-.focus-problem-core p {
-  font-size: var(--fs-h3);
-  line-height: 1.6;
-}
-
-.focus-problem-core strong {
-  display: block;
-  margin-top: 6px;
-  font-size: var(--fs-h3);
-}
-
-.focus-problem-after {
-  font-size: var(--fs-body);
-  line-height: 1.55;
-  opacity: 0.65;
-}
-
-/* ─── REVIEWS ELEMENTS ─── */
-
-.focus-reviews-title {
-  max-width: 920px;
-  margin-bottom: 18px;
-  line-height: 0.98;
-}
-
-.focus-reviews-title span { color: var(--color-accent); }
-
-.focus-reviews-intro {
-  max-width: 760px;
-  margin-bottom: 34px;
-  font-size: clamp(18px, 2vw, 22px);
-  line-height: 1.55;
-  color: rgba(240, 240, 245, 0.44);
-}
-
-.focus-reviews-summary {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
-  gap: 0;
-  margin-bottom: 8px;
-  padding-bottom: 30px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.focus-reviews-summary-item {
-  padding: 0 28px 0 0;
-  margin-bottom: 4px;
-  min-height: 48px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.focus-reviews-summary-item + .focus-reviews-summary-item {
-  padding-left: 28px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.focus-reviews-summary-item--rating {
-  display: flex;
+.focus-list-item {
   align-items: center;
-  gap: 18px;
+  gap: var(--space-xs);
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
-.focus-reviews-stars {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #ffb52e;
+.focus-list-item__marker {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-accent);
 }
 
-.focus-reviews-star {
-  width: 20px;
-  height: 20px;
-  fill: currentColor;
-  stroke: currentColor;
-}
-
-.focus-reviews-rating {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.focus-reviews-rating-value {
+.focus-list-item__marker--num {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
   font-family: var(--font-heading);
-  font-size: 44px;
-  font-weight: 600;
-  line-height: 0.95;
-  color: var(--focus-text);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-bold);
+  color: var(--c-accent);
+  letter-spacing: 0.06em;
+  min-width: 1.6em;
 }
 
-.focus-reviews-rating-copy,
-.focus-reviews-summary-label {
-  font-size: 15px;
-  line-height: 1.35;
-  color: rgba(240, 240, 245, 0.38);
+.focus-list-item__text {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-loose);
+  color: var(--focus-text-muted);
+}
+// ─── SHARED CENTERED UI ──────────────────────────────────
+
+.focus-included-icon,
+.focus-pipeline-node {
+  @include flex-center;
 }
 
-.focus-reviews-summary-value {
-  display: block;
-  margin-top: 4px;
-  font-size: 19px;
-  font-weight: 700;
-  color: var(--focus-text);
+// ─── ICON BOXES ──────────────────────────────────────────
+
+.focus-included-icon {
+  flex-shrink: 0;
+  width: var(--icon-box-size);
+  height: var(--icon-box-size);
+  border-radius: var(--surface-radius-xs);
+
+  background: radial-gradient(circle at 30% 30%, #0d1525, #080c18);
+
+  border: 1px solid rgba(74, 126, 191, 0.4);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 14px rgba(74, 126, 191, 0.12);
+
+  font-family: var(--font-heading);
+  font-size: var(--icon-fs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  line-height: 1;
+
+  color: rgba(74, 160, 255, 1);
 }
 
-.focus-reviews-badge {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  padding: 7px 14px;
-  margin-bottom: 22px;
-  border: 1px solid rgba(66, 192, 112, 0.2);
-  border-radius: var(--focus-radius-pill);
-  background: rgba(18, 60, 35, 0.52);
-  color: #46c970;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+// ─── CHECK / ARROW LISTS ─────────────────────────────────
+
+.focus-first-practice-item::before,
+.focus-pricing-features-item::before {
+  flex-shrink: 0;
+  color: var(--focus-blue);
+  font-weight: var(--fw-bold);
 }
 
-.focus-reviews-badge::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: currentColor;
+.focus-first-practice-item::before {
+  content: '→';
 }
 
-.focus-reviews-quote {
-  width: 24px;
-  height: 24px;
-  margin-bottom: 24px;
-  color: rgba(74, 126, 191, 0.88);
-}
-
-.focus-reviews-quote-copy {
-  font-size: clamp(16px, 1.65vw, 17px);
-  line-height: 1.72;
-  color: rgba(240, 240, 245, 0.66);
-}
-
-.focus-reviews-author {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 30px;
-}
-
-.focus-reviews-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 1px solid rgba(74, 126, 191, 0.28);
-  background: rgba(26, 40, 66, 0.9);
-  color: #62a0ff;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.focus-reviews-author-name { font-size: 17px; font-weight: 700; color: var(--focus-text); }
-.focus-reviews-author-meta { font-size: 14px; color: rgba(240, 240, 245, 0.34); }
-
-.focus-reviews-videos { margin-top: 52px; }
-
-.focus-reviews-videos-title {
-  margin-bottom: 18px;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(240, 240, 245, 0.34);
-}
-
-.focus-reviews-video-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.focus-video-skeleton {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
-}
-
-.focus-video-el {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.focus-video-play {
-  position: relative;
-  z-index: 2;
-  width: 58px;
-  height: 58px;
-  min-width: 58px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.11);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.focus-video-play:hover {
-  background: rgba(255, 255, 255, 0.18);
-  transform: scale(1.06);
-}
-
-.focus-video-play svg { width: 20px; height: 20px; }
-
-.focus-score-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(71, 123, 198, 0.96);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.focus-score-badge svg {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-  stroke: currentColor;
-}
-
-.focus-video-index {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: rgba(240, 240, 245, 0.42);
-}
-
-.focus-reviews-footer {
-  margin-top: 54px;
-  padding-top: 42px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.focus-reviews-footer-copy {
-  max-width: 720px;
-  margin-bottom: 28px;
-  font-size: 18px;
-  line-height: 1.65;
-  color: rgba(240, 240, 245, 0.42);
-}
-
-.focus-reviews-footer-copy strong { color: var(--focus-text); }
-
-.focus-reviews-footer-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* ─────────────────────────────
-   RESPONSIVE
-───────────────────────────── */
-
-@media (max-width: 900px) {
-  .focus-reviews-video-strip     { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .focus-reviews-summary         { grid-template-columns: 1fr; gap: 18px; border-bottom: 0; padding-bottom: 0; }
-  .focus-reviews-summary-item,
-  .focus-reviews-summary-item + .focus-reviews-summary-item { padding: 0; border-left: 0; }
-}
-
-@media (max-width: 480px) {
-  .focus-reviews-title           { line-height: 1.02; }
-  .focus-reviews-rating          { align-items: flex-start; flex-direction: column; gap: 8px; }
-  .focus-reviews-rating-value    { font-size: 38px; }
-  .focus-reviews-video-strip     { grid-template-columns: 1fr; }
-  .focus-reviews-footer-link     { width: 100%; justify-content: center; }
-  .focus-hero-meta               { grid-template-columns: 1fr; width: 100%; }
+.focus-pricing-features-item::before {
+  content: '✓';
 }

@@ -1,4 +1,5 @@
 import { ROUTES } from '@/config/routes'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { dashboardDesignSystem } from '@/styles/design-system'
 import { useGetWebMapQuery } from '@/features/web-map/services/web-map.api'
@@ -13,9 +14,15 @@ function getCurrentMonthLabel() {
 export default function WebMapWidget() {
   const visionTokens = dashboardDesignSystem.vision
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { navigateTo } = useSmartNavigation()
-  const { data: map } = useGetWebMapQuery(undefined, { skip: !user?.id })
-  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(user?.id ?? '', { skip: !user?.id })
+  const { data: map } = useGetWebMapQuery(undefined, {
+    skip: shouldSkipProtectedQueries || !user?.id,
+  })
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(user?.id ?? '', {
+    skip: shouldSkipProtectedQueries || !user?.id,
+  })
 
   const currentMonth = new Date().getMonth() + 1
   const currentYear = new Date().getFullYear()

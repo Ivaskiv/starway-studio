@@ -1,4 +1,5 @@
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useGetMyWeeklyReportsQuery, type WeeklyReportItem } from '@/features/ai-mentor/services/mentor.api'
 import { useGetDailyHistoryQuery } from '@/features/daily-cycle/services/daily.api'
 import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
@@ -123,16 +124,24 @@ function buildMonthlyCards(
 
 export function WheelMonthlyBoard({ onOpenInline, onOpenReports }: { onOpenInline: () => void; onOpenReports: () => void }) {
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const userId = user?.id ?? null
 
-  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', { skip: !userId })
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', {
+    skip: shouldSkipProtectedQueries || !userId,
+  })
   const { data: wheelHistory = [], isFetching: isHistoryFetching } = useGetWheelHistoryQuery(
     { userId: userId ?? '', limit: 24 },
-    { skip: !userId },
+    { skip: shouldSkipProtectedQueries || !userId },
   )
-  const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, { skip: !userId })
-  const { data: weeklyReports = [] } = useGetMyWeeklyReportsQuery(undefined, { skip: !userId })
-  const { tasks: microTasks } = useMicroTasks({ skip: !userId })
+  const { data: dailyHistory = [] } = useGetDailyHistoryQuery(undefined, {
+    skip: shouldSkipProtectedQueries || !userId,
+  })
+  const { data: weeklyReports = [] } = useGetMyWeeklyReportsQuery(undefined, {
+    skip: shouldSkipProtectedQueries || !userId,
+  })
+  const { tasks: microTasks } = useMicroTasks({ skip: shouldSkipProtectedQueries || !userId })
 
   const monthlyCards = useMemo(() => {
     const combined = [latestWheel, ...wheelHistory].filter((item): item is WheelAssessment => Boolean(item))

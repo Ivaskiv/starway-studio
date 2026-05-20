@@ -1,24 +1,41 @@
 // frontend/src/features/auth/components/AuthModal.tsx
 import { X } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAuth } from '../hooks/useAuth'
 import { LoginForm } from './LoginForm'
 import { RegisterForm } from './RegisterForm'
 import { usePostAuthNavigation } from '../hooks/usePostAuthNavigation'
 import { getToastMessage, type ToastLang } from '@/features/notifications/i18n/toast'
+import { getToken } from '../services/token'
 import toast from 'react-hot-toast'
 
 type Mode = 'login' | 'register'
 interface Props { isOpen: boolean; onClose: () => void; defaultMode?: Mode }
 
+type AbTestPendingPayload = {
+  source?: 'anonymous' | 'authenticated'
+  answers?: Array<{
+    questionId: string
+    answerId: string
+  }> | Record<string, string>
+}
+
 export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Props) {
   const { loginWithSocial, canUseSocialProvider } = useAuth()
+  const orchestrator = useSessionOrchestrator()
+  const location = useLocation()
+  const navigate = useNavigate()
   const lang: ToastLang = 'uk'
   const postAuthNavigate = usePostAuthNavigation()
 
   const [mode, setMode] = useState<Mode>(defaultMode)
   const [isProcessing, setIsProcessing] = useState(false)
   const formKey = useRef(0)
+  const deferToPendingProtectedNavigation =
+    orchestrator.sessionModal.kind === 'auth' &&
+    (orchestrator.sessionModal.reason === 'protected_route' || orchestrator.sessionModal.reason === 'telegram_required')
 
   useEffect(() => {
     if (isOpen) {
@@ -48,7 +65,9 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
       await loginWithSocial(provider)
       toast.success(getToastMessage('auth.socialSuccess', lang))
       onClose()
-      await postAuthNavigate()
+      if (!deferToPendingProtectedNavigation) {
+        await postAuthNavigate()
+      }
     } catch (err) {
       const message = err instanceof Error && err.message.includes('VITE_GOOGLE_CLIENT_ID not configured')
         ? getToastMessage('auth.socialGoogleNotConfigured', lang)
@@ -62,11 +81,55 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
   const showGoogleSocial = canUseSocialProvider('google')
   const showTelegramSocial = canUseSocialProvider('telegram')
   const showSocialSection = showGoogleSocial || showTelegramSocial
+  const isAbTestRegisterFlow = location.pathname.startsWith('/register') && new URLSearchParams(location.search).get('from') === 'ab-test'
 
-  const handleRegisterSuccess = () => {
+  const handleRegisterSuccess = async () => {
     toast.success(getToastMessage('auth.registerSuccess', lang))
+
+    const pending = readPendingAbTest()
+    let redirectedToAbTestResult = false
+
+    const pendingAnswers = normalizePendingAbTestAnswers(pending)
+
+    if (isAbTestRegisterFlow && pending?.source === 'anonymous' && pendingAnswers.length) {
+      setIsProcessing(true)
+      try {
+        const response = await fetch('/api/ab-test/submit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...buildAuthHeaders(),
+          },
+          credentials: 'include',
+          body: JSON.stringify({ answers: pendingAnswers }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to submit AB test result (${response.status})`)
+        }
+
+        const data = await response.json() as { type?: string }
+        window.sessionStorage.removeItem('ab_test_pending')
+        redirectedToAbTestResult = true
+        navigate(`/ab-test/result?type=${encodeURIComponent(String(data.type ?? 'STATE'))}`, {
+          replace: true,
+          state: { result: data },
+        })
+        return
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Не вдалося зберегти результат тесту')
+        return
+      } finally {
+        if (!redirectedToAbTestResult) {
+          setIsProcessing(false)
+        }
+      }
+    }
+
     onClose()
-    void postAuthNavigate()
+    if (!deferToPendingProtectedNavigation) {
+      void postAuthNavigate()
+    }
   }
 
   const switchMode = () => {
@@ -103,7 +166,12 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
               <LoginForm
                 key={`login-${formKey.current}`}
                 onSwitch={switchMode}
-                onSuccess={() => { onClose(); void postAuthNavigate() }}
+                onSuccess={() => {
+                  onClose()
+                  if (!deferToPendingProtectedNavigation) {
+                    void postAuthNavigate()
+                  }
+                }}
               />
             ) : (
               <RegisterForm key={`register-${formKey.current}`} onSwitch={switchMode} onSuccess={handleRegisterSuccess} />
@@ -140,4 +208,41 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
       </div>
     </div>
   )
+}
+
+function readPendingAbTest(): AbTestPendingPayload | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.sessionStorage.getItem('ab_test_pending')
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as AbTestPendingPayload | null
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function normalizePendingAbTestAnswers(
+  pending: AbTestPendingPayload | null,
+): Array<{ questionId: string; answerId: string }> {
+  if (!pending?.answers) return []
+
+  if (Array.isArray(pending.answers)) {
+    return pending.answers.filter(
+      (item): item is { questionId: string; answerId: string } =>
+        Boolean(item && typeof item.questionId === 'string' && typeof item.answerId === 'string'),
+    )
+  }
+
+  return Object.entries(pending.answers).flatMap(([questionId, answerId]) => (
+    typeof answerId === 'string' && answerId.trim()
+      ? [{ questionId, answerId }]
+      : []
+  ))
+}
+
+function buildAuthHeaders(): HeadersInit {
+  const token = getToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }

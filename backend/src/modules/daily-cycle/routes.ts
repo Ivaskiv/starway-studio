@@ -2,6 +2,7 @@ import express from 'express';
 const router = express.Router();
 
 import { requireClientAccess } from '../access/guard.js';
+import { requireBehavioralReadAccess } from '../../core/access/behavioralAccess.js';
 import { authOrBotRequired } from '../../modules/auth/middleware/auth-or-bot.js';
 import {
   completeTask,
@@ -15,30 +16,29 @@ import {
 } from './controller.js';
 
 router.use(authOrBotRequired);
-router.use(requireClientAccess);
 
 // GET today's entry
-router.get('/today', getToday);
+router.get('/today', requireBehavioralReadAccess('daily_today'), getToday);
 
 // UPSERT daily entry
-router.post('/entry', upsertEntry);
+router.post('/entry', requireClientAccess, upsertEntry);
 
 // AUTOSAVE morning answer
-router.patch('/morning/answer', saveMorningAnswer);
+router.patch('/morning/answer', requireClientAccess, saveMorningAnswer);
 
 // AUTOSAVE session answer by step
-router.patch('/session/:entryId/answer', saveSessionAnswer);
+router.patch('/session/:entryId/answer', requireClientAccess, saveSessionAnswer);
 
 // SKIP yesterday recovery
-router.post('/skip', skipPreviousDay);
+router.post('/skip', requireClientAccess, skipPreviousDay);
 
 // GET history
-router.get('/history', getHistoryController);
+router.get('/history', requireBehavioralReadAccess('daily_history'), getHistoryController);
 
 // GET user micro tasks
-router.get('/tasks', getTasks);
+router.get('/tasks', requireBehavioralReadAccess('daily_history'), getTasks);
 
 // COMPLETE micro task
-router.post('/tasks/:taskId/complete', completeTask);
+router.post('/tasks/:taskId/complete', requireClientAccess, completeTask);
 
 export default router;

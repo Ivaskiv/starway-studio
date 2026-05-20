@@ -3,41 +3,26 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n backend,web \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\"",
-    "dev:tunnel": "concurrently -n backend,web,tunnel \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:5173 >/dev/null; do sleep 1; done; pnpm --dir apps/web dev:tunnel'\"",
-    "dev:bot": "pnpm --dir apps/bot dev",
-    "prisma": "packages/db/prisma/schema.prisma",
+    "dev": "concurrently -c blue,magenta -n backend,web \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\"",
+    "dev:tunnel": "concurrently -c blue,magenta,green -n backend,web,tunnel \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir backend exec tsx ../scripts/dev/sync-ngrok.ts'\"",
+    "dev:clean": "kill -9 $(lsof -ti :3001) $(lsof -ti :5173) 2>/dev/null || true; pkill ngrok 2>/dev/null || true; pnpm dev:tunnel",
+    "prisma": "pnpm --filter @starway/db exec prisma",
     "prisma:generate": "pnpm --filter @starway/db run prisma:generate",
-    "build": "pnpm --dir packages/shared build && pnpm --dir packages/db build && pnpm --dir backend build && pnpm --dir apps/web build && pnpm --dir apps/bot build",
+    "prisma:db:push": "pnpm --filter @starway/db run prisma:db:push",
+    "prisma:migrate": "pnpm --filter @starway/db run prisma:migrate",
+    "prisma:migrate:deploy": "pnpm --filter @starway/db run prisma:migrate:deploy",
+    "build": "pnpm --dir packages/shared build && pnpm --dir packages/db build && pnpm --filter @starway/ai run build && pnpm --dir backend build && pnpm --dir apps/web build && pnpm --dir apps/workers build",
     "start": "pnpm --dir backend start",
-    "start:bot": "pnpm --dir apps/bot start",
-    "clean": "pnpm --dir packages/shared clean && pnpm --dir packages/db clean && pnpm --dir backend clean && pnpm --dir apps/web clean && pnpm --dir apps/bot clean",
-    "typecheck": "pnpm --dir packages/shared typecheck && pnpm --dir packages/db typecheck && pnpm --dir backend typecheck && pnpm --dir apps/web typecheck && pnpm --dir apps/bot typecheck",
-    "vercel-build": "pnpm build"
+    "clean": "pnpm --dir packages/shared clean && pnpm --dir packages/db clean && pnpm --dir packages/ai clean && pnpm --dir backend clean && pnpm --dir apps/web clean && pnpm --dir apps/workers clean",
+    "typecheck": "pnpm --dir packages/shared typecheck && pnpm --dir packages/db typecheck && pnpm --dir packages/ai typecheck && pnpm --dir backend typecheck && pnpm --dir apps/workers typecheck && pnpm --dir apps/web typecheck",
+    "vercel-build": "pnpm build",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:unit": "vitest"
   },
   "devDependencies": {
-    "@types/node": "^25.1.0",
-    "@types/pg": "^8.20.0",
-    "concurrently": "^8.2.2",
-    "typescript": "^5.3.3"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/express-serve-static-core": "4.19.8"
-    },
-    "workspaces": [
-      "apps/*",
-      "packages/*",
-      "backend"
-    ]
-  },
-  "packageManager": "pnpm@8.15.0",
-  "dependencies": {
-    "lucide-react": "^1.14.0",
-    "pg": "^8.20.0"
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.0",
+    "concurrently": "^8.2.2"
   }
 }

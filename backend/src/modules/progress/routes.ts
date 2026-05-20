@@ -1,15 +1,15 @@
 // backend/src/modules/progress/progress.routes.ts
 import { authRequired } from '../../modules/auth/middleware/auth.js';
 import { requireClientAccess } from '../access/guard.js';
+import { requireBehavioralReadAccess } from '../../core/access/behavioralAccess.js';
 import { Router } from 'express';
 import { getMyProgress, getUserProgress, updateMyProgress } from './controller.js';
 
 const router = Router();
 router.use(authRequired);
-router.use(requireClientAccess);
 
-router.get('/', getMyProgress);
-router.get('/:userId', getUserProgress);
-router.put('/', updateMyProgress);
+router.get('/', requireBehavioralReadAccess('progress'), getMyProgress);
+router.get('/:userId', requireClientAccess, getUserProgress);
+router.put('/', requireClientAccess, updateMyProgress);
 
 export default router;

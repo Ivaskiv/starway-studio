@@ -1,6 +1,9 @@
 import type { Context } from 'telegraf'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
 import { processVoiceInput } from '../../voice/voice.service.js'
+import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
+import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 
 function extractVoicePayload(ctx: Context) {
   if (!('message' in ctx) || !ctx.message) return null
@@ -44,11 +47,12 @@ export async function handleVoice(ctx: Context) {
     })
   } catch (error) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply(
-      `STATE: Недоступно (0/10)\n\nINTERPRETATION:\nНе вдалося обробити голосове повідомлення.\n\nACTION:\n1. Спробуй ще раз через коротке голосове до 1 хвилини.\n2. Якщо повториться — відкрий Mini App.`,
-      {
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-      },
-    )
+    const relationship = await resolveRelationshipMemory(userId, 'absystem').catch(() => null)
+    const copy = buildRecoveryCopy('voice_failure', resolveConversationProfile('absystem'), {
+      relationship,
+    })
+    await ctx.reply(`${absystemContent.errors.voiceFailure.title}\n${copy.body}`, {
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    })
   }
 }

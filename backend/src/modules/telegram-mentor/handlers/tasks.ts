@@ -7,9 +7,13 @@ import { getUserIdByChatId } from '../session.js'
 import { taskDoneKeyboard } from '../keyboards.js'
 import { sendEntryOffer, sendStateMenu } from './start.js'
 import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
+import { isLmOnlyModeEnabled } from '../runtime.js'
+import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
+import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 
 export async function handleTasks(ctx: Context) {
-  if (process.env.APP_MODE === 'LM_ONLY') {
+  if (isLmOnlyModeEnabled()) {
     // [LM_ONLY_MODE DISABLED]
     // Original task flow remains below for normal mode.
     return
@@ -43,13 +47,17 @@ export async function handleTasks(ctx: Context) {
     })
 
     if (!activeTasks.length) {
+      const relationship = await resolveRelationshipMemory(userId, 'absystem').catch(() => null)
+      const copy = buildRecoveryCopy('progress_stalled', resolveConversationProfile('absystem'), {
+        relationship,
+      })
       await ctx.reply(
-        '✅ Активних завдань немає.\n\nПройди ранковий чекін /morning — отримаєш нові.',
+        `${absystemContent.tasks.empty}\n${copy.body}`,
         {
           reply_markup: {
             inline_keyboard: [
-              [{ text: '🌅 Ранковий ритуал', callback_data: 'continue_ai_mentor' }],
-              [{ text: '✨ Спробувати 7 днів', callback_data: 'start_trial' }],
+              [{ text: absystemContent.tasks.backToRhythm, callback_data: 'continue_ai_mentor' }],
+              [{ text: absystemContent.tasks.rhythmCheck, callback_data: 'start_trial' }],
             ],
           },
         },
@@ -60,10 +68,12 @@ export async function handleTasks(ctx: Context) {
     const completedCount = allTasks.filter(task => task.status === 'COMPLETED').length
     const missedCount = allTasks.filter(task => task.status === 'skipped' || task.status === 'expired').length
 
-    await ctx.reply(`📋 *Активні завдання (${activeTasks.length})*\nВиконано: ${completedCount} · Пропущено: ${missedCount}`, {
-      parse_mode: 'Markdown',
+    await ctx.reply([
+      absystemContent.tasks.title,
+      absystemContent.tasks.summary(activeTasks.length, completedCount, missedCount),
+    ].join('\n'), {
       reply_markup: {
-        inline_keyboard: [[{ text: '📊 Мій стан', callback_data: 'open_status' }]],
+        inline_keyboard: [[{ text: absystemContent.tasks.myStatus, callback_data: 'open_status' }]],
       },
     })
 
@@ -90,7 +100,7 @@ export async function handleTasks(ctx: Context) {
 }
 
 export async function handleTaskDone(ctx: Context, taskId: string) {
-  if (process.env.APP_MODE === 'LM_ONLY') {
+  if (isLmOnlyModeEnabled()) {
     // [LM_ONLY_MODE DISABLED]
     // Original task completion remains below for normal mode.
     return
@@ -111,10 +121,10 @@ export async function handleTaskDone(ctx: Context, taskId: string) {
         taskId,
       },
     })
-    await ctx.answerCbQuery('✅ Завдання виконано!')
-    await ctx.editMessageText('✅ Завдання виконано!')
+    await ctx.answerCbQuery(absystemContent.tasks.completed)
+    await ctx.editMessageText(absystemContent.tasks.completed)
     await sendStateMenu(ctx, userId)
   } catch {
-    await ctx.answerCbQuery('⚠️ Помилка. Спробуй пізніше.')
+    await ctx.answerCbQuery(absystemContent.tasks.retry)
   }
 }

@@ -1,12 +1,11 @@
 // frontend/src/layout/MainLayout.tsx
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import BottomNav from '@/components/miniapp/BottomNav'
-import AuthModal from '@/features/auth/components/AuthModal'
-import DeepLinkAuthBridge from '@/features/auth/components/DeepLinkAuthBridge'
+import { normalizeDashboardRoutePath } from '@/config/routes'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAppSelector } from '@/app/hooks'
-import { resolvePreferredAuthMode } from '@/features/auth/services/token'
 import { selectIsAuthenticated } from '@/features/auth/services/auth.slice'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
@@ -96,65 +95,62 @@ export default function MainLayout({
   const [collapsed,   setCollapsed]   = useState(false)
   const [view,        setView]        = useState<AppView>('navigation')
   const [previewRole, setPreviewRole] = useState<PreviewRole>('user')
-  const [authMode,    setAuthMode]    = useState<'login' | 'register'>(resolvePreferredAuthMode('login'))
-  const [authModalOpen, setAuthModalOpen] = useState(false)
   const [isCompactViewport, setIsCompactViewport] = useState(false)
 
   const user = useAppSelector((state) => state.auth.user)
   const isAuthenticated = useAppSelector(selectIsAuthenticated)
   const { state } = useSystemState()
   const { navigateTo } = useSmartNavigation()
+  const { openAuthModal } = useSessionOrchestrator()
+  const normalizedPathname = useMemo(() => normalizeDashboardRoutePath(location.pathname), [location.pathname])
 
   const isMiniAppContext = isTelegramMiniAppContext(location.pathname)
   const isStandaloneMiniAppRoute = location.pathname.startsWith('/miniapp')
   const miniAppRouteTarget = useMemo(() => {
     if (!isMiniAppContext) return null
 
-    if (location.pathname === '/dashboard') return '/miniapp'
-    if (location.pathname.startsWith('/dashboard/cycle')) {
+    if (normalizedPathname === '/dashboard') return '/miniapp'
+    if (normalizedPathname.startsWith('/dashboard/cycle')) {
       const search = new URLSearchParams(location.search)
       const session = search.get('session')
       if (session === 'evening') return '/miniapp/mentor?context=evening'
       if (session === 'morning') return '/miniapp/mentor?context=morning'
       return '/miniapp/mentor'
     }
-    if (location.pathname.startsWith('/dashboard/ai-mentor')) return '/miniapp/mentor'
-    if (location.pathname.startsWith('/dashboard/progress') || location.pathname.startsWith('/dashboard/journal')) return '/miniapp/tracker'
-    if (location.pathname.startsWith('/dashboard/profile') || location.pathname.startsWith('/dashboard/settings')) return '/miniapp/profile'
+    if (normalizedPathname.startsWith('/dashboard/ai-mentor')) return '/miniapp/mentor'
+    if (normalizedPathname.startsWith('/dashboard/progress') || normalizedPathname.startsWith('/dashboard/journal')) return '/miniapp/tracker'
+    if (normalizedPathname.startsWith('/dashboard/profile') || normalizedPathname.startsWith('/dashboard/settings')) return '/miniapp/profile'
     if (
-      location.pathname.startsWith('/dashboard/courses') ||
-      location.pathname.startsWith('/dashboard/products') ||
-      location.pathname.startsWith('/dashboard/vision') ||
-      location.pathname.startsWith('/dashboard/goals') ||
-      location.pathname.startsWith('/dashboard/actions')
+      normalizedPathname.startsWith('/dashboard/courses') ||
+      normalizedPathname.startsWith('/dashboard/products') ||
+      normalizedPathname.startsWith('/dashboard/vision') ||
+      normalizedPathname.startsWith('/dashboard/goals') ||
+      normalizedPathname.startsWith('/dashboard/actions')
     ) {
       return '/miniapp/library'
     }
 
     return null
-  }, [isMiniAppContext, location.pathname])
-  const pageContext = getPageContext(location.pathname, dashboard || isAuthenticated)
+  }, [isMiniAppContext, location.search, normalizedPathname])
+  const pageContext = getPageContext(normalizedPathname, dashboard || isAuthenticated)
 
-  const toggle = () => setCollapsed(c => !c)
+  const toggle = useCallback(() => setCollapsed(c => !c), [])
 
-  const layoutControls = {
+  const layoutControls = useMemo(() => ({
     view,
     onViewChange: setView,
     previewRole,
     onRoleChange: setPreviewRole,
-  }
+  }), [previewRole, view])
 
-  // ── ВИПРАВЛЕНО: callbacks для Header ────────────────────────────────────
-  const authCallbacks = {
+  const authCallbacks = useMemo(() => ({
     onLoginClick: () => {
-      setAuthMode(resolvePreferredAuthMode('login'))
-      setAuthModalOpen(true)
+      openAuthModal({ mode: 'login', reason: 'manual' })
     },
     onRegisterClick: () => {
-      setAuthMode(resolvePreferredAuthMode('register'))
-      setAuthModalOpen(true)
+      openAuthModal({ mode: 'register', reason: 'manual' })
     },
-  }
+  }), [openAuthModal])
 
   useEffect(() => {
     const rawRole = ((user as any)?.role ?? (state as any)?.user?.role ?? '').toLowerCase()
@@ -194,27 +190,27 @@ export default function MainLayout({
   const shouldUseDashboardShell = dashboard || isAuthenticated
   const shouldShowSidebar = shouldUseDashboardShell && !isEmbeddedFrame && !isMiniAppContext && !isCompactViewport
   const shouldShowMiniAppNav = shouldUseDashboardShell && !isEmbeddedFrame && isMiniAppContext && !location.pathname.startsWith('/miniapp')
-  const isHomePage = location.pathname === '/'
+  const isHomePage = normalizedPathname === '/'
 
   const activeMiniAppTab = (() => {
-    if (location.pathname.startsWith('/dashboard/profile') || location.pathname.startsWith('/dashboard/settings')) {
+    if (normalizedPathname.startsWith('/dashboard/profile') || normalizedPathname.startsWith('/dashboard/settings')) {
       return 'profile' as const
     }
     if (
-      location.pathname.startsWith('/dashboard/ai-mentor') ||
-      location.pathname.startsWith('/dashboard/mentor/')
+      normalizedPathname.startsWith('/dashboard/ai-mentor') ||
+      normalizedPathname.startsWith('/dashboard/mentor/')
     ) {
       return 'ai' as const
     }
-    if (location.pathname.startsWith('/dashboard/progress') || location.pathname.startsWith('/dashboard/journal')) {
+    if (normalizedPathname.startsWith('/dashboard/progress') || normalizedPathname.startsWith('/dashboard/journal')) {
       return 'tracker' as const
     }
     if (
-      location.pathname.startsWith('/dashboard/courses') ||
-      location.pathname.startsWith('/dashboard/products') ||
-      location.pathname.startsWith('/dashboard/vision') ||
-      location.pathname.startsWith('/dashboard/goals') ||
-      location.pathname.startsWith('/dashboard/actions')
+      normalizedPathname.startsWith('/dashboard/courses') ||
+      normalizedPathname.startsWith('/dashboard/products') ||
+      normalizedPathname.startsWith('/dashboard/vision') ||
+      normalizedPathname.startsWith('/dashboard/goals') ||
+      normalizedPathname.startsWith('/dashboard/actions')
     ) {
       return 'library' as const
     }
@@ -242,10 +238,7 @@ export default function MainLayout({
 
   if (isStandaloneMiniAppRoute) {
     return (
-      <>
-        <DeepLinkAuthBridge />
-        <Outlet />
-      </>
+      <Outlet />
     )
   }
 
@@ -255,7 +248,6 @@ export default function MainLayout({
   if (shouldUseDashboardShell) {
     return (
       <>
-        <DeepLinkAuthBridge />
         <div className="flex h-screen overflow-hidden">
 
         {shouldShowSidebar && (
@@ -310,12 +302,6 @@ export default function MainLayout({
           )}
         </div>
 
-        {/* ── ВИПРАВЛЕНО: AuthModal є і в dashboard layout ── */}
-        <AuthModal
-          isOpen={authModalOpen}
-          onClose={() => setAuthModalOpen(false)}
-          defaultMode={authMode}
-        />
         </div>
       </>
     )
@@ -326,7 +312,6 @@ export default function MainLayout({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
-      <DeepLinkAuthBridge />
       <div className="min-h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans">
 
       {/* ── ВИПРАВЛЕНО: передаємо authCallbacks ── */}
@@ -353,12 +338,6 @@ export default function MainLayout({
       </main>
 
       {!isMiniAppContext && <Footer />}
-
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        defaultMode={authMode}
-      />
       </div>
     </>
   )

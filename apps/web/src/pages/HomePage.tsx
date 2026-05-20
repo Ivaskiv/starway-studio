@@ -71,8 +71,9 @@ export default function HomePage() {
     navigate(resolveResumeRoute())
   }
   const handleLearnMore = () => { howItWorksRef.current?.scrollIntoView({ behavior: 'smooth' }) }
+  const handleOpenTest = () => navigate(ROUTES.AB_TEST)
   const handleSelectPlan = () => {
-    if (user) navigate('/dashboard/subscription')
+    if (user) navigate(ROUTES.SUBSCRIPTION)
     else openAuth()
   }
 
@@ -84,7 +85,11 @@ export default function HomePage() {
     <>
       <div className="min-h-screen bg-[color:var(--bg-primary)] text-[color:var(--text-primary)]">
         {/* <TrialBannerSection user={user} /> */}
-        <HeroSection onGetStarted={handleGetStarted} onLearnMore={handleLearnMore} />
+        <HeroSection
+          onGetStarted={handleGetStarted}
+          onLearnMore={handleLearnMore}
+          onOpenTest={handleOpenTest}
+        />
 
         <section ref={el => { howItWorksRef.current = el }}>
           <HowItWorksSection onGetStarted={handleGetStarted} />

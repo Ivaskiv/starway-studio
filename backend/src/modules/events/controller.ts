@@ -1,6 +1,13 @@
 import type { Request, Response } from 'express'
 import type { Prisma } from '@starway/db/prisma-client'
 import { trackEvent, trackLeadEnteredApp } from './service.js'
+import {
+  buildCanonicalTestAnalyticsHooks,
+  resolveCanonicalTestCurrentState,
+  isCanonicalTestEventType,
+  resolveCanonicalTestTransition,
+  validateCanonicalTestFoundation,
+} from '../../core/state-machine/testFoundation.js'
 
 const ALLOWED_SOURCES = new Set(['telegram', 'web', 'miniapp'])
 
@@ -33,12 +40,45 @@ export async function ingestEvent(req: Request, res: Response) {
     return res.status(400).json({ error: 'invalid_source' })
   }
 
+  const foundationValidation = validateCanonicalTestFoundation()
+  if (!foundationValidation.ok) {
+    return res.status(500).json({
+      error: 'canonical_test_foundation_invalid',
+      details: foundationValidation.errors,
+    })
+  }
+
+  let normalizedState = state
+  let normalizedPayload: Prisma.JsonObject = payload
+
+  if (isCanonicalTestEventType(type)) {
+    const currentState = resolveCanonicalTestCurrentState(type, state)
+
+    const nextState = resolveCanonicalTestTransition(currentState, type) ?? currentState
+    const hooks = buildCanonicalTestAnalyticsHooks({
+      event: type,
+      payload,
+      startedAtMs: typeof payload.started_at_ms === 'number' ? payload.started_at_ms : null,
+    })
+
+    normalizedState = nextState
+    normalizedPayload = {
+      ...payload,
+      canonical_test: {
+        event: type,
+        current_state: currentState,
+        next_state: nextState,
+      },
+      analytics_hooks: hooks,
+    }
+  }
+
   const trackInput = {
     userId,
     type,
     source: source as 'telegram' | 'web' | 'miniapp',
-    state,
-    payload,
+    state: normalizedState,
+    payload: normalizedPayload,
     email,
     utmSource,
     utmCampaign,

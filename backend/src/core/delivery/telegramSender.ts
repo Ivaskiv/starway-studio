@@ -1,4 +1,5 @@
 import { prisma } from '../../db/client.js'
+import { requireTelegramBotConfig } from '../../modules/telegram-mentor/runtime/botConfig.js'
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org'
 const MAX_RETRIES = 2
@@ -22,8 +23,7 @@ async function resolveChatId(userId: string) {
 }
 
 async function sendTelegramRequest(chatId: string, text: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN?.trim()
-  if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not configured')
+  const token = requireTelegramBotConfig('telegram delivery').token
 
   const response = await fetch(`${TELEGRAM_API_BASE}/bot${token}/sendMessage`, {
     method: 'POST',

@@ -2,15 +2,18 @@
   "name": "starway-backend",
   "type": "module",
   "scripts": {
-    "dev": "node --watch --import tsx src/index.ts",
-    "build": "pnpm --filter @starway/db run build && tsc && tsc-alias -p tsconfig.json --resolve-full-paths --resolve-full-extension .js",
+    "dev": "pnpm --filter @starway/ai run build && tsx watch --clear-screen=false src/index.ts",
+    "build": "pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc && tsc-alias -p tsconfig.json --resolve-full-paths --resolve-full-extension .js",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
-    "typecheck": "pnpm --filter @starway/db run build && tsc --noEmit",
+    "typecheck": "pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc --noEmit",
     "vercel-build": "pnpm run build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
+    "@google/generative-ai": "^0.24.1",
     "@neondatabase/serverless": "^0.9.0",
+    "@starway/ai": "workspace:*",
     "@starway/db": "workspace:*",
     "@supabase/supabase-js": "^2.105.1",
     "bcryptjs": "^3.0.3",

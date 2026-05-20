@@ -1,0 +1,120 @@
+@use 'mixins' as *;
+
+#difference {
+  overflow: hidden;
+}
+
+.focus-difference-shell {
+  padding: clamp(18px, 2.8vw, 34px);
+}
+
+.focus-difference-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+  gap: var(--space-fluid-lg);
+  align-items: center;
+}
+
+.focus-difference-media {
+  min-width: 0;
+}
+
+.focus-difference-image {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  border-radius: 15px;
+  border-left: 1px solid var(--focus-border-soft);
+  border-bottom: 1px solid var(--focus-border-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 30px rgba(0, 0, 0, 0.28),
+    0 24px 72px rgba(0, 0, 0, 0.34);
+}
+
+.focus-difference-body {
+  min-width: 0;
+  color: var(--focus-text);
+}
+
+.focus-difference-eyebrow {
+  width: fit-content;
+}
+
+.focus-difference-intro {
+  gap: var(--space-xs);
+}
+
+.focus-difference-copy {
+  margin: 0;
+  padding: 0;
+  color: var(--focus-text-muted);
+  font-size: var(--fs-body);
+  line-height: var(--lh-loose);
+  text-wrap: balance;
+}
+
+.focus-difference-title {
+  margin: var(--space-xs) 0 0;
+  font-family: var(--font-heading);
+  font-size: clamp(42px, 5.4vw, 78px);
+  line-height: 0.92;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--focus-text);
+  white-space: nowrap;
+}
+
+.focus-difference-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+}
+
+.focus-difference-item {
+  list-style: none;
+}
+
+.focus-difference-item .focus-difference-copy {
+  color: var(--focus-text-muted);
+}
+
+@include below('tablet') {
+  .focus-difference-layout {
+    grid-template-columns: 1fr 1.02fr;
+    gap: var(--space-fluid-md);
+  }
+
+  .focus-difference-title {
+    font-size: clamp(34px, 6vw, 58px);
+  }
+}
+
+@include below('phablet') {
+  .focus-difference-shell {
+    padding: clamp(16px, 4vw, 22px);
+  }
+
+  .focus-difference-layout {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+
+  .focus-difference-media {
+    order: 2;
+  }
+
+  .focus-difference-body {
+    order: 1;
+  }
+
+  .focus-difference-title {
+    font-size: clamp(40px, 11vw, 62px);
+  }
+
+  .focus-difference-copy {
+    font-size: var(--fs-body);
+  }
+}

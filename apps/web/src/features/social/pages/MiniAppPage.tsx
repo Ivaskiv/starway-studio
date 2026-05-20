@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import type { RootState } from '@/app/store'
 import MiniAppLayout from '@/components/miniapp/MiniAppLayout'
 import { EmailCompletionCard } from '@/features/auth/components/EmailCompletionCard'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useUserState } from '@/features/auth/hooks/useUserState'
 import MiniAppHomeSection from '@/features/social/components/MiniAppHomeSection'
 import MiniAppJournalSection from '@/features/social/components/MiniAppJournalSection'
@@ -66,12 +67,16 @@ export default function MiniAppPage() {
 
   const user = useSelector((state: RootState) => state.auth.user)
   const userId = user?.id ?? ''
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const userName = user?.firstName ?? user?.name ?? 'Учень'
   const { subscription } = useSystemState()
   const { emailCompletionRequired, refetch } = useUserState()
-  const { data: trial } = useGetTrialStatusQuery(undefined, { skip: !userId })
-  const { data: summary } = useGetSummaryQuery(undefined, { skip: !userId })
-  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, { skip: !userId })
+  const { data: trial } = useGetTrialStatusQuery(undefined, { skip: shouldSkipProtectedQueries || !userId })
+  const { data: summary } = useGetSummaryQuery(undefined, { skip: shouldSkipProtectedQueries || !userId })
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, {
+    skip: shouldSkipProtectedQueries || !userId,
+  })
   const [generateDeepLink, { isLoading: isGeneratingCrossChannelLink }] = useGenerateDeepLinkMutation()
   const [trackFrontendEvent] = useTrackFrontendEventMutation()
   const leadEntryTrackedRef = useRef(false)

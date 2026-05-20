@@ -3,10 +3,12 @@ import { notificationJobService } from './services/NotificationJobService.js'
 
 const MAX_RETRIES = 3
 const POLL_INTERVAL_MS = 60_000
+const NOTIFICATION_WORKERS_DISABLED = process.env.DISABLE_NOTIFICATION_WORKERS === 'true'
 
 let workerTimer: NodeJS.Timeout | null = null
 let workerRunning = false
 let workerStopping = false
+let consecutiveErrors = 0
 
 export async function processDueNotificationJobs(limit = 100) {
   if (workerRunning || workerStopping) return
@@ -39,15 +41,35 @@ export async function processDueNotificationJobs(limit = 100) {
 }
 
 export function startNotificationWorker() {
-  if (workerTimer) return
+  if (NOTIFICATION_WORKERS_DISABLED) {
+    console.log('🔕 [runtime] notification workers disabled (DISABLE_NOTIFICATION_WORKERS=true)')
+    return
+  }
+
+  if (workerTimer) {
+    console.log('🔁 [runtime] notification worker already running, skip duplicate startup')
+    return
+  }
+
   workerStopping = false
-  workerTimer = setInterval(() => {
+  const runWithBackoff = async () => {
     if (workerStopping) return
-    void processDueNotificationJobs().catch((error) => {
-      console.error('[NotificationWorker] process failed', error)
-    })
+    try {
+      await processDueNotificationJobs()
+      consecutiveErrors = 0
+    } catch (error) {
+      consecutiveErrors++
+      const backoffMs = Math.min(1000 * Math.pow(2, consecutiveErrors), 60_000)
+      console.error(`[NotificationWorker] process failed (error #${consecutiveErrors}, backoff ${backoffMs}ms)`, error)
+      await new Promise(r => setTimeout(r, backoffMs))
+    }
+  }
+
+  workerTimer = setInterval(() => {
+    void runWithBackoff()
   }, POLL_INTERVAL_MS)
   workerTimer.unref()
+  console.log(`🔔 [runtime] notification worker enabled (interval=${POLL_INTERVAL_MS}ms)`)
 }
 
 export function stopNotificationWorker() {
@@ -55,4 +77,5 @@ export function stopNotificationWorker() {
   if (!workerTimer) return
   clearInterval(workerTimer)
   workerTimer = null
+  console.log('🛑 [runtime] notification worker stopped')
 }

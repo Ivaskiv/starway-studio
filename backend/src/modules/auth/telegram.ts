@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 
 import { AuthServiceError } from './auth.errors.js'
+import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
 
 export type TelegramMiniAppProfile = {
   id: string
@@ -14,10 +15,7 @@ export function verifyTelegramInitData(initData: string): TelegramMiniAppProfile
     throw new AuthServiceError('missing_fields', 400)
   }
 
-  const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim()
-  if (!botToken) {
-    throw new AuthServiceError('telegram_bot_not_configured', 500)
-  }
+  const botToken = requireTelegramBotConfig('telegram init data verification').token
 
   const params = new URLSearchParams(raw)
   const hash = params.get('hash')
@@ -37,13 +35,18 @@ export function verifyTelegramInitData(initData: string): TelegramMiniAppProfile
   const secret = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest()
   const expectedHash = crypto.createHmac('sha256', secret).update(dataCheckString).digest('hex')
 
-  if (expectedHash !== hash) {
+  const expectedHashBuffer = Buffer.from(expectedHash, 'hex')
+  const receivedHashBuffer = Buffer.from(hash, 'hex')
+  const validHash = expectedHashBuffer.length === receivedHashBuffer.length
+    && crypto.timingSafeEqual(expectedHashBuffer, receivedHashBuffer)
+
+  if (!validHash) {
     throw new AuthServiceError('invalid_telegram_signature', 401)
   }
 
   const authDate = Number(authDateRaw)
   const ageSeconds = Math.floor(Date.now() / 1000) - authDate
-  if (!Number.isFinite(authDate) || ageSeconds > 60 * 60) {
+  if (!Number.isFinite(authDate) || ageSeconds < -60 || ageSeconds > 60 * 60) {
     throw new AuthServiceError('telegram_init_data_expired', 401)
   }
 

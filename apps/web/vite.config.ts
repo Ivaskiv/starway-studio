@@ -6,8 +6,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3001';
+  const useNgrok = env.USE_NGROK === 'true';
   const tunnelUrl = env.VITE_DEV_TUNNEL_URL?.trim();
-  const tunnel = tunnelUrl ? new URL(tunnelUrl) : null;
+  const tunnel = useNgrok && tunnelUrl ? new URL(tunnelUrl) : null;
   const hmrHost = env.VITE_HMR_HOST?.trim() || tunnel?.hostname || 'localhost';
   const hmrProtocol = env.VITE_HMR_PROTOCOL?.trim() || (tunnel?.protocol === 'https:' ? 'wss' : 'ws');
   const hmrClientPort = Number(env.VITE_HMR_CLIENT_PORT || (tunnel ? (tunnel.port ? Number(tunnel.port) : 443) : 5173));
@@ -48,24 +49,33 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, 'src'),
         '@shared': path.resolve(__dirname, '../../packages/shared/src'),
+        '@ai': path.resolve(__dirname, '../../packages/ai/src'),
       },
     },
     server: {
       host: true,
       port: 5173,
       strictPort: true,
-      origin: tunnelUrl || undefined,
+      allowedHosts: [
+        'localhost',
+        '.ngrok-free.dev',
+        '.trycloudflare.com',
+      ],
+      origin: tunnel?.toString() || undefined,
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         Pragma: 'no-cache',
         Expires: '0',
+        'ngrok-skip-browser-warning': '1',
       },
-      hmr: {
-        protocol: hmrProtocol as 'ws' | 'wss',
-        host: hmrHost,
-        port: hmrPort,
-        clientPort: hmrClientPort,
-      },
+      hmr: useNgrok
+        ? {
+            protocol: hmrProtocol as 'ws' | 'wss',
+            host: hmrHost,
+            port: hmrPort,
+            clientPort: hmrClientPort,
+          }
+        : undefined,
       watch: {
         usePolling: true,
         interval: 100,

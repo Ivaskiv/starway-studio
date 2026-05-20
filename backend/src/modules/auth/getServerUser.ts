@@ -3,10 +3,13 @@ import type { Request } from 'express'
 import type { AuthUser, UserRole } from '../../types/globalTypes.js'
 import { getCachedAuthUser } from '../../lib/db/userCache.js'
 import { findLinkedUserId } from '../telegram-mentor/services/linking.service.js'
+import { readTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
 import { verifyAccessToken } from './auth.service.js'
 import { verifyTelegramInitData } from './telegram.js'
 
-const BOT_SECRET = process.env.INTERNAL_BOT_API_SECRET || process.env.TELEGRAM_BOT_TOKEN || ''
+function getBotSecret(): string {
+  return process.env.INTERNAL_BOT_API_SECRET || readTelegramBotConfig().token || ''
+}
 
 async function findAuthUserByUserId(userId: string): Promise<AuthUser | null> {
   const user = await getCachedAuthUser(userId)
@@ -34,7 +37,8 @@ async function resolveTmaUser(initData: string): Promise<AuthUser | null> {
 
 async function resolveBotUser(req: Request): Promise<AuthUser | null> {
   const secret = String(req.headers['x-internal-bot-secret'] ?? '')
-  if (!BOT_SECRET || secret !== BOT_SECRET) {
+  const botSecret = getBotSecret()
+  if (!botSecret || secret !== botSecret) {
     return null
   }
 

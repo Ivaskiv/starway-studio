@@ -41,9 +41,10 @@ const PROOF = [
 interface HeroSectionProps {
   onGetStarted: () => void
   onLearnMore:  () => void
+  onOpenTest: () => void
 }
 
-export function HeroSection({ onGetStarted, onLearnMore }: HeroSectionProps) {
+export function HeroSection({ onGetStarted, onLearnMore, onOpenTest }: HeroSectionProps) {
   const [active, setActive] = useState(0)
   const [fading, setFading] = useState(false)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -125,6 +126,14 @@ export function HeroSection({ onGetStarted, onLearnMore }: HeroSectionProps) {
             className="hero-cta-secondary inline-flex items-center justify-center gap-2"
           >
             Як це працює <ArrowRight className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={onOpenTest}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[rgba(var(--accent-rgb),0.22)] bg-[rgba(var(--accent-rgb),0.10)] px-5 py-3 text-sm font-semibold text-[rgb(var(--accent-soft-rgb))] transition hover:bg-[rgba(var(--accent-rgb),0.16)]"
+          >
+            <Sparkles className="w-4 h-4" />
+            Пройти AB тест
           </button>
         </div>
 

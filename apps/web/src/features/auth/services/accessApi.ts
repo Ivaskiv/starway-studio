@@ -63,15 +63,17 @@ export const accessApi = api.injectEndpoints({
   endpoints: (builder) => ({
     getMyAccess: builder.query<UserAccessResult, void>({
       query: () => '/access/me',
+      keepUnusedDataFor: 600,
       providesTags: ['Access'],
     }),
     getMySystemState: builder.query<UserSystemState, void>({
       query: () => '/access/state',
+      keepUnusedDataFor: 600,
       providesTags: ['Access', 'Products'],
     }),
     getTrialStatus: builder.query<TrialStatus, void>({
       query: () => '/trial/status',
-      keepUnusedDataFor: 60,
+      keepUnusedDataFor: 600,
       providesTags: ['TrialStatus'],
     }),
   }),

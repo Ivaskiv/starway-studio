@@ -1,5 +1,10 @@
+import { readTelegramBotConfig } from '../runtime/botConfig.js'
+
 const API_BASE_URL = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || '3001'}/api`
-const BOT_SECRET = process.env.INTERNAL_BOT_API_SECRET || process.env.TELEGRAM_BOT_TOKEN || ''
+
+function getBotSecret(): string {
+  return process.env.INTERNAL_BOT_API_SECRET || readTelegramBotConfig().token || ''
+}
 
 type RequestOptions = {
   method?: 'GET' | 'POST'
@@ -28,11 +33,11 @@ function extractErrorMessage(data: unknown): string {
 async function request<T>(path: string, options: RequestOptions): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-internal-bot-secret': BOT_SECRET,
-      'x-telegram-chat-id': options.chatId,
-    },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-bot-secret': getBotSecret(),
+        'x-telegram-chat-id': options.chatId,
+      },
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
 
@@ -100,6 +105,12 @@ export function postAIChat(chatId: string, message: string) {
   }>('/ai/chat', {
     method: 'POST',
     chatId,
-    body: { message },
+    body: {
+      message,
+      context: {
+        source: 'telegram',
+        product: 'stankey',
+      },
+    },
   })
 }

@@ -1,17 +1,34 @@
+import { useAppSelector } from '@/app/hooks'
 import { ROUTES } from '@/config/routes'
 import { useAppFlowStore } from '@/features/app/useAppFlowStore'
-import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
-import { useUserProgress } from '@/features/user/hooks/useUserProgress'
-import { useAppSelector } from '@/app/hooks'
 import { selectCurrentUser } from '@/features/auth/services/auth.slice'
+import { useMicroTasks } from '@/features/microTask/hooks/useMicroTasks'
 import { useSendTrialExpiredFlowDiagnosticMutation } from '@/features/notifications/services/notifications.api'
-import { useMemo, useState } from 'react'
-import { Button, GlassCard } from '@/ui'
-import { CheckCircle2, Circle, CircleDashed, Code2, Flame, ShieldCheck, Sparkles, Target, Trophy, Zap } from 'lucide-react'
+import { useUserProgress } from '@/features/user/hooks/useUserProgress'
 import { cn } from '@/lib/utils'
+import { Button, GlassCard } from '@/ui'
+import {
+  CheckCircle2,
+  Circle,
+  CircleDashed,
+  Code2,
+  Flame,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Zap,
+} from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-type TabId = 'map' | 'engine' | 'levels' | 'streak' | 'code' | 'spam' | 'checklist'
+type TabId =
+  | 'map'
+  | 'engine'
+  | 'levels'
+  | 'streak'
+  | 'code'
+  | 'spam'
+  | 'checklist'
 type ItemStatus = 'done' | 'partial' | 'pending'
 
 type ChecklistItem = {
@@ -33,12 +50,36 @@ const tabs: Array<{ id: TabId; label: string }> = [
 ]
 
 const eventRows = [
-  ['🧠 Сесія з ментором', 'Фіксується автоматично після кожного чату. У journal іде як факт активності, а не окремий дубльований лог.', 'Зелений · auto'],
-  ['📹 Zoom-сесія', 'Адмін створює вручну. У journal потрапляє сама Zoom-подія, а TG нагадування про неї живе окремо як reminder.', 'Фіолетовий · scheduled'],
-  ['✅ Практика / цикл', 'Щоденні практики, ранок і вечір входять в один display-клас “Практика”, щоб не плодити зайві кольори в календарі.', 'Блакитний · daily-cycle'],
-  ['🔥 Streak-день', 'Показує факт безперервності. Milestone і risk повідомлення не дублюють streak-event, а читаються з gamification/notifications.', 'Червоний · gamification'],
-  ['💎 Підписка / білінг', 'Дата старту, закінчення тріалу або періоду підписки. Монетизаційні нагадування не дублюють billing-event.', 'Помаранчевий · billing'],
-  ['🔔 TG нагадування', 'У journal потрапляють лише реально відправлені TG повідомлення з Notification log. Майбутні налаштування живуть у Settings, не в journal.', 'Бірюзовий · notification log'],
+  [
+    '🧠 Сесія з ментором',
+    'Фіксується автоматично після кожного чату. У journal іде як факт активності, а не окремий дубльований лог.',
+    'Зелений · auto',
+  ],
+  [
+    '📹 Zoom-сесія',
+    'Адмін створює вручну. У journal потрапляє сама Zoom-подія, а TG нагадування про неї живе окремо як reminder.',
+    'Фіолетовий · scheduled',
+  ],
+  [
+    '✅ Практика / цикл',
+    'Щоденні практики, ранок і вечір входять в один display-клас “Практика”, щоб не плодити зайві кольори в календарі.',
+    'Блакитний · daily-cycle',
+  ],
+  [
+    '🔥 Streak-день',
+    'Показує факт безперервності. Milestone і risk повідомлення не дублюють streak-event, а читаються з gamification/notifications.',
+    'Червоний · gamification',
+  ],
+  [
+    '💎 Підписка / білінг',
+    'Дата старту, закінчення тріалу або періоду підписки. Монетизаційні нагадування не дублюють billing-event.',
+    'Помаранчевий · billing',
+  ],
+  [
+    '🔔 TG нагадування',
+    'У journal потрапляють лише реально відправлені TG повідомлення з Notification log. Майбутні налаштування живуть у Settings, не в journal.',
+    'Бірюзовий · notification log',
+  ],
 ]
 
 const levelRows = [
@@ -47,7 +88,12 @@ const levelRows = [
   ['Thinker', '300+', '+30 NEUROGEMS', 'Стабільна робота з AI'],
   ['Builder', '600+', '+50 NEUROGEMS', 'Повний трекер і сильніший прогрес'],
   ['Strategist', '1000+', '+100 NEUROGEMS', 'Глибші сценарії розвитку'],
-  ['Visionary+', '1500+', 'посилені бонуси', 'Подальша прогресія без дублюючої логіки'],
+  [
+    'Visionary+',
+    '1500+',
+    'посилені бонуси',
+    'Подальша прогресія без дублюючої логіки',
+  ],
 ]
 
 const streakMilestones = [
@@ -62,59 +108,197 @@ const allPlans: Array<{ title: string; items: ChecklistItem[] }> = [
   {
     title: 'Notification flow',
     items: [
-      { id: 'notif-1', title: 'Єдиний NotificationService', status: 'done', percent: 100, note: 'event → job → worker → delivery уже живе.' },
-      { id: 'notif-2', title: 'Єдиний scheduler', status: 'done', percent: 100, note: 'cron-и зведені в один backend scheduler.' },
-      { id: 'notif-3', title: 'Webhook / polling розведені', status: 'done', percent: 100, note: 'Продакшн не впирається в 409 conflict.' },
-      { id: 'notif-4', title: 'link Telegram flow', status: 'partial', percent: 72, note: 'Архітектура готова, треба добити user-facing connect flow.' },
+      {
+        id: 'notif-1',
+        title: 'Єдиний NotificationService',
+        status: 'done',
+        percent: 100,
+        note: 'event → job → worker → delivery уже живе.',
+      },
+      {
+        id: 'notif-2',
+        title: 'Єдиний scheduler',
+        status: 'done',
+        percent: 100,
+        note: 'cron-и зведені в один backend scheduler.',
+      },
+      {
+        id: 'notif-3',
+        title: 'Webhook / polling розведені',
+        status: 'done',
+        percent: 100,
+        note: 'Продакшн не впирається в 409 conflict.',
+      },
+      {
+        id: 'notif-4',
+        title: 'link Telegram flow',
+        status: 'partial',
+        percent: 72,
+        note: 'Архітектура готова, треба добити user-facing connect flow.',
+      },
     ],
   },
   {
     title: 'Deep links Mini App',
     items: [
-      { id: 'deep-1', title: 'startapp → route map', status: 'done', percent: 100, note: 'MiniAppLayout уже читає start_param.' },
-      { id: 'deep-2', title: 'activated re-check', status: 'done', percent: 92, note: 'Foreground return уже не губить сценарій.' },
-      { id: 'deep-3', title: 'Context redirect', status: 'done', percent: 90, note: 'ai_morning / ai_evening вже автозапускають контекст.' },
-      { id: 'deep-4', title: 'level_up deep link', status: 'done', percent: 78, note: 'Є callout-flow, не повний modal-flow.' },
+      {
+        id: 'deep-1',
+        title: 'startapp → route map',
+        status: 'done',
+        percent: 100,
+        note: 'MiniAppLayout уже читає start_param.',
+      },
+      {
+        id: 'deep-2',
+        title: 'activated re-check',
+        status: 'done',
+        percent: 92,
+        note: 'Foreground return уже не губить сценарій.',
+      },
+      {
+        id: 'deep-3',
+        title: 'Context redirect',
+        status: 'done',
+        percent: 90,
+        note: 'ai_morning / ai_evening вже автозапускають контекст.',
+      },
+      {
+        id: 'deep-4',
+        title: 'level_up deep link',
+        status: 'done',
+        percent: 78,
+        note: 'Є callout-flow, не повний modal-flow.',
+      },
     ],
   },
   {
     title: 'Shared auth / API',
     items: [
-      { id: 'auth-1', title: 'verifyTelegramInitData shared helper', status: 'partial', percent: 58, note: 'Верифікація є, але не винесена в одну shared точку.' },
-      { id: 'auth-2', title: 'getServerUser(req)', status: 'pending', percent: 0, note: 'Одна auth-функція для web + miniapp ще не заведена.' },
-      { id: 'auth-3', title: 'shared apiFetch для Mini App', status: 'pending', percent: 0, note: 'TMA fetcher ще не централізований.' },
-      { id: 'auth-4', title: 'optimistic updates', status: 'pending', percent: 0, note: 'Наступний UX-крок після shared auth.' },
+      {
+        id: 'auth-1',
+        title: 'verifyTelegramInitData shared helper',
+        status: 'partial',
+        percent: 58,
+        note: 'Верифікація є, але не винесена в одну shared точку.',
+      },
+      {
+        id: 'auth-2',
+        title: 'getServerUser(req)',
+        status: 'pending',
+        percent: 0,
+        note: 'Одна auth-функція для web + miniapp ще не заведена.',
+      },
+      {
+        id: 'auth-3',
+        title: 'shared apiFetch для Mini App',
+        status: 'pending',
+        percent: 0,
+        note: 'TMA fetcher ще не централізований.',
+      },
+      {
+        id: 'auth-4',
+        title: 'optimistic updates',
+        status: 'pending',
+        percent: 0,
+        note: 'Наступний UX-крок після shared auth.',
+      },
     ],
   },
   {
     title: 'Gamification triggers',
     items: [
-      { id: 'game-1', title: 'Єдиний reward/event flow', status: 'done', percent: 88, note: '/gamification/events уже живе через reward engine.' },
-      { id: 'game-2', title: 'level up TG notify', status: 'done', percent: 92, note: 'Піднято на NotificationEvent.LEVEL_UP.' },
-      { id: 'game-3', title: 'near level up TG notify', status: 'done', percent: 86, note: 'Реалізовано через окремий notification event.' },
-      { id: 'game-4', title: 'streak milestones 3/7/14/30/100', status: 'done', percent: 90, note: 'Milestone trigger більше не підміняється streak risk.' },
-      { id: 'game-5', title: 'anti-spam по templateKey', status: 'done', percent: 88, note: 'Дедуп і daily limit уже в одному місці.' },
-      { id: 'game-6', title: 'streak broken cron 08:00', status: 'done', percent: 80, note: 'Додано в unified scheduler.' },
-      { id: 'game-7', title: 'weekly summary payload', status: 'done', percent: 82, note: 'Cron тепер шле агрегований payload, не порожній event.' },
-      { id: 'game-8', title: 'debug test endpoint', status: 'pending', percent: 0, note: 'Окремий ручний test route ще не доданий.' },
+      {
+        id: 'game-1',
+        title: 'Єдиний reward/event flow',
+        status: 'done',
+        percent: 88,
+        note: '/gamification/events уже живе через reward engine.',
+      },
+      {
+        id: 'game-2',
+        title: 'level up TG notify',
+        status: 'done',
+        percent: 92,
+        note: 'Піднято на NotificationEvent.LEVEL_UP.',
+      },
+      {
+        id: 'game-3',
+        title: 'near level up TG notify',
+        status: 'done',
+        percent: 86,
+        note: 'Реалізовано через окремий notification event.',
+      },
+      {
+        id: 'game-4',
+        title: 'streak milestones 3/7/14/30/100',
+        status: 'done',
+        percent: 90,
+        note: 'Milestone trigger більше не підміняється streak risk.',
+      },
+      {
+        id: 'game-5',
+        title: 'anti-spam по templateKey',
+        status: 'done',
+        percent: 88,
+        note: 'Дедуп і daily limit уже в одному місці.',
+      },
+      {
+        id: 'game-6',
+        title: 'streak broken cron 08:00',
+        status: 'done',
+        percent: 80,
+        note: 'Додано в unified scheduler.',
+      },
+      {
+        id: 'game-7',
+        title: 'weekly summary payload',
+        status: 'done',
+        percent: 82,
+        note: 'Cron тепер шле агрегований payload, не порожній event.',
+      },
+      {
+        id: 'game-8',
+        title: 'debug test endpoint',
+        status: 'pending',
+        percent: 0,
+        note: 'Окремий ручний test route ще не доданий.',
+      },
     ],
   },
 ]
 
-function StatusBadge({ status, percent }: { status: ItemStatus; percent: number }) {
+function StatusBadge({
+  status,
+  percent,
+}: {
+  status: ItemStatus
+  percent: number
+}) {
   const tone =
     status === 'done'
       ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
       : status === 'partial'
         ? 'border-amber-400/20 bg-amber-400/10 text-amber-200'
         : 'border-white/10 bg-white/5 text-[var(--text-muted)]'
-  const label = status === 'done' ? 'готово' : status === 'partial' ? 'частково' : 'ще ні'
-  return <span className={cn('inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', tone)}>{label} · {percent}%</span>
+  const label =
+    status === 'done' ? 'готово' : status === 'partial' ? 'частково' : 'ще ні'
+  return (
+    <span
+      className={cn(
+        'inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]',
+        tone
+      )}
+    >
+      {label} · {percent}%
+    </span>
+  )
 }
 
 function ChecklistIcon({ status }: { status: ItemStatus }) {
-  if (status === 'done') return <CheckCircle2 className="h-4 w-4 text-emerald-300" />
-  if (status === 'partial') return <CircleDashed className="h-4 w-4 text-amber-300" />
+  if (status === 'done')
+    return <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+  if (status === 'partial')
+    return <CircleDashed className="h-4 w-4 text-amber-300" />
   return <Circle className="h-4 w-4 text-[var(--text-muted)]" />
 }
 
@@ -125,8 +309,11 @@ export default function TelegramPage() {
   const [checked, setChecked] = useState<Record<string, boolean>>({})
   const [targetUserId, setTargetUserId] = useState('')
   const [diagnosticStatus, setDiagnosticStatus] = useState<string | null>(null)
-  const [completionFeedback, setCompletionFeedback] = useState<string | null>(null)
-  const [sendTrialExpiredFlowDiagnostic, { isLoading: isSendingTrialReplay }] = useSendTrialExpiredFlowDiagnosticMutation()
+  const [completionFeedback, setCompletionFeedback] = useState<string | null>(
+    null
+  )
+  const [sendTrialExpiredFlowDiagnostic, { isLoading: isSendingTrialReplay }] =
+    useSendTrialExpiredFlowDiagnosticMutation()
   const { tasks, completeTask } = useMicroTasks({ skip: !currentUser?.id })
   const { currentStep } = useUserProgress()
   const lastAction = useAppFlowStore((s) => s.lastAction)
@@ -134,14 +321,20 @@ export default function TelegramPage() {
   const setTodayCompleted = useAppFlowStore((s) => s.setTodayCompleted)
   const setLastAction = useAppFlowStore((s) => s.setLastAction)
 
-  const activeTask = tasks.find(task => (task.status ?? 'PENDING') === 'PENDING') ?? null
-  const todayFocus = activeTask?.title || lastAction || 'Один короткий крок, який тримає ритм системи'
+  const activeTask =
+    tasks.find((task) => (task.status ?? 'PENDING') === 'PENDING') ?? null
+  const todayFocus =
+    activeTask?.title ||
+    lastAction ||
+    'Один короткий крок, який тримає ритм системи'
 
   const overview = useMemo(() => {
-    const flat = allPlans.flatMap(section => section.items)
+    const flat = allPlans.flatMap((section) => section.items)
     return {
-      avg: Math.round(flat.reduce((sum, item) => sum + item.percent, 0) / flat.length),
-      done: flat.filter(item => item.status === 'done').length,
+      avg: Math.round(
+        flat.reduce((sum, item) => sum + item.percent, 0) / flat.length
+      ),
+      done: flat.filter((item) => item.status === 'done').length,
       total: flat.length,
     }
   }, [])
@@ -158,7 +351,9 @@ export default function TelegramPage() {
         sessions: 6,
       }).unwrap()
 
-      setDiagnosticStatus(`Replay відправлено для userId ${response.userId}: ${response.scenarios.join(' → ')}`)
+      setDiagnosticStatus(
+        `Replay відправлено для userId ${response.userId}: ${response.scenarios.join(' → ')}`
+      )
     } catch (error) {
       console.error(error)
       setDiagnosticStatus('Не вдалося відправити replay post-trial flow')
@@ -185,13 +380,24 @@ export default function TelegramPage() {
         return (
           <div className="space-y-5">
             <GlassCard className="p-6">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">Всі gamification події → що відбувається</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                Всі gamification події → що відбувається
+              </p>
               <div className="mt-5 space-y-3">
                 {eventRows.map(([title, text, badge]) => (
-                  <div key={title} className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.03] p-4 md:grid-cols-[280px_1fr_auto] md:items-center">
-                    <p className="text-xl font-semibold text-[var(--text-primary)]">{title}</p>
-                    <p className="text-sm leading-7 text-[var(--text-secondary)]">{text}</p>
-                    <span className="inline-flex rounded-full bg-[rgba(var(--accent-rgb),0.12)] px-3 py-1 text-sm font-semibold text-[var(--accent)]">{badge}</span>
+                  <div
+                    key={title}
+                    className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.03] p-4 md:grid-cols-[280px_1fr_auto] md:items-center"
+                  >
+                    <p className="text-xl font-semibold text-[var(--text-primary)]">
+                      {title}
+                    </p>
+                    <p className="text-sm leading-7 text-[var(--text-secondary)]">
+                      {text}
+                    </p>
+                    <span className="inline-flex rounded-full bg-[rgba(var(--accent-rgb),0.12)] px-3 py-1 text-sm font-semibold text-[var(--accent)]">
+                      {badge}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -202,16 +408,37 @@ export default function TelegramPage() {
         return (
           <div className="grid gap-5 xl:grid-cols-3">
             {[
-              ['⚡', 'Дія юзера', ['рефлексія', 'повідомлення ментора', 'практика', 'трекер']],
-              ['🎮', 'Gamification engine', ['rewardEngine', 'applyReward', 'onXpGained', 'onStreakUpdate']],
-              ['📤', 'Outputs', ['DB update', 'in-app feedback', 'TG notify', 'summary revalidate']],
+              [
+                '⚡',
+                'Дія юзера',
+                ['рефлексія', 'повідомлення ментора', 'практика', 'трекер'],
+              ],
+              [
+                '🎮',
+                'Gamification engine',
+                ['rewardEngine', 'applyReward', 'onXpGained', 'onStreakUpdate'],
+              ],
+              [
+                '📤',
+                'Outputs',
+                [
+                  'DB update',
+                  'in-app feedback',
+                  'TG notify',
+                  'summary revalidate',
+                ],
+              ],
             ].map(([icon, title, points]) => (
               <GlassCard key={String(title)} className="p-6">
                 <div className="space-y-4">
                   <div className="text-4xl">{icon}</div>
-                  <h2 className="text-2xl font-semibold text-[var(--text-primary)]">{title}</h2>
+                  <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
+                    {title}
+                  </h2>
                   <ul className="space-y-2 text-sm leading-7 text-[var(--text-secondary)]">
-                    {(points as string[]).map(point => <li key={point}>· {point}</li>)}
+                    {(points as string[]).map((point) => (
+                      <li key={point}>· {point}</li>
+                    ))}
                   </ul>
                 </div>
               </GlassCard>
@@ -228,11 +455,20 @@ export default function TelegramPage() {
               <div>Опис</div>
             </div>
             {levelRows.map(([title, xp, reward, desc]) => (
-              <div key={title} className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr] border-b border-white/10 px-5 py-5 last:border-b-0">
-                <div className="text-2xl font-semibold text-[var(--text-primary)]">{title}</div>
+              <div
+                key={title}
+                className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr] border-b border-white/10 px-5 py-5 last:border-b-0"
+              >
+                <div className="text-2xl font-semibold text-[var(--text-primary)]">
+                  {title}
+                </div>
                 <div className="text-xl text-[var(--text-secondary)]">{xp}</div>
-                <div className="text-xl text-[var(--text-primary)]">{reward}</div>
-                <div className="text-base text-[var(--text-secondary)]">{desc}</div>
+                <div className="text-xl text-[var(--text-primary)]">
+                  {reward}
+                </div>
+                <div className="text-base text-[var(--text-secondary)]">
+                  {desc}
+                </div>
               </div>
             ))}
           </GlassCard>
@@ -242,9 +478,15 @@ export default function TelegramPage() {
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {streakMilestones.map(([days, title, reward]) => (
               <GlassCard key={days} className="p-6">
-                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">Стрік {days}</p>
-                <h2 className="mt-4 text-2xl font-semibold text-[var(--text-primary)]">{title}</h2>
-                <p className="mt-3 text-base leading-8 text-[var(--text-secondary)]">{reward}</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  Стрік {days}
+                </p>
+                <h2 className="mt-4 text-2xl font-semibold text-[var(--text-primary)]">
+                  {title}
+                </h2>
+                <p className="mt-3 text-base leading-8 text-[var(--text-secondary)]">
+                  {reward}
+                </p>
               </GlassCard>
             ))}
           </div>
@@ -255,10 +497,12 @@ export default function TelegramPage() {
             <GlassCard className="p-6">
               <div className="mb-4 flex items-center gap-3">
                 <Code2 className="h-5 w-5 text-[var(--accent)]" />
-                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Що вже реалізовано</h2>
+                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
+                  Що вже реалізовано
+                </h2>
               </div>
               <pre className="overflow-x-auto whitespace-pre-wrap rounded-[20px] border border-white/10 bg-[#0b0f1b] p-4 text-sm leading-7 text-[#cbd6f4]">
-{`POST /gamification/events
+                {`POST /gamification/events
   -> rewardEngine
   -> applyReward()
   -> onXpGained()
@@ -275,10 +519,12 @@ NotificationService
             <GlassCard className="p-6">
               <div className="mb-4 flex items-center gap-3">
                 <Target className="h-5 w-5 text-[var(--accent)]" />
-                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Що лишилось</h2>
+                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
+                  Що лишилось
+                </h2>
               </div>
               <pre className="overflow-x-auto whitespace-pre-wrap rounded-[20px] border border-white/10 bg-[#0b0f1b] p-4 text-sm leading-7 text-[#cbd6f4]">
-{`next:
+                {`next:
 1. getServerUser(req)
 2. verifyTelegramInitData() shared
 3. Mini App apiFetch()
@@ -294,23 +540,41 @@ NotificationService
             <GlassCard className="p-6">
               <div className="mb-4 flex items-center gap-3">
                 <ShieldCheck className="h-5 w-5 text-[var(--accent)]" />
-                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Дедуп</h2>
+                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
+                  Дедуп
+                </h2>
               </div>
-              <p className="text-sm leading-7 text-[var(--text-secondary)]">TG повідомлення тепер звіряються по <code>templateKey</code>: <code>streak_7</code>, <code>near_level_Builder</code>, <code>level_up_4</code>. Це блокує дубль при рестартах і повторних job-ах.</p>
+              <p className="text-sm leading-7 text-[var(--text-secondary)]">
+                TG повідомлення тепер звіряються по <code>templateKey</code>:{' '}
+                <code>streak_7</code>, <code>near_level_Builder</code>,{' '}
+                <code>level_up_4</code>. Це блокує дубль при рестартах і
+                повторних job-ах.
+              </p>
             </GlassCard>
             <GlassCard className="p-6">
               <div className="mb-4 flex items-center gap-3">
                 <Zap className="h-5 w-5 text-[var(--accent)]" />
-                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Ліміт</h2>
+                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
+                  Ліміт
+                </h2>
               </div>
-              <p className="text-sm leading-7 text-[var(--text-secondary)]">Некритичні TG повідомлення мають денний ліміт <strong>2</strong>. Критичні <code>level_up_*</code> і <code>streak_broken</code> проходять завжди.</p>
+              <p className="text-sm leading-7 text-[var(--text-secondary)]">
+                Некритичні TG повідомлення мають денний ліміт <strong>2</strong>
+                . Критичні <code>level_up_*</code> і <code>streak_broken</code>{' '}
+                проходять завжди.
+              </p>
             </GlassCard>
             <GlassCard className="p-6">
               <div className="mb-4 flex items-center gap-3">
                 <Flame className="h-5 w-5 text-[var(--accent)]" />
-                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Cooldown</h2>
+                <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
+                  Cooldown
+                </h2>
               </div>
-              <p className="text-sm leading-7 text-[var(--text-secondary)]"><code>weekly_summary</code> має тижневий cooldown, а near-level повідомлення не повторюються по тому самому наступному рівню.</p>
+              <p className="text-sm leading-7 text-[var(--text-secondary)]">
+                <code>weekly_summary</code> має тижневий cooldown, а near-level
+                повідомлення не повторюються по тому самому наступному рівню.
+              </p>
             </GlassCard>
           </div>
         )
@@ -319,42 +583,82 @@ NotificationService
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-3">
               <GlassCard className="p-5">
-                <p className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">Загальна готовність</p>
-                <p className="mt-3 text-4xl font-semibold text-[var(--text-primary)]">{overview.avg}%</p>
+                <p className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  Загальна готовність
+                </p>
+                <p className="mt-3 text-4xl font-semibold text-[var(--text-primary)]">
+                  {overview.avg}%
+                </p>
               </GlassCard>
               <GlassCard className="p-5">
-                <p className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">Готово</p>
-                <p className="mt-3 text-4xl font-semibold text-[var(--text-primary)]">{overview.done}/{overview.total}</p>
+                <p className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  Готово
+                </p>
+                <p className="mt-3 text-4xl font-semibold text-[var(--text-primary)]">
+                  {overview.done}/{overview.total}
+                </p>
               </GlassCard>
               <GlassCard className="p-5">
-                <p className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">Фокус зараз</p>
-                <p className="mt-3 text-xl font-semibold text-[var(--text-primary)]">shared auth + debug routes</p>
+                <p className="text-sm uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  Фокус зараз
+                </p>
+                <p className="mt-3 text-xl font-semibold text-[var(--text-primary)]">
+                  shared auth + debug routes
+                </p>
               </GlassCard>
             </div>
 
             {allPlans.map((plan) => {
-              const avg = Math.round(plan.items.reduce((sum, item) => sum + item.percent, 0) / plan.items.length)
+              const avg = Math.round(
+                plan.items.reduce((sum, item) => sum + item.percent, 0) /
+                  plan.items.length
+              )
               return (
                 <GlassCard key={plan.title} className="p-6">
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-2xl font-semibold text-[var(--text-primary)]">{plan.title}</h2>
-                    <StatusBadge status={avg === 100 ? 'done' : avg > 0 ? 'partial' : 'pending'} percent={avg} />
+                    <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
+                      {plan.title}
+                    </h2>
+                    <StatusBadge
+                      status={
+                        avg === 100 ? 'done' : avg > 0 ? 'partial' : 'pending'
+                      }
+                      percent={avg}
+                    />
                   </div>
                   <div className="space-y-3">
-                    {plan.items.map(item => (
+                    {plan.items.map((item) => (
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setChecked(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                        onClick={() =>
+                          setChecked((prev) => ({
+                            ...prev,
+                            [item.id]: !prev[item.id],
+                          }))
+                        }
                         className="flex w-full items-start gap-4 rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-left transition-colors hover:bg-white/[0.05]"
                       >
-                        <div className="mt-0.5">{checked[item.id] ? <CheckCircle2 className="h-4 w-4 text-[var(--accent)]" /> : <ChecklistIcon status={item.status} />}</div>
+                        <div className="mt-0.5">
+                          {checked[item.id] ? (
+                            <CheckCircle2 className="h-4 w-4 text-[var(--accent)]" />
+                          ) : (
+                            <ChecklistIcon status={item.status} />
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex flex-wrap items-center gap-3">
-                            <p className="font-semibold text-[var(--text-primary)]">{item.title}</p>
-                            <StatusBadge status={item.status} percent={item.percent} />
+                            <p className="font-semibold text-[var(--text-primary)]">
+                              {item.title}
+                            </p>
+                            <StatusBadge
+                              status={item.status}
+                              percent={item.percent}
+                            />
                           </div>
-                          <p className="text-sm leading-7 text-[var(--text-secondary)]">{item.note}</p>
+                          <p className="text-sm leading-7 text-[var(--text-secondary)]">
+                            {item.note}
+                          </p>
                         </div>
                       </button>
                     ))}
@@ -372,13 +676,19 @@ NotificationService
       <GlassCard className="p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">Telegram як продовження системи</p>
-            <h1 className="mt-2 text-3xl font-semibold text-[var(--text-primary)]">Сьогоднішній фокус</h1>
-            <p className="mt-3 text-lg text-[var(--text-primary)]">{todayFocus}</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              Telegram як продовження системи
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold text-[var(--text-primary)]">
+              Сьогоднішній фокус
+            </h1>
+            <p className="mt-3 text-lg text-[var(--text-primary)]">
+              {todayFocus}
+            </p>
             <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
               {todayCompleted
                 ? 'Крок уже зафіксований. Повернись у цикл, щоб закріпити рух далі.'
-                : `Поточний етап: ${currentStep === 'tasks' ? 'Дія' : currentStep === 'vision' ? 'WEB-Карта' : currentStep === 'goals' ? 'Цілі' : currentStep === 'cycle' ? 'Щоденний цикл' : 'Колесо'}. Telegram тут не для нагадування, а для продовження дії.`}
+                : `Поточний етап: ${currentStep === 'tasks' ? 'Дія' : currentStep === 'wheel' ? 'Колесо' : currentStep === 'morning' || currentStep === 'evening' ? 'Щоденний цикл' : currentStep === 'report' ? 'Звіт' : 'Колесо'}. Telegram тут не для нагадування, а для продовження дії.`}
             </p>
           </div>
 
@@ -402,11 +712,14 @@ NotificationService
             </Button>
 
             {completionFeedback ? (
-              <p className="text-sm leading-7 text-[var(--text-secondary)]">{completionFeedback}</p>
+              <p className="text-sm leading-7 text-[var(--text-secondary)]">
+                {completionFeedback}
+              </p>
             ) : null}
 
             <p className="text-xs text-[var(--text-muted)]">
-              WEB-Карта готова на 70%. Наступна цінність відкривається, коли дія зафіксована в ритмі.
+              WEB-Карта готова на 70%. Наступна цінність відкривається, коли дія
+              зафіксована в ритмі.
             </p>
           </div>
         </div>
@@ -414,7 +727,7 @@ NotificationService
 
       <GlassCard className="p-6">
         <div className="flex flex-wrap gap-3">
-          {tabs.map(tab => (
+          {tabs.map((tab) => (
             <Button
               key={tab.id}
               type="button"
@@ -431,21 +744,34 @@ NotificationService
       <GlassCard className="border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.08)] p-6">
         <div className="flex flex-wrap items-center gap-3">
           <Sparkles className="h-5 w-5 text-[var(--accent)]" />
-          <p className="text-lg font-semibold text-[var(--text-primary)]">Gamification → TG повідомлення</p>
-          <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-[var(--text-secondary)]">{overview.avg}% загальної готовності</span>
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
+            Gamification → TG повідомлення
+          </p>
+          <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-[var(--text-secondary)]">
+            {overview.avg}% загальної готовності
+          </span>
         </div>
         <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
-          Один виклик у backend має запускати весь ланцюг: reward engine, streak update, level check, TG notification і frontend feedback. Логіка не повинна дублюватися між route-ами.
+          Один виклик у backend має запускати весь ланцюг: reward engine, streak
+          update, level check, TG notification і frontend feedback. Логіка не
+          повинна дублюватися між route-ами.
         </p>
       </GlassCard>
 
       <GlassCard className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">Replay сценаріїв</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">Post-trial Telegram flow</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              Replay сценаріїв
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">
+              Post-trial Telegram flow
+            </h2>
             <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
-              Перевідправляє правильну послідовність повідомлень після завершення trial: спочатку про завершення доступу і вибір підписки, потім follow-up зі статистикою за 7 днів і переходом у звіти.
+              Перевідправляє правильну послідовність повідомлень після
+              завершення trial: спочатку про завершення доступу і вибір
+              підписки, потім follow-up зі статистикою за 7 днів і переходом у
+              звіти.
             </p>
           </div>
 
@@ -453,7 +779,11 @@ NotificationService
             <input
               value={targetUserId}
               onChange={(event) => setTargetUserId(event.target.value)}
-              placeholder={currentUser?.id ? `Порожньо = поточний userId (${currentUser.id})` : 'Вкажіть userId для replay'}
+              placeholder={
+                currentUser?.id
+                  ? `Порожньо = поточний userId (${currentUser.id})`
+                  : 'Вкажіть userId для replay'
+              }
               className="w-full rounded-[18px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[rgba(var(--accent-rgb),0.22)]"
             />
             <div className="flex flex-wrap gap-3">
@@ -461,14 +791,21 @@ NotificationService
                 type="button"
                 variant="solid"
                 onClick={handleReplayTrialExpiredFlow}
-                disabled={isSendingTrialReplay || (!currentUser?.id && !targetUserId.trim())}
+                disabled={
+                  isSendingTrialReplay ||
+                  (!currentUser?.id && !targetUserId.trim())
+                }
                 className="rounded-[18px]"
               >
-                {isSendingTrialReplay ? 'Відправляємо…' : 'Перевідправити post-trial flow'}
+                {isSendingTrialReplay
+                  ? 'Відправляємо…'
+                  : 'Перевідправити post-trial flow'}
               </Button>
             </div>
             {diagnosticStatus ? (
-              <p className="text-sm leading-7 text-[var(--text-secondary)]">{diagnosticStatus}</p>
+              <p className="text-sm leading-7 text-[var(--text-secondary)]">
+                {diagnosticStatus}
+              </p>
             ) : null}
           </div>
         </div>

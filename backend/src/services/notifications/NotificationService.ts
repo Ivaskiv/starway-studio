@@ -9,6 +9,8 @@ import {
 } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
+import { trackEvent } from '../../modules/events/service.js'
+import { resolveUserState } from '../../modules/telegram-mentor/handlers/start.js'
 import { NotificationEvent } from './NotificationEvent.js'
 import { notificationDeliveryLayer } from './delivery/NotificationDeliveryLayer.js'
 import type { DeliveryMessage, DeliveryUser } from './delivery/types.js'
@@ -27,18 +29,45 @@ import { buildTelegramDeepLink, generateDeepLink } from '../../modules/deeplinks
 import { getUserAccess } from '../../modules/access/service.js'
 import { isNotificationAllowedForUser } from '../../modules/flow-control/service.js'
 import { resolvePausedMentorContext } from './mentorLifecycle.js'
-import { buildNotificationContent } from '../../lib/notifications/templates.js'
+import { buildNotificationContent, type AbTestFollowupTimerId } from '../../lib/notifications/templates.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import type { AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
 import {
   canSendCrossChannelNotification,
   markCrossChannelNotificationSent,
 } from '../../modules/user-state/crossChannelState.service.js'
+import {
+  buildFlowTimerAnalytics,
+  resolveFlowTimerContext,
+  shouldSkipFlowTimerDelivery,
+} from '../../core/state-machine/flowTimingFoundation.js'
+import {
+  buildRuntimeTelemetry,
+  claimRuntimeJobReplay,
+} from '../../core/runtime/runtimeIdempotency.js'
 
 type EventPayload = Record<string, unknown>
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function toJsonObject(value: unknown): Prisma.JsonObject {
+  return isJsonObject(value) ? value as Prisma.JsonObject : {}
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
 
 type PersistedJobPayload = {
   event: NotificationEvent
   userId: string
-  payload?: EventPayload
+  payload?: Prisma.JsonObject
 }
 
 type WeeklySummaryPayload = {
@@ -177,7 +206,7 @@ function toPersistedJobPayload(payload: unknown): PersistedJobPayload {
     event: event as NotificationEvent,
     userId,
     payload: typeof record.payload === 'object' && record.payload !== null && !Array.isArray(record.payload)
-      ? record.payload as EventPayload
+      ? record.payload as Prisma.JsonObject
       : undefined,
   }
 }
@@ -308,13 +337,22 @@ export class NotificationService {
 
   private buildImmediateJob(event: NotificationEvent, userId: string, payload?: EventPayload): NotificationJob {
     const now = new Date()
+    const normalizedPayload = toJsonObject(payload)
+    const flow = resolveFlowTimerContext({ trigger_event: event, payload: normalizedPayload })
     return {
       id: `instant:${event}:${userId}:${now.getTime()}`,
       type: resolveNotificationType(event),
       payload: ({
         event,
         userId,
-        payload: payload ?? {},
+        payload: {
+          ...normalizedPayload,
+          ...(flow.timer ? buildFlowTimerAnalytics({
+            timer: flow.timer,
+            lifecycleStage: asString(normalizedPayload.lifecycle_stage ?? normalizedPayload.lifecycleStage),
+            delayMs: asNumber(normalizedPayload.delay_ms ?? normalizedPayload.delayMs),
+          }) : {}),
+        },
       } satisfies PersistedJobPayload) as NotificationJob['payload'],
       runAt: now,
       status: 'DONE',
@@ -459,6 +497,22 @@ export class NotificationService {
       return this.buildImmediateJob(event, userId, payload)
     }
 
+    const normalizedPayload = toJsonObject(payload)
+    const flow = resolveFlowTimerContext({ trigger_event: event, payload: normalizedPayload })
+    if (flow.timer) {
+      await trackEvent({
+        userId,
+        type: 'FLOW_TRIGGERED',
+        source: 'web',
+        state: asString(normalizedPayload.lifecycle_stage ?? normalizedPayload.lifecycleStage) ?? null,
+        payload: buildFlowTimerAnalytics({
+          timer: flow.timer,
+          lifecycleStage: asString(normalizedPayload.lifecycle_stage ?? normalizedPayload.lifecycleStage),
+          delayMs: asNumber(normalizedPayload.delay_ms ?? normalizedPayload.delayMs),
+        }),
+      }).catch(() => undefined)
+    }
+
     const queueAvailable = await notificationJobService.isQueueAvailable().catch(() => false)
     if (!queueAvailable) {
       console.warn('[notifications] queue unavailable, fallback to immediate send', {
@@ -501,20 +555,120 @@ export class NotificationService {
   }
 
   async enqueueJob(event: NotificationEvent, userId: string, runAt: Date, payload?: EventPayload): Promise<NotificationJob> {
+    const normalizedPayload = toJsonObject(payload)
+    const flow = resolveFlowTimerContext({ trigger_event: event, payload: normalizedPayload })
+    const runtime = buildRuntimeTelemetry({
+      scope: 'notification_job',
+      type: event,
+      source: 'web',
+      userId,
+      state: asString(normalizedPayload.lifecycle_stage ?? normalizedPayload.lifecycleStage) ?? null,
+      tenantId: asString(normalizedPayload.tenant_id ?? normalizedPayload.tenantId) ?? null,
+      requestFingerprint: asString(normalizedPayload.request_fingerprint ?? normalizedPayload.requestFingerprint) ?? null,
+      runtimeStage: flow.timer?.source_stage ?? 'notification',
+      orchestrationPath: ['notifications', event],
+      retryAttempt: asNumber(normalizedPayload.retry_attempt ?? normalizedPayload.retryAttempt) ?? 0,
+      replayReason: asString(normalizedPayload.replay_reason ?? normalizedPayload.replayReason) ?? null,
+      executionLatencyMs: asNumber(normalizedPayload.execution_latency_ms ?? normalizedPayload.executionLatencyMs) ?? null,
+      queueLatencyMs: asNumber(normalizedPayload.queue_latency_ms ?? normalizedPayload.queueLatencyMs) ?? null,
+      deliveryLatencyMs: asNumber(normalizedPayload.delivery_latency_ms ?? normalizedPayload.deliveryLatencyMs) ?? null,
+      handlerDurationMs: asNumber(normalizedPayload.handler_duration_ms ?? normalizedPayload.handlerDurationMs) ?? null,
+      failureClassification: asString(normalizedPayload.failure_classification ?? normalizedPayload.failureClassification) ?? null,
+    })
+
+    const replay = await claimRuntimeJobReplay({
+      scope: 'notification_job',
+      type: resolveNotificationType(event),
+      source: 'web',
+      userId,
+      state: asString(normalizedPayload.lifecycle_stage ?? normalizedPayload.lifecycleStage) ?? null,
+      tenantId: asString(normalizedPayload.tenant_id ?? normalizedPayload.tenantId) ?? null,
+      requestFingerprint: runtime.request_id,
+      payload: {
+        ...normalizedPayload,
+        runtime,
+      } satisfies Prisma.JsonValue,
+      ttlMs: Math.max(15 * 60_000, (flow.timer?.delay_ms ?? 0) + 5 * 60_000),
+    })
+
+    if (replay.duplicate) {
+      const existing = await prisma.notificationJob.findFirst({
+        where: {
+          type: resolveNotificationType(event),
+          createdAt: { gte: new Date(Date.now() - Math.max(15 * 60_000, (flow.timer?.delay_ms ?? 0) + 5 * 60_000)) },
+          payload: {
+            path: ['runtime', 'idempotency_key'],
+            equals: replay.key,
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }).catch(() => null)
+
+      if (existing) {
+        return existing
+      }
+
+      return this.buildImmediateJob(event, userId, {
+        ...normalizedPayload,
+        runtime,
+        duplicate: true,
+      })
+    }
+
+    if (flow.timer) {
+      await trackEvent({
+        userId,
+        type: 'FLOW_TRIGGERED',
+        source: 'web',
+        state: asString(normalizedPayload.lifecycle_stage ?? normalizedPayload.lifecycleStage) ?? null,
+        payload: buildFlowTimerAnalytics({
+          timer: flow.timer,
+          lifecycleStage: asString(normalizedPayload.lifecycle_stage ?? normalizedPayload.lifecycleStage),
+          delayMs: asNumber(normalizedPayload.delay_ms ?? normalizedPayload.delayMs),
+        }),
+      }).catch(() => undefined)
+    }
     return notificationJobService.enqueue(resolveNotificationType(event), {
       event,
       userId,
-      payload: payload ?? {},
+      payload: {
+        ...normalizedPayload,
+        ...(flow.timer ? buildFlowTimerAnalytics({
+          timer: flow.timer,
+          lifecycleStage: asString(normalizedPayload.lifecycle_stage ?? normalizedPayload.lifecycleStage),
+          delayMs: asNumber(normalizedPayload.delay_ms ?? normalizedPayload.delayMs),
+        }) : {}),
+        runtime,
+      },
     }, runAt)
   }
 
   async processJob(job: NotificationJob): Promise<void> {
     const persisted = toPersistedJobPayload(job.payload)
+    const payload = toJsonObject(persisted.payload)
+    const flow = resolveFlowTimerContext({
+      trigger_event: persisted.event,
+      timer_id: asString(payload.flow_timer_id ?? payload.flowTimerId) as Parameters<typeof resolveFlowTimerContext>[0]['timer_id'] ?? null,
+      payload,
+    })
     if (!(await isNotificationAllowedForUser(persisted.event, persisted.userId))) {
       console.info('[notifications] skipped queued job by lifecycle guard', {
         event: persisted.event,
         userId: persisted.userId,
       })
+      if (flow.timer) {
+        await trackEvent({
+          userId: persisted.userId,
+          type: 'FLOW_SKIPPED',
+          source: 'web',
+          state: null,
+          payload: buildFlowTimerAnalytics({
+            timer: flow.timer,
+            reason: 'state_changed',
+            currentState: null,
+          }),
+        }).catch(() => undefined)
+      }
       return
     }
     if (!(await canSendCrossChannelNotification(persisted.userId, persisted.event))) {
@@ -522,6 +676,19 @@ export class NotificationService {
         event: persisted.event,
         userId: persisted.userId,
       })
+      if (flow.timer) {
+        await trackEvent({
+          userId: persisted.userId,
+          type: 'FLOW_SKIPPED',
+          source: 'web',
+          state: null,
+          payload: buildFlowTimerAnalytics({
+            timer: flow.timer,
+            reason: 'state_changed',
+            currentState: null,
+          }),
+        }).catch(() => undefined)
+      }
       return
     }
     const user = await loadDeliveryUser(persisted.userId)
@@ -530,18 +697,86 @@ export class NotificationService {
       throw new Error('notification_user_not_found')
     }
 
+    const currentState = await resolveUserState(persisted.userId).catch(() => null)
+    const readinessLevel = asString(payload.readiness_level ?? payload.readinessLevel)
+      ?? (isJsonObject(payload.behavioral) && isJsonObject(payload.behavioral.readiness)
+        ? asString(payload.behavioral.readiness.level)
+        : null)
+    const paymentSuccessSeen = flow.timer?.id.startsWith('PAYMENT_REMINDER') || flow.timer?.id.startsWith('RESULT_')
+      ? Boolean(await prisma.event.findFirst({
+          where: {
+            userId: persisted.userId,
+            type: 'payment_success',
+            ...(typeof payload.productId === 'string'
+              ? { payload: { path: ['productId'], equals: payload.productId } }
+              : {}),
+          },
+          select: { id: true },
+        }).catch(() => null))
+      : false
+    const zoomAttendanceSeen = flow.timer?.id.startsWith('PLATFORM_INVITE_AFTER_ZOOM') || flow.timer?.id.startsWith('ZOOM_REMINDER')
+      ? Boolean(await prisma.event.findFirst({
+          where: {
+            userId: persisted.userId,
+            type: 'ZOOM_ATTENDED',
+          },
+          select: { id: true },
+        }).catch(() => null))
+      : false
+    const activeUser = Boolean(currentState && !String(currentState).toLowerCase().includes('retention'))
+
+    if (flow.timer) {
+      const guard = shouldSkipFlowTimerDelivery({
+        currentState,
+        timer: flow.timer,
+        payload,
+        hasPaymentSuccess: paymentSuccessSeen,
+        hasZoomAttendance: zoomAttendanceSeen,
+        isActiveUser: activeUser,
+        readinessLevel,
+      })
+
+      if (!guard.ok) {
+        await trackEvent({
+          userId: persisted.userId,
+          type: 'FLOW_SKIPPED',
+          source: 'web',
+          state: currentState,
+          payload: buildFlowTimerAnalytics({
+            timer: flow.timer,
+            reason: guard.reason ?? 'state_changed',
+            currentState,
+          }),
+        }).catch(() => undefined)
+        return
+      }
+    }
+
     if (await this.shouldSuppressMentorNotification(persisted.event, user.id)) {
       console.info('[notifications] skipped: mentor access inactive', {
         event: persisted.event,
         userId: user.id,
       })
+      if (flow.timer) {
+        await trackEvent({
+          userId: persisted.userId,
+          type: 'FLOW_SKIPPED',
+          source: 'web',
+          state: currentState,
+          payload: buildFlowTimerAnalytics({
+            timer: flow.timer,
+            reason: 'active_user_retention_flow',
+            currentState,
+          }),
+        }).catch(() => undefined)
+      }
       return
     }
 
     const type = resolveNotificationType(persisted.event)
-    const templateKey = resolveNotificationTemplateKey(persisted.event, persisted.payload)
+    const templateKey = resolveNotificationTemplateKey(persisted.event, payload)
     const preferences = await notificationPreferenceRepository.ensureForUser(user.id)
-    const message = await this.buildMessage(persisted.event, user, persisted.payload)
+    const message = await this.buildMessage(persisted.event, user, payload)
     const dayStart = startOfDay()
     const dayEnd = endOfDay()
 
@@ -586,7 +821,7 @@ export class NotificationService {
         type,
         title: message.title,
         body: message.body,
-        data: buildNotificationData(persisted.event, persisted.payload, message),
+        data: buildNotificationData(persisted.event, payload, message),
         templateKey,
         channel: NotificationChannel.IN_APP,
         status: NotificationStatus.SENT,
@@ -624,6 +859,19 @@ export class NotificationService {
         userId: user.id,
         templateKey,
       })
+      if (flow.timer) {
+        await trackEvent({
+          userId: persisted.userId,
+          type: 'FLOW_SKIPPED',
+          source: 'web',
+          state: currentState,
+          payload: buildFlowTimerAnalytics({
+            timer: flow.timer,
+            reason: 'duplicate_reminder',
+            currentState,
+          }),
+        }).catch(() => undefined)
+      }
       return
     }
 
@@ -642,6 +890,19 @@ export class NotificationService {
           templateKey,
           todayCount,
         })
+        if (flow.timer) {
+          await trackEvent({
+            userId: persisted.userId,
+            type: 'FLOW_SKIPPED',
+            source: 'web',
+            state: currentState,
+            payload: buildFlowTimerAnalytics({
+              timer: flow.timer,
+              reason: 'duplicate_reminder',
+              currentState,
+            }),
+          }).catch(() => undefined)
+        }
         return
       }
     }
@@ -653,7 +914,7 @@ export class NotificationService {
       type,
       title: message.title,
       body: message.body,
-      data: buildNotificationData(persisted.event, persisted.payload, message),
+      data: buildNotificationData(persisted.event, payload, message),
       templateKey,
       channel: NotificationChannel.TELEGRAM,
       status: sent ? NotificationStatus.SENT : NotificationStatus.FAILED,
@@ -665,6 +926,50 @@ export class NotificationService {
     }
 
     await markCrossChannelNotificationSent(user.id, persisted.event, 'telegram')
+
+    if (
+      persisted.event === NotificationEvent.AB_TEST_FOLLOWUP &&
+      flow.timer?.id === 'RESULT_FOLLOWUP_72H' &&
+      !paymentSuccessSeen
+    ) {
+      const resultKey = asString(payload.result_key ?? payload.resultKey)
+      if (resultKey) {
+        const dojimSeries: Array<[AbTestFollowupTimerId, number]> = [
+          ['RESULT_DOJIM_24H', 24 * 60 * 60 * 1000],
+          ['RESULT_DOJIM_48H', 48 * 60 * 60 * 1000],
+          ['RESULT_DOJIM_72H', 72 * 60 * 60 * 1000],
+          ['RESULT_DOJIM_5D', 5 * 24 * 60 * 60 * 1000],
+          ['RESULT_DOJIM_7D', 7 * 24 * 60 * 60 * 1000],
+        ]
+
+        await Promise.all(dojimSeries.map(([timerId, delayMs]) => this.schedule(
+          NotificationEvent.AB_TEST_FOLLOWUP,
+          user.id,
+          new Date(Date.now() + delayMs),
+          {
+            ...payload,
+            flow_timer_id: timerId,
+            result_key: resultKey,
+            lifecycle_stage: flow.timer?.source_stage ?? payload.lifecycle_stage ?? payload.lifecycleStage ?? null,
+            delay_ms: delayMs,
+          },
+        )))
+      }
+    }
+
+    if (flow.timer) {
+      await trackEvent({
+        userId: persisted.userId,
+        type: 'FLOW_COMPLETED',
+        source: 'web',
+        state: currentState,
+        payload: buildFlowTimerAnalytics({
+          timer: flow.timer,
+          resultingEvent: persisted.event,
+          resultingTransition: flow.rule?.next_expected_transition ?? null,
+        }),
+      }).catch(() => undefined)
+    }
 
     console.info('[notifications] telegram sent', {
       event: persisted.event,
@@ -1038,6 +1343,7 @@ export class NotificationService {
       case NotificationEvent.NEAR_LEVEL_UP:
         return preferences.levelUpEnabled
       case NotificationEvent.AI_INACTIVE:
+      case NotificationEvent.ABSYSTEM_COMEBACK:
         return preferences.aiRemindersEnabled
       case NotificationEvent.STREAK_RISK:
         return preferences.streakRiskEnabled
@@ -1312,94 +1618,74 @@ export class NotificationService {
           }),
         }
       }
-      case NotificationEvent.SUBSCRIPTION_EXPIRING:
+      case NotificationEvent.ABSYSTEM_COMEBACK:
       {
-        const subscriptionWebUrl = await buildWebFlowUrl({
-          userId: user.id,
-          path: '/dashboard/subscription',
-          payload: {
-            source: 'subscription_expiring',
-            date: new Date().toISOString(),
-          },
-        })
-        const daysLeft = Number(payload?.daysLeft ?? 0)
-        const content = buildNotificationContent(NotificationEvent.SUBSCRIPTION_EXPIRING, {
+        const comebackKey = asString(payload?.comeback_key ?? payload?.comebackKey) ?? 'GAP_1_3'
+        const content = buildNotificationContent(NotificationEvent.ABSYSTEM_COMEBACK, {
           userName: firstName,
-          daysUntilExpiry: daysLeft,
+          comebackKey,
+          lastAction: asString(payload?.last_action ?? payload?.lastAction),
+          dailyCycles: Number(payload?.dailyCycles ?? payload?.daily_cycles ?? 0),
+          decisions: Number(payload?.decisions ?? payload?.decision_count ?? 0),
+          referralUrl: asString(payload?.referral_url ?? payload?.referralUrl),
+          renewalUrl: asString(payload?.renewal_url ?? payload?.renewalUrl),
+          paymentUrl: asString(payload?.payment_url ?? payload?.paymentUrl),
         })
         return {
           title: content.title,
           body: content.body,
           telegramHtml: buildTelegramCard({
-            title: '💎 Підписка',
-            intro: daysLeft > 0
-              ? `${firstName}, до завершення доступу залишилось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дні' : 'днів'}.`
-              : `${firstName}, варто перевірити статус доступу зараз.`,
-            facts: [
-              'Прогрес і звіти збережені',
-              'AI-сесії залежать від активного доступу',
-            ],
-            note: 'Краще оновити доступ до паузи, а не після втрати ритму.',
+            title: content.title,
+            intro: content.body,
+            note: 'Повернись до одного наступного кроку.',
           }),
-          ctaActions: [
-            {
-              text: '✦ Відкрити в мініап',
-              url: buildMiniAppStartUrl('subscription'),
-              mode: 'web_app',
-            },
-            {
-              text: '✦ Відкрити підписку на сайті',
-              url: subscriptionWebUrl,
-              mode: 'url',
-            },
-          ],
+          ctaText: content.ctaText,
+          ctaActions: content.ctaUrl
+            ? [{ text: content.ctaText ?? 'Відкрити', url: content.ctaUrl, mode: 'url' }]
+            : undefined,
+        }
+      }
+      case NotificationEvent.SUBSCRIPTION_EXPIRING:
+      {
+        const renewalUrl = asString(payload?.renewal_url ?? payload?.renewalUrl ?? payload?.payment_url ?? payload?.paymentUrl) ?? null
+        const content = buildNotificationContent(NotificationEvent.SUBSCRIPTION_EXPIRING, {
+          userName: firstName,
+          renewalUrl,
+          paymentUrl: renewalUrl,
+        })
+        return {
+          title: content.title,
+          body: content.body,
+          telegramHtml: buildTelegramCard({
+            title: content.title,
+            intro: content.body,
+          }),
+          ctaText: content.ctaText,
+          ctaActions: content.ctaUrl
+            ? [{ text: content.ctaText ?? 'Відкрити', url: content.ctaUrl, mode: 'url' }]
+            : undefined,
         }
       }
       case NotificationEvent.SUBSCRIPTION_EXPIRED:
       {
-        const subscriptionWebUrl = await buildWebFlowUrl({
-          userId: user.id,
-          path: '/dashboard/subscription',
-          payload: {
-            source: 'subscription_expired',
-            date: new Date().toISOString(),
-          },
-        })
-        const daysSinceExpired = Number(payload?.daysSinceExpired ?? 0)
-        const previousPlan = String(payload?.previousPlan ?? 'trial')
-        const recoveryLine = daysSinceExpired <= 1
-          ? 'Щоб продовжити ранкові й вечірні сесії, віднови доступ зараз.'
-          : 'Ранкові та вечірні сесії залишаються на паузі, доки доступ не буде відновлено.'
+        const renewalUrl = asString(payload?.renewal_url ?? payload?.renewalUrl ?? payload?.payment_url ?? payload?.paymentUrl) ?? null
         const content = buildNotificationContent(NotificationEvent.SUBSCRIPTION_EXPIRED, {
           userName: firstName,
-          previousPlan,
+          renewalUrl,
+          paymentUrl: renewalUrl,
         })
 
         return {
           title: content.title,
-          body: `${content.body.replace(/\.$/, '')} ${daysSinceExpired > 0 ? `${daysSinceExpired} дн. тому.` : 'Сьогодні.'} ${recoveryLine} Обери, де зручно подивитись плани і відновити доступ.`,
+          body: content.body,
           telegramHtml: buildTelegramCard({
-            title: previousPlan === 'trial' ? '💎 Тріал завершився' : '💎 Доступ завершився',
-            intro: `${firstName}, ${previousPlan === 'trial' ? 'пробний період завершився' : 'твій доступ завершився'} ${daysSinceExpired > 0 ? `${daysSinceExpired} дн. тому` : 'сьогодні'}.`,
-            facts: [
-              'Історія та звіти збережені',
-              'Ранкові й вечірні сесії зараз на паузі',
-            ],
-            note: recoveryLine,
-            closing: 'Обери, де зручно відкрити підписку і повернути доступ.',
+            title: content.title,
+            intro: content.body,
           }),
-          ctaActions: [
-            {
-              text: '✦ Обрати підписку в мініап',
-              url: buildMiniAppStartUrl('subscription'),
-              mode: 'web_app',
-            },
-            {
-              text: '✦ Обрати підписку на сайті',
-              url: subscriptionWebUrl,
-              mode: 'url',
-            },
-          ],
+          ctaText: content.ctaText,
+          ctaActions: content.ctaUrl
+            ? [{ text: content.ctaText ?? 'Відкрити', url: content.ctaUrl, mode: 'url' }]
+            : undefined,
         }
       }
       case NotificationEvent.POST_TRIAL_REPORTS:
@@ -1449,6 +1735,40 @@ export class NotificationService {
               mode: 'web_app',
             },
           ],
+        }
+      }
+      case NotificationEvent.AB_TEST_FOLLOWUP:
+      {
+        const flowTimerId = (asString(payload?.flow_timer_id ?? payload?.flowTimerId) ?? 'RESULT_FOLLOWUP_24H') as AbTestFollowupTimerId
+        const content = buildNotificationContent(flowTimerId, {
+          userName: firstName,
+          resultKey: asString(payload?.result_key ?? payload?.resultKey) as AbTestResultKey | null,
+        })
+        const isPlainBridge = flowTimerId === 'ZOOM_REMINDER_24H'
+          || flowTimerId === 'ZOOM_REMINDER_2H'
+          || flowTimerId === 'PLATFORM_INVITE_AFTER_ZOOM_1'
+          || flowTimerId === 'PLATFORM_INVITE_AFTER_ZOOM_2'
+        const bridgeUrl = asString(
+          payload?.payment_url
+          ?? payload?.paymentUrl
+          ?? payload?.cta_url
+          ?? payload?.ctaUrl,
+        )
+        ?? null
+        return {
+          title: content.title,
+          body: content.body,
+          telegramHtml: buildTelegramCard({
+            title: content.title,
+            intro: isPlainBridge ? content.body : `${firstName}, ${content.body}`,
+            note: 'Нагадування працює через canonical timing foundation.',
+          }),
+          ctaText: content.ctaText,
+          ctaActions: isPlainBridge && bridgeUrl && content.ctaText
+            ? [{ text: content.ctaText, url: bridgeUrl, mode: 'url' }]
+            : content.ctaUrl
+            ? [{ text: content.ctaText ?? 'Відкрити', url: content.ctaUrl, mode: 'url' }]
+            : undefined,
         }
       }
     }

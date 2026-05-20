@@ -1,6 +1,7 @@
 import type { NextFunction, Response } from 'express'
 import type { AuthenticatedRequest } from '../../../types/globalTypes.js'
 import { getServerUser } from '../getServerUser.js'
+import { buildRequestFingerprint } from '../../../core/state-machine/securityFoundation.js'
 
 // Middleware: перевірка JWT, присвоєння повного AuthUser
 export async function authRequired(
@@ -10,13 +11,17 @@ export async function authRequired(
 ) {
   try {
     const user = await getServerUser(req)
-    const header = String(req.headers.authorization ?? '')
-    const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : null
     console.log('[AUTH]', {
-      token: token ? `${token.slice(0, 12)}...` : null,
       userId: user?.id ?? null,
       path: req.path,
       method: req.method,
+      requestFingerprint: buildRequestFingerprint({
+        method: req.method,
+        path: req.path,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] as string | null | undefined,
+        userId: user?.id ?? null,
+      }),
     })
     if (!user) {
       return res.status(401).json({ error: 'unauthorized' })

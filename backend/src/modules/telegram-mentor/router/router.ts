@@ -13,23 +13,21 @@ import {
   getStateMessage,
   resolveLinkedUserIdFromContext,
   resolveUserState,
+  resolveStartContext,
+  handleMemoryAwareStartFlow,
   sendEntryOffer,
   sendStateMenu,
 } from '../handlers/start.js'
 import { handleStatus } from '../handlers/status.js'
 import { handleTasks } from '../handlers/tasks.js'
 import { openAppKeyboard, supportMenuKeyboard } from '../keyboards.js'
+import { isLmOnlyModeEnabled } from '../runtime.js'
 import { getSession } from '../session.js'
 import type { FlowState, RouterContext } from './context.js'
 import { resolveIntent, type Intent } from './intent.js'
 import type { RoleResult } from '../roles/base.role.js'
 import { runFunnelRole } from '../roles/funnel.role.js'
 import { runMentorRole } from '../roles/mentor.role.js'
-
-function isLmOnlyModeEnabled(): boolean {
-  // [LM_ONLY_MODE] added
-  return process.env.APP_MODE === 'LM_ONLY'
-}
 
 function getStartPayloadValue(ctx: Context): string {
   if ('startPayload' in ctx && typeof ctx.startPayload === 'string') {
@@ -260,7 +258,7 @@ async function handleActiveQuestionSession(
   // Під час активної сесії не виходимо в chat-mode.
   if (intent === 'support' || intent === 'off_topic') {
     await ctx.reply(
-      'Зараз у тебе активна сесія.\n\nДай відповідь на поточне питання або натисни «← Повернутись».',
+      'Зараз у тебе активний крок.\n\nДай відповідь на поточне питання або натисни «← Повернутись».',
       {
         reply_markup: {
           inline_keyboard: [
@@ -518,6 +516,11 @@ export async function handleUpdate(ctx: Context): Promise<void> {
 
   if (!routerContext.userId) {
     await sendEntryOffer(ctx)
+    return
+  }
+
+  const startContext = await resolveStartContext(routerContext.userId)
+  if (startContext && await handleMemoryAwareStartFlow(ctx, startContext)) {
     return
   }
 

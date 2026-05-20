@@ -1,6 +1,7 @@
 import { BookOpen, Clock3, Package, Sparkles, Target, User } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import { ROUTES } from '@/config/routes'
 import JournalSideRail from '@/features/journal/components/JournalSideRail'
 import { useUserProgress } from '@/features/user/hooks/useUserProgress'
 
@@ -44,7 +45,7 @@ export default function DashboardSideRails() {
       label: 'Колесо',
       active: false,
       tone: 'locked' as const,
-      onClick: () => navigate('/dashboard/wheel'),
+      onClick: () => navigate(ROUTES.WHEEL),
     },
     {
       id: 'ai',

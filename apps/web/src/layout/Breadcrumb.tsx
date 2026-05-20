@@ -1,8 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
+import { ROUTES, normalizeDashboardRoutePath } from '@/config/routes'
 import { buildContentStudioStepDefinitions } from '@/features/content-studio/config/contentStudio.steps'
 import type { ContentStudioStep } from '@/features/content-studio/config/contentStudio.config'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useGetMyProductsQuery } from '@/features/products/services/products.api'
 import { useGetLatestWheelAssessmentQuery, useGetWheelCooldownQuery } from '@/features/wheel/services/wheel.api'
@@ -35,6 +37,8 @@ const MINI_COURSE_TITLES: Record<string, string> = {
 }
 
 const DASHBOARD_ROOT = '/dashboard'
+const DASHBOARD_ROOT_CANONICAL = ROUTES.DASHBOARD
+const dashboardSectionPath = (section: string) => `${ROUTES.DASHBOARD}?section=${section}`
 
 function normalizeSlug(value: string) {
   return value
@@ -133,15 +137,15 @@ export function resolveSegments(
 
   if (isWheelRoute) {
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
       createSegment('Колесо балансу'),
     ]
   }
 
   if (pathname === '/wheel/start') {
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
-      createSegment('Колесо балансу', '/dashboard/wheel'),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
+      createSegment('Колесо балансу', ROUTES.WHEEL),
       createSegment('Старт'),
     ]
   }
@@ -151,8 +155,8 @@ export function resolveSegments(
     || (pathname === '/dashboard/cycle' && session === 'morning')
   ) {
     return [
-      createSegment('ABsystem', '/dashboard?section=products'),
-      createSegment('Щоденний цикл', '/dashboard/cycle'),
+      createSegment('ABsystem', dashboardSectionPath('products')),
+      createSegment('Щоденний цикл', ROUTES.CYCLE),
       createSegment('Ранок'),
     ]
   }
@@ -164,8 +168,8 @@ export function resolveSegments(
     || (pathname === '/dashboard/cycle' && session === 'tasks')
   ) {
     return [
-      createSegment('ABsystem', '/dashboard?section=products'),
-      createSegment('Щоденний цикл', '/dashboard/cycle'),
+      createSegment('ABsystem', dashboardSectionPath('products')),
+      createSegment('Щоденний цикл', ROUTES.CYCLE),
       createSegment('Мікрозавдання'),
     ]
   }
@@ -175,8 +179,8 @@ export function resolveSegments(
     || (pathname === '/dashboard/cycle' && session === 'evening')
   ) {
     return [
-      createSegment('ABsystem', '/dashboard?section=products'),
-      createSegment('Щоденний цикл', '/dashboard/cycle'),
+      createSegment('ABsystem', dashboardSectionPath('products')),
+      createSegment('Щоденний цикл', ROUTES.CYCLE),
       createSegment('Вечір'),
     ]
   }
@@ -186,51 +190,51 @@ export function resolveSegments(
     || (pathname === '/dashboard/cycle' && session === 'analysis')
   ) {
     return [
-      createSegment('ABsystem', '/dashboard?section=products'),
-      createSegment('Щоденний цикл', '/dashboard/cycle'),
+      createSegment('ABsystem', dashboardSectionPath('products')),
+      createSegment('Щоденний цикл', ROUTES.CYCLE),
       createSegment('Аналіз дня'),
     ]
   }
 
   if (pathname === '/dashboard/cycle') {
     return [
-      createSegment('ABsystem', '/dashboard?section=products'),
+      createSegment('ABsystem', dashboardSectionPath('products')),
       createSegment('Щоденний цикл'),
     ]
   }
 
   if (pathname === '/dashboard/goals') {
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
       createSegment('Цілі'),
     ]
   }
 
   if (pathname === '/dashboard/vision') {
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
       createSegment('WEB-Карта'),
     ]
   }
 
   if (pathname === '/dashboard/actions') {
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
       createSegment('Дії'),
     ]
   }
 
   if (pathname === '/journal/zoom') {
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
-      createSegment('Щоденник', '/journal'),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
+      createSegment('Щоденник', ROUTES.JOURNAL),
       createSegment('Zoom-сесії'),
     ]
   }
 
   if (isJournalRoute) {
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
       createSegment('Щоденник'),
     ]
   }
@@ -240,36 +244,36 @@ export function resolveSegments(
     if (!title) return []
 
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
-      createSegment('Практикуми', '/dashboard/courses'),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
+      createSegment('Практикуми', ROUTES.COURSES),
       createSegment(title),
     ]
   }
 
   if (pathname === '/practicums' || pathname === '/dashboard/courses') {
     return [
-      createSegment('Мій шлях', DASHBOARD_ROOT),
+      createSegment('Мій шлях', DASHBOARD_ROOT_CANONICAL),
       createSegment('Практикуми'),
     ]
   }
 
   if (pathname === '/reports/weekly') {
     return [
-      createSegment('Шлях', '/dashboard/journal'),
+      createSegment('Шлях', ROUTES.JOURNAL),
       createSegment('Тижневий'),
     ]
   }
 
   if (pathname === '/reports/monthly') {
     return [
-      createSegment('Шлях', '/dashboard/journal'),
+      createSegment('Шлях', ROUTES.JOURNAL),
       createSegment('Місячний'),
     ]
   }
 
   if (isReportsRoute) {
     return [
-      createSegment('Шлях', '/dashboard/journal'),
+      createSegment('Шлях', ROUTES.JOURNAL),
       createSegment('Загальний'),
     ]
   }
@@ -280,29 +284,29 @@ export function resolveSegments(
 
   if (pathname === '/dashboard/settings') {
     return [
-      createSegment('Профіль', '/dashboard/profile'),
+      createSegment('Профіль', ROUTES.PROFILE),
       createSegment('Налаштування'),
     ]
   }
 
   if (pathname === '/dashboard/subscription') {
     return [
-      createSegment('Мій кабінет', DASHBOARD_ROOT),
+      createSegment('Мій кабінет', DASHBOARD_ROOT_CANONICAL),
       createSegment('Підписка'),
     ]
   }
 
   if (pathname === '/dashboard/notifications') {
     return [
-      createSegment('Мій кабінет', DASHBOARD_ROOT),
+      createSegment('Мій кабінет', DASHBOARD_ROOT_CANONICAL),
       createSegment('Сповіщення'),
     ]
   }
 
   if (isContentRoute) {
     const baseSegments = [
-      createSegment('Контент і продажі', DASHBOARD_ROOT),
-      createSegment('Content Machine', '/dashboard?section=content'),
+      createSegment('Контент і продажі', DASHBOARD_ROOT_CANONICAL),
+      createSegment('Content Machine', dashboardSectionPath('content')),
     ]
 
     if (step === null || step === 0) return baseSegments
@@ -315,21 +319,21 @@ export function resolveSegments(
 
   if (pathname === '/funnel' || pathname === '/dashboard/leadmagnet' || (pathname === DASHBOARD_ROOT && section === 'leadmagnet')) {
     return [
-      createSegment('Контент і продажі', DASHBOARD_ROOT),
+      createSegment('Контент і продажі', DASHBOARD_ROOT_CANONICAL),
       createSegment('Воронка'),
     ]
   }
 
   if (pathname === '/telegram' || pathname === '/dashboard/telegram' || (pathname === DASHBOARD_ROOT && section === 'telegram')) {
     return [
-      createSegment('Контент і продажі', DASHBOARD_ROOT),
+      createSegment('Контент і продажі', DASHBOARD_ROOT_CANONICAL),
       createSegment('Telegram'),
     ]
   }
 
   if (pathname === '/seo' || pathname === '/dashboard/ai-seo' || (pathname === DASHBOARD_ROOT && section === 'ai-seo')) {
     return [
-      createSegment('Контент і продажі', DASHBOARD_ROOT),
+      createSegment('Контент і продажі', DASHBOARD_ROOT_CANONICAL),
       createSegment('SEO'),
     ]
   }
@@ -340,42 +344,42 @@ export function resolveSegments(
       if (!title) return []
 
       return [
-        createSegment('Мій кабінет', DASHBOARD_ROOT),
-        createSegment('Продукти', '/dashboard/products'),
+        createSegment('Мій кабінет', DASHBOARD_ROOT_CANONICAL),
+        createSegment('Продукти', ROUTES.PRODUCTS),
         createSegment(title),
       ]
     }
 
     return [
-      createSegment('Мій кабінет', DASHBOARD_ROOT),
+      createSegment('Мій кабінет', DASHBOARD_ROOT_CANONICAL),
       createSegment('Продукти'),
     ]
   }
 
   if (pathname === '/users' || pathname === '/dashboard/students' || (pathname === DASHBOARD_ROOT && section === 'students')) {
     return [
-      createSegment('Аналітика і система', DASHBOARD_ROOT),
+      createSegment('Аналітика і система', DASHBOARD_ROOT_CANONICAL),
       createSegment('Користувачі'),
     ]
   }
 
   if (pathname === '/analytics' || pathname === '/dashboard/admin/revenue') {
     return [
-      createSegment('Аналітика і система', DASHBOARD_ROOT),
+      createSegment('Аналітика і система', DASHBOARD_ROOT_CANONICAL),
       createSegment('Аналітика'),
     ]
   }
 
   if (pathname === '/calendar' || pathname === '/dashboard/calendar') {
     return [
-      createSegment('Аналітика і система', DASHBOARD_ROOT),
+      createSegment('Аналітика і система', DASHBOARD_ROOT_CANONICAL),
       createSegment('Календар'),
     ]
   }
 
   if (pathname === '/system' || (pathname === DASHBOARD_ROOT && section === 'system')) {
     return [
-      createSegment('Аналітика і система', DASHBOARD_ROOT),
+      createSegment('Аналітика і система', DASHBOARD_ROOT_CANONICAL),
       createSegment('Система'),
     ]
   }
@@ -385,13 +389,29 @@ export function resolveSegments(
 
 export default function Breadcrumb() {
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
+  const normalizedPathname = useMemo(() => normalizeDashboardRoutePath(pathname), [pathname])
 
   const userId = user?.id ?? ''
-  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, { skip: !userId })
-  const { data: wheelCooldown } = useGetWheelCooldownQuery(userId, { skip: !userId })
-  const { data: products = [] } = useGetMyProductsQuery(undefined, { skip: !userId })
+  const stableQueryOptions = {
+    skip: shouldSkipProtectedQueries || !userId,
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMountOrArgChange: false,
+  } as const
+  const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, stableQueryOptions)
+  const { data: wheelCooldown } = useGetWheelCooldownQuery(userId, stableQueryOptions)
+  const { data: products = [] } = useGetMyProductsQuery(undefined, stableQueryOptions)
+
+  useEffect(() => {
+    console.log('[AUTH][frontend] session status', sessionStatus)
+    if (shouldSkipProtectedQueries) {
+      console.log('[AUTH][frontend] protected queries skipped')
+    }
+  }, [sessionStatus, shouldSkipProtectedQueries])
 
   const wheelStatus = useMemo<WheelStatus>(() => ({
     completedAt: latestWheel?.completedAt ?? null,
@@ -400,17 +420,17 @@ export default function Breadcrumb() {
 
   const practicumTitle = useMemo(() => {
     if (
-      pathname.startsWith('/practicums/')
-      || pathname.startsWith('/dashboard/courses/')
+      normalizedPathname.startsWith('/practicums/')
+      || normalizedPathname.startsWith('/dashboard/courses/')
     ) {
-      return resolvePracticumTitle(pathname, products)
+      return resolvePracticumTitle(normalizedPathname, products)
     }
     return ''
-  }, [pathname, products])
+  }, [normalizedPathname, products])
 
   const segments = useMemo(
-    () => resolveSegments(pathname, searchParams, wheelStatus, practicumTitle),
-    [pathname, practicumTitle, searchParams, wheelStatus],
+    () => resolveSegments(normalizedPathname, searchParams, wheelStatus, practicumTitle),
+    [normalizedPathname, practicumTitle, searchParams, wheelStatus],
   )
 
   if (!segments.length) return null

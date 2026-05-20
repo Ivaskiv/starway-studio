@@ -1,4 +1,4 @@
-import { OpenAI } from 'openai'
+import { openai } from '@starway/ai/providers'
 import { prisma } from '../../db/client.js'
 import { checkQuota, decrementQuota } from '../quota/service.js'
 import { buildSystemPrompt, buildContextPrompt, buildTaskPrompt, MentorConfigPayload } from './prompt.js'
@@ -6,7 +6,6 @@ import { GenerationIntent, GenerationRequest, GenerationResponse } from './types
 import { GenerationType } from '@starway/db/prisma-client'
 import { runGuardedAiTask, stableHash } from '../../services/aiGuard.service.js'
 
-const openAi = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
 const COST_MAP: Record<GenerationIntent, number> = {
   morning: 0.00045,
@@ -57,7 +56,7 @@ async function callOpenAi(system: string, context: string, task: string, userId:
       duplicateWindowMs: 10 * 60_000,
     },
     async () => {
-      const completion = await openAi.chat.completions.create({
+      const completion = await openai.chat.completions.create({
         model: MODEL,
         temperature: 0.35,
         messages: [

@@ -1,5 +1,12 @@
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
+import { sanitizeSecurityPayload } from '../../core/state-machine/securityFoundation.js'
+import {
+  buildBehavioralAnalyticsSnapshot,
+  validateBehavioralAnalyticsLayer,
+  type BehavioralAnalyticsSnapshot,
+  type BehavioralEventRecord,
+} from './behavioral.js'
 
 type Period = '7d' | '30d' | '90d'
 
@@ -739,7 +746,7 @@ export async function getUserJourney(userId: string): Promise<JourneyItem[]> {
     type: event.type,
     source: event.source,
     state: event.state,
-    payload: event.payload,
+    payload: sanitizeSecurityPayload(event.payload),
     createdAt: event.createdAt.toISOString(),
   }))
 }
@@ -1008,4 +1015,35 @@ export async function getFounderAnalytics(period: Period = '30d'): Promise<Found
       ),
     },
   }
+}
+
+export async function getBehavioralAnalytics(period: Period = '30d'): Promise<BehavioralAnalyticsSnapshot> {
+  const { start } = getPeriodRange(period)
+  const events = await prisma.event.findMany({
+    where: { createdAt: { gte: start } },
+    select: {
+      userId: true,
+      type: true,
+      state: true,
+      payload: true,
+      createdAt: true,
+    },
+  })
+
+  const records: BehavioralEventRecord[] = events.map((event) => ({
+    userId: event.userId,
+    type: event.type,
+    state: event.state,
+    payload: event.payload,
+    createdAt: event.createdAt,
+  }))
+
+  const snapshot = buildBehavioralAnalyticsSnapshot(records)
+  const validation = validateBehavioralAnalyticsLayer()
+
+  if (!validation.ok) {
+    console.warn('[analytics] behavioral layer validation failed', validation.errors)
+  }
+
+  return snapshot
 }

@@ -32,7 +32,7 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/apps/bot/src/index.js",
+    "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

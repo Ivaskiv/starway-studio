@@ -1,0 +1,13 @@
+@use '../mixins' as *;
+
+.o-surface {
+  background: var(--focus-surface-bg);
+  border: 1px solid var(--focus-surface-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--focus-surface-shadow);
+}
+
+.o-card {
+  @include flex-col(var(--stack-gap-md));
+  padding: var(--card-padding);
+}

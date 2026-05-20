@@ -1,9 +1,13 @@
 // useWheelStatus.ts
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext';
 import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/api';
 import { useMemo } from 'react';
 
 export const useWheelStatus = (userId: string) => {
-  const { data: wheel, isLoading, error } = useGetLatestWheelAssessmentQuery(userId);
+  const { appState: sessionStatus } = useSessionOrchestrator();
+  const { data: wheel, isLoading, error } = useGetLatestWheelAssessmentQuery(userId, {
+    skip: sessionStatus !== 'authenticated' || !userId,
+  });
 
   const status = useMemo(() => {
     if (!wheel) {

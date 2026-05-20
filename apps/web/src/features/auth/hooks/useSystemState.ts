@@ -1,17 +1,17 @@
 import { useAppSelector } from '@/app/hooks'
-import { useMemo } from 'react';
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
+import { useCallback, useMemo } from 'react';
 
 import { getCoreAccess } from '@/features/auth/selectors/getCoreAccess';
-import { useGetMySystemStateQuery } from '@/features/auth/services/accessApi';
 
 type ModuleId = 'AI_GENERATOR' | 'AI_FUNNEL' | 'AI_MENTOR' | 'WHEEL_OF_BALANCE';
 
 export function useSystemState() {
   const isAuthenticated = useAppSelector(state => state.auth.status === 'authenticated')
-  const query = useGetMySystemStateQuery(undefined, {
-    skip: !isAuthenticated,
-  });
-  const state = query.data;
+  const { canRunProtectedQueries, systemStateData: state, isSystemReady } = useSessionOrchestrator()
+  const isLoading = isAuthenticated && canRunProtectedQueries && !isSystemReady
+  const isFetching = false
+  const isError = isAuthenticated && canRunProtectedQueries && !state && isSystemReady
 
   const moduleMap = useMemo(() => {
     const map = new Map<string, { isLocked: boolean; accessLevel: 'TRIAL' | 'PAID' | 'NONE'; lockReason: 'TRIAL_EXPIRED' | 'NO_SUBSCRIPTION' | null }>();
@@ -25,8 +25,8 @@ export function useSystemState() {
     return map;
   }, [state?.aiModules]);
 
-  const getModuleAccess = (moduleId: ModuleId) =>
-    moduleMap.get(moduleId) || { isLocked: true, accessLevel: 'NONE' as const, lockReason: 'NO_SUBSCRIPTION' as const };
+  const getModuleAccess = useCallback((moduleId: ModuleId) =>
+    moduleMap.get(moduleId) || { isLocked: true, accessLevel: 'NONE' as const, lockReason: 'NO_SUBSCRIPTION' as const }, [moduleMap]);
 
   const { trialActive, subscriptionActive, hasCoreAccess } = getCoreAccess({
     trial: state?.trial,
@@ -34,9 +34,13 @@ export function useSystemState() {
     accessControl: state?.accessControl,
   })
 
-  return {
-    ...query,
+  return useMemo(() => ({
     state,
+    data: state,
+    isLoading,
+    isFetching,
+    isError,
+    isSuccess: Boolean(state),
     counts: {
       ownedProducts: state?.products.owned.length ?? 0,
       subscribedProducts: state?.products.subscribed.length ?? 0,
@@ -51,5 +55,16 @@ export function useSystemState() {
     subscriptionActive,
     hasCoreAccess,
     getModuleAccess,
-  };
+  }), [
+    getModuleAccess,
+    hasCoreAccess,
+    isAuthenticated,
+    isError,
+    isFetching,
+    isLoading,
+    isSystemReady,
+    state,
+    subscriptionActive,
+    trialActive,
+  ]);
 }

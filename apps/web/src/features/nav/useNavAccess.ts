@@ -1,4 +1,5 @@
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetMyProductsQuery } from '@/features/products/services/products.api'
 import { useGetUpcomingSessionQuery } from '@/features/zoom/services/zoom.api'
@@ -25,13 +26,15 @@ const formatTime = (value?: string | null) => {
 
 export function useNavAccess() {
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
   const { state } = useSystemState()
   const currentRole = normalizeRole(state?.permissions?.role ?? user?.role)
   const hasPremium = Boolean(state?.subscription?.isActive)
   const isAuthenticated = Boolean(user?.id)
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
 
-  const { data: products = [] } = useGetMyProductsQuery(undefined, { skip: !isAuthenticated })
-  const { data: upcomingZoom } = useGetUpcomingSessionQuery(undefined, { skip: !isAuthenticated })
+  const { data: products = [] } = useGetMyProductsQuery(undefined, { skip: shouldSkipProtectedQueries || !isAuthenticated })
+  const { data: upcomingZoom } = useGetUpcomingSessionQuery(undefined, { skip: shouldSkipProtectedQueries || !isAuthenticated })
 
   const productIndex = useMemo(
     () => new Map(products.map(product => [product.id, product] as const)),

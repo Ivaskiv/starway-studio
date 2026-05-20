@@ -1,26 +1,27 @@
 // frontend/src/layout/Header.tsx
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NAVIGATION, type NavMenu } from '@/core/navigation/navigation.registry'
+import { ROUTES, normalizeDashboardRoutePath } from '@/config/routes'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
-import { useAuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext'
 import { hasKnownUser } from '@/features/auth/services/token'
 import {
   useGetNotificationsQuery,
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
 } from '@/features/notifications/services/notifications.api'
-import { selectCurrentUser, selectIsAuthenticated, selectIsLoading } from '@/features/auth/services/auth.slice'
+import { selectCurrentUser, selectIsAuthenticated } from '@/features/auth/services/auth.slice'
 import { isTelegramMiniAppAuthContext } from '@/features/auth/utils/sessionSync'
 import type { Notification } from '@/features/notifications/types/notification.types'
 import type { UserRole } from '@/features/user/types/user.types'
 import { UserMenu } from '@/features/user/userMenu/UserMenu'
-import { useGetWheelCooldownQuery } from '@/features/wheel/services/wheel.api'
+import { useSmartNavigation } from '@/hooks/useSmartNavigation'
 import type { SidebarNavItem } from '@/layout/Sidebar'
 import { SIDEBAR_NAV, isVisibleFor } from '@/layout/Sidebar'
 import type { LayoutSharedProps } from '@/layout/types/layout.types'
 import StarwayMark from '@/ui/StarwayMark'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 
 // ── Ролі ─────────────────────────────────────────────────────────────────────
 type ViewRole = 'user' | 'expert' | 'superadmin'
@@ -39,7 +40,7 @@ interface HeaderProps extends LayoutSharedProps {
   miniAppMode?: boolean
 }
 
-export default function Header({
+const Header = memo(function Header({
   view,
   onViewChange,
   previewRole,
@@ -49,44 +50,33 @@ export default function Header({
   forceBurgerMenu = false,
   miniAppMode = false,
 }: HeaderProps) {
-  const navigate  = useNavigate()
   const location  = useLocation()
+  const normalizedPathname = useMemo(() => normalizeDashboardRoutePath(location.pathname), [location.pathname])
   const headerRef = useRef<HTMLElement>(null)
 
-  // ── ВИПРАВЛЕНО: isAuthenticated з Redux store ─────────────────────────────
   const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isAuthLoading = useSelector(selectIsLoading)
   const user = useSelector(selectCurrentUser)
-  const authRestoreStatus = useAuthRestoreStatus()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { accessControl } = useSystemState()
-  const shouldLoadWheelCooldown =
-    isAuthenticated &&
-    !!user?.id &&
-    user.role === 'USER' &&
-    accessControl?.hasSubscription === true &&
-    accessControl?.hasRequiredContacts === true &&
-    accessControl?.currentFlow !== 'lead-magnet'
-  const { data: wheelCooldown } = useGetWheelCooldownQuery(
-    user?.id ?? '',
-    { skip: !shouldLoadWheelCooldown },
-  )
+  const { navigateTo, isNavigationLocked } = useSmartNavigation()
 
   const compactShellMode = miniAppMode || forceBurgerMenu
   const hideTelegramGuestAuth = miniAppMode || isTelegramMiniAppAuthContext()
   const shouldHideRegisterButton = hasKnownUser()
-  const holdMiniAppGuestAuth =
-    hideTelegramGuestAuth &&
-    !isAuthenticated &&
-    (authRestoreStatus === 'idle' ||
-      authRestoreStatus === 'restoring' ||
-      isAuthLoading ||
-      hideTelegramGuestAuth)
   const viewRole = previewRole
   const [openDrop, setOpenDrop] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === 'undefined' ? true : !document.hidden,
   )
+
+  useEffect(() => {
+    console.log('[AUTH][frontend] session status', sessionStatus)
+    if (shouldSkipProtectedQueries) {
+      console.log('[AUTH][frontend] protected queries skipped')
+    }
+  }, [sessionStatus, shouldSkipProtectedQueries])
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -102,10 +92,10 @@ export default function Header({
   } = useGetNotificationsQuery(
     { limit: 12 },
     {
-      skip: !isAuthenticated || !user?.id || miniAppMode || !isDocumentVisible,
+      skip: shouldSkipProtectedQueries || !user?.id || miniAppMode || !isDocumentVisible,
       pollingInterval: 60_000,
       refetchOnFocus: false,
-      refetchOnReconnect: true,
+      refetchOnReconnect: false,
     },
   )
   const [markNotificationRead] = useMarkNotificationReadMutation()
@@ -139,7 +129,9 @@ export default function Header({
       .filter(section => section.items.length > 0)
   }, [currentRole, isAuthenticated])
 
-  const go = useCallback((p: string) => navigate(p), [navigate])
+  const go = useCallback((path: string, requiresAuth = false) => {
+    navigateTo(path, { requiresAuth })
+  }, [navigateTo])
   const unreadNotifications = useMemo(
     () => notifications.filter((notification) => !notification.readAt),
     [notifications],
@@ -158,22 +150,22 @@ export default function Header({
       event.includes('MICRO') ||
       type === 'AI_REMINDER'
     ) {
-      return '/dashboard/ai-mentor'
+      return ROUTES.AI_MENTOR
     }
 
     if (templateKey.includes('weekly') || templateKey.includes('level') || templateKey.includes('streak')) {
-      return '/dashboard/journal'
+      return ROUTES.JOURNAL
     }
 
     if (templateKey.includes('subscription') || type === 'SUBSCRIPTION') {
-      return '/dashboard/subscription'
+      return ROUTES.SUBSCRIPTION
     }
 
     if (type === 'DAILY_MORNING' || type === 'DAILY_EVENING') {
-      return '/dashboard/cycle'
+      return ROUTES.CYCLE
     }
 
-    return '/dashboard/journal'
+    return ROUTES.JOURNAL
   }, [])
 
   const handleNotificationClick = useCallback(async (notification: Notification) => {
@@ -193,8 +185,8 @@ export default function Header({
       target,
     })
     setOpenDrop(null)
-    navigate(target)
-  }, [markNotificationRead, navigate, resolveNotificationTarget])
+    navigateTo(target, { requiresAuth: true })
+  }, [markNotificationRead, navigateTo, resolveNotificationTarget])
 
   const filteredNav = useMemo<NavMenu[]>(() => {
     const allowed = ROLE_NAV[viewRole]
@@ -235,6 +227,19 @@ export default function Header({
     <>
       <button
         className="hdr-btn-ghost"
+        disabled={isNavigationLocked}
+        onClick={() => {
+          go(ROUTES.AB_TEST)
+          onAfterClick?.()
+        }}
+        aria-label="Пройти AB тест"
+        type="button"
+      >
+        AB тест
+      </button>
+      <button
+        className="hdr-btn-ghost"
+        disabled={isNavigationLocked}
         onClick={() => {
           onLoginClick?.()
           onAfterClick?.()
@@ -247,6 +252,7 @@ export default function Header({
       {!shouldHideRegisterButton ? (
         <button
           className="hdr-btn-accent"
+          disabled={isNavigationLocked}
           onClick={() => {
             onRegisterClick?.()
             onAfterClick?.()
@@ -268,6 +274,7 @@ export default function Header({
             className="hdr-notif"
             aria-label="Сповіщення"
             type="button"
+            disabled={isNavigationLocked}
             onClick={() => setOpenDrop((value) => value === 'notifications' ? null : 'notifications')}
           >
             🔔
@@ -289,6 +296,7 @@ export default function Header({
                 {unreadCount > 0 ? (
                   <button
                     type="button"
+                    disabled={isNavigationLocked}
                     className="text-[11px] font-semibold text-[rgb(var(--accent-soft-rgb))]"
                     onClick={async () => {
                       if (!user?.id) return
@@ -308,6 +316,7 @@ export default function Header({
                   <button
                     key={notification.id}
                     type="button"
+                    disabled={isNavigationLocked}
                     onClick={() => { void handleNotificationClick(notification) }}
                     className={`flex w-full items-start gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors hover:bg-white/5 ${notification.readAt ? 'opacity-75' : ''}`}
                   >
@@ -331,20 +340,6 @@ export default function Header({
     renderGuestAuthButtons()
   )
 
-  useEffect(() => {
-    if (!import.meta.env.DEV || !miniAppMode) return
-
-    console.info('[Header] miniapp auth snapshot', {
-      isAuthenticated,
-      isAuthLoading,
-      authRestoreStatus,
-      holdMiniAppGuestAuth,
-      hideTelegramGuestAuth,
-      userId: user?.id ?? null,
-      email: user?.email ?? null,
-    })
-  }, [authRestoreStatus, hideTelegramGuestAuth, holdMiniAppGuestAuth, isAuthLoading, isAuthenticated, miniAppMode, user?.email, user?.id])
-
   return (
     <header
       ref={headerRef}
@@ -357,6 +352,7 @@ export default function Header({
         <div className="hdr-left">
           <button
             className="hdr-logo"
+            disabled={isNavigationLocked}
             onClick={() => go('/')}
             aria-label="Перейти на головну сторінку"
             type="button"
@@ -371,10 +367,17 @@ export default function Header({
             <nav className="hdr-nav" aria-label="Головна навігація">
               {desktopNav.map(menu => {
                 if (menu.path) {
+                  const directPath = menu.path
                   return (
-                    <Link key={menu.id} className="hdr-nb" to={menu.path}>
+                    <button
+                      key={menu.id}
+                      className="hdr-nb"
+                      disabled={isNavigationLocked}
+                      onClick={() => go(directPath)}
+                      type="button"
+                    >
                       {menu.label}
-                    </Link>
+                    </button>
                   )
                 }
                 const isOpen = openDrop === menu.id
@@ -382,6 +385,7 @@ export default function Header({
                   <div key={menu.id} className="hdr-drop-wrap">
                     <button
                       className={`hdr-nb${isOpen ? ' hdr-nb--open' : ''}`}
+                      disabled={isNavigationLocked}
                       onClick={() => setOpenDrop(isOpen ? null : menu.id)}
                       type="button"
                       ref={el => {
@@ -398,11 +402,15 @@ export default function Header({
                           <div key={group.id} className="hdr-drop-group">
                             <span className="hdr-drop-gtitle">{group.title}</span>
                             {group.pages.map(page => (
-                              <Link
+                              <button
                                 key={page.id}
-                                className={`hdr-drop-item${location.pathname === page.path ? ' hdr-drop-item--on' : ''}`}
-                                to={page.path}
-                                onClick={() => setOpenDrop(null)}
+                                className={`hdr-drop-item${normalizedPathname === page.path ? ' hdr-drop-item--on' : ''}`}
+                                disabled={isNavigationLocked}
+                                onClick={() => {
+                                  go(page.path)
+                                  setOpenDrop(null)
+                                }}
+                                type="button"
                               >
                                 {page.icon && (
                                   <span className="hdr-drop-icon" aria-hidden="true">{page.icon}</span>
@@ -413,7 +421,7 @@ export default function Header({
                                     <span className="hdr-drop-desc">{page.description}</span>
                                   )}
                                 </span>
-                              </Link>
+                              </button>
                             ))}
                           </div>
                         ))}
@@ -447,6 +455,7 @@ export default function Header({
               aria-label={mobileOpen ? 'Закрити меню' : 'Відкрити меню'}
               aria-controls="hdr-bmenu"
               type="button"
+              disabled={isNavigationLocked}
               ref={el => {
                 if (el) el.setAttribute('aria-expanded', mobileOpen ? 'true' : 'false')
               }}
@@ -478,17 +487,19 @@ export default function Header({
                 )}
                 {section.items.map((item: SidebarNavItem) => {
                   const isLocked = Boolean(item.requiresPaid && !hasPremium && currentRole !== 'SUPERADMIN')
-                  const isActive = item.path === '/dashboard'
-                    ? location.pathname === '/dashboard'
-                    : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+                  const itemPathname = normalizeDashboardRoutePath(item.path.split('?')[0] ?? item.path)
+                  const isActive = itemPathname === '/dashboard'
+                    ? normalizedPathname === '/dashboard'
+                    : normalizedPathname === itemPathname || normalizedPathname.startsWith(itemPathname + '/')
 
                   return (
                     <button
                       key={item.id}
+                      disabled={isNavigationLocked}
                       className={`hdr-bmenu-link${isActive ? ' hdr-bmenu-link--on' : ''}${isLocked ? ' hdr-bmenu-link--locked' : ''}`}
                       onClick={() => {
                         if (isLocked) return
-                        go(item.path)
+                        go(item.path, true)
                         setMobileOpen(false)
                       }}
                     >
@@ -512,7 +523,8 @@ export default function Header({
                   {group.pages.map(page => (
                     <button
                       key={page.id}
-                      className={`hdr-bmenu-link${location.pathname === page.path ? ' hdr-bmenu-link--on' : ''}`}
+                      disabled={isNavigationLocked}
+                      className={`hdr-bmenu-link${normalizedPathname === page.path ? ' hdr-bmenu-link--on' : ''}`}
                       onClick={() => { go(page.path); setMobileOpen(false) }}
                     >
                       {page.icon && (
@@ -541,4 +553,6 @@ export default function Header({
       </div>
     </header>
   )
-}
+})
+
+export default Header

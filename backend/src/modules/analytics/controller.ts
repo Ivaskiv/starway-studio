@@ -1,7 +1,25 @@
 import type { Request, Response } from 'express'
+import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { prisma } from '../../db/client.js'
+import { trackEvent } from '../events/service.js'
 import { BANNER_SEGMENTS, generateBanners } from '../banners/banner.service.js'
 import {
+  buildBehavioralAdaptationPlan,
+  buildRetentionIntelligence,
+  getLaunchGovernanceChecklist,
+  getOperatorGovernanceSnapshot,
+  getProductIntelligence,
+} from '../../core/governance/productIntelligence.js'
+import {
+  getReleaseGovernanceSnapshot,
+  getProductionActivationSnapshot,
+} from '../../core/governance/releaseGovernance.js'
+import {
+  getFeatureFlagCatalog,
+  resolveFeatureGate,
+} from '../../core/governance/featureFlags.js'
+import {
+  getBehavioralAnalytics,
   getAIInsights,
   getConversionRates,
   getDropOffPoints,
@@ -156,6 +174,21 @@ function getRequestedLimit(value: unknown, fallback: number): number {
   return clamp(parsed, 1, 100)
 }
 
+function isAdminUser(user: unknown): boolean {
+  const role = (user as { role?: string } | null)?.role
+  return role === 'SUPERADMIN' || role === 'ADMIN'
+}
+
+function requireAdminAccess(req: Request, res: Response): boolean {
+  const user = (req as any).user
+  if (isAdminUser(user)) {
+    return true
+  }
+
+  res.status(403).json({ error: 'operator_access_denied' })
+  return false
+}
+
 export async function getOverview(req: Request, res: Response) {
   try {
     const period = getRequestedPeriod(req.query.period)
@@ -229,6 +262,132 @@ export async function getInsights(req: Request, res: Response) {
   }
 }
 
+export async function getBehavioral(req: Request, res: Response) {
+  try {
+    const period = getRequestedPeriod(req.query.period)
+    const behavioral = await getBehavioralAnalytics(period)
+    return res.json(behavioral)
+  } catch (error) {
+    console.error('Analytics behavioral error', error)
+    return res.status(500).json({ error: 'analytics_behavioral_failed' })
+  }
+}
+
+export async function getProductIntelligenceView(req: Request, res: Response) {
+  try {
+    const period = getRequestedPeriod(req.query.period)
+    const productId = String(req.params.productId ?? req.query.productId ?? '').trim() || null
+    const user = (req as any).user
+
+    if (!productId && !isAdminUser(user)) {
+      return res.status(403).json({ error: 'product_intelligence_access_denied' })
+    }
+
+    const intelligence = await getProductIntelligence(period, { productId })
+    const adaptation = buildBehavioralAdaptationPlan(intelligence)
+    const retention = buildRetentionIntelligence(intelligence)
+    const featureFlags = getFeatureFlagCatalog().map((flag) => resolveFeatureGate({
+      flagName: flag.flag_name,
+      tenantId: productId ?? 'global',
+      userId: user?.id ?? null,
+    }))
+
+    return res.json({
+      productId,
+      intelligence,
+      adaptation,
+      retention,
+      featureFlags,
+    })
+  } catch (error) {
+    console.error('Analytics product intelligence error', error)
+    return res.status(500).json({ error: 'analytics_product_intelligence_failed' })
+  }
+}
+
+export async function getOperatorGovernance(req: Request, res: Response) {
+  try {
+    if (!requireAdminAccess(req, res)) {
+      return
+    }
+
+    const period = getRequestedPeriod(req.query.period)
+    const productId = String(req.query.productId ?? '').trim() || null
+    const snapshot = await getOperatorGovernanceSnapshot(period, { productId })
+
+    return res.json(snapshot)
+  } catch (error) {
+    console.error('Analytics operator governance error', error)
+    return res.status(500).json({ error: 'analytics_operator_governance_failed' })
+  }
+}
+
+export async function getLaunchGovernance(req: Request, res: Response) {
+  try {
+    if (!requireAdminAccess(req, res)) {
+      return
+    }
+
+    const checklist = await getLaunchGovernanceChecklist()
+    return res.json(checklist)
+  } catch (error) {
+    console.error('Analytics launch governance error', error)
+    return res.status(500).json({ error: 'analytics_launch_governance_failed' })
+  }
+}
+
+export async function getReleaseGovernance(req: Request, res: Response) {
+  try {
+    if (!requireAdminAccess(req, res)) {
+      return
+    }
+
+    const snapshot = await getReleaseGovernanceSnapshot()
+    return res.json(snapshot)
+  } catch (error) {
+    console.error('Analytics release governance error', error)
+    return res.status(500).json({ error: 'analytics_release_governance_failed' })
+  }
+}
+
+export async function getProductionActivation(req: Request, res: Response) {
+  try {
+    if (!requireAdminAccess(req, res)) {
+      return
+    }
+
+    const snapshot = await getProductionActivationSnapshot()
+    return res.json(snapshot)
+  } catch (error) {
+    console.error('Analytics production activation error', error)
+    return res.status(500).json({ error: 'analytics_production_activation_failed' })
+  }
+}
+
+export async function getFeatureFlags(req: Request, res: Response) {
+  try {
+    if (!requireAdminAccess(req, res)) {
+      return
+    }
+
+    const tenantId = String(req.query.tenantId ?? '').trim() || null
+    const userId = String(req.query.userId ?? '').trim() || null
+    const flags = getFeatureFlagCatalog().map((flag) => ({
+      ...flag,
+      gate: resolveFeatureGate({
+        flagName: flag.flag_name,
+        tenantId,
+        userId,
+      }),
+    }))
+
+    return res.json({ flags })
+  } catch (error) {
+    console.error('Analytics feature flags error', error)
+    return res.status(500).json({ error: 'analytics_feature_flags_failed' })
+  }
+}
+
 export async function getFounder(req: Request, res: Response) {
   try {
     const period = getRequestedPeriod(req.query.period)
@@ -251,11 +410,33 @@ export async function getLive(req: Request, res: Response) {
   }
 }
 
-export async function getJourney(req: Request, res: Response) {
+export async function getJourney(req: AuthenticatedRequest, res: Response) {
   try {
     const userId = String(req.params.userId ?? '')
     if (!userId) {
       return res.status(400).json({ error: 'user_id_required' })
+    }
+
+    const requesterId = req.user?.id ?? null
+    const requesterRole = req.user?.role ?? null
+    const isSelfOrAdmin = requesterId === userId || requesterRole === 'ADMIN' || requesterRole === 'SUPERADMIN'
+    if (!isSelfOrAdmin) {
+      await trackEvent({
+        userId: requesterId,
+        type: 'tenant_violation_attempt',
+        source: 'web',
+        state: null,
+        payload: {
+          requestedUserId: userId,
+          security: {
+            tenant_violation: true,
+            invalid_scope_access: true,
+            suspicious_activity: true,
+            tenant_id: userId,
+          },
+        },
+      }).catch(() => undefined)
+      return res.status(403).json({ error: 'tenant_scope_denied' })
     }
 
     const journey = await getUserJourney(userId)

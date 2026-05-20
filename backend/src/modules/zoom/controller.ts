@@ -2,6 +2,14 @@
 import { NextFunction, Request, Response } from 'express';
 import { prisma } from '../../db/client.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
+import { trackEvent } from '../events/service.js';
+import { resolveUserState } from '../telegram-mentor/handlers/start.js';
+import { resolveTelegramProductSummary } from '../telegram-mentor/services/productSummary.service.js';
+import { markAbTestZoomAttended, markAbTestZoomRegistered } from '@/products/ab-system/telegram/abTest.service.js';
+import { schedulePostZoomBridge, scheduleUpgradeOffer } from '@/modules/subscriptions/payments/business.js';
+import { notificationService } from '../../services/notifications/NotificationService.js';
+import { NotificationEvent } from '../../services/notifications/NotificationEvent.js';
+import { sendDedupedTelegramMessage } from '../../lib/telegram.js';
 import {
   createZoomSession,
   getSessionAttendees,
@@ -23,6 +31,23 @@ const getCurrentExpertId = async (userId: string | undefined): Promise<string> =
 
   if (!user?.expertId) throw new Error('Expert ID not found for this user');
   return user.expertId;
+};
+
+const getTelegramChatId = async (userId: string): Promise<string | null> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+    },
+  });
+
+  return user?.telegramChatId ?? user?.telegramLinks[0]?.chatId ?? null;
 };
 
 export async function createSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -80,6 +105,19 @@ export async function register(req: AuthenticatedRequest, res: Response, next: N
     if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
 
     const attendee = await registerAttendee(userId, sessionId);
+    const state = await resolveUserState(userId).catch(() => null);
+    await trackEvent({
+      userId,
+      type: 'ZOOM_REGISTERED',
+      source: 'web',
+      state,
+      payload: {
+        sessionId,
+        attended_live: false,
+        zoom_index: 1,
+      },
+    });
+    await markAbTestZoomRegistered(userId, sessionId).catch(() => undefined)
     return res.status(201).json(attendee);
   } catch (err) {
     next(err);
@@ -92,6 +130,118 @@ export async function markAttendedHandler(req: AuthenticatedRequest, res: Respon
     if (!attendeeId) return res.status(400).json({ error: 'attendeeId required' });
 
     const attendee = await markAttended(attendeeId);
+    const state = await resolveUserState(attendee.userId).catch(() => null);
+    await trackEvent({
+      userId: attendee.userId,
+      type: 'ZOOM_ATTENDED',
+      source: 'web',
+      state,
+      payload: {
+        sessionId: attendee.sessionId,
+        attended_live: true,
+        zoom_index: 1,
+      },
+    });
+    const productSummary = await resolveTelegramProductSummary(attendee.userId).catch(() => null)
+    const primaryProductKey = productSummary?.primary?.key ?? null
+    if (primaryProductKey === 'STANKEY') {
+      // STANKEY: isolated product — not ecosystem
+      return res.status(200).json(attendee);
+    }
+
+    await markAbTestZoomAttended(attendee.userId, attendee.sessionId).catch(() => undefined)
+
+    const user = await prisma.user.findUnique({
+      where: { id: attendee.userId },
+      select: {
+        lifecycleState: true,
+        settings: true,
+      },
+    })
+    const settings = user?.settings && typeof user.settings === 'object' && !Array.isArray(user.settings)
+      ? user.settings as Record<string, unknown>
+      : {}
+    const hardBridgeSentAt = typeof settings.hardBridgeSentAt === 'string' ? settings.hardBridgeSentAt : null
+    const zoomCount = await prisma.zoomSessionAttendee.count({
+      where: {
+        userId: attendee.userId,
+        attended: true,
+      },
+    })
+    const bridge = schedulePostZoomBridge(attendee.userId, {
+      zoomCount,
+      lifecycleState: user?.lifecycleState ?? null,
+      bridgeSentAt: typeof settings.bridgeSentAt === 'string' ? settings.bridgeSentAt : null,
+      productKey: primaryProductKey,
+    })
+
+    if (bridge.scheduled) {
+      try {
+        const bridgeSentAt = new Date().toISOString()
+        await prisma.user.update({
+          where: { id: attendee.userId },
+          data: {
+            settings: {
+              ...settings,
+              bridgeSentAt,
+            },
+          },
+        })
+
+        await notificationService.schedule(NotificationEvent.AB_TEST_FOLLOWUP, attendee.userId, new Date(Date.now() + bridge.delayMs), {
+          flow_timer_id: 'PLATFORM_INVITE_AFTER_ZOOM_1',
+          lifecycle_stage: 'S7_PLATFORM_INVITE',
+          delay_ms: bridge.delayMs,
+          message_key: 'PLATFORM_INVITE_AFTER_ZOOM',
+          result_key: null,
+          payment_url: bridge.paymentUrl,
+        }).catch(() => undefined)
+      } catch (bridgeError) {
+        console.warn('⚠️ Post-Zoom bridge scheduling skipped', {
+          userId: attendee.userId,
+          error: bridgeError instanceof Error ? bridgeError.message : 'unknown_error',
+        })
+      }
+    }
+
+    const upgradeOffer = scheduleUpgradeOffer(attendee.userId, {
+      zoomCount,
+      lifecycleState: user?.lifecycleState ?? null,
+      bridgeSentAt: typeof settings.bridgeSentAt === 'string' ? settings.bridgeSentAt : null,
+      hardBridgeSentAt,
+      productKey: primaryProductKey,
+    })
+
+    if (upgradeOffer.scheduled) {
+      const chatId = await getTelegramChatId(attendee.userId)
+      if (chatId) {
+        try {
+          await sendDedupedTelegramMessage(chatId, upgradeOffer.text, {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: upgradeOffer.ctaText, url: upgradeOffer.paymentUrl }],
+              ],
+            },
+          })
+
+          await prisma.user.update({
+            where: { id: attendee.userId },
+            data: {
+              settings: {
+                ...settings,
+                hardBridgeSentAt: new Date().toISOString(),
+              },
+            },
+          }).catch(() => undefined)
+        } catch (error) {
+          console.warn('⚠️ Hard bridge scheduling skipped', {
+            userId: attendee.userId,
+            error: error instanceof Error ? error.message : 'unknown_error',
+          })
+        }
+      }
+    }
+
     return res.status(200).json(attendee);
   } catch (err) {
     next(err);

@@ -1,3 +1,5 @@
+import { createAppRequestHeaders } from '@/lib/miniapp/apiClient'
+
 export const duplicateToMiniApp = async (
   userId: string,
   payload: Record<string, unknown>,
@@ -6,13 +8,13 @@ export const duplicateToMiniApp = async (
   try {
     await fetch('/api/miniapp/duplicate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: createAppRequestHeaders(undefined, true),
       body: JSON.stringify({ userId, payload, type }),
     })
 
     await fetch('/api/events/track', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: createAppRequestHeaders(undefined, true),
       body: JSON.stringify({
         userId,
         type: 'miniapp_duplicate_requested',

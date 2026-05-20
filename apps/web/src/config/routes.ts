@@ -10,77 +10,108 @@
  * - Консистентність між menu.ts та App.tsx
  */
 
+export const ROUTE_NAMESPACES = {
+  APP: '/app',
+  MINIAPP: '/miniapp',
+  ADMIN: '/admin',
+} as const
+
+export function toAppRoutePath(path: string): string {
+  if (path === '/dashboard' || path.startsWith('/dashboard/')) {
+    return `${ROUTE_NAMESPACES.APP}${path}`
+  }
+
+  return path
+}
+
+export function normalizeDashboardRoutePath(path: string): string {
+  if (path === ROUTE_NAMESPACES.APP) {
+    return '/dashboard'
+  }
+
+  if (path.startsWith(`${ROUTE_NAMESPACES.APP}/dashboard`)) {
+    return path.slice(ROUTE_NAMESPACES.APP.length)
+  }
+
+  return path
+}
+
 export const ROUTES = {
   // ==========================================
   // PUBLIC ROUTES
   // ==========================================
   HOME: '/',
   LOGIN: '/login',
+  PRICING: '/pricing',
   TELEGRAM_SUCCESS: '/auth/telegram/success',
   ONBOARDING_START: '/onboarding/start',
   ONBOARDING_CONTINUE: '/onboarding/continue',
   AI_FUNNEL_LANDING: '/',
   HELP: '/help',
+  AB_TEST: '/ab-test',
+  WELCOME_TEST: '/welcome-test',
   PRODUCT_INFO_BASE: '/products',
   RESET_PASSWORD: '/reset-password',
-  MINIAPP: '/miniapp',
+  APP: ROUTE_NAMESPACES.APP,
+  MINIAPP: ROUTE_NAMESPACES.MINIAPP,
+  ADMIN: ROUTE_NAMESPACES.ADMIN,
   
   // ==========================================
   // DASHBOARD
   // ==========================================
-  DASHBOARD: '/dashboard',
+  DASHBOARD: toAppRoutePath('/dashboard'),
   
   // ==========================================
   // AI MENTOR ECOSYSTEM
   // ==========================================
-  AI_MENTOR: '/dashboard/ai-mentor',
-  MENTOR_LANDING: '/dashboard/mentor/landing',
-  MENTOR_SETUP: '/dashboard/mentor/setup',
-  MENTOR_WORKSPACE: '/dashboard/mentor/workspace',
+  AI_MENTOR: toAppRoutePath('/dashboard/ai-mentor'),
+  MENTOR_LANDING: toAppRoutePath('/dashboard/mentor/landing'),
+  MENTOR_SETUP: toAppRoutePath('/dashboard/mentor/setup'),
+  MENTOR_WORKSPACE: toAppRoutePath('/dashboard/mentor/workspace'),
   
   // ==========================================
   // CORE MODULES (FREE + TRIAL)
   // ==========================================
-  WHEEL: '/dashboard/wheel',
+  WHEEL: toAppRoutePath('/dashboard/wheel'),
   WHEEL_START: '/wheel/start',
-  CYCLE: '/dashboard/cycle',         // Daily cycle
-  PROGRESS: '/dashboard/progress',   // Analytics
-  JOURNAL: '/dashboard/journal',
-  CALENDAR: '/dashboard/calendar',
-  MICROTASKS: '/dashboard/microtasks',
-  TASKS: '/dashboard/tasks',
-  STREAK: '/dashboard/streak',       // Streak tracker
+  CYCLE: toAppRoutePath('/dashboard/cycle'),         // Daily cycle
+  PROGRESS: toAppRoutePath('/dashboard/progress'),   // Analytics
+  JOURNAL: toAppRoutePath('/dashboard/journal'),
+  CALENDAR: toAppRoutePath('/dashboard/calendar'),
+  MICROTASKS: toAppRoutePath('/dashboard/microtasks'),
+  TASKS: toAppRoutePath('/dashboard/tasks'),
+  STREAK: toAppRoutePath('/dashboard/streak'),       // Streak tracker
   
   // ==========================================
   // ADVANCED MODULES (PAID)
   // ==========================================
-  VISION: '/dashboard/vision',
-  GOALS: '/dashboard/goals',
-  ACTIONS: '/dashboard/actions',
-  ZOOM: '/dashboard/zoom',
-  CONSULTATION: '/dashboard/consultation',
-  MENTORSHIP: '/dashboard/mentorship',
-  COURSES: '/dashboard/courses',
+  VISION: toAppRoutePath('/dashboard/vision'),
+  GOALS: toAppRoutePath('/dashboard/goals'),
+  ACTIONS: toAppRoutePath('/dashboard/actions'),
+  ZOOM: toAppRoutePath('/dashboard/zoom'),
+  CONSULTATION: toAppRoutePath('/dashboard/consultation'),
+  MENTORSHIP: toAppRoutePath('/dashboard/mentorship'),
+  COURSES: toAppRoutePath('/dashboard/courses'),
   
   // ==========================================
   // USER & SETTINGS
   // ==========================================
-  PROFILE: '/dashboard/profile',
-  SETTINGS: '/dashboard/settings',
-  SUBSCRIPTION: '/dashboard/subscription',
-  NOTIFICATIONS: '/dashboard/notifications',
+  PROFILE: toAppRoutePath('/dashboard/profile'),
+  SETTINGS: toAppRoutePath('/dashboard/settings'),
+  SUBSCRIPTION: toAppRoutePath('/dashboard/subscription'),
+  NOTIFICATIONS: toAppRoutePath('/dashboard/notifications'),
   
   // ==========================================
   // PRODUCTS & MARKETPLACE
   // ==========================================
-  PRODUCTS: '/dashboard/products',
-  PRODUCT_CREATION: '/dashboard/product-create',
-  AI_GENERATOR: '/dashboard/products',
-  AI_FUNNEL_BUILDER: '/dashboard/products',
-  AI_PRODUCER_CONSOLE: '/dashboard/products',
-  AI_PRODUCER_ASSISTANT: '/dashboard/products',
-  ADMIN_ROLES: '/dashboard/admin/roles',
-  ADMIN_STUDIO: '/dashboard/admin/studio',
+  PRODUCTS: toAppRoutePath('/dashboard/products'),
+  PRODUCT_CREATION: toAppRoutePath('/dashboard/product-create'),
+  AI_GENERATOR: toAppRoutePath('/dashboard/products'),
+  AI_FUNNEL_BUILDER: toAppRoutePath('/dashboard/products'),
+  AI_PRODUCER_CONSOLE: toAppRoutePath('/dashboard/products'),
+  AI_PRODUCER_ASSISTANT: toAppRoutePath('/dashboard/products'),
+  ADMIN_ROLES: toAppRoutePath('/dashboard/admin/roles'),
+  ADMIN_STUDIO: toAppRoutePath('/dashboard/admin/studio'),
   DEV_ROUTES: '/dev/routes',
 
 } as const;
@@ -101,12 +132,14 @@ export function isValidRoute(path: string): path is RoutePath {
 /**
  * Метадата для роутів (для хлібних крихт, SEO, тощо)
  */
-export const ROUTE_METADATA: Record<RoutePath, {
+type RouteMeta = {
   title: string;
   description?: string;
   requiresAuth: boolean;
   requiresPaid: boolean;
-}> = {
+}
+
+export const ROUTE_METADATA: Record<string, RouteMeta> & Record<RoutePath, RouteMeta> = {
   '/': {
     title: 'Головна',
     requiresAuth: false,
@@ -114,6 +147,11 @@ export const ROUTE_METADATA: Record<RoutePath, {
   },
   '/login': {
     title: 'Вхід',
+    requiresAuth: false,
+    requiresPaid: false,
+  },
+  '/pricing': {
+    title: 'Ціни',
     requiresAuth: false,
     requiresPaid: false,
   },
@@ -137,38 +175,53 @@ export const ROUTE_METADATA: Record<RoutePath, {
     requiresAuth: false,
     requiresPaid: false,
   },
+  '/ab-test': {
+    title: 'AB Test',
+    requiresAuth: false,
+    requiresPaid: false,
+  },
   '/products': {
     title: 'Продукти Starway',
     requiresAuth: false,
     requiresPaid: false,
   },
-  '/dashboard': {
+  '/app': {
+    title: 'App',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  '/admin': {
+    title: 'Admin',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  [ROUTES.DASHBOARD]: {
     title: 'Кабінет',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/ai-mentor': {
+  [ROUTES.AI_MENTOR]: {
     title: 'ABsystem',
     description: 'Менторський простір для досягнення цілей',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/mentor/landing': {
+  [ROUTES.MENTOR_LANDING]: {
     title: 'ABsystem - Вітання',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/mentor/setup': {
+  [ROUTES.MENTOR_SETUP]: {
     title: 'ABsystem - Налаштування',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/mentor/workspace': {
+  [ROUTES.MENTOR_WORKSPACE]: {
     title: 'ABsystem - Робоча область',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/wheel': {
+  [ROUTES.WHEEL]: {
     title: 'Колесо балансу',
     description: 'Оцініть баланс життєвих сфер',
     requiresAuth: true,
@@ -180,117 +233,137 @@ export const ROUTE_METADATA: Record<RoutePath, {
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/cycle': {
+  [ROUTES.CYCLE]: {
     title: 'Щоденний цикл',
     description: 'Фіксація стану та виборів',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/progress': {
+  [ROUTES.PROGRESS]: {
     title: 'Прогрес',
     description: 'Аналітика та статистика',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/journal': {
+  [ROUTES.JOURNAL]: {
     title: 'Журнал',
     description: 'Календар активностей і системних подій',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/calendar': {
+  [ROUTES.CALENDAR]: {
     title: 'Календар',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/microtasks': {
+  [ROUTES.MICROTASKS]: {
     title: 'Мікрозавдання',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/tasks': {
+  [ROUTES.TASKS]: {
     title: 'Мікрозавдання',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/streak': {
+  [ROUTES.STREAK]: {
     title: 'Streak',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/vision': {
+  [ROUTES.VISION]: {
     title: 'Точка Б',
     description: 'Сформуйте вашу точку Б',
     requiresAuth: true,
     requiresPaid: true,
   },
-  '/dashboard/goals': {
+  [ROUTES.GOALS]: {
     title: 'Цілі',
     requiresAuth: true,
     requiresPaid: true,
   },
-  '/dashboard/actions': {
+  [ROUTES.ACTIONS]: {
     title: 'Дії',
     requiresAuth: true,
     requiresPaid: true,
   },
-  '/dashboard/zoom': {
+  [ROUTES.ZOOM]: {
     title: 'Zoom-сесії',
     requiresAuth: true,
     requiresPaid: true,
   },
-  '/dashboard/consultation': {
+  [ROUTES.CONSULTATION]: {
     title: 'Консультації',
     requiresAuth: true,
     requiresPaid: true,
   },
-  '/dashboard/mentorship': {
+  [ROUTES.MENTORSHIP]: {
     title: 'Менторство',
     requiresAuth: true,
     requiresPaid: true,
   },
-  '/dashboard/courses': {
+  [ROUTES.COURSES]: {
     title: 'Курси',
     requiresAuth: true,
     requiresPaid: true,
   },
-  '/dashboard/profile': {
+  [ROUTES.PROFILE]: {
     title: 'Профіль',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/settings': {
+  [ROUTES.SETTINGS]: {
     title: 'Налаштування',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/notifications': {
+  [ROUTES.NOTIFICATIONS]: {
     title: 'Повідомлення',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/subscription': {
+  [ROUTES.SUBSCRIPTION]: {
     title: 'Підписка',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/products': {
+  [ROUTES.PRODUCTS]: {
     title: 'Продукти',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/product-create': {
+  [ROUTES.PRODUCT_CREATION]: {
     title: 'Створення продукту',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/admin/roles': {
+  [ROUTES.ADMIN_ROLES]: {
     title: 'Управління ролями',
     requiresAuth: true,
     requiresPaid: false,
   },
-  '/dashboard/admin/studio': {
+  [ROUTES.ADMIN_STUDIO]: {
     title: 'Master Panel',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  [toAppRoutePath('/dashboard/admin/revenue')]: {
+    title: 'Аналітика',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  [toAppRoutePath('/dashboard/admin/transfer-ownership')]: {
+    title: 'Transfer Ownership',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  [toAppRoutePath('/dashboard/telegram')]: {
+    title: 'Telegram',
+    requiresAuth: true,
+    requiresPaid: false,
+  },
+  [toAppRoutePath('/dashboard/students')]: {
+    title: 'Користувачі',
     requiresAuth: true,
     requiresPaid: false,
   },

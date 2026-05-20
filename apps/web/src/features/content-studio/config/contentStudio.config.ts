@@ -225,3 +225,11 @@ export const RESEARCH_HOOK_OPTIONS: readonly ResearchHookOptionUi[] = [
 ] as const
 
 export const WIDTH_CLASS_BY_PROGRESS = ['w-0', 'w-[5%]', 'w-[10%]', 'w-[15%]', 'w-[20%]', 'w-[25%]', 'w-[30%]', 'w-[35%]', 'w-[40%]', 'w-[45%]', 'w-[50%]', 'w-[55%]', 'w-[60%]', 'w-[65%]', 'w-[70%]', 'w-[75%]', 'w-[80%]', 'w-[85%]', 'w-[90%]', 'w-[95%]', 'w-full'] as const
+
+// DOCS(18.05.2026): AI Sales Assistant Sidebar Icon - Gemini
+export const AI_ASSISTANT_MENU_ITEM = {
+  label: 'AI Асистент STARWAY',
+  path: '/dashboard/sales-assistant',
+  icon: '✨', // або '💫'
+  iconClass: 'sidebar-menu-item__icon--ai-assistant',
+}

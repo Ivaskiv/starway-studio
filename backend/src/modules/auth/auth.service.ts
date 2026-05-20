@@ -266,7 +266,24 @@ export function verifyRefreshToken(token: string) {
 
 // ── Фолбек для refresh токенів, якщо таблиця відсутня ─
 const fallbackRefreshTokens = new Map<string, { userId: string; expiresAt: Date }>()
+const MAX_FALLBACK_REFRESH_TOKENS = 500
 let refreshTableAvailable: boolean | undefined
+
+function pruneFallbackRefreshTokens() {
+  const now = Date.now()
+
+  for (const [key, value] of fallbackRefreshTokens.entries()) {
+    if (value.expiresAt.getTime() <= now) {
+      fallbackRefreshTokens.delete(key)
+    }
+  }
+
+  while (fallbackRefreshTokens.size > MAX_FALLBACK_REFRESH_TOKENS) {
+    const oldestKey = fallbackRefreshTokens.keys().next().value
+    if (!oldestKey) return
+    fallbackRefreshTokens.delete(oldestKey)
+  }
+}
 
 async function checkRefreshTableAvailability() {
   if (typeof refreshTableAvailable !== 'undefined') return refreshTableAvailable
@@ -288,6 +305,7 @@ async function checkRefreshTableAvailability() {
 export async function storeRefreshToken(userId: string, token: string) {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
   if (!(await checkRefreshTableAvailability())) {
+    pruneFallbackRefreshTokens()
     fallbackRefreshTokens.set(token, { userId, expiresAt })
     return { token, userId, expiresAt }
   }
@@ -330,6 +348,7 @@ export async function findRefreshToken(token: string) {
     if (await checkRefreshTableAvailability()) {
       return await prisma.refreshToken.findUnique({ where: { token } })
     }
+    pruneFallbackRefreshTokens()
     const data = fallbackRefreshTokens.get(token)
     if (!data) return null
     return { token, userId: data.userId, expiresAt: data.expiresAt }

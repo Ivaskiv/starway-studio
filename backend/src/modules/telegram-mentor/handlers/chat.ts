@@ -2,6 +2,9 @@ import type { Context } from 'telegraf'
 
 import { postAIChat } from '../api/client.js'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
+import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
+import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 
 export async function handleChat(ctx: Context, message: string) {
   const chatId = String(ctx.chat?.id ?? '')
@@ -15,9 +18,13 @@ export async function handleChat(ctx: Context, message: string) {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
   } catch (error) {
-    const text = error instanceof Error ? error.message : 'Не вдалося отримати відповідь асистента.'
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply(`Асистент зараз недоступний.\n${text}`, {
+    const userId = (ctx.state as { userId?: string | null }).userId ?? null
+    const relationship = userId ? await resolveRelationshipMemory(userId, 'absystem').catch(() => null) : null
+    const copy = buildRecoveryCopy('ai_unavailable', resolveConversationProfile('absystem'), {
+      relationship,
+    })
+    await ctx.reply(`${absystemContent.errors.aiUnavailable.title}\n${copy.body}`, {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     })
   }

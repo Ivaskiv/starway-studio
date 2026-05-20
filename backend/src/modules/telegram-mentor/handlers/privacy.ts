@@ -1,9 +1,10 @@
 import type { Context } from 'telegraf'
 import { supportMenuKeyboard } from '../keyboards.js'
 import { sendEntryOffer, sendStateMenu, resolveLinkedUserIdFromContext } from './start.js'
+import { requireTelegramBotConfig } from '../runtime/botConfig.js'
 
 function getBotName(): string {
-  return process.env.TELEGRAM_BOT_USERNAME ?? 'Starway_byNadya_Bot'
+  return requireTelegramBotConfig('privacy handler').username
 }
 
 export async function handlePrivacy(ctx: Context) {

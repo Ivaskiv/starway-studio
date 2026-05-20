@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import { ROUTES, normalizeDashboardRoutePath, toAppRoutePath } from '@/config/routes'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { SALES_GUIDE_SECTIONS } from '../constants/assistantGuides'
 import type { AssistantMode } from '../lib/assistantBridge'
@@ -24,7 +25,9 @@ export default function GlobalAssistant() {
 
   const role = String((user as { role?: string } | null)?.role ?? '').toUpperCase()
   const isStandaloneMiniAppRoute = location.pathname.startsWith('/miniapp')
-  const isContentMachinePage = location.pathname.startsWith('/dashboard')
+  const normalizedPathname = normalizeDashboardRoutePath(location.pathname)
+  const dashboardSectionPath = (section: string) => `${ROUTES.DASHBOARD}?section=${section}`
+  const isContentMachinePage = normalizedPathname.startsWith('/dashboard')
     && new URLSearchParams(location.search).get('section') === 'content'
 
   const handleToggle = useCallback(() => {
@@ -45,19 +48,19 @@ export default function GlobalAssistant() {
     logAssistantEvent('assistant_action', { action })
 
     switch (action) {
-      case 'open_content_machine': navigate('/dashboard?section=content'); break
-      case 'open_mentor': navigate('/dashboard/ai-mentor'); break
-      case 'open_morning': navigate('/dashboard/cycle?session=morning'); break
-      case 'open_evening': navigate('/dashboard/cycle?session=evening'); break
-      case 'open_wheel': navigate('/dashboard/wheel'); break
-      case 'open_progress': navigate('/dashboard/journal'); break
-      case 'open_students': navigate('/dashboard/students'); break
-      case 'open_system': navigate('/dashboard?section=system'); break
-      case 'open_telegram': navigate('/dashboard/telegram'); break
-      case 'open_roles': navigate('/dashboard/admin/roles'); break
-      case 'open_revenue': navigate('/dashboard/admin/revenue'); break
-      case 'open_products': navigate('/dashboard/products'); break
-      case 'open_seo': navigate('/dashboard/ai-seo'); break
+      case 'open_content_machine': navigate(dashboardSectionPath('content')); break
+      case 'open_mentor': navigate(ROUTES.AI_MENTOR); break
+      case 'open_morning': navigate(`${ROUTES.CYCLE}?session=morning`); break
+      case 'open_evening': navigate(`${ROUTES.CYCLE}?session=evening`); break
+      case 'open_wheel': navigate(ROUTES.WHEEL); break
+      case 'open_progress': navigate(ROUTES.JOURNAL); break
+      case 'open_students': navigate(dashboardSectionPath('students')); break
+      case 'open_system': navigate(dashboardSectionPath('system')); break
+      case 'open_telegram': navigate(dashboardSectionPath('telegram')); break
+      case 'open_roles': navigate(ROUTES.ADMIN_ROLES); break
+      case 'open_revenue': navigate(toAppRoutePath('/dashboard/admin/revenue')); break
+      case 'open_products': navigate(ROUTES.PRODUCTS); break
+      case 'open_seo': navigate(dashboardSectionPath('ai-seo')); break
       default: break
     }
 

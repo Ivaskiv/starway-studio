@@ -24,43 +24,32 @@ function resolveFallbackRoute(step: string, hasWebMap: boolean): string {
 export default function TelegramSuccessPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { step, isLoading, refetch, isAuthenticated } = useUserState()
+  const { step, isLoading, isAuthenticated } = useUserState()
   const { data: webMap } = useGetWebMapQuery(undefined, {
     skip: !isAuthenticated,
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMountOrArgChange: false,
   })
 
   useEffect(() => {
-    void refetch()
-  }, [refetch])
+    const token = new URLSearchParams(location.search).get('dl')
+    if (token) {
+      navigate(`${ROUTES.ONBOARDING_CONTINUE}?dl=${encodeURIComponent(token)}`, { replace: true })
+      return
+    }
 
-  useEffect(() => {
     if (isLoading || !isAuthenticated) {
       return
     }
 
-    const token = new URLSearchParams(location.search).get('dl')
-    if (token) {
-      const timer = window.setTimeout(() => {
-        navigate(`${ROUTES.ONBOARDING_CONTINUE}?dl=${encodeURIComponent(token)}`, { replace: true })
-      }, 800)
-
-      return () => window.clearTimeout(timer)
-    }
-
     if (step === 'WHEEL') {
-      const timer = window.setTimeout(() => {
-        navigate(ROUTES.WHEEL_START, { replace: true })
-      }, 1200)
-
-      return () => window.clearTimeout(timer)
+      navigate(ROUTES.WHEEL_START, { replace: true })
+      return
     }
 
     if (step !== 'START_FLOW') {
-      const timer = window.setTimeout(() => {
-        navigate(resolveFallbackRoute(step, Boolean(webMap)), { replace: true })
-      }, 1200)
-
-      return () => window.clearTimeout(timer)
+      navigate(resolveFallbackRoute(step, Boolean(webMap)), { replace: true })
     }
   }, [isAuthenticated, isLoading, location.search, navigate, step, webMap])
 

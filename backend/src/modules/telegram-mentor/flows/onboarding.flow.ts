@@ -1,17 +1,15 @@
 import type { Context } from 'telegraf'
 
+import { getTelegramProductContext } from '@/content/telegram.product-context.js'
+
 export async function sendWaitlist(ctx: Context) {
+  const context = getTelegramProductContext('stankey')
   await ctx.reply(
-    [
-      'Ти в early access.',
-      '',
-      'Доступ відкривається поетапно, тому зараз для тебе активний обмежений rollout.',
-      'Як тільки твій доступ буде готовий, ми дамо наступний крок тут.',
-    ].join('\n'),
+    context.copy.onboarding.join('\n'),
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🔥 Early access', callback_data: 'waitlist_early_access' }],
+          [{ text: context.cta.waitlist, callback_data: 'waitlist_early_access' }],
         ],
       },
     },

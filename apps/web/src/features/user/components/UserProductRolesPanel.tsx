@@ -1,4 +1,5 @@
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useGetSummaryQuery } from '@/features/gamification/services/gamification.api'
 import { useGetMyProductsQuery, useGetAllProductsQuery } from '@/features/products/services/products.api'
 import { useGetProgressQuery } from '@/features/progress/services/progress.api'
@@ -17,10 +18,14 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 export default function UserProductRolesPanel() {
 
   const { user } = useAuth()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
 
   const userId = user?.id
 
-  const { data: myProducts = [] } = useGetMyProductsQuery()
+  const { data: myProducts = [] } = useGetMyProductsQuery(undefined, {
+    skip: shouldSkipProtectedQueries,
+  })
 
   const { data: allProducts = [] } = useGetAllProductsQuery({
     includeAll: Boolean(user?.isSuperAdmin)

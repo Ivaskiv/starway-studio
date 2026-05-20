@@ -3,6 +3,7 @@ import { type DailyState, type VoiceEntryType } from '@starway/db/prisma-client'
 import { bot } from '../../lib/telegram.js'
 import { openai } from '../../lib/openai.js'
 import { prisma } from '../../db/client.js'
+import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
 import { getMentorExtendedContext } from '../ai-mentor/services.js'
 import { generateMicroActions, updateUserState } from '../ai-mentor/state.service.js'
 import { registerStreakActivity } from '../streak/service.js'
@@ -36,10 +37,7 @@ async function transcribeTelegramAudio(fileId: string, type: VoiceEntryType, mim
     throw new Error('telegram_file_path_missing')
   }
 
-  const token = process.env.TELEGRAM_BOT_TOKEN
-  if (!token) {
-    throw new Error('telegram_bot_token_missing')
-  }
+  const token = requireTelegramBotConfig('voice transcription').token
 
   const response = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`)
   if (!response.ok) {

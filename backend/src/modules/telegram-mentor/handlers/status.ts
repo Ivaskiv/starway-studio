@@ -1,11 +1,15 @@
 import type { Context } from 'telegraf'
 
-import { getGamificationSummary, getUserState } from '../api/client.js'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
 import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
+import { resolveBehavioralContinuity, type BehavioralContinuityResolution } from '../../../core/continuity/behavioralContinuity.js'
+import { buildAbsystemStatusFlow } from '../../../core/flow-builder/flowBuilder.js'
+import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 
 export async function handleStatus(ctx: Context) {
   const chatId = String(ctx.chat?.id ?? '')
+  const userId = (ctx.state as { userId?: string | null }).userId ?? null
   if (!chatId) return
 
   try {
@@ -21,33 +25,80 @@ export async function handleStatus(ctx: Context) {
     ])) {
       return
     }
-
-    const [summaryResponse, stateResponse] = await Promise.all([
-      getGamificationSummary(chatId),
-      getUserState(chatId),
-    ])
-
-    const summary = summaryResponse.summary
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
+    const continuity = userId
+      ? await resolveBehavioralContinuity(userId)
+      : null
+    if (continuity) {
+      await deliverTelegramFlow(ctx, buildAbsystemStatusFlow(continuity), 'reply')
+      return
+    }
 
-    await ctx.reply(
-      [
-        '📊 Твій стан',
-        '',
-        `🔥 Streak: ${summary.streak.current} днів`,
-        `⭐ Рівень: ${summary.xp.level}`,
-        `🧠 XP: ${summary.xp.total} · до наступного: ${Math.max(summary.xp.nextLevelXp - summary.xp.currentLevelXp, 0)}`,
-        `💠 BITMIND: ${summary.rewards.bitMind} · NeuroGems: ${summary.rewards.neuroGems}`,
-        `🧭 Flow: ${String(stateResponse.accessControl?.currentFlow ?? 'unknown')}`,
-        `📍 Step: ${stateResponse.step}`,
-      ].join('\n'),
-      replyMarkup ? { reply_markup: replyMarkup } : undefined,
-    )
-  } catch (error) {
-    const text = error instanceof Error ? error.message : 'Не вдалося отримати статус.'
-    const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply(`Не вдалося отримати статус.\n${text}`, {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await ctx.reply([absystemContent.status.title, '', absystemContent.status.intro].join('\n'), replyMarkup ? { reply_markup: replyMarkup } : undefined)
+  } catch {
+    const fallback: BehavioralContinuityResolution = {
+      snapshot: {
+        focusParticipation: false,
+        repeatedRollback: false,
+        dailyCycleInterrupted: false,
+        momentumLevel: 'low',
+      },
+      signals: {
+        unresolvedGoal: null,
+        repeatedPostponedAction: null,
+        wheelImbalance: null,
+        interruptedDailyCycles: false,
+        repeatedRollbackPatterns: false,
+        focusParticipation: false,
+        lastZoomTopic: null,
+        inactiveDuration: null,
+        unfinishedStrategyNode: null,
+        repeatedHesitationPattern: null,
+        repeatedUnfinishedDecision: null,
+        lastMeaningfulMovement: null,
+        emotionalOverload: null,
+        movementInstability: 'low',
+      },
+      interpretation: {
+        priority: 'genericFallback',
+        interpretation: {
+          mainPattern: 'generic',
+          priority: 'genericFallback',
+          riskLevel: 'low',
+          movementState: {
+            stalledAfterClarity: false,
+            repeatedAvoidance: false,
+            unstableRhythm: false,
+            unresolvedDecisionLoop: false,
+            overloadedActionState: false,
+            interruptedMomentum: false,
+          },
+          recognition: 'Я бачу, де рух зупинився.',
+          interpretation: 'Не треба починати спочатку — достатньо повернутись до найближчої дії.',
+          nextMovement: 'Почнімо з найближчої простої дії.',
+          recommendedNarrative: 'generic_return',
+        },
+        movementState: {
+          stalledAfterClarity: false,
+          repeatedAvoidance: false,
+          unstableRhythm: false,
+          unresolvedDecisionLoop: false,
+          overloadedActionState: false,
+          interruptedMomentum: false,
+        },
+        nextMeaningfulAction: 'Почнімо з найближчої простої дії.',
+        summary: 'найближчий крок',
+      },
+      continuityMode: 'generic',
+      recommendedNextAction: 'Почнімо з найближчої простої дії.',
+      primaryBlock: null,
+      unresolvedAction: null,
+      repeatedPattern: null,
+      inactiveDays: null,
+      lastMeaningfulFocus: null,
+      lastZoomTopic: null,
+      relationship: null,
+    }
+    await deliverTelegramFlow(ctx, buildAbsystemStatusFlow(fallback), 'reply')
   }
 }

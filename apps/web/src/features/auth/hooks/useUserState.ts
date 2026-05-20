@@ -1,4 +1,5 @@
 import { useAppSelector } from '@/app/hooks'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import {
   useGetUserStateQuery,
   type UserState,
@@ -12,15 +13,21 @@ const DEFAULT_STEP: UserStep = 'LINK_TELEGRAM'
 export function useUserState() {
   const user = useAppSelector(state => state.auth.user)
   const isAuthenticated = useAppSelector(state => state.auth.status === 'authenticated')
+  const { canRunProtectedQueries } = useSessionOrchestrator()
   const hasRealEmail = Boolean(user?.email && !user.email.startsWith('telegram-guest-'))
 
   const query = useGetUserStateQuery(undefined, {
-    skip: !isAuthenticated,
+    skip: !isAuthenticated || !canRunProtectedQueries,
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMountOrArgChange: false,
   })
 
   const telegramStatusQuery = useGetTelegramStatusQuery(undefined, {
-    skip: !isAuthenticated,
-    refetchOnFocus: true,
+    skip: !isAuthenticated || !canRunProtectedQueries,
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMountOrArgChange: false,
   })
 
   return {

@@ -1,139 +1,377 @@
-// apps/web/src/features/landings/focus/styles/components/_buttons.scss
+@use '../mixins' as *;
 
-/* ─── SHARED BASE ─── */
+// ─────────────────────────────────────────────────────────
+// BASE — PREMIUM TACTILE GLASS SYSTEM
+// ─────────────────────────────────────────────────────────
 
 .focus-btn-primary,
-.focus-btn-ghost,
 .focus-nav-cta {
+  position: relative;
+
   display: inline-flex;
+
   flex: 0 1 auto;
+
   align-items: center;
   justify-content: center;
+
   gap: 12px;
-  border-radius: 15px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+
   min-width: 0;
   max-width: 100%;
+
+  overflow: hidden;
+
+  isolation: isolate;
+
+  cursor: pointer;
+
+
+  border:
+    1px solid rgba(148, 186, 255, 0.14);
+
+  border-radius:
+    clamp(20px, 2vw, 28px);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(18, 24, 40, 0.92) 0%,
+      rgba(8, 10, 20, 0.98) 100%
+    );
+
+    -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+
+  color:
+    rgba(255, 255, 255, 0.96);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -8px 18px rgba(0, 0, 0, 0.52),
+    0 1px 2px rgba(0, 0, 0, 0.28),
+    0 12px 32px rgba(0, 0, 0, 0.24);
+
+  transition:
+    transform 0.18s cubic-bezier(.22, 1, .36, 1),
+    box-shadow 0.22s cubic-bezier(.22, 1, .36, 1),
+    border-color 0.22s ease,
+    background 0.22s ease,
+    color 0.22s ease;
+
+  // glossy glass reflection
+  &::before {
+    content: '';
+
+    position: absolute;
+
+    inset: 0;
+
+    border-radius: inherit;
+
+    pointer-events: none;
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.14) 0%,
+        rgba(255, 255, 255, 0.06) 14%,
+        rgba(255, 255, 255, 0.02) 24%,
+        rgba(255, 255, 255, 0) 48%
+      );
+
+    opacity: 0.95;
+  }
+
+  // internal blue illumination
+  &::after {
+    content: '';
+
+    position: absolute;
+
+    inset: 0;
+
+    border-radius: inherit;
+
+    pointer-events: none;
+
+    opacity: 0;
+
+    transition:
+      opacity 0.22s ease,
+      transform 0.22s ease;
+
+    background:
+      radial-gradient(
+        circle at 50% 0%,
+        rgba(118, 168, 255, 0.24) 0%,
+        rgba(74, 126, 255, 0.16) 28%,
+        rgba(24, 34, 74, 0.08) 46%,
+        rgba(0, 0, 0, 0) 78%
+      );
+
+    box-shadow:
+      inset 0 1px 0 rgba(190, 220, 255, 0.14),
+      inset 0 -10px 24px rgba(0, 0, 0, 0.42);
+  }
 }
 
-/* ─── PRIMARY ─── */
-
-.focus-btn-primary,
-.focus-nav-cta {
-  border: 0;
-  background: var(--color-accent-subtitle);
-  color: #fff;
-}
-
-.focus-nav-cta {
-  padding: clamp(10px, 2.4vw, 12px) clamp(18px, 4vw, 22px);
-  font-size: var(--fs-small);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
+// ─────────────────────────────────────────────────────────
+// PRIMARY
+// ─────────────────────────────────────────────────────────
 
 .focus-btn-primary {
-  padding: 0 clamp(16px, 3vw, 28px);
-  font-size: var(--fs-button);
+  min-height:
+    var(--btn-height);
+
+  padding:
+    0 clamp(24px, 3vw, 36px);
+
+  font-size:
+    var(--fs-button);
+
   font-weight: 700;
-  letter-spacing: 0.01em;
+
+  letter-spacing:
+    0.05em;
+
+  text-transform: uppercase;
+
   text-align: center;
+
+  &:hover {
+    transform:
+      translateY(-1px);
+
+    border-color:
+      rgba(154, 196, 255, 0.24);
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(24, 34, 58, 0.96) 0%,
+        rgba(8, 12, 24, 0.98) 100%
+      );
+
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -10px 20px rgba(0, 0, 0, 0.56),
+      0 2px 6px rgba(0, 0, 0, 0.28),
+      0 18px 42px rgba(0, 0, 0, 0.26);
+
+    &::after {
+      opacity: 1;
+    }
+  }
+
+  // real tactile press
+  &:active {
+    transform:
+      translateY(2px)
+      scale(0.988);
+
+    border-color:
+      rgba(120, 170, 255, 0.16);
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(10, 14, 26, 0.98) 0%,
+        rgba(4, 6, 14, 1) 100%
+      );
+
+    box-shadow:
+      inset 0 5px 14px rgba(0, 0, 0, 0.58),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+      inset 0 1px 1px rgba(0, 0, 0, 0.44),
+      0 1px 2px rgba(0, 0, 0, 0.18);
+
+    &::after {
+      opacity: 0.72;
+
+      transform:
+        scale(0.992);
+    }
+  }
 }
 
-.focus-btn-primary,
-.focus-btn-ghost {
-  min-height: clamp(44px, 6vw, 54px);
+// ─────────────────────────────────────────────────────────
+// FULL WIDTH CTA
+// ─────────────────────────────────────────────────────────
+
+.focus-btn-primary.focus-btn-full {
+  width: 100%;
+
+  max-width: 100%;
+
+  min-height:
+    clamp(68px, 6vw, 84px);
+
+  padding:
+    0 clamp(30px, 4vw, 46px);
+
+  border-radius:
+    clamp(24px, 2vw, 32px);
+
+  font-size:
+    clamp(15px, 1.1vw, 18px);
+
+  letter-spacing:
+    0.06em;
+
+  // softer hardware depth
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -10px 22px rgba(0, 0, 0, 0.54),
+    0 1px 2px rgba(0, 0, 0, 0.28),
+    0 18px 42px rgba(0, 0, 0, 0.22);
+
+  &:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -12px 24px rgba(0, 0, 0, 0.58),
+      0 2px 8px rgba(0, 0, 0, 0.32),
+      0 22px 48px rgba(0, 0, 0, 0.28);
+
+    &::after {
+      opacity: 1;
+    }
+  }
+
+  &:active {
+    box-shadow:
+      inset 0 6px 16px rgba(0, 0, 0, 0.58),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+      0 1px 2px rgba(0, 0, 0, 0.16);
+
+    &::after {
+      opacity: 0.68;
+    }
+  }
 }
 
-.focus-nav-cta:hover,
-.focus-btn-primary:hover {
-  background: var(--focus-blue-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(74, 126, 191, 0.35);
+// ─────────────────────────────────────────────────────────
+// SECTION WIDTH
+// ─────────────────────────────────────────────────────────
+
+#included,
+#first-practice,
+#welcome-practice,
+#pricing,
+#final {
+  .focus-btn-primary.focus-btn-full {
+    width: 100%;
+  }
 }
 
-.focus-nav-cta:active,
-.focus-btn-primary:active {
-  transform: translateY(0);
+// ─────────────────────────────────────────────────────────
+// NAV CTA
+// ─────────────────────────────────────────────────────────
+
+.focus-nav-cta {
+  padding:
+    var(--nav-cta-padding-y)
+    var(--nav-cta-padding-x);
+
+  font-size:
+    var(--fs-small);
+
+  font-weight:
+    var(--fw-semibold);
+
+  letter-spacing:
+    0.03em;
+
+  &:hover {
+    transform:
+      translateY(-1px);
+
+    &::after {
+      opacity: 1;
+    }
+  }
+
+  &:active {
+    transform:
+      translateY(2px)
+      scale(0.988);
+  }
 }
 
-/* ─── GHOST ─── */
+// ─────────────────────────────────────────────────────────
+// CTA BLOCK
+// ─────────────────────────────────────────────────────────
 
-.focus-btn-ghost {
-  padding: 0 clamp(16px, 3vw, 28px);
-  border: 1px solid var(--focus-card-border);
-  border-radius: var(--focus-radius-pill);
-  background: transparent;
-  color: var(--focus-text-muted);
-  font-size: var(--fs-button);
-  font-weight: 600;
+.focus-cta-primary {
+  @include flex-center;
+
+  width:
+    min(100%, 560px);
+
+  min-height:
+    var(--btn-height-md);
+
+  padding:
+    0 var(--btn-cta-padding-x);
+
+  border-radius:
+    clamp(20px, 2vw, 28px);
+
+  font-size:
+    var(--fs-body);
 }
 
-.focus-btn-ghost:hover {
-  border-color: var(--focus-blue-border);
-  color: var(--focus-blue);
-}
-
-/* ─── MODIFIERS ─── */
-
-.focus-btn-full { width: 100%; }
-
-/* ─── ICONS ─── */
-
-.focus-inline-icon {
-  width: 18px;
-  height: 18px;
-  stroke: currentColor;
-  stroke-width: 1.8;
-}
+// ─────────────────────────────────────────────────────────
+// ICONS
+// ─────────────────────────────────────────────────────────
 
 .focus-icon {
   width: 20px;
   height: 20px;
+
   stroke: currentColor;
+
   stroke-width: 1.8;
+
   fill: none;
-  opacity: 0.8;
+
+  opacity: 0.82;
+
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
-.focus-btn-primary:hover .focus-icon,
-.focus-btn-primary:hover .focus-inline-icon,
-.focus-problem-item:hover .focus-icon,
-.focus-included-card:hover .focus-icon,
-.focus-reviews-card:hover .focus-icon {
-  opacity: 1;
+.focus-btn-primary:hover {
+  .focus-icon {
+    opacity: 1;
+
+    transform:
+      translateY(-1px);
+  }
 }
 
-/* ─── CTA BUTTON ─── */
+// ─────────────────────────────────────────────────────────
+// RESPONSIVE
+// ─────────────────────────────────────────────────────────
 
-.focus-cta-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: min(100%, 560px);
-  padding: 0 clamp(20px, 4vw, 40px);
-  min-height: clamp(44px, 6vw, 56px);
-  font-size: var(--fs-body);
-  border-radius: 15px;
-}
-
-/* ─────────────────────────────
-   RESPONSIVE
-───────────────────────────── */
-
-@media (max-width: 680px) {
-  .focus-btn-primary,
-  .focus-btn-ghost { justify-content: center; }
-}
-
-@media (max-width: 480px) {
+@include below('phablet') {
   .focus-btn-primary {
-    max-width: 100%;
+    justify-content: center;
   }
 
-  .focus-btn-ghost {
-    padding-inline: clamp(16px, 4vw, 20px);
+  .focus-btn-primary.focus-btn-full {
+    min-height:
+      clamp(62px, 8vw, 72px);
+
+    border-radius:
+      22px;
+  }
+}
+
+@include below('mobile') {
+  .focus-btn-primary {
+    max-width: 100%;
   }
 
   .focus-cta-primary {
@@ -141,9 +379,9 @@
   }
 }
 
-@media (max-width: 360px) {
-  .focus-btn-primary,
-  .focus-btn-ghost {
-    min-height: clamp(44px, 6vw, 50px);
+@include below('mobile-xs') {
+  .focus-btn-primary {
+    min-height:
+      var(--btn-height-xs);
   }
 }

@@ -1,5 +1,7 @@
 import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
-import { FOCUS_PAYMENT_URL } from '../utils/constants'
+import { handleFocusPaymentClick } from '@/features/subscription/utils/openExternalPaymentUrl'
+
+import { FOCUS_PAYMENT_URL } from '../content/constants'
 
 type FocusPricingPlan = {
   name: string
@@ -11,9 +13,9 @@ type FocusPricingPlan = {
   cta: string
   popular: boolean
   dayRate: string
-  decision: string
-  trust: string
-  note: string
+  decision?: string
+  trust?: string
+  note?: string
   guarantee?: string
 }
 
@@ -22,11 +24,25 @@ export default function Pricing() {
   const titleLines = title.split('\n')
 
   return (
-    <section id="pricing" className="focus-section stack" data-reveal>
-      <div className="focus-container focus-pricing-header focus-reveal stack" data-reveal data-reveal-delay="1">
-        <div className="focus-section-eyebrow focus-hero-stat-top">{subtitlesection}</div>
+    // o-ambient--cinematic: wide-zoom, subtle tilt — premium feel for conversion section
+    <section
+      id="pricing"
+      className="focus-section stack o-ambient o-ambient--cinematic"
+      data-reveal
+    >
+      <div
+        className="focus-container focus-pricing-header focus-reveal stack"
+        data-reveal
+        data-reveal-delay="1"
+      >
+        {/* SECTION CONTENT START */}
+        <div className="focus-section-eyebrow">{subtitlesection}</div>
 
-        <h2 className="focus-section-title focus-section-title-centered" data-reveal data-reveal-delay="2">
+        <h2
+          className="focus-section-title focus-section-title-centered"
+          data-reveal
+          data-reveal-delay="2"
+        >
           {titleLines.map((line: string, i: number) => (
             <span key={i}>
               {line}
@@ -37,68 +53,102 @@ export default function Pricing() {
 
         <div className="stack" data-reveal data-reveal-delay="3">
           {text.map((paragraph: string, i: number) => (
-            <p key={i} className="focus-pricing-subtitle">
+            <p key={i} className="focus-body-copy">
               {paragraph}
             </p>
           ))}
         </div>
+        {/* SECTION CONTENT END */}
       </div>
 
-      <div className="focus-container focus-pricing-grid focus-reveal" data-reveal data-reveal-delay="2">
+      {/* CARD ITEMS START */}
+      {/* focus-pricing-grid keeps its specific max-width centering behavior */}
+      <div
+        className="focus-container focus-pricing-grid focus-reveal"
+        data-reveal
+        data-reveal-delay="2"
+      >
         {items.map((plan: FocusPricingPlan) => (
-          <div
-            key={plan.tier}
-            className={`focus-pricing-card focus-card focus-glass ${
-              plan.popular ? 'focus-pricing-card-popular focus-glass-strong' : ''
-            }`}
-          >
-            {plan.popular ? (
-              <div className="focus-pricing-badge">ПОПУЛЯРНИЙ</div>
-            ) : null}
+          <div key={plan.tier} className="focus-pricing-item">
+            <div
+              className={`focus-pricing-card focus-card ${
+                plan.popular ? 'focus-pricing-card-popular' : ''
+              }`}
+            >
+              {plan.popular ? (
+                <div className="focus-pricing-badge">ПОПУЛЯРНИЙ</div>
+              ) : null}
 
-            <div className="focus-card-content">
-              <div className="focus-pricing-plan">{plan.name}</div>
-              <div className="focus-pricing-tier">{plan.tier}</div>
-              <div className="focus-pricing-price">{plan.price}</div>
-              <div className="focus-pricing-period">{plan.period}</div>
-              <div className="focus-pricing-day">{plan.dayRate}</div>
-              <div className="focus-pricing-decision">{plan.decision}</div>
-              <div className="focus-pricing-description">{plan.description}</div>
-              <ul className="focus-pricing-features">
-                {plan.features.map((feature: string) => (
-                  <li key={feature} className="focus-pricing-features-item">
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <div className="focus-pricing-trust">{plan.trust}</div>
+              <div className="focus-card-content">
+                <div className="focus-pricing-plan">{plan.name}</div>
+                <div className="focus-pricing-tier">{plan.tier}</div>
+                <div className="focus-pricing-price">{plan.price}</div>
+                <div className="focus-pricing-period">{plan.period}</div>
+                <div className="focus-pricing-day">{plan.dayRate}</div>
+
+                {plan.decision ? (
+                  <div className="focus-pricing-decision">{plan.decision}</div>
+                ) : null}
+
+                <div className="focus-pricing-description">
+                  {plan.description}
+                </div>
+
+                <ul className="focus-pricing-features">
+                  {plan.features.map((feature: string) => (
+                    <li key={feature} className="focus-pricing-features-item">
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <a
+                className="focus-btn-primary focus-btn-full focus-card-cta focus-btn-glass"
+                href={FOCUS_PAYMENT_URL}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => handleFocusPaymentClick(event, FOCUS_PAYMENT_URL)}
+              >
+                {plan.cta}
+              </a>
             </div>
 
-            <a
-              className="focus-btn-primary focus-btn-full focus-card-cta focus-btn-glass"
-              href={FOCUS_PAYMENT_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {plan.cta}
-            </a>
-            <p className="focus-footer-copy text-center mt-2">{plan.note}</p>
-            {plan.guarantee ? (
-              <p className="focus-footer-copy text-center mt-3">
-                {plan.guarantee}
-              </p>
+            {plan.trust ? (
+              <div className="focus-pricing-trust">{plan.trust}</div>
             ) : null}
           </div>
         ))}
       </div>
+      {/* CARD ITEMS END */}
 
-      <div className="focus-container focus-pricing-bottom focus-reveal stack" data-reveal data-reveal-delay="3">
+      <div
+        className="focus-container focus-pricing-bottom focus-reveal stack"
+        data-reveal
+        data-reveal-delay="3"
+      >
         <div className="stack">
-          {note.map((paragraph: string, i: number) => (
-            <p key={i} className="focus-pricing-bottom-text">
-              {paragraph}
-            </p>
-          ))}
+          {note && (
+            <div
+              className="focus-about-note-row focus-reveal"
+              data-reveal
+              data-reveal-delay="4"
+            >
+              <div className="focus-quote-glass">
+                <div className="focus-note">
+                  <p className="focus-note-primary">
+                    {note[0]}
+                  </p>
+
+                  {note[1] && (
+                    <p className="focus-note-secondary">
+                      {note[1]}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <p className="focus-pricing-bottom-accent">{cta}</p>

@@ -26,6 +26,16 @@ export async function startFlowController(
         result: typeof result === 'object' && result ? JSON.parse(JSON.stringify(result)) : null,
       },
     })
+    await trackEvent({
+      userId,
+      type: 'TEST_STARTED',
+      source: 'web',
+      state: 'S0_TRAFFIC',
+      payload: {
+        test_id: 'onboarding_flow',
+        started_at: new Date().toISOString(),
+      },
+    })
     return res.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR'

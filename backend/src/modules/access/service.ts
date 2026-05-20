@@ -47,6 +47,22 @@ type AccessUserSnapshot = {
   productAccesses: ProductAccessAssignment[]
 }
 
+const telegramOptionalSnapshotByUser = new Map<string, string>()
+
+function shouldLogTelegramOptionalSnapshot(userId: string, snapshot: Record<string, unknown>) {
+  const nextSnapshot = JSON.stringify(snapshot)
+  if (telegramOptionalSnapshotByUser.get(userId) === nextSnapshot) {
+    return false
+  }
+
+  telegramOptionalSnapshotByUser.set(userId, nextSnapshot)
+  if (telegramOptionalSnapshotByUser.size > 500) {
+    const oldestKey = telegramOptionalSnapshotByUser.keys().next().value
+    if (oldestKey) telegramOptionalSnapshotByUser.delete(oldestKey)
+  }
+  return true
+}
+
 function isProductAccessTableMissing(error: unknown) {
   if (!error || typeof error !== 'object') return false
   const candidate = error as { code?: string; message?: string; meta?: { table?: string } }
@@ -339,7 +355,7 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
   )
 
   if (!hasTelegramLinked && hasSubscription && process.env.NODE_ENV !== 'production') {
-    console.info('[access/state] TELEGRAM_OPTIONAL snapshot', {
+    const telegramOptionalSnapshot = {
       userId: user.id,
       email,
       telegramEnabled: user.telegramEnabled,
@@ -349,7 +365,11 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
       hasSubscription,
       currentFlow,
       accessLevel,
-    })
+    }
+
+    if (shouldLogTelegramOptionalSnapshot(user.id, telegramOptionalSnapshot)) {
+      console.info('[access/state] TELEGRAM_OPTIONAL snapshot', telegramOptionalSnapshot)
+    }
   }
 
   return {

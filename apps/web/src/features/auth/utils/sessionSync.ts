@@ -1,5 +1,4 @@
 import type { AppDispatch } from '@/app/store'
-import { accessApi } from '@/features/auth/services/accessApi'
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice'
 import { getRefreshToken, getToken, hasSessionHint } from '@/features/auth/services/token'
 import type { User } from '@/features/user/types/user.types'
@@ -11,11 +10,6 @@ const BAD_COLORS = new Set([
   '#ea580c', '#f97316', '#d97706',
   '#0a2446', '#0d1b3e',
 ])
-
-const ACCESS_REFRESH_OPTIONS = {
-  forceRefetch: true,
-  subscribe: false,
-} as const
 
 type ThemeSyncApi = {
   setAccent: (color: string) => void
@@ -43,14 +37,6 @@ function applyUserTheme(theme: ThemeSyncApi, user: User) {
   theme.setAccent(safeAccent(user.settings?.accentColor))
   theme.setMode(normalizeUiMode(user.settings?.theme))
   theme.setBgColor(user.settings?.bgColor ?? undefined)
-}
-
-async function refreshAccessState(dispatch: AppDispatch) {
-  try {
-    await dispatch(accessApi.endpoints.getMyAccess.initiate(undefined, ACCESS_REFRESH_OPTIONS)).unwrap()
-  } catch (error) {
-    console.warn('[sessionSync] Failed to refresh access state', error)
-  }
 }
 
 function isLikelyTelegramMiniAppRuntime(): boolean {
@@ -130,6 +116,14 @@ function isTelegramDevFallbackAllowed(): boolean {
   return import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 }
 
+function canUseCookieSessionRecovery(): boolean {
+  return typeof document !== 'undefined' && (
+    hasSessionHint() ||
+    Boolean(getRefreshToken()) ||
+    isLikelyTelegramMiniAppRuntime()
+  )
+}
+
 async function readJsonSafely(response: Response) {
   if (!response.ok) {
     console.warn('[sessionSync] request failed', response.status)
@@ -169,18 +163,19 @@ export async function syncAuthSession({
   }
 
   const token = getToken()
+  const refreshToken = getRefreshToken()
+  const sessionHint = hasSessionHint()
   const canTryRefresh =
-    allowRefreshWithoutHint ||
-    Boolean(token) ||
-    hasSessionHint() ||
-    typeof document !== 'undefined'
+    Boolean(refreshToken) ||
+    sessionHint ||
+    (allowRefreshWithoutHint && canUseCookieSessionRecovery())
 
   const markGuest = () => {
     if (import.meta.env.DEV) {
       console.info('[sessionSync] mark guest', {
         allowRefreshWithoutHint,
         hasToken: Boolean(token),
-        hasSessionHint: hasSessionHint(),
+        hasSessionHint: sessionHint,
         isTelegramRuntime: isLikelyTelegramMiniAppRuntime(),
         telegramUserId: getTelegramRuntimeUser()?.id ?? null,
         hasTelegramInitData: Boolean(getTelegramRuntimeInitData()),
@@ -192,7 +187,6 @@ export async function syncAuthSession({
 
   if (canTryRefresh) {
     try {
-      const refreshToken = getRefreshToken()
       const refreshRes = await fetch(resolveApiUrl('/auth/refresh'), {
         method: 'POST',
         credentials: 'include',
@@ -220,7 +214,6 @@ export async function syncAuthSession({
           }
           dispatch(setCredentials({ user: refreshedUser, accessToken: refreshedToken, refreshToken: refreshedRefreshToken }))
           applyUserTheme(theme, refreshedUser)
-          await refreshAccessState(dispatch)
           return true
         }
       }
@@ -253,7 +246,6 @@ export async function syncAuthSession({
           }
           dispatch(setCredentials({ user: restoredUser, accessToken: token }))
           applyUserTheme(theme, restoredUser)
-          await refreshAccessState(dispatch)
           return true
         }
       }
@@ -295,7 +287,6 @@ export async function syncAuthSession({
           }
           dispatch(setCredentials({ user: socialUser, accessToken: socialToken }))
           applyUserTheme(theme, socialUser)
-          await refreshAccessState(dispatch)
           return true
         }
       }
@@ -336,7 +327,6 @@ export async function syncAuthSession({
           }
           dispatch(setCredentials({ user: socialUser, accessToken: socialToken }))
           applyUserTheme(theme, socialUser)
-          await refreshAccessState(dispatch)
           return true
         }
       }

@@ -286,6 +286,13 @@ export async function getDailyEntryForDate(userId: string, dateInput: string): P
   return resolvedEntry
 }
 
+export async function getHistoricalDailyEntryForDate(userId: string, dateInput: string): Promise<DailyEntryRow | null> {
+  const date = getJournalDayAnchor(dateInput)
+  return prisma.dailyEntry.findUnique({
+    where: { userId_date: { userId, date } },
+  }) as Promise<DailyEntryRow | null>
+}
+
 export async function upsertDailyEntry(input: UpsertDailyEntryInput): Promise<DailyEntryRow> {
   const { entryId, userId, expertId, microSupport, state, choice, drain, dayFact, answers } = input
   const entryDate = getJournalDayAnchor(input.date ?? new Date())

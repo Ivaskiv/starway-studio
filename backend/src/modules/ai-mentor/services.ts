@@ -1,5 +1,6 @@
 import { prisma } from '../../db/client.js';
 import type { DailyState, Prisma } from '@starway/db/prisma-client';
+import { stankeyPrompts } from '@/products/stankey/config/stankey.prompts.js';
 import { openai } from '../../lib/openai.js';
 import { logDailyCycle, recordMicroSupport, calculateStreak, triggerAICheckIn } from '../daily-cycle/service.js';
 import { getPrimaryGoal } from '../goals/service.js';
@@ -14,6 +15,8 @@ import {
   updateUserState,
 } from './state.service.js';
 import { runGuardedAiTask, stableHash } from '../../services/aiGuard.service.js';
+import { runRegisteredAiTask } from '../../services/aiTaskRunner.service.js';
+import { resolveAiModel } from '../../platform/ai.registry.js';
 import {
   SendMessageDto,
   ChatResponse,
@@ -82,18 +85,23 @@ function pickFocusSphere(scores: Record<string, unknown> | null | undefined) {
 
 async function aiGenerate(prompt: AIGenerationRequest): Promise<AIGenerationResponse> {
   const contextPrompt = prompt.context?.join('\n') ?? ''
-  const text = await runGuardedAiTask(
+  const text = await runRegisteredAiTask(
+    'mentor_reply',
     {
       userId: prompt.userId ?? `system:${stableHash({ contextPrompt, prompt: prompt.prompt }).slice(0, 12)}`,
       source: 'mentor-generate',
       label: 'mentor-generate',
       payloadHash: stableHash({ contextPrompt, prompt: prompt.prompt }),
-      throttleMs: 10_000,
-      duplicateWindowMs: 10 * 60_000,
+      payload: {
+        contextHash: stableHash(contextPrompt),
+        promptHash: stableHash(prompt.prompt),
+        contextLength: contextPrompt.length,
+        promptLength: prompt.prompt.length,
+      },
     },
     async () => {
       const result = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: resolveAiModel('mentor_reply'),
         temperature: 0.35,
         messages: [
           { role: 'system', content: buildSystemPrompt() },
@@ -187,10 +195,13 @@ export async function sendMessage(params: SendMessageDto): Promise<ChatResponse>
   const taskPrompt = activeTasks.length
     ? `Активні задачі юзера:\n${activeTasks.map(task => `- ${task.title}${task.why ? ` — ${task.why}` : ''}`).join('\n')}`
     : 'Активних задач зараз немає.'
+  const productPrompt = params.context?.product === 'stankey'
+    ? stankeyPrompts.mentor.system
+    : ''
   const ai = await aiGenerate({
     userId: params.userId,
     prompt: `Прийми рішення по повідомленню користувача. Визнач розрив між станом і дією. Дай відповідь JSON: { "reply": "string", "actionables": ["string"] }. Повідомлення: ${params.message}`,
-    context: [contextPrompt, taskPrompt],
+    context: [productPrompt, contextPrompt, taskPrompt].filter(Boolean),
   });
   const mentorMessage = await logMessage({ sessionId: session.id, role: 'MENTOR', text: ai.text });
   await rewardEngine.onMentorSessionCompleted(params.userId);

@@ -1,6 +1,8 @@
 import type { Prisma } from '@starway/db/prisma-client'
 import { openai } from '../../lib/openai.js'
 import { prisma } from '../../db/client.js'
+import { runRegisteredAiTask } from '../../services/aiTaskRunner.service.js'
+import { stableHash } from '../../services/aiGuard.service.js'
 
 const SEGMENTS = ['new', 'warm', 'reactivation'] as const
 
@@ -71,15 +73,29 @@ async function generateBannerForSegment(
     reactivation: 'Аудиторія: були активні, але зникли або вийшли.',
   }
 
-  const raw = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    temperature: 0.7,
-    max_tokens: 300,
-    response_format: { type: 'json_object' },
-    messages: [
+    return runRegisteredAiTask(
+      'banner_generation',
       {
-        role: 'user',
-        content: `Створи рекламний банер.
+        userId: `banner:${segment}:${stableHash(data).slice(0, 12)}`,
+        source: 'banner-generation',
+        label: 'banner-generation',
+        payloadHash: stableHash({ segment, data }),
+        payload: {
+          segment,
+          dataHash: stableHash(data),
+          dataKeys: Object.keys(data),
+        },
+      },
+    async () => {
+      const raw = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        temperature: 0.7,
+        max_tokens: 300,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'user',
+            content: `Створи рекламний банер.
 ${segmentPrompts[segment]}
 Дані платформи: ${JSON.stringify(data)}
 Продукт: Starway — ABsystem.
@@ -91,26 +107,25 @@ JSON:
   "ctaText": "до 4 слів, дія"
 }
 Мова: українська. Без мотивації. Тільки факти і результат.`,
-      },
-    ],
-  })
+          },
+        ],
+      })
 
-  try {
-    const parsed = JSON.parse(raw.choices[0]?.message?.content ?? '{}') as Record<string, unknown>
-    return {
-      headline: typeof parsed.headline === 'string' ? parsed.headline : 'Starway. Від стану до результату.',
-      subheadline: typeof parsed.subheadline === 'string'
-        ? parsed.subheadline
-        : 'ABsystem який веде, а не мотивує.',
-      ctaText: typeof parsed.ctaText === 'string' ? parsed.ctaText : 'Спробувати',
-    }
-  } catch {
-    return {
+      const parsed = JSON.parse(raw.choices[0]?.message?.content ?? '{}') as Record<string, unknown>
+      return {
+        headline: typeof parsed.headline === 'string' ? parsed.headline : 'Starway. Від стану до результату.',
+        subheadline: typeof parsed.subheadline === 'string'
+          ? parsed.subheadline
+          : 'ABsystem який веде, а не мотивує.',
+        ctaText: typeof parsed.ctaText === 'string' ? parsed.ctaText : 'Спробувати',
+      }
+    },
+    () => ({
       headline: 'Starway. Від стану до результату.',
       subheadline: 'ABsystem який веде, а не мотивує.',
       ctaText: 'Спробувати',
-    }
-  }
+    }),
+  )
 }
 
 export async function generateBanners(period: 'weekly' | 'monthly'): Promise<void> {

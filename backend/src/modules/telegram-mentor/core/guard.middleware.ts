@@ -2,6 +2,8 @@ import type { Context, MiddlewareFn } from 'telegraf'
 
 import { isLockedState, resolveUserState, type UserState } from './state.service.js'
 import { resolveDecision } from '../../../core/decision/decision.resolver.js'
+import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
+import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
 
 type GuardState = {
   userId?: string | null
@@ -27,14 +29,22 @@ export const guard: MiddlewareFn<Context> = async (ctx, next) => {
       if (action === 'continue_task' || action === 'dismiss_task') {
         return next()
       }
-      await ctx.answerCbQuery().catch(() => undefined)
+      const relationship = await resolveRelationshipMemory(userId, 'stankey').catch(() => null)
+      const copy = buildRecoveryCopy('stale_callback', resolveConversationProfile('stankey'), {
+        relationship,
+      })
+      await ctx.answerCbQuery(copy.body).catch(() => undefined)
     }
     return
   }
 
   if (isLockedState(userState)) {
     if ('callbackQuery' in ctx && ctx.callbackQuery) {
-      await ctx.answerCbQuery().catch(() => undefined)
+      const relationship = await resolveRelationshipMemory(userId, 'stankey').catch(() => null)
+      const copy = buildRecoveryCopy('flow_interrupted', resolveConversationProfile('stankey'), {
+        relationship,
+      })
+      await ctx.answerCbQuery(copy.body).catch(() => undefined)
     }
     return
   }

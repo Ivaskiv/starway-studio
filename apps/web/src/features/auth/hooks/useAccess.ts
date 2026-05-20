@@ -1,12 +1,8 @@
 // frontend/src/features/auth/hooks/useAccess.ts
-// хук для перевірки прав доступу через API /access/me. 
-// Повертає can('wheel.view'), isPaid, isTrial, plan, daysLeft. 
-// Робить мережевий запит — використовуй 
-// там де потрібна актуальна інформація про підписку.
-import { useGetMyAccessQuery } from '@/features/auth/services/accessApi';
 import { selectIsAuthenticated } from '@/features/auth/services/auth.slice';
 import type { AccessKey } from '@/features/auth/types/auth.types';
-import { useMemo } from 'react';
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext';
+import { useCallback, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 
 /**
@@ -15,16 +11,13 @@ import { useSelector } from 'react-redux';
  */
 export function useAccess(options?: { enabled?: boolean }) {
   const isAuthenticated = useSelector(selectIsAuthenticated);
+  const { accessData: data, canRunProtectedQueries, isAccessReady } = useSessionOrchestrator();
   const enabled = options?.enabled ?? true;
-  const shouldFetchAccess = enabled && isAuthenticated;
-
-  const {
-    data,
-    isLoading,
-    isFetching,
-    isError,
-    isSuccess,
-  } = useGetMyAccessQuery(undefined, { skip: !shouldFetchAccess });
+  const shouldFetchAccess = enabled && isAuthenticated && canRunProtectedQueries;
+  const isLoading = shouldFetchAccess && !isAccessReady
+  const isFetching = false
+  const isError = shouldFetchAccess && !data && isAccessReady
+  const isSuccess = shouldFetchAccess && Boolean(data)
 
   const fallbackFreeAbilities: Record<string, boolean> = useMemo(
     () => ({
@@ -42,11 +35,11 @@ export function useAccess(options?: { enabled?: boolean }) {
     [],
   );
 
-  const can = (key: AccessKey): boolean => {
+  const can = useCallback((key: AccessKey): boolean => {
     if (data?.abilities) return data.abilities[key] === true;
     if (isError || !shouldFetchAccess) return fallbackFreeAbilities[key] === true;
     return false;
-  };
+  }, [data?.abilities, fallbackFreeAbilities, isError, shouldFetchAccess]);
   const plan = data?.plan ?? 'free';
   const normalizedRole = data?.role?.toUpperCase();
   const isAdmin = normalizedRole === 'ADMIN' || normalizedRole === 'SUPERADMIN';
@@ -59,7 +52,7 @@ export function useAccess(options?: { enabled?: boolean }) {
     : null;
   const label = isAdmin ? 'Admin' : isPaid ? 'Premium' : isTrial ? `Trial${daysLeft ? ` · ${daysLeft} д` : ''}` : 'Free';
 
-  return {
+  return useMemo(() => ({
     can,
     abilities: data?.abilities ?? {},
     plan,
@@ -73,8 +66,27 @@ export function useAccess(options?: { enabled?: boolean }) {
     isLoading,
     isFetching,
     isError,
-    isAccessReady: !shouldFetchAccess ? true : isSuccess || isError,
+    isSuccess,
+    isAccessReady: !shouldFetchAccess ? true : isAccessReady,
     isAccessEnabled: shouldFetchAccess,
     isAuthenticated,
-  };
+  }), [
+    can,
+    data?.abilities,
+    daysLeft,
+    isAccessReady,
+    isAdmin,
+    isAuthenticated,
+    isError,
+    isFetching,
+    isFree,
+    isLoading,
+    isPaid,
+    isSuccess,
+    isTrial,
+    label,
+    plan,
+    shouldFetchAccess,
+    trialEnd,
+  ]);
 }

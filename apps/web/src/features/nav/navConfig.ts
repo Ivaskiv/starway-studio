@@ -15,6 +15,7 @@ import {
   Video,
   Workflow,
 } from 'lucide-react'
+import { ROUTES, toAppRoutePath } from '@/config/routes'
 
 export type NavRole = 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
 
@@ -43,18 +44,20 @@ const USER_ROLES: NavRole[] = ['USER']
 const STAFF_ROLES: NavRole[] = ['EXPERT', 'ADMIN']
 const PRODUCT_OWNER_ROLES: NavRole[] = ['EXPERT', 'ADMIN', 'SUPERADMIN']
 const SUPERADMIN_ROLES: NavRole[] = ['SUPERADMIN']
+const dashboardSectionPath = (section: string, extraSearch = '') =>
+  `${ROUTES.DASHBOARD}?section=${section}${extraSearch}`
 
 const CONTENT_MACHINE_STEPS: NavItemConfig[] = [
-  { id: 'content-step-1', label: 'Контекст', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=1' },
-  { id: 'content-step-2', label: 'СТА', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=2' },
-  { id: 'content-step-3', label: 'Hook', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=3' },
-  { id: 'content-step-4', label: 'Дослідження', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=4' },
-  { id: 'content-step-5', label: 'Формула', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=5' },
-  { id: 'content-step-6', label: 'API', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=6' },
-  { id: 'content-step-7', label: 'Текст × 3', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=7' },
-  { id: 'content-step-8', label: 'Банери × 3', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=8' },
-  { id: 'content-step-9', label: 'Reels Engine', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=9' },
-  { id: 'content-step-10', label: 'Lead magnet', roles: PRODUCT_OWNER_ROLES, path: '/dashboard?section=content&step=10' },
+  { id: 'content-step-1', label: 'Контекст', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=1') },
+  { id: 'content-step-2', label: 'СТА', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=2') },
+  { id: 'content-step-3', label: 'Hook', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=3') },
+  { id: 'content-step-4', label: 'Дослідження', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=4') },
+  { id: 'content-step-5', label: 'Формула', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=5') },
+  { id: 'content-step-6', label: 'API', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=6') },
+  { id: 'content-step-7', label: 'Текст × 3', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=7') },
+  { id: 'content-step-8', label: 'Банери × 3', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=8') },
+  { id: 'content-step-9', label: 'Reels Engine', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=9') },
+  { id: 'content-step-10', label: 'Lead magnet', roles: PRODUCT_OWNER_ROLES, path: dashboardSectionPath('content', '&step=10') },
 ]
 
 export const NAV_CONFIG: NavSectionConfig[] = [
@@ -63,8 +66,8 @@ export const NAV_CONFIG: NavSectionConfig[] = [
     label: 'ПРОФІЛЬ',
     roles: ALL_ROLES,
     items: [
-      { id: 'profile-home', label: 'Профіль', icon: Sparkles, path: '/dashboard/profile', roles: ALL_ROLES },
-      { id: 'profile-journal', label: 'Щоденник', icon: BookOpen, path: '/dashboard/journal', roles: ALL_ROLES, requiresPremium: true },
+      { id: 'profile-home', label: 'Профіль', icon: Sparkles, path: ROUTES.PROFILE, roles: ALL_ROLES },
+      { id: 'profile-journal', label: 'Щоденник', icon: BookOpen, path: ROUTES.JOURNAL, roles: ALL_ROLES, requiresPremium: true },
     ],
   },
   {
@@ -88,7 +91,7 @@ export const NAV_CONFIG: NavSectionConfig[] = [
             collapsible: true,
             defaultCollapsed: false,
             children: [
-              { id: 'user-wheel', label: 'Колесо балансу', icon: Target, path: '/dashboard/wheel', roles: USER_ROLES },
+              { id: 'user-wheel', label: 'Колесо балансу', icon: Target, path: ROUTES.WHEEL, roles: USER_ROLES },
               {
                 id: 'user-daily',
                 label: 'Щоденний цикл',
@@ -97,11 +100,11 @@ export const NAV_CONFIG: NavSectionConfig[] = [
                 collapsible: true,
                 defaultCollapsed: false,
                 children: [
-                  { id: 'user-morning', label: 'Ранок', roles: USER_ROLES, requiresPremium: true, path: '/dashboard/cycle?session=morning' },
-                  { id: 'user-tasks', label: 'Мікрозавдання', roles: USER_ROLES, requiresPremium: true, path: '/dashboard/microtasks' },
-                  { id: 'user-evening', label: 'Вечір', roles: USER_ROLES, requiresPremium: true, path: '/dashboard/cycle?session=evening' },
-                  { id: 'user-analysis', label: 'Аналіз дня', roles: USER_ROLES, requiresPremium: true, path: '/dashboard/journal' },
-                  { id: 'user-zoom', label: 'Zoom', dynamicLabel: 'zoom', roles: USER_ROLES, requiresPremium: true, path: '/dashboard/journal' },
+                  { id: 'user-morning', label: 'Ранок', roles: USER_ROLES, requiresPremium: true, path: `${ROUTES.CYCLE}?session=morning` },
+                  { id: 'user-tasks', label: 'Мікрозавдання', roles: USER_ROLES, requiresPremium: true, path: ROUTES.MICROTASKS },
+                  { id: 'user-evening', label: 'Вечір', roles: USER_ROLES, requiresPremium: true, path: `${ROUTES.CYCLE}?session=evening` },
+                  { id: 'user-analysis', label: 'Аналіз дня', roles: USER_ROLES, requiresPremium: true, path: ROUTES.JOURNAL },
+                  { id: 'user-zoom', label: 'Zoom', dynamicLabel: 'zoom', roles: USER_ROLES, requiresPremium: true, path: ROUTES.JOURNAL },
                 ],
               },
               {
@@ -112,7 +115,7 @@ export const NAV_CONFIG: NavSectionConfig[] = [
                 collapsible: true,
                 defaultCollapsed: false,
                 children: [
-                  { id: 'user-practicum-item', label: 'Практикум', dynamicLabel: 'practicum', roles: USER_ROLES, requiresPremium: true, path: '/dashboard/courses' },
+                  { id: 'user-practicum-item', label: 'Практикум', dynamicLabel: 'practicum', roles: USER_ROLES, requiresPremium: true, path: ROUTES.COURSES },
                 ],
               },
             ],
@@ -126,8 +129,8 @@ export const NAV_CONFIG: NavSectionConfig[] = [
     label: 'НАВЧАННЯ',
     roles: USER_ROLES,
     items: [
-      { id: 'courses', label: 'Практикуми', icon: GraduationCap, roles: USER_ROLES, requiresPremium: true, path: '/dashboard/courses' },
-      { id: 'zoom', label: 'Zoom-сесії', icon: Video, roles: USER_ROLES, requiresPremium: true, path: '/dashboard/journal' },
+      { id: 'courses', label: 'Практикуми', icon: GraduationCap, roles: USER_ROLES, requiresPremium: true, path: ROUTES.COURSES },
+      { id: 'zoom', label: 'Zoom-сесії', icon: Video, roles: USER_ROLES, requiresPremium: true, path: ROUTES.JOURNAL },
     ],
   },
   {
@@ -139,7 +142,7 @@ export const NAV_CONFIG: NavSectionConfig[] = [
         id: 'expert-products',
         label: 'ПРОДУКТИ',
         icon: Package2,
-        path: '/dashboard/products',
+        path: ROUTES.PRODUCTS,
         roles: PRODUCT_OWNER_ROLES,
         collapsible: true,
         defaultCollapsed: false,
@@ -148,12 +151,12 @@ export const NAV_CONFIG: NavSectionConfig[] = [
             id: 'expert-absystem',
             label: 'ABsystem',
             icon: Sparkles,
-            path: '/dashboard/products',
+            path: ROUTES.PRODUCTS,
             roles: PRODUCT_OWNER_ROLES,
             collapsible: true,
             defaultCollapsed: false,
             children: [
-              { id: 'expert-wheel', label: 'Колесо балансу', icon: Target, path: '/dashboard/wheel', roles: PRODUCT_OWNER_ROLES },
+              { id: 'expert-wheel', label: 'Колесо балансу', icon: Target, path: ROUTES.WHEEL, roles: PRODUCT_OWNER_ROLES },
               {
                 id: 'expert-daily',
                 label: 'Щоденний цикл',
@@ -162,15 +165,15 @@ export const NAV_CONFIG: NavSectionConfig[] = [
                 collapsible: true,
                 defaultCollapsed: false,
                 children: [
-                  { id: 'expert-morning', label: 'Ранок', roles: PRODUCT_OWNER_ROLES, path: '/dashboard/cycle?session=morning' },
-                  { id: 'expert-tasks', label: 'Мікрозавдання', roles: PRODUCT_OWNER_ROLES, path: '/dashboard/microtasks' },
-                  { id: 'expert-evening', label: 'Вечір', roles: PRODUCT_OWNER_ROLES, path: '/dashboard/cycle?session=evening' },
-                  { id: 'expert-analysis', label: 'Аналіз дня', roles: PRODUCT_OWNER_ROLES, path: '/dashboard/journal' },
-                  { id: 'expert-zoom', label: 'Zoom', dynamicLabel: 'zoom', roles: STAFF_ROLES, path: '/dashboard/journal' },
+                  { id: 'expert-morning', label: 'Ранок', roles: PRODUCT_OWNER_ROLES, path: `${ROUTES.CYCLE}?session=morning` },
+                  { id: 'expert-tasks', label: 'Мікрозавдання', roles: PRODUCT_OWNER_ROLES, path: ROUTES.MICROTASKS },
+                  { id: 'expert-evening', label: 'Вечір', roles: PRODUCT_OWNER_ROLES, path: `${ROUTES.CYCLE}?session=evening` },
+                  { id: 'expert-analysis', label: 'Аналіз дня', roles: PRODUCT_OWNER_ROLES, path: ROUTES.JOURNAL },
+                  { id: 'expert-zoom', label: 'Zoom', dynamicLabel: 'zoom', roles: STAFF_ROLES, path: ROUTES.JOURNAL },
                 ],
               },
-              { id: 'expert-reports', label: 'Звіти', icon: BarChart3, path: '/dashboard/journal', roles: PRODUCT_OWNER_ROLES },
-              { id: 'expert-stats', label: 'Статистика', icon: BarChart3, path: '/dashboard/admin/revenue', roles: PRODUCT_OWNER_ROLES },
+              { id: 'expert-reports', label: 'Звіти', icon: BarChart3, path: ROUTES.JOURNAL, roles: PRODUCT_OWNER_ROLES },
+              { id: 'expert-stats', label: 'Статистика', icon: BarChart3, path: toAppRoutePath('/dashboard/admin/revenue'), roles: PRODUCT_OWNER_ROLES },
             ],
           },
         ],
@@ -186,15 +189,15 @@ export const NAV_CONFIG: NavSectionConfig[] = [
         id: 'content-machine',
         label: 'Content Machine',
         icon: Sparkles,
-        path: '/dashboard?section=content',
+        path: dashboardSectionPath('content'),
         roles: PRODUCT_OWNER_ROLES,
         collapsible: true,
         defaultCollapsed: true,
         children: CONTENT_MACHINE_STEPS,
       },
-      { id: 'funnel', label: 'Воронка', icon: Workflow, path: '/dashboard/leadmagnet', roles: PRODUCT_OWNER_ROLES },
-      { id: 'telegram', label: 'Telegram', icon: Send, path: '/dashboard/telegram', roles: PRODUCT_OWNER_ROLES },
-      { id: 'seo', label: 'SEO', icon: Search, path: '/dashboard/ai-seo', roles: PRODUCT_OWNER_ROLES },
+      { id: 'funnel', label: 'Воронка', icon: Workflow, path: dashboardSectionPath('leadmagnet'), roles: PRODUCT_OWNER_ROLES },
+      { id: 'telegram', label: 'Telegram', icon: Send, path: dashboardSectionPath('telegram'), roles: PRODUCT_OWNER_ROLES },
+      { id: 'seo', label: 'SEO', icon: Search, path: dashboardSectionPath('ai-seo'), roles: PRODUCT_OWNER_ROLES },
     ],
   },
   {
@@ -202,13 +205,13 @@ export const NAV_CONFIG: NavSectionConfig[] = [
     label: 'АНАЛІТИКА І СИСТЕМА',
     roles: PRODUCT_OWNER_ROLES,
     items: [
-      { id: 'studio-prompts', label: 'Промпти', icon: LayoutGrid, path: '/dashboard/admin/studio?tab=prompts', roles: PRODUCT_OWNER_ROLES },
-      { id: 'studio-signals', label: 'Сигнали', icon: Send, path: '/dashboard/admin/studio?tab=notifications', roles: PRODUCT_OWNER_ROLES },
-      { id: 'studio-funnels', label: 'Воронки', icon: Workflow, path: '/dashboard/admin/studio?tab=funnels', roles: PRODUCT_OWNER_ROLES },
-      { id: 'users', label: 'Користувачі', icon: Users, path: '/dashboard/students', roles: SUPERADMIN_ROLES },
-      { id: 'analytics', label: 'Аналітика', icon: BarChart3, path: '/dashboard/admin/revenue', roles: SUPERADMIN_ROLES },
-      { id: 'calendar', label: 'Календар', icon: CalendarDays, path: '/dashboard/calendar', roles: SUPERADMIN_ROLES },
-      { id: 'system', label: 'Система', icon: Settings, path: '/dashboard?section=system', roles: SUPERADMIN_ROLES },
+      { id: 'studio-prompts', label: 'Промпти', icon: LayoutGrid, path: `${ROUTES.ADMIN_STUDIO}?tab=prompts`, roles: PRODUCT_OWNER_ROLES },
+      { id: 'studio-signals', label: 'Сигнали', icon: Send, path: `${ROUTES.ADMIN_STUDIO}?tab=notifications`, roles: PRODUCT_OWNER_ROLES },
+      { id: 'studio-funnels', label: 'Воронки', icon: Workflow, path: `${ROUTES.ADMIN_STUDIO}?tab=funnels`, roles: PRODUCT_OWNER_ROLES },
+      { id: 'users', label: 'Користувачі', icon: Users, path: dashboardSectionPath('students'), roles: SUPERADMIN_ROLES },
+      { id: 'analytics', label: 'Аналітика', icon: BarChart3, path: toAppRoutePath('/dashboard/admin/revenue'), roles: SUPERADMIN_ROLES },
+      { id: 'calendar', label: 'Календар', icon: CalendarDays, path: ROUTES.CALENDAR, roles: SUPERADMIN_ROLES },
+      { id: 'system', label: 'Система', icon: Settings, path: dashboardSectionPath('system'), roles: SUPERADMIN_ROLES },
     ],
   },
 ]

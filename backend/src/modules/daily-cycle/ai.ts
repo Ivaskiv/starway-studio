@@ -2,10 +2,10 @@ import type { AssistantMemory } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
 import { openai } from '../../lib/openai.js'
-import { cacheGet, cacheSet } from '../../lib/cache/index.js'
 import { MODEL_FOR_TASK } from '../../lib/openaiModels.js'
 import type { DailyEntryForAi, DayAnalysisResult } from './types.js'
-import { runGuardedAiTask, stableHash } from '../../services/aiGuard.service.js'
+import { stableHash } from '../../services/aiGuard.service.js'
+import { runRegisteredAiTask } from '../../services/aiTaskRunner.service.js'
 
 function trimText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -97,22 +97,20 @@ export async function generateDailyAiAnalysis(entry: DailyEntryForAi, userId?: s
   const prompt = buildDayAnalysisPrompt(entry)
 
   try {
-    return await runGuardedAiTask(
+    return await runRegisteredAiTask(
+      'daily_analysis',
       {
         userId: userId ?? stableHash(entry).slice(0, 16),
         source: 'daily-analysis',
         label: 'daily-analysis',
         payloadHash: stableHash({ userId, entry }),
-        throttleMs: 10_000,
-        duplicateWindowMs: 10 * 60_000,
+        payload: {
+          entryHash: stableHash(entry),
+          userIdPresent: Boolean(userId),
+          date: entry.date,
+        },
       },
       async () => {
-        const cacheKey = `daily-analysis:${stableHash({ userId, entry })}`
-        const cached = await cacheGet<DayAnalysisResult | null>(cacheKey)
-        if (cached) {
-          return normalizeDayAnalysisResult(cached)
-        }
-
         const completion = await openai.chat.completions.create({
           model: MODEL_FOR_TASK.evening_analysis,
           temperature: 0.4,
@@ -133,9 +131,7 @@ export async function generateDailyAiAnalysis(entry: DailyEntryForAi, userId?: s
           }
         }
 
-        const normalized = normalizeDayAnalysisResult(parsed)
-        await cacheSet(cacheKey, normalized, 3600)
-        return normalized
+        return normalizeDayAnalysisResult(parsed)
       },
       () => null,
     )

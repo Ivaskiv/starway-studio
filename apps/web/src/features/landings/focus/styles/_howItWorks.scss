@@ -1,548 +1,328 @@
-// apps/web/src/features/landings/focus/styles/_howItWorks.scss
-// Keyframes focus-orbit-cw, focus-float-x, focus-node-breathe, focus-node-pulse → _animations.scss
-
-/* ─── SECTION HEADER ─── */
+@use 'mixins' as *;
+@use './glass' as *;
 
 .focus-how-header {
-  margin-bottom: clamp(36px, 4vw, 56px);
-}
-
-/* ─── TWO-COLUMN SPLIT LAYOUT ─── */
-
-.focus-how-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: clamp(32px, 5vw, 72px);
-  align-items: start;
-}
-
-.focus-how-split__left {
   display: flex;
   flex-direction: column;
-  gap: clamp(24px, 3vw, 36px);
+  gap: var(--space-sm);
+  max-width: min(100%, 52rem);
 }
 
-.focus-how-split__right {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(18px, 2.5vw, 24px);
-  padding: clamp(28px, 3.5vw, 48px);
-  border-radius: var(--focus-radius-xl);
-  background:
-    linear-gradient(160deg, rgba(74, 126, 191, 0.10) 0%, transparent 55%),
-    var(--focus-bg-secondary);
-  border: 1px solid rgba(74, 126, 191, 0.16);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    var(--focus-shadow-card);
-  overflow: hidden;
+.focus-how-eyebrow {
+  width: fit-content;
 }
 
-.focus-how-split__right::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(74, 126, 191, 0.35), transparent);
-  pointer-events: none;
+.focus-how-eyebrow,
+.focus-how-subtitle {
+  max-width: min(100%, 44rem);
 }
 
-.focus-how-split__right::after {
-  content: '';
-  position: absolute;
-  top: -40px; right: -40px;
-  width: 200px; height: 200px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(74, 126, 191, 0.1) 0%, transparent 70%);
-  pointer-events: none;
+.focus-how-title {
+  max-width: 12ch;
+  text-align: left;
 }
 
-/* ─── PIPELINE ─── */
+.focus-how-subtitle {
+  margin: 0;
+  padding: 0;
+  color: var(--focus-text-muted);
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-loose);
+  overflow-wrap: anywhere;
+}
 
 .focus-pipeline {
-  position: relative;
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: var(--space-fluid-sm);
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--space-2xs);
+  scroll-snap-type: x proximity;
 }
 
-.focus-pipeline-track {
-  position: absolute;
-  top: 32px;
-  left: 32px;
-  right: 32px;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    rgba(74, 126, 191, 0.5),
-    rgba(74, 126, 191, 0.15) 50%,
-    rgba(74, 126, 191, 0.5)
-  );
-  z-index: 0;
-  transform: translateY(-50%);
+.focus-pipeline-step-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-fluid-sm);
+  flex: 1 1 0;
+  min-width: 0;
+  padding-top: var(--space-2xs);
+  scroll-snap-align: start;
 }
 
-.focus-pipeline-item {
-  flex: 1;
+.focus-pipeline-card {
+  @extend .focus-glass;
+
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  position: relative;
-  z-index: 1;
+  justify-content: flex-start;
+  gap: var(--space-md);
+  min-width: 0;
+  min-height: clamp(240px, 26vw, 320px);
+  padding: clamp(20px, 2.8vw, 28px);
+  text-align: center;
 }
 
-.focus-pipeline-node {
-  position: relative;
-  width: 56px;
-  height: 56px;
-  display: flex;
+.focus-pipeline-step-wrap > .focus-pipeline-card {
+  align-items: center;
+}
+
+.focus-pipeline-step-badge {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-
-.focus-pipeline-node-glass {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.10), transparent 55%),
-    rgba(74, 126, 191, 0.10);
-  border: 1px solid rgba(74, 126, 191, 0.35);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 20px rgba(74, 126, 191, 0.16),
-    0 6px 20px rgba(0, 0, 0, 0.28);
-  transition: all 0.3s ease;
-}
-
-.focus-pipeline-item:hover .focus-pipeline-node-glass {
-  background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 55%),
-    rgba(74, 126, 191, 0.22);
-  border-color: rgba(74, 126, 191, 0.65);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.20),
-    0 0 36px rgba(74, 126, 191, 0.40),
-    0 10px 28px rgba(0, 0, 0, 0.4);
-}
-
-.focus-pipeline-node-ring {
-  position: absolute;
-  inset: 7px;
-  border-radius: 50%;
-  border: 1px solid rgba(74, 126, 191, 0.18);
-  animation: focus-orbit-cw 8s linear infinite;
-}
-
-.focus-pipeline-node-num {
-  position: relative;
-  z-index: 1;
+  align-self: center;
+  min-width: 2.8rem;
+  height: 2.8rem;
+  padding-inline: var(--space-xs);
+  border-radius: var(--focus-radius-pill);
+  border: 1px solid var(--focus-blue-border);
+  background: var(--focus-surface-bg);
+  box-shadow: var(--focus-surface-shadow);
   font-family: var(--font-heading);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: rgba(74, 160, 255, 0.9);
-  line-height: 1;
+  font-size: var(--fs-pipeline-node);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.06em;
+  color: var(--focus-blue);
 }
 
-.focus-pipeline-arrow {
-  position: absolute;
-  top: 28px;
-  right: -10px;
-  transform: translateY(-50%);
-  z-index: 4;
-  font-size: 20px;
-  color: rgba(74, 126, 191, 0.6);
-  animation: focus-float-x 2.2s ease-in-out infinite;
-  pointer-events: none;
-  line-height: 1;
+.focus-pipeline-step-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--space-2xs);
+  width: 64px;
+  height: 64px;
+  border-radius: var(--focus-radius);
+  border: 1px solid var(--focus-surface-border);
+  background: var(--focus-surface-bg);
+  box-shadow: var(--focus-surface-shadow);
+  color: var(--focus-text);
+}
+
+.focus-pipeline-step-icon-svg {
+  width: var(--icon-svg-size);
+  height: var(--icon-svg-size);
+  stroke-width: 1.7;
 }
 
 .focus-pipeline-label {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-
   align-items: center;
-  text-align: center;
-
-  gap: 8px;
-
-  padding: 0 8px;
+  justify-content: flex-start;
+  gap: var(--space-2xs);
+  min-width: 0;
 }
 
 .focus-pipeline-label-title {
-  font-family: var(--font-heading);
-  font-size: clamp(10px, 0.9vw, 12px);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--color-text-main);
-  line-height: 1.2;
+  max-width: 10ch;
+  overflow-wrap: anywhere;
 }
 
 .focus-pipeline-label-sub {
-  font-family: var(--font-sans);
-  font-size: clamp(10px, 0.85vw, 11.5px);
-  color: var(--focus-text-muted);
-  line-height: 1.4;
+  max-width: 16ch;
+  overflow-wrap: anywhere;
 }
 
-.focus-pipeline-outcome {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 20px;
-  border-radius: var(--focus-radius-pill);
-  border: 1px solid rgba(74, 126, 191, 0.20);
-  background:
-    linear-gradient(135deg, rgba(74, 126, 191, 0.07) 0%, transparent 70%),
-    rgba(255, 255, 255, 0.02);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  align-self: flex-start;
-}
-
-.focus-pipeline-outcome-arrow {
-  font-size: 15px;
-  color: rgba(74, 160, 255, 0.7);
-  animation: focus-float-x 2.2s ease-in-out infinite;
-  flex-shrink: 0;
-}
-
-.focus-pipeline-outcome-text {
-  font-family: var(--font-heading);
-  font-size: clamp(10px, 0.9vw, 12px);
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--color-accent-subtitle);
-  white-space: nowrap;
-}
-
-/* ─── HOW STEPS ─── */
-
-.focus-how-steps {
-  display: flex;
-  flex-direction: column;
-}
-
-/* ─── FLOW ROW ─── */
-
-.focus-how-flow {
+.focus-pipeline-connector {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(16px, 3vw, 40px);
-  padding: clamp(40px, 6vw, 72px) 0;
-  position: relative;
+  flex: 0 0 clamp(24px, 3vw, 44px);
+  min-width: clamp(24px, 3vw, 44px);
+  color: var(--focus-blue);
 }
 
-.focus-how-flow-side {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: clamp(13px, 1.4vw, 15px);
-  letter-spacing: 0.04em;
-  line-height: 1.5;
-}
-
-.focus-how-flow-side--left {
-  text-align: right;
-  color: rgba(240, 240, 245, 0.32);
-}
-
-.focus-how-flow-side--right {
-  text-align: left;
-}
-
-.focus-how-flow-side-strong  { color: var(--color-text-main); font-weight: 600; }
-.focus-how-flow-side-accent  { color: rgba(74, 160, 255, 0.85); }
-
-.focus-how-flow-connector {
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-
-.focus-how-flow-line {
-  width: clamp(32px, 4vw, 60px);
+.focus-pipeline-connector-line {
+  display: block;
+  flex: 1 1 auto;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(74, 126, 191, 0.4), rgba(74, 126, 191, 0.85));
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--focus-blue-light), transparent);
+  box-shadow: 0 0 14px var(--focus-blue-light);
 }
 
-.focus-how-flow-line--reverse {
-  background: linear-gradient(90deg, rgba(74, 126, 191, 0.85), rgba(74, 126, 191, 0.4), transparent);
-}
-
-.focus-how-flow-arrow {
-  font-size: 18px;
-  color: rgba(74, 126, 191, 0.8);
-  animation: focus-float-x 2.2s ease-in-out infinite;
+.focus-pipeline-connector-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-size: var(--fs-pipeline-arrow);
   line-height: 1;
+  animation: focus-float-x 3s ease-in-out infinite;
+  text-shadow: 0 0 16px var(--focus-blue-light);
 }
 
-.focus-how-flow-connector--left .focus-how-flow-arrow {
-  animation-direction: reverse;
+.focus-pipeline-card:hover {
+  border-color: var(--focus-surface-border-strong);
+  box-shadow: var(--focus-surface-shadow-strong);
 }
 
-/* ─── CENTER NODE ─── */
-
-.focus-how-node {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+.focus-pipeline-card:hover .focus-pipeline-step-badge {
+  animation: focus-pulse-glow 5.5s ease-in-out infinite;
 }
 
-.focus-how-node-aura {
-  position: absolute;
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(74, 126, 191, 0.22) 0%,
-    rgba(74, 126, 191, 0.06) 50%,
-    transparent 70%
-  );
-  animation: focus-node-breathe 3s ease-in-out infinite;
-}
+@include below('tablet') {
+  .focus-pipeline {
+    gap: var(--space-xs);
+  }
 
-.focus-how-node-ring {
-  position: absolute;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: 1px solid rgba(74, 126, 191, 0.2);
-}
+  .focus-pipeline-card {
+    min-height: clamp(220px, 30vw, 280px);
+    padding: clamp(18px, 2.4vw, 24px);
+    gap: var(--space-sm);
+  }
 
-.focus-how-node-ring--cw  { animation: focus-orbit-cw  7s linear infinite; }
-.focus-how-node-ring--ccw {
-  width: 40px;
-  height: 40px;
-  border-color: rgba(74, 126, 191, 0.12);
-  animation: focus-orbit-ccw 5s linear infinite;
-}
+  .focus-pipeline-step-icon {
+    width: 58px;
+    height: 58px;
+  }
 
-.focus-how-node-orbit-dot {
-  position: absolute;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  transform: translateX(-50%);
-  background: rgba(74, 160, 255, 0.9);
-  box-shadow: 0 0 8px rgba(74, 160, 255, 0.7);
-}
-
-.focus-how-node-orbit-dot--top    { top: -2.5px; }
-.focus-how-node-orbit-dot--bottom {
-  bottom: -2.5px;
-  width: 4px;
-  height: 4px;
-  background: rgba(74, 160, 255, 0.55);
-  box-shadow: 0 0 6px rgba(74, 160, 255, 0.4);
-}
-
-.focus-how-node-glass {
-  position: absolute;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.12), transparent 50%),
-    rgba(255, 255, 255, 0.04);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 4px 16px rgba(0, 0, 0, 0.3);
-}
-
-.focus-how-node-core {
-  position: relative;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: rgba(74, 126, 191, 1);
-  box-shadow:
-    0 0 20px rgba(74, 126, 191, 0.8),
-    0 0 40px rgba(74, 126, 191, 0.3);
-  animation: focus-node-pulse 2.4s ease-in-out infinite;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.focus-how-node-core-inner {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.75);
-  filter: blur(1px);
-}
-
-/* ─── HOW VISUAL CARD ─── */
-
-.focus-how-visual {
-  position: relative;
-  overflow: hidden;
-  padding: 40px 36px;
-  border-radius: var(--focus-radius-xl);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, transparent 50%),
-    var(--focus-bg-secondary);
-  border: 1px solid var(--focus-card-border);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    var(--focus-shadow-card);
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.focus-how-visual::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
-  pointer-events: none;
-}
-
-.focus-how-visual::after {
-  content: '';
-  position: absolute;
-  top: -40px; right: -40px;
-  width: 180px; height: 180px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(74, 126, 191, 0.1) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.focus-how-visual:hover {
-  border-color: rgba(74, 126, 191, 0.28);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    0 0 40px rgba(74, 126, 191, 0.08),
-    var(--focus-shadow-card);
-}
-
-/* ─────────────────────────────
-   RESPONSIVE
-───────────────────────────── */
-
-@media (max-width: 1024px) {
-  .focus-how-split           { gap: clamp(24px, 3.5vw, 48px); }
-  .focus-pipeline-node       { width: 48px; height: 48px; }
-  .focus-pipeline-track      { top: 24px; }
-  .focus-pipeline-arrow      { top: 24px; font-size: 18px; }
-  .focus-pipeline-node-num   { font-size: 14px; }
-  .focus-pipeline-node-ring  { inset: 6px; }
-}
-
-@media (max-width: 680px) {
-  .focus-how-split           { grid-template-columns: 1fr; gap: clamp(28px, 5vw, 40px); }
-  .focus-how-split__right    { border-radius: var(--focus-radius-lg); }
-
-  .focus-how-flow            { gap: 12px; }
-  .focus-how-flow-side       { font-size: 12px; }
-  .focus-how-flow-line       { width: 24px; }
-
-  .focus-how-node            { width: 52px; height: 52px; }
-  .focus-how-node-aura       { width: 64px; height: 64px; }
-  .focus-how-node-ring       { width: 42px; height: 42px; }
-  .focus-how-node-ring--ccw  { width: 32px; height: 32px; }
-  .focus-how-node-glass      { width: 28px; height: 28px; }
-  .focus-how-node-core       { width: 11px; height: 11px; }
-
-  .focus-pipeline            { flex-wrap: wrap; justify-content: center; row-gap: 20px; }
-  .focus-pipeline-track      { display: none; }
-  .focus-pipeline-item       { flex: 0 0 50%; max-width: 50%; }
-  .focus-pipeline-arrow      { display: none; }
-  .focus-pipeline-outcome    { align-self: center; }
-  .focus-pipeline-outcome-text { white-space: normal; }
-}
-
-@media (max-width: 400px) {
-  .focus-how-flow-side--left,
-  .focus-how-flow-side--right { display: none; }
-}
-
-/* ─── STEP CARDS GRID ─── */
-
-.focus-how-steps-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(10px, 1.8vw, 14px);
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-/* кожен рядок — flex, залишок автоматично центрується */
-.focus-how-steps-row {
-  display: flex;
-  justify-content: center;
-  gap: clamp(10px, 1.8vw, 14px);
-  flex-wrap: nowrap;
-}
-
-.focus-how-step-card {
-  flex: 1;
-  max-width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(6px, 1vw, 10px);
-  padding: clamp(16px, 2.5vw, 24px);
-  border-radius: var(--focus-radius);
-  text-align: center;
-  transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
-}
-
-.focus-how-step-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--focus-blue-border);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.2),
-    0 0 0 1px rgba(74, 126, 191, 0.1);
-}
-
-.focus-how-step-card .focus-step-title {
-  font-family: var(--font-heading);
-  font-size: clamp(13px, 1.8vw, 17px);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-text-main);
-  line-height: 1.2;
-}
-
-.focus-how-step-card .focus-step-copy {
-  font-family: var(--font-sans);
-  font-size: clamp(12px, 1.4vw, 14px);
-  color: var(--focus-text-muted);
-  line-height: 1.55;
-}
-
-/* tablet: 2 cols max */
-@media (max-width: 900px) {
-  .focus-how-step-card {
-    max-width: 320px;
+  .focus-pipeline-label-sub {
+    max-width: 14ch;
   }
 }
 
-/* mobile: stack vertically */
-@media (max-width: 560px) {
-  .focus-how-steps-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .focus-how-step-card {
+@include below('phablet') {
+  .focus-how-header {
     max-width: 100%;
+  }
+
+  .focus-how-title,
+  .focus-how-subtitle {
+    max-width: 100%;
+  }
+
+  .focus-how-subtitle {
+    font-size: var(--fs-body);
+  }
+
+  .focus-pipeline {
+    flex-direction: row;
+    align-items: stretch;
+    gap: var(--space-xs);
+    padding-bottom: var(--space-xs);
+  }
+
+  .focus-pipeline-step-wrap {
+    flex: 0 0 clamp(198px, 72vw, 260px);
+    flex-direction: row;
+    gap: var(--space-2xs);
+  }
+
+  .focus-pipeline-card {
+    width: 100%;
+    min-height: clamp(200px, 62vw, 260px);
+    align-items: center;
+    text-align: center;
+    padding: clamp(16px, 4vw, 22px);
+  }
+
+  .focus-pipeline-step-badge {
+    min-width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .focus-pipeline-step-icon {
+    width: 54px;
+    height: 54px;
+  }
+
+  .focus-pipeline-label {
+    align-items: center;
+  }
+
+  .focus-pipeline-label-sub {
+    max-width: 15ch;
+  }
+
+  .focus-pipeline-connector {
+    flex-direction: row;
+    flex: 0 0 clamp(18px, 5vw, 28px);
+    min-width: clamp(18px, 5vw, 28px);
+    min-height: 0;
+  }
+
+  .focus-pipeline-connector-line {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--focus-blue-light), transparent);
+  }
+
+  .focus-pipeline-connector-arrow {
+    transform: none;
+  }
+}
+
+@include below('mobile') {
+  .focus-pipeline {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .focus-pipeline-step-wrap {
+    flex: 0 0 auto;
+    width: 100%;
+    flex-direction: column;
+    gap: var(--space-2xs);
+  }
+
+  .focus-pipeline-card {
+    justify-content: flex-start;
+    align-items: flex-start;
     text-align: left;
+    min-height: clamp(124px, 30vw, 152px);
+    width: 100%;
+    padding: clamp(14px, 3.8vw, 18px);
+    gap: var(--space-xs);
+  }
+
+  .focus-pipeline-step-icon {
+    display: none;
+  }
+
+  .focus-pipeline-step-badge {
+    align-self: center;
+    min-width: 2.3rem;
+    height: 2.3rem;
+    font-size: var(--fs-pipeline-node-md);
+  }
+
+  .focus-pipeline-label {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .focus-pipeline-label-title {
+    max-width: 100%;
+  }
+
+  .focus-pipeline-label-sub {
+    max-width: 100%;
+  }
+
+  .focus-pipeline-connector {
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-width: 0;
+    min-height: 18px;
+  }
+
+  .focus-pipeline-connector-line {
+    width: 1px;
+    height: 14px;
+    background: linear-gradient(180deg, transparent, var(--focus-blue-light), transparent);
+  }
+
+  .focus-pipeline-connector-arrow {
+    display: inline-flex;
+    animation: focus-float-y-rotated 2.8s ease-in-out infinite;
   }
 }

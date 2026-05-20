@@ -1,18 +1,15 @@
 // apps/web/src/features/landings/focus/styles/_glass.scss
-// Zero backdrop-filter (Safari rule)
-// Глибина через: gradient layers + shadow stacking + borders
-
+@use 'mixins' as *;
 /* ─── SCSS VARS ─── */
-$glass-bg:            rgba(255, 255, 255, 0.04);
-$glass-bg-strong:     rgba(255, 255, 255, 0.07);
-$glass-border:        rgba(255, 255, 255, 0.08);
-$glass-border-strong: rgba(255, 255, 255, 0.16);
-$glass-border-ice:    rgba(74, 126, 191, 0.28);
-$glass-radius:        24px;
-$glass-radius-sm:     16px;
+$glass-bg:            var(--focus-surface-bg);
+$glass-bg-strong:     var(--focus-surface-bg-strong);
+$glass-border:        var(--focus-surface-border);
+$glass-border-strong: var(--focus-surface-border-strong);
+$glass-border-ice:    rgba(74, 126, 191, 0.22);
+$glass-radius:        var(--focus-surface-radius);
+$glass-radius-sm:     var(--focus-surface-radius-sm);
 $glass-shadow:
-  0 10px 40px rgba(0, 0, 0, 0.25),
-  inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  var(--focus-surface-shadow);
 
 /* ─── MIXINS ─── */
 
@@ -33,7 +30,7 @@ $glass-shadow:
       135deg,
       rgba(255, 255, 255, 0.07) 0%,
       transparent 45%,
-      rgba(74, 126, 191, 0.04) 100%
+      rgba(74, 126, 191, 0.03) 100%
     );
     border-radius: inherit;
   }
@@ -52,9 +49,8 @@ $glass-shadow:
   background: $glass-bg-strong;
   border-color: $glass-border-strong;
   box-shadow:
-    0 16px 56px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 -1px 0 rgba(74, 126, 191, 0.06);
+    var(--focus-surface-shadow-strong),
+    inset 0 -1px 0 rgba(74, 126, 191, 0.05);
 }
 
 @mixin glass-ice-accent {
@@ -96,20 +92,38 @@ $glass-shadow:
 
 .focus-quote-glass {
   position: relative;
-  border-radius: 14px;
-  padding: 16px 18px;
-  margin-bottom: 20px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  font-style: italic;
-  line-height: 1.5;
-  text-align: left;
-}
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border-radius: var(--surface-radius-sm);
+  padding: var(--quote-padding-block) var(--quote-padding-inline);
+  margin-bottom: 0;
+  background: linear-gradient(135deg, rgba(74, 126, 191, 0.08) 0%, rgba(74, 126, 191, 0.02) 100%);
+  border: 1px solid rgba(74, 127, 191, 0.568);
+  border-left: 1px solid rgba(74, 161, 255, 0.63);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 24px rgba(74, 126, 191, 0.06),
+    inset 2px 0 0 rgba(74, 161, 255, 0.714);
 
+  &::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: var(--space-md-tight);
+    width: 40px;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(74, 161, 255, 0.925), transparent);
+    border-radius: 2px;
+  }
+
+}
 .focus-glass-item {
   background: $glass-bg;
   border: 1px solid $glass-border;
   border-radius: $glass-radius-sm;
+  box-shadow: var(--focus-surface-shadow);
   transition: background 0.2s ease, border-color 0.2s ease;
 
   &:hover {
@@ -119,24 +133,73 @@ $glass-shadow:
 }
 
 .focus-card {
-  padding: var(--space-lg);
-  border-radius: 20px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
+  border-radius: var(--surface-radius);
 
+  background: var(--focus-surface-bg);
+
+  border: 1px solid var(--focus-surface-border);
+
+  box-shadow: var(--focus-surface-shadow);
+}
 .focus-btn-glass {
   @include glass-base;
   @include glass-shimmer;
 
-  border-radius: 999px;
-  padding: 10px 18px;
+  border-radius: var(--focus-control-radius);
+  padding: var(--space-sm-tight) var(--space-md-tight);
 
   &:hover {
     background: $glass-bg-strong;
     border-color: $glass-border-strong;
+  }
+}
+
+
+
+// ─────────────────────────────────────
+// NOTE SYSTEM
+// ─────────────────────────────────────
+
+.focus-note {
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-2xs);
+
+  width: 100%;
+  min-width: 0;
+}
+
+.focus-note-primary,
+.focus-note-secondary {
+  margin: 0;
+
+  min-width: 0;
+
+  overflow-wrap: anywhere;
+}
+
+.focus-note-primary,
+.focus-note-secondary {
+  font-family: var(--font-heading);
+
+  font-size: var(--fs-body-lg);
+
+  font-weight: var(--fw-bold);
+
+  line-height: var(--lh-tight);
+
+  letter-spacing: -.02em;
+
+  text-transform: uppercase;
+}
+
+.focus-note-secondary {
+  color: rgba(230, 230, 240, 0.58);
+}
+
+@include below('mobile-xs') {
+  .focus-note {
+    gap: var(--space-3xs);
   }
 }

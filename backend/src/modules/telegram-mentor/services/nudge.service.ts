@@ -10,13 +10,10 @@ import { prisma } from '../../../db/client.js'
 import { listMicroTasksForUser } from '../../microTask/service.js'
 import { getUserAccess, getUserSystemState } from '../../access/service.js'
 import { notificationRecordService } from '../../../services/notifications/services/NotificationRecordService.js'
-import {
-  isLockedState,
-  resolveUserState,
-  type UserState,
-} from '../core/state.service.js'
 import { syncAccessAwareChatMenuButton } from '../handlers/start.js'
 import { pickBestTask, type Task } from './taskPriority.service.js'
+import { resolveUserLifecycle } from '../../flow-control/service.js'
+import { resolveCentralLifecycleSnapshot } from '../../lifecycle/service.js'
 
 const NUDGE_MARKER_PREFIX = 'NUDGE_SENT:'
 const NUDGE_DISMISSED_MARKER = 'NUDGE_DISMISSED'
@@ -25,8 +22,6 @@ const NUDGE_WAVE_DAY_PREFIX = 'NUDGE_WAVE_DAY:'
 const NUDGE_SIGNATURE_DAY_PREFIX = 'NUDGE_SIGNATURE_DAY:'
 const NUDGE_THRESHOLDS_HOURS = [12, 36, 84] as const
 const DISALLOWED_SUBSCRIPTION_STATUSES = new Set(['WAITLIST', 'CANCELLED', 'EXPIRED'])
-const ALLOWED_STATES = new Set<UserState>(['TRIAL', 'ACTIVE'])
-
 function normalizeTaskType(task: {
   title: string
   reason?: string
@@ -258,12 +253,16 @@ export async function getOverdueTasks(userId: string): Promise<Task[]> {
     })
 }
 
-async function isNudgeEligible(userId: string, state: UserState): Promise<boolean> {
-  if (!ALLOWED_STATES.has(state)) {
+async function isNudgeEligible(userId: string, lifecycleSnapshot = null as ReturnType<typeof resolveCentralLifecycleSnapshot> | null): Promise<boolean> {
+  const now = new Date()
+  if (!lifecycleSnapshot) {
     return false
   }
 
-  const now = new Date()
+  if (!lifecycleSnapshot.reminderState.eligible) {
+    return false
+  }
+
   const systemState = await getUserSystemState(userId).catch(() => null)
   const mentorModulesLocked = systemState?.aiModules
     ?.filter(module => module.moduleId === 'AI_MENTOR')
@@ -278,7 +277,7 @@ async function isNudgeEligible(userId: string, state: UserState): Promise<boolea
     return false
   }
 
-  if (isLockedState(state)) {
+  if (lifecycleSnapshot.state !== 'trial' && lifecycleSnapshot.state !== 'active') {
     return false
   }
   const [access, preferences, user, latestSubscription] = await Promise.all([
@@ -482,13 +481,15 @@ async function sendNudgeMessage(userId: string, task: Task, templateKey: string,
 }
 
 export async function processNudges(userId: string, ctx?: Context): Promise<void> {
-  const [state, carrier, lastActivityHours] = await Promise.all([
-    resolveUserState(userId),
+  const [carrier, lastActivityHours] = await Promise.all([
     getNudgeCarrier(userId),
     resolveLastActivityHours(userId),
   ])
 
-  if (!(await isNudgeEligible(userId, state))) {
+  const lifecycle = await resolveUserLifecycle(userId)
+  const lifecycleSnapshot = resolveCentralLifecycleSnapshot({ userLifecycle: lifecycle })
+
+  if (!(await isNudgeEligible(userId, lifecycleSnapshot))) {
     return
   }
 
@@ -532,7 +533,7 @@ export async function processNudges(userId: string, ctx?: Context): Promise<void
   }
 
   const bestTask = await pickBestTask(tasks, {
-    state,
+    state: lifecycleSnapshot.state,
     lastActivityHours,
   })
 

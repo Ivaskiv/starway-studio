@@ -1,4 +1,5 @@
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import {
   useGetTelegramLinkUrlQuery,
@@ -71,6 +72,8 @@ export default function JourneySection({
     dayNumber: journeyDay,
     journeySteps,
   } = useUserProgress()
+  const { appState: sessionStatus } = useSessionOrchestrator()
+  const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const { accessControl, subscription, getModuleAccess } = useSystemState()
   const { data: trial, isLoading } = useGetTrialStatusQuery()
   const navigate = useNavigate()
@@ -83,7 +86,7 @@ export default function JourneySection({
     || accessControl?.hasSubscription,
   )
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId ?? '', {
-    skip: !userId,
+    skip: shouldSkipProtectedQueries || !userId,
   })
   const { tasks: microTasks } = useMicroTasks()
   const { data: todayEntry } = useGetTodayEntryQuery(undefined, {

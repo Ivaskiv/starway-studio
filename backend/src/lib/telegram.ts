@@ -3,17 +3,40 @@
 
 import crypto from 'crypto'
 import { Telegraf } from 'telegraf'
+import { requireTelegramBotConfig } from '../modules/telegram-mentor/runtime/botConfig.js'
 
-if (!process.env.TELEGRAM_BOT_TOKEN) {
-  console.warn('[Telegram] TELEGRAM_BOT_TOKEN not set — bot disabled')
+let telegramBotInstance: Telegraf | null = null
+
+function getTelegramBotInstance(): Telegraf {
+  if (telegramBotInstance) {
+    return telegramBotInstance
+  }
+
+  const { token } = requireTelegramBotConfig('telegram bot bootstrap')
+  telegramBotInstance = new Telegraf(token)
+  return telegramBotInstance
 }
 
-export const bot: Telegraf = new Telegraf(process.env.TELEGRAM_BOT_TOKEN ?? 'disabled')
+export const bot = new Proxy({} as Telegraf, {
+  get(_target, property, receiver) {
+    const instance = getTelegramBotInstance()
+    const value = Reflect.get(instance, property, receiver)
+    return typeof value === 'function' ? value.bind(instance) : value
+  },
+  set(_target, property, value) {
+    const instance = getTelegramBotInstance()
+    return Reflect.set(instance, property, value)
+  },
+  has(_target, property) {
+    const instance = getTelegramBotInstance()
+    return Reflect.has(instance, property)
+  },
+}) as Telegraf
 const LAST_MESSAGE_TTL_MS = 6 * 60 * 60 * 1000
 const lastMessageHashes = new Map<string, { hash: string; sentAt: number }>()
 
 const getBotLink = () =>
-  `https://t.me/${process.env.TELEGRAM_BOT_USERNAME ?? 'Starway_byNadya_Bot'}`
+  requireTelegramBotConfig('telegram bot link').botLink || 'https://t.me/'
 
 export { getBotLink }
 

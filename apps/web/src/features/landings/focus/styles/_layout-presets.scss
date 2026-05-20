@@ -1,0 +1,477 @@
+@use 'mixins' as *;
+
+// ═══════════════════════════════════════════════════════
+// HERO
+// ═══════════════════════════════════════════════════════
+
+.lp-hero {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(320px, 42vw);
+
+  align-items: center;
+
+  gap: var(--hero-layout-gap);
+
+  width: 100%;
+min-height: 100%;
+  min-width: 0;
+
+  @include below('tablet') {
+    grid-template-columns: 1fr;
+
+    gap: clamp(20px, 4vw, 32px);
+  }
+}
+
+.lp-split-hero {
+  @extend .lp-hero;
+}
+
+// ═══════════════════════════════════════════════════════
+// CHESS
+// ═══════════════════════════════════════════════════════
+
+.lp-chess {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: var(--content-space);
+
+  width: 100%;
+
+  overflow: hidden;
+
+  > * {
+    display: grid;
+    grid-template-rows: auto 1fr;
+
+    min-width: 0;
+
+    overflow: hidden;
+  }
+
+  > *:nth-child(odd) {
+    .ls-media {
+      order: 1;
+    }
+
+    .ls-body {
+      order: 2;
+    }
+  }
+
+  > *:nth-child(even) {
+    .ls-body {
+      order: 1;
+    }
+
+    .ls-media {
+      order: 2;
+    }
+  }
+
+  @include below('tablet') {
+    grid-template-columns: 1fr;
+
+    > *:nth-child(odd),
+    > *:nth-child(even) {
+      .ls-body {
+        order: 1;
+      }
+
+      .ls-media {
+        order: 2;
+      }
+    }
+  }
+}
+.lp-chess--fit {
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  @include below('tablet') {
+    grid-template-columns: 1fr;
+  }
+}
+// ═══════════════════════════════════════════════════════
+// 2COL
+// ═══════════════════════════════════════════════════════
+
+.lp-2col {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  align-items: center;
+
+  gap: var(--content-space);
+
+  @include below('tablet') {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lp-2col--wide {
+  @extend .lp-2col;
+
+  grid-template-columns: 3fr 2fr;
+}
+
+.lp-2col--narrow {
+  @extend .lp-2col;
+
+  grid-template-columns: 2fr 3fr;
+}
+
+// ═══════════════════════════════════════════════════════
+// 3COL
+// ═══════════════════════════════════════════════════════
+
+.lp-3col {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+
+  gap: var(--content-space);
+
+  @include below('tablet') {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  @include below('phablet') {
+    grid-template-columns: 1fr;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// 4COL
+// ═══════════════════════════════════════════════════════
+
+.lp-4col {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+
+  gap: var(--content-space);
+
+  @include below('laptop') {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  @include below('phablet') {
+    grid-template-columns: 1fr;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// AUTO GRID
+// ═══════════════════════════════════════════════════════
+
+.lp-auto-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(min(100%, var(--lp-min, 240px)), 1fr)
+    );
+
+  gap: var(--content-space);
+}
+
+// ═══════════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════════
+
+.lp-sidebar-left,
+.lp-sidebar-right {
+  display: grid;
+
+  align-items: start;
+
+  gap: var(--content-space);
+
+  @include below('tablet') {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lp-sidebar-left {
+  grid-template-columns: 280px 1fr;
+}
+
+.lp-sidebar-right {
+  grid-template-columns: 1fr 280px;
+}
+
+// ═══════════════════════════════════════════════════════
+// FEATURE
+// ═══════════════════════════════════════════════════════
+
+.lp-feature {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  align-items: center;
+
+  gap: var(--content-space);
+
+  @include below('tablet') {
+    grid-template-columns: 1fr;
+
+    .ls-body {
+      order: 1;
+    }
+
+    .ls-media {
+      order: 2;
+    }
+  }
+}
+
+.lp-feature--rev {
+  @extend .lp-feature;
+
+  .ls-media {
+    order: 1;
+  }
+
+  .ls-body {
+    order: 2;
+  }
+
+  @include below('tablet') {
+    .ls-body {
+      order: 1;
+    }
+
+    .ls-media {
+      order: 2;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// STACK
+// ═══════════════════════════════════════════════════════
+
+.lp-stack {
+  @include flex-col(var(--content-space));
+}
+
+.lp-stack--sm {
+  @include flex-col(var(--space-sm));
+}
+
+.lp-stack--lg {
+  @include flex-col(var(--space-lg));
+}
+
+.lp-stack--xl {
+  @include flex-col(var(--space-xl));
+}
+
+// ═══════════════════════════════════════════════════════
+// MASONRY
+// ═══════════════════════════════════════════════════════
+
+.lp-masonry {
+  column-count: 3;
+
+  column-gap: var(--content-space);
+
+  @include below('tablet') {
+    column-count: 2;
+  }
+
+  @include below('phablet') {
+    column-count: 1;
+  }
+}
+
+.lp-masonry-item {
+  break-inside: avoid;
+
+  margin-bottom: var(--content-space);
+}
+
+// ═══════════════════════════════════════════════════════
+// SLOTS
+// ═══════════════════════════════════════════════════════
+
+.ls-media {
+  position: relative;
+
+  width: 100%;
+
+  aspect-ratio: var(--ls-ratio, 16 / 10);
+
+  overflow: hidden;
+
+  background: var(--focus-bg-secondary);
+
+  picture {
+    position: absolute;
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+
+    object-fit: cover;
+    object-position: center top;
+
+    transition: transform 0.4s ease;
+  }
+
+  *:hover > & img {
+    transform: scale(1.04);
+  }
+
+  &--square {
+    --ls-ratio: 1 / 1;
+  }
+
+  &--portrait {
+    --ls-ratio: 3 / 4;
+  }
+
+  &--wide {
+    --ls-ratio: 16 / 9;
+  }
+
+  &--cinema {
+    --ls-ratio: 21 / 9;
+  }
+
+  &--tall {
+    --ls-ratio: 4 / 5;
+  }
+}
+
+.ls-body {
+  @include flex-col(var(--space-sm));
+
+  padding: var(--focus-card-padding);
+
+  flex: 1;
+}
+
+// ═══════════════════════════════════════════════════════
+// RESPONSIVE
+// ═══════════════════════════════════════════════════════
+
+@include below('tablet') {
+  .lp-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .ls-media {
+    aspect-ratio: 16 / 9;
+  }
+}
+
+@include below('phablet') {
+  .ls-media {
+    aspect-ratio: 4 / 3;
+  }
+
+  .ls-body {
+    gap: var(--space-xs);
+
+    padding: var(--card-padding-shell);
+  }
+}
+
+@include below('mobile-xs') {
+  .ls-body {
+    padding: var(--card-padding-compact);
+  }
+}
+
+// ─────────────────────────────────────
+// UNIVERSAL SHELL
+// ─────────────────────────────────────
+
+.focus-shell {
+  position: relative;
+
+  display: grid;
+
+  align-items: center;
+
+  width: 100%;
+  min-width: 0;
+
+  overflow: hidden;
+}
+
+.focus-shell--split {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(320px, 42%);
+
+  gap: clamp(20px, 3vw, 48px);
+}
+
+.focus-shell--center {
+  justify-items: center;
+}
+
+.focus-shell--glass {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
+}
+
+.focus-shell-content {
+  display: flex;
+  flex-direction: column;
+
+  min-width: 0;
+}
+
+.focus-shell-media {
+  position: relative;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  width: 100%;
+  min-width: 0;
+}
+
+.focus-shell-media picture {
+  display: block;
+  width: 100%;
+}
+
+@include below('phablet') {
+  .focus-shell--split {
+    grid-template-columns: 1fr;
+  }
+
+  .focus-shell-content {
+    order: 1;
+  }
+
+  .focus-shell-media {
+    order: 2;
+  }
+}

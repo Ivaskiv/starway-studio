@@ -59,7 +59,9 @@ export function resolveNotificationType(event: NotificationEvent): NotificationT
     case NotificationEvent.SUBSCRIPTION_EXPIRED:
       return NotificationType.SUBSCRIPTION
     case NotificationEvent.POST_TRIAL_REPORTS:
-      return NotificationType.WEEKLY_SUMMARY
+    case NotificationEvent.AB_TEST_FOLLOWUP:
+    case NotificationEvent.ABSYSTEM_COMEBACK:
+      return NotificationType.AI_REMINDER
   }
 }
 
@@ -79,8 +81,14 @@ export function resolveNotificationTemplateKey(event: NotificationEvent, payload
       return 'weekly_summary'
     case NotificationEvent.SUBSCRIPTION_EXPIRED:
       return `subscription_expired_${Number(payload?.daysSinceExpired ?? 0)}`
+    case NotificationEvent.SUBSCRIPTION_EXPIRING:
+      return `subscription_expiring_${Number(payload?.daysLeft ?? 0)}`
     case NotificationEvent.POST_TRIAL_REPORTS:
       return `post_trial_reports_${Number(payload?.daysSinceExpired ?? 0)}`
+    case NotificationEvent.AB_TEST_FOLLOWUP:
+      return String(payload?.flow_timer_id ?? payload?.flowTimerId ?? 'ab_test_followup')
+    case NotificationEvent.ABSYSTEM_COMEBACK:
+      return `absystem_comeback_${String(payload?.comeback_key ?? payload?.comebackKey ?? 'unknown')}`
     default:
       return resolveNotificationType(event)
   }
@@ -162,6 +170,18 @@ function resolveFeedKey(notification: Notification) {
 
   if (event === NotificationEvent.AI_INACTIVE) {
     return `mentor_nudge:${dateKey}`
+  }
+
+  if (event === NotificationEvent.AB_TEST_FOLLOWUP) {
+    return `ab_test:${String(payload?.flow_timer_id ?? payload?.flowTimerId ?? 'unknown')}`
+  }
+
+  if (event === NotificationEvent.ABSYSTEM_COMEBACK) {
+    return `absystem_comeback:${String(payload?.comeback_key ?? payload?.comebackKey ?? 'unknown')}:${dateKey}`
+  }
+
+  if (event === NotificationEvent.SUBSCRIPTION_EXPIRING) {
+    return `subscription_expiring:${dateKey}`
   }
 
   if (templateKey) {

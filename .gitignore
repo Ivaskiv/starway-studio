@@ -1,162 +1,168 @@
 # ============================================
-# 📦 DEPENDENCIES
+# DEPENDENCIES
 # ============================================
+
 node_modules/
-**/node_modules/
-html/
 .pnp/
 .pnpm-store/
 
+# ============================================
+# BUILD / CACHE
+# ============================================
 
-# ============================================
-# 🏗️ BUILD OUTPUTS
-# ============================================
 dist/
-apps/web/dist/
 build/
+coverage/
+
+.turbo/
+.cache/
+.vite/
+.next/
+
+.vercel/
 .vercel_build_output/
 
+*.tsbuildinfo
+
+# apps
+apps/web/dist/
+backend/dist/
+frontend/dist/
+frontend/.cache/
+
 # ============================================
-# 🔐 ENVIRONMENT VARIABLES
+# ENV
 # ============================================
+
 .env
 .env.local
 .env.*.local
+
 !.env.example
 
 # ============================================
-# 📝 LOGS
+# LOGS
 # ============================================
+
 *.log
+*.pid
+pnpm-debug.log*
 
 # ============================================
-# 🛠️ EDITOR & IDE
+# OS
 # ============================================
+
+.DS_Store
+
+# ============================================
+# EDITORS
+# ============================================
+
 .vscode/
 !.vscode/extensions.json
+
 .idea/
 
 # ============================================
-# 💻 OPERATING SYSTEM
+# DATABASE
 # ============================================
-.DS_Store
-**/.DS_Store
+
+*.sqlite
+*.db
+*.sql
 
 # ============================================
-# 🚀 DEPLOYMENT
+# PRISMA
 # ============================================
-.vercel/
-.turbo/
 
-# ============================================
-# 📁 BACKEND SPECIFIC
-# ============================================
-backend/prisma/
-!backend/prisma/schema.prisma
-!backend/prisma/migrations/
-backend/dist/
-
-# ============================================
-# 🎨 FRONTEND SPECIFIC
-# ============================================
-frontend/dist/
-frontend/.cache/
-backend/src/db/generated/
-package-lock.json
-
-# Prisma generated
-backend/src/db/generated/
-**/prisma/generated/
 packages/db/generated/
+backend/src/db/generated/
 
-# Package locks (use pnpm-lock.yaml only)
-package-lock.json
-yarn.lock
+# ============================================
+# CLOUDFLARE / NGROK
+# ============================================
 
-AGENTS.md
-APP_LOGIC.md
-ARCHITECTURE_MAP.md
-
-# Cloudflare tunnel
 .cloudflared/
+cloudflared.log
+
 *.pem
 *.json
-cloudflared.log
-.claude/
-# Ngrok
+
 ngrok.yml
 
-.DS_Store
+# ============================================
+# AI / MODELS
+# ============================================
 
-# AI / models
+models/
+checkpoints/
+
 *.bin
 *.onnx
 *.pt
 *.ckpt
 
-# videos
+# ============================================
+# MEDIA
+# ============================================
+
 *.mp4
+*.mov
+*.avi
+*.webm
 *.wav
 *.m4a
 *.aiff
+
 video-hooks/output/
 video-hooks/input/
 video-hooks/models/
 
-# dumps
-*.sql
+# ============================================
+# ARCHIVES
+# ============================================
 
-# claude
-.claude/
-
-# mac
-.DS_Store
-# ============================================
-# CACHE
-# ============================================
-.cache/
-.vite/
-**/.vite/
-tmp/
-temp/
-
-# ============================================
-# TESTS
-# ============================================
-coverage/
-
-# ============================================
-# GENERATED FILES
-# ============================================
-*.tsbuildinfo
-
-# ============================================
-# MEDIA EXPORTS
-# ============================================
-*.mov
-*.webm
-*.avi
-
-# ============================================
-# ZIPS
-# ============================================
 *.zip
 *.tar
 *.gz
 
 # ============================================
-# LOCAL DATABASES
+# LOCKFILES
 # ============================================
-*.sqlite
-*.db
+
+package-lock.json
+yarn.lock
 
 # ============================================
-# AI CACHE / ML
+# PRIVATE DOCS
 # ============================================
-models/
-checkpoints/
+
+AGENTS.md
+APP_LOGIC.md
+ARCHITECTURE_MAP.md
 
 # ============================================
-# DEBUG
+# TEMP
 # ============================================
-*.pid
+
+tmp/
+temp/
+
+# ============================================
+# CLAUDE
+# ============================================
+
+.claude/
+
+# ============================================
+# SCRIPTS
+# ============================================
+
+backend/scripts/reset-ab-test.ts
+
+playwright-report/
+test-results/
+coverage/
+.vitest/
+
+schema.backup.prisma

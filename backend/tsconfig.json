@@ -5,7 +5,7 @@
     "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "baseUrl": ".",
+    "composite": true,
     "rootDir": ".",
     "strict": true,
     "skipLibCheck": true,
@@ -13,10 +13,11 @@
     "outDir": "./dist",
     "sourceMap": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["../packages/shared/src/*"]
     }
   },
-  
+
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist", "src/db/generated"]
 }

@@ -6,6 +6,17 @@ import { getStoredUser, getToken, saveRefreshToken, saveStoredUser, saveToken, r
 
 const token = getToken();
 const storedUser = getStoredUser<User>();
+
+function areUsersEqual(left: User | null, right: User | null): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
 const initialState: AuthState = {
   user: storedUser,
   role: storedUser?.role ?? null,
@@ -19,6 +30,17 @@ const authSlice = createSlice({
   reducers: {
     // Після логіну / restore — повний об'єкт
     setCredentials: (state, { payload }: PayloadAction<{ user: User; accessToken: string; refreshToken?: string }>) => {
+      const sameCredentials =
+        state.status === 'authenticated' &&
+        state.accessToken === payload.accessToken &&
+        state.role === payload.user.role &&
+        areUsersEqual(state.user, payload.user);
+
+      if (sameCredentials) {
+        if (payload.refreshToken) saveRefreshToken(payload.refreshToken);
+        return;
+      }
+
       state.user        = payload.user;
       state.role        = payload.user.role;
       state.accessToken = payload.accessToken;
@@ -75,6 +97,11 @@ const authSlice = createSlice({
     setLoading: (state) => { state.status = 'loading'; },
 
     clearAuth: (state) => {
+      if (state.status === 'guest' && !state.user && !state.role && !state.accessToken) {
+        removeToken();
+        return;
+      }
+
       state.user        = null;
       state.role        = null;
       state.accessToken = null;

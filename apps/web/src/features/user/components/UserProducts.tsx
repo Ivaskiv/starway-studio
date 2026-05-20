@@ -1,11 +1,15 @@
 // frontend/src/features/dashboard/blocks/user/UserProducts.tsx
 
 import { useGetMyProductsQuery } from '@/features/products/services/products.api';
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext';
 import { GlassCard } from '@/ui';
 import { Package } from 'lucide-react';
 
 export default function UserProducts() {
-  const { data, isLoading } = useGetMyProductsQuery();
+  const { appState: sessionStatus } = useSessionOrchestrator();
+  const { data, isLoading } = useGetMyProductsQuery(undefined, {
+    skip: sessionStatus !== 'authenticated',
+  });
   const products = data ?? [];
 
   return (

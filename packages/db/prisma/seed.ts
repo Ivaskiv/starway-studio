@@ -14,12 +14,12 @@ import {
   PrismaClient,
   Role,
   SubscriptionStatus,
-} from '../generated/prisma/index.js';
+} from '../generated/client/index.js';
 import type {
   Role as RoleType,
   SubscriptionStatus as SubscriptionStatusType,
   User,
-} from '../generated/prisma/index.js';
+} from '../generated/client/index.js';
 
 type SeedUserInput = {
   key: string;
@@ -408,6 +408,118 @@ const existingSub = await prisma.subscription.findFirst({ where: { userId: user.
       data: { expertId: expert.id, userId: trialUser.id, channel: NotificationChannel.TELEGRAM, templateKey: 'daily_nudge', payload: { text: 'Seed reminder: start your check-in.' }, status: NotificationStatus.PENDING, scheduledAt: new Date(Date.now() + 5 * 60 * 1000) },
     });
   }
+
+  // ── ДНК STARWAY: профіль поведінки ─────────────────────────────────
+  const aiProfile = await prisma.aiBehaviorProfile.upsert({
+    where:  { key: 'STARWAY_OGOLENA_PRAVDA' },
+    update: {},
+    create: {
+      key:         'STARWAY_OGOLENA_PRAVDA',
+      name:        'Оголена правда STARWAY',
+      description: 'Психолінгвістика + тригерна мова + 5-кроковий алгоритм Хоменко',
+      systemAnchor:
+        'Ти — AI-асистент психолінгвістики STARWAY. Ти не пишеш тексти.' +
+        ' Ти оголюєш правду і змушуєш ДІЯТИ.' +
+        ' Зроби так, як би зробила АНЯ ХОМЕНКО, але з масштабом STARWAY.',
+      supportedOutputs: [
+        'WARMUP_1DAY','WARMUP_3DAYS','WARMUP_WEEK','WARMUP_LAUNCH',
+        'REELS_SCENARIO','WEBINAR_SALES','LIVE_STRUCTURE',
+        'BLOG_IDEAS','STORIES_CHECK','CUSTOM',
+      ],
+      supportedProtocols: {
+        SYSTEM: 'Оголена правда. Розбий ілюзії аудиторії в лоб.',
+        AUTHOR: 'Пиши як Архітектор STARWAY. Позиція сили, масштаб.',
+        PSYCH:  'Фільтр Психології Дії. Випали хорошу дівчинку.',
+      },
+    },
+  });
+
+  const aiTooltips = [
+    { elementKey: 'RADIO_SYSTEM', title: 'Оголена правда',
+      whatItDoes: 'Розбиває ілюзії. Провокативний тон.',
+      howToUse:   'Для холодної аудиторії та перших прогрівів.' },
+    { elementKey: 'RADIO_AUTHOR', title: 'Авторський',
+      whatItDoes: 'Транслює позицію сили, масштабу, харизми.',
+      howToUse:   'Для дорогих продуктів та наставництва.' },
+    { elementKey: 'RADIO_PSYCH',  title: 'Психологія дії',
+      whatItDoes: 'Виймає внутрішній затик. Аудит без цензури.',
+      howToUse:   'Для STORIES_CHECK та перевірки контенту.' },
+  ];
+  for (const t of aiTooltips) {
+    await prisma.aiTooltip.upsert({
+      where:  { profileId_elementKey: { profileId: aiProfile.id, elementKey: t.elementKey } },
+      update: {},
+      create: { profileId: aiProfile.id, ...t },
+    });
+  }
+  console.log(`✅ AI Profile: ${aiProfile.key}`);
+
+  const nadiya = await prisma.user.findUnique({ where: { email: 'nadyastarway@gmail.com' } });
+  if (nadiya) {
+    await prisma.userAiWorkspace.upsert({
+      where:  { userId: nadiya.id },
+      update: { isActive: true, activeProfileId: aiProfile.id },
+      create: {
+        userId:            nadiya.id,
+        isActive:          true,
+        activeProfileId:   aiProfile.id,
+        allowedModels:     ['gpt-4o', 'claude-sonnet-4-20250514', 'gemini-1.5-pro'],
+        maxTokensPerMonth: 2_000_000,
+      },
+    });
+    await prisma.user.update({
+      where: { id: nadiya.id },
+      data:  { role: Role.ADMIN },
+    });
+    console.log('✅ ДНК STARWAY активовано для nadyastarway@gmail.com');
+  } else {
+    console.warn('⚠️  nadyastarway@gmail.com не знайдено — запустіть seed після реєстрації');
+  }
+
+  const admins = await prisma.user.findMany({
+    where: { role: { in: ['SUPERADMIN', 'ADMIN'] as any[] } },
+    select: { id: true, email: true },
+  });
+  for (const admin of admins) {
+    const existing = await prisma.userAiWorkspace.findUnique({ where: { userId: admin.id } });
+    if (!existing) {
+      await prisma.userAiWorkspace.create({
+        data: {
+          userId:            admin.id,
+          isActive:          true,
+          activeProfileId:   aiProfile.id,
+          allowedModels:     ['gpt-4o', 'claude-sonnet-4-20250514', 'gemini-1.5-pro'],
+          maxTokensPerMonth: 10_000_000,
+        },
+      });
+      console.log(`✅ AI workspace створено для ${admin.email}`);
+    }
+  }
+
+  // ── Початковий Лексикон ─────────────────────────────────────────────
+  const initLex = [
+    { type: 'REQUIRED'  as const, word: 'тригер'                },
+    { type: 'REQUIRED'  as const, word: 'масштаб'               },
+    { type: 'REQUIRED'  as const, word: 'застрягла'             },
+    { type: 'REQUIRED'  as const, word: 'зливати'               },
+    { type: 'REQUIRED'  as const, word: 'тупняк'                },
+    { type: 'FORBIDDEN' as const, word: 'унікальна можливість'  },
+    { type: 'FORBIDDEN' as const, word: 'трансформація'         },
+    { type: 'FORBIDDEN' as const, word: 'успішний успіх'        },
+    { type: 'FORBIDDEN' as const, word: 'результат гарантовано' },
+    { type: 'FORBIDDEN' as const, word: 'просто почни'          },
+  ];
+  await prisma.lexicon.createMany({
+    data: initLex.map(l => ({
+      id:         `seed-${l.word.replace(/\s+/g, '-')}`,
+      profileKey: 'STARWAY_OGOLENA_PRAVDA',
+      type:       l.type,
+      word:       l.word,
+      addedBy:    'seed',
+    })),
+    skipDuplicates: true,
+  });
+  console.log('✅ Lexicon: 5 REQUIRED + 5 FORBIDDEN ініціалізовано');
 
   // JWT tokens
   console.log('\n🎉 Seed completed. JWT tokens:');
