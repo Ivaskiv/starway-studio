@@ -4,6 +4,7 @@
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
+    "types": ["node", "vitest"],
     "moduleResolution": "NodeNext",
     "composite": true,
     "rootDir": ".",
@@ -19,5 +20,10 @@
   },
 
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": ["node_modules", "dist", "src/db/generated"]
+"exclude": [
+  "node_modules",
+  "dist",
+  "src/db/generated",
+  "**/*.test.ts"
+]
 }
