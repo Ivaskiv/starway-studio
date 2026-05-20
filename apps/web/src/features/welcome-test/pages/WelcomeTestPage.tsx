@@ -36,15 +36,15 @@ export default function WelcomeTestPage() {
     onTrack: trackWelcomeTestEvent,
   })
 
-  useWelcomeTestPaymentConfirmation({
-    linkToken: linkToken ?? null,
-    status: welcomeTest.status,
-    canPoll: canRunProtectedQueries,
-    onPaid: () => {
-      welcomeTest.markPaid()
-      trackWelcomeTestEvent('welcome_test_payment_confirmed', {})
-    },
-  })
+  const paymentConfirmation = useWelcomeTestPaymentConfirmation(
+    linkToken ?? '',
+    canRunProtectedQueries && welcomeTest.status === 'PAYMENT_PENDING',
+  )
+
+  useEffect(() => {
+    if (!paymentConfirmation.isPaid) return
+    trackWelcomeTestEvent('welcome_test_payment_confirmed', {})
+  }, [paymentConfirmation.isPaid, trackWelcomeTestEvent])
 
   const currentQuestion = useMemo(() => {
     if (!welcomeTest.currentQuestion) return null

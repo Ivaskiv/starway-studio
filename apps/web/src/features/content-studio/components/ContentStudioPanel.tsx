@@ -342,7 +342,7 @@ export default function ContentStudioPanel({
       : 'Лідмагніт опубліковано в систему.')
     return result
   }
-  const handleRunGenerate = async (formats?: Array<'reels' | 'stories' | 'ad' | 'post' | 'podcast' | 'dm'>, allowWithoutStrategy = false) => {
+  const handleRunGenerate = async (formats?: ReadonlyArray<'reels' | 'stories' | 'ad' | 'post' | 'podcast' | 'dm'>, allowWithoutStrategy = false) => {
     if (!strategyReady && !allowWithoutStrategy) {
       setStatusTone('run')
       setStatusText('Спершу підтвердь AI стратегію або переведи формати в ручний режим.')
@@ -356,7 +356,18 @@ export default function ContentStudioPanel({
         ? (selectedFormats as Array<'reels' | 'stories' | 'ad' | 'post' | 'podcast' | 'dm'>)
         : aiStrategy?.suggestedFormats ?? ['reels']
 
-    return runGenerate(formats ?? defaultFormats)
+    return runGenerate([...(formats ?? defaultFormats)])
+  }
+  const handleRunGenerateFromItems = async (
+    formats: readonly ContentItemType[],
+    allowWithoutStrategy: boolean,
+  ) => {
+    const requestFormats = formats.map((format) => {
+      if (format === 'reel') return 'reels'
+      if (format === 'story') return 'stories'
+      return format
+    })
+    return (await handleRunGenerate(requestFormats, allowWithoutStrategy)) ?? undefined
   }
   const { queueItems, fallbackItems, completedNodeCount } = useQueueItems(items, approvedItems, publishedItems)
   const contentGenerationVisible = useGenerationCurtain(isGenerating || busyItemId !== null, {
@@ -453,14 +464,11 @@ export default function ContentStudioPanel({
               isStrategyReady={strategyReady}
               dispatch={dispatch}
               generateContentImages={generateContentImages}
-              runGenerate={async (
-                formats: readonly ContentItemType[],
-                allowWithoutStrategy: boolean,
-              ) => (await handleRunGenerate(formats, allowWithoutStrategy)) ?? undefined}
+              runGenerate={handleRunGenerateFromItems}
               refreshResearch={refreshResearch}
               openStep={openStep}
               activeGroup={activeGroup}
-              setActiveGroup={setActiveGroup}
+              setActiveGroup={(value: string) => setActiveGroup(value as ContentItemType)}
               items={items}
               inputs={inputs}
               activeItems={activeItems}
@@ -485,7 +493,7 @@ export default function ContentStudioPanel({
               activeContextHookIndex={activeContextHookIndex}
               canResetHookLimit={canResetHookLimit}
               ctaType={ctaType}
-              ctaDestination={ctaDestination}
+              ctaDestination={[...ctaDestination]}
               ctaRoutingMode={ctaRoutingMode}
               formulaType={formulaType}
               selectedHookType={selectedHookType}
@@ -560,9 +568,9 @@ export default function ContentStudioPanel({
               isGenerating={isGenerating}
               setReflection={setReflection}
               dispatchUpdateProduct={(value: string) => dispatch(updateInputs({ product: [value] }))}
-              handlePlatformChange={handlePlatformChange}
+              handlePlatformChange={(value: string) => handlePlatformChange(value as Parameters<typeof handlePlatformChange>[0])}
               updateInputField={updateStudioInput}
-              setAdMessageGoal={setAdMessageGoal}
+              setAdMessageGoal={(value: string) => setAdMessageGoal(value as Parameters<typeof setAdMessageGoal>[0])}
               handleResetContextHookLimit={handleResetContextHookLimit}
               canRestorePreviousContext={Boolean(contextHookDraftSource)}
               handleRestorePreviousContext={handleRestorePreviousContext}
@@ -570,9 +578,9 @@ export default function ContentStudioPanel({
               handlePrevContextHookVariant={handlePrevContextHookVariant}
               handleGenerateContextHook={handleGenerateContextHook}
               handleNextContextHookVariant={handleNextContextHookVariant}
-              setCtaType={setCtaType}
-              setCtaDestination={setCtaDestination}
-              setCtaRoutingMode={setCtaRoutingMode}
+              setCtaType={(value: string) => setCtaType(value as Parameters<typeof setCtaType>[0])}
+              setCtaDestination={(value: string) => setCtaDestination(value as Parameters<typeof setCtaDestination>[0])}
+              setCtaRoutingMode={(value: string) => setCtaRoutingMode(value as Parameters<typeof setCtaRoutingMode>[0])}
               handleAddCtaSuggestion={handleAddCtaSuggestion}
               setFormulaType={setFormulaType}
               setSelectedHookType={setSelectedHookType}

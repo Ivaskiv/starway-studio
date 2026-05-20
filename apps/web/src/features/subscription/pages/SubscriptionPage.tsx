@@ -143,6 +143,9 @@ export default function SubscriptionPage() {
         productId: 'stankey',
         planCode: 'monthly',
       }).unwrap()
+      if (!response.payment) {
+        throw new Error('payment_payload_missing')
+      }
       submitWayForPayForm(response.paymentUrl, response.payment)
     } catch {
       setPaymentFailed(true)

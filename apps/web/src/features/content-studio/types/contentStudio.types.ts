@@ -1,16 +1,45 @@
-export type ContentItemStatus = 'draft' | 'approved' | 'published'
+// apps/web/src/features/content-studio/types/index.ts
 
-export type ContentItemType = 'reel' | 'ad' | 'story' | 'podcast' | 'dm'
+export type ContentItemStatus =
+  | 'draft'
+  | 'approved'
+  | 'published'
 
-export type ContentStudioGoal = 'sale' | 'traffic' | 'warmup'
+export type ContentItemType =
+  | 'reel'
+  | 'ad'
+  | 'story'
+  | 'podcast'
+  | 'dm'
 
-export type LeadMagnetFormat = 'checklist' | 'guide' | 'quiz' | 'exercise' | 'bot-flow'
+export type ContentStudioGoal =
+  | 'sale'
+  | 'traffic'
+  | 'warmup'
 
-export type LeadMagnetStatus = 'draft' | 'review' | 'approved' | 'published'
+export type LeadMagnetFormat =
+  | 'checklist'
+  | 'guide'
+  | 'quiz'
+  | 'exercise'
+  | 'bot-flow'
 
-export type LeadMagnetDestination = 'telegram_bot' | 'landing_page' | 'dm_script'
+export type LeadMagnetStatus =
+  | 'draft'
+  | 'review'
+  | 'approved'
+  | 'published'
 
-export type ContentStudioStrategyDecision = 'pending' | 'confirmed' | 'manual' | 'rejected'
+export type LeadMagnetDestination =
+  | 'telegram_bot'
+  | 'landing_page'
+  | 'dm_script'
+
+export type ContentStudioStrategyDecision =
+  | 'pending'
+  | 'confirmed'
+  | 'manual'
+  | 'rejected'
 
 export type ContentStudioWeakestStep =
   | 'lead_magnet_to_app_entry'
@@ -24,6 +53,54 @@ export type ContentStudioFunnelTransitionKey =
   | 'wheel_to_trial'
   | 'trial_to_engagement'
   | 'trial_to_purchase'
+
+/* -------------------------------- */
+/* NEW CENTRALIZED UI TYPES */
+/* -------------------------------- */
+
+export type ContentStudioStep =
+  | 'context'
+  | 'lead-magnet'
+  | 'cta'
+  | 'formula'
+  | 'hook'
+  | 'api'
+  | 'research'
+  | 'texts'
+  | 'banners'
+
+export type PlatformValue =
+  | 'reels'
+  | 'stories'
+  | 'reels_stories'
+  | 'reels_ads'
+
+export type AdMessageGoal =
+  | 'tofu'
+  | 'mofu'
+  | 'bofu'
+
+export type CtaType =
+  | 'DM'
+  | 'START'
+  | 'GET_ACCESS'
+  | 'TRY_NOW'
+
+export type CtaRoutingMode =
+  | 'single'
+  | 'ai'
+
+export type CtaDestinationValue =
+  | 'telegram'
+  | 'instagram'
+  | 'site'
+  | 'quiz'
+  | 'bot'
+  | 'dm'
+
+/* -------------------------------- */
+/* STRATEGY */
+/* -------------------------------- */
 
 export interface ContentStudioStrategy {
   angle: string
@@ -53,7 +130,14 @@ export interface ContentStudioAIStrategy {
   ctaStrategy: string
   hookType: string
   emotion: string
-  suggestedFormats: Array<'reels' | 'stories' | 'dm' | 'ad'>
+
+  suggestedFormats: Array<
+    | 'reels'
+    | 'stories'
+    | 'dm'
+    | 'ad'
+  >
+
   formatReasoning: string
   humanInsight: string
   isFallback: boolean
@@ -62,11 +146,16 @@ export interface ContentStudioAIStrategy {
   sourceConversion?: number
 }
 
+/* -------------------------------- */
+/* LEAD MAGNET */
+/* -------------------------------- */
+
 export interface LeadMagnet {
   id: string
   title: string
   promise: string
   format: LeadMagnetFormat
+
   structure: {
     hook: string
     explanation: string
@@ -74,6 +163,7 @@ export interface LeadMagnet {
     result: string
     transitionToProduct: string
   }
+
   status: LeadMagnetStatus
   destinations: LeadMagnetDestination[]
   createdAt: Date
@@ -120,7 +210,9 @@ export interface ContentStudioLeadMagnetPayload {
   destinations: LeadMagnetDestination[]
   promise: string
   format: LeadMagnetFormat
+
   structure: LeadMagnet['structure']
+
   title: string
   formatKey: string
   formatLabel: string
@@ -146,6 +238,10 @@ export interface ContentStudioLeadMagnetPublishResult {
   telegramSent: boolean
   telegramMessageId?: number | null
 }
+
+/* -------------------------------- */
+/* RESEARCH */
+/* -------------------------------- */
 
 export interface MarketResearchHook {
   id: string
@@ -213,15 +309,41 @@ export interface ResearchCacheEnvelope<TData> {
   generatedAt: string
   isStale: boolean
   isFallback: boolean
-  source: 'openai' | 'cache' | 'fallback'
+  source:
+    | 'openai'
+    | 'cache'
+    | 'fallback'
 }
 
 export interface MarketResearchPayload {
-  hooks: ResearchCacheEnvelope<{ hooks: MarketResearchHook[] }> | null
-  ads: ResearchCacheEnvelope<{ campaigns: MarketResearchCampaign[] }> | null
-  formulas: ResearchCacheEnvelope<{ formulas: MarketResearchFormula[] }> | null
-  reelsTrends: ResearchCacheEnvelope<{ trends: MarketResearchTrend[] }> | null
+  hooks:
+    | ResearchCacheEnvelope<{
+        hooks: MarketResearchHook[]
+      }>
+    | null
+
+  ads:
+    | ResearchCacheEnvelope<{
+        campaigns: MarketResearchCampaign[]
+      }>
+    | null
+
+  formulas:
+    | ResearchCacheEnvelope<{
+        formulas: MarketResearchFormula[]
+      }>
+    | null
+
+  reelsTrends:
+    | ResearchCacheEnvelope<{
+        trends: MarketResearchTrend[]
+      }>
+    | null
 }
+
+/* -------------------------------- */
+/* CONTENT */
+/* -------------------------------- */
 
 export interface ContentStudioInputs {
   goal: string[]
@@ -240,23 +362,33 @@ export interface ContentStudioItem {
   formatLabel: string
   status: ContentItemStatus
   content: string[]
+
   goal?: ContentStudioGoal
   offer?: string
   hook?: string
   script?: string
   cta?: string
+
   imagePrompt?: string
+
   generatedImages?: ContentStudioImageVariant[]
+
   visualStyle?: string
   topic?: string
+
   strategy?: ContentStudioStrategy
+
   telegramPayload?: string
   telegramMessage?: string
   dmEntry?: string
+
   funnelPath?: string[]
+
   performance?: ContentStudioPerformanceForecast
+
   launchReady?: boolean
   audioReady?: boolean
+
   updatedAt: string
 }
 
@@ -268,7 +400,8 @@ export interface QueueItemWithSource {
   sourceItem: ContentStudioItem
 }
 
-export type PreviewQueueItem = Omit<QueueItemWithSource, 'sourceItem'>
+export type PreviewQueueItem =
+  Omit<QueueItemWithSource, 'sourceItem'>
 
 export interface ContentStudioState {
   inputs: ContentStudioInputs

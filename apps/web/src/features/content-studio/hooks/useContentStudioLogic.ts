@@ -73,28 +73,84 @@ export function useContentStudioLogic({
     syncProgress?.(value)
   }
 
-  const runGenerate = async (formats?: Array<'reels' | 'stories' | 'ad' | 'post' | 'podcast' | 'dm'>) => {
-    try {
-      updateBundleBusyKey(formats?.join(',') ?? 'all')
-      updateStatusTone('run')
-      updateStatusText(formats?.length ? `Генерую формат: ${formats.join(', ')}...` : 'Генерую весь пакет: Reels, реклама, Stories, Podcast, DM і Telegram...')
-      updateProgress(12)
-      const result = await withMinimumDelay(generateBundle({ inputs, formats, strategy: generationStrategy }).unwrap(), 1050)
-      dispatch(setGeneratedBundle({ items: formats?.length ? mergeContentItems(items, result.items) : result.items, generatedAt: result.generatedAt }))
-      updateProgress(autoReels ? 52 : 40)
-      updateStatusTone('done')
-      updateStatusText(formats?.length ? `Готово: ${result.items.length} одиниць контенту зібрано для вибраного формату.` : `Пакет готовий: ${result.items.length} одиниць контенту зібрано для всіх каналів.`)
-      setActiveTab('scripts')
-      return result.items
-    } catch (error) {
-      console.error('[content-studio] generate failed', error)
-      updateStatusTone('err')
-      updateStatusText('Помилка генерації')
-      return null
-    } finally {
-      updateBundleBusyKey(null)
-    }
+  const runGenerate = async (
+  formats?: Array<
+    | 'reels'
+    | 'stories'
+    | 'ad'
+    | 'post'
+    | 'podcast'
+    | 'dm'
+  >,
+) => {
+  try {
+    updateBundleBusyKey(
+      formats?.join(',') ?? 'all',
+    )
+
+    updateStatusTone('run')
+
+    updateStatusText(
+      formats?.length
+        ? `Генерую формат: ${formats.join(', ')}...`
+        : 'Генерую весь пакет: Reels, реклама, Stories, Podcast, DM і Telegram...',
+    )
+
+    updateProgress(12)
+
+    const result = await withMinimumDelay(
+      generateBundle({
+        inputs,
+        formats,
+        strategy: generationStrategy,
+      }).unwrap(),
+      1050,
+    )
+
+    dispatch(
+      setGeneratedBundle({
+        items: formats?.length
+          ? mergeContentItems(
+              items,
+              result.items,
+            )
+          : result.items,
+        generatedAt: result.generatedAt,
+      }),
+    )
+
+    updateProgress(
+      autoReels ? 52 : 40,
+    )
+
+    updateStatusTone('done')
+
+    updateStatusText(
+      formats?.length
+        ? `Готово: ${result.items.length} одиниць контенту зібрано для вибраного формату.`
+        : `Пакет готовий: ${result.items.length} одиниць контенту зібрано для всіх каналів.`,
+    )
+
+    setActiveTab('scripts')
+
+    return result.items
+  } catch (error) {
+    console.error(
+      '[content-studio] generate failed',
+      error,
+    )
+
+    updateStatusTone('err')
+
+    updateStatusText(
+      'Помилка генерації',
+    )
+
+    return null
+  } finally {
+    updateBundleBusyKey(null)
   }
+}
 
   const publishApprovedItems = async () => {
     for (const item of approvedItems) {

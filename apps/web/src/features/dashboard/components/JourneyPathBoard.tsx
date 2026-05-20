@@ -345,8 +345,8 @@ export default function JourneyPathBoard({
         const fromDirection: 1 | -1 = segment % 2 === 0 ? 1 : -1
         const toDirection: 1 | -1 = (segment + 1) % 2 === 0 ? 1 : -1
 
-        let colorA = dashboardDesignSystem.colors.pathIdle
-        let colorB = dashboardDesignSystem.colors.pathIdle
+        let colorA: string = dashboardDesignSystem.colors.pathIdle
+        let colorB: string = dashboardDesignSystem.colors.pathIdle
 
         if (from.status === 'done' && to.status === 'done') {
           colorA = dashboardDesignSystem.colors.pathDone
