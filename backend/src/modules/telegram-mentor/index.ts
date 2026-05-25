@@ -215,8 +215,7 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
   bot.on('callback_query', async (ctx) => {
     const action = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    // FIX 2026-05-25 B1: answer callback immediately to prevent infinite Telegram spinner on slow handlers
-    await ctx.answerCbQuery().catch(() => null)
+    // FIX 2025-05-25 B1: remove global callback ack; ack is handled inside concrete callback handlers
     // FIX 2026-05-25 C2: temporary callback diagnostic log
     console.log('[BOT][CB] data:', action, 'from:', ctx.from?.id)
     console.info('[AB_TEST_START_DEBUG] callback_query:received', {

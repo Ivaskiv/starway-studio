@@ -231,11 +231,12 @@ export async function handleStart(ctx: StartContext) {
         userId,
         payload,
       })
-      // FIX 2025-05-25 B: direct send MSG1 — bypass outbox for /start
+      // FIX 2025-05-25 B: direct send MSG1 — bypass outbox/orchestrator for /start
       // NOTE: User link/upsert is already completed above in transaction via telegramUserId/chatId.
       const directChatId = ctx.chat?.id ?? ctx.from?.id
       if (!directChatId) return
-      await ctx.reply(
+      await ctx.telegram.sendMessage(
+        directChatId,
         'Привіт.\n'
         + 'Це тест AB System:\n'
         + '«Чому ти відкладаєш те, що давно хочеш зробити?»\n\n'

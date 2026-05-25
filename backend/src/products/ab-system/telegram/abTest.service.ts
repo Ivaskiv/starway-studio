@@ -551,13 +551,19 @@ export async function handleAbTestCallback(
   // FIX 2025-05-25 D: question 1 after [Продовжити]
   if (action === 'ab_test:q1') {
     await ctx.answerCbQuery().catch(() => null)
+    const q1ChatId = ctx.chat?.id
+    if (!q1ChatId) {
+      return true
+    }
     const q1UserId = (ctx.state as { userId?: string | null }).userId ?? null
     if (!q1UserId) {
       return true
     }
     const progress = await loadAbTestProgress(q1UserId)
     const revision = Number(progress.revision ?? 1)
-    await ctx.reply(
+    // FIX 2025-05-25 D: bypass orchestrator dedupe for direct start flow message
+    await ctx.telegram.sendMessage(
+      q1ChatId,
       'Питання 1 з 8\n\n'
       + 'Що найчастіше відбувається, коли ти думаєш про те, що давно хочеш зробити?',
       {
@@ -684,7 +690,13 @@ export async function handleAbTestCallback(
   if (parsed.kind === 'start') {
     // FIX 2025-05-25 C: MSG2 direct send after [Почати тест]
     await ctx.answerCbQuery().catch(() => null)
-    await ctx.reply(
+    const startChatId = ctx.chat?.id
+    if (!startChatId) {
+      return true
+    }
+    // FIX 2025-05-25 D: bypass orchestrator dedupe for direct start flow message
+    await ctx.telegram.sendMessage(
+      startChatId,
       'У тесті буде 8 питань.\n'
       + 'Обирай той варіант, який найбільше схожий на тебе зараз.\n\n'
       + 'Не треба відповідати «правильно».\n'
@@ -714,7 +726,8 @@ export async function handleAbTestCallback(
     await saveAbTestProgress(userId, nextProgress)
     // DISABLED 2025-05-25: replaced by direct send fix
     // await startAbTestFlow(ctx, userId, action)
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_start_ack', absystemButtons.startTest).catch(() => undefined)
+    // DISABLED 2025-05-25: replaced by direct ack fix
+    // await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_start_ack', absystemButtons.startTest).catch(() => undefined)
     logCallbackHandled({
       action,
       handled: true,
