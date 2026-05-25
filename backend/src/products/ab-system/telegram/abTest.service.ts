@@ -561,20 +561,17 @@ export async function handleAbTestCallback(
     }
     const progress = await loadAbTestProgress(q1UserId)
     const revision = Number(progress.revision ?? 1)
-    // FIX 2025-05-25 D: bypass orchestrator dedupe for direct start flow message
+    const q1Question = getAbTestQuestion('q1')
+    // FIX 2025-05-25 F2: send q1 using canonical answer ids to keep parser-compatible flow
     await ctx.telegram.sendMessage(
       q1ChatId,
-      'Питання 1 з 8\n\n'
-      + 'Що найчастіше відбувається, коли ти думаєш про те, що давно хочеш зробити?',
+      `Питання 1 з 8\n\n${q1Question.prompt}`,
       {
         reply_markup: {
-          inline_keyboard: [
-            [{ text: 'А. Немає сил навіть почати', callback_data: `ab_test_answer:q1:A:${revision}` }],
-            [{ text: 'Б. Не розумію, чого точно хочу', callback_data: `ab_test_answer:q1:B:${revision}` }],
-            [{ text: 'В. Не можу обрати один варіант', callback_data: `ab_test_answer:q1:C:${revision}` }],
-            [{ text: 'Г. Ніби вирішила, але сумніваюсь', callback_data: `ab_test_answer:q1:D:${revision}` }],
-            [{ text: 'Д. Знаю крок, але переношу', callback_data: `ab_test_answer:q1:E:${revision}` }],
-          ],
+          inline_keyboard: q1Question.answers.map((answer) => ([{
+            text: answer.text,
+            callback_data: `ab_test_answer:q1:${answer.id}:${revision}`,
+          }])),
         },
       },
     )
@@ -714,16 +711,14 @@ export async function handleAbTestCallback(
       userId,
       chatId: String(ctx.chat?.id ?? ''),
     })
+    // FIX 2025-05-25 B2: do not set active question stage before first answer (prevents auto-recovery reset)
     const currentProgress = await loadAbTestProgress(userId)
-    const nextProgress = buildAbTestProgressPatch(currentProgress, {
-      status: 'active',
-      stage: 'S2_TEST_QUESTIONS',
-      current_question_id: 'q1',
+    const warmedProgress = buildAbTestProgressPatch(currentProgress, {
       started_at: currentProgress.started_at ?? new Date().toISOString(),
       last_callback_key: action,
       last_event_at: new Date().toISOString(),
     })
-    await saveAbTestProgress(userId, nextProgress)
+    await saveAbTestProgress(userId, warmedProgress)
     // DISABLED 2025-05-25: replaced by direct send fix
     // await startAbTestFlow(ctx, userId, action)
     // DISABLED 2025-05-25: replaced by direct ack fix
