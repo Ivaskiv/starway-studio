@@ -25,7 +25,7 @@ import {
 } from '../content/abTest.faq.js'
 import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
-import { BLOCK10_FOCUS, BLOCK9_POST_RESULT } from '../content/abTest.results.js'
+import { BLOCK10_FOCUS, BLOCK9_POST_RESULT, getAbTestResultDefinition } from '../content/abTest.results.js'
 import {
   handleAiSellerCallback,
   resolveAiSellerMode,
@@ -48,7 +48,6 @@ import { scheduleFollowups } from './abTest.scheduler.js'
 import {
   renderCurrentView,
   sendActionMessage,
-  sendLogMessage,
 } from './abTest.views.js'
 import { planAck, planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus.access.js'
@@ -276,6 +275,8 @@ export async function resumeAbTestFlow(
     chatId: String(ctx.chat?.id ?? ''),
     fromId: String(ctx.from?.id ?? ''),
   })
+  // FIX 2025-05-25 B1: ack immediately for answer callbacks before any async work
+  await ctx.answerCbQuery().catch(() => null)
   const progress = await loadAbTestProgress(userId)
   const validation = validateAbTestProgress(progress)
   if (!validation.resumable) {
@@ -965,11 +966,32 @@ export async function handleAbTestCallback(
 
   // ── COMPLETE (8th answer) ──────────────────────────────────
   if (complete && resultKey) {
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
     const scheduled = await scheduleFollowups(userId, next, 'S3_TEST_RESULT')
     const finalProgress = await saveAbTestProgress(userId, scheduled)
-    await sendLogMessage(ctx, finalProgress)
-    await renderCurrentView(ctx, userId, finalProgress)
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_complete_result_ack').catch(() => undefined)
+    const resultDef = getAbTestResultDefinition(resultKey)
+    // FIX 2025-05-25 B3: direct send result to bypass orchestrator timeout/retry paths
+    await ctx.telegram.sendMessage(
+      chatId,
+      `${resultDef.title}\n\n${resultDef.body}`,
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            {
+              text: 'Що з цим робити?',
+              callback_data: 'ab_test:start_wheel',
+            },
+          ]],
+        },
+      },
+    )
+    // DISABLED 2025-05-25: replaced by direct send fix
+    // await sendLogMessage(ctx, finalProgress)
+    // await renderCurrentView(ctx, userId, finalProgress)
+    // await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_complete_result_ack').catch(() => undefined)
     return true
     // [FIX] early return — does NOT fall through to next question render
   }
@@ -991,15 +1013,33 @@ export async function handleAbTestCallback(
   // [FIX] use next.stage not hardcoded 'S3_TEST_RESULT'
   const scheduled = await scheduleFollowups(userId, next, next.stage)
   const finalProgress = await saveAbTestProgress(userId, scheduled)
-
-  const flow = buildAbTestQuestionFlow(
-    finalProgress,
-    nextQuestion.question_id,
-    finalProgress.revision
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+  if (!chatId) {
+    return true
+  }
+  const nextQuestionNumber = resolveAbTestQuestionOrder().indexOf(nextQuestion.question_id) + 1
+  // FIX 2025-05-25 B2: direct send next question to bypass orchestrator timeout/retry paths
+  await ctx.telegram.sendMessage(
+    chatId,
+    `Питання ${nextQuestionNumber} з 8\n\n${nextQuestion.prompt}`,
+    {
+      reply_markup: {
+        inline_keyboard: nextQuestion.answers.map((answer) => ([{
+          text: answer.text,
+          callback_data: `ab_test_answer:${nextQuestion.question_id}:${answer.id}:${finalProgress.revision}`,
+        }])),
+      },
+    },
   )
-  flow.body = [nextQuestion.prompt]
-  await deliverTelegramFlow(ctx, flow, 'reply')
-  await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_next_question_ack').catch(() => undefined)
+  // DISABLED 2025-05-25: replaced by direct send fix
+  // const flow = buildAbTestQuestionFlow(
+  //   finalProgress,
+  //   nextQuestion.question_id,
+  //   finalProgress.revision
+  // )
+  // flow.body = [nextQuestion.prompt]
+  // await deliverTelegramFlow(ctx, flow, 'reply')
+  // await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_next_question_ack').catch(() => undefined)
   return true
 }
 
