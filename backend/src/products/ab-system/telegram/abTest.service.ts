@@ -7,6 +7,7 @@ import {
   buildAbTestProgressPatch,
   cloneAbTestProgress,
   normalizeAbTestProgress,
+  validateAbTestProgress,
   resolveAbTestAnswerLatency,
   resolveAbTestNextQuestion,
   resolveAbTestQuestionOrder,
@@ -15,7 +16,7 @@ import {
   type AbTestProgress,
 } from '../../../core/state-machine/abTestFoundation.js'
 import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
-import { absystemButtons, absystemContent } from '../config/absystem.content.js'
+import { absystemButtons, absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { abTestContent } from '../content/abTest.content.js'
 import {
   buildFaqKeyboard,
@@ -32,7 +33,7 @@ import {
 import { buildEcosystemPaymentCheckoutSession } from '../../../modules/subscriptions/payments/business.js'
 import { withDevTestPaymentButton } from '../../../modules/telegram-mentor/keyboards.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
-import { buildWebAppButton, resolveBrowserTestUrl } from './abTest.buttons.js'
+import { buildWebAppButton, resolveBrowserTestUrlOrNull } from './abTest.buttons.js'
 import {
   parseAbTestCallback,
   type AbTestCallbackAction,
@@ -49,7 +50,17 @@ import {
   sendActionMessage,
   sendLogMessage,
 } from './abTest.views.js'
-
+import { planAck, planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
+import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus.access.js'
+import { getConfiguredFocusProduct } from '@/modules/subscriptions/payments/focus.access.js'
+import { sendAbTestBlock12Welcome } from '@/modules/subscriptions/payments/callback.notifications.js'
+import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
+import { markAbTestPaymentSuccess } from './abTest.markers.js'
+import { attachEmailToUser } from '../../../modules/user/identity.service.js'
+import { upsertTelegramBinding } from '../../../modules/telegram-mentor/services/linking.service.js'
+import { buildWebDeepLink, generateDeepLink } from '../../../modules/deeplinks/service.js'
+import { sendMagicLoginEmail } from '../../../modules/auth/mail.service.js'
+import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 export {
   observeAbTestCanonicalAction,
   resolveAbTestButtonLabel,
@@ -69,6 +80,36 @@ export {
 export { resolveAiSellerMode }
 export type { AbTestCallbackAction }
 
+const AB_TEST_START_DEBUG_PREFIX = '[AB_TEST_START_DEBUG]'
+
+function logAbTestStartDebug(event: string, payload: Record<string, unknown>) {
+  console.info(AB_TEST_START_DEBUG_PREFIX, event, payload)
+}
+
+function logFlowStart(event: string, payload: Record<string, unknown>) {
+  console.info('[FLOW_START]', event, payload)
+}
+
+function logFlowResume(event: string, payload: Record<string, unknown>) {
+  console.info('[FLOW_RESUME]', event, payload)
+}
+
+function logFlowRender(event: string, payload: Record<string, unknown>) {
+  console.info('[FLOW_RENDER]', event, payload)
+}
+
+function logMessageSent(event: string, payload: Record<string, unknown>) {
+  console.info('[MESSAGE_SENT]', event, payload)
+}
+
+function logCallbackReceived(payload: Record<string, unknown>) {
+  console.info('[CALLBACK_RECEIVED]', payload)
+}
+
+function logCallbackHandled(payload: Record<string, unknown>) {
+  console.info('[CALLBACK_HANDLED]', payload)
+}
+
 function resolveQuestionLatency(
   progress: AbTestProgress,
   answeredAt: Date
@@ -83,6 +124,34 @@ function resolveQuestionLatency(
   }
 
   return Math.max(0, answeredAt.getTime() - openedAt)
+}
+
+function isValidEmail(value: string): boolean {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized || normalized.length > 254) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+}
+
+async function sendAbTestEmailStep(ctx: Context): Promise<void> {
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'ab_test_email_step',
+    [
+      'Введіть email, щоб:',
+      '— зберегти ваш результат',
+      '— продовжити з будь-якого пристрою',
+      '— отримати персональні рекомендації після тесту',
+      '',
+      'Можна пропустити на цьому кроці.',
+    ].join('\n'),
+    {
+      inline_keyboard: [
+        [{ text: 'Продовжити', callback_data: 'ab_test:email_continue' }],
+        [{ text: 'Пропустити поки що', callback_data: 'ab_test:email_skip' }],
+      ],
+    },
+  )
 }
 
 export function isAbTestStartPayload(
@@ -103,6 +172,21 @@ export async function startAbTestFlow(
   userId: string,
   payload?: string | null
 ): Promise<void> {
+  // FIX 2026-05-25 C2: temporary start-flow diagnostic log
+  console.log('[AB_TEST][START] telegramId:', ctx.from?.id)
+  logFlowStart('entered', {
+    userId,
+    payload: payload ?? null,
+    chatId: String(ctx.chat?.id ?? ''),
+    fromId: String(ctx.from?.id ?? ''),
+  })
+  logAbTestStartDebug('start_flow:entered', {
+    userId,
+    payload: payload ?? null,
+    chatId: String(ctx.chat?.id ?? ''),
+    fromId: String(ctx.from?.id ?? ''),
+  })
+
   const current = await loadAbTestProgress(userId)
   const now = new Date()
   const nextQuestionFromState =
@@ -120,7 +204,7 @@ export async function startAbTestFlow(
             last_event_at: now.toISOString(),
           })
         : buildAbTestProgressPatch(current, {
-            status: 'active',
+            status: 'idle',
             stage: 'S1_TEST_STARTED',
             current_question_id: 'q1',
             started_at: current.started_at ?? now.toISOString(),
@@ -134,6 +218,22 @@ export async function startAbTestFlow(
           })
 
   await saveAbTestProgress(userId, next)
+  logFlowRender('progress_saved', {
+    userId,
+    previousStatus: current.status,
+    nextStatus: next.status,
+    nextStage: next.stage,
+    currentQuestionId: next.current_question_id,
+    answersCount: next.answers.length,
+  })
+  logAbTestStartDebug('start_flow:saved_progress', {
+    userId,
+    previousStatus: current.status,
+    nextStatus: next.status,
+    nextStage: next.stage,
+    currentQuestionId: next.current_question_id,
+    answersCount: next.answers.length,
+  })
   await trackAbTestEvent({
     userId,
     type:
@@ -146,41 +246,158 @@ export async function startAbTestFlow(
     } satisfies Prisma.JsonObject,
   })
 
-  await renderCurrentView(ctx, userId, next)
+  const questionIdToOpen = next.current_question_id ?? nextQuestionFromState
+  const firstQuestion = getAbTestQuestion(questionIdToOpen)
+
+  const flow = buildAbTestQuestionFlow(next, questionIdToOpen, next.revision)
+
+  flow.body = [firstQuestion.prompt]
+
+  await deliverTelegramFlow(ctx, flow, 'reply')
+  logMessageSent('question_sent', {
+    userId,
+    questionId: questionIdToOpen,
+    stage: next.stage,
+    revision: next.revision,
+  })
+  logAbTestStartDebug('start_flow:rendered_current_view', {
+    userId,
+    stage: next.stage,
+    status: next.status,
+  })
 }
 
 export async function resumeAbTestFlow(
   ctx: Context,
   userId: string
 ): Promise<void> {
+  logFlowResume('entered', {
+    userId,
+    chatId: String(ctx.chat?.id ?? ''),
+    fromId: String(ctx.from?.id ?? ''),
+  })
   const progress = await loadAbTestProgress(userId)
+  const validation = validateAbTestProgress(progress)
+  if (!validation.resumable) {
+    await renderAbTestIntro(ctx, userId, 'ab_test:auto_reentry')
+    return
+  }
   await renderCurrentView(ctx, userId, progress)
+  logMessageSent('resume_rendered', {
+    userId,
+    status: progress.status,
+    stage: progress.stage,
+    answersCount: progress.answers.length,
+  })
+}
+
+export async function handleAbTestEmailCaptureText(
+  ctx: Context,
+  userId: string,
+  text: string
+): Promise<boolean> {
+  const progress = await loadAbTestProgress(userId)
+  if (progress.email_stage !== 'pending') {
+    return false
+  }
+
+  const normalizedEmail = text.trim().toLowerCase()
+  if (!isValidEmail(normalizedEmail)) {
+    await planMessage(ctx, 'ctx.reply', 'ab_test_email_invalid', 'Схоже, це не email. Введіть коректний email або натисніть «Пропустити поки що».')
+    return true
+  }
+
+  await attachEmailToUser(userId, normalizedEmail)
+
+  const chatId = String(ctx.chat?.id ?? '').trim()
+  const telegramUserId = String(ctx.from?.id ?? '').trim()
+  if (chatId && telegramUserId) {
+    await upsertTelegramBinding({
+      userId,
+      chatId,
+      telegramUserId,
+      telegramUserName: ctx.from?.username ?? null,
+      firstName: ctx.from?.first_name ?? null,
+    })
+  }
+
+  const deepLink = await generateDeepLink({
+    userId,
+    action: 'magic_login',
+    source: 'telegram',
+    target: 'web',
+    path: '/onboarding/continue',
+    payload: { origin: 'ab_test_email_capture' } satisfies Prisma.InputJsonValue,
+  })
+  const magicLoginUrl = buildWebDeepLink(deepLink.token, deepLink.path)
+  const mailSent = await sendMagicLoginEmail({
+    to: normalizedEmail,
+    loginUrl: magicLoginUrl,
+  })
+
+  const next = buildAbTestProgressPatch(progress, {
+    email_stage: 'captured',
+    email_captured_at: new Date().toISOString(),
+    last_event_at: new Date().toISOString(),
+  })
+  await saveAbTestProgress(userId, next)
+
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'ab_test_email_saved',
+    mailSent
+      ? 'Email збережено. Ми надіслали магічне посилання для входу в платформу.'
+      : 'Email збережено. Відкрити платформу можна одразу з цього посилання:',
+    {
+      inline_keyboard: [[{ text: 'Відкрити платформу', url: magicLoginUrl }]],
+    },
+  )
+
+  await startAbTestFlow(ctx, userId, AB_TEST_ACTIONS.START)
+  return true
 }
 
 export async function handleAbTestCallback(
   ctx: Context,
   action: string
 ): Promise<boolean> {
+  logCallbackReceived({
+    action,
+    chatId: String(ctx.chat?.id ?? ''),
+    fromId: String(ctx.from?.id ?? ''),
+    userId: (ctx.state as { userId?: string | null }).userId ?? null,
+  })
+  logAbTestStartDebug('callback:received', {
+    action,
+    chatId: String(ctx.chat?.id ?? ''),
+    fromId: String(ctx.from?.id ?? ''),
+    userId: (ctx.state as { userId?: string | null }).userId ?? null,
+  })
+
   if (await handleAiSellerCallback(ctx, action)) {
+    logCallbackHandled({
+      action,
+      handled: true,
+      reason: 'ai_seller',
+    })
+    logAbTestStartDebug('callback:handled_by_ai_seller', { action })
     return true
   }
 
   if (action === 'start_wheel') {
     // [FIX] ТЗ Блок 9 — відповідь на [Що з цим робити?]
-    await ctx.reply(BLOCK9_POST_RESULT.text, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: BLOCK9_POST_RESULT.cta,
-              callback_data: BLOCK9_POST_RESULT.callbackData,
-            },
-          ],
-        ],
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'ab_test_start_wheel',
+      BLOCK9_POST_RESULT.text,
+      {
+        inline_keyboard: [[{ text: BLOCK9_POST_RESULT.cta, callback_data: BLOCK9_POST_RESULT.callbackData }]],
       },
-    })
-    await ctx.answerCbQuery().catch(() => undefined)
+      'Markdown',
+    )
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_start_wheel_ack').catch(() => undefined)
     return true
   }
 
@@ -200,8 +417,28 @@ export async function handleAbTestCallback(
       console.error('[PAYMENT BUTTON] Missing userId for dynamic Focus checkout', {
         action,
       })
-      await ctx.reply('Не вдалося підготувати оплату: користувача не знайдено. Натисни /start і спробуй ще раз.')
-      await ctx.answerCbQuery().catch(() => undefined)
+      await planMessage(ctx, 'ctx.reply', 'ab_test_focus_missing_user', 'Не вдалося підготувати оплату: користувача не знайдено. Натисни /start і спробуй ще раз.')
+      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_missing_user_ack').catch(() => undefined)
+      return true
+    }
+
+    const hasActiveFocus = await hasActiveFocusSubscription(payingUserId)
+    if (hasActiveFocus) {
+      const inviteUrl = await getOrCreateFocusInviteLink(payingUserId)
+      await planMessage(ctx, 'ctx.reply', 'ab_test_focus_already_active', 'Підписка ФОКУС вже активна. Можеш відкрити доступ або отримати доступ повторно.', {
+        inline_keyboard: [[
+          { text: 'Відкрити ФОКУС', url: inviteUrl },
+          { text: 'Отримати доступ повторно', callback_data: 'resend_focus_block12' },
+        ]],
+      })
+      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_already_active_ack').catch(() => undefined)
+      return true
+    }
+
+    const configuredFocusProduct = await getConfiguredFocusProduct()
+    if (!configuredFocusProduct) {
+      await planMessage(ctx, 'ctx.reply', 'ab_test_focus_product_missing', 'Оплата тимчасово недоступна: продукт Focus не сконфігурований.')
+      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_product_missing_ack').catch(() => undefined)
       return true
     }
 
@@ -220,8 +457,8 @@ export async function handleAbTestCallback(
         userId: payingUserId,
         reason,
       })
-      await ctx.reply('Оплата тимчасово недоступна. Ми вже бачимо помилку конфігурації й можемо швидко це виправити.')
-      await ctx.answerCbQuery().catch(() => undefined)
+      await planMessage(ctx, 'ctx.reply', 'ab_test_focus_checkout_failed', 'Оплата тимчасово недоступна. Ми вже бачимо помилку конфігурації й можемо швидко це виправити.')
+      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_checkout_failed_ack').catch(() => undefined)
       return true
     }
 
@@ -242,23 +479,50 @@ export async function handleAbTestCallback(
       })
     }
 
-    await ctx.reply(BLOCK10_FOCUS.text, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: withDevTestPaymentButton([
-          ...(checkout1m ? [[{ text: BLOCK10_FOCUS.cta_1m, url: checkout1m.checkoutUrl }]] : []),
-          ...(checkout3m ? [[{ text: BLOCK10_FOCUS.cta_3m, url: checkout3m.checkoutUrl }]] : []),
-        ]),
-      },
-    })
-    await ctx.answerCbQuery().catch(() => undefined)
+    await planMessage(ctx, 'ctx.reply', 'ab_test_focus_offer', BLOCK10_FOCUS.text, {
+      inline_keyboard: withDevTestPaymentButton([
+        ...(checkout1m ? [[{ text: BLOCK10_FOCUS.cta_1m, url: checkout1m.checkoutUrl }]] : []),
+        ...(checkout3m ? [[{ text: BLOCK10_FOCUS.cta_3m, url: checkout3m.checkoutUrl }]] : []),
+      ]),
+    }, 'Markdown')
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_offer_ack').catch(() => undefined)
+    return true
+  }
+
+  if (action === 'resend_focus_block12') {
+    const targetUserId = (ctx.state as { userId?: string | null }).userId ?? null
+    if (!targetUserId) {
+      await planMessage(ctx, 'ctx.reply', 'ab_test_resend_missing_user', 'Не вдалося відновити доступ: користувача не знайдено.')
+      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_missing_user_ack').catch(() => undefined)
+      return true
+    }
+    const hasActiveFocus = await hasActiveFocusSubscription(targetUserId)
+    if (!hasActiveFocus) {
+      await planMessage(ctx, 'ctx.reply', 'ab_test_resend_inactive', 'Підписка ФОКУС неактивна. Спочатку активуй підписку.')
+      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_inactive_ack').catch(() => undefined)
+      return true
+    }
+    await markAbTestPaymentSuccess(targetUserId)
+    await sendAbTestBlock12Welcome(targetUserId)
+    await planMessage(ctx, 'ctx.reply', 'ab_test_resend_sent', 'Доступ повторно надіслано. Перевір повідомлення з інвайтом.')
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_sent_ack').catch(() => undefined)
     return true
   }
 
   // [FIX] ТЗ Блоки 16-21: FAQ відповіді
-  if (action === 'open_faq') {
-    await ctx.reply('Оберіть питання:', { reply_markup: buildFaqKeyboard() })
-    await ctx.answerCbQuery().catch(() => undefined)
+  if (action === AB_TEST_ACTIONS.OPEN_FAQ) {
+    await planMessage(ctx, 'ctx.reply', 'ab_test_open_faq', 'Оберіть питання:', buildFaqKeyboard() as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> })
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_open_faq_ack').catch(() => undefined)
+    return true
+  }
+
+  if (action === AB_TEST_ACTIONS.FOCUS_INFO) {
+    await planMessage(ctx, 'ctx.reply', 'ab_test_focus_info', BLOCK10_FOCUS.text, {
+      inline_keyboard: [[
+        { text: 'Оплатити ФОКУС', callback_data: AB_TEST_ACTIONS.FOCUS_PAY },
+      ]],
+    }, 'Markdown')
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_info_ack').catch(() => undefined)
     return true
   }
 
@@ -279,197 +543,146 @@ export async function handleAbTestCallback(
         ],
       }
     }
-    await ctx.reply(faqItem.text, replyOptions)
-    await ctx.answerCbQuery().catch(() => undefined)
+    await planMessage(ctx, 'ctx.reply', 'ab_test_faq_item', faqItem.text, replyOptions?.reply_markup, 'Markdown')
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_faq_item_ack').catch(() => undefined)
     return true
   }
 
   const parsed = parseAbTestCallback(action)
+  // FIX 2026-05-25 C2: temporary callback diagnostic log with parsed kind
+  console.log('[AB_TEST][CB] action:', action, 'kind:', parsed?.kind)
   if (!parsed) {
+    logCallbackHandled({
+      action,
+      handled: false,
+      reason: 'not_ab_test_action',
+    })
+    logAbTestStartDebug('callback:not_ab_test_action', { action })
     return false
   }
 
+  logAbTestStartDebug('callback:parsed', {
+    action,
+    kind: parsed.kind,
+  })
+
   const userId = (ctx.state as { userId?: string | null }).userId ?? null
   if (!userId) {
-    await ctx
-      .answerCbQuery(abTestContent.errors.invalid.join(' '))
+    logCallbackHandled({
+      action,
+      handled: true,
+      reason: 'missing_user_id',
+      kind: parsed.kind,
+    })
+    logAbTestStartDebug('callback:missing_user_id', {
+      action,
+      kind: parsed.kind,
+    })
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_missing_user_ack',
+      abTestContent.errors.invalid.join(' ')
+    )
       .catch(() => undefined)
     return true
   }
 
   if (parsed.kind === 'intro') {
-    const uiSettings = await loadUserUiSettings(userId)
-    const progress = getAbTestProgressFromUiSettings(uiSettings)
-    const answeredCount = progress.answers.length
-    const isCompleted =
-      progress.status === 'completed' && Boolean(progress.result_key)
-    const isInProgress = answeredCount > 0 && !isCompleted
-    const staleDays = 7
-    const updatedAt = progress.updated_at ? new Date(progress.updated_at) : null
-    const updatedAtMs = updatedAt?.getTime() ?? NaN
-    const elapsedDays = Number.isFinite(updatedAtMs)
-      ? Math.floor((Date.now() - updatedAtMs) / (24 * 60 * 60 * 1000))
-      : 0
-    const isStale = elapsedDays >= staleDays
-
-    if (isCompleted && progress.result_key) {
-      const resultLabel =
-        absystemContent.RESULT_TYPE_LABELS[
-          progress.result_key.toUpperCase() as keyof typeof absystemContent.RESULT_TYPE_LABELS
-        ] ?? progress.result_key
-
-      await ctx.reply(absystemContent.RESUME_FLOW.COMPLETED(resultLabel), {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: absystemContent.RESUME_FLOW.CTA_SHOW_RESULT,
-                callback_data: 'ab_test:show_result',
-              },
-            ],
-            [
-              {
-                text: absystemContent.RESUME_FLOW.CTA_RESTART,
-                callback_data: 'ab_test:restart',
-              },
-            ],
-          ],
-        },
-      })
-      await ctx.answerCbQuery().catch(() => undefined)
-      return true
-    }
-
-    if (isInProgress && isStale) {
-      await ctx.reply(
-        absystemContent.RESUME_FLOW.STALE_PROGRESS(answeredCount, elapsedDays),
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: absystemContent.RESUME_FLOW.CTA_CONTINUE,
-                  callback_data: 'ab_test:start',
-                },
-              ],
-              [
-                {
-                  text: absystemContent.RESUME_FLOW.CTA_RESTART,
-                  callback_data: 'ab_test:restart',
-                },
-              ],
-            ],
-          },
-        }
-      )
-      await ctx.answerCbQuery().catch(() => undefined)
-      return true
-    }
-
-    if (isInProgress) {
-      await ctx.reply(absystemContent.RESUME_FLOW.IN_PROGRESS(answeredCount), {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: absystemContent.RESUME_FLOW.CTA_CONTINUE,
-                callback_data: 'ab_test:start',
-              },
-            ],
-            [
-              {
-                text: absystemContent.RESUME_FLOW.CTA_RESTART,
-                callback_data: 'ab_test:restart',
-              },
-            ],
-          ],
-        },
-      })
-      await ctx.answerCbQuery().catch(() => undefined)
-      return true
-    }
-
-    await ctx.reply(absystemContent.START_BLOCK1.MSG2, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: absystemContent.START_BLOCK1.CTA_CHAT,
-              callback_data: 'ab_test:start',
-            },
-          ],
-          [
-            buildWebAppButton(
-              absystemContent.START_BLOCK1.CTA_MINIAPP,
-              '/ab-test'
-            ),
-          ],
-          [
-            {
-              text: absystemContent.START_BLOCK1.CTA_BROWSER,
-              url: resolveBrowserTestUrl(),
-            },
-          ],
-        ],
-      },
+    logFlowStart('legacy_intro_redirected_to_start', {
+      userId,
+      action,
     })
+    await startAbTestFlow(ctx, userId, 'legacy_intro_callback')
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_intro_ack').catch(() => undefined)
+    logCallbackHandled({
+      action,
+      handled: true,
+      reason: 'legacy_intro_redirect_to_start',
+      userId,
+    })
+    return true
+  }
 
-    await ctx.answerCbQuery().catch(() => undefined)
+  if (parsed.kind === 'entry') {
+    await renderAbTestEntry(ctx, userId, action)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_entry_ack').catch(() => undefined)
+    logCallbackHandled({
+      action,
+      handled: true,
+      reason: 'entry_flow_rendered',
+      userId,
+    })
     return true
   }
 
   if (parsed.kind === 'restart') {
     await saveAbTestProgress(userId, normalizeAbTestProgress(undefined))
-    await ctx.reply(absystemContent.START_BLOCK1.MSG2, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: absystemContent.START_BLOCK1.CTA_CHAT,
-              callback_data: 'ab_test:start',
-            },
-          ],
-          [
-            buildWebAppButton(
-              absystemContent.START_BLOCK1.CTA_MINIAPP,
-              '/ab-test'
-            ),
-          ],
-          [
-            {
-              text: absystemContent.START_BLOCK1.CTA_BROWSER,
-              url: resolveBrowserTestUrl(),
-            },
-          ],
-        ],
-      },
-    })
-    await ctx.answerCbQuery().catch(() => undefined)
+    await renderAbTestEntry(ctx, userId, action)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_restart_ack').catch(() => undefined)
     return true
   }
 
   if (parsed.kind === 'show_result') {
     const progress = await loadAbTestProgress(userId)
     await renderCurrentView(ctx, userId, progress)
-    await ctx.answerCbQuery().catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_show_result_ack').catch(() => undefined)
+    return true
+  }
+
+  if (parsed.kind === 'email_continue') {
+    const progress = await loadAbTestProgress(userId)
+    const next = buildAbTestProgressPatch(progress, {
+      email_stage: 'pending',
+      last_event_at: new Date().toISOString(),
+    })
+    await saveAbTestProgress(userId, next)
+    await planMessage(ctx, 'ctx.reply', 'ab_test_email_continue_prompt', 'Введіть email одним повідомленням у цьому чаті.')
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_email_continue_ack').catch(() => undefined)
+    return true
+  }
+
+  if (parsed.kind === 'email_skip') {
+    const progress = await loadAbTestProgress(userId)
+    const next = buildAbTestProgressPatch(progress, {
+      email_stage: 'skipped',
+      last_event_at: new Date().toISOString(),
+    })
+    await saveAbTestProgress(userId, next)
+    await startAbTestFlow(ctx, userId, action)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_email_skip_ack').catch(() => undefined)
     return true
   }
 
   if (parsed.kind === 'start') {
+    logAbTestStartDebug('callback:start_pressed', {
+      action,
+      userId,
+      chatId: String(ctx.chat?.id ?? ''),
+    })
     await startAbTestFlow(ctx, userId, action)
-    await ctx.answerCbQuery(absystemButtons.startTest).catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_start_ack', absystemButtons.startTest).catch(() => undefined)
+    logCallbackHandled({
+      action,
+      handled: true,
+      reason: 'start_flow_executed',
+      userId,
+    })
+    logAbTestStartDebug('callback:start_completed', {
+      action,
+      userId,
+    })
     return true
   }
 
   if (parsed.kind === 'restore') {
     await resumeAbTestFlow(ctx, userId)
-    await ctx
-      .answerCbQuery(absystemButtons.restoreProgress)
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_restore_ack',
+      absystemButtons.restoreProgress
+    )
       .catch(() => undefined)
     return true
   }
@@ -482,7 +695,7 @@ export async function handleAbTestCallback(
         title: '',
         body: [abTestMenuContent.body],
         buttons: [
-          [{ text: absystemButtons.startTest, callback_data: 'ab_test:start' }],
+          [{ text: 'Пройти тест', callback_data: AB_TEST_ACTIONS.ENTRY }],
           [
             {
               text: absystemButtons.restoreProgress,
@@ -491,18 +704,40 @@ export async function handleAbTestCallback(
           ],
           [
             {
+              text: 'Дізнатись про ФОКУС',
+              callback_data: AB_TEST_ACTIONS.FOCUS_INFO,
+            },
+          ],
+          [
+            {
+              text: 'Оплатити ФОКУС',
+              callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
+            },
+          ],
+          [
+            {
+              text: 'Я вже оплатив / оплатила',
+              callback_data: AB_TEST_ACTIONS.FOCUS_ALREADY_PAID,
+            },
+          ],
+          [
+            {
               text: absystemButtons.continue,
               callback_data: 'return_main_menu',
             },
           ],
-          [{ text: 'Задати питання', callback_data: 'open_faq' }],
+          [{ text: 'Задати питання', callback_data: AB_TEST_ACTIONS.OPEN_FAQ }],
         ],
         blocks: [],
       },
       'reply'
     )
-    await ctx
-      .answerCbQuery(abTestMenuContent.cta.continue)
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_menu_ack',
+      abTestMenuContent.cta.continue
+    )
       .catch(() => undefined)
     return true
   }
@@ -521,8 +756,12 @@ export async function handleAbTestCallback(
     await saveAbTestProgress(userId, next)
     const targetIndex = resolveAbTestQuestionOrder().indexOf(parsed.questionId)
     await sendActionMessage(ctx, userId, next, targetIndex, 'edit')
-    await ctx
-      .answerCbQuery(absystemContent.RESUME_FLOW.EDIT_OPENING)
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_edit_ack',
+      absystemContent.RESUME_FLOW.EDIT_OPENING
+    )
       .catch(() => undefined)
     return true
   }
@@ -533,7 +772,7 @@ export async function handleAbTestCallback(
 
   if (progress.status === 'completed') {
     await renderCurrentView(ctx, userId, progress)
-    await ctx.answerCbQuery().catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_completed_ack').catch(() => undefined)
     return true
   }
 
@@ -551,8 +790,12 @@ export async function handleAbTestCallback(
       } satisfies Prisma.JsonObject,
     })
     await renderCurrentView(ctx, userId, progress)
-    await ctx
-      .answerCbQuery(abTestContent.errors.stale.join(' '))
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_stale_question_ack',
+      abTestContent.errors.stale.join(' ')
+    )
       .catch(() => undefined)
     return true
   }
@@ -571,8 +814,12 @@ export async function handleAbTestCallback(
       } satisfies Prisma.JsonObject,
     })
     await renderCurrentView(ctx, userId, progress)
-    await ctx
-      .answerCbQuery(abTestContent.errors.stale.join(' '))
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_replay_rejected_ack',
+      abTestContent.errors.stale.join(' ')
+    )
       .catch(() => undefined)
     return true
   }
@@ -583,8 +830,12 @@ export async function handleAbTestCallback(
   )
   if (!selected) {
     await renderCurrentView(ctx, userId, progress)
-    await ctx
-      .answerCbQuery(abTestContent.errors.invalid.join(' '))
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_invalid_answer_ack',
+      abTestContent.errors.invalid.join(' ')
+    )
       .catch(() => undefined)
     return true
   }
@@ -657,7 +908,7 @@ export async function handleAbTestCallback(
     const finalProgress = await saveAbTestProgress(userId, scheduled)
     await sendLogMessage(ctx, finalProgress)
     await renderCurrentView(ctx, userId, finalProgress)
-    await ctx.answerCbQuery().catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_complete_result_ack').catch(() => undefined)
     return true
     // [FIX] early return — does NOT fall through to next question render
   }
@@ -666,8 +917,12 @@ export async function handleAbTestCallback(
   const nextQuestion = nextQuestionId ? getAbTestQuestion(nextQuestionId) : null
   if (!nextQuestion) {
     await renderCurrentView(ctx, userId, next)
-    await ctx
-      .answerCbQuery(abTestContent.progress.resumeHint)
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_next_question_missing_ack',
+      abTestContent.progress.resumeHint
+    )
       .catch(() => undefined)
     return true
   }
@@ -683,8 +938,39 @@ export async function handleAbTestCallback(
   )
   flow.body = [nextQuestion.prompt]
   await deliverTelegramFlow(ctx, flow, 'reply')
-  await ctx.answerCbQuery().catch(() => undefined)
+  await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_next_question_ack').catch(() => undefined)
   return true
+}
+
+export async function renderAbTestIntro(
+  ctx: Context,
+  userId: string,
+  payload?: string | null
+): Promise<void> {
+  logAbTestStartDebug('entry:render_intro', {
+    userId,
+    payload: payload ?? null,
+    chatId: String(ctx.chat?.id ?? ''),
+    buttonCallbackData: AB_TEST_ACTIONS.ENTRY,
+    buttonText: 'Далі',
+  })
+
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'ab_test_entry_intro',
+    absystemContent.START_BLOCK1.MSG1,
+    {
+      inline_keyboard: [[{ text: 'Далі', callback_data: AB_TEST_ACTIONS.ENTRY }]],
+    },
+    'Markdown',
+  )
+  logMessageSent('start_block1_intro_with_next_sent', {
+    userId,
+    chatId: String(ctx.chat?.id ?? ''),
+    cta: 'Далі',
+    callback_data: AB_TEST_ACTIONS.ENTRY,
+  })
 }
 
 export async function renderAbTestEntry(
@@ -692,21 +978,32 @@ export async function renderAbTestEntry(
   userId: string,
   payload?: string | null
 ): Promise<void> {
+  logAbTestStartDebug('entry:render_step2', {
+    userId,
+    payload: payload ?? null,
+    chatId: String(ctx.chat?.id ?? ''),
+    buttonCallbackData: AB_TEST_ACTIONS.START,
+    buttonText: absystemContent.START_BLOCK1.CTA1,
+  })
+
   void payload
   void userId
 
-  await ctx.reply(absystemContent.START_BLOCK1.MSG1, {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: absystemContent.START_BLOCK1.CTA1,
-            callback_data: 'ab_test:intro',
-          },
-        ],
-      ],
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'ab_test_entry_msg2',
+    absystemContent.START_BLOCK1.MSG2,
+    {
+      inline_keyboard: [[{ text: absystemContent.START_BLOCK1.CTA1, callback_data: AB_TEST_ACTIONS.START }]],
     },
+    'Markdown',
+  )
+  logMessageSent('start_block1_msg2_with_cta_sent', {
+    userId,
+    chatId: String(ctx.chat?.id ?? ''),
+    cta: absystemContent.START_BLOCK1.CTA1,
+    callback_data: AB_TEST_ACTIONS.START,
   })
 }
 
