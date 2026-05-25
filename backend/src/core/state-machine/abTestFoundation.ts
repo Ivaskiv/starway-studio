@@ -54,6 +54,7 @@ export type AbTestAnswer = {
 
 export type AbTestProgress = {
   version: 1
+  flow_state: 'IDLE' | 'STARTED' | 'QUESTIONING' | 'RESULT_READY' | 'PAYMENT_PENDING' | 'SUBSCRIBED' | 'COMPLETED'
   stage: AbTestStageId
   status: 'idle' | 'active' | 'completed' | 'abandoned'
   started_at: string | null
@@ -74,6 +75,8 @@ export type AbTestProgress = {
   last_callback_key: string | null
   last_message_key: CanonicalMessageKey | null
   last_event_at: string | null
+  email_stage: 'pending' | 'captured' | 'skipped' | null
+  email_captured_at: string | null
   timers: {
     result: CanonicalFlowTimerId[]
     payment: CanonicalFlowTimerId[]
@@ -133,6 +136,7 @@ function cloneTimers(input: Partial<AbTestProgress['timers']> | undefined): AbTe
 function getDefaultProgress(now = new Date()): AbTestProgress {
   return {
     version: AB_TEST_CURRENT_VERSION,
+    flow_state: 'IDLE',
     stage: 'S1_TEST_STARTED',
     status: 'idle',
     started_at: null,
@@ -142,6 +146,8 @@ function getDefaultProgress(now = new Date()): AbTestProgress {
     questions_shown: [],
     answers: [],
     result_key: null,
+    email_stage: null,
+    email_captured_at: null,
     result_opened_at: null,
     focus_opened_at: null,
     payment_started_at: null,
@@ -173,8 +179,9 @@ export function normalizeAbTestProgress(value: unknown, now = new Date()): AbTes
   const stage = asString(value.stage)
   const resultKey = asString(value.result_key)
 
-  return {
+  const normalized: AbTestProgress = {
     version: AB_TEST_CURRENT_VERSION,
+    flow_state: 'IDLE',
     stage: (AB_TEST_STAGE_IDS as readonly string[]).includes(stage ?? '')
       ? stage as AbTestStageId
       : 'S1_TEST_STARTED',
@@ -220,6 +227,10 @@ export function normalizeAbTestProgress(value: unknown, now = new Date()): AbTes
     result_key: (resultKey && (Object.keys(AB_TEST_RESULTS) as AbTestResultKey[]).includes(resultKey as AbTestResultKey))
       ? resultKey as AbTestResultKey
       : null,
+    email_stage: ['pending', 'captured', 'skipped'].includes(asString(value.email_stage) ?? '')
+      ? asString(value.email_stage) as AbTestProgress['email_stage']
+      : null,
+    email_captured_at: asString(value.email_captured_at),
     result_opened_at: asString(value.result_opened_at),
     focus_opened_at: asString(value.focus_opened_at),
     payment_started_at: asString(value.payment_started_at),
@@ -233,6 +244,72 @@ export function normalizeAbTestProgress(value: unknown, now = new Date()): AbTes
     last_event_at: asString(value.last_event_at),
     timers: cloneTimers(timers),
   }
+  normalized.flow_state = deriveCanonicalFlowState(normalized)
+  return normalized
+}
+
+function deriveCanonicalFlowState(progress: AbTestProgress): AbTestProgress['flow_state'] {
+  if (progress.platform_ready_at) return 'COMPLETED'
+  if (progress.payment_success_at) return 'SUBSCRIBED'
+  if (progress.payment_started_at || progress.stage === 'S5_PAYMENT') return 'PAYMENT_PENDING'
+  if (progress.status === 'completed' && progress.result_key) return 'RESULT_READY'
+  if (progress.status === 'active' && progress.answers.length > 0) return 'QUESTIONING'
+  if (progress.status === 'active') return 'STARTED'
+  return 'IDLE'
+}
+
+export type AbTestProgressValidation = {
+  valid: boolean
+  resumable: boolean
+  reasons: string[]
+}
+
+export function validateAbTestProgress(progress: AbTestProgress): AbTestProgressValidation {
+  const reasons: string[] = []
+  const totalQuestions = AB_TEST_QUESTION_ORDER.length
+  const answersCount = progress.answers.length
+
+  if (progress.status === 'active' && answersCount === 0) {
+    reasons.push('active_without_answers')
+  }
+  if (progress.stage === 'S2_TEST_QUESTIONS' && answersCount === 0) {
+    reasons.push('question_stage_without_answers')
+  }
+  if (progress.status === 'completed' && !progress.result_key) {
+    reasons.push('completed_without_result')
+  }
+  if (answersCount > totalQuestions) {
+    reasons.push('answers_overflow')
+  }
+
+  const valid = reasons.length === 0
+  const resumable =
+    valid &&
+    progress.status === 'active' &&
+    answersCount > 0 &&
+    progress.stage === 'S2_TEST_QUESTIONS'
+
+  return { valid, resumable, reasons }
+}
+
+export function repairAbTestProgress(
+  progress: AbTestProgress,
+  now = new Date()
+): { progress: AbTestProgress; repaired: boolean; reasons: string[] } {
+  const validation = validateAbTestProgress(progress)
+  if (validation.valid) {
+    const next = cloneAbTestProgress(progress, now)
+    next.flow_state = deriveCanonicalFlowState(next)
+    return { progress: next, repaired: false, reasons: [] }
+  }
+
+  const recovered = getDefaultProgress(now)
+  recovered.revision = Math.max(progress.revision + 1, 1)
+  recovered.last_callback_key = progress.last_callback_key
+  recovered.last_message_key = progress.last_message_key
+  recovered.last_event_at = now.toISOString()
+  recovered.flow_state = 'IDLE'
+  return { progress: recovered, repaired: true, reasons: validation.reasons }
 }
 
 export function createAbTestProgress(now = new Date()): AbTestProgress {
@@ -295,33 +372,20 @@ export function buildAbTestQuestionAnalyticsHook(question: AbTestQuestion, answe
 }
 
 export function resolveAbTestResultKey(answers: AbTestAnswer[]): AbTestResultKey {
-  const totals = new Map<AbTestResultKey, number>()
-  const answerOrderWeight = new Map<AbTestAnswerKey, number>(AB_TEST_ANSWER_ORDER.map((answer, index) => [answer, AB_TEST_ANSWER_ORDER.length - index]))
-  const recentBoost = new Map<AbTestResultKey, number>()
-
+  // FIX 2025-05-25 B1: result must be resolved by COUNT of answers, not score sum.
+  const counts = new Map<AbTestResultKey, number>()
   for (const answer of answers) {
-    totals.set(answer.category, (totals.get(answer.category) ?? 0) + (answer.score ?? 0))
+    const key = answer.answer_id as AbTestResultKey
+    counts.set(key, (counts.get(key) ?? 0) + 1)
   }
 
-  const recentAnswers = [...answers].slice(-3)
-  recentAnswers.forEach((answer, index) => {
-    recentBoost.set(answer.category, (recentBoost.get(answer.category) ?? 0) + (3 - index) + (answerOrderWeight.get(answer.answer_id) ?? 0))
-  })
-
-  const ranked = (Object.keys(AB_TEST_RESULTS) as AbTestResultKey[])
+  const ranked = AB_TEST_ANSWER_ORDER
     .map((key) => ({
       key,
-      score: totals.get(key) ?? 0,
-      recent: recentBoost.get(key) ?? 0,
-      answersCount: answers.filter(answer => answer.category === key).length,
+      count: counts.get(key) ?? 0,
       priority: AB_TEST_ANSWER_ORDER.indexOf(key),
     }))
-    .sort((left, right) =>
-      right.score - left.score ||
-      right.recent - left.recent ||
-      right.answersCount - left.answersCount ||
-      left.priority - right.priority,
-    )
+    .sort((left, right) => right.count - left.count || left.priority - right.priority)
 
   return ranked[0]?.key ?? 'action'
 }
@@ -489,7 +553,7 @@ export function validateAbTestFoundation(): { ok: boolean; errors: string[] } {
 }
 
 export function buildAbTestProgressPatch(progress: AbTestProgress, patch: AbTestProgressPatch, now = new Date()): AbTestProgress {
-  return {
+  const next = {
     ...progress,
     ...patch,
     timers: cloneTimers({
@@ -499,4 +563,6 @@ export function buildAbTestProgressPatch(progress: AbTestProgress, patch: AbTest
     updated_at: now.toISOString(),
     last_event_at: patch.last_event_at ?? progress.last_event_at ?? now.toISOString(),
   }
+  next.flow_state = deriveCanonicalFlowState(next)
+  return next
 }
