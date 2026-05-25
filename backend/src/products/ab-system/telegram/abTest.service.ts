@@ -954,6 +954,13 @@ export async function renderAbTestIntro(
     buttonCallbackData: AB_TEST_ACTIONS.ENTRY,
     buttonText: 'Далі',
   })
+  // FIX 2025-05-25 C4: direct send test — remove after webhook/queue diagnosis is confirmed
+  try {
+    await ctx.reply('🔧 діагностика: render_intro досягнуто')
+    console.log('[DIAG] direct ctx.reply — ok')
+  } catch (error) {
+    console.error('[DIAG] direct ctx.reply — FAILED:', error)
+  }
 
   await planMessage(
     ctx,

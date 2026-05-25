@@ -297,36 +297,49 @@ async function syncTelegramWebhook(
   const webhookUrl =
     `${publicUrl}${TELEGRAM_WEBHOOK_PATH}`
 
-  const response = await fetch(
-    `https://api.telegram.org/bot${token}/setWebhook`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
+  // FIX 2025-05-25 B2: retry setWebhook when Telegram returns rate limit (429)
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    const response = await fetch(
+      `https://api.telegram.org/bot${token}/setWebhook`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: webhookUrl,
+        }),
       },
-      body: JSON.stringify({
-        url: webhookUrl,
-      }),
-    },
-  )
+    )
 
-  const body = (await response
-    .json()
-    .catch(() => null)) as
-    | {
-        ok?: boolean
-        description?: string
-      }
-    | null
+    const body = (await response
+      .json()
+      .catch(() => null)) as
+      | {
+          ok?: boolean
+          error_code?: number
+          description?: string
+          parameters?: { retry_after?: number }
+        }
+      | null
 
-  if (!response.ok || body?.ok === false) {
+    if (response.ok && body?.ok !== false) {
+      log('TELEGRAM', `setWebhook -> ${webhookUrl}`)
+      return
+    }
+
+    if (body?.error_code === 429 && attempt < 5) {
+      const retryAfterMs = Math.max(1, Number(body.parameters?.retry_after ?? 3)) * 1000
+      log('TELEGRAM', `setWebhook 429, retry in ${retryAfterMs}ms (attempt ${attempt}/5)`)
+      await sleep(retryAfterMs)
+      continue
+    }
+
     throw new Error(
       body?.description ??
         `Telegram setWebhook failed with HTTP ${response.status}`,
     )
   }
-
-  log('TELEGRAM', `setWebhook -> ${webhookUrl}`)
 }
 
 async function main() {
