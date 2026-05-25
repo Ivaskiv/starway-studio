@@ -548,6 +548,33 @@ export async function handleAbTestCallback(
     return true
   }
 
+  // FIX 2025-05-25 D: question 1 after [Продовжити]
+  if (action === 'ab_test:q1') {
+    await ctx.answerCbQuery().catch(() => null)
+    const q1UserId = (ctx.state as { userId?: string | null }).userId ?? null
+    if (!q1UserId) {
+      return true
+    }
+    const progress = await loadAbTestProgress(q1UserId)
+    const revision = Number(progress.revision ?? 1)
+    await ctx.reply(
+      'Питання 1 з 8\n\n'
+      + 'Що найчастіше відбувається, коли ти думаєш про те, що давно хочеш зробити?',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'А. Немає сил навіть почати', callback_data: `ab_test_answer:q1:A:${revision}` }],
+            [{ text: 'Б. Не розумію, чого точно хочу', callback_data: `ab_test_answer:q1:B:${revision}` }],
+            [{ text: 'В. Не можу обрати один варіант', callback_data: `ab_test_answer:q1:C:${revision}` }],
+            [{ text: 'Г. Ніби вирішила, але сумніваюсь', callback_data: `ab_test_answer:q1:D:${revision}` }],
+            [{ text: 'Д. Знаю крок, але переношу', callback_data: `ab_test_answer:q1:E:${revision}` }],
+          ],
+        },
+      },
+    )
+    return true
+  }
+
   const parsed = parseAbTestCallback(action)
   // FIX 2026-05-25 C2: temporary callback diagnostic log with parsed kind
   console.log('[AB_TEST][CB] action:', action, 'kind:', parsed?.kind)
@@ -655,12 +682,38 @@ export async function handleAbTestCallback(
   }
 
   if (parsed.kind === 'start') {
+    // FIX 2025-05-25 C: MSG2 direct send after [Почати тест]
+    await ctx.answerCbQuery().catch(() => null)
+    await ctx.reply(
+      'У тесті буде 8 питань.\n'
+      + 'Обирай той варіант, який найбільше схожий на тебе зараз.\n\n'
+      + 'Не треба відповідати «правильно».\n'
+      + 'Треба чесно.',
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: 'Продовжити', callback_data: 'ab_test:q1' },
+          ]],
+        },
+      },
+    )
     logAbTestStartDebug('callback:start_pressed', {
       action,
       userId,
       chatId: String(ctx.chat?.id ?? ''),
     })
-    await startAbTestFlow(ctx, userId, action)
+    const currentProgress = await loadAbTestProgress(userId)
+    const nextProgress = buildAbTestProgressPatch(currentProgress, {
+      status: 'active',
+      stage: 'S2_TEST_QUESTIONS',
+      current_question_id: 'q1',
+      started_at: currentProgress.started_at ?? new Date().toISOString(),
+      last_callback_key: action,
+      last_event_at: new Date().toISOString(),
+    })
+    await saveAbTestProgress(userId, nextProgress)
+    // DISABLED 2025-05-25: replaced by direct send fix
+    // await startAbTestFlow(ctx, userId, action)
     await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_start_ack', absystemButtons.startTest).catch(() => undefined)
     logCallbackHandled({
       action,
