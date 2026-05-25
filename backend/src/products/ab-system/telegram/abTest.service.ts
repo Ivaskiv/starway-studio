@@ -408,109 +408,56 @@ export async function handleAbTestCallback(
 
   const focusPaymentAction = action.match(/^open_focus_payment(?::(1month|3month))?$/)
   if (focusPaymentAction) {
-    // FIX(18.05.2026): dynamic per-user Focus checkout — Claude
-    const selectedPlanId = focusPaymentAction[1] as '1month' | '3month' | undefined
+    // FIX 2025-05-25 B: direct send Block 10 — bypass heavy checkout path
+    await ctx.answerCbQuery().catch(() => null)
     const payingUserId = (ctx.state as { userId?: string | null }).userId ?? null
-    console.log('[PAYMENT BUTTON]', {
-      userId: payingUserId,
-      action,
-      productId: 'focus',
-      planId: selectedPlanId ?? 'all',
-    })
-
-    if (!payingUserId) {
-      console.error('[PAYMENT BUTTON] Missing userId for dynamic Focus checkout', {
-        action,
-      })
-      await planMessage(ctx, 'ctx.reply', 'ab_test_focus_missing_user', 'Не вдалося підготувати оплату: користувача не знайдено. Натисни /start і спробуй ще раз.')
-      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_missing_user_ack').catch(() => undefined)
-      return true
-    }
-
-    const hasActiveFocus = await hasActiveFocusSubscription(payingUserId)
-    if (hasActiveFocus) {
-      const inviteUrl = await getOrCreateFocusInviteLink(payingUserId)
-      await planMessage(ctx, 'ctx.reply', 'ab_test_focus_already_active', 'Підписка ФОКУС вже активна. Можеш відкрити доступ або отримати доступ повторно.', {
-        inline_keyboard: [[
-          { text: 'Відкрити ФОКУС', url: inviteUrl },
-          { text: 'Отримати доступ повторно', callback_data: 'resend_focus_block12' },
-        ]],
-      })
-      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_already_active_ack').catch(() => undefined)
-      return true
-    }
-
-    const configuredFocusProduct = await getConfiguredFocusProduct()
-    if (!configuredFocusProduct) {
-      await planMessage(ctx, 'ctx.reply', 'ab_test_focus_product_missing', 'Оплата тимчасово недоступна: продукт Focus не сконфігурований.')
-      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_product_missing_ack').catch(() => undefined)
-      return true
-    }
-
-    let checkout1m: ReturnType<typeof buildEcosystemPaymentCheckoutSession> | null = null
-    let checkout3m: ReturnType<typeof buildEcosystemPaymentCheckoutSession> | null = null
-    try {
-      if (!selectedPlanId || selectedPlanId === '1month') {
-        checkout1m = buildEcosystemPaymentCheckoutSession('focus', '1month', payingUserId)
-      }
-      if (!selectedPlanId || selectedPlanId === '3month') {
-        checkout3m = buildEcosystemPaymentCheckoutSession('focus', '3month', payingUserId)
-      }
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error)
-      console.error('[PAYMENT URL] Failed to generate dynamic Focus checkout URL', {
-        userId: payingUserId,
-        reason,
-      })
-      await planMessage(ctx, 'ctx.reply', 'ab_test_focus_checkout_failed', 'Оплата тимчасово недоступна. Ми вже бачимо помилку конфігурації й можемо швидко це виправити.')
-      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_checkout_failed_ack').catch(() => undefined)
-      return true
-    }
-
-    if (checkout1m) {
-      console.log('[PAYMENT URL]', {
-        userId: payingUserId,
-        planId: '1month',
-        generatedOrderReference: checkout1m.orderReference,
-        generatedCheckoutUrl: checkout1m.checkoutUrl,
-      })
-    }
-    if (checkout3m) {
-      console.log('[PAYMENT URL]', {
-        userId: payingUserId,
-        planId: '3month',
-        generatedOrderReference: checkout3m.orderReference,
-        generatedCheckoutUrl: checkout3m.checkoutUrl,
-      })
-    }
-
-    // FIX 2025-05-25 D: direct send block 10 payment offer (bypass orchestrator)
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) {
       return true
     }
-    await ctx.telegram.sendMessage(
-      chatId,
-      BLOCK10_FOCUS.text,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: withDevTestPaymentButton([
-            ...(checkout1m ? [[{ text: BLOCK10_FOCUS.cta_1m, url: checkout1m.checkoutUrl }]] : []),
-            ...(checkout3m ? [[{ text: BLOCK10_FOCUS.cta_3m, url: checkout3m.checkoutUrl }]] : []),
-          ]),
+    const url1m = process.env.WAYFORPAY_FOCUS_1M_URL
+      ?? process.env.FOCUS_1M_URL
+      ?? process.env.WAYFORPAY_FOCUS_LANDING_URL
+      ?? 'https://secure.wayforpay.com'
+    const url3m = process.env.WAYFORPAY_FOCUS_3M_URL
+      ?? process.env.FOCUS_3M_URL
+      ?? process.env.WAYFORPAY_FOCUS_LANDING_URL
+      ?? 'https://secure.wayforpay.com'
+    const text = BLOCK10_FOCUS?.text ?? 'ФОКУС | Zoom-практики AB System'
+    try {
+      await ctx.telegram.sendMessage(
+        chatId,
+        text,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: BLOCK10_FOCUS.cta_1m, url: url1m }],
+              [{ text: BLOCK10_FOCUS.cta_3m, url: url3m }],
+            ],
+          },
         },
-      },
-    )
-    const progressAfterFocusClick = await loadAbTestProgress(payingUserId)
-    await saveAbTestProgress(
-      payingUserId,
-      buildAbTestProgressPatch(progressAfterFocusClick, {
-        focus_opened_at: progressAfterFocusClick.focus_opened_at ?? new Date().toISOString(),
-        last_event_at: new Date().toISOString(),
-      }),
-    )
-    await ctx.answerCbQuery().catch(() => null)
+      )
+      console.log('[FOCUS_PAYMENT] block10 sent ok', { userId: payingUserId, chatId })
+    } catch (error) {
+      console.error('[FOCUS_PAYMENT] block10 send FAILED', error)
+    }
+    if (payingUserId) {
+      // FIX 2025-05-25 B: non-blocking progress mark
+      loadAbTestProgress(payingUserId)
+        .then((progressAfterFocusClick) =>
+          saveAbTestProgress(
+            payingUserId,
+            buildAbTestProgressPatch(progressAfterFocusClick, {
+              focus_opened_at: progressAfterFocusClick.focus_opened_at ?? new Date().toISOString(),
+              last_event_at: new Date().toISOString(),
+            }),
+          )
+        )
+        .catch((error: Error) =>
+          console.error('[FOCUS_PAYMENT] save progress failed', error)
+        )
+    }
     return true
   }
 
