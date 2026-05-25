@@ -386,19 +386,23 @@ export async function handleAbTestCallback(
     return true
   }
 
-  if (action === 'start_wheel') {
-    // [FIX] ТЗ Блок 9 — відповідь на [Що з цим робити?]
-    await planMessage(
-      ctx,
-      'ctx.reply',
-      'ab_test_start_wheel',
+  if (action === 'ab_test:start_wheel' || action === 'start_wheel') {
+    // FIX 2025-05-25 C: Block 9 after [Що з цим робити?] with direct send
+    await ctx.answerCbQuery().catch(() => null)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
+    await ctx.telegram.sendMessage(
+      chatId,
       BLOCK9_POST_RESULT.text,
       {
-        inline_keyboard: [[{ text: BLOCK9_POST_RESULT.cta, callback_data: BLOCK9_POST_RESULT.callbackData }]],
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{ text: BLOCK9_POST_RESULT.cta, callback_data: BLOCK9_POST_RESULT.callbackData }]],
+        },
       },
-      'Markdown',
     )
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_start_wheel_ack').catch(() => undefined)
     return true
   }
 
@@ -480,13 +484,33 @@ export async function handleAbTestCallback(
       })
     }
 
-    await planMessage(ctx, 'ctx.reply', 'ab_test_focus_offer', BLOCK10_FOCUS.text, {
-      inline_keyboard: withDevTestPaymentButton([
-        ...(checkout1m ? [[{ text: BLOCK10_FOCUS.cta_1m, url: checkout1m.checkoutUrl }]] : []),
-        ...(checkout3m ? [[{ text: BLOCK10_FOCUS.cta_3m, url: checkout3m.checkoutUrl }]] : []),
-      ]),
-    }, 'Markdown')
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_offer_ack').catch(() => undefined)
+    // FIX 2025-05-25 D: direct send block 10 payment offer (bypass orchestrator)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
+    await ctx.telegram.sendMessage(
+      chatId,
+      BLOCK10_FOCUS.text,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: withDevTestPaymentButton([
+            ...(checkout1m ? [[{ text: BLOCK10_FOCUS.cta_1m, url: checkout1m.checkoutUrl }]] : []),
+            ...(checkout3m ? [[{ text: BLOCK10_FOCUS.cta_3m, url: checkout3m.checkoutUrl }]] : []),
+          ]),
+        },
+      },
+    )
+    const progressAfterFocusClick = await loadAbTestProgress(payingUserId)
+    await saveAbTestProgress(
+      payingUserId,
+      buildAbTestProgressPatch(progressAfterFocusClick, {
+        focus_opened_at: progressAfterFocusClick.focus_opened_at ?? new Date().toISOString(),
+        last_event_at: new Date().toISOString(),
+      }),
+    )
+    await ctx.answerCbQuery().catch(() => null)
     return true
   }
 
@@ -973,6 +997,23 @@ export async function handleAbTestCallback(
     const scheduled = await scheduleFollowups(userId, next, 'S3_TEST_RESULT')
     const finalProgress = await saveAbTestProgress(userId, scheduled)
     const resultDef = getAbTestResultDefinition(resultKey)
+    // FIX 2025-05-25 B: answers summary before result message
+    const ANSWER_LABELS: Record<string, string> = {
+      state: 'А',
+      goal: 'Б',
+      choice: 'В',
+      decision: 'Г',
+      action: 'Д',
+    }
+    const summaryLines = nextAnswers.map((item, idx) =>
+      `${idx + 1}. ✅ ${ANSWER_LABELS[item.answer_id] ?? item.answer_id}`
+    )
+    await ctx.telegram.sendMessage(
+      chatId,
+      `Твої відповіді:\n\n${summaryLines.join('\n')}`,
+      { reply_markup: { remove_keyboard: true } },
+    )
+    await new Promise((resolve) => setTimeout(resolve, 300))
     // FIX 2025-05-25 B3: direct send result to bypass orchestrator timeout/retry paths
     await ctx.telegram.sendMessage(
       chatId,
