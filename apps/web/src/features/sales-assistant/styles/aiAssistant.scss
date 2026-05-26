@@ -4369,3 +4369,123 @@
 .dna-step-agents__pipe--idle strong { color: #9cb0cf; }
 .dna-step-agents__pipe--running strong { color: #f5d18f; }
 .dna-step-agents__pipe--done strong { color: #bff3c5; }
+
+/* === Step Artifacts === */
+.dna-step-artifacts {
+  display: grid;
+  gap: 12px;
+}
+
+.dna-step-artifacts__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dna-step-artifacts__header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.dna-step-artifacts__header span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.dna-step-artifacts__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dna-step-artifacts__item,
+.dna-step-artifacts__style-btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: #fff;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.dna-step-artifacts__item.is-active,
+.dna-step-artifacts__style-btn.is-active {
+  border-color: rgba(46, 107, 230, 0.7);
+  background: rgba(46, 107, 230, 0.16);
+}
+
+.dna-step-artifacts__styles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* === Step Result === */
+.dna-step-result {
+  display: grid;
+  gap: 12px;
+}
+
+.dna-step-result__metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dna-step-result__metric {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.dna-step-result__metric span {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.dna-step-result__metric strong {
+  font-size: 12px;
+  color: #fff;
+}
+
+.dna-step-result__banner {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.dna-step-result__prompts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dna-step-result__card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.dna-step-result__card h4,
+.dna-step-result__card p {
+  margin: 0;
+}
+
+.dna-step-result__footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 10px;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.dna-badge {
+  border: 1px solid rgba(46, 107, 230, 0.7);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
