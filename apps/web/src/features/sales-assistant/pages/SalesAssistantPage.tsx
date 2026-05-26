@@ -1,14 +1,9 @@
 import { AiProviderMonitor } from '@/features/sales-assistant/components/AiProvider'
-import { AiPositionSection } from '@/features/sales-assistant/components/AiPositionSection'
-import { StrategicCards } from '@/features/sales-assistant/components/ArtifactCards'
 import DnaGenerationPanel from '@/features/sales-assistant/components/DnaGenerationPanel'
-import { GenerationStepSection } from '@/features/sales-assistant/components/GenerationStepSection'
 import { HistoryPanel } from '@/features/sales-assistant/components/History'
-import { InputEngineSection } from '@/features/sales-assistant/components/InputEngineSection'
 import { LexiconPanel } from '@/features/sales-assistant/components/LexiconPanel'
-import { StrategicOutput } from '@/features/sales-assistant/components/OutputArtifacts'
 import { PreviewRenderer } from '@/features/sales-assistant/components/PreviewRenderer'
-import { SpecializedAgentsSection, type AgentKey } from '@/features/sales-assistant/components/SpecializedAgentsSection'
+import { type AgentKey } from '@/features/sales-assistant/components/SpecializedAgentsSection'
 import {
   AI_ASSISTANT_TONE_PRESETS,
   CONTENT_TYPES,
@@ -118,13 +113,6 @@ const PIPELINE_STAGES = [
   'Стратегія та структура',
   'Генерація контенту',
   'Підготовка виводу',
-] as const
-const PIPELINE_LIVE_STATES = [
-  'Парсинг контексту — Очищення аудіо-транскрипту від розмовного сміття',
-  'Мапінг болю — Зіставлення слів з матрицею болей ринку',
-  'Пошук тригерів — Виявлення маркерів лексикону автора',
-  'Побудова структури — Формування семантичного каркасу',
-  'Генерація результатів — Паралельний рендеринг карток',
 ] as const
 const INPUT_STATUS_COPY: Record<InputStatus, string> = {
   idle: 'Готово до вводу',
@@ -278,8 +266,6 @@ export default function SalesAssistantPage() {
   const [previewTabIndex, setPreviewTabIndex] = useState(0)
   const [previewPage, setPreviewPage] = useState(0)
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile' | 'doc'>('desktop')
-  const [pipelineStageIndex, setPipelineStageIndex] = useState(0)
-  const [queueProgress, setQueueProgress] = useState<Record<string, number>>({})
   const [strategicCoreSnapshot, setStrategicCoreSnapshot] = useState<{
     userContext: string
     userRequest: string
@@ -400,33 +386,6 @@ export default function SalesAssistantPage() {
     !isLoading &&
     !isGeneratingLocal &&
     !isGeneratingRef.current
-
-  useEffect(() => {
-    if (!(isLoading || isGeneratingLocal)) return
-    const interval = window.setInterval(() => {
-      setPipelineStageIndex((prev) => (prev + 1) % PIPELINE_LIVE_STATES.length)
-      setQueueProgress((prev) => {
-        const next: Record<string, number> = { ...prev }
-        outputs.forEach((type, index) => {
-          const base = next[type] ?? Math.max(6, index * 8)
-          next[type] = Math.min(96, base + 8)
-        })
-        return next
-      })
-    }, 1400)
-    return () => window.clearInterval(interval)
-  }, [isGeneratingLocal, isLoading, outputs])
-
-  useEffect(() => {
-    if (!latestResult) return
-    setQueueProgress((prev) => {
-      const next = { ...prev }
-      outputs.forEach((type) => {
-        next[type] = 100
-      })
-      return next
-    })
-  }, [latestResult, outputs])
 
   useEffect(() => () => {
     stopDictation()
@@ -942,27 +901,6 @@ export default function SalesAssistantPage() {
               />
             </div>
 
-            <div className="dna-divider" />
-
-            {/* 7. AI ПРОВАЙДЕРИ */}
-            <div className="dna-ctrl-section--no-pad">
-              <AiProviderMonitor
-                freeUsage={freeUsage}
-                generationEstimate={generationEstimate}
-                generationMode={generationMode}
-                latestUsage={latestResult?.usage}
-                outputCount={outputs.length}
-                outputLimit={outputLimit}
-                results={results}
-                selectedProvider={selectedProvider}
-                selectedProviderIsFreePath={selectedProviderIsFreePath}
-                selectedProtocol={selectedProtocol}
-                tokenMetrics={unifiedTokenMetrics}
-                usedProvider={latestResult?.modelUsed}
-                validationState={validationState}
-              />
-            </div>
-
           </aside>
 
           {/* ════════════════ CENTER — 4-step workflow ════════════════ */}
@@ -988,104 +926,20 @@ export default function SalesAssistantPage() {
               ))}
             </div>
 
-            <DnaGenerationPanel />
-
-            <InputEngineSection
-              inputMethod={inputMethod}
-              inputStatus={inputStatus}
-              activePreset={activePreset}
-              audioFile={audioFile}
-              audioDurationSec={audioDurationSec}
-              audioProcessingMs={audioProcessingMs}
-              audioTranscript={audioTranscript}
-              inputStatusCopy={INPUT_STATUS_COPY}
-              dictationField={dictationField}
-              pain={pain}
-              goal={goal}
-              customTask={customTask}
-              audioInputRef={audioInputRef}
-              onClear={handleClear}
-              onSetInputMethod={setInputMethod}
-              onStartDictation={startDictation}
-              onApplyPreset={applyPreset}
-              onAudioFileChange={(e) => void handleAudioFileChange(e)}
-              onResetAudio={resetAudio}
-              onPainChange={(value) => {
-                setPain(value)
-                setActivePreset(null)
-              }}
-              onGoalChange={(value) => {
-                setGoal(value)
-                setActivePreset(null)
-              }}
-              onCustomTaskChange={(value) => {
-                setCustomTask(value)
-                setActivePreset(null)
-              }}
-            />
-
-            <SpecializedAgentsSection
-              selectedAgents={selectedAgents}
-              onAgentsChange={setSelectedAgents}
-            />
-
-            <AiPositionSection
-              protocols={PROTOCOLS}
-              protocolIcons={PROTOCOL_ICONS}
-              selectedProtocol={selectedProtocol}
-              onSelectProtocol={(key) => setSelectedProtocol(key as (typeof PROTOCOLS)[number]['key'])}
-            />
-
-            <GenerationStepSection
-              selectedProviderLabel={resolveUiModelName(selectedProvider, selectedProtocol)}
-              generationMode={generationMode}
-              generationModeNote={GENERATION_MODES.find((m) => m.key === generationMode)?.note ?? ''}
-              strategicCoreReady={Boolean(strategicCoreSnapshot)}
-              outputs={outputs}
-              isPremiumAccess={isPremiumAccess}
-              contentTypes={CONTENT_TYPES}
-              pipelineStages={PIPELINE_STAGES}
-              isBusy={isBusy}
-              hasResult={Boolean(latestResult)}
-              canGenerate={canGenerate}
-              validationError={validationError}
-              tone={tone}
-              toneOptions={AI_ASSISTANT_TONE_PRESETS.map((item) => item.label)}
-              generationModeKey={generationMode}
-              generationModes={GENERATION_MODES.map((mode) => ({ key: mode.key, label: mode.label, provider: mode.provider }))}
-              onLockedType={() => toast.error('Доступно в Premium')}
-              onLockedPremium={() => toast.error('Доступно в Premium')}
-              onSetTone={setTone}
-              onSetGenerationMode={setGenerationMode}
-              onToggleOutput={handleToggleOutput}
-              onGenerateFromCore={(key) => void generateStrategicFromCore(key)}
-              onGenerate={() => void handleGenerate()}
-            />
-
-            <StrategicOutput
-              isBusy={isBusy}
-              activeStrategy={selectedProtocol}
-              activeTone={tone}
-              latestResult={latestResult}
-              editableContent={editableContent}
-              compareVersion={compareVersion}
-              models={models}
-              outputs={outputs}
-              preFilledFormula={preFilledFormula}
-              providerErrors={providerErrors}
-              resolveProviderErrorMessage={resolveProviderErrorMessage}
-              results={results}
-              validationState={validationState}
-              outputsByType={outputsByType}
-              onCopy={handleCopy}
-              onExport={handleExport}
-              onSetEditableContent={setEditableContent}
-              onSetPreFilledFormula={setPreFilledFormula}
-              onToggleModel={toggleModel}
-              reelsEngine={reelsEngineState}
-              generationJobs={generationJobs}
-              providerStatuses={providerStatuses}
-              debugMode={DEBUG_MODE}
+            <DnaGenerationPanel
+              previewSlot={(
+                <PreviewRenderer
+                  outputs={outputs}
+                  typedPayload={outputsByType[outputs[previewTabIndex] as ContentTypeKey]}
+                  previewTabIndex={previewTabIndex}
+                  previewPage={previewPage}
+                  previewDevice={previewDevice}
+                  onSetPreviewTabIndex={setPreviewTabIndex}
+                  onPrevPage={() => setPreviewPage((p) => Math.max(0, p - 1))}
+                  onNextPage={() => setPreviewPage((p) => Math.min(Math.max(0, outputs.length - 1), p + 1))}
+                  onSetPreviewDevice={setPreviewDevice}
+                />
+              )}
             />
 
           </main>
@@ -1093,39 +947,25 @@ export default function SalesAssistantPage() {
           {/* ════════════════ RIGHT COLUMN ════════════════ */}
           <aside className="dna-right-panel">
 
-            <PreviewRenderer
-              outputs={outputs}
-              typedPayload={outputsByType[outputs[previewTabIndex] as ContentTypeKey]}
-              previewTabIndex={previewTabIndex}
-              previewPage={previewPage}
-              previewDevice={previewDevice}
-              onSetPreviewTabIndex={setPreviewTabIndex}
-              onPrevPage={() => setPreviewPage((p) => Math.max(0, p - 1))}
-              onNextPage={() => setPreviewPage((p) => Math.min(Math.max(0, outputs.length - 1), p + 1))}
-              onSetPreviewDevice={setPreviewDevice}
-            />
-
             <div className="dna-right-section">
-              <h4 className="dna-right-label">PIPELINE VISIBILITY</h4>
-              <div className="dna-pipeline-live">
-                {PIPELINE_LIVE_STATES.map((state, idx) => (
-                  <div key={state} className={`dna-pipeline-live__row ${isBusy && idx === pipelineStageIndex ? 'is-active' : (!isBusy && latestResult) ? 'is-done' : ''}`}>
-                    <span>{!isBusy && latestResult ? 'Готово' : isBusy && idx === pipelineStageIndex ? 'В роботі' : 'Очікує'}</span>
-                    <span>{state}</span>
-                  </div>
-                ))}
-              </div>
+              <AiProviderMonitor
+                freeUsage={freeUsage}
+                generationEstimate={generationEstimate}
+                generationMode={generationMode}
+                latestUsage={latestResult?.usage}
+                outputCount={outputs.length}
+                outputLimit={outputLimit}
+                results={results}
+                selectedProvider={selectedProvider}
+                selectedProviderIsFreePath={selectedProviderIsFreePath}
+                selectedProtocol={selectedProtocol}
+                tokenMetrics={unifiedTokenMetrics}
+                usedProvider={latestResult?.modelUsed}
+                validationState={validationState}
+              />
             </div>
 
-            <StrategicCards
-              outputs={outputs}
-              queueProgress={queueProgress}
-              isBusy={isBusy}
-              hasResult={Boolean(latestResult)}
-              hasRealReelsEngine={reelsEngineState.isAvailable}
-            />
-
-            <div className="dna-right-section">
+            <div className="dna-right-section dna-right-section--stats">
               <h4 className="dna-right-label">СТАТИСТИКА СЕСІЇ</h4>
               <div className="dna-stat-grid dna-stat-grid--two-col">
                 <div className="dna-stat">
@@ -1149,22 +989,9 @@ export default function SalesAssistantPage() {
                 <div className="dna-stat dna-stat--icon"><span className="dna-stat__val">{latestResult ? 'Завершено' : '—'}</span><span className="dna-stat__key">Час</span></div>
                 <div className="dna-stat dna-stat--icon"><span className="dna-stat__val">Автооновлення</span><span className="dna-stat__key">Оновлення</span></div>
               </div>
-              <button
-                type="button"
-                className="dna-tg-publish-btn"
-                onClick={() => {
-                  if (!isPremiumAccess) {
-                    toast.error('Доступно в Premium')
-                    return
-                  }
-                  toast.success('Telegram publish queued')
-                }}
-              >
-                Створити публікацію в TG {!isPremiumAccess ? ' ПРЕМІУМ' : ''}
-              </button>
             </div>
 
-            <div className="dna-right-section">
+            <div className="dna-right-section dna-right-section--history-accent">
               <HistoryPanel
                 compareVersionId={compareVersionId}
                 history={history}

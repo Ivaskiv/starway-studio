@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type StrategyKey = 'truth' | 'architect' | 'psychology'
 
@@ -11,10 +11,10 @@ type LexiconState = {
   banTags: string[]
 }
 
-const STRATEGIES: Array<{ key: StrategyKey; label: string }> = [
-  { key: 'truth', label: 'Оголена правда' },
-  { key: 'architect', label: 'Головний архітектор' },
-  { key: 'psychology', label: 'Психологія дії' },
+const STRATEGIES: Array<{ key: StrategyKey; label: string; description: string }> = [
+  { key: 'truth', label: 'Оголена правда', description: 'Провокативно, в лоб, зриває маски' },
+  { key: 'architect', label: 'Головний архітектор', description: 'Сила, масштаб, жорсткий варіант А/Б' },
+  { key: 'psychology', label: 'Психологія дії', description: 'Глибокий психолінгвістичний audit без цензури' },
 ]
 
 const STORAGE_KEY = 'dna_lexicon'
@@ -59,11 +59,9 @@ export default function DnaLeftColumn({ onStrategyChange }: Props) {
     setBanInput('')
   }
 
-  const strategyTitle = useMemo(() => STRATEGIES.find((item) => item.key === selectedStrategy)?.label ?? 'Стратегія', [selectedStrategy])
-
   return (
     <aside className="dna-left-col" aria-label="Ліва панель ДНК">
-      <p className="dna-left-col__title">{strategyTitle}</p>
+      <p className="dna-left-col__title">AI-СТРАТЕГІЯ</p>
       <div className="dna-left-col__strategies">
         {STRATEGIES.map((strategy) => (
           <button
@@ -72,7 +70,10 @@ export default function DnaLeftColumn({ onStrategyChange }: Props) {
             className={`dna-left-col__strategy-btn${selectedStrategy === strategy.key ? ' is-active' : ''}`}
             onClick={() => switchStrategy(strategy.key)}
           >
-            <span>{strategy.label}</span>
+            <span className="dna-left-col__strategy-copy">
+              <strong>{strategy.label}</strong>
+              <small>{strategy.description}</small>
+            </span>
             {selectedStrategy === strategy.key ? <strong>Активно</strong> : null}
           </button>
         ))}

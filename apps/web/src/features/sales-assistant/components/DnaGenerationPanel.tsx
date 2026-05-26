@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import DnaLeftColumn from './DnaLeftColumn'
 import StepInput from './steps/StepInput'
 import StepAgents from './steps/StepAgents'
@@ -16,7 +16,11 @@ const STEP_BUTTON_LABELS: Record<StepKey, string> = {
   3: 'Отримати результат',
 }
 
-export default function DnaGenerationPanel() {
+type Props = {
+  previewSlot?: ReactNode
+}
+
+export default function DnaGenerationPanel({ previewSlot }: Props) {
   const [activeStep, setActiveStep] = useState<StepKey>(0)
   const [strategy, setStrategy] = useState<'truth' | 'architect' | 'psychology'>('truth')
   const [model, setModel] = useState<'gemini' | 'gpt' | 'claude'>('gpt')
@@ -40,7 +44,12 @@ export default function DnaGenerationPanel() {
     () => ({
       0: <StepInput onStatsChange={setStats} />,
       1: <StepAgents pipelineStatus={pipelineStatus} onChange={(p) => { setModel(p.model); setAgents(p.agents) }} />,
-      2: <StepArtifacts onChange={(p) => { setArtifacts(p.artifacts); setTone(p.style) }} />,
+      2: (
+        <>
+          <StepArtifacts onChange={(p) => { setArtifacts(p.artifacts); setTone(p.style) }} />
+          {previewSlot ? <div className="dna-step-preview">{previewSlot}</div> : null}
+        </>
+      ),
       3: <StepResult strategy={strategy} goal="Продаж" tone={tone} model={model} artifacts={artifacts} tokens={stats.tokens} cost={stats.cost} inputSource="ТЕКСТ" wordCount={stats.wordCount} hookCount={stats.hookCount} ctaCount={stats.ctaCount} score={stats.score} state="ВИКОНУЄТЬСЯ" />,
     }),
     [artifacts, model, pipelineStatus, stats, strategy, tone],

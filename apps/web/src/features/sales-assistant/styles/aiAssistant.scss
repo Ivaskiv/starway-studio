@@ -3072,6 +3072,15 @@
   }
 }
 
+.dna-right-section--stats {
+  border-color: rgba(46, 107, 230, 0.22);
+}
+
+.dna-right-section--history-accent {
+  border-color: rgba(46, 107, 230, 0.4);
+  box-shadow: 0 0 0 1px rgba(46, 107, 230, 0.18), 0 12px 28px rgba(5, 10, 24, 0.32);
+}
+
 .dna-right-label {
   font-size: 0.58rem;
   font-weight: 800;
@@ -4164,6 +4173,10 @@
   min-height: 0;
 }
 
+.dna-step-preview {
+  margin-top: 12px;
+}
+
 .dna-step-shell {
   min-height: 320px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -4222,11 +4235,28 @@
   justify-content: space-between;
   gap: 8px;
   font-size: 12px;
+  text-align: left;
 }
 
 .dna-left-col__strategy-btn.is-active {
   border-color: rgba(46, 107, 230, 0.7);
   background: rgba(46, 107, 230, 0.16);
+}
+
+.dna-left-col__strategy-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.dna-left-col__strategy-copy strong {
+  font-size: 12px;
+  color: #ffffff;
+}
+
+.dna-left-col__strategy-copy small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 .dna-left-col__strategy-btn strong {

@@ -3,12 +3,11 @@ packages:
   - "backend"
   - "packages/*"
   - "video-hooks"
-
-onlyBuiltDependencies:
-  - "@parcel/watcher"
-  - "@prisma/client"
-  - "@prisma/engines"
-  - "core-js"
-  - "esbuild"
-  - "msgpackr-extract"
-  - "prisma"
+allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  core-js: true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
