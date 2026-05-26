@@ -4489,3 +4489,104 @@
   padding: 2px 8px;
   font-size: 11px;
 }
+
+/* === MOBILE ≤768px === */
+@media (max-width: 768px) {
+  .dna-panel-grid,
+  .dna-generation-shell__content {
+    grid-template-columns: 1fr;
+  }
+
+  .dna-left-col,
+  .dna-generation-shell__left-col {
+    display: none;
+  }
+
+  .dna-left-col.open,
+  .dna-generation-shell__left-col.open {
+    display: block;
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(280px, 85vw);
+    height: 100%;
+    z-index: 100;
+    background: var(--color-background-primary);
+  }
+
+  .dna-steps-row,
+  .dna-generation-shell__steps {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+
+  .dna-step,
+  .dna-generation-shell__step-btn {
+    min-width: 70px;
+    scroll-snap-align: start;
+  }
+
+  .dna-step span {
+    display: none;
+  }
+
+  .dna-step.active span {
+    display: inline;
+  }
+
+  .dna-bottom-bar,
+  .dna-generation-shell__bottom-bar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .dna-bottom-bar .cost-info {
+    display: none;
+  }
+
+  .dna-generate-btn,
+  .dna-generation-shell__action-btn {
+    width: 100%;
+  }
+
+  .agents-grid,
+  .dna-step-agents__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .artifacts-grid,
+  .dna-step-artifacts__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .result-metrics,
+  .dna-step-result__metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dna-step-agents {
+    grid-template-columns: 1fr;
+  }
+
+  .dna-step-result__prompts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .panel-border,
+  .step-row,
+  .dna-card {
+    border-width: 0.5px;
+  }
+
+  .dna-tag,
+  .dna-badge,
+  .artifact-btn {
+    border-width: 0.5px;
+  }
+
+  .dna-bottom-bar,
+  .dna-generation-shell__bottom-bar {
+    border-top-width: 0.5px;
+  }
+}
