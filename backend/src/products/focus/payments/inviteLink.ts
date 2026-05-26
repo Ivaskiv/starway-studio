@@ -1,5 +1,6 @@
 import { prisma } from '../../../db/client.js'
 import { resolveFocusChannelInviteLink } from '../../../modules/subscriptions/payments/business.js'
+import { FOCUS_PRODUCT_CODES } from '../../../modules/subscriptions/payments/focus.access.js'
 
 export async function createOnceInviteLink(chatId: string): Promise<string> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN
@@ -38,7 +39,10 @@ export async function createOnceInviteLink(chatId: string): Promise<string> {
 /** Returns stored invite link or generates + saves a new one for this user */
 export async function getOrCreateFocusInviteLink(userId: string): Promise<string> {
   const subscription = await prisma.productSubscription.findFirst({
-    where: { userId, productId: 'focus' },
+    where: {
+      userId,
+      product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
+    },
     select: { id: true, focusChannelInviteLink: true },
   }).catch(() => null)
 

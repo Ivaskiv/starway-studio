@@ -3,6 +3,7 @@ import { prisma } from '../../../db/client.js'
 import { trackEvent } from '../../events/service.js'
 import { getInstantInsight } from '../../ai-mentor/services.js'
 import { sendDedupedTelegramMessage } from '../../../lib/telegram.js'
+import { reconcileTelegramIdentityUsers } from '../../user/identity.service.js'
 
 export async function findLinkedUserId(params: {
   chatId: string
@@ -26,6 +27,24 @@ export async function findLinkedUserId(params: {
     },
     select: { id: true },
   })
+
+  if (existingLink?.userId && foundByTelegramIdentity?.id && existingLink.userId !== foundByTelegramIdentity.id) {
+    const reconciled = await reconcileTelegramIdentityUsers({
+      linkedUserId: existingLink.userId,
+      identityUserId: foundByTelegramIdentity.id,
+      reason: 'link_identity_mismatch',
+    })
+    console.info('[USER_DEDUP]', {
+      chatId,
+      telegramUserId,
+      linkedUserId: existingLink.userId,
+      identityUserId: foundByTelegramIdentity.id,
+      reconciledUserId: reconciled.userId,
+      merged: reconciled.merged,
+      source: 'link+identity_reconciled',
+    })
+    return reconciled.userId
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     console.info('[telegram/linking] resolve user', {

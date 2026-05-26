@@ -166,7 +166,7 @@ export function applyAccentColor(accentHex?: string | null, mode?: UiMode) {
 
   // ── Ambient / фон ─────────────────────────────────────────────────────────
   set('--ambient-rgb',          `${ambient1[0]}, ${ambient1[1]}, ${ambient1[2]}`)
-  set('--ambient-rgb-2',        `${ambient2[0]}, ${ambient2[1]}, ${ambient2[2]}`)
+  set('--ambient-2-rgb',        `${ambient2[0]}, ${ambient2[1]}, ${ambient2[2]}`)
 
   // ── Glass ─────────────────────────────────────────────────────────────────
   set('--glass-border-rgb',     `${softRgb[0]}, ${softRgb[1]}, ${softRgb[2]}`)

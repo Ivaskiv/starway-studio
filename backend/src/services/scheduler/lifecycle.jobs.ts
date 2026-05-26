@@ -7,6 +7,7 @@ import { NotificationEvent } from '../notifications/NotificationEvent.js'
 import { notificationService } from '../notifications/NotificationService.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { buildEcosystemPaymentCheckoutUrl, resolveEcosystemPaymentTarget } from '../../modules/subscriptions/payments/business.js'
+import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js'
 import { ensureNotificationPreferenceTableAvailability, getSettingsObject, getUtcDateKey, readTimestamp, resolvePublicFrontendBaseUrl, sendUpgradeOfferTelegramMessage, type SchedulerNotifier } from './common.js'
 
 export async function mentorReadinessCheckCron(): Promise<void> {
@@ -28,7 +29,9 @@ export async function mentorReadinessCheckCron(): Promise<void> {
       paidAt: true,
       user: {
         select: {
-          lifecycleState: true,
+          currentState: true,
+          currentStep: true,
+          funnelStage: true,
           settings: true,
           notificationPreference: {
             select: {
@@ -44,7 +47,7 @@ export async function mentorReadinessCheckCron(): Promise<void> {
   for (const subscription of subscriptions) {
     const preferences = subscription.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) continue
-    if (subscription.user.lifecycleState !== 'platform_active') continue
+    if (resolveUserLifecycle(subscription.user).value !== 'platform_active') continue
 
     const settings = getSettingsObject(subscription.user.settings)
     if (readTimestamp(settings.mentorReadinessSentAt)) continue
@@ -113,7 +116,9 @@ export async function personalProgramCheckCron(): Promise<void> {
       paidAt: true,
       user: {
         select: {
-          lifecycleState: true,
+          currentState: true,
+          currentStep: true,
+          funnelStage: true,
           settings: true,
           notificationPreference: {
             select: {
@@ -129,7 +134,7 @@ export async function personalProgramCheckCron(): Promise<void> {
   for (const subscription of subscriptions) {
     const preferences = subscription.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) continue
-    if (subscription.user.lifecycleState !== 'platform_active') continue
+    if (resolveUserLifecycle(subscription.user).value !== 'platform_active') continue
 
     const settings = getSettingsObject(subscription.user.settings)
     const sentAt = readTimestamp(settings.personalProgramSentAt)
@@ -252,7 +257,9 @@ export async function scheduleWinbackNotification(
       },
       user: {
         select: {
-          lifecycleState: true,
+          currentState: true,
+          currentStep: true,
+          funnelStage: true,
           settings: true,
           notificationPreference: {
             select: {
@@ -269,7 +276,7 @@ export async function scheduleWinbackNotification(
   for (const subscription of subscriptions) {
     const preferences = subscription.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) continue
-    if (subscription.user.lifecycleState !== 'expired') continue
+    if (resolveUserLifecycle(subscription.user).value !== 'expired') continue
 
     const expiresAt = subscription.expiresAt ?? null
     if (!expiresAt) continue
@@ -285,7 +292,7 @@ export async function scheduleWinbackNotification(
     const target = resolveEcosystemPaymentTarget(amount)
     if (!target) continue
 
-    const paymentUrl = buildEcosystemPaymentCheckoutUrl(target.productId, target.planId, subscription.userId)
+    const paymentUrl = await buildEcosystemPaymentCheckoutUrl(target.productId, target.planId, subscription.userId)
     const dailyCycles = await database.dailyCycleLog.count({
       where: { userId: subscription.userId },
     }).catch(() => 0)
@@ -350,7 +357,9 @@ export async function referralCheckCron(deps?: {
       createdAt: true,
       user: {
         select: {
-          lifecycleState: true,
+          currentState: true,
+          currentStep: true,
+          funnelStage: true,
           settings: true,
           notificationPreference: {
             select: {
@@ -366,7 +375,7 @@ export async function referralCheckCron(deps?: {
   for (const subscription of subscriptions) {
     const preferences = subscription.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.aiRemindersEnabled) continue
-    if (subscription.user.lifecycleState !== 'platform_active') continue
+    if (resolveUserLifecycle(subscription.user).value !== 'platform_active') continue
 
     const settings = getSettingsObject(subscription.user.settings)
     if (readTimestamp(settings.referralSentAt)) continue

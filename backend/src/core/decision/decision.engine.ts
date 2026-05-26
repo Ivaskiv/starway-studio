@@ -63,10 +63,10 @@ function isReinforcementMoment(input: DecisionInput) {
 
 function buildOfferUiData(
   input: DecisionInput,
-  lifecycleState: 'activated' | 'trial_active' | 'paid_active' | 'expired' | 'churned',
+  lifecycle: 'activated' | 'trial_active' | 'paid_active' | 'expired' | 'churned',
 ) {
   return toUiData(getOffer({
-    lifecycleState,
+    lifecycle,
     hasProgress: hasProductProgress(input.product),
     daysToTrialEnd: input.product?.daysToTrialEnd ?? null,
     repeatedPatterns: Boolean(input.product?.repeatedPatterns),

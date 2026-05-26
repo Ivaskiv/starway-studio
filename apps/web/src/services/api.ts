@@ -9,7 +9,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
 import type { RootState } from '@/app/store';
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice';
-import { getRefreshToken } from '@/features/auth/services/token';
+import { getRefreshToken, hasSessionHint } from '@/features/auth/services/token';
 import type { User } from '@/features/user/types/user.types';
 import { TAG_TYPES } from '@/app/tagTypes';
 
@@ -79,6 +79,23 @@ const getTelegramMiniAppAuthHeader = () => {
   if (!initData) return null;
   return `tma ${initData}`;
 };
+
+function logAuthTrace(event: string, data: Record<string, unknown> = {}): void {
+  if (!import.meta.env.DEV) return;
+  console.info('[AUTH_TRACE]', {
+    event,
+    at: new Date().toISOString(),
+    ...data,
+  });
+}
+
+function canProbeCookieSessionWithoutTokens(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hasTelegramInitData = Boolean(
+    (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim(),
+  );
+  return hasSessionHint() || hasTelegramInitData;
+}
 
 console.info('[api] configuration', {
   mode: API_MODE,
@@ -186,10 +203,19 @@ const refreshAccessToken = async (
   if (refreshResponse.data) {
     const { accessToken, refreshToken, user } = refreshResponse.data as RefreshResponse;
     api.dispatch(setCredentials({ user, accessToken, refreshToken }));
+    logAuthTrace('refreshFinished', { ok: true, unauthorizedSource: null });
     return true;
   }
-
-  api.dispatch(clearAuth());
+  const refreshStatus = (refreshResponse.error as { status?: unknown } | undefined)?.status;
+  const isDefinitiveAuthFailure = refreshStatus === 401 || refreshStatus === 403;
+  if (isDefinitiveAuthFailure) {
+    // FIX 2026-05-25: clear auth only on definitive refresh auth failure.
+    api.dispatch(clearAuth());
+    logAuthTrace('refreshFinished', { ok: false, unauthorizedSource: 'refresh_unauthorized', status: refreshStatus });
+    return false;
+  }
+  // FIX 2026-05-25: preserve local session on transient network/backend failures.
+  logAuthTrace('refreshFinished', { ok: false, unauthorizedSource: 'refresh_transient', status: refreshStatus });
   return false;
 };
 
@@ -213,7 +239,18 @@ export const baseQueryWithReauth: BaseQueryFn<
   object,
   FetchBaseQueryMeta
 > = async (args, api, extraOptions): Promise<RawBaseQueryResult> => {
+  const requestPathForLog = getRequestPath(args);
+  const isDnaRequest =
+    requestPathForLog.includes('/ai/sales-assistant') ||
+    requestPathForLog.includes('/admin/content-studio');
+  if (isDnaRequest && import.meta.env.DEV) {
+    console.log('[DNA][api] request', { path: requestPathForLog });
+  }
   let result = await rawBaseQuery(args, api, extraOptions);
+
+  if (isDnaRequest && result.error) {
+    console.error('[DNA][api] error', { path: requestPathForLog, status: (result.error as { status?: unknown }).status });
+  }
 
   if (result.error?.status !== 401) {
     return result;
@@ -234,14 +271,27 @@ export const baseQueryWithReauth: BaseQueryFn<
   const state = api.getState() as RootState;
   const accessToken = getAccessToken(state);
   const refreshToken = getRefreshToken();
+  const allowCookieSessionProbe = canProbeCookieSessionWithoutTokens();
 
-  if (!accessToken && !refreshToken) {
+  logAuthTrace('routeGuardTriggered', {
+    tokenFound: Boolean(accessToken || refreshToken),
+    refreshStarted: true,
+    unauthorizedSource: requestPath,
+  });
+
+  if (!accessToken && !refreshToken && !allowCookieSessionProbe) {
+    // FIX 2026-05-25: keep hard clear only when no recoverable hints exist.
     api.dispatch(clearAuth());
+    logAuthTrace('logoutReason', { reason: 'no_tokens_no_recovery_hint', path: requestPath });
     return result;
   }
 
   const didRefresh = await runWithSingleRefresh(api, extraOptions);
   if (!didRefresh) {
+    if (!accessToken && !refreshToken) {
+      api.dispatch(clearAuth());
+      logAuthTrace('logoutReason', { reason: 'cookie_probe_failed', path: requestPath });
+    }
     return result;
   }
 

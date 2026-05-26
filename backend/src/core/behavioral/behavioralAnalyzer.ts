@@ -143,7 +143,7 @@ export async function buildBehavioralSnapshotFromUserId(userId: string): Promise
       orderBy: { createdAt: 'desc' },
       select: { goals: true },
     }).catch(() => null),
-    prisma.userAIMentor.findFirst({
+    prisma.userAiMentor.findFirst({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       select: {

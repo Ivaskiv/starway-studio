@@ -11,6 +11,7 @@ import { listMicroTasksForUser } from '../../microTask/service.js'
 import { getUserAccess, getUserSystemState } from '../../access/service.js'
 import { notificationRecordService } from '../../../services/notifications/services/NotificationRecordService.js'
 import { syncAccessAwareChatMenuButton } from '../handlers/start.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 import { pickBestTask, type Task } from './taskPriority.service.js'
 import { resolveUserLifecycle } from '../../flow-control/service.js'
 import { resolveCentralLifecycleSnapshot } from '../../lifecycle/service.js'
@@ -193,7 +194,7 @@ async function resolveLastActivityHours(userId: string): Promise<number> {
       where: { id: userId },
       select: { lastLoginAt: true },
     }),
-    prisma.userAIMentor.findFirst({
+    prisma.userAiMentor.findFirst({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       select: { lastInteractionAt: true },
@@ -445,10 +446,14 @@ async function sendNudgeMessage(userId: string, task: Task, templateKey: string,
   }
 
   if (ctx?.chat?.id) {
-    await ctx.reply(buildNudgeMessage(task), {
-      ...payload,
-      parse_mode: 'HTML',
-    })
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'nudge_task',
+      buildNudgeMessage(task),
+      payload.reply_markup,
+      'HTML',
+    )
     return true
   }
 

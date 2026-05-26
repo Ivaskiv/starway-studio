@@ -708,8 +708,7 @@ export async function getLiveActivity(limit = 20): Promise<LiveEventItem[]> {
           id: true,
           email: true,
           firstName: true,
-          name: true,
-        },
+                  },
       },
     },
   })
@@ -722,7 +721,7 @@ export async function getLiveActivity(limit = 20): Promise<LiveEventItem[]> {
     createdAt: event.createdAt.toISOString(),
     user: {
       id: event.user?.id ?? null,
-      label: event.user?.firstName ?? event.user?.name ?? event.user?.email ?? 'Unknown user',
+      label: event.user?.firstName ?? event.user?.firstName ?? event.user?.email ?? 'Unknown user',
     },
   }))
 }

@@ -17,6 +17,7 @@ import {
 } from '../../../core/state-machine/abTestFoundation.js'
 import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
 import { absystemButtons, absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { prisma } from '../../../db/client.js'
 import { abTestContent } from '../content/abTest.content.js'
 import {
   buildFaqKeyboard,
@@ -24,6 +25,7 @@ import {
   type FaqCallbackData,
 } from '../content/abTest.faq.js'
 import { abTestMenuContent } from '../content/abTest.menu.js'
+import { abTestPlatformContent } from '../content/abTest.platform.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
 import { BLOCK10_FOCUS, BLOCK9_POST_RESULT, getAbTestResultDefinition } from '../content/abTest.results.js'
 import {
@@ -50,6 +52,7 @@ import {
   sendActionMessage,
 } from './abTest.views.js'
 import { planAck, planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
+import { getQueueDepth } from '../../../modules/telegram-mentor/conversation/queue/perChatQueue.js'
 import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus.access.js'
 import { getConfiguredFocusProduct } from '@/modules/subscriptions/payments/focus.access.js'
 import { sendAbTestBlock12Welcome } from '@/modules/subscriptions/payments/callback.notifications.js'
@@ -129,6 +132,127 @@ function isValidEmail(value: string): boolean {
   const normalized = value.trim().toLowerCase()
   if (!normalized || normalized.length > 254) return false
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+}
+
+// FIX 2025-05-25 D1: avoid empty-string env values for payment URLs.
+function firstNonEmptyUrl(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+  return 'https://wayforpay.com'
+}
+
+// FIX 2025-05-25 TEST_PAYMENT: strict non-production guard for test payment controls.
+function isTestPaymentEnabled(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.TEST_PAYMENT_ENABLED?.trim() === '1'
+}
+
+type PaymentTraceStep = 'callback' | 'ack' | 'payment_generation' | 'invoice_create' | 'render' | 'send'
+
+// FIX 2025-05-25 PAYMENT_TRACE: scoped diagnostics and timeout guard for open_focus_payment flow.
+function logPaymentTrace(
+  step: PaymentTraceStep,
+  meta: {
+    chatId: string
+    startedAt: number
+    finishedAt?: number
+    lockState?: string
+    queueState?: number
+    orchestratorState?: string
+    note?: string
+  },
+): void {
+  const finishedAt = meta.finishedAt ?? Date.now()
+  const durationMs = finishedAt - meta.startedAt
+  const payload = {
+    step,
+    startedAt: new Date(meta.startedAt).toISOString(),
+    finishedAt: new Date(finishedAt).toISOString(),
+    durationMs,
+    lockState: meta.lockState ?? 'n/a',
+    queueState: meta.queueState ?? 0,
+    orchestratorState: meta.orchestratorState ?? 'n/a',
+    note: meta.note ?? null,
+  }
+  if (durationMs > 15000) {
+    console.error('[PAYMENT_TRACE]', payload)
+    return
+  }
+  if (durationMs > 5000) {
+    console.warn('[PAYMENT_TRACE]', payload)
+    return
+  }
+  console.log('[PAYMENT_TRACE]', payload)
+}
+
+async function runPaymentTraceStep<T>(
+  step: PaymentTraceStep,
+  chatId: string,
+  operation: () => Promise<T>,
+  timeoutMs = 15000,
+): Promise<T> {
+  const startedAt = Date.now()
+  const queueState = getQueueDepth(chatId)
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`PAYMENT_TRACE_TIMEOUT:${step}:${timeoutMs}`)), timeoutMs)
+    })
+    const result = await Promise.race([operation(), timeoutPromise])
+    logPaymentTrace(step, {
+      chatId,
+      startedAt,
+      finishedAt: Date.now(),
+      queueState,
+      lockState: 'n/a',
+      orchestratorState: 'direct-path',
+    })
+    return result
+  } catch (error) {
+    logPaymentTrace(step, {
+      chatId,
+      startedAt,
+      finishedAt: Date.now(),
+      queueState,
+      lockState: 'n/a',
+      orchestratorState: 'direct-path',
+      note: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
+
+// FIX 2025-05-25 PAYMENT_TRACE: immediate callback ack bypassing orchestrator queue.
+async function immediateCallbackAck(ctx: Context, action: string): Promise<void> {
+  const callbackQuery = ctx.callbackQuery
+  if (!callbackQuery || !('id' in callbackQuery)) return
+  const callbackId = String(callbackQuery.id ?? '')
+  if (!callbackId) return
+  const chatId = String(ctx.chat?.id ?? ctx.from?.id ?? 'n/a')
+  const startedAt = Date.now()
+  try {
+    await ctx.telegram.answerCbQuery(callbackId)
+    logPaymentTrace('ack', {
+      chatId,
+      startedAt,
+      finishedAt: Date.now(),
+      queueState: getQueueDepth(chatId),
+      lockState: 'bypass',
+      orchestratorState: 'telegram.answerCbQuery',
+      note: action,
+    })
+  } catch (error) {
+    logPaymentTrace('ack', {
+      chatId,
+      startedAt,
+      finishedAt: Date.now(),
+      queueState: getQueueDepth(chatId),
+      lockState: 'bypass',
+      orchestratorState: 'telegram.answerCbQuery',
+      note: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 // FIX 2025-05-25 C: shared direct sender for question rendering used by resume and answer flow.
@@ -387,6 +511,16 @@ export async function handleAbTestCallback(
   ctx: Context,
   action: string
 ): Promise<boolean> {
+  const callbackTraceStartedAt = Date.now()
+  logPaymentTrace('callback', {
+    chatId: String(ctx.chat?.id ?? ctx.from?.id ?? 'n/a'),
+    startedAt: callbackTraceStartedAt,
+    finishedAt: callbackTraceStartedAt,
+    queueState: getQueueDepth(String(ctx.chat?.id ?? ctx.from?.id ?? 'n/a')),
+    lockState: 'pre-handler',
+    orchestratorState: 'callback_received',
+    note: action,
+  })
   logCallbackReceived({
     action,
     chatId: String(ctx.chat?.id ?? ''),
@@ -399,6 +533,152 @@ export async function handleAbTestCallback(
     fromId: String(ctx.from?.id ?? ''),
     userId: (ctx.state as { userId?: string | null }).userId ?? null,
   })
+
+  const focusPaymentAction = action.match(/^open_focus_payment(?::(1month|3month))?$/)
+  if (focusPaymentAction) {
+    let payingUserId = (ctx.state as { userId?: string | null }).userId ?? null
+    // FIX 2025-05-25 T1: fallback user resolution so test button is visible in local callback flows.
+    if (!payingUserId && ctx.from?.id) {
+      const resolved = await prisma.user.findFirst({
+        where: { telegramUserId: String(ctx.from.id) },
+        select: { id: true },
+      }).catch(() => null)
+      payingUserId = resolved?.id ?? null
+      if (payingUserId) {
+        ;(ctx.state as { userId?: string | null }).userId = payingUserId
+      }
+    }
+    const chatIdValue = ctx.chat?.id ?? ctx.from?.id
+    const chatId = chatIdValue ? String(chatIdValue) : ''
+    await immediateCallbackAck(ctx, action)
+    console.log('[FOCUS_PAY] reached', { userId: payingUserId, chatId: ctx.chat?.id })
+    if (!chatIdValue) {
+      return true
+    }
+    const fallbackUrl1m = firstNonEmptyUrl(
+      process.env.WAYFORPAY_FOCUS_BOT_1M_URL,
+      process.env.WAYFORPAY_FOCUS_1M_URL,
+      process.env.FOCUS_1M_URL,
+      process.env.WAYFORPAY_FOCUS_LANDING_URL,
+    )
+    const fallbackUrl3m = firstNonEmptyUrl(
+      process.env.WAYFORPAY_FOCUS_BOT_3M_URL,
+      process.env.WAYFORPAY_FOCUS_3M_URL,
+      process.env.FOCUS_3M_URL,
+      process.env.WAYFORPAY_FOCUS_LANDING_URL,
+    )
+    const text = BLOCK10_FOCUS?.text
+      ?? 'ФОКУС | Zoom-практики AB System\n\n'
+      + 'ФОКУС — це живі Zoom-практики раз на тиждень.\n'
+      + 'Ти приходиш із реальною ситуацією:\n'
+      + '— що відкладаєш,\n'
+      + '— яке рішення переносиш,\n'
+      + '— яка ціль не рухається.\n\n'
+      + 'Тарифи:\n'
+      + '1 місяць — 780 грн\n'
+      + '3 місяці — 1990 грн'
+    const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць — 780 грн'
+    const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 1990 грн'
+    let dynamicUrl1m = fallbackUrl1m
+    let dynamicUrl3m = fallbackUrl3m
+    // FIX 2026-05-25 WFP2: wire short checkout as primary path for Telegram payment buttons.
+    if (payingUserId) {
+      try {
+        const [oneMonthSession, threeMonthSession] = await Promise.all([
+          runPaymentTraceStep('payment_generation', chatId, async () => (
+            await buildEcosystemPaymentCheckoutSession('focus', '1month', payingUserId)
+          )),
+          runPaymentTraceStep('payment_generation', chatId, async () => (
+            await buildEcosystemPaymentCheckoutSession('focus', '3month', payingUserId)
+          )),
+        ])
+        dynamicUrl1m = oneMonthSession.checkoutUrl
+        dynamicUrl3m = threeMonthSession.checkoutUrl
+      } catch (error) {
+        console.error('[WAYFORPAY_CHECKOUT] failed_to_build_dynamic_checkout', error)
+      }
+    }
+    let testButtonRow: Array<{ text: string; url: string }> | null = null
+    if (payingUserId && isTestPaymentEnabled()) {
+      try {
+        const testSession = await runPaymentTraceStep('payment_generation', chatId, async () => (
+          await buildEcosystemPaymentCheckoutSession(
+            'focus',
+            '1month',
+            payingUserId,
+            {
+              amountOverride: 1,
+              orderRefTag: 'test1uah',
+            },
+          )
+        ))
+        logPaymentTrace('invoice_create', {
+          chatId,
+          startedAt: Date.now(),
+          finishedAt: Date.now(),
+          queueState: getQueueDepth(chatId),
+          lockState: 'n/a',
+          orchestratorState: 'direct-path',
+          note: testSession.orderReference,
+        })
+        testButtonRow = [{ text: '🧪 Тест 1 грн', url: testSession.checkoutUrl }]
+        console.log('[TEST_PAYMENT]', {
+          userId: payingUserId,
+          productId: 'focus',
+          planId: '1month',
+          amount: 1,
+          orderReference: testSession.orderReference,
+        })
+      } catch (error) {
+        console.error('[TEST_PAYMENT] failed_to_build_checkout', error)
+      }
+    }
+    try {
+      await runPaymentTraceStep('render', chatId, async () => {
+        await ctx.telegram.sendMessage(
+          chatIdValue,
+          text,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: cta1m, url: dynamicUrl1m }],
+                [{ text: cta3m, url: dynamicUrl3m }],
+                ...(testButtonRow ? [testButtonRow] : []),
+              ],
+            },
+          },
+        )
+      })
+      logPaymentTrace('send', {
+        chatId,
+        startedAt: Date.now(),
+        finishedAt: Date.now(),
+        queueState: getQueueDepth(chatId),
+        lockState: 'n/a',
+        orchestratorState: 'telegram.sendMessage',
+      })
+      console.log('[FOCUS_PAY] sent ok', { userId: payingUserId, chatId: chatIdValue })
+    } catch (error) {
+      console.error('[FOCUS_PAY] FAILED', error)
+    }
+    if (payingUserId) {
+      loadAbTestProgress(payingUserId)
+        .then((progressAfterFocusClick) =>
+          saveAbTestProgress(
+            payingUserId,
+            buildAbTestProgressPatch(progressAfterFocusClick, {
+              focus_opened_at: progressAfterFocusClick.focus_opened_at ?? new Date().toISOString(),
+              last_event_at: new Date().toISOString(),
+            }),
+          )
+        )
+        .catch((error: Error) =>
+          console.error('[FOCUS_PAYMENT] save progress failed', error)
+        )
+    }
+    return true
+  }
 
   if (await handleAiSellerCallback(ctx, action)) {
     logCallbackHandled({
@@ -430,70 +710,26 @@ export async function handleAbTestCallback(
     return true
   }
 
-  const focusPaymentAction = action.match(/^open_focus_payment(?::(1month|3month))?$/)
-  if (focusPaymentAction) {
-    // FIX 2025-05-25 D1: direct send Block 10 with robust fallback and diagnostics.
+  // FIX 2025-05-25 C1: explicit bridge callback from paid member start screen to platform offer.
+  if (action === 'ab_test:show_platform') {
     await ctx.answerCbQuery().catch(() => null)
-    const payingUserId = (ctx.state as { userId?: string | null }).userId ?? null
     const chatId = ctx.chat?.id ?? ctx.from?.id
-    console.log('[FOCUS_PAY] reached', { userId: payingUserId, chatId: ctx.chat?.id })
     if (!chatId) {
       return true
     }
-    const url1m = process.env.WAYFORPAY_FOCUS_1M_URL
-      ?? process.env.FOCUS_1M_URL
-      ?? process.env.WAYFORPAY_FOCUS_LANDING_URL
-      ?? 'https://wayforpay.com'
-    const url3m = process.env.WAYFORPAY_FOCUS_3M_URL
-      ?? process.env.FOCUS_3M_URL
-      ?? process.env.WAYFORPAY_FOCUS_LANDING_URL
-      ?? 'https://wayforpay.com'
-    const text = BLOCK10_FOCUS?.text
-      ?? 'ФОКУС | Zoom-практики AB System\n\n'
-      + 'ФОКУС — це живі Zoom-практики раз на тиждень.\n'
-      + 'Ти приходиш із реальною ситуацією:\n'
-      + '— що відкладаєш,\n'
-      + '— яке рішення переносиш,\n'
-      + '— яка ціль не рухається.\n\n'
-      + 'Тарифи:\n'
-      + '1 місяць — 780 грн\n'
-      + '3 місяці — 1990 грн'
-    const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць — 780 грн'
-    const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 1990 грн'
-    try {
-      await ctx.telegram.sendMessage(
-        chatId,
-        text,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: cta1m, url: url1m }],
-              [{ text: cta3m, url: url3m }],
-            ],
-          },
+    await ctx.telegram.sendMessage(
+      chatId,
+      abTestPlatformContent.bridge.body,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{
+            text: abTestPlatformContent.bridge.cta,
+            callback_data: 'open_platform_payment',
+          }]],
         },
-      )
-      console.log('[FOCUS_PAY] sent ok', { userId: payingUserId, chatId })
-    } catch (error) {
-      console.error('[FOCUS_PAY] FAILED', error)
-    }
-    if (payingUserId) {
-      // FIX 2025-05-25 D2: non-blocking save.
-      loadAbTestProgress(payingUserId)
-        .then((progressAfterFocusClick) =>
-          saveAbTestProgress(
-            payingUserId,
-            buildAbTestProgressPatch(progressAfterFocusClick, {
-              focus_opened_at: progressAfterFocusClick.focus_opened_at ?? new Date().toISOString(),
-              last_event_at: new Date().toISOString(),
-            }),
-          )
-        )
-        .catch((error: Error) =>
-          console.error('[FOCUS_PAYMENT] save progress failed', error)
-        )
-    }
+      },
+    )
     return true
   }
 

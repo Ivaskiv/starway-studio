@@ -6,6 +6,7 @@ import {
   AB_TEST_UI_SETTINGS_KEY,
   buildAbTestProgressPatch,
   normalizeAbTestProgress,
+  repairAbTestProgress,
   type AbTestProgress,
 } from '../../../core/state-machine/abTestFoundation.js'
 
@@ -55,26 +56,66 @@ export function mergeUiSettings(
 export async function loadUserUiSettings(userId: string): Promise<UiSettingsObject> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { uiSettings: true },
+    select: { settings: true },
   })
 
-  return getUiSettings(user?.uiSettings)
+  const settings = getSettingsObject(user?.settings)
+  const nestedUi = getUiSettings(settings.ui)
+  if (Object.keys(nestedUi).length > 0) {
+    return nestedUi
+  }
+
+  return {}
 }
 
 export async function loadAbTestProgress(userId: string): Promise<AbTestProgress> {
   const uiSettings = await loadUserUiSettings(userId)
-  return getAbTestProgressFromUiSettings(uiSettings)
+  const progress = getAbTestProgressFromUiSettings(uiSettings)
+  const repaired = repairAbTestProgress(progress)
+  if (!repaired.repaired) {
+    return repaired.progress
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { settings: true },
+  })
+  const settings = getSettingsObject(user?.settings)
+  const nextUiSettings = mergeUiSettings(getUiSettings(settings.ui), repaired.progress)
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      settings: {
+        ...settings,
+        ui: nextUiSettings,
+      } as Prisma.InputJsonValue,
+    },
+  })
+  console.warn('[AB_TEST_FLOW] invalid progress auto-recovered', {
+    userId,
+    reasons: repaired.reasons,
+  })
+  return repaired.progress
 }
 
 export async function saveAbTestProgress(
   userId: string,
   progress: AbTestProgress
 ): Promise<AbTestProgress> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { settings: true },
+  })
   const uiSettings = await loadUserUiSettings(userId)
+  const settings = getSettingsObject(user?.settings)
+  const nextUiSettings = mergeUiSettings(uiSettings, progress)
   await prisma.user.update({
     where: { id: userId },
     data: {
-      uiSettings: mergeUiSettings(uiSettings, progress),
+      settings: {
+        ...settings,
+        ui: nextUiSettings,
+      } as Prisma.InputJsonValue,
     },
   })
   return progress

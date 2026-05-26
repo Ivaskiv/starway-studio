@@ -224,7 +224,7 @@ async function analyzePromptImpact(promptName: string): Promise<PromptImpactAnal
     select: {
       id: true,
       name: true,
-      version: true,
+            version: true,
       content: true,
       isActive: true,
       createdAt: true,
@@ -816,7 +816,7 @@ router.get('/ownership', authRequired, async (req: AuthenticatedRequest, res: Re
     },
   })
 
-  const mentorConfigs = await prisma.userAIMentor.findMany({
+  const mentorConfigs = await prisma.userAiMentor.findMany({
     include: {
       user: {
         select: { id: true, email: true, firstName: true, role: true },

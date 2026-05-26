@@ -15,14 +15,14 @@ const VIEW_TABS  = [
 ]
 
 const ROLE_TABS = [
-  { id: 'user'       as PreviewRole, label: '👤 User'       },
-  { id: 'expert'     as PreviewRole, label: '🎬 Expert'      },
-  { id: 'superadmin' as PreviewRole, label: '⭐ SuperAdmin'  },
+  { id: 'USER'       as PreviewRole, label: '👤 User'       },
+  { id: 'EXPERT'     as PreviewRole, label: '🎬 Expert'      },
+  { id: 'SUPERADMIN' as PreviewRole, label: '⭐ SuperAdmin'  },
 ]
 
 function availableRoleTabs(userRole: PreviewRole) {
-  if (userRole === 'superadmin') return ROLE_TABS
-  if (userRole === 'expert')     return ROLE_TABS.filter(t => t.id !== 'superadmin')
+  if (userRole === 'SUPERADMIN') return ROLE_TABS
+  if (userRole === 'EXPERT' || userRole === 'ADMIN') return ROLE_TABS.filter(t => t.id !== 'SUPERADMIN')
   return []
 }
 

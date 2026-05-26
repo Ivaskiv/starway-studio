@@ -14,7 +14,7 @@
 :root {
   // Синя тема — фіксовані значення (не залежать від --accent-rgb)
   --tf:     var(--accent);
-  --tf-rgb: var(--accent-rgb);
+  --tf-rgb: 26, 86, 219;
   --tf-08:  rgba(var(--accent-rgb), 0.08);
   --tf-12:  rgba(var(--accent-rgb), 0.12);
   --tf-20:  rgba(var(--accent-rgb), 0.20);

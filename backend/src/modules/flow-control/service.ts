@@ -16,6 +16,16 @@ function isWaitlistFlag(value: string | null | undefined): boolean {
   return normalized.includes('WAITLIST') || normalized.includes('EARLY_ACCESS')
 }
 
+function resolveOnboardingStage(
+  currentStep: string | null | undefined,
+): string | null {
+  const normalizedCurrentStep = String(currentStep ?? '').trim()
+  if (normalizedCurrentStep === 'lead_magnet') return 'lead_magnet'
+  if (normalizedCurrentStep && !normalizedCurrentStep.startsWith('lead_step_')) return normalizedCurrentStep
+  const normalizedOnboardingStage = String(currentStep ?? '').trim()
+  return normalizedOnboardingStage || null
+}
+
 function deriveLeadStep(progress: unknown): number {
   if (!progress || typeof progress !== 'object' || Array.isArray(progress)) return 0
   const raw = progress as { completedLessons?: unknown; steps?: unknown }
@@ -72,8 +82,7 @@ export async function resolveUserLifecycle(userId: string, db: FlowDbClient = pr
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
-      onboardingStage: true,
-      onboardingStartedAt: true,
+            onboardingStartedAt: true,
       currentStep: true,
       trialStartsAt: true,
       trialEndsAt: true,
@@ -114,13 +123,14 @@ export async function resolveUserLifecycle(userId: string, db: FlowDbClient = pr
   const subscription = user.subscriptions[0] ?? null
   const leadEnrollment = user.fivePointsEnrollment[0] ?? null
   const latestLead = user.funnelLeads[0] ?? null
+  const currentStep = resolveOnboardingStage(user.currentStep)
   const hasFreshLeadRecord = latestLead?.status === 'LEAD' && isFreshLeadMagnetDate(latestLead.updatedAt, now)
   const hasFreshLeadEnrollment = Boolean(
     leadEnrollment
     && !leadEnrollment.completedAt
     && isFreshLeadMagnetDate(leadEnrollment.createdAt, now),
   )
-  const hasWaitlistFlag = isWaitlistFlag(user.onboardingStage) || isWaitlistFlag(user.currentStep)
+  const hasWaitlistFlag = isWaitlistFlag(currentStep) || isWaitlistFlag(user.currentStep)
   const isPaidActive =
     subscription?.status === 'ACTIVE' &&
     (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
@@ -143,7 +153,7 @@ export async function resolveUserLifecycle(userId: string, db: FlowDbClient = pr
   )
   const hasLeadMagnetFlow = hasFreshLeadRecord
     || hasFreshLeadEnrollment
-    || (user.onboardingStage === 'lead_magnet' && (hasFreshLeadRecord || hasFreshLeadEnrollment))
+    || (currentStep === 'lead_magnet' && (hasFreshLeadRecord || hasFreshLeadEnrollment))
 
   if (isPaidActive) {
     return {
@@ -213,13 +223,13 @@ export async function resolveUserLifecycle(userId: string, db: FlowDbClient = pr
     }
   }
 
-  if (user.onboardingStartedAt || (user.onboardingStage && user.onboardingStage !== 'lead_magnet' && !hasWaitlistFlag)) {
+  if (user.onboardingStartedAt || (currentStep && currentStep !== 'lead_magnet' && !hasWaitlistFlag)) {
     return {
       state: 'onboarding',
       flow: 'onboarding',
       subscriptionStatus: 'inactive',
       subscriptionActive: false,
-      currentStep: user.onboardingStage ?? 'ENTRY',
+      currentStep: currentStep ?? 'ENTRY',
       leadStep,
       hasLeadMagnetFlow,
       hasCompletedLeadMagnet,

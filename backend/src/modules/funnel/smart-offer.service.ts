@@ -85,7 +85,7 @@ export async function getPersonalizedOffer(userId: string): Promise<SmartOffer |
       orderBy: { createdAt: 'desc' },
       select: { status: true, trialEndsAt: true },
     }),
-    prisma.userAIMentor.findFirst({
+    prisma.userAiMentor.findFirst({
       where: { userId },
       select: {
         stage: true,

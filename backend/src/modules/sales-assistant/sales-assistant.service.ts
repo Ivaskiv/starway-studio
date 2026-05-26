@@ -1,0 +1,395 @@
+import type { ModelGenerationResult } from '@starway/ai/types/salesAssistant.types'
+import { resolveModelStrategyTier } from '@starway/ai/providers/routing'
+import { prisma } from '@/db/client.js'
+import { type AiBehaviorProfile } from '@/modules/ai-assistant/promptCompiler.js'
+import { ProviderGenerationError } from '@/modules/ai-assistant/utils/normalizeProviderError.js'
+
+import { DEFAULT_PROVIDER, FALLBACK_PROFILE, MAX_PROMPT_CHARS, MAX_USER_REQUEST_CHARS, PROMPT_PREVIEW_CHARS } from '@/modules/sales-assistant/sales-assistant.constants.js'
+import type { SalesAssistantGenerateBody, SalesAssistantWorkspaceResponse, UpdateSalesAssistantWorkspaceBody } from '@/modules/sales-assistant/sales-assistant.types.js'
+import { hashCacheParts, rememberResultCache } from '@/modules/sales-assistant/sales-assistant.helpers.js'
+import { callProviderSafe, resolveEnabledProviders } from '@/modules/sales-assistant/sales-assistant.providers.js'
+import {
+  buildPromptForType,
+  resolveFreeFirstRoutingMode,
+  resolveProvidersForMode,
+  type ContentTypeKey,
+} from '@/modules/sales-assistant/prompts/contentType.prompts.js'
+import { validateOutput } from '@/modules/sales-assistant/sales-assistant.validation.js'
+import type { ModelProvider } from '@/modules/ai-assistant/promptCompiler.js'
+import { fromSalesAssistantInput, runPipeline } from '@/core/dna/index.js'
+
+// ─── re-export types ──────────────────────────────────────────────────────────
+export type { SalesAssistantGenerateBody, SalesAssistantWorkspaceResponse, UpdateSalesAssistantWorkspaceBody }
+
+const DNA_TARGET_TYPES = new Set<ContentTypeKey>(['reels', 'warmup'])
+function shouldUseDna(type: ContentTypeKey): boolean {
+  return isDnaEnabled() && DNA_TARGET_TYPES.has(type)
+}
+const CONTENT_TYPE_MAP: Record<string, ContentTypeKey> = {
+  REELS_SCENARIO: 'reels',
+  WARMUP_1DAY: 'warmup',
+  WARMUP_3DAYS: 'warmup',
+  WARMUP_WEEK: 'warmup',
+  WARMUP_LAUNCH: 'warmup',
+  BLOG_POST: 'blog',
+  BLOG_IDEAS: 'blog',
+  LANDING_PAGE: 'landing',
+  STORYTELLING: 'storytelling',
+  TELEGRAM_MESSAGE: 'telegram_msg',
+  STORIES_CHECK: 'stories',
+  WEBINAR_CONTENT: 'webinar',
+  WEBINAR_SALES: 'webinar',
+  CONTENT_AUDIT: 'audit',
+  SOCIAL_POST: 'post',
+  EMAIL_SEQUENCE: 'email',
+  SALES_SCRIPT: 'sales',
+  CUSTOM: 'post',
+}
+
+function resolveContentTypeKey(contentType: string): ContentTypeKey {
+  const key = contentType.trim()
+  if ((['blog', 'landing', 'storytelling', 'telegram_msg', 'reels', 'stories', 'warmup', 'webinar', 'audit', 'post', 'email', 'sales'] as ContentTypeKey[]).includes(key as ContentTypeKey)) {
+    return key as ContentTypeKey
+  }
+  return CONTENT_TYPE_MAP[key] ?? 'post'
+}
+
+function resolvePresetFromProtocol(selectedProtocol: string): 'SHUM' | 'ZASTRYAG' | 'BATL' | 'TAKTYKA' {
+  const upper = selectedProtocol.trim().toUpperCase()
+  if (upper.includes('SHUM') || upper.includes('ШУМ')) return 'SHUM'
+  if (upper.includes('ZASTRYAG') || upper.includes('ЗАСТРЯГ')) return 'ZASTRYAG'
+  if (upper.includes('BATL') || upper.includes('БАТЛ')) return 'BATL'
+  return 'TAKTYKA'
+}
+
+function isDnaEnabled(): boolean {
+  return process.env.DNA_ORCHESTRATOR_ENABLED === 'true'
+}
+
+// ─── workspace ───────────────────────────────────────────────────────────────
+export async function getWorkspace(userId: string): Promise<SalesAssistantWorkspaceResponse | null> {
+  return prisma.userAiWorkspace.findFirst({
+    where: { userId, isActive: true },
+    select: {
+      id: true, isActive: true, allowedModels: true,
+      maxTokensPerMonth: true, usedTokensThisMonth: true,
+      activeProfile: {
+        select: { id: true, key: true, name: true, description: true, supportedOutputs: true, supportedProtocols: true },
+      },
+    },
+  })
+}
+
+async function generateContentLegacy(
+  workspaceId: string | null,
+  body: SalesAssistantGenerateBody,
+  aiProfile: AiBehaviorProfile | null,
+  requestUserId = '',
+) {
+  const startedAt = Date.now()
+
+  const dbProfile = aiProfile ?? await prisma.aiBehaviorProfile.findFirst({ where: { key: 'STARWAY_OGOLENA_PRAVDA' } })
+  const profile = dbProfile ?? FALLBACK_PROFILE
+
+  console.log('[DNA][service][LEGACY_START]', {
+    workspaceId,
+    requestUserId,
+    contentType: body.contentType,
+    selectedProtocol: body.selectedProtocol,
+    providers: body.providers ?? body.provider ?? DEFAULT_PROVIDER,
+    hasProfile: Boolean(aiProfile),
+    profileKey: profile.key,
+  })
+
+  const strategyTier = resolveModelStrategyTier(body.selectedProtocol)
+  const safeUserRequest = body.userRequest.length > MAX_USER_REQUEST_CHARS ? body.userRequest.slice(0, MAX_USER_REQUEST_CHARS) : body.userRequest
+
+  const routingMode = resolveFreeFirstRoutingMode(body.selectedProtocol)
+  const requestedProviders = body.providers ?? resolveProvidersForMode(routingMode)
+  const enabledProviders = resolveEnabledProviders(requestedProviders, body)
+
+  console.log('[DNA][service][LEGACY] parallel call', { providers: enabledProviders, strategyTier, routingMode })
+
+  const resolvedType = resolveContentTypeKey(body.contentType)
+
+  const promptPair = buildPromptForType(resolvedType, {
+    selectedProtocol: body.selectedProtocol,
+    tone: body.tone,
+    selectedOutputs: body.selectedOutputs,
+    userContext: body.userContext,
+    userRequest: safeUserRequest,
+  })
+
+  let prompt = `${promptPair.system}\n\n${promptPair.user}`
+  if (prompt.length > MAX_PROMPT_CHARS) prompt = prompt.slice(0, MAX_PROMPT_CHARS)
+
+  const executeForProviders = async (providers: ModelProvider[]): Promise<ModelGenerationResult[]> => {
+    const settled = await Promise.allSettled(
+      providers.map((provider) =>
+        callProviderSafe(provider, prompt, promptPair.user, { contentType: body.contentType, strategyTier }),
+      ),
+    )
+    return settled.map((item, index) => {
+      if (item.status === 'fulfilled') return item.value
+      return {
+        modelKey: providers[index],
+        content: null,
+        usage: null,
+        error: {
+          status: 503,
+          code: 'PROVIDER_SETTLED_REJECTED',
+          message: item.reason instanceof Error ? item.reason.message : 'Provider failed',
+          isFatal: false,
+        },
+        durationMs: 0,
+      }
+    })
+  }
+
+  console.log('[DNA][service][LEGACY_PROMPT]', {
+    promptLength: prompt.length,
+    preview: prompt.slice(0, PROMPT_PREVIEW_CHARS),
+  })
+
+  let parallelResults: ModelGenerationResult[] = []
+  if (routingMode === 'FAST') {
+    parallelResults = await executeForProviders(['gemini'])
+  } else if (routingMode === 'BALANCED') {
+    const gptResults = await executeForProviders(['gpt'])
+    const gptContent = gptResults[0]?.content ?? ''
+    const geminiValidationPrompt = `${promptPair.system}\n\nПеревір чи JSON валідний і відповідає schema. Відповідь JSON: {"valid": boolean, "reason": "string"}`
+    const geminiValidationUser = `${promptPair.user}\n\nGenerated JSON:\n${gptContent}`
+    const geminiValidation = await callProviderSafe('gemini', geminiValidationPrompt, geminiValidationUser, {
+      contentType: body.contentType,
+      strategyTier,
+    })
+    parallelResults = [...gptResults, geminiValidation]
+  } else {
+    parallelResults = await executeForProviders(['claude', 'gpt', 'gemini'])
+  }
+
+  for (const r of parallelResults) {
+    if (r.content && r.usage) {
+      rememberResultCache(
+        hashCacheParts([r.modelKey, strategyTier, body.selectedProtocol, body.contentType, body.selectedOutputs, safeUserRequest]),
+        { content: r.content, usage: r.usage },
+      )
+    }
+  }
+
+  const preferredOrder = routingMode === 'PREMIUM' ? ['claude', 'gpt', 'gemini'] : routingMode === 'BALANCED' ? ['gpt', 'gemini'] : ['gemini']
+  const firstSuccess = preferredOrder
+    .map((provider) => parallelResults.find((r) => r.modelKey === provider && r.content !== null))
+    .find(Boolean) ?? parallelResults.find((r) => r.content !== null)
+
+  if (!firstSuccess) {
+    throw new ProviderGenerationError({
+      status: 503,
+      code: 'ALL_PROVIDERS_DOWN',
+      message: 'Всі провайдери недоступні. Перевір API ключі та баланс.',
+      provider: 'all',
+      retryAfter: 300,
+    })
+  }
+
+  const validation = await validateOutput(firstSuccess.content!, profile.key)
+  if (!validation.valid) console.warn('[DNA][validation] failed', { reason: validation.reason })
+
+  let generationId: string | undefined
+  if (workspaceId) {
+    try {
+      const gen = await prisma.salesAssistantGeneration.create({
+        data: {
+          workspaceId,
+          contentType: body.contentType,
+          modelUsed: firstSuccess.modelKey,
+          protocol: body.selectedProtocol,
+          userContext: body.userContext,
+          request: body.userRequest,
+          result: firstSuccess.content!,
+          tokensUsed: firstSuccess.usage?.totalTokens ?? 0,
+        },
+      })
+      generationId = gen.id
+
+      await prisma.userAiWorkspace.update({
+        where: { id: workspaceId },
+        data: { usedTokensThisMonth: { increment: firstSuccess.usage?.totalTokens ?? 0 } },
+      })
+    } catch (dbError) {
+      console.error('[DNA][service][LEGACY] DB persist failed', dbError)
+    }
+  }
+
+  console.log('[DNA][service][LEGACY_DONE]', {
+    provider: firstSuccess.modelKey,
+    contentType: body.contentType,
+    resultLength: firstSuccess.content!.length,
+    durationMs: Date.now() - startedAt,
+    successCount: parallelResults.filter((r) => r.content !== null).length,
+    errorCount: parallelResults.filter((r) => r.error !== null).length,
+  })
+
+  return {
+    id: generationId,
+    content: firstSuccess.content!,
+    modelUsed: firstSuccess.modelKey,
+    contentType: body.contentType,
+    protocol: body.selectedProtocol,
+    tokensUsed: firstSuccess.usage?.totalTokens ?? 0,
+    usage: firstSuccess.usage ?? undefined,
+    createdAt: new Date().toISOString(),
+    validationWarning: validation.valid ? undefined : validation.reason,
+    multiModelResults: parallelResults,
+    dnaDebug: {
+      pipeline: 'legacy',
+      preset: null,
+      provider: firstSuccess.modelKey,
+      fallbackTriggered: false,
+      generationType: resolveContentTypeKey(body.contentType),
+    },
+  }
+}
+
+async function generateContentWithDna(
+  workspaceId: string | null,
+  body: SalesAssistantGenerateBody,
+  aiProfile: AiBehaviorProfile | null,
+  requestUserId = '',
+) {
+  const startedAt = Date.now()
+  const resolvedType = resolveContentTypeKey(body.contentType)
+  const preset = resolvePresetFromProtocol(body.selectedProtocol)
+
+  console.log('[DNA][service][ORCH_START]', {
+    workspaceId,
+    requestUserId,
+    type: resolvedType,
+    preset,
+    protocol: body.selectedProtocol,
+  })
+
+  const pipelineInput = fromSalesAssistantInput({
+    userId: requestUserId,
+    workspaceId,
+    body: {
+      ...body,
+      contentType: resolvedType,
+    },
+    channel: 'web',
+  })
+  pipelineInput.preset = preset
+
+  const pipelineResult = await runPipeline(pipelineInput)
+const primaryArtifact =
+  pipelineResult.artifacts.find(
+    (artifact) =>
+      artifact.type === resolvedType &&
+      artifact.rawText?.trim()
+  ) ?? pipelineResult.artifacts.find(
+    (artifact) => artifact.rawText?.trim()
+  )
+
+if (!primaryArtifact) {
+  throw new Error('DNA_PIPELINE_EMPTY_ARTIFACT')
+}
+
+if (!primaryArtifact.rawText?.trim()) {
+  throw new Error('DNA_EMPTY_CONTENT')
+}
+
+  const dbProfile = aiProfile ?? await prisma.aiBehaviorProfile.findFirst({ where: { key: 'STARWAY_OGOLENA_PRAVDA' } })
+  const profile = dbProfile ?? FALLBACK_PROFILE
+  const validation = await validateOutput(primaryArtifact.rawText, profile.key)
+
+  const firstUsageEvent = pipelineResult.telemetry.find((event) => (event.tokens ?? 0) > 0)
+  const tokensUsed = firstUsageEvent?.tokens ?? 0
+
+  const modelResult: ModelGenerationResult = {
+    modelKey: primaryArtifact.provider,
+    content: primaryArtifact.rawText,
+    usage: {
+      provider: primaryArtifact.provider,
+      model: primaryArtifact.provider,
+      inputTokens: tokensUsed > 0 ? Math.max(1, Math.floor(tokensUsed * 0.45)) : 0,
+      outputTokens: tokensUsed > 0 ? Math.max(1, Math.floor(tokensUsed * 0.55)) : 0,
+      totalTokens: tokensUsed,
+      estimatedCostUsd: firstUsageEvent?.estimatedCostUsd ?? 0,
+      actualCostUsd: Number(firstUsageEvent?.details?.actualCostUsd ?? 0) || null,
+      costTier: 'low',
+    },
+    error: null,
+    durationMs: Date.now() - startedAt,
+  }
+
+  console.log('[DNA][service][ORCH_DONE]', {
+    runId: pipelineResult.runId,
+    type: resolvedType,
+    provider: primaryArtifact.provider,
+    preset,
+    artifacts: pipelineResult.artifacts.length,
+    durationMs: Date.now() - startedAt,
+    tokens: tokensUsed,
+  })
+
+  return {
+    id: pipelineResult.runId,
+    content: primaryArtifact.rawText,
+    modelUsed: primaryArtifact.provider,
+    contentType: body.contentType,
+    protocol: body.selectedProtocol,
+    tokensUsed,
+    usage: modelResult.usage ?? undefined,
+    createdAt: new Date().toISOString(),
+    validationWarning: validation.valid ? undefined : validation.reason,
+    multiModelResults: [modelResult],
+    dnaArtifacts: pipelineResult.artifacts,
+    dnaTelemetry: pipelineResult.telemetry,
+    dnaDebug: {
+      pipeline: 'dna',
+      preset,
+      provider: primaryArtifact.provider,
+      fallbackTriggered: false,
+      generationType: resolvedType,
+      runId: pipelineResult.runId,
+      status: pipelineResult.status,
+    },
+  }
+}
+
+// ─── main generate ────────────────────────────────────────────────────────────
+export async function generateContent(
+  workspaceId: string | null,
+  body: SalesAssistantGenerateBody,
+  aiProfile: AiBehaviorProfile | null,
+  requestUserId = '',
+) {
+  const resolvedType = resolveContentTypeKey(body.contentType)
+const dnaActive = shouldUseDna(resolvedType)
+  if (!dnaActive) {
+    return generateContentLegacy(workspaceId, body, aiProfile, requestUserId)
+  }
+
+  try {
+    return await generateContentWithDna(workspaceId, body, aiProfile, requestUserId)
+  } catch (error) {
+    console.error('[DNA][service][ORCH_FAIL_FALLBACK]', {
+      contentType: body.contentType,
+      resolvedType,
+      error: error instanceof Error ? error.message : String(error),
+      fallback: 'legacy',
+    })
+
+    const legacy = await generateContentLegacy(workspaceId, body, aiProfile, requestUserId)
+    return {
+      ...legacy,
+      dnaDebug: {
+        ...(legacy as { dnaDebug?: Record<string, unknown> }).dnaDebug,
+        pipeline: 'legacy',
+        fallbackTriggered: true,
+        fallbackReason: error instanceof Error ? error.message : String(error),
+        generationType: resolvedType,
+      },
+    }
+  }
+}

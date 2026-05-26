@@ -24,11 +24,12 @@ model Expert {
   telegramBotToken    String?
   telegramBotName     String?
   timezone            String               @default("UTC")
+  zoomAvailability    Json                 @default("[]")
   isActive            Boolean              @default(true)
   deletedAt           DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @default(now()) @updatedAt
-  aiMentors           AIMentor[]
+  aiMentors           AiMentor[]
   balanceWheelConfigs BalanceWheelConfig[]
   dailyEntries        DailyEntry[]
   funnels             Funnel[]
@@ -58,21 +59,19 @@ model User {
   id                     String                        @id @default(uuid())
   expertId               String?
   email                  String                        @unique
-  name                   String?
   firstName              String?
   lastName               String?
   telegramUserId         String?                       @unique
   telegramUserName       String?                       @unique
   telegramChatId         String?
   passwordHash           String?
-  uiSettings             Json?
   settings               Json?
   lastLoginAt            DateTime?
-  onboardingStage        String?
   onboardingStartedAt    DateTime?
   trialStartsAt          DateTime?
   trialEndsAt            DateTime?
   role                   Role                          @default(USER)
+  activeRole             Role                          @default(USER)
   deletedAt              DateTime?
   createdAt              DateTime                      @default(now())
   updatedAt              DateTime                      @updatedAt
@@ -83,18 +82,17 @@ model User {
   funnelUpdatedAt        DateTime?
   leadMagnetSentAt       DateTime?
   telegramEnabled        Boolean                       @default(true)
-  lifecycleState         String                        @default("new")
   testResultType         String?
   focusPaid              Boolean                       @default(false)
   onboardingDone         Boolean                       @default(false)
-  aiConversations        AIConversation[]
-  aiMemory               AIMemory[]
-  aiRecommendations      AIRecommendation[]
+  aiConversations        AiConversation[]
+  aiMemory               AiMemory[]
+  aiRecommendations      AiRecommendation[]
   affiliateLinks         AffiliateLink[]
   annualStrategyMap      AnnualStrategyMap?
   assistantMemories      AssistantMemory[]
   assistantSessions      AssistantSession[]
-  cTAInteractions        CTAInteraction[]
+  ctaInteractions        CtaInteraction[]
   contentItems           ContentItem[]
   courseEnrollments      CourseEnrollment[]
   cycleStreakMetrics     CycleStreakMetric?
@@ -128,7 +126,7 @@ model User {
   subscriptions          Subscription[]
   telegramLinks          TelegramLink[]
   expert                 Expert?                       @relation(fields: [expertId], references: [id])
-  userMentors            UserAIMentor[]
+  userMentors            UserAiMentor[]
   balanceEntries         UserBalanceEntry[]
   userFunnelProgress     UserFunnelStageProgress[]
   userMemory             UserMemory?
@@ -144,9 +142,10 @@ model User {
   zoomSessionAttendees   ZoomSessionAttendee[]
   expertBots             ExpertBotConfig[]             @relation("ExpertBot")
   expertProfile          ExpertProfile?                @relation("ExpertProfile")
-  mentorSession          AIMentorSession?
+  mentorSession          AiMentorSession?
   productAccesses        ProductAccess[]
   productSubscriptions   ProductSubscription[]
+  checkoutSessions       CheckoutSession[]
   trialMirrors           TrialMirror[]
   aiWorkspace            UserAiWorkspace?
 
@@ -157,6 +156,39 @@ model User {
   @@index([expertId, deletedAt])
   @@index([expertId, createdAt])
   @@index([funnelStage])
+}
+
+enum CheckoutSessionStatus {
+  CREATED
+  OPENED
+  PROCESSING
+  COMPLETED
+  EXPIRED
+  INVALIDATED
+}
+
+model CheckoutSession {
+  id            String                @id @default(cuid())
+  token         String                @unique
+  userId        String
+  orderReference String
+  amount        Float
+  currency      String                @default("UAH")
+  productCode   String
+  status        CheckoutSessionStatus @default(CREATED)
+  payload       Json
+  createdAt     DateTime              @default(now())
+  expiresAt     DateTime
+  openedAt      DateTime?
+  completedAt   DateTime?
+  invalidatedAt DateTime?
+  usageCount    Int                   @default(0)
+  lastOpenedAt  DateTime?
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+  @@index([orderReference])
 }
 
 model ExpertProfile {
@@ -194,7 +226,7 @@ model RefreshToken {
   @@index([userId])
 }
 
-model AIMentor {
+model AiMentor {
   id              String             @id @default(uuid())
   expertId        String
   slug            String
@@ -206,14 +238,15 @@ model AIMentor {
   runtimeConfig   Json
   createdAt       DateTime           @default(now())
   expert          Expert             @relation(fields: [expertId], references: [id])
-  userMentors     UserAIMentor[]     @relation("AiMentorUsers")
+  userMentors     UserAiMentor[]     @relation("AiMentorUsers")
   balanceEntries  UserBalanceEntry[]
   mentorStates    UserMentorState[]
 
   @@unique([expertId, slug])
+  @@map("AIMentor")
 }
 
-model UserAIMentor {
+model UserAiMentor {
   id                String            @id @default(cuid())
   userId            String
   aiMentorId        String
@@ -233,13 +266,14 @@ model UserAIMentor {
   realGoal          String?
   recommendedFocus  String?
   stage             String?
-  aiMentor          AIMentor          @relation("AiMentorUsers", fields: [aiMentorId], references: [id])
+  aiMentor          AiMentor          @relation("AiMentorUsers", fields: [aiMentorId], references: [id])
   user              User              @relation(fields: [userId], references: [id])
-  sessions          AIMentorSession[]
+  sessions          AiMentorSession[]
 
   @@unique([userId, aiMentorId])
   @@index([userId, updatedAt])
   @@index([userId])
+  @@map("UserAIMentor")
 }
 
 model BannerGeneration {
@@ -268,7 +302,7 @@ model MarketResearchCache {
   @@index([validUntil])
 }
 
-model AIMentorSession {
+model AiMentorSession {
   id           String            @id @default(cuid())
   userId       String            @unique
   chatId       String
@@ -279,9 +313,9 @@ model AIMentorSession {
   createdAt    DateTime          @default(now())
   endedAt      DateTime?
   updatedAt    DateTime          @updatedAt
-  messages     AIMentorMessage[]
+  messages     AiMentorMessage[]
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userMentor   UserAIMentor      @relation(fields: [userMentorId], references: [id])
+  userMentor   UserAiMentor      @relation(fields: [userMentorId], references: [id])
 
   @@map("mentor_sessions")
 }
@@ -298,13 +332,15 @@ model MentorQuestionSet {
   @@index([isActive])
 }
 
-model AIMentorMessage {
+model AiMentorMessage {
   id        String          @id @default(cuid())
   sessionId String
   role      String
   content   String
   createdAt DateTime        @default(now())
-  session   AIMentorSession @relation(fields: [sessionId], references: [id])
+  session   AiMentorSession @relation(fields: [sessionId], references: [id])
+
+  @@map("AIMentorMessage")
 }
 
 model UserMentorState {
@@ -317,7 +353,7 @@ model UserMentorState {
   lastInteractionAt DateTime @default(now())
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  aiMentor          AIMentor @relation(fields: [aiMentorId], references: [id])
+  aiMentor          AiMentor @relation(fields: [aiMentorId], references: [id])
   expert            Expert   @relation(fields: [expertId], references: [id])
   user              User     @relation(fields: [userId], references: [id])
 
@@ -418,6 +454,9 @@ model Subscription {
   user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expertId, userId, status])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@index([status, currentPeriodEnd])
 }
 
 model ProductSubscription {
@@ -430,6 +469,7 @@ model ProductSubscription {
   paidAt                  DateTime?
   focusWelcomedAt         DateTime?
   focusChannelInviteLink  String?
+  channelJoinedAt         DateTime?
   amount      Float?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -437,6 +477,12 @@ model ProductSubscription {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
+  @@index([userId, status])
+  @@index([productId, status])
+  @@index([productId, status, createdAt])
+  @@index([userId, status, expiresAt])
+  @@index([status, expiresAt])
+  @@index([channelJoinedAt])
   @@map("product_subscriptions")
 }
 
@@ -469,7 +515,7 @@ model AccessGrant {
   @@index([boundUserId])
 }
 
-model AIRecommendation {
+model AiRecommendation {
   id         String    @id @default(uuid())
   userId     String
   moduleId   String?
@@ -479,9 +525,10 @@ model AIRecommendation {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, moduleType])
+  @@map("AIRecommendation")
 }
 
-model CTAInteraction {
+model CtaInteraction {
   id        String   @id @default(uuid())
   userId    String
   type      CTAType
@@ -490,6 +537,7 @@ model CTAInteraction {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
+  @@map("CTAInteraction")
 }
 
 model Reminder {
@@ -965,7 +1013,7 @@ model UserBalanceEntry {
   scores          Json               @default("{}")
   note            String?
   createdAt       DateTime           @default(now())
-  aiMentor        AIMentor?          @relation(fields: [aiMentorId], references: [id])
+  aiMentor        AiMentor?          @relation(fields: [aiMentorId], references: [id])
   balanceConfig   BalanceWheelConfig @relation(fields: [balanceConfigId], references: [id])
   expert          Expert?            @relation(fields: [expertId], references: [id])
   user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1446,7 +1494,7 @@ model AdCampaign {
   product   Product  @relation(fields: [productId], references: [id])
 }
 
-model AIConversation {
+model AiConversation {
   id        String      @id @default(uuid())
   userId    String
   title     String?
@@ -1454,26 +1502,28 @@ model AIConversation {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages  AIMessage[]
+  messages  AiMessage[]
 
   @@index([userId])
   @@index([userId, createdAt])
+  @@map("AIConversation")
 }
 
-model AIMessage {
+model AiMessage {
   id             String         @id @default(uuid())
   conversationId String
   role           AIMessageRole
   content        String
   tokens         Int?
   createdAt      DateTime       @default(now())
-  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
   @@index([conversationId, createdAt])
+  @@map("AIMessage")
 }
 
-model AIMemory {
+model AiMemory {
   id        String    @id @default(uuid())
   userId    String
   key       String
@@ -1486,6 +1536,7 @@ model AIMemory {
 
   @@unique([userId, key])
   @@index([userId])
+  @@map("AIMemory")
 }
 
 model PromptVersion {
@@ -1684,9 +1735,9 @@ enum StageStatus {
 }
 
 enum AIMessageRole {
-  user
-  assistant
-  system
+  USER      @map("user")
+  ASSISTANT @map("assistant")
+  SYSTEM    @map("system")
 }
 
 enum FunnelStatus {
@@ -1709,11 +1760,11 @@ enum MicroTaskStatus {
 }
 
 enum MicroTaskReason {
-  low_score
-  instability
-  growth
-  wheel_gap
-  stagnation
+  LOW_SCORE   @map("low_score")
+  INSTABILITY @map("instability")
+  GROWTH      @map("growth")
+  WHEEL_GAP   @map("wheel_gap")
+  STAGNATION  @map("stagnation")
 }
 
 enum DailyState {
@@ -1804,6 +1855,23 @@ enum ZoomStatus {
   CANCELLED
 }
 
+enum ModelProvider {
+  CLAUDE
+  GPT4O
+  GEMINI
+  LLAMA3
+  FALLBACK_TEMPLATE
+}
+
+enum AgentType {
+  TOKEN_MARGINAL
+  ROUTER_DIRIGENT
+  FEATURE_PRIORITY
+  PROMPT_VERSIONER
+  COST_CONTROL
+  QUALITY_AUDITOR
+}
+
 model UserAiWorkspace {
   id                   String             @id @default(cuid())
   userId               String             @unique
@@ -1824,11 +1892,15 @@ model AiBehaviorProfile {
   name               String
   description        String?
   systemAnchor       String              @db.Text
+  version            Int                 @default(1)
+  cascadeOrder       ModelProvider[]     @default([CLAUDE, GPT4O, GEMINI, LLAMA3, FALLBACK_TEMPLATE])
   supportedOutputs   String[]
   supportedProtocols Json
   workspaces         UserAiWorkspace[]
   tooltips           AiTooltip[]
+  lexicon            Lexicon[]
   createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
 model AiTooltip {
@@ -1872,6 +1944,7 @@ model Lexicon {
   word       String
   addedBy    String
   createdAt  DateTime @default(now())
+  profile    AiBehaviorProfile @relation(fields: [profileKey], references: [key], onDelete: Cascade)
 
   @@index([profileKey, type])
 }
@@ -1884,7 +1957,36 @@ model CampaignMemory {
   objections    String
   resistance    String
   isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([userId, isActive])
+}
+
+model AiGenerationHistory {
+  id           String   @id @default(cuid())
+  agent        String
+  audiencePain String
+  targetAction String
+  product      String?
+  output       String   @db.Text
+  userFeedback String?
+  modelUsed    String
+  protocol     String
+  timestamp    DateTime @default(now())
+
+  @@index([agent, timestamp])
+  @@map("ai_generation_history")
+}
+
+model AgentExecutionLog {
+  id            String    @id @default(cuid())
+  agentType     AgentType
+  inputData     Json
+  outputData    Json
+  executionTime Int
+  status        String
+  createdAt     DateTime  @default(now())
+
+  @@map("agent_execution_logs")
 }

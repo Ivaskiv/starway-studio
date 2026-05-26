@@ -20,15 +20,12 @@ async function wipe() {
   await prisma.user.update({
     where: { id },
     data: {
-      lifecycleState: 'new',
       testResultType: null,
-      onboardingStage: null,
       onboardingStartedAt: null,
       currentStep: 'LINK_TELEGRAM',
       funnelStage: 'LEAD',
       funnelUpdatedAt: null,
       leadMagnetSentAt: null,
-      uiSettings: {},
       settings: {},
     },
   })
@@ -96,10 +93,8 @@ async function wipe() {
   const final = await prisma.user.findUnique({
     where: { id },
     select: {
-      lifecycleState: true,
       testResultType: true,
       currentStep: true,
-      uiSettings: true,
       settings: true,
     },
   })

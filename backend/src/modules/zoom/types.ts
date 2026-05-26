@@ -7,7 +7,7 @@ export type { ZoomSession, ZoomSessionAttendee };
 
 // Розширений тип для запиту з include: { user }
 export type ZoomAttendeeWithUser = ZoomSessionAttendee & {
-  user: Pick<User, 'id' | 'name' | 'email'>;
+  user: Pick<User, 'id' | 'firstName' | 'lastName' | 'email'>;
 };
 
 // DTO для створення сесії (те що приходить з body)

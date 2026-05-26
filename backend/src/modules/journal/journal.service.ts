@@ -319,7 +319,7 @@ async function getJournalResponseForWindow(userId: string, start: Date, end: Dat
       subscriptions,
       notifications,
     ] = await Promise.all([
-      prisma.aIMentorMessage.findMany({
+      prisma.aiMentorMessage.findMany({
         where: {
           createdAt: { gte: expandedStart, lt: expandedEnd },
           session: { userId },

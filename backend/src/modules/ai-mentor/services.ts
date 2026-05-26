@@ -122,14 +122,14 @@ async function aiGenerate(prompt: AIGenerationRequest): Promise<AIGenerationResp
 }
 
 async function getLatestSession(userMentorId: string): Promise<MentorSession | null> {
-  return prisma.aIMentorSession.findFirst({
+  return prisma.aiMentorSession.findFirst({
     where: { userMentorId },
     orderBy: { createdAt: 'desc' },
   });
 }
 
 async function createSession(userId: string, userMentorId: string): Promise<MentorSession> {
-  return prisma.aIMentorSession.create({
+  return prisma.aiMentorSession.create({
     data: {
       userId,
       chatId: userId,
@@ -151,7 +151,7 @@ function scheduleStage(startedAt: Date): OnboardingStage {
 export async function getOrCreateSession(userId: string, sessionId?: string): Promise<MentorSession> {
   const userMentor = await ensureMentor(userId);
   if (sessionId) {
-    const existing = await prisma.aIMentorSession.findUnique({ where: { id: sessionId } });
+    const existing = await prisma.aiMentorSession.findUnique({ where: { id: sessionId } });
     if (existing) return existing;
   }
   const latest = await getLatestSession(userMentor.id);
@@ -164,14 +164,14 @@ export async function logMessage(payload: {
   role: 'USER' | 'MENTOR' | 'SYSTEM';
   text: string;
 }): Promise<MentorMessage> {
-  const message = await prisma.aIMentorMessage.create({
+  const message = await prisma.aiMentorMessage.create({
     data: {
       sessionId: payload.sessionId,
       role: payload.role,
       content: payload.text,
     },
   });
-  await prisma.aIMentorSession.update({
+  await prisma.aiMentorSession.update({
     where: { id: payload.sessionId },
     data: { endedAt: new Date() },
   });
@@ -210,12 +210,12 @@ export async function sendMessage(params: SendMessageDto): Promise<ChatResponse>
 
 export async function getChatHistory(userId: string) {
   const userMentor = await ensureMentor(userId);
-  const sessions = await prisma.aIMentorSession.findMany({
+  const sessions = await prisma.aiMentorSession.findMany({
     where: { userMentorId: userMentor.id },
     select: { id: true },
   });
   const sessionIds = sessions.map(s => s.id);
-  return prisma.aIMentorMessage.findMany({
+  return prisma.aiMentorMessage.findMany({
     where: { sessionId: { in: sessionIds } },
     orderBy: { createdAt: 'desc' },
   });
@@ -375,13 +375,13 @@ export async function advanceOnboarding(userId: string): Promise<OnboardingStage
   const session = await getLatestSession(userMentor.id);
   if (!session) return 'ENTRY';
   const stage = scheduleStage(session.createdAt);
-  await prisma.userAIMentor.update({ where: { id: userMentor.id }, data: { currentStep: stage, lastInteractionAt: new Date() } });
+  await prisma.userAiMentor.update({ where: { id: userMentor.id }, data: { currentStep: stage, lastInteractionAt: new Date() } });
   return stage;
 }
 
 export async function completeStage(dto: CompleteStageDto) {
   const userMentor = await ensureMentor(dto.userId);
-  await prisma.userAIMentor.update({
+  await prisma.userAiMentor.update({
     where: { id: userMentor.id },
     data: { currentStep: dto.stage, updatedAt: new Date() },
   });
@@ -389,7 +389,7 @@ export async function completeStage(dto: CompleteStageDto) {
 
 export async function updateProgress(dto: UpdateProgressDto) {
   const userMentor = await ensureMentor(dto.userId);
-  await prisma.userAIMentor.update({
+  await prisma.userAiMentor.update({
     where: { id: userMentor.id },
     data: { currentStep: dto.stage },
   });
@@ -632,7 +632,7 @@ export async function generateWeeklyReport(
     prisma.dailyEntry.count({
       where: { userId, createdAt: { gte: weekStart } },
     }),
-    prisma.aIMentorSession.count({
+    prisma.aiMentorSession.count({
       where: {
         userMentor: { userId },
         createdAt: { gte: weekStart },

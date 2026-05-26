@@ -300,7 +300,7 @@ export async function resolveRelationshipMemory(userId: string, productScope: Re
     getUserMemoryProfile(userId).catch(() => null),
     getEngagementSignals(userId).catch(() => null),
     resolveCanonicalLifecycle(userId).catch(() => null),
-    prisma.userAIMentor.findFirst({
+    prisma.userAiMentor.findFirst({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       select: {

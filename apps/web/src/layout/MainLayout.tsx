@@ -1,5 +1,5 @@
 // frontend/src/layout/MainLayout.tsx
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import BottomNav from '@/components/miniapp/BottomNav'
@@ -16,6 +16,19 @@ import Header from '@/layout/Header'
 import Sidebar from '@/layout/Sidebar'
 
 import type { AppView, PreviewRole } from '@/layout/types/layout.types'
+
+export interface LayoutContextValue {
+  collapsed: boolean
+  setCollapsed: Dispatch<SetStateAction<boolean>>
+}
+
+export const LayoutContext = createContext<LayoutContextValue | null>(null)
+
+export function useLayoutContext(): LayoutContextValue {
+  const ctx = useContext(LayoutContext)
+  if (!ctx) throw new Error('useLayoutContext must be used within MainLayout')
+  return ctx
+}
 
 interface MainLayoutProps {
   dashboard?: boolean
@@ -94,7 +107,7 @@ export default function MainLayout({
 
   const [collapsed,   setCollapsed]   = useState(false)
   const [view,        setView]        = useState<AppView>('navigation')
-  const [previewRole, setPreviewRole] = useState<PreviewRole>('user')
+  const [previewRole, setPreviewRole] = useState<PreviewRole>('USER')
   const [isCompactViewport, setIsCompactViewport] = useState(false)
 
   const user = useAppSelector((state) => state.auth.user)
@@ -153,11 +166,16 @@ export default function MainLayout({
   }), [openAuthModal])
 
   useEffect(() => {
-    const rawRole = ((user as any)?.role ?? (state as any)?.user?.role ?? '').toLowerCase()
-    if (rawRole === 'superadmin' || rawRole === 'admin') setPreviewRole('superadmin')
-    else if (rawRole === 'expert' || rawRole === 'mentor') setPreviewRole('expert')
-    else setPreviewRole('user')
-  }, [user, state])
+    // Drive previewRole from activeRole if available, else fall back to primary role
+    const activeRole = (user as any)?.activeRole as string | undefined
+    const primaryRole = ((user as any)?.role ?? '') as string
+    const resolved = (activeRole || primaryRole).toUpperCase()
+    if (['SUPERADMIN', 'ADMIN', 'EXPERT', 'USER', 'MENTOR', 'PRODUCT_OWNER'].includes(resolved)) {
+      setPreviewRole(resolved as import('@/layout/types/layout.types').PreviewRole)
+    } else {
+      setPreviewRole('USER')
+    }
+  }, [user])
 
   useEffect(() => {
     if (isMiniAppContext) {
@@ -247,7 +265,7 @@ export default function MainLayout({
   // ─────────────────────────────────────────────────────────────────────────
   if (shouldUseDashboardShell) {
     return (
-      <>
+      <LayoutContext.Provider value={{ collapsed, setCollapsed }}>
         <div className="flex h-screen overflow-hidden">
 
         {shouldShowSidebar && (
@@ -303,7 +321,7 @@ export default function MainLayout({
         </div>
 
         </div>
-      </>
+      </LayoutContext.Provider>
     )
   }
 

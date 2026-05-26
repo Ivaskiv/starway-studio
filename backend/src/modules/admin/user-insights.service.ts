@@ -206,8 +206,7 @@ export async function getUserInsights(viewer: ViewerContext, limit = 40): Promis
     select: {
       id: true,
       email: true,
-      name: true,
-      firstName: true,
+            firstName: true,
       lastName: true,
       role: true,
       createdAt: true,
@@ -305,7 +304,7 @@ export async function getUserInsights(viewer: ViewerContext, limit = 40): Promis
     return {
       id: user.id,
       email: user.email,
-      name: user.firstName || user.name || user.telegramUserName || user.email,
+      name: user.firstName || user.firstName || user.telegramUserName || user.email,
       role: user.role,
       createdAt: user.createdAt.toISOString(),
       lastLoginAt: user.lastLoginAt?.toISOString() ?? null,

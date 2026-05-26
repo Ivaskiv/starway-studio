@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import toast from 'react-hot-toast'
 
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { PaymentScreen } from '@/features/welcome-test/components/PaymentScreen'
@@ -15,6 +16,7 @@ import { useWelcomeTestQuestions } from '@/features/welcome-test/hooks/useWelcom
 import { useWelcomeTestStore } from '@/features/welcome-test/stores/useWelcomeTestStore'
 import { fetchWelcomeTestPaymentStatus } from '@/features/welcome-test/services/welcomeTest.api'
 import { buildWelcomeTestResultView } from '@/features/welcome-test/utils/welcomeTestResult'
+import { FOCUS_ROUTE } from '@/features/landings/focus/content/constants'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
 
 type WelcomeTestStep = 'welcome' | 'question' | 'result' | 'payment'
@@ -150,6 +152,14 @@ export default function WelcomeTestPage() {
     void payment.startMonthlyPayment()
   }
 
+  const handleOpenFocus = () => {
+    if (typeof window !== 'undefined') window.location.href = FOCUS_ROUTE
+  }
+
+  const handleResendAccess = () => {
+    toast('Доступно в Telegram: натисни "Отримати доступ повторно".', { icon: '🔁' })
+  }
+
   useEffect(() => {
     if (!linkToken || !welcomeTest.initialized) return
     if (welcomeTest.status === 'PAID') return
@@ -217,6 +227,9 @@ export default function WelcomeTestPage() {
     return (
       <PaymentScreen
         onPay={handlePay}
+        onOpenFocus={handleOpenFocus}
+        onResendAccess={handleResendAccess}
+        isAlreadyActive={payment.alreadyActive}
         isPaying={payment.isPaying}
         errorMessage={payment.redirectError ?? welcomeTest.error?.message}
         onRetry={handlePay}

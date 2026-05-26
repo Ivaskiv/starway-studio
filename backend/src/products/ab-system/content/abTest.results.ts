@@ -1,4 +1,4 @@
-import { absystemButtons } from '../config/absystem.content.js'
+import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
 import { abTestContent } from './abTest.content.js'
 import type { AbTestAnswerKey } from './abTest.questions.js'
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import { FOCUS_ROUTE } from '@/features/landings/focus/content/constants'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { selectAccessToken } from '@/features/auth/services/auth.slice'
 import { getToken } from '@/features/auth/services/token'
@@ -702,7 +703,7 @@ export default function AbTestPage() {
   const { isAuthenticated } = useAuth()
   // [FIX] token needed for buildAuthHeaders() -> GET /progress
   const accessToken = useSelector(selectAccessToken)
-  const canSyncToDb = canSyncAbTestProgress(accessToken)
+  const canSyncToDb = isAuthenticated && canSyncAbTestProgress(accessToken)
   const isResultRoute = location.pathname.startsWith(RESULT_ROUTE_PATH)
   const routeState = (location.state as StoredResultRouteState | null) ?? null
   const routeStateResult = routeState?.result ?? null
@@ -733,11 +734,20 @@ export default function AbTestPage() {
     }
 
     const stored = loadStoredState()
+    if (!canSyncToDb && stored.result) {
+      clearStoredState()
+      setCurrentIndex(0)
+      setAnswers({})
+      setResult(null)
+      setHydrated(true)
+      return
+    }
+
     setCurrentIndex(stored.currentIndex)
     setAnswers(stored.answers)
     setResult(stored.result)
     setHydrated(true)
-  }, [isResultRoute])
+  }, [canSyncToDb, isResultRoute])
 
   useEffect(() => {
     if (!hydrated || isResultRoute) return
@@ -1136,6 +1146,44 @@ export default function AbTestPage() {
   }
 
   if (result) {
+    if (showBlock9) {
+      return (
+        <div className="ab-test-page">
+          <div className="ab-test-page__frame">
+            <div className="ab-test-shell ab-test-shell--result">
+              <div className="ab-test-shell__header">
+                <p className="ab-test-kicker">ABSystem</p>
+                <h1 className="ab-test-title">Що з цим робити далі</h1>
+              </div>
+              <div className="ab-test-shell__body">
+                <div className="ab-test-result-card">
+                  <p className="ab-test-result-text ab-test-result-text--narrative">
+                    {BLOCK9_CONTENT.text}
+                  </p>
+                </div>
+              </div>
+              <div className="ab-test-shell__footer">
+                <button
+                  type="button"
+                  onClick={() => navigate(FOCUS_ROUTE)}
+                  className="ab-test-result-cta"
+                >
+                  {BLOCK9_CONTENT.cta}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRestart}
+                  className="ab-test-nav-button ab-test-nav-button--back"
+                >
+                  Почати тест заново
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="ab-test-page">
         {/* [DESIGN] Result state */}
@@ -1208,7 +1256,7 @@ export default function AbTestPage() {
               ) : null}
               <button
                 type="button"
-                onClick={handleRestart}
+                onClick={handleResultCta}
                 className="ab-test-result-cta"
               >
                 {result.nextActionCta}

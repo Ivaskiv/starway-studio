@@ -1,4 +1,5 @@
 import { prisma } from '../../../db/client.js'
+import { FOCUS_PRODUCT_CODES } from '../../../modules/subscriptions/payments/focus.access.js'
 
 /**
  * Перевіряє, чи має користувач активну підписку на Focus.
@@ -7,7 +8,7 @@ export async function hasFocusAccess(userId: string): Promise<boolean> {
   const subscription = await prisma.productSubscription.findFirst({
     where: {
       userId,
-      product: { code: 'focus' },
+      product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
       status: 'active',
       expiresAt: { gt: new Date() },
     },

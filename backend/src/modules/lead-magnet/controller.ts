@@ -49,9 +49,9 @@ export async function registerLeadMagnet(req: Request, res: Response) {
       user = await prisma.user.create({
         data: {
           email: userEmail,
-          name,
+          firstName: name,
           passwordHash,
-          onboardingStage: 'lead_magnet',
+          currentStep: 'START_FLOW',
           expertId: resolvedOwnerExpertId ?? undefined,
         },
       })
@@ -128,7 +128,7 @@ export async function registerLeadMagnet(req: Request, res: Response) {
     res.json({
       ok: true,
       accessToken,
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.firstName, email: user.email },
       packageType,
       message: packageType === 'trial'
         ? 'AI-ментор активовано на 7 днів!'

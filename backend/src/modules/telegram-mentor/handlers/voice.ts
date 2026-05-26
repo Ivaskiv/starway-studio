@@ -4,6 +4,7 @@ import { processVoiceInput } from '../../voice/voice.service.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 function extractVoicePayload(ctx: Context) {
   if (!('message' in ctx) || !ctx.message) return null
@@ -42,17 +43,13 @@ export async function handleVoice(ctx: Context) {
       mimeType: payload.mimeType,
     })
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply(result.text, {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(ctx, 'ctx.reply', 'voice_result', result.text, replyMarkup)
   } catch (error) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
     const relationship = await resolveRelationshipMemory(userId, 'absystem').catch(() => null)
     const copy = buildRecoveryCopy('voice_failure', resolveConversationProfile('absystem'), {
       relationship,
     })
-    await ctx.reply(`${absystemContent.errors.voiceFailure.title}\n${copy.body}`, {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(ctx, 'ctx.reply', 'voice_failure', `${absystemContent.errors.voiceFailure.title}\n${copy.body}`, replyMarkup)
   }
 }

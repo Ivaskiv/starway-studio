@@ -13,6 +13,21 @@ type WeeklyActionState = {
   completed: boolean
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function resolveUiSettingsFromUser(user: unknown): Record<string, unknown> {
+  const userRecord = asRecord(user)
+  if (!userRecord) return {}
+  const settingsRecord = asRecord(userRecord.settings)
+  const uiFromSettings = asRecord(settingsRecord?.ui)
+  if (uiFromSettings) return uiFromSettings
+  const legacyUi = asRecord(userRecord.uiSettings)
+  return legacyUi ?? {}
+}
+
 function formatDateRange(start?: string | null, end?: string | null) {
   if (!start || !end) return 'Останній доступний тиждень'
   const from = new Date(start).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
@@ -30,11 +45,8 @@ function sanitizeMentorCopy(value: string) {
 }
 
 function getStoredWeeklyAction(user: unknown): WeeklyActionState | null {
-  const uiSettings = user && typeof user === 'object' && 'uiSettings' in user
-    ? (user as { uiSettings?: unknown }).uiSettings
-    : null
-  if (!uiSettings || typeof uiSettings !== 'object' || Array.isArray(uiSettings)) return null
-  const report = (uiSettings as Record<string, unknown>).weeklyReport
+  const uiSettings = resolveUiSettingsFromUser(user)
+  const report = uiSettings.weeklyReport
   if (!report || typeof report !== 'object' || Array.isArray(report)) return null
   const nextAction = (report as Record<string, unknown>).nextAction
   if (!nextAction || typeof nextAction !== 'object' || Array.isArray(nextAction)) return null
@@ -149,9 +161,7 @@ export default function ProgressPage() {
     const text = actionInput.trim()
     if (!text) return
 
-    const uiSettings = user && typeof user === 'object' && 'uiSettings' in user
-      ? ((user as { uiSettings?: Record<string, unknown> }).uiSettings ?? {})
-      : {}
+    const uiSettings = resolveUiSettingsFromUser(user)
 
     const nextAction: WeeklyActionState = {
       text,

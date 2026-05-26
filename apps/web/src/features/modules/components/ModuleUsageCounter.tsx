@@ -9,7 +9,7 @@ export function ModuleUsageCounter({ label, used, total }: ModuleUsageCounterPro
   const ratio = total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
 
   return (
-    <div className="rounded-xl bg-[color:rgba(var(--ambient-rgb-2),0.28)] p-3">
+    <div className="rounded-xl bg-[color:rgba(var(--ambient-2-rgb),0.28)] p-3">
       <div className="mb-2 flex items-center justify-between text-xs text-white/70">
         <span>{label}</span>
         <span className="text-white font-semibold">{used}/{total}</span>

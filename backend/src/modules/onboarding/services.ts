@@ -8,9 +8,18 @@ import type {
   UpdateProgressDto,
 } from './types.js';
 
-function toDbOnboardingStage(stage: OnboardingStage) {
-  // fix code_x: Prisma enum has no SETUP; keep UX stage but persist as ENTRY.
-  return stage === 'SETUP' ? 'ENTRY' : stage;
+function toDbOnboardingStep(stage: OnboardingStage): 'START_FLOW' | 'TRIAL_FINAL' {
+  if (stage === 'COMPLETED') return 'TRIAL_FINAL'
+  return 'START_FLOW'
+}
+
+function resolveOnboardingStage(
+  currentStep: string | null | undefined,
+): OnboardingStage | null {
+  if (currentStep && ONBOARDING_STAGES.includes(currentStep as OnboardingStage)) {
+    return currentStep as OnboardingStage
+  }
+  return null
 }
 
 // ==========================
@@ -22,7 +31,7 @@ export async function getProgress(userId: string): Promise<OnboardingProgress> {
     where: { id: userId },
     select: {
       id: true,
-      onboardingStage: true,
+      currentStep: true,
       onboardingStartedAt: true,
       lastLoginAt: true,
     },
@@ -31,12 +40,13 @@ export async function getProgress(userId: string): Promise<OnboardingProgress> {
   if (!user) throw new Error('User not found');
 
   // Якщо онбординг ще не почався — ініціалізуємо
-  if (!user.onboardingStage || !user.onboardingStartedAt) {
+  const resolvedStage = resolveOnboardingStage(user.currentStep)
+  if (!resolvedStage || !user.onboardingStartedAt) {
     const now = new Date();
     await prisma.user.update({
       where: { id: userId },
       data: {
-        onboardingStage: 'ENTRY',
+        currentStep: 'START_FLOW',
         onboardingStartedAt: now,
       },
     });
@@ -52,7 +62,7 @@ export async function getProgress(userId: string): Promise<OnboardingProgress> {
     };
   }
 
-  const currentStage = user.onboardingStage as OnboardingStage;
+  const currentStage = resolvedStage;
   const currentIndex = ONBOARDING_STAGES.indexOf(currentStage);
   const completedStages = ONBOARDING_STAGES.slice(0, currentIndex);
 
@@ -83,7 +93,7 @@ export async function completeStage(dto: CompleteStageDto): Promise<OnboardingPr
   await prisma.user.update({
     where: { id: dto.userId },
     data: {
-      onboardingStage: toDbOnboardingStage(nextStage),
+      currentStep: toDbOnboardingStep(nextStage),
       ...(nextStage === 'COMPLETED' && { onboardingCompletedAt: new Date() }),
     },
   });
@@ -98,7 +108,7 @@ export async function updateProgress(dto: UpdateProgressDto): Promise<Onboarding
   await prisma.user.update({
     where: { id: dto.userId },
     data: {
-      onboardingStage: toDbOnboardingStage(dto.stage),
+      currentStep: toDbOnboardingStep(dto.stage),
       ...(dto.stage === 'COMPLETED' && { onboardingCompletedAt: new Date() }),
     },
   });

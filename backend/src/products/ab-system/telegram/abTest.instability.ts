@@ -1,4 +1,5 @@
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { resolveUserLifecycle } from '../../../modules/users/runtime/resolveUserLifecycle.js'
 import { prisma } from '../../../db/client.js'
 import { sendDedupedTelegramMessage } from '../../../lib/telegram.js'
 import {
@@ -22,7 +23,9 @@ export async function detectStateInstability(
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
-      lifecycleState: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       dailyEntries: {
         where: {
           date: { gte: weekStart },
@@ -58,7 +61,7 @@ export async function detectStateInstability(
     },
   })
 
-  if (!user || user.lifecycleState !== 'platform_active') {
+  if (!user || resolveUserLifecycle(user).value !== 'platform_active') {
     return false
   }
 
@@ -111,7 +114,9 @@ export async function sendStateCourseOffer(
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
-      lifecycleState: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       settings: true,
       telegramChatId: true,
       telegramLinks: {
@@ -123,7 +128,7 @@ export async function sendStateCourseOffer(
     },
   })
 
-  if (!user || user.lifecycleState !== 'platform_active') {
+  if (!user || resolveUserLifecycle(user).value !== 'platform_active') {
     return
   }
 

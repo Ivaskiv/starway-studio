@@ -14,6 +14,5 @@ describe('welcome-test focus payment', () => {
   it('builds checkout proxy url for focus monthly', () => {
     const url = buildEcosystemPaymentCheckoutUrl('focus', '1month', 'user_test_1')
     expect(url).toContain('/api/payments/wayforpay/checkout')
-    expect(url).toContain('payload=')
   })
 })

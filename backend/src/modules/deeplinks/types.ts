@@ -10,6 +10,7 @@ export type DeepLinkAction =
   | 'open_miniapp'
   | 'resume_task'
   | 'open_mentor'
+  | 'magic_login'
 
 export interface GenerateDeepLinkInput {
   userId: string

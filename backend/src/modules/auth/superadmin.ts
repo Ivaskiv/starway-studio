@@ -1,7 +1,16 @@
-const RAW_SUPERADMIN_EMAILS = process.env.SUPERADMIN_EMAILS ?? 'viraivaskiv@gmail.com'
+const DEFAULT_SUPERADMIN_EMAILS = [
+  'viraivaskiv@gmail.com',
+  'nadyastarway@gmail.com',
+]
+
 const SUPERADMIN_EMAIL_SET = new Set(
-  RAW_SUPERADMIN_EMAILS
-    .split(',')
+  [
+    ...DEFAULT_SUPERADMIN_EMAILS,
+    ...(process.env.SUPERADMIN_EMAILS ?? '')
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
+  ]
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean),
 )

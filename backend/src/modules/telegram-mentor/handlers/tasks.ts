@@ -11,6 +11,7 @@ import { isLmOnlyModeEnabled } from '../runtime.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { planAck, planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleTasks(ctx: Context) {
   if (isLmOnlyModeEnabled()) {
@@ -51,15 +52,16 @@ export async function handleTasks(ctx: Context) {
       const copy = buildRecoveryCopy('progress_stalled', resolveConversationProfile('absystem'), {
         relationship,
       })
-      await ctx.reply(
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'tasks_empty',
         `${absystemContent.tasks.empty}\n${copy.body}`,
         {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: absystemContent.tasks.backToRhythm, callback_data: 'continue_ai_mentor' }],
-              [{ text: absystemContent.tasks.rhythmCheck, callback_data: 'start_trial' }],
-            ],
-          },
+          inline_keyboard: [
+            [{ text: absystemContent.tasks.backToRhythm, callback_data: 'continue_ai_mentor' }],
+            [{ text: absystemContent.tasks.rhythmCheck, callback_data: 'start_trial' }],
+          ],
         },
       )
       return
@@ -68,14 +70,14 @@ export async function handleTasks(ctx: Context) {
     const completedCount = allTasks.filter(task => task.status === 'COMPLETED').length
     const missedCount = allTasks.filter(task => task.status === 'skipped' || task.status === 'expired').length
 
-    await ctx.reply([
+    await planMessage(ctx, 'ctx.reply', 'tasks_summary',
+      [
       absystemContent.tasks.title,
       absystemContent.tasks.summary(activeTasks.length, completedCount, missedCount),
-    ].join('\n'), {
-      reply_markup: {
+    ].join('\n'),
+      {
         inline_keyboard: [[{ text: absystemContent.tasks.myStatus, callback_data: 'open_status' }]],
-      },
-    })
+      })
 
     for (const task of activeTasks) {
       const due = task.dueAt
@@ -84,7 +86,13 @@ export async function handleTasks(ctx: Context) {
       const schedule = task.schedule?.isMultiDay && task.schedule.label
         ? `\n🗓 ${task.schedule.label}`
         : ''
-      await ctx.reply(`▸ ${task.title}${schedule}${due}`, { reply_markup: taskDoneKeyboard(task.id).reply_markup })
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'tasks_item',
+        `▸ ${task.title}${schedule}${due}`,
+        taskDoneKeyboard(task.id).reply_markup,
+      )
     }
   } catch (error) {
     console.error('[TelegramMentor] tasks error:', error)
@@ -121,10 +129,10 @@ export async function handleTaskDone(ctx: Context, taskId: string) {
         taskId,
       },
     })
-    await ctx.answerCbQuery(absystemContent.tasks.completed)
-    await ctx.editMessageText(absystemContent.tasks.completed)
+    await planAck(ctx, 'ctx.answerCbQuery', 'task_done_completed', absystemContent.tasks.completed)
+    await planMessage(ctx, 'ctx.editMessageText', 'task_done_edit_completed', absystemContent.tasks.completed)
     await sendStateMenu(ctx, userId)
   } catch {
-    await ctx.answerCbQuery(absystemContent.tasks.retry)
+    await planAck(ctx, 'ctx.answerCbQuery', 'task_done_retry', absystemContent.tasks.retry)
   }
 }

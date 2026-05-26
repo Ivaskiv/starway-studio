@@ -166,3 +166,5 @@ coverage/
 .vitest/
 
 schema.backup.prisma
+# Local backend backup
+backend/backup-TIMESTAMP.json

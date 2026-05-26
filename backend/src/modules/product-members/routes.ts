@@ -36,8 +36,7 @@ router.get(
             select: {
               id: true,
               code: true,
-              name: true,
-              description: true,
+                            description: true,
               features: true,
               limits: true,
               durationDays: true,

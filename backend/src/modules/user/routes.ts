@@ -42,8 +42,7 @@ router.get('/', authRequired, async (req: AuthenticatedRequest, res: Response) =
     select: {
       id: true,
       email: true,
-      name: true,
-      firstName: true,
+            firstName: true,
       lastName: true,
       role: true,
     },

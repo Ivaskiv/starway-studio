@@ -57,7 +57,7 @@ export const ResultView = ({
         size={320}
       />
 
-      <div className="rounded-xl border border-[color:rgba(var(--glass-border-rgb),0.24)] bg-[color:rgba(var(--ambient-rgb-2),0.34)] p-4">
+      <div className="rounded-xl border border-[color:rgba(var(--glass-border-rgb),0.24)] bg-[color:rgba(var(--ambient-2-rgb),0.34)] p-4">
         <p className="text-sm text-white/70">
           Слабша сфера: <span className="font-semibold text-white">{summary.weakestLabel}</span>
         </p>
@@ -67,7 +67,7 @@ export const ResultView = ({
         <p className="mt-2 text-sm text-white/85">{summary.analysis}</p>
       </div>
 
-      <div className="space-y-2 rounded-xl border border-[color:rgba(var(--glass-border-rgb),0.24)] bg-[color:rgba(var(--ambient-rgb-2),0.34)] p-4">
+      <div className="space-y-2 rounded-xl border border-[color:rgba(var(--glass-border-rgb),0.24)] bg-[color:rgba(var(--ambient-2-rgb),0.34)] p-4">
         {WHEEL_CATEGORIES.map((category) => (
           <div key={category.id} className="flex items-center justify-between text-xs text-white/70">
             <span className="inline-flex items-center gap-2">

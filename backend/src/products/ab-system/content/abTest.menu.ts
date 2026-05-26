@@ -1,4 +1,4 @@
-import { absystemButtons } from '../config/absystem.content.js'
+import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
 
 export const abTestMenuContent = {
   title: '',

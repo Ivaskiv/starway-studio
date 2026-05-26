@@ -2,6 +2,7 @@ import type { Context } from 'telegraf'
 import { supportMenuKeyboard } from '../keyboards.js'
 import { sendEntryOffer, sendStateMenu, resolveLinkedUserIdFromContext } from './start.js'
 import { requireTelegramBotConfig } from '../runtime/botConfig.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 function getBotName(): string {
   return requireTelegramBotConfig('privacy handler').username
@@ -42,10 +43,7 @@ export async function handlePrivacy(ctx: Context) {
       '- Щоб перевірити актуальну версію, надішліть команду <i>/privacy</i>.',
     ].join('\n')
 
-    await ctx.reply(text, {
-      parse_mode: 'HTML',
-      reply_markup: supportMenuKeyboard.reply_markup,
-    })
+    await planMessage(ctx, 'ctx.reply', 'privacy_policy', text, supportMenuKeyboard.reply_markup, 'HTML')
   } catch (error) {
     console.error('[TelegramMentor] privacy error:', error)
     const userId = await resolveLinkedUserIdFromContext(ctx)

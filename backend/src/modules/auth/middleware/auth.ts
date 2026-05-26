@@ -29,8 +29,13 @@ export async function authRequired(
     req.user = user
     next()
   } catch (error) {
-    console.error('[AUTH] middleware failed', error instanceof Error ? error.stack : error)
-    return res.status(401).json({ error: 'invalid_token' })
+    // TokenExpiredError is expected — client will refresh and retry
+    const isExpired = error instanceof Error && error.name === 'TokenExpiredError'
+    if (!isExpired) {
+      console.error('[AUTH] middleware failed', error instanceof Error ? error.stack : error)
+    }
+    const errorCode = isExpired ? 'token_expired' : 'invalid_token'
+    return res.status(401).json({ error: errorCode })
   }
 }
 

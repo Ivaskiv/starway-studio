@@ -59,6 +59,32 @@ export async function sendDedupedTelegramMessage(
   return true
 }
 
+export async function sendUserTelegramMessage(
+  chatId: string,
+  text: string,
+  options?: Parameters<typeof bot.telegram.sendMessage>[2],
+): Promise<boolean> {
+  return sendDedupedTelegramMessage(chatId, text, options)
+}
+
+export async function sendOpsTelegramMessage(
+  text: string,
+  options?: Parameters<typeof bot.telegram.sendMessage>[2],
+): Promise<boolean> {
+  const chatId = process.env.OPS_TELEGRAM_CHAT_ID?.trim()
+  if (!chatId) {
+    console.warn('[telegram:ops] OPS_TELEGRAM_CHAT_ID is not configured')
+    return false
+  }
+
+  try {
+    return await sendDedupedTelegramMessage(chatId, text, options)
+  } catch (error) {
+    console.error('[telegram:ops] Failed to send OPS message', error)
+    return false
+  }
+}
+
 export async function sendToMentor(payload: {
   fromName: string
   fromEmail: string

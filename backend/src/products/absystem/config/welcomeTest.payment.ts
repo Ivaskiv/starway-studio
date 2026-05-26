@@ -2,6 +2,7 @@ import type { Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../../db/client.js'
 import { getUiSettings, isJsonObject } from '../../ab-system/telegram/abTest.progress.js'
+import { resolveUserLifecycle } from '../../../modules/users/runtime/resolveUserLifecycle.js'
 
 export const WELCOME_TEST_UI_KEY = 'welcomeTest'
 
@@ -39,28 +40,31 @@ export async function saveWelcomeTestPayment(
   userId: string,
   payment: WelcomeTestPaymentRecord
 ): Promise<void> {
-  const uiSettings = getUiSettings(
-    (
-      await prisma.user.findUnique({
-        where: { id: userId },
-        select: { uiSettings: true },
-      })
-    )?.uiSettings
-  )
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { settings: true },
+  })
+  const settings = getUiSettings(user?.settings)
+  const nestedUi = getUiSettings(settings.ui)
+  const uiSettings = nestedUi
 
   const welcome = isJsonObject(uiSettings[WELCOME_TEST_UI_KEY])
     ? { ...(uiSettings[WELCOME_TEST_UI_KEY] as Record<string, unknown>) }
     : {}
+  const nextUiSettings = {
+    ...uiSettings,
+    [WELCOME_TEST_UI_KEY]: {
+      ...welcome,
+      payment,
+    },
+  } as Prisma.InputJsonValue
 
   await prisma.user.update({
     where: { id: userId },
     data: {
-      uiSettings: {
-        ...uiSettings,
-        [WELCOME_TEST_UI_KEY]: {
-          ...welcome,
-          payment,
-        },
+      settings: {
+        ...settings,
+        ui: nextUiSettings,
       } as Prisma.InputJsonValue,
     },
   })
@@ -81,8 +85,7 @@ export async function markWelcomeTestPaymentPending(
 
 export async function markWelcomeTestPaymentPaid(userId: string): Promise<void> {
   const current = getWelcomeTestPaymentFromUiSettings(
-    (await prisma.user.findUnique({ where: { id: userId }, select: { uiSettings: true } }))
-      ?.uiSettings
+    await loadUserUiSettings(userId)
   )
 
   await saveWelcomeTestPayment(userId, {
@@ -94,12 +97,24 @@ export async function markWelcomeTestPaymentPaid(userId: string): Promise<void> 
   })
 }
 
+async function loadUserUiSettings(userId: string): Promise<Record<string, unknown>> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { settings: true },
+  })
+  const settings = getUiSettings(user?.settings)
+  const nestedUi = getUiSettings(settings.ui)
+  if (Object.keys(nestedUi).length > 0) return nestedUi
+  return {}
+}
+
 export async function isFocusSubscriptionActive(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { lifecycleState: true },
+    select: { currentState: true, currentStep: true, funnelStage: true },
   })
-  if (user?.lifecycleState === 'focus_active' || user?.lifecycleState === 'platform_active') {
+  const lifecycle = resolveUserLifecycle(user ?? {}).value
+  if (lifecycle === 'focus_active' || lifecycle === 'platform_active') {
     return true
   }
 

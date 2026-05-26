@@ -4,10 +4,14 @@ import type {
 } from '../content/abTest.questions.js'
 
 export type AbTestCallbackAction =
+  | { kind: 'entry' }
   | { kind: 'intro' }
+  | { kind: 'resume' }
   | { kind: 'restart' }
   | { kind: 'show_result' }
   | { kind: 'start' }
+  | { kind: 'email_continue' }
+  | { kind: 'email_skip' }
   | { kind: 'restore' }
   | { kind: 'menu' }
   | { kind: 'edit'; questionId: AbTestQuestionId }
@@ -21,10 +25,14 @@ export type AbTestCallbackAction =
 export function parseAbTestCallback(
   action: string,
 ): AbTestCallbackAction | null {
+  if (action === 'ab_test:entry') return { kind: 'entry' }
   if (action === 'ab_test:intro') return { kind: 'intro' }
+  if (action === 'ab_test:resume') return { kind: 'resume' }
   if (action === 'ab_test:restart') return { kind: 'restart' }
   if (action === 'ab_test:show_result') return { kind: 'show_result' }
   if (action === 'ab_test:start') return { kind: 'start' }
+  if (action === 'ab_test:email_continue') return { kind: 'email_continue' }
+  if (action === 'ab_test:email_skip') return { kind: 'email_skip' }
   if (action === 'ab_test:restore') return { kind: 'restore' }
   if (action === 'ab_test:menu') return { kind: 'menu' }
 

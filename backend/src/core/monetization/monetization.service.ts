@@ -1,7 +1,7 @@
 import type { CanonicalLifecycleState } from '../lifecycle/lifecycle.adapter.js'
 
 export interface MonetizationContext {
-  lifecycleState: CanonicalLifecycleState
+  lifecycle: CanonicalLifecycleState
   hasProgress?: boolean
   daysToTrialEnd?: number | null
   repeatedInactivity?: boolean
@@ -21,7 +21,7 @@ export interface MonetizationOffer {
 }
 
 export function getOffer(context: MonetizationContext): MonetizationOffer | null {
-  if (context.lifecycleState === 'expired' || context.lifecycleState === 'churned' || context.repeatedInactivity) {
+  if (context.lifecycle === 'expired' || context.lifecycle === 'churned' || context.repeatedInactivity) {
     return {
       offerType: 'winback',
       reason: 'Користувач втратив активний доступ і потребує повернення в систему.',
@@ -29,7 +29,7 @@ export function getOffer(context: MonetizationContext): MonetizationOffer | null
     }
   }
 
-  if (context.lifecycleState === 'activated' && (context.hasProgress || (context.streak ?? 0) > 0)) {
+  if (context.lifecycle === 'activated' && (context.hasProgress || (context.streak ?? 0) > 0)) {
     return {
       offerType: 'trial',
       reason: 'Користувач уже відчув першу цінність і готовий спробувати повний ритм ABsystem.',
@@ -37,7 +37,7 @@ export function getOffer(context: MonetizationContext): MonetizationOffer | null
   }
 
   if (
-    context.lifecycleState === 'trial_active'
+    context.lifecycle === 'trial_active'
     && (context.repeatedUsage || (context.streak ?? 0) >= 3)
   ) {
     return {
@@ -47,7 +47,7 @@ export function getOffer(context: MonetizationContext): MonetizationOffer | null
   }
 
   if (
-    context.lifecycleState === 'trial_active'
+    context.lifecycle === 'trial_active'
     && typeof context.daysToTrialEnd === 'number'
     && context.daysToTrialEnd <= 2
   ) {
@@ -59,7 +59,7 @@ export function getOffer(context: MonetizationContext): MonetizationOffer | null
   }
 
   if (
-    (context.lifecycleState === 'trial_active' || context.lifecycleState === 'paid_active')
+    (context.lifecycle === 'trial_active' || context.lifecycle === 'paid_active')
     && (
       context.blockedFeature
       || context.repeatedPatterns
@@ -75,7 +75,7 @@ export function getOffer(context: MonetizationContext): MonetizationOffer | null
     }
   }
 
-  if (context.lifecycleState === 'paid_active' && (context.unfinishedSteps ?? 0) > 0 && (context.streak ?? 0) >= 3) {
+  if (context.lifecycle === 'paid_active' && (context.unfinishedSteps ?? 0) > 0 && (context.streak ?? 0) >= 3) {
     return {
       offerType: 'upsell',
       reason: 'Користувач тримає ритм, але впирається в незавершені кроки — час запропонувати глибший формат підтримки.',

@@ -98,7 +98,7 @@ export async function getDashboardStats(req: Request, res: Response) {
     })
 
     const recentActivity = recentPurchases.map((purchase) => ({
-      user: purchase.user?.name ?? purchase.user?.email ?? 'Невідомий',
+      user: purchase.user?.firstName ?? purchase.user?.email ?? 'Невідомий',
       action: purchase.funnel ? `Subscription to ${purchase.funnel.name}` : 'Purchase',
       time: purchase.createdAt.toISOString(),
       type: 'purchase' as const,

@@ -153,7 +153,7 @@ export async function runReleaseGovernanceValidation(): Promise<ValidationReport
       ready: false,
       missing_secrets: ['REDIS_URL', 'WAYFORPAY_CALLBACK_URL', 'TELEGRAM_WEBHOOK_URL'],
       invalid_envs: ['SCHEDULER_ENABLED'],
-      duplicate_envs: ['WAYFORPAY_SECRET_KEY'],
+      duplicate_envs: [],
       checks: [],
     },
     migration_governance: {

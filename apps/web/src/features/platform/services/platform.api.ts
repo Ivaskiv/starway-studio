@@ -1,67 +1,6 @@
 import { api } from '@/services/api'
-
-export type PlatformAccessStatus =
-  | 'TRIAL_ACTIVE'
-  | 'TRIAL_EXPIRED'
-  | 'PAID_ONBOARDING'
-  | 'PAID_ACTIVE'
-  | 'FOCUS_ONLY'
-  | 'BLOCKED'
-
-export type PlatformAccess = {
-  status: PlatformAccessStatus
-  trialDay: number | null
-  daysLeft: number | null
-  focusPaid: boolean
-  aiUpgraded: boolean
-  onboardingDone: boolean
-  canAccessPlatform: boolean
-  canAccessPaidModules: boolean
-}
-
-export type PlatformMetricReport = {
-  period: 'weekly' | 'monthly'
-  metrics: {
-    from: string
-    to: string
-    days: number
-    dailyEntries: number
-    microTasksDone: number
-    microTasksTotal: number
-    mentorSessions: number
-    wheelEntries: number
-    avgWheelScore: number | null
-  }
-  summary: string[]
-}
-
-export type PlatformWheelSummary = {
-  latest: {
-    id: string
-    createdAt: string
-    updatedAt: string
-    scores: Array<{ categoryId: string; score: number }>
-    notes: string | null
-  } | null
-  cooldown: {
-    canFill: boolean
-    regenCount: number
-    regenLeft: number
-    nextWheelAt: string | null
-    lastWheelAt: string | null
-  }
-  analytics: {
-    totalAssessments: number
-    balanceIndex: number
-    trend: 'improving' | 'declining' | 'stable'
-  }
-  history: Array<{
-    id: string
-    createdAt: string
-    updatedAt: string
-    scores: Array<{ categoryId: string; score: number }>
-  }>
-}
+import type { PlatformAccess, PlatformMetricReport, PlatformWheelSummary } from '../types/platformAccess.types'
+export type { PlatformAccess, PlatformAccessStatus, PlatformMetricReport, PlatformWheelSummary } from '../types/platformAccess.types'
 
 export const platformApi = api.injectEndpoints({
   endpoints: builder => ({

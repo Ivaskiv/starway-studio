@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 
 type UserLevel = 'Seeker' | 'Builder' | 'Master' | 'Legend' | string
 
-type AIMessage = {
+type AiMessage = {
   id: string
   role: 'assistant' | 'user'
   content: string
@@ -56,7 +56,7 @@ export default function AIChat({
   xpToNext,
   streakDays,
 }: AIChatProps) {
-  const [messages, setMessages] = useState<AIMessage[]>([])
+  const [messages, setMessages] = useState<AiMessage[]>([])
   const [draft, setDraft] = useState('')
 
   const greeting = useMemo(() => buildGreeting(userName), [userName])

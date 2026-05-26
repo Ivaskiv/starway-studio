@@ -67,7 +67,7 @@ export async function buildContextPrompt(userId: string) {
         trialEndsAt: true,
       },
     }),
-    prisma.userAIMentor.findFirst({
+    prisma.userAiMentor.findFirst({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       select: {

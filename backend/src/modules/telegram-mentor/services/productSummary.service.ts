@@ -68,7 +68,7 @@ type ProductSummaryResult = {
     streak: number
     completedLessons: number
     currentLesson: string | null
-    onboardingStage: string | null
+    currentStep: string | null
     lastActivityAt: Date | null
     paymentStatus: 'paid' | 'trial' | 'paused' | 'unpaid'
   }
@@ -409,8 +409,7 @@ export async function resolveTelegramProductSummary(userId: string): Promise<Pro
     prisma.user.findUnique({
       where: { id: userId },
       select: {
-        onboardingStage: true,
-        currentStep: true,
+                currentStep: true,
         onboardingStartedAt: true,
         productAccesses: {
           orderBy: { createdAt: 'desc' },
@@ -474,9 +473,9 @@ export async function resolveTelegramProductSummary(userId: string): Promise<Pro
     return metadata?.productId === focusManifest.slug
   }))
 
-  const stankeyStageLabel = friendlyStageLabel(user?.currentStep ?? user?.onboardingStage ?? null)
-  const coreStageLabel = friendlyStageLabel(user?.currentStep ?? user?.onboardingStage ?? null)
-  const focusStageLabel = friendlyStageLabel(user?.onboardingStage ?? user?.currentStep ?? null)
+  const stankeyStageLabel = friendlyStageLabel(user?.currentStep ?? user?.currentStep ?? null)
+  const coreStageLabel = friendlyStageLabel(user?.currentStep ?? user?.currentStep ?? null)
+  const focusStageLabel = friendlyStageLabel(user?.currentStep ?? user?.currentStep ?? null)
 
   const blocks: Array<ProductSummaryBlock | null> = [
     buildProductBlock({
@@ -592,7 +591,7 @@ export async function resolveTelegramProductSummary(userId: string): Promise<Pro
       streak: progress.streak,
       completedLessons: progress.completedLessons,
       currentLesson: progress.currentLesson,
-      onboardingStage: isInternalStep(user?.currentStep) ? friendlyStageLabel(user?.onboardingStage ?? null) : friendlyStageLabel(user?.currentStep ?? null),
+      currentStep: isInternalStep(user?.currentStep) ? friendlyStageLabel(user?.currentStep ?? null) : friendlyStageLabel(user?.currentStep ?? null),
       lastActivityAt: progress.lastActivityAt,
       paymentStatus: progress.paymentStatus,
     },

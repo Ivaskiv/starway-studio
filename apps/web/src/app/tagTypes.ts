@@ -57,7 +57,7 @@ export const TAG_TYPES = [
   'Courses',
 
   'AI',
-  'AIMentor',
+  'AiMentor',
   'MicroTasks',
   'AIPrompt',
   'AITemplate',

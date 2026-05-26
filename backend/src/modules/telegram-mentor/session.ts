@@ -96,7 +96,7 @@ export async function getSession(chatId: string) {
   const link = await prisma.telegramLink.findFirst({ where: { chatId } })
   if (!link) return null
 
-  const session = await prisma.aIMentorSession.findUnique({
+  const session = await prisma.aiMentorSession.findUnique({
     where: { userId: link.userId },
   })
 
@@ -120,7 +120,7 @@ export async function updateSession(
 
   const userMentor = await ensureMentor(userId)
 
-  await prisma.aIMentorSession.upsert({
+  await prisma.aiMentorSession.upsert({
     where:  { userId },
     create: { userId, chatId, state, step, data: jsonData, userMentorId: userMentor.id },
     update: { state, step, data: jsonData, userMentorId: userMentor.id },

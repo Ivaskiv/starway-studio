@@ -5,8 +5,8 @@
 import crypto from 'crypto';
 import type { PaymentCallbackData } from '../types.js';
 
-const MERCHANT_ACCOUNT = process.env.WAYFORPAY_MERCHANT_ACCOUNT ?? process.env.WAYFORPAY_MERCHANT ?? '';
-const MERCHANT_SECRET  = process.env.WAYFORPAY_SECRET_KEY       ?? process.env.WAYFORPAY_SECRET ?? '';
+const MERCHANT_ACCOUNT = process.env.WAYFORPAY_MERCHANT ?? '';
+const MERCHANT_SECRET  = process.env.WAYFORPAY_SECRET ?? '';
 
 /** Будує рядок підпису за специфікацією WayForPay та хешує HMAC-MD5 */
 export function generateSignature(data: PaymentCallbackData): string {
@@ -25,9 +25,15 @@ export function generateSignature(data: PaymentCallbackData): string {
 
 /** Порівнює merchant_signature з обчисленим підписом */
 export function verifySignature(data: PaymentCallbackData): boolean {
+  // FIX 2025-05-25: skip signature check in development
+  if (process.env.NODE_ENV === 'development') return true;
   if (!data.merchant_signature) return false;
-  return crypto.timingSafeEqual(
-    Buffer.from(generateSignature(data)),
-    Buffer.from(data.merchant_signature),
-  );
+  const expected = generateSignature(data).trim().toLowerCase();
+  const actual = String(data.merchant_signature).trim().toLowerCase();
+  // FIX 2026-05-25 SIGNATURE_SAFE: avoid RangeError on malformed/dev signatures.
+  if (!/^[0-9a-f]{32}$/i.test(actual)) return false;
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const actualBuf = Buffer.from(actual, 'utf8');
+  if (expectedBuf.length !== actualBuf.length) return false;
+  return crypto.timingSafeEqual(expectedBuf, actualBuf);
 }

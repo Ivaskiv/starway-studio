@@ -4,13 +4,15 @@ import { Router } from 'express'
 import type { RequestHandler } from 'express'
 import { register, login, social, telegram, refresh, logout, getMe, updateSettings } from './auth.controller.js'
 import { authRequired } from './middleware/auth.js'
-import type { AuthenticatedRequest } from '../../types/globalTypes.js'
+import type { AuthenticatedRequest, UserRole } from '../../types/globalTypes.js'
 import { prisma } from '../../db/client.js'
 import { bot } from '../../lib/telegram.js'
 import { getCachedUser, invalidateUserCache } from '../../lib/db/userCache.js'
 import { createTelegramBindingDeepLink } from '../deeplinks/service.js'
 import { authLimiter } from '../../middleware/rateLimiter.js'
 import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
+import { computeAvailableRoles, isRoleAvailable } from './roleUtils.js'
+import { generateAccessToken, generateRefreshToken, storeRefreshToken, resolveSafeUserById } from './auth.service.js'
 
 const router = Router()
 export const telegramRouter = Router()
@@ -39,6 +41,38 @@ router.post('/refresh', refresh)
 router.post('/logout', authRequired, logout)
 router.get('/me', authRequired, getMe)
 router.patch('/settings', authRequired, updateSettings)
+
+router.post('/switch-role', authRequired, async (req: AuthenticatedRequest, res) => {
+  const userId = req.user?.id
+  if (!userId) return res.status(401).json({ message: 'unauthorized' })
+
+  const requestedRole = String(req.body?.role ?? '').toUpperCase() as UserRole
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, activeRole: true, email: true },
+  })
+  if (!user) return res.status(404).json({ message: 'user_not_found' })
+
+  const availableRoles = computeAvailableRoles({ role: user.role as UserRole })
+  if (!isRoleAvailable(requestedRole, availableRoles)) {
+    return res.status(403).json({ message: 'role_not_available', availableRoles })
+  }
+
+  await prisma.user.update({ where: { id: userId }, data: { activeRole: requestedRole } })
+  await invalidateUserCache(userId)
+
+  const safeUser = await resolveSafeUserById(userId)
+  const accessToken = generateAccessToken({
+    id: userId,
+    role: user.role as UserRole,
+    activeRole: requestedRole,
+    email: user.email,
+  })
+  const refreshToken = generateRefreshToken(userId)
+  await storeRefreshToken(userId, refreshToken)
+
+  return res.json({ user: safeUser, accessToken, refreshToken, activeRole: requestedRole })
+})
 
 router.get('/telegram-link', authRequired, async (req: AuthenticatedRequest, res) => {
   const userId = req.user?.id

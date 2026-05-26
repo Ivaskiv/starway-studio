@@ -9,7 +9,6 @@ type MergeCandidate = {
   id: string
   email: string
   role: Role
-  name: string | null
   firstName: string | null
   lastName: string | null
   passwordHash: string | null
@@ -19,11 +18,9 @@ type MergeCandidate = {
   telegramLinkedAt: Date | null
   currentState: UserState
   currentStep: UserStep
-  onboardingStage: string | null
   onboardingStartedAt: Date | null
   trialStartsAt: Date | null
   trialEndsAt: Date | null
-  uiSettings: Prisma.JsonValue | null
   settings: Prisma.JsonValue | null
   lastLoginAt: Date | null
   createdAt: Date
@@ -35,7 +32,8 @@ function normalizeEmail(email: string): string {
 }
 
 function isGuestEmail(email: string | null | undefined): boolean {
-  return typeof email === 'string' && email.startsWith('telegram-guest-')
+  if (typeof email !== 'string') return false
+  return email.startsWith('telegram-guest-') || /^telegram-\d+@starway\.local$/i.test(email)
 }
 
 function isRecordObject(value: Prisma.JsonValue | null | undefined): value is Prisma.JsonObject {
@@ -107,8 +105,7 @@ async function getMergeCandidate(tx: Tx, userId: string): Promise<MergeCandidate
       id: true,
       email: true,
       role: true,
-      name: true,
-      firstName: true,
+            firstName: true,
       lastName: true,
       passwordHash: true,
       telegramUserId: true,
@@ -117,12 +114,10 @@ async function getMergeCandidate(tx: Tx, userId: string): Promise<MergeCandidate
       telegramLinkedAt: true,
       currentState: true,
       currentStep: true,
-      onboardingStage: true,
-      onboardingStartedAt: true,
+            onboardingStartedAt: true,
       trialStartsAt: true,
       trialEndsAt: true,
-      uiSettings: true,
-      settings: true,
+            settings: true,
       lastLoginAt: true,
       createdAt: true,
       updatedAt: true,
@@ -136,10 +131,10 @@ async function getMergeCandidate(tx: Tx, userId: string): Promise<MergeCandidate
   return user
 }
 
-async function findUserByEmailTx(tx: Tx, email: string): Promise<{ id: string } | null> {
+async function findUserByEmailTx(tx: Tx, email: string): Promise<{ id: string; email: string | null } | null> {
   return tx.user.findUnique({
     where: { email },
-    select: { id: true },
+    select: { id: true, email: true },
   })
 }
 
@@ -298,8 +293,8 @@ async function mergeSimpleByUserId(
     | 'subscription'
     | 'paymentLog'
     | 'purchaseHistory'
-    | 'aIRecommendation'
-    | 'cTAInteraction'
+    | 'aiRecommendation'
+    | 'ctaInteraction'
     | 'reminder'
     | 'microTask'
     | 'microSupportItem'
@@ -312,7 +307,7 @@ async function mergeSimpleByUserId(
     | 'assistantMemory'
     | 'generationLog'
     | 'affiliateLink'
-    | 'aIConversation'
+    | 'aiConversation'
     | 'contentItem'
     | 'funnelLead'
     | 'event',
@@ -725,20 +720,20 @@ async function mergeMentorWeeklyProfiles(tx: Tx, sourceUserId: string, targetUse
 }
 
 async function mergeAimemory(tx: Tx, sourceUserId: string, targetUserId: string) {
-  const rows = await tx.aIMemory.findMany({ where: { userId: sourceUserId } })
+  const rows = await tx.aiMemory.findMany({ where: { userId: sourceUserId } })
 
   for (const row of rows) {
-    const existing = await tx.aIMemory.findUnique({
+    const existing = await tx.aiMemory.findUnique({
       where: { userId_key: { userId: targetUserId, key: row.key } },
     })
 
     if (!existing) {
-      await tx.aIMemory.update({ where: { id: row.id }, data: { userId: targetUserId } })
+      await tx.aiMemory.update({ where: { id: row.id }, data: { userId: targetUserId } })
       continue
     }
 
     if (row.updatedAt > existing.updatedAt) {
-      await tx.aIMemory.update({
+      await tx.aiMemory.update({
         where: { id: existing.id },
         data: {
           value: row.value,
@@ -748,7 +743,7 @@ async function mergeAimemory(tx: Tx, sourceUserId: string, targetUserId: string)
       })
     }
 
-    await tx.aIMemory.delete({ where: { id: row.id } })
+    await tx.aiMemory.delete({ where: { id: row.id } })
   }
 }
 
@@ -756,17 +751,19 @@ async function mergeUserAiMentors(
   tx: Tx,
   sourceUserId: string,
   targetUserId: string,
-): Promise<Map<string, string>> {
+): Promise<{ idMap: Map<string, string>; duplicateSourceIdsToDelete: string[] }> {
   const idMap = new Map<string, string>()
-  const rows = await tx.userAIMentor.findMany({ where: { userId: sourceUserId } })
+  // FIX 2026-05-25 USER_DEDUP2: defer duplicate mentor deletion until mentor sessions are remapped.
+  const duplicateSourceIdsToDelete: string[] = []
+  const rows = await tx.userAiMentor.findMany({ where: { userId: sourceUserId } })
 
   for (const row of rows) {
-    const existing = await tx.userAIMentor.findUnique({
+    const existing = await tx.userAiMentor.findUnique({
       where: { userId_aiMentorId: { userId: targetUserId, aiMentorId: row.aiMentorId } },
     })
 
     if (!existing) {
-      await tx.userAIMentor.update({
+      await tx.userAiMentor.update({
         where: { id: row.id },
         data: { userId: targetUserId },
       })
@@ -774,7 +771,7 @@ async function mergeUserAiMentors(
       continue
     }
 
-    await tx.userAIMentor.update({
+    await tx.userAiMentor.update({
       where: { id: existing.id },
       data: {
         state: toNullableJsonInput(mergeJsonValues(row.state, existing.state)),
@@ -795,10 +792,10 @@ async function mergeUserAiMentors(
     })
 
     idMap.set(row.id, existing.id)
-    await tx.userAIMentor.delete({ where: { id: row.id } })
+    duplicateSourceIdsToDelete.push(row.id)
   }
 
-  return idMap
+  return { idMap, duplicateSourceIdsToDelete }
 }
 
 async function mergeUserMentorStates(tx: Tx, sourceUserId: string, targetUserId: string) {
@@ -841,14 +838,14 @@ async function mergeAimentorSession(
   targetUserId: string,
   mentorIdMap: Map<string, string>,
 ) {
-  const source = await tx.aIMentorSession.findUnique({ where: { userId: sourceUserId } })
+  const source = await tx.aiMentorSession.findUnique({ where: { userId: sourceUserId } })
   if (!source) return
 
-  const target = await tx.aIMentorSession.findUnique({ where: { userId: targetUserId } })
+  const target = await tx.aiMentorSession.findUnique({ where: { userId: targetUserId } })
   const mappedUserMentorId = mentorIdMap.get(source.userMentorId) ?? source.userMentorId
 
   if (!target) {
-    await tx.aIMentorSession.update({
+    await tx.aiMentorSession.update({
       where: { userId: sourceUserId },
       data: {
         userId: targetUserId,
@@ -858,14 +855,14 @@ async function mergeAimentorSession(
     return
   }
 
-  await tx.aIMentorMessage.updateMany({
+  await tx.aiMentorMessage.updateMany({
     where: { sessionId: source.id },
     data: { sessionId: target.id },
   })
 
   const shouldReplace = source.updatedAt > target.updatedAt
   if (shouldReplace) {
-    await tx.aIMentorSession.update({
+    await tx.aiMentorSession.update({
       where: { userId: targetUserId },
       data: {
         chatId: source.chatId || target.chatId,
@@ -878,7 +875,7 @@ async function mergeAimentorSession(
     })
   }
 
-  await tx.aIMentorSession.delete({ where: { userId: sourceUserId } })
+  await tx.aiMentorSession.delete({ where: { userId: sourceUserId } })
 }
 
 function canAutoMerge(target: MergeCandidate, source: MergeCandidate): boolean {
@@ -888,7 +885,23 @@ function canAutoMerge(target: MergeCandidate, source: MergeCandidate): boolean {
   if (!guestInvolved) return false
 
   const allowedRoles = new Set<Role>([Role.USER])
-  return allowedRoles.has(target.role) && allowedRoles.has(source.role)
+  if (allowedRoles.has(target.role) && allowedRoles.has(source.role)) {
+    return true
+  }
+
+  // FIX 2025-05-25 C1: allow guest identity merge into established account roles.
+  // Used when Telegram guest later provides email of an existing account.
+  const privilegedRoles = new Set<Role>([Role.ADMIN, Role.SUPERADMIN])
+  const targetIsGuest = isGuestEmail(target.email)
+  const sourceIsGuest = isGuestEmail(source.email)
+  if (targetIsGuest && privilegedRoles.has(source.role)) {
+    return true
+  }
+  if (sourceIsGuest && privilegedRoles.has(target.role)) {
+    return true
+  }
+
+  return false
 }
 
 async function mergeUsersTx(
@@ -935,12 +948,13 @@ async function mergeUsersTx(
     },
   })
 
+  const mergedRole = chooseRole(target.role, source.role)
   await tx.user.update({
     where: { id: targetUserId },
     data: {
       email: nextEmail,
-      role: chooseRole(target.role, source.role),
-      name: target.name ?? source.name,
+      role: mergedRole,
+      activeRole: mergedRole,
       firstName: target.firstName ?? source.firstName,
       lastName: target.lastName ?? source.lastName,
       passwordHash: target.passwordHash ?? source.passwordHash,
@@ -950,11 +964,9 @@ async function mergeUsersTx(
       telegramLinkedAt: minDate(target.telegramLinkedAt, source.telegramLinkedAt),
       currentState: target.currentState ?? source.currentState,
       currentStep: target.currentStep ?? source.currentStep,
-      onboardingStage: target.onboardingStage ?? source.onboardingStage,
       onboardingStartedAt: minDate(target.onboardingStartedAt, source.onboardingStartedAt),
       trialStartsAt: minDate(target.trialStartsAt, source.trialStartsAt),
       trialEndsAt: maxDate(target.trialEndsAt, source.trialEndsAt),
-      uiSettings: toNullableJsonInput(mergeJsonValues(source.uiSettings, target.uiSettings)),
       settings: toNullableJsonInput(mergeJsonValues(source.settings, target.settings)),
       lastLoginAt: maxDate(target.lastLoginAt, source.lastLoginAt),
     },
@@ -964,8 +976,8 @@ async function mergeUsersTx(
   await mergeSimpleByUserId(tx, 'subscription', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'paymentLog', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'purchaseHistory', sourceUserId, targetUserId)
-  await mergeSimpleByUserId(tx, 'aIRecommendation', sourceUserId, targetUserId)
-  await mergeSimpleByUserId(tx, 'cTAInteraction', sourceUserId, targetUserId)
+  await mergeSimpleByUserId(tx, 'aiRecommendation', sourceUserId, targetUserId)
+  await mergeSimpleByUserId(tx, 'ctaInteraction', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'reminder', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'microTask', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'microSupportItem', sourceUserId, targetUserId)
@@ -977,7 +989,7 @@ async function mergeUsersTx(
   await mergeSimpleByUserId(tx, 'assistantMemory', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'generationLog', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'affiliateLink', sourceUserId, targetUserId)
-  await mergeSimpleByUserId(tx, 'aIConversation', sourceUserId, targetUserId)
+  await mergeSimpleByUserId(tx, 'aiConversation', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'contentItem', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'funnelLead', sourceUserId, targetUserId)
   await mergeSimpleByUserId(tx, 'event', sourceUserId, targetUserId)
@@ -1011,9 +1023,12 @@ async function mergeUsersTx(
   await mergeMentorWeeklyProfiles(tx, sourceUserId, targetUserId)
   await mergeAimemory(tx, sourceUserId, targetUserId)
 
-  const mentorIdMap = await mergeUserAiMentors(tx, sourceUserId, targetUserId)
+  const { idMap: mentorIdMap, duplicateSourceIdsToDelete } = await mergeUserAiMentors(tx, sourceUserId, targetUserId)
   await mergeUserMentorStates(tx, sourceUserId, targetUserId)
   await mergeAimentorSession(tx, sourceUserId, targetUserId, mentorIdMap)
+  for (const sourceId of duplicateSourceIdsToDelete) {
+    await tx.userAiMentor.delete({ where: { id: sourceId } })
+  }
 
   await tx.user.delete({ where: { id: sourceUserId } })
 
@@ -1041,9 +1056,11 @@ export async function attachEmailToUser(
       return { userId, merged: false }
     }
 
+    // FIX 2025-05-25 D1: preserve established email account id when merging with telegram guest.
+    const preserveExistingIdentity = isGuestEmail(current.email) && !isGuestEmail(existing.email)
     return mergeUsersTx(tx, {
-      sourceUserId: existing.id,
-      targetUserId: current.id,
+      sourceUserId: preserveExistingIdentity ? current.id : existing.id,
+      targetUserId: preserveExistingIdentity ? existing.id : current.id,
       normalizedEmail: email,
       reason: 'email_attach',
     })
@@ -1062,6 +1079,17 @@ export async function resolveOrCreateTelegramGuestUser(params: {
   }
 
   return prisma.$transaction(async tx => {
+    const linkedByChat = await tx.telegramLink.findFirst({
+      where: {
+        chatId: params.chatId,
+        isActive: true,
+      },
+      select: { userId: true },
+    })
+    if (linkedByChat?.userId) {
+      return linkedByChat.userId
+    }
+
     const found = await tx.user.findFirst({
       where: {
         OR: [
@@ -1083,6 +1111,35 @@ export async function resolveOrCreateTelegramGuestUser(params: {
       select: { id: true },
     })
 
+    if (found?.id && existingGuest?.id && found.id !== existingGuest.id) {
+      const [foundCandidate, guestCandidate] = await Promise.all([
+        getMergeCandidate(tx, found.id),
+        getMergeCandidate(tx, existingGuest.id),
+      ])
+
+      if (canAutoMerge(foundCandidate, guestCandidate)) {
+        const foundIsGuest = isGuestEmail(foundCandidate.email)
+        const guestIsGuest = isGuestEmail(guestCandidate.email)
+        const targetUserId = foundIsGuest && !guestIsGuest ? guestCandidate.id : foundCandidate.id
+        const sourceUserId = targetUserId === foundCandidate.id ? guestCandidate.id : foundCandidate.id
+        const merged = await mergeUsersTx(tx, {
+          sourceUserId,
+          targetUserId,
+          reason: 'telegram_identity',
+        })
+        console.info('[USER_DEDUP]', {
+          telegramUserId: params.telegramUserId,
+          chatId: params.chatId,
+          foundUserId: found.id,
+          guestUserId: existingGuest.id,
+          reconciledUserId: merged.userId,
+          merged: true,
+          source: 'resolve_or_create_reconciled',
+        })
+        return merged.userId
+      }
+    }
+
     if (existingGuest?.id) {
       return existingGuest.id
     }
@@ -1090,16 +1147,60 @@ export async function resolveOrCreateTelegramGuestUser(params: {
     const created = await tx.user.create({
       data: {
         email: guestEmail,
-        name: params.firstName,
         firstName: params.firstName,
         telegramUserId: params.telegramUserId,
         telegramUserName: params.telegramUserName,
         telegramChatId: params.chatId,
         telegramLinkedAt: new Date(),
+        // activeRole mirrors role for new users — user can switch later
+        role: 'USER',
+        activeRole: 'USER',
       },
       select: { id: true },
     })
 
     return created.id
   })
+}
+
+export async function reconcileTelegramIdentityUsers(params: {
+  linkedUserId: string
+  identityUserId: string
+  reason?: 'link_identity_mismatch' | 'start_reconcile'
+}): Promise<{ userId: string; merged: boolean }> {
+  const { linkedUserId, identityUserId } = params
+  if (!linkedUserId || !identityUserId || linkedUserId === identityUserId) {
+    return { userId: linkedUserId || identityUserId, merged: false }
+  }
+
+  try {
+    return await prisma.$transaction(async tx => {
+      const linked = await getMergeCandidate(tx, linkedUserId)
+      const identity = await getMergeCandidate(tx, identityUserId)
+
+      if (!canAutoMerge(linked, identity)) {
+        return { userId: linkedUserId, merged: false }
+      }
+
+      // Keep non-guest/established profile as target whenever possible.
+      const linkedIsGuest = isGuestEmail(linked.email)
+      const identityIsGuest = isGuestEmail(identity.email)
+      const targetUserId = linkedIsGuest && !identityIsGuest ? identity.id : linked.id
+      const sourceUserId = targetUserId === linked.id ? identity.id : linked.id
+
+      return mergeUsersTx(tx, {
+        sourceUserId,
+        targetUserId,
+        reason: 'telegram_identity',
+      })
+    })
+  } catch (error) {
+    console.warn('[USER_DEDUP] reconcile_failed', {
+      linkedUserId,
+      identityUserId,
+      reason: params.reason ?? 'link_identity_mismatch',
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return { userId: linkedUserId, merged: false }
+  }
 }

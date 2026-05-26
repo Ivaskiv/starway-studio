@@ -213,8 +213,8 @@ function getBooleanEnv(name: string, defaultValue = false): boolean {
 
 function buildEnvironmentGovernance(): EnvironmentGovernanceSnapshot {
   const aliasGroups = [
-    { primary: 'WAYFORPAY_SECRET_KEY', aliases: ['WAYFORPAY_SECRET'], severity: 'required' as const },
-    { primary: 'WAYFORPAY_MERCHANT_ACCOUNT', aliases: ['WAYFORPAY_MERCHANT'], severity: 'required' as const },
+    { primary: 'WAYFORPAY_SECRET', aliases: [], severity: 'required' as const },
+    { primary: 'WAYFORPAY_MERCHANT', aliases: [], severity: 'required' as const },
     { primary: 'JWT_SECRET', aliases: ['JWT_ACCESS_SECRET', 'JWT_PRIVATE_KEY'], severity: 'required' as const },
     { primary: 'JWT_REFRESH_SECRET', aliases: ['REFRESH_TOKEN_SECRET'], severity: 'recommended' as const },
     { primary: 'ENCRYPTION_KEY', aliases: ['APP_ENCRYPTION_KEY'], severity: 'required' as const },
@@ -261,7 +261,7 @@ function buildEnvironmentGovernance(): EnvironmentGovernanceSnapshot {
     details: schedulerEnabled ? 'Scheduler enabled' : 'Scheduler disabled',
   })
 
-  const signaturesReady = Boolean(process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || process.env.WAYFORPAY_SECRET_KEY?.trim() || process.env.WAYFORPAY_SECRET?.trim())
+  const signaturesReady = Boolean(process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || process.env.WAYFORPAY_SECRET?.trim())
   checks.push({
     key: 'webhook_signatures',
     ready: signaturesReady,

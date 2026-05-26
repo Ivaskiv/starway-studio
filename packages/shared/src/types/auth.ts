@@ -13,6 +13,8 @@ export interface SafeUser {
   firstName: string | null
   lastName: string | null
   role: UserRole
+  activeRole: UserRole
+  availableRoles: UserRole[]
   isAdmin: boolean
   isSuperAdmin: boolean
   abilities: string[]

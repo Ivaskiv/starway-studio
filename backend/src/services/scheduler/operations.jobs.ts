@@ -10,6 +10,7 @@ import { processScheduledNudges } from '../../modules/telegram-mentor/services/n
 import { runWeeklyAnalysis } from '../../modules/ai-mentor/weekly-analysis/service.js'
 import { runMonthlyAnalysis } from '../../modules/web-map/web-map.service.js'
 import { syncLifecycleForUser } from '../../modules/flow-control/service.js'
+import { resolveDisplayName } from '../../modules/users/runtime/resolveUserLifecycle.js'
 import { NotificationEvent } from '../notifications/NotificationEvent.js'
 import { resolvePausedMentorContext } from '../notifications/mentorLifecycle.js'
 import { notificationService } from '../notifications/NotificationService.js'
@@ -36,7 +37,10 @@ export async function markMissedDaysCron(): Promise<void> {
       content: true,
       user: {
         select: {
-          name: true,
+          firstName: true,
+          lastName: true,
+          telegramUserName: true,
+          email: true,
         },
       },
     },
@@ -82,7 +86,7 @@ export async function markMissedDaysCron(): Promise<void> {
     })
 
     const content = buildNotificationContent('MISSED_DAY_CATCHUP', {
-      userName: entry.user.name ?? 'Привіт',
+      userName: resolveDisplayName(entry.user),
       dayNumber: Number(dayKey.slice(-2)),
     })
 

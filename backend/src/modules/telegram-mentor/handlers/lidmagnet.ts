@@ -4,6 +4,7 @@ import { startLeadMagnet } from '../flows/leadMagnet.flow.js'
 import { sendEntryOffer, sendStateMenu, resolveLinkedUserIdFromContext } from './start.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleLidmagnet(ctx: Context) {
   const telegramId = String(ctx.from?.id ?? '')
@@ -28,13 +29,17 @@ export async function handleLidmagnet(ctx: Context) {
     const copy = buildRecoveryCopy('question_missing', resolveConversationProfile('stankey'), {
       relationship,
     })
-    await ctx.reply(`${copy.title}\n${copy.body}\n\n${stankeyContent.telegram.product.lidmagnetAccepted}`, {
-      reply_markup: {
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'lidmagnet_accepted',
+      `${copy.title}\n${copy.body}\n\n${stankeyContent.telegram.product.lidmagnetAccepted}`,
+      {
         inline_keyboard: [
           [{ text: stankeyContent.telegram.buttons.continueMaterial, callback_data: 'lm_continue_material' }],
         ],
       },
-    })
+    )
     return
   } catch (error) {
     console.error('[TelegramMentor] lidmagnet error:', error)

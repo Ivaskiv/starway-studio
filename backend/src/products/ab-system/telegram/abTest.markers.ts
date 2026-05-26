@@ -5,6 +5,9 @@ import {
   type AbTestProgress,
   type AbTestStageId,
 } from '../../../core/state-machine/abTestFoundation.js'
+import { prisma } from '../../../db/client.js'
+import { resolveNotificationType } from '../../../services/notifications/domain/notificationPolicy.js'
+import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { loadAbTestProgress, saveAbTestProgress } from './abTest.progress.js'
 
@@ -26,6 +29,18 @@ export async function markAbTestPaymentSuccess(userId: string): Promise<void> {
     state: current.stage === 'S5_PAYMENT' ? 'S6_ZOOM' : current.stage,
     payload: { stage: current.stage } satisfies Prisma.JsonObject,
   })
+
+  await prisma.notificationJob
+    .deleteMany({
+      where: {
+        type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),
+        status: 'PENDING',
+        payload: { path: ['userId'], equals: userId },
+      },
+    })
+    .catch((err) =>
+      console.warn('[AbTest] Failed to cancel pending followups on payment', err)
+    )
 }
 
 export async function markAbTestZoomRegistered(

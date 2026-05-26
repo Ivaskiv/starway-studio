@@ -9,7 +9,7 @@
     "build": "pnpm design:guard && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "design:guard": "node ./scripts/check-design-system.mjs",
+    "design:guard": "node ./scripts/check-design-system.mjs && node ./scripts/check-color-rgb-usage.mjs",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "vercel-build": "vite build"

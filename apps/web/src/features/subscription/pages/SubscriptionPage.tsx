@@ -143,6 +143,10 @@ export default function SubscriptionPage() {
         productId: 'stankey',
         planCode: 'monthly',
       }).unwrap()
+      if (response.status === 'already_active') {
+        openRuntimeTarget(stankeyRoom.openUrl ?? stankeyRoom.progressUrl)
+        return
+      }
       if (!response.payment) {
         throw new Error('payment_payload_missing')
       }

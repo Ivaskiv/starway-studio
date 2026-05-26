@@ -426,7 +426,7 @@ export async function updateUserState(input: StateInput): Promise<UserAIMentorSt
     stateHistory: [...previousHistory, historyItem].slice(-30),
   } as Prisma.InputJsonValue
 
-  const updateData: Prisma.UserAIMentorUpdateInput = {
+  const updateData: Prisma.UserAiMentorUpdateInput = {
     context: nextContext,
     lastAnalyzedAt: analyzedAt,
     currentState: normalized.currentState,
@@ -440,7 +440,7 @@ export async function updateUserState(input: StateInput): Promise<UserAIMentorSt
     lastInteractionAt: analyzedAt,
   }
 
-  const updated = await prisma.userAIMentor.update({
+  const updated = await prisma.userAiMentor.update({
     where: { id: userMentor.id },
     data: updateData,
     select: {
@@ -627,7 +627,7 @@ export async function logAssistantRoutingMeta(
     lastRoutedAt: new Date().toISOString(),
   } as Prisma.InputJsonValue
 
-  await prisma.userAIMentor.update({
+  await prisma.userAiMentor.update({
     where: { id: userMentor.id },
     data: {
       context: nextContext,

@@ -16,8 +16,8 @@ async function cleanTestUsers() {
   })
   const ids = testUsers.map((u) => u.id)
   if (ids.length === 0) return
-  await prisma.aIRecommendation.deleteMany({ where: { userId: { in: ids } } })
-  await prisma.cTAInteraction.deleteMany({ where: { userId: { in: ids } } })
+  await prisma.aiRecommendation.deleteMany({ where: { userId: { in: ids } } })
+  await prisma.ctaInteraction.deleteMany({ where: { userId: { in: ids } } })
   await prisma.reminder.deleteMany({ where: { userId: { in: ids } } })
   await prisma.dailyCycleLog.deleteMany({ where: { userId: { in: ids } } })
   await prisma.microSupportItem.deleteMany({ where: { userId: { in: ids } } })
@@ -78,10 +78,10 @@ describe('fix etap7: Trial→Paid + AI CTAs end-to-end scenario', () => {
   })
 
   it('fix etap7: records CTA interactions', async () => {
-    await prisma.cTAInteraction.deleteMany({ where: { userId: trialUserId } })
+    await prisma.ctaInteraction.deleteMany({ where: { userId: trialUserId } })
     await recordCTAInteraction(trialUserId, 'TELEGRAM', 'mini-course')
     await recordCTAInteraction(trialUserId, 'MINI_APP', 'funnel')
-    const interactions = await prisma.cTAInteraction.findMany({ where: { userId: trialUserId } })
+    const interactions = await prisma.ctaInteraction.findMany({ where: { userId: trialUserId } })
     expect(interactions.length).toBe(2)
   })
 

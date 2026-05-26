@@ -64,7 +64,7 @@ function parseStateHistory(value: unknown): StateHistoryItem[] {
 
 export async function buildUserProfile(userId: string): Promise<AssistantUserProfile> {
   const [mentorState, wheelHistory, dailyEntries, lifecycleEvents, subscription] = await Promise.all([
-    prisma.userAIMentor.findFirst({
+    prisma.userAiMentor.findFirst({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       select: {

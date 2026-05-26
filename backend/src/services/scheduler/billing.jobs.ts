@@ -6,6 +6,8 @@ import { NotificationEvent } from '../notifications/NotificationEvent.js'
 import { notificationService } from '../notifications/NotificationService.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { buildEcosystemPaymentCheckoutUrl, resolveEcosystemPaymentTarget } from '../../modules/subscriptions/payments/business.js'
+import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js'
+import { sendOpsTelegramMessage } from '../../lib/telegram.js'
 import { ensureNotificationPreferenceTableAvailability, getActivityGapDays, getUtcDateKey, readSettingsText, resolvePrimaryProductKey, type SchedulerNotifier } from './common.js'
 
 export async function scheduleInactivityComeback(
@@ -17,13 +19,14 @@ export async function scheduleInactivityComeback(
   const now = new Date()
   const users = await prisma.user.findMany({
     where: {
-      lifecycleState: 'platform_active',
       deletedAt: null,
       NOT: { email: { startsWith: 'telegram-guest-' } },
     },
     select: {
       id: true,
-      lifecycleState: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       settings: true,
       updatedAt: true,
       productAccesses: {
@@ -58,6 +61,7 @@ export async function scheduleInactivityComeback(
   })
 
   for (const user of users) {
+    if (resolveUserLifecycle(user).value !== 'platform_active') continue
     const preferences = user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.aiRemindersEnabled) continue
     if (resolvePrimaryProductKey(user.productAccesses) === 'STANKEY') continue
@@ -100,6 +104,10 @@ export async function scheduleInactivityComeback(
         comebackKey,
         error: error instanceof Error ? error.message : 'unknown_error',
       })
+      const details = error instanceof Error ? error.message : 'unknown_error'
+      void sendOpsTelegramMessage(
+        `⚠️ Scheduler comeback scheduling failed\nuserId: ${user.id}\nthresholdDays: ${thresholdDays}\nflow: ${comebackKey}\nerror: ${details}`,
+      )
     })
   }
 }
@@ -158,7 +166,7 @@ export async function scheduleBillingExpiryWarning(deps?: {
     const target = resolveEcosystemPaymentTarget(amount)
     if (!target) continue
 
-    const paymentUrl = buildEcosystemPaymentCheckoutUrl(target.productId, target.planId, subscription.userId)
+    const paymentUrl = await buildEcosystemPaymentCheckoutUrl(target.productId, target.planId, subscription.userId)
     await notifier.schedule(NotificationEvent.SUBSCRIPTION_EXPIRING, subscription.userId, new Date(), {
       expires_at: subscription.expiresAt?.toISOString() ?? null,
       payment_url: paymentUrl,
@@ -173,6 +181,10 @@ export async function scheduleBillingExpiryWarning(deps?: {
         userId: subscription.userId,
         error: error instanceof Error ? error.message : 'unknown_error',
       })
+      const details = error instanceof Error ? error.message : 'unknown_error'
+      void sendOpsTelegramMessage(
+        `⚠️ Scheduler subscription expiry warning failed\nuserId: ${subscription.userId}\nerror: ${details}`,
+      )
     })
   }
 }
@@ -211,7 +223,9 @@ export async function scheduleBillingExpiryCheck(deps?: {
       },
       user: {
         select: {
-          lifecycleState: true,
+          currentState: true,
+          currentStep: true,
+          funnelStage: true,
           notificationPreference: {
             select: {
               telegramEnabled: true,
@@ -241,11 +255,11 @@ export async function scheduleBillingExpiryCheck(deps?: {
     await database.user.update({
       where: { id: subscription.userId },
       data: {
-        lifecycleState: 'expired',
+        currentState: 'INACTIVE',
       },
     })
 
-    const paymentUrl = buildEcosystemPaymentCheckoutUrl(target.productId, target.planId, subscription.userId)
+    const paymentUrl = await buildEcosystemPaymentCheckoutUrl(target.productId, target.planId, subscription.userId)
     await notifier.schedule(NotificationEvent.SUBSCRIPTION_EXPIRED, subscription.userId, new Date(), {
       expires_at: subscription.expiresAt?.toISOString() ?? null,
       payment_url: paymentUrl,
@@ -253,12 +267,16 @@ export async function scheduleBillingExpiryCheck(deps?: {
       product_code: subscription.product.code,
       amount,
       daysSinceExpired: Math.ceil((now.getTime() - subscription.expiresAt!.getTime()) / (24 * 60 * 60 * 1000)),
-      lifecycle_stage: subscription.user.lifecycleState ?? 'expired',
+      lifecycle_stage: resolveUserLifecycle(subscription.user).value ?? 'expired',
     }).catch(error => {
       console.error('[scheduler] failed to schedule subscription expired notification', {
         userId: subscription.userId,
         error: error instanceof Error ? error.message : 'unknown_error',
       })
+      const details = error instanceof Error ? error.message : 'unknown_error'
+      void sendOpsTelegramMessage(
+        `⚠️ Scheduler subscription expired notification failed\nuserId: ${subscription.userId}\nerror: ${details}`,
+      )
     })
   }
 }

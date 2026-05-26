@@ -62,7 +62,7 @@ function buildAssistantMessage(
 export async function buildUserProfile(userId: string) {
   const [mentor, leads, subscription, streak, wheel] =
     await Promise.all([
-      prisma.userAIMentor.findFirst({
+      prisma.userAiMentor.findFirst({
         where: { userId },
         select: {
           currentState: true,
@@ -146,7 +146,7 @@ export async function buildUserProfileSnapshot(userId: string) {
 }
 
 export async function generateWeeklyInsight(userId: string) {
-  const userMentor = await prisma.userAIMentor.findFirst({
+  const userMentor = await prisma.userAiMentor.findFirst({
     where: { userId },
     orderBy: { updatedAt: 'desc' },
     select: {

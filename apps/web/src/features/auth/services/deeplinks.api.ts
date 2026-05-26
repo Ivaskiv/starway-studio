@@ -6,7 +6,7 @@ interface ResolveDeepLinkResponse {
   link: {
     userId: string
     token: string
-    action: 'bind_telegram' | 'continue_flow' | 'open_web' | 'open_miniapp' | 'resume_task' | 'open_mentor'
+    action: 'bind_telegram' | 'continue_flow' | 'open_web' | 'open_miniapp' | 'resume_task' | 'open_mentor' | 'magic_login'
     source: 'telegram' | 'web' | 'miniapp'
     target: 'telegram' | 'web' | 'miniapp'
     path: string | null
@@ -28,7 +28,7 @@ interface GenerateDeepLinkResponse {
   deepLink: {
     userId: string
     token: string
-    action: 'bind_telegram' | 'continue_flow' | 'open_web' | 'open_miniapp' | 'resume_task' | 'open_mentor'
+    action: 'bind_telegram' | 'continue_flow' | 'open_web' | 'open_miniapp' | 'resume_task' | 'open_mentor' | 'magic_login'
     source: 'telegram' | 'web' | 'miniapp'
     target: 'telegram' | 'web' | 'miniapp'
     path: string | null
@@ -43,7 +43,7 @@ export const deeplinksApi = api.injectEndpoints({
     generateDeepLink: builder.mutation<
       GenerateDeepLinkResponse,
       {
-        action: 'bind_telegram' | 'continue_flow' | 'open_web' | 'open_miniapp' | 'resume_task' | 'open_mentor'
+        action: 'bind_telegram' | 'continue_flow' | 'open_web' | 'open_miniapp' | 'resume_task' | 'open_mentor' | 'magic_login'
         source: 'telegram' | 'web' | 'miniapp'
         target: 'telegram' | 'web' | 'miniapp'
         path?: string | null

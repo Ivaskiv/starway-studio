@@ -17,7 +17,7 @@ import { resolveCanonicalTestResult } from '../../../core/state-machine/testFoun
 import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
 import { prisma } from '../../../db/client.js'
 import { PromptProvider } from '../../../PromptProvider.js'
-import { absystemButtons } from '../config/absystem.content.js'
+import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
 import {
   getAbTestAnswer,
   getAbTestQuestion,
@@ -28,13 +28,14 @@ import {
   type AbTestResultKey,
 } from '../content/abTest.results.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
-import { buildWebAppButton, resolveBrowserTestUrl } from './abTest.buttons.js'
+import { buildWebAppButton, resolveBrowserTestUrlOrNull } from './abTest.buttons.js'
 import {
   getAbTestProgressFromUiSettings,
   getUiSettings,
   loadUserUiSettings,
   saveAbTestProgress,
 } from './abTest.progress.js'
+import { planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 
 const QUESTION_LABELS: Record<AbTestQuestionId, string> = {
   q1: 'Що відбувається',
@@ -71,7 +72,7 @@ export async function sendLogMessage(
   }
 
   // [FIX] removed edit buttons — editing broken, not in ТЗ Block 3
-  await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' })
+  await planMessage(ctx, 'ctx.reply', 'ab_test_send_log', lines.join('\n'), undefined, 'Markdown')
 }
 
 export async function sendActionMessage(
@@ -92,7 +93,8 @@ export async function sendActionMessage(
   const selectedAnswerId =
     progress.answers.find((item) => item.question_id === questionId)
       ?.answer_id ?? null
-  const browserUrl = resolveBrowserTestUrl()
+  const browserUrl = resolveBrowserTestUrlOrNull()
+  const miniAppButton = buildWebAppButton(UI_COPY.miniApp, '/ab-test')
   const text = `*${question.prompt}*`
 
   const answerRows = question.answers.map((answer) => [
@@ -110,10 +112,12 @@ export async function sendActionMessage(
     reply_markup: {
       inline_keyboard: [
         ...answerRows,
-        [
-          buildWebAppButton(UI_COPY.miniApp, '/ab-test'),
-          { text: UI_COPY.browser, url: browserUrl },
-        ],
+        ...(miniAppButton || browserUrl
+          ? [[
+              ...(miniAppButton ? [miniAppButton] : []),
+              ...(browserUrl ? [{ text: UI_COPY.browser, url: browserUrl }] : []),
+            ]]
+          : []),
       ],
     },
   }
@@ -125,14 +129,21 @@ export async function sendActionMessage(
     ctx.callbackQuery.message
   ) {
     try {
-      await ctx.editMessageText(text, markup)
+      await planMessage(
+        ctx,
+        'ctx.editMessageText',
+        'ab_test_send_action_edit',
+        text,
+        markup.reply_markup,
+        'Markdown',
+      )
       return
     } catch {
       // fall through
     }
   }
 
-  await ctx.reply(text, markup)
+  await planMessage(ctx, 'ctx.reply', 'ab_test_send_action_reply', text, markup.reply_markup, 'Markdown')
 }
 
 export async function renderCurrentView(
@@ -150,7 +161,7 @@ export async function renderCurrentView(
   if (progress.status === 'completed' && progress.result_key) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { firstName: true, uiSettings: true },
+      select: { firstName: true, settings: true },
     })
     const resolvedAnswers = progress.answers.flatMap((item) => {
       const answer = getAbTestAnswer(item.question_id, item.answer_id)
@@ -192,13 +203,15 @@ export async function renderCurrentView(
     await prisma.user.update({
       where: { id: userId },
       data: {
-        lifecycleState: 'result_opened',
         currentStep: 'START_FLOW',
-        uiSettings: {
-          ...getUiSettings(user?.uiSettings),
-          dominantBlock,
-          [AB_TEST_UI_SETTINGS_KEY]: next,
-        },
+        settings: {
+          ...getUiSettings(user?.settings),
+          ui: {
+            ...getUiSettings(getUiSettings(user?.settings).ui),
+            dominantBlock,
+            [AB_TEST_UI_SETTINGS_KEY]: next,
+          },
+        } as Prisma.InputJsonValue,
       },
     })
 
@@ -219,6 +232,24 @@ export async function renderCurrentView(
     const flow = buildAbTestResultFlow(next)
     flow.body = [`*${resultDef.title}*`, '', resultDef.body]
     await deliverTelegramFlow(ctx, flow, 'reply')
+
+    if (next.email_stage !== 'captured') {
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'ab_test_email_prompt',
+        [
+          'Хочете зберегти результат і отримати персональний план дій?',
+          'Введіть email — і ми відкриємо вам платформу.',
+        ].join('\n'),
+        {
+          inline_keyboard: [
+            [{ text: 'Ввести email', callback_data: 'ab_test:email_continue' }],
+            [{ text: 'Пропустити поки що', callback_data: 'ab_test:email_skip' }],
+          ],
+        },
+      )
+    }
 
     return
   }

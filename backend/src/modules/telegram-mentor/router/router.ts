@@ -23,6 +23,7 @@ import { handleTasks } from '../handlers/tasks.js'
 import { openAppKeyboard, supportMenuKeyboard } from '../keyboards.js'
 import { isLmOnlyModeEnabled } from '../runtime.js'
 import { getSession } from '../session.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 import type { FlowState, RouterContext } from './context.js'
 import { resolveIntent, type Intent } from './intent.js'
 import type { RoleResult } from '../roles/base.role.js'
@@ -143,7 +144,7 @@ async function buildRouterContext(ctx: Context): Promise<RouterContext> {
       orderBy: { createdAt: 'desc' },
       select: { status: true },
     }),
-    prisma.userAIMentor.findFirst({
+    prisma.userAiMentor.findFirst({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       select: {
@@ -257,15 +258,16 @@ async function handleActiveQuestionSession(
 
   // Під час активної сесії не виходимо в chat-mode.
   if (intent === 'support' || intent === 'off_topic') {
-    await ctx.reply(
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'router_active_question_session_guard',
       'Зараз у тебе активний крок.\n\nДай відповідь на поточне питання або натисни «← Повернутись».',
       {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '← Повернутись', callback_data: 'return_main_menu' }],
-            [{ text: '📊 Мій стан', callback_data: 'open_status' }],
-          ],
-        },
+        inline_keyboard: [
+          [{ text: '← Повернутись', callback_data: 'return_main_menu' }],
+          [{ text: '📊 Мій стан', callback_data: 'open_status' }],
+        ],
       },
     )
     return true
@@ -285,7 +287,7 @@ async function handleActiveQuestionSession(
 }
 
 async function getOrCreateConversation(userId: string): Promise<string> {
-  const existing = await prisma.aIConversation.findFirst({
+  const existing = await prisma.aiConversation.findFirst({
     where: { userId },
     orderBy: { updatedAt: 'desc' },
     select: { id: true },
@@ -295,7 +297,7 @@ async function getOrCreateConversation(userId: string): Promise<string> {
     return existing.id
   }
 
-  const created = await prisma.aIConversation.create({
+  const created = await prisma.aiConversation.create({
     data: {
       userId,
       title: 'telegram-router',
@@ -310,11 +312,11 @@ async function getOrCreateConversation(userId: string): Promise<string> {
 async function logConversation(userId: string, userText: string, assistantText: string): Promise<void> {
   const conversationId = await getOrCreateConversation(userId)
   const data: Array<{ conversationId: string; role: AIMessageRole; content: string }> = [
-    { conversationId, role: 'user', content: userText },
-    { conversationId, role: 'assistant', content: assistantText },
+    { conversationId, role: 'USER', content: userText },
+    { conversationId, role: 'ASSISTANT', content: assistantText },
   ]
 
-  await prisma.aIMessage.createMany({ data })
+  await prisma.aiMessage.createMany({ data })
 }
 
 async function handleCommandRoute(ctx: Context, chatId: string, text: string): Promise<void> {
@@ -389,23 +391,27 @@ async function handleCommandRoute(ctx: Context, chatId: string, text: string): P
 
 async function applyRoleResult(ctx: Context, routerContext: RouterContext, result: RoleResult): Promise<void> {
   if (!routerContext.userId) {
-    await ctx.reply(result.reply, {
-      reply_markup: result.buttons && result.buttons.length > 0
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'router_apply_role_result_guest',
+      result.reply,
+      result.buttons && result.buttons.length > 0
         ? { inline_keyboard: result.buttons.map(button => [button]) }
         : undefined,
-    })
+    )
     return
   }
 
   if (result.nextState) {
-    const mentor = await prisma.userAIMentor.findFirst({
+    const mentor = await prisma.userAiMentor.findFirst({
       where: { userId: routerContext.userId },
       select: { id: true },
       orderBy: { updatedAt: 'desc' },
     })
 
     if (mentor) {
-      await prisma.userAIMentor.update({
+      await prisma.userAiMentor.update({
         where: { id: mentor.id },
         data: {
           currentState: result.nextState,
@@ -440,11 +446,15 @@ async function applyRoleResult(ctx: Context, routerContext: RouterContext, resul
     })
   }
 
-  await ctx.reply(result.reply, {
-    reply_markup: result.buttons && result.buttons.length > 0
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'router_apply_role_result',
+    result.reply,
+    result.buttons && result.buttons.length > 0
       ? { inline_keyboard: result.buttons.map(button => [button]) }
       : undefined,
-  })
+  )
 }
 
 async function logRouting(

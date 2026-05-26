@@ -4,6 +4,7 @@ import { postEveningAction } from '../api/client.js'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
 import { answerQuestion, startQuestionSession } from './questionFlow.js'
 import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleEvening(ctx: Context) {
   const chatId = String(ctx.chat?.id ?? '')
@@ -19,9 +20,13 @@ export async function handleEvening(ctx: Context) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Не вдалося запустити вечірню сесію.'
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply(`Не вдалося запустити вечірню сесію.\n${message}`, {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'evening_error',
+      `Не вдалося запустити вечірню сесію.\n${message}`,
+      replyMarkup,
+    )
   }
 }
 

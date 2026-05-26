@@ -199,7 +199,7 @@ export default function AIMentorPage() {
         setShowEmailForm(true)
         return
       }
-      console.error('[AIMentor] startTrial failed:', e)
+      console.error('[AiMentor] startTrial failed:', e)
     }
   }
 

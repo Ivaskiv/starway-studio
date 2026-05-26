@@ -5,6 +5,7 @@ import type { AuthUser, SafeUser, UserWithSub } from '../../types/globalTypes.js
 import { Prisma } from '@starway/db/prisma-client'
 import { isSuperAdminEmail } from './superadmin.js'
 import { resolveUserAbilities, ABILITIES } from './abilities.js'
+import { computeAvailableRoles, resolveActiveRole } from './roleUtils.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
 import { attachEmailToUser, resolveOrCreateTelegramGuestUser } from '../user/identity.service.js'
 import { findLinkedUserId } from '../telegram-mentor/services/linking.service.js'
@@ -89,7 +90,6 @@ function isMissingStructureError(error: unknown): boolean {
 async function createUserCompat(input: {
   email: string
   passwordHash?: string | null
-  name?: string | null
   firstName?: string | null
   role: 'USER' | 'SUPERADMIN'
   expertId?: string | null
@@ -100,8 +100,7 @@ async function createUserCompat(input: {
       data: {
         email: input.email,
         passwordHash: input.passwordHash ?? null,
-        name: input.name ?? null,
-        firstName: input.firstName ?? null,
+                firstName: input.firstName ?? null,
         role: input.role,
         expertId: input.expertId ?? null,
         lastLoginAt: input.lastLoginAt ?? null,
@@ -118,7 +117,6 @@ async function createUserCompat(input: {
           "id",
           "email",
           "passwordHash",
-          "name",
           "firstName",
           "role",
           "expertId",
@@ -126,13 +124,12 @@ async function createUserCompat(input: {
           "createdAt",
           "updatedAt"
         )
-        VALUES ($1, $2, $3, $4, $5, CAST($6 AS "Role"), $7, $8, NOW(), NOW())
+        VALUES ($1, $2, $3, $4, CAST($5 AS "Role"), $6, $7, NOW(), NOW())
         RETURNING "id"
       `,
       id,
       input.email,
       input.passwordHash ?? null,
-      input.name ?? null,
       input.firstName ?? null,
       input.role,
       input.expertId ?? null,
@@ -151,11 +148,11 @@ async function createUserCompat(input: {
 const USER_BASE_SELECT = Prisma.validator<Prisma.UserSelect>()({
   id: true,
   email: true,
-  name: true,
-  firstName: true,
+    firstName: true,
   lastName: true,
   expertId: true,
   role: true,
+  activeRole: true,
   passwordHash: true,
   telegramUserId: true,
   telegramUserName: true,
@@ -164,8 +161,8 @@ const USER_BASE_SELECT = Prisma.validator<Prisma.UserSelect>()({
   lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
-  uiSettings: true,
-})
+  settings: true,
+  })
 
 type PrismaUserBase = Prisma.UserGetPayload<{
   select: typeof USER_BASE_SELECT
@@ -217,6 +214,21 @@ function normalizeNotificationTypes(input: NotificationTypesPayload | undefined)
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function resolveUiSettingsFromUser(
+  user: { settings?: unknown; uiSettings?: unknown },
+): Record<string, unknown> {
+  const settingsRecord = asRecord(user.settings)
+  const uiFromSettings = asRecord(settingsRecord?.ui)
+  if (uiFromSettings) return { ...uiFromSettings }
+  const legacyUi = asRecord(user.uiSettings)
+  return legacyUi ? { ...legacyUi } : {}
+}
+
 export interface AuthTokensPayload {
   user: SafeUser
   accessToken: string
@@ -234,6 +246,12 @@ type SocialAuthInput = {
   name?: string | null
   username?: string | null
   expertId?: string | null
+}
+
+function hasProfileName(input: { name?: string | null; firstName?: string | null; lastName?: string | null }): boolean {
+  const fullName = [input.firstName, input.lastName].filter(Boolean).join(' ').trim()
+  if (fullName) return true
+  return Boolean(input.name && input.name.trim())
 }
 
 // ── Хешування пароля ──────────────────
@@ -404,18 +422,16 @@ async function loadUserDecorations(userId: string): Promise<UserDecorations> {
 }
 
 function toUserWithSub(baseUser: PrismaUserBase, decorations: UserDecorations): UserWithSub {
-  const sanitizedSettings = baseUser.uiSettings && typeof baseUser.uiSettings === 'object' && !Array.isArray(baseUser.uiSettings)
-    ? (baseUser.uiSettings as Record<string, unknown>)
-    : null
+  const sanitizedSettings = resolveUiSettingsFromUser(baseUser)
 
   return {
     id: baseUser.id,
     email: baseUser.email,
-    name: baseUser.name,
-    firstName: baseUser.firstName,
+        firstName: baseUser.firstName,
     lastName: baseUser.lastName,
     expertId: baseUser.expertId,
     role: baseUser.role,
+    activeRole: baseUser.activeRole as any,
     passwordHash: baseUser.passwordHash,
     telegramUserId: baseUser.telegramUserId,
     telegramUserName: baseUser.telegramUserName,
@@ -424,7 +440,7 @@ function toUserWithSub(baseUser: PrismaUserBase, decorations: UserDecorations): 
     lastLoginAt: baseUser.lastLoginAt,
     createdAt: baseUser.createdAt,
     updatedAt: baseUser.updatedAt,
-    uiSettings: sanitizedSettings,
+    uiSettings: Object.keys(sanitizedSettings).length > 0 ? sanitizedSettings : null,
     subscription: decorations.subscription,
     userProgress: decorations.userProgress,
     mentorConfigs: decorations.mentorConfigs,
@@ -456,9 +472,9 @@ function toSafeUserFromBase(user: PrismaUserBase): SafeUser {
   const abilities = isSuperAdmin
     ? Object.values(ABILITIES)
     : resolveUserAbilities({ role: user.role })
-  const resolvedUi = user.uiSettings && typeof user.uiSettings === 'object' && !Array.isArray(user.uiSettings)
-    ? user.uiSettings as Record<string, unknown>
-    : {}
+  const availableRoles = computeAvailableRoles({ role: user.role })
+  const activeRole = resolveActiveRole((user as any).activeRole ?? user.role, availableRoles)
+  const resolvedUi = resolveUiSettingsFromUser(user)
   const notifications = (
     typeof resolvedUi.notifications === 'object' &&
     resolvedUi.notifications !== null &&
@@ -470,8 +486,8 @@ function toSafeUserFromBase(user: PrismaUserBase): SafeUser {
   return {
     id: user.id,
     email: user.email,
-    name: user.name,
-    firstName: user.firstName,
+    name: null,
+        firstName: user.firstName,
     lastName: user.lastName,
     telegramUserId: user.telegramUserId,
     telegramUserName: user.telegramUserName,
@@ -479,6 +495,8 @@ function toSafeUserFromBase(user: PrismaUserBase): SafeUser {
     telegramEnabled: user.telegramEnabled,
     expertId: user.expertId ?? null,
     role: user.role,
+    activeRole,
+    availableRoles,
     isAdmin: user.role === 'SUPERADMIN' || isSuperAdmin,
     isSuperAdmin,
     abilities,
@@ -602,15 +620,13 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
     const normalizedEmail = payload.email ? normalizeEmail(payload.email) : null
     const existing = await prisma.user.findUnique({
       where: { id: userId },
-      select: { uiSettings: true, email: true },
+      select: { settings: true, email: true },
     })
     if (!existing) {
       throw new AuthServiceError('user_not_found', 404)
     }
 
-    const currentSettings = existing.uiSettings && typeof existing.uiSettings === 'object' && !Array.isArray(existing.uiSettings)
-      ? (existing.uiSettings as Record<string, unknown>)
-      : {}
+    const currentSettings = resolveUiSettingsFromUser(existing)
     const { notifications: notificationPayload, ...uiSettingsPayload } = payload.settings ?? {}
     const legacyFreeCurrentSettings = { ...currentSettings }
     delete legacyFreeCurrentSettings.notifications
@@ -623,6 +639,10 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
       !Array.isArray(mergedSettings) &&
       Object.keys(mergedSettings as Record<string, unknown>).length > 0
     const uiPayload: Prisma.JsonValue | undefined = shouldPersistSettings ? (mergedSettings as Prisma.JsonObject) : undefined
+    const currentRootSettings = asRecord(existing.settings) ?? {}
+    const settingsPayload: Prisma.InputJsonValue | undefined = uiPayload
+      ? ({ ...currentRootSettings, ui: uiPayload } as Prisma.InputJsonValue)
+      : undefined
 
     if (normalizedEmail && normalizedEmail !== existing.email) {
       try {
@@ -645,7 +665,7 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
           firstName: payload.firstName ?? undefined,
           lastName: payload.lastName ?? undefined,
           telegramEnabled: notificationPayload?.enabled ?? undefined,
-          uiSettings: uiPayload,
+          settings: settingsPayload,
         },
       })
 
@@ -714,6 +734,8 @@ export function toSafeUser(user: UserWithSub): SafeUser {
   const abilities = isSuperAdmin
     ? Object.values(ABILITIES)
     : resolveUserAbilities({ role: user.role })
+  const availableRoles = computeAvailableRoles({ role: user.role })
+  const activeRole = resolveActiveRole((user as any).activeRole ?? user.role, availableRoles)
 
   const rawConfig = user.mentorConfigs?.[0]?.config
   const configObject = rawConfig && typeof rawConfig === 'object' && !Array.isArray(rawConfig)
@@ -722,9 +744,7 @@ export function toSafeUser(user: UserWithSub): SafeUser {
   const mentorUi = configObject.ui && typeof configObject.ui === 'object' && !Array.isArray(configObject.ui)
     ? configObject.ui as Record<string, unknown>
     : {}
-  const fallbackUiSettings = user.uiSettings && typeof user.uiSettings === 'object' && !Array.isArray(user.uiSettings)
-    ? user.uiSettings as Record<string, unknown>
-    : {}
+  const fallbackUiSettings = resolveUiSettingsFromUser(user)
   const resolvedUi = { ...mentorUi, ...fallbackUiSettings }
   const notificationPreference = user.notificationPreference
   const normalizedNotificationSettings = notificationPreference
@@ -754,8 +774,8 @@ export function toSafeUser(user: UserWithSub): SafeUser {
   return {
     id: user.id,
     email: user.email,
-    name: user.name,
-    firstName: user.firstName,
+    name: null,
+        firstName: user.firstName,
     lastName: user.lastName,
     telegramUserId: user.telegramUserId,
     telegramUserName: user.telegramUserName,
@@ -763,6 +783,8 @@ export function toSafeUser(user: UserWithSub): SafeUser {
     telegramEnabled: user.telegramEnabled,
     expertId: user.expertId ?? null,
     role: user.role,
+    activeRole,
+    availableRoles,
     isAdmin: user.role === 'SUPERADMIN' || isSuperAdmin,
     isSuperAdmin,
     abilities,
@@ -838,7 +860,9 @@ export async function createSessionForUserId(userId: string): Promise<AuthTokens
       throw new AuthServiceError('user_not_found', 404)
     }
 
-    const accessToken = generateAccessToken({ id: baseUser.id, role: baseUser.role, email: baseUser.email } as AuthUser)
+    const availableRoles = computeAvailableRoles({ role: baseUser.role })
+    const activeRole = resolveActiveRole((baseUser as any).activeRole ?? baseUser.role, availableRoles)
+    const accessToken = generateAccessToken({ id: baseUser.id, role: baseUser.role, activeRole, email: baseUser.email })
     const refreshToken = generateRefreshToken(baseUser.id)
     await storeRefreshToken(baseUser.id, refreshToken)
 
@@ -846,7 +870,7 @@ export async function createSessionForUserId(userId: string): Promise<AuthTokens
       user: safeUser,
       accessToken,
       refreshToken,
-      needsProfile: !baseUser.name,
+      needsProfile: !hasProfileName(baseUser),
       expiresIn: 15 * 60,
     }
   } catch (error) {
@@ -890,8 +914,7 @@ export async function registerUser(input: {
     const createdUser = await createUserCompat({
       email,
       passwordHash,
-      name: input.name?.trim() || null,
-      role: initialRole,
+            role: initialRole,
       expertId: validatedExpertId,
     })
 
@@ -900,14 +923,16 @@ export async function registerUser(input: {
       throw new AuthServiceError('user_creation_failed', 500)
     }
 
-    const accessToken = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
+    const userAvailableRoles = computeAvailableRoles({ role: user.role })
+    const userActiveRole = resolveActiveRole((user as any).activeRole ?? user.role, userAvailableRoles)
+    const accessToken = generateAccessToken({ id: user.id, role: user.role, activeRole: userActiveRole, email: user.email })
     const refreshToken = generateRefreshToken(user.id)
     await storeRefreshToken(user.id, refreshToken)
     return {
       user: toSafeUser(user),
       accessToken,
       refreshToken,
-      needsProfile: !user.name,
+      needsProfile: !hasProfileName(user),
       expiresIn: 15 * 60,
     }
   } catch (error) {
@@ -1001,8 +1026,7 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
       } else {
         const created = await createUserCompat({
           email,
-          name: input.name?.trim() || null,
-          firstName: input.name?.trim() || null,
+                    firstName: input.name?.trim() || null,
           role: initialRole,
           lastLoginAt: new Date(),
           expertId: validatedExpertId,
@@ -1049,7 +1073,7 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
 
     return {
       ...session,
-      needsCompletion: !session.user.email || !session.user.name,
+      needsCompletion: !session.user.email || !hasProfileName(session.user),
       isNewUser,
     }
   } catch (error) {

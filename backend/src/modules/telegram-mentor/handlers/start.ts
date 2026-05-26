@@ -9,7 +9,9 @@ import { planMessage } from '../conversation/delivery/planDelivery.js'
 import { clearSession } from '../session.js'
 import { createAbTestProgress, validateAbTestProgress } from '../../../core/state-machine/abTestFoundation.js'
 import { loadAbTestProgress, mergeUiSettings } from '@/products/ab-system/telegram/abTest.progress.js'
-import { renderAbTestIntro, resumeAbTestFlow } from '@/products/ab-system/telegram/abTest.service.js'
+import { getAbTestResultDefinition } from '@/products/ab-system/content/abTest.results.js'
+import { resolveOrCreateTelegramGuestUser } from '../../user/identity.service.js'
+import { findLinkedUserId } from '../services/linking.service.js'
 import {
   GENERIC_DEEPLINK_PREFIX,
   type StartContext,
@@ -23,6 +25,32 @@ export * from './start.shared.js'
 
 const processedStartUpdateIds = new Set<number>()
 const activeStartProcessing = new Set<string>()
+const AB_RESULT_KEYS = ['state', 'goal', 'choice', 'decision', 'action'] as const
+function isAbResultKey(value: string): value is (typeof AB_RESULT_KEYS)[number] {
+  return (AB_RESULT_KEYS as readonly string[]).includes(value)
+}
+
+// FIX 2025-05-25 B: smart /start routing — direct MSG1 sender reused across entry states.
+async function sendMsg1(ctx: StartContext): Promise<void> {
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+  if (!chatId) return
+  await ctx.telegram.sendMessage(
+    chatId,
+    'Привіт.\n'
+    + 'Це тест AB System:\n'
+    + '«Чому ти відкладаєш те, що давно хочеш зробити?»\n\n'
+    + 'Він допоможе побачити, чому ти знову переносиш важливе і з чого почати.\n'
+    + 'Тут не буде складних питань.\n'
+    + 'Просто відповідай так, як є зараз.',
+    {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: 'Почати тест', callback_data: 'ab_test:start' },
+        ]],
+      },
+    },
+  )
+}
 
 export async function handleStart(ctx: StartContext) {
   try {
@@ -71,10 +99,37 @@ export async function handleStart(ctx: StartContext) {
         linkedUserId = verifiedLegacyUserId
       }
 
+      const linkedByIdentity = await findLinkedUserId({
+        chatId,
+        telegramUserId,
+        telegramUserName,
+      })
+      if (linkedByIdentity) {
+        linkedUserId = linkedByIdentity
+      }
+
+      const resolvedIdentityUserId = await resolveOrCreateTelegramGuestUser({
+        linkedUserId,
+        telegramUserId,
+        telegramUserName,
+        chatId,
+        firstName: firstName || telegramUserName || 'Учень',
+      })
+
       const userId = await prisma.$transaction(async tx => {
         const now = new Date()
+        const guestEmail = `telegram-guest-${telegramUserId}@starway.local`
+        const legacyGuestEmail = `telegram-${telegramUserId}@starway.local`
         const byTelegram = await tx.user.findUnique({
           where: { telegramUserId },
+          select: { id: true, settings: true },
+        })
+        const byGuestEmail = await tx.user.findUnique({
+          where: { email: guestEmail },
+          select: { id: true, settings: true },
+        })
+        const byLegacyGuestEmail = await tx.user.findUnique({
+          where: { email: legacyGuestEmail },
           select: { id: true, settings: true },
         })
         const byLinked = linkedUserId
@@ -83,7 +138,22 @@ export async function handleStart(ctx: StartContext) {
               select: { id: true, settings: true },
             })
           : null
-        const existingIdentity = byLinked ?? byTelegram
+        const byResolvedIdentity = await tx.user.findUnique({
+          where: { id: resolvedIdentityUserId },
+          select: { id: true, settings: true },
+        })
+        const existingIdentity = byLinked ?? byTelegram ?? byGuestEmail ?? byLegacyGuestEmail ?? byResolvedIdentity
+        const resolutionSource = byLinked
+          ? 'linked_user'
+          : byTelegram
+            ? 'telegram_user_id'
+            : byGuestEmail
+              ? 'guest_email'
+              : byLegacyGuestEmail
+                ? 'legacy_guest_email'
+                : byResolvedIdentity
+                  ? 'identity_service'
+                  : 'created'
 
         const telegramIdentity = existingIdentity
           ? await tx.user.update({
@@ -100,7 +170,8 @@ export async function handleStart(ctx: StartContext) {
             })
           : await tx.user.create({
               data: {
-                email: `telegram-${telegramUserId}@starway.local`,
+                // FIX 2026-05-25 USER_DEDUP1: unify guest identity format across auth+telegram flows.
+                email: guestEmail,
                 telegramUserId,
                 telegramChatId: chatId,
                 telegramUserName,
@@ -168,6 +239,13 @@ export async function handleStart(ctx: StartContext) {
           update: { telegramEnabled: true },
         })
 
+        console.info('[USER_DEDUP]', {
+          telegramUserId,
+          guestEmail,
+          resolutionSource,
+          userId: telegramIdentity.id,
+        })
+
         return telegramIdentity.id
       })
 
@@ -187,7 +265,7 @@ export async function handleStart(ctx: StartContext) {
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { settings: true, firstName: true },
+        select: { settings: true, firstName: true, focusPaid: true },
       })
       void user
 
@@ -199,60 +277,173 @@ export async function handleStart(ctx: StartContext) {
         inactivityDays: startContext?.inactivityDays ?? null,
       })
 
-      const abProgress = await loadAbTestProgress(userId).catch(() => null)
-      const validation = abProgress ? validateAbTestProgress(abProgress) : null
-      const hasMeaningfulAbProgress =
-        abProgress !== null &&
-        validation?.resumable === true
-      if (hasMeaningfulAbProgress) {
-        console.info('[FLOW_RESUME] routed_to_ab_resume', {
-          userId,
-          status: abProgress?.status ?? null,
-          flowState: abProgress?.flow_state ?? null,
-          resultKey: abProgress?.result_key ?? null,
-          answersCount: abProgress?.answers.length ?? 0,
-        })
-        await resumeAbTestFlow(ctx, userId)
-        return
-      }
-
-      if (abProgress && validation && !validation.valid) {
+      const progress = await loadAbTestProgress(userId).catch(() => null)
+      const validation = progress ? validateAbTestProgress(progress) : null
+      if (progress && validation && !validation.valid) {
         console.warn('[FLOW_RESUME] invalid_progress_auto_recovered', {
           userId,
           reasons: validation.reasons,
-          status: abProgress.status,
-          flowState: abProgress.flow_state,
-          stage: abProgress.stage,
-          answersCount: abProgress.answers.length,
+          status: progress.status,
+          flowState: progress.flow_state,
+          stage: progress.stage,
+          answersCount: progress.answers.length,
         })
       }
 
-      console.info('[FLOW_START] routed_to_ab_start', {
-        userId,
-        payload,
-      })
-      // FIX 2025-05-25 B: direct send MSG1 — bypass outbox/orchestrator for /start
-      // NOTE: User link/upsert is already completed above in transaction via telegramUserId/chatId.
-      const directChatId = ctx.chat?.id ?? ctx.from?.id
-      if (!directChatId) return
-      await ctx.telegram.sendMessage(
-        directChatId,
-        'Привіт.\n'
-        + 'Це тест AB System:\n'
-        + '«Чому ти відкладаєш те, що давно хочеш зробити?»\n\n'
-        + 'Він допоможе побачити, чому ти знову переносиш важливе і з чого почати.\n'
-        + 'Тут не буде складних питань.\n'
-        + 'Просто відповідай так, як є зараз.',
-        {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: 'Почати тест', callback_data: 'ab_test:start' },
-            ]],
+      // FIX 2025-05-25 B: deterministic /start routing matrix (5 user states).
+      const stage = progress?.stage ?? 'S1_TEST_STARTED'
+      const status = progress?.status ?? 'idle'
+      const answers = progress?.answers ?? []
+      const deliveryChatId = ctx.chat?.id ?? ctx.from?.id
+      if (!deliveryChatId) return
+
+      const isNewState = !progress || (status === 'idle' && answers.length === 0 && !progress.started_at)
+      if (isNewState) {
+        console.info('[FLOW_START] routed_to_ab_start', { userId, payload, reason: 'state_1_new' })
+        await sendMsg1(ctx)
+        return
+      }
+
+      if (stage === 'S1_TEST_STARTED' && answers.length === 0) {
+        console.info('[FLOW_START] routed_to_ab_start', { userId, payload, reason: 'state_2_intro_without_answers' })
+        await sendMsg1(ctx)
+        return
+      }
+
+      // FIX 2025-05-25: route in-progress only for 1..7 answers (not by status alone)
+      if (answers.length > 0 && answers.length < 8) {
+        const nextQ = answers.length + 1
+        const answered = answers.length
+        console.info('[FLOW_RESUME] routed_to_ab_resume', {
+          userId,
+          status,
+          flowState: progress?.flow_state ?? null,
+          resultKey: progress?.result_key ?? null,
+          answersCount: answered,
+        })
+        await ctx.telegram.sendMessage(
+          deliveryChatId,
+          `Ти вже відповіла на ${answered} з 8 питань.\nПродовжимо?`,
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: `Продовжити з питання ${Math.min(nextQ, 8)}`, callback_data: 'ab_test:resume' }],
+                [{ text: 'Почати заново', callback_data: 'ab_test:restart' }],
+              ],
+            },
           },
+        )
+        return
+      }
+
+      if (
+        (answers.length >= 8 || status === 'completed') &&
+        stage !== 'S4_FOCUS_INVITE' &&
+        !progress?.focus_opened_at
+      ) {
+        const progressLegacy = progress as (Record<string, unknown> | null)
+        const legacyResultKey = typeof progressLegacy?.resultKey === 'string'
+          ? progressLegacy.resultKey
+          : null
+        const resultKey = progress?.result_key ?? legacyResultKey ?? null
+        if (resultKey && isAbResultKey(resultKey)) {
+          const resultDef = getAbTestResultDefinition(resultKey)
+          await ctx.telegram.sendMessage(
+            deliveryChatId,
+            `${resultDef.title}\n\n${resultDef.body}`,
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: 'Що з цим робити?', callback_data: 'ab_test:start_wheel' }]],
+              },
+            },
+          )
+          return
+        }
+
+        await ctx.telegram.sendMessage(
+          deliveryChatId,
+          'Результат ще не збережено. Можеш показати його повторно або пройти тест заново.',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Показати результат', callback_data: 'ab_test:show_result' }],
+                [{ text: 'Почати заново', callback_data: 'ab_test:restart' }],
+              ],
+            },
+          },
+        )
+        return
+      }
+
+      // FIX 2025-05-25 B1: paid focus member state must be checked before focus CTA-open state.
+      const activeFocusSubscription = await prisma.productSubscription.findFirst({
+        where: {
+          userId,
+          status: 'active',
+          product: { is: { code: { in: ['focus', 'FOCUS'] } } },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         },
-      )
-      // DISABLED 2025-05-25: replaced by direct send fix
-      // await renderAbTestIntro(ctx, userId, payload)
+        orderBy: { updatedAt: 'desc' },
+        select: { expiresAt: true, createdAt: true, paidAt: true },
+      })
+      const isFocusPaid = Boolean(user?.focusPaid) || Boolean(activeFocusSubscription)
+      if (isFocusPaid) {
+        const now = Date.now()
+        const paidAtMs = activeFocusSubscription?.paidAt?.getTime()
+          ?? activeFocusSubscription?.createdAt?.getTime()
+          ?? now
+        const expiresAtMs = activeFocusSubscription?.expiresAt?.getTime()
+        const durationDays = expiresAtMs ? Math.max(0, Math.round((expiresAtMs - paidAtMs) / 86400000)) : null
+        const planLabel = durationDays !== null && durationDays >= 75 ? '3 місяці' : '1 місяць'
+        const expiresAt = activeFocusSubscription?.expiresAt
+          ? `до ${new Date(activeFocusSubscription.expiresAt).toLocaleDateString('uk-UA')}`
+          : ''
+        const focusInviteUrl =
+          process.env.FOCUS_INVITE_LINK?.trim()
+          || process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim()
+          || process.env.FOCUS_CHANNEL_INVITE_URL?.trim()
+          || 'https://t.me/'
+
+        await ctx.telegram.sendMessage(
+          deliveryChatId,
+          `Ти учасниця ФОКУСУ 🎯\n\n`
+          + `Тариф: ${planLabel}${expiresAt ? ` ${expiresAt}` : ''}\n\n`
+          + 'Ось посилання на закритий канал:\n'
+          + `${focusInviteUrl}\n\n`
+          + 'Наступний Zoom — перевір у каналі.',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '📺 Перейти в канал', url: focusInviteUrl }],
+                [{ text: '🔄 Переглянути результат тесту', callback_data: 'ab_test:show_result' }],
+                [{ text: '🚀 Перейти в ABSystem AI', callback_data: 'ab_test:show_platform' }],
+              ],
+            },
+          },
+        )
+        return
+      }
+
+      // FIX 2025-05-25 B2: state for users who clicked/opened focus but have no active paid focus subscription.
+      if (progress?.focus_opened_at || stage === 'S4_FOCUS_INVITE') {
+        await ctx.telegram.sendMessage(
+          deliveryChatId,
+          'Ти вже проходила тест і бачила результат.\nХочеш повернутись до ФОКУСУ?',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Переглянути результат', callback_data: 'ab_test:show_result' }],
+                [{ text: 'Хочу у ФОКУС', callback_data: 'open_focus_payment' }],
+                [{ text: 'Пройти тест заново', callback_data: 'ab_test:restart' }],
+              ],
+            },
+          },
+        )
+        return
+      }
+
+      console.info('[FLOW_START] routed_to_ab_start', { userId, payload, reason: 'fallback' })
+      await sendMsg1(ctx)
       return
     } finally {
       activeStartProcessing.delete(chatId)

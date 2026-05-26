@@ -65,7 +65,7 @@ async function resolvePlan(userId: string) {
   const [user, subscription] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { expertId: true, name: true, firstName: true },
+      select: { expertId: true, firstName: true, lastName: true },
     }),
     prisma.subscription.findFirst({
       where: { userId },
@@ -80,7 +80,7 @@ async function resolvePlan(userId: string) {
 
   return {
     expertId: user?.expertId ?? null,
-    firstName: user?.firstName ?? user?.name ?? 'Привіт',
+    firstName: user?.firstName ?? user?.firstName ?? 'Привіт',
     deepMode: hasPaid || hasTrial,
     dailyLimit: hasPaid || hasTrial ? PAID_DAILY_LIMIT : FREE_DAILY_LIMIT,
   }

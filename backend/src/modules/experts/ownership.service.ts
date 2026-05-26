@@ -27,8 +27,7 @@ export async function ensureOwnerExpertIdForUser(userId: string): Promise<string
     select: {
       id: true,
       email: true,
-      name: true,
-      firstName: true,
+            firstName: true,
       lastName: true,
       role: true,
       expertId: true,
@@ -113,7 +112,7 @@ export async function reassignLifecycleUsersToExpert(input: {
       AND: [
         {
           OR: [
-            { onboardingStage: 'lead_magnet' },
+            { currentStep: 'START_FLOW' },
             { funnelLeads: { some: {} } },
             { trialStartsAt: { not: null } },
             { subscriptions: { some: {} } },

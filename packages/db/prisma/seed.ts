@@ -225,8 +225,8 @@ const existingSub = await prisma.subscription.findFirst({ where: { userId: user.
   });
   console.log(`✅ Course: ${course.code}`);
 
-  // 8. AIMentor
-  const aiMentor = await prisma.aIMentor.upsert({
+  // 8. AiMentor
+  const aiMentor = await prisma.aiMentor.upsert({
     where: { expertId_slug: { expertId: expert.id, slug: 'daily-core-mentor' } },
     update: { name: 'Daily Core Mentor', niche: 'Mindset & Productivity', isPublished: true },
     create: {
@@ -421,6 +421,8 @@ const existingSub = await prisma.subscription.findFirst({ where: { userId: user.
         'Ти — AI-асистент психолінгвістики STARWAY. Ти не пишеш тексти.' +
         ' Ти оголюєш правду і змушуєш ДІЯТИ.' +
         ' Зроби так, як би зробила АНЯ ХОМЕНКО, але з масштабом STARWAY.',
+      version: 1,
+      cascadeOrder: ['CLAUDE', 'GPT4O', 'GEMINI', 'LLAMA3', 'FALLBACK_TEMPLATE'],
       supportedOutputs: [
         'WARMUP_1DAY','WARMUP_3DAYS','WARMUP_WEEK','WARMUP_LAUNCH',
         'REELS_SCENARIO','WEBINAR_SALES','LIVE_STRUCTURE',
@@ -503,11 +505,13 @@ const existingSub = await prisma.subscription.findFirst({ where: { userId: user.
     { type: 'REQUIRED'  as const, word: 'застрягла'             },
     { type: 'REQUIRED'  as const, word: 'зливати'               },
     { type: 'REQUIRED'  as const, word: 'тупняк'                },
+    { type: 'REQUIRED'  as const, word: 'готово'                },
     { type: 'FORBIDDEN' as const, word: 'унікальна можливість'  },
     { type: 'FORBIDDEN' as const, word: 'трансформація'         },
     { type: 'FORBIDDEN' as const, word: 'успішний успіх'        },
     { type: 'FORBIDDEN' as const, word: 'результат гарантовано' },
     { type: 'FORBIDDEN' as const, word: 'просто почни'          },
+    { type: 'FORBIDDEN' as const, word: 'не хочу'               },
   ];
   await prisma.lexicon.createMany({
     data: initLex.map(l => ({
@@ -519,7 +523,7 @@ const existingSub = await prisma.subscription.findFirst({ where: { userId: user.
     })),
     skipDuplicates: true,
   });
-  console.log('✅ Lexicon: 5 REQUIRED + 5 FORBIDDEN ініціалізовано');
+  console.log('✅ Lexicon: 6 REQUIRED + 6 FORBIDDEN ініціалізовано');
 
   // JWT tokens
   console.log('\n🎉 Seed completed. JWT tokens:');

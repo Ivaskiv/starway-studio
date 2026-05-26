@@ -8,6 +8,7 @@ import {
 import { sendEntryOffer, sendStateMenu } from './start.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleMiniCourse(ctx: Context) {
   const chatId = ctx.chat?.id ? String(ctx.chat.id) : null
@@ -30,9 +31,12 @@ export async function handleMiniCourse(ctx: Context) {
     const copy = buildRecoveryCopy('question_missing', resolveConversationProfile('stankey'), {
       relationship,
     })
-    await ctx.reply(
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'mini_course_activated',
       `${copy.title}\n${copy.body}\n\n🎁 Практикум активовано. Перевір пошту або чат — скоро отримаєш міні-курс.\n${getMentorReturnDeeplink()}`,
-      { reply_markup: continueToMentorKeyboard().reply_markup },
+      continueToMentorKeyboard().reply_markup,
     )
   } catch (error) {
     console.error('[TelegramMentor] mini-course error:', error)

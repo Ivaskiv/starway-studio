@@ -24,8 +24,8 @@ router.get('/', async (_req: Request, res: Response) => {
       },
       select: {
         id:   true,
-        name: true,
-        expertProfile: {
+        firstName: true,
+                expertProfile: {
           select: { displayName: true, bio: true, avatarUrl: true, specialty: true },
         },
         expertBots: {
@@ -44,7 +44,7 @@ router.get('/', async (_req: Request, res: Response) => {
       .filter(e => e.expertProfile !== null)
       .map(e => ({
         id:          e.id,
-        displayName: e.expertProfile?.displayName ?? e.name,
+        displayName: e.expertProfile?.displayName ?? e.firstName ?? 'Expert',
         bio:         e.expertProfile?.bio,
         avatarUrl:   e.expertProfile?.avatarUrl,
         specialty:   e.expertProfile?.specialty,
@@ -201,8 +201,7 @@ router.get('/students', authenticate, async (req: Request, res: Response) => {
         user: {
           select: {
             id:    true,
-            name:  true,
-            email: true,
+                        email: true,
             telegramLinks: {
               select: { chatId: true, isActive: true },
               take: 1,

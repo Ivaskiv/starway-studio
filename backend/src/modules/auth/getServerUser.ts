@@ -15,9 +15,14 @@ async function findAuthUserByUserId(userId: string): Promise<AuthUser | null> {
   const user = await getCachedAuthUser(userId)
 
   if (!user) return null
+  const role = user.role as UserRole
+  const storedActiveRole = (user.activeRole ?? role) as UserRole
+  // Reuse computeAvailableRoles from cached data — import avoided to keep dep simple
+  const activeRole: UserRole = storedActiveRole
   return {
     id: user.id,
-    role: user.role as UserRole,
+    role,
+    activeRole,
     email: user.email,
     expertId: user.expertId ?? null,
   }

@@ -19,6 +19,7 @@ const ALLOWED_ACTIONS: ReadonlySet<DeepLinkAction> = new Set([
   'open_miniapp',
   'resume_task',
   'open_mentor',
+  'magic_login',
 ])
 
 const ALLOWED_SOURCES: ReadonlySet<DeepLinkSource> = new Set(['telegram', 'web', 'miniapp'])

@@ -13,9 +13,9 @@ import {
 } from './payments/business.js';
 import {
   createWayForPayCheckout,
-  deleteCheckoutSession,
   getCheckoutSession,
 } from './payments/wayforpay.checkout.js';
+import { generatePaymentSignature } from './payments/wayforpay.js';
 import {
   markWelcomeTestPaymentPending,
 } from '../../products/absystem/config/welcomeTest.payment.js';
@@ -26,6 +26,9 @@ import { prisma } from '../../db/client.js';
 import { syncLifecycleForUser } from '../flow-control/service.js';
 import { invalidateFunnelStage } from '../../lib/funnel/getUserFunnelStage.js';
 import { getTelegramProductContext } from '@/content/telegram.product-context.js';
+import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.markers.js';
+import { sendAbTestBlock12Welcome } from './payments/callback.notifications.js';
+import { getConfiguredFocusProduct, hasActiveFocusSubscription } from './payments/focus.access.js';
 
 type AccessGrantLike = {
   id: string
@@ -63,6 +66,51 @@ function decodeStoredCheckoutPayload(payload: string): Record<string, unknown> |
       : null
   } catch {
     return null
+  }
+}
+
+function refreshCheckoutPayloadForRetry(rawPayload: Record<string, unknown>): Record<string, unknown> {
+  const amount = Number(rawPayload.amount ?? 0)
+  const currency = String(rawPayload.currency ?? 'UAH')
+  const clientAccountId = String(rawPayload.clientAccountId ?? '').trim()
+  const existingRef = String(rawPayload.orderReference ?? '').trim()
+  const productName = Array.isArray(rawPayload.productName)
+    ? rawPayload.productName.map((item) => String(item))
+    : []
+  const productPrice = Array.isArray(rawPayload.productPrice)
+    ? rawPayload.productPrice.map((item) => Number(item))
+    : []
+  const productCount = Array.isArray(rawPayload.productCount)
+    ? rawPayload.productCount.map((item) => Number(item))
+    : []
+
+  if (!existingRef || !clientAccountId || !Number.isFinite(amount) || amount <= 0 || productName.length === 0) {
+    return rawPayload
+  }
+
+  const orderDate = Math.floor(Date.now() / 1000)
+  const sanitizedBaseRef = existingRef.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'focus'
+  // FIX 2026-05-25 PAY_RETRY1: every checkout open gets a fresh orderReference to avoid WFP 1112 duplicate id.
+  const nextOrderReference = `${sanitizedBaseRef}_r${Date.now()}`
+  const merchantSignature = generatePaymentSignature(
+    {
+      userId: clientAccountId,
+      productId: productName[0] ?? 'focus',
+      amount,
+      payRef: nextOrderReference,
+      currency,
+      product_name: productName,
+      product_count: productCount.length ? productCount : [1],
+      product_price: productPrice.length ? productPrice : [amount],
+    },
+    orderDate,
+  )
+
+  return {
+    ...rawPayload,
+    orderReference: nextOrderReference,
+    orderDate,
+    merchantSignature,
   }
 }
 
@@ -385,6 +433,23 @@ export async function initiateSubscriptionPaymentHandler(req: AuthenticatedReque
     const planCode = typeof req.body?.planCode === 'string' ? req.body.planCode.trim() : ''
 
     if (productId === 'focus') {
+      const configuredFocusProduct = await getConfiguredFocusProduct()
+      if (!configuredFocusProduct) {
+        return res.status(503).json({
+          error: 'focus_product_not_configured',
+          message: 'Focus product is missing in DB',
+        })
+      }
+
+      const alreadyActive = await hasActiveFocusSubscription(userId)
+      if (alreadyActive) {
+        return res.json({
+          status: 'already_active',
+          action: 'resend_access',
+          message: 'Focus subscription already active',
+        })
+      }
+
       const planId = normalizeFocusPlanCode(planCode)
       if (!planId) return res.status(400).json({ error: 'invalid_plan' })
       const plan = resolveEcosystemPaymentPlan('focus', planId)
@@ -395,15 +460,15 @@ export async function initiateSubscriptionPaymentHandler(req: AuthenticatedReque
         planId,
         amount: plan.amount,
         currency: 'UAH',
-        hasMerchantAccount: Boolean(process.env.WAYFORPAY_MERCHANT_ACCOUNT || process.env.WAYFORPAY_MERCHANT),
+        hasMerchantAccount: Boolean(process.env.WAYFORPAY_MERCHANT),
         hasMerchantDomain: Boolean(process.env.WAYFORPAY_MERCHANT_DOMAIN),
-        hasSecret: Boolean(process.env.WAYFORPAY_SECRET_KEY || process.env.WAYFORPAY_SECRET),
+        hasSecret: Boolean(process.env.WAYFORPAY_SECRET),
         hasCallbackUrl: Boolean(process.env.WAYFORPAY_CALLBACK_URL),
       })
 
-      let checkout: ReturnType<typeof buildEcosystemPaymentCheckoutSession>
+      let checkout: Awaited<ReturnType<typeof buildEcosystemPaymentCheckoutSession>>
       try {
-        checkout = buildEcosystemPaymentCheckoutSession('focus', planId, userId)
+        checkout = await buildEcosystemPaymentCheckoutSession('focus', planId, userId)
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
         console.error('[PAYMENT_INIT] ❌ Failed to build checkout URL', { reason })
@@ -456,7 +521,7 @@ export async function initiateSubscriptionPaymentHandler(req: AuthenticatedReque
         return res.status(400).json({ error: 'invalid_plan' })
       }
 
-      const checkout = createWayForPayCheckout({
+      const checkout = await createWayForPayCheckout({
         user: {
           id: userId,
           email: user?.email ?? null,
@@ -502,35 +567,91 @@ export async function initiateSubscriptionPaymentHandler(req: AuthenticatedReque
   }
 }
 
+export async function resendFocusBlock12DevHandler(req: Request, res: Response) {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'dev_only' })
+  }
+
+  const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : ''
+  if (!userId) return res.status(400).json({ error: 'user_id_required' })
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+  if (!user) return res.status(404).json({ error: 'user_not_found' })
+
+  const focusActive = await hasActiveFocusSubscription(userId)
+  if (!focusActive) {
+    return res.status(400).json({ error: 'focus_subscription_not_active' })
+  }
+
+  await markAbTestPaymentSuccess(userId)
+  await sendAbTestBlock12Welcome(userId)
+
+  return res.json({
+    ok: true,
+    userId,
+    focusActive: true,
+    block12Resent: true,
+  })
+}
+
 export async function renderWayForPayCheckoutPageHandler(req: Request, res: Response) {
   const token = typeof req.params.token === 'string' ? req.params.token.trim() : ''
-  const storedPayload = token ? getCheckoutSession(token) : null
-  const payload = storedPayload ? decodeStoredCheckoutPayload(storedPayload) : null
+  const storedPayload = token ? await getCheckoutSession(token) : null
+  const payloadFromSession = storedPayload ? decodeStoredCheckoutPayload(storedPayload) : null
+  const fallbackPayloadRaw = typeof req.query.payload === 'string' ? req.query.payload.trim() : ''
+  // FIX 2026-05-25 TP3: recover from token miss using signed payload fallback in query.
+  const payloadFromFallback = !payloadFromSession && fallbackPayloadRaw
+    ? decodeStoredCheckoutPayload(fallbackPayloadRaw)
+    : null
+  const payload = payloadFromSession ?? payloadFromFallback
 
   if (!payload) {
     console.error('[WAYFORPAY_CHECKOUT] ❌ Invalid or expired checkout token', {
       product: req.query.product,
       plan: req.query.plan,
       hasToken: Boolean(token),
+      hasFallbackPayload: Boolean(fallbackPayloadRaw),
     })
     return res.status(400).send('Invalid checkout token')
   }
 
-  deleteCheckoutSession(token)
+  if (!payloadFromSession && payloadFromFallback) {
+    console.warn('[CHECKOUT_TRACE] token_miss_payload_fallback', {
+      product: req.query.product,
+      plan: req.query.plan,
+      hasToken: Boolean(token),
+      hasFallbackPayload: true,
+    })
+  }
+
+  // FIX 2026-05-25 PAY_RETRY2: regenerate order reference/signature so repeated pay attempts stay valid.
+  const replaySafePayload = refreshCheckoutPayloadForRetry(payload)
+  if (String(replaySafePayload.orderReference ?? '') !== String(payload.orderReference ?? '')) {
+    console.warn('[PAYMENT_RETRY]', {
+      oldRef: String(payload.orderReference ?? ''),
+      newRef: String(replaySafePayload.orderReference ?? ''),
+    })
+    console.info('[PAYMENT_TRACE]', {
+      step: 'invoice_create',
+      note: 'checkout_retry_regenerated',
+      previousOrderReference: payload.orderReference,
+      nextOrderReference: replaySafePayload.orderReference,
+    })
+  }
 
   console.log('[WAYFORPAY_CHECKOUT] rendering form', {
     product: req.query.product,
     plan: req.query.plan,
     merchantAccount: String(payload.merchantAccount ?? '').slice(0, 8) + '...',
-    orderReference: payload.orderReference,
-    amount: payload.amount,
-    currency: payload.currency,
-    hasSignature: Boolean(payload.merchantSignature),
-    hasReturnUrl: Boolean(payload.returnUrl),
-    hasServiceUrl: Boolean(payload.serviceUrl),
+    orderReference: replaySafePayload.orderReference,
+    amount: replaySafePayload.amount,
+    currency: replaySafePayload.currency,
+    hasSignature: Boolean(replaySafePayload.merchantSignature),
+    hasReturnUrl: Boolean(replaySafePayload.returnUrl),
+    hasServiceUrl: Boolean(replaySafePayload.serviceUrl),
   })
 
-  const formInputs = Object.entries(payload)
+  const formInputs = Object.entries(replaySafePayload)
     .flatMap(([key, value]) => {
       if (Array.isArray(value)) {
         return value.map((item) =>
@@ -559,6 +680,32 @@ export async function renderWayForPayCheckoutPageHandler(req: Request, res: Resp
     '</html>',
   ].join('')
 
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  return res.status(200).send(html)
+}
+
+export async function wayForPayReturnHandler(req: Request, res: Response) {
+  const targetRaw = typeof req.query.target === 'string' ? req.query.target.trim() : ''
+  const frontendBase = (
+    process.env.TELEGRAM_PUBLIC_FRONTEND_URL?.trim() ||
+    process.env.PUBLIC_FRONTEND_URL?.trim() ||
+    process.env.FRONTEND_URL?.trim() ||
+    ''
+  ).replace(/\/$/, '')
+  const fallbackTarget = frontendBase ? `${frontendBase}/miniapp?startapp=billing-success` : ''
+
+  const target = targetRaw || fallbackTarget
+  if (target.startsWith('http://') || target.startsWith('https://')) {
+    return res.redirect(302, target)
+  }
+
+  const html = [
+    '<!doctype html>',
+    '<html lang="uk"><head><meta charset="utf-8" /><title>Оплата успішна</title></head><body>',
+    '<h3>Оплата успішна</h3>',
+    '<p>Поверніться у застосунок.</p>',
+    '</body></html>',
+  ].join('')
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   return res.status(200).send(html)
 }

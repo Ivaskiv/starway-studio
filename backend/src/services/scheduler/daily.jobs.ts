@@ -171,7 +171,7 @@ export async function aiInactiveCron(): Promise<void> {
   if (!(await ensureNotificationPreferenceTableAvailability())) return
   const threshold = new Date(Date.now() - 48 * 60 * 60 * 1000)
 
-  const mentors = await prisma.userAIMentor.findMany({
+  const mentors = await prisma.userAiMentor.findMany({
     where: {
       lastInteractionAt: { lt: threshold },
     },

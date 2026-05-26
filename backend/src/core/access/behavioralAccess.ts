@@ -119,7 +119,7 @@ async function gatherContinuitySignals(userId: string): Promise<ContinuitySignal
       where: { userId },
       select: { createdAt: true, updatedAt: true },
     }),
-    prisma.userAIMentor.findFirst({
+    prisma.userAiMentor.findFirst({
       where: { userId },
       orderBy: { lastInteractionAt: 'desc' },
       select: {

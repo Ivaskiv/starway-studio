@@ -78,7 +78,7 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
       { id: 'journal', label: 'Журнал', icon: BookOpen, path: ROUTES.JOURNAL, visibleTo: ['USER'] },
       { id: 'courses', label: 'Практики', icon: Puzzle, path: ROUTES.COURSES, visibleTo: ['USER'] },
       { id: 'products', label: 'Продукти', icon: Package, path: ROUTES.PRODUCTS, visibleTo: ['USER'] },
-      { id: 'zoom', label: 'Zoom-сесії', icon: Video, path: ROUTES.ZOOM, visibleTo: ['USER'] },
+      { id: 'zoom', label: 'Zoom-сесії', icon: Video, path: ROUTES.ZOOM, visibleTo: ['USER', 'EXPERT', 'ADMIN', 'SUPERADMIN'] },
       { id: 'subscription', label: 'Підписка', icon: CreditCard, path: ROUTES.SUBSCRIPTION, visibleTo: ['USER'] },
     ],
   },
@@ -100,6 +100,7 @@ export const SIDEBAR_NAV: SidebarNavSection[] = [
       { id: 'leadmagnet', label: 'Лідмагніти', icon: Magnet, path: `${ROUTES.DASHBOARD}?section=leadmagnet`, visibleTo: ['EXPERT', 'SUPERADMIN'] },
       { id: 'telegram', label: 'Telegram', icon: Send, path: `${ROUTES.DASHBOARD}?section=telegram`, visibleTo: ['EXPERT', 'SUPERADMIN'] },
       { id: 'students', label: 'Учні', icon: Users, path: `${ROUTES.DASHBOARD}?section=students`, visibleTo: ['EXPERT', 'SUPERADMIN'] },
+      { id: 'zoom-coach', label: 'Zoom-календар', icon: Video, path: ROUTES.ZOOM, visibleTo: ['EXPERT', 'ADMIN', 'SUPERADMIN'] },
     ],
   },
   {
@@ -157,17 +158,13 @@ const Sidebar = memo(function Sidebar({ collapsed, onToggle, previewRole }: Side
     if (normalized === 'ADMIN') return 'ADMIN'
     if (normalized === 'EXPERT') return 'EXPERT'
     if (normalized === 'MENTOR') return 'MENTOR'
+    if (normalized === 'PRODUCT_OWNER') return 'PRODUCT_OWNER'
     return 'USER'
   }
 
-  const previewRoleMap: Record<PreviewRole, UserRole> = {
-    superadmin: 'SUPERADMIN',
-    expert: 'EXPERT',
-    user: 'USER',
-  }
-
   const currentRole = useMemo<UserRole>(() => {
-    if (previewRole) return previewRoleMap[previewRole]
+    // previewRole is now UserRole-typed — use it directly if provided
+    if (previewRole) return normalizeRole(previewRole)
     const role = ((state as any)?.permissions?.role ?? '') as string
     return normalizeRole(role)
   }, [previewRole, state])
@@ -365,7 +362,7 @@ const Sidebar = memo(function Sidebar({ collapsed, onToggle, previewRole }: Side
         {collapsed ? '>' : '<'}
       </button>
 
-      <UserMenu variant="sidebar" />
+      <UserMenu variant="sidebar" collapsed={collapsed} />
     </aside>
   )
 }

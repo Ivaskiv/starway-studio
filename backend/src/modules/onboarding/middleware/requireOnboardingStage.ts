@@ -14,7 +14,7 @@ export function requireOnboardingStage(stage: OnboardingStage) {
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { onboardingStage: true },
+        select: { currentStep: true },
       });
 
       if (!user) {
@@ -22,8 +22,8 @@ export function requireOnboardingStage(stage: OnboardingStage) {
       }
 
       const currentStage: OnboardingStage =
-        isOnboardingStage(user.onboardingStage)
-          ? user.onboardingStage
+        isOnboardingStage(user.currentStep)
+          ? user.currentStep
           : 'ENTRY';
 
       if (stageIndex(currentStage) < stageIndex(stage)) {

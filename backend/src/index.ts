@@ -1,7 +1,7 @@
 // backend/src/index.ts
 
 import { config as loadEnv } from 'dotenv'
-import { type Express, type Request, type Response } from 'express'
+import { type Express } from 'express'
 import { existsSync } from 'node:fs'
 import { type Server } from 'node:http'
 import { dirname, resolve } from 'node:path'
@@ -13,6 +13,9 @@ import { registerDailyTelegramCommands } from './modules/daily-cycle/telegram.js
 import { resolveRuntimeBotRegistry } from './platform/index.js'
 import { registerStankeyBot } from './products/stankey/index.js'
 import { startScheduler, stopScheduler } from './services/scheduler/index.js'
+import { startZoomNotificationsCron, startBattleCron, seedDefaultAvailability } from './modules/zoom/index.js'
+import { startDnaQueueWorkers, stopDnaQueueWorkers } from '@/core/dna/queues/dna.workers.js'
+import { startDnaQueueTelemetry } from '@/core/dna/telemetry/dna.queue-telemetry.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
@@ -28,6 +31,7 @@ if (existsSync(backendEnvPath)) {
 const PORT = Number(process.env.PORT) || 3001
 const isProduction = process.env.NODE_ENV === 'production'
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
 const TELEGRAM_POLLING_ENABLED =
   process.env.TELEGRAM_POLLING_ENABLED === 'true' ||
@@ -94,32 +98,6 @@ function isTelegramPollingConflict(error: unknown): boolean {
 }
 
 // ─────────────────────────────────────────────
-// TELEGRAM WEBHOOK ROUTE
-// Реєструємо маршрут тільки якщо є публічний webhook URL.
-// ─────────────────────────────────────────────
-if (START_TELEGRAM_BOT && telegramBotConfig.token && TELEGRAM_WEBHOOK_URL) {
-app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
-  try {
-    console.log('📩 [TELEGRAM WEBHOOK]', {
-      updateId: req.body?.update_id,
-      message: req.body?.message?.text,
-      callback: req.body?.callback_query?.data,
-    })
-
-    await bot.handleUpdate(req.body)
-
-    res.status(200).send('OK')
-  } catch (error) {
-    console.error('❌ [TELEGRAM WEBHOOK ERROR]', error)
-
-    res.status(500).send('Webhook error')
-  }
-})
-
-console.log('🔗 Telegram webhook route: POST /api/telegram/webhook')
-}
-
-// ─────────────────────────────────────────────
 // TELEGRAM
 // ─────────────────────────────────────────────
 async function startTelegramBot() {
@@ -131,11 +109,6 @@ async function startTelegramBot() {
   }
 
   telegramStartupPromise = (async () => {
-    if (isProduction) {
-      console.log('🤖 Telegram: production mode (no polling)')
-      return
-    }
-
     if (!START_TELEGRAM_BOT) {
       console.log(
         '🤖 [runtime] telegram runtime disabled (START_TELEGRAM_BOT=false)'
@@ -150,6 +123,7 @@ async function startTelegramBot() {
         productOwnership: botRegistry.main.productOwnership,
         polling: TELEGRAM_POLLING_ENABLED,
         webhook: Boolean(TELEGRAM_WEBHOOK_URL),
+        production: isProduction,
       })
 
       registerDailyTelegramCommands()
@@ -234,8 +208,19 @@ async function startTelegramBot() {
 
       if (TELEGRAM_WEBHOOK_URL) {
         const webhookEndpoint = `${TELEGRAM_WEBHOOK_URL.replace(/\/$/, '')}/api/telegram/webhook`
+        await bot.telegram.setWebhook(webhookEndpoint, {
+          drop_pending_updates: false,
+          allowed_updates: ['message', 'callback_query', 'chat_member', 'my_chat_member'],
+          ...(TELEGRAM_WEBHOOK_SECRET ? { secret_token: TELEGRAM_WEBHOOK_SECRET } : {}),
+        })
+        const webhookInfo = await bot.telegram.getWebhookInfo()
+        if (webhookInfo.url !== webhookEndpoint) {
+          throw new Error(
+            `[Telegram] webhook mismatch after setWebhook: expected=${webhookEndpoint} actual=${webhookInfo.url}`,
+          )
+        }
         telegramRunningMode = 'webhook'
-        console.log(`🤖 Telegram bot ready (webhook route active: ${webhookEndpoint})`)
+        console.log(`🤖 Telegram bot ready (webhook mode): ${webhookEndpoint}`)
         return
       }
 
@@ -243,6 +228,11 @@ async function startTelegramBot() {
         console.log(
           '🤖 [Telegram] Polling skipped (set TELEGRAM_POLLING_ENABLED=true to enable local polling)'
         )
+        return
+      }
+
+      if (isProduction) {
+        console.log('🤖 Telegram: production mode (polling disabled)')
         return
       }
 
@@ -259,7 +249,7 @@ async function startTelegramBot() {
       console.log('🤖 [Telegram] Launching polling...')
       telegramRunningMode = 'polling'
       void bot
-        .launch({ dropPendingUpdates: false }, () =>
+        .launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'chat_member', 'my_chat_member'] }, () =>
           console.log(
             '🤖 Telegram bot ready (polling mode for local development)'
           )
@@ -312,12 +302,8 @@ async function bootstrap() {
   // Env Validation
   const criticalEnvs = {
     DATABASE_URL: !!process.env.DATABASE_URL,
-    WAYFORPAY_MERCHANT: !!(
-      process.env.WAYFORPAY_MERCHANT_ACCOUNT || process.env.WAYFORPAY_MERCHANT
-    ),
-    WAYFORPAY_SECRET: !!(
-      process.env.WAYFORPAY_SECRET_KEY || process.env.WAYFORPAY_SECRET
-    ),
+    WAYFORPAY_MERCHANT: !!process.env.WAYFORPAY_MERCHANT,
+    WAYFORPAY_SECRET: !!process.env.WAYFORPAY_SECRET,
     TELEGRAM_BOT_TOKEN: !!telegramBotConfig.token,
     FOCUS_INVITE_LINK: !!process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK,
   }
@@ -420,8 +406,24 @@ async function bootstrap() {
     if (schedulerEnabled && databaseReady) {
       console.log('⏰ [runtime] Starting scheduler...')
       startScheduler()
+      startZoomNotificationsCron()
+      startBattleCron()
+      if (process.env.NODE_ENV !== 'production') {
+        prisma.expert.findFirst().then(expert => {
+          if (expert) seedDefaultAvailability(expert.id).catch(() => undefined);
+        }).catch(() => undefined);
+      }
     } else {
       console.warn('⚠️ [runtime] Scheduler disabled or DB not ready')
+    }
+
+    if (databaseReady) {
+      startDnaQueueTelemetry()
+      await startDnaQueueWorkers().catch((error) => {
+        console.warn('⚠️ [DNA][queue] workers startup skipped', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
     }
   })()
 }
@@ -462,6 +464,8 @@ async function shutdown(signal: string) {
     } catch {
       // silent
     }
+
+    await stopDnaQueueWorkers().catch(() => undefined)
 
     try {
       if (START_TELEGRAM_BOT) {

@@ -104,14 +104,21 @@ export const billingApi = api.injectEndpoints({
       invalidatesTags: ['Subscription', 'Payment'],
     }),
     createProductPayment: builder.mutation<
+      (
       {
+        status: 'already_active'
+        action?: 'resend_access'
+        message?: string
+      } | {
+        status?: 'ok'
         checkoutUrl?: string
         paymentUrl: string
         payment?: Record<string, unknown>
         productId: string
         planCode: string
         orderReference?: string
-      },
+      }
+      ),
       { productId: string; planCode: string; linkToken?: string }
     >({
       query: (body) => ({

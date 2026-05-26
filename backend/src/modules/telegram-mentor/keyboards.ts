@@ -11,9 +11,10 @@ type InlineKeyboardButton =
 
 const miniAppVersion = process.env.MINIAPP_VERSION?.trim() || 'dev'
 const isDevRuntime = process.env.NODE_ENV !== 'production'
+const isTestPaymentEnabled = isDevRuntime && process.env.TEST_PAYMENT_ENABLED?.trim() === '1'
 const DEV_TEST_PAYMENT_URL = 'https://secure.wayforpay.com/button/bcd1a02457187'
 const DEV_TEST_PAYMENT_BUTTON = {
-  text: '🧪 Тестова оплата 1 грн',
+  text: '🧪 Тест 1 грн',
   url: DEV_TEST_PAYMENT_URL,
 } as const
 
@@ -110,7 +111,7 @@ function isPaymentButton(button: InlineKeyboardButton): boolean {
 export function withDevTestPaymentButton<T extends InlineKeyboardButton>(
   rows: T[][],
 ): Array<Array<T | typeof DEV_TEST_PAYMENT_BUTTON>> {
-  if (!isDevRuntime || !rows.some((row) => row.some(isPaymentButton))) {
+  if (!isTestPaymentEnabled || !rows.some((row) => row.some(isPaymentButton))) {
     return rows
   }
 

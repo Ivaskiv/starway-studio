@@ -5,11 +5,14 @@ import GlobalAssistant from '@/features/assistant/components/GlobalAssistant'
 import DeepLinkAuthBridge from '@/features/auth/components/DeepLinkAuthBridge'
 import ProtectedRoute from '@/features/auth/components/ProtectedRoute'
 import { SessionOrchestratorProvider } from '@/features/auth/context/SessionOrchestratorContext'
+import { useAppSelector } from '@/app/hooks'
+import { selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
 import type { AccessKey } from '@/features/auth/types/auth.types'
 import {
   FOCUS_ALIAS_ROUTE,
   FOCUS_ROUTE,
 } from '@/features/landings/focus/content/constants'
+import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
 import MainLayout from '@/layout/MainLayout'
 import { Suspense, lazy, useMemo, type ReactElement } from 'react'
@@ -80,7 +83,6 @@ const MentorSetup = lazy(() => import('@/features/ai-mentor/pages/MentorSetup'))
 const ResetPasswordPage = lazy(
   () => import('@/features/auth/pages/ResetPasswordPage')
 )
-const SessionsPage = lazy(() => import('@/features/zoom/pages/SessionsPage'))
 const DevRoutes = lazy(() => import('@/pages/dev/DevRoutes'))
 const TransferOwnership = lazy(
   () => import('@/features/admin/pages/TransferOwnershipPage')
@@ -94,7 +96,7 @@ const NotificationsPage = lazy(
   () => import('@/features/notifications/pages/Notifications')
 )
 const SalesAssistantPage = lazy(
-  () => import('@/features/ai-assistant/pages/SalesAssistantPage')
+  () => import('@/features/sales-assistant/pages/SalesAssistantPage')
 )
 const PlatformPage = lazy(() => import('@/features/platform/pages/PlatformPage'))
 
@@ -172,6 +174,16 @@ function isProtectedPath(pathname: string): boolean {
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT_PATHS.has(pathname)) return true
   return PUBLIC_PATH_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix))
+}
+
+function ZoomPageWrapper() {
+  const user = useAppSelector(selectCurrentUser)
+  const role = useAppSelector(selectUserRole)
+  if (!user) return null
+  const isCoach = role === 'EXPERT' || role === 'SUPERADMIN'
+  return isCoach
+    ? <CoachZoomPanel expertId={user.id} />
+    : <UserZoomPanel userId={user.id} />
 }
 
 const DASHBOARD_ROUTES: RouteConfig[] = [
@@ -310,7 +322,7 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   },
   {
     path: '/dashboard/sessions',
-    element: <SessionsPage />,
+    element: <Navigate to={toAppRoutePath('/dashboard/zoom')} replace />,
     ability: 'dashboard.view',
   },
   {
@@ -346,7 +358,7 @@ const DASHBOARD_ROUTES: RouteConfig[] = [
   },
   {
     path: '/dashboard/zoom',
-    element: <Subscription />,
+    element: <ZoomPageWrapper />,
     ability: 'dashboard.view',
   },
   {
@@ -545,6 +557,40 @@ function PublicAppRouter() {
   )
 }
 
+function GuestAppRouter() {
+  return (
+    <Routes>
+      <Route path={ROUTES.HOME} element={<HomePage />} />
+      <Route path={ROUTES.PRICING} element={<HomePage />} />
+      <Route path={ROUTES.AB_TEST} element={<AbTestPage />} />
+      <Route path={`${ROUTES.AB_TEST}/*`} element={<AbTestPage />} />
+      <Route path="/test" element={<AbTestPage />} />
+      <Route path="/test/*" element={<AbTestPage />} />
+      <Route path={FOCUS_ROUTE} element={<FocusRouteView />} />
+      {FOCUS_ALIAS_ROUTE !== FOCUS_ROUTE ? (
+        <Route path={FOCUS_ALIAS_ROUTE} element={<Navigate to={FOCUS_ROUTE} replace />} />
+      ) : null}
+      <Route
+        path={ROUTES.LOGIN}
+        element={<Navigate to={`${ROUTES.HOME}?auth=login`} replace />}
+      />
+      <Route
+        path="/register"
+        element={<Navigate to={`${ROUTES.HOME}?auth=register`} replace />}
+      />
+      <Route path="/products/:slug" element={<ProductInfo />} />
+      {PUBLIC_INFO_ROUTES.map((path) => (
+        <Route
+          key={path}
+          path={path}
+          element={<InfoPage />}
+        />
+      ))}
+      <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
+    </Routes>
+  )
+}
+
 function ProtectedAppRouter() {
   const dashboardRoutes = useMemo(
     () =>
@@ -626,6 +672,11 @@ export default function App() {
 // }
 function AppRouter() {
   const location = useLocation()
+  const user = useAppSelector(selectCurrentUser)
+
+  if (!user) {
+    return <GuestAppRouter />
+  }
 
   if (isProtectedPath(location.pathname)) {
     return <ProtectedAppRouter />

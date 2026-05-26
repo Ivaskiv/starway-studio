@@ -73,7 +73,7 @@ export interface AnalyticsPrediction {
   color: string;
 }
 
-export interface AIRecommendation {
+export interface AiRecommendation {
   title: string;
   description: string;
   emoji: string;
@@ -81,7 +81,7 @@ export interface AIRecommendation {
 
 export interface AnalyticsResponse {
   predictions: AnalyticsPrediction[];
-  recommendations: AIRecommendation[];
+  recommendations: AiRecommendation[];
 }
 
 export interface AnalyticsOverview {

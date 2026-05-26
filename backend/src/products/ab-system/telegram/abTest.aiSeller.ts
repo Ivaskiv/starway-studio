@@ -2,13 +2,15 @@ import type { Context } from 'telegraf'
 
 import { prisma } from '../../../db/client.js'
 import { getUiSettings } from './abTest.progress.js'
+import { resolveUserLifecycle } from '../../../modules/users/runtime/resolveUserLifecycle.js'
 import {
   aiSellerContent,
   type AiSellerMode,
 } from '../config/aiSeller.content.js'
+import { planAck, planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 
 export function resolveAiSellerMode(user: {
-  lifecycleState: string | null
+  lifecycle: string
   testResultType: string | null
   zoomCount: number
   daysToExpiry: number | null
@@ -17,13 +19,13 @@ export function resolveAiSellerMode(user: {
   if (user.daysToExpiry !== null && user.daysToExpiry <= 7) {
     return 'RETENTION'
   }
-  if (user.lifecycleState === 'platform_active') {
+  if (user.lifecycle === 'platform_active') {
     return 'PLATFORM'
   }
-  if (user.lifecycleState === 'focus_active' && user.zoomCount >= 1) {
+  if (user.lifecycle === 'focus_active' && user.zoomCount >= 1) {
     return 'FOCUS'
   }
-  if (user.testResultType && user.lifecycleState !== 'focus_active') {
+  if (user.testResultType && user.lifecycle !== 'focus_active') {
     return 'LEAD'
   }
   return 'LEAD'
@@ -37,25 +39,21 @@ export async function handleAiSellerCallback(
   if (!userId) return false
 
   if (action === aiSellerContent.LEAD.softCtaCallback) {
-    await ctx.reply(aiSellerContent.LEAD.msg3, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: aiSellerContent.LEAD.cta_1m, callback_data: aiSellerContent.LEAD.callback_1m }],
-          [{ text: aiSellerContent.LEAD.cta_3m, callback_data: aiSellerContent.LEAD.callback_3m }],
-        ],
-      },
+    await planMessage(ctx, 'ctx.reply', 'ai_seller_lead_soft_cta', aiSellerContent.LEAD.msg3, {
+      inline_keyboard: [
+        [{ text: aiSellerContent.LEAD.cta_1m, callback_data: aiSellerContent.LEAD.callback_1m }],
+        [{ text: aiSellerContent.LEAD.cta_3m, callback_data: aiSellerContent.LEAD.callback_3m }],
+      ],
     })
-    await ctx.answerCbQuery().catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ai_seller_lead_soft_cta_ack').catch(() => undefined)
     return true
   }
 
   if (action === aiSellerContent.FOCUS.callback_learn_more) {
-    await ctx.reply(aiSellerContent.FOCUS.platform_details, {
-      reply_markup: {
-        inline_keyboard: [[{ text: aiSellerContent.FOCUS.cta_upgrade, callback_data: aiSellerContent.FOCUS.callback_upgrade }]],
-      },
+    await planMessage(ctx, 'ctx.reply', 'ai_seller_focus_learn_more', aiSellerContent.FOCUS.platform_details, {
+      inline_keyboard: [[{ text: aiSellerContent.FOCUS.cta_upgrade, callback_data: aiSellerContent.FOCUS.callback_upgrade }]],
     })
-    await ctx.answerCbQuery().catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ai_seller_focus_learn_more_ack').catch(() => undefined)
     return true
   }
 
@@ -67,7 +65,9 @@ export async function handleAiSellerCallback(
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      lifecycleState: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       testResultType: true,
       settings: true,
       subscriptions: {
@@ -87,7 +87,7 @@ export async function handleAiSellerCallback(
     where: { userId, attended: true },
   }).catch(() => 0)
   const mode = resolveAiSellerMode({
-    lifecycleState: user.lifecycleState,
+    lifecycle: resolveUserLifecycle(user).value,
     testResultType: user.testResultType,
     zoomCount,
     daysToExpiry,
@@ -123,11 +123,11 @@ export async function handleAiSellerCallback(
   }
 
   if (!replyText) {
-    await ctx.answerCbQuery().catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ai_seller_objection_no_reply').catch(() => undefined)
     return true
   }
 
-  await ctx.reply(replyText)
-  await ctx.answerCbQuery().catch(() => undefined)
+  await planMessage(ctx, 'ctx.reply', 'ai_seller_objection_reply', replyText)
+  await planAck(ctx, 'ctx.answerCbQuery', 'ai_seller_objection_reply_ack').catch(() => undefined)
   return true
 }

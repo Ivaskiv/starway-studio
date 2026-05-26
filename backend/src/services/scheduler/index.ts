@@ -3,6 +3,7 @@ import cron, { type ScheduledTask } from 'node-cron'
 import { refreshMarketResearch } from '../../modules/admin/content-research.service.js'
 import { PLATFORM_CRON_REGISTRY, getProductCronProfile } from '../../platform/index.js'
 import { withRuntimeAdvisoryLock } from '../../core/runtime/runtimeIdempotency.js'
+import { sendOpsTelegramMessage } from '../../lib/telegram.js'
 import { startNotificationWorker, stopNotificationWorker } from '../notifications/worker.js'
 import { startRuntimeOutboxWorker, stopRuntimeOutboxWorker } from '../runtimeOutbox/worker.js'
 import { aiSellerFocusCheck24hCron, aiSellerFocusDojimBeforeZoom2Cron, aiSellerLeadFollowup3dCron, aiSellerLeadFollowup7dCron, aiSellerReactivationCron, aiSellerRetentionCron } from './ai-seller.jobs.js'
@@ -31,6 +32,9 @@ function register(task: ScheduledTask) {
 function safeSchedule(key: string, expression: string, task: () => void, timezone: string) {
   if (registeredCronKeys.has(key)) {
     console.warn('[scheduler] duplicate registration prevented:', key)
+    void sendOpsTelegramMessage(
+      `⚠️ Scheduler duplicate registration prevented\nkey: ${key}`,
+    )
     return
   }
   registeredCronKeys.add(key)
@@ -45,6 +49,15 @@ function runScheduled(key: string, task: () => Promise<void>) {
       await task()
     }).then(() => undefined).catch(error => {
       console.error('[scheduler] cron task failed', { key, error })
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'unknown_error'
+      void sendOpsTelegramMessage(
+        `🚨 Scheduler cron task failed\nkey: ${key}\nerror: ${message}`,
+      )
     })
   })
 }

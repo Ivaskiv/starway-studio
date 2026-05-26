@@ -64,7 +64,12 @@ const Header = memo(function Header({
   const compactShellMode = miniAppMode || forceBurgerMenu
   const hideTelegramGuestAuth = miniAppMode || isTelegramMiniAppAuthContext()
   const shouldHideRegisterButton = hasKnownUser()
-  const viewRole = previewRole
+  // Normalize uppercase UserRole to lowercase ViewRole for ROLE_NAV lookup
+  const viewRole: ViewRole = (
+    String(previewRole ?? 'user').toLowerCase() === 'superadmin' ? 'superadmin'
+    : String(previewRole ?? 'user').toLowerCase() === 'expert' ? 'expert'
+    : 'user'
+  ) as ViewRole
   const [openDrop, setOpenDrop] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>

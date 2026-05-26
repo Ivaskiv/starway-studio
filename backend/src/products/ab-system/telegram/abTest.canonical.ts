@@ -11,7 +11,7 @@ import {
   type CanonicalCtaId,
 } from '../../../core/state-machine/ctaFoundation.js'
 import { resolveUserLifecycle } from '../../../modules/flow-control/service.js'
-import { absystemButtons } from '../config/absystem.content.js'
+import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
 import { abTestPaymentsContent } from '../content/abTest.payments.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { loadAbTestProgress, saveAbTestProgress } from './abTest.progress.js'

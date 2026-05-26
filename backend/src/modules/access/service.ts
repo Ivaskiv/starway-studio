@@ -47,6 +47,16 @@ type AccessUserSnapshot = {
   productAccesses: ProductAccessAssignment[]
 }
 
+function resolveOnboardingStage(
+  onboardingStage: string | null | undefined,
+  currentStep: string | null | undefined,
+): string | null {
+  const step = String(currentStep ?? '').trim()
+  if (step === 'lead_magnet') return 'lead_magnet'
+  const stage = String(onboardingStage ?? '').trim()
+  return stage || null
+}
+
 const telegramOptionalSnapshotByUser = new Map<string, string>()
 
 function shouldLogTelegramOptionalSnapshot(userId: string, snapshot: Record<string, unknown>) {
@@ -135,8 +145,7 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
     id: true,
     email: true,
     role: true,
-    onboardingStage: true,
-    currentStep: true,
+        currentStep: true,
     trialStartsAt: true,
     trialEndsAt: true,
     telegramEnabled: true,
@@ -341,9 +350,10 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
   const currentStep = currentFlow === 'lead-magnet'
     ? deriveLeadStep(leadEnrollment?.progress)
     : 0
+  const onboardingStage = resolveOnboardingStage(user.onboardingStage, user.currentStep)
   const accessLevel: AccessControlState['accessLevel'] = hasSubscription
     ? 'CLIENT'
-    : currentFlow === 'lead-magnet' || hasLeadMagnet || user.onboardingStage === 'lead_magnet'
+    : currentFlow === 'lead-magnet' || hasLeadMagnet || onboardingStage === 'lead_magnet'
       ? 'LEAD'
       : 'GUEST'
   const email = user.email ?? null
@@ -496,7 +506,7 @@ export async function revokeProductAccess(input: {
   })
 }
 
-export async function getUserAccess(userId: string): Promise<UserAccessResult> {
+export async function getUserAccess(userId: string, _precomputedAccessControl?: AccessControlState): Promise<UserAccessResult> {
   const user = await getAccessUserSnapshot(userId)
   if (!user) throw new Error('User not found')
 
@@ -510,7 +520,7 @@ export async function getUserAccess(userId: string): Promise<UserAccessResult> {
     email: user.email,
     productAccesses: user.productAccesses,
   })
-  const accessControl = await getAccessControlState(userId)
+  const accessControl = _precomputedAccessControl ?? await getAccessControlState(userId)
   const canUseClientFeatures = accessControl.hasSubscription
 
   // ── SUPERADMIN ─────────────────────────────────────────────────────────────
@@ -693,8 +703,8 @@ const PRODUCT_TEMPLATES: UserSystemState['products']['templates'] = [
 ]
 
 export async function getUserSystemState(userId: string): Promise<UserSystemState> {
-  const access      = await getUserAccess(userId)
   const accessControl = await getAccessControlState(userId)
+  const access      = await getUserAccess(userId, accessControl)
   const trialStatus = await getTrialStatus(userId)
   const now         = new Date()
   const isSuperAdmin = String(access.role).toUpperCase() === 'SUPERADMIN'

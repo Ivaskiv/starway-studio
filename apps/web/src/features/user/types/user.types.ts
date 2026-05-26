@@ -76,7 +76,6 @@ export interface User {
   firstName: string | null
   lastName:  string | null
 
-  // ✅ ДОДАЙ ОЦЕ
   createdAt?: string
   updatedAt?: string
 
@@ -85,9 +84,11 @@ export interface User {
   telegramChatId?: string | null
   telegramEnabled?: boolean
 
-  role:        UserRole
-  isAdmin:     boolean
-  isSuperAdmin: boolean
+  role:            UserRole   // primary/max role
+  activeRole:      UserRole   // currently selected context role
+  availableRoles?: UserRole[] // all roles this user can switch to
+  isAdmin:         boolean
+  isSuperAdmin:    boolean
 
   abilities: Ability[]
 
@@ -137,6 +138,12 @@ export const hasPaidAccess = (user: User | null): boolean => {
   if (!user) return false
   return user.access?.isPaid === true || user.subscriptionStatus === 'active'
 }
+
+export const getUserFullName = (user: Pick<User, 'firstName' | 'lastName'>): string =>
+  [user.firstName, user.lastName].filter(Boolean).join(' ').trim()
+
+export const getUserDisplayName = (user: Pick<User, 'firstName' | 'lastName' | 'name' | 'email'>): string =>
+  getUserFullName(user) || user.name || user.email?.split('@')[0] || 'User'
 
 // ── Profile tabs ───────────────────────────────────────────────
 export type ProfileTab = 'overview' | 'history' | 'badges' | 'settings'

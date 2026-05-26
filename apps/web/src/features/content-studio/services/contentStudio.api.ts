@@ -42,6 +42,15 @@ export const contentStudioApi = api.injectEndpoints({
         method: 'POST',
         body,
       }),
+      async onQueryStarted(payload, { queryFulfilled }) {
+        console.log('[DNA][content-studio] submit payload', payload)
+        try {
+          const response = await queryFulfilled
+          console.log('[DNA][content-studio] response', response.data)
+        } catch (error) {
+          console.error('[DNA][content-studio] error', error)
+        }
+      },
     }),
     regenerateContentItem: builder.mutation<ContentStudioItem, { item: ContentStudioItem; inputs: ContentStudioInputs; strategy?: ContentStudioAIStrategy | null }>({
       query: (body) => ({

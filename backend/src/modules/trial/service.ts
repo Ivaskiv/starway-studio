@@ -8,6 +8,7 @@ import {
   StageType,
   User,
 } from '@starway/db/prisma-client'
+import { isSuperAdminEmail } from '../auth/superadmin.js'
 import { scheduleReminder }                                          from '../notifications/reminder.service.js'
 import { syncLifecycleForUser }                                      from '../flow-control/service.js'
 import { invalidateFunnelStage }                                     from '../../lib/funnel/getUserFunnelStage.js'
@@ -136,10 +137,12 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
     prisma.user.findUnique({
       where:  { id: userId },
       select: {
+        email: true,
+        role: true,
         createdAt: true,
         onboardingStartedAt: true,
-        onboardingStage: true,
-        trialStartsAt: true,
+        currentStep: true,
+                trialStartsAt: true,
         trialEndsAt: true,
       },
     }),
@@ -162,6 +165,28 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
     return buildSafeTrialStatus(userId)
   }
 
+  const hasSystemPremiumAccess =
+    user.role === 'SUPERADMIN' || isSuperAdminEmail(user.email ?? null)
+  if (hasSystemPremiumAccess) {
+    return {
+      userId,
+      isActive: false,
+      isPaid: true,
+      startedAt: null,
+      endsAt: null,
+      daysLeft: 0,
+      currentDay: 0,
+      daysUsed: 0,
+      daysTotal: TRIAL_DAYS,
+      onboardingCompleted: true,
+      dailyCycleStarted: true,
+      progress: 100,
+      status: 'ACTIVE',
+      hasDay4Mirror: mirrors.some(m => m.day === 4),
+      hasDay7Mirror: mirrors.some(m => m.day === 7),
+    }
+  }
+
   const now = new Date()
   const daysTotal = Math.max(1, TRIAL_DAYS)
   const startedAt = user.trialStartsAt ?? user.onboardingStartedAt ?? user.createdAt
@@ -170,7 +195,7 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
     : 0
   const daysUsed = clampInt(rawDaysUsed, 0, daysTotal)
   const currentDay = clampInt(daysUsed + 1, 1, daysTotal)
-  const onboardingCompleted = user.onboardingStage === 'COMPLETED'
+  const onboardingCompleted = user.currentStep === 'TRIAL_FINAL'
   const dailyCycleStarted = Boolean(latestDailyCycleLog)
   const canExpireByBusinessRule = onboardingCompleted && dailyCycleStarted
   const isPaid = activeSub?.status === 'ACTIVE'
@@ -280,7 +305,7 @@ export async function generateAIMiniCourseSuggestions(userId: string) {
   const state          = (lastCycle?.state ?? DailyState.NEUTRAL) as DailyState
   const suggestedCourse = state === DailyState.FEAR ? 'resilience' : 'clarity'
 
-  return prisma.aIRecommendation.create({
+  return prisma.aiRecommendation.create({
     data: {
       userId,
       moduleId:   suggestedCourse,
@@ -299,7 +324,7 @@ export async function recordCTAInteraction(
   type:     CTAType,
   moduleId?: string,
 ) {
-  return prisma.cTAInteraction.create({
+  return prisma.ctaInteraction.create({
     data: { userId, type, moduleId },
   })
 }

@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js'
-import type { UserAIMentor } from '@starway/db/prisma-client'
+import type { UserAiMentor } from '@starway/db/prisma-client'
 
 const SYSTEM_EXPERT_EMAIL = process.env.SYSTEM_EXPERT_EMAIL ?? 'system@starway.ai'
 
@@ -46,7 +46,7 @@ export async function ensureUserExpertId(userId: string): Promise<string> {
         where: { id: userId },
         data: { expertId },
       }).catch((error) => {
-        console.error('[AIMentor] Failed to persist fallback expertId', { userId, expertId, error })
+        console.error('[AiMentor] Failed to persist fallback expertId', { userId, expertId, error })
       })
     }
   }
@@ -55,18 +55,18 @@ export async function ensureUserExpertId(userId: string): Promise<string> {
   return expertId
 }
 
-export async function ensureMentor(userId: string): Promise<UserAIMentor> {
-  const existing = await prisma.userAIMentor.findFirst({ where: { userId } })
+export async function ensureMentor(userId: string): Promise<UserAiMentor> {
+  const existing = await prisma.userAiMentor.findFirst({ where: { userId } })
   if (existing) return existing
 
   const expertId = await ensureUserExpertId(userId)
 
-  let mentor = await prisma.aIMentor.findFirst({
+  let mentor = await prisma.aiMentor.findFirst({
     where: { expertId },
     orderBy: { createdAt: 'desc' },
   })
   if (!mentor) {
-    mentor = await prisma.aIMentor.create({
+    mentor = await prisma.aiMentor.create({
       data: {
         expertId,
         slug: `mentor-${userId}`,
@@ -77,7 +77,7 @@ export async function ensureMentor(userId: string): Promise<UserAIMentor> {
     })
   }
 
-  return prisma.userAIMentor.create({
+  return prisma.userAiMentor.create({
     data: {
       userId,
       aiMentorId: mentor.id,

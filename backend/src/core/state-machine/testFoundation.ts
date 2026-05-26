@@ -373,6 +373,18 @@ const CANONICAL_TEST_TIEBREAK_QUESTION_ORDER: readonly AbTestQuestionId[] = [
   'q8',
 ]
 
+// FIX 2025-05-25 B1: normalize legacy letter answers to canonical keys.
+function normalizeCanonicalAnswerKey(raw: unknown): AbTestAnswerKey | null {
+  if (typeof raw !== 'string') return null
+  const value = raw.trim().toLowerCase()
+  if (value === 'state' || value === 'a' || value === 'а') return 'state'
+  if (value === 'goal' || value === 'b' || value === 'б') return 'goal'
+  if (value === 'choice' || value === 'v' || value === 'в' || value === 'c') return 'choice'
+  if (value === 'decision' || value === 'g' || value === 'г') return 'decision'
+  if (value === 'action' || value === 'd' || value === 'д') return 'action'
+  return null
+}
+
 type CanonicalTestScoredAnswer = {
   questionId: AbTestQuestionId
   answerId: AbTestAnswerKey
@@ -435,9 +447,8 @@ function chooseCanonicalTestWinner(
   const tbWinnersSorted = CHAIN.filter((t) => tbWinners.includes(t))
 
   if (tbWinnersSorted.length === 1) {
-    // Chain priority overrides tiebreaker score:
-    // topCandidates[0] is always first in CHAIN (most fundamental)
-    return topCandidates[0]
+    // FIX 2025-05-25 B2: return the actual tiebreak winner, not first top candidate.
+    return tbWinnersSorted[0]
   }
 
   // Рівень 3: q8 → q7 → q6 серед кандидатів
@@ -454,10 +465,15 @@ function chooseCanonicalTestWinner(
 export function resolveCanonicalTestResult(
   answers: Array<{ questionId: AbTestQuestionId; answerId: AbTestAnswerKey }>
 ): CanonicalTestResult {
-  const scoredAnswers: CanonicalTestScoredAnswer[] = answers.map((answer) => ({
-    ...answer,
-    resultType: CANONICAL_TEST_RESULT_BY_ANSWER[answer.answerId],
-  }))
+  const scoredAnswers: CanonicalTestScoredAnswer[] = answers.flatMap((answer) => {
+    const normalizedAnswerId = normalizeCanonicalAnswerKey(answer.answerId)
+    if (!normalizedAnswerId) return []
+    return [{
+      questionId: answer.questionId,
+      answerId: normalizedAnswerId,
+      resultType: CANONICAL_TEST_RESULT_BY_ANSWER[normalizedAnswerId],
+    }]
+  })
 
   const categoryBreakdown = scoreCanonicalTestAnswers(scoredAnswers)
   const tieBreakAnswers = scoredAnswers.filter((answer) =>

@@ -7,9 +7,50 @@ export const absystemContent = {
     productName: 'ABSystem',
     tone: 'human-first',
   },
+  START_BLOCK1: {
+    MSG1: [
+      'Привіт.',
+      'Це тест AB System:',
+      '«Чому ти відкладаєш те, що давно хочеш зробити?»',
+      '',
+      'Він допоможе побачити, чому ти знову переносиш важливе і з чого почати.',
+      'Тут не буде складних питань.',
+      'Просто відповідай так, як є зараз.',
+    ].join('\n'),
+    MSG2: [
+      'У тесті буде 8 питань.',
+      'Обирай той варіант, який найбільше схожий на тебе зараз.',
+      '',
+      'Не треба відповідати «правильно».',
+      'Треба чесно.',
+    ].join('\n'),
+    CTA1: 'Почати тест',
+    CTA_CHAT: '💬 Продовжити тут',
+    CTA_MINIAPP: '📱 Відкрити в MiniApp',
+    CTA_BROWSER: '🌐 В браузері',
+  },
+  RESUME_FLOW: {
+    IN_PROGRESS: (n: number) =>
+      `Ти вже відповіла на ${n} з 8 питань.\nПродовжити з того місця де зупинилась?`,
+    STALE_PROGRESS: (n: number, days: number) =>
+      `Ти відповіла на ${n} з 8 питань ${days} днів тому.\nТвої відчуття могли змінитися. Продовжити чи пройти заново?`,
+    COMPLETED: (resultType: string) =>
+      `Ти вже пройшла тест.\nТвій результат: *${resultType}*\n\nМожеш переглянути результат або пройти заново.`,
+    CTA_CONTINUE: '▶️ Продовжити',
+    CTA_RESTART: '🔄 Пройти заново',
+    CTA_SHOW_RESULT: '📊 Показати результат',
+    EDIT_OPENING: 'Відкриваю питання',
+  },
+  RESULT_TYPE_LABELS: {
+    STATE: 'СТАН',
+    GOAL: 'ЦІЛЬ',
+    CHOICE: 'ВИБІР',
+    DECISION: 'РІШЕННЯ',
+    ACTION: 'ДІЯ',
+  } as const,
   START_FLOWS: {
     FIRST_TIME_USER: {
-      text: 'Привіт. Це ABSystem — система, яка допомагає побачити, де зупинився твій рух: у стані, цілі, виборі, рішенні чи дії. Почнемо з короткого тесту. Він займе 3 хвилини і покаже твою точку зупинки прямо зараз.',
+      text: 'Привіт. Це тест AB System: «Чому ти відкладаєш те, що давно хочеш зробити?»\n\nВін допоможе побачити, чому ти знову переносиш важливе і з чого почати.',
       cta: 'Почати тест',
     },
     POST_TEST: {
@@ -632,6 +673,36 @@ export const absystemContent = {
     } satisfies Record<RelationshipTrustProgression, string>,
   },
 } as const
+
+export const absystemButtons = {
+  startTest: 'Почати тест',
+  continueTest: 'Продовжити тест',
+  restoreProgress: 'Продовжити',
+  continueInChat: '💬 Продовжити в чаті',
+  openMiniApp: '📱 Відкрити Mini App',
+  openInBrowser: '🌐 Відкрити в браузері',
+  whatToDo: 'Що з цим робити?',
+  joinFocus: 'Хочу у ФОКУС',
+  payFocus: 'Оплатити ФОКУС',
+  joinFocusNow: 'Приєднатись до ФОКУСУ',
+  joinChannel: 'Перейти в канал',
+  focusMonthly: 'ФОКУС — 780 грн / міс',
+  focusQuarterly: 'ФОКУС — 1990 грн / 3 міс',
+  openPlatform: 'Перейти в ABSystem AI',
+  openDashboard: 'Відкрити платформу',
+  openDailyCycle: 'Відкрити щоденник',
+  openZoom: 'Відкрити Zoom',
+  back: 'Назад',
+  continue: 'Продовжити',
+  edit: (n: number) => `✏️ Змінити №${n}`,
+  renewAccess: 'Продовжити доступ',
+  restoreAccess: 'Відновити доступ',
+  tryAgain: 'Спробувати ще раз',
+  joinWaitlist: 'Залишити заявку',
+  shareTest: 'Поділитись тестом',
+} as const
+
+export type AbsystemButtonKey = keyof typeof absystemButtons
 
 export type AbsSystemBillingKey = keyof typeof absystemContent.BILLING
 

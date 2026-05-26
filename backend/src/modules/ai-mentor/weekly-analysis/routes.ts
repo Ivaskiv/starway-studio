@@ -114,7 +114,7 @@ router.get('/monthly-context', authRequired, async (req: AuthenticatedRequest, r
     windowStart.setDate(windowStart.getDate() - (MONTH_WINDOW_DAYS - 1))
 
     const [conversations, goalsSet, subscription, zoomAttendances] = await Promise.all([
-      prisma.aIConversation.findMany({
+      prisma.aiConversation.findMany({
       where: {
         userId: req.user.id,
         updatedAt: { gte: windowStart },
@@ -163,15 +163,15 @@ router.get('/monthly-context', authRequired, async (req: AuthenticatedRequest, r
     ])
 
     const flattenedMessages = conversations.flatMap(conversation => conversation.messages)
-    const userMessages = flattenedMessages.filter(message => message.role === 'user')
-    const assistantMessages = flattenedMessages.filter(message => message.role === 'assistant')
+    const userMessages = flattenedMessages.filter(message => message.role === 'USER')
+    const assistantMessages = flattenedMessages.filter(message => message.role === 'ASSISTANT')
     const topThemes = extractTopThemes(userMessages.map(message => message.content))
 
     const recentHighlights = conversations
       .slice(0, RECENT_CONVERSATION_LIMIT)
       .map(conversation => {
-        const previewSource = conversation.messages.find(message => message.role === 'assistant')
-          ?? conversation.messages.find(message => message.role === 'user')
+        const previewSource = conversation.messages.find(message => message.role === 'ASSISTANT')
+          ?? conversation.messages.find(message => message.role === 'USER')
 
         return {
           id: conversation.id,
@@ -255,7 +255,7 @@ router.get('/admin/profiles', authRequired, async (req: AuthenticatedRequest, re
         orderBy: [{ retentionRisk: 'asc' }, { createdAt: 'desc' }],
         take:    Number(limit),
         skip:    (Number(page) - 1) * Number(limit),
-        include: { user: { select: { id: true, email: true, name: true } } },
+        include: { user: { select: { id: true, email: true, firstName: true, lastName: true } } },
       }),
       prisma.mentorWeeklyProfile.count({ where }),
     ])

@@ -15,10 +15,11 @@ export interface User {
   id: string
   expertId?: string | null
   email: string | null
-  name: string | null
+  name?: string | null
   firstName: string | null
   lastName: string | null
   role: UserRole
+  activeRole: UserRole
   passwordHash: string | null
   telegramUserId: string | null
   telegramUserName: string | null
@@ -48,7 +49,9 @@ export interface SafeUser {
   telegramUserName: string | null
   telegramChatId: string | null
   telegramEnabled?: boolean
-  role: UserRole // ✅ гарантовано сумісний з фронтендом
+  role: UserRole // primary/max role
+  activeRole: UserRole // currently selected context role
+  availableRoles: UserRole[] // all roles this user can switch to
   isAdmin: boolean
   isSuperAdmin: boolean
   abilities: string[]
@@ -80,9 +83,9 @@ export interface SafeUser {
 export interface AuthUser {
   id: string
   role: UserRole
+  activeRole: UserRole
   email: string | null
-    expertId?: string | null
-
+  expertId?: string | null
 }
 
 // ✅ ВИДАЛЕНО: declare global для Request.user (створював конфлікт)

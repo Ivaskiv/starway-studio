@@ -162,6 +162,18 @@ export const authApi = api.injectEndpoints({
       query: body => ({ url: '/auth/reset-password', method: 'POST', body }),
     }),
 
+    switchRole: builder.mutation<{ user: User; accessToken: string; refreshToken: string; activeRole: string }, { role: string }>({
+      query: body => ({ url: '/auth/switch-role', method: 'POST', body }),
+      async onQueryStarted(_, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          dispatch(setCredentials({ user: data.user, accessToken: data.accessToken, refreshToken: data.refreshToken }))
+        } catch (error) {
+          console.warn('[auth.api] switch-role failed:', error)
+        }
+      },
+    }),
+
   }),
 })
 
@@ -180,4 +192,5 @@ export const {
   useResetPasswordMutation,
   useAttachEmailMutation,
   useUpdateUserSettingsMutation,
+  useSwitchRoleMutation,
 } = authApi

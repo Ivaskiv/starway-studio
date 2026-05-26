@@ -11,6 +11,7 @@ import {
   initiateSubscriptionPaymentHandler,
   listSubscriptions,
   renderWayForPayCheckoutPageHandler,
+  wayForPayReturnHandler,
   startSuperadminTrialTestHandler,
 } from './controller.js';
 import { wayForPayCallback } from './payments/callback.js';
@@ -20,6 +21,7 @@ const router = Router();
 // Публічний webhook — WayForPay не передає Bearer token
 router.post('/payments/wayforpay/callback', wayForPayCallback);
 router.get('/payments/wayforpay/checkout/:token', renderWayForPayCheckoutPageHandler);
+router.get('/payments/wayforpay/return', wayForPayReturnHandler);
 
 router.get('/status', authRequired, getSubscriptionStatus);
 router.get('/',       authRequired, listSubscriptions);

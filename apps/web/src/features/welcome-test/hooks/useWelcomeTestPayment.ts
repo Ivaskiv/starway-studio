@@ -14,6 +14,7 @@ type Options = {
 export function useWelcomeTestPayment({ linkToken, onPending, onTrack }: Options = {}) {
   const [createProductPayment, paymentState] = useCreateProductPaymentMutation()
   const [redirectError, setRedirectError] = useState<string | null>(null)
+  const [alreadyActive, setAlreadyActive] = useState(false)
 
   const startMonthlyPayment = useCallback(async () => {
     onPending?.()
@@ -30,11 +31,17 @@ export function useWelcomeTestPayment({ linkToken, onPending, onTrack }: Options
 
     try {
       setRedirectError(null)
+      setAlreadyActive(false)
       const response = await createProductPayment({
         productId: 'focus',
         planCode: 'monthly',
         linkToken: linkToken ?? undefined,
       }).unwrap()
+
+      if (response.status === 'already_active') {
+        setAlreadyActive(true)
+        return false
+      }
 
       const checkoutUrl = response.checkoutUrl ?? response.paymentUrl
       if (!checkoutUrl) throw new Error('missing_checkout_url')
@@ -56,6 +63,7 @@ export function useWelcomeTestPayment({ linkToken, onPending, onTrack }: Options
   }, [createProductPayment, linkToken, onPending, onTrack])
 
   return {
+    alreadyActive,
     redirectError,
     isPaying: paymentState.isLoading,
     clearRedirectError: () => setRedirectError(null),

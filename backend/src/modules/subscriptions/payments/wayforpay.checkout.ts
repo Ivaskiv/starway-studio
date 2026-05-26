@@ -1,8 +1,11 @@
 //backend/src/modules/subscriptions/payments/wayforpay.checkout.ts
 import { stankeyManifest } from '@/products/stankey/product.manifest.js'
+import type { Prisma } from '@starway/db/prisma-client'
 import { randomUUID } from 'node:crypto'
+import { prisma } from '../../../db/client.js'
 import { getWayForPayCallbackUrl } from './callbackUrl.js'
 import { buildPaymentRequest } from './wayforpay.js'
+import { buildWayForPayReturnUrl } from './business.checkout.js'
 
 export type StankeyPlanId = (typeof stankeyManifest.pricing.plans)[number]['id']
 
@@ -71,14 +74,37 @@ export function encodeCheckoutPayload(payload: Record<string, unknown>) {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
 }
 
-export function buildShortWayForPayCheckoutUrl(
+export async function buildShortWayForPayCheckoutUrl(
   backendBaseUrl: string,
   payload: Record<string, unknown>,
-  query?: Record<string, string>
+  query?: Record<string, string>,
 ) {
   const token = randomUUID().replace(/-/g, '')
-  saveCheckoutSession(token, encodeCheckoutPayload(payload))
+  const encodedPayload = encodeCheckoutPayload(payload)
+  await saveCheckoutSession(token, encodedPayload)
 
+  // FIX 2026-05-25 UX1: keep Telegram URL short (tokenized link only, no payload blob in query).
+  const params = new URLSearchParams(query)
+  const queryString = params.toString()
+  return `${backendBaseUrl.replace(/\/$/, '')}/api/payments/wayforpay/checkout/${token}${queryString ? `?${queryString}` : ''}`
+}
+
+// Legacy sync helper for flows that cannot await during render composition.
+// Persists token asynchronously; strict runtime flows should prefer async helper above.
+export function buildShortWayForPayCheckoutUrlSync(
+  backendBaseUrl: string,
+  payload: Record<string, unknown>,
+  query?: Record<string, string>,
+) {
+  const token = randomUUID().replace(/-/g, '')
+  const encodedPayload = encodeCheckoutPayload(payload)
+  void saveCheckoutSession(token, encodedPayload).catch((error) => {
+    console.error('[CHECKOUT_TRACE] async_persist_failed', {
+      token,
+      reason: error instanceof Error ? error.message : String(error),
+    })
+  })
+  // FIX 2026-05-25 UX2: keep legacy sync checkout URL short for Telegram dialogs.
   const params = new URLSearchParams(query)
   const queryString = params.toString()
   return `${backendBaseUrl.replace(/\/$/, '')}/api/payments/wayforpay/checkout/${token}${queryString ? `?${queryString}` : ''}`
@@ -114,7 +140,7 @@ export function parseStankeyOrderReference(orderReference: string): {
   }
 }
 
-export function createWayForPayCheckout(input: StankeyCheckoutInput): StankeyCheckoutResult {
+export async function createWayForPayCheckout(input: StankeyCheckoutInput): Promise<StankeyCheckoutResult> {
   const plan = getPlan(input.plan)
   if (!plan) {
     throw new Error('invalid_stankey_plan')
@@ -143,8 +169,9 @@ export function createWayForPayCheckout(input: StankeyCheckoutInput): StankeyChe
     product_count: [1],
     product_price: [plan.price],
   })
+  payment.returnUrl = buildWayForPayReturnUrl(getBackendBaseUrl(), frontendBaseUrl ?? undefined)
 
-  const checkoutUrl = buildShortWayForPayCheckoutUrl(getBackendBaseUrl(), payment)
+  const checkoutUrl = await buildShortWayForPayCheckoutUrl(getBackendBaseUrl(), payment)
 
   return {
     checkoutUrl,
@@ -169,50 +196,211 @@ export function createWayForPayCheckout(input: StankeyCheckoutInput): StankeyChe
 }
 // FIX(18.05.2026): controller aligned with linear payment flow — Codex
 
-const CHECKOUT_SESSION_TTL_MS = 30 * 60 * 1000
-const checkoutSessions = new Map<string, { payload: string; expiresAt: number }>()
-const MAX_CHECKOUT_SESSIONS = 200
+const CHECKOUT_SESSION_TTL_MS =
+  process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 30 * 60 * 1000
 
-function pruneCheckoutSessions() {
-  const now = Date.now()
-
-  for (const [key, value] of checkoutSessions.entries()) {
-    if (value.expiresAt <= now) {
-      checkoutSessions.delete(key)
-    }
-  }
-
-  while (checkoutSessions.size > MAX_CHECKOUT_SESSIONS) {
-    const oldestKey = checkoutSessions.keys().next().value
-    if (!oldestKey) return
-    checkoutSessions.delete(oldestKey)
+function resolveSessionMetadata(payload: Record<string, unknown>) {
+  const orderReference = String(payload.orderReference ?? '').trim()
+  const amount = Number(payload.amount ?? 0)
+  const currency = String(payload.currency ?? 'UAH').trim() || 'UAH'
+  const productName = Array.isArray(payload.productName) ? String(payload.productName[0] ?? '') : ''
+  const productCode = productName.toLowerCase().includes('focus') ? 'focus' : 'absystem_ai'
+  const orderUserMatch = orderReference.match(/^[a-z0-9_-]+_[a-z0-9_-]+_([a-z0-9-]+)_\d+/i)
+  const userId = String(payload.clientAccountId ?? orderUserMatch?.[1] ?? '').trim()
+  return {
+    orderReference,
+    amount,
+    currency,
+    productCode,
+    userId,
   }
 }
 
-export function saveCheckoutSession(
+export async function saveCheckoutSession(
   token: string,
   payload: string,
 ) {
-  pruneCheckoutSessions()
-  checkoutSessions.set(token, {
-    payload,
-    expiresAt: Date.now() + CHECKOUT_SESSION_TTL_MS,
+  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>
+  const meta = resolveSessionMetadata(decoded)
+  if (!meta.userId || !meta.orderReference || !Number.isFinite(meta.amount) || meta.amount <= 0) {
+    throw new Error('CHECKOUT_SESSION_INVALID_PAYLOAD')
+  }
+  const expiresAt = new Date(Date.now() + CHECKOUT_SESSION_TTL_MS)
+  await prisma.checkoutSession.upsert({
+    where: { token },
+    update: {
+      payload: decoded as Prisma.InputJsonValue,
+      orderReference: meta.orderReference,
+      amount: meta.amount,
+      currency: meta.currency,
+      productCode: meta.productCode,
+      userId: meta.userId,
+      status: 'CREATED',
+      expiresAt,
+      invalidatedAt: null,
+    },
+    create: {
+      token,
+      payload: decoded as Prisma.InputJsonValue,
+      orderReference: meta.orderReference,
+      amount: meta.amount,
+      currency: meta.currency,
+      productCode: meta.productCode,
+      userId: meta.userId,
+      status: 'CREATED',
+      expiresAt,
+    },
   })
 }
 
-export function getCheckoutSession(token: string) {
-  pruneCheckoutSessions()
-  const session = checkoutSessions.get(token)
+export async function getCheckoutSession(token: string) {
+  const session = await prisma.checkoutSession.findUnique({
+    where: { token },
+    select: {
+      payload: true,
+      status: true,
+      createdAt: true,
+      openedAt: true,
+      completedAt: true,
+      expiresAt: true,
+      invalidatedAt: true,
+      usageCount: true,
+      lastOpenedAt: true,
+    },
+  })
   if (!session) return null
-
-  if (session.expiresAt <= Date.now()) {
-    checkoutSessions.delete(token)
+  const now = new Date()
+  if (session.expiresAt <= now) {
+    await prisma.checkoutSession.update({
+      where: { token },
+      data: {
+        status: 'EXPIRED',
+        invalidatedAt: session.invalidatedAt ?? now,
+      },
+    }).catch(() => undefined)
     return null
   }
 
-  return session.payload
+  if (session.status === 'INVALIDATED' || session.status === 'COMPLETED' || session.status === 'EXPIRED') {
+    return null
+  }
+
+  await prisma.checkoutSession.update({
+    where: { token },
+    data: {
+      status: session.status === 'CREATED' ? 'OPENED' : session.status,
+      openedAt: session.openedAt ?? now,
+      usageCount: { increment: 1 },
+      lastOpenedAt: now,
+    },
+  })
+
+  const openDelayMs = now.getTime() - session.createdAt.getTime()
+  console.log('[CHECKOUT_TRACE]', {
+    token,
+    status: session.status,
+    usageCount: session.usageCount + 1,
+    createdAt: session.createdAt.toISOString(),
+    openedAt: session.openedAt?.toISOString() ?? now.toISOString(),
+    completedAt: session.completedAt?.toISOString() ?? null,
+    expiresAt: session.expiresAt.toISOString(),
+    invalidatedAt: session.invalidatedAt?.toISOString() ?? null,
+    openDelayMs,
+    paymentDelayMs: null,
+  })
+
+  return Buffer.from(JSON.stringify(session.payload), 'utf8').toString('base64url')
 }
 
-export function deleteCheckoutSession(token: string) {
-  checkoutSessions.delete(token)
+export async function deleteCheckoutSession(token: string) {
+  await prisma.checkoutSession.update({
+    where: { token },
+    data: {
+      status: 'INVALIDATED',
+      invalidatedAt: new Date(),
+    },
+  }).catch(() => undefined)
+}
+
+export async function markCheckoutSessionCompleted(orderReference: string) {
+  const now = new Date()
+  const session = await prisma.checkoutSession.findFirst({
+    where: {
+      orderReference,
+      status: { in: ['CREATED', 'OPENED', 'PROCESSING'] },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      token: true,
+      createdAt: true,
+      openedAt: true,
+      usageCount: true,
+      expiresAt: true,
+      invalidatedAt: true,
+    },
+  })
+  if (!session) return
+  await prisma.checkoutSession.update({
+    where: { token: session.token },
+    data: {
+      status: 'COMPLETED',
+      completedAt: now,
+      invalidatedAt: now,
+    },
+  })
+  const paymentDelayMs = now.getTime() - (session.openedAt?.getTime() ?? session.createdAt.getTime())
+  console.log('[CHECKOUT_TRACE]', {
+    token: session.token,
+    status: 'COMPLETED',
+    usageCount: session.usageCount,
+    createdAt: session.createdAt.toISOString(),
+    openedAt: session.openedAt?.toISOString() ?? null,
+    completedAt: now.toISOString(),
+    expiresAt: session.expiresAt.toISOString(),
+    invalidatedAt: now.toISOString(),
+    openDelayMs: session.openedAt ? session.openedAt.getTime() - session.createdAt.getTime() : null,
+    paymentDelayMs,
+  })
+}
+
+export async function markCheckoutSessionProcessing(orderReference: string) {
+  const now = new Date()
+  await prisma.checkoutSession.updateMany({
+    where: {
+      orderReference,
+      status: { in: ['CREATED', 'OPENED'] },
+      completedAt: null,
+      invalidatedAt: null,
+    },
+    data: {
+      status: 'PROCESSING',
+    },
+  })
+  const session = await prisma.checkoutSession.findFirst({
+    where: { orderReference },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      token: true,
+      status: true,
+      usageCount: true,
+      createdAt: true,
+      openedAt: true,
+      completedAt: true,
+      expiresAt: true,
+      invalidatedAt: true,
+    },
+  })
+  if (!session) return
+  console.log('[CHECKOUT_TRACE]', {
+    token: session.token,
+    status: 'PROCESSING',
+    usageCount: session.usageCount,
+    createdAt: session.createdAt.toISOString(),
+    openedAt: session.openedAt?.toISOString() ?? null,
+    completedAt: session.completedAt?.toISOString() ?? null,
+    expiresAt: session.expiresAt.toISOString(),
+    invalidatedAt: session.invalidatedAt?.toISOString() ?? null,
+    openDelayMs: session.openedAt ? session.openedAt.getTime() - session.createdAt.getTime() : null,
+    paymentDelayMs: session.openedAt ? now.getTime() - session.openedAt.getTime() : null,
+  })
 }

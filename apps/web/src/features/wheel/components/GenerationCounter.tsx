@@ -15,7 +15,7 @@ export const GenerationCounter = ({ used, max }: GenerationCounterProps) => {
   }, [ratio])
 
   return (
-    <div className="space-y-2 rounded-xl border border-[color:rgba(var(--glass-border-rgb),0.24)] bg-[color:rgba(var(--ambient-rgb-2),0.34)] p-3">
+    <div className="space-y-2 rounded-xl border border-[color:rgba(var(--glass-border-rgb),0.24)] bg-[color:rgba(var(--ambient-2-rgb),0.34)] p-3">
       <div className="flex items-center justify-between text-sm">
         <span className="text-white/70">Генерації</span>
         <span className="font-semibold text-white">

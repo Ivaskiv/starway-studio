@@ -20,7 +20,7 @@ async function getWindowMetrics(userId: string, days: number) {
     prisma.dailyEntry.count({ where: { userId, createdAt: { gte: from } } }),
     prisma.microTask.count({ where: { userId, isCompleted: true, createdAt: { gte: from } } }),
     prisma.microTask.count({ where: { userId, createdAt: { gte: from } } }),
-    prisma.aIMentorSession.count({ where: { userMentor: { userId }, createdAt: { gte: from } } }),
+    prisma.aiMentorSession.count({ where: { userMentor: { userId }, createdAt: { gte: from } } }),
     getWheelHistory(userId, 30),
   ])
 

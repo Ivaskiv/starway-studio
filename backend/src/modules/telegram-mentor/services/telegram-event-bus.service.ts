@@ -22,6 +22,7 @@ import { CANONICAL_CTA_REGISTRY, resolveCanonicalCtaId, resolveCanonicalMessageK
 import { buildRequestFingerprint } from '../../../core/state-machine/securityFoundation.js'
 import { claimRuntimeEventReplay, buildRuntimeTelemetry, withRuntimeAdvisoryLock } from '../../../core/runtime/runtimeIdempotency.js'
 import { handleAbTestCallback, observeAbTestCanonicalAction } from '@/products/ab-system/telegram/abTest.service.js'
+import { planAck, planMessage } from '../conversation/delivery/planDelivery.js'
 
 type TelegramCallbackKind =
   | 'payment'
@@ -153,31 +154,35 @@ async function handleRoomAction(ctx: Context, userId: string | null, action: str
   }
 
   if (action === 'start_wheel') {
-    await ctx.reply('Відкрий Starway і запусти діагностику стану в MiniApp.', {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'room_start_wheel',
+      'Відкрий Starway і запусти діагностику стану в MiniApp.',
+      replyMarkup,
+    )
     return true
   }
 
   if (action === 'open_focus_portal') {
     const focusContext = getTelegramProductContext('focus')
-    await ctx.reply(focusContext.copy.welcome.join('\n'), {
-      reply_markup: openAppKeyboard(focusContext.route.miniApp ?? '/miniapp', focusContext.cta.openRoom).reply_markup,
-    })
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'room_open_focus_portal',
+      focusContext.copy.welcome.join('\n'),
+      openAppKeyboard(focusContext.route.miniApp ?? '/miniapp', focusContext.cta.openRoom).reply_markup,
+    )
     return true
   }
 
   if (action === 'open_course') {
-    await ctx.reply('Відкриваю курс у Starway.', {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(ctx, 'ctx.reply', 'room_open_course', 'Відкриваю курс у Starway.', replyMarkup)
     return true
   }
 
   if (action === 'open_practices') {
-    await ctx.reply('Відкриваю практики у Starway.', {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(ctx, 'ctx.reply', 'room_open_practices', 'Відкриваю практики у Starway.', replyMarkup)
     return true
   }
 
@@ -195,9 +200,13 @@ async function handleRoomAction(ctx: Context, userId: string | null, action: str
         await sendStateMenu(ctx, targetUserId)
       }
     } else {
-      await ctx.reply('Starway підключено. Відкрий Mini App для продовження.', {
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-      })
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'room_return_main_menu_guest',
+        'Starway підключено. Відкрий Mini App для продовження.',
+        replyMarkup,
+      )
     }
     return true
   }
@@ -220,6 +229,15 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
   const userId = (ctx.state as { userId?: string | null }).userId ?? null
   const event = resolveTelegramCallbackEvent(action)
   const canonicalCtaId = resolveCanonicalCtaId(action)
+  console.info('[AB_TEST_START_DEBUG] event_bus:dispatch_received', {
+    action,
+    userId,
+    chatId: String(ctx.chat?.id ?? ''),
+    callbackQueryId:
+      'callbackQuery' in ctx && ctx.callbackQuery && 'id' in ctx.callbackQuery
+        ? String(ctx.callbackQuery.id ?? '')
+        : null,
+  })
 
   const runtime = buildRuntimeTelemetry({
     scope: 'telegram_callback',
@@ -243,6 +261,31 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
   })
 
   try {
+    // AB test callbacks are handled directly — they carry their own idempotency
+    // and must not be blocked by the advisory lock (which can fail to acquire
+    // due to Prisma connection-pool session mismatch).
+    if (action === 'continue_test_chat') {
+      if (await handleAbTestCallback(ctx, 'ab_test:start')) {
+        console.info('[AB_TEST_START_DEBUG] event_bus:handled_by_ab_test', {
+          action,
+          routedAs: 'ab_test:start',
+          userId,
+        })
+        return true
+      }
+    }
+    if (await handleAbTestCallback(ctx, action)) {
+      console.info('[AB_TEST_START_DEBUG] event_bus:handled_by_ab_test', {
+        action,
+        userId,
+      })
+      return true
+    }
+    console.info('[AB_TEST_START_DEBUG] event_bus:not_handled_by_ab_test', {
+      action,
+      userId,
+    })
+
     const replay = await withRuntimeAdvisoryLock({
       scope: 'telegram_callback',
       type: event.kind,
@@ -272,16 +315,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
       })
 
       if (duplicateFence.duplicate) {
-        return duplicateFence
-      }
-
-      if (action === 'continue_test_chat') {
-        if (await handleAbTestCallback(ctx, 'ab_test:start')) {
-          return duplicateFence
-        }
-      }
-
-      if (await handleAbTestCallback(ctx, action)) {
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_duplicate_fence').catch(() => undefined)
         return duplicateFence
       }
 
@@ -339,12 +373,12 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
             select: { currentState: true },
           })
           if (userRecord?.currentState !== 'NEW' && userRecord?.currentState !== 'TELEGRAM_LINKED') {
-            await ctx.answerCbQuery().catch(() => undefined)
+            await planAck(ctx, 'ctx.answerCbQuery', 'callback_start_trial_state_reject').catch(() => undefined)
             return duplicateFence
           }
           const lastSent = startTrialSentAt.get(userId)
           if (lastSent && Date.now() - lastSent < START_TRIAL_DEDUP_TTL_MS) {
-            await ctx.answerCbQuery().catch(() => undefined)
+            await planAck(ctx, 'ctx.answerCbQuery', 'callback_start_trial_recent_reject').catch(() => undefined)
             return duplicateFence
           }
           const dedupeKey = getStartTrialWelcomeDedupeKey(userId)
@@ -354,7 +388,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
           })
           if (existing) {
             console.log('[start_trial] dedup skip', { userId })
-            await ctx.answerCbQuery().catch(() => undefined)
+            await planAck(ctx, 'ctx.answerCbQuery', 'callback_start_trial_outbox_reject').catch(() => undefined)
             return duplicateFence
           }
           try {
@@ -385,7 +419,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
               throw error
             }
             console.log('[start_trial] dedup skip', { userId })
-            await ctx.answerCbQuery().catch(() => undefined)
+            await planAck(ctx, 'ctx.answerCbQuery', 'callback_start_trial_unique_reject').catch(() => undefined)
             return duplicateFence
           }
           startTrialSentAt.set(userId, Date.now())
@@ -396,7 +430,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
             await sendStateMenu(ctx, userId)
           }
         }
-        await ctx.answerCbQuery('Показую наступний крок').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_start_trial', 'Показую наступний крок').catch(() => undefined)
         return duplicateFence
       }
 
@@ -404,7 +438,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
         if (userId) {
           await handleBillingPaywall(ctx, userId)
         }
-        await ctx.answerCbQuery('Показую тарифи').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_paid_checkout', 'Показую тарифи').catch(() => undefined)
         return duplicateFence
       }
 
@@ -413,7 +447,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
           const planId = action.slice('pay_stankey_'.length).trim() as 'monthly' | 'quarterly' | 'lifetime'
           await handleBillingCheckout(ctx, userId, planId)
         }
-        await ctx.answerCbQuery('Готую оплату').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_pay_stankey', 'Готую оплату').catch(() => undefined)
         return duplicateFence
       }
 
@@ -424,7 +458,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
         } else {
           await handleStatus(ctx)
         }
-        await ctx.answerCbQuery('Оновлюю стан').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_status', 'Оновлюю стан').catch(() => undefined)
         return duplicateFence
       }
 
@@ -434,49 +468,54 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
             await sendStateMenu(ctx, userId)
           }
         }
-        await ctx.answerCbQuery('Оновлюю доступний сценарій').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_waitlist_early_access', 'Оновлюю доступний сценарій').catch(() => undefined)
         return duplicateFence
       }
 
       if (action === 'continue_ai_mentor') {
         await resumeQuestionSession(ctx)
-        await ctx.answerCbQuery('Продовжуємо сесію').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_continue_ai_mentor', 'Продовжуємо сесію').catch(() => undefined)
         return duplicateFence
       }
 
       if (action === 'resume_morning_session') {
         await handleMorning(ctx)
-        await ctx.answerCbQuery('Відкриваю ранкову сесію').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_resume_morning', 'Відкриваю ранкову сесію').catch(() => undefined)
         return duplicateFence
       }
 
       if (action === 'resume_evening_session') {
         await handleEvening(ctx)
-        await ctx.answerCbQuery('Відкриваю вечірню сесію').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_resume_evening', 'Відкриваю вечірню сесію').catch(() => undefined)
         return duplicateFence
       }
 
       if (action === 'continue_ai_mentor_chat') {
-        await ctx.reply('👇 Напиши питання ABsystemу в поле вводу нижче, і я продовжу розмову тут у Telegram.')
-        await ctx.answerCbQuery('Продовжуємо в Telegram').catch(() => undefined)
+        await planMessage(
+          ctx,
+          'ctx.reply',
+          'callback_continue_ai_mentor_chat_message',
+          '👇 Напиши питання ABsystemу в поле вводу нижче, і я продовжу розмову тут у Telegram.',
+        )
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_continue_ai_mentor_chat', 'Продовжуємо в Telegram').catch(() => undefined)
         return duplicateFence
       }
 
       if (action === 'continue_task') {
         await handleTasks(ctx)
-        await ctx.answerCbQuery('Показую пріоритетне завдання').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_continue_task', 'Показую пріоритетне завдання').catch(() => undefined)
         return duplicateFence
       }
 
       if (action === 'open_tasks') {
         await handleTasks(ctx)
-        await ctx.answerCbQuery('Відкриваю завдання').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_tasks', 'Відкриваю завдання').catch(() => undefined)
         return duplicateFence
       }
 
       if (action === 'open_privacy') {
         await handlePrivacy(ctx)
-        await ctx.answerCbQuery('Відкриваю політику').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_privacy', 'Відкриваю політику').catch(() => undefined)
         return duplicateFence
       }
 
@@ -485,14 +524,14 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
         if (taskId) {
           await handleTaskDone(ctx, taskId)
         } else {
-          await ctx.answerCbQuery('Не вдалося визначити завдання').catch(() => undefined)
+          await planAck(ctx, 'ctx.answerCbQuery', 'callback_done_task_missing_id', 'Не вдалося визначити завдання').catch(() => undefined)
         }
         return duplicateFence
       }
 
       if (action === 'task_done') {
         await handleTasks(ctx)
-        await ctx.answerCbQuery('Обери конкретне завдання').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_task_done', 'Обери конкретне завдання').catch(() => undefined)
         return duplicateFence
       }
 
@@ -500,13 +539,13 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
         if (userId) {
           await dismissNudges(userId)
         }
-        await ctx.answerCbQuery('Добре, повернемось пізніше').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_task_skip', 'Добре, повернемось пізніше').catch(() => undefined)
         return duplicateFence
       }
 
       if (action === 'open_lidmagnet') {
         await handleLidmagnet(ctx)
-        await ctx.answerCbQuery('Відкриваю практикум').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_lidmagnet', 'Відкриваю практикум').catch(() => undefined)
         return duplicateFence
       }
 
@@ -519,7 +558,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
         if (userId) {
           await dismissNudges(userId)
         }
-        await ctx.answerCbQuery('Добре, поки без нагадувань').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_dismiss_task', 'Добре, поки без нагадувань').catch(() => undefined)
         return duplicateFence
       }
 
@@ -530,14 +569,14 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
           const started = await startLeadMagnet(session.userId, chatId, 'telegram_resume')
           if (!started) {
             await sendStateMenu(ctx, session.userId)
-            await ctx.answerCbQuery('Доступний актуальний сценарій').catch(() => undefined)
+            await planAck(ctx, 'ctx.answerCbQuery', 'callback_lm_continue_stale', 'Доступний актуальний сценарій').catch(() => undefined)
             return duplicateFence
           }
         }
         if (session?.userId) {
           await sendStateMenu(ctx, session.userId)
         }
-        await ctx.answerCbQuery('Запускаю практикум').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_lm_continue', 'Запускаю практикум').catch(() => undefined)
         return duplicateFence
       }
 
@@ -547,24 +586,30 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
           const started = await startLeadMagnet(userId, chatId, 'telegram_resume_material')
           if (!started) {
             await sendStateMenu(ctx, userId)
-            await ctx.answerCbQuery('Доступний актуальний сценарій').catch(() => undefined)
+            await planAck(ctx, 'ctx.answerCbQuery', 'callback_lm_continue_material_stale', 'Доступний актуальний сценарій').catch(() => undefined)
             return duplicateFence
           }
         }
-        await ctx.answerCbQuery('Запускаю матеріал').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_lm_continue_material', 'Запускаю матеріал').catch(() => undefined)
         return duplicateFence
       }
 
       if (await handleRoomAction(ctx, userId, action)) {
-        await ctx.answerCbQuery('Оновлюю room').catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_room_update', 'Оновлюю room').catch(() => undefined)
         return duplicateFence
       }
 
-      await ctx.answerCbQuery('Відкрий Mini App для продовження').catch(() => undefined)
+      await planAck(ctx, 'ctx.answerCbQuery', 'callback_fallback', 'Відкрий Mini App для продовження').catch(() => undefined)
       return duplicateFence
     })
 
-    if (!replay.acquired || !replay.value) {
+    if (!replay.acquired) {
+      await planAck(ctx, 'ctx.answerCbQuery', 'callback_lock_skipped', 'Запит уже обробляється').catch(() => undefined)
+      logTelegramEvent('callback_lock_skipped', event, { userId, deduped: true })
+      return true
+    }
+
+    if (!replay.value) {
       return false
     }
 
@@ -604,7 +649,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
     return true
   } catch (error) {
     logger.error('[telegram-event-bus:callback]', error)
-    await ctx.answerCbQuery('Не вдалося відновити сесію').catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'callback_error', 'Не вдалося відновити сесію').catch(() => undefined)
     return false
   }
 }

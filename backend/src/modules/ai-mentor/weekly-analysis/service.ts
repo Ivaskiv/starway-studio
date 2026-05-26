@@ -100,7 +100,7 @@ export async function collectWeeklyData(
       where: { userId, createdAt: { gte: weekStart, lte: weekEnd } },
     }),
 
-    prisma.aIMentorMessage.findMany({
+    prisma.aiMentorMessage.findMany({
       where: {
         session: {
           userMentor: { userId },
@@ -111,7 +111,7 @@ export async function collectWeeklyData(
       take: 40,   // обмежуємо щоб не перевантажити контекст
     }),
 
-    prisma.aIMentorSession.count({
+    prisma.aiMentorSession.count({
       where: {
         userMentor: { userId },
         createdAt: { gte: weekStart, lte: weekEnd },

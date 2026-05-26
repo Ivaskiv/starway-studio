@@ -9,7 +9,6 @@ type CachedUser = Prisma.UserGetPayload<{
   select: {
     id: true
     email: true
-    name: true
     firstName: true
     lastName: true
     expertId: true
@@ -21,7 +20,7 @@ type CachedUser = Prisma.UserGetPayload<{
     lastLoginAt: true
     createdAt: true
     updatedAt: true
-    uiSettings: true
+    settings: true
     subscriptions: {
       orderBy: { createdAt: 'desc' }
       take: 1
@@ -39,7 +38,6 @@ export async function getCachedUser(userId: string): Promise<CachedUser> {
     select: {
       id: true,
       email: true,
-      name: true,
       firstName: true,
       lastName: true,
       expertId: true,
@@ -51,7 +49,7 @@ export async function getCachedUser(userId: string): Promise<CachedUser> {
       lastLoginAt: true,
       createdAt: true,
       updatedAt: true,
-      uiSettings: true,
+      settings: true,
       subscriptions: {
         orderBy: { createdAt: 'desc' },
         take: 1,
@@ -68,6 +66,7 @@ export async function getCachedAuthUser(userId: string) {
   const cached = await cacheGet<{
     id: string
     role: string
+    activeRole: string
     email: string | null
     expertId: string | null
   } | null>(key)
@@ -75,7 +74,7 @@ export async function getCachedAuthUser(userId: string) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, email: true, expertId: true },
+    select: { id: true, role: true, activeRole: true, email: true, expertId: true },
   })
 
   await cacheSet(key, user, USER_CACHE_TTL_SECONDS)

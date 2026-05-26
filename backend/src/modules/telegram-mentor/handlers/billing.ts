@@ -8,6 +8,7 @@ import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/sta
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 function buildPlansKeyboard() {
   const context = getTelegramProductContext('stankey')
@@ -25,15 +26,15 @@ export async function handleBillingPaywall(ctx: Context, userId: string) {
   const context = getTelegramProductContext('stankey')
   const profile = resolveConversationProfile('stankey')
   const relationship = await resolveRelationshipMemory(userId, 'stankey').catch(() => null)
-  await ctx.reply([
+  await planMessage(ctx, 'ctx.reply', 'billing_paywall',
+    [
     absystemContent.subscription.restore,
     ...(relationship?.lastMeaningfulGoal ? [`Пам'ятаю твій фокус: ${relationship.lastMeaningfulGoal}`] : []),
     ...(relationship?.repeatedPostponedAction ? [`Повторюється вузол: ${relationship.repeatedPostponedAction}`] : []),
     ...context.copy.payment,
     profile.upgradeLead,
-  ].join('\n'), {
-    reply_markup: buildPlansKeyboard(),
-  })
+  ].join('\n'),
+  buildPlansKeyboard())
 }
 
 export async function handleBillingCheckout(ctx: Context, userId: string, planId: StankeyPlanId) {
@@ -42,7 +43,7 @@ export async function handleBillingCheckout(ctx: Context, userId: string, planId
     select: { email: true },
   })
 
-  const checkout = createWayForPayCheckout({
+  const checkout = await createWayForPayCheckout({
     user: {
       id: userId,
       email: user?.email ?? null,
@@ -59,8 +60,12 @@ export async function handleBillingCheckout(ctx: Context, userId: string, planId
   const copy = buildRecoveryCopy('payment_interrupted', resolveConversationProfile('stankey'), {
     relationship,
   })
-  await ctx.reply(`${absystemContent.errors.paymentInterrupted.title}\n${copy.body}\nОплата відкривається зараз: ${checkout.amount} ${checkout.currency}.`, {
-    reply_markup: {
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'billing_checkout',
+    `${absystemContent.errors.paymentInterrupted.title}\n${copy.body}\nОплата відкривається зараз: ${checkout.amount} ${checkout.currency}.`,
+    {
       inline_keyboard: withDevTestPaymentButton([[
         {
           text: context.cta.buy,
@@ -68,7 +73,7 @@ export async function handleBillingCheckout(ctx: Context, userId: string, planId
         },
       ]]),
     },
-  })
+  )
 
   return checkout
 }

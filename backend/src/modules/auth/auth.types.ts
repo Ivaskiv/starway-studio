@@ -15,6 +15,7 @@ export interface AuthApiResponse {
 export interface JwtPayload {
   id: string;
   role: UserRole;
+  activeRole: UserRole;
   email: string | null;
 }
 
@@ -62,6 +63,7 @@ export function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
+    activeRole: user.activeRole,
     lastLoginAt: user.lastLoginAt,
     passwordHash: user.passwordHash,
     telegramUserId: user.telegramUserId,
@@ -78,11 +80,12 @@ export function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
 export interface PrismaUserWithRelations {
   id: string
   email: string | null
-  name: string | null
+  name?: string | null
   firstName: string | null
   lastName: string | null
   expertId?: string | null
   role: UserRole
+  activeRole: UserRole
   passwordHash: string | null
   lastLoginAt: Date | null
   createdAt: Date

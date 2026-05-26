@@ -768,8 +768,8 @@ export async function getLaunchGovernanceChecklist(): Promise<LaunchGovernanceCh
     },
     {
       key: 'payment_ready',
-      ready: Boolean((process.env.WAYFORPAY_MERCHANT_ACCOUNT ?? process.env.WAYFORPAY_MERCHANT)?.trim()) && Boolean((process.env.WAYFORPAY_SECRET_KEY ?? process.env.WAYFORPAY_SECRET)?.trim()),
-      details: Boolean((process.env.WAYFORPAY_MERCHANT_ACCOUNT ?? process.env.WAYFORPAY_MERCHANT)?.trim()) && Boolean((process.env.WAYFORPAY_SECRET_KEY ?? process.env.WAYFORPAY_SECRET)?.trim())
+      ready: Boolean(process.env.WAYFORPAY_MERCHANT?.trim()) && Boolean(process.env.WAYFORPAY_SECRET?.trim()),
+      details: Boolean(process.env.WAYFORPAY_MERCHANT?.trim()) && Boolean(process.env.WAYFORPAY_SECRET?.trim())
         ? 'WayForPay credentials configured'
         : 'WayForPay credentials missing',
     },
@@ -792,7 +792,7 @@ export async function getLaunchGovernanceChecklist(): Promise<LaunchGovernanceCh
     db_schema_ready: Boolean(process.env.DATABASE_URL?.trim()),
     webhook_ready: Boolean(process.env.WAYFORPAY_CALLBACK_URL?.trim()),
     telegram_webhook_ready: Boolean(process.env.TELEGRAM_WEBHOOK_URL?.trim()),
-    payment_ready: Boolean((process.env.WAYFORPAY_MERCHANT_ACCOUNT ?? process.env.WAYFORPAY_MERCHANT)?.trim()) && Boolean((process.env.WAYFORPAY_SECRET_KEY ?? process.env.WAYFORPAY_SECRET)?.trim()),
+    payment_ready: Boolean(process.env.WAYFORPAY_MERCHANT?.trim()) && Boolean(process.env.WAYFORPAY_SECRET?.trim()),
     environment_consistency: Boolean(process.env.NODE_ENV?.trim()),
     feature_flag_rollout_ready: validateFeatureFlagFoundation().ok,
     blockers,

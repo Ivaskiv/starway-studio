@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 
+import PlatformGuard from '@/features/platform/components/PlatformGuard'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import {
   useGeneratePlatformWeeklyReportMutation,
@@ -93,6 +94,7 @@ export default function PlatformPage() {
   const showOverview = !showCycle && !showWheel && !showReports && !showOnboarding
 
   return (
+    <PlatformGuard>
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-5 py-6">
       <header className="flex flex-col gap-3">
         <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">Starway platform · Level 2</p>
@@ -163,5 +165,6 @@ export default function PlatformPage() {
         </section>
       ) : null}
     </main>
+    </PlatformGuard>
   )
 }

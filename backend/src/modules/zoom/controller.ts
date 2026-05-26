@@ -7,6 +7,7 @@ import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 import { resolveTelegramProductSummary } from '../telegram-mentor/services/productSummary.service.js';
 import { markAbTestZoomAttended, markAbTestZoomRegistered } from '@/products/ab-system/telegram/abTest.service.js';
 import { schedulePostZoomBridge, scheduleUpgradeOffer } from '@/modules/subscriptions/payments/business.js';
+import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js';
 import { notificationService } from '../../services/notifications/NotificationService.js';
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js';
 import { sendDedupedTelegramMessage } from '../../lib/telegram.js';
@@ -154,7 +155,9 @@ export async function markAttendedHandler(req: AuthenticatedRequest, res: Respon
     const user = await prisma.user.findUnique({
       where: { id: attendee.userId },
       select: {
-        lifecycleState: true,
+        currentState: true,
+        currentStep: true,
+        funnelStage: true,
         settings: true,
       },
     })
@@ -168,9 +171,10 @@ export async function markAttendedHandler(req: AuthenticatedRequest, res: Respon
         attended: true,
       },
     })
+    const resolvedLifecycle = resolveUserLifecycle(user ?? {}).value
     const bridge = schedulePostZoomBridge(attendee.userId, {
       zoomCount,
-      lifecycleState: user?.lifecycleState ?? null,
+      lifecycle: resolvedLifecycle,
       bridgeSentAt: typeof settings.bridgeSentAt === 'string' ? settings.bridgeSentAt : null,
       productKey: primaryProductKey,
     })
@@ -206,7 +210,7 @@ export async function markAttendedHandler(req: AuthenticatedRequest, res: Respon
 
     const upgradeOffer = scheduleUpgradeOffer(attendee.userId, {
       zoomCount,
-      lifecycleState: user?.lifecycleState ?? null,
+      lifecycle: resolvedLifecycle,
       bridgeSentAt: typeof settings.bridgeSentAt === 'string' ? settings.bridgeSentAt : null,
       hardBridgeSentAt,
       productKey: primaryProductKey,

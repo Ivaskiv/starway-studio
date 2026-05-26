@@ -1,9 +1,15 @@
-import { Router, type Request, type Response } from 'express'
+import { Router, type NextFunction, type Request, type Response } from 'express'
 import {
   buildAbTestProgressPatch,
+  validateAbTestProgress,
   type AbTestAnswer,
 } from '../../core/state-machine/abTestFoundation.js'
-import { type CanonicalTestResult } from '../../core/state-machine/testFoundation.js'
+import { buildBehavioralNarrative } from '../../core/behavioral/buildBehavioralNarrative.js'
+import { buildBehavioralSnapshot } from '../../core/behavioral/behavioralSnapshot.js'
+import {
+  resolveCanonicalTestResult,
+  type CanonicalTestResult,
+} from '../../core/state-machine/testFoundation.js'
 import { prisma } from '../../db/client.js'
 import {
   AB_TEST_QUESTION_ORDER,
@@ -18,8 +24,9 @@ import {
   loadUserUiSettings,
   saveAbTestProgress,
 } from '../../products/ab-system/telegram/abTest.progress.js'
+import { resolveUserLifecycle } from '../users/runtime/resolveUserLifecycle.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { authRequired } from '../auth/middleware/auth.js'
+import { getServerUser } from '../auth/getServerUser.js'
 
 type AbTestSubmissionAnswer = {
   questionId: AbTestQuestionId
@@ -63,6 +70,19 @@ const CANONICAL_TEST_RESULT_TYPES = new Set<CanonicalTestResult['type']>([
   'ACTION',
 ])
 
+async function optionalAuth(
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction,
+) {
+  try {
+    req.user = (await getServerUser(req)) ?? undefined
+  } catch {
+    req.user = undefined
+  }
+  next()
+}
+
 function toBehavioralBlock(type: CanonicalTestResult['type']): BehavioralBlock {
   return type.toLowerCase() as BehavioralBlock
 }
@@ -83,8 +103,8 @@ async function persistTestOutcome(
   await prisma.user.update({
     where: { id: userId },
     data: {
-      lifecycleState: 'test_completed',
       testResultType: result.type,
+      currentStep: 'START_FLOW',
     },
   })
 }
@@ -93,7 +113,9 @@ async function loadStoredTestResult(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      lifecycleState: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       testResultType: true,
     },
   })
@@ -104,10 +126,11 @@ async function loadStoredTestResult(userId: string) {
 
   const dominantBlock = toBehavioralBlock(user.testResultType)
 
+  const resolvedLifecycle = resolveUserLifecycle(user ?? {}).value
   return {
     type: user.testResultType,
     dominantBlock,
-    lifecycleState: user.lifecycleState,
+    lifecycleState: resolvedLifecycle,
     nextAction: buildNextAction(dominantBlock),
     nextActionCta: resolveNextActionCtaLabel(dominantBlock),
   }
@@ -330,17 +353,89 @@ router.get('/questions', (_req: Request, res: Response) => {
 
 router.post(
   '/submit',
-  authRequired,
-  async (req: AuthenticatedRequest, res: Response) => {}
+  optionalAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.id
+
+    const body = req.body as AbTestSubmitBody | undefined
+    const normalizedAnswers = normalizeAnswers(body?.answers)
+    if (!normalizedAnswers.length) {
+      return res.status(400).json({ error: 'no answers' })
+    }
+    if (normalizedAnswers.length < AB_TEST_QUESTION_ORDER.length) {
+      return res.status(400).json({ error: 'incomplete_answers' })
+    }
+
+    const resolvedAnswers = resolveAnswers(normalizedAnswers)
+    if (!resolvedAnswers.length) {
+      return res.status(400).json({ error: 'no answers' })
+    }
+
+    const canonical = resolveCanonicalTestResult(normalizedAnswers)
+    const dominantBlock = toBehavioralBlock(canonical.type)
+    const semantic = resolveSemanticFocus(resolvedAnswers, dominantBlock)
+    const inactivityDays = buildInactivityDays(resolvedAnswers)
+
+    const snapshot = buildBehavioralSnapshot({
+      answers: resolvedAnswers.map((answer) => ({
+        category: answer.category,
+        text: answer.answerText,
+        score: answer.score,
+        questionId: answer.questionId,
+        answerId: answer.answerId,
+      })),
+      userState: {
+        dominantBlock,
+        inactivityDays,
+      },
+    })
+
+    if (userId) {
+      const nowIso = new Date().toISOString()
+      const current = await loadAbTestProgress(userId)
+      const incomingAnswers = buildProgressAnswers(resolvedAnswers, nowIso)
+      const mergedAnswers = mergeProgressAnswers(current.answers, incomingAnswers)
+      const next = buildAbTestProgressPatch(current, {
+        status: 'completed',
+        stage: 'S3_TEST_RESULT',
+        answers: mergedAnswers,
+        current_question_id: null,
+        result_key: dominantBlock,
+        updated_at: nowIso,
+        last_event_at: nowIso,
+      })
+      await saveAbTestProgress(userId, next)
+      await persistTestOutcome(userId, canonical)
+    }
+
+    return res.json({
+      type: canonical.type,
+      dominantScore: canonical.dominantScore,
+      categoryBreakdown: canonical.categoryBreakdown,
+      dominantBlock,
+      unresolvedGoal: semantic.unresolvedGoal,
+      repeatedPostponedAction: semantic.repeatedPostponedAction,
+      inactivityDays,
+      narrative: buildBehavioralNarrative(snapshot),
+      nextAction: buildNextAction(dominantBlock),
+      nextActionCta: resolveNextActionCtaLabel(dominantBlock),
+    })
+  }
 )
 
 router.get(
   '/progress',
-  authRequired,
+  optionalAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.id
     if (!userId) {
-      return res.status(401).json({ error: 'unauthorized' })
+      return res.json({
+        answers: [],
+        currentIndex: 0,
+        resultType: null,
+        status: 'idle',
+        flowState: 'IDLE',
+      })
     }
 
     const uiSettings = await loadUserUiSettings(userId)
@@ -356,18 +451,17 @@ router.get(
       currentIndex: progress.answers.length,
       resultType: toPublicResultType(progress.result_key),
       status: progress.status,
+      flowState: progress.flow_state,
+      resumable: validateAbTestProgress(progress).resumable,
     })
   }
 )
 
 router.post(
   '/submit-partial',
-  authRequired,
+  optionalAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.id
-    if (!userId) {
-      return res.status(401).json({ error: 'unauthorized' })
-    }
 
     const body = req.body as AbTestPartialSubmitBody | undefined
     const normalizedAnswers = normalizeAnswers(body?.answers)
@@ -379,6 +473,14 @@ router.post(
     const resolvedAnswers = resolveAnswers(normalizedAnswers)
     if (!resolvedAnswers.length) {
       return res.status(400).json({ error: 'no answers' })
+    }
+
+    if (!userId) {
+      return res.json({
+        saved: resolvedAnswers.length,
+        currentIndex: resolvedAnswers.length,
+        status: 'active',
+      })
     }
 
     const current = await loadAbTestProgress(userId)
@@ -408,11 +510,11 @@ router.post(
 
 router.get(
   '/result',
-  authRequired,
+  optionalAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.id
     if (!userId) {
-      return res.status(401).json({ error: 'unauthorized' })
+      return res.status(404).json({ error: 'result_not_found' })
     }
 
     const storedResult = await loadStoredTestResult(userId)

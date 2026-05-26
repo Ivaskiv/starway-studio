@@ -205,9 +205,9 @@ async function resolveTrackingUserId(input: TrackEventInput): Promise<string | n
   const created = await prisma.user.create({
     data: {
       email: normalizedEmail,
-      name: normalizedEmail.split('@')[0] || 'Lead user',
+      firstName: normalizedEmail.split('@')[0] || 'Lead user',
       passwordHash: `lead-${Date.now().toString(36)}`,
-      onboardingStage: 'lead_magnet',
+      currentStep: 'START_FLOW',
       settings: {
         tracking: {
           utmSource: input.utmSource ?? null,

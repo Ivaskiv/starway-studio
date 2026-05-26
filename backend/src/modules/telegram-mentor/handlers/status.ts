@@ -6,6 +6,7 @@ import { resolveBehavioralContinuity, type BehavioralContinuityResolution } from
 import { buildAbsystemStatusFlow } from '../../../core/flow-builder/flowBuilder.js'
 import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleStatus(ctx: Context) {
   const chatId = String(ctx.chat?.id ?? '')
@@ -34,7 +35,13 @@ export async function handleStatus(ctx: Context) {
       return
     }
 
-    await ctx.reply([absystemContent.status.title, '', absystemContent.status.intro].join('\n'), replyMarkup ? { reply_markup: replyMarkup } : undefined)
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'status_fallback_intro',
+      [absystemContent.status.title, '', absystemContent.status.intro].join('\n'),
+      replyMarkup,
+    )
   } catch {
     const fallback: BehavioralContinuityResolution = {
       snapshot: {

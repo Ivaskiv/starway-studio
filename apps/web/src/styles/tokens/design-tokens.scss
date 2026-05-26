@@ -70,7 +70,6 @@
   // ── Header-specific ──────────────────────────────────────────
   --header-height: 56px;
   --tf:     var(--accent);
-  --tf-rgb: var(--accent-rgb);
   --tf-08:  rgba(var(--accent-rgb), 0.08);
   --tf-12:  rgba(var(--accent-rgb), 0.12);
   --tf-20:  rgba(var(--accent-rgb), 0.20);
@@ -107,11 +106,18 @@
 
   --text-primary:     hsl(220 45% 95%);
   --text-secondary:   hsl(216 32% 83%);
-  --text-muted:       hsl(214 22% 76%);
+  --text-muted:       hsla(212, 22%, 75%, 0.935);
   --text-muted-light: hsl(214 16% 68%);
   --text-subtle:      hsl(213 72% 69%);
+  --text-subtle-rgb:  119, 170, 233;
   --text-field:       hsl(214 26% 84%);
   --text-field-placeholder: hsl(214 16% 62%);
+  --semantic-success: hsl(145 58% 52%);
+  --semantic-success-rgb: 60, 190, 110;
+  --semantic-danger: hsl(4 68% 60%);
+  --semantic-danger-rgb: 220, 92, 84;
+  --semantic-warning: hsl(42 78% 58%);
+  --semantic-warning-rgb: 220, 170, 72;
   --icon-rgb:         229, 236, 245;
   --icon-bg:          rgba(var(--accent-rgb), 0.18);
   --icon-bg-hover:    rgba(var(--accent-rgb), 0.24);
@@ -180,6 +186,13 @@
   --text-subtle:      hsl(213 62% 44%);
   --text-field:       hsl(220 18% 30%);
   --text-field-placeholder: hsl(220 12% 48%);
+  --semantic-success: hsl(145 42% 36%);
+  --semantic-success-rgb: 53, 130, 82;
+  --semantic-danger: hsl(4 58% 46%);
+  --semantic-danger-rgb: 185, 65, 58;
+  --semantic-warning: hsl(42 68% 42%);
+  --semantic-warning-rgb: 180, 132, 40;
+  --text-subtle-rgb:  43, 105, 182;
   --icon-rgb:         241, 246, 252;
   --icon-bg:          rgba(var(--accent-rgb), 0.16);
   --icon-bg-hover:    rgba(var(--accent-rgb), 0.22);

@@ -36,8 +36,9 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    if (searchParams.get('auth') === 'login') {
-      openAuth('login')
+    const authParam = searchParams.get('auth')
+    if (authParam === 'login' || authParam === 'register') {
+      openAuth(authParam)
       const next = new URLSearchParams(searchParams)
       next.delete('auth')
       setSearchParams(next, { replace: true })

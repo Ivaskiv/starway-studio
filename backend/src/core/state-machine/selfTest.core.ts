@@ -490,7 +490,7 @@ export async function runCoreTests() {
     'payment webhook first call should process'
   )
   assert(
-    paymentTestDb.state.users.get('user-test')?.lifecycleState ===
+    paymentTestDb.state.users.get('user-test')?.['lifecycleState'] ===
       'focus_active',
     'payment webhook focus lifecycle update failed'
   )
@@ -506,7 +506,7 @@ export async function runCoreTests() {
 
   const postZoomBridge = schedulePostZoomBridge('user-test', {
     zoomCount: 1,
-    lifecycleState: 'focus_active',
+    lifecycle: 'focus_active',
     bridgeSentAt: null,
   })
   assert(
@@ -516,7 +516,7 @@ export async function runCoreTests() {
 
   const hardUpgradeOffer = scheduleUpgradeOffer('user-test', {
     zoomCount: 4,
-    lifecycleState: 'focus_active',
+    lifecycle: 'focus_active',
     bridgeSentAt: new Date().toISOString(),
     hardBridgeSentAt: null,
   })
@@ -571,7 +571,7 @@ export async function runCoreTests() {
   )
 
   assert(
-    ecosystemDb.state.users.get('user-focus')?.lifecycleState ===
+    ecosystemDb.state.users.get('user-focus')?.['lifecycleState'] ===
       'platform_active',
     'ecosystem upgrade must advance lifecycle'
   )

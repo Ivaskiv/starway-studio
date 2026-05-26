@@ -4,6 +4,7 @@
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { aiSellerContent } from '@/products/ab-system/config/aiSeller.content.js'
+import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js'
 import { daysBetween, ensureNotificationPreferenceTableAvailability, getEndOfUtcDay, getSettingsObject, getStartOfUtcDay, readTimestamp, sendAiSellerTelegramMessage } from './common.js'
 
 export async function aiSellerLeadFollowup3dCron(deps?: {
@@ -22,12 +23,14 @@ export async function aiSellerLeadFollowup3dCron(deps?: {
   const sender = deps?.sender ?? sendAiSellerTelegramMessage
   const users = await database.user.findMany({
     where: {
-      lifecycleState: 'result_opened',
       deletedAt: null,
       NOT: { email: { startsWith: 'telegram-guest-' } },
     },
     select: {
       id: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       settings: true,
       updatedAt: true,
       notificationPreference: {
@@ -42,6 +45,8 @@ export async function aiSellerLeadFollowup3dCron(deps?: {
   })
 
   for (const user of users) {
+    const lifecycle = resolveUserLifecycle(user).value
+    if (lifecycle !== 'result_opened') continue
     if (!user.notificationPreference?.telegramEnabled || !user.notificationPreference.aiRemindersEnabled) continue
     if (user.subscriptions.length > 0) continue
     const settings = getSettingsObject(user.settings)
@@ -63,12 +68,14 @@ export async function aiSellerLeadFollowup7dCron(): Promise<void> {
   const now = new Date()
   const users = await prisma.user.findMany({
     where: {
-      lifecycleState: 'result_opened',
       deletedAt: null,
       NOT: { email: { startsWith: 'telegram-guest-' } },
     },
     select: {
       id: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       settings: true,
       updatedAt: true,
       notificationPreference: {
@@ -83,6 +90,8 @@ export async function aiSellerLeadFollowup7dCron(): Promise<void> {
   })
 
   for (const user of users) {
+    const lifecycle = resolveUserLifecycle(user).value
+    if (lifecycle !== 'result_opened') continue
     if (!user.notificationPreference?.telegramEnabled || !user.notificationPreference.aiRemindersEnabled) continue
     if (user.subscriptions.length > 0) continue
     const settings = getSettingsObject(user.settings)
@@ -106,12 +115,14 @@ export async function aiSellerFocusCheck24hCron(): Promise<void> {
   const now = new Date()
   const users = await prisma.user.findMany({
     where: {
-      lifecycleState: 'focus_active',
       deletedAt: null,
       NOT: { email: { startsWith: 'telegram-guest-' } },
     },
     select: {
       id: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       settings: true,
       notificationPreference: {
         select: { telegramEnabled: true, aiRemindersEnabled: true },
@@ -120,6 +131,8 @@ export async function aiSellerFocusCheck24hCron(): Promise<void> {
   })
 
   for (const user of users) {
+    const lifecycle = resolveUserLifecycle(user).value
+    if (lifecycle !== 'focus_active') continue
     if (!user.notificationPreference?.telegramEnabled || !user.notificationPreference.aiRemindersEnabled) continue
     const settings = getSettingsObject(user.settings)
     if (readTimestamp(settings.focusCheck24hSentAt)) continue
@@ -148,12 +161,14 @@ export async function aiSellerFocusDojimBeforeZoom2Cron(): Promise<void> {
   const now = new Date()
   const users = await prisma.user.findMany({
     where: {
-      lifecycleState: 'focus_active',
       deletedAt: null,
       NOT: { email: { startsWith: 'telegram-guest-' } },
     },
     select: {
       id: true,
+      currentState: true,
+      currentStep: true,
+      funnelStage: true,
       settings: true,
       notificationPreference: {
         select: { telegramEnabled: true, aiRemindersEnabled: true },
@@ -162,13 +177,18 @@ export async function aiSellerFocusDojimBeforeZoom2Cron(): Promise<void> {
   })
 
   for (const user of users) {
+    const lifecycle = resolveUserLifecycle(user).value
+    if (lifecycle !== 'focus_active') continue
     if (!user.notificationPreference?.telegramEnabled || !user.notificationPreference.aiRemindersEnabled) continue
     const settings = getSettingsObject(user.settings)
     if (readTimestamp(settings.focusDojimBeforeZoom2SentAt)) continue
     const zoomCount = await prisma.zoomSessionAttendee.count({ where: { userId: user.id, attended: true } })
     if (zoomCount !== 1) continue
-    const lifecycle = await prisma.user.findUnique({ where: { id: user.id }, select: { lifecycleState: true } })
-    if (lifecycle?.lifecycleState === 'platform_active') continue
+    const latestLifecycle = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { currentState: true, currentStep: true, funnelStage: true },
+    })
+    if (latestLifecycle && resolveUserLifecycle(latestLifecycle).value === 'platform_active') continue
     const nextZoom = await prisma.zoomSession.findFirst({
       where: { scheduledAt: { gt: now } },
       orderBy: { scheduledAt: 'asc' },
@@ -258,7 +278,9 @@ export async function aiSellerReactivationCron(daysSince: 7 | 30): Promise<void>
       userId: true,
       user: {
         select: {
-          lifecycleState: true,
+          currentState: true,
+          currentStep: true,
+          funnelStage: true,
           settings: true,
           notificationPreference: { select: { telegramEnabled: true, aiRemindersEnabled: true } },
         },
@@ -267,7 +289,7 @@ export async function aiSellerReactivationCron(daysSince: 7 | 30): Promise<void>
   })
 
   for (const subscription of subscriptions) {
-    if (subscription.user.lifecycleState !== 'expired') continue
+    if (resolveUserLifecycle(subscription.user).value !== 'expired') continue
     if (!subscription.user.notificationPreference?.telegramEnabled || !subscription.user.notificationPreference.aiRemindersEnabled) continue
     const settings = getSettingsObject(subscription.user.settings)
     const sentKey = daysSince === 7 ? 'reactivation7dSentAt' : 'reactivation30dSentAt'

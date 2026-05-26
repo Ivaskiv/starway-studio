@@ -148,6 +148,7 @@ import analyticsRoutes from './modules/analytics/routes.js'
 import assistantRoutes from './modules/assistant/routes.js'
 import authRoutes, { telegramRouter } from './modules/auth/auth.routes.js'
 import { authRequired } from './modules/auth/middleware/auth.js'
+import { bot } from './lib/telegram.js'
 import billingRoutes from './modules/billing/billing.module.js'
 import consultationRoutes from './modules/consultation/routes.js'
 import dailyRoutes from './modules/daily-cycle/routes.js'
@@ -174,7 +175,7 @@ import quotaRoutes from './modules/quota/routes.js'
 import settingsRoutes from './modules/settings/routes.js'
 import socialRoutes from './modules/social/routes.js'
 import startFlowRoutes from './modules/start-flow/routes.js'
-import { renderWayForPayCheckoutPageHandler } from './modules/subscriptions/controller.js'
+import { renderWayForPayCheckoutPageHandler, resendFocusBlock12DevHandler } from './modules/subscriptions/controller.js'
 import subscriptionsRoutes from './modules/subscriptions/routes.js'
 import trialRoutes from './modules/trial/routes.js'
 import userStateRoutes from './modules/user-state/routes.js'
@@ -188,6 +189,9 @@ import salesAssistantRouter from './routers/salesAssistant.router.js'
 
 export function createApp(): Express {
   const app = express()
+  const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
+  const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
+  const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || ''
   const isProduction = process.env.NODE_ENV === 'production'
   const allowedOrigins = [
     'http://localhost:5173',
@@ -232,6 +236,40 @@ export function createApp(): Express {
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
   app.use(cookieParser())
+
+  app.get('/api/telegram/webhook/health', (_req: Request, res: Response) => {
+    const enabled = START_TELEGRAM_BOT && Boolean(TELEGRAM_WEBHOOK_URL)
+    return res.status(200).json({
+      ok: true,
+      webhook: {
+        enabled,
+        startTelegramBot: START_TELEGRAM_BOT,
+        hasWebhookUrl: Boolean(TELEGRAM_WEBHOOK_URL),
+      },
+    })
+  })
+
+  // Keep webhook route in createApp so it is registered regardless of bootstrap entrypoint.
+  app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
+    if (!START_TELEGRAM_BOT || !TELEGRAM_WEBHOOK_URL) {
+      return res.status(404).json({ ok: false, message: 'telegram webhook disabled' })
+    }
+
+    if (TELEGRAM_WEBHOOK_SECRET) {
+      const incomingSecret = req.get('x-telegram-bot-api-secret-token')?.trim() || ''
+      if (!incomingSecret || incomingSecret !== TELEGRAM_WEBHOOK_SECRET) {
+        return res.status(401).json({ ok: false, message: 'invalid telegram webhook secret' })
+      }
+    }
+
+    try {
+      await bot.handleUpdate(req.body)
+      return res.status(200).send('OK')
+    } catch (error) {
+      console.error('❌ [TELEGRAM WEBHOOK ERROR]', error)
+      return res.status(500).send('Webhook error')
+    }
+  })
 
   // FIX(18.05.2026): handle telegram root token before request logging — Codex
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -298,6 +336,7 @@ export function createApp(): Express {
   app.use('/api/notifications', notificationsRoutes)
   app.use('/debug', mentorDebugRoutes)
   app.use('/debug', dbAuditRouter)
+  app.use('/api/debug', dbAuditRouter)
 
   app.use('/api/mentor', mentorRoutes)
   app.use('/api/mentor', mentorWeeklyAnalysisRoutes)
@@ -326,6 +365,7 @@ export function createApp(): Express {
   app.use('/api/courses', miniCoursesRoutes)
   app.use('/api/social', socialRoutes)
   app.use('/api/subscriptions', subscriptionsRoutes)
+  app.post('/api/dev/focus/block12/resend', resendFocusBlock12DevHandler)
   app.get(
     '/api/payments/wayforpay/checkout/:token',
     renderWayForPayCheckoutPageHandler

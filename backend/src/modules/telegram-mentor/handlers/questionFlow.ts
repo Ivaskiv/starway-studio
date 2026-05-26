@@ -19,6 +19,7 @@ import type { SessionData } from '../types.js'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 type SessionKind = 'morning' | 'evening'
 
@@ -40,20 +41,20 @@ async function replyWithQuestion(ctx: Context, kind: SessionKind, index: number,
     const copy = buildRecoveryCopy('question_missing', resolveConversationProfile('stankey'), {
       relationship,
     })
-    await ctx.reply(`${copy.title}\n${copy.body}`, {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(ctx, 'ctx.reply', 'question_missing_reply', `${copy.title}\n${copy.body}`, replyMarkup)
     return
   }
 
   const total = questionSet[kind].length
   const hint = question.hint ? `\n\n<i>${question.hint}</i>` : ''
 
-  await ctx.reply(
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'question_prompt',
     `${getSessionTitle(kind)} · ${index + 1}/${total}\n\n<b>${question.text}</b>${hint}\n\nНапиши відповідь одним повідомленням.`,
-    {
-      parse_mode: 'HTML',
-    },
+    undefined,
+    'HTML',
   )
 }
 
@@ -67,9 +68,7 @@ export async function startQuestionSession(ctx: Context, kind: SessionKind, init
     const copy = buildRecoveryCopy('session_expired', resolveConversationProfile('stankey'), {
       nextStep: 'підключити Telegram до акаунта Starway',
     })
-    await ctx.reply(`${copy.title}\n${copy.body}`, {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(ctx, 'ctx.reply', 'question_session_expired', `${copy.title}\n${copy.body}`, replyMarkup)
     return
   }
 
@@ -81,11 +80,14 @@ export async function startQuestionSession(ctx: Context, kind: SessionKind, init
 
   if (synced.completedAt) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-    await ctx.reply(
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'question_session_completed',
       kind === 'morning'
         ? '✅ Ранкова сесія вже завершена. Дані синхронізовані між каналами.'
         : '✅ Вечірню сесію вже завершено. Дані синхронізовані між каналами.',
-      replyMarkup ? { reply_markup: replyMarkup } : undefined,
+      replyMarkup,
     )
     return
   }
@@ -116,9 +118,7 @@ export async function resumeQuestionSession(ctx: Context) {
       step: 'morning_q1',
       relationship,
     })
-    await ctx.reply(`${copy.title}\n${copy.body}`, {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(ctx, 'ctx.reply', 'question_resume_interrupted', `${copy.title}\n${copy.body}`, replyMarkup)
     return
   }
 
@@ -154,9 +154,7 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
       context: kind === 'morning' ? 'ранкова сесія' : 'вечірня рефлексія',
       relationship,
     })
-    await ctx.reply(`${copy.title}\n${copy.body}`, {
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-    })
+    await planMessage(ctx, 'ctx.reply', 'question_missing_in_answer', `${copy.title}\n${copy.body}`, replyMarkup)
     return
   }
 
@@ -199,10 +197,13 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
   await clearSession(session.userId, chatId)
   const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
 
-    await ctx.reply(
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'question_session_saved',
       kind === 'morning'
         ? '✅ Ранковий крок збережено. Я залишив наступну дію на місці.'
         : '✅ Вечірню дію збережено. Історію дня підхоплено без втрат.',
-    replyMarkup ? { reply_markup: replyMarkup } : undefined,
+    replyMarkup,
   )
 }

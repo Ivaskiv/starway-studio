@@ -8,6 +8,7 @@ import { renderDecisionUnlessAllowed } from '../services/decisionTransport.servi
 import { isLmOnlyModeEnabled } from '../runtime.js'
 import { resolveUserLifecycle } from '../../flow-control/service.js'
 import { resolveCentralLifecycleSnapshot } from '../../lifecycle/service.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 export type AIMentorEntryScenario = 'FIRST_ENTRY' | 'RETURN_WITH_CONTEXT' | 'STUCK_AT_POINT'
 
@@ -214,11 +215,9 @@ export async function handleAIMentor(ctx: Context) {
   const entry = await resolveAIMentorEntry(session.userId)
   const copy = resolveAIMentorCopy(entry.scenario, entry.context)
 
-  await ctx.reply(copy.text, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: copy.cta, callback_data: 'continue_ai_mentor' }],
-      ],
-    },
+  await planMessage(ctx, 'ctx.reply', 'ai_mentor_entry', copy.text, {
+    inline_keyboard: [
+      [{ text: copy.cta, callback_data: 'continue_ai_mentor' }],
+    ],
   })
 }

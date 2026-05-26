@@ -122,8 +122,7 @@ export async function getAdminClients(req: AuthenticatedRequest, res: Response) 
     select: {
       id: true,
       email: true,
-      name: true,
-      firstName: true,
+            firstName: true,
       lastName: true,
       role: true,
       createdAt: true,

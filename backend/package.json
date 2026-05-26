@@ -7,6 +7,9 @@
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "typecheck": "pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc --noEmit",
+    "user:consolidation:dry": "tsx src/scripts/user-consolidation-backfill.ts",
+    "user:consolidation:apply": "tsx src/scripts/user-consolidation-backfill.ts --apply",
+    "user:consolidation:apply:clear-name": "tsx src/scripts/user-consolidation-backfill.ts --apply --clear-legacy-name",
     "vercel-build": "pnpm run build"
   },
   "dependencies": {
@@ -17,6 +20,7 @@
     "@starway/db": "workspace:*",
     "@supabase/supabase-js": "^2.105.1",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.77.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
@@ -24,6 +28,7 @@
     "express-rate-limit": "^6.11.2",
     "fastify": "^5.7.4",
     "get-stream": "^9.0.1",
+    "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.1",
     "nanoid": "^5.1.6",

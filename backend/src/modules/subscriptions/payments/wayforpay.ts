@@ -6,9 +6,9 @@ import crypto from 'crypto';
 import type { PaymentData } from '../types.js';
 import { getWayForPayCallbackUrl } from './callbackUrl.js';
 
-const MERCHANT_ACCOUNT  = process.env.WAYFORPAY_MERCHANT_ACCOUNT  ?? process.env.WAYFORPAY_MERCHANT ?? '';
-const MERCHANT_DOMAIN   = process.env.WAYFORPAY_MERCHANT_DOMAIN   ?? '';
-const MERCHANT_SECRET   = process.env.WAYFORPAY_SECRET_KEY        ?? process.env.WAYFORPAY_SECRET ?? '';
+const MERCHANT_ACCOUNT  = process.env.WAYFORPAY_MERCHANT ?? '';
+const MERCHANT_DOMAIN   = process.env.WAYFORPAY_MERCHANT_DOMAIN ?? '';
+const MERCHANT_SECRET   = process.env.WAYFORPAY_SECRET ?? '';
 
 /** Генерує HMAC-MD5 підпис для ініціалізаційного запиту WayForPay */
 export function generatePaymentSignature(data: PaymentData, orderDate: number): string {

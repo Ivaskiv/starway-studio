@@ -55,16 +55,28 @@ export function resolveBrowserTestUrl(): string {
   return `${base}/ab-test`
 }
 
+export function resolveBrowserTestUrlOrNull(): string | null {
+  try {
+    return resolveBrowserTestUrl()
+  } catch {
+    return null
+  }
+}
+
 export function buildWebAppButton(
   label: string,
   path: string,
-): TelegramWebAppButton {
+): TelegramWebAppButton | null {
   const webappBase = normalizeEnvBaseUrl(process.env.TELEGRAM_WEBAPP_BASE_URL)
 
   if (!isTelegramSafeHttpsUrl(webappBase)) {
+    const browserUrl = resolveBrowserTestUrlOrNull()
+    if (!browserUrl) {
+      return null
+    }
     return {
       text: label,
-      url: resolveBrowserTestUrl(),
+      url: browserUrl,
     }
   }
 

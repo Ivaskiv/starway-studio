@@ -99,6 +99,15 @@ const REHYDRATE_COOLDOWN_MS = 1500
 const DEBUG_LOG_LIMIT = 50
 const SAFE_GUEST_FALLBACK_ROUTE = '/'
 
+function logAuthTrace(event: string, data: Record<string, unknown> = {}): void {
+  if (!import.meta.env.DEV) return
+  console.info('[AUTH_TRACE]', {
+    event,
+    at: new Date().toISOString(),
+    ...data,
+  })
+}
+
 function isProtectedPath(pathname: string): boolean {
   const normalized = normalizeDashboardRoutePath(pathname)
   const normalizedMeta = ROUTE_METADATA[normalized as keyof typeof ROUTE_METADATA]
@@ -343,6 +352,11 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
     }
 
     const hadEvidence = hasRecoverableSessionEvidence()
+    logAuthTrace('hydrationStarted', {
+      reason,
+      tokenFound: hadEvidence,
+      routeGuardTriggered: isProtectedPath(locationPathRef.current),
+    })
     setAuthRestoreStatus('restoring')
     setAppState('auth_restoring')
     setRestoreAttempted(true)
@@ -360,23 +374,46 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
       theme: themeRef.current,
     })
       .then(async (restored) => {
+        const durationMs = Date.now() - now
         setRestoreAtAndStatus(now)
         if (restored) {
           setRestoreFailureWithEvidence(false)
           setAuthRestoreStatus('ready')
+          logAuthTrace('hydrationFinished', {
+            reason,
+            ok: true,
+            durationMs,
+            tokenValid: true,
+          })
           pushDebugEvent('restore.succeeded', { reason, path: locationPathRef.current })
           return true
         }
 
         setRestoreFailureWithEvidence(hadEvidence)
         setAuthRestoreStatus('failed')
+        logAuthTrace('hydrationFinished', {
+          reason,
+          ok: false,
+          durationMs,
+          tokenValid: false,
+          logoutReason: hadEvidence ? 'restore_failed_with_evidence' : 'no_session_evidence',
+        })
         pushDebugEvent('restore.failed', { reason, hadEvidence, path: locationPathRef.current })
         return false
       })
       .catch((error) => {
+        const durationMs = Date.now() - now
         setRestoreAtAndStatus(now)
         setRestoreFailureWithEvidence(hadEvidence)
         setAuthRestoreStatus('failed')
+        logAuthTrace('hydrationFinished', {
+          reason,
+          ok: false,
+          durationMs,
+          tokenValid: false,
+          logoutReason: 'restore_exception',
+          unauthorizedSource: error instanceof Error ? error.message : 'unknown',
+        })
         pushDebugEvent('restore.errored', {
           reason,
           hadEvidence,
@@ -487,6 +524,11 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
     if (!isProtectedRoute || appState === 'auth_restoring') return
 
     if (!isAuthenticated && restoreAttempted) {
+      logAuthTrace('routeGuardTriggered', {
+        routeGuardTriggered: true,
+        authRestoreStatus,
+        unauthorizedSource: 'protected_route_modal',
+      })
       const currentPath = `${location.pathname}${location.search}`
       if (dismissedProtectedPathRef.current === currentPath) {
         return

@@ -187,7 +187,7 @@ function createBillingSchedulerTestDb() {
           .filter((user) => {
             if (
               where?.lifecycleState &&
-              user.lifecycleState !== where.lifecycleState
+              user['lifecycleState' as keyof typeof user] !== where.lifecycleState
             )
               return false
             if (
@@ -350,13 +350,13 @@ export async function runFlowTests() {
     'canonical message key mapping failed'
   )
   assert(
-    resolveStartScenario({ lifecycleState: 'new', testResultType: null }) ===
+    resolveStartScenario({ lifecycle: 'new', testResultType: null }) ===
       'FIRST_TIME_USER',
     'start scenario first time user failed'
   )
   assert(
     resolveStartScenario({
-      lifecycleState: 'focus_active',
+      lifecycle: 'focus_active',
       testResultType: 'STATE',
     }) === 'FOCUS_PARTICIPANT',
     'start scenario focus participant failed'
@@ -365,7 +365,7 @@ export async function runFlowTests() {
   assert(
     resolveComeback({
       lastActivityDays: 10,
-      lifecycleState: 'platform_active',
+      lifecycle: 'platform_active',
     }) === 'GAP_7_14',
     'resolveComeback gap 7_14 failed'
   )
@@ -380,7 +380,7 @@ export async function runFlowTests() {
 
   assert(
     resolveAiSellerMode({
-      lifecycleState: 'result_opened',
+      lifecycle: 'result_opened',
       testResultType: 'STATE',
       zoomCount: 0,
       daysToExpiry: null,

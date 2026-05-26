@@ -68,7 +68,7 @@ export const productsApi = api.injectEndpoints({
     // ================== AI MENTOR ==================
     getAIMentorSettings: builder.query<AIMentorSettings, string>({
       query: (productId) => `/products/${productId}/ai-mentor`,
-      providesTags: ['AIMentor'],
+      providesTags: ['AiMentor'],
     }),
 
     createAIMentorSettings: builder.mutation<AIMentorSettings, AIMentorSettings>({
@@ -77,7 +77,7 @@ export const productsApi = api.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['AIMentor'],
+      invalidatesTags: ['AiMentor'],
     }),
         getMyProductMemberships: builder.query<ProductMember[], void>({
           query: () => '/product-members/me',
