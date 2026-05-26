@@ -1,13 +1,14 @@
 packages:
-  - 'backend'
-  - 'apps/*'
-  - 'packages/*'
-  - 'video-hooks'
+  - "apps/*"
+  - "backend"
+  - "packages/*"
+  - "video-hooks"
+
 onlyBuiltDependencies:
+  - "@parcel/watcher"
   - "@prisma/client"
   - "@prisma/engines"
-  - "prisma"
-  - "esbuild"
-  - "@parcel/watcher"
   - "core-js"
+  - "esbuild"
   - "msgpackr-extract"
+  - "prisma"

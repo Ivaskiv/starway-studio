@@ -1,6 +1,7 @@
 import { AiProviderMonitor } from '@/features/sales-assistant/components/AiProvider'
 import { AiPositionSection } from '@/features/sales-assistant/components/AiPositionSection'
 import { StrategicCards } from '@/features/sales-assistant/components/ArtifactCards'
+import DnaGenerationPanel from '@/features/sales-assistant/components/DnaGenerationPanel'
 import { GenerationStepSection } from '@/features/sales-assistant/components/GenerationStepSection'
 import { HistoryPanel } from '@/features/sales-assistant/components/History'
 import { InputEngineSection } from '@/features/sales-assistant/components/InputEngineSection'
@@ -986,6 +987,8 @@ export default function SalesAssistantPage() {
                 </Fragment>
               ))}
             </div>
+
+            <DnaGenerationPanel />
 
             <InputEngineSection
               inputMethod={inputMethod}

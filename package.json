@@ -6,16 +6,23 @@
     "dev": "concurrently -c blue,magenta -n backend,web \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\"",
     "dev:tunnel": "concurrently -c blue,magenta,green -n backend,web,tunnel \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir backend exec tsx ../scripts/dev/sync-ngrok.ts'\"",
     "dev:clean": "kill -9 $(lsof -ti :3001) $(lsof -ti :5173) 2>/dev/null || true; pkill ngrok 2>/dev/null || true; pnpm dev:tunnel",
+
     "prisma": "pnpm --filter @starway/db exec prisma",
     "prisma:generate": "pnpm --filter @starway/db run prisma:generate",
     "prisma:db:push": "pnpm --filter @starway/db run prisma:db:push",
     "prisma:migrate": "pnpm --filter @starway/db run prisma:migrate",
     "prisma:migrate:deploy": "pnpm --filter @starway/db run prisma:migrate:deploy",
+
     "build": "pnpm --dir packages/shared build && pnpm --dir packages/db build && pnpm --filter @starway/ai run build && pnpm --dir backend build && pnpm --dir apps/web build",
+
     "start": "pnpm --dir backend start",
+
     "clean": "pnpm --dir packages/shared clean && pnpm --dir packages/db clean && pnpm --dir packages/ai clean && pnpm --dir backend clean && pnpm --dir apps/web clean",
+
     "typecheck": "pnpm --dir packages/shared typecheck && pnpm --dir packages/db typecheck && pnpm --dir packages/ai typecheck && pnpm --dir backend typecheck && pnpm --dir apps/web typecheck",
+
     "vercel-build": "pnpm build",
+
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:unit": "vitest"
@@ -25,15 +32,5 @@
     "@types/node": "^25.9.0",
     "concurrently": "^8.2.2"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/client",
-      "@prisma/engines",
-      "prisma",
-      "esbuild",
-      "@parcel/watcher",
-      "core-js",
-      "msgpackr-extract"
-    ]
-  }
+  "packageManager": "pnpm@11.3.0"
 }
