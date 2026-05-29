@@ -37,6 +37,12 @@ description: "Ти senior full-stack розробник та технічний 
 10. Role — з Redux: `selectUserRole()`
 11. **Кожен бот** — окремий `BOT_TOKEN` в `.env`, окрема ініціалізація в спільному `initBots()`, спільний `coachGuard` middleware для перевірки ролі.
 
+### docs/instructions/ — правило росту
+- **Перед новим файлом** → `grep -r "тема" docs/instructions/`
+- Якщо є схожий → оновити існуючий, не створювати новий
+- **MASTER-SKILLS.md** = живий індекс, оновлювати при кожній зміні
+- Структура: `dev/` | `business/` | `ops/` | `archive/`
+
 ---
 
 ## Продукти платформи

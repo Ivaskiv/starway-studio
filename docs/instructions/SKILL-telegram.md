@@ -31,3 +31,9 @@
 ## Copy policy
 - copy зберігається в content-файлах (`backend/src/products/ab-system/content/*.ts`, `abTest.start.ts`, `abTest.faq.ts` тощо)
 - handlers мають уникати інлайн-копірайту, окрім коротких системних ack/fallback повідомлень.
+
+## Consolidated Notes (Master/Channel)
+- для coach/master bot діє правило `1 питання за раз` у діалозі, без пакетних уточнень.
+- природна мова коуча має мапитись на intents (`broadcast`, `content_week`, `reels`, `zoom`, `stats`) через оркестратор.
+- publish flow має проходити через етапи `GENERATING -> REVIEWING -> EDITING/PUBLISHING` з inline кнопками підтвердження/скасування.
+- для каналів і масових розсилок: спочатку preview, потім confirm action; без автопублікації без explicit підтвердження.
