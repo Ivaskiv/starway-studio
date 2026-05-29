@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Starway Studio — Форма запиту на бот / канал</title>
+<style>
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface2: #22222a;
+    --border: #2e2e3a;
+    --border-active: #7c6fff;
+    --text: #f0f0f4;
+    --text-muted: #7a7a8c;
+    --text-hint: #4a4a5a;
+    --accent: #7c6fff;
+    --accent-dim: #3d3580;
+    --accent-glow: rgba(124,111,255,0.15);
+    --success: #3ecf8e;
+    --warn: #f5a623;
+    --danger: #ff5f5f;
+    --radius: 10px;
+    --radius-lg: 16px;
+    --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* Header */
+  .header {
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .logo-mark {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; color: #fff;
+  }
+  .logo-name { font-size: 15px; font-weight: 600; color: var(--text); }
+  .logo-sub { font-size: 12px; color: var(--text-muted); }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .subtitle { font-size: 14px; color: var(--text-muted); }
+
+  /* Progress */
+  .progress-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 32px;
+  }
+  .progress-step {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    transition: background 0.3s;
+  }
+  .progress-step.done { background: var(--accent); }
+  .progress-step.active { background: var(--accent); opacity: 0.5; }
+
+  /* Sections */
+  .section {
+    margin-bottom: 32px;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .section-num {
+    width: 24px; height: 24px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* Fields */
+  .field { margin-bottom: 16px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    letter-spacing: 0.03em;
+  }
+  label .req { color: var(--accent); margin-left: 3px; }
+  label .hint { font-weight: 400; color: var(--text-hint); margin-left: 6px; }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="url"],
+  textarea,
+  select {
+    width: 100%;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+    appearance: none;
+  }
+  input:focus, textarea:focus, select:focus {
+    border-color: var(--border-active);
+    background: var(--surface2);
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-hint); }
+  textarea { resize: vertical; min-height: 80px; }
+  select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7a8c' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+
+  /* Radio / Checkbox group */
+  .option-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px;
+  }
+  .option-card {
+    position: relative;
+  }
+  .option-card input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .option-card label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text);
+    margin: 0;
+    letter-spacing: 0;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .option-card input:checked + label {
+    border-color: var(--border-active);
+    background: var(--accent-glow);
+    color: var(--text);
+  }
+  .option-card label .dot {
+    width: 14px; height: 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .option-card input:checked + label .dot {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  /* Commands builder */
+  .commands-list { display: flex; flex-direction: column; gap: 8px; }
+  .command-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 32px;
+    gap: 8px;
+    align-items: center;
+  }
+  .command-row input[type="text"] { font-family: var(--mono); font-size: 13px; }
+  .cmd-remove {
+    width: 32px; height: 32px;
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .cmd-remove:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* Add button */
+  .btn-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 0.5px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 8px 14px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-add:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Divider */
+  .divider {
+    height: 0.5px;
+    background: var(--border);
+    margin: 28px 0;
+  }
+
+  /* Info box */
+  .info-box {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-left: 2px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    line-height: 1.7;
+  }
+  .info-box strong { color: var(--text); }
+
+  /* Submit area */
+  .submit-area {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 32px;
+  }
+  .btn-submit {
+    width: 100%;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 14px 24px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    letter-spacing: 0.02em;
+  }
+  .btn-submit:hover { opacity: 0.88; }
+  .btn-secondary {
+    width: 100%;
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 12px 24px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .btn-secondary:hover { border-color: var(--text-muted); }
+
+  /* Output preview */
+  .output-box {
+    display: none;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-top: 24px;
+  }
+  .output-box.visible { display: block; }
+  .output-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+  .output-code {
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--success);
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.8;
+  }
+  .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 6px 12px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Required field marker */
+  .field-required-hint {
+    font-size: 11px;
+    color: var(--text-hint);
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 0.5px solid var(--border);
+  }
+
+  @media (max-width: 560px) {
+    .field-row { grid-template-columns: 1fr; }
+    .command-row { grid-template-columns: 1fr 1fr 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-mark">S</div>
+      <div>
+        <div class="logo-name">Starway Studio</div>
+        <div class="logo-sub">ABSystem · Bot Setup</div>
+      </div>
+    </div>
+    <h1>Запит на створення бота / каналу</h1>
+    <p class="subtitle">Заповни форму — розробник отримає всі дані для налаштування без зайвих питань</p>
+  </div>
+
+  <div class="progress-bar">
+    <div class="progress-step done" id="p1"></div>
+    <div class="progress-step" id="p2"></div>
+    <div class="progress-step" id="p3"></div>
+    <div class="progress-step" id="p4"></div>
+    <div class="progress-step" id="p5"></div>
+  </div>
+
+  <form id="botForm">
+
+    <!-- СЕКЦІЯ 1: Замовник -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">1</div>
+        <div class="section-title">Контакт замовника</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Ім'я / назва проекту <span class="req">*</span></label>
+          <input type="text" id="clientName" placeholder="Надя Starway" required>
+        </div>
+        <div class="field">
+          <label>Telegram <span class="req">*</span> <span class="hint">@username</span></label>
+          <input type="text" id="clientTg" placeholder="@nadyastarway" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Email <span class="hint">для отримання звіту</span></label>
+        <input type="email" id="clientEmail" placeholder="nadya@starway.com">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- СЕКЦІЯ 2: Тип -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">2</div>
+        <div class="section-title">Що створюємо</div>
+      </div>
+
+      <div class="field">
+        <label>Тип <span class="req">*</span></label>
+        <div class="option-grid">
+          <div class="option-card">
+            <input type="radio" name="botType" id="t1" value="user_bot" checked>
+            <label for="t1"><span class="dot"></span>Бот для учасників</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="botType" id="t2" value="coach_bot">
+            <label for="t2"><span class="dot"></span>Коуч-панель (бот)</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="botType" id="t3" value="sales_bot">
+            <label for="t3"><span class="dot"></span>AI Seller (продажі)</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="botType" id="t4" value="channel">
+            <label for="t4"><span class="dot"></span>Канал / група</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="botType" id="t5" value="test_bot">
+            <label for="t5"><span class="dot"></span>Вхідний тест</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="botType" id="t6" value="admin_bot">
+            <label for="t6"><span class="dot"></span>Адмін-панель</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="field" id="channelTypeField" style="display:none">
+        <label>Тип каналу</label>
+        <div class="option-grid">
+          <div class="option-card">
+            <input type="radio" name="channelType" id="ch1" value="public">
+            <label for="ch1"><span class="dot"></span>Публічний</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="channelType" id="ch2" value="private">
+            <label for="ch2"><span class="dot"></span>Приватний</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="channelType" id="ch3" value="group">
+            <label for="ch3"><span class="dot"></span>Група</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- СЕКЦІЯ 3: Ідентифікація -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">3</div>
+        <div class="section-title">Ідентифікація в Telegram</div>
+      </div>
+
+      <div class="info-box">
+        <strong>Як вибрати username:</strong> тільки латиниця, цифри, підкреслення. Мін. 5 символів. Username бота закінчується на <code style="color:var(--accent)">_bot</code> або <code style="color:var(--accent)">Bot</code> — Telegram додає автоматично.
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Публічна назва <span class="req">*</span> <span class="hint">видна в чаті</span></label>
+          <input type="text" id="botDisplayName" placeholder="Starway DNA" required>
+        </div>
+        <div class="field">
+          <label>Username <span class="req">*</span> <span class="hint">@username_bot</span></label>
+          <input type="text" id="botUsername" placeholder="Starway_DNA_Bot" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Мова інтерфейсу <span class="req">*</span></label>
+        <div class="option-grid">
+          <div class="option-card">
+            <input type="radio" name="botLang" id="l1" value="uk" checked>
+            <label for="l1"><span class="dot"></span>Українська</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="botLang" id="l2" value="ru">
+            <label for="l2"><span class="dot"></span>Русский</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="botLang" id="l3" value="en">
+            <label for="l3"><span class="dot"></span>English</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- СЕКЦІЯ 4: Контент -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">4</div>
+        <div class="section-title">Контент та команди</div>
+      </div>
+
+      <div class="field">
+        <label>Опис бота <span class="req">*</span> <span class="hint">до 120 символів — показується в профілі</span></label>
+        <textarea id="botDescription" placeholder="Коуч-панель Starway Studio. Управляй розкладом, аналітикою та учасниками прямо в Telegram." maxlength="120"></textarea>
+        <div style="font-size:11px; color:var(--text-hint); margin-top:4px; text-align:right;"><span id="descCount">0</span>/120</div>
+      </div>
+
+      <div class="field">
+        <label>Welcome-повідомлення <span class="req">*</span> <span class="hint">перше що бачить користувач</span></label>
+        <textarea id="welcomeText" placeholder="Привіт! Це твоя коуч-панель Starway DNA. Тут ти керуєш розкладом, бачиш аналітику та отримуєш сповіщення від платформи." style="min-height:100px;"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Команди бота <span class="hint">будуть показані в меню Telegram</span></label>
+        <div class="commands-list" id="commandsList">
+          <div class="command-row">
+            <input type="text" placeholder="/start" value="/start">
+            <input type="text" placeholder="Головне меню">
+            <button type="button" class="cmd-remove" onclick="removeCmd(this)">×</button>
+          </div>
+          <div class="command-row">
+            <input type="text" placeholder="/schedule" value="/schedule">
+            <input type="text" placeholder="Мій розклад">
+            <button type="button" class="cmd-remove" onclick="removeCmd(this)">×</button>
+          </div>
+          <div class="command-row">
+            <input type="text" placeholder="/analytics" value="/analytics">
+            <input type="text" placeholder="Аналітика ДНК">
+            <button type="button" class="cmd-remove" onclick="removeCmd(this)">×</button>
+          </div>
+        </div>
+        <button type="button" class="btn-add" onclick="addCmd()">+ Додати команду</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- СЕКЦІЯ 5: Технічні деталі -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">5</div>
+        <div class="section-title">Технічні деталі</div>
+      </div>
+
+      <div class="field">
+        <label>Роль у системі <span class="req">*</span> <span class="hint">хто матиме доступ</span></label>
+        <div class="option-grid">
+          <div class="option-card">
+            <input type="radio" name="sysRole" id="r1" value="USER">
+            <label for="r1"><span class="dot"></span>USER (всі)</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="sysRole" id="r2" value="EXPERT" checked>
+            <label for="r2"><span class="dot"></span>EXPERT (коуч)</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="sysRole" id="r3" value="SUPERADMIN">
+            <label for="r3"><span class="dot"></span>SUPERADMIN</label>
+          </div>
+          <div class="option-card">
+            <input type="radio" name="sysRole" id="r4" value="ANY">
+            <label for="r4"><span class="dot"></span>Будь-хто</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>.env змінна <span class="req">*</span> <span class="hint">назва для токена</span></label>
+        <input type="text" id="envVar" placeholder="COACH_BOT_TOKEN" style="font-family: var(--mono); font-size:13px;" oninput="updateEnvPreview()">
+      </div>
+
+      <div class="field">
+        <label>Пов'язаний канал <span class="hint">якщо є — username каналу</span></label>
+        <input type="text" id="linkedChannel" placeholder="@starway_focus_channel">
+      </div>
+
+      <div class="field">
+        <label>Додаткові побажання / контекст</label>
+        <textarea id="notes" placeholder="Наприклад: бот має надсилати нотифікації при новій оплаті, показувати тижневий розклад зумів, мати кнопку для закриття слотів..." style="min-height:90px;"></textarea>
+      </div>
+    </div>
+
+    <div class="field-required-hint">
+      <span style="color:var(--accent)">*</span> — обов'язкове поле
+    </div>
+
+    <div class="submit-area">
+      <button type="button" class="btn-submit" onclick="generateOutput()">
+        Згенерувати технічне завдання для розробника →
+      </button>
+      <button type="button" class="btn-secondary" onclick="resetForm()">
+        Очистити форму
+      </button>
+    </div>
+
+  </form>
+
+  <!-- OUTPUT -->
+  <div class="output-box" id="outputBox">
+    <div class="output-title">Технічне завдання — передати розробнику</div>
+    <div class="output-code" id="outputCode"></div>
+    <button class="copy-btn" onclick="copyOutput()">⎘ Копіювати</button>
+  </div>
+
+</div>
+
+<script>
+// Progress tracking
+const fields = ['clientName','clientTg','botDisplayName','botUsername','botDescription','welcomeText','envVar'];
+function updateProgress() {
+  const filled = fields.filter(id => {
+    const el = document.getElementById(id);
+    return el && el.value.trim().length > 0;
+  }).length;
+  const steps = document.querySelectorAll('.progress-step');
+  const pct = filled / fields.length;
+  steps.forEach((s, i) => {
+    s.classList.remove('done','active');
+    const threshold = (i + 1) / steps.length;
+    if (pct >= threshold) s.classList.add('done');
+    else if (pct >= threshold - 0.2) s.classList.add('active');
+  });
+}
+document.querySelectorAll('input,textarea').forEach(el => {
+  el.addEventListener('input', updateProgress);
+});
+
+// Description counter
+document.getElementById('botDescription').addEventListener('input', function() {
+  document.getElementById('descCount').textContent = this.value.length;
+});
+
+// Channel type toggle
+document.querySelectorAll('input[name="botType"]').forEach(r => {
+  r.addEventListener('change', function() {
+    document.getElementById('channelTypeField').style.display =
+      this.value === 'channel' ? 'block' : 'none';
+  });
+});
+
+// Commands
+function addCmd() {
+  const list = document.getElementById('commandsList');
+  const row = document.createElement('div');
+  row.className = 'command-row';
+  row.innerHTML = `
+    <input type="text" placeholder="/command">
+    <input type="text" placeholder="Опис команди">
+    <button type="button" class="cmd-remove" onclick="removeCmd(this)">×</button>`;
+  list.appendChild(row);
+}
+function removeCmd(btn) {
+  const rows = document.querySelectorAll('.command-row');
+  if (rows.length > 1) btn.closest('.command-row').remove();
+}
+
+// Env var auto-suggest
+document.getElementById('botUsername').addEventListener('input', function() {
+  const v = this.value.replace(/[^a-zA-Z0-9]/g,'').toUpperCase();
+  const env = document.getElementById('envVar');
+  if (!env.value) env.value = v ? v + '_BOT_TOKEN' : '';
+  updateEnvPreview();
+});
+function updateEnvPreview() {}
+
+// Generate output
+function generateOutput() {
+  const get = id => (document.getElementById(id)||{}).value || '';
+  const radio = name => { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ''; };
+
+  const cmds = [];
+  document.querySelectorAll('.command-row').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    if (inputs[0].value) cmds.push(`  ${inputs[0].value.trim()} — ${inputs[1].value.trim()}`);
+  });
+
+  const typeLabels = {
+    user_bot: 'Бот для учасників (USER)',
+    coach_bot: 'Коуч-панель (EXPERT/SUPERADMIN)',
+    sales_bot: 'AI Seller (продажі)',
+    channel: 'Telegram канал/група',
+    test_bot: 'Вхідний тест',
+    admin_bot: 'Адмін-панель'
+  };
+
+  const output = `# Bot Setup Request — ${get('botDisplayName')}
+Generated: ${new Date().toLocaleDateString('uk-UA')}
+
+## Замовник
+Ім'я: ${get('clientName')}
+Telegram: ${get('clientTg')}
+Email: ${get('clientEmail') || '—'}
+
+## Ідентифікація
+Тип: ${typeLabels[radio('botType')] || radio('botType')}
+Публічна назва: ${get('botDisplayName')}
+Username: @${get('botUsername').replace('@','')}
+Мова: ${radio('botLang')}
+
+## Контент
+Опис (BotFather /setdescription):
+${get('botDescription')}
+
+Welcome-повідомлення:
+${get('welcomeText')}
+
+Команди (BotFather /setcommands):
+${cmds.join('\n') || '  /start — Головне меню'}
+
+## Технічні деталі
+Роль у системі: ${radio('sysRole')}
+.env змінна: ${get('envVar')}
+Пов'язаний канал: ${get('linkedChannel') || '—'}
+
+Нотатки:
+${get('notes') || '—'}
+
+## Чекліст для розробника
+[ ] BotFather: створити бота з username @${get('botUsername').replace('@','')}
+[ ] BotFather: /setdescription
+[ ] BotFather: /setcommands
+[ ] .env: додати ${get('envVar')}=<TOKEN>
+[ ] .env.example: додати ${get('envVar')}=
+[ ] initBots(): додати ініціалізацію
+[ ] bot/guards/: guard для ролі ${radio('sysRole')}
+[ ] bot/content/${get('botUsername').replace('@','').replace('Bot','').replace('_bot','').toLowerCase()}.content.ts: copy
+[ ] bot/handlers/: start handler
+[ ] pnpm -C backend exec tsc --noEmit → green`;
+
+  document.getElementById('outputCode').textContent = output;
+  document.getElementById('outputBox').classList.add('visible');
+  document.getElementById('outputBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function copyOutput() {
+  const text = document.getElementById('outputCode').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✓ Скопійовано';
+    setTimeout(() => btn.innerHTML = '⎘ Копіювати', 2000);
+  });
+}
+
+function resetForm() {
+  document.getElementById('botForm').reset();
+  document.getElementById('descCount').textContent = '0';
+  document.getElementById('outputBox').classList.remove('visible');
+  updateProgress();
+}
+
+updateProgress();
+</script>
+</body>
+</html>
