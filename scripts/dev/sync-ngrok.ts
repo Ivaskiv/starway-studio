@@ -297,6 +297,28 @@ async function syncTelegramWebhook(
   const webhookUrl =
     `${publicUrl}${TELEGRAM_WEBHOOK_PATH}`
 
+  const infoResponse = await fetch(
+    `https://api.telegram.org/bot${token}/getWebhookInfo`,
+  )
+  const infoBody = (await infoResponse
+    .json()
+    .catch(() => null)) as
+    | {
+        ok?: boolean
+        result?: { url?: string }
+        description?: string
+      }
+    | null
+
+  const currentWebhookUrl = infoBody?.result?.url?.trim() ?? ''
+  if (currentWebhookUrl === webhookUrl) {
+    log(
+      'TELEGRAM',
+      `webhook already up-to-date (${webhookUrl}), skipping setWebhook`,
+    )
+    return
+  }
+
   // FIX 2025-05-25 B2: retry setWebhook when Telegram returns rate limit (429)
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const response = await fetch(
