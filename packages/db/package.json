@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "prisma": {
     "schema": "prisma/schema.prisma",
     "seed": "tsx prisma/seed.ts"
