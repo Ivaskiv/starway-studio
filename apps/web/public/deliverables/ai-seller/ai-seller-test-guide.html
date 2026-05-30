@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Seller — Starway Studio · Посібник тестування</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#0D0E1A;--paper:#F5F3EE;--cream:#EDE9E0;--blue:#1A3C8F;--blue-mid:#2D55C0;
+    --blue-light:#EBF0FF;--accent:#E85A1A;--accent-light:#FFF0E8;--green:#1A7A4A;
+    --green-light:#E8F5EE;--warm:#C8820A;--warm-light:#FFF8E8;--cold:#4A7AB5;
+    --cold-light:#EBF3FF;--hot:#C01A1A;--hot-light:#FFF0F0;--rule:rgba(13,14,26,0.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);font-size:15px;line-height:1.65}
+  .site-header{background:var(--ink);padding:0;position:sticky;top:0;z-index:100;border-bottom:3px solid var(--accent)}
+  .header-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:56px}
+  .logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:#fff;display:flex;align-items:center;gap:10px}
+  .logo span{color:var(--accent)}
+  .progress-bar{height:3px;background:rgba(255,255,255,0.1);position:absolute;bottom:-3px;left:0;width:100%}
+  .progress-fill{height:100%;background:var(--accent);width:0%;transition:width 0.3s ease}
+  .hero{background:var(--ink);color:#fff;padding:80px 32px 60px;text-align:center;position:relative;overflow:hidden}
+  .hero::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 60px,rgba(255,255,255,0.015) 60px,rgba(255,255,255,0.015) 61px)}
+  .hero-badge{display:inline-block;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);padding:5px 14px;border-radius:2px;margin-bottom:24px}
+  .hero h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(52px,8vw,96px);letter-spacing:4px;line-height:0.95;margin-bottom:20px}
+  .hero h1 em{color:var(--accent);font-style:normal}
+  .hero p{font-size:17px;color:rgba(255,255,255,0.65);max-width:560px;margin:0 auto 40px}
+  .hero-chips{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .chip{font-family:'DM Mono',monospace;font-size:12px;padding:6px 14px;border-radius:2px;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.7)}
+  .wrapper{max-width:1100px;margin:0 auto;padding:0 32px 80px}
+  .section{margin-top:80px}
+  .section-header{display:flex;align-items:flex-end;gap:20px;margin-bottom:32px;padding-bottom:16px;border-bottom:2px solid var(--ink)}
+  .section-num{font-family:'Bebas Neue',sans-serif;font-size:72px;line-height:1;color:var(--cream);letter-spacing:2px}
+  .section-title h2{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:2px;color:var(--ink)}
+  .section-title p{font-size:14px;color:rgba(13,14,26,0.5);margin-top:2px}
+  .callout{padding:18px 22px;border-radius:4px;margin:20px 0;border-left:4px solid;font-size:14px;line-height:1.6}
+  .callout.info{background:var(--blue-light);border-color:var(--blue);color:var(--blue)}
+  .callout.warn{background:var(--accent-light);border-color:var(--accent);color:#7A2A08}
+  .callout.success{background:var(--green-light);border-color:var(--green);color:#0D4A2A}
+  .callout strong{display:block;font-size:13px;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:6px;opacity:0.7}
+  .steps{display:grid;gap:16px}
+  .step{display:flex;gap:20px;align-items:flex-start;background:#fff;border:1px solid var(--rule);border-radius:6px;padding:20px 24px;transition:box-shadow 0.2s}
+  .step:hover{box-shadow:0 4px 20px rgba(13,14,26,0.08)}
+  .step-num{flex-shrink:0;width:40px;height:40px;background:var(--ink);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;display:flex;align-items:center;justify-content:center;border-radius:4px}
+  .step-content h3{font-size:15px;font-weight:600;margin-bottom:4px}
+  .step-content p{font-size:14px;color:rgba(13,14,26,0.65)}
+  .code-block{background:#0D0E1A;border-radius:6px;overflow:hidden;margin:20px 0}
+  .code-block-header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.08)}
+  .code-label{font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,0.4);letter-spacing:1px;text-transform:uppercase}
+  .copy-btn{font-family:'DM Mono',monospace;font-size:11px;padding:4px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:3px;cursor:pointer;transition:all 0.15s;letter-spacing:0.5px}
+  .copy-btn:hover{background:rgba(255,255,255,0.15);color:#fff}
+  .copy-btn.copied{background:var(--green);color:#fff;border-color:var(--green)}
+  .code-body{padding:20px 24px;font-family:'DM Mono',monospace;font-size:13px;line-height:1.8;color:#C8D8FF;white-space:pre-wrap;word-break:break-word}
+  .code-body .comment{color:#556688}
+  .code-body .highlight{color:#FFB366}
+  .code-body .danger{color:#FF6666}
+  .code-body .ok{color:#66CC88}
+  .ktable{width:100%;border-collapse:collapse;margin:20px 0;font-size:14px}
+  .ktable th{background:var(--ink);color:#fff;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:12px 16px;text-align:left;font-weight:500}
+  .ktable td{padding:12px 16px;border-bottom:1px solid var(--rule);vertical-align:top}
+  .ktable tr:nth-child(even) td{background:rgba(13,14,26,0.025)}
+  .ktable tr:hover td{background:var(--blue-light)}
+  .file-name{font-family:'DM Mono',monospace;font-size:12px;color:var(--blue-mid);white-space:nowrap}
+  .tag{display:inline-block;font-family:'DM Mono',monospace;font-size:10px;padding:2px 8px;border-radius:2px;letter-spacing:0.5px;margin-left:6px}
+  .tag.yes{background:var(--green-light);color:var(--green)}
+  .tag.no{background:var(--hot-light);color:var(--hot)}
+  .tab-nav{display:flex;gap:0;border-bottom:2px solid var(--ink);margin-bottom:0}
+  .tab-btn{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;padding:12px 28px;background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;cursor:pointer;color:rgba(13,14,26,0.35);transition:all 0.15s;position:relative}
+  .tab-btn:hover{color:var(--ink)}
+  .tab-btn.active{color:var(--ink);border-bottom-color:var(--accent)}
+  .tab-btn .count{font-family:'DM Mono',monospace;font-size:10px;font-weight:500;vertical-align:super;margin-left:4px;color:inherit;opacity:0.6}
+  .tab-content{display:none;padding-top:24px}
+  .tab-content.active{display:block}
+  .lead-grid{display:grid;gap:16px}
+  .lead-card{background:#fff;border:1px solid var(--rule);border-radius:6px;overflow:hidden;transition:box-shadow 0.2s}
+  .lead-card:hover{box-shadow:0 4px 24px rgba(13,14,26,0.1)}
+  .lead-card-header{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--rule)}
+  .lead-id{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;padding:3px 10px;border-radius:3px;white-space:nowrap}
+  .lead-id.cold{background:var(--cold-light);color:var(--cold)}
+  .lead-id.warm{background:var(--warm-light);color:var(--warm)}
+  .lead-id.hot{background:var(--hot-light);color:var(--hot)}
+  .lead-id.obj{background:var(--accent-light);color:var(--accent)}
+  .lead-type{font-size:12px;color:rgba(13,14,26,0.4);font-style:italic}
+  .lead-body{padding:16px 20px}
+  .lead-message{font-size:15px;font-weight:500;color:var(--ink);margin-bottom:10px;line-height:1.5;padding:12px 16px;background:var(--cream);border-radius:4px;border-left:3px solid var(--ink);cursor:pointer;display:flex;align-items:center;gap:10px}
+  .lead-message::before{content:'📋';font-size:14px;flex-shrink:0}
+  .lead-message:hover{background:var(--blue-light);border-left-color:var(--blue)}
+  .lead-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+  .meta-chip{font-size:11px;padding:6px 10px;border-radius:3px;text-align:center}
+  .meta-chip span{display:block;font-family:'DM Mono',monospace;font-size:10px;opacity:0.6;margin-bottom:2px;letter-spacing:0.5px;text-transform:uppercase}
+  .meta-chip.temp{background:var(--warm-light);color:#7A5000}
+  .meta-chip.spin{background:var(--blue-light);color:var(--blue)}
+  .meta-chip.fear{background:var(--hot-light);color:var(--hot)}
+  .response-toggle{font-size:12px;font-weight:600;color:var(--blue-mid);cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 0;border:none;background:none;letter-spacing:0.3px}
+  .response-toggle .arrow{transition:transform 0.2s;font-style:normal}
+  .response-toggle.open .arrow{transform:rotate(90deg)}
+  .response-box{display:none;margin-top:10px;padding:14px 16px;background:var(--green-light);border-radius:4px;border-left:3px solid var(--green);font-size:14px;line-height:1.65;color:#0D3A22;position:relative}
+  .response-box.open{display:block}
+  .copy-resp{position:absolute;top:10px;right:10px;font-family:'DM Mono',monospace;font-size:10px;padding:3px 10px;background:rgba(26,122,74,0.15);border:1px solid rgba(26,122,74,0.3);color:var(--green);border-radius:3px;cursor:pointer;transition:all 0.15s}
+  .copy-resp:hover{background:var(--green);color:#fff}
+  .spin-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0}
+  @media(max-width:680px){.spin-grid{grid-template-columns:1fr}}
+  .spin-card{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:20px;position:relative;overflow:hidden}
+  .spin-card::before{content:attr(data-letter);position:absolute;right:16px;top:8px;font-family:'Bebas Neue',sans-serif;font-size:72px;opacity:0.06;line-height:1}
+  .spin-card h3{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;margin-bottom:8px}
+  .spin-card p{font-size:13px;color:rgba(13,14,26,0.6);margin-bottom:12px}
+  .spin-example{font-family:'DM Mono',monospace;font-size:12px;padding:10px 12px;background:var(--cream);border-radius:4px;color:var(--ink);line-height:1.6}
+  .temp-scale{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:20px 0}
+  @media(max-width:580px){.temp-scale{grid-template-columns:1fr}}
+  .temp-card{border-radius:6px;padding:20px;position:relative;overflow:hidden}
+  .temp-card.cold{background:var(--cold-light);border:1px solid rgba(74,122,181,0.3)}
+  .temp-card.warm{background:var(--warm-light);border:1px solid rgba(200,130,10,0.3)}
+  .temp-card.hot{background:var(--hot-light);border:1px solid rgba(192,26,26,0.3)}
+  .temp-label{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;margin-bottom:8px}
+  .temp-card.cold .temp-label{color:var(--cold)}
+  .temp-card.warm .temp-label{color:var(--warm)}
+  .temp-card.hot .temp-label{color:var(--hot)}
+  .temp-signals{font-size:12px;line-height:1.7;color:rgba(13,14,26,0.65)}
+  .temp-action{margin-top:12px;font-size:12px;font-weight:600}
+  .train-card{background:var(--ink);color:#fff;border-radius:6px;padding:28px 32px;margin:20px 0}
+  .train-card h3{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:var(--accent);margin-bottom:16px}
+  .train-steps{display:grid;gap:12px}
+  .train-step{display:flex;gap:14px;align-items:flex-start}
+  .train-step-num{flex-shrink:0;width:28px;height:28px;background:var(--accent);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:16px;display:flex;align-items:center;justify-content:center;border-radius:3px}
+  .train-step p{font-size:14px;color:rgba(255,255,255,0.75);line-height:1.6;padding-top:4px}
+  .train-step strong{color:#fff}
+  .forbidden-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}
+  @media(max-width:600px){.forbidden-grid{grid-template-columns:1fr}}
+  .forbidden-item{display:flex;gap:12px;align-items:center;padding:12px 16px;background:var(--hot-light);border:1px solid rgba(192,26,26,0.2);border-radius:4px;font-size:13px;color:var(--hot);font-weight:500}
+  .forbidden-item::before{content:'✗';font-size:16px;flex-shrink:0;font-weight:700}
+  .checklist{display:grid;gap:8px;margin:16px 0}
+  .check-item{display:flex;align-items:center;gap:12px;font-size:14px;padding:10px 14px;background:#fff;border:1px solid var(--rule);border-radius:4px;cursor:pointer;transition:all 0.15s}
+  .check-item:hover{background:var(--blue-light)}
+  .check-item.done{background:var(--green-light);border-color:rgba(26,122,74,0.3);text-decoration:line-through;opacity:0.7}
+  .check-item .checkbox{width:20px;height:20px;border:2px solid var(--rule);border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all 0.15s}
+  .check-item.done .checkbox{background:var(--green);border-color:var(--green);color:#fff}
+  footer{background:var(--ink);color:rgba(255,255,255,0.4);text-align:center;padding:32px;font-size:13px;font-family:'DM Mono',monospace;letter-spacing:0.5px}
+  footer strong{color:rgba(255,255,255,0.7)}
+  .search-wrap{margin-bottom:20px}
+  .search-input{width:100%;padding:12px 18px;font-family:'DM Sans',sans-serif;font-size:14px;border:2px solid var(--rule);border-radius:4px;background:#fff;outline:none;transition:border-color 0.15s}
+  .search-input:focus{border-color:var(--blue-mid)}
+  @media(max-width:640px){.hero h1{font-size:52px}.wrapper{padding:0 16px 60px}.lead-meta{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <div class="logo">STARWAY <span>STUDIO</span> · AI SELLER</div>
+    <div style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,0.35);letter-spacing:1px;">ПОСІБНИК ТЕСТУВАННЯ v1.0</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+</header>
+
+<section class="hero">
+  <div class="hero-badge">Посібник для замовника</div>
+  <h1>ТЕСТУЙ<br><em>AI SELLER</em><br>СЬОГОДНІ</h1>
+  <p>Project налаштовано. Відкрий claude.ai → знайди «AI Seller — Starway Studio» → починай ганяти реальні сценарії.</p>
+  <div class="hero-chips">
+    <div class="chip">10 Cold Leads</div>
+    <div class="chip">10 Warm Leads</div>
+    <div class="chip">10 Hot Leads</div>
+    <div class="chip">10 Objections</div>
+    <div class="chip">SPIN Selling</div>
+    <div class="chip">Навчання моделі</div>
+  </div>
+</section>
+
+<div class="wrapper">
+
+  <!-- 01 СТАРТ -->
+  <section class="section" id="setup">
+    <div class="section-header">
+      <div class="section-num">01</div>
+      <div class="section-title">
+        <h2>СТАРТ ТЕСТУВАННЯ</h2>
+        <p>Project вже налаштовано — відкрий і починай</p>
+      </div>
+    </div>
+
+    <div class="callout success">
+      <strong>Все готово</strong>
+      Claude Project «AI Seller — Starway Studio» вже налаштований. Knowledge Files завантажені. Project Instructions вставлені. Твоя задача — відкрити Project і почати тестувати реальні сценарії з розділу 05.
+    </div>
+
+    <div class="callout info">
+      <strong>Як відкрити</strong>
+      Перейди на claude.ai → у лівій панелі знайди «AI Seller — Starway Studio» → натисни → ти всередині Project.
+    </div>
+
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-content"><h3>Відкрий Project у лівій панелі claude.ai</h3><p>Знайди «AI Seller — Starway Studio». Якщо не бачиш — перевір що увійшов в правильний акаунт.</p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-content"><h3>Створи новий чат всередині Project</h3><p>Натисни «New chat» всередині Project. Назви його: Cold / Warm / Hot або Objections — залежно від типу тесту. Не змішуй типи в одному чаті.</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-content"><h3>Перейди до розділу 05 і скопіюй перше повідомлення</h3><p>Вибери тип ліда → натисни на повідомлення → вставляй у чат. Пиши як справжній клієнт — без пояснень що це тест.</p></div></div>
+    </div>
+
+    <h3 style="margin-top:32px;margin-bottom:12px;font-size:16px;font-weight:600;">Що вже є в Project — для довідки</h3>
+    <table class="ktable">
+      <thead><tr><th>#</th><th>Файл</th><th>Що містить</th><th>Статус</th></tr></thead>
+      <tbody>
+        <tr><td style="font-family:'DM Mono',monospace;font-size:13px;color:rgba(13,14,26,0.4);">01</td><td><span class="file-name">ai-seller-system-prompt.md</span></td><td>Роль, SPIN методологія, тон, заборони (9 блоків)</td><td><span class="tag yes">✓ Завантажено</span></td></tr>
+        <tr><td style="font-family:'DM Mono',monospace;font-size:13px;color:rgba(13,14,26,0.4);">02</td><td><span class="file-name">business-model.md</span></td><td>Продукти, ціни, product ladder</td><td><span class="tag yes">✓ Завантажено</span></td></tr>
+        <tr><td style="font-family:'DM Mono',monospace;font-size:13px;color:rgba(13,14,26,0.4);">03</td><td><span class="file-name">customer-avatar.md</span></td><td>Аудиторія, болі, страхи, заперечення</td><td><span class="tag yes">✓ Завантажено</span></td></tr>
+        <tr><td style="font-family:'DM Mono',monospace;font-size:13px;color:rgba(13,14,26,0.4);">04</td><td><span class="file-name">focus-offer-faq.md</span></td><td>Оффер ФОКУС: що це, для кого, ціна, FAQ</td><td><span class="tag yes">✓ Завантажено</span></td></tr>
+        <tr style="opacity:0.5;"><td>—</td><td><span class="file-name">Fish Audio / WayForPay / Prisma</span></td><td>Технічний стек — не потрібен продавцю</td><td><span class="tag no">✗ Не додавати</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 02 ТЕМПЕРАТУРА -->
+  <section class="section" id="temperature">
+    <div class="section-header">
+      <div class="section-num">02</div>
+      <div class="section-title"><h2>ТЕМПЕРАТУРА ЛІДІВ</h2><p>Як розпізнати стан людини та обрати стратегію</p></div>
+    </div>
+    <div class="temp-scale">
+      <div class="temp-card cold"><div class="temp-label">❄ COLD</div><div class="temp-signals"><strong>Сигнали:</strong><br>«Що це таке?»<br>«Скільки коштує?» (без контексту)<br>«Знову курс продають...»<br>Пасивний інтерес, захисна реакція</div><div class="temp-action" style="color:var(--cold);">→ Situation + Problem</div></div>
+      <div class="temp-card warm"><div class="temp-label">🌡 WARM</div><div class="temp-signals"><strong>Сигнали:</strong><br>«Я вже купувала схожі програми»<br>«Цікаво, але...»<br>«Скажіть чесно — це реально?»<br>Є біль, але страх помилки</div><div class="temp-action" style="color:var(--warm);">→ Implication + зняти страх</div></div>
+      <div class="temp-card hot"><div class="temp-label">🔥 HOT</div><div class="temp-signals"><strong>Сигнали:</strong><br>«Готова. Як записатись?»<br>«Де оплатити?»<br>«Місця ще є?»<br>Рішення прийнято</div><div class="temp-action" style="color:var(--hot);">→ Need-Payoff + чіткий CTA</div></div>
+    </div>
+  </section>
+
+  <!-- 03 SPIN -->
+  <section class="section" id="spin">
+    <div class="section-header">
+      <div class="section-num">03</div>
+      <div class="section-title"><h2>МЕТОДОЛОГІЯ SPIN</h2><p>Чотири етапи — Claude проходить послідовно</p></div>
+    </div>
+    <div class="spin-grid">
+      <div class="spin-card" data-letter="S"><h3 style="color:var(--blue);">S — Situation</h3><p>Збір контексту. Хто ця людина, де вона зараз.</p><div class="spin-example">«Ти зараз більше в особистому розвитку чи є і бізнес-задачі?»</div></div>
+      <div class="spin-card" data-letter="P"><h3 style="color:var(--accent);">P — Problem</h3><p>Виявлення болі. Що не працює, що заважає.</p><div class="spin-example">«З чим відчуваєш найбільше застрягання — з фокусом чи з направленням?»</div></div>
+      <div class="spin-card" data-letter="I"><h3 style="color:var(--warm);">I — Implication</h3><p>Наслідки бездіяльності. Не тиск — усвідомлення.</p><div class="spin-example">«Якщо цей стан залишиться ще пів року — як це вплине на важливе для тебе?»</div></div>
+      <div class="spin-card" data-letter="N"><h3 style="color:var(--green);">N — Need-Payoff</h3><p>Зв'язок рішення з результатом. Не продаж — шлях.</p><div class="spin-example">«Якби знайшла систему яка тримає фокус — як би змінився твій день?»</div></div>
+    </div>
+    <div class="callout warn"><strong>Якщо Claude пропустив SPIN</strong>Надішли: «Ти перейшов до продажу не пройшовши SPIN. Поверніться до Problem — задай уточнююче питання про біль.»</div>
+  </section>
+
+  <!-- 04 НАВЧАННЯ -->
+  <section class="section" id="training">
+    <div class="section-header">
+      <div class="section-num">04</div>
+      <div class="section-title"><h2>ЯК НАВЧАТИ МОДЕЛЬ</h2><p>Цикл корекції відповідей в процесі тестування</p></div>
+    </div>
+    <div class="callout info"><strong>Важливо</strong>Claude не «навчається» між сесіями. Ти навчаєш себе формулювати кращі промпти та файли. Корекції в чаті — це debug-сесія, результати якої переносиш у Knowledge Files.</div>
+    <div class="train-card">
+      <h3>ЦИКЛ: INPUT → ОЦІНКА → ПРАВКА</h3>
+      <div class="train-steps">
+        <div class="train-step"><div class="train-step-num">1</div><p><strong>Надішли тестове повідомлення</strong> з розділу 05. Не пояснюй що це тест.</p></div>
+        <div class="train-step"><div class="train-step-num">2</div><p><strong>Оціни відповідь</strong>: SPIN дотримано? Відповідає температурі? Є наступний крок?</p></div>
+        <div class="train-step"><div class="train-step-num">3</div><p><strong>Якщо слабка</strong> — надішли аналітичний запит (блок нижче).</p></div>
+        <div class="train-step"><div class="train-step-num">4</div><p><strong>Зафіксуй паттерн помилки</strong> — де зламався: пропустив етап, вигадав ціну, перейшов до тиску.</p></div>
+        <div class="train-step"><div class="train-step-num">5</div><p><strong>Збирай реальні заперечення</strong> з Telegram — і тестуй у чаті Objections. Найкращий матеріал.</p></div>
+      </div>
+    </div>
+    <h3 style="margin-top:28px;margin-bottom:12px;font-size:16px;font-weight:600;">Аналітичний запит після відповіді</h3>
+    <div class="code-block">
+      <div class="code-block-header"><span class="code-label">Відправ після відповіді Claude</span><button class="copy-btn" onclick="copyCode(this,'analysis-prompt')">Копіювати</button></div>
+      <div class="code-body" id="analysis-prompt">Покажи аналіз цього діалогу:
+
+<span class="highlight">1. Етап SPIN:</span> на якому ти зараз і чому
+<span class="highlight">2. Температура ліда:</span> Cold / Warm / Hot — і які ознаки
+<span class="highlight">3. Прихований страх:</span> що насправді за цим повідомленням
+<span class="highlight">4. Якість відповіді:</span> що добре, що покращити
+<span class="highlight">5. Наступний крок:</span> що робити далі</div>
+    </div>
+    <h3 style="margin-top:28px;margin-bottom:12px;font-size:16px;font-weight:600;">Ознаки поганої відповіді</h3>
+    <div class="forbidden-grid">
+      <div class="forbidden-item">Одразу пропонує купити не з'ясувавши біль</div>
+      <div class="forbidden-item">Вигадує ціну або продукти яких немає</div>
+      <div class="forbidden-item">Обіцяє конкретні результати</div>
+      <div class="forbidden-item">Відповідає як коуч замість продавця</div>
+      <div class="forbidden-item">Говорить про технічний стек або SaaS</div>
+      <div class="forbidden-item">Тисне на дефіцит («лишилось 2 місця!»)</div>
+      <div class="forbidden-item">3+ абзаци без питання в кінці</div>
+      <div class="forbidden-item">Пропускає SPIN, одразу до N-етапу</div>
+    </div>
+    <div class="code-block">
+      <div class="code-block-header"><span class="code-label">Корекційний промпт</span><button class="copy-btn" onclick="copyCode(this,'correction-prompt')">Копіювати</button></div>
+      <div class="code-body" id="correction-prompt">СТОП. Ти порушив правило: <span class="danger">[опиши що саме]</span>
+
+Поверніться до: <span class="highlight">[вкажи правильний SPIN-етап]</span>
+
+Правильна поведінка:
+- Не переходь до пропозиції поки не виявлено біль
+- Задай одне відкрите питання
+- Тримай теплий тон без тиску
+
+Переформулюй відповідь.</div>
+    </div>
+  </section>
+
+  <!-- 05 ПОВІДОМЛЕННЯ -->
+  <section class="section" id="leads">
+    <div class="section-header">
+      <div class="section-num">05</div>
+      <div class="section-title"><h2>ТЕСТОВІ ПОВІДОМЛЕННЯ</h2><p>40 готових — натисни щоб скопіювати</p></div>
+    </div>
+    <p style="margin-bottom:16px;color:rgba(13,14,26,0.65);">Натисни на повідомлення → скопіюється автоматично. Встав у відповідний чат Claude Project. Після відповіді — розгорни рекомендовану відповідь щоб порівняти.</p>
+    <div class="search-wrap"><input class="search-input" type="text" id="leadSearch" placeholder="Пошук повідомлень..." oninput="filterLeads(this.value)"></div>
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('cold',this)">❄ Cold<span class="count">10</span></button>
+      <button class="tab-btn" onclick="switchTab('warm',this)">🌡 Warm<span class="count">10</span></button>
+      <button class="tab-btn" onclick="switchTab('hot',this)">🔥 Hot<span class="count">10</span></button>
+      <button class="tab-btn" onclick="switchTab('obj',this)">⚡ Objections<span class="count">10</span></button>
+    </div>
+    <div class="tab-content active" id="tab-cold"><div class="lead-grid" id="grid-cold"></div></div>
+    <div class="tab-content" id="tab-warm"><div class="lead-grid" id="grid-warm"></div></div>
+    <div class="tab-content" id="tab-hot"><div class="lead-grid" id="grid-hot"></div></div>
+    <div class="tab-content" id="tab-obj"><div class="lead-grid" id="grid-obj"></div></div>
+  </section>
+
+  <!-- 06 ЧЕКЛИСТ -->
+  <section class="section" id="checklist">
+    <div class="section-header">
+      <div class="section-num">06</div>
+      <div class="section-title"><h2>ЧЕКЛИСТ ТЕСТУВАННЯ</h2><p>Відмічай — прогрес зберігається в браузері</p></div>
+    </div>
+    <div class="checklist" id="checklist-block">
+      <div class="check-item" onclick="toggleCheck(this)" data-key="c1"><div class="checkbox"></div>Відкрито Project «AI Seller — Starway Studio» на claude.ai</div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="c2"><div class="checkbox"></div>Створено чат «Cold» — протестовано 5+ повідомлень</div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="c3"><div class="checkbox"></div>Створено чат «Warm» — протестовано 5+ повідомлень</div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="c4"><div class="checkbox"></div>Створено чат «Hot» — протестовано 5+ повідомлень</div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="c5"><div class="checkbox"></div>Створено чат «Objections» — протестовано 5+ заперечень</div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="c6"><div class="checkbox"></div>Відповіді сильні — перша скопійована в реальний Telegram</div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="c7"><div class="checkbox"></div>Зібрано перші реальні заперечення з Telegram</div>
+      <div class="check-item" onclick="toggleCheck(this)" data-key="c8"><div class="checkbox"></div>Реальні заперечення протестовані в чаті Objections</div>
+    </div>
+    <div class="callout success" style="margin-top:24px;"><strong>Коли всі пункти виконано</strong>AI Seller працює. Наступний крок — підключення Make.com для автоматизації першого контакту в Telegram.</div>
+  </section>
+</div>
+
+<footer><strong>Starway Studio · AI Seller</strong> · Посібник тестування v1.1 · AIAuto 2026</footer>
+
+<script>
+const leadsData={cold:[{id:"CL-01",type:"Нульове знання",temp:"Cold ❄",spin:"Situation",fear:"Не знає що хоче",msg:"Привіт, побачила рекламу. Що таке ФОКУС?",resp:"Привіт! ФОКУС — це 6-тижнева програма від Наді, яка допомагає вибудувати систему коли відчуваєш що крутишся але не рухаєшся. Скажи — ти зараз більше в особистому розвитку чи є і бізнес-задачі?"},{id:"CL-02",type:"Прямий запит без контексту",temp:"Cold ❄",spin:"Situation",fear:"Страх витратити гроші даремно",msg:"Скільки коштує?",resp:"Ціна залежить від формату. Але спочатку — ти шукаєш щось конкретне або просто хочеш зрозуміти чим займається Starway Studio?"},{id:"CL-03",type:"Скептицизм",temp:"Cold ❄",spin:"Problem",fear:"Обпалений досвід",msg:"Знову якийсь курс продають...",resp:"Розумію цю реакцію. Тому не буду переконувати. Скажи — що для тебе зараз найбільша проблема? З фокусом, з енергією, з направленням?"},{id:"CL-04",type:"Питання диференціації",temp:"Cold ❄",spin:"Problem",fear:"Страх отримати те що вже є",msg:"Я не розумію чим це відрізняється від звичайного коучингу",resp:"Хороше питання. Коучинг — це розмови. ФОКУС — структурована система з конкретними інструментами та Zoom-практиками. Але спочатку — ти вже мала досвід з коучингом?"},{id:"CL-05",type:"Класична холодна відмова",temp:"Cold ❄",spin:"Situation",fear:"Відчуття що немає ресурсів",msg:"У мене взагалі немає часу зараз. Може пізніше.",resp:"Розумію. Тільки одне питання — «пізніше» в тебе зазвичай приходить, чи все одно щось постійно заважає?"},{id:"CL-06",type:"Питання аудиторії",temp:"Cold ❄",spin:"Situation",fear:"Не вписатись",msg:"Це для жінок чи для всіх?",resp:"Більшість учасниць — жінки, але формально немає обмежень. А тебе що більше цікавить — особиста сторона чи є і бізнес-контекст?"},{id:"CL-07",type:"Блок ідентичності",temp:"Cold ❄",spin:"Problem",fear:"Не вірить в онлайн",msg:"Я ніколи не платила за онлайн-курси. Не моє.",resp:"Це чесна позиція. Скажи — де ти взагалі черпаєш підтримку або знання коли щось застрягає? Є якийсь формат який для тебе працює?"},{id:"CL-08",type:"Пасивний запит",temp:"Cold ❄",spin:"Situation",fear:"Не готова до діалогу",msg:"Пришліть більше інформації",resp:"Зараз пришлю. Але щоб надіслати найбільш корисне — ти більше шукаєш щось для внутрішнього стану чи для конкретних результатів у справах?"},{id:"CL-09",type:"Недовіра до ринку",temp:"Cold ❄",spin:"Problem",fear:"Недовіра загалом",msg:"Ви знаєте скільки у вас конкурентів? Всі обіцяють однакове.",resp:"Ти права. Я не буду казати що ми унікальні. Скажи краще: що для тебе означало б «це реально відрізняється»? Що ти шукаєш, що досі не знайшла?"},{id:"CL-10",type:"Тепле направлення",temp:"Cold→Warm",spin:"Situation",fear:"Не розуміє для чого",msg:"Мені подруга порадила написати. Вона каже що змінилось щось у неї після вашого курсу",resp:"Приємно чути! А подруга казала в якому контексті? Що в неї змінилось — щоб я розуміла чи це може бути актуально і для тебе."}],warm:[{id:"WL-01",type:"Обпалена досвідом",temp:"Warm 🌡",spin:"Problem→Implication",fear:"Страх черговою помилкою",msg:"Читала про ФОКУС. Мені цікаво але я вже купувала схожі програми і вони не дали результату.",resp:"Це важлива річ яку ти сказала. Більшість хто приходить — саме з таким досвідом. Коли ти купувала ті програми — в чому конкретно вони підвели? Що мало бути але не було?"},{id:"WL-02",type:"Пряме питання про цінність",temp:"Warm 🌡",spin:"Implication",fear:"Страх знову витратити час",msg:"Скажіть чесно — це реально допомагає чи просто ще одна мотивашка?",resp:"Скажу чесно: якщо хочеш просто «підзарядитись» — це не те. ФОКУС про структуру і систему. Але щоб сказати чи підійде — що у тебе зараз найбільше не працює?"},{id:"WL-03",type:"Усвідомлений біль",temp:"Warm 🌡",spin:"Problem→Implication",fear:"Страх неправильного вибору",msg:"Я знаю що мені треба щось змінити. Просто не знаю з чого почати.",resp:"Це вже багато — коли знаєш що треба змінити. Якщо уявиш себе через 3 місяці — що б мало змінитись щоб ти сказала «ось, стало краще»?"},{id:"WL-04",type:"Фінансове заперечення",temp:"Warm 🌡",spin:"Need-Payoff",fear:"Страх фінансової помилки",msg:"Ціна висока для мене зараз. Є розстрочка?",resp:"Так, є варіанти — уточню. Але спочатку: якщо питання ціни вирішується — є ще щось що тебе зупиняє? Бо інколи ціна це перше заперечення, а за ним щось глибше."},{id:"WL-05",type:"Страх не встигнути",temp:"Warm 🌡",spin:"Implication",fear:"Страх почати і кинути",msg:"А якщо я почну і не встигатиму? Я дуже зайнята людина.",resp:"Чесний страх. Розкажи — як зараз виглядає твій тиждень? Хочу зрозуміти чи формат ФОКУС взагалі може вписатись без стресу."},{id:"WL-06",type:"Питання позиціювання",temp:"Warm 🌡",spin:"Need-Payoff",fear:"Вибрати не те",msg:"Чим ФОКУС відрізняється від інших ваших продуктів?",resp:"Коротко: ФОКУС — система за 6 тижнів. Менторинг — довгий супровід. Стратегічна сесія — одна глибока зустріч. Скажи — ти зараз більше хочеш систему чи живу роботу?"},{id:"WL-07",type:"Вік як бар'єр",temp:"Warm 🌡",spin:"Problem",fear:"«Вже пізно»",msg:"Мені 45 років. Думаєте мені ще не пізно?",resp:"Пізно для чого? Серйозно питаю. Більшість учасниць — саме в цьому віці коли є і досвід, і ясність що хочеш, і втома від того що щось не так."},{id:"WL-08",type:"Порівняння з конкурентом",temp:"Warm 🌡",spin:"Problem",fear:"Страх отримати те саме",msg:"Я вже проходила схожий курс у іншого автора. Що нового тут?",resp:"Не буду казати що ми кращі — не знаю що ти проходила. Що в тому курсі спрацювало, а що ні? Тоді скажу чесно чи є сенс розглядати ФОКУС."},{id:"WL-09",type:"Уточнення застосування",temp:"Warm 🌡",spin:"Situation",fear:"Невідповідність контексту",msg:"Хочу зрозуміти — це для особистого розвитку чи для бізнесу?",resp:"Чесна відповідь: і для того, і для іншого — але через внутрішній стан. Спочатку фокус, потім рішення в бізнесі. У тебе є і те, і інше, чи щось одне переважає?"},{id:"WL-10",type:"Реферал",temp:"Warm 🌡",spin:"Need-Payoff",fear:"Завищені очікування",msg:"Мені порадили написати вам. Кажуть тут допомагають не просто з курсом а з реальними змінами.",resp:"Це саме так. Але щоб не створювати зайвих очікувань — що для тебе «реальна зміна»? Що має статись щоб через 2 місяці ти сказала «так, це було варто»?"}],hot:[{id:"HL-01",type:"Пряма готовність",temp:"Hot 🔥",spin:"CTA",fear:"Потрібна чіткість",msg:"Я готова. Як записатись на ФОКУС?",resp:"Чудово! Є кілька варіантів старту. Зараз уточню найближчі дати та умови і напишу детально. Займе 5 хвилин — можна?"},{id:"HL-02",type:"Рішення прийнято",temp:"Hot 🔥",spin:"CTA",fear:"Немає страху",msg:"Ок, переконали. Де оплатити?",resp:"Відправляю деталі. Але спочатку — ти вже обрала конкретний формат? Є кілька варіантів ФОКУС, хочу переконатись що відправляю правильне."},{id:"HL-03",type:"Готова, питання логістики",temp:"Hot 🔥",spin:"CTA",fear:"Страх не встигнути на старт",msg:"Я думала тиждень. Беру. Але скажіть — коли старт?",resp:"Найближчий старт — уточниш у Наді. Є ще кілька місць. Щоб зафіксувати — потрібна реєстрація або попередня оплата. Оформляємо?"},{id:"HL-04",type:"FOMO + готовність",temp:"Hot 🔥",spin:"CTA",fear:"Страх не встигнути",msg:"Хочу потрапити на ФОКУС але місця ще є?",resp:"Так, є — але небагато в цьому потоці. Щоб зафіксувати твоє місце — мені потрібно ім'я та пошту. Займе хвилину."},{id:"HL-05",type:"Умовна готовність",temp:"Hot 🔥",spin:"CTA",fear:"Фінансовий ризик",msg:"Чи можу я оплатити частинами? Якщо так — оформлюю зараз.",resp:"Так, є варіант часткової оплати. Тобі зручніше 2 частинами або інший варіант? Розкажу умови і якщо підходить — одразу оформляємо."},{id:"HL-06",type:"Соціальний доказ",temp:"Hot 🔥",spin:"CTA",fear:"Немає страху",msg:"Підруга вже записалась. Я теж хочу. Що робити далі?",resp:"Чудово що разом! Наступний крок простий: надай ім'я та контакт, і я підтверджу твоє місце в тому ж потоці що і подруга."},{id:"HL-07",type:"Досліджений клієнт",temp:"Hot 🔥",spin:"CTA",fear:"Немає",msg:"Переглянула всі ваші матеріали. Це саме те що мені треба. Куди платити?",resp:"Відправляю реквізити. Але спочатку — ти вже обрала конкретний формат? Хочу переконатись що відправляю правильне."},{id:"HL-08",type:"Подолання страху",temp:"Hot 🔥",spin:"CTA",fear:"Страх подолано",msg:"Я давно хотіла але боялась. Сьогодні вирішила — берусь.",resp:"Це важливий момент. Давай оформимо поки є цей стан. Є ще якісь питання перед реєстрацією?"},{id:"HL-09",type:"Запит на доступність",temp:"Hot 🔥",spin:"CTA",fear:"Страх не встигнути",msg:"Є ще місця на найближчий потік?",resp:"Уточнюю. Поки чекаєш — ти вже знайома з програмою ФОКУС або потрібно коротко пояснити що входить?"},{id:"HL-10",type:"Найгарячіший",temp:"Hot 🔥",spin:"CTA",fear:"Немає",msg:"Ціну знаю, програму знаю. Чекаю реквізити.",resp:"Відправляю: [реквізити / посилання на оплату]. Після оплати — напишіть підтвердження, і я зафіксую ваше місце та надішлю деталі по старту."}],obj:[{id:"OB-01",type:"Цінове заперечення",temp:"Warm 🌡",spin:"Implication",fear:"Страх фінансової помилки",msg:"Занадто дорого для мене.",resp:"Розумію. Якби ціна не була питанням — ти б розглядала ФОКУС? Хочу зрозуміти: це питання бюджету, або є ще сумніви в цінності?"},{id:"OB-02",type:"Відкладання",temp:"Warm 🌡",spin:"Implication",fear:"Страх самостійного рішення",msg:"Мені потрібно порадитись з чоловіком.",resp:"Звісно. А сама для себе — ти вже розумієш чи тобі це потрібно? Чи і для тебе є питання?"},{id:"OB-03",type:"Сумнів у форматі",temp:"Cold→Warm",spin:"Problem",fear:"Онлайн не дає результату",msg:"Я не вірю що онлайн-формат дає реальні зміни.",resp:"Більшість хто так думає — має негативний досвід. Що б мало бути в програмі щоб ти дала їй шанс? Що для тебе ознака що щось реально працює?"},{id:"OB-04",type:"Є коуч",temp:"Warm 🌡",spin:"Implication",fear:"Дублювання",msg:"У мене вже є коуч.",resp:"Добре що є підтримка. А що твій коуч з тобою не закриває? Є щось де відчуваєш що потрібно більше — структура, інструменти, конкретика?"},{id:"OB-05",type:"Негативний досвід",temp:"Warm 🌡",spin:"Problem",fear:"Страх повторної невдачі",msg:"Я вже пробувала — не допомогло.",resp:"Розкажи більше — що пробувала і що конкретно не спрацювало? Де була проблема — в програмі, в часі, або щось інше заважало."},{id:"OB-06",type:"Відкладання 2",temp:"Warm 🌡",spin:"Implication",fear:"Страх зробити зараз",msg:"Зараз не час. Після літа.",resp:"Окей. «Після літа» для тебе це конкретна дата, або це коли з'явиться якийсь стан або умова?"},{id:"OB-07",type:"Складно",temp:"Cold 🌡",spin:"Situation",fear:"Страх складності",msg:"Я не розумію навіщо мені SPIN і ABSystem. Звучить складно.",resp:"Ти як клієнт зі SPIN не працюєш — це інструмент для нашої розмови. ФОКУС — про тебе і твою систему. Скажи краще: що тебе цікавить насправді?"},{id:"OB-08",type:"Підозра в маніпуляції",temp:"Warm 🌡",spin:"Problem",fear:"Страх маніпуляції",msg:"Це схоже на маніпуляцію продажами.",resp:"Гарне спостереження. Я не буду тебе переконувати купити. Скажи: що конкретно здалось маніпуляцією? Хочу зрозуміти де я неточно висловився."},{id:"OB-09",type:"Питання довіри",temp:"Warm 🌡",spin:"Need-Payoff",fear:"Страх вибору не того фахівця",msg:"Чому я маю довіряти саме вам?",resp:"Не повинна — поки. Скажи: що для тебе ознака що спеціалісту варто довіряти? Результати? Рекомендації? Або щось в підході?"},{id:"OB-10",type:"Самодостатність",temp:"Warm 🌡",spin:"Implication",fear:"Страх виглядати слабкою",msg:"Мені здається що я сама розберусь без курсу.",resp:"Можливо і так. А скільки часу ти вже «розбираєшся сама» з тим що заважає? Якщо чесно."}]};
+
+function renderLeads(type){
+  const grid=document.getElementById('grid-'+type);
+  grid.innerHTML=leadsData[type].map(l=>`
+    <div class="lead-card" data-msg="${l.msg.toLowerCase()}">
+      <div class="lead-card-header"><span class="lead-id ${type}">${l.id}</span><span class="lead-type">${l.type}</span></div>
+      <div class="lead-body">
+        <div class="lead-message" onclick="copyText('${l.msg.replace(/'/g,"\\'")}',this)">${l.msg}</div>
+        <div class="lead-meta">
+          <div class="meta-chip temp"><span>температура</span>${l.temp}</div>
+          <div class="meta-chip spin"><span>SPIN</span>${l.spin}</div>
+          <div class="meta-chip fear"><span>страх</span>${l.fear}</div>
+        </div>
+        <button class="response-toggle" onclick="toggleResponse(this)"><em class="arrow">▶</em> Рекомендована відповідь</button>
+        <div class="response-box"><button class="copy-resp" onclick="copyText('${l.resp.replace(/'/g,"\\'")}',this)">Копіювати</button>${l.resp}</div>
+      </div>
+    </div>`).join('');
+}
+['cold','warm','hot','obj'].forEach(renderLeads);
+function switchTab(t,btn){document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));btn.classList.add('active');document.getElementById('tab-'+t).classList.add('active')}
+function toggleResponse(btn){btn.nextElementSibling.classList.toggle('open');btn.classList.toggle('open')}
+function copyText(text,el){navigator.clipboard.writeText(text).then(()=>{if(el.classList.contains('lead-message')){el.style.background='var(--green-light)';setTimeout(()=>el.style.background='',800)}else{const o=el.textContent;el.textContent='✓';setTimeout(()=>el.textContent=o,1200)}})}
+function copyCode(btn,id){const t=document.getElementById(id).innerText;navigator.clipboard.writeText(t).then(()=>{btn.textContent='✓ Скопійовано';btn.classList.add('copied');setTimeout(()=>{btn.textContent='Копіювати';btn.classList.remove('copied')},2000)})}
+function filterLeads(q){const l=q.toLowerCase();document.querySelectorAll('.lead-card').forEach(c=>c.style.display=(c.dataset.msg||'').includes(l)?'':'none')}
+function toggleCheck(el){el.classList.toggle('done');el.querySelector('.checkbox').textContent=el.classList.contains('done')?'✓':'';localStorage.setItem('ck_'+el.dataset.key,el.classList.contains('done')?'1':'0')}
+document.querySelectorAll('.check-item').forEach(el=>{if(localStorage.getItem('ck_'+el.dataset.key)==='1'){el.classList.add('done');el.querySelector('.checkbox').textContent='✓'}});
+window.addEventListener('scroll',()=>{const h=document.documentElement;document.getElementById('progress').style.width=(h.scrollTop/(h.scrollHeight-h.clientHeight)*100)+'%'});
+</script>
+</body>
+</html>
