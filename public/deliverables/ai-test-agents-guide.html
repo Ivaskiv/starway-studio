@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3 Агенти — Посібник користувача · Starway Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0D0E1A;--paper:#F5F3EE;--cream:#EDE9E0;--blue:#1A3C8F;--bm:#2D55C0;--bl:#EBF0FF;--acc:#E85A1A;--al:#FFF0E8;--gr:#1A7A4A;--gl:#E8F5EE;--wa:#C8820A;--wl:#FFF8E8;--re:#C01A1A;--rl:#FFF0F0;--rule:rgba(13,14,26,0.12)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);font-size:15px;line-height:1.65}
+header{background:var(--ink);position:sticky;top:0;z-index:100;border-bottom:3px solid var(--gr)}
+.hi{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:56px}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:#fff}.logo span{color:var(--gr)}
+.ubadge{background:var(--gr);color:#fff;font-family:'DM Mono',monospace;font-size:10px;padding:3px 10px;letter-spacing:1px;border-radius:2px}
+.hero{background:var(--ink);color:#fff;padding:60px 32px 48px;text-align:center}
+.hero h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(40px,7vw,78px);letter-spacing:3px;line-height:1;margin-bottom:12px}
+.hero h1 em{color:#4DBA7F;font-style:normal}
+.hero p{font-size:15px;color:rgba(255,255,255,0.55);max-width:520px;margin:0 auto}
+.chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:20px}
+.chip{font-family:'DM Mono',monospace;font-size:11px;padding:5px 12px;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.65);border-radius:2px}
+.wrap{max-width:1100px;margin:0 auto;padding:0 32px 80px}
+.agent-nav{display:flex;border-bottom:2px solid var(--ink);margin-top:48px}
+.an-btn{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;padding:14px 32px;background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;cursor:pointer;color:rgba(13,14,26,0.35);transition:all .15s}
+.an-btn:hover{color:var(--ink)}
+.an-btn.active{color:var(--ink);border-bottom-color:var(--gr)}
+.an-panel{display:none;padding-top:32px}.an-panel.active{display:block}
+h2{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--ink);margin-bottom:6px}
+h3{font-size:15px;font-weight:600;color:var(--ink);margin:24px 0 10px}
+.sec{margin-bottom:32px}
+.callout{padding:16px 20px;border-radius:4px;margin:16px 0;border-left:4px solid;font-size:14px;line-height:1.6}
+.callout.info{background:var(--bl);border-color:var(--blue);color:var(--blue)}
+.callout.ok{background:var(--gl);border-color:var(--gr);color:#0D4A2A}
+.callout.warn{background:var(--al);border-color:var(--acc);color:#7A2A08}
+.callout strong{display:block;font-size:11px;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px;opacity:.7}
+/* HOW TO USE cards */
+.how-grid{display:grid;gap:12px;margin:16px 0}
+.how-card{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:20px;display:flex;gap:16px;align-items:flex-start;cursor:pointer;transition:box-shadow .15s}
+.how-card:hover{box-shadow:0 4px 20px rgba(13,14,26,0.08)}
+.how-num{flex-shrink:0;width:40px;height:40px;background:var(--gr);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;display:flex;align-items:center;justify-content:center;border-radius:4px}
+.how-body h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.how-body p{font-size:13px;color:rgba(13,14,26,0.6);line-height:1.5}
+/* Command cards */
+.cmd-grid{display:grid;gap:10px;margin:16px 0}
+.cmd-card{background:#fff;border:1px solid var(--rule);border-radius:5px;overflow:hidden}
+.cmd-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--rule);background:rgba(13,14,26,0.02)}
+.cmd-name{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--gr)}
+.cmd-desc{font-size:12px;color:rgba(13,14,26,0.5);margin-top:2px}
+.cmd-copy{font-family:'DM Mono',monospace;font-size:10px;padding:4px 12px;background:var(--gl);border:1px solid rgba(26,122,74,0.3);color:var(--gr);border-radius:3px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.cmd-copy:hover{background:var(--gr);color:#fff}
+.cmd-copy.done{background:var(--gr);color:#fff}
+.cmd-body{padding:12px 16px}
+.cmd-example{font-family:'DM Mono',monospace;font-size:12px;padding:10px 12px;background:var(--cream);border-radius:4px;color:var(--ink);line-height:1.6;margin-bottom:8px;cursor:pointer}
+.cmd-example:hover{background:var(--bl)}
+.cmd-result{font-size:13px;color:rgba(13,14,26,0.6);line-height:1.5}
+/* Test scenarios */
+.test-grid{display:grid;gap:12px;margin:16px 0}
+.test-card{background:#fff;border:1px solid var(--rule);border-radius:5px;overflow:hidden}
+.test-msg{padding:14px 16px;background:var(--cream);border-left:3px solid var(--ink);font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px}
+.test-msg::before{content:'📋';font-size:13px;flex-shrink:0}
+.test-msg:hover{background:var(--bl);border-left-color:var(--blue)}
+.test-meta{padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--rule)}
+.tmeta{font-family:'DM Mono',monospace;font-size:10px;padding:3px 8px;border-radius:2px}
+.tmeta.what{background:var(--bl);color:var(--blue)}
+.tmeta.exp{background:var(--gl);color:var(--gr)}
+.test-toggle{font-size:12px;font-weight:600;color:var(--bm);cursor:pointer;display:flex;align-items:center;gap:6px;padding:10px 16px;border:none;background:none;width:100%}
+.test-toggle .ar{transition:transform .2s}
+.test-toggle.open .ar{transform:rotate(90deg)}
+.test-resp{display:none;padding:12px 16px;background:var(--gl);font-size:13px;line-height:1.65;color:#0D3A22;border-top:1px solid rgba(26,122,74,0.2)}
+.test-resp.open{display:block}
+/* Checklist */
+.chk{display:grid;gap:8px;margin:16px 0}
+.chk-item{display:flex;align-items:center;gap:12px;font-size:14px;padding:10px 14px;background:#fff;border:1px solid var(--rule);border-radius:4px;cursor:pointer;transition:all .15s}
+.chk-item:hover{background:var(--bl)}
+.chk-item.done{background:var(--gl);border-color:rgba(26,122,74,0.3);text-decoration:line-through;opacity:.65}
+.cb{width:20px;height:20px;border:2px solid var(--rule);border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s}
+.chk-item.done .cb{background:var(--gr);border-color:var(--gr);color:#fff}
+footer{background:var(--ink);color:rgba(255,255,255,0.35);text-align:center;padding:24px;font-family:'DM Mono',monospace;font-size:12px}
+footer strong{color:rgba(255,255,255,0.65)}
+@media(max-width:640px){.wrap{padding:0 16px 60px}.an-btn{padding:12px 14px;font-size:16px}}
+</style>
+</head>
+<body>
+<header>
+<div class="hi">
+  <div class="logo">STARWAY <span>STUDIO</span> · АГЕНТИ</div>
+  <div class="ubadge">✓ ПОСІБНИК КОРИСТУВАЧА</div>
+</div>
+</header>
+
+<div class="hero">
+  <h1>ТВОЇ 3<br><em>AI ПОМІЧНИКИ</em></h1>
+  <p>Все налаштовано. Відкрий потрібний Project у claude.ai і починай — команди та приклади всередині.</p>
+  <div class="chips">
+    <div class="chip">AI MENTOR — підтримка клієнтів</div>
+    <div class="chip">AI CONTENT — контент за 5 хв</div>
+    <div class="chip">AI STRATEGIST — офери і воронки</div>
+  </div>
+</div>
+
+<div class="wrap">
+<div class="callout ok" style="margin-top:32px"><strong>Все готово — що робити зараз</strong>Всі три Projects вже налаштовані на claude.ai. Знайди їх у лівій панелі. Кожен чат всередині Project — це окремий сценарій. Не змішуй агентів в одному чаті.</div>
+
+<div class="agent-nav">
+  <button class="an-btn active" onclick="sw('m',this)">🧠 AI MENTOR</button>
+  <button class="an-btn" onclick="sw('c',this)">✍️ AI CONTENT</button>
+  <button class="an-btn" onclick="sw('s',this)">📈 AI STRATEGIST</button>
+</div>
+
+<!-- ══ MENTOR ══════════════════════════════════════════════════════ -->
+<div class="an-panel active" id="p-m">
+<div class="sec" style="margin-top:32px">
+<h2>AI MENTOR</h2>
+<p style="color:rgba(13,14,26,0.55);font-size:14px">Підтримує учасників ФОКУС між Zoom-сесіями. Відповідає як ти — у твоєму стилі, 24/7.</p>
+</div>
+
+<div class="callout info"><strong>Як використовувати</strong>Скопіюй повідомлення від клієнта → відкрий Project "AI Mentor" → вставити → отримати відповідь → скопіювати клієнту в Telegram. Або поставити бот — і він відповідатиме автоматично.</div>
+
+<div class="sec">
+<h3>Як почати — 3 кроки</h3>
+<div class="how-grid">
+<div class="how-card"><div class="how-num">1</div><div class="how-body"><h4>Відкрий «AI Mentor — Starway Studio» на claude.ai</h4><p>Лівий сайдбар → Projects → знайди назву. Не бачиш? Перевір акаунт.</p></div></div>
+<div class="how-card"><div class="how-num">2</div><div class="how-body"><h4>Натисни «New chat» всередині Project</h4><p>Кожен клієнт або ситуація — новий чат. Назви його: «Клієнт [ім'я]» або «Сценарій comeback».</p></div></div>
+<div class="how-card"><div class="how-num">3</div><div class="how-body"><h4>Вставляй повідомлення клієнта і отримуй відповідь</h4><p>Пиши від першої особи — як пише сам клієнт. Claude відповідає від імені Наді.</p></div></div>
+</div>
+</div>
+
+<div class="sec">
+<h3>Тестові сценарії — натисни щоб скопіювати</h3>
+<div class="test-grid">
+
+<div class="test-card">
+<div class="test-msg" onclick="ct(this,'Я застрягла і вже третій тиждень не можу почати. Розумію що треба але не роблю.')">Я застрягла і вже третій тиждень не можу почати. Розумію що треба але не роблю.</div>
+<div class="test-meta"><span class="tmeta what">РІШЕННЯ → ДІЯ</span><span class="tmeta exp">Очікувати: одне питання + виявлення точки зупинки</span></div>
+<button class="test-toggle" onclick="tr(this)"><em class="ar">▶</em> Еталонна відповідь</button>
+<div class="test-resp">«Третій тиждень — це вже не прокрастинація. Там є якась конкретна перешкода. Скажи мені: коли думаєш про цю дію — що перше приходить? Страх? Втома? Або відчуття що щось ще не готово?»</div>
+</div>
+
+<div class="test-card">
+<div class="test-msg" onclick="ct(this,'Після Zoom я пару днів на підйомі а потім все гасне. Як це зберегти?')">Після Zoom я пару днів на підйомі а потім все гасне. Як це зберегти?</div>
+<div class="test-meta"><span class="tmeta what">СТАН → ДІЯ</span><span class="tmeta exp">Очікувати: визнання патерну + один практичний крок</span></div>
+<button class="test-toggle" onclick="tr(this)"><em class="ar">▶</em> Еталонна відповідь</button>
+<div class="test-resp">«Це дуже впізнаваний патерн. Підйом після Zoom — це стан. А стан не тримається сам. Питання не в тому як зберегти підйом — а в тому як рухатись навіть коли його немає. Що ти зазвичай робиш у перші 24 години після Zoom?»</div>
+</div>
+
+<div class="test-card">
+<div class="test-msg" onclick="ct(this,'Мені здається я обрала не ту ціль. Вже місяць над нею і нічого не відчуваю.')">Мені здається я обрала не ту ціль. Вже місяць над нею і нічого не відчуваю.</div>
+<div class="test-meta"><span class="tmeta what">ЦІЛЬ</span><span class="tmeta exp">Очікувати: не переконувати, питати про різницю між ціллю і бажанням</span></div>
+<button class="test-toggle" onclick="tr(this)"><em class="ar">▶</em> Еталонна відповідь</button>
+<div class="test-resp">«Місяць без відчуття — це важлива інформація. Скажи мені: ця ціль — вона з'явилась бо ти справді цього хочеш, чи бо так «правильно» або «треба»?»</div>
+</div>
+
+<div class="test-card">
+<div class="test-msg" onclick="ct(this,'Не розумію наступний крок. Все зрозуміло в голові але що конкретно робити першим?')">Не розумію наступний крок. Все зрозуміло в голові але що конкретно робити першим?</div>
+<div class="test-meta"><span class="tmeta what">ДІЯ</span><span class="tmeta exp">Очікувати: допомога декомпозиції, не список інструкцій</span></div>
+<button class="test-toggle" onclick="tr(this)"><em class="ar">▶</em> Еталонна відповідь</button>
+<div class="test-resp">«Якщо в голові все ясно — значить проблема не в розумінні. Скажи: який найменший крок ти можеш зробити прямо сьогодні? Навіть якщо він здається занадто малим.»</div>
+</div>
+
+</div>
+</div>
+
+<div class="sec">
+<h3>Ознаки що агент налаштований правильно</h3>
+<div class="chk" id="chk-m">
+<div class="chk-item" onclick="tc(this,'mm1')" data-key="mm1"><div class="cb"></div>Відповідає тепло — без оцінки, без поради одразу</div>
+<div class="chk-item" onclick="tc(this,'mm2')" data-key="mm2"><div class="cb"></div>Одне питання в кінці кожної відповіді</div>
+<div class="chk-item" onclick="tc(this,'mm3')" data-key="mm3"><div class="cb"></div>До 4 речень — не пише «простирадла»</div>
+<div class="chk-item" onclick="tc(this,'mm4')" data-key="mm4"><div class="cb"></div>Не пропонує купити ФОКУС або ABSystem</div>
+<div class="chk-item" onclick="tc(this,'mm5')" data-key="mm5"><div class="cb"></div>Відповідь можна скопіювати клієнту без редагування</div>
+</div>
+</div>
+</div><!-- end mentor -->
+
+<!-- ══ CONTENT ═════════════════════════════════════════════════════ -->
+<div class="an-panel" id="p-c">
+<div class="sec" style="margin-top:32px">
+<h2>AI CONTENT</h2>
+<p style="color:rgba(13,14,26,0.55);font-size:14px">Один Zoom-транскрипт або тема → Reels, пости, карусель, email. Займає 5 хвилин замість 3 годин.</p>
+</div>
+
+<div class="callout ok"><strong>Головний workflow</strong>Після кожного Zoom: зроби транскрипт → відкрий AI Content → напиши <code>/content [транскрипт]</code> → отримай повний пакет → публікуй.</div>
+
+<div class="sec">
+<h3>Команди — натисни на приклад щоб скопіювати</h3>
+<div class="cmd-grid">
+
+<div class="cmd-card">
+<div class="cmd-header">
+  <div><div class="cmd-name">/reels [тема]</div><div class="cmd-desc">3 сценарії Reels 30с з хуками, текстом і промптом для відео</div></div>
+  <button class="cmd-copy" onclick="ct2(this,'/reels застрягання між рішенням і дією')">Скопіювати</button>
+</div>
+<div class="cmd-body">
+<div class="cmd-example" onclick="ct(this,'/reels застрягання між рішенням і дією')">/reels застрягання між рішенням і дією</div>
+<div class="cmd-example" onclick="ct(this,'/reels чому мотивація зникає через 3 дні')">/reels чому мотивація зникає через 3 дні</div>
+<div class="cmd-result">Отримаєш: 3 варіанти × (хук + текст + CTA + промпт Kling AI)</div>
+</div>
+</div>
+
+<div class="cmd-card">
+<div class="cmd-header">
+  <div><div class="cmd-name">/post [тема]</div><div class="cmd-desc">3 варіанти посту: короткий / середній / довгий</div></div>
+  <button class="cmd-copy" onclick="ct2(this,'/post коли розумієш але не робиш')">Скопіювати</button>
+</div>
+<div class="cmd-body">
+<div class="cmd-example" onclick="ct(this,'/post коли розумієш але не робиш')">/post коли розумієш але не робиш</div>
+<div class="cmd-example" onclick="ct(this,'/post різниця між ціллю і бажанням')">/post різниця між ціллю і бажанням</div>
+<div class="cmd-result">Отримаєш: 3 пости різної довжини в TOV Наді. Бери той що підходить.</div>
+</div>
+</div>
+
+<div class="cmd-card">
+<div class="cmd-header">
+  <div><div class="cmd-name">/carousel [тема]</div><div class="cmd-desc">Структура каруселі: заголовок + 5-7 слайдів + CTA</div></div>
+  <button class="cmd-copy" onclick="ct2(this,'/carousel 5 ознак що рух зупинився не там де думаєш')">Скопіювати</button>
+</div>
+<div class="cmd-body">
+<div class="cmd-example" onclick="ct(this,'/carousel 5 ознак що рух зупинився не там де думаєш')">/carousel 5 ознак що рух зупинився не там де думаєш</div>
+<div class="cmd-result">Отримаєш: готова структура для дизайнера або Canva.</div>
+</div>
+</div>
+
+<div class="cmd-card" style="border-color:rgba(26,122,74,0.4)">
+<div class="cmd-header" style="background:var(--gl)">
+  <div><div class="cmd-name" style="color:var(--gr)">/content [транскрипт або текст]</div><div class="cmd-desc">Головна команда. Повний пакет з одного матеріалу.</div></div>
+  <button class="cmd-copy" onclick="ct2(this,'/content [вставити транскрипт Zoom]')">Скопіювати</button>
+</div>
+<div class="cmd-body">
+<div class="cmd-example" onclick="ct(this,'/content [вставити транскрипт Zoom]')">/content [вставити транскрипт Zoom]</div>
+<div class="cmd-result">Отримаєш за 30 сек: 1 Reels сценарій + 2 пости + 1 карусель + Telegram-повідомлення. Тиждень контенту з однієї практики.</div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="sec">
+<h3>Ознаки що агент налаштований правильно</h3>
+<div class="chk">
+<div class="chk-item" onclick="tc(this,'cc1')" data-key="cc1"><div class="cb"></div>Пост звучить як ти — не як ChatGPT</div>
+<div class="chk-item" onclick="tc(this,'cc2')" data-key="cc2"><div class="cb"></div>Немає слів «трансформуйся», «розкрий потенціал», «не проспи»</div>
+<div class="chk-item" onclick="tc(this,'cc3')" data-key="cc3"><div class="cb"></div>/reels дає хук + структуру + CTA (не просто текст)</div>
+<div class="chk-item" onclick="tc(this,'cc4')" data-key="cc4"><div class="cb"></div>/content з транскрипту дає мінімум 3 різних формати</div>
+<div class="chk-item" onclick="tc(this,'cc5')" data-key="cc5"><div class="cb"></div>Можна опублікувати без редагування або з мінімальними правками</div>
+</div>
+</div>
+</div><!-- end content -->
+
+<!-- ══ STRATEGIST ══════════════════════════════════════════════════ -->
+<div class="an-panel" id="p-s">
+<div class="sec" style="margin-top:32px">
+<h2>AI STRATEGIST</h2>
+<p style="color:rgba(13,14,26,0.55);font-size:14px">Будує офери, воронки, лендінги, рекламні матеріали. Не пише контент — думає як ти маєш рости.</p>
+</div>
+
+<div class="callout warn"><strong>Важливо</strong>Стратегіст не вигадує — він аналізує. Чим більше ти даєш контексту (хто клієнт, який продукт, яка ціль) — тим точніший результат.</div>
+
+<div class="sec">
+<h3>Команди — натисни на приклад щоб скопіювати</h3>
+<div class="cmd-grid">
+
+<div class="cmd-card">
+<div class="cmd-header">
+  <div><div class="cmd-name">/offer [продукт]</div><div class="cmd-desc">Grand Slam Offer за Хормозі: Core + бонуси + гарантія + CTA</div></div>
+  <button class="cmd-copy" onclick="ct2(this,'/offer ФОКУС by Надя — груповий формат 6 тижнів')">Скопіювати</button>
+</div>
+<div class="cmd-body">
+<div class="cmd-example" onclick="ct(this,'/offer ФОКУС by Надя — груповий формат 6 тижнів')">/offer ФОКУС by Надя — груповий формат 6 тижнів</div>
+<div class="cmd-example" onclick="ct(this,'/offer ABSystem AI — щоденна підписка для учасників ФОКУС')">/offer ABSystem AI — щоденна підписка для учасників ФОКУС</div>
+<div class="cmd-result">Отримаєш: аналіз аудиторії + страх + трансформація + готовий стек оффера.</div>
+</div>
+</div>
+
+<div class="cmd-card">
+<div class="cmd-header">
+  <div><div class="cmd-name">/funnel [точка входу]</div><div class="cmd-desc">Воронка від першого контакту до оплати</div></div>
+  <button class="cmd-copy" onclick="ct2(this,'/funnel Instagram Reels → тест → ФОКУС')">Скопіювати</button>
+</div>
+<div class="cmd-body">
+<div class="cmd-example" onclick="ct(this,'/funnel Instagram Reels → тест → ФОКУС')">/funnel Instagram Reels → тест → ФОКУС</div>
+<div class="cmd-example" onclick="ct(this,'/funnel Telegram холодний трафік → перше повідомлення → ФОКУС')">/funnel Telegram холодний трафік → перше повідомлення → ФОКУС</div>
+<div class="cmd-result">Отримаєш: кожен крок воронки з повідомленням, таймінгом і тригером.</div>
+</div>
+</div>
+
+<div class="cmd-card">
+<div class="cmd-header">
+  <div><div class="cmd-name">/landing [продукт]</div><div class="cmd-desc">Структура лендінгу: Hero / Біль / Рішення / Оффер / FAQ / CTA</div></div>
+  <button class="cmd-copy" onclick="ct2(this,'/landing ФОКУС by Надя для жінок після вигорання')">Скопіювати</button>
+</div>
+<div class="cmd-body">
+<div class="cmd-example" onclick="ct(this,'/landing ФОКУС by Надя для жінок після вигорання')">/landing ФОКУС by Надя для жінок після вигорання</div>
+<div class="cmd-result">Отримаєш: повну структуру з текстами для кожного блоку. Дай розробнику.</div>
+</div>
+</div>
+
+<div class="cmd-card">
+<div class="cmd-header">
+  <div><div class="cmd-name">/gap</div><div class="cmd-desc">GAP-аналіз: що є у конкурентів, чого немає, де твоє вікно</div></div>
+  <button class="cmd-copy" onclick="ct2(this,'/gap')">Скопіювати</button>
+</div>
+<div class="cmd-body">
+<div class="cmd-example" onclick="ct(this,'/gap')">/gap</div>
+<div class="cmd-result">Отримаєш: порівняльний аналіз по 5 критеріях + де ти сильніша за ринок.</div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="sec">
+<h3>Тестові сценарії</h3>
+<div class="test-grid">
+<div class="test-card">
+<div class="test-msg" onclick="ct(this,'/offer ФОКУС by Надя. Аудиторія: жінки 30-45, підприємці і фрілансери, вигорання і відсутність фокусу. Хочуть систему без зайвого навантаження.')">/offer ФОКУС by Надя. Аудиторія: жінки 30-45, підприємці і фрілансери, вигорання і відсутність фокусу. Хочуть систему без зайвого навантаження.</div>
+<div class="test-meta"><span class="tmeta what">Grand Slam Offer</span><span class="tmeta exp">Очікувати: аналіз + Value Equation + стек оффера</span></div>
+<button class="test-toggle" onclick="tr(this)"><em class="ar">▶</em> Що має видати</button>
+<div class="test-resp">АНАЛІЗ: аудиторія (жінки 30-45, рівень Ханта 3-4) → біль (вигорання + хаос) → страх (докласти зусиль і знову нічого) → трансформація (система яка тримає фокус без надлишку) → СТРАТЕГІЯ: чому спрацює + РЕЗУЛЬТАТ: Core offer + 3 бонуси + гарантія + CTA → НАСТУПНИЙ КРОК: що тестувати першим.</div>
+</div>
+</div>
+</div>
+
+<div class="sec">
+<h3>Ознаки що агент налаштований правильно</h3>
+<div class="chk">
+<div class="chk-item" onclick="tc(this,'ss1')" data-key="ss1"><div class="cb"></div>Починає з аналізу — не одразу дає оффер</div>
+<div class="chk-item" onclick="tc(this,'ss2')" data-key="ss2"><div class="cb"></div>Використовує Value Equation (Dream Outcome / Probability / Time / Effort)</div>
+<div class="chk-item" onclick="tc(this,'ss3')" data-key="ss3"><div class="cb"></div>Показує для кого конкретно і який страх використовується</div>
+<div class="chk-item" onclick="tc(this,'ss4')" data-key="ss4"><div class="cb"></div>Не вигадує кейси або відгуки</div>
+<div class="chk-item" onclick="tc(this,'ss5')" data-key="ss5"><div class="cb"></div>Дає «Наступний крок» після кожного результату</div>
+</div>
+</div>
+</div><!-- end strategist -->
+
+</div><!-- wrap -->
+<footer><strong>AIAuto · Посібник користувача · Starway Studio</strong> · 3 агенти · 2026</footer>
+
+<script>
+function sw(t,btn){document.querySelectorAll('.an-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.an-panel').forEach(p=>p.classList.remove('active'));btn.classList.add('active');document.getElementById('p-'+t).classList.add('active')}
+function ct(el,text){navigator.clipboard.writeText(text).then(()=>{if(el.classList&&(el.classList.contains('test-msg')||el.classList.contains('cmd-example'))){el.style.background='var(--gl)';setTimeout(()=>el.style.background='',800)}})}
+function ct2(btn,text){navigator.clipboard.writeText(text).then(()=>{btn.textContent='✓';btn.classList.add('done');setTimeout(()=>{btn.textContent='Скопіювати';btn.classList.remove('done')},1500)})}
+function tr(btn){btn.nextElementSibling.classList.toggle('open');btn.classList.toggle('open')}
+function tc(el,key){el.classList.toggle('done');el.querySelector('.cb').textContent=el.classList.contains('done')?'✓':'';localStorage.setItem('ag_'+key,el.classList.contains('done')?'1':'0')}
+document.querySelectorAll('.chk-item').forEach(el=>{if(localStorage.getItem('ag_'+el.dataset.key)==='1'){el.classList.add('done');el.querySelector('.cb').textContent='✓'}});
+</script>
+</body>
+</html>
