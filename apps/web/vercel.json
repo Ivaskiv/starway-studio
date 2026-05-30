@@ -8,7 +8,11 @@
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/deliverables/(.*)",
+      "destination": "/deliverables/$1"
+    },
+    {
+      "source": "/((?!deliverables/).*)",
       "destination": "/index.html"
     }
   ]
