@@ -87,6 +87,7 @@ cloudflared.log
 
 *.pem
 *.json
+!vercel.json
 
 ngrok.yml
 
@@ -168,3 +169,12 @@ coverage/
 schema.backup.prisma
 # Local backend backup
 backend/backup-TIMESTAMP.json
+
+# ============================================
+# GENERATED STYLES
+# ============================================
+
+**/*.css.map
+apps/web/src/styles/
+apps/web/src/features/**/styles/*.css
+apps/web/src/features/**/styles/components/
