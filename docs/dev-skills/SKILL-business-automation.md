@@ -93,11 +93,11 @@
 ```
 Тригери:
 - /start в боті
-- Ранковий/вечірній цикл
+- `TODO: daily cycle trigger (див. backend/src/modules/telegram-mentor/content/*.content.ts)`
 - Питання в чат
 
 Що робить:
-- Веде щоденний цикл (5 ранкових + 6 вечірніх питань)
+- `TODO: daily cycle question set (див. docs/platform/telegram-architecture.md)`
 - Аналізує відповіді через Claude API
 - Зберігає поведінковий контекст
 - Генерує тижневий AI-звіт
