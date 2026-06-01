@@ -141,7 +141,7 @@ function firstNonEmptyUrl(...values: Array<string | null | undefined>): string {
 }
 
 function isTestPaymentEnabled(): boolean {
-  return process.env.NODE_ENV !== 'production' && process.env.TEST_PAYMENT_ENABLED?.trim() === '1'
+  return process.env.NODE_ENV !== 'production' && process.env.TEST_PAYMENT_ENABLED?.trim() === 'true'
 }
 
 function formatSubscriptionDate(value: Date | string | null | undefined): string {

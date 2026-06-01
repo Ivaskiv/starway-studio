@@ -194,12 +194,13 @@ export function createApp(): Express {
   const app = express()
   const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
   const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
-  const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || ''
+  const TELEGRAM_WEBHOOK_SECRET =
+    process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || ''
   const isProduction = process.env.NODE_ENV === 'production'
-  const corsOriginEnv = process.env.CORS_ORIGIN
-    ?.split(',')
-    .map(origin => origin.trim())
-    .filter(Boolean) ?? []
+  const corsOriginEnv =
+    process.env.CORS_ORIGIN?.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean) ?? []
   const vercelUrl = process.env.VERCEL_URL?.trim()
   const vercelOrigin = vercelUrl
     ? `https://${vercelUrl.replace(/^https?:\/\//, '')}`
@@ -224,8 +225,11 @@ export function createApp(): Express {
         return
       }
 
-      const isDevLocalOrigin = !isProduction && localNetworkOriginPattern.test(origin)
-      const isKnownOrigin = allowedOrigins.some(allowed => origin.startsWith(allowed))
+      const isDevLocalOrigin =
+        !isProduction && localNetworkOriginPattern.test(origin)
+      const isKnownOrigin = allowedOrigins.some((allowed) =>
+        origin.startsWith(allowed)
+      )
 
       if (isKnownOrigin || isDevLocalOrigin) {
         callback(null, true)
@@ -241,9 +245,13 @@ export function createApp(): Express {
   // =====================
   // Middleware
   // =====================
-  const wayforpayCors = cors({ origin: '*' })
-  app.use('/api/subscriptions/payments/wayforpay', wayforpayCors)
-  app.use('/api/payments/wayforpay', wayforpayCors)
+  // Webhook endpoints — публічні receivers, CORS не потрібен.
+  // WayForPay надсилає Origin: https://secure.wayforpay.com —
+  // він ніколи не буде в allowedOrigins, тому cors({ origin: '*' }) тут.
+  const webhookCors = cors({ origin: '*' })
+  app.use('/api/payments/wayforpay', webhookCors)
+  app.use('/api/subscriptions/payments/wayforpay', webhookCors)
+
   app.use(corsOptions)
   app.options('*', corsOptions)
   app.use(securityHeaders)
@@ -259,7 +267,7 @@ export function createApp(): Express {
       fallthrough: false,
       index: false,
       redirect: false,
-    }),
+    })
   )
 
   app.get('/api/telegram/webhook/health', (_req: Request, res: Response) => {
@@ -277,13 +285,18 @@ export function createApp(): Express {
   // Keep webhook route in createApp so it is registered regardless of bootstrap entrypoint.
   app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
     if (!START_TELEGRAM_BOT || !TELEGRAM_WEBHOOK_URL) {
-      return res.status(404).json({ ok: false, message: 'telegram webhook disabled' })
+      return res
+        .status(404)
+        .json({ ok: false, message: 'telegram webhook disabled' })
     }
 
     if (TELEGRAM_WEBHOOK_SECRET) {
-      const incomingSecret = req.get('x-telegram-bot-api-secret-token')?.trim() || ''
+      const incomingSecret =
+        req.get('x-telegram-bot-api-secret-token')?.trim() || ''
       if (!incomingSecret || incomingSecret !== TELEGRAM_WEBHOOK_SECRET) {
-        return res.status(401).json({ ok: false, message: 'invalid telegram webhook secret' })
+        return res
+          .status(401)
+          .json({ ok: false, message: 'invalid telegram webhook secret' })
       }
     }
 

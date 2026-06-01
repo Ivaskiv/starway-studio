@@ -11,7 +11,7 @@ type InlineKeyboardButton =
 
 const miniAppVersion = process.env.MINIAPP_VERSION?.trim() || 'dev'
 const isDevRuntime = process.env.NODE_ENV !== 'production'
-const isTestPaymentEnabled = isDevRuntime && process.env.TEST_PAYMENT_ENABLED?.trim() === '1'
+const isTestPaymentEnabled = isDevRuntime && process.env.TEST_PAYMENT_ENABLED?.trim() === 'true'
 const DEV_TEST_PAYMENT_URL = 'https://secure.wayforpay.com/button/bcd1a02457187'
 const DEV_TEST_PAYMENT_BUTTON = {
   text: '🧪 Тест 1 грн',
