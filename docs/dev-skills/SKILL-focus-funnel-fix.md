@@ -307,3 +307,26 @@ WHERE "focusPaid" = false AND "offerShownAt" IS NOT NULL;
 ❌ Не дублювати NotificationJob (перевіряти existingJobs)
 ❌ Не блокувати Event Loop у scheduler (async/await + take: 50)
 ```
+## 10. WAYFORPAY WEBHOOK — ВІДОМІ ПРОБЛЕМИ
+
+### CORS блок
+WayForPay надсилає serviceUrl POST з origin https://secure.wayforpay.com.
+Рішення: додати wayforpayCors = cors({ origin: '*' }) для
+/api/subscriptions/payments/wayforpay/* і /api/payments/wayforpay/* маршрутів
+ДО загального cors middleware в app.ts.
+Ці endpoints — публічні webhook receivers, CORS не потрібен.
+
+### Payload як рядок-ключ
+WayForPay іноді надсилає весь JSON як один рядок-ключ в body.
+Тобто Object.keys(body)[0] = '{"orderReference":"...","amount":1,...}'.
+Парсер має перевіряти обидва варіанти:
+1. body.orderReference існує → прямий об'єкт
+2. Object.keys(body).length === 1 → JSON.parse(keys[0])
+
+### Guard після оплати (idempotent)
+Перед відправкою Block 12 завжди перевіряти:
+if (sub.focusWelcomedAt) return — не дублювати
+
+### Guard проти циклу кнопок
+Перед запуском тесту: if (user.focusPaid) → показати FOCUS_ALREADY_PAID
+Перед повторним тестом: якщо testCompletedAt → підтвердити restart
