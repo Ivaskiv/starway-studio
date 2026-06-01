@@ -23,6 +23,17 @@ import { buildRequestFingerprint } from '../../../core/state-machine/securityFou
 import { claimRuntimeEventReplay, buildRuntimeTelemetry, withRuntimeAdvisoryLock } from '../../../core/runtime/runtimeIdempotency.js'
 import { handleAbTestCallback, observeAbTestCanonicalAction } from '@/products/ab-system/telegram/abTest.service.js'
 import { planAck, planMessage } from '../conversation/delivery/planDelivery.js'
+import {
+  acceptSwapRequest,
+  bookPrivateSlot,
+  cancelPrivateBooking,
+  declineSwapRequest,
+  getUpcomingGroupSessions,
+  getCoachWeekSlots,
+  toggleCoachSlotStatus,
+} from '../../zoom/service.js'
+import { ZoomSlotStatus } from '@starway/db/prisma-client'
+import { abTestZoomContent } from '@/products/ab-system/content/abTest.zoom.js'
 
 type TelegramCallbackKind =
   | 'payment'
@@ -55,6 +66,64 @@ type TelegramCallbackTransition =
   | 'leadmagnet_material_resumed'
   | 'main_menu_opened'
   | 'lifecycle_unknown'
+
+const RESULT_LABEL: Record<string, string> = {
+  STATE: 'СТАН',
+  GOAL: 'ЦІЛЬ',
+  CHOICE: 'ВИБІР',
+  DECISION: 'РІШЕННЯ',
+  ACTION: 'ДІЯ',
+}
+
+const RESULT_FOCUS_CONTEXT: Record<string, string> = {
+  STATE: [
+    'Система визначила: основна точка блокування — енергетичний',
+    'та ресурсний стан. Дія переривається раніше, ніж починається.',
+    '',
+    'Що це означає в роботі ФОКУС:',
+    '— практики будуватимуться від відновлення ресурсного стану',
+    '— завдання тижня — мінімальний крок без надриву',
+    '— фокус не на результат, а на умови з яких можлива дія',
+  ].join('\n'),
+  GOAL: [
+    'Система визначила: основна точка блокування — відсутність',
+    'сформованої внутрішньої цілі. Дія не тримається, бо',
+    'напрямок ще не зафіксований.',
+    '',
+    'Що це означає в роботі ФОКУС:',
+    '— на практиках фокус на прояснення реального запиту',
+    '— завдання тижня від питання "навіщо", а не "як"',
+    '— перший крок — точне формулювання, а не план дій',
+  ].join('\n'),
+  CHOICE: [
+    'Система визначила: основна точка блокування — незакритий',
+    'вибір. Паралельні варіанти утримують від руху в будь-який бік.',
+    '',
+    'Що це означає в роботі ФОКУС:',
+    '— практики будуються навколо конкретної ситуації вибору',
+    '— завдання тижня — не обрати правильно, а побачити справжню ціну',
+    '  кожного варіанту',
+    '— фокус на те, що насправді утримує від рішення',
+  ].join('\n'),
+  DECISION: [
+    'Система визначила: основна точка блокування — незафіксоване',
+    'рішення. Розуміння є, але внутрішньої фіксації "я це роблю" — немає.',
+    '',
+    'Що це означає в роботі ФОКУС:',
+    '— практики спрямовані на доведення розуміння до рішення',
+    '— завдання тижня — конкретна дія що підтверджує рішення',
+    '— фокус не на аналіз, а на фіксацію',
+  ].join('\n'),
+  ACTION: [
+    'Система визначила: основна точка блокування — перший крок.',
+    'Ціль і рішення є, але дія залишається в голові.',
+    '',
+    'Що це означає в роботі ФОКУС:',
+    '— практики будуються навколо декомпозиції конкретної дії',
+    '— завдання тижня — зробити крок меншим до реально виконуваного',
+    '— фокус на усунення розриву між "знаю" і "зробив"',
+  ].join('\n'),
+}
 
 export type TelegramCallbackEvent = {
   action: string
@@ -225,6 +294,151 @@ async function renderDecisionForContext(
   return renderTelegram(ctx, decision, firstName)
 }
 
+async function handleZoomCallback(ctx: Context, action: string, userId: string | null): Promise<boolean> {
+  if (action === 'coach:my_schedule') {
+    const coachId = userId
+    if (!coachId) {
+      await planAck(ctx, 'ctx.answerCbQuery', 'coach_schedule_no_user', 'Не знайдено коуча').catch(() => undefined)
+      return true
+    }
+    const slots = await getCoachWeekSlots(coachId)
+    await planAck(ctx, 'ctx.answerCbQuery', 'coach_schedule_ok').catch(() => undefined)
+
+    if (!slots.length) {
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'coach_schedule_empty',
+        `${abTestZoomContent.coachSchedule.title}\n\n${abTestZoomContent.coachSchedule.empty}`,
+      ).catch(() => undefined)
+      return true
+    }
+
+    const weekdayNames = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+    const lines = slots.map((slot) => {
+      const weekday = weekdayNames[slot.date.getDay()] ?? 'День'
+      return `${weekday} ${slot.date.toLocaleDateString('uk-UA')} ${String(slot.hour).padStart(2, '0')}:00 — ${slot.status}`
+    })
+
+    const buttons = slots.map((slot) => {
+      const nextStatus = slot.status === ZoomSlotStatus.OPEN ? ZoomSlotStatus.CLOSED : ZoomSlotStatus.OPEN
+      const label = slot.status === ZoomSlotStatus.OPEN
+        ? abTestZoomContent.coachSchedule.closeLabel
+        : abTestZoomContent.coachSchedule.openLabel
+      return [{ text: `${label} ${String(slot.hour).padStart(2, '0')}:00`, callback_data: `coach:slot_toggle:${slot.id}:${nextStatus}` }]
+    })
+
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'coach_schedule_panel',
+      `${abTestZoomContent.coachSchedule.title}\n\n${lines.join('\n')}`,
+      { inline_keyboard: buttons },
+    ).catch(() => undefined)
+    return true
+  }
+
+  if (action.startsWith('coach:slot_toggle:')) {
+    const [, , , slotId, statusRaw] = action.split(':')
+    if (!slotId || !statusRaw) return true
+    const coachId = userId
+    if (!coachId) {
+      await planAck(ctx, 'ctx.answerCbQuery', 'coach_slot_toggle_no_user', 'Не знайдено коуча').catch(() => undefined)
+      return true
+    }
+    const status = statusRaw === 'OPEN' ? ZoomSlotStatus.OPEN : ZoomSlotStatus.CLOSED
+    const slot = await prisma.zoomSlot.findUnique({ where: { id: slotId }, select: { coachId: true } })
+    if (!slot || slot.coachId !== coachId) {
+      await planAck(ctx, 'ctx.answerCbQuery', 'coach_slot_toggle_forbidden', 'Немає доступу').catch(() => undefined)
+      return true
+    }
+    await toggleCoachSlotStatus({ slotId, coachId, status })
+    await planAck(ctx, 'ctx.answerCbQuery', 'coach_slot_toggle_ok', abTestZoomContent.coachSchedule.updated).catch(() => undefined)
+    return handleZoomCallback(ctx, 'coach:my_schedule', coachId)
+  }
+
+  if (!action.startsWith('zoom:')) return false
+
+  if (action === 'zoom:next_sessions') {
+    const sessions = await getUpcomingGroupSessions(3)
+    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_next_sessions_ack').catch(() => undefined)
+    if (!sessions.length) {
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'zoom_next_sessions_empty',
+        'Розклад практик публікується щонеділі.\nНаступна сесія зʼявиться тут автоматично.',
+      ).catch(() => undefined)
+      return true
+    }
+    const lines = sessions.map((session) => {
+      const dt = session.scheduledAt.toLocaleString('uk-UA', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      return `${dt} — ${session.topic}`
+    })
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'zoom_next_sessions_list',
+      `Найближчі Zoom-практики ФОКУС:\n\n${lines.join('\n')}\n\nПосилання на підключення надходить за 2 години до початку.`,
+    ).catch(() => undefined)
+    return true
+  }
+
+  const telegramUserId = String(ctx.from?.id ?? '').trim()
+  const effectiveUserId = userId ?? (
+    telegramUserId
+      ? (await prisma.user.findUnique({ where: { telegramUserId }, select: { id: true } }))?.id ?? null
+      : null
+  )
+  if (!effectiveUserId) {
+    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_callback_no_user', 'Не знайдено користувача').catch(() => undefined)
+    return true
+  }
+
+  if (action.startsWith('zoom:swap:accept:')) {
+    const [, , , swapId, sessionIdTo] = action.split(':')
+    if (!swapId || !sessionIdTo) return true
+    await acceptSwapRequest(swapId, effectiveUserId, sessionIdTo)
+    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_swap_accept_ok', '✅ Обмін підтверджено!').catch(() => undefined)
+    await ctx.editMessageText('✅ Обмін підтверджено. Дані сесій оновлено.').catch(() => undefined)
+    return true
+  }
+
+  if (action.startsWith('zoom:swap:decline:')) {
+    const [, , , swapId] = action.split(':')
+    if (!swapId) return true
+    await declineSwapRequest(swapId, effectiveUserId)
+    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_swap_decline_ok', 'Відхилено').catch(() => undefined)
+    await ctx.editMessageText('Ви відхилили запит на обмін').catch(() => undefined)
+    return true
+  }
+
+  if (action.startsWith('zoom:book:')) {
+    const [, , sessionId] = action.split(':')
+    if (!sessionId) return true
+    await bookPrivateSlot(effectiveUserId, sessionId)
+    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_book_ok', '📅 Записано!').catch(() => undefined)
+    await planMessage(ctx, 'ctx.reply', 'zoom_book_confirm', '📅 Записано! Перевір Zoom-календар.').catch(() => undefined)
+    return true
+  }
+
+  if (action.startsWith('zoom:cancel:')) {
+    const [, , sessionId] = action.split(':')
+    if (!sessionId) return true
+    await cancelPrivateBooking(effectiveUserId, sessionId)
+    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_cancel_ok', 'Запис скасовано').catch(() => undefined)
+    return true
+  }
+
+  return false
+}
+
 export async function dispatchTelegramCallbackEvent(ctx: Context, action: string): Promise<boolean> {
   const userId = (ctx.state as { userId?: string | null }).userId ?? null
   const event = resolveTelegramCallbackEvent(action)
@@ -274,11 +488,71 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
         return true
       }
     }
+    if (action === 'back_to_dashboard') {
+      await planAck(ctx, 'ctx.answerCbQuery', 'back_to_dashboard_ack').catch(() => undefined)
+      await handleStart(ctx as never)
+      return true
+    }
+    if (action === 'ab_test:show_result' && userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { focusPaid: true, testResultType: true },
+      })
+      const activeFocusSubscription = await prisma.productSubscription.findFirst({
+        where: {
+          userId,
+          status: 'active',
+          product: { is: { code: { in: ['focus', 'FOCUS'] } } },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+        select: { id: true },
+      })
+      const isFocusPaid = Boolean(user?.focusPaid) || Boolean(activeFocusSubscription)
+      if (isFocusPaid) {
+        await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_show_result_paid_ack').catch(() => undefined)
+        const chatId = ctx.chat?.id ?? ctx.from?.id
+        if (!chatId) return true
+        const resultKey = user?.testResultType ?? 'UNKNOWN'
+        const resultLabel = RESULT_LABEL[resultKey] ?? 'не визначено'
+        const resultContext = RESULT_FOCUS_CONTEXT[resultKey]
+          ?? 'Для уточнення діагностики — пройти тест повторно.'
+        const webAppBaseUrl = (process.env.TELEGRAM_WEBAPP_BASE_URL ?? '').trim().replace(/\/+$/, '')
+        const publicFrontend = (process.env.PUBLIC_FRONTEND_URL ?? '').trim().replace(/\/+$/, '')
+        const zoomUrl = webAppBaseUrl
+          ? `${webAppBaseUrl}/zoom`
+          : `${publicFrontend}/zoom`
+        const text =
+          `Результат діагностики: ${resultLabel}\n\n`
+          + `${resultContext}\n\n`
+          + 'Наступна дія: відкрити Календар і підготувати одну ситуацію для розбору на практиці.'
+        const inline_keyboard = [
+          [
+            webAppBaseUrl
+              ? { text: 'Календар Zoom-практик', web_app: { url: zoomUrl } }
+              : { text: 'Календар Zoom-практик', url: zoomUrl },
+          ],
+          [{ text: 'Повернутись до кабінету', callback_data: 'back_to_dashboard' }],
+        ]
+        await ctx.telegram.sendMessage(
+          chatId,
+          text,
+          {
+            reply_markup: {
+              inline_keyboard,
+            },
+          },
+        )
+        return true
+      }
+    }
     if (await handleAbTestCallback(ctx, action)) {
       console.info('[AB_TEST_START_DEBUG] event_bus:handled_by_ab_test', {
         action,
         userId,
       })
+      return true
+    }
+    if (await handleZoomCallback(ctx, action, userId)) {
       return true
     }
     console.info('[AB_TEST_START_DEBUG] event_bus:not_handled_by_ab_test', {

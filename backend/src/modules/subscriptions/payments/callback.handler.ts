@@ -1,3 +1,8 @@
+//backend/src/modules/subscriptions/payments/callback.handler.ts
+import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
+import { scheduleFollowups } from '@/products/ab-system/telegram/abTest.scheduler.js'
+import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.service.js'
+import { FOCUS_WELCOME } from '@/products/ab-system/content/abTest.focus.js'
 import type { Prisma } from '@starway/db/prisma-client'
 import type { Request, Response } from 'express'
 import {
@@ -6,7 +11,7 @@ import {
 } from '../../../core/runtime/runtimeIdempotency.js'
 import { buildRequestFingerprint } from '../../../core/state-machine/securityFoundation.js'
 import { prisma } from '../../../db/client.js'
-import { resolveNotificationType } from '../../../services/notifications/domain/notificationPolicy.js'
+import { bot, sendOpsTelegramMessage } from '../../../lib/telegram.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
 import { runWeeklyAnalysis } from '../../ai-mentor/weekly-analysis/service.js'
@@ -14,33 +19,118 @@ import { getContentAttributionEventPayload } from '../../events/contentAttributi
 import { trackEvent } from '../../events/service.js'
 import { sendBillingSuccessTelegramMessage } from '../../telegram-mentor/handlers/billing.js'
 import { resolveUserState } from '../../telegram-mentor/handlers/start.js'
+import {
+  getUpcomingGroupSessions,
+  confirmZoomSwapPaymentByOrderRef,
+  scheduleReminders,
+} from '../../zoom/service.js'
 import type { PaymentCallbackData } from '../types.js'
 import {
   buildEcosystemPaymentCheckoutUrl,
-  FOCUS_DOJIM_TIMER_IDS,
   resolveFocusChannelInviteLink,
   simulateFocusActivation,
 } from './business.js'
 import {
   cancelPendingFocusDojims,
   sendAbsystemPaymentSuccessTelegramMessage,
-  sendAbTestBlock12Welcome,
-  sendFocusPaymentSuccessTelegramMessage,
   sendPaymentFailedTelegramMessage,
 } from './callback.notifications.js'
-import { sendOpsTelegramMessage } from '../../../lib/telegram.js'
-import { isProcessedPayment, processPaymentWebhook } from './callback.processing.js'
+import {
+  processPaymentWebhook,
+} from './callback.processing.js'
 import { resolveWebhookPaymentTarget } from './callback.targets.js'
 import { verifySignature } from './crypto.js'
-import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
-import { scheduleFollowups } from '@/products/ab-system/telegram/abTest.scheduler.js'
-import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.service.js'
-import { markCheckoutSessionCompleted, markCheckoutSessionProcessing } from './wayforpay.checkout.js'
+import {
+  markCheckoutSessionCompleted,
+  markCheckoutSessionProcessing,
+} from './wayforpay.checkout.js'
+
+type WayForPayPayload = {
+  order_reference?: string
+  orderReference?: string
+  transaction_status?: string
+  transactionStatus?: string
+  amount?: number | string
+  currency?: string
+  product_name?: unknown[]
+  productName?: unknown[]
+  product_count?: unknown[]
+  productCount?: unknown[]
+  product_price?: unknown[]
+  productPrice?: unknown[]
+  clientAccountId?: string
+  client_account_id?: string
+  merchant_signature?: string
+  merchantSignature?: string
+  transaction_id?: string
+  transactionId?: string
+  reason_code?: string
+  reasonCode?: string
+}
+
+function parseWayForPayPayload(body: unknown): WayForPayPayload | null {
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    const payload = body as WayForPayPayload
+    if (payload.orderReference || payload.order_reference) {
+      return payload
+    }
+  }
+
+  if (body && typeof body === 'object') {
+    const keys = Object.keys(body as object)
+    if (keys.length === 1) {
+      try {
+        const parsed = JSON.parse(keys[0]) as unknown
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const payload = parsed as WayForPayPayload
+          if (payload.orderReference || payload.order_reference) {
+            return payload
+          }
+        }
+      } catch {
+        // not JSON key payload
+      }
+    }
+  }
+
+  return null
+}
+
+function getSafeName(firstName?: string | null): string {
+  if (!firstName) return ''
+  return firstName
+    .replace(/[<>{}\[\]]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40)
+}
+
+function resolveZoomCalendarUrl(): string | null {
+  const candidates = [
+    process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? '',
+    process.env.TELEGRAM_PUBLIC_FRONTEND_URL?.trim() ?? '',
+    process.env.PUBLIC_FRONTEND_URL?.trim() ?? '',
+    process.env.FRONTEND_URL?.trim() ?? '',
+  ].filter(Boolean)
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = new URL(candidate)
+      if (!parsed.host) continue
+      return `${candidate.replace(/\/$/, '')}/zoom`
+    } catch {
+      continue
+    }
+  }
+
+  return null
+}
 
 /** WayForPay callback handler — публічний ендпоінт (без authRequired) */
 export async function wayForPayCallback(req: Request, res: Response) {
   try {
-    const raw = (req.body ?? {}) as Record<string, unknown>
+    const parsedPayload = parseWayForPayPayload(req.body)
+    const raw: WayForPayPayload = parsedPayload ?? ((req.body ?? {}) as WayForPayPayload)
     const data = {
       order_reference:
         typeof raw.order_reference === 'string'
@@ -54,8 +144,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
           : typeof raw.amount === 'string'
             ? Number(raw.amount)
             : NaN,
-      currency:
-        typeof raw.currency === 'string' ? raw.currency : '',
+      currency: typeof raw.currency === 'string' ? raw.currency : '',
       product_name: Array.isArray(raw.product_name)
         ? raw.product_name.map((v) => String(v))
         : Array.isArray(raw.productName)
@@ -104,15 +193,16 @@ export async function wayForPayCallback(req: Request, res: Response) {
     } as PaymentCallbackData
     const callbackStartedAt = Date.now()
     const normalizedPreview = {
-      order_reference: (req.body as Record<string, unknown>)?.order_reference ?? (req.body as Record<string, unknown>)?.orderReference ?? null,
-      transaction_status: (req.body as Record<string, unknown>)?.transaction_status ?? (req.body as Record<string, unknown>)?.transactionStatus ?? null,
-      amount: (req.body as Record<string, unknown>)?.amount ?? null,
-      currency: (req.body as Record<string, unknown>)?.currency ?? null,
-      clientAccountId: (req.body as Record<string, unknown>)?.clientAccountId ?? null,
-      merchant_signature_present: Boolean((req.body as Record<string, unknown>)?.merchant_signature),
-      merchantSignature_present: Boolean((req.body as Record<string, unknown>)?.merchantSignature),
+      order_reference: raw.order_reference ?? raw.orderReference ?? null,
+      transaction_status: raw.transaction_status ?? raw.transactionStatus ?? null,
+      amount: raw.amount ?? null,
+      currency: raw.currency ?? null,
+      clientAccountId:
+        raw.clientAccountId ?? null,
+      merchant_signature_present: Boolean(raw.merchant_signature),
+      merchantSignature_present: Boolean(raw.merchantSignature),
     }
-    console.log('[PAYMENT_LIFECYCLE] parsed payload', req.body)
+    console.log('[PAYMENT_LIFECYCLE] parsed payload', parsedPayload ?? req.body)
     console.log('[PAYMENT_LIFECYCLE] normalized payload', normalizedPreview)
 
     if (!data.order_reference || !data.amount || isNaN(Number(data.amount))) {
@@ -122,8 +212,14 @@ export async function wayForPayCallback(req: Request, res: Response) {
       })
       console.warn('[PAYMENT_LIFECYCLE] skip reason', {
         reason: 'missing_required_fields',
-        expected: ['order_reference', 'amount', 'currency', 'transaction_status', 'merchant_signature'],
-        actualKeys: Object.keys((req.body ?? {}) as Record<string, unknown>),
+        expected: [
+          'order_reference',
+          'amount',
+          'currency',
+          'transaction_status',
+          'merchant_signature',
+        ],
+        actualKeys: Object.keys(raw as object),
       })
       return res.status(200).json({ status: 'skipped' })
     }
@@ -137,11 +233,15 @@ export async function wayForPayCallback(req: Request, res: Response) {
       currency: data.currency,
     })
 
-    if (typeof data.order_reference === 'string' && data.order_reference.trim()) {
-      await markCheckoutSessionProcessing(data.order_reference.trim()).catch(() => undefined)
+    if (
+      typeof data.order_reference === 'string' &&
+      data.order_reference.trim()
+    ) {
+      await markCheckoutSessionProcessing(data.order_reference.trim()).catch(
+        () => undefined
+      )
     }
 
-    const target = resolveWebhookPaymentTarget(data)
     const requestFingerprint = buildRequestFingerprint({
       method: req.method,
       path: req.path,
@@ -196,23 +296,35 @@ export async function wayForPayCallback(req: Request, res: Response) {
       isDevBypass: !isValidSignature && isDev,
     })
 
-    if (data.transaction_status === 'Approved') {
-      const alreadyProcessed = await isProcessedPayment(data.order_reference, prisma)
-      if (alreadyProcessed) {
-        console.warn('[PAYMENT_LIFECYCLE] duplicate callback detected', {
-          orderReference: data.order_reference,
-          source: 'processedPayment_guard',
-          action: 'skip_reprocessing',
-        })
-        return res.status(200).send('OK')
-      }
-
-      console.log('[PAYMENT_LIFECYCLE] payment verified', {
-        orderReference: data.order_reference,
-        signature: 'ok',
-        transactionStatus: data.transaction_status,
-      })
+    const isZoomSwapPayment = typeof data.order_reference === 'string'
+      && data.order_reference.startsWith('zoom_swap_')
+    if (isZoomSwapPayment && data.transaction_status === 'Approved') {
+      await confirmZoomSwapPaymentByOrderRef(data.order_reference).catch(() => undefined)
+      return res.status(200).send('OK')
     }
+
+    const target = resolveWebhookPaymentTarget(data)
+    // fix with kimi 2026-05-28: moved resolveWebhookPaymentTarget to after signature verification — prevents processing malformed orderReference before request legitimacy is confirmed
+    if (!target && data.transaction_status === 'Approved') {
+      console.error('[PAYMENT_LIFECYCLE] PRODUCT_NOT_FOUND', {
+        orderReference: data.order_reference,
+        reason: 'cannot_resolve_target_from_order_reference',
+      })
+      await trackEvent({
+        userId:
+          typeof data.clientAccountId === 'string' ? data.clientAccountId : null,
+        type: 'payment_callback_product_not_found',
+        source: 'web',
+        state: null,
+        payload: {
+          orderReference: data.order_reference,
+          productName: data.product_name,
+        },
+      })
+      return res.status(200).send('OK') // 200 — prevent WayForPay retry loop
+    }
+
+    // fix with kimi 2026-05-28: removed pre-lock isProcessedPayment() — race condition, deduplication handled inside withRuntimeAdvisoryLock
 
     if (data.transaction_status !== 'Approved') {
       await trackEvent({
@@ -333,9 +445,80 @@ export async function wayForPayCallback(req: Request, res: Response) {
     })
 
     if (webhookResult.result?.status === 'approved' && userId) {
-      if (typeof data.order_reference === 'string' && data.order_reference.trim()) {
-        await markCheckoutSessionCompleted(data.order_reference.trim()).catch(() => undefined)
-      }
+      await prisma.$transaction(
+        async (tx) => {
+          // fix with kimi 2026-05-28: wrapped all post-payment DB writes in prisma.$transaction — prevents partial state (e.g. subscription created but focusPaid = false) on server crash mid-orchestration
+          if (
+            typeof data.order_reference === 'string' &&
+            data.order_reference.trim()
+          ) {
+            await markCheckoutSessionCompleted(
+              data.order_reference.trim(),
+              tx
+            ).catch(() => undefined)
+          }
+
+          if (
+            webhookResult.scope === 'ecosystem' &&
+            webhookResult.productId === 'focus'
+          ) {
+            await tx.productSubscription.updateMany({
+              where: {
+                userId,
+                product: {
+                  is: {
+                    code: {
+                      in: ['focus', 'FOCUS', 'stankey', 'STANKEY'],
+                    },
+                  },
+                },
+              },
+              data: {
+                status: 'active',
+                paidAt: new Date(),
+              },
+            }).catch(() => undefined)
+
+            await tx.user
+              .update({
+                where: { id: userId },
+                data: { focusPaid: true },
+              })
+              .catch(() => undefined)
+
+            if (webhookResult.planId === 'welcome_test') {
+              const linkToken = payRef.split('_')[1]
+              await tx.user.update({
+                where: { id: userId },
+                data: {
+                  settings: {
+                    ...(typeof (state as any)?.settings === 'object'
+                      ? (state as any).settings
+                      : {}),
+                    welcomeTest: {
+                      ...(typeof (state as any)?.settings?.welcomeTest ===
+                      'object'
+                        ? (state as any).settings.welcomeTest
+                        : {}),
+                      payment: {
+                        status: 'PAID',
+                        paidAt: new Date().toISOString(),
+                        paymentId: payRef,
+                        linkToken,
+                      },
+                    },
+                  } as any,
+                },
+              })
+            }
+
+            await cancelPendingFocusDojims(userId, tx).catch(() => undefined)
+            await markAbTestPaymentSuccess(userId, tx).catch(() => undefined)
+          }
+        },
+        { maxWait: 5000, timeout: 10000 }
+      )
+
       console.log(`[WayForPay] Subscription activated`, {
         userId,
         productId,
@@ -365,10 +548,29 @@ export async function wayForPayCallback(req: Request, res: Response) {
             tenant_id: productId,
           },
         },
-      }).catch(() => undefined)
+      }).catch((err: unknown) => {
+        // fix with kimi 2026-05-28: explicit side-effect error boundary — logs failure without crashing webhook, WayForPay receives 200 OK regardless
+        console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+          operation: 'track_event_payment_success',
+          userId,
+          orderReference: data.order_reference,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
 
       if (webhookResult.scope === 'stankey') {
-        const sent = await sendBillingSuccessTelegramMessage(userId).catch(() => undefined)
+        const sent = await sendBillingSuccessTelegramMessage(userId).catch(
+          (err: unknown) => {
+            // fix with kimi 2026-05-28: explicit side-effect error boundary — logs failure without crashing webhook, WayForPay receives 200 OK regardless
+            console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+              operation: 'telegram_payment_confirmation',
+              userId,
+              orderReference: data.order_reference,
+              error: err instanceof Error ? err.message : String(err),
+            })
+            return undefined
+          }
+        )
         console.log('[PAYMENT_LIFECYCLE] Telegram delivery completed', {
           userId,
           flow: 'stankey_success',
@@ -378,62 +580,6 @@ export async function wayForPayCallback(req: Request, res: Response) {
         webhookResult.scope === 'ecosystem' &&
         webhookResult.productId === 'focus'
       ) {
-        const focusSuccessDelivered = await sendFocusPaymentSuccessTelegramMessage(userId).catch(
-          () => undefined
-        )
-        console.log('[PAYMENT_LIFECYCLE] invite generated', {
-          userId,
-          flow: 'focus_success',
-          generated: Boolean(focusSuccessDelivered),
-        })
-        console.log('[PAYMENT_LIFECYCLE] Telegram delivery completed', {
-          userId,
-          flow: 'focus_success',
-          sent: Boolean(focusSuccessDelivered),
-        })
-        await markAbTestPaymentSuccess(userId).catch(() => undefined)
-        void sendAbTestBlock12Welcome(userId).catch((err) => {
-          console.warn('[Focus] Block 12 send failed', err)
-          const details = err instanceof Error ? err.message : 'unknown_error'
-          void sendOpsTelegramMessage(
-            `⚠️ Focus Block 12 send failed\nuserId: ${userId}\nerror: ${details}`,
-          )
-        })
-        void loadAbTestProgress(userId)
-          .then((progress) => scheduleFollowups(userId, progress, 'S6_ZOOM'))
-          .catch((err) => {
-            console.warn('[Focus] S6_ZOOM followup scheduling failed', err)
-            const details = err instanceof Error ? err.message : 'unknown_error'
-            void sendOpsTelegramMessage(
-              `⚠️ Focus S6_ZOOM followup scheduling failed\nuserId: ${userId}\nerror: ${details}`,
-            )
-          })
-
-        if (webhookResult.planId === 'welcome_test') {
-          const linkToken = payRef.split('_')[1]
-          await prisma.user.update({
-            where: { id: userId },
-            data: {
-              settings: {
-                ...(typeof (state as any)?.settings === 'object'
-                  ? (state as any).settings
-                  : {}),
-                welcomeTest: {
-                  ...(typeof (state as any)?.settings?.welcomeTest === 'object'
-                    ? (state as any).settings.welcomeTest
-                    : {}),
-                  payment: {
-                    status: 'PAID',
-                    paidAt: new Date().toISOString(),
-                    paymentId: payRef,
-                    linkToken,
-                  },
-                },
-              } as any,
-            },
-          })
-        }
-
         const activation = simulateFocusActivation(userId, {
           nextZoomAt: process.env.NEXT_ZOOM_AT?.trim() || null,
           channelInviteLink: resolveFocusChannelInviteLink(),
@@ -458,19 +604,243 @@ export async function wayForPayCallback(req: Request, res: Response) {
                     result_key: null,
                   }
                 )
-                .catch(() => undefined)
+                .catch((err: unknown) => {
+                  // fix with kimi 2026-05-28: explicit side-effect error boundary — logs failure without crashing webhook, WayForPay receives 200 OK regardless
+                  console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+                    operation: 'notification_service_schedule',
+                    userId,
+                    orderReference: data.order_reference,
+                    error: err instanceof Error ? err.message : String(err),
+                  })
+                })
             )
           )
         }
 
-        await cancelPendingFocusDojims(userId).catch(() => undefined)
+        const paidUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            firstName: true,
+            email: true,
+            telegramChatId: true,
+            telegramLinks: {
+              where: { isActive: true, chatId: { not: null } },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { chatId: true },
+            },
+          },
+        })
+        const focusSubscription = await prisma.productSubscription.findFirst({
+          where: {
+            userId,
+            product: {
+              is: {
+                code: {
+                  in: ['focus', 'FOCUS', 'stankey', 'STANKEY'],
+                },
+              },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+          select: { id: true, focusWelcomedAt: true },
+        })
+        const planLabelMap: Record<string, string> = {
+          focus_1month: '1 місяць',
+          focus_3month: '3 місяці',
+          welcome_test: 'welcome_test',
+        }
+        const planLabel = webhookResult.planId
+          ? (planLabelMap[webhookResult.planId] ?? webhookResult.planId)
+          : 'невідомо'
+        const dateStr = new Date().toLocaleString('uk-UA', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        const activeCount = await prisma.productSubscription.count({
+          where: { status: 'ACTIVE' },
+        })
+        const payerName = getSafeName(paidUser?.firstName)
+        const opsSent = await sendOpsTelegramMessage(
+          `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n` +
+            `Тип події: Нова оплата\n` +
+            `Учасник: ${payerName || 'Користувач'} · ${paidUser?.email ?? 'email невідомий'}\n` +
+            `Тариф: ${planLabel}\n` +
+            `Сума: ${amount} ${data.currency ?? 'UAH'}\n` +
+            `Order: ${data.order_reference}\n` +
+            `Час: ${dateStr}\n` +
+            `Активних підписок: ${activeCount}`,
+          process.env.PUBLIC_FRONTEND_URL?.trim()
+            ? {
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: 'Панель керування',
+                        url: `${process.env.PUBLIC_FRONTEND_URL!.replace(/\/$/, '')}/app/dashboard`,
+                      },
+                    ],
+                  ],
+                },
+              }
+            : undefined
+        ).catch((err) => {
+          console.error('[payment] notify ops:', err)
+          return false
+        })
+        console.log('[PAYMENT_LIFECYCLE] ops report delivered', {
+          userId,
+          delivered: Boolean(opsSent),
+        })
+
+        const upcoming = await getUpcomingGroupSessions(8)
+        const paidChatId =
+          paidUser?.telegramChatId ?? paidUser?.telegramLinks[0]?.chatId ?? null
+        if (upcoming.length > 0 && paidChatId && paidUser) {
+          const zoomUrl = resolveZoomCalendarUrl()
+          const lines = upcoming
+            .map((session) => {
+              const dt = new Date(session.scheduledAt)
+              return `${dt.toLocaleString('uk-UA', {
+                weekday: 'short',
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })} — ${session.topic}`
+            })
+            .join('\n')
+          const name = getSafeName(paidUser.firstName)
+          const greeting = name ? `${name}, ` : ''
+
+          if (!zoomUrl) {
+            console.warn(
+              '[payment] skip upcoming schedule message: no valid zoomUrl configured'
+            )
+          } else {
+            await bot.telegram
+              .sendMessage(
+                paidChatId,
+                `${greeting}доступ до модуля ФОКУС активовано.\n\n` +
+                  `Тариф: ${planLabel}\n` +
+                  `Статус: активний\n\n` +
+                  'Нижче доступний актуальний календар Zoom-практик.',
+                {
+                  reply_markup: {
+                    inline_keyboard: [
+                      [
+                        process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
+                          ? {
+                              text: 'Відкрити календар',
+                              web_app: { url: zoomUrl },
+                            }
+                          : { text: 'Відкрити календар', url: zoomUrl },
+                      ],
+                    ],
+                  },
+                }
+              )
+              .catch((err) =>
+                console.error('[payment] send focus access message:', err)
+              )
+
+            await bot.telegram
+              .sendMessage(
+                paidChatId,
+                `Календар Zoom-практик:\n\n${lines}\n\n` +
+                  'Посилання на підключення надходить автоматично за 2 години до початку кожної сесії.',
+                {
+                  reply_markup: {
+                    inline_keyboard: [
+                      [
+                        process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
+                          ? {
+                              text: 'Переглянути календар',
+                              web_app: { url: zoomUrl },
+                            }
+                          : { text: 'Переглянути календар', url: zoomUrl },
+                      ],
+                    ],
+                  },
+                }
+              )
+              .catch((err) =>
+                console.error('[payment] send upcoming schedule:', err)
+              )
+          }
+
+          for (const session of upcoming) {
+            await scheduleReminders(paidUser.id, session)
+          }
+        }
+
+        if (!focusSubscription?.focusWelcomedAt) {
+          const paidChatId =
+            paidUser?.telegramChatId ?? paidUser?.telegramLinks[0]?.chatId ?? null
+          const channelLink = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
+          if (paidChatId) {
+            await bot.telegram.sendMessage(
+              paidChatId,
+              FOCUS_WELCOME.msg1.body,
+              channelLink
+                ? {
+                    reply_markup: {
+                      inline_keyboard: [[{
+                        text: 'Перейти в канал ФОКУС',
+                        url: channelLink,
+                      }]],
+                    },
+                  }
+                : undefined,
+            ).catch((err) => {
+              console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+                operation: 'focus_block12_send',
+                userId,
+                orderReference: data.order_reference,
+                error: err instanceof Error ? err.message : String(err),
+              })
+            })
+            if (focusSubscription?.id) {
+              await prisma.productSubscription.update({
+                where: { id: focusSubscription.id },
+                data: { focusWelcomedAt: new Date() },
+              }).catch(() => undefined)
+            }
+            console.log('[FOCUS_BLOCK12] sent', {
+              userId,
+              channelLink: Boolean(channelLink),
+            })
+          }
+        }
+
+        void loadAbTestProgress(userId)
+          .then((progress) => scheduleFollowups(userId, progress, 'S6_ZOOM'))
+          .catch((err) => {
+            console.warn('[Focus] S6_ZOOM followup scheduling failed', err)
+            const details = err instanceof Error ? err.message : 'unknown_error'
+            void sendOpsTelegramMessage(
+              `Focus S6_ZOOM followup scheduling failed\nuserId: ${userId}\nerror: ${details}`
+            )
+          })
       } else if (
         webhookResult.scope === 'ecosystem' &&
         webhookResult.productId === 'absystem_ai'
       ) {
-        const sent = await sendAbsystemPaymentSuccessTelegramMessage(userId).catch(
-          () => undefined
-        )
+        const sent = await sendAbsystemPaymentSuccessTelegramMessage(
+          userId
+        ).catch((err: unknown) => {
+          // fix with kimi 2026-05-28: explicit side-effect error boundary — logs failure without crashing webhook, WayForPay receives 200 OK regardless
+          console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+            operation: 'telegram_payment_confirmation',
+            userId,
+            orderReference: data.order_reference,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          return undefined
+        })
         console.log('[PAYMENT_LIFECYCLE] Telegram delivery completed', {
           userId,
           flow: 'absystem_success',
@@ -503,7 +873,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
                 ? generationError.message
                 : 'unknown_error'
             void sendOpsTelegramMessage(
-              `⚠️ Weekly report generation after payment failed\nuserId: ${userId}\nerror: ${details}`,
+              `⚠️ Weekly report generation after payment failed\nuserId: ${userId}\nerror: ${details}`
             )
           }
         })()
@@ -523,9 +893,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
       error: err instanceof Error ? err.message : 'unknown',
     })
     const details = err instanceof Error ? err.message : 'unknown_error'
-    void sendOpsTelegramMessage(
-      `🚨 Payment callback error\nerror: ${details}`,
-    )
+    void sendOpsTelegramMessage(`🚨 Payment callback error\nerror: ${details}`)
     return res.status(500).send('FAIL')
   }
 }

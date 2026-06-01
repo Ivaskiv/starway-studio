@@ -9,13 +9,17 @@ export type TelegramMiniAppProfile = {
   username: string | null
 }
 
-export function verifyTelegramInitData(initData: string): TelegramMiniAppProfile {
+export function verifyTelegramInitData(
+  initData: string,
+  botTokenOverride?: string,
+): TelegramMiniAppProfile {
   const raw = String(initData ?? '').trim()
   if (!raw) {
     throw new AuthServiceError('missing_fields', 400)
   }
 
-  const botToken = requireTelegramBotConfig('telegram init data verification').token
+  const botToken = botTokenOverride?.trim()
+    || requireTelegramBotConfig('telegram init data verification').token
 
   const params = new URLSearchParams(raw)
   const hash = params.get('hash')

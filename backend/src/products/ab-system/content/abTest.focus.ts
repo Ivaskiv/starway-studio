@@ -11,6 +11,8 @@ export const FOCUS_CHANNEL_URL =
 export const FOCUS_WELCOME = {
   msg1: {
     body: [
+      'Оплата пройшла — вхід у ФОКУС',
+      '',
       'Оплата пройшла.',
       'Вітаю, ти у ФОКУСІ.',
       '',
@@ -29,6 +31,8 @@ export const FOCUS_WELCOME = {
   },
   msg2: {
     body: [
+      'Після входу в канал',
+      '',
       'Ти вже в каналі ФОКУС.',
       '',
       'Що зробити зараз:',

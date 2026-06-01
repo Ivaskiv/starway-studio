@@ -8,8 +8,11 @@
   "scripts": {
     "preinstall": "node -e \"const v=process.versions.node; const major=Number(v.split('.')[0]); if(major!==22){console.error(`Node ${v} is not allowed. Use Node 22.x only.`); process.exit(1);}\"",
     "dev": "concurrently -c blue,magenta -n backend,web \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\"",
+    "dev:parallel": "bash scripts/dev-parallel.sh",
     "dev:tunnel": "concurrently -c blue,magenta,green -n backend,web,tunnel \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir backend exec tsx ../scripts/dev/sync-ngrok.ts'\"",
     "dev:clean": "kill -9 $(lsof -ti :3001) $(lsof -ti :5173) 2>/dev/null || true; pkill ngrok 2>/dev/null || true; pnpm dev:tunnel",
+    "webhook:set": "bash scripts/set-webhook.sh",
+    "health": "curl -s http://localhost:3001/health/ready | jq",
     "prisma": "pnpm --filter @starway/db exec prisma",
     "prisma:generate": "pnpm --filter @starway/db run prisma:generate",
     "prisma:db:push": "pnpm --filter @starway/db run prisma:db:push",

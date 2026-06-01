@@ -11,7 +11,11 @@ import { NotificationEvent } from '../../../services/notifications/NotificationE
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { loadAbTestProgress, saveAbTestProgress } from './abTest.progress.js'
 
-export async function markAbTestPaymentSuccess(userId: string): Promise<void> {
+export async function markAbTestPaymentSuccess(
+  userId: string,
+  tx?: Prisma.TransactionClient // fix with kimi 2026-05-28: optional tx for atomic post-payment orchestration
+): Promise<void> {
+  const client = tx ?? prisma
   const current = await loadAbTestProgress(userId)
   if (current.payment_success_at) return
 
@@ -30,7 +34,7 @@ export async function markAbTestPaymentSuccess(userId: string): Promise<void> {
     payload: { stage: current.stage } satisfies Prisma.JsonObject,
   })
 
-  await prisma.notificationJob
+  await client.notificationJob
     .deleteMany({
       where: {
         type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),

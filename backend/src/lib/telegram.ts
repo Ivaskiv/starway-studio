@@ -3,9 +3,11 @@
 
 import crypto from 'crypto'
 import { Telegraf } from 'telegraf'
-import { requireTelegramBotConfig } from '../modules/telegram-mentor/runtime/botConfig.js'
+import { readCoachBotToken, requireTelegramBotConfig } from '../modules/telegram-mentor/runtime/botConfig.js'
 
 let telegramBotInstance: Telegraf | null = null
+let coachBotInstance: Telegraf | null = null
+let testBotInstance: Telegraf | null = null
 
 function getTelegramBotInstance(): Telegraf {
   if (telegramBotInstance) {
@@ -17,21 +19,54 @@ function getTelegramBotInstance(): Telegraf {
   return telegramBotInstance
 }
 
-export const bot = new Proxy({} as Telegraf, {
-  get(_target, property, receiver) {
-    const instance = getTelegramBotInstance()
-    const value = Reflect.get(instance, property, receiver)
-    return typeof value === 'function' ? value.bind(instance) : value
-  },
-  set(_target, property, value) {
-    const instance = getTelegramBotInstance()
-    return Reflect.set(instance, property, value)
-  },
-  has(_target, property) {
-    const instance = getTelegramBotInstance()
-    return Reflect.has(instance, property)
-  },
-}) as Telegraf
+function getCoachBotInstance(): Telegraf {
+  if (coachBotInstance) {
+    return coachBotInstance
+  }
+
+  const token = readCoachBotToken()
+  if (!token) {
+    throw new Error('[Telegram] Missing required env var during coach bot bootstrap: COACH_BOT_TOKEN')
+  }
+  coachBotInstance = new Telegraf(token)
+  return coachBotInstance
+}
+
+function getTestBotInstance(): Telegraf {
+  if (testBotInstance) {
+    return testBotInstance
+  }
+
+  const token = String(process.env.TEST_BOT_TOKEN ?? '').trim()
+  if (!token) {
+    throw new Error('[Telegram] Missing required env var during test bot bootstrap: TEST_BOT_TOKEN')
+  }
+
+  testBotInstance = new Telegraf(token)
+  return testBotInstance
+}
+
+function createBotProxy(resolver: () => Telegraf): Telegraf {
+  return new Proxy({} as Telegraf, {
+    get(_target, property, receiver) {
+      const instance = resolver()
+      const value = Reflect.get(instance, property, receiver)
+      return typeof value === 'function' ? value.bind(instance) : value
+    },
+    set(_target, property, value) {
+      const instance = resolver()
+      return Reflect.set(instance, property, value)
+    },
+    has(_target, property) {
+      const instance = resolver()
+      return Reflect.has(instance, property)
+    },
+  }) as Telegraf
+}
+
+export const bot = createBotProxy(getTelegramBotInstance)
+export const coachBot = createBotProxy(getCoachBotInstance)
+export const testBot = createBotProxy(getTestBotInstance)
 const LAST_MESSAGE_TTL_MS = 6 * 60 * 60 * 1000
 const lastMessageHashes = new Map<string, { hash: string; sentAt: number }>()
 
@@ -39,6 +74,35 @@ const getBotLink = () =>
   requireTelegramBotConfig('telegram bot link').botLink || 'https://t.me/'
 
 export { getBotLink }
+
+/**
+ * Запускає бота в правильному режимі.
+ * Webhook — якщо передано webhookUrl.
+ * Polling — fallback, якщо webhookUrl порожній.
+ * Кожен бот запускається незалежно.
+ */
+export async function launchBot(
+  targetBot: Telegraf,
+  name: string,
+  webhookUrl?: string,
+): Promise<void> {
+  try {
+    const normalizedWebhookUrl = String(webhookUrl ?? '').trim()
+    if (normalizedWebhookUrl) {
+      await targetBot.telegram.setWebhook(normalizedWebhookUrl)
+      console.log(`✓ ${name} started [webhook]`)
+      return
+    }
+
+    // Polling mode requires webhook to be cleared, otherwise Telegram keeps
+    // delivering updates to webhook endpoint and getUpdates sees conflicts.
+    await targetBot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
+    await targetBot.launch()
+    console.log(`✓ ${name} started [polling]`)
+  } catch (err) {
+    console.error(`✗ ${name} failed to start:`, err)
+  }
+}
 
 export async function sendDedupedTelegramMessage(
   chatId: string,
@@ -71,9 +135,9 @@ export async function sendOpsTelegramMessage(
   text: string,
   options?: Parameters<typeof bot.telegram.sendMessage>[2],
 ): Promise<boolean> {
-  const chatId = process.env.OPS_TELEGRAM_CHAT_ID?.trim()
+  const chatId = process.env.STARWAY_OPS_CHAT_ID?.trim()
   if (!chatId) {
-    console.warn('[telegram:ops] OPS_TELEGRAM_CHAT_ID is not configured')
+    console.warn('[telegram:ops] STARWAY_OPS_CHAT_ID is not configured')
     return false
   }
 

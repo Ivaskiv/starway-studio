@@ -8,6 +8,10 @@ import {
   useCancelZoomSessionMutation,
   useBookSlotMutation,
   useUnbookSlotMutation,
+  useBookPrivateSlotMutation,
+  useCancelPrivateBookingMutation,
+  useCreateSwapRequestMutation,
+  useGetAvailablePrivateSlotsQuery,
 } from './zoom.api';
 import {
   getMonthGrid,
@@ -36,6 +40,8 @@ const TYPE_LABELS: Record<ZoomSessionType, string> = {
   individual:     'Індивідуальна',
   intensive:      'Інтенсив',
   battle_review:  'Battle',
+  PRIVATE:        'PRIVATE слот',
+  GROUP:          'GROUP практика',
 };
 
 const TYPE_BADGE: Record<ZoomSessionType, string> = {
@@ -43,6 +49,8 @@ const TYPE_BADGE: Record<ZoomSessionType, string> = {
   battle_review:  'bg-amber-100 text-amber-800',
   individual:     'bg-teal-100 text-teal-800',
   intensive:      'bg-blue-100 text-blue-800',
+  PRIVATE:        'bg-blue-100 text-blue-800',
+  GROUP:          'bg-purple-100 text-purple-800',
 };
 
 const UK_DAY_SHORT = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
@@ -88,6 +96,9 @@ function SessionDetailCard({
   const linkActive = isZoomLinkActive(session.scheduledAt) && !!session.zoomLink;
   const [bookSlot, { isLoading: booking }] = useBookSlotMutation();
   const [unbookSlot, { isLoading: unbooking }] = useUnbookSlotMutation();
+  const [bookPrivateSlot, { isLoading: bookingPrivate }] = useBookPrivateSlotMutation();
+  const [cancelPrivateBooking, { isLoading: cancelingPrivate }] = useCancelPrivateBookingMutation();
+  const [createSwapRequest, { isLoading: creatingSwap }] = useCreateSwapRequestMutation();
 
   const maxSlots = (session.remainingSlots !== undefined && session.attendeesCount !== undefined)
     ? session.remainingSlots + session.attendeesCount
@@ -145,6 +156,36 @@ function SessionDetailCard({
       {/* Booking UI — user mode only */}
       {mode === 'user' && !isPastDate(session.scheduledAt) && session.type !== 'battle_review' && (
         <div className="mb-3">
+          {(session.type === 'PRIVATE') && (
+            <div className="flex flex-col gap-2">
+              {session.isMyBooking ? (
+                <>
+                  <button
+                    onClick={() => cancelPrivateBooking(session.id).catch(console.error)}
+                    disabled={cancelingPrivate}
+                    className="self-start px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[13px] font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                  >
+                    ❌ Скасувати запис
+                  </button>
+                  <button
+                    onClick={() => createSwapRequest({ sessionIdFrom: session.id }).catch(console.error)}
+                    disabled={creatingSwap}
+                    className="self-start px-4 py-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[13px] font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                  >
+                    💱 Запропонувати обмін
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => bookPrivateSlot(session.id).catch(console.error)}
+                  disabled={bookingPrivate}
+                  className="self-start px-4 py-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[13px] font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                >
+                  📅 Записатись
+                </button>
+              )}
+            </div>
+          )}
           {session.type === 'group_practice' && (
             session.isMyBooking ? (
               <div className="flex items-center gap-2">
@@ -396,9 +437,10 @@ function CreateSessionForm({
 export interface ZoomCalendarProps {
   mode: ZoomCalendarMode;
   userId: string;
+  expertId?: string;
 }
 
-export default function ZoomCalendar({ mode, userId }: ZoomCalendarProps) {
+export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarProps) {
   const [view, setView] = useState<CalendarView>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedSession, setSelectedSession] = useState<ZoomCalendarSession | null>(null);
@@ -408,7 +450,14 @@ export default function ZoomCalendar({ mode, userId }: ZoomCalendarProps) {
   const from = startOf(view, currentDate).toISOString();
   const to   = endOf(view, currentDate).toISOString();
 
-  const { data: sessions = [] } = useGetCalendarSessionsQuery({ from, to, role: mode, userId });
+  const { data: sessions = [] } = useGetCalendarSessionsQuery(
+    { from, to, role: mode, userId },
+    { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
+  );
+  useGetAvailablePrivateSlotsQuery(
+    { expertId: expertId ?? userId, from, to },
+    { skip: !(expertId ?? userId) },
+  );
   const [createSession, { isLoading: creating }] = useCreateZoomSessionMutation();
   const [updateSession] = useUpdateZoomSessionMutation();
   const [cancelSession] = useCancelZoomSessionMutation();

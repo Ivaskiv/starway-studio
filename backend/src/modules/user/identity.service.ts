@@ -1,5 +1,6 @@
 import { Prisma, Role, UserState, UserStep } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
+import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from './userCreation.service.js'
 
 type Tx = Prisma.TransactionClient
 
@@ -1073,6 +1074,8 @@ export async function resolveOrCreateTelegramGuestUser(params: {
   telegramUserName: string | null
   chatId: string
   firstName: string
+  source?: UserCreationSource
+  requestId?: string | null
 }): Promise<string> {
   if (params.linkedUserId) {
     return params.linkedUserId
@@ -1144,22 +1147,31 @@ export async function resolveOrCreateTelegramGuestUser(params: {
       return existingGuest.id
     }
 
-    const created = await tx.user.create({
-      data: {
-        email: guestEmail,
-        firstName: params.firstName,
-        telegramUserId: params.telegramUserId,
-        telegramUserName: params.telegramUserName,
-        telegramChatId: params.chatId,
-        telegramLinkedAt: new Date(),
-        // activeRole mirrors role for new users — user can switch later
-        role: 'USER',
-        activeRole: 'USER',
-      },
-      select: { id: true },
-    })
+    try {
+      const created = await UserCreationService.createUser({
+        client: tx,
+        source: params.source ?? UserCreationSource.TELEGRAM_MINIAPP,
+        requestId: params.requestId ?? null,
+        data: {
+          email: guestEmail,
+          firstName: params.firstName,
+          telegramUserId: params.telegramUserId,
+          telegramUserName: params.telegramUserName,
+          telegramChatId: params.chatId,
+          telegramLinkedAt: new Date(),
+          // activeRole mirrors role for new users — user can switch later
+          role: 'USER',
+          activeRole: 'USER',
+        },
+      })
 
-    return created.id
+      return created.id
+    } catch (error) {
+      if (error instanceof UserAutoCreationDisabledError) {
+        throw new Error('AUTO_USER_CREATION_DISABLED')
+      }
+      throw error
+    }
   })
 }
 

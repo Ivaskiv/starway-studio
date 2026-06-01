@@ -85,6 +85,11 @@ model User {
   testResultType         String?
   focusPaid              Boolean                       @default(false)
   onboardingDone         Boolean                       @default(false)
+  lifecycleState         UserLifecycleState            @default(NEW_USER)
+  testStartedAt          DateTime?
+  testCompletedAt        DateTime?
+  offerShownAt           DateTime?
+  swapsUsedThisMonth     Int                           @default(0)
   aiConversations        AiConversation[]
   aiMemory               AiMemory[]
   aiRecommendations      AiRecommendation[]
@@ -96,6 +101,7 @@ model User {
   contentItems           ContentItem[]
   courseEnrollments      CourseEnrollment[]
   cycleStreakMetrics     CycleStreakMetric?
+  dailyAnswers           DailyAnswer[]
   dailyCycleLogs         DailyCycleLog[]
   dailyEntries           DailyEntry[]
   deepLinkTokens         DeepLinkToken[]
@@ -129,6 +135,7 @@ model User {
   userMentors            UserAiMentor[]
   balanceEntries         UserBalanceEntry[]
   userFunnelProgress     UserFunnelStageProgress[]
+  userCreationAudits     UserCreationAudit[]
   userMemory             UserMemory?
   userMentorConfigs      UserMentorConfig?
   mentorStates           UserMentorState[]
@@ -140,6 +147,7 @@ model User {
   weeklyReports          WeeklyReport[]
   wheelAssessments       WheelAssessment[]
   zoomSessionAttendees   ZoomSessionAttendee[]
+  swapRequestsRequested  ZoomSlotSwapRequest[]         @relation("SwapRequester")
   expertBots             ExpertBotConfig[]             @relation("ExpertBot")
   expertProfile          ExpertProfile?                @relation("ExpertProfile")
   mentorSession          AiMentorSession?
@@ -148,6 +156,8 @@ model User {
   checkoutSessions       CheckoutSession[]
   trialMirrors           TrialMirror[]
   aiWorkspace            UserAiWorkspace?
+  coachZoomSlots         ZoomSlot[]                     @relation("CoachZoomSlots")
+  initiatedZoomSwaps     ZoomSwap[]                     @relation("InitiatedZoomSwaps")
 
   @@unique([expertId, telegramUserId])
   @@index([expertId])
@@ -213,6 +223,18 @@ model UserMentorConfig {
   user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
+}
+
+model UserCreationAudit {
+  id             String   @id @default(cuid())
+  userId         String
+  source         String
+  payloadSummary Json?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([source, createdAt])
 }
 
 model RefreshToken {
@@ -877,6 +899,20 @@ model DailyCycleLog {
   @@index([userId, date])
 }
 
+model DailyAnswer {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         String
+  questionId   String
+  questionType String
+  answer       String
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, date, questionId])
+  @@index([userId, date])
+}
+
 model TrialMirror {
   id        String   @id @default(uuid())
   userId    String
@@ -1277,15 +1313,26 @@ model ZoomSession {
   scheduledAt       DateTime
   topic             String
   status            ZoomStatus            @default(SCHEDULED)
+  type              ZoomSessionType       @default(GROUP)
+  capacity          Int                   @default(50)
   requests          Json                  @default("[]")
   postSessionReport Json?
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
   expert            Expert?               @relation(fields: [expertId], references: [id])
   attendees         ZoomSessionAttendee[]
+  swapRequestsFrom  ZoomSlotSwapRequest[] @relation("SwapFrom")
 
   @@index([expertId, status])
   @@index([scheduledAt])
+}
+
+model ZoomChannelPost {
+  id        String   @id @default(cuid())
+  messageId Int      @unique
+  chatId    String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }
 
 model ZoomSessionAttendee {
@@ -1300,6 +1347,92 @@ model ZoomSessionAttendee {
   @@unique([sessionId, userId])
   @@index([sessionId])
   @@index([userId])
+}
+
+model ZoomSlot {
+  id        String         @id @default(cuid())
+  coachId   String
+  date      DateTime
+  hour      Int
+  status    ZoomSlotStatus @default(OPEN)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  coach     User           @relation("CoachZoomSlots", fields: [coachId], references: [id], onDelete: Cascade)
+  swaps     ZoomSwap[]     @relation("TargetZoomSlot")
+
+  @@unique([coachId, date, hour])
+  @@index([coachId, date])
+  @@index([status, date])
+}
+
+model ZoomSwap {
+  id           String         @id @default(cuid())
+  initiatorId  String
+  targetSlotId String
+  fee          Int            @default(75)
+  status       ZoomSwapStatus @default(PENDING_PAYMENT)
+  month        String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  paidAt       DateTime?
+  orderRef     String?        @unique
+  initiator    User           @relation("InitiatedZoomSwaps", fields: [initiatorId], references: [id], onDelete: Cascade)
+  targetSlot   ZoomSlot       @relation("TargetZoomSlot", fields: [targetSlotId], references: [id], onDelete: Cascade)
+
+  @@index([initiatorId, createdAt])
+  @@index([targetSlotId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ZoomSlotSwapRequest {
+  id            String     @id @default(cuid())
+  requesterId   String
+  targetUserId  String?
+  sessionIdFrom String?
+  sessionIdTo   String?
+  targetSlotId  String?
+  fee           Int            @default(75)
+  month         String?
+  paymentStatus ZoomSwapStatus @default(PENDING_PAYMENT)
+  paidAt        DateTime?
+  orderRef      String?        @unique
+  status        SwapStatus @default(PENDING)
+  createdAt     DateTime   @default(now())
+  expiresAt     DateTime
+  resolvedAt    DateTime?
+
+  requester   User        @relation("SwapRequester", fields: [requesterId], references: [id])
+  sessionFrom ZoomSession? @relation("SwapFrom", fields: [sessionIdFrom], references: [id])
+
+  @@index([requesterId])
+  @@index([sessionIdFrom])
+  @@index([targetSlotId, createdAt])
+  @@index([paymentStatus, createdAt])
+  @@index([status, expiresAt])
+}
+
+model ContentPipeline {
+  id                String         @id @default(cuid())
+  inputType         String
+  inputText         String
+  topic             String
+  variantA          Json?
+  variantB          Json?
+  variantC          Json?
+  selectedVariant   String?
+  videoUrl          String?
+  audioUrl          String?
+  videoScenes       Json?
+  status            PipelineStatus @default(PENDING)
+  instagramPostId   String?
+  telegramMessageId Int?
+  publishedAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  createdBy         String
+
+  @@index([status, createdAt])
+  @@index([createdBy, createdAt])
 }
 
 model GenerationQuota {
@@ -1681,6 +1814,19 @@ enum UserState {
   INACTIVE
 }
 
+enum UserLifecycleState {
+  NEW_USER
+  TEST_NOT_STARTED
+  TEST_IN_PROGRESS
+  TEST_DONE
+  OFFER_SHOWN
+  FOCUS_PAID
+  ZOOM_MEMBER
+  POST_ZOOM_1
+  UPSELL
+  EXPIRED
+}
+
 enum UserStep {
   NONE
   LINK_TELEGRAM
@@ -1852,6 +1998,43 @@ enum ZoomStatus {
   SCHEDULED
   ACTIVE
   COMPLETED
+  CANCELLED
+}
+
+enum ZoomSessionType {
+  GROUP
+  PRIVATE
+}
+
+enum SwapStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum ZoomSlotStatus {
+  OPEN
+  CLOSED
+}
+
+enum ZoomSwapStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+enum PipelineStatus {
+  PENDING
+  GENERATING
+  AWAITING_CHOICE
+  PRODUCING
+  PREVIEW_SENT
+  PUBLISHING
+  PUBLISHED
+  FAILED
   CANCELLED
 }
 

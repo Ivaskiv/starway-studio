@@ -8,7 +8,7 @@ import { createOnceInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { hasActiveFocusSubscription } from './focus.access.js'
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
-import { sendDedupedTelegramMessage } from '../../../lib/telegram.js'
+import { bot, sendDedupedTelegramMessage } from '../../../lib/telegram.js'
 import { resolveNotificationType } from '../../../services/notifications/domain/notificationPolicy.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { FOCUS_DOJIM_TIMER_IDS } from './business.js'
@@ -81,7 +81,7 @@ export async function sendFocusPaymentSuccessTelegramMessage(userId: string) {
   return sent
 }
 
-export async function sendAbTestBlock12Welcome(userId: string): Promise<void> {
+export async function sendAbTestBlock12Welcome(userId: string): Promise<boolean> {
   console.log('[BLOCK12_DIAG]', { userId, step: 'enter' })
 
   const user = await prisma.user.findUnique({
@@ -110,7 +110,7 @@ export async function sendAbTestBlock12Welcome(userId: string): Promise<void> {
     console.warn(
       `[Focus] No telegramChatId for userId=${userId} — Block 12 not sent`
     )
-    return
+    return false
   }
 
   const subscription = await prisma.productSubscription.findFirst({
@@ -132,7 +132,7 @@ export async function sendAbTestBlock12Welcome(userId: string): Promise<void> {
   })
 
   const block12Url = inviteUrl || FOCUS_CHANNEL_URL
-  await sendDedupedTelegramMessage(
+  await bot.telegram.sendMessage(
     chatId,
     `${FOCUS_WELCOME.msg1.body}\n${block12Url}`.trim(),
     {
@@ -143,6 +143,8 @@ export async function sendAbTestBlock12Welcome(userId: string): Promise<void> {
     },
     }
   )
+  console.log('[BLOCK12_DIAG]', { userId, chatId, step: 'after_send' })
+  return true
 }
 
 function normalizeTelegramId(value: string | number | null | undefined): string {
@@ -219,8 +221,12 @@ export async function handleFocusChannelJoinByTelegramUserId(
   return sendAbTestBlock12PostJoin(user.id)
 }
 
-export async function cancelPendingFocusDojims(userId: string): Promise<number> {
-  const jobs = await prisma.notificationJob
+export async function cancelPendingFocusDojims(
+  userId: string,
+  tx?: Prisma.TransactionClient // fix with kimi 2026-05-28: optional tx for atomic post-payment orchestration
+): Promise<number> {
+  const client = tx ?? prisma
+  const jobs = await client.notificationJob
     .findMany({
       where: {
         type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),
@@ -264,7 +270,7 @@ export async function cancelPendingFocusDojims(userId: string): Promise<number> 
     return 0
   }
 
-  await prisma.notificationJob.deleteMany({
+  await client.notificationJob.deleteMany({
     where: {
       id: { in: ids },
     },

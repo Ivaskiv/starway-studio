@@ -14,6 +14,7 @@ import { AuthServiceError } from './auth.errors.js'
 import { assignUserToExpert, resolveDefaultMentorOwnerExpertId } from '../experts/ownership.service.js'
 import { cacheGet, cacheSet } from '../../lib/cache/index.js'
 import { invalidateUserCache } from '../../lib/db/userCache.js'
+import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../user/userCreation.service.js'
 
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
@@ -74,6 +75,11 @@ function toAuthServiceError(error: unknown, fallbackCode = 'auth_internal_error'
   }
 
   if (error instanceof Prisma.PrismaClientInitializationError) {
+    console.error('[auth] PrismaClientInitializationError', {
+      message: error.message,
+      errorCode: error.errorCode ?? null,
+      ts: new Date().toISOString(),
+    })
     return new AuthServiceError('auth_db_unavailable', 500, 'Database unavailable')
   }
 
@@ -94,20 +100,27 @@ async function createUserCompat(input: {
   role: 'USER' | 'SUPERADMIN'
   expertId?: string | null
   lastLoginAt?: Date | null
+  source?: UserCreationSource
+  requestId?: string | null
 }): Promise<{ id: string }> {
   try {
-    return await prisma.user.create({
+    return await UserCreationService.createUser({
+      source: input.source ?? UserCreationSource.SYSTEM,
+      requestId: input.requestId ?? null,
       data: {
         email: input.email,
         passwordHash: input.passwordHash ?? null,
-                firstName: input.firstName ?? null,
+        firstName: input.firstName ?? null,
         role: input.role,
         expertId: input.expertId ?? null,
         lastLoginAt: input.lastLoginAt ?? null,
       },
-      select: { id: true },
     })
   } catch (error) {
+    if (error instanceof UserAutoCreationDisabledError) {
+      throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
+    }
+
     if (!isMissingStructureError(error)) throw error
 
     const id = crypto.randomUUID()
@@ -246,6 +259,7 @@ type SocialAuthInput = {
   name?: string | null
   username?: string | null
   expertId?: string | null
+  requestId?: string | null
 }
 
 function hasProfileName(input: { name?: string | null; firstName?: string | null; lastName?: string | null }): boolean {
@@ -887,6 +901,7 @@ export async function registerUser(input: {
   password: string
   name?: string | null
   expertId?: string | null
+  requestId?: string | null
 }): Promise<AuthTokensPayload> {
   const email = normalizeEmail(input.email)
   const password = String(input.password ?? '')
@@ -914,8 +929,10 @@ export async function registerUser(input: {
     const createdUser = await createUserCompat({
       email,
       passwordHash,
-            role: initialRole,
+      role: initialRole,
       expertId: validatedExpertId,
+      source: UserCreationSource.SYSTEM,
+      requestId: input.requestId ?? null,
     })
 
     const user = await findUserById(createdUser.id)
@@ -1026,10 +1043,12 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
       } else {
         const created = await createUserCompat({
           email,
-                    firstName: input.name?.trim() || null,
+          firstName: input.name?.trim() || null,
           role: initialRole,
           lastLoginAt: new Date(),
           expertId: validatedExpertId,
+          source: UserCreationSource.GOOGLE_LOGIN,
+          requestId: input.requestId ?? null,
         })
         userId = created.id
         isNewUser = true
@@ -1050,13 +1069,23 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
           await assignUserToExpert(linkedUserId, validatedExpertId)
         }
       } else {
-        const createdUserId = await resolveOrCreateTelegramGuestUser({
-          linkedUserId: null,
-          telegramUserId,
-          telegramUserName,
-          chatId: telegramUserId,
-          firstName: input.name?.trim() || telegramUserName || 'Учень',
-        })
+        let createdUserId: string
+        try {
+          createdUserId = await resolveOrCreateTelegramGuestUser({
+            linkedUserId: null,
+            telegramUserId,
+            telegramUserName,
+            chatId: telegramUserId,
+            firstName: input.name?.trim() || telegramUserName || 'Учень',
+            requestId: input.requestId ?? null,
+            source: UserCreationSource.TELEGRAM_MINIAPP,
+          })
+        } catch (error) {
+          if (error instanceof Error && error.message === 'AUTO_USER_CREATION_DISABLED') {
+            throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
+          }
+          throw error
+        }
         userId = createdUserId
         isNewUser = true
         if (validatedExpertId) {
@@ -1081,7 +1110,7 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
   }
 }
 
-export async function telegramMiniAppLoginUser(initData: string): Promise<AuthTokensPayload> {
+export async function telegramMiniAppLoginUser(initData: string, requestId?: string | null): Promise<AuthTokensPayload> {
   const telegramUser = verifyTelegramInitData(initData)
 
   return socialLoginUser({
@@ -1089,6 +1118,7 @@ export async function telegramMiniAppLoginUser(initData: string): Promise<AuthTo
     externalId: telegramUser.id,
     username: telegramUser.username ?? undefined,
     name: telegramUser.firstName ?? undefined,
+    requestId: requestId ?? null,
   })
 }
 

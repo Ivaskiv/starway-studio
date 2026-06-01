@@ -30,6 +30,12 @@ import { assertRecoverableDate, getRecoveryPolicy } from './recoveryPolicy.js'
 import { updateCrossChannelUserState } from '../user-state/crossChannelState.service.js'
 
 const JOURNAL_TIMEZONE = 'Europe/Kyiv'
+function getTodayKyiv(): string {
+  return new Date().toLocaleDateString('sv-SE', {
+    timeZone: JOURNAL_TIMEZONE,
+  })
+}
+
 const dailySessionDelegate = (
   prisma as unknown as {
     dailySession?: {
@@ -482,6 +488,26 @@ export async function saveDailyAnswer(
     update: {
       status: DayStatus.IN_PROGRESS,
       content,
+    },
+  })
+
+  await prisma.dailyAnswer.upsert({
+    where: {
+      userId_date_questionId: {
+        userId,
+        date: getTodayKyiv(),
+        questionId: data.questionId,
+      },
+    },
+    create: {
+      userId,
+      date: getTodayKyiv(),
+      questionId: data.questionId,
+      questionType: data.questionId.startsWith('dynamic_q') ? 'DYNAMIC' : 'STATIC',
+      answer: data.answer,
+    },
+    update: {
+      answer: data.answer,
     },
   })
 

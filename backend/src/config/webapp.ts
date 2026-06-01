@@ -1,4 +1,7 @@
-const PROD_FRONTEND_FALLBACK = 'https://starway-frontend.vercel.app'
+const PROD_FRONTEND_FALLBACK = (
+  process.env.FRONTEND_URL?.trim()
+  || 'http://localhost:5173'
+).replace(/\/$/, '')
 
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/$/, '')

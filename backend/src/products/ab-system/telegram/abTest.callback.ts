@@ -14,6 +14,7 @@ export type AbTestCallbackAction =
   | { kind: 'email_skip' }
   | { kind: 'restore' }
   | { kind: 'menu' }
+  | { kind: 'subscription' }
   | { kind: 'edit'; questionId: AbTestQuestionId }
   | {
       kind: 'answer'
@@ -35,6 +36,7 @@ export function parseAbTestCallback(
   if (action === 'ab_test:email_skip') return { kind: 'email_skip' }
   if (action === 'ab_test:restore') return { kind: 'restore' }
   if (action === 'ab_test:menu') return { kind: 'menu' }
+  if (action === 'ab_test:subscription') return { kind: 'subscription' }
 
   const editMatch = action.match(/^ab_test_edit:(q[1-8])$/)
   if (editMatch) {

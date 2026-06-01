@@ -4,10 +4,12 @@
 import cron from 'node-cron';
 import { Prisma } from '@starway/db/prisma-client';
 import { prisma } from '../../db/client.js';
-import { sendDedupedTelegramMessage } from '../../lib/telegram.js';
+import { bot, sendDedupedTelegramMessage } from '../../lib/telegram.js';
 import {
   getAllUpcomingSessionsForNotification,
   patchSessionRequests,
+  expireStaleSwapRequests,
+  syncChannelPost,
 } from './service.js';
 import { generateSessionsFromAvailability } from './zoom.availability.service.js';
 
@@ -24,6 +26,38 @@ type SessionRequestsMeta = {
 function parseMeta(raw: unknown): SessionRequestsMeta {
   if (!raw || Array.isArray(raw) || typeof raw !== 'object') return {};
   return raw as SessionRequestsMeta;
+}
+
+function formatWeeklySchedule(sessions: Array<{ scheduledAt: Date; topic: string }>): string {
+  if (sessions.length === 0) return '📅 На цьому тижні групових Zoom-практик поки не заплановано.'
+  const lines = sessions.map((session) => {
+    const day = session.scheduledAt.toLocaleDateString('uk-UA', { weekday: 'short' })
+    const date = session.scheduledAt.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' })
+    const time = session.scheduledAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
+    return `${day} ${date} о ${time} — ${session.topic}`
+  })
+  return `📅 Розклад Zoom на тиждень:\n${lines.join('\n')}`
+}
+
+export async function notifySwapProposal(targetTelegramId: string, swapDetails: {
+  requesterName: string
+  fromSlot: string
+  toSlot: string
+  swapId: string
+  sessionIdTo: string
+}) {
+  const text =
+    `💱 ${swapDetails.requesterName} пропонує обмін слотом\n`
+    + `Їхній слот: ${swapDetails.fromSlot}\n`
+    + `Твій слот: ${swapDetails.toSlot}`
+  await sendDedupedTelegramMessage(targetTelegramId, text, {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '✅ Погодитись', callback_data: `zoom:swap:accept:${swapDetails.swapId}:${swapDetails.sessionIdTo}` },
+        { text: '❌ Відхилити', callback_data: `zoom:swap:decline:${swapDetails.swapId}` },
+      ]],
+    },
+  }).catch(() => undefined)
 }
 
 async function getAttendeeTelegramIds(sessionId: string): Promise<{ userId: string; chatId: string | null }[]> {
@@ -50,6 +84,30 @@ async function getAttendeeTelegramIds(sessionId: string): Promise<{ userId: stri
   }));
 }
 
+async function getPaidSubscriberTelegramIds(): Promise<{ userId: string; chatId: string | null }[]> {
+  const users = await prisma.user.findMany({
+    where: {
+      productSubscriptions: { some: { status: 'ACTIVE' } },
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+    },
+  });
+
+  return users.map((user) => ({
+    userId: user.id,
+    chatId: user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null,
+  }));
+}
+
 async function runNotificationCheck() {
   const now = new Date();
   const in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000);
@@ -58,6 +116,7 @@ async function runNotificationCheck() {
 
   for (const session of sessions) {
     const meta = parseMeta(session.requests);
+    const sessionType = typeof meta.type === 'string' ? meta.type : '';
     const scheduledAt = new Date(session.scheduledAt);
     const msUntil = scheduledAt.getTime() - now.getTime();
     const hoursUntil = msUntil / (60 * 60 * 1000);
@@ -66,7 +125,10 @@ async function runNotificationCheck() {
 
     // 24h alert
     if (meta.notify24h && !meta.notifiedAt24h && hoursUntil <= 25 && hoursUntil > 1.5) {
-      const attendees = await getAttendeeTelegramIds(session.id);
+      const attendees =
+        sessionType === 'group_practice'
+          ? await getPaidSubscriberTelegramIds()
+          : await getAttendeeTelegramIds(session.id);
       const time = scheduledAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
       const dateStr = scheduledAt.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
       for (const { chatId } of attendees) {
@@ -82,7 +144,10 @@ async function runNotificationCheck() {
 
     // 2h alert
     if (meta.notify2h && !meta.notifiedAt2h && hoursUntil <= 2.5 && hoursUntil > 0) {
-      const attendees = await getAttendeeTelegramIds(session.id);
+      const attendees =
+        sessionType === 'group_practice'
+          ? await getPaidSubscriberTelegramIds()
+          : await getAttendeeTelegramIds(session.id);
       const time = scheduledAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
       for (const { chatId } of attendees) {
         if (!chatId) continue;
@@ -107,6 +172,34 @@ export function startZoomNotificationsCron(): void {
       console.error('[zoom-notifications] cron error', err),
     );
   });
+
+  // Every Sunday 18:00 — keep pinned channel schedule post up-to-date.
+  cron.schedule('0 18 * * 0', () => {
+    syncChannelPost(bot).catch((err) =>
+      console.error('[zoom-notifications] weekly channel sync error', err),
+    );
+  });
+
+  // Every 30 minutes — expire stale swap requests and notify requesters.
+  cron.schedule('*/30 * * * *', () => {
+    expireStaleSwapRequests()
+      .then(async ({ expired }) => {
+        if (expired.length === 0) return
+        const users = await prisma.user.findMany({
+          where: { id: { in: expired.map((item) => item.requesterId) } },
+          select: { id: true, telegramChatId: true },
+        })
+        const byId = new Map(users.map((user) => [user.id, user.telegramChatId]))
+        await Promise.all(
+          expired.map((item) => {
+            const chatId = byId.get(item.requesterId)
+            if (!chatId) return Promise.resolve()
+            return sendDedupedTelegramMessage(chatId, '⏱ Час обміну вийшов. Ніхто не відповів.').catch(() => undefined)
+          }),
+        )
+      })
+      .catch((err) => console.error('[zoom-notifications] swap expiry cron error', err))
+  })
 
   // Every Sunday at 00:00 — generate sessions for the next 4 weeks
   cron.schedule('0 0 * * 0', () => {

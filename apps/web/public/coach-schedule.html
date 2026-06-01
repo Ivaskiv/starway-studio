@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Starway Coach Schedule</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: var(--tg-theme-bg-color);
+      --text: var(--tg-theme-text-color);
+      --hint: var(--tg-theme-hint-color);
+      --button: var(--tg-theme-button-color);
+      --button-text: var(--tg-theme-button-text-color);
+      --section-bg: var(--tg-theme-secondary-bg-color);
+      --header-bg: var(--tg-theme-section-bg-color);
+      --line: color-mix(in srgb, var(--text) 16%, transparent);
+      --open-bg: color-mix(in srgb, var(--button) 20%, transparent);
+      --closed-bg: color-mix(in srgb, var(--hint) 24%, transparent);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .app {
+      min-height: 100dvh;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .hint {
+      margin: 0;
+      color: var(--hint);
+      font-size: 13px;
+    }
+
+    .status {
+      margin: 0;
+      color: var(--hint);
+      font-size: 12px;
+      min-height: 18px;
+    }
+
+    .grid-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--section-bg);
+    }
+
+    .grid {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 760px;
+    }
+
+    .grid th,
+    .grid td {
+      border: 1px solid var(--line);
+      text-align: center;
+      padding: 8px 6px;
+      font-size: 13px;
+      min-width: 86px;
+      height: 42px;
+    }
+
+    .grid th {
+      background: var(--header-bg);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .time {
+      font-weight: 600;
+      min-width: 64px;
+      background: var(--header-bg);
+      position: sticky;
+      left: 0;
+      z-index: 1;
+    }
+
+    .slot {
+      border: 0;
+      width: 100%;
+      height: 100%;
+      color: var(--text);
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--closed-bg);
+    }
+
+    .slot.open { background: var(--open-bg); }
+    .slot.closed { background: var(--closed-bg); }
+
+    .footer {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--button-text);
+      background: var(--button);
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <h1 class="title">Мій розклад</h1>
+    <p class="hint">Торкнись клітинки, щоб відкрити або закрити слот.</p>
+    <p id="status" class="status">Завантаження...</p>
+    <div class="grid-wrap">
+      <table class="grid" id="grid" aria-label="Coach schedule grid"></table>
+    </div>
+    <div class="footer">
+      <button id="save" class="btn" type="button">Зберегти</button>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const tg = window.Telegram.WebApp
+      tg.ready()
+      tg.expand()
+
+      const statusEl = document.getElementById('status')
+      const gridEl = document.getElementById('grid')
+      const saveBtn = document.getElementById('save')
+
+      const state = {
+        days: [],
+        hours: [],
+        slots: new Map(),
+        fixed: null,
+      }
+
+      const apiBaseFromQuery = new URLSearchParams(window.location.search).get('apiBase') || ''
+      const apiBase = apiBaseFromQuery.replace(/\/$/, '')
+
+      function setStatus(text) {
+        statusEl.textContent = text
+      }
+
+      function cellKey(date, hour) {
+        return `${date}:${hour}`
+      }
+
+      function authHeaders() {
+        const initData = window.Telegram?.WebApp?.initData || ''
+        return {
+          'Content-Type': 'application/json',
+          'x-telegram-init-data': initData,
+        }
+      }
+
+      async function loadSchedule() {
+        const response = await fetch(`${apiBase}/api/coach/schedule?week=next`, {
+          method: 'GET',
+          headers: authHeaders(),
+        })
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          throw new Error(payload.error || `HTTP ${response.status}`)
+        }
+        const payload = await response.json()
+        state.days = payload.days || []
+        state.hours = payload.hours || []
+        state.fixed = null
+        state.slots.clear()
+
+        for (const slot of payload.slots || []) {
+          state.slots.set(cellKey(slot.date, slot.hour), {
+            id: slot.id,
+            date: slot.date,
+            hour: slot.hour,
+            status: slot.status,
+          })
+        }
+      }
+
+      function iconFor(slot) {
+        if (!slot) return '✗'
+        return slot.status === 'OPEN' ? '✓' : '✗'
+      }
+
+      function classesFor(slot) {
+        if (!slot) return 'slot closed'
+        return slot.status === 'OPEN' ? 'slot open' : 'slot closed'
+      }
+
+      function renderGrid() {
+        const header = [
+          '<thead><tr><th></th>',
+          ...state.days.map((day) => `<th>${day.label}</th>`),
+          '</tr></thead>',
+        ].join('')
+
+        const rows = state.hours.map((hour) => {
+          const cells = state.days.map((day) => {
+            const key = cellKey(day.date, hour)
+            const slot = state.slots.get(key)
+            return `<td><button class="${classesFor(slot)}" data-date="${day.date}" data-hour="${hour}" type="button">${iconFor(slot)}</button></td>`
+          }).join('')
+
+          return `<tr><td class="time">${hour}:00</td>${cells}</tr>`
+        }).join('')
+
+        gridEl.innerHTML = `${header}<tbody>${rows}</tbody>`
+      }
+
+      async function patchSlot(slotId, status) {
+        const response = await fetch(`${apiBase}/api/coach/schedule/slot`, {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify({ slotId, status }),
+        })
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          throw new Error(payload.error || `HTTP ${response.status}`)
+        }
+      }
+
+      async function onGridClick(event) {
+        const button = event.target.closest('button.slot')
+        if (!button) return
+
+        const date = button.dataset.date
+        const hour = Number(button.dataset.hour)
+        const slot = state.slots.get(cellKey(date, hour))
+        if (!slot) return
+
+        const previous = slot.status
+        slot.status = previous === 'OPEN' ? 'CLOSED' : 'OPEN'
+        renderGrid()
+        setStatus('Зберігаємо...')
+
+        try {
+          await patchSlot(slot.id, slot.status)
+          setStatus('Зміни збережено')
+        } catch (error) {
+          slot.status = previous
+          renderGrid()
+          setStatus(`Помилка: ${error instanceof Error ? error.message : 'невідома'}`)
+        }
+      }
+
+      async function bootstrap() {
+        try {
+          await loadSchedule()
+          renderGrid()
+          setStatus('Готово')
+        } catch (error) {
+          setStatus(`Не вдалося завантажити: ${error instanceof Error ? error.message : 'невідома помилка'}`)
+        }
+      }
+
+      gridEl.addEventListener('click', (event) => {
+        void onGridClick(event)
+      })
+
+      saveBtn.addEventListener('click', () => {
+        tg.close()
+      })
+
+      void bootstrap()
+    })()
+  </script>
+</body>
+</html>

@@ -8,6 +8,7 @@ export const AB_TEST_ACTIONS = {
   EMAIL_CONTINUE: 'ab_test:email_continue',
   EMAIL_SKIP: 'ab_test:email_skip',
   MENU: 'ab_test:menu',
+  SUBSCRIPTION: 'ab_test:subscription',
   FOCUS_INFO: 'ab_test:focus_info',
   FOCUS_PAY: 'open_focus_payment',
   FOCUS_ALREADY_PAID: 'resend_focus_block12',

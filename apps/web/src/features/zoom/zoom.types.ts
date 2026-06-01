@@ -1,6 +1,6 @@
 // apps/web/src/features/zoom/zoom.types.ts
 
-export type ZoomSessionType = 'group_practice' | 'individual' | 'intensive' | 'battle_review';
+export type ZoomSessionType = 'group_practice' | 'individual' | 'intensive' | 'battle_review' | 'PRIVATE' | 'GROUP' | string;
 
 export type ZoomStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
@@ -83,4 +83,16 @@ export interface BattleProgressEntry {
   day: number;
   text: string;
   createdAt: string;
+}
+
+export interface ZoomSwapRequest {
+  id: string;
+  requesterId: string;
+  targetUserId?: string | null;
+  sessionIdFrom: string;
+  sessionIdTo?: string | null;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'CANCELLED';
+  createdAt: string;
+  expiresAt: string;
+  resolvedAt?: string | null;
 }

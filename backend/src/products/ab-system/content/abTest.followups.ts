@@ -8,6 +8,18 @@ export type FollowupCopy = {
   cta?: string
 }
 
+export type LifecycleReminderKey =
+  | 'R1_TEST_24H'
+  | 'R2_TEST_72H'
+  | 'R3_PROGRESS_4H'
+  | 'R4_PROGRESS_24H'
+  | 'R5_RESULT_2H'
+  | 'R6_RESULT_48H'
+  | 'R7_OFFER_6H'
+  | 'R8_OFFER_3D'
+  | 'Z1_ZOOM_MON_1800'
+  | 'Z2_ZOOM_MON_1855'
+
 export type BranchFollowupCopy = {
   RESULT_FOLLOWUP_24H: FollowupCopy
   RESULT_FOLLOWUP_48H: FollowupCopy
@@ -236,4 +248,57 @@ export function resolveAbTestFollowupCopy(
   }
 
   return GENERIC_FOLLOWUPS[timerId] ?? AB_TEST_FOLLOWUPS.action.RESULT_FOLLOWUP_24H
+}
+
+export const AB_TEST_LIFECYCLE_REMINDERS: Record<LifecycleReminderKey, FollowupCopy> = {
+  R1_TEST_24H: {
+    title: 'Нагадування про тест',
+    body: 'Минуло 24 години. Пройди короткий тест AB System, щоб зафіксувати наступний крок.',
+    cta: 'Пройти тест',
+  },
+  R2_TEST_72H: {
+    title: 'Тест досі чекає',
+    body: 'Минуло 72 години. Якщо відкладати далі, стан не зміниться. Почни тест зараз.',
+    cta: 'Пройти тест',
+  },
+  R3_PROGRESS_4H: {
+    title: 'Повернись до тесту',
+    body: 'Ти зупинилась у процесі. Повернись і закрий тест за кілька хвилин.',
+    cta: 'Продовжити тест',
+  },
+  R4_PROGRESS_24H: {
+    title: 'Тест не завершено',
+    body: 'Минуло 24 години з останньої активності в тесті. Дотисни до результату.',
+    cta: 'Продовжити тест',
+  },
+  R5_RESULT_2H: {
+    title: 'Результат готовий',
+    body: 'Твій результат уже готовий. Переглянь його і переходь до наступного кроку.',
+    cta: 'Показати результат',
+  },
+  R6_RESULT_48H: {
+    title: 'Повернись до результату',
+    body: 'Минуло 48 годин після тесту. Результат працює тільки коли переходиш до дії.',
+    cta: 'Хочу у ФОКУС',
+  },
+  R7_OFFER_6H: {
+    title: 'Оффер ФОКУС активний',
+    body: 'Минуло 6 годин після показу офферу. Можеш зайти у ФОКУС у зручний момент.',
+    cta: 'Хочу у ФОКУС',
+  },
+  R8_OFFER_3D: {
+    title: 'Останнє нагадування про оффер',
+    body: 'Минуло 3 дні. Якщо готова рухатись у темпі з підтримкою, заходь у ФОКУС.',
+    cta: 'Оплатити ФОКУС',
+  },
+  Z1_ZOOM_MON_1800: {
+    title: 'Zoom сьогодні о 19:00',
+    body: 'За годину Zoom-практика. Підготуй одну ситуацію, яку хочеш розібрати.',
+    cta: 'Відкрити Zoom',
+  },
+  Z2_ZOOM_MON_1855: {
+    title: 'Zoom стартує за 5 хвилин',
+    body: 'Підключайся, щоб не пропустити практичну частину і свій наступний крок.',
+    cta: 'Відкрити Zoom',
+  },
 }

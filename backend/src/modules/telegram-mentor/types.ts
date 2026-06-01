@@ -112,6 +112,23 @@ export const DEFAULT_QUESTION_SET: Omit<QuestionSet, 'id' | 'createdAt' | 'updat
   ],
 }
 
+// Динамічні питання — вибираються на основі відповідей юзера
+// TODO: тексти питань взяти з ТЗ
+export const DYNAMIC_QUESTIONS = [
+  { id: 'dynamic_q1', text: 'TODO: dynamic_q1 з ТЗ' },
+  { id: 'dynamic_q2', text: 'TODO: dynamic_q2 з ТЗ' },
+  { id: 'dynamic_q3', text: 'TODO: dynamic_q3 з ТЗ' },
+  { id: 'dynamic_q4', text: 'TODO: dynamic_q4 з ТЗ' },
+] as const
+
+// Логіка вибору: скільки динамічних питань показати
+export function getDynamicQuestionsCount(lifecycleState: string): number {
+  // Новий юзер: 2 питання
+  // Активний (ZOOM_MEMBER+): 4 питання
+  const activeStates = ['ZOOM_MEMBER', 'POST_ZOOM_1', 'UPSELL']
+  return activeStates.includes(lifecycleState) ? 4 : 2
+}
+
 // ── Сфери колеса балансу (редагуються в адмін-панелі) ─────────
 export const DEFAULT_WHEEL_SPHERES: string[] = [
   'гроші',

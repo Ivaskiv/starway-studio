@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: var(--tg-theme-bg-color, #1a1a2e);
+      --text: var(--tg-theme-text-color, #fff);
+      --btn: var(--tg-theme-button-color, #7c6fff);
+      --btn-text: var(--tg-theme-button-text-color, #fff);
+      --secondary: var(--tg-theme-secondary-bg-color, #2a2a3e);
+      --hint: var(--tg-theme-hint-color, #aaa);
+      --r: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, sans-serif;
+      padding: 16px;
+    }
+    h1 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: var(--hint); margin-bottom: 16px; }
+    .slot-card {
+      background: var(--secondary);
+      border-radius: var(--r);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .slot-info { font-size: 14px; font-weight: 500; }
+    .slot-sub { font-size: 12px; color: var(--hint); margin-top: 2px; }
+    .btn-book {
+      background: var(--btn);
+      color: var(--btn-text);
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-book:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-book.booked {
+      background: #3ecf8e;
+    }
+    .empty {
+      text-align: center;
+      color: var(--hint);
+      padding: 40px 0;
+      font-size: 14px;
+    }
+    .error {
+      color: #ff5f5f;
+      font-size: 13px;
+      text-align: center;
+      padding: 20px 0;
+    }
+    .actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 12px;
+    }
+    .btn-close {
+      background: transparent;
+      color: var(--hint);
+      border: 1px solid var(--hint);
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>📅 Записатись на Zoom</h1>
+  <p class="subtitle">Обери зручний час</p>
+  <div id="slots"></div>
+  <div class="actions">
+    <button class="btn-close" id="closeBtn" type="button">Закрити</button>
+  </div>
+  <script>
+    const tg = window.Telegram.WebApp
+    tg.ready()
+    tg.expand()
+    const initData = tg.initData
+
+    const DAYS = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+    const MONTHS = ['січ', 'лют', 'бер', 'кві', 'тра', 'чер', 'лип', 'сер', 'вер', 'жов', 'лис', 'гру']
+
+    function formatDate(iso) {
+      const d = new Date(iso)
+      return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`
+    }
+
+    async function api(path, method = 'GET', body) {
+      const r = await fetch(`/api${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-init-data': initData
+        },
+        body: body ? JSON.stringify(body) : undefined
+      })
+      if (!r.ok) {
+        const txt = await r.text()
+        throw new Error(txt || `HTTP ${r.status}`)
+      }
+      return r.json()
+    }
+
+    async function loadSlots() {
+      const el = document.getElementById('slots')
+      try {
+        const slots = await api('/zoom/slots/available')
+        if (!slots.length) {
+          el.innerHTML = '<div class="empty">Немає доступних слотів на цьому тижні</div>'
+          return
+        }
+        el.innerHTML = slots.map(s => `
+          <div class="slot-card">
+            <div>
+              <div class="slot-info">${formatDate(s.date)} о ${s.hour}:00</div>
+              <div class="slot-sub">${s.bookedCount || 0} записано</div>
+            </div>
+            <button
+              class="btn-book ${s.isBooked ? 'booked' : ''}"
+              data-id="${s.id}"
+              ${s.isBooked ? 'disabled' : ''}
+            >${s.isBooked ? '✓ Записано' : 'Записатись'}</button>
+          </div>
+        `).join('')
+
+        for (const btn of el.querySelectorAll('.btn-book')) {
+          btn.addEventListener('click', async () => {
+            const slotId = btn.getAttribute('data-id')
+            if (!slotId || btn.disabled) return
+            btn.disabled = true
+            btn.textContent = '...'
+            try {
+              await api(`/zoom/sessions/${slotId}/book`, 'POST')
+              btn.classList.add('booked')
+              btn.textContent = '✓ Записано'
+              tg.showAlert('✅ Записано! Чекай на посилання перед зустріччю.')
+            } catch (e) {
+              btn.disabled = false
+              btn.textContent = 'Записатись'
+              tg.showAlert('Помилка: ' + (e.message || 'невідома'))
+            }
+          })
+        }
+      } catch (e) {
+        el.innerHTML = `<div class="error">Помилка завантаження: ${e.message}</div>`
+      }
+    }
+
+    document.getElementById('closeBtn').addEventListener('click', () => {
+      tg.close()
+    })
+
+    loadSlots()
+  </script>
+</body>
+</html>

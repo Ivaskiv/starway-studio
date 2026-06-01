@@ -11,6 +11,15 @@ import {
   getCalendarSessions,
   bookSlot,
   unbookSlot,
+  getAvailablePrivateSlots,
+  bookPrivateSlot,
+  cancelPrivateBooking,
+  getAvailableSlotsForUser,
+  createSwapRequest,
+  acceptSwapRequest,
+  declineSwapRequest,
+  toggleCoachSlotStatus,
+  initiateZoomSwap,
 } from './service.js';
 import { getZoomLeaderboard } from './zoom.leaderboard.js';
 import {
@@ -20,7 +29,8 @@ import {
 } from './zoom.availability.service.js';
 import type { AvailabilitySlot } from './zoom.availability.service.js';
 import { prisma } from '../../db/client.js';
-import { ZoomStatus } from '@starway/db/prisma-client';
+import { sendOpsTelegramMessage } from '../../lib/telegram.js';
+import { SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/prisma-client';
 
 type BattleOutcome = 'challenger' | 'opponent' | 'both' | 'none';
 
@@ -55,6 +65,8 @@ export async function handleCreateSession(
   next: NextFunction,
 ) {
   try {
+    console.log('[zoom/POST sessions] body:', JSON.stringify(req.body));
+    console.log('[zoom/POST sessions] user:', req.user?.id ?? null);
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -91,8 +103,10 @@ export async function handleCreateSession(
       topic,
       requests,
     });
+    console.log('[zoom/POST sessions] created session:', session.id);
     return res.status(201).json(session);
   } catch (err) {
+    console.error('[zoom/POST sessions] ERROR:', err);
     next(err);
   }
 }
@@ -125,6 +139,18 @@ export async function handleUpdateSession(
     }
 
     const updated = await updateSession(id, patch as Parameters<typeof updateSession>[1]);
+    const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? '';
+    const panelUrl = panelBase ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom` : '';
+    void sendOpsTelegramMessage(
+      `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n`
+      + `Тип події: Редагування сесії\n`
+      + `Сесія: ${updated.topic}\n`
+      + `Зміна: ${scheduledAt ? 'Час' : zoomLink !== undefined ? 'Zoom-посилання' : topic ? 'Тема' : 'Параметри'}\n`
+      + `Нове значення: ${scheduledAt ?? zoomLink ?? topic ?? 'оновлено'}`,
+      panelUrl
+        ? { reply_markup: { inline_keyboard: [[{ text: 'Панель керування', url: panelUrl }]] } }
+        : undefined,
+    ).catch((err) => console.error('[zoom.admin] ops update report:', err));
     return res.status(200).json(updated);
   } catch (err) {
     next(err);
@@ -138,7 +164,23 @@ export async function handleCancelSession(
 ) {
   try {
     const { id } = req.params;
+    const existing = await prisma.zoomSession.findUnique({
+      where: { id },
+      select: { topic: true, scheduledAt: true, attendees: { select: { id: true } } },
+    });
     const session = await cancelSession(id);
+    const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? '';
+    const panelUrl = panelBase ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom` : '';
+    void sendOpsTelegramMessage(
+      `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n`
+      + `Тип події: Скасування сесії коучем\n`
+      + `Сесія: ${session.topic}\n`
+      + `Дата: ${(existing?.scheduledAt ?? session.scheduledAt).toLocaleString('uk-UA')}\n`
+      + `Причетних учасників: ${existing?.attendees.length ?? 0}`,
+      panelUrl
+        ? { reply_markup: { inline_keyboard: [[{ text: 'Панель керування', url: panelUrl }]] } }
+        : undefined,
+    ).catch((err) => console.error('[zoom.admin] ops cancel report:', err));
     return res.status(200).json(session);
   } catch (err) {
     next(err);
@@ -401,5 +443,203 @@ export async function handleUnbookSlot(
       return res.status(409).json({ error: err.message });
     }
     next(err);
+  }
+}
+
+export async function handleGetAvailablePrivateSlots(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { expertId, from, to } = req.query as { expertId?: string; from?: string; to?: string }
+    if (!expertId || !from || !to) return res.status(400).json({ error: 'expertId, from, to required' })
+
+    const fromDate = new Date(from)
+    const toDate = new Date(to)
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) return res.status(400).json({ error: 'Invalid date range' })
+
+    const rows = await getAvailablePrivateSlots(expertId, fromDate, toDate)
+    return res.status(200).json(rows)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function getAvailableSlots(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const slots = await getAvailableSlotsForUser(userId)
+    return res.status(200).json(slots)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function handleBookPrivateSlot(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const { id } = req.params
+    const result = await bookPrivateSlot(userId, id)
+    return res.status(200).json(result)
+  } catch (err) {
+    if (err instanceof Error) {
+      return res.status(409).json({ error: err.message })
+    }
+    next(err)
+  }
+}
+
+export async function handleCancelPrivateSlotBooking(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const { id } = req.params
+    const result = await cancelPrivateBooking(userId, id)
+    return res.status(200).json(result)
+  } catch (err) {
+    if (err instanceof Error) {
+      return res.status(409).json({ error: err.message })
+    }
+    next(err)
+  }
+}
+
+export async function handleCreateSwapRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const { sessionIdFrom, targetUserIds } = req.body as { sessionIdFrom?: string; targetUserIds?: string[] }
+    if (!sessionIdFrom) return res.status(400).json({ error: 'sessionIdFrom required' })
+    const result = await createSwapRequest(userId, sessionIdFrom, targetUserIds)
+    return res.status(200).json(result)
+  } catch (err) {
+    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    next(err)
+  }
+}
+
+export async function handleAcceptSwapRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const { swapId } = req.params
+    const { sessionIdTo } = req.body as { sessionIdTo?: string }
+    if (!sessionIdTo) return res.status(400).json({ error: 'sessionIdTo required' })
+    const result = await acceptSwapRequest(swapId, userId, sessionIdTo)
+    return res.status(200).json(result)
+  } catch (err) {
+    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    next(err)
+  }
+}
+
+export async function handleDeclineSwapRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const { swapId } = req.params
+    const result = await declineSwapRequest(swapId, userId)
+    return res.status(200).json(result)
+  } catch (err) {
+    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    next(err)
+  }
+}
+
+export async function handleGetPendingSwapRequests(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const pending = await prisma.zoomSlotSwapRequest.findMany({
+      where: {
+        status: SwapStatus.PENDING,
+        OR: [{ targetUserId: userId }, { requesterId: userId }],
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    return res.status(200).json(pending)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function handleToggleCoachSlot(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const { slotId, status } = req.body as { slotId?: string; status?: string }
+    if (!slotId || !status) return res.status(400).json({ error: 'slotId and status required' })
+    if (status !== 'OPEN' && status !== 'CLOSED') return res.status(400).json({ error: 'invalid_status' })
+
+    const slot = await prisma.zoomSlot.findUnique({
+      where: { id: slotId },
+      select: { coachId: true },
+    })
+    if (!slot) return res.status(404).json({ error: 'slot_not_found' })
+    if (slot.coachId !== userId) return res.status(403).json({ error: 'forbidden' })
+
+    const updated = await toggleCoachSlotStatus({
+      slotId,
+      coachId: userId,
+      status: status as ZoomSlotStatus,
+    })
+    return res.status(200).json(updated)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function handleInitiateZoomSwap(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const { targetSlotId } = req.body as { targetSlotId?: string }
+    if (!targetSlotId) return res.status(400).json({ error: 'targetSlotId required' })
+    const result = await initiateZoomSwap(userId, targetSlotId)
+    return res.status(200).json(result)
+  } catch (err) {
+    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    next(err)
   }
 }

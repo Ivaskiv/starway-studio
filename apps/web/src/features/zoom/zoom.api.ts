@@ -8,6 +8,7 @@ import type {
   CreateSessionPayload,
   LeaderboardEntry,
   AvailabilitySlot,
+  ZoomSwapRequest,
 } from './zoom.types';
 
 export const zoomCalendarApi = api.injectEndpoints({
@@ -108,6 +109,52 @@ export const zoomCalendarApi = api.injectEndpoints({
       invalidatesTags: ['ZoomSession'],
     }),
 
+    getAvailablePrivateSlots: build.query<
+      Array<{ session: ZoomCalendarSession; remaining: number }>,
+      { expertId: string; from: string; to: string }
+    >({
+      query: ({ expertId, from, to }) =>
+        `/zoom/sessions/private/available?expertId=${encodeURIComponent(expertId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      providesTags: ['ZoomSession'],
+    }),
+
+    bookPrivateSlot: build.mutation<{ success: boolean }, string>({
+      query: sessionId => ({ url: `/zoom/sessions/${sessionId}/book`, method: 'POST' }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    cancelPrivateBooking: build.mutation<{ success: boolean }, string>({
+      query: sessionId => ({ url: `/zoom/sessions/${sessionId}/book`, method: 'DELETE' }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    getPendingSwaps: build.query<ZoomSwapRequest[], void>({
+      query: () => '/zoom/swap/pending',
+      providesTags: ['ZoomSession'],
+    }),
+
+    createSwapRequest: build.mutation<{ swapId: string }, { sessionIdFrom: string; targetUserIds?: string[] }>({
+      query: body => ({ url: '/zoom/swap', method: 'POST', body }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    acceptSwap: build.mutation<{ success: boolean }, { swapId: string; sessionIdTo: string }>({
+      query: ({ swapId, sessionIdTo }) => ({
+        url: `/zoom/swap/${swapId}/accept`,
+        method: 'POST',
+        body: { sessionIdTo },
+      }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    declineSwap: build.mutation<{ success: boolean }, { swapId: string }>({
+      query: ({ swapId }) => ({
+        url: `/zoom/swap/${swapId}/decline`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
   }),
   overrideExisting: false,
 });
@@ -127,4 +174,11 @@ export const {
   useGenerateSessionsMutation,
   useBookSlotMutation,
   useUnbookSlotMutation,
+  useGetAvailablePrivateSlotsQuery,
+  useBookPrivateSlotMutation,
+  useCancelPrivateBookingMutation,
+  useGetPendingSwapsQuery,
+  useCreateSwapRequestMutation,
+  useAcceptSwapMutation,
+  useDeclineSwapMutation,
 } = zoomCalendarApi;

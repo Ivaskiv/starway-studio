@@ -1,5 +1,6 @@
 import { prisma } from '../../db/client.js'
 import { Prisma, StageStatus, User } from '@starway/db/prisma-client'
+import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../user/userCreation.service.js'
 
 // fix etap2: payload for first-login handling via web/telegram flows
 export interface FirstLoginPayload {
@@ -11,6 +12,7 @@ export interface FirstLoginPayload {
   initialFunnelSlug?: string
   initialVideoSlug?: string
   initialMiniCourseSlug?: string
+  requestId?: string
 }
 
 function isMissingStructureError(error: unknown) {
@@ -22,7 +24,9 @@ function isMissingStructureError(error: unknown) {
 
 async function createUserCompat(payload: FirstLoginPayload, now: Date) {
   try {
-    return await prisma.user.create({
+    const created = await UserCreationService.createUser({
+      source: UserCreationSource.FIRST_LOGIN,
+      requestId: payload.requestId ?? null,
       data: {
         email: payload.email,
         expertId: payload.expertId,
@@ -33,7 +37,11 @@ async function createUserCompat(payload: FirstLoginPayload, now: Date) {
         telegramUserName: payload.telegramUserName ?? null,
       },
     })
+    return prisma.user.findUniqueOrThrow({ where: { id: created.id } })
   } catch (error) {
+    if (error instanceof UserAutoCreationDisabledError) {
+      throw new Error('AUTO_USER_CREATION_DISABLED')
+    }
     if (!isMissingStructureError(error)) throw error
 
     const id = crypto.randomUUID()

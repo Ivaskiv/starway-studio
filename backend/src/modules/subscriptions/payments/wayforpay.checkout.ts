@@ -322,9 +322,13 @@ export async function deleteCheckoutSession(token: string) {
   }).catch(() => undefined)
 }
 
-export async function markCheckoutSessionCompleted(orderReference: string) {
+export async function markCheckoutSessionCompleted(
+  orderReference: string,
+  tx?: Prisma.TransactionClient // fix with kimi 2026-05-28: optional tx for atomic post-payment orchestration
+) {
+  const client = tx ?? prisma
   const now = new Date()
-  const session = await prisma.checkoutSession.findFirst({
+  const session = await client.checkoutSession.findFirst({
     where: {
       orderReference,
       status: { in: ['CREATED', 'OPENED', 'PROCESSING'] },
@@ -340,7 +344,7 @@ export async function markCheckoutSessionCompleted(orderReference: string) {
     },
   })
   if (!session) return
-  await prisma.checkoutSession.update({
+  await client.checkoutSession.update({
     where: { token: session.token },
     data: {
       status: 'COMPLETED',
@@ -363,9 +367,13 @@ export async function markCheckoutSessionCompleted(orderReference: string) {
   })
 }
 
-export async function markCheckoutSessionProcessing(orderReference: string) {
+export async function markCheckoutSessionProcessing(
+  orderReference: string,
+  tx?: Prisma.TransactionClient // fix with kimi 2026-05-28: optional tx for atomic post-payment orchestration
+) {
+  const client = tx ?? prisma
   const now = new Date()
-  await prisma.checkoutSession.updateMany({
+  await client.checkoutSession.updateMany({
     where: {
       orderReference,
       status: { in: ['CREATED', 'OPENED'] },
@@ -376,7 +384,7 @@ export async function markCheckoutSessionProcessing(orderReference: string) {
       status: 'PROCESSING',
     },
   })
-  const session = await prisma.checkoutSession.findFirst({
+  const session = await client.checkoutSession.findFirst({
     where: { orderReference },
     orderBy: { createdAt: 'desc' },
     select: {

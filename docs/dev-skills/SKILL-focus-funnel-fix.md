@@ -309,7 +309,7 @@ WHERE "focusPaid" = false AND "offerShownAt" IS NOT NULL;
 ```
 ## 10. WAYFORPAY WEBHOOK — ВІДОМІ ПРОБЛЕМИ
 
-### CORS блок
+## CORS блок
 WayForPay надсилає serviceUrl POST з origin https://secure.wayforpay.com.
 Рішення: додати wayforpayCors = cors({ origin: '*' }) для
 /api/subscriptions/payments/wayforpay/* і /api/payments/wayforpay/* маршрутів

@@ -17,11 +17,27 @@ const STEP_BUTTON_LABELS: Record<StepKey, string> = {
 }
 
 type Props = {
+  activeStep: StepKey
   previewSlot?: ReactNode
+  statusMeta: {
+    model: string
+    estimatedTokens: number
+    estimatedCost: number
+    actual: string
+    validation: string
+    routingPath: string
+    outputCount: number
+    state: string
+    timeLabel: string
+    updateLabel: string
+  }
 }
 
-export default function DnaGenerationPanel({ previewSlot }: Props) {
-  const [activeStep, setActiveStep] = useState<StepKey>(0)
+export default function DnaGenerationPanel({
+  activeStep,
+  previewSlot,
+  statusMeta,
+}: Props) {
   const [strategy, setStrategy] = useState<'truth' | 'architect' | 'psychology'>('truth')
   const [model, setModel] = useState<'gemini' | 'gpt' | 'claude'>('gpt')
   const [tone, setTone] = useState<'clear' | 'warm' | 'expert' | 'bold'>('expert')
@@ -57,32 +73,40 @@ export default function DnaGenerationPanel({ previewSlot }: Props) {
 
   return (
     <section className="dna-generation-shell" aria-label="DNA Generation Panel">
-      <header className="dna-generation-shell__top-bar">
-        <nav className="dna-generation-shell__steps" aria-label="DNA Steps">
-          {[0, 1, 2, 3].map((step) => (
-            <button
-              key={step}
-              type="button"
-              className={`dna-generation-shell__step-btn${activeStep === step ? ' is-active' : ''}`}
-              onClick={() => setActiveStep(step as StepKey)}
-            >
-              Крок {step + 1}
-            </button>
-          ))}
-        </nav>
-      </header>
-
       <div className="dna-generation-shell__content">
         <DnaLeftColumn onStrategyChange={setStrategy} />
-        <main className="dna-generation-shell__main-col">{stepMap[activeStep]}</main>
+        <main className="dna-generation-shell__main-col">
+          <div className="dna-generation-shell__stage">
+            {stepMap[activeStep]}
+          </div>
+          <footer className="dna-generation-shell__bottom-bar">
+            <div className="dna-generation-shell__status-grid">
+              <div className="dna-generation-shell__status-row">
+                <span>Model</span>
+                <strong>{statusMeta.model}</strong>
+                <span>Estimated</span>
+                <strong>{statusMeta.estimatedTokens} tok · ${statusMeta.estimatedCost.toFixed(6)}</strong>
+                <span>Validation</span>
+                <strong>{statusMeta.validation}</strong>
+                <span>Стан</span>
+                <strong>{statusMeta.state}</strong>
+                <span>Слів</span>
+                <strong>{stats.wordCount}</strong>
+                <span>Хуків</span>
+                <strong>{stats.hookCount}</strong>
+                <span>CTA</span>
+                <strong>{stats.ctaCount}</strong>
+                <span>Score</span>
+                <strong>{stats.score}</strong>
+              </div>
+              <div className="dna-generation-shell__status-subrow">Route: {statusMeta.routingPath} · Actual: {statusMeta.actual} · Оновлення: {statusMeta.updateLabel}</div>
+            </div>
+            <button type="button" className="dna-generation-shell__action-btn">
+              {STEP_BUTTON_LABELS[activeStep]}{activeStep === 1 ? ` (${agents.length})` : ''}
+            </button>
+          </footer>
+        </main>
       </div>
-
-      <footer className="dna-generation-shell__bottom-bar">
-        <div className="cost-info">${stats.cost} · {stats.tokens} ток.</div>
-        <button type="button" className="dna-generation-shell__action-btn">
-          {STEP_BUTTON_LABELS[activeStep]}{activeStep === 1 ? ` (${agents.length})` : ''}
-        </button>
-      </footer>
     </section>
   )
 }

@@ -178,3 +178,7 @@ backend/backup-TIMESTAMP.json
 apps/web/src/styles/
 apps/web/src/features/**/styles/*.css
 apps/web/src/features/**/styles/components/
+
+
+!packages/ai/
+!packages/ai/package.json

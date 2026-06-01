@@ -78,10 +78,24 @@ export default defineConfig(({ mode }) => {
         : undefined,
       watch: {
         usePolling: true,
-        interval: 100,
+        interval: 150,
+        ignored: [
+          '**/node_modules/**',
+          '**/dist/**',
+          '**/.turbo/**',
+          '**/coverage/**',
+          '**/.git/**',
+          '**/generated/**',
+          '**/.next/**',
+        ],
       },
       proxy: {
         '/api': {
+          target: proxyTarget,
+          changeOrigin: true,
+          secure: false,
+        },
+        '/webhook': {
           target: proxyTarget,
           changeOrigin: true,
           secure: false,

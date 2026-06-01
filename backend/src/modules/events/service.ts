@@ -12,6 +12,7 @@ import {
 } from '../../core/runtime/runtimeIdempotency.js'
 import { buildRuntimeResilienceSnapshot } from '../../core/runtime/runtimeResilience.js'
 import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
+import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../user/userCreation.service.js'
 
 export type EventSource = 'telegram' | 'web' | 'miniapp'
 
@@ -202,7 +203,9 @@ async function resolveTrackingUserId(input: TrackEventInput): Promise<string | n
     return existing.id
   }
 
-  const created = await prisma.user.create({
+  const created = await UserCreationService.createUser({
+    source: UserCreationSource.TRACKING_EVENT,
+    requestId: input.runtime?.request_id ?? null,
     data: {
       email: normalizedEmail,
       firstName: normalizedEmail.split('@')[0] || 'Lead user',
@@ -216,8 +219,17 @@ async function resolveTrackingUserId(input: TrackEventInput): Promise<string | n
         },
       },
     },
-    select: { id: true },
-  }).catch(() => null)
+    payloadSummary: {
+      email: normalizedEmail,
+      upsertUser: Boolean(input.upsertUser),
+      utmSource: input.utmSource ?? null,
+      utmCampaign: input.utmCampaign ?? null,
+      productId: input.productId ?? null,
+    },
+  }).catch((error) => {
+    if (error instanceof UserAutoCreationDisabledError) return null
+    return null
+  })
 
   return created?.id ?? null
 }

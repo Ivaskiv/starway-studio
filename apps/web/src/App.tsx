@@ -7,15 +7,20 @@ import ProtectedRoute from '@/features/auth/components/ProtectedRoute'
 import { SessionOrchestratorProvider } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAppSelector } from '@/app/hooks'
 import { selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
+import {
+  useTelegramMiniAppAuthMutation,
+  useUpdateUserSettingsMutation,
+} from '@/features/auth/services/auth.api'
 import type { AccessKey } from '@/features/auth/types/auth.types'
 import {
   FOCUS_ALIAS_ROUTE,
   FOCUS_ROUTE,
 } from '@/features/landings/focus/content/constants'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
+import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
 import MainLayout from '@/layout/MainLayout'
-import { Suspense, lazy, useMemo, type ReactElement } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import {
   BrowserRouter,
   Navigate,
@@ -184,6 +189,135 @@ function ZoomPageWrapper() {
   return isCoach
     ? <CoachZoomPanel expertId={user.id} />
     : <UserZoomPanel userId={user.id} />
+}
+
+function MiniAppZoomRoute() {
+  const user = useAppSelector(selectCurrentUser)
+  const [telegramMiniAppAuth, { isLoading: isAuthLoading }] = useTelegramMiniAppAuthMutation()
+  const [updateUserSettings, { isLoading: isSaving }] = useUpdateUserSettingsMutation()
+  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null)
+  const [firstName, setFirstName] = useState('')
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const authAttemptedRef = useRef(false)
+
+  useEffect(() => {
+    const tgUser = (window as {
+      Telegram?: { WebApp?: { initDataUnsafe?: { user?: { first_name?: string } } } }
+    }).Telegram?.WebApp?.initDataUnsafe?.user
+    if (tgUser?.first_name?.trim()) {
+      setFirstName(tgUser.first_name.trim())
+    }
+  }, [])
+
+  useEffect(() => {
+    if (user) {
+      setNeedsOnboarding(!user.email || !user.firstName)
+      if (user.firstName) setFirstName(user.firstName)
+      if (user.email) setEmail(user.email)
+      return
+    }
+
+    if (authAttemptedRef.current) return
+    authAttemptedRef.current = true
+
+    const initData = (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim() ?? ''
+    if (!initData) {
+      setError('Telegram initData відсутній. Відкрий цю сторінку з Telegram Mini App.')
+      setNeedsOnboarding(true)
+      return
+    }
+
+    void telegramMiniAppAuth({ initData })
+      .unwrap()
+      .then((result) => {
+        setNeedsOnboarding(Boolean(result.needsOnboarding))
+      })
+      .catch((authError) => {
+        console.error('[MiniAppZoomRoute] telegram auth failed', authError)
+        setError('Не вдалося авторизуватись через Telegram. Спробуй ще раз.')
+      })
+  }, [telegramMiniAppAuth, user])
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError(null)
+    if (!email.trim() || !firstName.trim()) {
+      setError("Заповни ім'я та email.")
+      return
+    }
+
+    try {
+      await updateUserSettings({ firstName: firstName.trim(), email: email.trim() }).unwrap()
+      setNeedsOnboarding(false)
+    } catch (saveError) {
+      console.error('[MiniAppZoomRoute] onboarding save failed', saveError)
+      setError('Не вдалося зберегти дані. Спробуй ще раз.')
+    }
+  }
+
+  if (isAuthLoading || needsOnboarding === null) {
+    return (
+      <div className="mx-auto w-full max-w-md px-4 pt-8 pb-10">
+        <div className="rounded-2xl border border-white/10 bg-[var(--bg-secondary)] p-5 text-sm text-[var(--text-primary)]">
+          Синхронізуємо вхід у Zoom-календар...
+        </div>
+      </div>
+    )
+  }
+
+  if (needsOnboarding) {
+    return (
+      <div className="mx-auto w-full max-w-md px-4 pt-8 pb-10">
+        <div className="rounded-2xl border border-white/10 bg-[var(--bg-secondary)] p-5">
+          <p className="text-sm text-[var(--text-primary)]">
+            Щоб бачити розклад Zoom-практик і отримувати нагадування - залиш email. Це займе 10 секунд.
+          </p>
+          <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+            <label className="block">
+              <span className="mb-1 block text-xs text-[var(--text-muted)]">Ім&apos;я</span>
+              <input
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-white/30"
+                placeholder="Твоє ім'я"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-[var(--text-muted)]">Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-white/30"
+                placeholder="you@example.com"
+              />
+            </label>
+            {error ? <p className="text-xs text-rose-400">{error}</p> : null}
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="w-full rounded-xl bg-[var(--accent-primary)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-60"
+            >
+              Зберегти і відкрити Zoom-календар
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="mx-auto w-full max-w-md px-4 pt-8 pb-10">
+        <div className="rounded-2xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-100">
+          {error ?? 'Користувача не знайдено. Спробуй відкрити з Telegram ще раз.'}
+        </div>
+      </div>
+    )
+  }
+
+  return <ZoomCalendar mode="user" userId={user.id} />
 }
 
 const DASHBOARD_ROUTES: RouteConfig[] = [
@@ -498,60 +632,63 @@ function PublicMiniAppRoute() {
 function PublicAppRouter() {
   return (
     <Routes>
-      <Route path={ROUTES.HOME} element={<HomePage />} />
-      <Route path={ROUTES.PRICING} element={<HomePage />} />
-      <Route path={ROUTES.AB_TEST} element={<AbTestPage />} />
-      <Route path={`${ROUTES.AB_TEST}/*`} element={<AbTestPage />} />
-      {/* [FIX] /test alias for ROUTES.AB_TEST — exact path */}
-      <Route path="/test" element={<AbTestPage />} />
-      <Route path="/test/*" element={<AbTestPage />} />
-      <Route path="/welcome-test/:linkToken" element={<WelcomeTestPage />} />
-      <Route path={FOCUS_ROUTE} element={<FocusRouteView />} />
-      {FOCUS_ALIAS_ROUTE !== FOCUS_ROUTE ? (
-        <Route path={FOCUS_ALIAS_ROUTE} element={<Navigate to={FOCUS_ROUTE} replace />} />
-      ) : null}
-      <Route
-        path={ROUTES.LOGIN}
-        element={<LoginPage />}
-      />
-      <Route
-        path="/register"
-        element={<LoginPage />}
-      />
-      <Route
-        path={ROUTES.TELEGRAM_SUCCESS}
-        element={<TelegramSuccessPage />}
-      />
-      <Route
-        path={ROUTES.ONBOARDING_START}
-        element={<StartFlowPage />}
-      />
-      <Route
-        path={ROUTES.ONBOARDING_CONTINUE}
-        element={<ContinueFlowPage />}
-      />
-      <Route
-        path={ROUTES.WHEEL_START}
-        element={<WheelStart />}
-      />
-      <Route
-        path={ROUTES.RESET_PASSWORD}
-        element={<ResetPasswordPage />}
-      />
-      <Route
-        path={ROUTES.DEV_ROUTES}
-        element={<DevRoutes />}
-      />
-      <Route path="/products/:slug" element={<ProductInfo />} />
+      <Route element={<MainLayout />}>
+        <Route path={ROUTES.HOME} element={<HomePage />} />
+        <Route path={ROUTES.PRICING} element={<HomePage />} />
+        <Route path={ROUTES.AB_TEST} element={<AbTestPage />} />
+        <Route path={`${ROUTES.AB_TEST}/*`} element={<AbTestPage />} />
+        {/* [FIX] /test alias for ROUTES.AB_TEST — exact path */}
+        <Route path="/test" element={<AbTestPage />} />
+        <Route path="/test/*" element={<AbTestPage />} />
+        <Route path="/welcome-test/:linkToken" element={<WelcomeTestPage />} />
+        <Route path={FOCUS_ROUTE} element={<FocusRouteView />} />
+        {FOCUS_ALIAS_ROUTE !== FOCUS_ROUTE ? (
+          <Route path={FOCUS_ALIAS_ROUTE} element={<Navigate to={FOCUS_ROUTE} replace />} />
+        ) : null}
+        <Route
+          path={ROUTES.LOGIN}
+          element={<LoginPage />}
+        />
+        <Route
+          path="/register"
+          element={<LoginPage />}
+        />
+        <Route
+          path={ROUTES.TELEGRAM_SUCCESS}
+          element={<TelegramSuccessPage />}
+        />
+        <Route
+          path={ROUTES.ONBOARDING_START}
+          element={<StartFlowPage />}
+        />
+        <Route
+          path={ROUTES.ONBOARDING_CONTINUE}
+          element={<ContinueFlowPage />}
+        />
+        <Route
+          path={ROUTES.WHEEL_START}
+          element={<WheelStart />}
+        />
+        <Route
+          path={ROUTES.RESET_PASSWORD}
+          element={<ResetPasswordPage />}
+        />
+        <Route
+          path={ROUTES.DEV_ROUTES}
+          element={<DevRoutes />}
+        />
+        <Route path="/products/:slug" element={<ProductInfo />} />
+        {PUBLIC_INFO_ROUTES.map((path) => (
+          <Route
+            key={path}
+            path={path}
+            element={<InfoPage />}
+          />
+        ))}
+      </Route>
       <Route path="/miniapp" element={<PublicMiniAppRoute />} />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
-      {PUBLIC_INFO_ROUTES.map((path) => (
-        <Route
-          key={path}
-          path={path}
-          element={<InfoPage />}
-        />
-      ))}
+      <Route path="/zoom" element={<MiniAppZoomRoute />} />
       <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
     </Routes>
   )
@@ -560,32 +697,34 @@ function PublicAppRouter() {
 function GuestAppRouter() {
   return (
     <Routes>
-      <Route path={ROUTES.HOME} element={<HomePage />} />
-      <Route path={ROUTES.PRICING} element={<HomePage />} />
-      <Route path={ROUTES.AB_TEST} element={<AbTestPage />} />
-      <Route path={`${ROUTES.AB_TEST}/*`} element={<AbTestPage />} />
-      <Route path="/test" element={<AbTestPage />} />
-      <Route path="/test/*" element={<AbTestPage />} />
-      <Route path={FOCUS_ROUTE} element={<FocusRouteView />} />
-      {FOCUS_ALIAS_ROUTE !== FOCUS_ROUTE ? (
-        <Route path={FOCUS_ALIAS_ROUTE} element={<Navigate to={FOCUS_ROUTE} replace />} />
-      ) : null}
-      <Route
-        path={ROUTES.LOGIN}
-        element={<Navigate to={`${ROUTES.HOME}?auth=login`} replace />}
-      />
-      <Route
-        path="/register"
-        element={<Navigate to={`${ROUTES.HOME}?auth=register`} replace />}
-      />
-      <Route path="/products/:slug" element={<ProductInfo />} />
-      {PUBLIC_INFO_ROUTES.map((path) => (
+      <Route element={<MainLayout />}>
+        <Route path={ROUTES.HOME} element={<HomePage />} />
+        <Route path={ROUTES.PRICING} element={<HomePage />} />
+        <Route path={ROUTES.AB_TEST} element={<AbTestPage />} />
+        <Route path={`${ROUTES.AB_TEST}/*`} element={<AbTestPage />} />
+        <Route path="/test" element={<AbTestPage />} />
+        <Route path="/test/*" element={<AbTestPage />} />
+        <Route path={FOCUS_ROUTE} element={<FocusRouteView />} />
+        {FOCUS_ALIAS_ROUTE !== FOCUS_ROUTE ? (
+          <Route path={FOCUS_ALIAS_ROUTE} element={<Navigate to={FOCUS_ROUTE} replace />} />
+        ) : null}
         <Route
-          key={path}
-          path={path}
-          element={<InfoPage />}
+          path={ROUTES.LOGIN}
+          element={<Navigate to={`${ROUTES.HOME}?auth=login`} replace />}
         />
-      ))}
+        <Route
+          path="/register"
+          element={<Navigate to={`${ROUTES.HOME}?auth=register`} replace />}
+        />
+        <Route path="/products/:slug" element={<ProductInfo />} />
+        {PUBLIC_INFO_ROUTES.map((path) => (
+          <Route
+            key={path}
+            path={path}
+            element={<InfoPage />}
+          />
+        ))}
+      </Route>
       <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
     </Routes>
   )
@@ -623,6 +762,7 @@ function ProtectedAppRouter() {
   return (
     <Routes>
       <Route element={<MainLayout dashboard />}>
+        <Route path="/zoom" element={<MiniAppZoomRoute />} />
         {dashboardRoutes}
         {ADMIN_ROUTES.map((route) => (
           <Route key={route.path} path={route.path} element={withGuard(route)} />

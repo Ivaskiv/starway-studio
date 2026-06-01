@@ -7,6 +7,9 @@ import {
   useInitiateBattleMutation,
   useLogBattleProgressMutation,
   useGetEligibleOpponentsQuery,
+  useGetPendingSwapsQuery,
+  useAcceptSwapMutation,
+  useDeclineSwapMutation,
 } from './zoom.api';
 import { isZoomLinkActive } from './zoom.utils';
 import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './zoom.types';
@@ -370,9 +373,15 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-  const { data: sessions = [] } = useGetCalendarSessionsQuery({ from: monthStart, to: monthEnd, role: 'user', userId });
+  const { data: sessions = [] } = useGetCalendarSessionsQuery(
+    { from: monthStart, to: monthEnd, role: 'user', userId },
+    { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
+  );
   const { data: leaderboard = [] } = useGetLeaderboardQuery();
   const [logProgress] = useLogBattleProgressMutation();
+  const { data: pendingSwaps = [] } = useGetPendingSwapsQuery();
+  const [acceptSwap] = useAcceptSwapMutation();
+  const [declineSwap] = useDeclineSwapMutation();
 
   const activeBattle = sessions.find(
     s => s.type === 'battle_review' && s.status !== 'COMPLETED' && s.status !== 'CANCELLED',
@@ -424,6 +433,34 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
         <SectionLabel label="МІЙ ZOOM-РОЗКЛАД" />
         <ZoomCalendar mode="user" userId={userId} />
       </section>
+
+      {pendingSwaps.length > 0 && (
+        <section>
+          <SectionLabel label="SWAP ЗАПИТИ" />
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3">
+            {pendingSwaps.slice(0, 3).map((swap) => (
+              <div key={swap.id} className="rounded-lg border border-white/10 p-2 mb-2 last:mb-0">
+                <p className="text-xs text-white/80">💱 Запит на обмін слотом</p>
+                <p className="text-[11px] text-white/60 mt-1">ID: {swap.id}</p>
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => swap.sessionIdTo && acceptSwap({ swapId: swap.id, sessionIdTo: swap.sessionIdTo }).catch(console.error)}
+                    className="rounded-lg bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300"
+                  >
+                    ✅ Погодитись
+                  </button>
+                  <button
+                    onClick={() => declineSwap({ swapId: swap.id }).catch(console.error)}
+                    className="rounded-lg bg-rose-500/20 px-3 py-1 text-xs text-rose-300"
+                  >
+                    ❌ Відхилити
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 4. My upcoming sessions */}
       <section>

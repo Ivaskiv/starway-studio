@@ -48,6 +48,7 @@ export interface AuthTokensDTO {
 export interface AuthSuccessResponseDTO extends AuthTokensDTO {
   user: SafeUserDTO;
   needsProfile?: boolean;
+  needsOnboarding?: boolean;
   expiresIn?: number;
   isNewUser?: boolean;
   needsCompletion?: boolean;

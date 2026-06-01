@@ -16,7 +16,7 @@ export async function hasActiveFocusSubscription(userId: string): Promise<boolea
   const subscription = await prisma.productSubscription.findFirst({
     where: {
       userId,
-      status: 'active',
+      status: { in: ['active', 'ACTIVE'] },
       product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
       OR: [
         { expiresAt: null },

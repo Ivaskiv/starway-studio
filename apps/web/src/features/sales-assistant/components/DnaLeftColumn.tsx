@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { HelpCircle } from 'lucide-react'
+import { AI_ASSISTANT_SECTION_INFO } from '@/features/sales-assistant/config/contentStudio.config'
+import DnaLexiconLocalTags from './DnaLexiconLocalTags'
 
 type StrategyKey = 'truth' | 'architect' | 'psychology'
 
@@ -19,7 +22,9 @@ const STRATEGIES: Array<{ key: StrategyKey; label: string; description: string }
 
 const STORAGE_KEY = 'dna_lexicon'
 
-export default function DnaLeftColumn({ onStrategyChange }: Props) {
+export default function DnaLeftColumn({
+  onStrategyChange,
+}: Props) {
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyKey>('truth')
   const [mustTags, setMustTags] = useState<string[]>(['тригер', 'застрягла', 'зливати'])
   const [banTags, setBanTags] = useState<string[]>(['трансформація', 'унікальна можливість', 'успішний успіх'])
@@ -61,7 +66,11 @@ export default function DnaLeftColumn({ onStrategyChange }: Props) {
 
   return (
     <aside className="dna-left-col" aria-label="Ліва панель ДНК">
-      <p className="dna-left-col__title">AI-СТРАТЕГІЯ</p>
+
+            <label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-[0.2em] flex items-center gap-2">
+              <h3 className="ai-sidebar-label-heading">AI-СТРАТЕГІЯ</h3>
+            </label>
+
       <div className="dna-left-col__strategies">
         {STRATEGIES.map((strategy) => (
           <button
@@ -74,37 +83,27 @@ export default function DnaLeftColumn({ onStrategyChange }: Props) {
               <strong>{strategy.label}</strong>
               <small>{strategy.description}</small>
             </span>
-            {selectedStrategy === strategy.key ? <strong>Активно</strong> : null}
+            <span
+              className={`dna-left-col__strategy-dot${selectedStrategy === strategy.key ? ' is-active' : ''}`}
+              aria-hidden="true"
+            />
           </button>
         ))}
       </div>
 
-      <section className="dna-left-col__tag-panel dna-left-col__tag-panel--must">
-        <h4>MUST</h4>
-        <div className="dna-left-col__tags">
-          {mustTags.map((tag) => <TagPill key={tag} tag={tag} onRemove={() => setMustTags((prev) => prev.filter((item) => item !== tag))} />)}
-        </div>
-        <input className="dna-left-col__input" value={mustInput} onChange={(e) => setMustInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag('must')} placeholder="Додати MUST тег" />
-      </section>
 
-      <section className="dna-left-col__tag-panel dna-left-col__tag-panel--ban">
-        <h4>BAN</h4>
-        <div className="dna-left-col__tags">
-          {banTags.map((tag) => <TagPill key={tag} tag={tag} onRemove={() => setBanTags((prev) => prev.filter((item) => item !== tag))} />)}
-        </div>
-        <input className="dna-left-col__input" value={banInput} onChange={(e) => setBanInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag('ban')} placeholder="Додати BAN тег" />
-      </section>
+      <DnaLexiconLocalTags
+        mustTags={mustTags}
+        banTags={banTags}
+        mustInput={mustInput}
+        banInput={banInput}
+        onMustInputChange={setMustInput}
+        onBanInputChange={setBanInput}
+        onAddTag={addTag}
+        onRemoveMustTag={(tag) => setMustTags((prev) => prev.filter((item) => item !== tag))}
+        onRemoveBanTag={(tag) => setBanTags((prev) => prev.filter((item) => item !== tag))}
+      /> 
+      
     </aside>
-  )
-}
-
-function TagPill({ tag, onRemove }: { tag: string; onRemove: () => void }) {
-  return (
-    <span className="dna-left-col__tag">
-      {tag}
-      <button type="button" className="dna-left-col__tag-remove" onClick={onRemove} aria-label={`Видалити ${tag}`}>
-        ×
-      </button>
-    </span>
   )
 }

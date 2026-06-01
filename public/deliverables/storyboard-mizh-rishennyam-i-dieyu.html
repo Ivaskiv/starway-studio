@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Storyboard — Між рішенням і дією</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0D0E1A;--paper:#F5F3EE;--cream:#EDE9E0;--blue:#1A3C8F;--bm:#2D55C0;--bl:#EBF0FF;--acc:#E85A1A;--al:#FFF0E8;--gr:#1A7A4A;--gl:#E8F5EE;--rule:rgba(13,14,26,0.12)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);font-size:15px;line-height:1.65}
+header{background:var(--ink);border-bottom:3px solid var(--acc);padding:0}
+.hi{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:52px}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:#fff}.logo span{color:var(--acc)}
+.badge{background:var(--acc);color:#fff;font-family:'DM Mono',monospace;font-size:10px;padding:3px 10px;letter-spacing:1px}
+.hero{background:var(--ink);color:#fff;padding:56px 32px 44px;text-align:center}
+.hero h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(44px,7vw,80px);letter-spacing:3px;line-height:.95;margin-bottom:12px}
+.hero h1 em{color:var(--acc);font-style:normal}
+.hero p{font-size:14px;color:rgba(255,255,255,.5);max-width:480px;margin:0 auto}
+.wrap{max-width:1100px;margin:0 auto;padding:32px 32px 80px}
+
+/* TOP ACTION */
+.top-action{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:28px;padding:16px 20px;background:#fff;border:1px solid var(--rule);border-radius:6px}
+.top-meta{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-family:'DM Mono',monospace;font-size:10px;padding:3px 10px;border-radius:2px}
+.pill.point{background:var(--bl);color:var(--blue)}
+.pill.hant{background:#FFF8E8;color:#7A5000}
+.pill.pos{background:var(--gl);color:var(--gr)}
+.copy-all-btn{font-family:'DM Mono',monospace;font-size:11px;padding:8px 20px;background:var(--ink);color:#fff;border:none;border-radius:3px;cursor:pointer;letter-spacing:.5px;transition:background .15s;white-space:nowrap}
+.copy-all-btn:hover{background:var(--acc)}
+.copy-all-btn.done{background:var(--gr)}
+
+/* SCENES GRID */
+.scenes{display:grid;gap:16px;margin-bottom:28px}
+.scene{background:#fff;border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.scene-head{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--rule);background:rgba(13,14,26,.02)}
+.scene-num{font-family:'Bebas Neue',sans-serif;font-size:32px;color:rgba(13,14,26,.08);line-height:1;min-width:36px}
+.scene-info{flex:1}
+.scene-time{font-family:'DM Mono',monospace;font-size:11px;color:rgba(13,14,26,.4);margin-bottom:2px}
+.scene-title{font-size:15px;font-weight:600}
+.scene-mood{font-size:12px;color:rgba(13,14,26,.45);font-style:italic;margin-top:2px}
+.scene-body{padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:640px){.scene-body{grid-template-columns:1fr}}
+.scene-col h4{font-size:11px;font-family:'DM Mono',monospace;letter-spacing:.8px;text-transform:uppercase;color:rgba(13,14,26,.4);margin-bottom:6px}
+.scene-text{font-size:13px;line-height:1.65;color:var(--ink)}
+.screen-text-box{background:var(--cream);border-left:3px solid var(--ink);padding:8px 12px;font-size:14px;font-weight:500;border-radius:0 3px 3px 0;margin-top:8px}
+.prompt-block{background:#0D0E1A;border-radius:4px;padding:10px 13px;font-family:'DM Mono',monospace;font-size:11.5px;line-height:1.8;color:#C8D8FF;position:relative}
+.prompt-label{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:6px}
+.pcopy{position:absolute;top:8px;right:8px;font-family:'DM Mono',monospace;font-size:9px;padding:2px 8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);border-radius:2px;cursor:pointer;transition:all .15s}
+.pcopy:hover{background:rgba(255,255,255,.18);color:#fff}
+.pcopy.done{background:var(--gr);color:#fff;border-color:var(--gr)}
+
+/* SECTIONS */
+.section{margin-bottom:28px}
+.sec-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.sec-icon{font-size:18px}
+.sec-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1.5px}
+.music-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.music-card{background:#fff;border:1px solid var(--rule);border-radius:5px;padding:14px}
+.music-card h4{font-size:11px;font-family:'DM Mono',monospace;letter-spacing:.8px;text-transform:uppercase;color:rgba(13,14,26,.4);margin-bottom:6px}
+.music-card p{font-size:13px;line-height:1.6}
+.tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.tech-item{background:#fff;border:1px solid var(--rule);border-radius:4px;padding:12px}
+.tech-item span{font-size:11px;font-family:'DM Mono',monospace;color:rgba(13,14,26,.4);display:block;margin-bottom:3px}
+.tech-item p{font-size:13px;font-weight:500}
+
+/* ONE PROMPT */
+.one-prompt-wrap{background:#0D0E1A;border-radius:6px;overflow:hidden;margin-top:4px}
+.oph{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.08)}
+.oplabel{font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase}
+.opbtn{font-family:'DM Mono',monospace;font-size:10px;padding:4px 14px;background:var(--acc);border:none;color:#fff;border-radius:3px;cursor:pointer;letter-spacing:.5px;transition:all .15s}
+.opbtn:hover{background:#c04a10}
+.opbtn.done{background:var(--gr)}
+.op-body{padding:20px 22px;font-family:'DM Mono',monospace;font-size:12px;line-height:2;color:#C8D8FF;white-space:pre-wrap;word-break:break-word;max-height:400px;overflow-y:auto}
+.op-body .hl{color:#FFB366}.op-body .ok{color:#66CC88}.op-body .cm{color:#4A6080}
+
+.callout-note{padding:14px 18px;background:var(--al);border-left:4px solid var(--acc);border-radius:0 4px 4px 0;font-size:13px;color:#7A2A08;margin-top:12px}
+.callout-note strong{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;opacity:.7}
+
+footer{background:var(--ink);color:rgba(255,255,255,.3);text-align:center;padding:20px;font-family:'DM Mono',monospace;font-size:11px}
+footer strong{color:rgba(255,255,255,.6)}
+</style>
+</head>
+<body>
+
+<header>
+<div class="hi">
+  <div class="logo">STARWAY <span>STUDIO</span></div>
+  <div class="badge">STORYBOARD · /storyboard</div>
+</div>
+</header>
+
+<div class="hero">
+  <h1>МІЖ РІШЕННЯМ<br><em>І ДІЄЮ</em></h1>
+  <p>9:16 · 30 сек · Reels / TikTok / Shorts · Kling AI + Seedance</p>
+</div>
+
+<div class="wrap">
+
+<!-- TOP -->
+<div class="top-action">
+  <div class="top-meta">
+    <span class="pill point">ABSystem: РІШЕННЯ → ДІЯ</span>
+    <span class="pill hant">Ханта: 2-3</span>
+    <span class="pill pos">ПСИХОЛОГІЯ ДІЇ</span>
+  </div>
+  <button class="copy-all-btn" onclick="copyAll(this)">Скопіювати все одним промптом ↗</button>
+</div>
+
+<!-- SCENES -->
+<div class="scenes">
+
+  <!-- SCENE 1 -->
+  <div class="scene">
+    <div class="scene-head">
+      <div class="scene-num">1</div>
+      <div class="scene-info">
+        <div class="scene-time">0–3 СЕК · ХУК</div>
+        <div class="scene-title">Рука над щоденником — заморожений момент</div>
+        <div class="scene-mood">Тихе впізнавання, без драми</div>
+      </div>
+    </div>
+    <div class="scene-body">
+      <div>
+        <h4>Що на екрані + текст</h4>
+        <p class="scene-text">Крупний план — рука з ручкою зависла над відкритим щоденником. Сторінка заповнена — списки, стрілки, підкреслення. Рука не рухається.</p>
+        <div class="screen-text-box">Ти вже вирішила. Місяць тому.</div>
+      </div>
+      <div>
+        <h4>AI-промти</h4>
+        <div class="prompt-block">
+          <div class="prompt-label">Kling AI</div>
+          <button class="pcopy" onclick="cp(this,'p1k')">copy</button>
+          <span id="p1k">Close-up of a woman's hand holding a pen, hovering motionless over an open journal filled with notes and to-do lists. Warm morning light from the left. 9:16 vertical, cinematic, photorealistic, soft bokeh. Camera: completely static. Mood: suspended moment, quiet tension.</span>
+        </div>
+        <div class="prompt-block" style="margin-top:8px">
+          <div class="prompt-label">Seedance</div>
+          <button class="pcopy" onclick="cp(this,'p1s')">copy</button>
+          <span id="p1s">A 3-second vertical video (9:16). Extreme close-up of a hand with pen hovering over a handwritten journal page. No movement. Warm natural light. Camera: static. Color grade: warm neutral. No text overlays. Mood: frozen in thought.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 2 -->
+  <div class="scene">
+    <div class="scene-head">
+      <div class="scene-num">2</div>
+      <div class="scene-info">
+        <div class="scene-time">3–10 СЕК · ПРОБЛЕМА</div>
+        <div class="scene-title">Жінка дивиться в нікуди — рух відсутній</div>
+        <div class="scene-mood">Впізнаваний стан без осуду</div>
+      </div>
+    </div>
+    <div class="scene-body">
+      <div>
+        <h4>Що на екрані + текст</h4>
+        <p class="scene-text">Жінка за столом біля вікна. Дивиться вперед — не у вікно, не в телефон. На столі — відкритий ноутбук, чашка кави, телефон. Все є. Рух відсутній.</p>
+        <div class="screen-text-box">Не лінь. Не слабкість.<br>Між рішенням і дією є точка де рух зупиняється.</div>
+      </div>
+      <div>
+        <h4>AI-промти</h4>
+        <div class="prompt-block">
+          <div class="prompt-label">Kling AI</div>
+          <button class="pcopy" onclick="cp(this,'p2k')">copy</button>
+          <span id="p2k">Ukrainian woman 30-38yo sitting at a desk near a window, staring into middle distance. Laptop open, coffee cup beside her, slight furrow in brow — not sad, just stuck. Soft diffused daylight. 9:16 vertical, cinematic. Camera: slow gentle push in toward her face. Mood: quiet internal pause, no judgment.</span>
+        </div>
+        <div class="prompt-block" style="margin-top:8px">
+          <div class="prompt-label">Seedance</div>
+          <button class="pcopy" onclick="cp(this,'p2s')">copy</button>
+          <span id="p2s">A 7-second vertical video (9:16). A woman in her early 30s sits at a home desk, gazing forward, unfocused. Laptop open in front of her, untouched. Soft window light from the right. Camera: very slow push in. Color grade: warm muted. No text overlays. Mood: the space between knowing and doing.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 3 -->
+  <div class="scene">
+    <div class="scene-head">
+      <div class="scene-num">3</div>
+      <div class="scene-info">
+        <div class="scene-time">10–18 СЕК · РІШЕННЯ</div>
+        <div class="scene-title">Один рядок написаний — спокійна ясність</div>
+        <div class="scene-mood">Тихий момент розуміння, без пафосу</div>
+      </div>
+    </div>
+    <div class="scene-body">
+      <div>
+        <h4>Що на екрані + текст</h4>
+        <p class="scene-text">Та сама жінка — але тепер інша. Вона щось написала. Один рядок. Дивиться на нього. На обличчі — не радість, а спокійна ясність. Момент «ось воно».</p>
+        <div class="screen-text-box">Рух зупиняється не в дії.<br>ABSystem знаходить де саме — і повертає в контекст.</div>
+      </div>
+      <div>
+        <h4>AI-промти</h4>
+        <div class="prompt-block">
+          <div class="prompt-label">Kling AI</div>
+          <button class="pcopy" onclick="cp(this,'p3k')">copy</button>
+          <span id="p3k">Ukrainian woman coach 35-40yo, looking down at a journal where she just wrote one clear sentence. Slight exhale, soft confident expression — the look of recognition, not celebration. Warm lamp light. 9:16 vertical, cinematic, close-up face and journal alternating. Mood: quiet clarity, the moment something clicks.</span>
+        </div>
+        <div class="prompt-block" style="margin-top:8px">
+          <div class="prompt-label">Seedance</div>
+          <button class="pcopy" onclick="cp(this,'p3s')">copy</button>
+          <span id="p3s">A 8-second vertical video (9:16). Woman looks down at open notebook, reads what she wrote, nods slightly. Expression: calm realization. Warm interior light. Camera: slow rack focus from journal to face. Color grade: warm golden. No text overlays. Mood: the moment of understanding.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 4 -->
+  <div class="scene">
+    <div class="scene-head">
+      <div class="scene-num">4</div>
+      <div class="scene-info">
+        <div class="scene-time">18–25 СЕК · ТРАНСФОРМАЦІЯ</div>
+        <div class="scene-title">Жінка встає — один цілеспрямований крок</div>
+        <div class="scene-mood">Спокійна рішучість, природність</div>
+      </div>
+    </div>
+    <div class="scene-body">
+      <div>
+        <h4>Що на екрані + текст</h4>
+        <p class="scene-text">Жінка встає з-за столу — впевнено, без поспіху. Бере телефон, робить один цілеспрямований крок. Не біжить, не суєтиться. Просто рухається.</p>
+        <div class="screen-text-box">Коли знаходиш точку — дія відбувається сама.</div>
+      </div>
+      <div>
+        <h4>AI-промти</h4>
+        <div class="prompt-block">
+          <div class="prompt-label">Kling AI</div>
+          <button class="pcopy" onclick="cp(this,'p4k')">copy</button>
+          <span id="p4k">Ukrainian woman 35-40yo standing up from desk with calm purpose, picking up phone with intention. Not rushing — moving with clarity. Warm natural light, home office setting. 9:16 vertical, cinematic. Camera: follows her movement slightly, handheld feel. Mood: effortless forward motion.</span>
+        </div>
+        <div class="prompt-block" style="margin-top:8px">
+          <div class="prompt-label">Seedance</div>
+          <button class="pcopy" onclick="cp(this,'p4s')">copy</button>
+          <span id="p4s">A 7-second vertical video (9:16). Woman rises from a chair at a desk, picks up her phone naturally, begins walking with quiet confidence. Soft warm light. Camera: gentle follow shot. Color grade: warm bright. No text overlays. Mood: calm momentum returning.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 5 -->
+  <div class="scene">
+    <div class="scene-head">
+      <div class="scene-num">5</div>
+      <div class="scene-info">
+        <div class="scene-time">25–30 СЕК · CTA</div>
+        <div class="scene-title">Чистий фон — один рядок тексту</div>
+        <div class="scene-mood">Чисто, просто, без тиску</div>
+      </div>
+    </div>
+    <div class="scene-body">
+      <div>
+        <h4>Що на екрані + текст</h4>
+        <p class="scene-text">Чистий теплий фон — кремовий або м'який бежевий. По центру — один рядок тексту і стрілка. Без зайвого.</p>
+        <div class="screen-text-box">Пройди тест і побач де зупинився твій рух →<br><span style="font-size:12px;font-weight:400;opacity:.6">Посилання в шапці профілю</span></div>
+      </div>
+      <div>
+        <h4>AI-промт</h4>
+        <div class="prompt-block">
+          <div class="prompt-label">Kling AI</div>
+          <button class="pcopy" onclick="cp(this,'p5k')">copy</button>
+          <span id="p5k">Clean minimal background, warm cream color #F5F0E8, soft gradient light. No people. Static shot. Space for text overlay. 9:16 vertical. Mood: calm, inviting, premium minimal.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- scenes -->
+
+<!-- MUSIC -->
+<div class="section">
+  <div class="sec-head">
+    <span class="sec-icon">🎵</span>
+    <span class="sec-title">Музика і настрій</span>
+  </div>
+  <div class="music-grid">
+    <div class="music-card">
+      <h4>Емоційна дуга</h4>
+      <p>Застигання → впізнавання → ясність → рух</p>
+    </div>
+    <div class="music-card">
+      <h4>Жанр + BPM</h4>
+      <p>Ambient piano + light cinematic · 68-75 BPM</p>
+    </div>
+    <div class="music-card">
+      <h4>Epidemic Sound</h4>
+      <p>«introspective piano soft clarity»<br>«minimal ambient hope warm»</p>
+    </div>
+    <div class="music-card">
+      <h4>Artlist</h4>
+      <p>«reflective piano cinematic gentle»</p>
+    </div>
+    <div class="music-card">
+      <h4>Гучність</h4>
+      <p>Фон на сц. 1-2 → середній план на сц. 3-4</p>
+    </div>
+    <div class="music-card">
+      <h4>Посилення</h4>
+      <p>Сцени 3-4 — момент розуміння і руху</p>
+    </div>
+  </div>
+</div>
+
+<!-- TECH -->
+<div class="section">
+  <div class="sec-head">
+    <span class="sec-icon">⚙️</span>
+    <span class="sec-title">Технічні вимоги</span>
+  </div>
+  <div class="tech-grid">
+    <div class="tech-item"><span>Формат</span><p>MP4, H.264</p></div>
+    <div class="tech-item"><span>Роздільна здатність</span><p>1080×1920 (9:16)</p></div>
+    <div class="tech-item"><span>FPS</span><p>30fps</p></div>
+    <div class="tech-item"><span>Шрифт субтитрів</span><p>Montserrat Bold</p></div>
+    <div class="tech-item"><span>Розмір субтитрів</span><p>44-48px</p></div>
+    <div class="tech-item"><span>Позиція</span><p>Нижня третина</p></div>
+    <div class="tech-item"><span>Виділення</span><p>#F5C842 жовтий теплий</p></div>
+    <div class="tech-item"><span>Субтитри</span><p>Білий + чорна обводка</p></div>
+  </div>
+  <div class="callout-note" style="margin-top:14px">
+    <strong>Монтажеру</strong>
+    Сцена 2 — найдовша і найважливіша. Якщо вона резонує — глядач досивиться до кінця. Знімати у природному денному світлі, без постановочної усмішки.
+  </div>
+</div>
+
+<!-- ONE PROMPT -->
+<div class="section">
+  <div class="sec-head">
+    <span class="sec-icon">📋</span>
+    <span class="sec-title">Все одним промптом</span>
+  </div>
+  <div class="one-prompt-wrap">
+    <div class="oph">
+      <span class="oplabel">Копіювати і вставити в AI-інструмент</span>
+      <button class="opbtn" onclick="copyAll(this)">Копіювати все ↗</button>
+    </div>
+    <div class="op-body" id="all-prompt"><span class="cm">// STORYBOARD: "Між рішенням і дією"
+// Формат: 9:16 | 30 сек | Reels/TikTok/Shorts
+// Точка ABSystem: РІШЕННЯ → ДІЯ | Ханта: 2-3 | Позиція: ПСИХОЛОГІЯ ДІЇ</span>
+
+<span class="hl">СЦЕНА 1 | 0–3 сек | ХУК</span>
+Що на екрані: крупний план — рука з ручкою зависла над відкритим щоденником. Сторінка заповнена — списки, стрілки, підкреслення. Рука не рухається.
+Текст: «Ти вже вирішила. Місяць тому.»
+Настрій: тихе впізнавання, без драми
+
+Kling AI: Close-up of a woman's hand holding a pen, hovering motionless over an open journal filled with notes and to-do lists. Warm morning light from the left. 9:16 vertical, cinematic, photorealistic, soft bokeh. Camera: completely static. Mood: suspended moment, quiet tension.
+
+Seedance: A 3-second vertical video (9:16). Extreme close-up of a hand with pen hovering over a handwritten journal page. No movement. Warm natural light. Camera: static. Color grade: warm neutral. No text overlays. Mood: frozen in thought.
+
+<span class="hl">СЦЕНА 2 | 3–10 сек | ПРОБЛЕМА</span>
+Що на екрані: жінка за столом біля вікна. Дивиться вперед — не у вікно, не в телефон. На столі — відкритий ноутбук, чашка кави, телефон. Все є. Рух відсутній.
+Текст: «Не лінь. Не слабкість. Між рішенням і дією є точка де рух зупиняється.»
+Настрій: впізнаваний стан без осуду
+
+Kling AI: Ukrainian woman 30-38yo sitting at a desk near a window, staring into middle distance. Laptop open, coffee cup beside her, slight furrow in brow — not sad, just stuck. Soft diffused daylight. 9:16 vertical, cinematic. Camera: slow gentle push in toward her face. Mood: quiet internal pause, no judgment.
+
+Seedance: A 7-second vertical video (9:16). A woman in her early 30s sits at a home desk, gazing forward, unfocused. Laptop open in front of her, untouched. Soft window light from the right. Camera: very slow push in. Color grade: warm muted. No text overlays. Mood: the space between knowing and doing.
+
+<span class="hl">СЦЕНА 3 | 10–18 сек | РІШЕННЯ</span>
+Що на екрані: та сама жінка — але тепер інша. Вона щось написала. Один рядок. Дивиться на нього. На обличчі — не радість, а спокійна ясність. Момент «ось воно».
+Текст: «Рух зупиняється не в дії. ABSystem знаходить де саме — і повертає в контекст.»
+Настрій: тихий момент розуміння, без пафосу
+
+Kling AI: Ukrainian woman coach 35-40yo, looking down at a journal where she just wrote one clear sentence. Slight exhale, soft confident expression — the look of recognition, not celebration. Warm lamp light. 9:16 vertical, cinematic, close-up face and journal alternating. Mood: quiet clarity, the moment something clicks.
+
+Seedance: A 8-second vertical video (9:16). Woman looks down at open notebook, reads what she wrote, nods slightly. Expression: calm realization. Warm interior light. Camera: slow rack focus from journal to face. Color grade: warm golden. No text overlays. Mood: the moment of understanding.
+
+<span class="hl">СЦЕНА 4 | 18–25 сек | ТРАНСФОРМАЦІЯ</span>
+Що на екрані: жінка встає з-за столу — впевнено, без поспіху. Бере телефон, робить один цілеспрямований крок. Не біжить, не суєтиться. Просто рухається.
+Текст: «Коли знаходиш точку — дія відбувається сама.»
+Настрій: спокійна рішучість, природність
+
+Kling AI: Ukrainian woman 35-40yo standing up from desk with calm purpose, picking up phone with intention. Not rushing — moving with clarity. Warm natural light, home office setting. 9:16 vertical, cinematic. Camera: follows her movement slightly, handheld feel. Mood: effortless forward motion.
+
+Seedance: A 7-second vertical video (9:16). Woman rises from a chair at a desk, picks up her phone naturally, begins walking with quiet confidence. Soft warm light. Camera: gentle follow shot. Color grade: warm bright. No text overlays. Mood: calm momentum returning.
+
+<span class="hl">СЦЕНА 5 | 25–30 сек | CTA</span>
+Що на екрані: чистий теплий фон кремовий #F5F0E8. По центру — один рядок тексту і стрілка. Без зайвого.
+Текст: «Пройди тест і побач де зупинився твій рух → Посилання в шапці профілю»
+Настрій: чисто, просто, без тиску
+
+Kling AI: Clean minimal background, warm cream color #F5F0E8, soft gradient light. No people. Static shot. Space for text overlay. 9:16 vertical. Mood: calm, inviting, premium minimal.
+
+<span class="cm">// МУЗИКА
+// Жанр: ambient piano + light cinematic | BPM: 68-75
+// Epidemic Sound: "introspective piano soft clarity"
+// Artlist: "reflective piano cinematic gentle"
+// Посилення: сцени 3-4 (розуміння і рух)</span>
+
+<span class="cm">// ТЕХНІЧНІ ВИМОГИ
+// MP4 H.264 | 1080×1920 | 30fps
+// Субтитри: Montserrat Bold, 44-48px, нижня третина
+// Виділення ключових слів: #F5C842</span></div>
+  </div>
+</div>
+
+</div><!-- wrap -->
+<footer><strong>Starway Studio · Storyboard</strong> · AIAuto · 2026</footer>
+
+<script>
+function cp(btn,id){
+  const t=document.getElementById(id).textContent;
+  navigator.clipboard.writeText(t).then(()=>{
+    btn.textContent='✓';btn.classList.add('done');
+    setTimeout(()=>{btn.textContent='copy';btn.classList.remove('done')},1500);
+  });
+}
+function copyAll(btn){
+  const t=document.getElementById('all-prompt').innerText;
+  navigator.clipboard.writeText(t).then(()=>{
+    btn.textContent='✓ Скопійовано';btn.classList.add('done');
+    setTimeout(()=>{
+      btn.textContent=btn.classList.contains('opbtn')?'Копіювати все ↗':'Скопіювати все одним промптом ↗';
+      btn.classList.remove('done');
+    },2000);
+  });
+}
+</script>
+</body>
+</html>

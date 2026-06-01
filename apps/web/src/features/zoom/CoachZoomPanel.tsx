@@ -323,7 +323,10 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-  const { data: sessions = [] } = useGetCalendarSessionsQuery({ from: monthStart, to: monthEnd, role: 'coach', userId: expertId });
+  const { data: sessions = [] } = useGetCalendarSessionsQuery(
+    { from: monthStart, to: monthEnd, role: 'coach', userId: expertId },
+    { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
+  );
   const { data: leaderboard = [] } = useGetLeaderboardQuery();
   const [finalize] = useFinalizeBattleMutation();
   const [createSession, { isLoading: isCreating }] = useCreateZoomSessionMutation();
@@ -371,8 +374,15 @@ const canManageZoom =
     const [d, m, y] = formDate.split('.').map(Number);
     const [h, mi] = formTime.split(':').map(Number);
     const dt = new Date(y, m - 1, d, h, mi, 0);
-    await createSession({ scheduledAt: dt.toISOString(), topic: formTopic, type: formType, zoomLink: formLink || undefined }).unwrap();
-    setFormDate(''); setFormTopic(''); setFormLink('');
+    const payload = { scheduledAt: dt.toISOString(), topic: formTopic, type: formType, zoomLink: formLink || undefined };
+    console.log('[zoom/create] submitting:', payload);
+    try {
+      const result = await createSession(payload).unwrap();
+      console.log('[zoom/create] success:', result);
+      setFormDate(''); setFormTopic(''); setFormLink('');
+    } catch (err) {
+      console.error('[zoom/create] ERROR:', err);
+    }
   };
 
   return (
@@ -410,7 +420,23 @@ const canManageZoom =
       {/* 3. Calendar */}
       <section>
         <SectionLabel label="КАЛЕНДАР СЕСІЙ" />
-        <ZoomCalendar mode="coach" userId={expertId} />
+        <ZoomCalendar mode="coach" userId={expertId} expertId={expertId} />
+      </section>
+
+      <section>
+        <SectionLabel label="ІНДИВІДУАЛЬНІ СЛОТИ" />
+        <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] p-3">
+          <button
+            onClick={() => {
+              setFormType('PRIVATE')
+              setFormTopic('Індивідуальний Zoom слот')
+            }}
+            className="btn-liquid-primary inline-flex items-center text-[12px] font-semibold px-3 py-2 rounded-[var(--btn-radius)]"
+          >
+            + Додати індивідуальний слот
+          </button>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">PRIVATE слот рекомендується створювати з місткістю 1.</p>
+        </div>
       </section>
 
       {/* 4. Availability template (collapsible) */}

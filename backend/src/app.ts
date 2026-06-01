@@ -12,11 +12,13 @@ import { fileURLToPath } from 'node:url'
 
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
+import { prisma } from './db/client.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
 const backendEnvPath = resolve(currentDirPath, '../.env')
 const rootEnvPath = resolve(currentDirPath, '../../.env')
+const publicDeliverablesPath = resolve(currentDirPath, '../../public/deliverables')
 if (existsSync(rootEnvPath)) {
   loadEnv({ path: rootEnvPath })
 }
@@ -184,6 +186,7 @@ import visionRoutes from './modules/vision/routes.js'
 import webMapRouter from './modules/web-map/web-map.router.js'
 import wheelRoutes from './modules/wheel/routes.js'
 import zoomRoutes from './modules/zoom/routes.js'
+import zoomCoachRoutes from './modules/zoom/zoom.coach.routes.js'
 import testSyncRoutes from './products/absystem/config/testSync.router.js'
 import salesAssistantRouter from './routers/salesAssistant.router.js'
 
@@ -193,11 +196,24 @@ export function createApp(): Express {
   const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
   const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || ''
   const isProduction = process.env.NODE_ENV === 'production'
+  const corsOriginEnv = process.env.CORS_ORIGIN
+    ?.split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean) ?? []
+  const vercelUrl = process.env.VERCEL_URL?.trim()
+  const vercelOrigin = vercelUrl
+    ? `https://${vercelUrl.replace(/^https?:\/\//, '')}`
+    : null
   const allowedOrigins = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
     'https://starway-frontend.vercel.app',
     process.env.FRONTEND_URL?.trim(),
+    process.env.PUBLIC_FRONTEND_URL?.trim(),
+    vercelOrigin,
+    ...corsOriginEnv,
   ].filter((origin): origin is string => Boolean(origin))
   const localNetworkOriginPattern = /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:5173$/
 
@@ -208,19 +224,15 @@ export function createApp(): Express {
         return
       }
 
-      const isDevLocalOrigin =
-        !isProduction &&
-        (allowedOrigins.includes(origin) ||
-          localNetworkOriginPattern.test(origin))
-
-      const isKnownOrigin = allowedOrigins.includes(origin)
+      const isDevLocalOrigin = !isProduction && localNetworkOriginPattern.test(origin)
+      const isKnownOrigin = allowedOrigins.some(allowed => origin.startsWith(allowed))
 
       if (isKnownOrigin || isDevLocalOrigin) {
         callback(null, true)
         return
       }
 
-      callback(new Error('CORS blocked'))
+      callback(new Error(`CORS blocked: ${origin}`))
     },
     credentials: true,
     optionsSuccessStatus: 204,
@@ -229,6 +241,9 @@ export function createApp(): Express {
   // =====================
   // Middleware
   // =====================
+  const wayforpayCors = cors({ origin: '*' })
+  app.use('/api/subscriptions/payments/wayforpay', wayforpayCors)
+  app.use('/api/payments/wayforpay', wayforpayCors)
   app.use(corsOptions)
   app.options('*', corsOptions)
   app.use(securityHeaders)
@@ -236,6 +251,16 @@ export function createApp(): Express {
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
   app.use(cookieParser())
+
+  // Public static deliverables must stay доступні без auth/login flows.
+  app.use(
+    '/deliverables',
+    express.static(publicDeliverablesPath, {
+      fallthrough: false,
+      index: false,
+      redirect: false,
+    }),
+  )
 
   app.get('/api/telegram/webhook/health', (_req: Request, res: Response) => {
     const enabled = START_TELEGRAM_BOT && Boolean(TELEGRAM_WEBHOOK_URL)
@@ -262,13 +287,15 @@ export function createApp(): Express {
       }
     }
 
-    try {
-      await bot.handleUpdate(req.body)
-      return res.status(200).send('OK')
-    } catch (error) {
-      console.error('❌ [TELEGRAM WEBHOOK ERROR]', error)
-      return res.status(500).send('Webhook error')
-    }
+    // ACK immediately to avoid webhook caller timeout/retries;
+    // update processing runs in background.
+    res.status(200).send('OK')
+    setImmediate(() => {
+      void bot.handleUpdate(req.body).catch((error) => {
+        console.error('❌ [TELEGRAM WEBHOOK ERROR]', error)
+      })
+    })
+    return
   })
 
   // FIX(18.05.2026): handle telegram root token before request logging — Codex
@@ -299,6 +326,23 @@ export function createApp(): Express {
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',
     })
+  })
+
+  app.get('/health/ready', async (_req: Request, res: Response) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`
+      res.status(200).json({ status: 'ok', db: 'connected' })
+    } catch (error) {
+      res.status(503).json({
+        status: 'error',
+        db: 'unavailable',
+        message: error instanceof Error ? error.message : 'Database not ready',
+      })
+    }
+  })
+
+  app.get('/health/live', (_req: Request, res: Response) => {
+    res.status(200).json({ alive: true })
   })
 
   app.use(async (req: Request, res: Response, next: NextFunction) => {
@@ -361,6 +405,7 @@ export function createApp(): Express {
   app.use('/api/ab-test', abTestRoutes)
   app.use('/api/test', testSyncRoutes)
   app.use('/api/zoom', zoomRoutes)
+  app.use('/api/coach', zoomCoachRoutes)
   app.use('/api/mentorship', mentorshipRoutes)
   app.use('/api/courses', miniCoursesRoutes)
   app.use('/api/social', socialRoutes)

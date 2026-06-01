@@ -8,14 +8,16 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './app.js'
 import { prisma, withRetry } from './db/client.js'
-import { bot } from './lib/telegram.js'
+import { bot, coachBot, launchBot, testBot } from './lib/telegram.js'
 import { registerDailyTelegramCommands } from './modules/daily-cycle/telegram.js'
+import { readCoachBotToken } from './modules/telegram-mentor/runtime/botConfig.js'
 import { resolveRuntimeBotRegistry } from './platform/index.js'
 import { registerStankeyBot } from './products/stankey/index.js'
 import { startScheduler, stopScheduler } from './services/scheduler/index.js'
 import { startZoomNotificationsCron, startBattleCron, seedDefaultAvailability } from './modules/zoom/index.js'
 import { startDnaQueueWorkers, stopDnaQueueWorkers } from '@/core/dna/queues/dna.workers.js'
 import { startDnaQueueTelemetry } from '@/core/dna/telemetry/dna.queue-telemetry.js'
+import { registerCoachBotHandlers } from './bot/handlers/coach/coachStart.handler.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
@@ -48,6 +50,8 @@ const telegramBotConfig = botRegistry.main
 const app: Express = createApp()
 let server: Server | null = null
 let telegramRunningMode: 'webhook' | 'polling' | null = null
+let coachTelegramRunningMode: 'webhook' | 'polling' | null = null
+let testTelegramRunningMode: 'webhook' | 'polling' | null = null
 let telegramStartupPromise: Promise<void> | null = null
 let isShuttingDown = false
 let prismaKeepAliveInterval: NodeJS.Timeout | null = null
@@ -126,145 +130,152 @@ async function startTelegramBot() {
         production: isProduction,
       })
 
-      registerDailyTelegramCommands()
-      await registerStankeyBot()
-
-      console.log('🤖 [Telegram] Checking bot identity...')
-      const me = await bot.telegram.getMe()
-      console.log(`🤖 [Telegram] Bot: @${me.username} (id: ${me.id})`)
-      await bot.telegram
-        .setChatMenuButton({
-          menuButton: {
-            type: 'default',
-          },
-        })
-        .catch((error) => {
-          console.warn('⚠️ [Telegram] Failed to reset chat menu button:', error)
-        })
-      await bot.telegram
-        .setMyCommands([
-          {
-            command: 'privacy',
-            description: 'Політика конфіденційності чат-бота',
-          },
-        ])
-        .catch((error) => {
-          console.warn('⚠️ [Telegram] Failed to set global commands:', error)
-        })
-      await bot.telegram
-        .setMyCommands(
-          [
-            {
-              command: 'privacy',
-              description: 'Політика конфіденційності чат-бота',
-            },
-          ],
-          {
-            scope: { type: 'all_private_chats' },
-          }
-        )
-        .catch((error) => {
-          console.warn(
-            '⚠️ [Telegram] Failed to set private chat commands:',
-            error
-          )
-        })
-      await bot.telegram
-        .setMyCommands(
-          [
-            {
-              command: 'privacy',
-              description: 'Політика конфіденційності чат-бота',
-            },
-          ],
-          {
-            scope: { type: 'all_group_chats' },
-          }
-        )
-        .catch((error) => {
-          console.warn(
-            '⚠️ [Telegram] Failed to set group chat commands:',
-            error
-          )
-        })
-      await bot.telegram
-        .setMyCommands(
-          [
-            {
-              command: 'privacy',
-              description: 'Політика конфіденційності чат-бота',
-            },
-          ],
-          {
-            scope: { type: 'all_chat_administrators' },
-          }
-        )
-        .catch((error) => {
-          console.warn(
-            '⚠️ [Telegram] Failed to set admin chat commands:',
-            error
-          )
-        })
-
-      if (TELEGRAM_WEBHOOK_URL) {
-        const webhookEndpoint = `${TELEGRAM_WEBHOOK_URL.replace(/\/$/, '')}/api/telegram/webhook`
-        await bot.telegram.setWebhook(webhookEndpoint, {
-          drop_pending_updates: false,
-          allowed_updates: ['message', 'callback_query', 'chat_member', 'my_chat_member'],
-          ...(TELEGRAM_WEBHOOK_SECRET ? { secret_token: TELEGRAM_WEBHOOK_SECRET } : {}),
-        })
-        const webhookInfo = await bot.telegram.getWebhookInfo()
-        if (webhookInfo.url !== webhookEndpoint) {
-          throw new Error(
-            `[Telegram] webhook mismatch after setWebhook: expected=${webhookEndpoint} actual=${webhookInfo.url}`,
-          )
-        }
-        telegramRunningMode = 'webhook'
-        console.log(`🤖 Telegram bot ready (webhook mode): ${webhookEndpoint}`)
-        return
+      try {
+        registerDailyTelegramCommands()
+      } catch (error) {
+        console.warn('⚠️ [Telegram] registerDailyTelegramCommands failed:', error)
       }
-
-      if (!TELEGRAM_POLLING_ENABLED) {
-        console.log(
-          '🤖 [Telegram] Polling skipped (set TELEGRAM_POLLING_ENABLED=true to enable local polling)'
-        )
-        return
-      }
-
-      if (isProduction) {
-        console.log('🤖 Telegram: production mode (polling disabled)')
-        return
-      }
-
-      console.log('🤖 [Telegram] Switching to polling mode...')
-      console.log('🤖 [Telegram] Deleting webhook...')
-      await bot.telegram
-        .deleteWebhook({ drop_pending_updates: false })
-        .catch(() => undefined)
-      const webhookInfoAfterDelete = await bot.telegram.getWebhookInfo()
-      console.log('🤖 [Telegram] Webhook after delete:', {
-        url: webhookInfoAfterDelete.url,
-        pending_update_count: webhookInfoAfterDelete.pending_update_count,
+      await registerStankeyBot().catch((error) => {
+        console.warn('⚠️ [Telegram] registerStankeyBot failed:', error)
       })
-      console.log('🤖 [Telegram] Launching polling...')
-      telegramRunningMode = 'polling'
-      void bot
-        .launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'chat_member', 'my_chat_member'] }, () =>
-          console.log(
-            '🤖 Telegram bot ready (polling mode for local development)'
-          )
-        )
-        .catch((error) => {
-          telegramRunningMode = null
-          if (isTelegramPollingConflict(error)) {
-            console.warn(
-              '⚠️ [Telegram] Polling skipped: another bot instance is already consuming updates'
-            )
+
+      const coachToken = readCoachBotToken()
+      if (coachToken) {
+        registerCoachBotHandlers(coachBot)
+      } else {
+        console.log('🤖 [CoachBot] skipped: COACH_BOT_TOKEN is not set')
+      }
+
+      const mainWebhookUrl = TELEGRAM_WEBHOOK_URL
+        ? `${TELEGRAM_WEBHOOK_URL.replace(/\/$/, '')}/api/telegram/webhook`
+        : ''
+      const coachWebhookUrl = process.env.COACH_BOT_WEBHOOK_URL?.trim() || ''
+      const testBotToken = String(process.env.TEST_BOT_TOKEN ?? '').trim()
+      const testWebhookUrl = process.env.TEST_BOT_WEBHOOK_URL?.trim() || ''
+
+      await Promise.allSettled([
+        (async () => {
+          if (!telegramBotConfig.token) return
+          try {
+            console.log('🤖 [Telegram] Checking bot identity...')
+            const me = await bot.telegram.getMe()
+            console.log(`🤖 [Telegram] Bot: @${me.username} (id: ${me.id})`)
+            await bot.telegram
+              .setChatMenuButton({
+                menuButton: {
+                  type: 'default',
+                },
+              })
+              .catch((error) => {
+                console.warn('⚠️ [Telegram] Failed to reset chat menu button:', error)
+              })
+            await bot.telegram
+              .setMyCommands([
+                {
+                  command: 'privacy',
+                  description: 'Політика конфіденційності чат-бота',
+                },
+              ])
+              .catch((error) => {
+                console.warn('⚠️ [Telegram] Failed to set global commands:', error)
+              })
+            await bot.telegram
+              .setMyCommands(
+                [
+                  {
+                    command: 'privacy',
+                    description: 'Політика конфіденційності чат-бота',
+                  },
+                ],
+                {
+                  scope: { type: 'all_private_chats' },
+                }
+              )
+              .catch((error) => {
+                console.warn(
+                  '⚠️ [Telegram] Failed to set private chat commands:',
+                  error
+                )
+              })
+            await bot.telegram
+              .setMyCommands(
+                [
+                  {
+                    command: 'privacy',
+                    description: 'Політика конфіденційності чат-бота',
+                  },
+                ],
+                {
+                  scope: { type: 'all_group_chats' },
+                }
+              )
+              .catch((error) => {
+                console.warn(
+                  '⚠️ [Telegram] Failed to set group chat commands:',
+                  error
+                )
+              })
+            await bot.telegram
+              .setMyCommands(
+                [
+                  {
+                    command: 'privacy',
+                    description: 'Політика конфіденційності чат-бота',
+                  },
+                ],
+                {
+                  scope: { type: 'all_chat_administrators' },
+                }
+              )
+              .catch((error) => {
+                console.warn(
+                  '⚠️ [Telegram] Failed to set admin chat commands:',
+                  error
+                )
+              })
+          } catch (error) {
+            console.warn('⚠️ [Telegram] main bot identity/setup failed:', error)
+          }
+
+          if (mainWebhookUrl) {
+            const webhookInfoBefore = await bot.telegram.getWebhookInfo()
+            if (webhookInfoBefore.url !== mainWebhookUrl) {
+              await bot.telegram.setWebhook(mainWebhookUrl, {
+                drop_pending_updates: false,
+                allowed_updates: ['message', 'callback_query', 'channel_post', 'edited_channel_post', 'chat_member', 'my_chat_member'],
+                ...(TELEGRAM_WEBHOOK_SECRET ? { secret_token: TELEGRAM_WEBHOOK_SECRET } : {}),
+              })
+            }
+            telegramRunningMode = 'webhook'
+            console.log(`🤖 Telegram bot ready (webhook mode): ${mainWebhookUrl}`)
             return
           }
-          console.error('⚠️ [Telegram] Polling launch failed:', error)
-        })
-      console.log('🤖 [Telegram] Polling launch started')
+
+          if (!TELEGRAM_POLLING_ENABLED) {
+            console.log('🤖 [Telegram] Polling skipped (set TELEGRAM_POLLING_ENABLED=true to enable local polling)')
+            return
+          }
+
+          if (isProduction) {
+            console.log('🤖 Telegram: production mode (polling disabled)')
+            return
+          }
+
+          await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
+          await launchBot(bot, 'Starway Main')
+          telegramRunningMode = 'polling'
+        })(),
+        (async () => {
+          if (!coachToken) return
+          await launchBot(coachBot, 'Starway DNA Coach', coachWebhookUrl || undefined)
+          coachTelegramRunningMode = coachWebhookUrl ? 'webhook' : 'polling'
+        })(),
+        (async () => {
+          if (!testBotToken) return
+          await launchBot(testBot, 'Starway Test', testWebhookUrl || undefined)
+          testTelegramRunningMode = testWebhookUrl ? 'webhook' : 'polling'
+        })(),
+      ])
     } catch (error) {
       telegramRunningMode = null
       console.error('⚠️ Telegram bot setup failed:', error)
@@ -405,7 +416,7 @@ async function bootstrap() {
 
     if (schedulerEnabled && databaseReady) {
       console.log('⏰ [runtime] Starting scheduler...')
-      startScheduler()
+      startScheduler({ coachBot: readCoachBotToken() ? coachBot : null })
       startZoomNotificationsCron()
       startBattleCron()
       if (process.env.NODE_ENV !== 'production') {
@@ -470,6 +481,12 @@ async function shutdown(signal: string) {
     try {
       if (START_TELEGRAM_BOT) {
         bot.stop(signal)
+        if (coachTelegramRunningMode) {
+          coachBot.stop(signal)
+        }
+        if (testTelegramRunningMode) {
+          testBot.stop(signal)
+        }
       }
     } catch {
       // silent

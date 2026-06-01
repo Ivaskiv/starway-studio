@@ -1,5 +1,6 @@
 import type { Context } from 'telegraf'
 
+import { prisma } from '../../../db/client.js'
 import { rewardEngine } from '../../gamification/reward.engine.js'
 import { saveDailySession, getJournalDayAnchor } from '../../daily-cycle/service.js'
 import { saveDailyAnswer } from '../../daily-cycle/service.js'
@@ -7,15 +8,14 @@ import { getSharedSessionState } from '../../daily-cycle/sessionSync.service.js'
 import {
   clearSession,
   getActiveQuestionSet,
-  getQuestion,
   getSession,
   getUserIdByChatId,
-  hasNextQuestion,
   parseQuestionState,
   questionState,
   updateSession,
 } from '../session.js'
-import type { SessionData } from '../types.js'
+import { DYNAMIC_QUESTIONS, getDynamicQuestionsCount } from '../types.js'
+import type { Question, SessionData } from '../types.js'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
@@ -23,15 +23,32 @@ import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 type SessionKind = 'morning' | 'evening'
 
+async function getQuestionsForUser(kind: SessionKind, userId: string): Promise<Question[]> {
+  const questionSet = await getActiveQuestionSet()
+  if (kind !== 'morning') {
+    return questionSet[kind]
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { lifecycleState: true },
+  })
+  const lifecycleState = String(user?.lifecycleState ?? 'NEW_USER')
+  const dynamicQuestions = DYNAMIC_QUESTIONS
+    .slice(0, getDynamicQuestionsCount(lifecycleState))
+    .map(question => ({ ...question }))
+
+  return [...questionSet.morning, ...dynamicQuestions]
+}
+
 function getSessionTitle(kind: SessionKind): string {
   return kind === 'morning' ? '🌅 Ранкова сесія' : '🌙 Вечірня рефлексія'
 }
 
 async function replyWithQuestion(ctx: Context, kind: SessionKind, index: number, userId?: string | null) {
-  const [question, questionSet] = await Promise.all([
-    getQuestion(kind, index),
-    getActiveQuestionSet(),
-  ])
+  if (!userId) return
+  const questions = await getQuestionsForUser(kind, userId)
+  const question = questions[index] ?? null
 
   if (!question) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
@@ -45,7 +62,7 @@ async function replyWithQuestion(ctx: Context, kind: SessionKind, index: number,
     return
   }
 
-  const total = questionSet[kind].length
+  const total = questions.length
   const hint = question.hint ? `\n\n<i>${question.hint}</i>` : ''
 
   await planMessage(
@@ -144,7 +161,8 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
       : getJournalDayAnchor(new Date()).toISOString()
   const synced = await getSharedSessionState(session.userId, kind, sessionDate)
   const currentIndex = synced.lastQuestionIndex
-  const question = await getQuestion(kind, currentIndex)
+  const questions = await getQuestionsForUser(kind, session.userId)
+  const question = questions[currentIndex] ?? null
   if (!question) {
     const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
     const relationship = session?.userId
@@ -163,7 +181,7 @@ export async function answerQuestion(ctx: Context, kind: SessionKind, answer: st
     [question.id]: normalizedAnswer,
   }
 
-  const hasNext = await hasNextQuestion(kind, currentIndex)
+  const hasNext = currentIndex + 1 < questions.length
   if (hasNext) {
     const nextIndex = currentIndex + 1
     await saveDailyAnswer(session.userId, {

@@ -2,6 +2,7 @@
 
 import { Router }        from 'express';
 import { authRequired }  from '../../modules/auth/middleware/auth.js';
+import { telegramWebAppAuth } from '../../modules/auth/middleware/auth.js';
 import {
   createSession,
   getUpcoming,
@@ -26,6 +27,16 @@ import {
   handleGenerateSessions,
   handleBookSlot,
   handleUnbookSlot,
+  handleGetAvailablePrivateSlots,
+  handleBookPrivateSlot,
+  handleCancelPrivateSlotBooking,
+  handleCreateSwapRequest,
+  handleAcceptSwapRequest,
+  handleDeclineSwapRequest,
+  handleGetPendingSwapRequests,
+  handleToggleCoachSlot,
+  handleInitiateZoomSwap,
+  getAvailableSlots,
 } from './zoom.admin.handler.js';
 
 const router = Router();
@@ -58,7 +69,16 @@ router.put('/availability',                    authRequired, handleSaveAvailabil
 router.post('/availability/generate',          authRequired, handleGenerateSessions);
 
 // ── Slot booking ──────────────────────────────────────────────────────────────
-router.post('/sessions/:id/book',              authRequired, handleBookSlot);
+router.get('/slots/available',                telegramWebAppAuth(), getAvailableSlots);
+router.post('/sessions/:id/book',             telegramWebAppAuth(), handleBookPrivateSlot);
 router.post('/sessions/:id/unbook',            authRequired, handleUnbookSlot);
+router.get('/sessions/private/available',      authRequired, handleGetAvailablePrivateSlots);
+router.delete('/sessions/:id/book',            authRequired, handleCancelPrivateSlotBooking);
+router.post('/swap',                           authRequired, handleCreateSwapRequest);
+router.post('/swap/:swapId/accept',            authRequired, handleAcceptSwapRequest);
+router.post('/swap/:swapId/decline',           authRequired, handleDeclineSwapRequest);
+router.get('/swap/pending',                    authRequired, handleGetPendingSwapRequests);
+router.post('/swap/initiate',                  authRequired, handleInitiateZoomSwap);
+router.post('/slot/toggle',                    authRequired, handleToggleCoachSlot);
 
 export default router;

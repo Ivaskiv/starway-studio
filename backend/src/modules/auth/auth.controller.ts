@@ -61,6 +61,11 @@ function getRecentRefreshSession(token: string): RefreshSessionResult | null {
 
 const COOKIE_OPTIONS = buildSecureCookieOptions()
 
+function resolveRequestId(req: Request): string | null {
+  const value = String(req.headers['x-request-id'] ?? req.headers['x-correlation-id'] ?? '').trim()
+  return value || null
+}
+
 function resolveRefreshToken(req: Request): string | null {
   const cookieToken = String(req.cookies?.refreshToken ?? '').trim()
   if (cookieToken) return cookieToken
@@ -105,7 +110,7 @@ export async function register(req: Request, res: Response) {
       turnstileToken,
       ip: req.ip,
     })
-    const result = await registerUser({ email, password, name, expertId })
+    const result = await registerUser({ email, password, name, expertId, requestId: resolveRequestId(req) })
 
     res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
 
@@ -172,6 +177,7 @@ export async function social(req: Request, res: Response) {
       name,
       username,
       expertId,
+      requestId: resolveRequestId(req),
     })
 
     res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
@@ -193,7 +199,7 @@ export async function social(req: Request, res: Response) {
 export async function telegram(req: Request, res: Response) {
   try {
     const { initData } = req.body ?? {}
-    const result = await telegramMiniAppLoginUser(String(initData ?? ''))
+    const result = await telegramMiniAppLoginUser(String(initData ?? ''), resolveRequestId(req))
 
     res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
 
@@ -202,6 +208,7 @@ export async function telegram(req: Request, res: Response) {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
       user: result.user,
+      needsOnboarding: result.needsCompletion,
       needsProfile: result.needsProfile,
       expiresIn: result.expiresIn,
       isNewUser: result.isNewUser,

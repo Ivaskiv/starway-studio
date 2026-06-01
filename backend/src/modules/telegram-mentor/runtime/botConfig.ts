@@ -29,3 +29,7 @@ export function requireTelegramBotConfig(context = 'startup'): TelegramBotConfig
 
   return config
 }
+
+export function readCoachBotToken(): string {
+  return normalizeEnv(process.env.COACH_BOT_TOKEN)
+}

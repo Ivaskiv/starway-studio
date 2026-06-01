@@ -77,13 +77,10 @@ export function resolveWebhookPaymentTarget(
     }
   }
 
-  return {
-    scope: 'legacy',
-    userId:
-      typeof data.clientAccountId === 'string' ? data.clientAccountId : null,
-    productId: data.product_name?.[0] ?? null,
-    planId: null,
-    amount,
-    payRef,
-  }
+  // fix with kimi 2026-05-28: removed legacy fallback — unresolvable orderReference must return null, not a guess. PRODUCT_NOT_FOUND guard in callback.handler.ts handles this case.
+  console.error('[PAYMENT_TARGET] unresolvable_order_reference', {
+    orderReference: data.order_reference,
+    productName: data.product_name,
+  })
+  return null
 }
