@@ -17,6 +17,7 @@
 | SKILL-pdf-reports.md | PDF звіти, weekly report |
 | docs/agents/ai-mentor/tov-mentor-examples.md | AI позиції, інструменти, routing |
 | SKILL-business-automation.md | Автоматизація, скрипти, workflows |
+| SKILL-webhook-cors-payload.md | Webhook CORS, payload parser, WayForPay quirks |
 | env-architecture.md | .env структура, змінні, секрети |
 
 ## Бізнес / контент скіли
