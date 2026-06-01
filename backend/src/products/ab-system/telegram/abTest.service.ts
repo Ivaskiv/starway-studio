@@ -1,6 +1,6 @@
 //backend/src/products/ab-system/telegram/abTest.service.ts
 import type { Prisma } from '@starway/db/prisma-client'
-import type { Context } from 'telegraf'
+import type { Context, Telegraf } from 'telegraf'
 
 import { buildAbTestQuestionFlow } from '../../../core/flow-builder/flowBuilder.js'
 import {
@@ -63,6 +63,7 @@ import { upsertTelegramBinding } from '../../../modules/telegram-mentor/services
 import { buildWebDeepLink, generateDeepLink } from '../../../modules/deeplinks/service.js'
 import { sendMagicLoginEmail } from '../../../modules/auth/mail.service.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
+import { notificationService } from '../../../services/notifications/NotificationService.js'
 export {
   observeAbTestCanonicalAction,
   resolveAbTestButtonLabel,
@@ -83,9 +84,28 @@ export { resolveAiSellerMode }
 export type { AbTestCallbackAction }
 
 const AB_TEST_START_DEBUG_PREFIX = '[AB_TEST_START_DEBUG]'
+const SUBSCRIPTION_CHECK_TIMEOUT_MS = 5000
 
 function logAbTestStartDebug(event: string, payload: Record<string, unknown>) {
   console.info(AB_TEST_START_DEBUG_PREFIX, event, payload)
+}
+
+async function resolveActiveFocusSubscriptionSafe(userId: string): Promise<boolean> {
+  try {
+    const timeout = new Promise<boolean>((resolve) => {
+      setTimeout(() => resolve(false), SUBSCRIPTION_CHECK_TIMEOUT_MS)
+    })
+    return await Promise.race([
+      hasActiveFocusSubscription(userId),
+      timeout,
+    ])
+  } catch (error) {
+    console.warn('[FOCUS_PAY] hasActiveFocusSubscription failed, fallback=false', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
 }
 
 function logFlowStart(event: string, payload: Record<string, unknown>) {
@@ -110,6 +130,46 @@ function logCallbackReceived(payload: Record<string, unknown>) {
 
 function logCallbackHandled(payload: Record<string, unknown>) {
   console.info('[CALLBACK_HANDLED]', payload)
+}
+
+async function sendTypingWithDelay(
+  ctx: Context,
+  chatId: number | string,
+  durationMs: number
+): Promise<void> {
+  const intervalMs = 4_500
+  const iterations = Math.ceil(durationMs / intervalMs)
+  for (let i = 0; i < iterations; i += 1) {
+    await ctx.telegram.sendChatAction(chatId, 'typing')
+    const remaining = durationMs - i * intervalMs
+    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, remaining)))
+  }
+}
+
+function resolveZoomUrl(): string {
+  const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? ''
+  const publicFrontend = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
+  if (webAppBaseUrl) return `${webAppBaseUrl.replace(/\/$/, '')}/zoom`
+  return `${publicFrontend.replace(/\/$/, '')}/zoom`
+}
+
+type CalendarButton =
+  | { text: string; callback_data: string }
+  | { text: string; web_app: { url: string } }
+  | { text: string; url: string }
+
+function resolveCalendarButton(
+  isFocusPaid: boolean,
+): CalendarButton {
+  if (!isFocusPaid) {
+    return { text: BLOCK9_POST_RESULT.cta, callback_data: 'open_focus_payment' }
+  }
+  const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? ''
+  const zoomUrl = resolveZoomUrl()
+  if (webAppBaseUrl) {
+    return { text: BLOCK9_POST_RESULT.cta, web_app: { url: zoomUrl } }
+  }
+  return { text: BLOCK9_POST_RESULT.cta, url: zoomUrl }
 }
 
 function resolveQuestionLatency(
@@ -147,6 +207,10 @@ function firstNonEmptyUrl(...values: Array<string | null | undefined>): string {
 // FIX 2025-05-25 TEST_PAYMENT: strict non-production guard for test payment controls.
 function isTestPaymentEnabled(): boolean {
   return process.env.NODE_ENV !== 'production' && process.env.TEST_PAYMENT_ENABLED?.trim() === '1'
+}
+
+function isDynamicFocusCheckoutEnabled(): boolean {
+  return process.env.FOCUS_DYNAMIC_CHECKOUT?.trim() === '1'
 }
 
 type PaymentTraceStep = 'callback' | 'ack' | 'payment_generation' | 'invoice_create' | 'render' | 'send'
@@ -550,10 +614,21 @@ export async function handleAbTestCallback(
     }
     const chatIdValue = ctx.chat?.id ?? ctx.from?.id
     const chatId = chatIdValue ? String(chatIdValue) : ''
-    await immediateCallbackAck(ctx, action)
+    void immediateCallbackAck(ctx, action).catch((error) => {
+      console.warn('[FOCUS_PAY] immediateCallbackAck failed', error)
+    })
     console.log('[FOCUS_PAY] reached', { userId: payingUserId, chatId: ctx.chat?.id })
     if (!chatIdValue) {
       return true
+    }
+    if (payingUserId) {
+      const alreadyActiveFocus = await resolveActiveFocusSubscriptionSafe(payingUserId)
+      if (alreadyActiveFocus) {
+        await markAbTestPaymentSuccess(payingUserId).catch(() => undefined)
+        await sendAbTestBlock12Welcome(payingUserId).catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_already_paid_ack', 'ФОКУС уже активний').catch(() => undefined)
+        return true
+      }
     }
     const fallbackUrl1m = firstNonEmptyUrl(
       process.env.WAYFORPAY_FOCUS_BOT_1M_URL,
@@ -581,8 +656,9 @@ export async function handleAbTestCallback(
     const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 1990 грн'
     let dynamicUrl1m = fallbackUrl1m
     let dynamicUrl3m = fallbackUrl3m
-    // FIX 2026-05-25 WFP2: wire short checkout as primary path for Telegram payment buttons.
-    if (payingUserId) {
+    // For stable local/dev callback latency keep static payment URLs by default.
+    // Dynamic checkout generation can be explicitly enabled with FOCUS_DYNAMIC_CHECKOUT=1.
+    if (payingUserId && isDynamicFocusCheckoutEnabled()) {
       try {
         const [oneMonthSession, threeMonthSession] = await Promise.all([
           runPaymentTraceStep('payment_generation', chatId, async () => (
@@ -659,24 +735,53 @@ export async function handleAbTestCallback(
         orchestratorState: 'telegram.sendMessage',
       })
       console.log('[FOCUS_PAY] sent ok', { userId: payingUserId, chatId: chatIdValue })
+      if (payingUserId) {
+        try {
+          const progressAfterFocusClick = await loadAbTestProgress(payingUserId)
+          const userProfile = await prisma.user.findUnique({
+            where: { id: payingUserId },
+            select: { testResultType: true },
+          })
+          const rawResultKey = typeof userProfile?.testResultType === 'string'
+            ? userProfile.testResultType.toLowerCase()
+            : null
+          const fallbackResultKey = (
+            rawResultKey === 'state'
+            || rawResultKey === 'goal'
+            || rawResultKey === 'choice'
+            || rawResultKey === 'decision'
+            || rawResultKey === 'action'
+          ) ? rawResultKey : null
+          const nextProgress = buildAbTestProgressPatch(progressAfterFocusClick, {
+            focus_opened_at: progressAfterFocusClick.focus_opened_at ?? new Date().toISOString(),
+            last_event_at: new Date().toISOString(),
+            stage: 'S5_PAYMENT',
+            result_key: progressAfterFocusClick.result_key ?? fallbackResultKey ?? progressAfterFocusClick.result_key,
+          })
+          const scheduledProgress = await scheduleFollowups(payingUserId, nextProgress, 'S5_PAYMENT')
+          await saveAbTestProgress(payingUserId, scheduledProgress)
+
+          const dojimResult = await notificationService.scheduleDojimSeries(payingUserId, {
+            flow_timer_id: 'DOJIM_0_IMMEDIATE',
+            lifecycle_stage: 'S5_PAYMENT',
+            result_key: scheduledProgress.result_key ?? fallbackResultKey ?? null,
+            ab_test_stage: 'S5_PAYMENT',
+            message_key: 'DOJIM_0_IMMEDIATE',
+          } satisfies Prisma.JsonObject)
+          // DEBUG: SELECT id, "templateKey", status, "runAt" FROM "RuntimeOutbox"
+          //        WHERE payload::text LIKE '%{userId}%' ORDER BY "runAt"
+          console.log('[FOCUS_PAYMENT] dojim scheduled:', { userId: payingUserId, jobsCount: dojimResult.jobsCount })
+        } catch (error) {
+          console.error('[FOCUS_PAYMENT] dojim schedule failed', {
+            userId: payingUserId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
     } catch (error) {
       console.error('[FOCUS_PAY] FAILED', error)
     }
-    if (payingUserId) {
-      loadAbTestProgress(payingUserId)
-        .then((progressAfterFocusClick) =>
-          saveAbTestProgress(
-            payingUserId,
-            buildAbTestProgressPatch(progressAfterFocusClick, {
-              focus_opened_at: progressAfterFocusClick.focus_opened_at ?? new Date().toISOString(),
-              last_event_at: new Date().toISOString(),
-            }),
-          )
-        )
-        .catch((error: Error) =>
-          console.error('[FOCUS_PAYMENT] save progress failed', error)
-        )
-    }
+    // S5_PAYMENT followups and Dojim series are scheduled after payment message rendering.
     return true
   }
 
@@ -697,13 +802,19 @@ export async function handleAbTestCallback(
     if (!chatId) {
       return true
     }
+    const stateUserId = (ctx.state as { userId?: string | null }).userId ?? null
+    const isFocusPaid = stateUserId ? await hasActiveFocusSubscription(stateUserId).catch(() => false) : false
+    const calendarButton = resolveCalendarButton(isFocusPaid)
     await ctx.telegram.sendMessage(
       chatId,
       BLOCK9_POST_RESULT.text,
       {
         parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: [[{ text: BLOCK9_POST_RESULT.cta, callback_data: BLOCK9_POST_RESULT.callbackData }]],
+          inline_keyboard: [
+            [calendarButton],
+            [{ text: 'Повний аналіз метрик тесту', callback_data: 'ab_test:show_result' }],
+          ],
         },
       },
     )
@@ -761,6 +872,16 @@ export async function handleAbTestCallback(
   }
 
   if (action === AB_TEST_ACTIONS.FOCUS_INFO) {
+    const focusInfoUserId = (ctx.state as { userId?: string | null }).userId ?? null
+    if (focusInfoUserId) {
+      const alreadyActiveFocus = await hasActiveFocusSubscription(focusInfoUserId).catch(() => false)
+      if (alreadyActiveFocus) {
+        await markAbTestPaymentSuccess(focusInfoUserId).catch(() => undefined)
+        await sendAbTestBlock12Welcome(focusInfoUserId).catch(() => undefined)
+        await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_info_already_paid_ack', 'ФОКУС уже активний').catch(() => undefined)
+        return true
+      }
+    }
     await planMessage(ctx, 'ctx.reply', 'ab_test_focus_info', BLOCK10_FOCUS.text, {
       inline_keyboard: [[
         { text: 'Оплатити ФОКУС', callback_data: AB_TEST_ACTIONS.FOCUS_PAY },
@@ -1315,6 +1436,8 @@ export async function handleAbTestCallback(
     const scheduled = await scheduleFollowups(userId, next, 'S3_TEST_RESULT')
     const finalProgress = await saveAbTestProgress(userId, scheduled)
     const resultDef = getAbTestResultDefinition(resultKey)
+    await ctx.telegram.sendMessage(chatId, 'Аналізую відповіді...')
+    await sendTypingWithDelay(ctx, chatId, 30_000)
     // FIX 2025-05-25 E1: summary message removed; replaced by inline checkmarks.
     // FIX 2025-05-25 B3: direct send result to bypass orchestrator timeout/retry paths
     await ctx.telegram.sendMessage(
@@ -1452,4 +1575,62 @@ export async function renderAbTestResume(
 ): Promise<void> {
   const progress = await loadAbTestProgress(userId)
   await renderCurrentView(ctx, userId, progress)
+}
+
+export async function broadcastBlock9Update(
+  bot: Telegraf
+): Promise<{ sent: number; failed: number }> {
+  const subscribers = await prisma.user.findMany({
+    where: {
+      OR: [
+        { focusPaid: true },
+        { productSubscriptions: { some: { status: 'ACTIVE' } } },
+      ],
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+    },
+  })
+
+  let sent = 0
+  let failed = 0
+  const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? ''
+  const zoomUrl = resolveZoomUrl()
+  const calendarButton = webAppBaseUrl
+    ? { text: BLOCK9_POST_RESULT.cta, web_app: { url: zoomUrl } }
+    : { text: BLOCK9_POST_RESULT.cta, url: zoomUrl }
+
+  const inline_keyboard = [
+    [calendarButton],
+    [{ text: 'Повний аналіз метрик тесту', callback_data: 'ab_test:show_result' }],
+  ]
+
+  for (const user of subscribers) {
+    const tgId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null
+    if (!tgId) {
+      failed += 1
+      continue
+    }
+    try {
+      await bot.telegram.sendMessage(tgId, BLOCK9_POST_RESULT.text, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard },
+      })
+      sent += 1
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    } catch (err) {
+      console.warn(`[broadcast] failed ${tgId}:`, err)
+      failed += 1
+    }
+  }
+
+  return { sent, failed }
 }

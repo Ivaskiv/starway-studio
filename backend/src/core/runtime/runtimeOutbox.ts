@@ -17,6 +17,8 @@ export type RuntimeOutboxItem = {
 
 const OUTBOX_TTL_MS = 15 * 60_000
 const OUTBOX_LOCK_SCOPE = 'runtime_outbox'
+const RUNTIME_OUTBOX_POLL_INTERVAL_MS = 5_000
+let runtimeOutboxPollTimer: NodeJS.Timeout | null = null
 
 function buildOutboxDedupeKey(input: RuntimeOutboxItem) {
   const runtime = buildRuntimeTelemetry({
@@ -173,6 +175,26 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
     return processed
   }).then(result => result.acquired ? result.value : 0)
 }
+
+export function startRuntimeOutboxAutoProcessor(limit = 100): void {
+  if (process.env.SCHEDULER_AUTO_START !== 'true') return
+  if (runtimeOutboxPollTimer) return
+
+  runtimeOutboxPollTimer = setInterval(() => {
+    void processRuntimeOutbox(limit).catch((error) => {
+      console.error('[RuntimeOutbox] auto process failed', error)
+    })
+  }, RUNTIME_OUTBOX_POLL_INTERVAL_MS)
+  runtimeOutboxPollTimer.unref()
+}
+
+export function stopRuntimeOutboxAutoProcessor(): void {
+  if (!runtimeOutboxPollTimer) return
+  clearInterval(runtimeOutboxPollTimer)
+  runtimeOutboxPollTimer = null
+}
+
+startRuntimeOutboxAutoProcessor()
 
 export function validateRuntimeOutboxFoundation(): { ok: boolean; errors: string[] } {
   const errors: string[] = []

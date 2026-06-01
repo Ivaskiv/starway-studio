@@ -45,8 +45,12 @@ import {
   buildRuntimeTelemetry,
   claimRuntimeJobReplay,
 } from '../../core/runtime/runtimeIdempotency.js'
+import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 
 type EventPayload = Record<string, unknown>
+type DojimSeriesScheduleResult = {
+  jobsCount: number
+}
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -101,7 +105,7 @@ const TELEGRAM_SAFE_FRONTEND_URL = (() => {
     // fall through to hosted frontend fallback
   }
 
-  return 'https://starway-frontend.vercel.app'
+  return LOCAL_FRONTEND_URL.replace(/\/$/, '')
 })()
 const DEFAULT_MINIAPP_URL = (
   process.env.MINIAPP_URL?.trim()
@@ -530,6 +534,39 @@ export class NotificationService {
     return this.enqueueJob(event, userId, runAt, payload)
   }
 
+  public async scheduleDojimSeries(
+    userId: string,
+    payload: Prisma.JsonObject,
+  ): Promise<DojimSeriesScheduleResult> {
+    const dojimSeries: Array<[AbTestFollowupTimerId, number]> = [
+      ['RESULT_DOJIM_24H', 24 * 60 * 60 * 1000],
+      ['RESULT_DOJIM_48H', 48 * 60 * 60 * 1000],
+      ['RESULT_DOJIM_72H', 72 * 60 * 60 * 1000],
+      ['RESULT_DOJIM_5D', 5 * 24 * 60 * 60 * 1000],
+      ['RESULT_DOJIM_7D', 7 * 24 * 60 * 60 * 1000],
+    ]
+
+    await Promise.all(dojimSeries.map(([timerId, offsetMs]) => enqueueRuntimeOutboxItem({
+      scope: 'notification_job',
+      type: NotificationEvent.AB_TEST_FOLLOWUP,
+      source: 'web',
+      userId,
+      state: typeof payload.lifecycle_stage === 'string' ? payload.lifecycle_stage : null,
+      payload: {
+        event: NotificationEvent.AB_TEST_FOLLOWUP,
+        userId,
+        payload: {
+          ...payload,
+          flow_timer_id: timerId,
+          delay_ms: offsetMs,
+        },
+      } satisfies Prisma.JsonObject,
+      runAt: new Date(Date.now() + offsetMs),
+    })))
+
+    return { jobsCount: dojimSeries.length }
+  }
+
   async createNotification(input: {
     userId: string
     type: NotificationType
@@ -934,26 +971,11 @@ export class NotificationService {
     ) {
       const resultKey = asString(payload.result_key ?? payload.resultKey)
       if (resultKey) {
-        const dojimSeries: Array<[AbTestFollowupTimerId, number]> = [
-          ['RESULT_DOJIM_24H', 24 * 60 * 60 * 1000],
-          ['RESULT_DOJIM_48H', 48 * 60 * 60 * 1000],
-          ['RESULT_DOJIM_72H', 72 * 60 * 60 * 1000],
-          ['RESULT_DOJIM_5D', 5 * 24 * 60 * 60 * 1000],
-          ['RESULT_DOJIM_7D', 7 * 24 * 60 * 60 * 1000],
-        ]
-
-        await Promise.all(dojimSeries.map(([timerId, delayMs]) => this.schedule(
-          NotificationEvent.AB_TEST_FOLLOWUP,
-          user.id,
-          new Date(Date.now() + delayMs),
-          {
-            ...payload,
-            flow_timer_id: timerId,
-            result_key: resultKey,
-            lifecycle_stage: flow.timer?.source_stage ?? payload.lifecycle_stage ?? payload.lifecycleStage ?? null,
-            delay_ms: delayMs,
-          },
-        )))
+        await this.scheduleDojimSeries(user.id, {
+          ...payload,
+          result_key: resultKey,
+          lifecycle_stage: flow.timer?.source_stage ?? payload.lifecycle_stage ?? payload.lifecycleStage ?? null,
+        } satisfies Prisma.JsonObject)
       }
     }
 
@@ -1761,7 +1783,6 @@ export class NotificationService {
           telegramHtml: buildTelegramCard({
             title: content.title,
             intro: isPlainBridge ? content.body : `${firstName}, ${content.body}`,
-            note: 'Нагадування працює через canonical timing foundation.',
           }),
           ctaText: content.ctaText,
           ctaActions: isPlainBridge && bridgeUrl && content.ctaText
