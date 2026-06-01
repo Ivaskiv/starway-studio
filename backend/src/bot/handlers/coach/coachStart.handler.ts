@@ -4,6 +4,8 @@ import { Markup } from 'telegraf'
 import { coachBotContent } from '../../content/coachBot.content.js'
 import { prisma } from '../../../db/client.js'
 import { analyticsHandler } from './analytics.handler.js'
+import { activateProductSubscription } from '../../../modules/subscriptions/payments/paymentActivation.service.js'
+import { sendAbTestBlock12Welcome } from '../../../modules/subscriptions/payments/callback.notifications.js'
 import {
   hoursMenuHandler,
   nextWeekDoneHandler,
@@ -116,5 +118,40 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
   telegramBot.action('coach:analytics', async (ctx) => {
     if (!await checkCoachRole(ctx)) return ctx.answerCbQuery()
     return analyticsHandler(ctx)
+  })
+  telegramBot.action(/^admin:grant_focus:/, async (ctx) => {
+    if (!await checkCoachRole(ctx)) return ctx.answerCbQuery()
+    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+    const parts = raw.split(':')
+    const userId = parts[2] ?? ''
+    const orderReference = parts.slice(3).join(':') || undefined
+    if (!userId) {
+      await ctx.answerCbQuery('Некоректний userId').catch(() => undefined)
+      return
+    }
+    const result = await activateProductSubscription({
+      userId,
+      productCode: 'focus',
+      source: 'coach_manual',
+      orderReference,
+      planMonths: 1,
+      manualNote: 'coach confirmed via telegram',
+    })
+    if (result.success) {
+      await sendAbTestBlock12Welcome(userId).catch(() => undefined)
+      await ctx.answerCbQuery('Доступ відкрито').catch(() => undefined)
+      await ctx.reply(`✅ Доступ до ФОКУС відкрито вручну.\nuserId: ${userId}`)
+      return
+    }
+    await ctx.answerCbQuery('Помилка').catch(() => undefined)
+    await ctx.reply(`❌ Не вдалося відкрити доступ.\nПричина: ${result.message}\nuserId: ${userId}`)
+  })
+  telegramBot.action(/^admin:deny_focus:/, async (ctx) => {
+    if (!await checkCoachRole(ctx)) return ctx.answerCbQuery()
+    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+    const parts = raw.split(':')
+    const userId = parts[2] ?? ''
+    await ctx.answerCbQuery('Відхилено').catch(() => undefined)
+    await ctx.reply(`❌ Ручне надання доступу відхилено.\nuserId: ${userId}`)
   })
 }

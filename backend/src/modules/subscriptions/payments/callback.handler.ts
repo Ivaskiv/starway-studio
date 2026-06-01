@@ -11,7 +11,7 @@ import {
 } from '../../../core/runtime/runtimeIdempotency.js'
 import { buildRequestFingerprint } from '../../../core/state-machine/securityFoundation.js'
 import { prisma } from '../../../db/client.js'
-import { bot, sendOpsTelegramMessage } from '../../../lib/telegram.js'
+import { bot, coachBot, sendOpsTelegramMessage } from '../../../lib/telegram.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
 import { runWeeklyAnalysis } from '../../ai-mentor/weekly-analysis/service.js'
@@ -35,6 +35,8 @@ import {
   sendAbsystemPaymentSuccessTelegramMessage,
   sendPaymentFailedTelegramMessage,
 } from './callback.notifications.js'
+import { alertCoachAboutPaymentIssue } from './coachAlert.service.js'
+import { activateProductSubscription } from './paymentActivation.service.js'
 import {
   processPaymentWebhook,
 } from './callback.processing.js'
@@ -124,6 +126,15 @@ function resolveZoomCalendarUrl(): string | null {
   }
 
   return null
+}
+
+function extractUserIdFromOrderRef(orderReference: string): string | null {
+  const normalized = String(orderReference ?? '').trim()
+  if (!normalized) return null
+  const uuidMatch = normalized.match(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i
+  )
+  return uuidMatch?.[0] ?? null
 }
 
 /** WayForPay callback handler — публічний ендпоінт (без authRequired) */
@@ -221,6 +232,27 @@ export async function wayForPayCallback(req: Request, res: Response) {
         ],
         actualKeys: Object.keys(raw as object),
       })
+      const rawOrderRef = String(raw.order_reference ?? raw.orderReference ?? '').trim()
+      const rawAmountNumber =
+        typeof raw.amount === 'number'
+          ? raw.amount
+          : typeof raw.amount === 'string'
+            ? Number(raw.amount)
+            : NaN
+      const coachChatId = String(process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
+      if (rawOrderRef && Number.isFinite(rawAmountNumber) && coachChatId) {
+        await alertCoachAboutPaymentIssue({
+          bot: coachBot,
+          coachChatId,
+          userId: extractUserIdFromOrderRef(rawOrderRef) ?? 'unknown',
+          orderReference: rawOrderRef,
+          amount: rawAmountNumber,
+          reason: 'webhook_parse_failed',
+          scenario: 'C',
+        }).catch((err) =>
+          console.error('[COACH_NOTIFY] webhook_parse_failed notify failed', err)
+        )
+      }
       return res.status(200).json({ status: 'skipped' })
     }
 
@@ -327,6 +359,25 @@ export async function wayForPayCallback(req: Request, res: Response) {
     // fix with kimi 2026-05-28: removed pre-lock isProcessedPayment() — race condition, deduplication handled inside withRuntimeAdvisoryLock
 
     if (data.transaction_status !== 'Approved') {
+      const coachChatId = String(process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
+      const rawOrderRef = String(data.order_reference ?? '').trim()
+      const amountNumber = Number(data.amount ?? 0)
+      if (coachChatId && rawOrderRef && Number.isFinite(amountNumber)) {
+        await alertCoachAboutPaymentIssue({
+          bot: coachBot,
+          coachChatId,
+          userId:
+            (typeof data.clientAccountId === 'string' && data.clientAccountId.trim())
+              || extractUserIdFromOrderRef(rawOrderRef)
+              || 'unknown',
+          orderReference: rawOrderRef,
+          amount: amountNumber,
+          reason: `transaction_${String(data.transaction_status ?? 'unknown')}`,
+          scenario: 'B',
+        }).catch((err) =>
+          console.error('[COACH_NOTIFY] non_approved notify failed', err)
+        )
+      }
       await trackEvent({
         userId:
           typeof data.clientAccountId === 'string'
@@ -445,6 +496,34 @@ export async function wayForPayCallback(req: Request, res: Response) {
     })
 
     if (webhookResult.result?.status === 'approved' && userId) {
+      if (
+        webhookResult.scope === 'ecosystem' &&
+        webhookResult.productId === 'focus'
+      ) {
+        const planMonths =
+          webhookResult.planId === '3month'
+            ? 3
+            : webhookResult.planId === '6month'
+              ? 6
+              : webhookResult.planId === '1year'
+                ? 12
+                : 1
+        await activateProductSubscription({
+          userId,
+          productCode: 'focus',
+          source: 'webhook_approved',
+          orderReference: data.order_reference,
+          amount: Number(data.amount ?? 0),
+          planMonths,
+        }).catch((activationError) => {
+          console.error('[PAYMENT_LIFECYCLE] activation service failed', {
+            userId,
+            orderReference: data.order_reference,
+            activationError,
+          })
+        })
+      }
+
       await prisma.$transaction(
         async (tx) => {
           // fix with kimi 2026-05-28: wrapped all post-payment DB writes in prisma.$transaction — prevents partial state (e.g. subscription created but focusPaid = false) on server crash mid-orchestration

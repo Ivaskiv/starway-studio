@@ -191,6 +191,7 @@ model CheckoutSession {
   expiresAt     DateTime
   openedAt      DateTime?
   completedAt   DateTime?
+  paymentIssueReportedAt DateTime?
   invalidatedAt DateTime?
   usageCount    Int                   @default(0)
   lastOpenedAt  DateTime?
@@ -493,6 +494,10 @@ model ProductSubscription {
   focusChannelInviteLink  String?
   channelJoinedAt         DateTime?
   amount      Float?
+  manuallyGrantedBy String?
+  manualGrantNote String?
+  paymentIssueCount Int @default(0)
+  lastPaymentIssueAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)

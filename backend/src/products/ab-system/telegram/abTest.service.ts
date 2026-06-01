@@ -60,6 +60,8 @@ import { upsertTelegramBinding } from '../../../modules/telegram-mentor/services
 import { buildWebDeepLink, generateDeepLink } from '../../../modules/deeplinks/service.js'
 import { sendMagicLoginEmail } from '../../../modules/auth/mail.service.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
+import { alertCoachAboutPaymentIssue } from '@/modules/subscriptions/payments/coachAlert.service.js'
+import { coachBot } from '../../../lib/telegram.js'
 export {
   observeAbTestCanonicalAction,
   resolveAbTestButtonLabel,
@@ -640,6 +642,7 @@ export async function handleAbTestCallback(
               [{ text: cta1m, url: url1m }],
               [{ text: cta3m, url: url3m }],
               ...testButtonRow.map((row) => [row]),
+              [{ text: '⚠️ Проблема з оплатою', callback_data: 'focus:payment_issue' }],
             ],
           },
         },
@@ -684,6 +687,74 @@ export async function handleAbTestCallback(
     await sendAbTestBlock12Welcome(targetUserId)
     await planMessage(ctx, 'ctx.reply', 'ab_test_resend_sent', 'Доступ повторно надіслано. Перевір повідомлення з інвайтом.')
     await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_sent_ack').catch(() => undefined)
+    return true
+  }
+
+  if (action === 'focus:payment_issue') {
+    await ctx.answerCbQuery().catch(() => null)
+    const issueUserId = (ctx.state as { userId?: string | null }).userId ?? null
+    if (!issueUserId) {
+      await planMessage(ctx, 'ctx.reply', 'ab_test_payment_issue_no_user', 'Не вдалося ідентифікувати профіль. Спробуйте ще раз або зверніться до підтримки.')
+      return true
+    }
+
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'ab_test_payment_issue_ack',
+      [
+        '⚠️ <b>Прийнято, передали коучу.</b>',
+        '',
+        'Якщо оплата вже пройшла, ми перевіримо і відкриємо доступ.',
+        'Зазвичай це займає до 10 хвилин у робочий час.',
+      ].join('\n'),
+      undefined,
+      'HTML',
+    )
+
+    const lastCheckout = await prisma.checkoutSession.findFirst({
+      where: { userId: issueUserId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        orderReference: true,
+        amount: true,
+      },
+    })
+
+    if (lastCheckout) {
+      await prisma.checkoutSession.update({
+        where: { id: lastCheckout.id },
+        data: { paymentIssueReportedAt: new Date() },
+      }).catch(() => undefined)
+    }
+
+    await prisma.productSubscription.updateMany({
+      where: {
+        userId: issueUserId,
+        product: { is: { code: { in: ['focus', 'FOCUS'] } } },
+      },
+      data: {
+        paymentIssueCount: { increment: 1 },
+        lastPaymentIssueAt: new Date(),
+      },
+    }).catch(() => undefined)
+
+    const coachChatId = String(process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
+    if (coachChatId) {
+      await alertCoachAboutPaymentIssue({
+        bot: coachBot,
+        coachChatId,
+        userId: issueUserId,
+        orderReference: lastCheckout?.orderReference ?? 'unknown',
+        amount: lastCheckout?.amount ?? 0,
+        reason: 'user_reported_issue',
+        scenario: 'E',
+      }).catch((error) =>
+        console.error('[PAYMENT_ISSUE] coach alert failed', error),
+      )
+    }
+
     return true
   }
 
