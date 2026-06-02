@@ -418,6 +418,104 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
     }
     await ctx.reply('✅ Block 12 повторно надіслано.')
   })
+  bot.command('retranscribe', async (ctx) => {
+    try {
+      const userId = (ctx.state as { userId?: string | null }).userId ?? null
+      if (!userId) return
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+      })
+
+      if (user?.role !== 'EXPERT' && user?.role !== 'SUPERADMIN') {
+        await ctx.reply('⛔ Недостатньо прав.')
+        return
+      }
+
+      await ctx.reply('🔍 Шукаю аудіо файли в каналі...')
+
+      const channelId = process.env.ZOOM_AUDIO_TELEGRAM_CHANNEL_ID?.trim()
+      if (!channelId) {
+        await ctx.reply('❌ ZOOM_AUDIO_TELEGRAM_CHANNEL_ID не налаштований.')
+        return
+      }
+
+      const commandText =
+        'message' in ctx && ctx.message && 'text' in ctx.message
+          ? String(ctx.message.text ?? '').trim()
+          : ''
+      const args = commandText.split(/\s+/).slice(1)
+
+      if (args.length === 0) {
+        await ctx.reply(
+          [
+            '📎 Щоб ретранскрибувати конкретний файл:',
+            '',
+            '/retranscribe <fileId> <fileName>',
+            '',
+            'Або перешли аудіо повідомлення в цей чат і запусти /retranscribe у відповідь на нього.',
+            '',
+            'Якщо потрібен fileId, його можна взяти через Telegram file API або getUpdates.',
+          ].join('\n'),
+        )
+        return
+      }
+
+      const [fileId, ...nameParts] = args
+      const trimmedFileId = fileId.trim()
+      if (!trimmedFileId) {
+        await ctx.reply('❌ Не вдалося визначити fileId.')
+        return
+      }
+
+      const fileName = nameParts.join('_') || 'zoom_audio.mp3'
+      const zoomType = resolveZoomTypeFromFileName(fileName)
+      const dedupeKey = `zoom_audio_manual_${trimmedFileId}`
+
+      const exists = await prisma.runtimeOutbox.findUnique({
+        where: { dedupeKey },
+        select: { id: true, status: true },
+      }).catch(() => null)
+
+      if (exists) {
+        await ctx.reply(`ℹ️ Цей файл вже в черзі або оброблений.\nСтатус: ${exists.status}`)
+        return
+      }
+
+      await prisma.runtimeOutbox.create({
+        data: {
+          scope: 'zoom',
+          type: 'ZOOM_AUDIO_UPLOADED',
+          source: 'manual_retranscribe',
+          dedupeKey,
+          tenantId: channelId,
+          payload: {
+            fileId: trimmedFileId,
+            fileName,
+            chatId: channelId,
+            messageId: 0,
+            zoomType,
+            uploadedAt: new Date().toISOString(),
+            triggeredBy: userId,
+          },
+          runAt: new Date(),
+        },
+      })
+
+      await ctx.reply(
+        [
+          '✅ Аудіо поставлено в чергу на ретранскрипцію.',
+          `📎 fileId: ${trimmedFileId}`,
+          `🧭 Zoom type: ${zoomType}`,
+          `🔐 dedupeKey: ${dedupeKey}`,
+        ].join('\n'),
+      )
+    } catch (error) {
+      logger.error('[retranscribe] failed', error)
+      await ctx.reply('❌ Не вдалося поставити аудіо в чергу.')
+    }
+  })
   registerPipelineCommands(bot)
   bot.command('zoomhelp', async (ctx) => {
     const coachTelegramId = process.env.COACH_TELEGRAM_ID?.trim()
