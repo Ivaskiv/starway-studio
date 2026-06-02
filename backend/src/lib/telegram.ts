@@ -20,6 +20,11 @@ function getTelegramBotInstance(): Telegraf {
   return telegramBotInstance
 }
 
+function readTelegramApiRoot(envKey: string): string {
+  const value = String(process.env[envKey as keyof NodeJS.ProcessEnv] ?? '').trim()
+  return value || 'https://api.telegram.org'
+}
+
 function getContentBotInstance(): Telegraf {
   if (contentBotInstance) {
     return contentBotInstance
@@ -28,6 +33,7 @@ function getContentBotInstance(): Telegraf {
   const mainToken = String(process.env.TELEGRAM_BOT_TOKEN ?? '').trim()
   const contentToken = String(process.env.CONTENT_BOT_TOKEN ?? '').trim()
   const token = contentToken || mainToken
+  const apiRoot = readTelegramApiRoot('CONTENT_BOT_API_ROOT')
 
   if (!token) {
     throw new Error('[Telegram] Missing required env var during content bot bootstrap: CONTENT_BOT_TOKEN or TELEGRAM_BOT_TOKEN')
@@ -39,7 +45,11 @@ function getContentBotInstance(): Telegraf {
     console.log('[contentBot] using shared token, send-only mode')
   }
 
-  contentBotInstance = new Telegraf(token)
+  contentBotInstance = new Telegraf(token, {
+    telegram: {
+      apiRoot,
+    },
+  })
   return contentBotInstance
 }
 

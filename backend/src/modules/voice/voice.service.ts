@@ -1,3 +1,12 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
+import { pipeline } from 'node:stream/promises'
+import { Readable } from 'node:stream'
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
+import { fileURLToPath } from 'node:url'
+
 import { type DailyState, type VoiceEntryType } from '@starway/db/prisma-client'
 
 import { bot } from '../../lib/telegram.js'
@@ -36,39 +45,87 @@ export async function transcribeTelegramAudio(
   mimeType?: string | null,
   downloadUrl?: string | URL | null,
 ) {
-  let response: Response
+  const cleanupTasks: Array<() => Promise<void>> = []
+
+  try {
+    const inputFile = await resolveTelegramAudioInput(fileId, type, downloadUrl, cleanupTasks)
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: inputFile,
+      model: 'gpt-4o-mini-transcribe',
+      language: 'uk',
+      response_format: 'text',
+    })
+
+    return String(transcription ?? '').trim()
+  } finally {
+    for (const cleanup of cleanupTasks.reverse()) {
+      await cleanup().catch(() => undefined)
+    }
+  }
+}
+
+async function resolveTelegramAudioInput(
+  fileId: string,
+  type: VoiceEntryType,
+  downloadUrl: string | URL | null | undefined,
+  cleanupTasks: Array<() => Promise<void>>,
+) {
+  const fileName = type === 'TELEGRAM_AUDIO' ? 'telegram-audio.mp3' : 'telegram-voice.ogg'
 
   if (downloadUrl) {
-    response = await fetch(String(downloadUrl))
-  } else {
-    const file = await bot.telegram.getFile(fileId)
-    if (!file.file_path) {
-      throw new Error('telegram_file_path_missing')
-    }
-
-    const token = requireTelegramBotConfig('voice transcription').token
-    response = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`)
+    return downloadTelegramAudioSource(downloadUrl, fileName, cleanupTasks)
   }
 
-  if (!response.ok) {
+  const file = await bot.telegram.getFile(fileId)
+  if (!file.file_path) {
+    throw new Error('telegram_file_path_missing')
+  }
+
+  const token = requireTelegramBotConfig('voice transcription').token
+  const telegramUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`
+  return downloadTelegramAudioSource(telegramUrl, fileName, cleanupTasks)
+}
+
+async function downloadTelegramAudioSource(
+  source: string | URL,
+  fallbackFileName: string,
+  cleanupTasks: Array<() => Promise<void>>,
+) {
+  const normalized = typeof source === 'string' ? source.trim() : source
+  if (!normalized) {
+    throw new Error('telegram_audio_source_missing')
+  }
+
+  if (normalized instanceof URL && normalized.protocol === 'file:') {
+    return createReadStream(fileURLToPath(normalized))
+  }
+
+  if (typeof normalized === 'string' && normalized.startsWith('file://')) {
+    return createReadStream(fileURLToPath(new URL(normalized)))
+  }
+
+  if (typeof normalized === 'string' && normalized.startsWith('/')) {
+    return createReadStream(normalized)
+  }
+
+  const response = await fetch(String(normalized))
+  if (!response.ok || !response.body) {
     throw new Error('telegram_file_download_failed')
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer())
-  const audioFile = new File(
-    [buffer],
-    type === 'TELEGRAM_AUDIO' ? 'telegram-audio.mp3' : 'telegram-voice.ogg',
-    { type: mimeType ?? (type === 'TELEGRAM_AUDIO' ? 'audio/mpeg' : 'audio/ogg') },
-  )
-
-  const transcription = await openai.audio.transcriptions.create({
-    file: audioFile,
-    model: 'gpt-4o-mini-transcribe',
-    language: 'uk',
-    response_format: 'text',
+  const tempDir = await mkdtemp(join(tmpdir(), 'starway-zoom-audio-'))
+  const tempPath = join(tempDir, basename(fallbackFileName))
+  const destination = createWriteStream(tempPath)
+  cleanupTasks.push(async () => {
+    await rm(tempDir, { recursive: true, force: true })
   })
 
-  return String(transcription ?? '').trim()
+  const body = response.body
+  const stream = body instanceof Readable ? body : Readable.fromWeb(body as NodeReadableStream)
+  await pipeline(stream, destination)
+
+  return createReadStream(tempPath)
 }
 
 async function resolvePlan(userId: string) {
