@@ -56,3 +56,42 @@ export const abTestFocusContent = {
     body: FOCUS_WELCOME.msg2.body,
   },
 } as const
+
+export const FOCUS_PAYMENT_ISSUE_USER_MSG =
+  'Дякуємо, що написала.\n\n' +
+  'Ми отримали твій запит і зараз перевіряємо оплату.\n' +
+  'Якщо все пройшло — відкриємо доступ найближчим часом.'
+
+export const FOCUS_PAYMENT_ISSUE_NO_USER_MSG =
+  'Не вдалося ідентифікувати профіль.\n\n' +
+  'Спробуйте ще раз або напишіть нам — розберемось разом.'
+
+export const FOCUS_PAYMENT_ISSUE_COACH_MSG = (params: {
+  userId: string
+  orderReference: string
+  amount: number
+}): string =>
+  '💳 Учасниця повідомила про проблему з оплатою\n\n' +
+  `UserId: ${params.userId}\n` +
+  `Order: ${params.orderReference}\n` +
+  `Перевір WayForPay — чи пройшла оплата.\n` +
+  `Сума: ${params.amount} грн\n` +
+  'Якщо підтверджено — натисни кнопку нижче.'
+
+export const FOCUS_ALREADY_ACTIVE_MSG = (inviteUrl: string): string =>
+  '✅ <b>Твій доступ до ФОКУСУ активний.</b>\n\n' +
+  (inviteUrl
+    ? 'Закритий канал:\n' + inviteUrl + '\n\nПерейди і закріпи, щоб не загубити.'
+    : 'Натисни кнопку нижче щоб відновити доступ.')
+
+export const FOCUS_RESEND_SUCCESS_MSG =
+  'Посилання на канал надіслано повторно.\n' +
+  'Якщо не бачиш — перевір папку «Інше» в Telegram.'
+
+export const FOCUS_RESEND_NO_SUB_MSG =
+  'Доступ до ФОКУСУ ще не активовано.\n\n' +
+  'Якщо ти вже оплатила — натисни «⚠️ Проблема з оплатою».\n' +
+  'Ми перевіримо і відкриємо доступ.'
+
+export const FOCUS_RESEND_MISSING_USER_MSG =
+  'Не вдалося відновити доступ: користувача не знайдено.'

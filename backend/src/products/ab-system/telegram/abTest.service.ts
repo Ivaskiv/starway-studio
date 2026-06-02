@@ -28,6 +28,15 @@ import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
 import { BLOCK10_FOCUS, BLOCK9_POST_RESULT, getAbTestResultDefinition } from '../content/abTest.results.js'
 import {
+  FOCUS_ALREADY_ACTIVE_MSG,
+  FOCUS_PAYMENT_ISSUE_COACH_MSG,
+  FOCUS_PAYMENT_ISSUE_NO_USER_MSG,
+  FOCUS_PAYMENT_ISSUE_USER_MSG,
+  FOCUS_RESEND_MISSING_USER_MSG,
+  FOCUS_RESEND_NO_SUB_MSG,
+  FOCUS_RESEND_SUCCESS_MSG,
+} from '../content/abTest.focus.js'
+import {
   handleAiSellerCallback,
   resolveAiSellerMode,
 } from './abTest.aiSeller.js'
@@ -646,19 +655,9 @@ export async function handleAbTestCallback(
         const inviteUrl = String(
           process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? ''
         ).trim()
-        const alreadyActiveText = [
-          '✅ <b>Підписка ФОКУС вже активна.</b>',
-          '',
-          'Оплата повторно не потрібна.',
-          ...(inviteUrl ? [
-            '',
-            'Твій закритий канал — перейди і закріпи, щоб не загубити:',
-            inviteUrl,
-          ] : []),
-        ].join('\n')
         await ctx.telegram.sendMessage(
           chatId,
-          alreadyActiveText,
+          FOCUS_ALREADY_ACTIVE_MSG(inviteUrl),
           {
             parse_mode: 'HTML',
             reply_markup: {
@@ -776,13 +775,19 @@ export async function handleAbTestCallback(
   if (action === 'resend_focus_block12') {
     const targetUserId = await resolveContextUserId(ctx)
     if (!targetUserId) {
-      await planMessage(ctx, 'ctx.reply', 'ab_test_resend_missing_user', 'Не вдалося відновити доступ: користувача не знайдено.')
+      const chatId = ctx.chat?.id ?? ctx.from?.id
+      if (chatId) {
+        await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_MISSING_USER_MSG)
+      }
       await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_missing_user_ack').catch(() => undefined)
       return true
     }
     const hasActiveFocus = await hasActiveFocusSubscription(targetUserId)
     if (!hasActiveFocus) {
-      await planMessage(ctx, 'ctx.reply', 'ab_test_resend_inactive', 'Підписка ФОКУС неактивна. Спочатку активуй підписку.')
+      const chatId = ctx.chat?.id ?? ctx.from?.id
+      if (chatId) {
+        await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_NO_SUB_MSG)
+      }
       await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_inactive_ack').catch(() => undefined)
       return true
     }
@@ -795,7 +800,10 @@ export async function handleAbTestCallback(
       },
       data: { focusWelcomedAt: new Date() },
     }).catch(() => undefined)
-    await planMessage(ctx, 'ctx.reply', 'ab_test_resend_sent', 'Доступ повторно надіслано. Перевір повідомлення з інвайтом.')
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (chatId) {
+      await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_SUCCESS_MSG)
+    }
     await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_sent_ack').catch(() => undefined)
     return true
   }
@@ -808,7 +816,7 @@ export async function handleAbTestCallback(
       if (chatId) {
         await ctx.telegram.sendMessage(
           String(chatId),
-          'Не вдалося ідентифікувати профіль. Спробуйте ще раз або зверніться до підтримки.',
+          FOCUS_PAYMENT_ISSUE_NO_USER_MSG,
         )
       }
       return true
@@ -817,12 +825,7 @@ export async function handleAbTestCallback(
     if (chatId) {
       await ctx.telegram.sendMessage(
         String(chatId),
-        [
-          '⚠️ <b>Прийнято, передали коучу.</b>',
-          '',
-          'Якщо оплата вже пройшла, ми перевіримо і відкриємо доступ.',
-          'Зазвичай це займає до 10 хвилин у робочий час.',
-        ].join('\n'),
+        FOCUS_PAYMENT_ISSUE_USER_MSG,
         { parse_mode: 'HTML' },
       )
     }
@@ -863,7 +866,11 @@ export async function handleAbTestCallback(
         userId: issueUserId,
         orderReference: lastCheckout?.orderReference ?? 'unknown',
         amount: lastCheckout?.amount ?? 0,
-        reason: 'user_reported_issue',
+        reason: FOCUS_PAYMENT_ISSUE_COACH_MSG({
+          userId: issueUserId,
+          orderReference: lastCheckout?.orderReference ?? 'unknown',
+          amount: lastCheckout?.amount ?? 0,
+        }),
         scenario: 'E',
       }).catch((error) =>
         console.error('[PAYMENT_ISSUE] coach alert failed', error),

@@ -19,6 +19,7 @@
 | testing/SKILL-flow-completeness-auditor.md | Flow completeness, UX gaps, recovery gaps |
 | telegram/SKILL-telegram.md | Telegram бот патерни, guards, handlers |
 | telegram/SKILL-bot-channel-setup.md | Scaffold нового бота через new-bot.ts |
+| SKILL-bot-copy.md | Copy бота: тон, БАН-слова, шаблони, де живе текст |
 | docs/agents/ai-content/SKILL-output-engine.md | CSS rules, zero inline styles, zero backdrop-filter |
 | reports/SKILL-pdf-reports.md | PDF звіти, weekly report |
 | docs/agents/ai-mentor/methodology-absystem.md | AI позиції, інструменти, routing |
