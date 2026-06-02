@@ -956,7 +956,7 @@ async function upsertWeeklyProofContentItem(params: {
   type: string
   platform: string
   content: string
-}): Promise<void> {
+}): Promise<'created' | 'updated'> {
   const existing = await prisma.contentItem.findFirst({
     where: {
       userId: params.userId,
@@ -975,7 +975,7 @@ async function upsertWeeklyProofContentItem(params: {
         content: params.content,
       },
     }).catch(() => undefined)
-    return
+    return 'updated'
   }
 
   await prisma.contentItem.create({
@@ -988,6 +988,8 @@ async function upsertWeeklyProofContentItem(params: {
       content: params.content,
     },
   }).catch(() => undefined)
+
+  return 'created'
 }
 
 export async function storeWeeklySocialProofArtifacts(params: WeeklySocialProofInput): Promise<{
@@ -1054,28 +1056,19 @@ export async function storeWeeklySocialProofArtifacts(params: WeeklySocialProofI
   let updated = 0
 
   for (const item of artifactSpecs) {
-    const existing = await prisma.contentItem.findFirst({
-      where: {
-        userId: params.userId,
-        topic: item.topic,
-        type: item.type,
-      },
-      select: { id: true },
-    }).catch(() => null)
-
-    if (existing?.id) {
-      updated += 1
-    } else {
-      created += 1
-    }
-
-    await upsertWeeklyProofContentItem({
+    const result = await upsertWeeklyProofContentItem({
       userId: params.userId,
       topic: item.topic,
       type: item.type,
       platform: item.platform,
       content: item.content,
     })
+
+    if (result === 'created') {
+      created += 1
+    } else {
+      updated += 1
+    }
   }
 
   return { created, updated }

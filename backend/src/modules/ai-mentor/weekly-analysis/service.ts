@@ -16,6 +16,7 @@ import { Prisma, SubscriptionStatus } from '@starway/db/prisma-client'
 import { extractProgressPercent } from '../../microTask/service.js'
 import { runGuardedAiTask, stableHash } from '../../../services/aiGuard.service.js'
 import { storeWeeklySocialProofArtifacts } from '../../admin/content-research.service.js'
+import { parseZoomPostReport } from '../../zoom/zoomPostReport.types.js'
 
 const extractAnswers = (value: unknown): string[] => {
   if (!value || typeof value !== 'object') return []
@@ -24,6 +25,17 @@ const extractAnswers = (value: unknown): string[] => {
   const answers = record.answers
   if (!Array.isArray(answers)) return []
   return answers.filter((answer): answer is string => typeof answer === 'string')
+}
+
+function extractTaggedLines(transcripts: WeeklyRawData['zoomTranscripts'], prefix: string): string[] {
+  return transcripts.flatMap((item) =>
+    item.transcript
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith(prefix))
+      .map((line) => line.slice(prefix.length).trim())
+      .filter((line) => line.length > 0),
+  )
 }
 
 function getMicroTaskProgressStats(tasks: WeeklyRawData['microTasks']) {
@@ -167,6 +179,7 @@ export async function collectWeeklyData(
       orderBy: { scheduledAt: 'desc' },
       select: {
         id: true,
+        topic: true,
         scheduledAt: true,
         postSessionReport: true,
       },
@@ -204,49 +217,34 @@ export async function collectWeeklyData(
 
   const transcriptItems = zoomTranscripts
     .map((session) => {
-      const report = session.postSessionReport as Record<string, unknown> | null
-      const transcript = typeof report?.transcript === 'string'
-        ? report.transcript
-        : typeof report?.text === 'string'
-          ? report.text
-          : ''
+      const report = parseZoomPostReport(session.postSessionReport)
+      if (!report) return null
+
+      const transcript = [
+        session.topic ? `Topic: ${session.topic}` : '',
+        report.summary ? `Summary: ${report.summary}` : '',
+        ...(report.highlights ?? []).map((highlight) => `HIGHLIGHT: ${highlight}`),
+        ...(report.quotes ?? []).map((quote) => `QUOTE: ${quote}`),
+        report.transcript ? `Transcript: ${report.transcript}` : '',
+      ].filter((line) => line.trim().length > 0).join('\n')
+
       if (!transcript.trim()) return null
 
-      const transcriptRecord = normalizeZoomTranscript({
+      return normalizeZoomTranscript({
         sessionId: session.id,
         scheduledAt: session.scheduledAt,
         transcript,
         transcriptLength: transcript.length,
-        fileId: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).fileId === 'string'
-          ? (report.transcriptMeta as Record<string, unknown>).fileId
-          : null,
-        fileUniqueId: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).fileUniqueId === 'string'
-          ? (report.transcriptMeta as Record<string, unknown>).fileUniqueId
-          : null,
-        chatId: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).chatId === 'string'
-          ? (report.transcriptMeta as Record<string, unknown>).chatId
-          : null,
-        messageId: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).messageId === 'number'
-          ? (report.transcriptMeta as Record<string, unknown>).messageId
-          : null,
-        mediaType: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).mediaType === 'string'
-          ? (report.transcriptMeta as Record<string, unknown>).mediaType
-          : null,
-        fileName: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).fileName === 'string'
-          ? (report.transcriptMeta as Record<string, unknown>).fileName
-          : null,
-        mimeType: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).mimeType === 'string'
-          ? (report.transcriptMeta as Record<string, unknown>).mimeType
-          : null,
-        caption: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).caption === 'string'
-          ? (report.transcriptMeta as Record<string, unknown>).caption
-          : null,
-        observedAt: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).observedAt === 'string'
-          ? (report.transcriptMeta as Record<string, unknown>).observedAt
-          : null,
+        fileId: typeof report.audioFileId === 'string' ? report.audioFileId : null,
+        fileUniqueId: null,
+        chatId: null,
+        messageId: null,
+        mediaType: null,
+        fileName: null,
+        mimeType: null,
+        caption: null,
+        observedAt: report.transcribedAt ?? null,
       })
-
-      return transcriptRecord
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
 
@@ -525,7 +523,9 @@ async function generateUserReport(
   const userGoal = data.userGoal?.trim() || 'не задано'
   const morningReflections = data.morningReflections.slice(-5)
   const eveningReflections = data.eveningReflections.slice(-5)
-  const transcriptHighlights = data.zoomTranscripts.slice(0, 5).map(item => item.transcript.slice(0, 220))
+  const allHighlights = extractTaggedLines(data.zoomTranscripts, 'HIGHLIGHT:')
+  const allQuotes = extractTaggedLines(data.zoomTranscripts, 'QUOTE:')
+  const allSummaries = extractTaggedLines(data.zoomTranscripts, 'Summary:')
   const weakestWheel = data.wheelScores
     .slice()
     .sort((left, right) => left.score - right.score)[0]
@@ -566,7 +566,9 @@ Input data provided:
 - score: ${Math.max(1, Math.min(10, Math.round((completionRate / 20) + Math.min(data.streakDays, 10) * 0.25 + Math.min(data.sessionCount, 7) * 0.3)))}
 - morning_reflections: ${JSON.stringify(morningReflections)}
 - evening_reflections: ${JSON.stringify(eveningReflections)}
-- zoom_transcripts: ${JSON.stringify(transcriptHighlights)}
+- zoom_transcript_highlights: ${JSON.stringify(allHighlights)}
+- zoom_transcript_quotes: ${JSON.stringify(allQuotes)}
+- zoom_transcript_summaries: ${JSON.stringify(allSummaries)}
 - user_goal: ${JSON.stringify(userGoal)}
 - wheel_weak_area: ${JSON.stringify(weakestWheel?.sphere ?? '')}
 - wheel_strong_area: ${JSON.stringify(strongestWheel?.sphere ?? '')}
@@ -672,6 +674,10 @@ async function generateMentorProfile(
   userReport: UserWeeklyReport,
 ): Promise<MentorWeeklyProfile> {
 
+  const allHighlights = extractTaggedLines(data.zoomTranscripts, 'HIGHLIGHT:')
+  const allQuotes = extractTaggedLines(data.zoomTranscripts, 'QUOTE:')
+  const allSummaries = extractTaggedLines(data.zoomTranscripts, 'Summary:')
+
   const prompt = `Ти — аналітична система для онлайн-школи. Проаналізуй поведінку користувача за тиждень.
 Твоя мета: допомогти ментору утримати користувача і запропонувати потрібний продукт у правильний момент.
 
@@ -688,8 +694,18 @@ ${data.dailyCycles.map(d =>
 ).join('\n')}
 
 Zoom transcript highlights:
-${data.zoomTranscripts.slice(0, 5).map((item, index) =>
-  `${index + 1}. ${item.transcript.slice(0, 220)}`
+${allHighlights.slice(0, 5).map((item, index) =>
+  `${index + 1}. ${item}`
+).join('\n')}
+
+Zoom transcript quotes:
+${allQuotes.slice(0, 5).map((item, index) =>
+  `${index + 1}. ${item}`
+).join('\n')}
+
+Zoom transcript summaries:
+${allSummaries.slice(0, 5).map((item, index) =>
+  `${index + 1}. ${item}`
 ).join('\n')}
 
 Найбільші проблемні зони (з колеса): ${userReport.struggleAreas.join(', ')}

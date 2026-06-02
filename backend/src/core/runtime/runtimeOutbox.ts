@@ -245,7 +245,13 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             },
           }).catch(() => null)
 
-          if (fallbackSession) {
+          if (fallbackSession?.id) {
+            console.log('[ZOOM_TRANSCRIPT] session matched', {
+              sessionId: fallbackSession.id,
+              matchMethod: session?.id ? 'scheduled_at_match' : 'heuristic_fallback',
+              audioItemId: item.id,
+            })
+
             const canonicalReport = mergeZoomPostSessionReport(fallbackSession.postSessionReport, {
               transcript,
               transcriptLength: transcript.length,
@@ -273,6 +279,25 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 status: ZoomStatus.COMPLETED,
               },
             })
+          } else {
+            console.warn('[ZOOM_TRANSCRIPT] session NOT matched — orphan transcript', {
+              audioItemId: item.id,
+              payload,
+            })
+
+            await prisma.runtimeOutbox.create({
+              data: {
+                scope: 'zoom',
+                type: 'ZOOM_TRANSCRIPT_ORPHAN',
+                source: 'runtimeOutbox',
+                dedupeKey: `zoom_orphan_${item.id}`,
+                payload: {
+                  audioItemId: item.id,
+                  reason: 'no_session_matched',
+                } as Prisma.InputJsonValue,
+                runAt: new Date(),
+              },
+            }).catch(() => undefined)
           }
 
           const { trackEvent } = await import('../../modules/events/service.js')
