@@ -797,12 +797,12 @@ export async function handleAbTestCallback(
       },
     })
 
-    if (lastCheckout) {
-      await prisma.checkoutSession.update({
-        where: { id: lastCheckout.id },
-        data: { paymentIssueReportedAt: new Date() },
-      }).catch(() => undefined)
-    }
+    // if (lastCheckout) {
+    //   await prisma.checkoutSession.update({
+    //     where: { id: lastCheckout.id },
+    //     data: { paymentIssueReportedAt: new Date() },
+    //   }).catch(() => undefined)
+    // }
 
     await prisma.productSubscription.updateMany({
       where: {

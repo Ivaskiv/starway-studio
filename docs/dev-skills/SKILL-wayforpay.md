@@ -78,3 +78,35 @@ WAYFORPAY_DOMAIN=              # merchantDomainName
 | Forbidden від WayForPay | serviceUrl не whitelisted | Додати callback URL в WayForPay кабінет |
 | Подвійний інкремент | Немає idempotency check | Перевірити paymentStatus перед update |
 | Невірний підпис | Порядок полів або зайві пробіли | Перевірити порядок в buildSignature() |
+STEP 07c — docs: update SKILL-wayforpay.md
+
+Додати в docs/dev-skills/SKILL-wayforpay.md новий розділ:
+
+## РУЧНЕ ПІДТВЕРДЖЕННЯ ОПЛАТИ
+
+Коли використовувати:
+- WayForPay callback прийшов з Declined
+- Webhook payload не розпарсився (JSON-рядок-ключ)
+- Коуч знає що людина оплатила але доступу немає
+
+Файли:
+- backend/src/modules/admin/manualPayment.service.ts
+  → grantFocusAccessManually(userId, 'coach')
+- backend/src/modules/admin/coachNotification.service.ts
+  → notifyCoachAboutFailedPayment(...)
+
+Тригер автоматичного сповіщення:
+  callback.handler.ts → після "Invalid callback - skipping"
+  → notifyCoachAboutFailedPayment()
+
+Coach bot action:
+  admin:grant_focus:{userId} → grant + Block12
+  admin:deny_focus:{userId}  → відхилити
+
+Тест через Postman:
+  backend/scripts/generate-test-webhook.ts
+  ORDER_REF="..." tsx scripts/generate-test-webhook.ts
+  → копіюєш JSON → Postman POST → serviceUrl endpoint
+
+git add docs/dev-skills/SKILL-wayforpay.md
+git commit -m "docs: add manual payment approval pattern to wayforpay skill"
