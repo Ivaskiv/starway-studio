@@ -1,6 +1,7 @@
 import { ZoomStatus, type Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
+import { contentBot } from '../../lib/telegram.js'
 import { transcribeTelegramAudio } from '../../modules/voice/voice.service.js'
 import { buildRuntimeTelemetry, claimRuntimeEventReplay, withRuntimeAdvisoryLock, type RuntimeIdempotencyInput } from './runtimeIdempotency.js'
 
@@ -140,7 +141,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
         ? payload.runtime as Record<string, unknown>
         : {}
       const zoomAudioPayload = payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? payload as Prisma.JsonObject & {
+          ? payload as Prisma.JsonObject & {
             fileId?: string
             fileUniqueId?: string | null
             chatId?: string
@@ -150,6 +151,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             mimeType?: string | null
             caption?: string | null
             source?: string
+            zoomType?: string | null
             observedAt?: string
           }
         : null
@@ -209,10 +211,12 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           : 'TELEGRAM_AUDIO'
 
         try {
+          const telegramFileLink = await contentBot.telegram.getFileLink(fileId)
           const transcript = await transcribeTelegramAudio(
             fileId,
             mediaType,
             typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null,
+            telegramFileLink,
           )
 
           if (!transcript) {
@@ -266,6 +270,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 fileName: typeof zoomAudioPayload?.fileName === 'string' ? zoomAudioPayload.fileName : null,
                 mimeType: typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null,
                 caption: typeof zoomAudioPayload?.caption === 'string' ? zoomAudioPayload.caption : null,
+                zoomType: typeof zoomAudioPayload?.zoomType === 'string' ? zoomAudioPayload.zoomType : null,
                 observedAt: typeof zoomAudioPayload?.observedAt === 'string' ? zoomAudioPayload.observedAt : null,
                 outboxId: item.id,
                 outboxDedupeKey: item.dedupeKey,
@@ -326,6 +331,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               fileName: typeof zoomAudioPayload?.fileName === 'string' ? zoomAudioPayload.fileName : null,
               mimeType: typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null,
               caption: typeof zoomAudioPayload?.caption === 'string' ? zoomAudioPayload.caption : null,
+              zoomType: typeof zoomAudioPayload?.zoomType === 'string' ? zoomAudioPayload.zoomType : null,
               observedAt: typeof zoomAudioPayload?.observedAt === 'string' ? zoomAudioPayload.observedAt : null,
               runtime: {
                 outboxId: item.id,

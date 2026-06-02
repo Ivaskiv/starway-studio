@@ -30,15 +30,26 @@ function stateLabel(state: DailyState) {
   }
 }
 
-export async function transcribeTelegramAudio(fileId: string, type: VoiceEntryType, mimeType?: string | null) {
-  const file = await bot.telegram.getFile(fileId)
-  if (!file.file_path) {
-    throw new Error('telegram_file_path_missing')
+export async function transcribeTelegramAudio(
+  fileId: string,
+  type: VoiceEntryType,
+  mimeType?: string | null,
+  downloadUrl?: string | URL | null,
+) {
+  let response: Response
+
+  if (downloadUrl) {
+    response = await fetch(String(downloadUrl))
+  } else {
+    const file = await bot.telegram.getFile(fileId)
+    if (!file.file_path) {
+      throw new Error('telegram_file_path_missing')
+    }
+
+    const token = requireTelegramBotConfig('voice transcription').token
+    response = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`)
   }
 
-  const token = requireTelegramBotConfig('voice transcription').token
-
-  const response = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`)
   if (!response.ok) {
     throw new Error('telegram_file_download_failed')
   }

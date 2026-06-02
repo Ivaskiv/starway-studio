@@ -72,6 +72,7 @@ type ChannelPostAudioPayload = {
   mimeType: string | null
   caption: string | null
   source: 'telegram'
+  zoomType: 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP'
 }
 
 function extractZoomAudioPayload(post: {
@@ -103,6 +104,7 @@ function extractZoomAudioPayload(post: {
       mimeType: post.voice.mime_type ?? 'audio/ogg',
       caption,
       source: 'telegram',
+      zoomType: 'GROUP',
     }
   }
 
@@ -117,6 +119,7 @@ function extractZoomAudioPayload(post: {
       mimeType: post.audio.mime_type ?? 'audio/mpeg',
       caption,
       source: 'telegram',
+      zoomType: resolveZoomTypeFromFileName(post.audio.file_name ?? ''),
     }
   }
 
@@ -140,10 +143,20 @@ function extractZoomAudioPayload(post: {
       mimeType,
       caption,
       source: 'telegram',
+      zoomType: resolveZoomTypeFromFileName(fileName ?? ''),
     }
   }
 
   return null
+}
+
+function resolveZoomTypeFromFileName(name: string): 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP' {
+  const normalized = name.toUpperCase()
+  if (normalized.startsWith('IND_')) return 'INDIVIDUAL'
+  if (normalized.startsWith('МАЙСТЕРМАЙНД')) return 'MASTERMIND'
+  if (normalized.startsWith('ІНТЕНСИВ')) return 'INTENSIVE'
+  if (normalized.startsWith('ВОРКШОП')) return 'WORKSHOP'
+  return 'GROUP'
 }
 
 function parseMonthSchedule(
@@ -779,6 +792,32 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
           return
         }
 
+        const messageId = audioPayload.messageId
+        if (typeof messageId === 'number') {
+          const existing = await prisma.zoomChannelPost.findUnique({
+            where: { messageId },
+            select: { id: true },
+          }).catch(() => null)
+          if (existing) {
+            console.log('[ZOOM_AUDIO] duplicate channel post skipped', {
+              chatId,
+              messageId,
+            })
+            return
+          }
+
+          await prisma.zoomChannelPost.create({
+            data: {
+              messageId,
+              chatId,
+            },
+          }).catch((error) => {
+            console.warn('[ZOOM_AUDIO] failed to persist channel post marker', error)
+          })
+        }
+
+        const zoomType = audioPayload.zoomType
+
         const outbox = await enqueueRuntimeOutboxItem({
           scope: 'zoom_audio_ingest',
           type: 'ZOOM_AUDIO_UPLOADED',
@@ -796,6 +835,7 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
             mimeType: audioPayload.mimeType,
             caption: audioPayload.caption,
             source: audioPayload.source,
+            zoomType,
             observedAt: new Date().toISOString(),
           },
         })
@@ -804,6 +844,7 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
           chatId,
           messageId: audioPayload.messageId,
           fileId: audioPayload.fileId,
+          zoomType,
           duplicate: outbox.duplicate,
           dedupeKey: outbox.dedupeKey,
         })
