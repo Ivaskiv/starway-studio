@@ -75,6 +75,70 @@ type ChannelPostAudioPayload = {
   zoomType: 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP'
 }
 
+type TelegramAudioMessage = {
+  audio?: {
+    file_id?: string
+    file_unique_id?: string
+    mime_type?: string | null
+    file_name?: string | null
+  }
+  voice?: {
+    file_id?: string
+    file_unique_id?: string
+    mime_type?: string | null
+  }
+  document?: {
+    file_id?: string
+    file_unique_id?: string
+    mime_type?: string | null
+    file_name?: string | null
+  }
+  caption?: string | null
+}
+
+function extractRetranscribeAudioFromMessage(message: TelegramAudioMessage | null | undefined): {
+  fileId: string
+  fileName: string
+  zoomType: 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP'
+} | null {
+  if (!message) return null
+
+  if (message.voice?.file_id) {
+    return {
+      fileId: message.voice.file_id,
+      fileName: 'telegram_voice.ogg',
+      zoomType: 'GROUP',
+    }
+  }
+
+  if (message.audio?.file_id) {
+    return {
+      fileId: message.audio.file_id,
+      fileName: message.audio.file_name ?? 'zoom_audio.mp3',
+      zoomType: resolveZoomTypeFromFileName(message.audio.file_name ?? ''),
+    }
+  }
+
+  if (message.document?.file_id) {
+    const mimeType = message.document.mime_type ?? null
+    const fileName = message.document.file_name ?? 'zoom_audio.mp3'
+    const lowerName = fileName.toLowerCase()
+    const looksLikeAudio =
+      (mimeType?.startsWith('audio/') ?? false) ||
+      /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(lowerName)
+
+    if (!looksLikeAudio) return null
+
+    return {
+      fileId: message.document.file_id,
+      fileName,
+      zoomType: resolveZoomTypeFromFileName(fileName),
+    }
+  }
+
+  return null
+}
+
 function extractZoomAudioPayload(post: {
   chat?: { id?: number | string }
   message_id?: number
@@ -441,6 +505,11 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         return
       }
 
+      const replyMessage = 'message' in ctx && ctx.message && 'reply_to_message' in ctx.message
+        ? (ctx.message.reply_to_message as TelegramAudioMessage | undefined)
+        : undefined
+      const repliedAudio = extractRetranscribeAudioFromMessage(replyMessage)
+
       const commandText =
         'message' in ctx && ctx.message && 'text' in ctx.message
           ? String(ctx.message.text ?? '').trim()
@@ -448,6 +517,50 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       const args = commandText.split(/\s+/).slice(1)
 
       if (args.length === 0) {
+        if (repliedAudio) {
+          const dedupeKey = `zoom_audio_manual_${repliedAudio.fileId}`
+          const exists = await prisma.runtimeOutbox.findUnique({
+            where: { dedupeKey },
+            select: { id: true, status: true },
+          }).catch(() => null)
+
+          if (exists) {
+            await ctx.reply(`ℹ️ Цей файл вже в черзі або оброблений.\nСтатус: ${exists.status}`)
+            return
+          }
+
+          await prisma.runtimeOutbox.create({
+            data: {
+              scope: 'zoom',
+              type: 'ZOOM_AUDIO_UPLOADED',
+              source: 'manual_retranscribe',
+              dedupeKey,
+              tenantId: channelId,
+              payload: {
+                fileId: repliedAudio.fileId,
+                fileName: repliedAudio.fileName,
+                chatId: channelId,
+                messageId: 0,
+                zoomType: repliedAudio.zoomType,
+                uploadedAt: new Date().toISOString(),
+                triggeredBy: userId,
+                replaySource: 'reply_to_message',
+              },
+              runAt: new Date(),
+            },
+          })
+
+          await ctx.reply(
+            [
+              '✅ Аудіо з reply поставлено в чергу на ретранскрипцію.',
+              `📎 fileId: ${repliedAudio.fileId}`,
+              `🧭 Zoom type: ${repliedAudio.zoomType}`,
+              `🔐 dedupeKey: ${dedupeKey}`,
+            ].join('\n'),
+          )
+          return
+        }
+
         await ctx.reply(
           [
             '📎 Щоб ретранскрибувати конкретний файл:',
