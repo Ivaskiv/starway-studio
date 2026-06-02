@@ -153,6 +153,15 @@ function formatSubscriptionDate(value: Date | string | null | undefined): string
   return date.toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' })
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
 async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promise<void> {
   const [active, subscription, checkout] = await Promise.all([
     hasActiveFocusSubscription(userId),
@@ -173,6 +182,10 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
         expiresAt: true,
         focusWelcomedAt: true,
         channelJoinedAt: true,
+        manuallyGrantedBy: true,
+        manualGrantNote: true,
+        paymentIssueCount: true,
+        lastPaymentIssueAt: true,
         product: { select: { name: true, code: true, currency: true } },
       },
     }),
@@ -186,6 +199,7 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
         createdAt: true,
         completedAt: true,
         lastOpenedAt: true,
+        paymentIssueReportedAt: true,
       },
     }),
   ])
@@ -196,47 +210,63 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
       'ctx.reply',
       'ab_test_subscription_missing',
       [
-        '*Підписка ФОКУС*',
+        '<b>Підписка ФОКУС</b>',
         '',
-        'Статус: `не знайдено`',
+        'Статус: <code>не знайдено</code>',
         'Ще немає оформленої підписки.',
       ].join('\n'),
       {
-        inline_keyboard: [[{ text: 'Оплатити ФОКУС', callback_data: AB_TEST_ACTIONS.FOCUS_PAY }]],
+        inline_keyboard: [
+          [{ text: 'Оплатити ФОКУС', callback_data: AB_TEST_ACTIONS.FOCUS_PAY }],
+          [{ text: '← Меню', callback_data: 'ab_test:menu' }],
+        ],
       },
-      'Markdown',
+      'HTML',
     )
     return
   }
 
-  const statusLabel = active ? 'активна' : 'неактивна'
+  const statusValue = String(subscription.status ?? '—')
+  const activeLabel = active ? 'так' : 'ні'
   const amountLabel = subscription.amount
     ? `${subscription.amount} ${subscription.product.currency || 'UAH'}`
     : '—'
+  const inviteUrl = String(process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? '').trim()
+  const manualGrantLabel = subscription.manuallyGrantedBy
+    ? `🔧 ручна активація: <code>${escapeHtml(subscription.manuallyGrantedBy)}</code>`
+    : 'Автоактивація'
+  const manualGrantNoteLabel = subscription.manualGrantNote
+    ? `Примітка: ${escapeHtml(subscription.manualGrantNote)}`
+    : null
   const lines = [
-    '*Підписка ФОКУС*',
+    '<b>Підписка ФОКУС</b>',
     '',
-    `Статус доступу: *${statusLabel}*`,
-    `План: ${subscription.product.name} (${subscription.product.code})`,
-    `Стан запису: \`${subscription.status}\``,
-    `Сума: ${amountLabel}`,
-    `Оплачено: ${formatSubscriptionDate(subscription.paidAt)}`,
-    `Діє до: ${formatSubscriptionDate(subscription.expiresAt)}`,
-    `Trial до: ${formatSubscriptionDate(subscription.trialEndsAt)}`,
-    `Block 12 надіслано: ${formatSubscriptionDate(subscription.focusWelcomedAt)}`,
-    `Вступ у канал: ${formatSubscriptionDate(subscription.channelJoinedAt)}`,
-    `Оновлено: ${formatSubscriptionDate(subscription.updatedAt)}`,
+    `Активний доступ: <b>${activeLabel}</b>`,
+    `Статус: <code>${escapeHtml(statusValue)}</code>`,
+    `План: <code>${escapeHtml(subscription.product.name)}</code> (<code>${escapeHtml(subscription.product.code)}</code>)`,
+    `Сума: <b>${escapeHtml(amountLabel)}</b>`,
+    `Оплачено: ${escapeHtml(formatSubscriptionDate(subscription.paidAt))}`,
+    `Діє до: ${escapeHtml(formatSubscriptionDate(subscription.expiresAt))}`,
+    `Trial до: ${escapeHtml(formatSubscriptionDate(subscription.trialEndsAt))}`,
+    `Block 12 надіслано: ${subscription.focusWelcomedAt ? '✅ надіслано' : '❌ не надіслано'}`,
+    `Вступ у канал: ${subscription.channelJoinedAt ? '✅ вступив' : '⏳ не вступив'}`,
+    `Проблема з оплатою: ${subscription.paymentIssueCount}`,
+    `Остання проблема: ${escapeHtml(formatSubscriptionDate(subscription.lastPaymentIssueAt))}`,
+    manualGrantLabel,
+    ...(manualGrantNoteLabel ? [manualGrantNoteLabel] : []),
+    `Оновлено: ${escapeHtml(formatSubscriptionDate(subscription.updatedAt))}`,
   ]
 
   if (checkout) {
     lines.push(
       '',
-      '*Остання checkout-сесія*',
-      `Статус: \`${checkout.status}\``,
-      `Сума: ${checkout.amount} ${checkout.currency}`,
-      `Створено: ${formatSubscriptionDate(checkout.createdAt)}`,
-      `Відкривали: ${formatSubscriptionDate(checkout.lastOpenedAt)}`,
-      `Завершено: ${formatSubscriptionDate(checkout.completedAt)}`,
+      '<b>Остання checkout-сесія</b>',
+      `Статус: <code>${escapeHtml(String(checkout.status))}</code>`,
+      `Сума: <b>${escapeHtml(`${checkout.amount} ${checkout.currency}`)}</b>`,
+      `Створено: ${escapeHtml(formatSubscriptionDate(checkout.createdAt))}`,
+      `Відкривали: ${escapeHtml(formatSubscriptionDate(checkout.lastOpenedAt))}`,
+      `Завершено: ${escapeHtml(formatSubscriptionDate(checkout.completedAt))}`,
+      `Проблема з оплатою: ${checkout.paymentIssueReportedAt ? '✅ зафіксовано' : '❌ немає'}`,
     )
   }
 
@@ -247,11 +277,14 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
     lines.join('\n'),
     {
       inline_keyboard: [
-        [{ text: 'Оплатити ФОКУС', callback_data: AB_TEST_ACTIONS.FOCUS_PAY }],
-        [{ text: 'Я вже оплатив / оплатила', callback_data: AB_TEST_ACTIONS.FOCUS_ALREADY_PAID }],
+        ...(inviteUrl
+          ? [[{ text: '🔗 Посилання на канал', url: inviteUrl }]]
+          : []),
+        [{ text: '🔄 Відновити доступ', callback_data: 'resend_focus_block12' }],
+        [{ text: '← Меню', callback_data: 'ab_test:menu' }],
       ],
     },
-    'Markdown',
+    'HTML',
   )
 }
 
@@ -592,6 +625,48 @@ export async function handleAbTestCallback(
     if (!chatId) {
       return true
     }
+
+    if (payingUserId) {
+      const hasActive = await hasActiveFocusSubscription(payingUserId)
+      if (hasActive) {
+        await ctx.telegram.sendMessage(
+          chatId,
+          [
+            '✅ <b>Підписка ФОКУС вже активна.</b>',
+            '',
+            'Оплата повторно не потрібна.',
+            'Натисни кнопку, щоб відновити доступ або переглянути деталі.',
+          ].join('\n'),
+          {
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🔗 Відновити доступ до каналу',
+                    callback_data: 'resend_focus_block12',
+                  },
+                ],
+                [
+                  {
+                    text: '📋 Моя підписка',
+                    callback_data: 'ab_test:subscription',
+                  },
+                ],
+                [
+                  {
+                    text: '← Меню',
+                    callback_data: 'ab_test:menu',
+                  },
+                ],
+              ],
+            },
+          },
+        )
+        return true
+      }
+    }
+
     const url1m = firstNonEmptyUrl(
       process.env.WAYFORPAY_FOCUS_1M_URL,
       process.env.FOCUS_1M_URL,
@@ -1120,7 +1195,7 @@ export async function handleAbTestCallback(
           ],
           [
             {
-              text: 'Підписка',
+              text: '📋 Моя підписка',
               callback_data: AB_TEST_ACTIONS.SUBSCRIPTION,
             },
           ],

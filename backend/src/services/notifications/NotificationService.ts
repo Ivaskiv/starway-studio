@@ -46,6 +46,7 @@ import {
   claimRuntimeJobReplay,
 } from '../../core/runtime/runtimeIdempotency.js'
 import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
+import { FOCUS_DOJIM_TIMER_IDS } from '../../modules/subscriptions/payments/business.types.js'
 
 type EventPayload = Record<string, unknown>
 type DojimSeriesScheduleResult = {
@@ -688,6 +689,25 @@ export class NotificationService {
       timer_id: asString(payload.flow_timer_id ?? payload.flowTimerId) as Parameters<typeof resolveFlowTimerContext>[0]['timer_id'] ?? null,
       payload,
     })
+    const isFocusDojim = Boolean(
+      flow.timer?.id && FOCUS_DOJIM_TIMER_IDS.includes(flow.timer.id as (typeof FOCUS_DOJIM_TIMER_IDS)[number])
+    )
+    if (isFocusDojim && persisted.userId) {
+      const focusStatus = await prisma.user.findUnique({
+        where: { id: persisted.userId },
+        select: { focusPaid: true, telegramEnabled: true },
+      }).catch(() => null)
+      if (!focusStatus || focusStatus.focusPaid || !focusStatus.telegramEnabled) {
+        console.info('[notifications] skipped focus dojims by payment guard', {
+          event: persisted.event,
+          userId: persisted.userId,
+          focusPaid: focusStatus?.focusPaid ?? null,
+          telegramEnabled: focusStatus?.telegramEnabled ?? null,
+          timerId: flow.timer?.id ?? null,
+        })
+        return
+      }
+    }
     if (!(await isNotificationAllowedForUser(persisted.event, persisted.userId))) {
       console.info('[notifications] skipped queued job by lifecycle guard', {
         event: persisted.event,
