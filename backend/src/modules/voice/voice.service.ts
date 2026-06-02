@@ -8,7 +8,6 @@ import { getMentorExtendedContext } from '../ai-mentor/services.js'
 import { generateMicroActions, updateUserState } from '../ai-mentor/state.service.js'
 import { registerStreakActivity } from '../streak/service.js'
 import { createMicroTask } from '../microTask/service.js'
-import { trackEvent } from '../events/service.js'
 import { detectEmotion } from './emotion.engine.js'
 import { getUserMemorySummary, updateImplicitMemory } from './memory.engine.js'
 import type { VoiceDecision, VoiceProcessInput } from './types.js'
@@ -31,7 +30,7 @@ function stateLabel(state: DailyState) {
   }
 }
 
-async function transcribeTelegramAudio(fileId: string, type: VoiceEntryType, mimeType?: string | null) {
+export async function transcribeTelegramAudio(fileId: string, type: VoiceEntryType, mimeType?: string | null) {
   const file = await bot.telegram.getFile(fileId)
   if (!file.file_path) {
     throw new Error('telegram_file_path_missing')
@@ -179,6 +178,7 @@ export async function processVoiceInput(input: VoiceProcessInput) {
   })
   const memory = await updateImplicitMemory(input.userId, emotion)
   const decision = await buildDecision(input.userId, transcript, stateUpdate.currentState as DailyState)
+  const { trackEvent } = await import('../events/service.js')
 
   let createdTaskId: string | null = null
   if (plan.deepMode && decision.actions[0] && plan.expertId) {

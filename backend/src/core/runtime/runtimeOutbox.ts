@@ -1,6 +1,7 @@
 import type { Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
+import { transcribeTelegramAudio } from '../../modules/voice/voice.service.js'
 import { buildRuntimeTelemetry, claimRuntimeEventReplay, withRuntimeAdvisoryLock, type RuntimeIdempotencyInput } from './runtimeIdempotency.js'
 
 export type RuntimeOutboxItem = {
@@ -123,6 +124,20 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
       const runtime = payload?.runtime && typeof payload.runtime === 'object' && !Array.isArray(payload.runtime)
         ? payload.runtime as Record<string, unknown>
         : {}
+      const zoomAudioPayload = payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? payload as Prisma.JsonObject & {
+            fileId?: string
+            fileUniqueId?: string | null
+            chatId?: string
+            messageId?: number | null
+            mediaType?: 'voice' | 'audio' | 'document_audio'
+            fileName?: string | null
+            mimeType?: string | null
+            caption?: string | null
+            source?: string
+            observedAt?: string
+          }
+        : null
 
       const replay = await claimRuntimeEventReplay({
         scope: item.scope,
@@ -158,6 +173,84 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           payload: payload as Prisma.InputJsonValue,
         },
       })
+
+      if (item.type === 'ZOOM_AUDIO_UPLOADED') {
+        const fileId = typeof zoomAudioPayload?.fileId === 'string' ? zoomAudioPayload.fileId.trim() : ''
+        if (!fileId) {
+          await prisma.runtimeOutbox.update({
+            where: { id: item.id },
+            data: {
+              status: 'FAILED',
+              processedAt: new Date(),
+              attempts: { increment: 1 },
+              lastError: 'missing_zoom_audio_file_id',
+            },
+          }).catch(() => undefined)
+          continue
+        }
+
+        const mediaType = zoomAudioPayload?.mediaType === 'voice'
+          ? 'TELEGRAM_VOICE'
+          : 'TELEGRAM_AUDIO'
+
+        try {
+          const transcript = await transcribeTelegramAudio(
+            fileId,
+            mediaType,
+            typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null,
+          )
+
+          if (!transcript) {
+            throw new Error('zoom_audio_transcription_empty')
+          }
+
+          const { trackEvent } = await import('../../modules/events/service.js')
+          await trackEvent({
+            userId: item.userId ?? null,
+            type: 'ZOOM_TRANSCRIPT_READY',
+            source: 'telegram',
+            payload: {
+              source: 'telegram',
+              sourceEvent: {
+                type: item.type,
+                scope: item.scope,
+                tenantId: item.tenantId ?? null,
+                state: item.state ?? null,
+                createdAt: item.createdAt.toISOString(),
+                payload: payload ?? {},
+              },
+              transcript,
+              transcriptLength: transcript.length,
+              fileId,
+              fileUniqueId: typeof zoomAudioPayload?.fileUniqueId === 'string' ? zoomAudioPayload.fileUniqueId : null,
+              chatId: typeof zoomAudioPayload?.chatId === 'string' ? zoomAudioPayload.chatId : item.tenantId ?? null,
+              messageId: typeof zoomAudioPayload?.messageId === 'number' ? zoomAudioPayload.messageId : null,
+              mediaType: zoomAudioPayload?.mediaType ?? null,
+              fileName: typeof zoomAudioPayload?.fileName === 'string' ? zoomAudioPayload.fileName : null,
+              mimeType: typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null,
+              caption: typeof zoomAudioPayload?.caption === 'string' ? zoomAudioPayload.caption : null,
+              observedAt: typeof zoomAudioPayload?.observedAt === 'string' ? zoomAudioPayload.observedAt : null,
+              runtime: {
+                outboxId: item.id,
+                outboxDedupeKey: item.dedupeKey,
+                originalEventId: item.id,
+              },
+            } as Prisma.InputJsonValue,
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'zoom_audio_transcription_failed'
+          await prisma.runtimeOutbox.update({
+            where: { id: item.id },
+            data: {
+              status: 'FAILED',
+              processedAt: new Date(),
+              attempts: { increment: 1 },
+              lastError: message,
+            },
+          }).catch(() => undefined)
+          continue
+        }
+      }
 
       await prisma.runtimeOutbox.update({
         where: { id: item.id },

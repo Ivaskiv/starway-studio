@@ -24,6 +24,7 @@ import { handleFocusChannelJoinByTelegramUserId, sendAbTestBlock12Welcome } from
 import { conversationOrchestrator } from './conversation/orchestrator/ConversationOrchestrator.js'
 import type { OrchestratedContext } from './conversation/types.js'
 import { planAck, planMessage } from './conversation/delivery/planDelivery.js'
+import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 import {
   AB_TEST_ACTIONS,
 } from '@/packages/abTestActions.js'
@@ -59,6 +60,90 @@ interface MonthSessionLine {
   scheduledAt: Date
   topic: string
   zoomLink: string
+}
+
+type ChannelPostAudioPayload = {
+  chatId: string
+  messageId: number | null
+  fileId: string
+  fileUniqueId: string | null
+  mediaType: 'voice' | 'audio' | 'document_audio'
+  fileName: string | null
+  mimeType: string | null
+  caption: string | null
+  source: 'telegram'
+}
+
+function extractZoomAudioPayload(post: {
+  chat?: { id?: number | string }
+  message_id?: number
+  voice?: { file_id?: string; file_unique_id?: string; mime_type?: string | null }
+  audio?: { file_id?: string; file_unique_id?: string; mime_type?: string | null; file_name?: string | null }
+  document?: {
+    file_id?: string
+    file_unique_id?: string
+    mime_type?: string | null
+    file_name?: string | null
+  }
+  caption?: string | null
+}): ChannelPostAudioPayload | null {
+  const chatId = String(post.chat?.id ?? '').trim()
+  if (!chatId) return null
+
+  const caption = typeof post.caption === 'string' && post.caption.trim() ? post.caption.trim() : null
+
+  if (post.voice?.file_id) {
+    return {
+      chatId,
+      messageId: typeof post.message_id === 'number' ? post.message_id : null,
+      fileId: post.voice.file_id,
+      fileUniqueId: post.voice.file_unique_id ?? null,
+      mediaType: 'voice',
+      fileName: null,
+      mimeType: post.voice.mime_type ?? 'audio/ogg',
+      caption,
+      source: 'telegram',
+    }
+  }
+
+  if (post.audio?.file_id) {
+    return {
+      chatId,
+      messageId: typeof post.message_id === 'number' ? post.message_id : null,
+      fileId: post.audio.file_id,
+      fileUniqueId: post.audio.file_unique_id ?? null,
+      mediaType: 'audio',
+      fileName: post.audio.file_name ?? null,
+      mimeType: post.audio.mime_type ?? 'audio/mpeg',
+      caption,
+      source: 'telegram',
+    }
+  }
+
+  if (post.document?.file_id) {
+    const mimeType = post.document.mime_type ?? null
+    const fileName = post.document.file_name ?? null
+    const lowerName = String(fileName ?? '').toLowerCase()
+    const looksLikeAudio =
+      (mimeType?.startsWith('audio/') ?? false) ||
+      /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(lowerName)
+
+    if (!looksLikeAudio) return null
+
+    return {
+      chatId,
+      messageId: typeof post.message_id === 'number' ? post.message_id : null,
+      fileId: post.document.file_id,
+      fileUniqueId: post.document.file_unique_id ?? null,
+      mediaType: 'document_audio',
+      fileName,
+      mimeType,
+      caption,
+      source: 'telegram',
+    }
+  }
+
+  return null
 }
 
 function parseMonthSchedule(
@@ -651,17 +736,82 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
   bot.on('channel_post', async (ctx) => {
     try {
-      const post = (ctx.update as { channel_post?: { chat?: { id?: number | string }; text?: string; from?: { id?: number | string } } }).channel_post
+      const post = (ctx.update as {
+        channel_post?: {
+          chat?: { id?: number | string }
+          message_id?: number
+          text?: string
+          caption?: string | null
+          from?: { id?: number | string }
+          voice?: { file_id?: string; file_unique_id?: string; mime_type?: string | null }
+          audio?: {
+            file_id?: string
+            file_unique_id?: string
+            mime_type?: string | null
+            file_name?: string | null
+          }
+          document?: {
+            file_id?: string
+            file_unique_id?: string
+            mime_type?: string | null
+            file_name?: string | null
+          }
+        }
+      }).channel_post
       console.log('[DEBUG channel_post] отримано update:', {
         chatId: post?.chat?.id,
         text: post?.text?.slice(0, 100),
         type: post?.chat ? 'channel' : undefined,
       })
-      if (!post?.text) return
+      if (!post?.chat?.id) return
 
-      const channelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID?.trim()
-      if (!channelId) return
-      if (String(post.chat?.id ?? '') !== channelId) return
+      const chatId = String(post.chat.id).trim()
+      const focusChannelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID?.trim()
+      const zoomAudioChannelId = process.env.ZOOM_AUDIO_TELEGRAM_CHANNEL_ID?.trim()
+
+      if (zoomAudioChannelId && chatId === zoomAudioChannelId) {
+        const audioPayload = extractZoomAudioPayload(post)
+        if (!audioPayload) {
+          console.log('[ZOOM_AUDIO] ignored non-audio channel post', {
+            chatId,
+            messageId: post.message_id ?? null,
+          })
+          return
+        }
+
+        const outbox = await enqueueRuntimeOutboxItem({
+          scope: 'zoom_audio_ingest',
+          type: 'ZOOM_AUDIO_UPLOADED',
+          source: 'telegram',
+          userId: null,
+          state: 'uploaded',
+          tenantId: chatId,
+          payload: {
+            chatId: audioPayload.chatId,
+            messageId: audioPayload.messageId,
+            fileId: audioPayload.fileId,
+            fileUniqueId: audioPayload.fileUniqueId,
+            mediaType: audioPayload.mediaType,
+            fileName: audioPayload.fileName,
+            mimeType: audioPayload.mimeType,
+            caption: audioPayload.caption,
+            source: audioPayload.source,
+            observedAt: new Date().toISOString(),
+          },
+        })
+
+        console.log('[ZOOM_AUDIO] runtime outbox enqueued', {
+          chatId,
+          messageId: audioPayload.messageId,
+          fileId: audioPayload.fileId,
+          duplicate: outbox.duplicate,
+          dedupeKey: outbox.dedupeKey,
+        })
+        return
+      }
+
+      if (!focusChannelId || chatId !== focusChannelId) return
+      if (!post.text) return
 
       const parsed = parseZoomChannelPost(post.text)
       if (!parsed.isValid) {
