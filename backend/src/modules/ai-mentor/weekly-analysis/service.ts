@@ -15,6 +15,7 @@ import { logger } from '../../../utils/logger.js'
 import { Prisma, SubscriptionStatus } from '@starway/db/prisma-client'
 import { extractProgressPercent } from '../../microTask/service.js'
 import { runGuardedAiTask, stableHash } from '../../../services/aiGuard.service.js'
+import { storeWeeklySocialProofArtifacts } from '../../admin/content-research.service.js'
 
 const extractAnswers = (value: unknown): string[] => {
   if (!value || typeof value !== 'object') return []
@@ -981,6 +982,36 @@ export async function runWeeklyAnalysis(
     }
 
     await saveResults(result)
+    await storeWeeklySocialProofArtifacts({
+      userId: result.userReport.userId,
+      weekStart: result.userReport.weekStart,
+      weekEnd: result.userReport.weekEnd,
+      userReport: {
+        summaryText: result.userReport.summaryText,
+        topInsights: result.userReport.topInsights,
+        nextWeekFocus: result.userReport.nextWeekFocus,
+        nextWeekTasks: result.userReport.nextWeekTasks,
+        completionRate: result.userReport.completionRate,
+        streakDays: result.userReport.streakDays,
+        growthAreas: result.userReport.growthAreas,
+        struggleAreas: result.userReport.struggleAreas,
+      },
+      mentorProfile: {
+        behaviorPattern: result.mentorProfile.behaviorPattern,
+        mainPainThisWeek: result.mentorProfile.mainPainThisWeek,
+        emotionalTone: result.mentorProfile.emotionalTone,
+        retentionRisk: result.mentorProfile.retentionRisk,
+        retentionFactors: result.mentorProfile.retentionFactors,
+        churnSignals: result.mentorProfile.churnSignals,
+        upsellReady: result.mentorProfile.upsellReady,
+        upsellProduct: result.mentorProfile.upsellProduct,
+        upsellTiming: result.mentorProfile.upsellTiming,
+        upsellReasoning: result.mentorProfile.upsellReasoning,
+        recommendedOffer: result.mentorProfile.recommendedOffer,
+        systemNotes: result.mentorProfile.systemNotes,
+      },
+      zoomTranscripts: rawData.zoomTranscripts,
+    })
 
     logger.info(`[WeeklyAnalysis] done userId=${userId} retention=${profile.retentionRisk}`)
     return result

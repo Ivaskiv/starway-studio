@@ -22,6 +22,8 @@ import { fromSalesAssistantInput, runPipeline } from '@/core/dna/index.js'
 export type { SalesAssistantGenerateBody, SalesAssistantWorkspaceResponse, UpdateSalesAssistantWorkspaceBody }
 
 const DNA_TARGET_TYPES = new Set<ContentTypeKey>(['reels', 'warmup'])
+const SOCIAL_PROOF_TOPIC_PREFIX = 'weekly-proof:'
+
 function shouldUseDna(type: ContentTypeKey): boolean {
   return isDnaEnabled() && DNA_TARGET_TYPES.has(type)
 }
@@ -64,6 +66,60 @@ function resolvePresetFromProtocol(selectedProtocol: string): 'SHUM' | 'ZASTRYAG
 
 function isDnaEnabled(): boolean {
   return process.env.DNA_ORCHESTRATOR_ENABLED === 'true'
+}
+
+function compactText(value: string, maxLength = 220): string {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+}
+
+async function loadWeeklySocialProofContext(userId: string): Promise<string> {
+  const items = await prisma.contentItem.findMany({
+    where: {
+      userId,
+      status: 'approved',
+      topic: { startsWith: SOCIAL_PROOF_TOPIC_PREFIX },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 6,
+    select: {
+      type: true,
+      topic: true,
+      platform: true,
+      content: true,
+      createdAt: true,
+    },
+  }).catch(() => [])
+
+  if (!items.length) return ''
+
+  const lines = items.map((item, index) => {
+    const title = (item.topic ?? '').replace(SOCIAL_PROOF_TOPIC_PREFIX, '')
+    const content = compactText(item.content, 520)
+    return [
+      `${index + 1}. ${item.type} | ${title} | ${item.platform ?? 'internal'}`,
+      content,
+    ].join('\n')
+  })
+
+  return [
+    'SOCIAL_PROOF_CONTEXT:',
+    'Use these approved weekly proof artifacts as source material for hooks, reels, stories, transformation angles, and proof-led CTAs.',
+    ...lines,
+  ].join('\n')
+}
+
+async function enrichSalesAssistantContext(userId: string, body: SalesAssistantGenerateBody): Promise<SalesAssistantGenerateBody> {
+  const socialProofContext = await loadWeeklySocialProofContext(userId)
+  if (!socialProofContext) return body
+
+  const mergedUserContext = [body.userContext, socialProofContext].filter((value) => value.trim()).join('\n\n')
+  return {
+    ...body,
+    userContext: mergedUserContext,
+  }
 }
 
 // ─── workspace ───────────────────────────────────────────────────────────────
@@ -364,14 +420,15 @@ export async function generateContent(
   aiProfile: AiBehaviorProfile | null,
   requestUserId = '',
 ) {
+  const enrichedBody = await enrichSalesAssistantContext(requestUserId, body)
   const resolvedType = resolveContentTypeKey(body.contentType)
 const dnaActive = shouldUseDna(resolvedType)
   if (!dnaActive) {
-    return generateContentLegacy(workspaceId, body, aiProfile, requestUserId)
+    return generateContentLegacy(workspaceId, enrichedBody, aiProfile, requestUserId)
   }
 
   try {
-    return await generateContentWithDna(workspaceId, body, aiProfile, requestUserId)
+    return await generateContentWithDna(workspaceId, enrichedBody, aiProfile, requestUserId)
   } catch (error) {
     console.error('[DNA][service][ORCH_FAIL_FALLBACK]', {
       contentType: body.contentType,
@@ -380,7 +437,7 @@ const dnaActive = shouldUseDna(resolvedType)
       fallback: 'legacy',
     })
 
-    const legacy = await generateContentLegacy(workspaceId, body, aiProfile, requestUserId)
+    const legacy = await generateContentLegacy(workspaceId, enrichedBody, aiProfile, requestUserId)
     return {
       ...legacy,
       dnaDebug: {
