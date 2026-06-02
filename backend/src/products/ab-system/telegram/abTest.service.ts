@@ -150,7 +150,7 @@ function formatSubscriptionDate(value: Date | string | null | undefined): string
   if (!value) return '—'
   const date = value instanceof Date ? value : new Date(value)
   if (!Number.isFinite(date.getTime())) return '—'
-  return date.toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' })
+  return date.toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' })
 }
 
 function escapeHtml(value: string): string {
@@ -163,14 +163,18 @@ function escapeHtml(value: string): string {
 }
 
 async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promise<void> {
-  const [active, subscription, checkout] = await Promise.all([
-    hasActiveFocusSubscription(userId),
+  const focusProductId = '68c3e55a-4b70-4680-a26c-15fdd607fd59'
+  const productName = 'ФОКУС'
+  const productCode = 'focus'
+  const currency = 'UAH'
+  const [active, subscription, checkout, user] = await Promise.all([
+    hasActiveFocusSubscription(userId).catch(() => false),
     prisma.productSubscription.findFirst({
       where: {
         userId,
-        product: { is: { code: { in: ['focus', 'FOCUS'] } } },
+        productId: focusProductId,
       },
-      orderBy: [{ updatedAt: 'desc' }],
+      orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
         status: true,
@@ -186,12 +190,11 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
         manualGrantNote: true,
         paymentIssueCount: true,
         lastPaymentIssueAt: true,
-        product: { select: { name: true, code: true, currency: true } },
       },
-    }),
+    }).catch(() => null),
     prisma.checkoutSession.findFirst({
-      where: { userId, productCode: { in: ['focus', 'FOCUS'] } },
-      orderBy: [{ createdAt: 'desc' }],
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
       select: {
         status: true,
         amount: true,
@@ -201,7 +204,11 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
         lastOpenedAt: true,
         paymentIssueReportedAt: true,
       },
-    }),
+    }).catch(() => null),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    }).catch(() => null),
   ])
 
   if (!subscription) {
@@ -228,13 +235,18 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
 
   const statusValue = String(subscription.status ?? '—')
   const activeLabel = active ? 'так' : 'ні'
-  const amountLabel = subscription.amount
-    ? `${subscription.amount} ${subscription.product.currency || 'UAH'}`
+  const amountLabel = subscription.amount !== null && subscription.amount !== undefined
+    ? `${subscription.amount} ${currency}`
     : '—'
   const inviteUrl = String(process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? '').trim()
   const manualGrantLabel = subscription.manuallyGrantedBy
     ? `🔧 ручна активація: <code>${escapeHtml(subscription.manuallyGrantedBy)}</code>`
     : 'Автоактивація'
+  const daysLeft = subscription.expiresAt
+    ? Math.max(0, Math.ceil(
+        (new Date(subscription.expiresAt).getTime() - Date.now()) / 86400000
+      ))
+    : null
   const manualGrantNoteLabel = subscription.manualGrantNote
     ? `Примітка: ${escapeHtml(subscription.manualGrantNote)}`
     : null
@@ -243,10 +255,12 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
     '',
     `Активний доступ: <b>${activeLabel}</b>`,
     `Статус: <code>${escapeHtml(statusValue)}</code>`,
-    `План: <code>${escapeHtml(subscription.product.name)}</code> (<code>${escapeHtml(subscription.product.code)}</code>)`,
+    `Продукт: <code>${escapeHtml(productName)}</code> (<code>${escapeHtml(productCode)}</code>)`,
     `Сума: <b>${escapeHtml(amountLabel)}</b>`,
     `Оплачено: ${escapeHtml(formatSubscriptionDate(subscription.paidAt))}`,
+    `Email: ${user?.email ? escapeHtml(user.email) : '—'}`,
     `Діє до: ${escapeHtml(formatSubscriptionDate(subscription.expiresAt))}`,
+    ...(daysLeft !== null ? [`Залишилось: <b>${daysLeft} днів</b>`] : []),
     `Trial до: ${escapeHtml(formatSubscriptionDate(subscription.trialEndsAt))}`,
     `Block 12 надіслано: ${subscription.focusWelcomedAt ? '✅ надіслано' : '❌ не надіслано'}`,
     `Вступ у канал: ${subscription.channelJoinedAt ? '✅ вступив' : '⏳ не вступив'}`,
@@ -629,21 +643,33 @@ export async function handleAbTestCallback(
     if (payingUserId) {
       const hasActive = await hasActiveFocusSubscription(payingUserId)
       if (hasActive) {
+        const inviteUrl = String(
+          process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? ''
+        ).trim()
+        const alreadyActiveText = [
+          '✅ <b>Підписка ФОКУС вже активна.</b>',
+          '',
+          'Оплата повторно не потрібна.',
+          ...(inviteUrl ? [
+            '',
+            'Твій закритий канал — перейди і закріпи, щоб не загубити:',
+            inviteUrl,
+          ] : []),
+        ].join('\n')
         await ctx.telegram.sendMessage(
           chatId,
-          [
-            '✅ <b>Підписка ФОКУС вже активна.</b>',
-            '',
-            'Оплата повторно не потрібна.',
-            'Натисни кнопку, щоб відновити доступ або переглянути деталі.',
-          ].join('\n'),
+          alreadyActiveText,
           {
             parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [
+                ...(inviteUrl ? [[{
+                  text: '🔗 Перейти в канал ФОКУС',
+                  url: inviteUrl,
+                }]] : []),
                 [
                   {
-                    text: '🔗 Відновити доступ до каналу',
+                    text: '🔄 Відновити доступ',
                     callback_data: 'resend_focus_block12',
                   },
                 ],
@@ -668,11 +694,13 @@ export async function handleAbTestCallback(
     }
 
     const url1m = firstNonEmptyUrl(
+      process.env.WAYFORPAY_FOCUS_BOT_1M_URL,
       process.env.WAYFORPAY_FOCUS_1M_URL,
       process.env.FOCUS_1M_URL,
       process.env.WAYFORPAY_FOCUS_LANDING_URL,
     )
     const url3m = firstNonEmptyUrl(
+      process.env.WAYFORPAY_FOCUS_BOT_3M_URL,
       process.env.WAYFORPAY_FOCUS_3M_URL,
       process.env.FOCUS_3M_URL,
       process.env.WAYFORPAY_FOCUS_LANDING_URL,
@@ -760,6 +788,13 @@ export async function handleAbTestCallback(
     }
     await markAbTestPaymentSuccess(targetUserId)
     await sendAbTestBlock12Welcome(targetUserId)
+    await prisma.productSubscription.updateMany({
+      where: {
+        userId: targetUserId,
+        productId: '68c3e55a-4b70-4680-a26c-15fdd607fd59',
+      },
+      data: { focusWelcomedAt: new Date() },
+    }).catch(() => undefined)
     await planMessage(ctx, 'ctx.reply', 'ab_test_resend_sent', 'Доступ повторно надіслано. Перевір повідомлення з інвайтом.')
     await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_sent_ack').catch(() => undefined)
     return true
