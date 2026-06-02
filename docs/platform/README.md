@@ -1,5 +1,7 @@
 # Platform Control Center
 
+> Redirect note: architecture governance is migrating to `docs/architecture/platform-control-center.md` and the new hub at `docs/architecture/README.md`.
+
 Single entry point for the ABSystem operational blueprint.
 
 This document replaces the separate platform docs and keeps the launch system in one place:
@@ -63,7 +65,7 @@ Primary source areas:
 | Task | Status | Priority | Owner | Risk | Dependencies | Affected modules/files | Explanation |
 |---|---|---:|---|---|---|---|---|
 | Canonical platform navigator with readiness gates | missing | critical | product + backend | high | user state, lifecycle, room state, AI tiers | `backend/src/core/orchestrator/*`, `backend/src/modules/ai-mentor/*` | The platform needs one authoritative AI Navigator that blocks next-tier selling until engagement readiness is proven. |
-| Operational Google Sheets control center | missing | high | ops + product | medium | roadmap, lifecycle, analytics, funnels | `docs/platform/*` | The system lacks a shared spreadsheet blueprint for non-developer operations and launch coordination. |
+| Operational Google Sheets control center | missing | high | ops + product | medium | roadmap, lifecycle, analytics, funnels | `docs/architecture/*` | The system lacks a shared spreadsheet blueprint for non-developer operations and launch coordination. |
 | Unified state-machine mapping to business states | missing | high | backend + product | high | lifecycle resolver, cross-channel state, mentor modes | `backend/src/core/state-machine/*`, `backend/src/modules/lifecycle/service.ts` | Code has low-level lifecycle states, but the business state model is not yet published as a canonical map. |
 | Anonymous feedback intelligence pipeline | missing | high | product + backend | medium | sentiment, lifecycle relation, analytics tagging | `backend/src/modules/analytics/*`, `backend/src/modules/user-state/*` | Feedback can be collected, but the privacy-safe sentiment/risk pipeline is not centralized. |
 | Distributed lock strategy for cron and callback overlap | missing | high | backend | high | scheduler, callback dedupe, reminder delivery | `backend/src/services/scheduler/index.ts`, `backend/src/modules/telegram-mentor/services/telegram-event-bus.service.ts` | Current in-memory locks are not enough for multi-instance safety. |
@@ -87,7 +89,7 @@ Primary source areas:
 
 | Task | Status | Priority | Owner | Risk | Dependencies | Affected modules/files | Explanation |
 |---|---|---:|---|---|---|---|---|
-| Publish the control-center docs set | pending | critical | product ops | medium | checklist, state machine, sheets, navigator | `docs/platform/*` | These documents must become the shared operating manual for launch. |
+| Publish the control-center docs set | pending | critical | product ops | medium | checklist, state machine, sheets, navigator | `docs/architecture/*` | These documents must become the shared operating manual for launch. |
 | Add distributed locks for cron and callback dedupe | pending | high | backend | high | infra, queue/storage choice | `backend/src/services/scheduler/index.ts`, `backend/src/modules/telegram-mentor/services/telegram-event-bus.service.ts` | Multi-instance launch needs a shared lock implementation. |
 | Verify billing callback end-to-end | pending | high | backend + finance | high | WayForPay, product mapping, Telegram success path | `backend/src/modules/subscriptions/payments/callback.ts` | Test the full approved-payment journey with live callbacks. |
 | Lock AI navigator gate rules | pending | critical | product + backend | high | readiness states, allowed CTAs | `backend/src/modules/ai-mentor/*`, `backend/src/content/telegram.product-context.ts` | The AI must not sell a next tier before readiness is true. |

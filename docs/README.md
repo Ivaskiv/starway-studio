@@ -2,9 +2,10 @@
 
 ## Source Of Truth Zones
 - `docs/client/` — business and client operations truth
-- `docs/instructions/` — skills and execution truth
-- `docs/platform/` — platform and runtime governance truth
-- `docs/automation/` — lifecycle/callback/telegram flow maps
+- `docs/dev-skills/` — skills and execution truth
+- `docs/architecture/` — platform, lifecycle, callback, Telegram, and orchestration architecture truth
+- `docs/platform/` — transitional redirect layer for platform governance
+- `docs/automation/` — transitional redirect layer for lifecycle/callback/telegram maps
 
 ## Registry And Temporary Zones
 - `docs/agents/` — lightweight agent registry (references only)

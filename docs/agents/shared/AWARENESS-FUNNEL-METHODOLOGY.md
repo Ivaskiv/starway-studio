@@ -659,7 +659,7 @@ ABSystem AI — наступний рівень: щоденна підтримк
 
 ## ЩОДЕННИЙ ЦИКЛ
 
-// TODO: текст з ТЗ — docs/platform/telegram-architecture.md (daily cycle prompts)
+// TODO: текст з ТЗ — docs/architecture/telegram-architecture.md (daily cycle prompts)
 - `TODO: morning_q1`
 - `TODO: morning_q2`
 - `TODO: morning_q3`

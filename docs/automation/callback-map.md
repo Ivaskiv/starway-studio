@@ -1,3 +1,4 @@
+
 # Callback Map
 
 This document describes how Telegram callbacks are categorized, dispatched, and translated into room / onboarding / reminder / mentor / payment transitions.
@@ -79,3 +80,4 @@ They should dispatch an orchestration event and let the room/lifecycle resolver 
 
 Duplicate callback bursts should be deduplicated by the event bus before transitions run.
 That prevents room and reminder state from being applied twice.
+# Redirect note: callback architecture is migrating to `docs/architecture/callback-map.md`.

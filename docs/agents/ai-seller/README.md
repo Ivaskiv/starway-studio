@@ -98,7 +98,7 @@ AI Seller допомагає людині:
 ### Product Knowledge
 
 * docs/agents/ai-mentor/focus-course-materials.md
-* docs/agents/shared/SKILL-ab-test.md
+* docs/dev-skills/testing/SKILL-ab-test.md
 
 ---
 
@@ -111,8 +111,7 @@ AI Seller допомагає людині:
 
 ### Platform Knowledge
 
-* docs/platform/*
-* docs/automation/*
+* docs/architecture/*
 
 ---
 
@@ -153,7 +152,7 @@ Hot
 * docs/agents/shared/STARWAY-DNA-LEXICON.md
 * docs/agents/shared/CLIENT-DNA-METHODOLOGY.md
 * docs/agents/shared/AWARENESS-FUNNEL-METHODOLOGY.md
-* docs/agents/shared/SKILL-ab-test.md
+* docs/dev-skills/testing/SKILL-ab-test.md
 * docs/agents/ai-mentor/comeback-flows.md
 * docs/agents/ai-mentor/focus-course-materials.md
 ## Global Dependencies

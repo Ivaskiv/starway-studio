@@ -12,26 +12,22 @@ Claude автоматично підтягує контекст при кожн�
 | Файл | Призначення |
 |---|---|
 | MASTER-SKILLS.md | Індекс всіх скілів — читати першим |
-| SKILL-developer.md | Головний dev скіл: стек, архітектура, угоди |
-| SKILL-ab-test.md | Вхідний тест, result types, chain priority |
-| SKILL-funnel.md | Воронка: lead → paid, dojim, lifecycle |
-| SKILL-focus-funnel-fix.md | ФОКУС: open_focus_payment → Dojim → WayForPay |
-| SKILL-wayforpay.md | WayForPay: webhook, checkout session, idempotency |
-| SKILL-telegram.md | Telegram бот патерни, handlers, guards |
-| SKILL-bot-channel-setup.md | Новий бот: scaffold, .env, реєстрація |
-| SKILL-auth-webapp.md | Auth: JWT, Telegram initData, deeplink tokens |
-| SKILL-orchestrator.md | Scheduler, NotificationJob, cron патерни |
-| SKILL-event-orchestration.md | Events, analytics, trackEvent патерни |
-| SKILL-business-automation.md | Клієнтські проекти: шаблон, retainer, upsell |
-| SKILL-instagram-ai-content-automation.md | AI контент-план для Instagram коучів |
-| SKILL-pdf-reports.md | PDF генерація, weasyprint, звіти |
-| SKILL-ai-tools-stack.md | AI стек: OpenAI, Claude API, Whisper |
-| env-architecture.md | .env змінні: структура, Render, Vercel |
+| developers/ | Стек, архітектура, auth, env |
+| developers/SKILL-ai-tools-stack.md | AI стек: OpenAI, Claude API, Whisper |
+| orchestration/ | Lifecycle, scheduler, funnels |
+| payments/ | WayForPay, checkout, focus payment flow |
+| reliability/ | Webhooks, dedupe, retries, notification safety |
+| architecture/ | AI agent governance |
+| telegram/ | Telegram bot patterns and setup |
+| testing/ | AB test, spec and flow auditors |
+| business/ | Client business automation |
+| content/ | AI content automation |
+| reports/ | PDF reporting |
 | archive/ | Застарілі скіли (reference only) |
 
 ## Правило оновлення
 
 Після кожного нового архітектурного рішення або нового скілу:
-1. Додати файл SKILL-*.md в цю папку
+1. Додати файл SKILL-*.md у відповідну підпапку
 2. Оновити MASTER-SKILLS.md (таблиця)
 3. git commit -m "docs: add/update skill — [назва]"

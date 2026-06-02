@@ -1,3 +1,4 @@
+
 # Lifecycle Map
 
 This document explains how lifecycle state moves across Telegram, SaaS, dashboard, reminders, and AI mentor flows.
@@ -104,3 +105,4 @@ The lifecycle resolver emits one snapshot that contains:
 
 Telegram room state, dashboard state, reminders, and mentor behavior should all read from the same lifecycle snapshot.
 If a mismatch appears, log it and recover from the central resolver.
+# Redirect note: lifecycle architecture is migrating to `docs/architecture/lifecycle-map.md`.

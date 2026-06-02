@@ -97,7 +97,7 @@
 - Питання в чат
 
 Що робить:
-- `TODO: daily cycle question set (див. docs/platform/telegram-architecture.md)`
+- `TODO: daily cycle question set (див. docs/architecture/telegram-architecture.md)`
 - Аналізує відповіді через Claude API
 - Зберігає поведінковий контекст
 - Генерує тижневий AI-звіт

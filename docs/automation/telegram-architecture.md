@@ -1,3 +1,4 @@
+
 # Telegram Platform Architecture
 
 This document is the operational map for the Telegram platform.
@@ -122,3 +123,4 @@ To add a future product:
 6. Add AI task config if needed.
 
 That keeps scaling config-driven instead of architecture-driven.
+# Redirect note: Telegram architecture is migrating to `docs/architecture/telegram-architecture.md`.

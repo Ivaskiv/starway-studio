@@ -1173,6 +1173,8 @@ export async function handleAbTestCallback(
   }
 
   if (parsed.kind === 'menu') {
+    // ACK first so Telegram does not time out while we render the menu payload.
+    await ctx.answerCbQuery().catch(() => null)
     await deliverTelegramFlow(
       ctx,
       {
@@ -1234,6 +1236,8 @@ export async function handleAbTestCallback(
   }
 
   if (parsed.kind === 'subscription') {
+    // ACK first so the subscription card can load without callback timeout risk.
+    await ctx.answerCbQuery().catch(() => null)
     await renderFocusSubscriptionCard(ctx, userId)
     await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_subscription_ack').catch(() => undefined)
     return true

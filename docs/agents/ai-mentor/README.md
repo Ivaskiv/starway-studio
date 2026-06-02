@@ -5,13 +5,12 @@ User support, behavior-change guidance, accountability messaging, and Psychology
 
 ## Knowledge Sources
 - Business truth: `docs/client/*`
-- Skills truth: `docs/instructions/*`
-- Platform truth: `docs/platform/*`
+- Skills truth: `docs/dev-skills/*`
+- Architecture truth: `docs/architecture/*`
 
 ## Referenced Source-Of-Truth Files
 - `docs/agents/ai-strategist/customer-avatar-deep.md`
 - `docs/agents/ai-strategist/offer-methodology.md`
-- `docs/agents/ai-mentor/tov-mentor-examples.md`
 - `docs/agents/ai-mentor/methodology-absystem.md`
 - `docs/agents/shared/STARWAY-DNA-LEXICON.md`
 ## Global Dependencies

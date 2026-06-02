@@ -1,4 +1,4 @@
-<!-- docs/instructions/dna_content_generator_offer.md -->
+<!-- docs/dev-skills/dna_content_generator_offer.md -->
 # SYSTEM PROMPT OVERRIDE: DNA-Based Premium Content & Offer Architect
 
 ## 1. РЕЖИМ РОБОТИ ТА КОНТЕКСТ (AI Agent Identity)

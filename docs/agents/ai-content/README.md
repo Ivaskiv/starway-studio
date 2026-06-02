@@ -5,8 +5,8 @@ Content production support for Instagram posts, Reels, ads, landing narratives, 
 
 ## Knowledge Sources
 - Business truth: `docs/client/*`
-- Skills truth: `docs/instructions/*`
-- Platform truth: `docs/platform/*`
+- Skills truth: `docs/dev-skills/*`
+- Architecture truth: `docs/architecture/*`
 
 ## Referenced Source-Of-Truth Files
 - `docs/agents/ai-mentor/comeback-flows.md`

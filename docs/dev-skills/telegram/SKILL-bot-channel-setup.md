@@ -95,6 +95,6 @@ COACH_CHANNEL_ID=         # приватний канал коуча
 
 ## Форма замовника
 
-Файл: `docs/templates/bot-setup-form.html`
+Файл: `docs/client/onboarding/bot-setup-form.html`
 Замовник заповнює → розробник отримує всі дані для BotFather + розробки.
 Поля: назва, username, тип, мова, роль, команди, опис, welcome-текст, логотип.

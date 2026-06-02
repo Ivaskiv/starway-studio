@@ -80,7 +80,7 @@ WAYFORPAY_DOMAIN=              # merchantDomainName
 | Невірний підпис | Порядок полів або зайві пробіли | Перевірити порядок в buildSignature() |
 STEP 07c — docs: update SKILL-wayforpay.md
 
-Додати в docs/dev-skills/SKILL-wayforpay.md новий розділ:
+Додати в docs/dev-skills/payments/SKILL-wayforpay.md новий розділ:
 
 ## РУЧНЕ ПІДТВЕРДЖЕННЯ ОПЛАТИ
 
@@ -108,5 +108,5 @@ Coach bot action:
   ORDER_REF="..." tsx scripts/generate-test-webhook.ts
   → копіюєш JSON → Postman POST → serviceUrl endpoint
 
-git add docs/dev-skills/SKILL-wayforpay.md
+git add docs/dev-skills/payments/SKILL-wayforpay.md
 git commit -m "docs: add manual payment approval pattern to wayforpay skill"
