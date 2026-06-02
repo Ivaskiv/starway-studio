@@ -6,6 +6,7 @@ import { Telegraf } from 'telegraf'
 import { readCoachBotToken, requireTelegramBotConfig } from '../modules/telegram-mentor/runtime/botConfig.js'
 
 let telegramBotInstance: Telegraf | null = null
+let contentBotInstance: Telegraf | null = null
 let coachBotInstance: Telegraf | null = null
 let testBotInstance: Telegraf | null = null
 
@@ -17,6 +18,29 @@ function getTelegramBotInstance(): Telegraf {
   const { token } = requireTelegramBotConfig('telegram bot bootstrap')
   telegramBotInstance = new Telegraf(token)
   return telegramBotInstance
+}
+
+function getContentBotInstance(): Telegraf {
+  if (contentBotInstance) {
+    return contentBotInstance
+  }
+
+  const mainToken = String(process.env.TELEGRAM_BOT_TOKEN ?? '').trim()
+  const contentToken = String(process.env.CONTENT_BOT_TOKEN ?? '').trim()
+  const token = contentToken || mainToken
+
+  if (!token) {
+    throw new Error('[Telegram] Missing required env var during content bot bootstrap: CONTENT_BOT_TOKEN or TELEGRAM_BOT_TOKEN')
+  }
+
+  if (contentToken && contentToken !== mainToken) {
+    console.log('[contentBot] separate bot instance')
+  } else {
+    console.log('[contentBot] using shared token, send-only mode')
+  }
+
+  contentBotInstance = new Telegraf(token)
+  return contentBotInstance
 }
 
 function getCoachBotInstance(): Telegraf {
@@ -65,6 +89,7 @@ function createBotProxy(resolver: () => Telegraf): Telegraf {
 }
 
 export const bot = createBotProxy(getTelegramBotInstance)
+export const contentBot = createBotProxy(getContentBotInstance)
 export const coachBot = createBotProxy(getCoachBotInstance)
 export const testBot = createBotProxy(getTestBotInstance)
 const LAST_MESSAGE_TTL_MS = 6 * 60 * 60 * 1000
