@@ -1,4 +1,4 @@
-import type { Prisma } from '@starway/db/prisma-client'
+import { ZoomStatus, type Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
 import { transcribeTelegramAudio } from '../../modules/voice/voice.service.js'
@@ -47,6 +47,21 @@ function buildOutboxDedupeKey(input: RuntimeOutboxItem) {
   })
 
   return runtime.idempotency_key
+}
+
+function isJsonObject(value: unknown): value is Prisma.JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeZoomPostSessionReport(existing: unknown, next: Prisma.JsonObject): Prisma.JsonObject {
+  if (!isJsonObject(existing)) {
+    return next
+  }
+
+  return {
+    ...existing,
+    ...next,
+  }
 }
 
 export async function enqueueRuntimeOutboxItem(input: RuntimeOutboxItem): Promise<{ duplicate: boolean; dedupeKey: string }> {
@@ -204,6 +219,62 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             throw new Error('zoom_audio_transcription_empty')
           }
 
+          const observedAt = typeof zoomAudioPayload?.observedAt === 'string'
+            ? new Date(zoomAudioPayload.observedAt)
+            : item.createdAt
+          const session = await prisma.zoomSession.findFirst({
+            where: {
+              scheduledAt: { lte: observedAt },
+              status: { not: ZoomStatus.CANCELLED },
+            },
+            orderBy: [{ scheduledAt: 'desc' }, { updatedAt: 'desc' }],
+            select: {
+              id: true,
+              postSessionReport: true,
+            },
+          }).catch(() => null)
+
+          const fallbackSession = session ?? await prisma.zoomSession.findFirst({
+            where: {
+              status: { not: ZoomStatus.CANCELLED },
+            },
+            orderBy: [{ scheduledAt: 'desc' }, { updatedAt: 'desc' }],
+            select: {
+              id: true,
+              postSessionReport: true,
+            },
+          }).catch(() => null)
+
+          if (fallbackSession) {
+            const canonicalReport = mergeZoomPostSessionReport(fallbackSession.postSessionReport, {
+              transcript,
+              transcriptLength: transcript.length,
+              transcriptSource: 'telegram',
+              transcriptStoredAt: new Date().toISOString(),
+              transcriptMeta: {
+                fileId,
+                fileUniqueId: typeof zoomAudioPayload?.fileUniqueId === 'string' ? zoomAudioPayload.fileUniqueId : null,
+                chatId: typeof zoomAudioPayload?.chatId === 'string' ? zoomAudioPayload.chatId : item.tenantId ?? null,
+                messageId: typeof zoomAudioPayload?.messageId === 'number' ? zoomAudioPayload.messageId : null,
+                mediaType: zoomAudioPayload?.mediaType ?? null,
+                fileName: typeof zoomAudioPayload?.fileName === 'string' ? zoomAudioPayload.fileName : null,
+                mimeType: typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null,
+                caption: typeof zoomAudioPayload?.caption === 'string' ? zoomAudioPayload.caption : null,
+                observedAt: typeof zoomAudioPayload?.observedAt === 'string' ? zoomAudioPayload.observedAt : null,
+                outboxId: item.id,
+                outboxDedupeKey: item.dedupeKey,
+              },
+            })
+
+            await prisma.zoomSession.update({
+              where: { id: fallbackSession.id },
+              data: {
+                postSessionReport: canonicalReport as Prisma.InputJsonValue,
+                status: ZoomStatus.COMPLETED,
+              },
+            })
+          }
+
           const { trackEvent } = await import('../../modules/events/service.js')
           await trackEvent({
             userId: item.userId ?? null,
@@ -211,6 +282,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             source: 'telegram',
             payload: {
               source: 'telegram',
+              sessionId: fallbackSession?.id ?? null,
               sourceEvent: {
                 type: item.type,
                 scope: item.scope,
