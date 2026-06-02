@@ -12,7 +12,7 @@ import { invalidateWeeklyReportCache } from '../../../lib/db/weeklyReportCache.j
 import { MODEL_FOR_TASK } from '../../../lib/openaiModels.js'
 import { suggestNextProduct } from '../../assistant/service.js'
 import { logger } from '../../../utils/logger.js'
-import { SubscriptionStatus } from '@starway/db/prisma-client'
+import { Prisma, SubscriptionStatus } from '@starway/db/prisma-client'
 import { extractProgressPercent } from '../../microTask/service.js'
 import { runGuardedAiTask, stableHash } from '../../../services/aiGuard.service.js'
 
@@ -43,6 +43,36 @@ function getMicroTaskProgressStats(tasks: WeeklyRawData['microTasks']) {
   }
 }
 
+function normalizeZoomTranscript(value: unknown): WeeklyRawData['zoomTranscripts'][number] | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const transcript = String(record.transcript ?? '').trim()
+  if (!transcript) return null
+
+  const scheduledAtValue = record.scheduledAt
+  const scheduledAt = scheduledAtValue instanceof Date
+    ? scheduledAtValue
+    : typeof scheduledAtValue === 'string' && scheduledAtValue.trim()
+      ? new Date(scheduledAtValue)
+      : null
+
+  return {
+    sessionId: typeof record.sessionId === 'string' ? record.sessionId : null,
+    scheduledAt: scheduledAt && !Number.isNaN(scheduledAt.getTime()) ? scheduledAt : null,
+    transcript,
+    transcriptLength: typeof record.transcriptLength === 'number' ? record.transcriptLength : transcript.length,
+    fileId: typeof record.fileId === 'string' ? record.fileId : null,
+    fileUniqueId: typeof record.fileUniqueId === 'string' ? record.fileUniqueId : null,
+    chatId: typeof record.chatId === 'string' ? record.chatId : null,
+    messageId: typeof record.messageId === 'number' ? record.messageId : null,
+    mediaType: typeof record.mediaType === 'string' ? record.mediaType : null,
+    fileName: typeof record.fileName === 'string' ? record.fileName : null,
+    mimeType: typeof record.mimeType === 'string' ? record.mimeType : null,
+    caption: typeof record.caption === 'string' ? record.caption : null,
+    observedAt: typeof record.observedAt === 'string' ? record.observedAt : null,
+  }
+}
+
 // ── 1. Збір даних з БД ────────────────────────────────────────
 export async function collectWeeklyData(
   userId: string,
@@ -62,6 +92,7 @@ export async function collectWeeklyData(
     sessionCount,
     streak,
     subscription,
+    zoomTranscripts,
   ] = await Promise.all([
 
     prisma.user.findUnique({
@@ -124,6 +155,21 @@ export async function collectWeeklyData(
       where: { userId, status: SubscriptionStatus.ACTIVE },
       orderBy: { createdAt: 'desc' },
     }),
+
+    prisma.zoomSession.findMany({
+      where: {
+        scheduledAt: { gte: weekStart, lte: weekEnd },
+        postSessionReport: {
+          not: Prisma.JsonNull,
+        },
+      },
+      orderBy: { scheduledAt: 'desc' },
+      select: {
+        id: true,
+        scheduledAt: true,
+        postSessionReport: true,
+      },
+    }),
   ])
 
   // Формуємо wheelScores з delta
@@ -154,6 +200,54 @@ export async function collectWeeklyData(
       entry.drain ? `Що заважало: ${entry.drain}` : '',
     ].filter(Boolean).join(' · '))
     .filter(Boolean)
+
+  const transcriptItems = zoomTranscripts
+    .map((session) => {
+      const report = session.postSessionReport as Record<string, unknown> | null
+      const transcript = typeof report?.transcript === 'string'
+        ? report.transcript
+        : typeof report?.text === 'string'
+          ? report.text
+          : ''
+      if (!transcript.trim()) return null
+
+      const transcriptRecord = normalizeZoomTranscript({
+        sessionId: session.id,
+        scheduledAt: session.scheduledAt,
+        transcript,
+        transcriptLength: transcript.length,
+        fileId: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).fileId === 'string'
+          ? (report.transcriptMeta as Record<string, unknown>).fileId
+          : null,
+        fileUniqueId: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).fileUniqueId === 'string'
+          ? (report.transcriptMeta as Record<string, unknown>).fileUniqueId
+          : null,
+        chatId: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).chatId === 'string'
+          ? (report.transcriptMeta as Record<string, unknown>).chatId
+          : null,
+        messageId: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).messageId === 'number'
+          ? (report.transcriptMeta as Record<string, unknown>).messageId
+          : null,
+        mediaType: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).mediaType === 'string'
+          ? (report.transcriptMeta as Record<string, unknown>).mediaType
+          : null,
+        fileName: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).fileName === 'string'
+          ? (report.transcriptMeta as Record<string, unknown>).fileName
+          : null,
+        mimeType: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).mimeType === 'string'
+          ? (report.transcriptMeta as Record<string, unknown>).mimeType
+          : null,
+        caption: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).caption === 'string'
+          ? (report.transcriptMeta as Record<string, unknown>).caption
+          : null,
+        observedAt: typeof report?.transcriptMeta === 'object' && report?.transcriptMeta && typeof (report.transcriptMeta as Record<string, unknown>).observedAt === 'string'
+          ? (report.transcriptMeta as Record<string, unknown>).observedAt
+          : null,
+      })
+
+      return transcriptRecord
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
 
   return {
     userId,
@@ -199,6 +293,7 @@ export async function collectWeeklyData(
       content: m.content,
       date:    m.createdAt,
     })),
+    zoomTranscripts: transcriptItems,
 
     streakDays:       streak?.current ?? 0,
     subscriptionPlan: subscription?.planCode ?? 'trial',
@@ -429,6 +524,7 @@ async function generateUserReport(
   const userGoal = data.userGoal?.trim() || 'не задано'
   const morningReflections = data.morningReflections.slice(-5)
   const eveningReflections = data.eveningReflections.slice(-5)
+  const transcriptHighlights = data.zoomTranscripts.slice(0, 5).map(item => item.transcript.slice(0, 220))
   const weakestWheel = data.wheelScores
     .slice()
     .sort((left, right) => left.score - right.score)[0]
@@ -469,6 +565,7 @@ Input data provided:
 - score: ${Math.max(1, Math.min(10, Math.round((completionRate / 20) + Math.min(data.streakDays, 10) * 0.25 + Math.min(data.sessionCount, 7) * 0.3)))}
 - morning_reflections: ${JSON.stringify(morningReflections)}
 - evening_reflections: ${JSON.stringify(eveningReflections)}
+- zoom_transcripts: ${JSON.stringify(transcriptHighlights)}
 - user_goal: ${JSON.stringify(userGoal)}
 - wheel_weak_area: ${JSON.stringify(weakestWheel?.sphere ?? '')}
 - wheel_strong_area: ${JSON.stringify(strongestWheel?.sphere ?? '')}
@@ -587,6 +684,11 @@ async function generateMentorProfile(
 Патерни активності:
 ${data.dailyCycles.map(d =>
   `${new Date(d.date).toLocaleDateString('uk', { weekday: 'short' })}: стан="${d.state}", дренажі=[${d.drains.join(',')}]`
+).join('\n')}
+
+Zoom transcript highlights:
+${data.zoomTranscripts.slice(0, 5).map((item, index) =>
+  `${index + 1}. ${item.transcript.slice(0, 220)}`
 ).join('\n')}
 
 Найбільші проблемні зони (з колеса): ${userReport.struggleAreas.join(', ')}

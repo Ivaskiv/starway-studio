@@ -37,6 +37,21 @@ export interface WeeklyRawData {
     content: string
     date:    Date
   }[]
+  zoomTranscripts: {
+    sessionId: string | null
+    scheduledAt: Date | null
+    transcript: string
+    transcriptLength: number
+    fileId: string | null
+    fileUniqueId: string | null
+    chatId: string | null
+    messageId: number | null
+    mediaType: string | null
+    fileName: string | null
+    mimeType: string | null
+    caption: string | null
+    observedAt: string | null
+  }[]
   streakDays:      number
   subscriptionPlan: string
 }
