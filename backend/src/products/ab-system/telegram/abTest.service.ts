@@ -803,24 +803,29 @@ export async function handleAbTestCallback(
   if (action === 'focus:payment_issue') {
     await ctx.answerCbQuery().catch(() => null)
     const issueUserId = (ctx.state as { userId?: string | null }).userId ?? null
+    const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!issueUserId) {
-      await planMessage(ctx, 'ctx.reply', 'ab_test_payment_issue_no_user', 'Не вдалося ідентифікувати профіль. Спробуйте ще раз або зверніться до підтримки.')
+      if (chatId) {
+        await ctx.telegram.sendMessage(
+          String(chatId),
+          'Не вдалося ідентифікувати профіль. Спробуйте ще раз або зверніться до підтримки.',
+        )
+      }
       return true
     }
 
-    await planMessage(
-      ctx,
-      'ctx.reply',
-      'ab_test_payment_issue_ack',
-      [
-        '⚠️ <b>Прийнято, передали коучу.</b>',
-        '',
-        'Якщо оплата вже пройшла, ми перевіримо і відкриємо доступ.',
-        'Зазвичай це займає до 10 хвилин у робочий час.',
-      ].join('\n'),
-      undefined,
-      'HTML',
-    )
+    if (chatId) {
+      await ctx.telegram.sendMessage(
+        String(chatId),
+        [
+          '⚠️ <b>Прийнято, передали коучу.</b>',
+          '',
+          'Якщо оплата вже пройшла, ми перевіримо і відкриємо доступ.',
+          'Зазвичай це займає до 10 хвилин у робочий час.',
+        ].join('\n'),
+        { parse_mode: 'HTML' },
+      )
+    }
 
     const lastCheckout = await prisma.checkoutSession.findFirst({
       where: { userId: issueUserId },
