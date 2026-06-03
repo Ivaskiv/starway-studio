@@ -14,6 +14,7 @@ import {
   transcribeTelegramAudio,
   type ZoomAudioProcessingStrategy,
 } from '../../modules/voice/voice.service.js'
+import type { EventSource } from '../../modules/events/service.js'
 import { buildRuntimeTelemetry, claimRuntimeEventReplay, withRuntimeAdvisoryLock, type RuntimeIdempotencyInput } from './runtimeIdempotency.js'
 
 export type RuntimeOutboxItem = {
@@ -206,6 +207,13 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             sizeBytes?: number | null
             sizeMB?: number | null
             processingStrategy?: ZoomAudioProcessingStrategy | null
+            downloadUrl?: string | null
+            cloudinaryUrl?: string | null
+            cloudinaryPublicId?: string | null
+            cloudinaryAssetId?: string | null
+            cloudinaryFolder?: string | null
+            cloudinaryFormat?: string | null
+            cloudinaryResourceType?: string | null
           }
         : null
 
@@ -282,7 +290,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           }
 
           const uploadedAt = typeof audioPayload.uploadedAt === 'string' ? new Date(audioPayload.uploadedAt) : null
-          if (uploadedAt && !Number.isNaN(uploadedAt.getTime())) {
+          if (uploadedAt && !Number.isNaN(uploadedAt.getTime()) && audioPayload?.source !== 'cloudinary') {
             console.error('[ZOOM_DEBUG] NOTE: Telegram fileId expires after ~1 hour', {
               fileId,
               uploadedAt: audioPayload.uploadedAt ?? null,
@@ -361,23 +369,38 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             '⬇️ Завантаження...',
           ])
 
+          const directDownloadUrl = typeof audioPayload.downloadUrl === 'string' && audioPayload.downloadUrl.trim()
+            ? audioPayload.downloadUrl.trim()
+            : typeof audioPayload.cloudinaryUrl === 'string' && audioPayload.cloudinaryUrl.trim()
+              ? audioPayload.cloudinaryUrl.trim()
+              : null
+
           let downloadUrl: string
-          try {
-            const fileLink = await contentBot.telegram.getFileLink(fileId)
-            downloadUrl = fileLink.href ?? String(fileLink)
-            console.log('[ZOOM_DEBUG] step 2 — getFileLink ok', {
+          if (directDownloadUrl) {
+            downloadUrl = directDownloadUrl
+            console.log('[ZOOM_DEBUG] step 2 — direct download url ok', {
               downloadUrl: `${downloadUrl.substring(0, 60)}...`,
+              source: audioPayload.source ?? null,
               fileId,
             })
-          } catch (err) {
-            console.error('[ZOOM_DEBUG] step 2 FAILED — getFileLink error', {
-              fileId,
-              error: err instanceof Error ? err.message : String(err),
-              botToken: process.env.CONTENT_BOT_TOKEN
-                ? 'CONTENT_BOT_TOKEN set'
-                : 'CONTENT_BOT_TOKEN missing — falling back to TELEGRAM_BOT_TOKEN',
-            })
-            throw err
+          } else {
+            try {
+              const fileLink = await contentBot.telegram.getFileLink(fileId)
+              downloadUrl = fileLink.href ?? String(fileLink)
+              console.log('[ZOOM_DEBUG] step 2 — getFileLink ok', {
+                downloadUrl: `${downloadUrl.substring(0, 60)}...`,
+                fileId,
+              })
+            } catch (err) {
+              console.error('[ZOOM_DEBUG] step 2 FAILED — getFileLink error', {
+                fileId,
+                error: err instanceof Error ? err.message : String(err),
+                botToken: process.env.CONTENT_BOT_TOKEN
+                  ? 'CONTENT_BOT_TOKEN set'
+                  : 'CONTENT_BOT_TOKEN missing — falling back to TELEGRAM_BOT_TOKEN',
+              })
+              throw err
+            }
           }
 
           let chunkPaths: string[] = []
@@ -581,7 +604,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             const canonicalReport = mergeZoomPostSessionReport(fallbackSession.postSessionReport, {
               transcript,
               transcriptLength: transcript.length,
-              transcriptSource: 'telegram',
+              transcriptSource: typeof zoomAudioPayload?.source === 'string' ? zoomAudioPayload.source : 'telegram',
               transcriptStoredAt: new Date().toISOString(),
               transcriptMeta: {
                 fileId,
@@ -598,6 +621,13 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 sizeBytes: typeof zoomAudioPayload?.sizeBytes === 'number' ? zoomAudioPayload.sizeBytes : null,
                 sizeMB: typeof zoomAudioPayload?.sizeMB === 'number' ? zoomAudioPayload.sizeMB : null,
                 processingStrategy: zoomAudioPayload?.processingStrategy ?? null,
+                downloadUrl: typeof zoomAudioPayload?.downloadUrl === 'string' ? zoomAudioPayload.downloadUrl : null,
+                cloudinaryUrl: typeof zoomAudioPayload?.cloudinaryUrl === 'string' ? zoomAudioPayload.cloudinaryUrl : null,
+                cloudinaryPublicId: typeof zoomAudioPayload?.cloudinaryPublicId === 'string' ? zoomAudioPayload.cloudinaryPublicId : null,
+                cloudinaryAssetId: typeof zoomAudioPayload?.cloudinaryAssetId === 'string' ? zoomAudioPayload.cloudinaryAssetId : null,
+                cloudinaryFolder: typeof zoomAudioPayload?.cloudinaryFolder === 'string' ? zoomAudioPayload.cloudinaryFolder : null,
+                cloudinaryFormat: typeof zoomAudioPayload?.cloudinaryFormat === 'string' ? zoomAudioPayload.cloudinaryFormat : null,
+                cloudinaryResourceType: typeof zoomAudioPayload?.cloudinaryResourceType === 'string' ? zoomAudioPayload.cloudinaryResourceType : null,
                 outboxId: item.id,
                 outboxDedupeKey: item.dedupeKey,
               },
@@ -641,12 +671,15 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           }
 
           const { trackEvent } = await import('../../modules/events/service.js')
+          const transcriptEventSource = (
+            typeof zoomAudioPayload?.source === 'string' ? zoomAudioPayload.source : 'telegram'
+          ) as EventSource
           await trackEvent({
             userId: item.userId ?? null,
             type: 'ZOOM_TRANSCRIPT_READY',
-            source: 'telegram',
+            source: transcriptEventSource,
             payload: {
-              source: 'telegram',
+              source: transcriptEventSource,
               sessionId: fallbackSession?.id ?? null,
               sourceEvent: {
                 type: item.type,
@@ -672,9 +705,16 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               sizeBytes: typeof zoomAudioPayload?.sizeBytes === 'number' ? zoomAudioPayload.sizeBytes : null,
               sizeMB: typeof zoomAudioPayload?.sizeMB === 'number' ? zoomAudioPayload.sizeMB : null,
               processingStrategy: zoomAudioPayload?.processingStrategy ?? null,
-              runtime: {
-                outboxId: item.id,
-                outboxDedupeKey: item.dedupeKey,
+              downloadUrl: typeof zoomAudioPayload?.downloadUrl === 'string' ? zoomAudioPayload.downloadUrl : null,
+              cloudinaryUrl: typeof zoomAudioPayload?.cloudinaryUrl === 'string' ? zoomAudioPayload.cloudinaryUrl : null,
+                cloudinaryPublicId: typeof zoomAudioPayload?.cloudinaryPublicId === 'string' ? zoomAudioPayload.cloudinaryPublicId : null,
+                cloudinaryAssetId: typeof zoomAudioPayload?.cloudinaryAssetId === 'string' ? zoomAudioPayload.cloudinaryAssetId : null,
+                cloudinaryFolder: typeof zoomAudioPayload?.cloudinaryFolder === 'string' ? zoomAudioPayload.cloudinaryFolder : null,
+                cloudinaryFormat: typeof zoomAudioPayload?.cloudinaryFormat === 'string' ? zoomAudioPayload.cloudinaryFormat : null,
+                cloudinaryResourceType: typeof zoomAudioPayload?.cloudinaryResourceType === 'string' ? zoomAudioPayload.cloudinaryResourceType : null,
+                runtime: {
+                  outboxId: item.id,
+                  outboxDedupeKey: item.dedupeKey,
                 originalEventId: item.id,
               },
             } as Prisma.InputJsonValue,

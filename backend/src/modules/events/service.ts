@@ -14,7 +14,7 @@ import { buildRuntimeResilienceSnapshot } from '../../core/runtime/runtimeResili
 import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../user/userCreation.service.js'
 
-export type EventSource = 'telegram' | 'web' | 'miniapp'
+export type EventSource = 'telegram' | 'web' | 'miniapp' | 'cloudinary'
 
 export interface TrackEventInput {
   userId?: string | null

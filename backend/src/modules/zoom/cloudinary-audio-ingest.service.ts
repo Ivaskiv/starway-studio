@@ -1,0 +1,214 @@
+import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
+import { formatZoomAudioSizeMB } from '../voice/voice.service.js'
+
+type CloudinaryResource = {
+  asset_id?: string
+  public_id?: string
+  folder?: string | null
+  resource_type?: string | null
+  format?: string | null
+  bytes?: number | null
+  duration?: number | null
+  secure_url?: string | null
+  created_at?: string | null
+  original_filename?: string | null
+}
+
+type CloudinaryResourcesResponse = {
+  resources?: CloudinaryResource[]
+  next_cursor?: string | null
+}
+
+const CLOUDINARY_AUDIO_FOLDERS = ['zoom/group', 'zoom/individual'] as const
+const CLOUDINARY_PAGE_SIZE = 500
+
+function getCloudinaryConfig() {
+  const cloudName = String(process.env.CLOUDINARY_CLOUD_NAME ?? '').trim()
+  const apiKey = String(process.env.CLOUDINARY_API_KEY ?? '').trim()
+  const apiSecret = String(process.env.CLOUDINARY_API_SECRET ?? '').trim()
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    return null
+  }
+
+  return { cloudName, apiKey, apiSecret }
+}
+
+function toBasicAuth(apiKey: string, apiSecret: string) {
+  return Buffer.from(`${apiKey}:${apiSecret}`).toString('base64')
+}
+
+function normalizeFolderPrefix(folder: string) {
+  const trimmed = folder.trim().replace(/^\/+|\/+$/g, '')
+  return `${trimmed}/`
+}
+
+function resolveZoomTypeFromFolder(folder: string): 'GROUP' | 'INDIVIDUAL' {
+  const normalized = folder.toLowerCase()
+  return normalized.includes('individual') ? 'INDIVIDUAL' : 'GROUP'
+}
+
+function resolveMimeTypeFromFormat(format?: string | null): string {
+  const normalized = String(format ?? '').toLowerCase()
+  switch (normalized) {
+    case 'mp3':
+      return 'audio/mpeg'
+    case 'm4a':
+    case 'mp4':
+      return 'audio/mp4'
+    case 'ogg':
+    case 'oga':
+      return 'audio/ogg'
+    case 'wav':
+      return 'audio/wav'
+    case 'aac':
+      return 'audio/aac'
+    case 'flac':
+      return 'audio/flac'
+    case 'webm':
+      return 'audio/webm'
+    default:
+      return normalized ? `audio/${normalized}` : 'audio/mpeg'
+  }
+}
+
+function buildFileName(resource: CloudinaryResource): string {
+  const base = resource.original_filename?.trim()
+    || resource.public_id?.split('/').pop()?.trim()
+    || 'zoom_audio'
+  const extension = resource.format?.trim()
+  return extension ? `${base}.${extension}` : base
+}
+
+async function fetchCloudinaryFolderResources(folder: string): Promise<CloudinaryResource[]> {
+  const config = getCloudinaryConfig()
+  if (!config) {
+    console.warn('[cloudinaryZoomAudio] missing Cloudinary admin credentials, skip ingest')
+    return []
+  }
+
+  const folderPrefix = normalizeFolderPrefix(folder)
+  const collected: CloudinaryResource[] = []
+  let nextCursor: string | null | undefined
+
+  do {
+    const url = new URL(`https://api.cloudinary.com/v1_1/${config.cloudName}/resources/video/upload`)
+    url.searchParams.set('prefix', folderPrefix)
+    url.searchParams.set('max_results', String(CLOUDINARY_PAGE_SIZE))
+    if (nextCursor) {
+      url.searchParams.set('next_cursor', nextCursor)
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Basic ${toBasicAuth(config.apiKey, config.apiSecret)}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`cloudinary_list_resources_failed:${response.status}`)
+    }
+
+    const body = await response.json() as CloudinaryResourcesResponse
+    collected.push(...(body.resources ?? []))
+    nextCursor = body.next_cursor ?? null
+  } while (nextCursor)
+
+  return collected
+}
+
+async function ingestCloudinaryFolder(folder: string) {
+  const resources = await fetchCloudinaryFolderResources(folder)
+  const zoomType = resolveZoomTypeFromFolder(folder)
+  let enqueued = 0
+  let duplicates = 0
+
+  for (const resource of resources) {
+    const publicId = String(resource.public_id ?? '').trim()
+    const assetId = String(resource.asset_id ?? '').trim()
+    const secureUrl = String(resource.secure_url ?? '').trim()
+    if (!publicId || !assetId || !secureUrl) continue
+
+    const fileName = buildFileName(resource)
+    const sizeBytes = typeof resource.bytes === 'number' && Number.isFinite(resource.bytes) && resource.bytes > 0
+      ? resource.bytes
+      : null
+    const duration = typeof resource.duration === 'number' && Number.isFinite(resource.duration) && resource.duration > 0
+      ? resource.duration
+      : null
+    const sizeMB = formatZoomAudioSizeMB(sizeBytes)
+    const observedAt = typeof resource.created_at === 'string' && resource.created_at.trim()
+      ? resource.created_at.trim()
+      : null
+
+    const outbox = await enqueueRuntimeOutboxItem({
+      scope: 'zoom_audio_ingest',
+      type: 'ZOOM_AUDIO_UPLOADED',
+      source: 'cloudinary',
+      userId: null,
+      state: 'uploaded',
+      tenantId: folder,
+      runtime: {
+        requestFingerprint: assetId,
+        orchestrationPath: ['cloudinary_zoom_audio_ingest', folder],
+      },
+      payload: {
+        fileId: publicId,
+        fileUniqueId: assetId,
+        mediaType: 'audio',
+        fileName,
+        mimeType: resolveMimeTypeFromFormat(resource.format),
+        caption: null,
+        source: 'cloudinary',
+        zoomType,
+        duration,
+        sizeBytes,
+        sizeMB,
+        observedAt,
+        uploadedAt: observedAt,
+        cloudinaryUrl: secureUrl,
+        cloudinaryPublicId: publicId,
+        cloudinaryAssetId: assetId,
+        cloudinaryFolder: resource.folder ?? folder,
+        cloudinaryFormat: resource.format ?? null,
+        cloudinaryResourceType: resource.resource_type ?? 'video',
+        downloadUrl: secureUrl,
+      },
+    })
+
+    if (outbox.duplicate) {
+      duplicates += 1
+      continue
+    }
+
+    enqueued += 1
+    console.info('[cloudinaryZoomAudio] enqueued', {
+      folder,
+      zoomType,
+      publicId,
+      assetId,
+      sizeMB,
+      dedupeKey: outbox.dedupeKey,
+    })
+  }
+
+  return { folder, total: resources.length, enqueued, duplicates }
+}
+
+export async function ingestCloudinaryZoomAudio(): Promise<Array<{ folder: string; total: number; enqueued: number; duplicates: number }>> {
+  const results: Array<{ folder: string; total: number; enqueued: number; duplicates: number }> = []
+  for (const folder of CLOUDINARY_AUDIO_FOLDERS) {
+    results.push(await ingestCloudinaryFolder(folder))
+  }
+  return results
+}
+
+export async function cloudinaryZoomAudioIngestCron(): Promise<void> {
+  try {
+    const results = await ingestCloudinaryZoomAudio()
+    console.info('[cloudinaryZoomAudio] ingest complete', { results })
+  } catch (error) {
+    console.error('[cloudinaryZoomAudio] ingest failed', error)
+    throw error
+  }
+}
