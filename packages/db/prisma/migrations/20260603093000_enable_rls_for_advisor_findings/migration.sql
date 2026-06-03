@@ -1,0 +1,18 @@
+-- Supabase Advisor hardening
+-- These tables are only accessed through backend Prisma / service-side APIs.
+-- Enable RLS without public policies so anon/authenticated access is denied by default.
+
+ALTER TABLE "AiBehaviorProfile" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "AiTooltip" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "CampaignMemory" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "CheckoutSession" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ContentPipeline" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "DailyAnswer" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Lexicon" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "SalesAssistantGeneration" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "UserAiWorkspace" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "UserCreationAudit" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ZoomChannelPost" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ZoomSlot" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ZoomSlotSwapRequest" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ZoomSwap" ENABLE ROW LEVEL SECURITY;
