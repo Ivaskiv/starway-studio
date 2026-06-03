@@ -122,6 +122,63 @@ export async function handlePendingTelegramIdentityText(ctx: StartContext, text:
     return true
   }
 
+  const existingByTelegram = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { telegramUserId },
+        { telegramChatId: chatId },
+        { telegramLinks: { some: { chatId, isActive: true } } },
+      ],
+    },
+    select: {
+      id: true,
+      email: true,
+    },
+  })
+
+  if (existingByTelegram) {
+    const hasRealEmail =
+      Boolean(existingByTelegram.email) && !existingByTelegram.email.includes('@placeholder.starway.app')
+
+    if (!hasRealEmail) {
+      const emailOwner = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      })
+
+      if (emailOwner && emailOwner.id !== existingByTelegram.id) {
+        await planMessage(
+          ctx,
+          'ctx.reply',
+          'email_conflict',
+          [
+            'Цей email вже прив\'язаний до іншого акаунту.',
+            'Напишіть інший email або пропустіть.',
+          ].join('\n'),
+        )
+        return true
+      }
+
+      await prisma.user.update({
+        where: { id: existingByTelegram.id },
+        data: { email },
+      })
+    }
+
+    await upsertTelegramBinding({
+      userId: existingByTelegram.id,
+      chatId,
+      telegramUserId,
+      telegramUserName: ctx.from?.username ?? null,
+      firstName: ctx.from?.first_name ?? null,
+    })
+
+    await clearPendingTelegramIdentity(chatId)
+    ;(ctx.state as { userId?: string | null }).userId = existingByTelegram.id
+    await handleStart(ctx)
+    return true
+  }
+
   const resolved = await resolveOrCreateUser(
     {
       email,
