@@ -153,6 +153,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             source?: string
             zoomType?: string | null
             observedAt?: string
+            uploadedAt?: string
           }
         : null
 
@@ -193,6 +194,12 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
 
       if (item.type === 'ZOOM_AUDIO_UPLOADED') {
         const fileId = typeof zoomAudioPayload?.fileId === 'string' ? zoomAudioPayload.fileId.trim() : ''
+        console.log('[ZOOM_DEBUG] step 1 — payload received', {
+          fileId: zoomAudioPayload?.fileId ?? null,
+          fileName: zoomAudioPayload?.fileName ?? null,
+          zoomType: zoomAudioPayload?.zoomType ?? null,
+          source: zoomAudioPayload?.source ?? null,
+        })
         if (!fileId) {
           await prisma.runtimeOutbox.update({
             where: { id: item.id },
@@ -211,12 +218,49 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           : 'TELEGRAM_AUDIO'
 
         try {
-          const telegramFileLink = await contentBot.telegram.getFileLink(fileId)
+          if (!contentBot) {
+            console.error('[ZOOM_DEBUG] contentBot is undefined — check CONTENT_BOT_TOKEN')
+            throw new Error('contentBot not initialized')
+          }
+
+          const uploadedAt = typeof zoomAudioPayload?.uploadedAt === 'string' ? new Date(zoomAudioPayload.uploadedAt) : null
+          if (uploadedAt && !Number.isNaN(uploadedAt.getTime())) {
+            console.error('[ZOOM_DEBUG] NOTE: Telegram fileId expires after ~1 hour', {
+              fileId,
+              uploadedAt: zoomAudioPayload?.uploadedAt ?? null,
+              ageMinutes: Math.round((Date.now() - uploadedAt.getTime()) / 60000),
+            })
+          }
+
+          let downloadUrl: string
+          try {
+            const fileLink = await contentBot.telegram.getFileLink(fileId)
+            downloadUrl = fileLink.href ?? String(fileLink)
+            console.log('[ZOOM_DEBUG] step 2 — getFileLink ok', {
+              downloadUrl: `${downloadUrl.substring(0, 60)}...`,
+              fileId,
+            })
+          } catch (err) {
+            console.error('[ZOOM_DEBUG] step 2 FAILED — getFileLink error', {
+              fileId,
+              error: err instanceof Error ? err.message : String(err),
+              botToken: process.env.CONTENT_BOT_TOKEN
+                ? 'CONTENT_BOT_TOKEN set'
+                : 'CONTENT_BOT_TOKEN missing — falling back to TELEGRAM_BOT_TOKEN',
+            })
+            throw err
+          }
+
+          console.log('[ZOOM_DEBUG] step 3 — starting transcription', {
+            downloadUrl: `${downloadUrl.substring(0, 60)}...`,
+            fileName: zoomAudioPayload?.fileName ?? null,
+          })
+
           const transcript = await transcribeTelegramAudio(
             fileId,
             mediaType,
             typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null,
-            telegramFileLink,
+            downloadUrl,
           )
 
           if (!transcript) {
