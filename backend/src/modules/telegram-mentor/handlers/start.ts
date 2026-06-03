@@ -1,7 +1,8 @@
 import type { UserLifecycleState } from '@starway/db/prisma-client'
 
 import { prisma } from '../../../db/client.js'
-import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../../user/userCreation.service.js'
+import { UserCreationSource } from '../../user/userCreation.service.js'
+import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 import {
   type StartContext,
   syncAccessAwareChatEntryPoints,
@@ -38,20 +39,6 @@ function getHoursSince(date: Date | null | undefined): number {
   return diffMs > 0 ? diffMs / 3_600_000 : 0
 }
 
-async function getUserByTelegramId(telegramUserId: string): Promise<StartUserSnapshot | null> {
-  return prisma.user.findUnique({
-    where: { telegramUserId },
-    select: {
-      id: true,
-      lifecycleState: true,
-      testStartedAt: true,
-      testCompletedAt: true,
-      offerShownAt: true,
-      updatedAt: true,
-    },
-  })
-}
-
 async function setLifecycleState(userId: string, lifecycleState: UserLifecycleState): Promise<void> {
   await prisma.user.update({
     where: { id: userId },
@@ -60,40 +47,29 @@ async function setLifecycleState(userId: string, lifecycleState: UserLifecycleSt
 }
 
 async function ensureUser(ctx: StartContext, chatId: string, telegramUserId: string): Promise<StartUserSnapshot> {
-  const existing = await getUserByTelegramId(telegramUserId)
-  if (existing) return existing
-
-  let createdId: string
-  try {
-    const created = await UserCreationService.createUser({
+  const resolved = await resolveOrCreateUser(
+    {
+      telegramId: telegramUserId,
+      chatId,
+      telegramUserName: ctx.from?.username ?? undefined,
+    },
+    {
       source: UserCreationSource.TELEGRAM_START,
       requestId: Number.isFinite((ctx.update as { update_id?: number }).update_id)
         ? String((ctx.update as { update_id?: number }).update_id)
         : null,
-      data: {
-        email: `telegram-guest-${telegramUserId}@starway.local`,
-        telegramUserId,
-        telegramChatId: chatId,
-        telegramUserName: ctx.from?.username ?? null,
-        firstName: ctx.from?.first_name ?? undefined,
-        telegramEnabled: true,
+      name: ctx.from?.first_name ?? null,
+      createData: {
         lifecycleState: 'NEW_USER',
         currentState: 'NEW',
         currentStep: 'LINK_TELEGRAM',
-        role: 'USER',
         activeRole: 'USER',
       },
-    })
-    createdId = created.id
-  } catch (error) {
-    if (error instanceof UserAutoCreationDisabledError) {
-      throw new Error('AUTO_USER_CREATION_DISABLED')
-    }
-    throw error
-  }
+    },
+  )
 
   const created = await prisma.user.findUniqueOrThrow({
-    where: { id: createdId },
+    where: { id: resolved.user.id },
     select: {
       id: true,
       lifecycleState: true,
@@ -109,6 +85,15 @@ async function ensureUser(ctx: StartContext, chatId: string, telegramUserId: str
     create: { userId: created.id, telegramEnabled: true },
     update: { telegramEnabled: true },
   })
+
+  if (resolved.conflict) {
+    console.warn('[USER_IDENTITY_CONFLICT]', {
+      source: 'telegram_start',
+      chatId,
+      telegramUserId,
+      resolvedUserId: resolved.user.id,
+    })
+  }
 
   return created
 }

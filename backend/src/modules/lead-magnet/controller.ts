@@ -6,7 +6,8 @@ import jwt from 'jsonwebtoken'
 import { assignUserToExpert, resolveDefaultMentorOwnerExpertId } from '../experts/ownership.service.js'
 import { trackEvent } from '../events/service.js'
 import { syncLifecycleForUser } from '../flow-control/service.js'
-import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../user/userCreation.service.js'
+import { UserAutoCreationDisabledError, UserCreationSource } from '../user/userCreation.service.js'
+import { resolveOrCreateUser } from '../user/resolveOrCreateUser.js'
 
 async function resolveExpertId(expertId: string | null | undefined): Promise<string | null> {
   const value = String(expertId ?? '').trim()
@@ -42,33 +43,33 @@ export async function registerLeadMagnet(req: Request, res: Response) {
     // Генеруємо email якщо немає (phone-only реєстрація)
     const userEmail = email ?? `${phone?.replace(/\D/g, '')}@starway.app`
 
-    // Перевіряємо чи вже існує
-    let user = await prisma.user.findUnique({ where: { email: userEmail } })
-
-    if (!user) {
-      const passwordHash = await bcrypt.hash(Math.random().toString(36), 10)
-      try {
-        const created = await UserCreationService.createUser({
-          source: UserCreationSource.LEAD_MAGNET,
-          requestId: String(req.headers['x-request-id'] ?? '').trim() || null,
-          data: {
-            email: userEmail,
-            firstName: name,
-            passwordHash,
-            currentStep: 'START_FLOW',
-            expertId: resolvedOwnerExpertId ?? undefined,
-          },
-        })
-        user = await prisma.user.findUnique({ where: { id: created.id } })
-        if (!user) {
-          return res.status(500).json({ error: 'leadmagnet_user_not_found_after_create' })
-        }
-      } catch (error) {
-        if (error instanceof UserAutoCreationDisabledError) {
-          return res.status(403).json({ error: 'user_creation_disabled' })
-        }
-        throw error
+    const passwordHash = await bcrypt.hash(Math.random().toString(36), 10)
+    const resolved = await resolveOrCreateUser(
+      { email: userEmail },
+      {
+        source: UserCreationSource.LEAD_MAGNET,
+        requestId: String(req.headers['x-request-id'] ?? '').trim() || null,
+        name,
+        expertId: resolvedOwnerExpertId ?? undefined,
+        passwordHash,
+        createData: {
+          currentStep: 'START_FLOW',
+        },
+      },
+    ).catch((error) => {
+      if (error instanceof UserAutoCreationDisabledError) {
+        return null
       }
+      throw error
+    })
+
+    if (!resolved) {
+      return res.status(403).json({ error: 'user_creation_disabled' })
+    }
+
+    let user = await prisma.user.findUnique({ where: { id: resolved.user.id } })
+    if (!user) {
+      return res.status(500).json({ error: 'leadmagnet_user_not_found_after_create' })
     }
 
     if (resolvedOwnerExpertId && user.expertId !== resolvedOwnerExpertId) {

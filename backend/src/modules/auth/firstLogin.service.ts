@@ -1,6 +1,7 @@
 import { prisma } from '../../db/client.js'
-import { Prisma, StageStatus, User } from '@starway/db/prisma-client'
-import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../user/userCreation.service.js'
+import { StageStatus, User } from '@starway/db/prisma-client'
+import { UserAutoCreationDisabledError, UserCreationSource } from '../user/userCreation.service.js'
+import { resolveOrCreateUser } from '../user/resolveOrCreateUser.js'
 
 // fix etap2: payload for first-login handling via web/telegram flows
 export interface FirstLoginPayload {
@@ -15,108 +16,38 @@ export interface FirstLoginPayload {
   requestId?: string
 }
 
-function isMissingStructureError(error: unknown) {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    (error.code === 'P2021' || error.code === 'P2022')
-  )
-}
-
-async function createUserCompat(payload: FirstLoginPayload, now: Date) {
-  try {
-    const created = await UserCreationService.createUser({
-      source: UserCreationSource.FIRST_LOGIN,
-      requestId: payload.requestId ?? null,
-      data: {
-        email: payload.email,
-        expertId: payload.expertId,
-        role: 'USER',
-        lastLoginAt: now,
-        telegramUserId: payload.telegramUserId ?? null,
-        telegramChatId: payload.telegramChatId ?? null,
-        telegramUserName: payload.telegramUserName ?? null,
-      },
-    })
-    return prisma.user.findUniqueOrThrow({ where: { id: created.id } })
-  } catch (error) {
-    if (error instanceof UserAutoCreationDisabledError) {
-      throw new Error('AUTO_USER_CREATION_DISABLED')
-    }
-    if (!isMissingStructureError(error)) throw error
-
-    const id = crypto.randomUUID()
-    const rows = await prisma.$queryRawUnsafe<User[]>(
-      `
-        INSERT INTO "User" (
-          "id",
-          "email",
-          "expertId",
-          "role",
-          "lastLoginAt",
-          "telegramUserId",
-          "telegramChatId",
-          "telegramUserName",
-          "createdAt",
-          "updatedAt"
-        )
-        VALUES ($1, $2, $3, CAST($4 AS "Role"), $5, $6, $7, $8, NOW(), NOW())
-        RETURNING *
-      `,
-      id,
-      payload.email,
-      payload.expertId ?? null,
-      'USER',
-      now,
-      payload.telegramUserId ?? null,
-      payload.telegramChatId ?? null,
-      payload.telegramUserName ?? null,
-    )
-
-    const created = rows[0]
-    if (!created) throw error
-    return created
-  }
-}
-
 // fix etap2: seed every stage progress for the user to give AI/mini-app deterministic state
 export async function handleFirstLogin(payload: FirstLoginPayload): Promise<User> {
   const now = new Date()
-  const existing = await prisma.user.findUnique({
-    where: { email: payload.email },
-    select: {
-      id: true,
-      telegramUserId: true,
-      telegramChatId: true,
-      telegramUserName: true,
-      expertId: true,
+  const resolved = await resolveOrCreateUser(
+    {
+      email: payload.email,
+      telegramId: payload.telegramUserId ?? undefined,
+      chatId: payload.telegramChatId ?? undefined,
+      telegramUserName: payload.telegramUserName ?? undefined,
     },
+    {
+      source: UserCreationSource.FIRST_LOGIN,
+      requestId: payload.requestId ?? null,
+      expertId: payload.expertId ?? null,
+      role: 'USER',
+      createData: {
+        lastLoginAt: now,
+      },
+    },
+  ).catch((error) => {
+    if (error instanceof UserAutoCreationDisabledError) {
+      throw new Error('AUTO_USER_CREATION_DISABLED')
+    }
+    throw error
   })
 
-  const telegramData =
-    payload.telegramUserId || payload.telegramChatId || payload.telegramUserName
-      ? {
-          telegramUserId: payload.telegramUserId ?? existing?.telegramUserId ?? null,
-          telegramChatId: payload.telegramChatId ?? existing?.telegramChatId ?? null,
-          telegramUserName: payload.telegramUserName ?? existing?.telegramUserName ?? null,
-        }
-      : undefined
-
-  const user = existing
-    ? await prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          lastLoginAt: now,
-          telegramUserId: telegramData?.telegramUserId || undefined,
-          telegramChatId: telegramData?.telegramChatId || undefined,
-          telegramUserName: telegramData?.telegramUserName || undefined,
-        },
-      })
-    : await createUserCompat({
-        ...payload,
-        telegramUserId: telegramData?.telegramUserId || undefined,
-        telegramChatId: telegramData?.telegramChatId || undefined,
-        telegramUserName: telegramData?.telegramUserName || undefined,
-      }, now)
+  const user = await prisma.user.update({
+    where: { id: resolved.user.id },
+    data: {
+      lastLoginAt: now,
+    },
+  })
 
   await prisma.userProgress.upsert({
     where: { userId: user.id },

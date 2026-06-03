@@ -7,7 +7,8 @@ This map describes every runtime source that can create a new `User` and how it 
 `SOURCE`  
 -> `CONTROLLER/HANDLER`  
 -> `SERVICE`  
--> `UserCreationService.createUser()`  
+-> `resolveOrCreateUser()`  
+-> `UserCreationService.createUser()` only when no existing identity matches  
 -> `prisma.user.create()`  
 -> `UserCreationAudit`
 
@@ -15,38 +16,46 @@ This map describes every runtime source that can create a new `User` and how it 
 
 1. `TELEGRAM_START`
 - Controller/Handler: `backend/src/modules/telegram-mentor/handlers/start.ts` (`handleStart -> ensureUser`)
-- Service: `ensureUser`
-- Unified creation: `UserCreationService.createUser({ source: TELEGRAM_START })`
+- Service: `ensureUser -> resolveOrCreateUser`
+- Unified creation: `resolveOrCreateUser({ telegramId, chatId, telegramUserName })`
 
 2. `TELEGRAM_MINIAPP`
 - Controller: `backend/src/modules/auth/auth.controller.ts` (`telegram`)
-- Service: `telegramMiniAppLoginUser -> socialLoginUser -> resolveOrCreateTelegramGuestUser`
-- Unified creation: `UserCreationService.createUser({ source: TELEGRAM_MINIAPP })`
+- Service: `telegramMiniAppLoginUser -> socialLoginUser -> resolveOrCreateUser`
+- Unified creation: `resolveOrCreateUser({ telegramId, chatId, telegramUserName, email? })`
 
 3. `GOOGLE_LOGIN`
 - Controller: `backend/src/modules/auth/auth.controller.ts` (`social`)
 - Service: `socialLoginUser`
-- Unified creation: `UserCreationService.createUser({ source: GOOGLE_LOGIN })`
+- Unified creation: `resolveOrCreateUser({ email })`
 
 4. `LEAD_MAGNET`
 - Controller: `backend/src/modules/lead-magnet/controller.ts` (`registerLeadMagnet`)
-- Service: inline registration flow in controller
-- Unified creation: `UserCreationService.createUser({ source: LEAD_MAGNET })`
+- Service: `registerLeadMagnet -> resolveOrCreateUser`
+- Unified creation: `resolveOrCreateUser({ email })`
 
 5. `TRACKING_EVENT`
 - Controller: multiple event producers
 - Service: `backend/src/modules/events/service.ts` (`resolveTrackingUserId`)
-- Unified creation: `UserCreationService.createUser({ source: TRACKING_EVENT })`
+- Unified creation: `resolveOrCreateUser({ email })`
 
 6. `FIRST_LOGIN`
 - Controller/Entry: first-login orchestration callers
-- Service: `backend/src/modules/auth/firstLogin.service.ts` (`handleFirstLogin -> createUserCompat`)
-- Unified creation: `UserCreationService.createUser({ source: FIRST_LOGIN })`
+- Service: `backend/src/modules/auth/firstLogin.service.ts` (`handleFirstLogin -> resolveOrCreateUser`)
+- Unified creation: `resolveOrCreateUser({ email, telegram? })`
 
 7. `SYSTEM`
 - Controller: `backend/src/modules/auth/auth.controller.ts` (`register`)
 - Service: `registerUser -> createUserCompat`
-- Unified creation: `UserCreationService.createUser({ source: SYSTEM })`
+- Unified creation: `resolveOrCreateUser({ email })`
+
+## Governance
+
+- Resolve identity first with `resolveOrCreateUser()`.
+- If a user already exists by email, Telegram, or link, reuse it.
+- If multiple candidates exist, log a conflict and do not auto-merge.
+- Only call `UserCreationService.createUser()` after resolution returns no existing user.
+- Never call `prisma.user.create()` directly outside `UserCreationService`.
 
 ## Feature flag
 

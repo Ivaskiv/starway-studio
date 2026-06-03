@@ -12,7 +12,8 @@ import {
 } from '../../core/runtime/runtimeIdempotency.js'
 import { buildRuntimeResilienceSnapshot } from '../../core/runtime/runtimeResilience.js'
 import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
-import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../user/userCreation.service.js'
+import { UserAutoCreationDisabledError, UserCreationSource } from '../user/userCreation.service.js'
+import { resolveOrCreateUser } from '../user/resolveOrCreateUser.js'
 
 export type EventSource = 'telegram' | 'web' | 'miniapp' | 'cloudinary'
 
@@ -194,44 +195,30 @@ async function resolveTrackingUserId(input: TrackEventInput): Promise<string | n
   const normalizedEmail = normalizeEmail(input.email)
   if (!normalizedEmail || !input.upsertUser) return null
 
-  const existing = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
-    select: { id: true },
-  }).catch(() => null)
-
-  if (existing?.id) {
-    return existing.id
-  }
-
-  const created = await UserCreationService.createUser({
-    source: UserCreationSource.TRACKING_EVENT,
-    requestId: input.runtime?.request_id ?? null,
-    data: {
-      email: normalizedEmail,
-      firstName: normalizedEmail.split('@')[0] || 'Lead user',
+  const resolved = await resolveOrCreateUser(
+    { email: normalizedEmail },
+    {
+      source: UserCreationSource.TRACKING_EVENT,
+      requestId: input.runtime?.request_id ?? null,
+      name: normalizedEmail.split('@')[0] || 'Lead user',
       passwordHash: `lead-${Date.now().toString(36)}`,
-      currentStep: 'START_FLOW',
-      settings: {
-        tracking: {
-          utmSource: input.utmSource ?? null,
-          utmCampaign: input.utmCampaign ?? null,
-          productId: input.productId ?? null,
+      createData: {
+        currentStep: 'START_FLOW',
+        settings: {
+          tracking: {
+            utmSource: input.utmSource ?? null,
+            utmCampaign: input.utmCampaign ?? null,
+            productId: input.productId ?? null,
+          },
         },
       },
     },
-    payloadSummary: {
-      email: normalizedEmail,
-      upsertUser: Boolean(input.upsertUser),
-      utmSource: input.utmSource ?? null,
-      utmCampaign: input.utmCampaign ?? null,
-      productId: input.productId ?? null,
-    },
-  }).catch((error) => {
+  ).catch((error) => {
     if (error instanceof UserAutoCreationDisabledError) return null
-    return null
+    throw error
   })
 
-  return created?.id ?? null
+  return resolved?.user.id ?? null
 }
 
 export async function trackLeadEnteredApp(input: TrackEventInput): Promise<void> {

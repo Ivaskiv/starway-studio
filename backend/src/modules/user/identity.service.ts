@@ -1,6 +1,7 @@
 import { Prisma, Role, UserState, UserStep } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
-import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from './userCreation.service.js'
+import { resolveOrCreateUser } from './resolveOrCreateUser.js'
+import { UserCreationSource } from './userCreation.service.js'
 
 type Tx = Prisma.TransactionClient
 
@@ -1081,98 +1082,25 @@ export async function resolveOrCreateTelegramGuestUser(params: {
     return params.linkedUserId
   }
 
-  return prisma.$transaction(async tx => {
-    const linkedByChat = await tx.telegramLink.findFirst({
-      where: {
-        chatId: params.chatId,
-        isActive: true,
+  const resolved = await resolveOrCreateUser(
+    {
+      telegramId: params.telegramUserId,
+      chatId: params.chatId,
+      telegramUserName: params.telegramUserName ?? undefined,
+    },
+    {
+      source: params.source ?? UserCreationSource.TELEGRAM_MINIAPP,
+      requestId: params.requestId ?? null,
+      name: params.firstName,
+      createData: {
+        telegramLinkedAt: new Date(),
+        role: 'USER',
+        activeRole: 'USER',
       },
-      select: { userId: true },
-    })
-    if (linkedByChat?.userId) {
-      return linkedByChat.userId
-    }
+    },
+  )
 
-    const found = await tx.user.findFirst({
-      where: {
-        OR: [
-          { telegramUserId: params.telegramUserId },
-          { telegramChatId: params.chatId },
-          ...(params.telegramUserName ? [{ telegramUserName: params.telegramUserName }] : []),
-        ],
-      },
-      select: { id: true },
-    })
-
-    if (found?.id) {
-      return found.id
-    }
-
-    const guestEmail = `telegram-guest-${params.telegramUserId}@starway.local`
-    const existingGuest = await tx.user.findUnique({
-      where: { email: guestEmail },
-      select: { id: true },
-    })
-
-    if (found?.id && existingGuest?.id && found.id !== existingGuest.id) {
-      const [foundCandidate, guestCandidate] = await Promise.all([
-        getMergeCandidate(tx, found.id),
-        getMergeCandidate(tx, existingGuest.id),
-      ])
-
-      if (canAutoMerge(foundCandidate, guestCandidate)) {
-        const foundIsGuest = isGuestEmail(foundCandidate.email)
-        const guestIsGuest = isGuestEmail(guestCandidate.email)
-        const targetUserId = foundIsGuest && !guestIsGuest ? guestCandidate.id : foundCandidate.id
-        const sourceUserId = targetUserId === foundCandidate.id ? guestCandidate.id : foundCandidate.id
-        const merged = await mergeUsersTx(tx, {
-          sourceUserId,
-          targetUserId,
-          reason: 'telegram_identity',
-        })
-        console.info('[USER_DEDUP]', {
-          telegramUserId: params.telegramUserId,
-          chatId: params.chatId,
-          foundUserId: found.id,
-          guestUserId: existingGuest.id,
-          reconciledUserId: merged.userId,
-          merged: true,
-          source: 'resolve_or_create_reconciled',
-        })
-        return merged.userId
-      }
-    }
-
-    if (existingGuest?.id) {
-      return existingGuest.id
-    }
-
-    try {
-      const created = await UserCreationService.createUser({
-        client: tx,
-        source: params.source ?? UserCreationSource.TELEGRAM_MINIAPP,
-        requestId: params.requestId ?? null,
-        data: {
-          email: guestEmail,
-          firstName: params.firstName,
-          telegramUserId: params.telegramUserId,
-          telegramUserName: params.telegramUserName,
-          telegramChatId: params.chatId,
-          telegramLinkedAt: new Date(),
-          // activeRole mirrors role for new users — user can switch later
-          role: 'USER',
-          activeRole: 'USER',
-        },
-      })
-
-      return created.id
-    } catch (error) {
-      if (error instanceof UserAutoCreationDisabledError) {
-        throw new Error('AUTO_USER_CREATION_DISABLED')
-      }
-      throw error
-    }
-  })
+  return resolved.user.id
 }
 
 export async function reconcileTelegramIdentityUsers(params: {

@@ -7,14 +7,14 @@ import { isSuperAdminEmail } from './superadmin.js'
 import { resolveUserAbilities, ABILITIES } from './abilities.js'
 import { computeAvailableRoles, resolveActiveRole } from './roleUtils.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
-import { attachEmailToUser, resolveOrCreateTelegramGuestUser } from '../user/identity.service.js'
-import { findLinkedUserId } from '../telegram-mentor/services/linking.service.js'
+import { attachEmailToUser } from '../user/identity.service.js'
 import { verifyTelegramInitData } from './telegram.js'
 import { AuthServiceError } from './auth.errors.js'
 import { assignUserToExpert, resolveDefaultMentorOwnerExpertId } from '../experts/ownership.service.js'
 import { cacheGet, cacheSet } from '../../lib/cache/index.js'
 import { invalidateUserCache } from '../../lib/db/userCache.js'
-import { UserAutoCreationDisabledError, UserCreationService, UserCreationSource } from '../user/userCreation.service.js'
+import { UserAutoCreationDisabledError, UserCreationSource } from '../user/userCreation.service.js'
+import { resolveOrCreateUser } from '../user/resolveOrCreateUser.js'
 
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
@@ -103,58 +103,61 @@ async function createUserCompat(input: {
   source?: UserCreationSource
   requestId?: string | null
 }): Promise<{ id: string }> {
-  try {
-    return await UserCreationService.createUser({
+  const resolved = await resolveOrCreateUser(
+    { email: input.email },
+    {
       source: input.source ?? UserCreationSource.SYSTEM,
       requestId: input.requestId ?? null,
-      data: {
-        email: input.email,
-        passwordHash: input.passwordHash ?? null,
-        firstName: input.firstName ?? null,
-        role: input.role,
-        expertId: input.expertId ?? null,
+      name: input.firstName ?? null,
+      passwordHash: input.passwordHash ?? null,
+      role: input.role,
+      expertId: input.expertId ?? null,
+      createData: {
         lastLoginAt: input.lastLoginAt ?? null,
       },
-    })
-  } catch (error) {
+    },
+  ).catch((error) => {
     if (error instanceof UserAutoCreationDisabledError) {
       throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
     }
+    throw error
+  })
 
-    if (!isMissingStructureError(error)) throw error
+  return { id: resolved.user.id }
+}
 
-    const id = crypto.randomUUID()
-    const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `
-        INSERT INTO "User" (
-          "id",
-          "email",
-          "passwordHash",
-          "firstName",
-          "role",
-          "expertId",
-          "lastLoginAt",
-          "createdAt",
-          "updatedAt"
-        )
-        VALUES ($1, $2, $3, $4, CAST($5 AS "Role"), $6, $7, NOW(), NOW())
-        RETURNING "id"
-      `,
-      id,
-      input.email,
-      input.passwordHash ?? null,
-      input.firstName ?? null,
-      input.role,
-      input.expertId ?? null,
-      input.lastLoginAt ?? null,
-    )
+async function resolveTelegramSocialUser(input: SocialAuthInput): Promise<{ id: string; created: boolean; expertId: string | null }> {
+  const telegramUserId = String(input.externalId ?? '').trim()
+  const telegramUserName = input.username?.trim() || null
+  const validatedExpertId = await resolveRequestedExpertId(input.expertId)
 
-    const createdId = rows[0]?.id
-    if (!createdId) {
-      throw error
+  const resolved = await resolveOrCreateUser(
+    {
+      telegramId: telegramUserId,
+      chatId: telegramUserId,
+      telegramUserName: telegramUserName ?? undefined,
+      email: input.email ?? undefined,
+    },
+    {
+      source: UserCreationSource.TELEGRAM_MINIAPP,
+      requestId: input.requestId ?? null,
+      name: input.name?.trim() || telegramUserName || 'Учень',
+      expertId: validatedExpertId,
+      createData: {
+        telegramEnabled: true,
+      },
+    },
+  ).catch((error) => {
+    if (error instanceof UserAutoCreationDisabledError) {
+      throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
     }
+    throw error
+  })
 
-    return { id: createdId }
+  return {
+    id: resolved.user.id,
+    created: resolved.created,
+    expertId: validatedExpertId,
   }
 }
 
@@ -1054,43 +1057,12 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
         isNewUser = true
       }
     } else {
-      const telegramUserId = externalId
-      const telegramUserName = input.username?.trim() || null
-      const validatedExpertId = await resolveRequestedExpertId(input.expertId)
-      const linkedUserId = await findLinkedUserId({
-        chatId: telegramUserId,
-        telegramUserId,
-        telegramUserName,
-      })
+      const resolved = await resolveTelegramSocialUser(input)
+      userId = resolved.id
+      isNewUser = resolved.created
 
-      if (linkedUserId) {
-        userId = linkedUserId
-        if (validatedExpertId) {
-          await assignUserToExpert(linkedUserId, validatedExpertId)
-        }
-      } else {
-        let createdUserId: string
-        try {
-          createdUserId = await resolveOrCreateTelegramGuestUser({
-            linkedUserId: null,
-            telegramUserId,
-            telegramUserName,
-            chatId: telegramUserId,
-            firstName: input.name?.trim() || telegramUserName || 'Учень',
-            requestId: input.requestId ?? null,
-            source: UserCreationSource.TELEGRAM_MINIAPP,
-          })
-        } catch (error) {
-          if (error instanceof Error && error.message === 'AUTO_USER_CREATION_DISABLED') {
-            throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
-          }
-          throw error
-        }
-        userId = createdUserId
-        isNewUser = true
-        if (validatedExpertId) {
-          await assignUserToExpert(createdUserId, validatedExpertId)
-        }
+      if (resolved.expertId) {
+        await assignUserToExpert(userId, resolved.expertId)
       }
     }
 
