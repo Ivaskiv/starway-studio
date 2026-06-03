@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -24,7 +24,8 @@ import type { VoiceDecision, VoiceProcessInput } from './types.js'
 
 const FREE_DAILY_LIMIT = 2
 const PAID_DAILY_LIMIT = 20
-const DEFAULT_ZOOM_AUDIO_CHUNK_SECONDS = 600
+const DEFAULT_ZOOM_AUDIO_CHUNK_SECONDS = 240
+export const OPENAI_AUDIO_TRANSCRIPTION_MAX_BYTES = 25 * 1024 * 1024
 
 export type ZoomAudioProcessingStrategy =
   | 'DIRECT_TRANSCRIPT'
@@ -285,6 +286,15 @@ export async function splitZoomAudioFile(inputPath: string, chunkSeconds = DEFAU
   return {
     filePaths,
     cleanup: workspace.cleanup,
+  }
+}
+
+export async function probeZoomAudioFileSizeBytes(filePath: string): Promise<number | null> {
+  try {
+    const info = await stat(filePath)
+    return info.isFile() && info.size > 0 ? info.size : null
+  } catch {
+    return null
   }
 }
 

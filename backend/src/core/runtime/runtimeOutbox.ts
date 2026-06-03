@@ -7,6 +7,8 @@ import {
   downloadTelegramAudioSourceToTempFile,
   formatZoomAudioSizeMB,
   normalizeZoomAudioFile,
+  OPENAI_AUDIO_TRANSCRIPTION_MAX_BYTES,
+  probeZoomAudioFileSizeBytes,
   resolveZoomAudioStrategy,
   splitZoomAudioFile,
   transcribeTelegramAudio,
@@ -319,6 +321,35 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           const fileName = typeof zoomAudioPayload?.fileName === 'string' && zoomAudioPayload.fileName.trim()
             ? zoomAudioPayload.fileName
             : 'zoom_audio'
+          const transcribeChunkedAudio = async (sourcePath: string, sourceLabel: string) => {
+            const chunks = await splitZoomAudioFile(sourcePath, 240)
+            chunkPaths = chunks.filePaths
+            cleanupTasks.push(chunks.cleanup)
+
+            const chunkTranscripts: string[] = []
+            for (const [index, chunkPath] of chunkPaths.entries()) {
+              await bot.telegram.sendMessage(
+                opsChatId ?? '',
+                `🔤 Транскрипція ${index + 1}/${chunkPaths.length}`,
+              ).catch(() => undefined)
+              const chunkTranscript = await transcribeTelegramAudio(
+                fileId,
+                mediaType,
+                mimeType,
+                chunkPath,
+              )
+              if (chunkTranscript.trim()) {
+                chunkTranscripts.push(chunkTranscript.trim())
+              }
+            }
+
+            transcript = chunkTranscripts.join('\n\n').trim()
+            console.log('[ZOOM_DEBUG] chunk transcription complete', {
+              sourceLabel,
+              chunks: chunkPaths.length,
+              transcriptLength: transcript.length,
+            })
+          }
 
           if (processingStrategy === 'DIRECT_TRANSCRIPT') {
             console.log('[ZOOM_DEBUG] step 3 — starting transcription', {
@@ -353,16 +384,29 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               const normalized = await normalizeZoomAudioFile(rawFile.filePath)
               cleanupTasks.push(normalized.cleanup)
 
-              await bot.telegram.sendMessage(
-                opsChatId ?? '',
-                '🔤 Транскрипція 1/1',
-              ).catch(() => undefined)
-              transcript = await transcribeTelegramAudio(
-                fileId,
-                mediaType,
-                mimeType,
-                normalized.filePath,
-              )
+              const normalizedSizeBytes = await probeZoomAudioFileSizeBytes(normalized.filePath)
+              if (normalizedSizeBytes && normalizedSizeBytes <= OPENAI_AUDIO_TRANSCRIPTION_MAX_BYTES) {
+                await bot.telegram.sendMessage(
+                  opsChatId ?? '',
+                  '🔤 Транскрипція 1/1',
+                ).catch(() => undefined)
+                transcript = await transcribeTelegramAudio(
+                  fileId,
+                  mediaType,
+                  mimeType,
+                  normalized.filePath,
+                )
+              } else {
+                console.log('[ZOOM_DEBUG] normalized file still too large for direct transcription, chunking', {
+                  normalizedSizeBytes,
+                  limitBytes: OPENAI_AUDIO_TRANSCRIPTION_MAX_BYTES,
+                })
+                await bot.telegram.sendMessage(
+                  opsChatId ?? '',
+                  '✂️ Розбиття на частини...',
+                ).catch(() => undefined)
+                await transcribeChunkedAudio(normalized.filePath, 'normalized')
+              }
             } else {
               let chunkSourcePath = rawFile.filePath
               if (processingStrategy === 'COMPRESS_CHUNK_TRANSCRIPT') {
@@ -379,28 +423,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 opsChatId ?? '',
                 '✂️ Розбиття на частини...',
               ).catch(() => undefined)
-              const chunks = await splitZoomAudioFile(chunkSourcePath)
-              chunkPaths = chunks.filePaths
-              cleanupTasks.push(chunks.cleanup)
-
-              const chunkTranscripts: string[] = []
-              for (const [index, chunkPath] of chunkPaths.entries()) {
-                await bot.telegram.sendMessage(
-                  opsChatId ?? '',
-                  `🔤 Транскрипція ${index + 1}/${chunkPaths.length}`,
-                ).catch(() => undefined)
-                const chunkTranscript = await transcribeTelegramAudio(
-                  fileId,
-                  mediaType,
-                  mimeType,
-                  chunkPath,
-                )
-                if (chunkTranscript.trim()) {
-                  chunkTranscripts.push(chunkTranscript.trim())
-                }
-              }
-
-              transcript = chunkTranscripts.join('\n\n').trim()
+              await transcribeChunkedAudio(chunkSourcePath, processingStrategy === 'COMPRESS_CHUNK_TRANSCRIPT' ? 'compressed' : 'raw')
             }
           }
 
