@@ -1034,6 +1034,10 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         }
 
         const zoomType = audioPayload.zoomType
+        const readyEstimate = new Date(Date.now() + 10 * 60_000).toLocaleTimeString('uk-UA', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
         await ctx.telegram.sendChatAction(post.chat?.id ?? chatId, 'typing').catch(() => undefined)
         await ctx
           .reply(
@@ -1044,6 +1048,8 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
               `🎯 Тип: ${zoomType}`,
               '',
               '⏳ Додано в чергу транскрипції...',
+              `🟡 Статус: у черзі → транскрипція → готово`,
+              `🕒 Орієнтовно готово: ${readyEstimate}`,
             ].join('\n')
           )
           .catch(() => undefined)
@@ -1082,6 +1088,9 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         await ctx.reply(
           [
             '✅ Додано до черги!',
+            '',
+            `🕒 Орієнтовно готово: ${readyEstimate}`,
+            '🟡 Статус: у черзі → транскрипція → готово',
             '',
             'Транскрипт з\'явиться через кілька хвилин.',
             'Повідомлення прийде, коли буде готово.',
