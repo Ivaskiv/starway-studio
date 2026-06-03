@@ -754,7 +754,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               '',
               message.toLowerCase().includes('quota') || message.toLowerCase().includes('limit')
                 ? 'Дія: перевірте баланс OpenAI'
-                : 'Дія: перевірте файл, токен Telegram та повторіть /retranscribe',
+                : 'Дія: перевірте Cloudinary файл і повторіть ingest',
             ]
             if (coachStatusRef) {
               await editZoomCoachStatusMessage(coachStatusRef, buildZoomCoachStatusText(recoveryLines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null))

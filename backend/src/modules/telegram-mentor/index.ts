@@ -21,10 +21,10 @@ import { resolveDecision, shouldRenderDecisionBeforeTransport } from '../../core
 import { renderTelegram } from './renderers/decisionTelegram.js'
 import { dispatchTelegramCallbackEvent } from './services/telegram-event-bus.service.js'
 import { handleFocusChannelJoinByTelegramUserId, sendAbTestBlock12Welcome } from '../subscriptions/payments/callback.notifications.js'
+import { callProviderSafe } from '../sales-assistant/sales-assistant.providers.js'
 import { conversationOrchestrator } from './conversation/orchestrator/ConversationOrchestrator.js'
 import type { OrchestratedContext } from './conversation/types.js'
 import { planAck, planMessage } from './conversation/delivery/planDelivery.js'
-import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 import {
   AB_TEST_ACTIONS,
 } from '@/packages/abTestActions.js'
@@ -35,6 +35,7 @@ import {
 } from '@/products/ab-system/telegram/abTest.service.js'
 import { hasActiveFocusSubscription } from '../subscriptions/payments/focus.access.js'
 import { parseZoomChannelPost } from '../zoom/zoom.channel-parser.js'
+import { resolveModelStrategyTier } from '@starway/ai/providers/routing'
 import {
   afterZoomOperation,
   createFullSession,
@@ -62,187 +63,72 @@ interface MonthSessionLine {
   zoomLink: string
 }
 
-type ChannelPostAudioPayload = {
-  chatId: string
-  messageId: number | null
-  fileId: string
-  fileUniqueId: string | null
-  mediaType: 'voice' | 'audio' | 'document_audio'
-  fileName: string | null
-  mimeType: string | null
-  caption: string | null
-  source: 'telegram'
-  zoomType: 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP'
-  duration?: number | null
-  sizeBytes?: number | null
+function buildNotebookSystemPrompt(): string {
+  return [
+    'Ти Claude Notebook Assistant для Telegram-каналу.',
+    'Користувач пише короткі нотатки, ідеї, уточнення або запити.',
+    'Відповідай українською, коротко, по суті, без зайвої теорії.',
+    'Якщо це нотатка, коротко структуруй її у 2-4 булети: суть, сенс, наступний крок.',
+    'Якщо це запит, дай практичну відповідь у 1-3 пунктах.',
+    'Не вигадуй факти. Якщо бракує контексту, скажи про це прямо.',
+    'Не перевищуй 1200 символів.',
+  ].join(' ')
 }
 
-type TelegramAudioMessage = {
-  audio?: {
-    file_id?: string
-    file_unique_id?: string
-    mime_type?: string | null
-    file_name?: string | null
-    duration?: number | null
-    file_size?: number | null
-  }
-  voice?: {
-    file_id?: string
-    file_unique_id?: string
-    mime_type?: string | null
-    duration?: number | null
-    file_size?: number | null
-  }
-  document?: {
-    file_id?: string
-    file_unique_id?: string
-    mime_type?: string | null
-    file_name?: string | null
-    file_size?: number | null
-  }
-  caption?: string | null
-}
-
-function extractRetranscribeAudioFromMessage(message: TelegramAudioMessage | null | undefined): {
-  fileId: string
-  fileName: string
-  zoomType: 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP'
-  duration?: number | null
-  sizeBytes?: number | null
-} | null {
-  if (!message) return null
-
-  if (message.voice?.file_id) {
-    return {
-      fileId: message.voice.file_id,
-      fileName: 'telegram_voice.ogg',
-      zoomType: 'GROUP',
-      duration: message.voice.duration ?? null,
-      sizeBytes: message.voice.file_size ?? null,
-    }
-  }
-
-  if (message.audio?.file_id) {
-    return {
-      fileId: message.audio.file_id,
-      fileName: message.audio.file_name ?? 'zoom_audio.mp3',
-      zoomType: resolveZoomTypeFromFileName(message.audio.file_name ?? ''),
-      duration: message.audio.duration ?? null,
-      sizeBytes: message.audio.file_size ?? null,
-    }
-  }
-
-  if (message.document?.file_id) {
-    const mimeType = message.document.mime_type ?? null
-    const fileName = message.document.file_name ?? 'zoom_audio.mp3'
-    const lowerName = fileName.toLowerCase()
-    const looksLikeAudio =
-      (mimeType?.startsWith('audio/') ?? false) ||
-      /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(lowerName)
-
-    if (!looksLikeAudio) return null
-
-    return {
-      fileId: message.document.file_id,
-      fileName,
-      zoomType: resolveZoomTypeFromFileName(fileName),
-      duration: null,
-      sizeBytes: message.document.file_size ?? null,
-    }
-  }
-
-  return null
-}
-
-function extractZoomAudioPayload(post: {
+async function handleNotebookChannelPost(ctx: Context, post: {
   chat?: { id?: number | string }
   message_id?: number
-  voice?: { file_id?: string; file_unique_id?: string; mime_type?: string | null; duration?: number | null; file_size?: number | null }
-  audio?: { file_id?: string; file_unique_id?: string; mime_type?: string | null; file_name?: string | null; duration?: number | null; file_size?: number | null }
-  document?: {
-    file_id?: string
-    file_unique_id?: string
-    mime_type?: string | null
-    file_name?: string | null
-    file_size?: number | null
-  }
+  text?: string
   caption?: string | null
-}): ChannelPostAudioPayload | null {
+}): Promise<boolean> {
+  const rawText = String(post.text ?? post.caption ?? '').trim()
+  if (!rawText) return false
+
   const chatId = String(post.chat?.id ?? '').trim()
-  if (!chatId) return null
+  if (!chatId) return false
 
-  const caption = typeof post.caption === 'string' && post.caption.trim() ? post.caption.trim() : null
+  const strategyTier = resolveModelStrategyTier('raw_truth')
 
-  if (post.voice?.file_id) {
-    return {
+  await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+  const result = await callProviderSafe(
+    'claude',
+    buildNotebookSystemPrompt(),
+    [
+      'Нотатка з Telegram-каналу:',
+      rawText,
+    ].join('\n\n'),
+    {
+      contentType: 'CUSTOM',
+      strategyTier,
+    },
+  )
+
+  if (!result.content?.trim()) {
+    console.warn('[NOTEBOOK] Claude returned empty response', {
       chatId,
       messageId: typeof post.message_id === 'number' ? post.message_id : null,
-      fileId: post.voice.file_id,
-      fileUniqueId: post.voice.file_unique_id ?? null,
-      mediaType: 'voice',
-      fileName: null,
-      mimeType: post.voice.mime_type ?? 'audio/ogg',
-      caption,
-      source: 'telegram',
-      zoomType: 'GROUP',
-      duration: post.voice.duration ?? null,
-      sizeBytes: post.voice.file_size ?? null,
-    }
-  }
-
-  if (post.audio?.file_id) {
-    return {
+      hasError: Boolean(result.error),
+      error: result.error ?? null,
+    })
+    await ctx.telegram.sendMessage(
       chatId,
-      messageId: typeof post.message_id === 'number' ? post.message_id : null,
-      fileId: post.audio.file_id,
-      fileUniqueId: post.audio.file_unique_id ?? null,
-      mediaType: 'audio',
-      fileName: post.audio.file_name ?? null,
-      mimeType: post.audio.mime_type ?? 'audio/mpeg',
-      caption,
-      source: 'telegram',
-      zoomType: resolveZoomTypeFromFileName(post.audio.file_name ?? ''),
-      duration: post.audio.duration ?? null,
-      sizeBytes: post.audio.file_size ?? null,
-    }
+      '❌ Не вдалося передати нотатку в Claude. Спробуйте ще раз.',
+    ).catch(() => undefined)
+    return true
   }
 
-  if (post.document?.file_id) {
-    const mimeType = post.document.mime_type ?? null
-    const fileName = post.document.file_name ?? null
-    const lowerName = String(fileName ?? '').toLowerCase()
-    const looksLikeAudio =
-      (mimeType?.startsWith('audio/') ?? false) ||
-      /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(lowerName)
+  const replyText = result.content.trim().slice(0, 3900)
+  console.info('[NOTEBOOK] channel post processed by Claude', {
+    chatId,
+    messageId: typeof post.message_id === 'number' ? post.message_id : null,
+    responseLength: replyText.length,
+  })
 
-    if (!looksLikeAudio) return null
-
-    return {
-      chatId,
-      messageId: typeof post.message_id === 'number' ? post.message_id : null,
-      fileId: post.document.file_id,
-      fileUniqueId: post.document.file_unique_id ?? null,
-      mediaType: 'document_audio',
-      fileName,
-      mimeType,
-      caption,
-      source: 'telegram',
-      zoomType: resolveZoomTypeFromFileName(fileName ?? ''),
-      duration: null,
-      sizeBytes: post.document.file_size ?? null,
-    }
-  }
-
-  return null
-}
-
-function resolveZoomTypeFromFileName(name: string): 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP' {
-  const normalized = name.toUpperCase()
-  if (normalized.startsWith('IND_')) return 'INDIVIDUAL'
-  if (normalized.startsWith('МАЙСТЕРМАЙНД')) return 'MASTERMIND'
-  if (normalized.startsWith('ІНТЕНСИВ')) return 'INTENSIVE'
-  if (normalized.startsWith('ВОРКШОП')) return 'WORKSHOP'
-  return 'GROUP'
+  await ctx.telegram.sendMessage(
+    chatId,
+    replyText,
+  ).catch(() => undefined)
+  return true
 }
 
 function parseMonthSchedule(
@@ -503,163 +389,6 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       return
     }
     await ctx.reply('✅ Block 12 повторно надіслано.')
-  })
-  bot.command('retranscribe', async (ctx) => {
-    try {
-      const userId = (ctx.state as { userId?: string | null }).userId ?? null
-      if (!userId) return
-
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { role: true },
-      })
-
-      if (user?.role !== 'EXPERT' && user?.role !== 'SUPERADMIN') {
-        await ctx.reply('⛔ Недостатньо прав.')
-        return
-      }
-
-      await ctx.reply('🔍 Шукаю аудіо файли в каналі...')
-
-      const channelId = process.env.ZOOM_AUDIO_TELEGRAM_CHANNEL_ID?.trim()
-      if (!channelId) {
-        await ctx.reply('❌ ZOOM_AUDIO_TELEGRAM_CHANNEL_ID не налаштований.')
-        return
-      }
-
-      const replyMessage = 'message' in ctx && ctx.message && 'reply_to_message' in ctx.message
-        ? (ctx.message.reply_to_message as TelegramAudioMessage | undefined)
-        : undefined
-      const repliedAudio = extractRetranscribeAudioFromMessage(replyMessage)
-
-      const commandText =
-        'message' in ctx && ctx.message && 'text' in ctx.message
-          ? String(ctx.message.text ?? '').trim()
-          : ''
-      const args = commandText.split(/\s+/).slice(1)
-
-      if (args.length === 0) {
-        if (repliedAudio) {
-          const dedupeKey = `zoom_audio_manual_${repliedAudio.fileId}`
-          const exists = await prisma.runtimeOutbox.findUnique({
-            where: { dedupeKey },
-            select: { id: true, status: true },
-          }).catch(() => null)
-
-          if (exists) {
-            await ctx.reply(`ℹ️ Цей файл вже в черзі або оброблений.\nСтатус: ${exists.status}`)
-            return
-          }
-
-          await ctx.telegram.sendChatAction(ctx.chat?.id ?? ctx.from?.id ?? 0, 'typing').catch(() => undefined)
-          await prisma.runtimeOutbox.create({
-            data: {
-              scope: 'zoom',
-              type: 'ZOOM_AUDIO_UPLOADED',
-              source: 'manual_retranscribe',
-              dedupeKey,
-              tenantId: channelId,
-              payload: {
-                fileId: repliedAudio.fileId,
-                fileName: repliedAudio.fileName,
-                chatId: channelId,
-                messageId: 0,
-                zoomType: repliedAudio.zoomType,
-                duration: repliedAudio.duration ?? null,
-                sizeBytes: repliedAudio.sizeBytes ?? null,
-                uploadedAt: new Date().toISOString(),
-                triggeredBy: userId,
-                replaySource: 'reply_to_message',
-              },
-              runAt: new Date(),
-            },
-          })
-
-          await ctx.reply(
-            [
-              '✅ Додано до черги!',
-              `📎 fileId: ${repliedAudio.fileId}`,
-              `🧭 Zoom type: ${repliedAudio.zoomType}`,
-              `🔐 dedupeKey: ${dedupeKey}`,
-              '',
-              '⏳ Транскрипт з\'явиться через кілька хвилин.',
-            ].join('\n'),
-          )
-          return
-        }
-
-        await ctx.reply(
-          [
-            '📎 Щоб ретранскрибувати конкретний файл:',
-            '',
-            '/retranscribe <fileId> <fileName>',
-            '',
-            'Або перешли аудіо повідомлення в цей чат і запусти /retranscribe у відповідь на нього.',
-            '',
-            'Якщо потрібен fileId, його можна взяти через Telegram file API або getUpdates.',
-          ].join('\n'),
-        )
-        return
-      }
-
-      const [fileId, ...nameParts] = args
-      const trimmedFileId = fileId.trim()
-      if (!trimmedFileId) {
-        await ctx.reply('❌ Не вдалося визначити fileId.')
-        return
-      }
-
-      const fileName = nameParts.join('_') || 'zoom_audio.mp3'
-      const zoomType = resolveZoomTypeFromFileName(fileName)
-      const dedupeKey = `zoom_audio_manual_${trimmedFileId}`
-
-      const exists = await prisma.runtimeOutbox.findUnique({
-        where: { dedupeKey },
-        select: { id: true, status: true },
-      }).catch(() => null)
-
-      if (exists) {
-        await ctx.reply(`ℹ️ Цей файл вже в черзі або оброблений.\nСтатус: ${exists.status}`)
-        return
-      }
-
-      await ctx.telegram.sendChatAction(ctx.chat?.id ?? ctx.from?.id ?? 0, 'typing').catch(() => undefined)
-      await prisma.runtimeOutbox.create({
-        data: {
-          scope: 'zoom',
-          type: 'ZOOM_AUDIO_UPLOADED',
-          source: 'manual_retranscribe',
-          dedupeKey,
-          tenantId: channelId,
-          payload: {
-            fileId: trimmedFileId,
-            fileName,
-            chatId: channelId,
-            messageId: 0,
-            zoomType,
-            duration: null,
-            sizeBytes: null,
-            uploadedAt: new Date().toISOString(),
-            triggeredBy: userId,
-          },
-          runAt: new Date(),
-        },
-      })
-
-      await ctx.reply(
-        [
-          '✅ Додано до черги!',
-          `📎 fileId: ${trimmedFileId}`,
-          `🧭 Zoom type: ${zoomType}`,
-          `🔐 dedupeKey: ${dedupeKey}`,
-          '',
-          '⏳ Транскрипт з\'явиться через кілька хвилин.',
-        ].join('\n'),
-      )
-    } catch (error) {
-      logger.error('[retranscribe] failed', error)
-      await ctx.reply('❌ Не вдалося поставити аудіо в чергу.')
-    }
   })
   registerPipelineCommands(bot)
   bot.command('zoomhelp', async (ctx) => {
@@ -1023,213 +752,121 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
       const chatId = String(post.chat.id).trim()
       const focusChannelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID?.trim()
-      const zoomAudioChannelId = process.env.ZOOM_AUDIO_TELEGRAM_CHANNEL_ID?.trim()
 
-      if (zoomAudioChannelId && chatId === zoomAudioChannelId) {
-        const audioPayload = extractZoomAudioPayload(post)
-        if (!audioPayload) {
-          console.log('[ZOOM_AUDIO] ignored non-audio channel post', {
-            chatId,
-            messageId: post.message_id ?? null,
-          })
+      if (focusChannelId && chatId === focusChannelId) {
+        if (!post.text) return
+
+        const parsed = parseZoomChannelPost(post.text)
+        if (!parsed.isValid) {
+          if (parsed.errors.length > 0 && hasStructuredFields(post.text)) {
+            const expertTgId = process.env.COACH_TELEGRAM_ID?.trim()
+            if (expertTgId) {
+              await ctx.telegram.sendMessage(
+                expertTgId,
+                'Помилка в шаблоні Zoom-сесії:\n\n'
+                  + parsed.errors.join('\n')
+                  + '\n\nШаблон:\n'
+                  + '#zoom\n'
+                  + 'Дата: DD.MM.YYYY\n'
+                  + 'Час: HH:MM\n'
+                  + 'Тема: назва практики\n'
+                  + 'Link: https://zoom.us/j/...',
+              )
+            }
+          }
           return
         }
 
-        const messageId = audioPayload.messageId
-        if (typeof messageId === 'number') {
-          const existing = await prisma.zoomChannelPost.findUnique({
-            where: { messageId },
-            select: { id: true },
-          }).catch(() => null)
-          if (existing) {
-            console.log('[ZOOM_AUDIO] duplicate channel post skipped', {
-              chatId,
-              messageId,
+        const coachTelegramId = process.env.COACH_TELEGRAM_ID?.trim()
+        if (coachTelegramId && post.from?.id && String(post.from.id) !== coachTelegramId) {
+          return
+        }
+
+        const expert = coachTelegramId
+          ? await prisma.expert.findFirst({
+              where: { users: { some: { telegramUserId: coachTelegramId } } },
+              select: { id: true },
             })
-            return
-          }
+          : await prisma.expert.findFirst({
+              where: { isActive: true },
+              orderBy: { createdAt: 'asc' },
+              select: { id: true },
+            })
 
-          await prisma.zoomChannelPost.create({
-            data: {
-              messageId,
-              chatId,
+        if (!expert) {
+          console.warn('[zoom-parser] expert not found')
+          return
+        }
+
+        const existing = await prisma.zoomSession.findFirst({
+          where: {
+            expertId: expert.id,
+            scheduledAt: parsed.scheduledAt,
+            status: { not: ZoomStatus.CANCELLED },
+          },
+        })
+
+        let isCreated = false
+
+        if (existing) {
+          const existingMeta =
+            existing.requests && typeof existing.requests === 'object' && !Array.isArray(existing.requests)
+              ? (existing.requests as Record<string, unknown>)
+              : {}
+
+          await updateSession(existing.id, {
+            topic: parsed.topic,
+            requests: {
+              ...existingMeta,
+              type: 'group_practice',
+              zoomLink: parsed.zoomLink,
             },
-          }).catch((error) => {
-            console.warn('[ZOOM_AUDIO] failed to persist channel post marker', error)
           })
+        } else {
+          await createFullSession({
+            expertId: expert.id,
+            scheduledAt: parsed.scheduledAt,
+            topic: parsed.topic,
+            requests: {
+              type: 'group_practice',
+              zoomLink: parsed.zoomLink,
+              notify24h: true,
+              notify2h: true,
+              notifiedAt24h: null,
+              notifiedAt2h: null,
+            },
+          })
+          isCreated = true
         }
 
-        const zoomType = audioPayload.zoomType
-        const readyEstimate = new Date(Date.now() + 10 * 60_000).toLocaleTimeString('uk-UA', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-        await ctx.telegram.sendChatAction(post.chat?.id ?? chatId, 'typing').catch(() => undefined)
-        await ctx
-          .reply(
-            [
-              '🎙 Аудіо отримано!',
-              '',
-              `📁 ${audioPayload.fileName ?? 'zoom_audio'}`,
-              `🎯 Тип: ${zoomType}`,
-              '',
-              '⏳ Додано в чергу транскрипції...',
-              `🟡 Статус: у черзі → транскрипція → готово`,
-              `🕒 Орієнтовно буде готово: ${readyEstimate}`,
-            ].join('\n')
+        const expertTgId = process.env.COACH_TELEGRAM_ID?.trim()
+        if (expertTgId) {
+          const dateStr = parsed.scheduledAt.toLocaleString('uk-UA', {
+            weekday: 'long',
+            day: '2-digit',
+            month: 'long',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+          await ctx.telegram.sendMessage(
+            expertTgId,
+            `Zoom-сесію ${isCreated ? 'додано' : 'оновлено'} в системі.\n\n`
+              + `${dateStr}\n`
+              + `${parsed.topic}\n\n`
+              + 'Нагадування заплановані.',
           )
-          .catch(() => undefined)
-
-        const outbox = await enqueueRuntimeOutboxItem({
-          scope: 'zoom_audio_ingest',
-          type: 'ZOOM_AUDIO_UPLOADED',
-          source: 'telegram',
-          userId: null,
-          state: 'uploaded',
-          tenantId: chatId,
-          payload: {
-            chatId: audioPayload.chatId,
-            messageId: audioPayload.messageId,
-            fileId: audioPayload.fileId,
-            fileUniqueId: audioPayload.fileUniqueId,
-            mediaType: audioPayload.mediaType,
-            fileName: audioPayload.fileName,
-            mimeType: audioPayload.mimeType,
-            caption: audioPayload.caption,
-            source: audioPayload.source,
-            zoomType,
-            duration: audioPayload.duration ?? null,
-            sizeBytes: audioPayload.sizeBytes ?? null,
-            observedAt: new Date().toISOString(),
-          },
-        })
-
-        console.log('[ZOOM_AUDIO] runtime outbox enqueued', {
-          chatId,
-          messageId: audioPayload.messageId,
-          fileId: audioPayload.fileId,
-          zoomType,
-          duplicate: outbox.duplicate,
-          dedupeKey: outbox.dedupeKey,
-        })
-
-        await ctx.reply(
-          [
-            '✅ Додано до черги!',
-            '',
-            `🕒 Орієнтовно готово: ${readyEstimate}`,
-            '🟡 Статус: у черзі → транскрипція → готово',
-            '',
-            'Транскрипт з\'явиться через кілька хвилин.',
-            'Повідомлення прийде, коли буде готово.',
-          ].join('\n'),
-        ).catch(() => undefined)
-        return
-      }
-
-      if (!focusChannelId || chatId !== focusChannelId) return
-      if (!post.text) return
-
-      const parsed = parseZoomChannelPost(post.text)
-      if (!parsed.isValid) {
-        if (parsed.errors.length > 0 && hasStructuredFields(post.text)) {
-          const expertTgId = process.env.COACH_TELEGRAM_ID?.trim()
-          if (expertTgId) {
-            await ctx.telegram.sendMessage(
-              expertTgId,
-              'Помилка в шаблоні Zoom-сесії:\n\n'
-                + parsed.errors.join('\n')
-                + '\n\nШаблон:\n'
-                + '#zoom\n'
-                + 'Дата: DD.MM.YYYY\n'
-                + 'Час: HH:MM\n'
-                + 'Тема: назва практики\n'
-                + 'Link: https://zoom.us/j/...',
-            )
-          }
         }
         return
       }
 
-      const coachTelegramId = process.env.COACH_TELEGRAM_ID?.trim()
-      if (coachTelegramId && post.from?.id && String(post.from.id) !== coachTelegramId) {
-        return
+      if (post.text || post.caption) {
+        const handledNotebook = await handleNotebookChannelPost(ctx, post)
+        if (handledNotebook) {
+          return
+        }
       }
 
-      const expert = coachTelegramId
-        ? await prisma.expert.findFirst({
-            where: { users: { some: { telegramUserId: coachTelegramId } } },
-            select: { id: true },
-          })
-        : await prisma.expert.findFirst({
-            where: { isActive: true },
-            orderBy: { createdAt: 'asc' },
-            select: { id: true },
-          })
-
-      if (!expert) {
-        console.warn('[zoom-parser] expert not found')
-        return
-      }
-
-      const existing = await prisma.zoomSession.findFirst({
-        where: {
-          expertId: expert.id,
-          scheduledAt: parsed.scheduledAt,
-          status: { not: ZoomStatus.CANCELLED },
-        },
-      })
-
-      let isCreated = false
-
-      if (existing) {
-        const existingMeta =
-          existing.requests && typeof existing.requests === 'object' && !Array.isArray(existing.requests)
-            ? (existing.requests as Record<string, unknown>)
-            : {}
-
-        await updateSession(existing.id, {
-          topic: parsed.topic,
-          requests: {
-            ...existingMeta,
-            type: 'group_practice',
-            zoomLink: parsed.zoomLink,
-          },
-        })
-      } else {
-        await createFullSession({
-          expertId: expert.id,
-          scheduledAt: parsed.scheduledAt,
-          topic: parsed.topic,
-          requests: {
-            type: 'group_practice',
-            zoomLink: parsed.zoomLink,
-            notify24h: true,
-            notify2h: true,
-            notifiedAt24h: null,
-            notifiedAt2h: null,
-          },
-        })
-        isCreated = true
-      }
-
-      const expertTgId = process.env.COACH_TELEGRAM_ID?.trim()
-      if (expertTgId) {
-        const dateStr = parsed.scheduledAt.toLocaleString('uk-UA', {
-          weekday: 'long',
-          day: '2-digit',
-          month: 'long',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-        await ctx.telegram.sendMessage(
-          expertTgId,
-          `Zoom-сесію ${isCreated ? 'додано' : 'оновлено'} в системі.\n\n`
-            + `${dateStr}\n`
-            + `${parsed.topic}\n\n`
-            + 'Нагадування заплановані.',
-        )
-      }
+      return
     } catch (error) {
       logger.error('[telegram-thin-client:channel_post]', error)
     }
