@@ -4,6 +4,8 @@ import { trackEvent } from '../../events/service.js'
 import { getInstantInsight } from '../../ai-mentor/services.js'
 import { sendDedupedTelegramMessage } from '../../../lib/telegram.js'
 import { reconcileTelegramIdentityUsers } from '../../user/identity.service.js'
+import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
+import { UserCreationSource } from '../../user/userCreation.service.js'
 
 export async function findLinkedUserId(params: {
   chatId: string
@@ -67,7 +69,33 @@ export async function findLinkedUserId(params: {
     return existingLink.userId
   }
 
-  return foundByTelegramIdentity?.id ?? null
+  if (foundByTelegramIdentity?.id) {
+    return foundByTelegramIdentity.id
+  }
+
+  const fallbackResolved = await resolveOrCreateUser(
+    {
+      telegramId: chatId,
+      chatId,
+      telegramUserName: telegramUserName ?? undefined,
+    },
+    {
+      source: UserCreationSource.TELEGRAM_START,
+    },
+  ).catch(() => null)
+
+  if (fallbackResolved) {
+    console.info('[telegram/linking] fallback resolved user', {
+      chatId,
+      telegramUserId,
+      telegramUserName,
+      linkedUserId: fallbackResolved.user.id,
+      source: fallbackResolved.created ? 'created' : 'resolved',
+    })
+    return fallbackResolved.user.id
+  }
+
+  return null
 }
 
 export async function upsertTelegramBinding(params: {

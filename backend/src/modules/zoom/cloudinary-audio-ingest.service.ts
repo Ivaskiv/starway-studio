@@ -106,6 +106,14 @@ async function fetchCloudinaryFolderResources(folder: string): Promise<Cloudinar
     })
 
     if (!response.ok) {
+      console.error('[CLOUDINARY_INGEST] auth failed', {
+        folder,
+        endpoint: url.toString(),
+        status: response.status,
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'MISSING',
+        apiKey: process.env.CLOUDINARY_API_KEY ? 'SET' : 'MISSING',
+        apiSecret: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'MISSING',
+      })
       throw new Error(`cloudinary_list_resources_failed:${response.status}`)
     }
 
