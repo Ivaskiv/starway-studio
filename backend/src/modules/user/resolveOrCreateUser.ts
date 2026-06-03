@@ -1,6 +1,7 @@
 import type { Prisma, Role } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
+import { mergeUsersById } from './identity.service.js'
 import { UserCreationService, type UserCreationSource } from './userCreation.service.js'
 
 export interface ResolveIdentity {
@@ -184,19 +185,38 @@ export async function resolveOrCreateUser(
   if (candidates.size > 1) {
     const sortedCandidates = [...candidates.values()].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
     const winner = sortedCandidates[0]
-    await logConflict({
-      candidateIds: Array.from(candidates.keys()),
-      telegramId,
-      chatId,
-      email,
-      telegramUserName,
-    })
+
+    const mergeReasons = email ? 'email_attach' : 'telegram_identity'
+    let mergedAny = false
+    for (const source of sortedCandidates.slice(1)) {
+      try {
+        const merged = await mergeUsersById(source.id, winner.id, {
+          normalizedEmail: email ?? undefined,
+          reason: mergeReasons,
+        })
+        mergedAny = mergedAny || merged.merged
+      } catch (error) {
+        await logConflict({
+          candidateIds: Array.from(candidates.keys()),
+          telegramId,
+          chatId,
+          email,
+          telegramUserName,
+        })
+        return {
+          user: winner,
+          created: false,
+          linked: mergedAny,
+          conflict: true,
+        }
+      }
+    }
 
     return {
-      user: winner ?? { id: Array.from(candidates.keys())[0] ?? '', email: email ?? '', role: 'USER' },
+      user: winner ?? { id: Array.from(candidates.keys())[0] ?? '', email: email ?? '', role: 'USER', telegramUserId: null, telegramChatId: null, telegramUserName: null, telegramLinkedAt: null, createdAt: new Date(0) },
       created: false,
-      linked: false,
-      conflict: true,
+      linked: mergedAny,
+      conflict: false,
     }
   }
 

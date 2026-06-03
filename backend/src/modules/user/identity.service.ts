@@ -1037,6 +1037,22 @@ async function mergeUsersTx(
   return { userId: targetUserId, merged: true }
 }
 
+export async function mergeUsersById(
+  sourceUserId: string,
+  targetUserId: string,
+  options: {
+    normalizedEmail?: string
+    reason: MergeReason
+  },
+): Promise<{ userId: string; merged: boolean }> {
+  return prisma.$transaction(async tx => mergeUsersTx(tx, {
+    sourceUserId,
+    targetUserId,
+    normalizedEmail: options.normalizedEmail,
+    reason: options.reason,
+  }))
+}
+
 export async function attachEmailToUser(
   userId: string,
   rawEmail: string,
