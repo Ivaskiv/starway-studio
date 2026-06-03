@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -23,6 +24,30 @@ import type { VoiceDecision, VoiceProcessInput } from './types.js'
 
 const FREE_DAILY_LIMIT = 2
 const PAID_DAILY_LIMIT = 20
+const DEFAULT_ZOOM_AUDIO_CHUNK_SECONDS = 600
+
+export type ZoomAudioProcessingStrategy =
+  | 'DIRECT_TRANSCRIPT'
+  | 'NORMALIZE_TRANSCRIPT'
+  | 'CHUNK_TRANSCRIPT'
+  | 'COMPRESS_CHUNK_TRANSCRIPT'
+
+export function resolveZoomAudioStrategy(sizeBytes?: number | null): ZoomAudioProcessingStrategy {
+  const sizeMB = typeof sizeBytes === 'number' && Number.isFinite(sizeBytes) && sizeBytes > 0
+    ? sizeBytes / (1024 * 1024)
+    : null
+
+  if (sizeMB === null) return 'NORMALIZE_TRANSCRIPT'
+  if (sizeMB < 20) return 'DIRECT_TRANSCRIPT'
+  if (sizeMB < 100) return 'NORMALIZE_TRANSCRIPT'
+  if (sizeMB <= 220) return 'CHUNK_TRANSCRIPT'
+  return 'COMPRESS_CHUNK_TRANSCRIPT'
+}
+
+export function formatZoomAudioSizeMB(sizeBytes?: number | null): number | null {
+  if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes) || sizeBytes <= 0) return null
+  return Number((sizeBytes / (1024 * 1024)).toFixed(1))
+}
 
 function stateLabel(state: DailyState) {
   switch (state) {
@@ -65,6 +90,57 @@ export async function transcribeTelegramAudio(
   }
 }
 
+export async function downloadTelegramAudioSourceToTempFile(
+  source: string | URL,
+  fallbackFileName: string,
+): Promise<{ filePath: string; cleanup: () => Promise<void> }> {
+  const normalized = typeof source === 'string' ? source.trim() : source
+  if (!normalized) {
+    throw new Error('telegram_audio_source_missing')
+  }
+
+  if (normalized instanceof URL && normalized.protocol === 'file:') {
+    return {
+      filePath: fileURLToPath(normalized),
+      cleanup: async () => undefined,
+    }
+  }
+
+  if (typeof normalized === 'string' && normalized.startsWith('file://')) {
+    return {
+      filePath: fileURLToPath(new URL(normalized)),
+      cleanup: async () => undefined,
+    }
+  }
+
+  if (typeof normalized === 'string' && normalized.startsWith('/')) {
+    return {
+      filePath: normalized,
+      cleanup: async () => undefined,
+    }
+  }
+
+  const response = await fetch(String(normalized))
+  if (!response.ok || !response.body) {
+    throw new Error('telegram_file_download_failed')
+  }
+
+  const tempDir = await mkdtemp(join(tmpdir(), 'starway-zoom-audio-'))
+  const tempPath = join(tempDir, basename(fallbackFileName))
+  const destination = createWriteStream(tempPath)
+
+  const body = response.body
+  const stream = body instanceof Readable ? body : Readable.fromWeb(body as NodeReadableStream)
+  await pipeline(stream, destination)
+
+  return {
+    filePath: tempPath,
+    cleanup: async () => {
+      await rm(tempDir, { recursive: true, force: true })
+    },
+  }
+}
+
 async function resolveTelegramAudioInput(
   fileId: string,
   type: VoiceEntryType,
@@ -92,40 +168,154 @@ async function downloadTelegramAudioSource(
   fallbackFileName: string,
   cleanupTasks: Array<() => Promise<void>>,
 ) {
-  const normalized = typeof source === 'string' ? source.trim() : source
-  if (!normalized) {
-    throw new Error('telegram_audio_source_missing')
-  }
+  const { filePath, cleanup } = await downloadTelegramAudioSourceToTempFile(source, fallbackFileName)
+  if (cleanupTasks) cleanupTasks.push(cleanup)
+  return createReadStream(filePath)
+}
 
-  if (normalized instanceof URL && normalized.protocol === 'file:') {
-    return createReadStream(fileURLToPath(normalized))
-  }
+function getFfmpegPath(): string {
+  return String(process.env.FFMPEG_PATH ?? 'ffmpeg').trim() || 'ffmpeg'
+}
 
-  if (typeof normalized === 'string' && normalized.startsWith('file://')) {
-    return createReadStream(fileURLToPath(new URL(normalized)))
-  }
+async function runFfmpeg(args: string[]): Promise<void> {
+  const ffmpegPath = getFfmpegPath()
 
-  if (typeof normalized === 'string' && normalized.startsWith('/')) {
-    return createReadStream(normalized)
-  }
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(ffmpegPath, args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    })
 
-  const response = await fetch(String(normalized))
-  if (!response.ok || !response.body) {
-    throw new Error('telegram_file_download_failed')
-  }
+    let stderr = ''
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      stderr += chunk.toString()
+    })
 
-  const tempDir = await mkdtemp(join(tmpdir(), 'starway-zoom-audio-'))
-  const tempPath = join(tempDir, basename(fallbackFileName))
-  const destination = createWriteStream(tempPath)
-  cleanupTasks.push(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+    child.once('error', reject)
+    child.once('close', (code) => {
+      if (code === 0) {
+        resolve()
+        return
+      }
+
+      reject(new Error(`ffmpeg_exit_${code ?? 'unknown'}:${stderr.slice(-2000)}`))
+    })
+  })
+}
+
+async function createZoomAudioWorkspace(prefix: string) {
+  const dir = await mkdtemp(join(tmpdir(), prefix))
+  return {
+    dir,
+    cleanup: async () => {
+      await rm(dir, { recursive: true, force: true })
+    },
+  }
+}
+
+export async function transcodeZoomAudioFile(inputPath: string, options: {
+  outputName: string
+  bitrateKbps: number
+  sampleRate?: number
+  channels?: number
+}): Promise<{ filePath: string; cleanup: () => Promise<void> }> {
+  const workspace = await createZoomAudioWorkspace('starway-zoom-transcode-')
+  const outputPath = join(workspace.dir, options.outputName)
+
+  const args = [
+    '-y',
+    '-i', inputPath,
+    '-vn',
+    '-ac', String(options.channels ?? 1),
+    '-ar', String(options.sampleRate ?? 16000),
+    '-b:a', `${options.bitrateKbps}k`,
+    outputPath,
+  ]
+
+  await runFfmpeg(args)
+
+  return {
+    filePath: outputPath,
+    cleanup: workspace.cleanup,
+  }
+}
+
+export async function normalizeZoomAudioFile(inputPath: string): Promise<{ filePath: string; cleanup: () => Promise<void> }> {
+  return transcodeZoomAudioFile(inputPath, {
+    outputName: 'normalized.mp3',
+    bitrateKbps: 64,
+    sampleRate: 16000,
+    channels: 1,
+  })
+}
+
+export async function compressZoomAudioFile(inputPath: string): Promise<{ filePath: string; cleanup: () => Promise<void> }> {
+  return transcodeZoomAudioFile(inputPath, {
+    outputName: 'compressed.mp3',
+    bitrateKbps: 32,
+    sampleRate: 16000,
+    channels: 1,
+  })
+}
+
+export async function splitZoomAudioFile(inputPath: string, chunkSeconds = DEFAULT_ZOOM_AUDIO_CHUNK_SECONDS): Promise<{ filePaths: string[]; cleanup: () => Promise<void> }> {
+  const workspace = await createZoomAudioWorkspace('starway-zoom-chunks-')
+  const outputPattern = join(workspace.dir, 'chunk_%03d.mp3')
+
+  await runFfmpeg([
+    '-y',
+    '-i', inputPath,
+    '-vn',
+    '-ac', '1',
+    '-ar', '16000',
+    '-b:a', '64k',
+    '-f', 'segment',
+    '-segment_time', String(chunkSeconds),
+    '-reset_timestamps', '1',
+    outputPattern,
+  ])
+
+  const filePaths = await import('node:fs/promises').then(async (fs) => {
+    const entries = await fs.readdir(workspace.dir)
+    return entries
+      .filter((name) => name.endsWith('.mp3'))
+      .sort()
+      .map((name) => join(workspace.dir, name))
   })
 
-  const body = response.body
-  const stream = body instanceof Readable ? body : Readable.fromWeb(body as NodeReadableStream)
-  await pipeline(stream, destination)
+  return {
+    filePaths,
+    cleanup: workspace.cleanup,
+  }
+}
 
-  return createReadStream(tempPath)
+export async function probeZoomAudioDurationSeconds(filePath: string): Promise<number | null> {
+  const ffprobePath = String(process.env.FFPROBE_PATH ?? 'ffprobe').trim() || 'ffprobe'
+
+  return new Promise<number | null>((resolve) => {
+    const child = spawn(ffprobePath, [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath,
+    ], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+
+    let stdout = ''
+    child.stdout?.on('data', (chunk: Buffer | string) => {
+      stdout += chunk.toString()
+    })
+
+    child.once('error', () => resolve(null))
+    child.once('close', (code) => {
+      if (code !== 0) {
+        resolve(null)
+        return
+      }
+      const parsed = Number(stdout.trim())
+      resolve(Number.isFinite(parsed) && parsed > 0 ? parsed : null)
+    })
+  })
 }
 
 async function resolvePlan(userId: string) {

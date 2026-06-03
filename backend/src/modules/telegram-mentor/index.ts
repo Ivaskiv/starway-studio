@@ -73,6 +73,8 @@ type ChannelPostAudioPayload = {
   caption: string | null
   source: 'telegram'
   zoomType: 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP'
+  duration?: number | null
+  sizeBytes?: number | null
 }
 
 type TelegramAudioMessage = {
@@ -81,17 +83,22 @@ type TelegramAudioMessage = {
     file_unique_id?: string
     mime_type?: string | null
     file_name?: string | null
+    duration?: number | null
+    file_size?: number | null
   }
   voice?: {
     file_id?: string
     file_unique_id?: string
     mime_type?: string | null
+    duration?: number | null
+    file_size?: number | null
   }
   document?: {
     file_id?: string
     file_unique_id?: string
     mime_type?: string | null
     file_name?: string | null
+    file_size?: number | null
   }
   caption?: string | null
 }
@@ -100,6 +107,8 @@ function extractRetranscribeAudioFromMessage(message: TelegramAudioMessage | nul
   fileId: string
   fileName: string
   zoomType: 'GROUP' | 'INDIVIDUAL' | 'MASTERMIND' | 'INTENSIVE' | 'WORKSHOP'
+  duration?: number | null
+  sizeBytes?: number | null
 } | null {
   if (!message) return null
 
@@ -108,6 +117,8 @@ function extractRetranscribeAudioFromMessage(message: TelegramAudioMessage | nul
       fileId: message.voice.file_id,
       fileName: 'telegram_voice.ogg',
       zoomType: 'GROUP',
+      duration: message.voice.duration ?? null,
+      sizeBytes: message.voice.file_size ?? null,
     }
   }
 
@@ -116,6 +127,8 @@ function extractRetranscribeAudioFromMessage(message: TelegramAudioMessage | nul
       fileId: message.audio.file_id,
       fileName: message.audio.file_name ?? 'zoom_audio.mp3',
       zoomType: resolveZoomTypeFromFileName(message.audio.file_name ?? ''),
+      duration: message.audio.duration ?? null,
+      sizeBytes: message.audio.file_size ?? null,
     }
   }
 
@@ -133,6 +146,8 @@ function extractRetranscribeAudioFromMessage(message: TelegramAudioMessage | nul
       fileId: message.document.file_id,
       fileName,
       zoomType: resolveZoomTypeFromFileName(fileName),
+      duration: null,
+      sizeBytes: message.document.file_size ?? null,
     }
   }
 
@@ -142,13 +157,14 @@ function extractRetranscribeAudioFromMessage(message: TelegramAudioMessage | nul
 function extractZoomAudioPayload(post: {
   chat?: { id?: number | string }
   message_id?: number
-  voice?: { file_id?: string; file_unique_id?: string; mime_type?: string | null }
-  audio?: { file_id?: string; file_unique_id?: string; mime_type?: string | null; file_name?: string | null }
+  voice?: { file_id?: string; file_unique_id?: string; mime_type?: string | null; duration?: number | null; file_size?: number | null }
+  audio?: { file_id?: string; file_unique_id?: string; mime_type?: string | null; file_name?: string | null; duration?: number | null; file_size?: number | null }
   document?: {
     file_id?: string
     file_unique_id?: string
     mime_type?: string | null
     file_name?: string | null
+    file_size?: number | null
   }
   caption?: string | null
 }): ChannelPostAudioPayload | null {
@@ -169,6 +185,8 @@ function extractZoomAudioPayload(post: {
       caption,
       source: 'telegram',
       zoomType: 'GROUP',
+      duration: post.voice.duration ?? null,
+      sizeBytes: post.voice.file_size ?? null,
     }
   }
 
@@ -184,6 +202,8 @@ function extractZoomAudioPayload(post: {
       caption,
       source: 'telegram',
       zoomType: resolveZoomTypeFromFileName(post.audio.file_name ?? ''),
+      duration: post.audio.duration ?? null,
+      sizeBytes: post.audio.file_size ?? null,
     }
   }
 
@@ -208,6 +228,8 @@ function extractZoomAudioPayload(post: {
       caption,
       source: 'telegram',
       zoomType: resolveZoomTypeFromFileName(fileName ?? ''),
+      duration: null,
+      sizeBytes: post.document.file_size ?? null,
     }
   }
 
@@ -543,6 +565,8 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
                 chatId: channelId,
                 messageId: 0,
                 zoomType: repliedAudio.zoomType,
+                duration: repliedAudio.duration ?? null,
+                sizeBytes: repliedAudio.sizeBytes ?? null,
                 uploadedAt: new Date().toISOString(),
                 triggeredBy: userId,
                 replaySource: 'reply_to_message',
@@ -613,6 +637,8 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
             chatId: channelId,
             messageId: 0,
             zoomType,
+            duration: null,
+            sizeBytes: null,
             uploadedAt: new Date().toISOString(),
             triggeredBy: userId,
           },
@@ -1049,7 +1075,7 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
               '',
               '⏳ Додано в чергу транскрипції...',
               `🟡 Статус: у черзі → транскрипція → готово`,
-              `🕒 Орієнтовно готово: ${readyEstimate}`,
+              `🕒 Орієнтовно буде готово: ${readyEstimate}`,
             ].join('\n')
           )
           .catch(() => undefined)
@@ -1072,6 +1098,8 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
             caption: audioPayload.caption,
             source: audioPayload.source,
             zoomType,
+            duration: audioPayload.duration ?? null,
+            sizeBytes: audioPayload.sizeBytes ?? null,
             observedAt: new Date().toISOString(),
           },
         })

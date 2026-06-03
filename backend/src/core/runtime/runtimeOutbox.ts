@@ -2,7 +2,16 @@ import { ZoomStatus, type Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
 import { bot, contentBot } from '../../lib/telegram.js'
-import { transcribeTelegramAudio } from '../../modules/voice/voice.service.js'
+import {
+  compressZoomAudioFile,
+  downloadTelegramAudioSourceToTempFile,
+  formatZoomAudioSizeMB,
+  normalizeZoomAudioFile,
+  resolveZoomAudioStrategy,
+  splitZoomAudioFile,
+  transcribeTelegramAudio,
+  type ZoomAudioProcessingStrategy,
+} from '../../modules/voice/voice.service.js'
 import { buildRuntimeTelemetry, claimRuntimeEventReplay, withRuntimeAdvisoryLock, type RuntimeIdempotencyInput } from './runtimeIdempotency.js'
 
 export type RuntimeOutboxItem = {
@@ -140,7 +149,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
       const runtime = payload?.runtime && typeof payload.runtime === 'object' && !Array.isArray(payload.runtime)
         ? payload.runtime as Record<string, unknown>
         : {}
-      const zoomAudioPayload = payload && typeof payload === 'object' && !Array.isArray(payload)
+      let zoomAudioPayload = payload && typeof payload === 'object' && !Array.isArray(payload)
           ? payload as Prisma.JsonObject & {
             fileId?: string
             fileUniqueId?: string | null
@@ -154,6 +163,10 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             zoomType?: string | null
             observedAt?: string
             uploadedAt?: string
+            duration?: number | null
+            sizeBytes?: number | null
+            sizeMB?: number | null
+            processingStrategy?: ZoomAudioProcessingStrategy | null
           }
         : null
 
@@ -216,6 +229,9 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
         const mediaType = zoomAudioPayload?.mediaType === 'voice'
           ? 'TELEGRAM_VOICE'
           : 'TELEGRAM_AUDIO'
+        const opsChatId = process.env.OPS_TELEGRAM_CHAT_ID?.trim()
+        const cleanupTasks: Array<() => Promise<void>> = []
+        let transcript = ''
 
         try {
           if (!contentBot) {
@@ -230,6 +246,52 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               uploadedAt: zoomAudioPayload?.uploadedAt ?? null,
               ageMinutes: Math.round((Date.now() - uploadedAt.getTime()) / 60000),
             })
+          }
+
+          let telegramFileSizeBytes = typeof zoomAudioPayload?.sizeBytes === 'number' && Number.isFinite(zoomAudioPayload.sizeBytes) && zoomAudioPayload.sizeBytes > 0
+            ? zoomAudioPayload.sizeBytes
+            : null
+          let telegramDurationSeconds = typeof zoomAudioPayload?.duration === 'number' && Number.isFinite(zoomAudioPayload.duration) && zoomAudioPayload.duration > 0
+            ? zoomAudioPayload.duration
+            : null
+
+          if (!telegramFileSizeBytes) {
+            const telegramFile = await contentBot.telegram.getFile(fileId)
+            telegramFileSizeBytes = typeof telegramFile.file_size === 'number' && Number.isFinite(telegramFile.file_size) && telegramFile.file_size > 0
+              ? telegramFile.file_size
+              : null
+          }
+
+          const sizeMB = formatZoomAudioSizeMB(telegramFileSizeBytes)
+          const processingStrategy = resolveZoomAudioStrategy(telegramFileSizeBytes)
+          zoomAudioPayload = {
+            ...zoomAudioPayload,
+            duration: telegramDurationSeconds,
+            sizeBytes: telegramFileSizeBytes,
+            sizeMB,
+            processingStrategy,
+          }
+
+          await prisma.runtimeOutbox.update({
+            where: { id: item.id },
+            data: {
+              payload: zoomAudioPayload as Prisma.InputJsonValue,
+            },
+          }).catch(() => undefined)
+
+          if (opsChatId) {
+            await bot.telegram.sendMessage(
+              opsChatId,
+              [
+                '🎙 Аудіо отримано',
+                '',
+                `📁 ${zoomAudioPayload.fileName ?? 'zoom audio'}`,
+                `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+                `⚙️ Стратегія: ${processingStrategy}`,
+                '',
+                '⏳ Починаємо обробку...',
+              ].join('\n'),
+            ).catch((error) => console.error('[ZOOM_TRANSCRIPT] intake notify failed', error))
           }
 
           let downloadUrl: string
@@ -251,17 +313,96 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             throw err
           }
 
-          console.log('[ZOOM_DEBUG] step 3 — starting transcription', {
-            downloadUrl: `${downloadUrl.substring(0, 60)}...`,
-            fileName: zoomAudioPayload?.fileName ?? null,
-          })
+          let chunkPaths: string[] = []
 
-          const transcript = await transcribeTelegramAudio(
-            fileId,
-            mediaType,
-            typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null,
-            downloadUrl,
-          )
+          const mimeType = typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null
+          const fileName = typeof zoomAudioPayload?.fileName === 'string' && zoomAudioPayload.fileName.trim()
+            ? zoomAudioPayload.fileName
+            : 'zoom_audio'
+
+          if (processingStrategy === 'DIRECT_TRANSCRIPT') {
+            console.log('[ZOOM_DEBUG] step 3 — starting transcription', {
+              downloadUrl: `${downloadUrl.substring(0, 60)}...`,
+              fileName,
+            })
+            if (opsChatId) {
+              await bot.telegram.sendMessage(
+                opsChatId,
+                '🔤 Транскрипція 1/1',
+              ).catch(() => undefined)
+            }
+            transcript = await transcribeTelegramAudio(
+              fileId,
+              mediaType,
+              mimeType,
+              downloadUrl,
+            )
+          } else {
+            await bot.telegram.sendMessage(
+              opsChatId ?? '',
+              '⬇️ Завантаження...',
+            ).catch(() => undefined)
+            const rawFile = await downloadTelegramAudioSourceToTempFile(downloadUrl, fileName)
+            cleanupTasks.push(rawFile.cleanup)
+
+            if (processingStrategy === 'NORMALIZE_TRANSCRIPT') {
+              await bot.telegram.sendMessage(
+                opsChatId ?? '',
+                '⚙️ Оптимізація...',
+              ).catch(() => undefined)
+              const normalized = await normalizeZoomAudioFile(rawFile.filePath)
+              cleanupTasks.push(normalized.cleanup)
+
+              await bot.telegram.sendMessage(
+                opsChatId ?? '',
+                '🔤 Транскрипція 1/1',
+              ).catch(() => undefined)
+              transcript = await transcribeTelegramAudio(
+                fileId,
+                mediaType,
+                mimeType,
+                normalized.filePath,
+              )
+            } else {
+              let chunkSourcePath = rawFile.filePath
+              if (processingStrategy === 'COMPRESS_CHUNK_TRANSCRIPT') {
+                await bot.telegram.sendMessage(
+                  opsChatId ?? '',
+                  '⚙️ Оптимізація...',
+                ).catch(() => undefined)
+                const compressed = await compressZoomAudioFile(rawFile.filePath)
+                cleanupTasks.push(compressed.cleanup)
+                chunkSourcePath = compressed.filePath
+              }
+
+              await bot.telegram.sendMessage(
+                opsChatId ?? '',
+                '✂️ Розбиття на частини...',
+              ).catch(() => undefined)
+              const chunks = await splitZoomAudioFile(chunkSourcePath)
+              chunkPaths = chunks.filePaths
+              cleanupTasks.push(chunks.cleanup)
+
+              const chunkTranscripts: string[] = []
+              for (const [index, chunkPath] of chunkPaths.entries()) {
+                await bot.telegram.sendMessage(
+                  opsChatId ?? '',
+                  `🔤 Транскрипція ${index + 1}/${chunkPaths.length}`,
+                ).catch(() => undefined)
+                const chunkTranscript = await transcribeTelegramAudio(
+                  fileId,
+                  mediaType,
+                  mimeType,
+                  chunkPath,
+                )
+                if (chunkTranscript.trim()) {
+                  chunkTranscripts.push(chunkTranscript.trim())
+                }
+              }
+
+              transcript = chunkTranscripts.join('\n\n').trim()
+            }
+          }
 
           if (!transcript) {
             throw new Error('zoom_audio_transcription_empty')
@@ -316,6 +457,10 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 caption: typeof zoomAudioPayload?.caption === 'string' ? zoomAudioPayload.caption : null,
                 zoomType: typeof zoomAudioPayload?.zoomType === 'string' ? zoomAudioPayload.zoomType : null,
                 observedAt: typeof zoomAudioPayload?.observedAt === 'string' ? zoomAudioPayload.observedAt : null,
+                duration: typeof zoomAudioPayload?.duration === 'number' ? zoomAudioPayload.duration : null,
+                sizeBytes: typeof zoomAudioPayload?.sizeBytes === 'number' ? zoomAudioPayload.sizeBytes : null,
+                sizeMB: typeof zoomAudioPayload?.sizeMB === 'number' ? zoomAudioPayload.sizeMB : null,
+                processingStrategy: zoomAudioPayload?.processingStrategy ?? null,
                 outboxId: item.id,
                 outboxDedupeKey: item.dedupeKey,
               },
@@ -363,7 +508,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 tenantId: item.tenantId ?? null,
                 state: item.state ?? null,
                 createdAt: item.createdAt.toISOString(),
-                payload: payload ?? {},
+                payload: zoomAudioPayload ?? payload ?? {},
               },
               transcript,
               transcriptLength: transcript.length,
@@ -377,6 +522,10 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               caption: typeof zoomAudioPayload?.caption === 'string' ? zoomAudioPayload.caption : null,
               zoomType: typeof zoomAudioPayload?.zoomType === 'string' ? zoomAudioPayload.zoomType : null,
               observedAt: typeof zoomAudioPayload?.observedAt === 'string' ? zoomAudioPayload.observedAt : null,
+              duration: typeof zoomAudioPayload?.duration === 'number' ? zoomAudioPayload.duration : null,
+              sizeBytes: typeof zoomAudioPayload?.sizeBytes === 'number' ? zoomAudioPayload.sizeBytes : null,
+              sizeMB: typeof zoomAudioPayload?.sizeMB === 'number' ? zoomAudioPayload.sizeMB : null,
+              processingStrategy: zoomAudioPayload?.processingStrategy ?? null,
               runtime: {
                 outboxId: item.id,
                 outboxDedupeKey: item.dedupeKey,
@@ -385,10 +534,14 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             } as Prisma.InputJsonValue,
           })
 
-          const coachChatId = process.env.OPS_TELEGRAM_CHAT_ID?.trim()
-          if (coachChatId) {
+          if (opsChatId) {
             await bot.telegram.sendMessage(
-              coachChatId,
+              opsChatId,
+              '💾 Збереження...',
+            ).catch(() => undefined)
+
+            await bot.telegram.sendMessage(
+              opsChatId,
               [
                 '✅ <b>Транскрипт готовий!</b>',
                 '',
@@ -409,9 +562,23 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 },
               },
             ).catch((error) => console.error('[ZOOM_TRANSCRIPT] notify coach failed', error))
+            await bot.telegram.sendMessage(
+              opsChatId,
+              '✅ Готово',
+            ).catch(() => undefined)
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'zoom_audio_transcription_failed'
+          if (opsChatId) {
+            await bot.telegram.sendMessage(
+              opsChatId,
+              [
+                '❌ Помилка обробки аудіо',
+                '',
+                `${message}`,
+              ].join('\n'),
+            ).catch(() => undefined)
+          }
           await prisma.runtimeOutbox.update({
             where: { id: item.id },
             data: {
@@ -422,6 +589,10 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             },
           }).catch(() => undefined)
           continue
+        } finally {
+          for (const cleanup of cleanupTasks.reverse()) {
+            await cleanup().catch(() => undefined)
+          }
         }
       }
 
