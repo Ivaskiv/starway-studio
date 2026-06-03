@@ -42,6 +42,11 @@ function getHoursSince(date: Date | null | undefined): number {
   return diffMs > 0 ? diffMs / 3_600_000 : 0
 }
 
+function buildTelegramGuestEmail(telegramUserId: string): string {
+  const normalized = String(telegramUserId ?? '').trim()
+  return `telegram-${normalized}@starway.local`
+}
+
 async function setLifecycleState(userId: string, lifecycleState: UserLifecycleState): Promise<void> {
   await prisma.user.update({
     where: { id: userId },
@@ -170,14 +175,52 @@ export async function handleStart(ctx: StartContext) {
 
   try {
     const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
-    const linkedUserId = await resolveLinkedUserIdFromContext(ctx)
+    let resolvedUserId = await resolveLinkedUserIdFromContext(ctx)
 
-    if (!linkedUserId) {
-      await promptForEmail(ctx, chatId, telegramUserId)
-      return
+    if (!resolvedUserId) {
+      const resolved = await resolveOrCreateUser(
+        {
+          telegramId: telegramUserId,
+          chatId,
+          telegramUserName: ctx.from?.username ?? undefined,
+        },
+        {
+          source: UserCreationSource.TELEGRAM_START,
+          expertId: process.env.DEFAULT_AI_EXPERT_ID ?? undefined,
+          name: ctx.from?.first_name ?? undefined,
+          createData: {
+            email: buildTelegramGuestEmail(telegramUserId),
+            lifecycleState: 'NEW_USER',
+            currentState: 'NEW',
+            currentStep: 'LINK_TELEGRAM',
+            activeRole: 'USER',
+            telegramEnabled: true,
+            telegramUserId,
+            telegramChatId: chatId,
+            telegramUserName: ctx.from?.username ?? null,
+            firstName: ctx.from?.first_name ?? null,
+          },
+        },
+      )
+
+      await upsertTelegramBinding({
+        userId: resolved.user.id,
+        chatId,
+        telegramUserId,
+        telegramUserName: ctx.from?.username ?? null,
+        firstName: ctx.from?.first_name ?? null,
+      })
+
+      resolvedUserId = resolved.user.id
+
+      console.log('[START] new user created', {
+        userId: resolvedUserId,
+        telegramId: telegramUserId,
+        created: resolved.created,
+      })
     }
 
-    const user = await loadUserSnapshot(linkedUserId)
+    const user = await loadUserSnapshot(resolvedUserId)
 
     ;(ctx.state as { userId?: string | null }).userId = user.id
     await syncAccessAwareChatEntryPoints(chatId, user.id)
