@@ -208,21 +208,23 @@ async function generateContentLegacy(
   })
 
   let parallelResults: ModelGenerationResult[] = []
-  if (routingMode === 'FAST') {
-    parallelResults = await executeForProviders(['gemini'])
-  } else if (routingMode === 'BALANCED') {
-    const gptResults = await executeForProviders(['gpt'])
-    const gptContent = gptResults[0]?.content ?? ''
-    const geminiValidationPrompt = `${promptPair.system}\n\nПеревір чи JSON валідний і відповідає schema. Відповідь JSON: {"valid": boolean, "reason": "string"}`
-    const geminiValidationUser = `${promptPair.user}\n\nGenerated JSON:\n${gptContent}`
-    const geminiValidation = await callProviderSafe('gemini', geminiValidationPrompt, geminiValidationUser, {
-      contentType: body.contentType,
-      strategyTier,
-    })
-    parallelResults = [...gptResults, geminiValidation]
-  } else {
-    parallelResults = await executeForProviders(['claude', 'gpt', 'gemini'])
-  }
+  // OpenAI і Gemini тимчасово вимкнені — тільки Claude
+  // if (routingMode === 'FAST') {
+  //   parallelResults = await executeForProviders(['gemini'])
+  // } else if (routingMode === 'BALANCED') {
+  //   const gptResults = await executeForProviders(['gpt'])
+  //   const gptContent = gptResults[0]?.content ?? ''
+  //   const geminiValidationPrompt = `${promptPair.system}\n\nПеревір чи JSON валідний і відповідає schema. Відповідь JSON: {"valid": boolean, "reason": "string"}`
+  //   const geminiValidationUser = `${promptPair.user}\n\nGenerated JSON:\n${gptContent}`
+  //   const geminiValidation = await callProviderSafe('gemini', geminiValidationPrompt, geminiValidationUser, {
+  //     contentType: body.contentType,
+  //     strategyTier,
+  //   })
+  //   parallelResults = [...gptResults, geminiValidation]
+  // } else {
+  //   parallelResults = await executeForProviders(['claude', 'gpt', 'gemini'])
+  // }
+  parallelResults = await executeForProviders(['claude'])
 
   for (const r of parallelResults) {
     if (r.content && r.usage) {
@@ -233,7 +235,9 @@ async function generateContentLegacy(
     }
   }
 
-  const preferredOrder = routingMode === 'PREMIUM' ? ['claude', 'gpt', 'gemini'] : routingMode === 'BALANCED' ? ['gpt', 'gemini'] : ['gemini']
+  // OpenAI і Gemini тимчасово вимкнені — тільки Claude
+  // const preferredOrder = routingMode === 'PREMIUM' ? ['claude', 'gpt', 'gemini'] : routingMode === 'BALANCED' ? ['gpt', 'gemini'] : ['gemini']
+  const preferredOrder = ['claude']
   const firstSuccess = preferredOrder
     .map((provider) => parallelResults.find((r) => r.modelKey === provider && r.content !== null))
     .find(Boolean) ?? parallelResults.find((r) => r.content !== null)

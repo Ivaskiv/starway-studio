@@ -117,8 +117,9 @@ export function resolveFreeFirstRoutingMode(selectedProtocol: string): FreeFirst
 }
 
 export function resolveProvidersForMode(mode: FreeFirstRoutingMode): ModelProvider[] {
-  if (mode === 'FAST') return ['gemini']
-  if (mode === 'BALANCED') return ['gpt', 'gemini']
-  return ['claude', 'gpt', 'gemini']
+  // OpenAI і Gemini тимчасово вимкнені — тільки Claude
+  // if (mode === 'FAST') return ['gemini']
+  // if (mode === 'BALANCED') return ['gpt', 'gemini']
+  // return ['claude', 'gpt', 'gemini']
+  return ['claude']
 }
-

@@ -26,17 +26,19 @@ export class SaasAgentsService {
     availableProviders: Array<'claude' | 'gpt' | 'gemini'>
   ): Promise<'claude' | 'gpt' | 'gemini'> {
     const startTime = Date.now()
-    const routing: Record<string, 'claude' | 'gpt' | 'gemini'> = {
-      stories: 'gemini',
-      blog: 'claude',
-      warmup: 'gpt',
-      reels: 'gpt',
-      webinar: 'gpt',
-    }
-    let preferred = routing[contentType] ?? 'claude'
-    if (!availableProviders.includes(preferred)) {
-      preferred = availableProviders[0] ?? 'gemini'
-    }
+    // OpenAI і Gemini тимчасово вимкнені — тільки Claude
+    // const routing: Record<string, 'claude' | 'gpt' | 'gemini'> = {
+    //   stories: 'gemini',
+    //   blog: 'claude',
+    //   warmup: 'gpt',
+    //   reels: 'gpt',
+    //   webinar: 'gpt',
+    // }
+    // let preferred = routing[contentType] ?? 'claude'
+    // if (!availableProviders.includes(preferred)) {
+    //   preferred = availableProviders[0] ?? 'gemini'
+    // }
+    const preferred: 'claude' = availableProviders.includes('claude') ? 'claude' : 'claude'
     await this.logAgentExecution(
       DbAgentType.ROUTER_DIRIGENT,
       { contentType, availableProviders },

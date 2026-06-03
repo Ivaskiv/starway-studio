@@ -78,9 +78,11 @@ function safeNormalize(raw: string): unknown {
 }
 
 function mapModelToProvider(model: 'claude' | 'gpt' | 'gemini'): ModelProvider {
-  if (model === 'claude') return 'claude'
-  if (model === 'gemini') return 'gemini'
-  return 'gpt'
+  // OpenAI і Gemini тимчасово вимкнені — усе мапимо на Claude
+  // if (model === 'claude') return 'claude'
+  // if (model === 'gemini') return 'gemini'
+  // return 'gpt'
+  return 'claude'
 }
 
 function mapContentTypeToFeature(type: GenerationContentType): ProviderFeature {
@@ -280,8 +282,8 @@ export class GenerationPipelineService {
 
     generationQueueStore.updateSession(sessionId, { status: 'processing' })
 
-    const providerStatuses = new Map<'claude' | 'gpt' | 'gemini', ProviderStatus>()
-    const ensureProvider = (provider: 'claude' | 'gpt' | 'gemini') => {
+    const providerStatuses = new Map<'claude', ProviderStatus>()
+    const ensureProvider = (provider: 'claude') => {
       if (!providerStatuses.has(provider)) {
         const health = providerHealthService.getState(provider)
         providerStatuses.set(provider, {
@@ -292,7 +294,7 @@ export class GenerationPipelineService {
         })
       }
     }
-    ;(['claude', 'gpt', 'gemini'] as const).forEach(ensureProvider)
+    ;(['claude'] as const).forEach(ensureProvider)
     const settled = await Promise.allSettled(jobs.map((job) => this.executeJob(job, input, providerStatuses)))
 
     const refreshedJobs = generationQueueStore.getJobs(sessionId)
@@ -399,7 +401,7 @@ export class GenerationPipelineService {
   private async executeJob(
     job: GenerationJob,
     input: GenerationPipelineInput,
-    providerStatuses: Map<'claude' | 'gpt' | 'gemini', ProviderStatus>
+    providerStatuses: Map<'claude', ProviderStatus>
   ): Promise<{ result: string; durationMs: number; degraded: boolean }> {
     let attempt = 0
     let lastError: string | null = null
@@ -435,7 +437,7 @@ export class GenerationPipelineService {
         const providerChain = this.resolveFallbackProviders(primaryProvider, feature)
         let responseContent: string | null = null
         let responseError: string | null = null
-        let usedProvider: ModelProvider = primaryProvider
+        let usedProvider: ModelProvider = 'claude'
         let failureClass: ProviderFailureClass | null = null
 
         const routedProvider = await saasAgentsService.routeToModel(
@@ -472,8 +474,8 @@ export class GenerationPipelineService {
                 fallbackProvider: provider,
               })
             }
-            providerStatuses.set(provider as 'claude' | 'gpt' | 'gemini', {
-              provider: provider as 'claude' | 'gpt' | 'gemini',
+            providerStatuses.set(provider as 'claude', {
+              provider: provider as 'claude',
               available: true,
               status: degraded ? 'degraded' : 'ok',
             })
@@ -487,8 +489,8 @@ export class GenerationPipelineService {
             failureClass,
             responseError
           )
-          providerStatuses.set(provider as 'claude' | 'gpt' | 'gemini', {
-            provider: provider as 'claude' | 'gpt' | 'gemini',
+          providerStatuses.set(provider as 'claude', {
+            provider: provider as 'claude',
             available: false,
             status: lifecycleState,
             message: responseError,

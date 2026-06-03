@@ -1,6 +1,6 @@
 import type { AiBehaviorProfile, ModelProvider } from '@/modules/ai-assistant/promptCompiler.js'
 
-export const DEFAULT_PROVIDER: ModelProvider = 'gpt'
+export const DEFAULT_PROVIDER: ModelProvider = 'claude'
 export const MAX_PROMPT_CHARS = 12_000
 export const MAX_USER_REQUEST_CHARS = 4_000
 export const PROMPT_PREVIEW_CHARS = 300

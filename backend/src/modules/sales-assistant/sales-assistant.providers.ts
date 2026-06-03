@@ -1,4 +1,4 @@
-import { anthropic, gemini, openai } from '@starway/ai/providers'
+import { anthropic } from '@starway/ai/providers'
 import { MODEL_STRATEGY, type ModelStrategyTier } from '@starway/ai/providers/models'
 import {
   buildAiUsageEstimate,
@@ -12,7 +12,7 @@ import type { ModelProvider } from '@/modules/ai-assistant/promptCompiler.js'
 import { normalizeProviderError } from '@/modules/ai-assistant/utils/normalizeProviderError.js'
 import { sendAdminAlert } from '@/modules/sales-assistant/sales-assistant.alert.js'
 import { SalesAssistantGenerateBody } from '@/modules/sales-assistant/sales-assistant.types.js'
-import { estimateTokensFromGeneratedText, normalizeProviderAlias } from '@/modules/sales-assistant/sales-assistant.helpers.js'
+import { normalizeProviderAlias } from '@/modules/sales-assistant/sales-assistant.helpers.js'
 import { PROMPT_PREVIEW_CHARS } from '@/modules/sales-assistant/sales-assistant.constants.js'
 
 // ─── model name resolvers ─────────────────────────────────────────────────────
@@ -43,14 +43,14 @@ export function resolveHumanErrorMessage(
   if (lower.includes('credit balance') || lower.includes('credit_balance_too_low'))
     return 'Баланс токенів вичерпано. Поповни рахунок у кабінеті провайдера.'
   if (norm.code === 'QUOTA_EXCEEDED')
-    return 'Денний ліміт вичерпано. Gemini — безкоштовний fallback доступний.'
+    return 'Денний ліміт вичерпано. Claude — єдиний активний провайдер.'
   if (norm.code === 'RATE_LIMITED')
     return 'Забагато запитів. Зачекай 60 сек та спробуй знову.'
   if (norm.status === 401)
     return 'API ключ недійсний або відсутній. Перевір .env'
   if (norm.status === 503 || norm.status === 529)
     return 'Провайдер перевантажений. Спробуй через 2–3 хвилини.'
-  return 'AI тимчасово недоступний. Gemini (безкоштовно) завжди доступний як fallback.'
+  return 'AI тимчасово недоступний. Claude — єдиний активний провайдер.'
 }
 
 // ─── enabled providers resolver ──────────────────────────────────────────────
@@ -60,9 +60,9 @@ export function resolveEnabledProviders(
 ): ModelProvider[] {
   if (body.provider) {
     const normalized = normalizeProviderAlias(body.provider)
-    return normalized ? [normalized] : ['gpt']
+    return normalized === 'claude' ? [normalized] : ['claude']
   }
-  return requested.length > 0 ? requested : ['gpt', 'claude', 'gemini']
+  return requested.length > 0 ? requested.filter((provider) => provider === 'claude') : ['claude']
 }
 
 // ─── raw provider call ────────────────────────────────────────────────────────
@@ -95,34 +95,39 @@ export async function callProvider(
     return { result: text, tokensUsed: inputTokens + outputTokens, usage: { provider, model: modelName, inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, estimatedCostUsd: estimate.estimatedCostUsd, actualCostUsd, costTier: getCostTier(actualCostUsd || estimate.estimatedCostUsd) } }
   }
 
-  if (provider === 'gemini') {
-    const model = resolveGeminiModelName(options.strategyTier)
-    if (isDev) console.info('[DNA][gemini][CALL]', { model })
-    const response = await gemini
-      .getGenerativeModel({ model, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 } })
-      .generateContent({ contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userRequest}` }] }] })
-    const text = typeof response.response.text === 'function' ? response.response.text() : ''
-    if (!text.trim()) throw new Error('Gemini returned empty response')
-    const outputTokens = estimateTokensFromGeneratedText(text)
-    const actualCostUsd = calculateAiCostUsd(model, estimate.inputTokens, outputTokens)
-    console.info('[DNA][gemini][SUCCESS]', { resultLength: text.length, ...(isDev && { preview: text.slice(0, PROMPT_PREVIEW_CHARS) }) })
-    return { result: text, tokensUsed: estimate.inputTokens + outputTokens, usage: { provider, model, inputTokens: estimate.inputTokens, outputTokens, totalTokens: estimate.inputTokens + outputTokens, estimatedCostUsd: estimate.estimatedCostUsd, actualCostUsd, costTier: getCostTier(actualCostUsd || estimate.estimatedCostUsd) } }
-  }
+  // OpenAI тимчасово вимкнено
+  // if (provider === 'gpt') {
+  //   if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is missing.')
+  //   if (isDev) console.info('[DNA][openai][CALL]', { model: modelName })
+  //   const response = await openai.chat.completions.create({
+  //     model: modelName, max_tokens: maxTokens,
+  //     messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userRequest }],
+  //   })
+  //   const text = response.choices[0]?.message?.content ?? ''
+  //   const inputTokens = response.usage?.prompt_tokens ?? estimate.inputTokens
+  //   const outputTokens = response.usage?.completion_tokens ?? estimateTokensFromGeneratedText(text)
+  //   const totalTokens = response.usage?.total_tokens ?? inputTokens + outputTokens
+  //   const actualCostUsd = calculateAiCostUsd(modelName, inputTokens, outputTokens)
+  //   console.info('[DNA][openai][SUCCESS]', { tokens: totalTokens, actualCostUsd, ...(isDev && { preview: text.slice(0, PROMPT_PREVIEW_CHARS) }) })
+  //   return { result: text, tokensUsed: totalTokens, usage: { provider, model: modelName, inputTokens, outputTokens, totalTokens, estimatedCostUsd: estimate.estimatedCostUsd, actualCostUsd, costTier: getCostTier(actualCostUsd || estimate.estimatedCostUsd) } }
+  // }
 
-  // openai
-  if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is missing.')
-  if (isDev) console.info('[DNA][openai][CALL]', { model: modelName })
-  const response = await openai.chat.completions.create({
-    model: modelName, max_tokens: maxTokens,
-    messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userRequest }],
-  })
-  const text = response.choices[0]?.message?.content ?? ''
-  const inputTokens = response.usage?.prompt_tokens ?? estimate.inputTokens
-  const outputTokens = response.usage?.completion_tokens ?? estimateTokensFromGeneratedText(text)
-  const totalTokens = response.usage?.total_tokens ?? inputTokens + outputTokens
-  const actualCostUsd = calculateAiCostUsd(modelName, inputTokens, outputTokens)
-  console.info('[DNA][openai][SUCCESS]', { tokens: totalTokens, actualCostUsd, ...(isDev && { preview: text.slice(0, PROMPT_PREVIEW_CHARS) }) })
-  return { result: text, tokensUsed: totalTokens, usage: { provider, model: modelName, inputTokens, outputTokens, totalTokens, estimatedCostUsd: estimate.estimatedCostUsd, actualCostUsd, costTier: getCostTier(actualCostUsd || estimate.estimatedCostUsd) } }
+  // Gemini тимчасово вимкнено
+  // if (provider === 'gemini') {
+  //   const model = resolveGeminiModelName(options.strategyTier)
+  //   if (isDev) console.info('[DNA][gemini][CALL]', { model })
+  //   const response = await gemini
+  //     .getGenerativeModel({ model, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 } })
+  //     .generateContent({ contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userRequest}` }] }] })
+  //   const text = typeof response.response.text === 'function' ? response.response.text() : ''
+  //   if (!text.trim()) throw new Error('Gemini returned empty response')
+  //   const outputTokens = estimateTokensFromGeneratedText(text)
+  //   const actualCostUsd = calculateAiCostUsd(model, estimate.inputTokens, outputTokens)
+  //   console.info('[DNA][gemini][SUCCESS]', { resultLength: text.length, ...(isDev && { preview: text.slice(0, PROMPT_PREVIEW_CHARS) }) })
+  //   return { result: text, tokensUsed: estimate.inputTokens + outputTokens, usage: { provider, model, inputTokens: estimate.inputTokens, outputTokens, totalTokens: estimate.inputTokens + outputTokens, estimatedCostUsd: estimate.estimatedCostUsd, actualCostUsd, costTier: getCostTier(actualCostUsd || estimate.estimatedCostUsd) } }
+  // }
+
+  throw new Error(`PROVIDER_DISABLED:${provider}`)
 }
 
 // ─── safe parallel wrapper ────────────────────────────────────────────────────

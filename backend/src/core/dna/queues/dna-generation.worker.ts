@@ -35,8 +35,11 @@ export async function startDnaGenerationWorker(): Promise<void> {
         selectedOutputs: request.input.selectedOutputs,
         transcript: request.input.transcript,
       })
-      route.providerOrder = ['claude', 'gpt', 'gemini']
-      route.fallbackProviders = ['gpt', 'gemini']
+      // OpenAI і Gemini тимчасово вимкнені — залишаємо тільки Claude
+      // route.providerOrder = ['claude', 'gpt', 'gemini']
+      // route.fallbackProviders = ['gpt', 'gemini']
+      route.providerOrder = ['claude']
+      route.fallbackProviders = ['claude']
 
       const result = await executeDnaPipeline({ request, runId, route })
 

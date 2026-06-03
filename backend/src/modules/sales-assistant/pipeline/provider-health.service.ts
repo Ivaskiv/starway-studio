@@ -95,7 +95,9 @@ class ProviderHealthService {
   }
 
   resolveCandidates(primary: ProviderKey, feature: ProviderFeature): ProviderKey[] {
-    const ordered: ProviderKey[] = [primary, 'gpt', 'claude', 'gemini', 'runway']
+    // OpenAI і Gemini тимчасово вимкнені — тільки Claude для текстових провайдерів
+    // const ordered: ProviderKey[] = [primary, 'gpt', 'claude', 'gemini', 'runway']
+    const ordered: ProviderKey[] = ['claude']
     const uniq = [...new Set(ordered)]
     return uniq.filter((provider) => this.supports(provider, feature) && this.isAvailable(provider))
   }
