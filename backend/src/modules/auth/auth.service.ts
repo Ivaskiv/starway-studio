@@ -120,6 +120,9 @@ async function createUserCompat(input: {
     if (error instanceof UserAutoCreationDisabledError) {
       throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
     }
+    if (error instanceof Error && error.message === 'EMAIL_REQUIRED_FOR_USER_CREATION') {
+      throw new AuthServiceError('telegram_email_required', 400, 'Потрібен email для прив’язки Telegram')
+    }
     throw error
   })
 
@@ -150,6 +153,9 @@ async function resolveTelegramSocialUser(input: SocialAuthInput): Promise<{ id: 
   ).catch((error) => {
     if (error instanceof UserAutoCreationDisabledError) {
       throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
+    }
+    if (error instanceof Error && error.message === 'EMAIL_REQUIRED_FOR_USER_CREATION') {
+      throw new AuthServiceError('telegram_email_required', 400, 'Потрібен email для прив’язки Telegram')
     }
     throw error
   })

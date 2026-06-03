@@ -96,6 +96,15 @@ function sendControllerError(res: Response, error: unknown) {
       })
     }
 
+    if (error.code === 'telegram_email_required') {
+      return res.status(error.status).json({
+        success: false,
+        message: 'Потрібен email для прив’язки Telegram',
+        action: 'requestEmail',
+        error: error.code,
+      })
+    }
+
     return res.status(error.status).json({ success: false, error: error.code })
   }
   return res.status(400).json({ success: false, error: 'internal_error' })

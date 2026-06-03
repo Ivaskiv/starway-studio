@@ -1,10 +1,13 @@
 import type { UserLifecycleState } from '@starway/db/prisma-client'
-
 import { prisma } from '../../../db/client.js'
-import { UserCreationSource } from '../../user/userCreation.service.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
+import { UserCreationSource } from '../../user/userCreation.service.js'
+import { upsertTelegramBinding } from '../services/linking.service.js'
+import { clearPendingTelegramIdentity, getPendingTelegramIdentity, isValidEmail, setPendingTelegramIdentity } from '../services/pendingIdentity.service.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 import {
   type StartContext,
+  resolveLinkedUserIdFromContext,
   syncAccessAwareChatEntryPoints,
 } from './start.shared.js'
 import {
@@ -46,30 +49,9 @@ async function setLifecycleState(userId: string, lifecycleState: UserLifecycleSt
   })
 }
 
-async function ensureUser(ctx: StartContext, chatId: string, telegramUserId: string): Promise<StartUserSnapshot> {
-  const resolved = await resolveOrCreateUser(
-    {
-      telegramId: telegramUserId,
-      chatId,
-      telegramUserName: ctx.from?.username ?? undefined,
-    },
-    {
-      source: UserCreationSource.TELEGRAM_START,
-      requestId: Number.isFinite((ctx.update as { update_id?: number }).update_id)
-        ? String((ctx.update as { update_id?: number }).update_id)
-        : null,
-      name: ctx.from?.first_name ?? null,
-      createData: {
-        lifecycleState: 'NEW_USER',
-        currentState: 'NEW',
-        currentStep: 'LINK_TELEGRAM',
-        activeRole: 'USER',
-      },
-    },
-  )
-
-  const created = await prisma.user.findUniqueOrThrow({
-    where: { id: resolved.user.id },
+async function loadUserSnapshot(userId: string): Promise<StartUserSnapshot> {
+  return prisma.user.findUniqueOrThrow({
+    where: { id: userId },
     select: {
       id: true,
       lifecycleState: true,
@@ -79,23 +61,6 @@ async function ensureUser(ctx: StartContext, chatId: string, telegramUserId: str
       updatedAt: true,
     },
   })
-
-  await prisma.notificationPreference.upsert({
-    where: { userId: created.id },
-    create: { userId: created.id, telegramEnabled: true },
-    update: { telegramEnabled: true },
-  })
-
-  if (resolved.conflict) {
-    console.warn('[USER_IDENTITY_CONFLICT]', {
-      source: 'telegram_start',
-      chatId,
-      telegramUserId,
-      resolvedUserId: resolved.user.id,
-    })
-  }
-
-  return created
 }
 
 async function deliver(
@@ -107,6 +72,83 @@ async function deliver(
   await ctx.telegram.sendMessage(deliveryChatId, payload.text, {
     reply_markup: payload.reply_markup,
   })
+}
+
+async function promptForEmail(ctx: StartContext, chatId: string, telegramUserId: string): Promise<void> {
+  await setPendingTelegramIdentity({
+    chatId,
+    telegramUserId,
+    telegramUserName: ctx.from?.username ?? null,
+    firstName: ctx.from?.first_name ?? null,
+    source: 'telegram_start',
+    requestId: Number.isFinite((ctx.update as { update_id?: number }).update_id)
+      ? String((ctx.update as { update_id?: number }).update_id)
+      : null,
+  })
+
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'telegram_identity_email_prompt',
+    [
+      'Щоб прив’язати акаунт, надішліть email одним повідомленням.',
+      '',
+      'Якщо акаунт уже є на сайті, ми під’єднаємо його до Telegram.',
+    ].join('\n'),
+  )
+}
+
+export async function handlePendingTelegramIdentityText(ctx: StartContext, text: string): Promise<boolean> {
+  const chatId = ctx.chat?.id ? String(ctx.chat.id) : ''
+  const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
+  if (!chatId || !telegramUserId) return false
+
+  const pending = await getPendingTelegramIdentity(chatId)
+  if (!pending) return false
+
+  const email = text.trim().toLowerCase()
+  if (!isValidEmail(email)) {
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'telegram_identity_email_invalid',
+      'Схоже, це не email. Надішліть email одним повідомленням.',
+    )
+    return true
+  }
+
+  const resolved = await resolveOrCreateUser(
+    {
+      email,
+      telegramId: telegramUserId,
+      chatId,
+      telegramUserName: ctx.from?.username ?? undefined,
+    },
+    {
+      source: UserCreationSource.TELEGRAM_START,
+      requestId: pending.requestId,
+      name: ctx.from?.first_name ?? null,
+      createData: {
+        lifecycleState: 'NEW_USER',
+        currentState: 'NEW',
+        currentStep: 'LINK_TELEGRAM',
+        activeRole: 'USER',
+      },
+    },
+  )
+
+  await upsertTelegramBinding({
+    userId: resolved.user.id,
+    chatId,
+    telegramUserId,
+    telegramUserName: ctx.from?.username ?? null,
+    firstName: ctx.from?.first_name ?? null,
+  })
+
+  await clearPendingTelegramIdentity(chatId)
+  ;(ctx.state as { userId?: string | null }).userId = resolved.user.id
+  await handleStart(ctx)
+  return true
 }
 
 export async function handleStart(ctx: StartContext) {
@@ -128,9 +170,16 @@ export async function handleStart(ctx: StartContext) {
 
   try {
     const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
-    const user = await ensureUser(ctx, chatId, telegramUserId)
+    const linkedUserId = await resolveLinkedUserIdFromContext(ctx)
 
-    ;(ctx.state as { userId?: string }).userId = user.id
+    if (!linkedUserId) {
+      await promptForEmail(ctx, chatId, telegramUserId)
+      return
+    }
+
+    const user = await loadUserSnapshot(linkedUserId)
+
+    ;(ctx.state as { userId?: string | null }).userId = user.id
     await syncAccessAwareChatEntryPoints(chatId, user.id)
 
     switch (user.lifecycleState) {

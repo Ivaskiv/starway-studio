@@ -27,6 +27,17 @@ type ResolveOptions = {
   createData?: Partial<Prisma.UserUncheckedCreateInput>
 }
 
+type ResolveCandidate = {
+  id: string
+  email: string
+  role: string
+  telegramUserId: string | null
+  telegramChatId: string | null
+  telegramUserName: string | null
+  telegramLinkedAt: Date | null
+  createdAt: Date
+}
+
 function normalizeEmail(email: string | null | undefined): string | null {
   const normalized = String(email ?? '').trim().toLowerCase()
   return normalized || null
@@ -48,11 +59,6 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string | nu
     if (normalized) return normalized
   }
   return null
-}
-
-function buildPlaceholderEmail(params: { telegramId: string | null; chatId: string | null }): string {
-  const seed = params.telegramId ?? params.chatId ?? `${Date.now()}`
-  return `tg.${seed}@placeholder.starway.app`
 }
 
 async function logConflict(input: {
@@ -93,7 +99,7 @@ export async function resolveOrCreateUser(
   const email = normalizeEmail(identity.email)
   const telegramUserName = normalizeTelegramValue(identity.telegramUserName)
 
-  const candidates = new Map<string, { id: string; email: string; role: string; telegramUserId: string | null; telegramChatId: string | null; telegramUserName: string | null }>()
+  const candidates = new Map<string, ResolveCandidate>()
 
   if (telegramId) {
     const byTelegram = await prisma.user.findFirst({
@@ -111,6 +117,7 @@ export async function resolveOrCreateUser(
         telegramChatId: true,
         telegramUserName: true,
         telegramLinkedAt: true,
+        createdAt: true,
       },
     })
     if (byTelegram) candidates.set(byTelegram.id, byTelegram)
@@ -129,6 +136,7 @@ export async function resolveOrCreateUser(
             telegramChatId: true,
             telegramUserName: true,
             telegramLinkedAt: true,
+            createdAt: true,
           },
         },
       },
@@ -147,6 +155,7 @@ export async function resolveOrCreateUser(
         telegramChatId: true,
         telegramUserName: true,
         telegramLinkedAt: true,
+        createdAt: true,
       },
     })
     if (byEmail) candidates.set(byEmail.id, byEmail)
@@ -164,6 +173,7 @@ export async function resolveOrCreateUser(
         telegramChatId: true,
         telegramUserName: true,
         telegramLinkedAt: true,
+        createdAt: true,
       },
     })
     for (const candidate of byUsername) {
@@ -172,7 +182,8 @@ export async function resolveOrCreateUser(
   }
 
   if (candidates.size > 1) {
-    const winner = candidates.values().next().value as { id: string; email: string; role: string } | undefined
+    const sortedCandidates = [...candidates.values()].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+    const winner = sortedCandidates[0]
     await logConflict({
       candidateIds: Array.from(candidates.keys()),
       telegramId,
@@ -316,13 +327,16 @@ export async function resolveOrCreateUser(
     }
   }
 
-  const guestEmail = email ?? buildPlaceholderEmail({ telegramId, chatId })
+  if (!email) {
+    throw new Error('EMAIL_REQUIRED_FOR_USER_CREATION')
+  }
+
   const created = await UserCreationService.createUser({
     source: options.source,
     requestId: options.requestId ?? null,
     data: {
       ...(options.createData ?? {}),
-      email: guestEmail,
+      email,
       firstName: options.name ?? options.createData?.firstName ?? null,
       passwordHash: options.passwordHash ?? options.createData?.passwordHash ?? null,
       role: options.role ?? options.createData?.role ?? 'USER',
@@ -339,7 +353,7 @@ export async function resolveOrCreateUser(
   })
 
   return {
-    user: newUser ?? { id: created.id, email: guestEmail, role: String(options.role ?? 'USER') },
+    user: newUser ?? { id: created.id, email, role: String(options.role ?? 'USER') },
     created: true,
     linked: false,
     conflict: false,

@@ -15,7 +15,7 @@ import { handleVoice } from './handlers/voice.js'
 import { getSession, parseQuestionState } from './session.js'
 import { handleEveningAnswer } from './handlers/evening.js'
 import { handleMorningAnswer } from './handlers/morning.js'
-import { getAccessAwareAppReplyMarkupForContext, handleStart } from './handlers/start.js'
+import { getAccessAwareAppReplyMarkupForContext, handlePendingTelegramIdentityText, handleStart } from './handlers/start.js'
 import { logger } from '../../utils/logger.js'
 import { resolveLinkedUserIdFromContext } from './core/state.service.js'
 import { resolveDecision, shouldRenderDecisionBeforeTransport } from '../../core/decision/decision.resolver.js'
@@ -298,6 +298,11 @@ async function handleTextMessage(ctx: Context) {
   if (userId) {
     const handledEmailCapture = await handleAbTestEmailCaptureText(ctx, userId, text)
     if (handledEmailCapture) {
+      return
+    }
+  } else {
+    const handledPendingIdentity = await handlePendingTelegramIdentityText(ctx, text)
+    if (handledPendingIdentity) {
       return
     }
   }
