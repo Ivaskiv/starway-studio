@@ -1,7 +1,7 @@
 import { ZoomStatus, type Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
-import { contentBot } from '../../lib/telegram.js'
+import { bot, contentBot } from '../../lib/telegram.js'
 import { transcribeTelegramAudio } from '../../modules/voice/voice.service.js'
 import { buildRuntimeTelemetry, claimRuntimeEventReplay, withRuntimeAdvisoryLock, type RuntimeIdempotencyInput } from './runtimeIdempotency.js'
 
@@ -384,6 +384,32 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               },
             } as Prisma.InputJsonValue,
           })
+
+          const coachChatId = process.env.OPS_TELEGRAM_CHAT_ID?.trim()
+          if (coachChatId) {
+            await bot.telegram.sendMessage(
+              coachChatId,
+              [
+                '✅ <b>Транскрипт готовий!</b>',
+                '',
+                `📁 ${typeof zoomAudioPayload?.fileName === 'string' && zoomAudioPayload.fileName.trim() ? zoomAudioPayload.fileName : 'zoom audio'}`,
+                `🎯 Тип: ${typeof zoomAudioPayload?.zoomType === 'string' && zoomAudioPayload.zoomType.trim() ? zoomAudioPayload.zoomType : 'GROUP'}`,
+                '',
+                'Тепер можна аналізувати контент 👇',
+              ].join('\n'),
+              {
+                parse_mode: 'HTML',
+                reply_markup: {
+                  inline_keyboard: [[
+                    {
+                      text: '📝 Планувати контент',
+                      callback_data: 'content_os:start_planning',
+                    },
+                  ]],
+                },
+              },
+            ).catch((error) => console.error('[ZOOM_TRANSCRIPT] notify coach failed', error))
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'zoom_audio_transcription_failed'
           await prisma.runtimeOutbox.update({

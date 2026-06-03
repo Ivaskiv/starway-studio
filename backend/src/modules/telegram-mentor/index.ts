@@ -529,6 +529,7 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
             return
           }
 
+          await ctx.telegram.sendChatAction(ctx.chat?.id ?? ctx.from?.id ?? 0, 'typing').catch(() => undefined)
           await prisma.runtimeOutbox.create({
             data: {
               scope: 'zoom',
@@ -552,10 +553,12 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
           await ctx.reply(
             [
-              '✅ Аудіо з reply поставлено в чергу на ретранскрипцію.',
+              '✅ Поставлено в чергу!',
               `📎 fileId: ${repliedAudio.fileId}`,
               `🧭 Zoom type: ${repliedAudio.zoomType}`,
               `🔐 dedupeKey: ${dedupeKey}`,
+              '',
+              '⏳ Транскрипт з\'явиться через кілька хвилин.',
             ].join('\n'),
           )
           return
@@ -596,6 +599,7 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         return
       }
 
+      await ctx.telegram.sendChatAction(ctx.chat?.id ?? ctx.from?.id ?? 0, 'typing').catch(() => undefined)
       await prisma.runtimeOutbox.create({
         data: {
           scope: 'zoom',
@@ -618,10 +622,12 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
       await ctx.reply(
         [
-          '✅ Аудіо поставлено в чергу на ретранскрипцію.',
+          '✅ Поставлено в чергу!',
           `📎 fileId: ${trimmedFileId}`,
           `🧭 Zoom type: ${zoomType}`,
           `🔐 dedupeKey: ${dedupeKey}`,
+          '',
+          '⏳ Транскрипт з\'явиться через кілька хвилин.',
         ].join('\n'),
       )
     } catch (error) {
@@ -1028,6 +1034,17 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         }
 
         const zoomType = audioPayload.zoomType
+        await ctx.telegram.sendChatAction(post.chat?.id ?? chatId, 'typing').catch(() => undefined)
+        await ctx.reply(
+          [
+            '🎙 Отримала аудіо!',
+            '',
+            `📁 ${audioPayload.fileName ?? 'zoom_audio'}`,
+            `🎯 Тип: ${zoomType}`,
+            '',
+            '⏳ Ставлю в чергу транскрипції...',
+          ].join('\n'),
+        ).catch(() => undefined)
 
         const outbox = await enqueueRuntimeOutboxItem({
           scope: 'zoom_audio_ingest',
@@ -1059,6 +1076,15 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
           duplicate: outbox.duplicate,
           dedupeKey: outbox.dedupeKey,
         })
+
+        await ctx.reply(
+          [
+            '✅ В черзі!',
+            '',
+            'Транскрипт з\'явиться через кілька хвилин.',
+            'Я повідомлю коли буде готово.',
+          ].join('\n'),
+        ).catch(() => undefined)
         return
       }
 
