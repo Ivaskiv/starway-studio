@@ -33,6 +33,43 @@ const OUTBOX_LOCK_SCOPE = 'runtime_outbox'
 const RUNTIME_OUTBOX_POLL_INTERVAL_MS = 5_000
 let runtimeOutboxPollTimer: NodeJS.Timeout | null = null
 
+type CoachStatusMessageRef = {
+  chatId: string
+  messageId: number
+}
+
+type CoachInlineKeyboardMarkup = {
+  inline_keyboard: Array<Array<{
+    text: string
+    callback_data: string
+  }>>
+}
+
+function buildZoomCoachStatusText(lines: string[], fileName?: string | null, zoomType?: string | null): string {
+  const body = lines.filter(Boolean).join('\n')
+  const fileLine = fileName ? `\n\n📁 ${fileName}` : ''
+  const zoomTypeLine = zoomType ? `\n🎯 Тип: ${zoomType}` : ''
+  return `${body}${fileLine}${zoomTypeLine}`
+}
+
+async function sendZoomCoachStatusMessage(chatId: string, text: string) {
+  const message = await bot.telegram.sendMessage(chatId, text)
+  return { chatId, messageId: message.message_id }
+}
+
+async function editZoomCoachStatusMessage(
+  ref: CoachStatusMessageRef | null,
+  text: string,
+  replyMarkup?: CoachInlineKeyboardMarkup,
+) {
+  if (!ref) return null
+  const options = replyMarkup
+    ? ({ reply_markup: replyMarkup } as Parameters<typeof bot.telegram.editMessageText>[4])
+    : undefined
+  await bot.telegram.editMessageText(ref.chatId, ref.messageId, undefined, text, options)
+  return ref
+}
+
 function buildOutboxDedupeKey(input: RuntimeOutboxItem) {
   const runtime = buildRuntimeTelemetry({
     scope: input.scope,
@@ -208,6 +245,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
       })
 
       if (item.type === 'ZOOM_AUDIO_UPLOADED') {
+        let coachStatusRef: CoachStatusMessageRef | null = null
         const fileId = typeof zoomAudioPayload?.fileId === 'string' ? zoomAudioPayload.fileId.trim() : ''
         console.log('[ZOOM_DEBUG] step 1 — payload received', {
           fileId: zoomAudioPayload?.fileId ?? null,
@@ -228,7 +266,9 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           continue
         }
 
-        const mediaType = zoomAudioPayload?.mediaType === 'voice'
+        const audioPayload = zoomAudioPayload as NonNullable<typeof zoomAudioPayload>
+
+        const mediaType = audioPayload.mediaType === 'voice'
           ? 'TELEGRAM_VOICE'
           : 'TELEGRAM_AUDIO'
         const opsChatId = process.env.OPS_TELEGRAM_CHAT_ID?.trim()
@@ -241,20 +281,20 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             throw new Error('contentBot not initialized')
           }
 
-          const uploadedAt = typeof zoomAudioPayload?.uploadedAt === 'string' ? new Date(zoomAudioPayload.uploadedAt) : null
+          const uploadedAt = typeof audioPayload.uploadedAt === 'string' ? new Date(audioPayload.uploadedAt) : null
           if (uploadedAt && !Number.isNaN(uploadedAt.getTime())) {
             console.error('[ZOOM_DEBUG] NOTE: Telegram fileId expires after ~1 hour', {
               fileId,
-              uploadedAt: zoomAudioPayload?.uploadedAt ?? null,
+              uploadedAt: audioPayload.uploadedAt ?? null,
               ageMinutes: Math.round((Date.now() - uploadedAt.getTime()) / 60000),
             })
           }
 
-          let telegramFileSizeBytes = typeof zoomAudioPayload?.sizeBytes === 'number' && Number.isFinite(zoomAudioPayload.sizeBytes) && zoomAudioPayload.sizeBytes > 0
-            ? zoomAudioPayload.sizeBytes
+          let telegramFileSizeBytes = typeof audioPayload.sizeBytes === 'number' && Number.isFinite(audioPayload.sizeBytes) && audioPayload.sizeBytes > 0
+            ? audioPayload.sizeBytes
             : null
-          let telegramDurationSeconds = typeof zoomAudioPayload?.duration === 'number' && Number.isFinite(zoomAudioPayload.duration) && zoomAudioPayload.duration > 0
-            ? zoomAudioPayload.duration
+          let telegramDurationSeconds = typeof audioPayload.duration === 'number' && Number.isFinite(audioPayload.duration) && audioPayload.duration > 0
+            ? audioPayload.duration
             : null
 
           if (!telegramFileSizeBytes) {
@@ -267,7 +307,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           const sizeMB = formatZoomAudioSizeMB(telegramFileSizeBytes)
           const processingStrategy = resolveZoomAudioStrategy(telegramFileSizeBytes)
           zoomAudioPayload = {
-            ...zoomAudioPayload,
+            ...audioPayload,
             duration: telegramDurationSeconds,
             sizeBytes: telegramFileSizeBytes,
             sizeMB,
@@ -281,20 +321,45 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             },
           }).catch(() => undefined)
 
+          const coachStatusText = buildZoomCoachStatusText([
+            '🎙 Аудіо отримано',
+            '',
+            '📦 Аналізуємо розмір',
+            `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+            `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+            `⚙️ Стратегія: ${processingStrategy}`,
+            '',
+            '🟡 Статус: аналізуємо та починаємо обробку',
+          ], audioPayload.fileName ?? null, audioPayload.zoomType ?? null)
+
           if (opsChatId) {
-            await bot.telegram.sendMessage(
-              opsChatId,
-              [
-                '🎙 Аудіо отримано',
-                '',
-                `📁 ${zoomAudioPayload.fileName ?? 'zoom audio'}`,
-                `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
-                `⚙️ Стратегія: ${processingStrategy}`,
-                '',
-                '⏳ Починаємо обробку...',
-              ].join('\n'),
-            ).catch((error) => console.error('[ZOOM_TRANSCRIPT] intake notify failed', error))
+            try {
+              coachStatusRef = await sendZoomCoachStatusMessage(opsChatId, coachStatusText)
+            } catch (error) {
+              console.error('[ZOOM_TRANSCRIPT] intake notify failed', error)
+            }
           }
+
+          const updateCoachStatus = async (lines: string[], options?: { replyMarkup?: CoachInlineKeyboardMarkup }) => {
+            if (!opsChatId || !coachStatusRef) return
+            const text = buildZoomCoachStatusText(lines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null)
+            try {
+              await editZoomCoachStatusMessage(coachStatusRef, text, options?.replyMarkup)
+            } catch (error) {
+              console.error('[ZOOM_TRANSCRIPT] coach status update failed', error)
+            }
+          }
+
+          await updateCoachStatus([
+            '🎙 Аудіо отримано',
+            '',
+            '📦 Аналізуємо розмір',
+            `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+            `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+            `⚙️ Стратегія: ${processingStrategy}`,
+            '',
+            '⬇️ Завантаження...',
+          ])
 
           let downloadUrl: string
           try {
@@ -328,10 +393,17 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
 
             const chunkTranscripts: string[] = []
             for (const [index, chunkPath] of chunkPaths.entries()) {
-              await bot.telegram.sendMessage(
-                opsChatId ?? '',
-                `🔤 Транскрипція ${index + 1}/${chunkPaths.length}`,
-              ).catch(() => undefined)
+              await updateCoachStatus([
+                '🎙 Аудіо отримано',
+                '',
+                '📦 Аналізуємо розмір',
+                `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+                `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+                `⚙️ Стратегія: ${processingStrategy}`,
+                '',
+                '🔤 Транскрипція',
+                `🔤 Частина ${index + 1} з ${chunkPaths.length}`,
+              ])
               const chunkTranscript = await transcribeTelegramAudio(
                 fileId,
                 mediaType,
@@ -356,12 +428,17 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               downloadUrl: `${downloadUrl.substring(0, 60)}...`,
               fileName,
             })
-            if (opsChatId) {
-              await bot.telegram.sendMessage(
-                opsChatId,
-                '🔤 Транскрипція 1/1',
-              ).catch(() => undefined)
-            }
+            await updateCoachStatus([
+              '🎙 Аудіо отримано',
+              '',
+              '📦 Аналізуємо розмір',
+              `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+              `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+              `⚙️ Стратегія: ${processingStrategy}`,
+              '',
+              '🔤 Транскрипція',
+              '🔤 Частина 1 з 1',
+            ])
             transcript = await transcribeTelegramAudio(
               fileId,
               mediaType,
@@ -369,27 +446,46 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               downloadUrl,
             )
           } else {
-            await bot.telegram.sendMessage(
-              opsChatId ?? '',
+            await updateCoachStatus([
+              '🎙 Аудіо отримано',
+              '',
+              '📦 Аналізуємо розмір',
+              `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+              `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+              `⚙️ Стратегія: ${processingStrategy}`,
+              '',
               '⬇️ Завантаження...',
-            ).catch(() => undefined)
+            ])
             const rawFile = await downloadTelegramAudioSourceToTempFile(downloadUrl, fileName)
             cleanupTasks.push(rawFile.cleanup)
 
             if (processingStrategy === 'NORMALIZE_TRANSCRIPT') {
-              await bot.telegram.sendMessage(
-                opsChatId ?? '',
+              await updateCoachStatus([
+                '🎙 Аудіо отримано',
+                '',
+                '📦 Аналізуємо розмір',
+                `📁 ${zoomAudioPayload.fileName ?? 'zoom audio'}`,
+                `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+                `⚙️ Стратегія: ${processingStrategy}`,
+                '',
                 '⚙️ Оптимізація...',
-              ).catch(() => undefined)
+              ])
               const normalized = await normalizeZoomAudioFile(rawFile.filePath)
               cleanupTasks.push(normalized.cleanup)
 
               const normalizedSizeBytes = await probeZoomAudioFileSizeBytes(normalized.filePath)
               if (normalizedSizeBytes && normalizedSizeBytes <= OPENAI_AUDIO_TRANSCRIPTION_MAX_BYTES) {
-                await bot.telegram.sendMessage(
-                  opsChatId ?? '',
-                  '🔤 Транскрипція 1/1',
-                ).catch(() => undefined)
+                await updateCoachStatus([
+                  '🎙 Аудіо отримано',
+                  '',
+                  '📦 Аналізуємо розмір',
+                  `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+                  `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+                  `⚙️ Стратегія: ${processingStrategy}`,
+                  '',
+                  '🔤 Транскрипція',
+                  '🔤 Частина 1 з 1',
+                ])
                 transcript = await transcribeTelegramAudio(
                   fileId,
                   mediaType,
@@ -401,28 +497,46 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                   normalizedSizeBytes,
                   limitBytes: OPENAI_AUDIO_TRANSCRIPTION_MAX_BYTES,
                 })
-                await bot.telegram.sendMessage(
-                  opsChatId ?? '',
+                await updateCoachStatus([
+                  '🎙 Аудіо отримано',
+                  '',
+                  '📦 Аналізуємо розмір',
+                  `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+                  `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+                  `⚙️ Стратегія: ${processingStrategy}`,
+                  '',
                   '✂️ Розбиття на частини...',
-                ).catch(() => undefined)
+                ])
                 await transcribeChunkedAudio(normalized.filePath, 'normalized')
               }
             } else {
               let chunkSourcePath = rawFile.filePath
               if (processingStrategy === 'COMPRESS_CHUNK_TRANSCRIPT') {
-                await bot.telegram.sendMessage(
-                  opsChatId ?? '',
+                await updateCoachStatus([
+                  '🎙 Аудіо отримано',
+                  '',
+                  '📦 Аналізуємо розмір',
+                  `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+                  `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+                  `⚙️ Стратегія: ${processingStrategy}`,
+                  '',
                   '⚙️ Оптимізація...',
-                ).catch(() => undefined)
+                ])
                 const compressed = await compressZoomAudioFile(rawFile.filePath)
                 cleanupTasks.push(compressed.cleanup)
                 chunkSourcePath = compressed.filePath
               }
 
-              await bot.telegram.sendMessage(
-                opsChatId ?? '',
+              await updateCoachStatus([
+                '🎙 Аудіо отримано',
+                '',
+                '📦 Аналізуємо розмір',
+                `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+                `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+                `⚙️ Стратегія: ${processingStrategy}`,
+                '',
                 '✂️ Розбиття на частини...',
-              ).catch(() => undefined)
+              ])
               await transcribeChunkedAudio(chunkSourcePath, processingStrategy === 'COMPRESS_CHUNK_TRANSCRIPT' ? 'compressed' : 'raw')
             }
           }
@@ -517,6 +631,15 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             }).catch(() => undefined)
           }
 
+          const finalReplyMarkup: CoachInlineKeyboardMarkup = {
+            inline_keyboard: [[
+              {
+                text: '📝 Планувати контент',
+                callback_data: 'content_os:start_planning',
+              },
+            ]],
+          }
+
           const { trackEvent } = await import('../../modules/events/service.js')
           await trackEvent({
             userId: item.userId ?? null,
@@ -558,49 +681,48 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           })
 
           if (opsChatId) {
-            await bot.telegram.sendMessage(
-              opsChatId,
+            await updateCoachStatus([
+              '🎙 Аудіо отримано',
+              '',
+              '📦 Аналізуємо розмір',
+              `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+              `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+              `⚙️ Стратегія: ${processingStrategy}`,
+              '',
               '💾 Збереження...',
-            ).catch(() => undefined)
-
-            await bot.telegram.sendMessage(
-              opsChatId,
-              [
-                '✅ <b>Транскрипт готовий!</b>',
-                '',
-                `📁 ${typeof zoomAudioPayload?.fileName === 'string' && zoomAudioPayload.fileName.trim() ? zoomAudioPayload.fileName : 'zoom audio'}`,
-                `🎯 Тип: ${typeof zoomAudioPayload?.zoomType === 'string' && zoomAudioPayload.zoomType.trim() ? zoomAudioPayload.zoomType : 'GROUP'}`,
-                '',
-                'Тепер можна аналізувати контент 👇',
-              ].join('\n'),
-              {
-                parse_mode: 'HTML',
-                reply_markup: {
-                  inline_keyboard: [[
-                    {
-                      text: '📝 Планувати контент',
-                      callback_data: 'content_os:start_planning',
-                    },
-                  ]],
-                },
-              },
-            ).catch((error) => console.error('[ZOOM_TRANSCRIPT] notify coach failed', error))
-            await bot.telegram.sendMessage(
-              opsChatId,
-              '✅ Готово',
-            ).catch(() => undefined)
+            ])
+            await updateCoachStatus([
+              '🎙 Аудіо отримано',
+              '',
+              '📦 Аналізуємо розмір',
+              `📁 ${audioPayload.fileName ?? 'zoom audio'}`,
+              `📦 Розмір: ${sizeMB !== null ? `${sizeMB} MB` : 'невідомо'}`,
+              `⚙️ Стратегія: ${processingStrategy}`,
+              '',
+              '✅ Транскрипт готовий',
+              '',
+              'Тепер можна аналізувати контент 👇',
+            ], { replyMarkup: finalReplyMarkup })
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'zoom_audio_transcription_failed'
           if (opsChatId) {
-            await bot.telegram.sendMessage(
-              opsChatId,
-              [
-                '❌ Помилка обробки аудіо',
-                '',
-                `${message}`,
-              ].join('\n'),
-            ).catch(() => undefined)
+            const recoveryLines = [
+              '❌ Транскрипцію зупинено',
+              '',
+              `Причина: ${message}`,
+              '',
+              message.toLowerCase().includes('quota') || message.toLowerCase().includes('limit')
+                ? 'Дія: перевірте баланс OpenAI'
+                : 'Дія: перевірте файл, токен Telegram та повторіть /retranscribe',
+            ]
+            if (coachStatusRef) {
+              await editZoomCoachStatusMessage(coachStatusRef, buildZoomCoachStatusText(recoveryLines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null))
+                .catch((error) => console.error('[ZOOM_TRANSCRIPT] coach failure status update failed', error))
+            } else {
+              await sendZoomCoachStatusMessage(opsChatId, buildZoomCoachStatusText(recoveryLines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null))
+                .catch((error) => console.error('[ZOOM_TRANSCRIPT] coach failure notify failed', error))
+            }
           }
           await prisma.runtimeOutbox.update({
             where: { id: item.id },
