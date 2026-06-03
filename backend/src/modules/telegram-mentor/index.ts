@@ -553,7 +553,7 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
           await ctx.reply(
             [
-              '✅ Поставлено в чергу!',
+              '✅ Додано до черги!',
               `📎 fileId: ${repliedAudio.fileId}`,
               `🧭 Zoom type: ${repliedAudio.zoomType}`,
               `🔐 dedupeKey: ${dedupeKey}`,
@@ -622,7 +622,7 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
       await ctx.reply(
         [
-          '✅ Поставлено в чергу!',
+          '✅ Додано до черги!',
           `📎 fileId: ${trimmedFileId}`,
           `🧭 Zoom type: ${zoomType}`,
           `🔐 dedupeKey: ${dedupeKey}`,
@@ -1035,16 +1035,18 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
         const zoomType = audioPayload.zoomType
         await ctx.telegram.sendChatAction(post.chat?.id ?? chatId, 'typing').catch(() => undefined)
-        await ctx.reply(
-          [
-            '🎙 Отримала аудіо!',
-            '',
-            `📁 ${audioPayload.fileName ?? 'zoom_audio'}`,
-            `🎯 Тип: ${zoomType}`,
-            '',
-            '⏳ Ставлю в чергу транскрипції...',
-          ].join('\n'),
-        ).catch(() => undefined)
+        await ctx
+          .reply(
+            [
+              '🎙 Аудіо отримано!',
+              '',
+              `📁 ${audioPayload.fileName ?? 'zoom_audio'}`,
+              `🎯 Тип: ${zoomType}`,
+              '',
+              '⏳ Додано в чергу транскрипції...',
+            ].join('\n')
+          )
+          .catch(() => undefined)
 
         const outbox = await enqueueRuntimeOutboxItem({
           scope: 'zoom_audio_ingest',
@@ -1079,10 +1081,10 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
         await ctx.reply(
           [
-            '✅ В черзі!',
+            '✅ Додано до черги!',
             '',
             'Транскрипт з\'явиться через кілька хвилин.',
-            'Я повідомлю коли буде готово.',
+            'Повідомлення прийде, коли буде готово.',
           ].join('\n'),
         ).catch(() => undefined)
         return
