@@ -59,6 +59,9 @@ function toAuthServiceError(error: unknown, fallbackCode = 'auth_internal_error'
   if (error instanceof AuthServiceError) return error
 
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P1001') {
+      return new AuthServiceError('auth_db_unavailable', 503, 'Database temporarily unavailable')
+    }
     if (error.code === 'P2021') {
       return new AuthServiceError('auth_schema_mismatch', 500, 'Auth table mismatch')
     }
@@ -80,7 +83,7 @@ function toAuthServiceError(error: unknown, fallbackCode = 'auth_internal_error'
       errorCode: error.errorCode ?? null,
       ts: new Date().toISOString(),
     })
-    return new AuthServiceError('auth_db_unavailable', 500, 'Database unavailable')
+    return new AuthServiceError('auth_db_unavailable', 503, 'Database unavailable')
   }
 
   return new AuthServiceError(fallbackCode, 500)
