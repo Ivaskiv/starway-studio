@@ -1,3 +1,4 @@
+import { Markup } from 'telegraf'
 import type { Context } from 'telegraf'
 import { ZoomStatus } from '@starway/db/prisma-client'
 
@@ -104,6 +105,24 @@ async function handleNotebookChannelPost(ctx: Context, post: {
   )
 
   if (!result.content?.trim()) {
+    const err = result.error
+    const isBalance = err?.status === 400 &&
+      String(err?.message ?? '').toLowerCase().includes('баланс')
+    const isBadRequest = err?.code === 'INVALID_PROVIDER_REQUEST'
+    const reason = (isBalance || isBadRequest)
+      ? '💳 Вичерпано баланс Anthropic API'
+      : '⚠️ Claude API тимчасово недоступний'
+    const buttons = (isBalance || isBadRequest)
+      ? Markup.inlineKeyboard([[
+          Markup.button.url(
+            '💳 Поповнити баланс',
+            'https://console.anthropic.com/settings/billing',
+          ),
+        ]])
+      : Markup.inlineKeyboard([[
+          Markup.button.callback('🔄 Спробувати ще раз', 'retry_last_action'),
+        ]])
+
     console.warn('[NOTEBOOK] Claude returned empty response', {
       chatId,
       messageId: typeof post.message_id === 'number' ? post.message_id : null,
@@ -112,7 +131,8 @@ async function handleNotebookChannelPost(ctx: Context, post: {
     })
     await ctx.telegram.sendMessage(
       chatId,
-      '❌ Не вдалося передати нотатку в Claude. Спробуйте ще раз.',
+      `❌ Не вдалося отримати відповідь від Claude.\n\n${reason}`,
+      buttons,
     ).catch(() => undefined)
     return true
   }
