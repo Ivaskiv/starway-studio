@@ -858,7 +858,7 @@ export async function handleAbTestCallback(
       },
     }).catch(() => undefined)
 
-    const coachChatId = String(process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
+    const coachChatId = String(process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
     if (coachChatId) {
       await alertCoachAboutPaymentIssue({
         bot: coachBot,

@@ -62,6 +62,11 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string | nu
   return null
 }
 
+function buildPlaceholderEmail(telegramId: string | null, chatId: string | null): string {
+  const identity = telegramId || chatId || String(Date.now())
+  return `tg.${identity}@placeholder.starway.app`
+}
+
 async function logConflict(input: {
   candidateIds: string[]
   telegramId: string | null
@@ -347,16 +352,14 @@ export async function resolveOrCreateUser(
     }
   }
 
-  if (!email) {
-    throw new Error('EMAIL_REQUIRED_FOR_USER_CREATION')
-  }
+  const resolvedEmail = email ?? buildPlaceholderEmail(telegramId, chatId)
 
   const created = await UserCreationService.createUser({
     source: options.source,
     requestId: options.requestId ?? null,
     data: {
       ...(options.createData ?? {}),
-      email,
+      email: resolvedEmail,
       firstName: options.name ?? options.createData?.firstName ?? null,
       passwordHash: options.passwordHash ?? options.createData?.passwordHash ?? null,
       role: options.role ?? options.createData?.role ?? 'USER',
@@ -373,7 +376,7 @@ export async function resolveOrCreateUser(
   })
 
   return {
-    user: newUser ?? { id: created.id, email, role: String(options.role ?? 'USER') },
+    user: newUser ?? { id: created.id, email: resolvedEmail, role: String(options.role ?? 'USER') },
     created: true,
     linked: false,
     conflict: false,

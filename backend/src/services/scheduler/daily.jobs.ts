@@ -141,7 +141,7 @@ async function readWeeklyContentStats(weekStart: Date, weekEnd: Date, nextWeekSt
 }
 
 export async function weeklyContentReminderCron(): Promise<void> {
-  const coachChatId = process.env.OPS_TELEGRAM_CHAT_ID?.trim() || process.env.STARWAY_OPS_CHAT_ID?.trim()
+  const coachChatId = process.env.STARWAY_OPS_CHAT_ID?.trim() || process.env.OPS_TELEGRAM_CHAT_ID?.trim()
   if (!coachChatId) return
 
   const now = new Date()

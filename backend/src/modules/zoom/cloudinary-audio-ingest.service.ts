@@ -92,7 +92,9 @@ async function fetchCloudinaryFolderResources(folder: string): Promise<Cloudinar
   let nextCursor: string | null | undefined
 
   do {
-    const url = new URL(`https://api.cloudinary.com/v1_1/${config.cloudName}/resources/video/upload`)
+    const url = new URL(`https://api.cloudinary.com/v1_1/${config.cloudName}/resources`)
+    url.searchParams.set('resource_type', 'video')
+    url.searchParams.set('type', 'upload')
     url.searchParams.set('prefix', folderPrefix)
     url.searchParams.set('max_results', String(CLOUDINARY_PAGE_SIZE))
     if (nextCursor) {

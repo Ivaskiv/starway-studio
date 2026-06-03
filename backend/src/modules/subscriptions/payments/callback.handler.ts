@@ -239,7 +239,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
           : typeof raw.amount === 'string'
             ? Number(raw.amount)
             : NaN
-      const coachChatId = String(process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
+      const coachChatId = String(process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
       if (rawOrderRef && Number.isFinite(rawAmountNumber) && coachChatId) {
         await alertCoachAboutPaymentIssue({
           bot: coachBot,
@@ -359,7 +359,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
     // fix with kimi 2026-05-28: removed pre-lock isProcessedPayment() — race condition, deduplication handled inside withRuntimeAdvisoryLock
 
     if (data.transaction_status !== 'Approved') {
-      const coachChatId = String(process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
+      const coachChatId = String(process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
       const rawOrderRef = String(data.order_reference ?? '').trim()
       const amountNumber = Number(data.amount ?? 0)
       if (coachChatId && rawOrderRef && Number.isFinite(amountNumber)) {

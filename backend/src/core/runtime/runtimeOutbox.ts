@@ -279,7 +279,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
         const mediaType = audioPayload.mediaType === 'voice'
           ? 'TELEGRAM_VOICE'
           : 'TELEGRAM_AUDIO'
-        const opsChatId = process.env.OPS_TELEGRAM_CHAT_ID?.trim()
+        const opsChatId = process.env.STARWAY_OPS_CHAT_ID?.trim() || process.env.OPS_TELEGRAM_CHAT_ID?.trim()
         const cleanupTasks: Array<() => Promise<void>> = []
         let transcript = ''
 
