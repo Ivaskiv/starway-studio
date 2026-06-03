@@ -119,6 +119,17 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     if (!await checkCoachRole(ctx)) return ctx.answerCbQuery()
     return analyticsHandler(ctx)
   })
+  telegramBot.action('content_os:start_planning', async (ctx) => {
+    if (!await checkCoachRole(ctx)) return ctx.answerCbQuery()
+    await ctx.answerCbQuery('Починаємо планування').catch(() => undefined)
+    await ctx.reply([
+      '📍 Зараз: Аналіз тижня',
+      '⬜ Далі: Бізнес-сигнали → Інсайти → Тема → Контент-план',
+      '',
+      'Ми аналізуємо минулий тиждень і плануємо новий?',
+      'Або одразу плануємо — і ти розкажеш що було по ходу?',
+    ].join('\n'))
+  })
   telegramBot.action(/^admin:grant_focus:/, async (ctx) => {
     if (!await checkCoachRole(ctx)) return ctx.answerCbQuery()
     const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''

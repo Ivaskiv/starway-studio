@@ -1,0 +1,23 @@
+DO $$ BEGIN
+  ALTER TYPE "ZoomSessionType" ADD VALUE 'INDIVIDUAL';
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TYPE "ZoomSessionType" ADD VALUE 'MASTERMIND';
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TYPE "ZoomSessionType" ADD VALUE 'INTENSIVE';
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TYPE "ZoomSessionType" ADD VALUE 'WORKSHOP';
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;

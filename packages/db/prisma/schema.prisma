@@ -2009,6 +2009,10 @@ enum ZoomStatus {
 enum ZoomSessionType {
   GROUP
   PRIVATE
+  INDIVIDUAL
+  MASTERMIND
+  INTENSIVE
+  WORKSHOP
 }
 
 enum SwapStatus {
