@@ -1,5 +1,5 @@
 import cron, { type ScheduledTask } from 'node-cron'
-import { NotificationChannel, NotificationStatus, NotificationType, type UserLifecycleState } from '@starway/db/prisma-client'
+import { NotificationChannel, NotificationStatus, NotificationType, ZoomStatus, type UserLifecycleState } from '@starway/db/prisma-client'
 import type { Telegraf } from 'telegraf'
 
 import { refreshMarketResearch } from '../../modules/admin/content-research.service.js'
@@ -30,6 +30,10 @@ let schedulerStarted = false
 let schedulerStopping = false
 const SCHEDULERS_DISABLED = process.env.DISABLE_SCHEDULERS === 'true'
 
+type CronTaskOptions = {
+  critical?: boolean
+}
+
 function register(task: ScheduledTask) {
   scheduledTasks.push(task)
   return task
@@ -47,25 +51,72 @@ function safeSchedule(key: string, expression: string, task: () => void, timezon
   register(cron.schedule(expression, task, { timezone }))
 }
 
-function runScheduled(key: string, task: () => Promise<void>) {
+function runScheduled(key: string, task: () => Promise<void>, options?: CronTaskOptions) {
   if (schedulerStopping || !schedulerStarted) return
   setImmediate(() => {
     if (schedulerStopping || !schedulerStarted) return
     void withRuntimeAdvisoryLock({ scope: 'cron', type: key, source: 'internal', runtimeStage: 'scheduler' }, async () => {
       await task()
     }).then(() => undefined).catch(error => {
-      console.error('[scheduler] cron task failed', { key, error })
       const message =
         error instanceof Error
           ? error.message
           : typeof error === 'string'
             ? error
             : 'unknown_error'
+      if (options?.critical === false) {
+        console.warn('[scheduler] non-critical cron task failed', { key, error: message })
+        return
+      }
+      console.error('[scheduler] cron task failed', { key, error })
       void sendOpsTelegramMessage(
         `🚨 Scheduler cron task failed\nkey: ${key}\nerror: ${message}`,
       )
     })
   })
+}
+
+function startOfWeekMonday(date = new Date()): Date {
+  const normalized = new Date(date)
+  const day = normalized.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  normalized.setDate(normalized.getDate() + diff)
+  normalized.setHours(0, 0, 0, 0)
+  return normalized
+}
+
+function endOfDay(date: Date): Date {
+  const normalized = new Date(date)
+  normalized.setHours(23, 59, 59, 999)
+  return normalized
+}
+
+function addDays(date: Date, days: number): Date {
+  const normalized = new Date(date)
+  normalized.setDate(normalized.getDate() + days)
+  return normalized
+}
+
+async function zoomScheduleReadinessFridayCron(): Promise<void> {
+  const currentWeekStart = startOfWeekMonday(new Date())
+  const nextWeekStart = addDays(currentWeekStart, 7)
+  const nextWeekEnd = endOfDay(addDays(nextWeekStart, 6))
+
+  const count = await prisma.zoomSession.count({
+    where: {
+      scheduledAt: {
+        gte: nextWeekStart,
+        lte: nextWeekEnd,
+      },
+      status: { not: ZoomStatus.CANCELLED },
+    },
+  })
+
+  if (count === 0) {
+    await sendOpsTelegramMessage(
+      'Zoom-розклад на наступний тиждень не сформовано. Додати сесії до неділі.',
+    )
+  }
 }
 
 type ReminderDispatch = {
@@ -258,7 +309,8 @@ export function startScheduler(options?: { startNotificationWorker?: boolean; co
   safeSchedule('streakRiskCron', '0 * * * *', () => { runScheduled('streakRiskCron', streakRiskCron) }, timezone)
   safeSchedule('weeklyContentReminderCron', '0 9 * * 2', () => { runScheduled('weeklyContentReminderCron', weeklyContentReminderCron) }, timezone)
   safeSchedule('weeklySummaryCron', '0 19 * * 0', () => { runScheduled('weeklySummaryCron', weeklySummaryCron) }, timezone)
-  safeSchedule('cloudinaryZoomAudioIngestCron', '0 3 * * 2', () => { runScheduled('cloudinaryZoomAudioIngestCron', cloudinaryZoomAudioIngestCron) }, timezone)
+  safeSchedule('cloudinaryZoomAudioIngestCron', '0 3 * * 2', () => { runScheduled('cloudinaryZoomAudioIngestCron', cloudinaryZoomAudioIngestCron, { critical: false }) }, timezone)
+  safeSchedule('zoomScheduleReadinessFridayCron', '0 9 * * 5', () => { runScheduled('zoomScheduleReadinessFridayCron', zoomScheduleReadinessFridayCron) }, timezone)
   safeSchedule('aiInactiveCron', '0 * * * *', () => { runScheduled('aiInactiveCron', aiInactiveCron) }, timezone)
   safeSchedule('billingExpiryWarningCron', '0 10 * * *', () => { runScheduled('billingExpiryWarningCron', scheduleBillingExpiryWarning) }, timezone)
   safeSchedule('billingExpiryCheckCron', '0 9 * * *', () => { runScheduled('billingExpiryCheckCron', scheduleBillingExpiryCheck) }, timezone)
