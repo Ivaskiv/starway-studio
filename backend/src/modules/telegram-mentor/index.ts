@@ -76,6 +76,28 @@ function buildNotebookSystemPrompt(): string {
   ].join(' ')
 }
 
+function isMissingAnthropicKey(): boolean {
+  const apiKey = String(process.env.ANTHROPIC_API_KEY ?? '').trim()
+  return !apiKey || apiKey === 'SET'
+}
+
+function isRetryableClaudeError(error?: { status?: number; code?: string } | null): boolean {
+  if (!error) return true
+  return (
+    error.status === 429 ||
+    error.status === 500 ||
+    error.status === 503 ||
+    error.status === 529 ||
+    error.code === 'RATE_LIMITED' ||
+    error.code === 'PROVIDER_OVERLOADED' ||
+    error.code === 'INTERNAL_ERROR'
+  )
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 async function handleNotebookChannelPost(ctx: Context, post: {
   chat?: { id?: number | string }
   message_id?: number
@@ -88,10 +110,18 @@ async function handleNotebookChannelPost(ctx: Context, post: {
   const chatId = String(post.chat?.id ?? '').trim()
   if (!chatId) return false
 
+  if (isMissingAnthropicKey()) {
+    console.warn('[NOTEBOOK] ANTHROPIC_API_KEY missing — skip Claude notebook call', {
+      chatId,
+      messageId: typeof post.message_id === 'number' ? post.message_id : null,
+    })
+    return true
+  }
+
   const strategyTier = resolveModelStrategyTier('raw_truth')
 
   await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-  const result = await callProviderSafe(
+  let result = await callProviderSafe(
     'claude',
     buildNotebookSystemPrompt(),
     [
@@ -103,6 +133,29 @@ async function handleNotebookChannelPost(ctx: Context, post: {
       strategyTier,
     },
   )
+
+  for (let attempt = 2; attempt <= 3 && !result.content?.trim(); attempt += 1) {
+    if (!isRetryableClaudeError(result.error)) break
+    console.warn('[NOTEBOOK] retrying Claude call', {
+      chatId,
+      messageId: typeof post.message_id === 'number' ? post.message_id : null,
+      attempt,
+      error: result.error ?? null,
+    })
+    await sleep((attempt - 1) * 2000)
+    result = await callProviderSafe(
+      'claude',
+      buildNotebookSystemPrompt(),
+      [
+        'Нотатка з Telegram-каналу:',
+        rawText,
+      ].join('\n\n'),
+      {
+        contentType: 'CUSTOM',
+        strategyTier,
+      },
+    )
+  }
 
   if (!result.content?.trim()) {
     const err = result.error
@@ -131,7 +184,7 @@ async function handleNotebookChannelPost(ctx: Context, post: {
     })
     await ctx.telegram.sendMessage(
       chatId,
-      `❌ Не вдалося отримати відповідь від Claude.\n\n${reason}`,
+      `❌ Не вдалося передати нотатку в Claude.\n\n${reason}`,
       buttons,
     ).catch(() => undefined)
     return true
