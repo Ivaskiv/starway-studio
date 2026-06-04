@@ -53,26 +53,23 @@ function safeSchedule(key: string, expression: string, task: () => void, timezon
 
 function runScheduled(key: string, task: () => Promise<void>, options?: CronTaskOptions) {
   if (schedulerStopping || !schedulerStarted) return
-  setImmediate(() => {
-    if (schedulerStopping || !schedulerStarted) return
-    void withRuntimeAdvisoryLock({ scope: 'cron', type: key, source: 'internal', runtimeStage: 'scheduler' }, async () => {
-      await task()
-    }).then(() => undefined).catch(error => {
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === 'string'
-            ? error
-            : 'unknown_error'
-      if (options?.critical === false) {
-        console.warn('[scheduler] non-critical cron task failed', { key, error: message })
-        return
-      }
-      console.error('[scheduler] cron task failed', { key, error })
-      void sendOpsTelegramMessage(
-        `🚨 Scheduler cron task failed\nkey: ${key}\nerror: ${message}`,
-      )
-    })
+  void withRuntimeAdvisoryLock({ scope: 'cron', type: key, source: 'internal', runtimeStage: 'scheduler' }, async () => {
+    await task()
+  }).catch(error => {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : 'unknown_error'
+    if (options?.critical === false) {
+      console.warn('[scheduler] non-critical cron task failed', { key, error: message })
+      return
+    }
+    console.error('[scheduler] cron task failed', { key, error })
+    void sendOpsTelegramMessage(
+      `🚨 Scheduler cron task failed\nkey: ${key}\nerror: ${message}`,
+    )
   })
 }
 

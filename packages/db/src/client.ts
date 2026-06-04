@@ -81,6 +81,15 @@ async function reconnectPrisma() {
   await prisma.$connect().catch(() => undefined)
 }
 
+export async function ensureDbConnected(): Promise<void> {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+  } catch {
+    console.warn('[prisma] connection lost, attempting reconnect...')
+    await reconnectPrisma()
+  }
+}
+
 export async function withRetry<T>(
   fn: () => Promise<T>,
   retries = 3,

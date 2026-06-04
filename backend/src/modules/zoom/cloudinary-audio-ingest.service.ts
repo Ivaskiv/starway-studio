@@ -46,16 +46,19 @@ function parseCloudinaryUrl(urlValue: string): CloudinaryConfig | null {
 
 function hasCloudinaryCredentials(): boolean {
   const cloudinaryUrl = String(process.env.CLOUDINARY_URL ?? '').trim()
-  if (cloudinaryUrl) return true
+  if (cloudinaryUrl && cloudinaryUrl !== 'SET') return true
 
-  return Boolean(process.env.CLOUDINARY_CLOUD_NAME?.trim())
-    && Boolean(process.env.CLOUDINARY_API_KEY?.trim())
-    && Boolean(process.env.CLOUDINARY_API_SECRET?.trim())
+  const cloudName = String(process.env.CLOUDINARY_CLOUD_NAME ?? '').trim()
+  const apiKey = String(process.env.CLOUDINARY_API_KEY ?? '').trim()
+  const apiSecret = String(process.env.CLOUDINARY_API_SECRET ?? '').trim()
+  return Boolean(cloudName && cloudName !== 'SET')
+    && Boolean(apiKey && apiKey !== 'SET')
+    && Boolean(apiSecret && apiSecret !== 'SET')
 }
 
 function getCloudinaryConfig() {
   const cloudinaryUrl = String(process.env.CLOUDINARY_URL ?? '').trim()
-  if (cloudinaryUrl) {
+  if (cloudinaryUrl && cloudinaryUrl !== 'SET') {
     const parsed = parseCloudinaryUrl(cloudinaryUrl)
     if (parsed) return parsed
   }
@@ -65,6 +68,7 @@ function getCloudinaryConfig() {
   const apiSecret = String(process.env.CLOUDINARY_API_SECRET ?? '').trim()
 
   if (!cloudName || !apiKey || !apiSecret) return null
+  if (cloudName === 'SET' || apiKey === 'SET' || apiSecret === 'SET') return null
 
   return { cloudName, apiKey, apiSecret }
 }
