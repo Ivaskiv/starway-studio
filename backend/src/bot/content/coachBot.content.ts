@@ -1,14 +1,17 @@
 export const coachBotContent = {
   start: {
-    title: 'Панель коуча',
-    subtitle: 'Оберіть розділ для керування.',
+    title: 'Starway Coach Panel',
+    subtitle: 'Єдина операційна панель коуча: Zoom, Audio, Content, Users, Notifications, Analytics, Payments.',
   },
   menu: {
-    schedule: 'Мій розклад',
-    nextWeek: '📅 Наступний тиждень',
-    dna: 'ДНК аналітика',
-    members: 'Учасники',
-    notifications: 'Нотифікації',
+    schedule: '📅 Zoom',
+    nextWeek: '➕ Schedule add',
+    dna: '📊 Stats',
+    members: '👥 Users',
+    notifications: '🔔 Notify',
+    audio: '🎧 Audio',
+    planner: '🧭 Planner',
+    payments: '💳 Payments',
   },
   schedule: {
     title: 'Мій розклад на тиждень',
@@ -33,7 +36,7 @@ export const coachBotContent = {
     hours: [9, 11, 13, 15, 17, 19],
   },
   analytics: {
-    title: 'ДНК аналітика',
+    title: 'Analytics',
     total: 'Всього учасників',
     inTest: 'Проходять тест',
     testDone: 'Завершили тест',
@@ -41,5 +44,39 @@ export const coachBotContent = {
     zoomActive: 'Активні в Zoom',
     conversion: 'Конверсія тест → ФОКУС',
     noData: 'Дані ще збираються',
+  },
+  stats: {
+    title: 'Stats',
+    newUsers: 'Нові користувачі',
+    activeUsers: 'Активні користувачі',
+    avgActions: 'Середня активність / юзер',
+    streakUsers: 'Користувачі зі streak',
+    retention: 'Retention',
+    funnel: 'Funnel',
+    liveActivity: 'Live activity',
+  },
+  audio: {
+    title: 'Audio',
+    listEmpty: 'Поки що Cloudinary-аудіо не знайдено.',
+    listHeader: 'Останні аудіо-записи',
+    ingestStarted: 'Запускаю ручну обробку аудіо...',
+    ingestDone: 'Ручну обробку аудіо завершено.',
+    usage: '/audio — показати список\n/audio run — запустити обробку',
+  },
+  users: {
+    title: 'Users',
+    listHeader: 'Останні користувачі',
+    searchHeader: 'Результати пошуку',
+    empty: 'Користувачів не знайдено.',
+    usage: '/users — список\n/users search <query> — пошук',
+  },
+  notify: {
+    title: 'Notifications',
+    usage: '/notify all <message>\n/notify user <id|email|tgId> <message>',
+    done: '✅ Повідомлення відправлено.',
+  },
+  payments: {
+    title: 'Payments',
+    noData: 'Поки що даних по платежах немає.',
   },
 } as const
