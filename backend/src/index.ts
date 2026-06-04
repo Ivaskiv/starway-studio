@@ -18,6 +18,7 @@ import { startZoomNotificationsCron, startBattleCron, seedDefaultAvailability } 
 import { startDnaQueueWorkers, stopDnaQueueWorkers } from '@/core/dna/queues/dna.workers.js'
 import { startDnaQueueTelemetry } from '@/core/dna/telemetry/dna.queue-telemetry.js'
 import { registerCoachBotHandlers } from './bot/handlers/coach/coachStart.handler.js'
+import { registerCoachContentHandlers } from './bot/handlers/coachContent.handler.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
@@ -142,6 +143,7 @@ async function startTelegramBot() {
       const coachToken = readCoachBotToken()
       if (coachToken) {
         registerCoachBotHandlers(coachBot)
+        registerCoachContentHandlers(coachBot)
       } else {
         console.log('🤖 [CoachBot] skipped: COACH_BOT_TOKEN is not set')
       }

@@ -156,7 +156,9 @@ model User {
   checkoutSessions       CheckoutSession[]
   trialMirrors           TrialMirror[]
   aiWorkspace            UserAiWorkspace?
+  contentPlans           ContentPlan[]
   coachZoomSlots         ZoomSlot[]                     @relation("CoachZoomSlots")
+  notes                  Note[]
   initiatedZoomSwaps     ZoomSwap[]                     @relation("InitiatedZoomSwaps")
 
   @@unique([expertId, telegramUserId])
@@ -1310,6 +1312,36 @@ model Report {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expertId, userId, createdAt])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  content   String   @db.Text
+  source    String   @default("coach_bot")
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([source, createdAt])
+}
+
+model ContentPlan {
+  id        String   @id @default(cuid())
+  expertId  String
+  weekStart DateTime
+  type      String
+  content   String   @db.Text
+  status    String   @default("DRAFT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  expert    User     @relation(fields: [expertId], references: [id], onDelete: Cascade)
+
+  @@unique([expertId, weekStart, type])
+  @@index([expertId, weekStart])
+  @@index([expertId, createdAt])
 }
 
 model ZoomSession {
