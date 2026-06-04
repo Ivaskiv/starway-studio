@@ -258,7 +258,7 @@ export function startScheduler(options?: { startNotificationWorker?: boolean; co
   safeSchedule('streakRiskCron', '0 * * * *', () => { runScheduled('streakRiskCron', streakRiskCron) }, timezone)
   safeSchedule('weeklyContentReminderCron', '0 9 * * 2', () => { runScheduled('weeklyContentReminderCron', weeklyContentReminderCron) }, timezone)
   safeSchedule('weeklySummaryCron', '0 19 * * 0', () => { runScheduled('weeklySummaryCron', weeklySummaryCron) }, timezone)
-  safeSchedule('cloudinaryZoomAudioIngestCron', '*/5 * * * *', () => { runScheduled('cloudinaryZoomAudioIngestCron', cloudinaryZoomAudioIngestCron) }, timezone)
+  safeSchedule('cloudinaryZoomAudioIngestCron', '0 3 * * 2', () => { runScheduled('cloudinaryZoomAudioIngestCron', cloudinaryZoomAudioIngestCron) }, timezone)
   safeSchedule('aiInactiveCron', '0 * * * *', () => { runScheduled('aiInactiveCron', aiInactiveCron) }, timezone)
   safeSchedule('billingExpiryWarningCron', '0 10 * * *', () => { runScheduled('billingExpiryWarningCron', scheduleBillingExpiryWarning) }, timezone)
   safeSchedule('billingExpiryCheckCron', '0 9 * * *', () => { runScheduled('billingExpiryCheckCron', scheduleBillingExpiryCheck) }, timezone)

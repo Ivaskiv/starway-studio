@@ -22,14 +22,49 @@ type CloudinaryResourcesResponse = {
 const CLOUDINARY_AUDIO_FOLDERS = ['zoom/group', 'zoom/individual'] as const
 const CLOUDINARY_PAGE_SIZE = 500
 
+type CloudinaryConfig = {
+  cloudName: string
+  apiKey: string
+  apiSecret: string
+}
+
+function parseCloudinaryUrl(urlValue: string): CloudinaryConfig | null {
+  try {
+    const parsed = new URL(urlValue)
+    if (parsed.protocol !== 'cloudinary:') return null
+
+    const cloudName = String(parsed.hostname ?? '').trim()
+    const apiKey = String(parsed.username ?? '').trim()
+    const apiSecret = String(parsed.password ?? '').trim()
+
+    if (!cloudName || !apiKey || !apiSecret) return null
+    return { cloudName, apiKey, apiSecret }
+  } catch {
+    return null
+  }
+}
+
+function hasCloudinaryCredentials(): boolean {
+  const cloudinaryUrl = String(process.env.CLOUDINARY_URL ?? '').trim()
+  if (cloudinaryUrl) return true
+
+  return Boolean(process.env.CLOUDINARY_CLOUD_NAME?.trim())
+    && Boolean(process.env.CLOUDINARY_API_KEY?.trim())
+    && Boolean(process.env.CLOUDINARY_API_SECRET?.trim())
+}
+
 function getCloudinaryConfig() {
+  const cloudinaryUrl = String(process.env.CLOUDINARY_URL ?? '').trim()
+  if (cloudinaryUrl) {
+    const parsed = parseCloudinaryUrl(cloudinaryUrl)
+    if (parsed) return parsed
+  }
+
   const cloudName = String(process.env.CLOUDINARY_CLOUD_NAME ?? '').trim()
   const apiKey = String(process.env.CLOUDINARY_API_KEY ?? '').trim()
   const apiSecret = String(process.env.CLOUDINARY_API_SECRET ?? '').trim()
 
-  if (!cloudName || !apiKey || !apiSecret) {
-    return null
-  }
+  if (!cloudName || !apiKey || !apiSecret) return null
 
   return { cloudName, apiKey, apiSecret }
 }
@@ -214,6 +249,11 @@ export async function ingestCloudinaryZoomAudio(): Promise<Array<{ folder: strin
 }
 
 export async function cloudinaryZoomAudioIngestCron(): Promise<void> {
+  if (!hasCloudinaryCredentials()) {
+    console.warn('[cloudinary-ingest] credentials missing — skipping')
+    return
+  }
+
   try {
     const results = await ingestCloudinaryZoomAudio()
     console.info('[cloudinaryZoomAudio] ingest complete', { results })
