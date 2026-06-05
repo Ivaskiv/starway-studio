@@ -18,7 +18,34 @@ if (existsSync(backendEnvPath)) {
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
-const databaseUrl = process.env.DATABASE_URL?.trim()
+const globalPrismaKeepAlive = globalThis as typeof globalThis & {
+  __starwayDbKeepAliveInterval?: NodeJS.Timeout
+}
+type PrismaErrorListenerClient = PrismaClient & {
+  $on(event: 'error', callback: (event: { message: string }) => void): void
+}
+
+function normalizeDatabaseUrl(input: string | undefined): string | undefined {
+  const raw = String(input ?? '').trim()
+  if (!raw) {
+    return undefined
+  }
+
+  try {
+    const url = new URL(raw)
+    if (url.hostname.includes('pooler.supabase.com')) {
+      url.searchParams.set('pgbouncer', 'true')
+      url.searchParams.set('connection_limit', '1')
+      return url.toString()
+    }
+  } catch {
+    return raw
+  }
+
+  return raw
+}
+
+const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL)
 
 function isRecoverableConnectionMessage(message: string): boolean {
   const normalized = message.toLowerCase()
@@ -32,10 +59,7 @@ function isRecoverableConnectionMessage(message: string): boolean {
 
 const prismaClientSingleton = () =>
   new PrismaClient({
-    log: [
-      { emit: 'event', level: 'error' },
-      { emit: 'stdout', level: 'warn' },
-    ],
+    log: ['error'],
     datasources: {
       db: {
         url: databaseUrl,
@@ -45,12 +69,24 @@ const prismaClientSingleton = () =>
 
 export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
 
-;(prisma as any).$on('error', (event: { message: string }) => {
+;(prisma as PrismaErrorListenerClient).$on('error', (event) => {
   if (isRecoverableConnectionMessage(event.message)) {
     return
   }
   console.error('prisma:error', event.message)
 })
+
+if (!globalPrismaKeepAlive.__starwayDbKeepAliveInterval) {
+  globalPrismaKeepAlive.__starwayDbKeepAliveInterval = setInterval(async () => {
+    try {
+      await prisma.$queryRaw`SELECT 1`
+    } catch {
+      // reconnect automatically on the next query
+    }
+  }, 4 * 60 * 1000)
+
+  globalPrismaKeepAlive.__starwayDbKeepAliveInterval.unref?.()
+}
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
