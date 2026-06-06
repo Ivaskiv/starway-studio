@@ -1,5 +1,9 @@
 import type { Prisma } from '@starway/db/prisma-client'
 
+import {
+  PAYMENT_REMINDER_MESSAGE_KEYS,
+} from './paymentReminderFoundation.js'
+
 export const CANONICAL_CTA_IDS = [
   'START_TEST',
   'OPEN_FOCUS',
@@ -23,9 +27,7 @@ export const CANONICAL_MESSAGE_KEYS = [
   'FOCUS_INVITE_24H',
   'FOCUS_INVITE_48H',
   'FOCUS_INVITE_72H',
-  'PAYMENT_REMINDER_24H',
-  'PAYMENT_REMINDER_48H',
-  'PAYMENT_REMINDER_72H',
+  ...PAYMENT_REMINDER_MESSAGE_KEYS,
   'ZOOM_REMINDER_24H',
   'ZOOM_REMINDER_2H',
   'PLATFORM_INVITE_AFTER_ZOOM',

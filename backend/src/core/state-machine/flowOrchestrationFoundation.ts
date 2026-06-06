@@ -7,6 +7,10 @@ import {
   resolveCanonicalMessageKeyByCtaId,
 } from './ctaFoundation.js'
 import {
+  PAYMENT_REMINDER_MESSAGE_KEY_24H,
+  PAYMENT_REMINDER_MESSAGE_KEY_72H,
+} from './paymentReminderFoundation.js'
+import {
   CANONICAL_FLOW_TIMER_REGISTRY,
   type CanonicalFlowStageId,
   type CanonicalFlowTimerId,
@@ -127,7 +131,7 @@ export const CANONICAL_FLOW_REGISTRY: Record<CanonicalFlowId, CanonicalFlowDefin
     analytics_hooks: ['flow_id', 'flow_action', 'orchestration_reason', 'blocked_reason', 'guardrail_result', 'orchestration_priority', 'lifecycle_stage'],
     primary_cta: 'PAY_FOCUS_1M',
     completion_cta: 'JOIN_CHANNEL',
-    message_key: 'PAYMENT_REMINDER_24H',
+    message_key: PAYMENT_REMINDER_MESSAGE_KEY_24H,
     timer_ids: ['PAYMENT_REMINDER_24H', 'PAYMENT_REMINDER_48H', 'PAYMENT_REMINDER_72H'],
   },
   ZOOM_ACTIVATION_FLOW: {
@@ -198,7 +202,7 @@ export const CANONICAL_FLOW_REGISTRY: Record<CanonicalFlowId, CanonicalFlowDefin
     analytics_hooks: ['flow_id', 'flow_action', 'orchestration_reason', 'blocked_reason', 'guardrail_result', 'orchestration_priority', 'lifecycle_stage'],
     primary_cta: 'RESTORE_PROGRESS',
     completion_cta: 'RESTORE_PROGRESS',
-    message_key: 'PAYMENT_REMINDER_72H',
+    message_key: PAYMENT_REMINDER_MESSAGE_KEY_72H,
     timer_ids: ['PAYMENT_REMINDER_5D', 'PAYMENT_REMINDER_7D'],
   },
   RETURN_FLOW: {

@@ -6,6 +6,7 @@ import {
   getTestDriveFollowupBodyLines,
   type TestDriveContentVersion,
 } from './testDrive.content.js'
+import { PAYMENT_REMINDER_FOLLOWUP_COPY } from '@/core/state-machine/paymentReminderFoundation.js'
 
 export type FollowupCopy = {
   title: string
@@ -184,31 +185,7 @@ const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = 
     body: '[DEPRECATED] Wave 0 recognition body is injected by the scheduler via payload.message_body.',
     cta: CTA_JOIN_FOCUS,
   },
-  PAYMENT_REMINDER_24H: {
-    title: 'ФОКУС',
-    body: 'Якщо хочеш продовжити, контекст уже збережено.',
-    cta: CTA_JOIN_FOCUS,
-  },
-  PAYMENT_REMINDER_48H: {
-    title: 'ФОКУС',
-    body: 'Повертаємось до рішення: що саме дає тобі зараз найбільше користі.',
-    cta: CTA_JOIN_FOCUS,
-  },
-  PAYMENT_REMINDER_72H: {
-    title: 'ФОКУС',
-    body: 'Незавершений крок теж впливає на ритм. Можна мʼяко повернутись до нього.',
-    cta: CTA_JOIN_FOCUS,
-  },
-  PAYMENT_REMINDER_5D: {
-    title: 'ФОКУС',
-    body: 'Пауза вже показує ціну відкладання. Повернутись можна одним кроком.',
-    cta: CTA_JOIN_FOCUS,
-  },
-  PAYMENT_REMINDER_7D: {
-    title: 'ФОКУС',
-    body: 'Можна повернутись до збереженого прогресу і свого темпу.',
-    cta: CTA_JOIN_FOCUS,
-  },
+  ...PAYMENT_REMINDER_FOLLOWUP_COPY,
   ZOOM_REMINDER_24H: {
     title: 'Zoom через добу',
     body: 'Завтра буде Zoom-практика у ФОКУСІ. Підготуй одну ситуацію: що ти давно хочеш зробити, але переносиш?',

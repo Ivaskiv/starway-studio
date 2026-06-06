@@ -1,5 +1,11 @@
 import type { Prisma } from '@starway/db/prisma-client'
 import { CANONICAL_CTA_IDS, CANONICAL_MESSAGE_KEYS, type CanonicalCtaId, type CanonicalMessageKey } from './ctaFoundation.js'
+import {
+  PAYMENT_REMINDER_MESSAGE_KEY_24H,
+  PAYMENT_REMINDER_MESSAGE_KEY_48H,
+  PAYMENT_REMINDER_MESSAGE_KEY_72H,
+  PAYMENT_REMINDER_TIMER_IDS,
+} from './paymentReminderFoundation.js'
 
 export const CANONICAL_FLOW_TIMER_IDS = [
   'RESULT_FOLLOWUP_24H',
@@ -10,11 +16,7 @@ export const CANONICAL_FLOW_TIMER_IDS = [
   'RESULT_DOJIM_72H',
   'RESULT_DOJIM_5D',
   'RESULT_DOJIM_7D',
-  'PAYMENT_REMINDER_24H',
-  'PAYMENT_REMINDER_48H',
-  'PAYMENT_REMINDER_72H',
-  'PAYMENT_REMINDER_5D',
-  'PAYMENT_REMINDER_7D',
+  ...PAYMENT_REMINDER_TIMER_IDS,
   'ZOOM_REMINDER_24H',
   'ZOOM_REMINDER_2H',
   'PLATFORM_INVITE_AFTER_ZOOM_1',
@@ -155,7 +157,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     delay_ms: 24 * 60 * 60 * 1000,
     allowed_states: ['S4_FOCUS_INVITE', 'S5_PAYMENT'],
     blocked_states: ['S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY', 'S9_RETENTION', 'S10_RETENTION_WINBACK'],
-    message_key: 'PAYMENT_REMINDER_24H',
+    message_key: PAYMENT_REMINDER_MESSAGE_KEY_24H,
     analytics_hook: 'FLOW_TRIGGERED',
   },
   PAYMENT_REMINDER_48H: {
@@ -165,7 +167,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     delay_ms: 48 * 60 * 60 * 1000,
     allowed_states: ['S4_FOCUS_INVITE', 'S5_PAYMENT'],
     blocked_states: ['S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY', 'S9_RETENTION', 'S10_RETENTION_WINBACK'],
-    message_key: 'PAYMENT_REMINDER_48H',
+    message_key: PAYMENT_REMINDER_MESSAGE_KEY_48H,
     analytics_hook: 'FLOW_TRIGGERED',
   },
   PAYMENT_REMINDER_72H: {
@@ -175,7 +177,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     delay_ms: 72 * 60 * 60 * 1000,
     allowed_states: ['S4_FOCUS_INVITE', 'S5_PAYMENT'],
     blocked_states: ['S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY', 'S9_RETENTION', 'S10_RETENTION_WINBACK'],
-    message_key: 'PAYMENT_REMINDER_72H',
+    message_key: PAYMENT_REMINDER_MESSAGE_KEY_72H,
     analytics_hook: 'FLOW_TRIGGERED',
   },
   PAYMENT_REMINDER_5D: {
@@ -185,7 +187,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     delay_ms: 5 * 24 * 60 * 60 * 1000,
     allowed_states: ['S9_RETENTION', 'S10_RETENTION_WINBACK'],
     blocked_states: ['S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY'],
-    message_key: 'PAYMENT_REMINDER_72H',
+    message_key: PAYMENT_REMINDER_MESSAGE_KEY_72H,
     analytics_hook: 'FLOW_TRIGGERED',
   },
   PAYMENT_REMINDER_7D: {
@@ -195,7 +197,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     delay_ms: 7 * 24 * 60 * 60 * 1000,
     allowed_states: ['S9_RETENTION', 'S10_RETENTION_WINBACK'],
     blocked_states: ['S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY'],
-    message_key: 'PAYMENT_REMINDER_72H',
+    message_key: PAYMENT_REMINDER_MESSAGE_KEY_72H,
     analytics_hook: 'FLOW_TRIGGERED',
   },
   ZOOM_REMINDER_24H: {
