@@ -50,7 +50,7 @@ export const ROUTES = {
   AI_FUNNEL_LANDING: '/',
   HELP: '/help',
   AB_TEST: '/ab-test',
-  AB_TEST_QUIZ: '/test',
+  AB_TEST_QUIZ: '/ab-test/quiz',
   WELCOME_TEST: '/welcome-test',
   PRODUCT_INFO_BASE: '/products',
   RESET_PASSWORD: '/reset-password',
@@ -200,6 +200,11 @@ export const ROUTE_METADATA: Record<string, RouteMeta> & Record<RoutePath, Route
   },
   '/test/result': {
     title: 'AB Test Result',
+    requiresAuth: false,
+    requiresPaid: false,
+  },
+  '/ab-test/quiz': {
+    title: 'AB Test Quiz',
     requiresAuth: false,
     requiresPaid: false,
   },

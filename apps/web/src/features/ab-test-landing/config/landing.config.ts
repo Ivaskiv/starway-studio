@@ -1,5 +1,5 @@
-export const AB_TEST_LANDING_ROUTE = '/lead-ab-test'
-export const AB_TEST_LANDING_QUIZ_ROUTE = '/test'
+export const AB_TEST_LANDING_ROUTE = '/ab-test'
+export const AB_TEST_LANDING_QUIZ_ROUTE = '/ab-test/quiz'
 export const AB_TEST_LANDING_RESULT_ROUTE = '/ab-test/result'
 
 export const AB_TEST_LANDING_SEO = {

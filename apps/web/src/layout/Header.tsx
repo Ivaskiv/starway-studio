@@ -234,7 +234,7 @@ const Header = memo(function Header({
         className="hdr-btn-ghost"
         disabled={isNavigationLocked}
         onClick={() => {
-          go(ROUTES.LEAD_AB_TEST)
+          go(ROUTES.AB_TEST)
           onAfterClick?.()
         }}
         aria-label="Пройти AB тест"
