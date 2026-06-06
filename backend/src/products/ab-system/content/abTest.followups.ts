@@ -177,6 +177,8 @@ export const AB_TEST_FOLLOWUPS: Record<AbTestResultKey, BranchFollowupCopy> = {
 }
 
 const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = {
+  // In-chat Focus offer copy.
+  // The personalized wave-0 recognition body is injected by the scheduler via payload.message_body.
   DOJIM_0_IMMEDIATE: {
     title: 'ФОКУС',
     body: [

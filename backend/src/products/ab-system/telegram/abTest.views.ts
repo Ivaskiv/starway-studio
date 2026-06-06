@@ -4,7 +4,6 @@ import type { Context } from 'telegraf'
 import { buildBehavioralSnapshot } from '../../../core/behavioral/behavioralSnapshot.js'
 import {
   buildAbTestQuestionFlow,
-  buildAbTestResultFlow,
 } from '../../../core/flow-builder/flowBuilder.js'
 import {
   AB_TEST_UI_SETTINGS_KEY,
@@ -230,14 +229,37 @@ export async function renderAbTestCompletedResult(
 
   const resultKey = dominantBlock.toLowerCase() as AbTestResultKey
   const resultDef = getAbTestResultDefinition(resultKey)
-  const flow = buildAbTestResultFlow(next)
   const firstName = user?.firstName ?? user?.telegramUserName ?? null
-  flow.body = [`*${resultDef.title}*`, '', interpolateFirstName(resultDef.body, firstName)]
-  await deliverTelegramFlow(ctx, flow, 'reply')
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+  if (!chatId) {
+    return
+  }
+
+  const resultBody = interpolateFirstName(resultDef.body, firstName)
+  await ctx.telegram.sendMessage(
+    chatId,
+    escapeHtml(resultBody),
+    {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+          [{ text: 'Як це виглядає зсередини?', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+        ],
+      },
+    },
+  )
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
 }
 
 export async function renderAbTestFocusOffer(

@@ -1769,6 +1769,7 @@ export class NotificationService {
       {
         const flowTimerId = (asString(payload?.flow_timer_id ?? payload?.flowTimerId) ?? 'RESULT_FOLLOWUP_24H') as AbTestFollowupTimerId
         const contentVersion = (asString(payload?.content_version ?? payload?.contentVersion) ?? 'legacy') as TestDriveContentVersion
+        const customBody = asString(payload?.message_body ?? payload?.messageBody)
         const content = buildNotificationContent(flowTimerId, {
           userName: firstName,
           resultKey: asString(payload?.result_key ?? payload?.resultKey) as AbTestResultKey | null,
@@ -1787,10 +1788,10 @@ export class NotificationService {
         ?? null
         return {
           title: content.title,
-          body: content.body,
+          body: customBody ?? content.body,
           telegramHtml: buildTelegramCard({
             title: content.title,
-            intro: isPlainBridge ? content.body : `${firstName}, ${content.body}`,
+            intro: isPlainBridge || customBody ? (customBody ?? content.body) : `${firstName}, ${content.body}`,
           }),
           ctaText: content.ctaText,
           ctaActions: isPlainBridge && bridgeUrl && content.ctaText

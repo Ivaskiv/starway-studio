@@ -616,12 +616,16 @@ export async function handleAbTestEmailCaptureText(
       })
     }
 
-    await scheduleFollowups(persistedUserId, next, 'S3_TEST_RESULT').catch((error) => {
+    const scheduled = await scheduleFollowups(persistedUserId, next, 'S3_TEST_RESULT').catch((error) => {
       console.error('[AB_TEST_EMAIL_CAPTURE] followups_failed', {
         userId: persistedUserId,
         error: error instanceof Error ? error.message : String(error),
       })
+      return next
     })
+    if (scheduled !== next) {
+      await saveAbTestProgress(persistedUserId, scheduled)
+    }
 
     await renderAbTestPostEmailSubmitSequence(ctx, persistedUserId, next)
     return true
@@ -1191,12 +1195,16 @@ export async function handleAbTestCallback(
       last_event_at: nowIso,
     })
     await saveAbTestProgress(userId, next)
-    await scheduleFollowups(userId, next, 'S3_TEST_RESULT').catch((error) => {
+    const scheduled = await scheduleFollowups(userId, next, 'S3_TEST_RESULT').catch((error) => {
       console.error('[AB_TEST_Q8_TRACE] result_followups_failed', {
         userId,
         error: error instanceof Error ? error.message : String(error),
       })
+      return next
     })
+    if (scheduled !== next) {
+      await saveAbTestProgress(userId, scheduled)
+    }
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (chatId) {
       await clearPendingTelegramIdentity(String(chatId))
@@ -1621,13 +1629,17 @@ export async function handleAbTestCallback(
         deliveryKind: 'ab_test_email_gate',
       })
       await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-      await scheduleFollowups(userId, resolvedProgress, 'S3_TEST_RESULT').catch((error) => {
+      const scheduled = await scheduleFollowups(userId, resolvedProgress, 'S3_TEST_RESULT').catch((error) => {
         console.error('[AB_TEST_Q8_TRACE] result_followups_failed', {
           userId,
           error: error instanceof Error ? error.message : String(error),
         })
+        return resolvedProgress
       })
-      await renderAbTestResultThenOffer(ctx, userId, resolvedProgress)
+      if (scheduled !== resolvedProgress) {
+        await saveAbTestProgress(userId, scheduled)
+      }
+      await renderAbTestResultThenOffer(ctx, userId, scheduled)
       return true
     }
     console.info('[AB_TEST_Q8_TRACE] result_email_prompt_sent', {
@@ -1637,7 +1649,11 @@ export async function handleAbTestCallback(
     })
     await ctx.telegram.sendMessage(
       chatId,
-      'Введи email — надішлемо аналіз результату.\n\nАбо натисни «Пропустити» щоб продовжити без email.',
+      'Введи email одним повідомленням, щоб:\n\n'
+      + '• зберегти результат\n'
+      + '• отримати персональний розбір\n'
+      + '• побачити свій наступний крок\n\n'
+      + 'Після цього я підготую твій результат.',
       {
         reply_markup: {
           inline_keyboard: [[
