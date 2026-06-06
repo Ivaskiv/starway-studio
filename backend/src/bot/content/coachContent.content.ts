@@ -1,4 +1,4 @@
-import type { ContentPlanMode } from '../../modules/coach-content/contentPlanner.service.js'
+import type { ContentPlanMode, ContentPlanScope } from '../../modules/coach-content/contentPlanner.service.js'
 
 export const coachContent = {
   accessDenied: 'Цей модуль доступний тільки для коуча.',
@@ -8,6 +8,7 @@ export const coachContent = {
     collecting: 'Можеш одразу написати фокус теми або натиснути "Продовжити".',
     collectingHint: 'Наприклад: "фокус на продажах" або "тема: вигорання".',
     periodPrefix: 'Період:',
+    monthlyPeriodPrefix: 'Місяць:',
     generating: 'Готую чернетку на основі контексту...',
     confirming: 'Ось чернетка. Перевір і підтверди, або перепиши.',
     focusPrefix: 'Фокус:',
@@ -25,11 +26,15 @@ export const coachContent = {
     cancelled: 'Ок, сесію планування скасовано.',
     errorFallback: 'Не вдалося згенерувати чернетку. Спробуй ще раз пізніше.',
     aiNotConfigured: 'Claude ще не підключено. Перевір ANTHROPIC_API_KEY.',
+    monthlyPrompt: 'Аналізую місяць...',
+    monthlyTitle: 'Контент-план на місяць',
+    monthlySaved: 'Місячний план збережено.',
   },
   buttons: {
     confirm: 'Підтвердити',
     rewrite: 'Переписати',
     changeTopic: 'Змінити тему',
+    monthlyPlan: 'Місячний план',
     continue: 'Продовжити',
     sales: 'Фокус на продажах',
     burnout: 'Тема: вигорання',
@@ -43,6 +48,7 @@ export const coachContent = {
   },
   mode: {
     WEEKLY_PLAN: 'Планер тижня',
+    MONTHLY_PLAN: 'Планер місяця',
     REELS_IDEAS: 'Ідеї для Reels',
     FULL_CONTENT: 'Повний контент-пакет',
   } satisfies Record<ContentPlanMode, string>,
@@ -61,6 +67,7 @@ export const coachContent = {
       'Якщо контексту мало, чесно скажи, чого бракує.',
     ].join(' '),
     weeklyPlan: 'Згенеруй планер тижня: 1) ключовий фокус тижня, 2) бізнес-сигнали з контексту, 3) контент-зони, 4) 3-5 тем для постів, 5) 3-5 тем для Reels, 6) що поставити в Zoom/живі сесії.',
+    monthlyPlan: 'Згенеруй планер на місяць: 1) короткий місячний огляд тем із Zoom-транскриптів, 2) 4 тижні контент-плану по одній головній темі на тиждень, 3) рекомендації по Reels на місяць, 4) ключові акценти для постів та Zoom-акцентів, 5) короткий висновок по динаміці місяця.',
     reelsIdeas: 'Згенеруй список тем для Reels на тиждень: 10 ідей з коротким хуком, основною думкою та CTA.',
     fullContent: 'Згенеруй повний контент-пакет на тиждень: контент-план, ідеї для Reels, теми для Stories, теми для постів, пропозицію для Zoom-акцентів.',
     clarification: 'Якщо є уточнення по темі, врахуй його як головний фокус.',
@@ -69,7 +76,8 @@ export const coachContent = {
 
 export function buildPlannerUserPrompt(input: {
   mode: ContentPlanMode
-  weekRange: string
+  scope: ContentPlanScope
+  periodRange: string
   topic?: string | null
   zoomDigest: string
   noteDigest: string
@@ -77,13 +85,18 @@ export function buildPlannerUserPrompt(input: {
   const topicLine = String(input.topic ?? '').trim() || 'без додаткового уточнення'
   const modePrompt = input.mode === 'WEEKLY_PLAN'
     ? coachContent.prompts.weeklyPlan
+    : input.mode === 'MONTHLY_PLAN'
+      ? coachContent.prompts.monthlyPlan
     : input.mode === 'REELS_IDEAS'
       ? coachContent.prompts.reelsIdeas
       : coachContent.prompts.fullContent
+  const scopeLabel = input.scope === 'MONTHLY'
+    ? coachContent.planner.monthlyPeriodPrefix
+    : coachContent.planner.periodPrefix
 
   return [
     `Режим: ${coachContent.mode[input.mode]}`,
-    `Період: ${input.weekRange}`,
+    `${scopeLabel} ${input.periodRange}`,
     `Фокус: ${topicLine}`,
     '',
     modePrompt,

@@ -5,6 +5,8 @@ import { authRequired }  from '../../modules/auth/middleware/auth.js';
 import { telegramWebAppAuth } from '../../modules/auth/middleware/auth.js';
 import {
   createSession,
+  getCurrentWeekSessions,
+  getPublicCurrentWeekSessions,
   getUpcoming,
   register,
   markAttendedHandler,
@@ -44,11 +46,13 @@ const router = Router();
 // ── Legacy routes (kept for backward compatibility) ───────────────────────────
 router.post('/session',                        authRequired, createSession);
 router.get('/upcoming',                        authRequired, getUpcoming);
+router.get('/week',                            telegramWebAppAuth(), getCurrentWeekSessions);
 router.post('/register',                       authRequired, register);
 router.patch('/attendee/attended',             authRequired, markAttendedHandler);
 router.patch('/session/:sessionId/report',     authRequired, postSessionReport);
 router.get('/session/:sessionId/attendees',    authRequired, getAttendees);
 router.get('/my',                              authRequired, getMySessions);
+router.get('/public/week',                     getPublicCurrentWeekSessions);
 
 // ── Calendar sessions ─────────────────────────────────────────────────────────
 router.get('/sessions/calendar',               authRequired, handleGetCalendarSessions);

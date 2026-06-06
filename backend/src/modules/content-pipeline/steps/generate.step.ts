@@ -1,14 +1,42 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { calculateAiCostUsd, getCostTier } from '@starway/ai/providers/pricing'
 
 import type { ReelsVariant } from '../pipeline.types.js'
+import { hashCacheParts, rememberResultCache, resultCache } from '../../sales-assistant/sales-assistant.helpers.js'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+function ensureAnthropicConfigured(): void {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
+  if (!apiKey || apiKey === 'SET') {
+    throw new Error('anthropic_not_configured')
+  }
+}
+
 export async function generateReelsVariants(topic: string): Promise<ReelsVariant[]> {
-  const prompt = buildGenerationPrompt(topic)
+  ensureAnthropicConfigured()
+  const normalizedTopic = topic.replace(/\s+/g, ' ').trim()
+  const prompt = buildGenerationPrompt(normalizedTopic)
+  const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514'
+  const maxTokens = 2400
+  const cacheKey = hashCacheParts([
+    'content-pipeline-reels',
+    model,
+    maxTokens,
+    prompt,
+  ])
+  const cached = resultCache.get(cacheKey)
+  if (cached) {
+    const variants = parseVariantsFromResponse(cached.content)
+    if (variants.length !== 3) {
+      throw new Error(`Очікувались 3 варіанти, отримано ${variants.length}`)
+    }
+    return variants
+  }
+
   const response = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
+    model,
+    max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }],
   })
 
@@ -21,6 +49,22 @@ export async function generateReelsVariants(topic: string): Promise<ReelsVariant
   if (variants.length !== 3) {
     throw new Error(`Очікувались 3 варіанти, отримано ${variants.length}`)
   }
+  const inputTokens = response.usage?.input_tokens ?? 0
+  const outputTokens = response.usage?.output_tokens ?? 0
+  const actualCostUsd = calculateAiCostUsd(model, inputTokens, outputTokens)
+  rememberResultCache(cacheKey, {
+    content: text,
+    usage: {
+      provider: 'claude',
+      model,
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      estimatedCostUsd: actualCostUsd,
+      actualCostUsd,
+      costTier: getCostTier(actualCostUsd),
+    },
+  })
   return variants
 }
 

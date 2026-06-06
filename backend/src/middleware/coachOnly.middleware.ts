@@ -3,6 +3,8 @@ import type { Context, MiddlewareFn } from 'telegraf'
 import { prisma } from '../db/client.js'
 
 export const coachOnly: MiddlewareFn<Context> = async (ctx, next) => {
+  if (ctx.chat?.type && ctx.chat.type !== 'private') return
+
   const telegramUserId = ctx.from?.id ? String(ctx.from.id) : ''
   if (!telegramUserId) return
 

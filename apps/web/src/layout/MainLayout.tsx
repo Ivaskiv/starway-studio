@@ -8,7 +8,7 @@ import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestra
 import { useAppSelector } from '@/app/hooks'
 import { selectIsAuthenticated } from '@/features/auth/services/auth.slice'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
-import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
 import Breadcrumb from '@/layout/Breadcrumb'
 import Footer from '@/layout/Footer'
@@ -117,7 +117,7 @@ export default function MainLayout({
   const { openAuthModal } = useSessionOrchestrator()
   const normalizedPathname = useMemo(() => normalizeDashboardRoutePath(location.pathname), [location.pathname])
 
-  const isMiniAppContext = isTelegramMiniAppContext(location.pathname)
+  const isMiniAppContext = isTelegramMiniApp(location.pathname)
   const isStandaloneMiniAppRoute = location.pathname.startsWith('/miniapp')
   const miniAppRouteTarget = useMemo(() => {
     if (!isMiniAppContext) return null

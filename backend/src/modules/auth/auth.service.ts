@@ -132,6 +132,63 @@ async function createUserCompat(input: {
   return { id: resolved.user.id }
 }
 
+async function linkTelegramIdentityToUser(userId: string, telegramId: string | null): Promise<void> {
+  const normalizedTelegramId = String(telegramId ?? '').trim()
+  if (!normalizedTelegramId) return
+
+  const conflictingUser = await prisma.user.findFirst({
+    where: {
+      id: { not: userId },
+      OR: [
+        { telegramUserId: normalizedTelegramId },
+        { telegramChatId: normalizedTelegramId },
+      ],
+    },
+    select: { id: true },
+  })
+  if (conflictingUser) {
+    console.warn('[AuthService] skip telegram link update due to existing linked user', {
+      userId,
+      telegramId: normalizedTelegramId,
+      conflictingUserId: conflictingUser.id,
+    })
+    return
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { telegramUserId: true, telegramChatId: true },
+  })
+  if (!existing) return
+
+  const currentTelegramId = existing.telegramUserId ?? existing.telegramChatId ?? null
+  if (currentTelegramId && currentTelegramId !== normalizedTelegramId) {
+    console.warn('[AuthService] skip telegram link update due to mismatched identity', {
+      userId,
+      currentTelegramId,
+      normalizedTelegramId,
+    })
+    return
+  }
+
+  const nextTelegramUserId = existing.telegramUserId ?? normalizedTelegramId
+  const nextTelegramChatId = existing.telegramChatId ?? normalizedTelegramId
+  if (existing.telegramUserId === nextTelegramUserId && existing.telegramChatId === nextTelegramChatId) {
+    return
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      telegramUserId: nextTelegramUserId,
+      telegramChatId: nextTelegramChatId,
+      telegramEnabled: true,
+    },
+  })
+
+  await invalidateUserCache(userId)
+}
+
 async function resolveTelegramSocialUser(input: SocialAuthInput): Promise<{ id: string; created: boolean; expertId: string | null }> {
   const telegramUserId = String(input.externalId ?? '').trim()
   const telegramUserName = input.username?.trim() || null
@@ -494,7 +551,7 @@ async function findRawUserByEmail(email: string): Promise<PrismaUserBase | null>
 }
 
 function toSafeUserFromBase(user: PrismaUserBase): SafeUser {
-  const isSuperAdmin = user.email ? isSuperAdminEmail(user.email) : false
+  const isSuperAdmin = user.role === 'SUPERADMIN'
   const abilities = isSuperAdmin
     ? Object.values(ABILITIES)
     : resolveUserAbilities({ role: user.role })
@@ -523,7 +580,7 @@ function toSafeUserFromBase(user: PrismaUserBase): SafeUser {
     role: user.role,
     activeRole,
     availableRoles,
-    isAdmin: user.role === 'SUPERADMIN' || isSuperAdmin,
+    isAdmin: user.role === 'ADMIN' || user.role === 'SUPERADMIN',
     isSuperAdmin,
     abilities,
     access: {
@@ -568,18 +625,7 @@ export async function resolveSafeUserById(id: string): Promise<SafeUser | null> 
 }
 
 async function ensureSuperAdminRoleForRecord(user: PrismaUserBase): Promise<PrismaUserBase> {
-  if (!isSuperAdminEmail(user.email) || user.role === 'SUPERADMIN') return user
-  try {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { role: 'SUPERADMIN' },
-      // важливо: не повертати всі поля (інакше при schema mismatch падає P2022)
-      select: { id: true },
-    })
-    return { ...user, role: 'SUPERADMIN' }
-  } catch (error) {
-    throw toAuthServiceError(error, 'superadmin_role_update_failed')
-  }
+  return user
 }
 
 // ── Пошук користувача за ID ───────────────
@@ -752,7 +798,7 @@ export async function updateUserSettings(userId: string, payload: UpdateUserSett
 export function toSafeUser(user: UserWithSub): SafeUser {
   const sub = user.subscription
   const now = new Date()
-  const isSuperAdmin = user.email ? isSuperAdminEmail(user.email) : false
+  const isSuperAdmin = user.role === 'SUPERADMIN'
 
   const isPaid = sub?.status === 'ACTIVE' && (!sub.currentPeriodEnd || sub.currentPeriodEnd > now)
   const isTrial = sub?.status === 'TRIAL' && !!sub.trialEndsAt && sub.trialEndsAt > now
@@ -811,7 +857,7 @@ export function toSafeUser(user: UserWithSub): SafeUser {
     role: user.role,
     activeRole,
     availableRoles,
-    isAdmin: user.role === 'SUPERADMIN' || isSuperAdmin,
+    isAdmin: user.role === 'ADMIN' || user.role === 'SUPERADMIN',
     isSuperAdmin,
     abilities,
     access: {
@@ -913,6 +959,7 @@ export async function registerUser(input: {
   password: string
   name?: string | null
   expertId?: string | null
+  telegramId?: string | null
   requestId?: string | null
 }): Promise<AuthTokensPayload> {
   const email = normalizeEmail(input.email)
@@ -946,6 +993,8 @@ export async function registerUser(input: {
       source: UserCreationSource.SYSTEM,
       requestId: input.requestId ?? null,
     })
+
+    await linkTelegramIdentityToUser(createdUser.id, input.telegramId ?? null)
 
     const user = await findUserById(createdUser.id)
     if (!user) {

@@ -4,10 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import type { RootState } from '@/app/store'
 import MiniAppLayout from '@/components/miniapp/MiniAppLayout'
-import { EmailCompletionCard } from '@/features/auth/components/EmailCompletionCard'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
-import { useUserState } from '@/features/auth/hooks/useUserState'
-import MiniAppHomeSection from '@/features/social/components/MiniAppHomeSection'
 import MiniAppJournalSection from '@/features/social/components/MiniAppJournalSection'
 import MiniAppLibrarySection from '@/features/social/components/MiniAppLibrarySection'
 import MiniAppMentorSection from '@/features/social/components/MiniAppMentorSection'
@@ -23,7 +20,8 @@ import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import { useTrackFrontendEventMutation } from '@/features/analytics/services/events.api'
 import type { MiniAppLibraryItem, MiniAppPageId } from '@/features/social/types/miniapp'
 import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
-import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
+import { useGetWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
+import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 
 const LIBRARY_ITEMS: MiniAppLibraryItem[] = [
   { title: '5 точок опори', sub: 'Безкоштовно', locked: false },
@@ -36,7 +34,6 @@ const LIBRARY_ITEMS: MiniAppLibraryItem[] = [
 export default function MiniAppPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const isMiniAppRuntime = isTelegramMiniAppContext(location.pathname)
 
   const page = useMemo<MiniAppPageId>(() => {
     if (location.pathname.startsWith('/miniapp/library')) return 'library'
@@ -71,11 +68,14 @@ export default function MiniAppPage() {
   const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const userName = user?.firstName ?? user?.name ?? 'Учень'
   const { subscription } = useSystemState()
-  const { emailCompletionRequired, refetch } = useUserState()
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: shouldSkipProtectedQueries || !userId })
   const { data: summary } = useGetSummaryQuery(undefined, { skip: shouldSkipProtectedQueries || !userId })
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, {
     skip: shouldSkipProtectedQueries || !userId,
+  })
+  const { data: weekOverview, isLoading: isWeekOverviewLoading, isError: isWeekOverviewError } = useGetWeekOverviewQuery(undefined, {
+    skip: shouldSkipProtectedQueries || !userId,
+    refetchOnMountOrArgChange: true,
   })
   const [generateDeepLink, { isLoading: isGeneratingCrossChannelLink }] = useGenerateDeepLinkMutation()
   const [trackFrontendEvent] = useTrackFrontendEventMutation()
@@ -97,7 +97,19 @@ export default function MiniAppPage() {
     subscription,
     userName,
   })
-  const shouldBlockForEmailCompletion = emailCompletionRequired && !isMiniAppRuntime
+  const telegramInitData = useMemo(() => {
+    if (typeof window === 'undefined') return ''
+    const telegram = window as Window & {
+      Telegram?: {
+        WebApp?: {
+          initData?: string
+        }
+      }
+    }
+
+    return telegram.Telegram?.WebApp?.initData?.trim() ?? ''
+  }, [])
+  const hasTelegramInitData = Boolean(telegramInitData)
 
   const handleOpenTelegramSession = async () => {
     const session = mentorContext === 'evening' ? 'evening' : mentorContext === 'morning' ? 'morning' : null
@@ -165,6 +177,16 @@ export default function MiniAppPage() {
     })
   }, [isBootstrappingAuth, location.search, page, trackFrontendEvent, user?.email, user?.subscriptionStatus, userId])
 
+  if (!isBootstrappingAuth && !hasTelegramInitData) {
+    return (
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-md items-center justify-center px-4 py-8 text-center">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-6 text-sm text-white/75 shadow-[0_20px_80px_rgba(0,0,0,0.16)]">
+          Відкрий в Telegram
+        </div>
+      </div>
+    )
+  }
+
   return (
     <MiniAppLayout activeTab={page}>
         {isBootstrappingAuth && !userId ? (
@@ -178,27 +200,15 @@ export default function MiniAppPage() {
           </div>
         ) : null}
 
-        {!isBootstrappingAuth && shouldBlockForEmailCompletion ? (
-          <div className="px-4 pt-6">
-            <EmailCompletionCard onCompleted={async () => { await refetch() }} />
-          </div>
-        ) : null}
-
-        {!isBootstrappingAuth && !shouldBlockForEmailCompletion && page === 'home' && (
-          <MiniAppHomeSection
-            hasAccess={view.hasAccess}
-            profileBitMind={view.profileBitMind}
-            profileLevel={view.profileLevel}
-            profileStreak={view.profileStreak}
-            trialDay={view.trialDay}
-            trackerProgress={view.trackerProgress}
-            onOpenMentor={() => navigate('/miniapp/mentor')}
-            onOpenTracker={() => navigate('/miniapp/tracker')}
-            onOpenLibrary={() => navigate('/miniapp/library')}
+        {!isBootstrappingAuth && page === 'home' && (
+          <MiniAppZoomWeekPanel
+            isError={isWeekOverviewError}
+            isLoading={isWeekOverviewLoading}
+            overview={weekOverview ?? null}
           />
         )}
 
-        {!isBootstrappingAuth && !shouldBlockForEmailCompletion && page === 'mentor' && (
+        {!isBootstrappingAuth && page === 'mentor' && (
           <MiniAppMentorSection
             context={mentorContext}
             chatInput={chatInput}
@@ -212,26 +222,152 @@ export default function MiniAppPage() {
           />
         )}
 
-        {!isBootstrappingAuth && !shouldBlockForEmailCompletion && page === 'tracker' && (
+        {!isBootstrappingAuth && page === 'tracker' && (
           <MiniAppTrackerSection currentDay={view.trialDay} />
         )}
 
-        {!isBootstrappingAuth && !shouldBlockForEmailCompletion && page === 'journal' && (
+        {!isBootstrappingAuth && page === 'journal' && (
           <div className="px-4 pt-6">
             <MiniAppJournalSection showHeader />
           </div>
         )}
 
-        {!isBootstrappingAuth && !shouldBlockForEmailCompletion && page === 'library' && (
+        {!isBootstrappingAuth && page === 'library' && (
           <MiniAppLibrarySection items={LIBRARY_ITEMS} />
         )}
 
-        {!isBootstrappingAuth && !shouldBlockForEmailCompletion && page === 'profile' && (
+        {!isBootstrappingAuth && page === 'profile' && (
           <MiniAppProfileSection
             displayName={view.displayName}
             panel={profilePanel}
           />
         )}
     </MiniAppLayout>
+  )
+}
+
+function MiniAppZoomWeekPanel({
+  overview,
+  isLoading,
+  isError,
+}: {
+  overview: ZoomWeekOverview | null
+  isLoading: boolean
+  isError: boolean
+}) {
+  const formatDateTime = (iso: string) => {
+    const date = new Date(iso)
+    return date.toLocaleString('uk-UA', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Europe/Kyiv',
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-4 pt-4">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/70">
+          Завантажуємо Zoom-розклад поточного тижня...
+        </div>
+      </div>
+    )
+  }
+
+  if (isError || !overview) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-4 pt-4">
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
+          Не вдалося завантажити Zoom-розклад. Спробуй оновити сторінку.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 pt-4 pb-4">
+      <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_80px_rgba(0,0,0,0.16)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Zoom-календар</p>
+            <h2 className="mt-1 text-xl font-semibold text-white">Поточний тиждень</h2>
+            <p className="mt-1 text-sm text-white/55">
+              {new Date(overview.week.from).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' })}
+              {' '}—{' '}
+              {new Date(overview.week.to).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' })}
+              {' '}· {overview.week.timezone}
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] text-white/60">
+            {overview.sessions.length} сесій
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {overview.sessions.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
+              На цей тиждень Zoom-сесій ще немає.
+            </div>
+          ) : (
+            overview.sessions.map((session) => (
+              <div key={session.id} className="rounded-2xl border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">{session.topic}</p>
+                    <p className="mt-1 text-xs text-white/55">
+                      {formatDateTime(session.scheduledAt)}
+                      {' '}· {session.type}
+                      {session.attendeesCount ? ` · ${session.attendeesCount} учасн.` : ''}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-white/50">
+                    {session.status}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {session.zoomLink ? (
+                    <a
+                      href={session.zoomLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:opacity-90"
+                    >
+                      Відкрити Zoom
+                    </a>
+                  ) : null}
+
+                  {session.hasAudio ? (
+                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-100">
+                      Є аудіо-запис
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {overview.audios.length > 0 ? (
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Аудіо цього тижня</p>
+            <div className="mt-3 space-y-2">
+              {overview.audios.map((audio) => (
+                <div key={audio.sessionId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/75">
+                  <p className="font-semibold text-white">{audio.topic}</p>
+                  <p className="mt-1 text-xs text-white/55">
+                    {formatDateTime(audio.scheduledAt)} · {audio.type}
+                  </p>
+                  <p className="mt-2 text-xs text-white/60">Audio file ID: {audio.audioFileId}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
   )
 }

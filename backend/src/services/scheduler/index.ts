@@ -13,14 +13,14 @@ import { startNotificationWorker, stopNotificationWorker } from '../notification
 import { startRuntimeOutboxWorker, stopRuntimeOutboxWorker } from '../runtimeOutbox/worker.js'
 import { aiSellerFocusCheck24hCron, aiSellerFocusDojimBeforeZoom2Cron, aiSellerLeadFollowup3dCron, aiSellerLeadFollowup7dCron, aiSellerReactivationCron, aiSellerRetentionCron } from './ai-seller.jobs.js'
 import { scheduleBillingExpiryCheck, scheduleBillingExpiryWarning, scheduleInactivityComeback } from './billing.jobs.js'
-import { aiInactiveCron, dailyEveningCron, dailyMorningCron, streakBrokenCron, streakRiskCron, weeklyContentReminderCron, weeklySummaryCron } from './daily.jobs.js'
+import { aiInactiveCron, coachDailyBriefingCron, coachMonthlyStrategicPlannerCron, coachWeeklyPlannerSaturdayCron, coachWeeklyPlannerTuesdayCron, dailyEveningCron, dailyMorningCron, streakBrokenCron, streakRiskCron, weeklyContentReminderCron, weeklySummaryCron } from './daily.jobs.js'
 import { cloudinaryZoomAudioIngestCron } from '../../modules/zoom/cloudinary-audio-ingest.service.js'
 import { mentorReadinessCheckCron, personalProgramCheckCron, referralCheckCron, scheduleWinbackNotification } from './lifecycle.jobs.js'
 import { expireMicroTasksCron, markMissedDaysCron, microTaskReminderCron, nudgeCron, subscriptionExpiredCron, subscriptionExpiringCron, webMapBehindGoalsCron, webMapMonthEndAnalysisCron, webMapMonthStartReminderCron } from './operations.jobs.js'
 
 export { aiSellerFocusCheck24hCron, aiSellerFocusDojimBeforeZoom2Cron, aiSellerLeadFollowup3dCron, aiSellerLeadFollowup7dCron, aiSellerReactivationCron, aiSellerRetentionCron } from './ai-seller.jobs.js'
 export { scheduleBillingExpiryCheck, scheduleBillingExpiryWarning, scheduleInactivityComeback } from './billing.jobs.js'
-export { aiInactiveCron, dailyEveningCron, dailyMorningCron, streakBrokenCron, streakRiskCron, weeklyContentReminderCron, weeklySummaryCron } from './daily.jobs.js'
+export { aiInactiveCron, coachDailyBriefingCron, coachMonthlyStrategicPlannerCron, coachWeeklyPlannerSaturdayCron, coachWeeklyPlannerTuesdayCron, dailyEveningCron, dailyMorningCron, streakBrokenCron, streakRiskCron, weeklyContentReminderCron, weeklySummaryCron } from './daily.jobs.js'
 export { mentorReadinessCheckCron, personalProgramCheckCron, referralCheckCron, scheduleWinbackNotification } from './lifecycle.jobs.js'
 export { expireMicroTasksCron, markMissedDaysCron, microTaskReminderCron, nudgeCron, subscriptionExpiredCron, subscriptionExpiringCron, webMapBehindGoalsCron, webMapMonthEndAnalysisCron, webMapMonthStartReminderCron } from './operations.jobs.js'
 
@@ -301,11 +301,15 @@ export function startScheduler(options?: { startNotificationWorker?: boolean; co
     focusCron: getProductCronProfile('focus').jobs.length,
     coachBotAttached: Boolean(options?.coachBot),
   })
-  safeSchedule('dailyMorningCron', '* * * * *', () => { runScheduled('dailyMorningCron', dailyMorningCron) }, timezone)
-  safeSchedule('dailyEveningCron', '* * * * *', () => { runScheduled('dailyEveningCron', dailyEveningCron) }, timezone)
+  safeSchedule('dailyMorningCron', '0 8 * * *', () => { runScheduled('dailyMorningCron', dailyMorningCron) }, timezone)
+  safeSchedule('dailyEveningCron', '0 20 * * *', () => { runScheduled('dailyEveningCron', dailyEveningCron) }, timezone)
+  safeSchedule('coachDailyBriefingCron', '0 9 * * *', () => { runScheduled('coachDailyBriefingCron', coachDailyBriefingCron) }, timezone)
   safeSchedule('streakRiskCron', '0 * * * *', () => { runScheduled('streakRiskCron', streakRiskCron) }, timezone)
   safeSchedule('weeklyContentReminderCron', '0 9 * * 2', () => { runScheduled('weeklyContentReminderCron', weeklyContentReminderCron) }, timezone)
+  safeSchedule('coachWeeklyPlannerTuesdayCron', '0 9 * * 2', () => { runScheduled('coachWeeklyPlannerTuesdayCron', coachWeeklyPlannerTuesdayCron) }, timezone)
   safeSchedule('weeklySummaryCron', '0 19 * * 0', () => { runScheduled('weeklySummaryCron', weeklySummaryCron) }, timezone)
+  safeSchedule('coachWeeklyPlannerSaturdayCron', '0 9 * * 6', () => { runScheduled('coachWeeklyPlannerSaturdayCron', coachWeeklyPlannerSaturdayCron) }, timezone)
+  safeSchedule('coachMonthlyStrategicPlannerCron', '0 9 * * 6', () => { runScheduled('coachMonthlyStrategicPlannerCron', coachMonthlyStrategicPlannerCron) }, timezone)
   safeSchedule('cloudinaryZoomAudioIngestCron', '0 3 * * 2', () => { runScheduled('cloudinaryZoomAudioIngestCron', cloudinaryZoomAudioIngestCron, { critical: false }) }, timezone)
   safeSchedule('zoomScheduleReadinessFridayCron', '0 9 * * 5', () => { runScheduled('zoomScheduleReadinessFridayCron', zoomScheduleReadinessFridayCron) }, timezone)
   safeSchedule('aiInactiveCron', '0 * * * *', () => { runScheduled('aiInactiveCron', aiInactiveCron) }, timezone)

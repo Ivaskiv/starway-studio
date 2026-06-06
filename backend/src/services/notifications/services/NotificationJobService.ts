@@ -35,6 +35,11 @@ export class NotificationJobService {
   async rescheduleRetry(id: string, attempts: number, runAt: Date, error?: string | null): Promise<NotificationJob> {
     return notificationJobRepository.reschedule(id, 'PENDING', runAt, attempts, error)
   }
+
+  async cancelByUserAndTypes(userId: string, types: NotificationType[]): Promise<number> {
+    const result = await notificationJobRepository.cancelByUserAndTypes(userId, types)
+    return result.count
+  }
 }
 
 export const notificationJobService = new NotificationJobService()

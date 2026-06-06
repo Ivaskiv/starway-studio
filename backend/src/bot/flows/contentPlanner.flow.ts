@@ -6,6 +6,7 @@ import { prisma } from '../../db/client.js'
 import { coachContent, buildPlannerResultTitle } from '../content/coachContent.content.js'
 import {
   generateContentPlannerDraft,
+  getMonthRange,
   getPlannerWeekWindow,
   listCoachZoomSessions,
   formatZoomListMessage,
@@ -85,6 +86,7 @@ function buildCollectingKeyboard() {
     [Markup.button.callback(coachContent.buttons.sales, 'coach-content:topic:sales')],
     [Markup.button.callback(coachContent.buttons.burnout, 'coach-content:topic:burnout')],
     [Markup.button.callback(coachContent.buttons.continue, 'coach-content:topic:clear')],
+    [Markup.button.callback(coachContent.buttons.monthlyPlan, 'coach-content:mode:monthly')],
     [Markup.button.callback(coachContent.buttons.cancel, 'coach-content:cancel')],
   ])
 }
@@ -117,7 +119,7 @@ async function showPlannerPrompt(ctx: Context, mode: ContentPlanMode, userId: st
   clearPlannerSession(userId)
   clearNoteCapture(userId)
 
-  const week = getPlannerWeekWindow()
+  const period = mode === 'MONTHLY_PLAN' ? getMonthRange() : getPlannerWeekWindow()
   setPlannerSession({
     userId,
     chatId,
@@ -140,7 +142,7 @@ async function showPlannerPrompt(ctx: Context, mode: ContentPlanMode, userId: st
     coachContent.planner.collecting,
     coachContent.planner.collectingHint,
     '',
-    `${coachContent.planner.periodPrefix} ${week.weekRange}`,
+    `${mode === 'MONTHLY_PLAN' ? coachContent.planner.monthlyPeriodPrefix : coachContent.planner.periodPrefix} ${period.periodRange}`,
   ].join('\n'), buildCollectingKeyboard()).catch(() => undefined)
 }
 
@@ -152,12 +154,17 @@ async function generateAndShowDraft(ctx: Context, userId: string, topic?: string
   session.topic = topic?.trim() || session.topic || null
   setPlannerSession(session)
 
-  await ctx.reply(coachContent.planner.generating).catch(() => undefined)
+  const generatingMessage = session.mode === 'MONTHLY_PLAN'
+    ? coachContent.planner.monthlyPrompt
+    : coachContent.planner.generating
+
+  await ctx.reply(generatingMessage).catch(() => undefined)
 
   try {
     const draft = await generateContentPlannerDraft({
       userId,
       mode: session.mode,
+      scope: session.mode === 'MONTHLY_PLAN' ? 'MONTHLY' : 'WEEKLY',
       topic: session.topic,
     })
 
@@ -173,8 +180,12 @@ async function generateAndShowDraft(ctx: Context, userId: string, topic?: string
       ? draft.notes.map((note, index) => `• ${index + 1}. ${note}`).join('\n')
       : coachContent.planner.noData
 
+    const resultTitle = session.mode === 'MONTHLY_PLAN'
+      ? `${coachContent.planner.monthlyTitle} — ${draft.periodRange}`
+      : buildPlannerResultTitle(session.mode, draft.periodRange)
+
     const reply = [
-      `✍️ ${buildPlannerResultTitle(session.mode, draft.weekRange)}`,
+      `✍️ ${resultTitle}`,
       '',
       topic ? `${coachContent.planner.focusPrefix} ${topic}` : coachContent.planner.focusNoTopic,
       '',
@@ -207,12 +218,18 @@ async function saveCurrentDraft(ctx: Context, userId: string): Promise<void> {
 
   await saveContentPlan({
     expertId: userId,
-    weekStart: session.draft.weekStart,
+    periodStart: session.draft.periodStart,
+    periodEnd: session.draft.periodEnd,
+    planScope: session.draft.planScope,
     mode: session.mode,
     content: session.draft.content,
   })
 
-  await ctx.reply([coachContent.planner.saved, '', session.draft.content].join('\n')).catch(() => undefined)
+  const savedMessage = session.draft.planScope === 'MONTHLY'
+    ? coachContent.planner.monthlySaved
+    : coachContent.planner.saved
+
+  await ctx.reply([savedMessage, '', session.draft.content].join('\n')).catch(() => undefined)
   clearPlannerSession(userId)
 }
 
@@ -321,6 +338,12 @@ async function handlePlannerAction(ctx: Context, action: string): Promise<boolea
   if (action === 'coach-content:topic:custom') {
     await ctx.answerCbQuery(coachContent.buttons.changeTopic).catch(() => undefined)
     await promptForTopic(ctx, userId)
+    return true
+  }
+
+  if (action === 'coach-content:mode:monthly') {
+    await ctx.answerCbQuery(coachContent.buttons.monthlyPlan).catch(() => undefined)
+    await showPlannerPrompt(ctx, 'MONTHLY_PLAN', userId, chatId)
     return true
   }
 

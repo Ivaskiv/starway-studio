@@ -30,6 +30,7 @@ import { getUserAccess } from '../../modules/access/service.js'
 import { isNotificationAllowedForUser } from '../../modules/flow-control/service.js'
 import { resolvePausedMentorContext } from './mentorLifecycle.js'
 import { buildNotificationContent, type AbTestFollowupTimerId } from '../../lib/notifications/templates.js'
+import type { TestDriveContentVersion } from '@/products/ab-system/content/testDrive.content.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import type { AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
 import {
@@ -984,21 +985,6 @@ export class NotificationService {
 
     await markCrossChannelNotificationSent(user.id, persisted.event, 'telegram')
 
-    if (
-      persisted.event === NotificationEvent.AB_TEST_FOLLOWUP &&
-      flow.timer?.id === 'RESULT_FOLLOWUP_72H' &&
-      !paymentSuccessSeen
-    ) {
-      const resultKey = asString(payload.result_key ?? payload.resultKey)
-      if (resultKey) {
-        await this.scheduleDojimSeries(user.id, {
-          ...payload,
-          result_key: resultKey,
-          lifecycle_stage: flow.timer?.source_stage ?? payload.lifecycle_stage ?? payload.lifecycleStage ?? null,
-        } satisfies Prisma.JsonObject)
-      }
-    }
-
     if (flow.timer) {
       await trackEvent({
         userId: persisted.userId,
@@ -1782,9 +1768,11 @@ export class NotificationService {
       case NotificationEvent.AB_TEST_FOLLOWUP:
       {
         const flowTimerId = (asString(payload?.flow_timer_id ?? payload?.flowTimerId) ?? 'RESULT_FOLLOWUP_24H') as AbTestFollowupTimerId
+        const contentVersion = (asString(payload?.content_version ?? payload?.contentVersion) ?? 'legacy') as TestDriveContentVersion
         const content = buildNotificationContent(flowTimerId, {
           userName: firstName,
           resultKey: asString(payload?.result_key ?? payload?.resultKey) as AbTestResultKey | null,
+          contentVersion,
         })
         const isPlainBridge = flowTimerId === 'ZOOM_REMINDER_24H'
           || flowTimerId === 'ZOOM_REMINDER_2H'

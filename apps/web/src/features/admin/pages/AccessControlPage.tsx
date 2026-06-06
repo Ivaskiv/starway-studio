@@ -39,8 +39,6 @@ const ROLE_OPTIONS: Array<{ value: ProductAccessRole; label: string; description
   },
 ]
 
-const SUPERADMIN_EMAIL = 'viraivaskiv@gmail.com'
-
 function getUserName(user: AdminUser) {
   const name = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim()
   return name || user.email
@@ -81,12 +79,10 @@ function buildAccessEmailHref(input: {
     '',
     `З повагою,`,
     `Vira · SuperAdmin Starway`,
-    SUPERADMIN_EMAIL,
   ].join('\n')
 
   const params = new URLSearchParams({
     to: input.recipientEmail,
-    cc: SUPERADMIN_EMAIL,
     su: subject,
     body,
     fs: '1',
@@ -355,7 +351,7 @@ export default function AccessControlPage() {
                           Написати листа у новій вкладці
                         </a>
                         <span className="inline-flex items-center text-xs text-[var(--text-muted)]">
-                          Лист відкриється з шаблоном від {SUPERADMIN_EMAIL}
+                          Лист відкриється з шаблоном від поточного SUPERADMIN
                         </span>
                       </div>
                     </div>

@@ -5,9 +5,9 @@ import {
   type AbTestProgress,
   type AbTestStageId,
 } from '../../../core/state-machine/abTestFoundation.js'
-import { prisma } from '../../../db/client.js'
 import { resolveNotificationType } from '../../../services/notifications/domain/notificationPolicy.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
+import { notificationJobService } from '../../../services/notifications/services/NotificationJobService.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { loadAbTestProgress, saveAbTestProgress } from './abTest.progress.js'
 
@@ -15,7 +15,6 @@ export async function markAbTestPaymentSuccess(
   userId: string,
   tx?: Prisma.TransactionClient // fix with kimi 2026-05-28: optional tx for atomic post-payment orchestration
 ): Promise<void> {
-  const client = tx ?? prisma
   const current = await loadAbTestProgress(userId)
   if (current.payment_success_at) return
 
@@ -34,17 +33,22 @@ export async function markAbTestPaymentSuccess(
     payload: { stage: current.stage } satisfies Prisma.JsonObject,
   })
 
-  await client.notificationJob
-    .deleteMany({
+  const cancelPendingFollowups = tx
+    ? tx.notificationJob.deleteMany({
       where: {
         type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),
         status: 'PENDING',
-        payload: { path: ['userId'], equals: userId },
+        payload: {
+          path: ['userId'],
+          equals: userId,
+        },
       },
     })
-    .catch((err) =>
-      console.warn('[AbTest] Failed to cancel pending followups on payment', err)
-    )
+    : notificationJobService.cancelByUserAndTypes(userId, [resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP)])
+
+  await cancelPendingFollowups.catch((err) =>
+    console.warn('[AbTest] Failed to cancel pending followups on payment', err)
+  )
 }
 
 export async function markAbTestZoomRegistered(

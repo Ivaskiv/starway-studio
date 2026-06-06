@@ -27,6 +27,7 @@ export interface RegisterInput {
   expertId?: string
   companyWebsite?: string
   turnstileToken?: string
+  telegramId?: string | null
 }
 
 export interface ForgotPasswordInput {

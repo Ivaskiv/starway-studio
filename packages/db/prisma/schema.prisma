@@ -1332,6 +1332,9 @@ model ContentPlan {
   expertId  String
   weekStart DateTime
   type      String
+  planScope String   @default("WEEKLY")
+  periodStart DateTime?
+  periodEnd   DateTime?
   content   String   @db.Text
   status    String   @default("DRAFT")
   createdAt DateTime @default(now())
@@ -2000,6 +2003,18 @@ enum NotificationType {
   AI_REMINDER
   SUBSCRIPTION
   MISSED_DAY_CATCHUP
+  INSTAGRAM_ARRIVAL_2H
+  INSTAGRAM_ARRIVAL_24H
+  INSTAGRAM_ARRIVAL_72H
+  TEST_DROPOUT_1H
+  TEST_DROPOUT_24H
+  TEST_DROPOUT_72H
+  PRE_ZOOM_24H
+  PRE_ZOOM_2H
+  SUBSCRIPTION_EXPIRING_7D
+  SUBSCRIPTION_EXPIRING_3D
+  SUBSCRIPTION_EXPIRING_1D
+  AI_UPGRADE_BRIDGE
 }
 
 enum NotificationStatus {

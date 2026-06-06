@@ -10,6 +10,7 @@ import { CANONICAL_FLOW_TIMER_REGISTRY } from '../../../core/state-machine/flowT
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
+import { resolveTestDriveVersion } from '@/products/ab-system/content/testDrive.content.js'
 
 export async function scheduleFollowups(
   userId: string,
@@ -24,6 +25,8 @@ export async function scheduleFollowups(
   const groupKey =
     stage === 'S3_TEST_RESULT'
       ? 'result'
+      : stage === 'S4_FOCUS_INVITE'
+        ? 'dojim'
       : stage === 'S5_PAYMENT'
         ? 'payment'
         : stage === 'S6_ZOOM'
@@ -53,6 +56,7 @@ export async function scheduleFollowups(
       message_key: timer.message_key,
       ab_test_stage: stage,
       result_key: nextProgress.result_key,
+      content_version: resolveTestDriveVersion(nextProgress.started_at),
     } satisfies Prisma.JsonObject
 
     await notificationService.schedule(

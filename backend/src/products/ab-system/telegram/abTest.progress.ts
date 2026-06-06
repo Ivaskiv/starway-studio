@@ -13,6 +13,25 @@ import {
 export type UiSettingsObject = Record<string, unknown>
 export type SettingsObject = Record<string, unknown>
 
+function normalizeEmail(value: string | null | undefined): string | null {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized || null
+}
+
+function isValidEmail(value: string | null | undefined): boolean {
+  const normalized = normalizeEmail(value)
+  if (!normalized || normalized.length > 254) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+}
+
+function isPlaceholderEmail(value: string | null | undefined): boolean {
+  const normalized = normalizeEmail(value)
+  if (!normalized) return false
+  return normalized.endsWith('@placeholder.starway.app')
+    || normalized.startsWith('telegram-guest-')
+    || normalized.startsWith('tg.')
+}
+
 export function isJsonObject(value: unknown): value is Prisma.JsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -66,6 +85,43 @@ export async function loadUserUiSettings(userId: string): Promise<UiSettingsObje
   }
 
   return {}
+}
+
+export async function ensureAbTestEmailCapturedFromProfile(userId: string, progress: AbTestProgress): Promise<AbTestProgress> {
+  if (progress.email_stage === 'captured') {
+    return progress
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  })
+  const email = normalizeEmail(user?.email)
+  if (!isValidEmail(email) || isPlaceholderEmail(email)) {
+    return progress
+  }
+
+  const nowIso = new Date().toISOString()
+  const next = buildAbTestProgressPatch(progress, {
+    email_stage: 'captured',
+    email_captured_at: progress.email_captured_at ?? nowIso,
+    last_event_at: nowIso,
+  })
+
+  await saveAbTestProgress(userId, next)
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      email: email ?? undefined,
+      testStartedAt: progress.started_at ? new Date(progress.started_at) : undefined,
+      testCompletedAt: nowIso,
+      testResultType: progress.result_key ?? undefined,
+      funnelStage: 'LEAD',
+      lifecycleState: 'TEST_DONE',
+    },
+  })
+
+  return next
 }
 
 export async function loadAbTestProgress(userId: string): Promise<AbTestProgress> {

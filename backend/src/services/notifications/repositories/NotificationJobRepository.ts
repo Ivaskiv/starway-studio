@@ -5,7 +5,7 @@ import {
   Prisma,
 } from '@starway/db/prisma-client'
 
-import { prisma } from '../../../db/client.js'
+import { prisma, withRetry } from '../../../db/client.js'
 
 export interface CreateNotificationJobInput {
   type: NotificationType
@@ -22,14 +22,14 @@ async function ensureNotificationJobTableAvailability(): Promise<boolean> {
   }
 
   try {
-    const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+    const rows = await withRetry(() => prisma.$queryRaw<Array<{ exists: boolean }>>`
       SELECT EXISTS (
         SELECT 1
         FROM information_schema.tables
         WHERE table_schema = 'public'
           AND table_name = 'NotificationJob'
       ) AS "exists"
-    `
+    `)
     notificationJobTableAvailable = rows[0]?.exists === true
   } catch (error) {
     throw error
@@ -76,13 +76,13 @@ export class NotificationJobRepository {
       return buildSyntheticJob(input.type, input.payload, input.runAt)
     }
 
-    return prisma.notificationJob.create({
+    return withRetry(() => prisma.notificationJob.create({
       data: {
         type: input.type,
         payload: (input.payload ?? {}) as Prisma.JsonObject,
         runAt: input.runAt,
       },
-    })
+    }))
   }
 
   async findDuePending(limit = 100) {
@@ -90,14 +90,14 @@ export class NotificationJobRepository {
       return []
     }
 
-    return prisma.notificationJob.findMany({
+    return withRetry(() => prisma.notificationJob.findMany({
       where: {
         status: 'PENDING',
         runAt: { lte: new Date() },
       },
       orderBy: { runAt: 'asc' },
       take: limit,
-    })
+    }))
   }
 
   async updateStatus(id: string, status: NotificationJobStatus, lastError?: string | null) {
@@ -105,13 +105,13 @@ export class NotificationJobRepository {
       return buildSyntheticJob('AI_REMINDER', {}, new Date(), status)
     }
 
-    return prisma.notificationJob.update({
+    return withRetry(() => prisma.notificationJob.update({
       where: { id },
       data: {
         status,
         lastError: lastError ?? null,
       },
-    })
+    }))
   }
 
   async incrementAttempts(id: string, lastError?: string | null) {
@@ -119,13 +119,13 @@ export class NotificationJobRepository {
       return buildSyntheticJob('AI_REMINDER', {}, new Date(), 'FAILED')
     }
 
-    return prisma.notificationJob.update({
+    return withRetry(() => prisma.notificationJob.update({
       where: { id },
       data: {
         attempts: { increment: 1 },
         lastError: lastError ?? null,
       },
-    })
+    }))
   }
 
   async reschedule(id: string, status: NotificationJobStatus, runAt: Date, attempts: number, lastError?: string | null) {
@@ -133,7 +133,7 @@ export class NotificationJobRepository {
       return buildSyntheticJob('AI_REMINDER', {}, runAt, status)
     }
 
-    return prisma.notificationJob.update({
+    return withRetry(() => prisma.notificationJob.update({
       where: { id },
       data: {
         status,
@@ -141,7 +141,24 @@ export class NotificationJobRepository {
         attempts,
         lastError: lastError ?? null,
       },
-    })
+    }))
+  }
+
+  async cancelByUserAndTypes(userId: string, types: NotificationType[]) {
+    if (!(await ensureNotificationJobTableAvailability())) {
+      return { count: 0 }
+    }
+
+    return withRetry(() => prisma.notificationJob.deleteMany({
+      where: {
+        type: { in: types },
+        status: 'PENDING',
+        payload: {
+          path: ['userId'],
+          equals: userId,
+        },
+      },
+    }))
   }
 }
 

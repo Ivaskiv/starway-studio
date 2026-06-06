@@ -10,6 +10,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { RootState } from '@/app/store';
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice';
 import { getRefreshToken, hasSessionHint } from '@/features/auth/services/token';
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp';
 import type { User } from '@/features/user/types/user.types';
 import { TAG_TYPES } from '@/app/tagTypes';
 
@@ -106,6 +107,8 @@ const REFRESH_IGNORED_PATHS = new Set([
   '/auth/login',
   '/auth/register',
   '/auth/refresh',
+  '/auth/social',
+  '/auth/telegram',
   '/auth/forgot-password',
   '/auth/reset-password',
 ]);
@@ -151,8 +154,13 @@ const rawBaseQuery = fetchBaseQuery({
     const state = getState() as RootState;
     const accessToken = getAccessToken(state);
     const expertId = getExpertId(state);
+    const skipAccessToken = headers.get('x-skip-access-token') === '1';
 
-    if (accessToken) {
+    if (skipAccessToken) {
+      headers.delete('x-skip-access-token');
+    }
+
+    if (accessToken && !skipAccessToken) {
       headers.set('Authorization', `Bearer ${accessToken}`);
     } else {
       const miniAppAuthHeader = getTelegramMiniAppAuthHeader()
@@ -172,6 +180,7 @@ const rawBaseQuery = fetchBaseQuery({
 type RawBaseQueryResult = Awaited<ReturnType<typeof rawBaseQuery>>;
 
 let refreshPromise: Promise<boolean> | null = null;
+let telegramMiniAppRecoveryPromise: Promise<boolean> | null = null;
 
 const refreshAccessToken = async (
   api: BaseQueryApi,
@@ -219,6 +228,68 @@ const refreshAccessToken = async (
   return false;
 };
 
+const getTelegramMiniAppInitData = (): string => {
+  if (typeof window === 'undefined') return '';
+
+  return (window as {
+    Telegram?: {
+      WebApp?: {
+        initData?: string;
+      };
+    };
+  }).Telegram?.WebApp?.initData?.trim() ?? '';
+};
+
+const isTelegramMiniAppRuntime = (): boolean =>
+  isTelegramMiniApp() && Boolean(getTelegramMiniAppInitData());
+
+const recoverTelegramMiniAppSession = async (
+  api: BaseQueryApi,
+  extraOptions: object,
+): Promise<boolean> => {
+  const initData = getTelegramMiniAppInitData();
+  if (!initData || !isTelegramMiniAppRuntime()) {
+    return false;
+  }
+
+  if (!telegramMiniAppRecoveryPromise) {
+    telegramMiniAppRecoveryPromise = (async () => {
+      const socialResponse = await rawBaseQuery(
+        {
+          url: '/auth/telegram',
+          method: 'POST',
+          headers: {
+            'x-skip-access-token': '1',
+          },
+          body: { initData },
+        },
+        api,
+        extraOptions,
+      );
+
+      if (!socialResponse.data) {
+        return false;
+      }
+
+      const socialData = socialResponse.data as Partial<RefreshResponse> & { refreshToken?: string };
+      const socialUser = socialData.user ?? null;
+      const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null;
+      const socialRefreshToken = typeof socialData.refreshToken === 'string' ? socialData.refreshToken : undefined;
+
+      if (!socialUser || !socialToken) {
+        return false;
+      }
+
+      api.dispatch(setCredentials({ user: socialUser, accessToken: socialToken, refreshToken: socialRefreshToken }));
+      return true;
+    })().finally(() => {
+      telegramMiniAppRecoveryPromise = null;
+    });
+  }
+
+  return telegramMiniAppRecoveryPromise;
+};
+
 const runWithSingleRefresh = async (
   api: BaseQueryApi,
   extraOptions: object,
@@ -252,7 +323,10 @@ export const baseQueryWithReauth: BaseQueryFn<
     console.error('[DNA][api] error', { path: requestPathForLog, status: (result.error as { status?: unknown }).status });
   }
 
-  if (result.error?.status !== 401) {
+  const responseStatus = (result.error as { status?: unknown } | undefined)?.status
+  const isAuthFailure = responseStatus === 401 || responseStatus === 403
+
+  if (!isAuthFailure) {
     return result;
   }
 
@@ -265,6 +339,10 @@ export const baseQueryWithReauth: BaseQueryFn<
   }
 
   if (NO_REFRESH_URLS.some(path => requestPath.includes(path))) {
+    return result;
+  }
+
+  if (responseStatus === 403 && !isTelegramMiniAppRuntime()) {
     return result;
   }
 
@@ -288,6 +366,12 @@ export const baseQueryWithReauth: BaseQueryFn<
 
   const didRefresh = await runWithSingleRefresh(api, extraOptions);
   if (!didRefresh) {
+    const didTelegramRecover = await recoverTelegramMiniAppSession(api, extraOptions);
+    if (didTelegramRecover) {
+      result = await rawBaseQuery(args, api, extraOptions);
+      return result;
+    }
+
     if (!accessToken && !refreshToken) {
       api.dispatch(clearAuth());
       logAuthTrace('logoutReason', { reason: 'cookie_probe_failed', path: requestPath });

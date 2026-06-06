@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { prisma } from '../../db/client.js';
-import { isSuperAdminEmail, isSuperAdminRequest } from '../../modules/auth/superadmin.js';
+import { isSuperAdminRequest } from '../../modules/auth/superadmin.js';
 import { logSuperAdminAudit } from '../../utils/logger.js';
 import {
   getAllProducts,
@@ -120,7 +120,7 @@ export async function createProductHandler(req: AuthenticatedRequest, res: Respo
 
     if (!code || !name) return res.status(400).json({ error: 'Code and name are required' });
 
-    const canOverrideOwner = user.role === 'ADMIN' || isSuperAdminEmail(user.email);
+    const canOverrideOwner = user.role === 'ADMIN' || user.role === 'SUPERADMIN';
 
     if ((requestedOwnerId || ownerEmail) && !canOverrideOwner) {
       return res.status(403).json({ error: 'forbidden_owner_override' });

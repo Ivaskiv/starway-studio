@@ -8,6 +8,7 @@ import { NotificationEvent } from '../../services/notifications/NotificationEven
 import { abTestZoomContent } from '@/products/ab-system/content/abTest.zoom.js';
 import { buildShortWayForPayCheckoutUrl } from '../subscriptions/payments/wayforpay.checkout.js';
 import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js';
+import { parseZoomPostReport } from './zoomPostReport.types.js';
 
 function isGroupPracticeRequest(requests: unknown): boolean {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return false;
@@ -40,6 +41,198 @@ function getSafeName(firstName?: string | null): string {
   if (trimmed.length < 2) return ''
 
   return trimmed
+}
+
+const KYIV_TIME_ZONE = 'Europe/Kyiv'
+
+function getKyivNow(now = new Date()): Date {
+  return new Date(now.toLocaleString('en-US', { timeZone: KYIV_TIME_ZONE }))
+}
+
+function startOfKyivWeek(now = new Date()): Date {
+  const date = getKyivNow(now)
+  const day = date.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  date.setDate(date.getDate() + diff)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function endOfKyivWeek(now = new Date()): Date {
+  const date = startOfKyivWeek(now)
+  date.setDate(date.getDate() + 6)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+function extractZoomLinkFromRequests(requests: unknown): string {
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object') return ''
+  const meta = requests as Record<string, unknown>
+  return typeof meta.zoomLink === 'string' ? meta.zoomLink : ''
+}
+
+export async function getCurrentWeekZoomOverview(args: {
+  userId: string
+  role: 'coach' | 'user'
+  expertId?: string | null
+  now?: Date
+}): Promise<{
+  week: { from: string; to: string; timezone: string }
+  sessions: Array<{
+    id: string
+    scheduledAt: string
+    topic: string
+    status: ZoomStatus
+    type: ZoomSessionType
+    zoomLink: string
+    attendeesCount: number
+    isMyBooking: boolean
+    audioFileId: string | null
+    hasAudio: boolean
+  }>
+  audios: Array<{
+    sessionId: string
+    scheduledAt: string
+    topic: string
+    status: ZoomStatus
+    type: ZoomSessionType
+    audioFileId: string
+  }>
+}> {
+  const from = startOfKyivWeek(args.now)
+  const to = endOfKyivWeek(args.now)
+  const sessions = await getCalendarSessions({
+    from,
+    to,
+    role: args.role,
+    userId: args.userId,
+    expertId: args.expertId ?? undefined,
+  })
+
+  const normalized = sessions.map((session) => {
+    const meta = session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests)
+      ? session.requests as Record<string, unknown>
+      : {}
+    const report = parseZoomPostReport(session.postSessionReport)
+    const attendeesCount = (session as { _count?: { attendees?: number } })._count?.attendees ?? 0
+    const zoomLink = extractZoomLinkFromRequests(session.requests)
+
+    return {
+      id: session.id,
+      scheduledAt: session.scheduledAt.toISOString(),
+      topic: session.topic,
+      status: session.status,
+      type: (typeof meta.type === 'string' ? meta.type : session.type) as ZoomSessionType,
+      zoomLink,
+      attendeesCount,
+      isMyBooking: Boolean((session as { isMyBooking?: boolean }).isMyBooking),
+      audioFileId: report?.audioFileId ?? null,
+      hasAudio: Boolean(report?.audioFileId),
+    }
+  })
+
+  const audios = normalized
+    .filter((session) => Boolean(session.audioFileId))
+    .map((session) => ({
+      sessionId: session.id,
+      scheduledAt: session.scheduledAt,
+      topic: session.topic,
+      status: session.status,
+      type: session.type,
+      audioFileId: String(session.audioFileId),
+    }))
+
+  return {
+    week: {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      timezone: KYIV_TIME_ZONE,
+    },
+    sessions: normalized.sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime()),
+    audios,
+  }
+}
+
+export async function getPublicCurrentWeekZoomOverview(now = new Date()): Promise<{
+  week: { from: string; to: string; timezone: string }
+  sessions: Array<{
+    id: string
+    scheduledAt: string
+    topic: string
+    status: ZoomStatus
+    type: ZoomSessionType
+    zoomLink: string
+    attendeesCount: number
+    isMyBooking: boolean
+    audioFileId: string | null
+    hasAudio: boolean
+  }>
+  audios: Array<{
+    sessionId: string
+    scheduledAt: string
+    topic: string
+    status: ZoomStatus
+    type: ZoomSessionType
+    audioFileId: string
+  }>
+}> {
+  const from = startOfKyivWeek(now)
+  const to = endOfKyivWeek(now)
+  const sessions = await prisma.zoomSession.findMany({
+    where: {
+      scheduledAt: { gte: from, lte: to },
+      status: { not: ZoomStatus.CANCELLED },
+      requests: {
+        path: ['type'],
+        equals: 'group_practice',
+      },
+    },
+    include: { _count: { select: { attendees: true } } },
+    orderBy: { scheduledAt: 'asc' },
+  })
+
+  const normalized = sessions.map((session) => {
+    const meta = session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests)
+      ? session.requests as Record<string, unknown>
+      : {}
+    const report = parseZoomPostReport(session.postSessionReport)
+    const attendeesCount = (session as { _count?: { attendees?: number } })._count?.attendees ?? 0
+    const zoomLink = extractZoomLinkFromRequests(session.requests)
+
+    return {
+      id: session.id,
+      scheduledAt: session.scheduledAt.toISOString(),
+      topic: session.topic,
+      status: session.status,
+      type: (typeof meta.type === 'string' ? meta.type : session.type) as ZoomSessionType,
+      zoomLink,
+      attendeesCount,
+      isMyBooking: false,
+      audioFileId: report?.audioFileId ?? null,
+      hasAudio: Boolean(report?.audioFileId),
+    }
+  })
+
+  const audios = normalized
+    .filter((session) => Boolean(session.audioFileId))
+    .map((session) => ({
+      sessionId: session.id,
+      scheduledAt: session.scheduledAt,
+      topic: session.topic,
+      status: session.status,
+      type: session.type,
+      audioFileId: String(session.audioFileId),
+    }))
+
+  return {
+    week: {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      timezone: KYIV_TIME_ZONE,
+    },
+    sessions: normalized,
+    audios,
+  }
 }
 
 export async function createZoomSession(

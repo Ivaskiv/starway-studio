@@ -16,6 +16,7 @@ export type ConversationMessagePlanItem =
       priority?: number
       delayMs?: number
       parseMode?: 'Markdown' | 'HTML'
+      deliveryKind?: 'default' | 'ab_test_email_gate'
     }
   | {
       type: 'edit'
@@ -24,6 +25,7 @@ export type ConversationMessagePlanItem =
       priority?: number
       delayMs?: number
       parseMode?: 'Markdown' | 'HTML'
+      deliveryKind?: 'default' | 'ab_test_email_gate'
     }
   | {
       type: 'callback_ack'

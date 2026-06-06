@@ -21,6 +21,14 @@ type ModelPricing = {
   label: string
 }
 
+const MODEL_PRICE_ALIASES: Record<string, string> = {
+  'claude-sonnet-4-20250514': 'claude-sonnet-4-5',
+}
+
+function resolvePricingModelKey(model: string): string {
+  return MODEL_PRICE_ALIASES[model] ?? model
+}
+
 export const AI_MODEL_PRICING: Record<string, ModelPricing> = {
   'gpt-4.1-mini': {
     inputUsdPerMillion: 0.4,
@@ -64,8 +72,8 @@ export const AI_MAX_TOKENS_BY_CONTENT_TYPE: Record<string, number> = {
   WEBINAR_SALES: 1200,
   AD_COPY: 400,
   BLOG_IDEAS: 800,
-  CUSTOM: 800,
-  CUSTOM_SCRIPT: 800,
+  CUSTOM: 600,
+  CUSTOM_SCRIPT: 600,
   DEFAULT: 800,
 }
 
@@ -93,7 +101,7 @@ export function calculateAiCostUsd(
   inputTokens: number,
   outputTokens: number,
 ): number {
-  const pricing = AI_MODEL_PRICING[model]
+  const pricing = AI_MODEL_PRICING[resolvePricingModelKey(model)]
   if (!pricing) return 0
 
   return Number(

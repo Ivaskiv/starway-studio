@@ -92,7 +92,11 @@ export class ConversationOrchestrator {
           source,
           transition,
           flowState: this.resolveFlowState(ctx),
-          key: this.buildDeliveryKey(ctx, 'plan_message', item.text),
+          key: this.buildDeliveryKey(
+            ctx,
+            item.deliveryKind === 'ab_test_email_gate' ? 'ab_test_email_gate' : 'plan_message',
+            item.deliveryKind === 'ab_test_email_gate' ? transition : item.text,
+          ),
           execute: () =>
             ctx.reply(item.text, {
               ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
@@ -107,7 +111,11 @@ export class ConversationOrchestrator {
           source,
           transition,
           flowState: this.resolveFlowState(ctx),
-          key: this.buildDeliveryKey(ctx, 'plan_edit', item.text),
+          key: this.buildDeliveryKey(
+            ctx,
+            item.deliveryKind === 'ab_test_email_gate' ? 'ab_test_email_gate' : 'plan_edit',
+            item.deliveryKind === 'ab_test_email_gate' ? transition : item.text,
+          ),
           execute: () =>
             ctx.editMessageText?.(item.text, {
               ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
@@ -250,6 +258,9 @@ export class ConversationOrchestrator {
 
   private buildDeliveryKey(ctx: Context, kind: string, text: string): string {
     const updateId = this.resolveUpdateId(ctx) ?? 0
+    if (kind === 'ab_test_email_gate') {
+      return `${this.resolveChatId(ctx)}:${updateId}:${kind}:${text}`
+    }
     return `${this.resolveChatId(ctx)}:${updateId}:${kind}:${crypto
       .createHash('sha1')
       .update(text.slice(0, 256))

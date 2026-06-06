@@ -8,15 +8,17 @@ import type { AuthenticatedRequest, UserRole } from '../../types/globalTypes.js'
 import { prisma } from '../../db/client.js'
 import { bot } from '../../lib/telegram.js'
 import { getCachedUser, invalidateUserCache } from '../../lib/db/userCache.js'
-import { createTelegramBindingDeepLink } from '../deeplinks/service.js'
+import { createTelegramBindingDeepLink, resolveDeepLinkToken } from '../deeplinks/service.js'
 import { authLimiter } from '../../middleware/rateLimiter.js'
 import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
 import { computeAvailableRoles, isRoleAvailable } from './roleUtils.js'
-import { generateAccessToken, generateRefreshToken, storeRefreshToken, resolveSafeUserById } from './auth.service.js'
+import { createSessionForUserId, generateAccessToken, generateRefreshToken, storeRefreshToken, resolveSafeUserById } from './auth.service.js'
+import { buildSecureCookieOptions } from '../../core/state-machine/securityFoundation.js'
 
 const router = Router()
 export const telegramRouter = Router()
 const authLimiterHandler = authLimiter as unknown as RequestHandler
+const COOKIE_OPTIONS = buildSecureCookieOptions()
 
 function isTelegramInactiveError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -97,6 +99,32 @@ router.get('/telegram-link', authRequired, async (req: AuthenticatedRequest, res
     botUsername,
   })
 })
+
+const magicLoginHandler: RequestHandler = async (req, res) => {
+  const token = String(req.query?.token ?? '').trim()
+  if (!token) {
+    return res.status(400).json({ error: 'token_required' })
+  }
+
+  const resolved = await resolveDeepLinkToken({ token, consume: true })
+  if (!resolved || resolved.action !== 'magic_login') {
+    return res.status(401).json({ error: 'invalid_or_expired_token' })
+  }
+
+  const session = await createSessionForUserId(resolved.userId)
+  res.cookie('refreshToken', session.refreshToken, COOKIE_OPTIONS)
+
+  return res.json({
+    ok: true,
+    user: session.user,
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    expiresIn: session.expiresIn,
+    token: resolved.token,
+  })
+}
+
+router.get('/magic', magicLoginHandler)
 
 telegramRouter.post('/retry-link', authRequired, async (req: AuthenticatedRequest, res) => {
   const userId = req.user?.id

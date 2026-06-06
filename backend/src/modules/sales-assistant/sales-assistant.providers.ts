@@ -12,7 +12,7 @@ import type { ModelProvider } from '@/modules/ai-assistant/promptCompiler.js'
 import { normalizeProviderError } from '@/modules/ai-assistant/utils/normalizeProviderError.js'
 import { sendAdminAlert } from '@/modules/sales-assistant/sales-assistant.alert.js'
 import { SalesAssistantGenerateBody } from '@/modules/sales-assistant/sales-assistant.types.js'
-import { normalizeProviderAlias } from '@/modules/sales-assistant/sales-assistant.helpers.js'
+import { hashCacheParts, normalizeProviderAlias, rememberResultCache, resultCache } from '@/modules/sales-assistant/sales-assistant.helpers.js'
 import { PROMPT_PREVIEW_CHARS } from '@/modules/sales-assistant/sales-assistant.constants.js'
 
 // ─── model name resolvers ─────────────────────────────────────────────────────
@@ -35,6 +35,45 @@ export function resolveGeminiModelName(tier: ModelStrategyTier): string {
   return normalized
 }
 
+function ensureAnthropicConfigured(): void {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
+  if (!apiKey || apiKey === 'SET') {
+    throw new Error('anthropic_not_configured')
+  }
+}
+
+function buildClaudeCacheKey(params: {
+  provider: ModelProvider
+  modelName: string
+  systemPrompt: string
+  userRequest: string
+  contentType: string
+  strategyTier: ModelStrategyTier
+  maxTokens: number
+}): string {
+  return hashCacheParts([
+    'claude-provider',
+    params.provider,
+    params.modelName,
+    params.contentType,
+    params.strategyTier,
+    params.maxTokens,
+    params.systemPrompt,
+    params.userRequest,
+  ])
+}
+
+function cloneCachedUsageForHit(usage: AiCostTelemetry): AiCostTelemetry {
+  return {
+    ...usage,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    actualCostUsd: 0,
+    cacheHit: true,
+  }
+}
+
 // ─── human error messages ─────────────────────────────────────────────────────
 export function resolveHumanErrorMessage(
   norm: ReturnType<typeof normalizeProviderError>
@@ -46,6 +85,8 @@ export function resolveHumanErrorMessage(
     return 'Денний ліміт вичерпано. Claude — єдиний активний провайдер.'
   if (norm.code === 'RATE_LIMITED')
     return 'Забагато запитів. Зачекай 60 сек та спробуй знову.'
+  if (norm.code === 'PROVIDER_NOT_CONFIGURED')
+    return 'Claude не підключено. Перевір ANTHROPIC_API_KEY.'
   if (norm.status === 401)
     return 'API ключ недійсний або відсутній. Перевір .env'
   if (norm.status === 503 || norm.status === 529)
@@ -74,6 +115,24 @@ export async function callProvider(
 ): Promise<{ result: string; tokensUsed: number; usage: AiCostTelemetry }> {
   const maxTokens = resolveAiMaxOutputTokens(options.contentType)
   const modelName = getProviderModelName(provider, options.strategyTier)
+  const cacheKey = buildClaudeCacheKey({
+    provider,
+    modelName,
+    systemPrompt,
+    userRequest,
+    contentType: options.contentType,
+    strategyTier: options.strategyTier,
+    maxTokens,
+  })
+  const cached = resultCache.get(cacheKey)
+  if (cached) {
+    return {
+      result: cached.content,
+      tokensUsed: 0,
+      usage: cloneCachedUsageForHit(cached.usage),
+    }
+  }
+
   const isDev = process.env.NODE_ENV !== 'production'
   const estimate = buildAiUsageEstimate({
     model: modelName, promptText: systemPrompt,
@@ -81,6 +140,7 @@ export async function callProvider(
   })
 
   if (provider === 'claude') {
+    ensureAnthropicConfigured()
     if (isDev) console.info('[DNA][claude][CALL]', { model: modelName })
     const response = await anthropic.messages.create({
       model: modelName, max_tokens: maxTokens,
@@ -92,7 +152,18 @@ export async function callProvider(
     const outputTokens = response.usage.output_tokens
     const actualCostUsd = calculateAiCostUsd(modelName, inputTokens, outputTokens)
     console.info('[DNA][claude][SUCCESS]', { tokens: inputTokens + outputTokens, actualCostUsd, ...(isDev && { preview: text.slice(0, PROMPT_PREVIEW_CHARS) }) })
-    return { result: text, tokensUsed: inputTokens + outputTokens, usage: { provider, model: modelName, inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, estimatedCostUsd: estimate.estimatedCostUsd, actualCostUsd, costTier: getCostTier(actualCostUsd || estimate.estimatedCostUsd) } }
+    const usage: AiCostTelemetry = {
+      provider,
+      model: modelName,
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      estimatedCostUsd: estimate.estimatedCostUsd,
+      actualCostUsd,
+      costTier: getCostTier(actualCostUsd || estimate.estimatedCostUsd),
+    }
+    rememberResultCache(cacheKey, { content: text, usage })
+    return { result: text, tokensUsed: usage.totalTokens, usage }
   }
 
   // OpenAI тимчасово вимкнено

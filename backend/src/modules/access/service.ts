@@ -1,7 +1,6 @@
 // backend/src/modules/access/access.service.ts
 import { prisma } from '../../db/client.js'
 import { getAllAbilities } from '../../modules/auth/abilities.js'
-import { isSuperAdminEmail } from '../../modules/auth/superadmin.js'
 import { getTrialStatus } from '../trial/service.js'
 import { ensureOwnerExpertIdForUser } from '../experts/ownership.service.js'
 import {
@@ -92,10 +91,9 @@ function isProductAccessRole(value: string): value is ProductAccessRole {
 
 function resolveEffectiveRole(input: {
   role: AccessUserSnapshot['role']
-  email: string | null
   productAccesses: ProductAccessAssignment[]
 }): 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN' {
-  if (input.role === 'SUPERADMIN' || isSuperAdminEmail(input.email ?? '')) return 'SUPERADMIN'
+  if (input.role === 'SUPERADMIN') return 'SUPERADMIN'
   if (input.role === 'ADMIN') return 'ADMIN'
   if (input.role === 'EXPERT') return 'EXPERT'
   if (input.productAccesses.some((item) => item.role === 'ADMIN')) return 'ADMIN'
@@ -325,7 +323,7 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
 
   const now = new Date()
   const trial = await getTrialStatus(userId)
-  const isSuperAdmin = user.role === 'SUPERADMIN' || isSuperAdminEmail(user.email ?? '')
+  const isSuperAdmin = user.role === 'SUPERADMIN'
   const subscription = user.subscription
   const leadEnrollment = user.fivePointsEnrollment
   const isPaidActive =
@@ -514,10 +512,9 @@ export async function getUserAccess(userId: string, _precomputedAccessControl?: 
   const trialStatus = await getTrialStatus(userId)
   const subscription = user.subscription
   const items: AccessItem[] = []
-  const isSuperAdmin = isSuperAdminEmail(user.email ?? '')
+  const isSuperAdmin = user.role === 'SUPERADMIN'
   const effectiveRole = resolveEffectiveRole({
     role: user.role,
-    email: user.email,
     productAccesses: user.productAccesses,
   })
   const accessControl = _precomputedAccessControl ?? await getAccessControlState(userId)

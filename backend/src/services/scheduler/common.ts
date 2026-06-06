@@ -2,7 +2,7 @@
 // Інструкція: тут спільні утиліти, перевірки доступності та Telegram-хелпери для cron-задач.
 
 import { resolveTelegramWebappBaseUrl } from '@/config/webapp.js'
-import { prisma } from '../../db/client.js'
+import { prisma, withRetry } from '../../db/client.js'
 import { getUserAccess } from '../../modules/access/service.js'
 import { sendDedupedTelegramMessage } from '../../lib/telegram.js'
 import { notificationService } from '../notifications/NotificationService.js'
@@ -119,14 +119,14 @@ export async function hasMentorNotificationAccess(userId: string): Promise<boole
 
 export async function ensureNotificationPreferenceTableAvailability(): Promise<boolean> {
   if (typeof notificationPreferenceTableAvailable !== 'undefined') return notificationPreferenceTableAvailable
-  const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+  const rows = await withRetry(() => prisma.$queryRaw<Array<{ exists: boolean }>>`
     SELECT EXISTS (
       SELECT 1
       FROM information_schema.tables
       WHERE table_schema = 'public'
         AND table_name = 'NotificationPreference'
     ) AS "exists"
-  `
+  `)
   notificationPreferenceTableAvailable = rows[0]?.exists === true
   if (!notificationPreferenceTableAvailable) {
     if (!hasWarnedAboutMissingNotificationPreferenceTable) {

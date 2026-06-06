@@ -4,13 +4,14 @@ export const coachBotContent = {
     subtitle: 'Єдина операційна панель коуча: Zoom, Audio, Content, Users, Notifications, Analytics, Payments.',
   },
   menu: {
-    schedule: '📅 Zoom',
+    schedule: '📅 Zoom Calendar',
     nextWeek: '➕ Schedule add',
-    dna: '📊 Stats',
+    dna: '📈 Аналітика',
     members: '👥 Users',
     notifications: '🔔 Notify',
-    audio: '🎧 Audio',
-    planner: '🧭 Planner',
+    audio: '📊 Аудіо цього тижня',
+    planner: '📝 Плануємо контент',
+    script: '✏️ Мій сценарій',
     payments: '💳 Payments',
   },
   schedule: {
@@ -43,6 +44,9 @@ export const coachBotContent = {
     focusPaid: 'Оплатили ФОКУС',
     zoomActive: 'Активні в Zoom',
     conversion: 'Конверсія тест → ФОКУС',
+    abSystemUpgrades: 'ABSystem апгрейди',
+    revenue: 'Revenue',
+    mrr: 'MRR',
     noData: 'Дані ще збираються',
   },
   stats: {
@@ -61,7 +65,7 @@ export const coachBotContent = {
     listHeader: 'Останні аудіо-записи',
     ingestStarted: 'Запускаю ручну обробку аудіо...',
     ingestDone: 'Ручну обробку аудіо завершено.',
-    usage: '/audio — показати список\n/audio run — запустити обробку',
+    usage: '/audio — показати аудіо поточного тижня\n/audio run — запустити обробку',
   },
   users: {
     title: 'Users',

@@ -1,4 +1,4 @@
-import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { getToken } from '@/features/auth/services/token'
 import { resolveApiUrl } from '@/services/api'
 
@@ -20,7 +20,7 @@ export function getTelegramMiniAppAuthHeader() {
   if (typeof window === 'undefined') return null
 
   const initData = getTelegramMiniAppInitData()
-  if (!initData || !isTelegramMiniAppContext(window.location.pathname)) {
+  if (!initData || !isTelegramMiniApp(window.location.pathname)) {
     return null
   }
 

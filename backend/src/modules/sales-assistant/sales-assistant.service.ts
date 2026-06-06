@@ -6,7 +6,6 @@ import { ProviderGenerationError } from '@/modules/ai-assistant/utils/normalizeP
 
 import { DEFAULT_PROVIDER, FALLBACK_PROFILE, MAX_PROMPT_CHARS, MAX_USER_REQUEST_CHARS, PROMPT_PREVIEW_CHARS } from '@/modules/sales-assistant/sales-assistant.constants.js'
 import type { SalesAssistantGenerateBody, SalesAssistantWorkspaceResponse, UpdateSalesAssistantWorkspaceBody } from '@/modules/sales-assistant/sales-assistant.types.js'
-import { hashCacheParts, rememberResultCache } from '@/modules/sales-assistant/sales-assistant.helpers.js'
 import { callProviderSafe, resolveEnabledProviders } from '@/modules/sales-assistant/sales-assistant.providers.js'
 import {
   buildPromptForType,
@@ -23,6 +22,23 @@ export type { SalesAssistantGenerateBody, SalesAssistantWorkspaceResponse, Updat
 
 const DNA_TARGET_TYPES = new Set<ContentTypeKey>(['reels', 'warmup'])
 const SOCIAL_PROOF_TOPIC_PREFIX = 'weekly-proof:'
+const SOCIAL_PROOF_CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000
+
+type SocialProofContextCacheValue = {
+  expiresAt: number
+  value: string
+}
+
+const socialProofContextCache = new Map<string, SocialProofContextCacheValue>()
+
+function cleanupSocialProofContextCache(): void {
+  const now = Date.now()
+  for (const [key, entry] of socialProofContextCache.entries()) {
+    if (entry.expiresAt <= now) {
+      socialProofContextCache.delete(key)
+    }
+  }
+}
 
 function shouldUseDna(type: ContentTypeKey): boolean {
   return isDnaEnabled() && DNA_TARGET_TYPES.has(type)
@@ -76,6 +92,13 @@ function compactText(value: string, maxLength = 220): string {
 }
 
 async function loadWeeklySocialProofContext(userId: string): Promise<string> {
+  const cacheKey = `social-proof:${userId}`
+  cleanupSocialProofContextCache()
+  const cached = socialProofContextCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value
+  }
+
   const items = await prisma.contentItem.findMany({
     where: {
       userId,
@@ -104,11 +127,18 @@ async function loadWeeklySocialProofContext(userId: string): Promise<string> {
     ].join('\n')
   })
 
-  return [
+  const value = [
     'SOCIAL_PROOF_CONTEXT:',
     'Use these approved weekly proof artifacts as source material for hooks, reels, stories, transformation angles, and proof-led CTAs.',
     ...lines,
   ].join('\n')
+
+  socialProofContextCache.set(cacheKey, {
+    expiresAt: Date.now() + SOCIAL_PROOF_CONTEXT_CACHE_TTL_MS,
+    value,
+  })
+
+  return value
 }
 
 async function enrichSalesAssistantContext(userId: string, body: SalesAssistantGenerateBody): Promise<SalesAssistantGenerateBody> {
@@ -225,15 +255,6 @@ async function generateContentLegacy(
   //   parallelResults = await executeForProviders(['claude', 'gpt', 'gemini'])
   // }
   parallelResults = await executeForProviders(['claude'])
-
-  for (const r of parallelResults) {
-    if (r.content && r.usage) {
-      rememberResultCache(
-        hashCacheParts([r.modelKey, strategyTier, body.selectedProtocol, body.contentType, body.selectedOutputs, safeUserRequest]),
-        { content: r.content, usage: r.usage },
-      )
-    }
-  }
 
   // OpenAI і Gemini тимчасово вимкнені — тільки Claude
   // const preferredOrder = routingMode === 'PREMIUM' ? ['claude', 'gpt', 'gemini'] : routingMode === 'BALANCED' ? ['gpt', 'gemini'] : ['gemini']

@@ -1,6 +1,7 @@
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import { setCredentials } from '@/features/auth/services/auth.slice'
 import { useRestoreDeepLinkSessionMutation } from '@/features/auth/services/deeplinks.api'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { DEFAULT_ACCENT, normalizeUiMode } from '@/theme/accent.utils'
 import { useThemeContext } from '@/theme/ThemeProvider'
 import { useEffect, useRef } from 'react'
@@ -12,7 +13,7 @@ const BAD_COLORS = new Set([
   '#0a2446', '#0d1b3e',
 ])
 const AUTH_CALLBACK_PARAMS = ['token', 'accessToken', 'authToken', 'refreshToken']
-const TOKEN_PARAM_SAFE_PATHS = new Set(['/reset-password'])
+const TOKEN_PARAM_SAFE_PATHS = new Set(['/reset-password', '/auth/magic'])
 const PENDING_DEEPLINK_TOKEN_KEY = 'starway_pending_deeplink_token'
 
 function safeAccent(color?: string | null): string {
@@ -78,6 +79,10 @@ export default function DeepLinkAuthBridge() {
     if (status === 'authenticated' && location.pathname !== '/onboarding/continue') {
       processedTokenRef.current = token
       search.delete('dl')
+      if (isTelegramMiniApp(location.pathname)) {
+        navigate('/miniapp', { replace: true })
+        return
+      }
       navigate(
         {
           pathname: location.pathname,
@@ -109,6 +114,11 @@ export default function DeepLinkAuthBridge() {
 
         const currentPath = `${location.pathname}${location.search}`
         const targetPath = result.link.path
+
+        if (isTelegramMiniApp(location.pathname)) {
+          navigate('/miniapp', { replace: true })
+          return
+        }
 
         if (location.pathname === '/onboarding/continue' && targetPath) {
           navigate(targetPath, { replace: true })

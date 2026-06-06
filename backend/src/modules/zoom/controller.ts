@@ -13,6 +13,8 @@ import { NotificationEvent } from '../../services/notifications/NotificationEven
 import { sendDedupedTelegramMessage } from '../../lib/telegram.js';
 import {
   createZoomSession,
+  getCurrentWeekZoomOverview,
+  getPublicCurrentWeekZoomOverview,
   getSessionAttendees,
   getUpcomingZoom,
   markAttended,
@@ -300,5 +302,32 @@ export async function getMySessions(req: AuthenticatedRequest, res: Response, ne
     return res.status(200).json(result);
   } catch (err) {
     next(err);
+  }
+}
+
+export async function getCurrentWeekSessions(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const user = req.user
+    if (!user?.id) return res.status(401).json({ error: 'Unauthorized' })
+
+    const role = user.role === 'EXPERT' || user.role === 'SUPERADMIN' ? 'coach' : 'user'
+    const overview = await getCurrentWeekZoomOverview({
+      userId: user.id,
+      role,
+      expertId: user.expertId ?? user.id,
+    })
+
+    return res.status(200).json(overview)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function getPublicCurrentWeekSessions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const overview = await getPublicCurrentWeekZoomOverview()
+    return res.status(200).json(overview)
+  } catch (err) {
+    next(err)
   }
 }

@@ -14,6 +14,21 @@ function getTurnstileToken() {
   return String(tokenFromWindow ?? '').trim()
 }
 
+function getTelegramRuntimeUserId(): string | null {
+  if (typeof window === 'undefined') return null
+  const telegramUser = (window as {
+    Telegram?: {
+      WebApp?: {
+        initDataUnsafe?: {
+          user?: { id?: number }
+        }
+      }
+    }
+  }).Telegram?.WebApp?.initDataUnsafe?.user
+
+  return telegramUser?.id ? String(telegramUser.id) : null
+}
+
 interface Props {
   email?:    string
   name?:     string
@@ -57,6 +72,7 @@ export function RegisterForm({ email: initialEmail = '', name: initialName = '',
           name: value.name.trim(),
           companyWebsite: value.companyWebsite,
           turnstileToken: getTurnstileToken(),
+          telegramId: getTelegramRuntimeUserId(),
         }).unwrap()
         if (response.accessToken) onSuccess({ email: value.email, password: value.password })
         else onSuccess()

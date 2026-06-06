@@ -352,10 +352,10 @@ export async function isNotificationAllowedForUser(event: NotificationEvent, use
   const snapshot = await resolveUserLifecycle(userId, db)
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { role: true },
+    select: { role: true, activeRole: true },
   })
 
-  if (!isNotificationRoleAllowed(event, user?.role)) {
+  if (!isNotificationRoleAllowed(event, user?.role, user?.activeRole)) {
     return false
   }
 

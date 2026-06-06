@@ -1,6 +1,6 @@
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import type { Response } from 'express'
-import { isSuperAdminEmail, isSuperAdminRequest } from '../../modules/auth/superadmin.js'
+import { isSuperAdminRequest } from '../../modules/auth/superadmin.js'
 import { findUserById } from '../../modules/auth/auth.service.js'
 import { trackEvent } from '../events/service.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
@@ -36,7 +36,7 @@ function ensureSuperAdmin(req: AuthenticatedRequest, res: Response): boolean {
     return false
   }
 
-  if (!(req.user.role === 'SUPERADMIN' || isSuperAdminRequest(req) || isSuperAdminEmail(req.user.email ?? ''))) {
+  if (!isSuperAdminRequest(req)) {
     res.status(403).json({ error: 'superadmin_only' })
     return false
   }

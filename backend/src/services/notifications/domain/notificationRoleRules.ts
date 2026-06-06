@@ -20,12 +20,22 @@ const USER_NOTIFICATION_EVENTS = new Set<NotificationEvent>([
   NotificationEvent.AB_TEST_FOLLOWUP,
 ])
 
-export function isNotificationRoleAllowed(event: NotificationEvent, role: string | null | undefined): boolean {
+export function isNotificationRoleAllowed(
+  event: NotificationEvent,
+  role: string | null | undefined,
+  activeRole?: string | null | undefined,
+): boolean {
   const normalizedRole = String(role ?? '').toUpperCase() as NotificationRole
+  const normalizedActiveRole = String(activeRole ?? '').toUpperCase() as NotificationRole
 
   if (!USER_NOTIFICATION_EVENTS.has(event)) {
     return true
   }
 
-  return normalizedRole === 'USER' || normalizedRole === 'TRIAL'
+  return (
+    normalizedActiveRole === 'USER'
+    || normalizedActiveRole === 'TRIAL'
+    || normalizedRole === 'USER'
+    || normalizedRole === 'TRIAL'
+  )
 }

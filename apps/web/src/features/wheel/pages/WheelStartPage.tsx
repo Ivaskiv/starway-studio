@@ -4,6 +4,7 @@ import { useTrackFrontendEventMutation } from '@/features/analytics/services/eve
 import { EmailCompletionCard } from '@/features/auth/components/EmailCompletionCard'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useUserState } from '@/features/auth/hooks/useUserState'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { WheelForm } from '@/features/wheel/components/WheelForm'
 import { resetWheelPersistedState } from '@/features/wheel/hooks/useWheelFlowState'
 import { Button } from '@/ui'
@@ -44,7 +45,7 @@ export default function WheelStartPage() {
           <p className="text-sm text-[var(--text-secondary)]">
             Діагностика доступна після входу в систему
           </p>
-          <Button onClick={() => navigate('/login')} variant="solid" className="hero-cta-primary w-full">
+          <Button onClick={() => navigate(isTelegramMiniApp() ? '/miniapp' : '/login')} variant="solid" className="hero-cta-primary w-full">
             Увійти
           </Button>
         </div>

@@ -1,4 +1,4 @@
-export function isTelegramMiniAppContext(pathname?: string): boolean {
+export function isTelegramMiniApp(pathname?: string): boolean {
   if (typeof window === 'undefined') {
     return Boolean(pathname?.startsWith('/miniapp'))
   }
@@ -22,4 +22,8 @@ export function isTelegramMiniAppContext(pathname?: string): boolean {
     hasTelegramQueryHints ||
     (hasTelegramWebAppObject && hasInitData),
   )
+}
+
+export function isTelegramMiniAppContext(pathname?: string): boolean {
+  return isTelegramMiniApp(pathname)
 }

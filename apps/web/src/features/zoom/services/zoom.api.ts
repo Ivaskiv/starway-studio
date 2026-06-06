@@ -7,6 +7,7 @@ import type {
   ZoomAttendeeDTO,
   ZoomSessionDTO,
   ZoomSessionWithAttendance,
+  ZoomWeekOverview,
 } from '../types/zoom.types'
 
 // ── Mock data (залишено без змін) ─────────────────────────────────────────────
@@ -72,6 +73,16 @@ export const zoomApi = api.injectEndpoints({
       providesTags: ['ZoomSession'],
     }),
 
+    getWeekOverview: build.query<ZoomWeekOverview, void>({
+        query:        () => '/zoom/week',
+      providesTags: ['ZoomSession'],
+    }),
+
+    getPublicWeekOverview: build.query<ZoomWeekOverview, void>({
+      query: () => '/zoom/public/week',
+      providesTags: ['ZoomSession'],
+    }),
+
     registerAttendee: build.mutation<ZoomAttendeeDTO, RegisterAttendeeDto>({
       query:           body => ({ url: '/zoom/register', method: 'POST', body }),
       invalidatesTags: ['ZoomSession', 'ZoomAttendee'],
@@ -94,6 +105,8 @@ export const zoomApi = api.injectEndpoints({
 export const {
   useGetUpcomingSessionQuery,
   useGetMySessionsQuery,
+  useGetWeekOverviewQuery,
+  useGetPublicWeekOverviewQuery,
   useRegisterAttendeeMutation,
   useMarkAttendedMutation,
   useGetAttendeesQuery,

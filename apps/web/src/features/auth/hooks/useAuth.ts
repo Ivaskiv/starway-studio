@@ -26,7 +26,7 @@ import type { RegisterRequest, User } from '@/features/user/types/user.types'
 import { DEFAULT_ACCENT, normalizeUiMode } from '@/theme/accent.utils'
 import { useThemeContext } from '@/theme/ThemeProvider'
 import { useDispatch, useSelector } from 'react-redux'
-import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 
 // ── Хелпер: SafeUserDTO → User ───────────────────────────────────────────────
 // SafeUserDTO.abilities = string[] (бекенд не знає про тип Ability)
@@ -61,7 +61,7 @@ export function useAuth() {
 
   const canUseSocialProvider = (provider: SocialPlatform) => {
     if (provider === 'google') return true
-    if (provider === 'telegram') return Boolean(getTelegramRuntimeAuthData()) && !isTelegramMiniAppContext()
+    if (provider === 'telegram') return Boolean(getTelegramRuntimeAuthData()) && !isTelegramMiniApp()
     return false
   }
 

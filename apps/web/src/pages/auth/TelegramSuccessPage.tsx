@@ -33,7 +33,8 @@ export default function TelegramSuccessPage() {
   })
 
   useEffect(() => {
-    const token = new URLSearchParams(location.search).get('dl')
+    const searchParams = new URLSearchParams(location.search)
+    const token = searchParams.get('dl') ?? searchParams.get('token')
     if (token) {
       navigate(`${ROUTES.ONBOARDING_CONTINUE}?dl=${encodeURIComponent(token)}`, { replace: true })
       return
@@ -73,7 +74,9 @@ export default function TelegramSuccessPage() {
           <CheckCircle2 className="h-7 w-7" />
         </div>
 
-        <h1 className="mt-5 text-3xl font-bold text-white">Telegram підключено</h1>
+        <h1 className="mt-5 text-3xl font-bold text-white">
+          {location.pathname === ROUTES.MAGIC_LOGIN ? 'Вхід без пароля' : 'Telegram підключено'}
+        </h1>
 
         {step === 'START_FLOW' ? (
           <>

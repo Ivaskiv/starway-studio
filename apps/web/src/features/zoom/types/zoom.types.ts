@@ -3,6 +3,7 @@
 // Використовується в: zoom.api.ts, useZoom.ts, компонентах
 
 export type ZoomStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+export type ZoomSessionType = 'GROUP' | 'INDIVIDUAL' | 'group_practice' | 'individual' | 'intensive' | 'battle_review' | 'PRIVATE';
 
 /** Запит юзера на сесію (ZoomSession.requests: Json[]) */
 export interface SessionRequest {
@@ -47,6 +48,32 @@ export interface ZoomAttendeeDTO {
 export interface ZoomSessionWithAttendance extends ZoomSessionDTO {
   isRegistered: boolean;
   attendeeId?:  string;
+}
+
+export interface ZoomWeekAudio {
+  sessionId: string;
+  scheduledAt: string;
+  topic: string;
+  status: ZoomStatus;
+  type: ZoomSessionType;
+  audioFileId: string;
+}
+
+export interface ZoomWeekOverview {
+  week: {
+    from: string;
+    to: string;
+    timezone: string;
+  };
+  sessions: Array<ZoomSessionDTO & {
+    type: ZoomSessionType;
+    attendeesCount: number;
+    isMyBooking: boolean;
+    audioFileId: string | null;
+    hasAudio: boolean;
+    zoomLink: string;
+  }>;
+  audios: ZoomWeekAudio[];
 }
 
 export interface RegisterAttendeeDto   { sessionId: string }

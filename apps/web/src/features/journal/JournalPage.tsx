@@ -7,7 +7,7 @@ import JournalDashboardHeader from '@/features/journal/components/JournalDashboa
 import JournalFeed from '@/features/journal/components/JournalFeed'
 import { useJournal } from './hooks/useJournal';
 
-import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp';
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp';
 import JournalLayout from '@/features/journal/layout/JournalLayout';
 import ProgressPanel from '@/components/layout/ProgressPanel';
 import { useUserProgress } from '@/features/user/hooks/useUserProgress'
@@ -23,7 +23,7 @@ export default function JournalPage({ compact = false }: { compact?: boolean }) 
 
   // Перенаправлення для Telegram Mini App
   useEffect(() => {
-    if (!isTelegramMiniAppContext(location.pathname)) return;
+    if (!isTelegramMiniApp(location.pathname)) return;
     navigate('/miniapp/journal', { replace: true });
   }, [location.pathname, navigate]);
 

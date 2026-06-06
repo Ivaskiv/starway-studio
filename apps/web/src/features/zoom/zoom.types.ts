@@ -36,6 +36,7 @@ export interface ZoomCalendarSession {
   status: ZoomStatus;
   type: ZoomSessionType;
   zoomLink: string;
+  audioFileId?: string | null;
   attendeesCount?: number;
   notifiedAt24h?: string | null;
   notifiedAt2h?: string | null;
@@ -47,6 +48,25 @@ export interface ZoomCalendarSession {
   isMyBooking?: boolean;
   priceCents?: number;
   durationMinutes?: number;
+}
+
+export interface ZoomWeekAudio {
+  sessionId: string;
+  scheduledAt: string;
+  topic: string;
+  status: ZoomStatus;
+  type: ZoomSessionType;
+  audioFileId: string;
+}
+
+export interface ZoomWeekOverview {
+  week: {
+    from: string;
+    to: string;
+    timezone: string;
+  };
+  sessions: ZoomCalendarSession[];
+  audios: ZoomWeekAudio[];
 }
 
 export interface AvailabilitySlot {

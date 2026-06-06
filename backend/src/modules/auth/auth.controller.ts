@@ -113,13 +113,20 @@ function sendControllerError(res: Response, error: unknown) {
 // ── REGISTER ──────────────────────────────
 export async function register(req: Request, res: Response) {
   try {
-    const { email, password, name, expertId, companyWebsite, turnstileToken } = req.body ?? {}
+    const { email, password, name, expertId, companyWebsite, turnstileToken, telegramId } = req.body ?? {}
     await assertHumanVerification({
       honeypot: companyWebsite,
       turnstileToken,
       ip: req.ip,
     })
-    const result = await registerUser({ email, password, name, expertId, requestId: resolveRequestId(req) })
+    const result = await registerUser({
+      email,
+      password,
+      name,
+      expertId,
+      telegramId: String(telegramId ?? '').trim() || null,
+      requestId: resolveRequestId(req),
+    })
 
     res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
 

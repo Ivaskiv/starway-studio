@@ -15,6 +15,8 @@ export function getSessionDotClass(type: ZoomSessionType, isPast: boolean): stri
     case 'individual':     return 'bg-teal-500';
     case 'intensive':      return 'bg-blue-500';
   }
+
+  return 'bg-blue-500';
 }
 
 export function getWeekDays(date: Date): Date[] {

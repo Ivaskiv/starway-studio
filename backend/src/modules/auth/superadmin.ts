@@ -21,9 +21,9 @@ export function isSuperAdminEmail(email?: string | null): boolean {
 }
 
 /**
- * Перевіряє, чи є запит від супер-адміна.
- * Очікує, що req.user.email доступний (наприклад після auth middleware)
+ * Runtime authority uses the canonical role only.
+ * Email allowlist stays as a bootstrap helper for account provisioning.
  */
-export function isSuperAdminRequest(req: { user?: { email?: string | null } }): boolean {
-  return isSuperAdminEmail(req.user?.email ?? null)
+export function isSuperAdminRequest(req: { user?: { role?: string | null } }): boolean {
+  return String(req.user?.role ?? '').toUpperCase() === 'SUPERADMIN'
 }

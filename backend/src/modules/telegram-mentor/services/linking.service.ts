@@ -158,7 +158,7 @@ export async function upsertTelegramBinding(params: {
       telegramChatId: chatId,
       telegramUserId,
       telegramUserName,
-      telegramLinkedAt: new Date(),
+      telegramLinkedAt: existingUser?.telegramLinkedAt ?? new Date(),
     },
   })
 

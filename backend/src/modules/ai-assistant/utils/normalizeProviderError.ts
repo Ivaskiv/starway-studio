@@ -127,6 +127,9 @@ export function normalizeProviderError(
   const status = detectStatus(candidate, lower)
   const resolvedProvider = detectProvider(candidate, provider)
 
+  if (lower.includes('anthropic_not_configured')) {
+    return { status: 400, code: 'PROVIDER_NOT_CONFIGURED', message, provider: resolvedProvider, retryAfter: null }
+  }
   if (status === 401 || lower.includes('api key') || lower.includes('unauthorized')) {
     return { status: 401, code: 'INVALID_PROVIDER_KEY', message, provider: resolvedProvider, retryAfter: null }
   }

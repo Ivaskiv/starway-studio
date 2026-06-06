@@ -214,6 +214,24 @@ function logTelegramEvent(scope: string, event: TelegramCallbackEvent, extra?: R
   })
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`${label}_timeout`))
+    }, timeoutMs)
+
+    promise
+      .then((value) => {
+        clearTimeout(timeout)
+        resolve(value)
+      })
+      .catch((error) => {
+        clearTimeout(timeout)
+        reject(error)
+      })
+  })
+}
+
 async function handleRoomAction(ctx: Context, userId: string | null, action: string) {
   const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
 
@@ -223,13 +241,29 @@ async function handleRoomAction(ctx: Context, userId: string | null, action: str
   }
 
   if (action === 'start_wheel') {
-    await planMessage(
-      ctx,
-      'ctx.reply',
-      'room_start_wheel',
-      'Відкрий Starway і запусти діагностику стану в MiniApp.',
-      replyMarkup,
-    )
+    await planAck(ctx, 'ctx.answerCbQuery', 'room_start_wheel_ack', 'Показую діагностику стану').catch(() => undefined)
+    try {
+      await withTimeout(
+        planMessage(
+          ctx,
+          'ctx.reply',
+          'room_start_wheel',
+          'Відкрий Starway і запусти діагностику стану в MiniApp.',
+          replyMarkup,
+        ),
+        15_000,
+        'room_start_wheel',
+      )
+    } catch (error) {
+      if (error instanceof Error && error.message === 'room_start_wheel_timeout') {
+        logger.warn('[telegram-thin-client:start_wheel_timeout]', {
+          userId,
+          error: error.message,
+        })
+        return true
+      }
+      throw error
+    }
     return true
   }
 

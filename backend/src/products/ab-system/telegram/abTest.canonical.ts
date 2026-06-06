@@ -71,6 +71,7 @@ export async function observeAbTestCanonicalAction(
       last_event_at: new Date().toISOString(),
     })
     next = await scheduleFollowups(userId, next, 'S3_TEST_RESULT')
+    next = await scheduleFollowups(userId, next, 'S4_FOCUS_INVITE')
   } else if (canonical === 'PAY_FOCUS_1M' || canonical === 'PAY_FOCUS_3M') {
     next = buildAbTestProgressPatch(next, {
       stage,

@@ -4,6 +4,7 @@ import { prisma } from '../../db/client.js'
 import { sendUserTelegramMessage } from '../../lib/telegram.js'
 import { coachOnly } from '../../middleware/coachOnly.middleware.js'
 import {
+  getCanonicalCoachMetrics,
   getFunnelStats,
   getLiveActivity,
   getOverviewStats,
@@ -14,6 +15,7 @@ import {
   listCloudinaryZoomAudio,
 } from '../../modules/zoom/cloudinary-audio-ingest.service.js'
 import { formatZoomAudioSizeMB } from '../../modules/voice/voice.service.js'
+import { coachBotContent } from '../content/coachBot.content.js'
 import { coachContent } from '../content/coachContent.content.js'
 import {
   handleCoachContentAction,
@@ -29,56 +31,29 @@ type CoachAccess = {
   expertId: string | null
 }
 
-type CoachPanelContent = typeof coachContent & {
-  analytics: {
-    title: string
-    total: string
-    inTest: string
-    testDone: string
-    focusPaid: string
-    zoomActive: string
-    conversion: string
-    noData: string
-  }
-  audio: {
-    title: string
-    listEmpty: string
-    listHeader: string
-    ingestStarted: string
-    ingestDone: string
-    usage: string
-  }
-  users: {
-    title: string
-    listHeader: string
-    searchHeader: string
-    empty: string
-    usage: string
-  }
-  notify: {
-    title: string
-    usage: string
-    done: string
-  }
-  stats: {
-    title: string
-    newUsers: string
-    activeUsers: string
-    avgActions: string
-    streakUsers: string
-    retention: string
-    funnel: string
-    liveActivity: string
-  }
-  payments: {
-    title: string
-    noData: string
-  }
-}
-
-const coachPanelContent = coachContent as CoachPanelContent
+const coachPanelContent = coachBotContent
 
 const KYIV_TZ = 'Europe/Kyiv'
+const COACH_RUNTIME_ERROR_MESSAGE = '❌ Сталася помилка. Спробуй ще раз.'
+const REQUIRED_PANEL_SECTIONS = ['start', 'menu', 'schedule', 'nextWeek', 'analytics', 'stats', 'audio', 'users', 'notify', 'payments'] as const
+const REQUIRED_PLANNER_SECTIONS = ['planner', 'buttons', 'note', 'mode', 'topics', 'prompts'] as const
+
+let coachContentCatalogValidated = false
+
+export function validateCoachContentCatalog(): void {
+  if (coachContentCatalogValidated) return
+  coachContentCatalogValidated = true
+
+  const missingPanelSections = REQUIRED_PANEL_SECTIONS.filter((key) => !(key in coachBotContent))
+  const missingPlannerSections = REQUIRED_PLANNER_SECTIONS.filter((key) => !(key in coachContent))
+
+  if (missingPanelSections.length === 0 && missingPlannerSections.length === 0) return
+
+  console.error('[coach-panel] startup validation failed', {
+    missingPanelSections,
+    missingPlannerSections,
+  })
+}
 
 function getCommandPayload(ctx: Context): string {
   const match = Array.isArray((ctx as { match?: unknown[] }).match)
@@ -103,8 +78,68 @@ function safeText(value: string | null | undefined, fallback = '—'): string {
   return text || fallback
 }
 
+function formatMoney(value: number): string {
+  return `€${value.toFixed(2)}`
+}
+
+function startOfWeekMonday(now = new Date()): Date {
+  const kyivNow = new Date(now.toLocaleString('en-US', { timeZone: KYIV_TZ }))
+  const date = new Date(kyivNow)
+  const day = date.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  date.setDate(date.getDate() + diff)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function endOfWeekSunday(weekStart: Date): Date {
+  const date = new Date(weekStart)
+  date.setDate(date.getDate() + 6)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
 function splitPayload(payload: string): string[] {
   return payload.trim().split(/\s+/u).filter(Boolean)
+}
+
+async function replyOrEditPanelMessage(
+  ctx: Context,
+  text: string,
+): Promise<void> {
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(text).catch(() => undefined)
+      return
+    } catch (error) {
+      console.error('[coach-panel:edit-fallback] failed', error)
+    }
+  }
+
+  await ctx.reply(text).catch(() => undefined)
+}
+
+async function reportCoachRuntimeError(ctx: Context, scope: string, error: unknown): Promise<void> {
+  console.error(`[coach-panel:${scope}] failed`, error)
+
+  if (ctx.callbackQuery) {
+    await ctx.answerCbQuery(COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
+  }
+
+  await ctx.reply(COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
+}
+
+function withCoachRuntimeProtection<T extends Context>(
+  scope: string,
+  handler: (ctx: T) => Promise<unknown>,
+) {
+  return async (ctx: T): Promise<void> => {
+    try {
+      await handler(ctx)
+    } catch (error) {
+      await reportCoachRuntimeError(ctx, scope, error)
+    }
+  }
 }
 
 function formatUserRow(user: {
@@ -196,43 +231,53 @@ export async function handleCoachAudioCommand(ctx: Context, payload = ''): Promi
   const [action] = splitPayload(payload.toLowerCase())
 
   if (action === 'run' || action === 'ingest' || action === 'sync') {
-    await ctx.reply(coachPanelContent.audio.ingestStarted).catch(() => undefined)
+    await replyOrEditPanelMessage(ctx, coachPanelContent.audio.ingestStarted)
     const results = await ingestCloudinaryZoomAudio()
-    const total = results.reduce((sum, item) => sum + item.total, 0)
+    const total = results.reduce((sum, item) => sum + item.returned, 0)
+    const filtered = results.reduce((sum, item) => sum + item.filtered, 0)
+    const accepted = results.reduce((sum, item) => sum + item.accepted, 0)
     const enqueued = results.reduce((sum, item) => sum + item.enqueued, 0)
     const duplicates = results.reduce((sum, item) => sum + item.duplicates, 0)
 
-    await ctx.reply([
+    await replyOrEditPanelMessage(ctx, [
       `🎧 ${coachPanelContent.audio.title}`,
       '',
       coachPanelContent.audio.ingestDone,
       `• folders: ${results.length}`,
       `• total: ${total}`,
+      `• filtered: ${filtered}`,
+      `• accepted: ${accepted}`,
       `• enqueued: ${enqueued}`,
       `• duplicates: ${duplicates}`,
-    ].join('\n')).catch(() => undefined)
+    ].join('\n'))
     return true
   }
 
-  const items = await listCloudinaryZoomAudio(1)
+  const weekStart = startOfWeekMonday()
+  const weekEnd = endOfWeekSunday(weekStart)
+  const items = await listCloudinaryZoomAudio({
+    limitPerFolder: 50,
+    from: weekStart,
+    to: weekEnd,
+  })
   if (items.length === 0) {
-    await ctx.reply([
+    await replyOrEditPanelMessage(ctx, [
       `🎧 ${coachPanelContent.audio.title}`,
       '',
-      coachPanelContent.audio.listEmpty,
+      'Поки що Cloudinary-аудіо за поточний тиждень не знайдено.',
       '',
       coachPanelContent.audio.usage,
-    ].join('\n')).catch(() => undefined)
+    ].join('\n'))
     return true
   }
 
-  await ctx.reply([
+  await replyOrEditPanelMessage(ctx, [
     `🎧 ${coachPanelContent.audio.title}`,
     '',
-    coachPanelContent.audio.listHeader,
+    `Аудіо за поточний тиждень: ${weekStart.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: KYIV_TZ })}–${weekEnd.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: KYIV_TZ })}`,
     '',
-    ...items.map(item => formatAudioRow(item)),
-  ].join('\n\n')).catch(() => undefined)
+    ...items.map((item) => formatAudioRow(item)),
+  ].join('\n\n'))
   return true
 }
 
@@ -286,7 +331,7 @@ export async function handleCoachUsersCommand(ctx: Context, payload = ''): Promi
     : coachPanelContent.users.listHeader
 
   if (users.length === 0) {
-    await ctx.reply([
+    await replyOrEditPanelMessage(ctx, [
       `👥 ${coachPanelContent.users.title}`,
       '',
       header,
@@ -294,17 +339,17 @@ export async function handleCoachUsersCommand(ctx: Context, payload = ''): Promi
       coachPanelContent.users.empty,
       '',
       coachPanelContent.users.usage,
-    ].join('\n')).catch(() => undefined)
+    ].join('\n'))
     return true
   }
 
-  await ctx.reply([
+  await replyOrEditPanelMessage(ctx, [
     `👥 ${coachPanelContent.users.title}`,
     '',
     header,
     '',
     ...users.map(user => formatUserRow(user)),
-  ].join('\n\n')).catch(() => undefined)
+  ].join('\n\n'))
   return true
 }
 
@@ -314,20 +359,28 @@ export async function handleCoachNotifyCommand(ctx: Context, payload = ''): Prom
   if (!coach || !chatId) return false
 
   const [mode, ...rest] = splitPayload(payload)
+  if (!mode) {
+    await replyOrEditPanelMessage(ctx, [
+      `🔔 ${coachPanelContent.notify.title}`,
+      '',
+      coachPanelContent.notify.usage,
+    ].join('\n'))
+    return true
+  }
   const normalizedMode = mode.toLowerCase()
   const message = rest.join(' ').trim()
 
   if (!normalizedMode || (normalizedMode !== 'all' && normalizedMode !== 'user')) {
-    await ctx.reply([
+    await replyOrEditPanelMessage(ctx, [
       `🔔 ${coachPanelContent.notify.title}`,
       '',
       coachPanelContent.notify.usage,
-    ].join('\n')).catch(() => undefined)
+    ].join('\n'))
     return true
   }
 
   if (!message) {
-    await ctx.reply(coachPanelContent.notify.usage).catch(() => undefined)
+    await replyOrEditPanelMessage(ctx, coachPanelContent.notify.usage)
     return true
   }
 
@@ -362,21 +415,21 @@ export async function handleCoachNotifyCommand(ctx: Context, payload = ''): Prom
       }
     }
 
-    await ctx.reply([
+    await replyOrEditPanelMessage(ctx, [
       `🔔 ${coachPanelContent.notify.title}`,
       '',
       coachPanelContent.notify.done,
       `• delivered: ${delivered}`,
       `• failed: ${failed}`,
       `• scope: ${coach.role === 'SUPERADMIN' ? 'all users' : 'expert users'}`,
-    ].join('\n')).catch(() => undefined)
+    ].join('\n'))
     return true
   }
 
   const [target, ...messageParts] = rest
   const targetMessage = messageParts.join(' ').trim()
   if (!target || !targetMessage) {
-    await ctx.reply(coachPanelContent.notify.usage).catch(() => undefined)
+    await replyOrEditPanelMessage(ctx, coachPanelContent.notify.usage)
     return true
   }
 
@@ -400,18 +453,18 @@ export async function handleCoachNotifyCommand(ctx: Context, payload = ''): Prom
   })
 
   if (!recipient?.telegramChatId) {
-    await ctx.reply('Користувача не знайдено або в нього немає Telegram chatId.').catch(() => undefined)
+    await replyOrEditPanelMessage(ctx, 'Користувача не знайдено або в нього немає Telegram chatId.')
     return true
   }
 
   const sent = await sendUserTelegramMessage(recipient.telegramChatId, targetMessage).catch(() => false)
-  await ctx.reply([
+  await replyOrEditPanelMessage(ctx, [
     `🔔 ${coachPanelContent.notify.title}`,
     '',
     sent ? coachPanelContent.notify.done : '❌ Не вдалося надіслати повідомлення.',
     `• target: ${recipient.email}`,
     `• userId: ${recipient.id}`,
-  ].join('\n')).catch(() => undefined)
+  ].join('\n'))
   return true
 }
 
@@ -420,12 +473,12 @@ export async function handleCoachStatsCommand(ctx: Context): Promise<boolean> {
   const chatId = ctx.chat?.id ? String(ctx.chat.id) : ''
   if (!coach || !chatId) return false
 
-  const [overview, funnel, retention, liveActivity, focusPaid] = await Promise.all([
+  const [overview, funnel, retention, liveActivity, canonical] = await Promise.all([
     getOverviewStats('30d'),
     getFunnelStats('30d'),
     getRetentionStats('30d'),
     getLiveActivity(5),
-    prisma.user.count({ where: { deletedAt: null, focusPaid: true } }),
+    getCanonicalCoachMetrics(),
   ])
 
   const funnelSummary = funnel.stages
@@ -438,24 +491,30 @@ export async function handleCoachStatsCommand(ctx: Context): Promise<boolean> {
       .join('\n')
     : '—'
 
-  await ctx.reply([
-    `📊 ${coachPanelContent.analytics.title}`,
-    '',
-    `👥 ${coachPanelContent.analytics.total}: ${overview.totalUsers}`,
-    `🔬 ${coachPanelContent.analytics.inTest}: ${overview.activeUsers}`,
-    `🆕 ${coachPanelContent.stats.newUsers}: ${overview.newUsers}`,
-    `💳 ${coachPanelContent.analytics.focusPaid}: ${focusPaid}`,
-    `📈 ${coachPanelContent.analytics.conversion}: ${funnel.stages.at(-1)?.conversionRate ?? 0}%`,
-    `⏱️ ${coachPanelContent.stats.avgActions}: ${overview.avgActionsPerUser}`,
-    `🔁 ${coachPanelContent.stats.streakUsers}: ${overview.streakUsers}`,
-    '',
-    `${coachPanelContent.stats.retention}: D1 ${retention.day1}% | D3 ${retention.day3}% | D7 ${retention.day7}%`,
-    '',
-    `${coachPanelContent.stats.funnel}: ${funnelSummary}`,
-    '',
-    `${coachPanelContent.stats.liveActivity}:`,
-    liveSummary,
-  ].join('\n')).catch(() => undefined)
+    await replyOrEditPanelMessage(ctx, [
+      `📊 ${coachPanelContent.analytics.title}`,
+      '',
+      `👥 ${coachPanelContent.analytics.total}: ${canonical.totalUsers}`,
+      `🔬 ${coachPanelContent.analytics.inTest}: ${canonical.testInProgress}`,
+      `✅ ${coachPanelContent.analytics.testDone}: ${canonical.testCompleted}`,
+      `💳 ${coachPanelContent.analytics.focusPaid}: ${canonical.focusPaid}`,
+      `🎥 ${coachPanelContent.analytics.zoomActive}: ${canonical.activeZoomUsers}`,
+      `📈 ${coachPanelContent.analytics.conversion}: ${canonical.testToFocusConversion}%`,
+      `🚀 ${coachPanelContent.analytics.abSystemUpgrades}: ${canonical.abSystemUpgrades}`,
+      `💰 ${coachPanelContent.analytics.revenue}: ${formatMoney(canonical.revenueCents / 100)}`,
+      `📆 ${coachPanelContent.analytics.mrr}: ${formatMoney(canonical.mrr)}`,
+      '',
+      `🆕 ${coachPanelContent.stats.newUsers}: ${overview.newUsers}`,
+      `⏱️ ${coachPanelContent.stats.avgActions}: ${overview.avgActionsPerUser}`,
+      `🔁 ${coachPanelContent.stats.streakUsers}: ${overview.streakUsers}`,
+      '',
+      `${coachPanelContent.stats.retention}: D1 ${retention.day1}% | D3 ${retention.day3}% | D7 ${retention.day7}%`,
+      '',
+      `${coachPanelContent.stats.funnel}: ${funnelSummary}`,
+      '',
+      `${coachPanelContent.stats.liveActivity}:`,
+      liveSummary,
+    ].join('\n'))
   return true
 }
 
@@ -492,7 +551,7 @@ export async function handleCoachPaymentsCommand(ctx: Context): Promise<boolean>
     }).join('\n')
     : coachPanelContent.payments.noData
 
-  await ctx.reply([
+  await replyOrEditPanelMessage(ctx, [
     `💳 ${coachPanelContent.payments.title}`,
     '',
     `ACTIVE: ${active}`,
@@ -503,7 +562,7 @@ export async function handleCoachPaymentsCommand(ctx: Context): Promise<boolean>
     '',
     'Recent purchases:',
     recentLines,
-  ].join('\n')).catch(() => undefined)
+  ].join('\n'))
   return true
 }
 
@@ -528,6 +587,11 @@ async function handleCoachPanelAction(ctx: Context, action: string): Promise<boo
     return handleCoachContentCommand(ctx, 'WEEKLY_PLAN')
   }
 
+  if (action === 'coach-content:monthly') {
+    await ctx.answerCbQuery('Monthly plan').catch(() => undefined)
+    return handleCoachContentCommand(ctx, 'MONTHLY_PLAN')
+  }
+
   if (action === 'coach-content:payments') {
     await ctx.answerCbQuery('Payments').catch(() => undefined)
     return handleCoachPaymentsCommand(ctx)
@@ -537,77 +601,87 @@ async function handleCoachPanelAction(ctx: Context, action: string): Promise<boo
 }
 
 export function registerCoachContentHandlers(telegramBot: Telegraf): void {
-  telegramBot.hears(/^\/planner(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  validateCoachContentCatalog()
+
+  telegramBot.hears(/^\/planner(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:planner', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachContentCommand(ctx, 'WEEKLY_PLAN', payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/планер(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/планер(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:планер', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachContentCommand(ctx, 'WEEKLY_PLAN', payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/місяць(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/місяць(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:місяць', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachContentCommand(ctx, 'MONTHLY_PLAN', payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/monthly(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/monthly(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:monthly', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachContentCommand(ctx, 'MONTHLY_PLAN', payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/reels(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/reels(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:reels', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachContentCommand(ctx, 'REELS_IDEAS', payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/контент(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/контент(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:контент', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachContentCommand(ctx, 'FULL_CONTENT', payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/зуми(?:@\w+)?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/зуми(?:@\w+)?$/iu, coachOnly, withCoachRuntimeProtection('command:зуми', async (ctx) => {
     await handleCoachContentZooms(ctx)
-  })
+  }))
 
-  telegramBot.hears(/^\/audio(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/audio(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:audio', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachAudioCommand(ctx, payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/users(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/users(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:users', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachUsersCommand(ctx, payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/notify(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/notify(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:notify', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachNotifyCommand(ctx, payload)
-  })
+  }))
 
-  telegramBot.hears(/^\/stats(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/stats(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:stats', async (ctx) => {
     await handleCoachStatsCommand(ctx)
-  })
+  }))
 
-  telegramBot.hears(/^\/payments(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/payments(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:payments', async (ctx) => {
     await handleCoachPaymentsCommand(ctx)
-  })
+  }))
 
-  telegramBot.hears(/^\/нотатка(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, async (ctx) => {
+  telegramBot.hears(/^\/нотатка(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:нотатка', async (ctx) => {
     const payload = getCommandPayload(ctx)
     await handleCoachContentNote(ctx, payload)
-  })
+  }))
 
   telegramBot.action(/^coach-content:/, coachOnly, async (ctx) => {
     const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const handled = await handleCoachPanelAction(ctx, raw)
-    if (!handled) {
-      await ctx.answerCbQuery().catch(() => undefined)
+    try {
+      const handled = await handleCoachPanelAction(ctx, raw)
+      if (!handled) {
+        await ctx.answerCbQuery().catch(() => undefined)
+      }
+    } catch (error) {
+      await reportCoachRuntimeError(ctx, raw || 'coach-content:unknown', error)
     }
   })
 
   telegramBot.on('text', coachOnly, async (ctx, next) => {
-    await handleCoachContentText(ctx, async () => { await next() })
+    try {
+      await handleCoachContentText(ctx, async () => { await next() })
+    } catch (error) {
+      await reportCoachRuntimeError(ctx, 'text', error)
+    }
   })
 }

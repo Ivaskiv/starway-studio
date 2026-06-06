@@ -1,4 +1,4 @@
-import { isTelegramMiniAppContext } from '@/features/social/utils/telegramWebApp'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { resolveApiUrl } from '@/services/api'
 
 import { openExternalPaymentUrl } from './openExternalPaymentUrl'
@@ -36,7 +36,7 @@ function isDirectWayForPayPayEndpoint(action: string): boolean {
 
 function shouldUseExternalCheckout(action: string): boolean {
   if (typeof window === 'undefined') return false
-  if (!isTelegramMiniAppContext(window.location.pathname)) return false
+  if (!isTelegramMiniApp(window.location.pathname)) return false
   return isDirectWayForPayPayEndpoint(action) || isWayForPayCheckoutProxy(action)
 }
 

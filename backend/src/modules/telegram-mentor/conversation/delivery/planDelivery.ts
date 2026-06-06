@@ -10,6 +10,7 @@ export async function planMessage(
   text: string,
   keyboard?: unknown,
   parseMode?: 'Markdown' | 'HTML',
+  options?: { deliveryKind?: 'default' | 'ab_test_email_gate' },
 ): Promise<void> {
   await conversationOrchestrator.deliverPlan(
     ctx as OrchestratedContext,
@@ -20,6 +21,7 @@ export async function planMessage(
       text,
       keyboard,
       ...(parseMode ? { parseMode } : {}),
+      ...(options?.deliveryKind ? { deliveryKind: options.deliveryKind } : {}),
       priority: 0,
       delayMs: 0,
     }],

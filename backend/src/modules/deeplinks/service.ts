@@ -108,6 +108,12 @@ export function buildWebDeepLink(token: string, path?: string | null): string {
   return url.toString()
 }
 
+export function buildMagicLoginWebLink(token: string): string {
+  const url = new URL('/auth/magic', getFrontendBaseUrl())
+  url.searchParams.set('token', token)
+  return url.toString()
+}
+
 export async function generateDeepLink(input: GenerateDeepLinkInput): Promise<ResolvedDeepLink> {
   const token = crypto.randomBytes(18).toString('base64url')
   const expiresAt = new Date(Date.now() + (input.expiresInSeconds ?? DEFAULT_TTL_SECONDS) * 1000)
@@ -164,6 +170,18 @@ export async function generateDeepLink(input: GenerateDeepLinkInput): Promise<Re
   })
 
   return serializeResolvedLink(link)
+}
+
+export async function generateMagicLink(userId: string): Promise<string> {
+  const generated = await generateDeepLink({
+    userId,
+    action: 'magic_login',
+    source: 'telegram',
+    target: 'web',
+    path: '/auth/magic',
+  })
+
+  return buildMagicLoginWebLink(generated.token)
 }
 
 export async function resolveDeepLinkToken(input: ResolveDeepLinkInput): Promise<ResolvedDeepLink | null> {

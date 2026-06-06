@@ -8,7 +8,6 @@ import {
   StageType,
   User,
 } from '@starway/db/prisma-client'
-import { isSuperAdminEmail } from '../auth/superadmin.js'
 import { scheduleReminder }                                          from '../notifications/reminder.service.js'
 import { syncLifecycleForUser }                                      from '../flow-control/service.js'
 import { invalidateFunnelStage }                                     from '../../lib/funnel/getUserFunnelStage.js'
@@ -166,7 +165,7 @@ export async function getTrialStatus(userId: string): Promise<TrialStatus> {
   }
 
   const hasSystemPremiumAccess =
-    user.role === 'SUPERADMIN' || isSuperAdminEmail(user.email ?? null)
+    user.role === 'SUPERADMIN'
   if (hasSystemPremiumAccess) {
     return {
       userId,

@@ -21,6 +21,7 @@ import {
 import {
   getBehavioralAnalytics,
   getAIInsights,
+  getCanonicalCoachMetrics,
   getConversionRates,
   getDropOffPoints,
   getFounderAnalytics,
@@ -53,9 +54,9 @@ export async function getDashboardStats(req: Request, res: Response) {
     const periodStart = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000)
     const prevStart = new Date(periodStart.getTime() - periodDays * 24 * 60 * 60 * 1000)
     const prevEnd = periodStart
+    const canonical = await getCanonicalCoachMetrics()
 
     const userWhere = productId ? { deletedAt: null, productId } : { deletedAt: null }
-    const totalUsers = await prisma.user.count({ where: userWhere })
     const newUsersDuringPeriod = await prisma.user.count({
       where: { ...userWhere, createdAt: { gte: periodStart } },
     })
@@ -69,19 +70,23 @@ export async function getDashboardStats(req: Request, res: Response) {
       where: { ...funnelWhere, isActive: true },
     })
 
-    const revenueWhere = productId ? { productId } : undefined
-    const revenueSum = await prisma.purchaseHistory.aggregate({ _sum: { amountCents: true }, where: revenueWhere })
-    const totalRevenueCents = revenueSum._sum.amountCents ?? 0
-
     const funnels = await prisma.funnel.findMany({
       where: { deletedAt: null },
       take: 3,
       orderBy: { purchaseHistories: { _count: 'desc' } },
-      include: { purchaseHistories: true },
+      select: {
+        name: true,
+        slug: true,
+        _count: {
+          select: {
+            purchaseHistories: true,
+          },
+        },
+      },
     })
 
     const funnelsPayload = funnels.map((funnel) => {
-      const conversions = funnel.purchaseHistories.length
+      const conversions = funnel._count.purchaseHistories
       const visitors = conversions * 15 + 120
       return {
         name: funnel.name ?? funnel.slug,
@@ -94,7 +99,20 @@ export async function getDashboardStats(req: Request, res: Response) {
     const recentPurchases = await prisma.purchaseHistory.findMany({
       orderBy: { createdAt: 'desc' },
       take: 5,
-      include: { user: true, funnel: true },
+      select: {
+        createdAt: true,
+        user: {
+          select: {
+            firstName: true,
+            email: true,
+          },
+        },
+        funnel: {
+          select: {
+            name: true,
+          },
+        },
+      },
     })
 
     const recentActivity = recentPurchases.map((purchase) => ({
@@ -109,32 +127,67 @@ export async function getDashboardStats(req: Request, res: Response) {
 
     const stats = [
       {
-        label: 'Активних користувачів',
-        value: totalUsers,
+        label: 'Всього учасників',
+        value: canonical.totalUsers,
         change: userChange,
         trend: userTrend,
         color: '#38bdf8',
       },
       {
-        label: 'Активних воронок',
-        value: activeFunnels,
+        label: 'Проходять тест',
+        value: canonical.testInProgress,
         change: funnelChange,
         trend: funnelTrend,
         color: '#a855f7',
       },
       {
-        label: 'Доходу (EUR)',
-        value: `€${(totalRevenueCents / 100).toFixed(2)}`,
+        label: 'Завершили тест',
+        value: canonical.testCompleted,
         change: '5%',
         trend: 'up' as const,
         color: '#0a2446',
       },
       {
-        label: 'Конверсія',
-        value: `${Math.min(100, Math.round((funnelsPayload.reduce((acc, f) => acc + f.conversions, 0) / Math.max(1, funnelsPayload.reduce((acc, f) => acc + f.visitors, 0))) * 100))}%`,
+        label: 'Оплатили ФОКУС',
+        value: canonical.focusPaid,
         change: '1%',
         trend: 'up' as const,
         color: '#22c55e',
+      },
+      {
+        label: 'Активні в Zoom',
+        value: canonical.activeZoomUsers,
+        change: '0%',
+        trend: 'stable' as const,
+        color: '#06b6d4',
+      },
+      {
+        label: 'Конверсія тест → ФОКУС',
+        value: `${canonical.testToFocusConversion}%`,
+        change: '0%',
+        trend: 'stable' as const,
+        color: '#22c55e',
+      },
+      {
+        label: 'ABSystem апгрейди',
+        value: canonical.abSystemUpgrades,
+        change: '0%',
+        trend: 'stable' as const,
+        color: '#f59e0b',
+      },
+      {
+        label: 'Доходу (EUR)',
+        value: `€${(canonical.revenueCents / 100).toFixed(2)}`,
+        change: '0%',
+        trend: 'stable' as const,
+        color: '#0a2446',
+      },
+      {
+        label: 'MRR',
+        value: `€${canonical.mrr.toFixed(2)}`,
+        change: '0%',
+        trend: 'stable' as const,
+        color: '#8b5cf6',
       },
     ]
 
@@ -143,10 +196,15 @@ export async function getDashboardStats(req: Request, res: Response) {
     console.error('Analytics stats error', error)
     if (error?.code === 'P1001') {
       const fallbackStats = [
-        { label: 'Активних користувачів', value: 0, change: '0%', trend: 'stable', color: '#38bdf8' },
-        { label: 'Активних воронок', value: 0, change: '0%', trend: 'stable', color: '#a855f7' },
+        { label: 'Всього учасників', value: 0, change: '0%', trend: 'stable', color: '#38bdf8' },
+        { label: 'Проходять тест', value: 0, change: '0%', trend: 'stable', color: '#a855f7' },
+        { label: 'Завершили тест', value: 0, change: '0%', trend: 'stable', color: '#0a2446' },
+        { label: 'Оплатили ФОКУС', value: 0, change: '0%', trend: 'stable', color: '#22c55e' },
+        { label: 'Активні в Zoom', value: 0, change: '0%', trend: 'stable', color: '#06b6d4' },
+        { label: 'Конверсія тест → ФОКУС', value: '0%', change: '0%', trend: 'stable', color: '#22c55e' },
+        { label: 'ABSystem апгрейди', value: 0, change: '0%', trend: 'stable', color: '#f59e0b' },
         { label: 'Доходу (EUR)', value: '€0.00', change: '0%', trend: 'stable', color: '#0a2446' },
-        { label: 'Конверсія', value: '0%', change: '0%', trend: 'stable', color: '#22c55e' },
+        { label: 'MRR', value: '€0.00', change: '0%', trend: 'stable', color: '#8b5cf6' },
       ]
       return res.json({
         stats: fallbackStats,
