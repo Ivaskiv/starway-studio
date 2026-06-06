@@ -181,16 +181,7 @@ const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = 
   // The personalized wave-0 recognition body is injected by the scheduler via payload.message_body.
   DOJIM_0_IMMEDIATE: {
     title: 'ФОКУС',
-    body: [
-      '{firstName}, супер.',
-      'Ось доступ у ФОКУС:',
-      '',
-      '1 місяць — 15 євро',
-      '3 місяці — 39 євро',
-      '',
-      'Після оплати ти отримаєш посилання на закритий Telegram-канал',
-      'і доступ до живих Zoom-практик.',
-    ].join('\n'),
+    body: '[DEPRECATED] Wave 0 recognition body is injected by the scheduler via payload.message_body.',
     cta: CTA_JOIN_FOCUS,
   },
   PAYMENT_REMINDER_24H: {
