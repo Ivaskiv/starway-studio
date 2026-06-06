@@ -5,11 +5,11 @@
     "node": ">=22 <23"
   },
   "scripts": {
-    "dev": "pnpm --filter @starway/ai run build && tsx watch --clear-screen=false --ignore dist --ignore node_modules --ignore .turbo --ignore coverage --ignore .git src/index.ts",
-    "build": "pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc && tsc-alias -p tsconfig.json --resolve-full-paths --resolve-full-extension .js",
+    "dev": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && tsx watch --clear-screen=false --ignore dist --ignore node_modules --ignore .turbo --ignore coverage --ignore .git src/index.ts",
+    "build": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
-    "typecheck": "pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc --noEmit",
+    "typecheck": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc --noEmit",
     "user:consolidation:dry": "tsx src/scripts/user-consolidation-backfill.ts",
     "user:consolidation:apply": "tsx src/scripts/user-consolidation-backfill.ts --apply",
     "user:consolidation:apply:clear-name": "tsx src/scripts/user-consolidation-backfill.ts --apply --clear-legacy-name",
@@ -20,6 +20,7 @@
     "@google/generative-ai": "^0.24.1",
     "@neondatabase/serverless": "^0.9.0",
     "@starway/ai": "workspace:*",
+    "@starway/shared": "workspace:*",
     "@starway/db": "workspace:*",
     "@supabase/supabase-js": "^2.105.1",
     "bcryptjs": "^3.0.3",

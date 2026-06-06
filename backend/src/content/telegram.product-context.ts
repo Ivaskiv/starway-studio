@@ -1,4 +1,4 @@
-import { getPlatformProductConfig, type PlatformProductId } from '@shared/platform.registry'
+import { getPlatformProductConfig, type PlatformProductId } from '@starway/shared/platform.registry'
 
 import { focusContent } from '@/products/focus/config/focus.content.js'
 import { subscriptionsContent, type SubscriptionLifecycleState } from './subscriptions.content.js'

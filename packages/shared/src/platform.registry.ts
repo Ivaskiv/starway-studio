@@ -41,55 +41,91 @@ export type PlatformProductRoomConfig = {
   sections: string[]
 }
 
-export type PlatformProductManifest =
-  | {
-      slug: string
-      name: string
-      visibility: PlatformVisibility
-      channels: readonly string[]
-      billing: {
-        provider: 'wayforpay'
-        subscriptions: true
-      }
-      onboarding: {
-        enabled: boolean
-        quizEnabled: boolean
-      }
-      features: Record<string, boolean>
-    }
-  | {
-      productId: PlatformProductId
-      slug: string
-      name: string
+export type FocusManifest = {
+  slug: 'focus'
+  name: 'FOCUS'
+  visibility: PlatformVisibility
+  channels: readonly string[]
+  billing: {
+    provider: 'wayforpay'
+    subscriptions: true
+  }
+  onboarding: {
+    enabled: boolean
+    quizEnabled: boolean
+  }
+  features: Record<string, boolean>
+}
+
+export type StankeyManifest = {
+  productId: 'stankey'
+  slug: 'stankey'
+  name: 'STANKEY'
+  title: string
+  visibility: PlatformVisibility
+  channels: readonly string[]
+  billing: {
+    provider: 'wayforpay'
+    subscriptions: true
+  }
+  pricing: {
+    currency: 'UAH'
+    plans: Array<{
+      id: string
       title: string
-      visibility: PlatformVisibility
-      channels: readonly string[]
-      billing: {
-        provider: 'wayforpay'
-        subscriptions: true
-      }
-      pricing: {
-        currency: 'UAH'
-        plans: Array<{
-          id: string
-          title: string
-          price: number
-          durationDays: number | null
-        }>
-      }
-      access: {
-        durationDays: Record<string, number | null>
-      }
-      trial: {
-        enabled: boolean
-        durationDays: number
-      }
-      onboarding: {
-        enabled: boolean
-        quizEnabled: boolean
-      }
-      features: Record<string, boolean>
-    }
+      price: number
+      durationDays: number | null
+    }>
+  }
+  access: {
+    durationDays: Record<string, number | null>
+  }
+  trial: {
+    enabled: boolean
+    durationDays: number
+  }
+  onboarding: {
+    enabled: boolean
+    quizEnabled: boolean
+  }
+  features: Record<string, boolean>
+}
+
+export type AbsystemManifest = {
+  productId: 'absystem'
+  slug: 'absystem'
+  name: 'ABsystem'
+  title: string
+  visibility: PlatformVisibility
+  channels: readonly string[]
+  billing: {
+    provider: 'wayforpay'
+    subscriptions: true
+  }
+  pricing: {
+    currency: 'UAH'
+    plans: Array<{
+      id: string
+      title: string
+      price: number
+      durationDays: number | null
+    }>
+  }
+  access: {
+    durationDays: Record<string, number | null>
+  }
+  trial: {
+    enabled: boolean
+    durationDays: number
+  }
+  onboarding: {
+    enabled: boolean
+    quizEnabled: boolean
+  }
+  features: Record<string, boolean>
+}
+
+export type PlatformProductManifest = FocusManifest | StankeyManifest | AbsystemManifest
 
 export type PlatformProductConfig = {
   id: PlatformProductId
@@ -139,7 +175,7 @@ export type PlatformProductConfig = {
   manifest: PlatformProductManifest
 }
 
-const focusManifest: PlatformProductManifest = {
+const focusManifest: FocusManifest = {
   slug: 'focus',
   name: 'FOCUS',
   visibility: 'public',
@@ -160,7 +196,7 @@ const focusManifest: PlatformProductManifest = {
   },
 }
 
-const stankeyManifest: PlatformProductManifest = {
+const stankeyManifest: StankeyManifest = {
   productId: 'stankey',
   slug: 'stankey',
   name: 'STANKEY',
@@ -207,7 +243,7 @@ const stankeyManifest: PlatformProductManifest = {
   },
 }
 
-const absystemManifest: PlatformProductManifest = {
+const absystemManifest: AbsystemManifest = {
   productId: 'absystem',
   slug: 'absystem',
   name: 'ABsystem',
@@ -562,6 +598,9 @@ export function getPlatformProductByRoute(route: string) {
   ) ?? null
 }
 
+export function getPlatformProductManifest(productId: 'focus'): FocusManifest
+export function getPlatformProductManifest(productId: 'stankey'): StankeyManifest
+export function getPlatformProductManifest(productId: 'absystem'): AbsystemManifest
 export function getPlatformProductManifest(productId: PlatformProductId) {
   return getPlatformProductConfig(productId).manifest
 }

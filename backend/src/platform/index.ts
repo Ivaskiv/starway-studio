@@ -19,7 +19,7 @@ export {
   type PlatformProductId,
   type PlatformProductType,
   type PlatformVisibility,
-} from '@shared/platform.registry'
+} from '@starway/shared/platform.registry'
 
 export {
   resolveRuntimeBotRegistry,

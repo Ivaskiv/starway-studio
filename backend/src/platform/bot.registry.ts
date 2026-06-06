@@ -1,4 +1,4 @@
-import { listPlatformProducts, type PlatformProductId } from '@shared/platform.registry'
+import { listPlatformProducts, type PlatformProductId } from '@starway/shared/platform.registry'
 
 import { requireTelegramBotConfig } from '../modules/telegram-mentor/runtime/botConfig.js'
 
@@ -124,4 +124,3 @@ export function resolveRuntimeBotRegistry(context = 'platform bot registry'): Pl
     productOwnershipIndex,
   }
 }
-

@@ -6,7 +6,7 @@ import { focusManifest } from '@/products/focus/product.manifest.js'
 import { stankeyManifest } from '@/products/stankey/product.manifest.js'
 import { getMediaById, getNextLesson } from '../../../products/stankey/media/catalog.js'
 import { resolveStankeyProgressSnapshot } from '../../../products/stankey/progress.service.js'
-import { getPlatformProductConfig } from '@shared/platform.registry'
+import { getPlatformProductConfig } from '@starway/shared/platform.registry'
 import { resolveUserLifecycle } from '../../flow-control/service.js'
 import type { UserLifecycleSnapshot } from '../../flow-control/types.js'
 import {

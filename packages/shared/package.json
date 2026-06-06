@@ -10,5 +10,23 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "exports": {
+    "./platform.registry": {
+      "types": "./dist/platform.registry.d.ts",
+      "import": "./dist/platform.registry.js"
+    },
+    "./payments": {
+      "types": "./dist/payments.d.ts",
+      "import": "./dist/payments.js"
+    },
+    "./auth/abilities": {
+      "types": "./dist/auth/abilities.d.ts",
+      "import": "./dist/auth/abilities.js"
+    },
+    "./types/auth": {
+      "types": "./dist/types/auth.d.ts",
+      "import": "./dist/types/auth.js"
+    }
   }
 }

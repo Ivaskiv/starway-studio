@@ -1,4 +1,4 @@
-import type { PlatformProductId } from '@shared/platform.registry'
+import type { PlatformProductId } from '@starway/shared/platform.registry'
 
 import { getProductCronProfile } from '@/platform/cron.registry.js'
 import type { UserLifecycleSnapshot } from '../../flow-control/types.js'

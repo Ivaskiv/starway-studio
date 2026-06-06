@@ -1,4 +1,4 @@
-import type { PlatformProductId } from '@shared/platform.registry'
+import type { PlatformProductId } from '@starway/shared/platform.registry'
 
 import type { UserLifecycleSnapshot } from '../flow-control/types.js'
 import type { TelegramAccessSource, TelegramMentorMode } from '@/content/telegram.product-context.js'

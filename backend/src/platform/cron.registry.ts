@@ -1,4 +1,4 @@
-import type { PlatformProductId } from '@shared/platform.registry'
+import type { PlatformProductId } from '@starway/shared/platform.registry'
 
 export type PlatformCronCategory = 'reminder' | 'subscription' | 'retention' | 'analytics'
 export type PlatformCronDeliveryMode = 'telegram' | 'internal'
@@ -105,4 +105,3 @@ export function getProductCronProfile(productId: PlatformProductId): PlatformCro
     jobs,
   }
 }
-
