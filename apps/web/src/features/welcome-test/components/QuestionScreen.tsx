@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 import type { WelcomeTestQuestion } from '@/features/welcome-test/types/welcomeTestQuestions.types'
 import { WELCOME_TEST_QUESTION_ORDER } from '@/features/welcome-test/types/welcomeTest.types'
 
@@ -72,6 +74,9 @@ export function QuestionScreen({
         <div className="ab-test-answers">
           {question.answers.map((answer) => {
             const isSelected = selectedAnswerId === answer.id
+            const answerButtonStyle: CSSProperties = submitting
+              ? { pointerEvents: 'none', cursor: 'wait' }
+              : { whiteSpace: 'normal', alignItems: 'flex-start', textAlign: 'left' }
             return (
               <button
                 key={answer.id}
@@ -80,10 +85,15 @@ export function QuestionScreen({
                 onClick={() => onSelect(answer.id)}
                 data-selected={isSelected ? 'true' : 'false'}
                 className="ab-test-answer"
-                style={submitting ? { pointerEvents: 'none', cursor: 'wait' } : undefined}
+                style={answerButtonStyle}
               >
                 <span className="ab-test-answer__dot" aria-hidden="true" />
-                <span className="ab-test-answer__text">{answer.text}</span>
+                <span
+                  className="ab-test-answer__text"
+                  style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
+                >
+                  {answer.text}
+                </span>
               </button>
             )
           })}

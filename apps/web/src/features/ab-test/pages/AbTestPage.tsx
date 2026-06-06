@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth'
 import { selectAccessToken } from '@/features/auth/services/auth.slice'
 import { getToken } from '@/features/auth/services/token'
 import { getTelegramMiniAppAuthHeader } from '@/lib/miniapp/apiClient'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { Button } from '@/ui'
 
 type AbTestQuestion = {
@@ -187,7 +188,7 @@ const BLOCK9_CONTENT = {
   cta: 'Хочу у ФОКУС',
 }
 
-const RESULT_ROUTE_PATH = '/ab-test/result'
+const RESULT_ROUTE_PATH = '/ab-test/quiz/result'
 
 function isAbTestResultType(value: unknown): value is AbTestResultType {
   return (
@@ -1247,7 +1248,7 @@ export default function AbTestPage() {
               {!isAuthenticated ? (
                 <Button
                   type="button"
-                  onClick={() => navigate('/register?from=ab-test')}
+                  onClick={() => navigate(isTelegramMiniApp() ? '/miniapp' : '/register?from=ab-test')}
                   variant="glass"
                   fullWidth
                 >
@@ -1337,12 +1338,16 @@ export default function AbTestPage() {
                         onClick={() => handleSelectAnswer(answer.id)}
                         data-selected={isSelected ? 'true' : 'false'}
                         className="ab-test-answer"
+                        style={{ whiteSpace: 'normal', alignItems: 'flex-start', textAlign: 'left' }}
                       >
                         <span
                           className="ab-test-answer__dot"
                           aria-hidden="true"
                         />
-                        <span className="ab-test-answer__text">
+                        <span
+                          className="ab-test-answer__text"
+                          style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
+                        >
                           {answer.text}
                         </span>
                       </button>
