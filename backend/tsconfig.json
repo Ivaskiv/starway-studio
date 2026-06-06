@@ -4,18 +4,19 @@
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
+    "baseUrl": ".",
     "types": ["node"],
     "moduleResolution": "NodeNext",
     "composite": false,
     "declaration": false,
-"declarationMap": false,
+    "declarationMap": false,
     "rootDir": ".",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "outDir": "./dist",
     "sourceMap": true,
-    
+    "typeRoots": ["./node_modules/@types", "../node_modules/@types"],
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["../packages/shared/src/*"]
@@ -23,10 +24,10 @@
   },
 
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-"exclude": [
-  "node_modules",
-  "dist",
-  "src/db/generated",
-  "**/*.test.ts"
-]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/db/generated",
+    "**/*.test.ts"
+  ]
 }
