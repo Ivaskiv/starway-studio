@@ -12,6 +12,7 @@ import { getToastMessage, type ToastLang } from '@/features/notifications/i18n/t
 import { getToken } from '../services/token'
 import toast from 'react-hot-toast'
 import { AB_TEST_LANDING_RESULT_ROUTE } from '@/features/ab-test-landing/config'
+import { resolveApiUrl } from '@/services/api'
 
 type Mode = 'login' | 'register'
 interface Props { isOpen: boolean; onClose: () => void; defaultMode?: Mode }
@@ -96,7 +97,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
     if (isAbTestRegisterFlow && pending?.source === 'anonymous' && pendingAnswers.length) {
       setIsProcessing(true)
       try {
-        const response = await fetch('/api/ab-test/submit', {
+        const response = await fetch(resolveApiUrl('/ab-test/submit'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

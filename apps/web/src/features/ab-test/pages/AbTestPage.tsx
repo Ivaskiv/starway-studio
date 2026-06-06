@@ -10,6 +10,7 @@ import { getToken } from '@/features/auth/services/token'
 import { getTelegramMiniAppAuthHeader } from '@/lib/miniapp/apiClient'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { Button } from '@/ui'
+import { resolveApiUrl } from '@/services/api'
 
 type AbTestQuestion = {
   id: string
@@ -777,7 +778,7 @@ export default function AbTestPage() {
       const authHeaders = buildAuthHeaders(accessToken)
 
       if (authHeaders.Authorization) {
-        void fetch('/api/ab-test/submit-partial', {
+        void fetch(resolveApiUrl('/ab-test/submit-partial'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -791,7 +792,7 @@ export default function AbTestPage() {
       }
 
       const blob = new Blob([payload], { type: 'application/json' })
-      navigator.sendBeacon('/api/ab-test/submit-partial', blob)
+      navigator.sendBeacon(resolveApiUrl('/ab-test/submit-partial'), blob)
     }
 
     window.addEventListener('beforeunload', handleUnload)
@@ -814,7 +815,7 @@ export default function AbTestPage() {
       }
 
       try {
-        const response = await fetch('/api/ab-test/progress', {
+        const response = await fetch(resolveApiUrl('/ab-test/progress'), {
           credentials: 'include',
           headers: buildAuthHeaders(accessToken),
         })
@@ -869,7 +870,7 @@ export default function AbTestPage() {
       setError(null)
 
       try {
-        const response = await fetch('/api/ab-test/questions', {
+        const response = await fetch(resolveApiUrl('/ab-test/questions'), {
           credentials: 'include',
         })
 
@@ -926,7 +927,7 @@ export default function AbTestPage() {
 
     async function loadStoredResult() {
       try {
-        const response = await fetch('/api/ab-test/result', {
+        const response = await fetch(resolveApiUrl('/ab-test/result'), {
           credentials: 'include',
           headers: buildAuthHeaders(accessToken),
         })
@@ -1011,7 +1012,7 @@ export default function AbTestPage() {
     setAnswers(nextAnswers)
 
     if (canSyncToDb) {
-      void fetch('/api/ab-test/submit-partial', {
+      void fetch(resolveApiUrl('/ab-test/submit-partial'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1059,7 +1060,7 @@ export default function AbTestPage() {
     setError(null)
 
     try {
-      const response = await fetch('/api/ab-test/submit', {
+      const response = await fetch(resolveApiUrl('/ab-test/submit'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
