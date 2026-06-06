@@ -32,8 +32,9 @@ import { trackAbTestEvent } from './abTest.analytics.js'
 import { buildWebAppButton, resolveBrowserTestUrlOrNull } from './abTest.buttons.js'
 import {
   getAbTestProgressFromUiSettings,
+  buildAbTestEmailGateMessage,
   getUiSettings,
-  ensureAbTestEmailCapturedFromProfile,
+  getAbTestProfileEmail,
   loadUserUiSettings,
   saveAbTestProgress,
 } from './abTest.progress.js'
@@ -350,18 +351,18 @@ export async function renderCurrentView(
   }
 
   if (progress.status === 'completed' && progress.result_key) {
-    const resolvedProgress = await ensureAbTestEmailCapturedFromProfile(userId, progress)
-    if (resolvedProgress.email_stage === 'pending') {
+    if (progress.email_stage === 'pending') {
+      const profileEmail = await getAbTestProfileEmail(userId)
       console.info('[AB_TEST_Q8_TRACE] result_render_blocked_by_email_gate', {
         userId,
-        resultKey: resolvedProgress.result_key,
-        emailStage: resolvedProgress.email_stage,
+        resultKey: progress.result_key,
+        emailStage: progress.email_stage,
       })
       const chatId = ctx.chat?.id ?? ctx.from?.id
       if (chatId) {
         await ctx.telegram.sendMessage(
           chatId,
-          'Введи email — надішлемо аналіз результату.\n\nАбо натисни «Пропустити» щоб продовжити без email.',
+          buildAbTestEmailGateMessage(Boolean(profileEmail)),
           {
             reply_markup: {
               inline_keyboard: [[
@@ -381,7 +382,7 @@ export async function renderCurrentView(
       }
       return
     }
-    await renderAbTestCompletedResult(ctx, userId, resolvedProgress)
+    await renderAbTestCompletedResult(ctx, userId, progress)
 
     return
   }

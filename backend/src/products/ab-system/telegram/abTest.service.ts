@@ -50,9 +50,10 @@ import {
 } from './abTest.callback.js'
 import {
   getAbTestProgressFromUiSettings,
+  buildAbTestEmailGateMessage,
+  getAbTestProfileEmail,
   loadAbTestProgress,
   loadUserUiSettings,
-  ensureAbTestEmailCapturedFromProfile,
   saveAbTestProgress,
 } from './abTest.progress.js'
 import {
@@ -1621,39 +1622,15 @@ export async function handleAbTestCallback(
       resultKey: pendingEmailProgress.result_key,
     })
     await saveAbTestProgress(userId, pendingEmailProgress)
-    const resolvedProgress = await ensureAbTestEmailCapturedFromProfile(userId, pendingEmailProgress)
-    if (resolvedProgress.email_stage === 'captured') {
-      console.info('[AB_TEST_Q8_TRACE] result_email_gate_auto_captured', {
-        userId,
-        transition: 'ab_test_email_prompt_before_result',
-        deliveryKind: 'ab_test_email_gate',
-      })
-      await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-      const scheduled = await scheduleFollowups(userId, resolvedProgress, 'S3_TEST_RESULT').catch((error) => {
-        console.error('[AB_TEST_Q8_TRACE] result_followups_failed', {
-          userId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-        return resolvedProgress
-      })
-      if (scheduled !== resolvedProgress) {
-        await saveAbTestProgress(userId, scheduled)
-      }
-      await renderAbTestResultThenOffer(ctx, userId, scheduled)
-      return true
-    }
+    const profileEmail = await getAbTestProfileEmail(userId)
     console.info('[AB_TEST_Q8_TRACE] result_email_prompt_sent', {
       userId,
-      transition: 'ab_test_email_prompt_before_result',
+      transition: profileEmail ? 'ab_test_email_prompt_confirm_existing' : 'ab_test_email_prompt_before_result',
       deliveryKind: 'ab_test_email_gate',
     })
     await ctx.telegram.sendMessage(
       chatId,
-      'Введи email одним повідомленням, щоб:\n\n'
-      + '• зберегти результат\n'
-      + '• отримати персональний розбір\n'
-      + '• побачити свій наступний крок\n\n'
-      + 'Після цього я підготую твій результат.',
+      buildAbTestEmailGateMessage(Boolean(profileEmail)),
       {
         reply_markup: {
           inline_keyboard: [[

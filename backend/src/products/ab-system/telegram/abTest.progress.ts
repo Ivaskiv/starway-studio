@@ -87,6 +87,31 @@ export async function loadUserUiSettings(userId: string): Promise<UiSettingsObje
   return {}
 }
 
+export async function getAbTestProfileEmail(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  })
+  const email = normalizeEmail(user?.email)
+  if (!isValidEmail(email) || isPlaceholderEmail(email)) {
+    return null
+  }
+
+  return email
+}
+
+export function buildAbTestEmailGateMessage(hasProfileEmail: boolean): string {
+  if (hasProfileEmail) {
+    return 'У профілі вже є email. Підтверди його, надіславши ще раз одним повідомленням.\n\nЯкщо він змінився — введи актуальний email.'
+  }
+
+  return 'Введи email одним повідомленням, щоб:\n\n'
+    + '• зберегти результат\n'
+    + '• отримати персональний розбір\n'
+    + '• побачити свій наступний крок\n\n'
+    + 'Після цього я підготую твій результат.'
+}
+
 export async function ensureAbTestEmailCapturedFromProfile(userId: string, progress: AbTestProgress): Promise<AbTestProgress> {
   if (progress.email_stage === 'captured') {
     return progress
