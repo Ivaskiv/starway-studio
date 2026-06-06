@@ -66,8 +66,12 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
 
 export function offerShownMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Нагадую про оффер ФОКУС. Доступ ще відкритий, можна зайти прямо зараз.',
-    buttons: [[{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }]],
+    text: 'Ти вже проходила тест і бачила результат.\n\nХочеш повернутися до ФОКУСУ або пройти тест заново?',
+    buttons: [
+      [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+      [{ text: 'Пройти тест заново', callback_data: 'ab_test:restart' }],
+      [{ text: 'Мій результат', callback_data: 'ab_test:show_result' }],
+    ],
   })
 }
 

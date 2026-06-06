@@ -26,7 +26,7 @@ import {
 } from '../content/abTest.faq.js'
 import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
-import { BLOCK10_FOCUS, BLOCK9_POST_RESULT } from '../content/abTest.results.js'
+import { BLOCK10_FOCUS, BLOCK9_POST_RESULT, getAbTestResultDefinition, interpolateFirstName, type AbTestResultKey } from '../content/abTest.results.js'
 import { getTestDriveInsideSurface, getTestDriveInsideResponseSurface } from '../content/testDrive.content.js'
 import {
   FOCUS_ALREADY_ACTIVE_MSG,
@@ -62,7 +62,6 @@ import {
 import { scheduleFollowups } from './abTest.scheduler.js'
 import {
   renderCurrentView,
-  renderAbTestCompletedResult,
   renderAbTestResultThenOffer,
   renderAbTestPostEmailSubmitSequence,
   sendActionMessage,
@@ -1070,8 +1069,29 @@ export async function handleAbTestCallback(
   if (parsed.kind === 'restart') {
     // FIX 2025-05-25 D: restart — reset progress and send MSG1 directly.
     await ctx.answerCbQuery().catch(() => null)
-    await saveAbTestProgress(userId, normalizeAbTestProgress(undefined))
     const chatId = ctx.chat?.id ?? ctx.from?.id
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        lifecycleState: 'TEST_NOT_STARTED',
+        testStartedAt: null,
+        testCompletedAt: null,
+        offerShownAt: null,
+        testResultType: null,
+      },
+    }).catch(() => undefined)
+    if (chatId) {
+      await prisma.notificationJob.updateMany({
+        where: {
+          status: 'PENDING',
+          type: 'AI_REMINDER',
+          payload: { path: ['userId'], equals: userId },
+        },
+        data: { status: 'FAILED', lastError: 'cancelled_by_ab_test_restart' },
+      }).catch(() => undefined)
+      await clearPendingTelegramIdentity(String(chatId)).catch(() => undefined)
+    }
+    await saveAbTestProgress(userId, normalizeAbTestProgress(undefined))
     if (chatId) {
       await ctx.telegram.sendMessage(
         chatId,
@@ -1114,41 +1134,14 @@ export async function handleAbTestCallback(
   if (parsed.kind === 'show_result') {
     // FIX 2025-05-25 E: show_result — return saved result or fallback to start.
     await ctx.answerCbQuery().catch(() => null)
-    const progress = await loadAbTestProgress(userId)
-    const resolvedProgress = await ensureAbTestEmailCapturedFromProfile(userId, progress)
-    if (resolvedProgress.email_stage === 'pending') {
-      const next = buildAbTestProgressPatch(progress, {
-        email_stage: 'pending',
-        last_event_at: new Date().toISOString(),
-      })
-      await saveAbTestProgress(userId, next)
-      const chatId = ctx.chat?.id ?? ctx.from?.id
-      if (chatId) {
-        await ctx.telegram.sendMessage(
-          chatId,
-          'Введи email — надішлемо аналіз результату.\n\nАбо натисни «Пропустити» щоб продовжити без email.',
-          {
-            reply_markup: {
-              inline_keyboard: [[
-                { text: 'Пропустити →', callback_data: 'skip_email_before_result' },
-              ]],
-            },
-          },
-        )
-        await setPendingTelegramIdentity({
-          chatId: String(chatId),
-          telegramUserId: String(ctx.from?.id ?? ''),
-          telegramUserName: ctx.from?.username ?? null,
-          firstName: ctx.from?.first_name ?? null,
-          source: 'email_after_test',
-          requestId: null,
-        })
-      }
-      return true
-    }
-    const resultKey = resolvedProgress.result_key
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) return true
+
+    const userRecord = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { testResultType: true, telegramUserName: true },
+    })
+    const resultKey = (userRecord?.testResultType ?? null) as AbTestResultKey | null
     if (!resultKey) {
       await ctx.telegram.sendMessage(
         chatId,
@@ -1164,7 +1157,21 @@ export async function handleAbTestCallback(
       )
       return true
     }
-    await renderAbTestCompletedResult(ctx, userId, resolvedProgress)
+
+    const resultDef = getAbTestResultDefinition(resultKey)
+    const firstName = userRecord?.telegramUserName ?? ''
+    await ctx.telegram.sendMessage(
+      chatId,
+      interpolateFirstName(resultDef.body, firstName),
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+            [{ text: 'Як це виглядає зсередини?', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+          ],
+        },
+      },
+    )
     return true
   }
 

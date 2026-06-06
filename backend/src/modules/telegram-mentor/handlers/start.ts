@@ -1,6 +1,5 @@
 import type { UserLifecycleState } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
-import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 import { UserCreationSource } from '../../user/userCreation.service.js'
 import { upsertTelegramBinding } from '../services/linking.service.js'
@@ -38,6 +37,7 @@ type StartUserSnapshot = {
   testStartedAt: Date | null
   testCompletedAt: Date | null
   offerShownAt: Date | null
+  testResultType: string | null
   updatedAt: Date
 }
 
@@ -68,6 +68,7 @@ async function loadUserSnapshot(userId: string): Promise<StartUserSnapshot> {
       testStartedAt: true,
       testCompletedAt: true,
       offerShownAt: true,
+      testResultType: true,
       updatedAt: true,
     },
   })
@@ -306,21 +307,6 @@ export async function handleStart(ctx: StartContext) {
     }
 
     const user = await loadUserSnapshot(resolvedUserId)
-    const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
-    const showOfferFromLifecycle =
-      user.lifecycleState === 'OFFER_SHOWN' &&
-      Boolean(abTestProgress?.result_opened_at)
-
-    if (user.lifecycleState === 'OFFER_SHOWN' && !showOfferFromLifecycle) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          lifecycleState: 'TEST_DONE',
-          offerShownAt: null,
-        },
-      }).catch(() => undefined)
-      user.lifecycleState = 'TEST_DONE'
-    }
 
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = user.id
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
@@ -351,16 +337,42 @@ export async function handleStart(ctx: StartContext) {
         return
       }
       case 'TEST_IN_PROGRESS': {
-        const r3 = getHoursSince(user.updatedAt) > 4
-        await deliver(ctx, testInProgressMessage({ r3 }))
+        const hoursSince = getHoursSince(user.updatedAt)
+        if (hoursSince > 168) {
+          await deliver(ctx, {
+            text: 'Ти вже починала тест, але пройшло більше тижня.\n\nВідповіді можуть бути неактуальні.',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: 'Продовжити', callback_data: 'ab_test:resume' },
+                { text: 'Почати заново', callback_data: 'ab_test:restart' },
+              ]],
+            },
+          })
+          return
+        }
+
+        await deliver(ctx, testInProgressMessage({ r3: hoursSince > 4 }))
         return
       }
       case 'TEST_DONE': {
+        if (user.testResultType) {
+          await deliver(ctx, {
+            text: 'Ти вже пройшла тест.\n\nПодивитись результат або пройти заново?',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Мій результат', callback_data: 'ab_test:show_result' }],
+                [{ text: 'Пройти заново', callback_data: 'ab_test:restart' }],
+              ],
+            },
+          })
+          return
+        }
+
         await deliver(ctx, testDoneMessage())
         return
       }
       case 'OFFER_SHOWN': {
-        await deliver(ctx, showOfferFromLifecycle ? offerShownMessage() : testDoneMessage())
+        await deliver(ctx, offerShownMessage())
         return
       }
       case 'FOCUS_PAID': {
