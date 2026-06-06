@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && tsx watch --clear-screen=false --ignore dist --ignore node_modules --ignore .turbo --ignore coverage --ignore .git src/index.ts",
     "build": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc && tsc-alias -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "tsx dist/index.js",
     "clean": "rm -rf dist",
     "typecheck": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc --noEmit",
     "user:consolidation:dry": "tsx src/scripts/user-consolidation-backfill.ts",
