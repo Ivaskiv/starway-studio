@@ -822,7 +822,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
                   },
                 }
               )
-              .catch((err) =>
+              .catch((err: unknown) =>
                 console.error('[payment] send focus access message:', err)
               )
 
@@ -846,7 +846,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
                   },
                 }
               )
-              .catch((err) =>
+              .catch((err: unknown) =>
                 console.error('[payment] send upcoming schedule:', err)
               )
           }
@@ -874,7 +874,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
                     },
                   }
                 : undefined,
-            ).catch((err) => {
+            ).catch((err: unknown) => {
               console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
                 operation: 'focus_block12_send',
                 userId,
@@ -897,7 +897,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
 
         void loadAbTestProgress(userId)
           .then((progress) => scheduleFollowups(userId, progress, 'S6_ZOOM'))
-          .catch((err) => {
+          .catch((err: unknown) => {
             console.warn('[Focus] S6_ZOOM followup scheduling failed', err)
             const details = err instanceof Error ? err.message : 'unknown_error'
             void sendOpsTelegramMessage(
