@@ -1,0 +1,13 @@
+@forward '../../landings/focus/styles/variables';
+
+:root {
+  --ab-test-landing-max-width: 1180px;
+  --ab-test-landing-narrow-width: 920px;
+  --ab-test-landing-gap: clamp(16px, 2.2vw, 28px);
+  --ab-test-landing-surface: rgba(255, 255, 255, 0.04);
+  --ab-test-landing-surface-strong: rgba(255, 255, 255, 0.06);
+  --ab-test-landing-accent: rgba(123, 159, 255, 0.95);
+  --ab-test-landing-accent-soft: rgba(123, 159, 255, 0.18);
+  --ab-test-landing-split: clamp(22px, 3.4vw, 52px);
+}
+

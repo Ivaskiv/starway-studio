@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { FOCUS_ROUTE } from '@/features/landings/focus/content/constants'
+import { AB_TEST_LANDING_ROUTE } from '@/features/ab-test-landing/config'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { selectAccessToken } from '@/features/auth/services/auth.slice'
 import { getToken } from '@/features/auth/services/token'
@@ -188,7 +189,7 @@ const BLOCK9_CONTENT = {
   cta: 'Хочу у ФОКУС',
 }
 
-const RESULT_ROUTE_PATH = '/ab-test/quiz/result'
+const RESULT_ROUTE_PATH = '/ab-test/result'
 
 function isAbTestResultType(value: unknown): value is AbTestResultType {
   return (
@@ -915,7 +916,7 @@ export default function AbTestPage() {
       if (isAbTestResultType(resultTypeQuery)) {
         setResult(buildStoredResultFromType(resultTypeQuery))
       } else {
-        navigate('/ab-test', { replace: true })
+        navigate(AB_TEST_LANDING_ROUTE, { replace: true })
       }
       return
     }
@@ -950,7 +951,7 @@ export default function AbTestPage() {
         } else if (isAbTestResultType(resultTypeQuery)) {
           setResult(buildStoredResultFromType(resultTypeQuery))
         } else {
-          navigate('/ab-test', { replace: true })
+          navigate(AB_TEST_LANDING_ROUTE, { replace: true })
         }
       } catch (loadError) {
         if (cancelled) return
@@ -1102,7 +1103,7 @@ export default function AbTestPage() {
     clearStoredState()
 
     if (isResultRoute) {
-      navigate('/ab-test', { replace: true })
+      navigate(AB_TEST_LANDING_ROUTE, { replace: true })
     }
   }
 

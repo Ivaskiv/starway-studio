@@ -1,0 +1,26 @@
+@use './variables';
+@use './mixins';
+@use './hero';
+@use './form';
+@use './social-proof';
+@use './cta';
+@use './responsive';
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+html,
+body {
+  min-height: 100%;
+  background: #06080f;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body:has(.ab-test-landing-layout) {
+  .assistant-overlay,
+  .assistant-panel-wrap,
+  .ava-bubble {
+    display: none;
+  }
+}

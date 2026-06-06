@@ -2,6 +2,7 @@
 import { X } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { ROUTES } from '@/config/routes'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAuth } from '../hooks/useAuth'
 import { LoginForm } from './LoginForm'
@@ -10,6 +11,7 @@ import { usePostAuthNavigation } from '../hooks/usePostAuthNavigation'
 import { getToastMessage, type ToastLang } from '@/features/notifications/i18n/toast'
 import { getToken } from '../services/token'
 import toast from 'react-hot-toast'
+import { AB_TEST_LANDING_RESULT_ROUTE } from '@/features/ab-test-landing/config'
 
 type Mode = 'login' | 'register'
 interface Props { isOpen: boolean; onClose: () => void; defaultMode?: Mode }
@@ -111,7 +113,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
         const data = await response.json() as { type?: string }
         window.sessionStorage.removeItem('ab_test_pending')
         redirectedToAbTestResult = true
-        navigate(`/ab-test/result?type=${encodeURIComponent(String(data.type ?? 'STATE'))}`, {
+        navigate(`${AB_TEST_LANDING_RESULT_ROUTE}?type=${encodeURIComponent(String(data.type ?? 'STATE'))}`, {
           replace: true,
           state: { result: data },
         })

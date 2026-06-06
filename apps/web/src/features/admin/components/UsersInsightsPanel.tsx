@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarPlus, Mail, MessageCircle, Search } from 'lucide-react'
 import { Button, InfoHint, Select } from '@/ui'
+import { buildTelegramProfileLink } from '@/shared/telegram/telegramDeepLinks'
 import { useGetUserInsightsQuery, useUpdateBotMessagesMutation } from '../services/ownership.api'
 
 type UserInsightRow = {
@@ -245,7 +246,7 @@ export default function UsersInsightsPanel() {
     }
 
     if (item.telegramUserName) {
-      window.open(`https://t.me/${item.telegramUserName}`, '_blank', 'noopener,noreferrer')
+      window.open(buildTelegramProfileLink(item.telegramUserName), '_blank', 'noopener,noreferrer')
       return
     }
     window.open(buildCoachEmailHref(item), '_blank', 'noopener,noreferrer')

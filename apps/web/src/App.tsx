@@ -16,8 +16,12 @@ import {
   FOCUS_ALIAS_ROUTE,
   FOCUS_ROUTE,
 } from '@/features/landings/focus/content/constants'
+import { useGetWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
+import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
+import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
 import MainLayout from '@/layout/MainLayout'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
@@ -32,6 +36,9 @@ import {
 const HomePage = lazy(() => import('@/pages/HomePage'))
 const AbTestPage = lazy(
   () => import('@/features/ab-test/pages/AbTestPage')
+)
+const AbTestLandingRouteView = lazy(
+  () => import('@/features/ab-test-landing/page/AbTestLandingRouteView')
 )
 const WelcomeTestPage = lazy(
   () => import('@/features/welcome-test/pages/WelcomeTestPage')
@@ -112,6 +119,11 @@ type RouteConfig = {
   showDeniedScreen?: boolean
 }
 
+function PreserveSearchNavigate({ to }: { to: string }) {
+  const location = useLocation()
+  return <Navigate to={`${to}${location.search}`} replace />
+}
+
 const PUBLIC_INFO_ROUTES = [
   '/help',
   '/about',
@@ -159,6 +171,12 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
   ROUTES.PRICING,
   ROUTES.LOGIN,
   '/register',
+  '/task',
+  '/tasks',
+  '/planner',
+  '/content',
+  '/zoom-calendar',
+  ROUTES.MAGIC_LOGIN,
   ROUTES.TELEGRAM_SUCCESS,
   ROUTES.ONBOARDING_START,
   ROUTES.ONBOARDING_CONTINUE,
@@ -200,6 +218,7 @@ function MiniAppZoomRoute() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const authAttemptedRef = useRef(false)
+  const isTelegramRuntime = isTelegramMiniApp('/zoom')
 
   useEffect(() => {
     const tgUser = (window as {
@@ -212,6 +231,11 @@ function MiniAppZoomRoute() {
 
   useEffect(() => {
     if (user) {
+      if (isTelegramRuntime) {
+        setNeedsOnboarding(false)
+        return
+      }
+
       setNeedsOnboarding(!user.email || !user.firstName)
       if (user.firstName) setFirstName(user.firstName)
       if (user.email) setEmail(user.email)
@@ -231,13 +255,13 @@ function MiniAppZoomRoute() {
     void telegramMiniAppAuth({ initData })
       .unwrap()
       .then((result) => {
-        setNeedsOnboarding(Boolean(result.needsOnboarding))
+        setNeedsOnboarding(isTelegramRuntime ? false : Boolean(result.needsOnboarding))
       })
       .catch((authError) => {
         console.error('[MiniAppZoomRoute] telegram auth failed', authError)
         setError('Не вдалося авторизуватись через Telegram. Спробуй ще раз.')
       })
-  }, [telegramMiniAppAuth, user])
+  }, [isTelegramRuntime, telegramMiniAppAuth, user])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -256,6 +280,16 @@ function MiniAppZoomRoute() {
     }
   }
 
+  if (isTelegramRuntime && error) {
+    return (
+      <div className="mx-auto w-full max-w-md px-4 pt-8 pb-10">
+        <div className="rounded-2xl border border-white/10 bg-[var(--bg-secondary)] p-5 text-sm text-[var(--text-primary)]">
+          {error}
+        </div>
+      </div>
+    )
+  }
+
   if (isAuthLoading || needsOnboarding === null) {
     return (
       <div className="mx-auto w-full max-w-md px-4 pt-8 pb-10">
@@ -266,7 +300,7 @@ function MiniAppZoomRoute() {
     )
   }
 
-  if (needsOnboarding) {
+  if (!isTelegramRuntime && needsOnboarding) {
     return (
       <div className="mx-auto w-full max-w-md px-4 pt-8 pb-10">
         <div className="rounded-2xl border border-white/10 bg-[var(--bg-secondary)] p-5">
@@ -317,7 +351,156 @@ function MiniAppZoomRoute() {
     )
   }
 
-  return <ZoomCalendar mode="user" userId={user.id} />
+  return (
+    <div className="space-y-4 pb-6">
+      <MiniAppZoomWeekPanel />
+      <div className="mx-auto w-full max-w-5xl px-4 pb-4">
+        <ZoomCalendar mode="user" userId={user.id} />
+      </div>
+    </div>
+  )
+}
+
+function MiniAppZoomWeekPanel() {
+  const user = useAppSelector(selectCurrentUser)
+  const { data, isLoading, isError } = useGetWeekOverviewQuery(undefined, {
+    skip: !user,
+    refetchOnMountOrArgChange: true,
+  })
+
+  const formatDateTime = (iso: string) => {
+    const date = new Date(iso)
+    return date.toLocaleString('uk-UA', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Europe/Kyiv',
+    })
+  }
+
+  if (!user) {
+    return null
+  }
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-4 pt-4">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/70">
+          Завантажуємо Zoom-розклад поточного тижня...
+        </div>
+      </div>
+    )
+  }
+
+  if (isError || !data) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-4 pt-4">
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
+          Не вдалося завантажити Zoom-розклад. Спробуй оновити сторінку.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 pt-4 pb-4">
+      <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_80px_rgba(0,0,0,0.16)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Zoom-календар</p>
+            <h2 className="mt-1 text-xl font-semibold text-white">Поточний тиждень</h2>
+            <p className="mt-1 text-sm text-white/55">
+              {new Date(data.week.from).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' })}
+              {' '}—{' '}
+              {new Date(data.week.to).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' })}
+              {' '}· {data.week.timezone}
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] text-white/60">
+            {data.sessions.length} сесій
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {data.sessions.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
+              На цей тиждень Zoom-сесій ще немає.
+            </div>
+          ) : (
+            data.sessions.map((session: ZoomWeekOverview['sessions'][number]) => (
+              <div key={session.id} className="rounded-2xl border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">{session.topic}</p>
+                    <p className="mt-1 text-xs text-white/55">
+                      {formatDateTime(session.scheduledAt)}
+                      {' '}· {session.type}
+                      {session.attendeesCount ? ` · ${session.attendeesCount} учасн.` : ''}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-white/50">
+                    {session.status}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {session.zoomLink ? (
+                    <a
+                      href={session.zoomLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-3 py-1.5 text-xs font-semibold text-[rgb(var(--accent-rgb))]"
+                    >
+                      Відкрити Zoom
+                    </a>
+                  ) : (
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40">
+                      Zoom-лінк ще не додано
+                    </span>
+                  )}
+
+                  {session.audioFileId ? (
+                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200">
+                      Є аудіо запис
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40">
+                      Аудіо запису немає
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="mt-5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Аудіо</p>
+          {data.audios.length === 0 ? (
+            <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+              Записів за цей тиждень поки немає.
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {data.audios.map((audio: ZoomWeekOverview['audios'][number]) => (
+                <div key={audio.sessionId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <p className="text-sm font-medium text-white">{audio.topic}</p>
+                  <p className="mt-1 text-xs text-white/55">
+                    {formatDateTime(audio.scheduledAt)} · {audio.type} · {audio.status}
+                  </p>
+                  <p className="mt-2 break-all font-mono text-[11px] text-white/45">
+                    {audio.audioFileId}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 const DASHBOARD_ROUTES: RouteConfig[] = [
@@ -632,29 +815,36 @@ function PublicMiniAppRoute() {
 function PublicAppRouter() {
   return (
     <Routes>
+      <Route path={ROUTES.AB_TEST} element={<AbTestLandingRouteView />} />
+      <Route path={ROUTES.AB_TEST_QUIZ} element={<AbTestPage />} />
+      <Route path={`${ROUTES.AB_TEST_QUIZ}/*`} element={<AbTestPage />} />
+      <Route
+        path="/ab-test/result"
+        element={<AbTestPage />}
+      />
+      <Route path="/ab-test/result/*" element={<AbTestPage />} />
+      <Route path="/test" element={<AbTestPage />} />
+      <Route path="/test/*" element={<AbTestPage />} />
       <Route element={<MainLayout />}>
         <Route path={ROUTES.HOME} element={<HomePage />} />
+        <Route path="/home" element={<HomePage />} />
+        <Route path="/landing" element={<HomePage />} />
+        <Route path="/welcome" element={<HomePage />} />
         <Route path={ROUTES.PRICING} element={<HomePage />} />
-        <Route path={ROUTES.AB_TEST} element={<AbTestPage />} />
-        <Route path={`${ROUTES.AB_TEST}/*`} element={<AbTestPage />} />
-        {/* [FIX] /test alias for ROUTES.AB_TEST — exact path */}
-        <Route path="/test" element={<AbTestPage />} />
-        <Route path="/test/*" element={<AbTestPage />} />
         <Route path="/welcome-test/:linkToken" element={<WelcomeTestPage />} />
         <Route path={FOCUS_ROUTE} element={<FocusRouteView />} />
         {FOCUS_ALIAS_ROUTE !== FOCUS_ROUTE ? (
           <Route path={FOCUS_ALIAS_ROUTE} element={<Navigate to={FOCUS_ROUTE} replace />} />
         ) : null}
-        <Route
-          path={ROUTES.LOGIN}
-          element={<LoginPage />}
-        />
-        <Route
-          path="/register"
-          element={<LoginPage />}
-        />
+        <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+        <Route path="/register" element={<LoginPage />} />
+        <Route path="/auth" element={<Navigate to={ROUTES.HOME} replace />} />
         <Route
           path={ROUTES.TELEGRAM_SUCCESS}
+          element={<TelegramSuccessPage />}
+        />
+        <Route
+          path={ROUTES.MAGIC_LOGIN}
           element={<TelegramSuccessPage />}
         />
         <Route
@@ -688,6 +878,12 @@ function PublicAppRouter() {
       </Route>
       <Route path="/miniapp" element={<PublicMiniAppRoute />} />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
+      <Route path="/zoom-calendar" element={<ZoomCalendarPage />} />
+      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage />} />
+      <Route path="/task" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
+      <Route path="/tasks" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
+      <Route path="/planner" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
+      <Route path="/content" element={<Navigate to="/miniapp/library" replace />} />
       <Route path="/zoom" element={<MiniAppZoomRoute />} />
       <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
     </Routes>
@@ -697,24 +893,36 @@ function PublicAppRouter() {
 function GuestAppRouter() {
   return (
     <Routes>
+      <Route path={ROUTES.AB_TEST} element={<AbTestLandingRouteView />} />
+      <Route path={ROUTES.AB_TEST_QUIZ} element={<AbTestPage />} />
+      <Route path={`${ROUTES.AB_TEST_QUIZ}/*`} element={<AbTestPage />} />
+      <Route
+        path="/ab-test/result"
+        element={<AbTestPage />}
+      />
+      <Route path="/ab-test/result/*" element={<AbTestPage />} />
+      <Route path="/test" element={<AbTestPage />} />
+      <Route path="/test/*" element={<AbTestPage />} />
       <Route element={<MainLayout />}>
         <Route path={ROUTES.HOME} element={<HomePage />} />
+        <Route path="/home" element={<HomePage />} />
+        <Route path="/landing" element={<HomePage />} />
+        <Route path="/welcome" element={<HomePage />} />
         <Route path={ROUTES.PRICING} element={<HomePage />} />
-        <Route path={ROUTES.AB_TEST} element={<AbTestPage />} />
-        <Route path={`${ROUTES.AB_TEST}/*`} element={<AbTestPage />} />
-        <Route path="/test" element={<AbTestPage />} />
-        <Route path="/test/*" element={<AbTestPage />} />
         <Route path={FOCUS_ROUTE} element={<FocusRouteView />} />
         {FOCUS_ALIAS_ROUTE !== FOCUS_ROUTE ? (
           <Route path={FOCUS_ALIAS_ROUTE} element={<Navigate to={FOCUS_ROUTE} replace />} />
         ) : null}
+        <Route path="/task" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
+        <Route path="/tasks" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
+        <Route path="/planner" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
+        <Route path="/content" element={<Navigate to="/miniapp/library" replace />} />
+        <Route path={ROUTES.LOGIN} element={<Navigate to={`${ROUTES.HOME}?auth=login`} replace />} />
+        <Route path="/register" element={<Navigate to={`${ROUTES.HOME}?auth=register`} replace />} />
+        <Route path="/auth" element={<Navigate to={ROUTES.HOME} replace />} />
         <Route
-          path={ROUTES.LOGIN}
-          element={<Navigate to={`${ROUTES.HOME}?auth=login`} replace />}
-        />
-        <Route
-          path="/register"
-          element={<Navigate to={`${ROUTES.HOME}?auth=register`} replace />}
+          path={ROUTES.MAGIC_LOGIN}
+          element={<TelegramSuccessPage />}
         />
         <Route path="/products/:slug" element={<ProductInfo />} />
         {PUBLIC_INFO_ROUTES.map((path) => (
@@ -725,6 +933,8 @@ function GuestAppRouter() {
           />
         ))}
       </Route>
+      <Route path="/zoom-calendar" element={<ZoomCalendarPage />} />
+      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage />} />
       <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
     </Routes>
   )
@@ -813,6 +1023,19 @@ export default function App() {
 function AppRouter() {
   const location = useLocation()
   const user = useAppSelector(selectCurrentUser)
+  const isTelegramRuntime = isTelegramMiniApp(location.pathname)
+  const isTelegramProductRoute =
+    location.pathname.startsWith(ROUTES.MINIAPP) ||
+    location.pathname === '/zoom' ||
+    location.pathname === '/zoom-calendar' ||
+    location.pathname === '/task' ||
+    location.pathname === '/tasks' ||
+    location.pathname === '/planner' ||
+    location.pathname === '/content'
+
+  if (isTelegramRuntime && !isTelegramProductRoute) {
+    return <Navigate to={ROUTES.MINIAPP} replace />
+  }
 
   if (!user) {
     return <GuestAppRouter />
