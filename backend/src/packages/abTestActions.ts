@@ -5,8 +5,6 @@ export const AB_TEST_ACTIONS = {
   RESTART: 'ab_test:restart',
   INTRO: 'ab_test:intro',
   SHOW_RESULT: 'ab_test:show_result',
-  EMAIL_CONTINUE: 'ab_test:email_continue',
-  EMAIL_SKIP: 'ab_test:email_skip',
   MENU: 'ab_test:menu',
   SUBSCRIPTION: 'ab_test:subscription',
   FOCUS_INFO: 'ab_test:focus_info',

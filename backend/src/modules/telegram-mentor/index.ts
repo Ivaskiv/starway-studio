@@ -411,7 +411,9 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
   })
 
   bot.use(async (ctx, next) => {
-    ;(ctx.state as { userId?: string | null }).userId = await resolveLinkedUserIdFromContext(ctx)
+    const resolvedUserId = await resolveLinkedUserIdFromContext(ctx)
+    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = resolvedUserId
+    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
     await next()
   })
 
@@ -829,6 +831,15 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       if (!post?.chat?.id) return
 
       const chatId = String(post.chat.id).trim()
+      const rawText = String(post.text ?? post.caption ?? '').trim()
+      if (rawText.startsWith('/')) {
+        console.info('[channel_post] skip command text:', {
+          chatId,
+          text: rawText.slice(0, 120),
+        })
+        return
+      }
+
       const focusChannelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID?.trim()
 
       if (focusChannelId && chatId === focusChannelId) {

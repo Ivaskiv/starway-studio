@@ -79,6 +79,7 @@ export type AbTestProgress = {
   email_captured_at: string | null
   timers: {
     result: CanonicalFlowTimerId[]
+    dojim: CanonicalFlowTimerId[]
     payment: CanonicalFlowTimerId[]
     zoom: CanonicalFlowTimerId[]
     platform: CanonicalFlowTimerId[]
@@ -94,6 +95,8 @@ export const AB_TEST_UI_SETTINGS_KEY = 'abTest'
 export const AB_TEST_CURRENT_VERSION = 1
 
 const AB_TEST_ANSWER_ORDER: AbTestAnswerKey[] = ['state', 'goal', 'choice', 'decision', 'action']
+const AB_TEST_ACTIVE_QUESTION_ORDER = AB_TEST_QUESTION_ORDER
+type AbTestActiveQuestionId = typeof AB_TEST_ACTIVE_QUESTION_ORDER[number]
 const AB_TEST_RELEVANT_MESSAGE_KEYS: CanonicalMessageKey[] = [
   'TEST_RESULT_STATE',
   'TEST_RESULT_GOAL',
@@ -123,9 +126,14 @@ function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function isActiveAbTestQuestionId(questionId: AbTestQuestionId | null): questionId is AbTestActiveQuestionId {
+  return Boolean(questionId && AB_TEST_ACTIVE_QUESTION_ORDER.includes(questionId as AbTestActiveQuestionId))
+}
+
 function cloneTimers(input: Partial<AbTestProgress['timers']> | undefined): AbTestProgress['timers'] {
   return {
     result: [...(input?.result ?? [])],
+    dojim: [...(input?.dojim ?? [])],
     payment: [...(input?.payment ?? [])],
     zoom: [...(input?.zoom ?? [])],
     platform: [...(input?.platform ?? [])],
@@ -161,6 +169,7 @@ function getDefaultProgress(now = new Date()): AbTestProgress {
     last_event_at: now.toISOString(),
     timers: {
       result: [],
+      dojim: [],
       payment: [],
       zoom: [],
       platform: [],
@@ -332,12 +341,16 @@ export function resolveAbTestCurrentQuestion(progress: AbTestProgress): AbTestQu
   // [DEPRECATED] do not use in rendering — use progress.answers.length instead
   // Safe to call only from analytics/tracking paths
   // Will be removed in next cleanup pass
-  return progress.current_question_id ? getAbTestQuestion(progress.current_question_id) : null
+  return isActiveAbTestQuestionId(progress.current_question_id) ? getAbTestQuestion(progress.current_question_id) : null
 }
 
 export function resolveAbTestNextQuestion(progress: AbTestProgress): AbTestQuestion | null {
   if (!progress.current_question_id) {
     return getAbTestQuestion(AB_TEST_QUESTION_ORDER[0])
+  }
+
+  if (!isActiveAbTestQuestionId(progress.current_question_id)) {
+    return null
   }
 
   const currentIndex = AB_TEST_QUESTION_ORDER.indexOf(progress.current_question_id)
@@ -417,6 +430,8 @@ export function resolveAbTestFlowTimerIdsForStage(stage: AbTestStageId): readonl
   switch (stage) {
     case 'S3_TEST_RESULT':
       return ['RESULT_FOLLOWUP_24H', 'RESULT_FOLLOWUP_48H', 'RESULT_FOLLOWUP_72H']
+    case 'S4_FOCUS_INVITE':
+      return ['RESULT_DOJIM_24H', 'RESULT_DOJIM_48H', 'RESULT_DOJIM_72H', 'RESULT_DOJIM_5D', 'RESULT_DOJIM_7D']
     case 'S5_PAYMENT':
       return ['PAYMENT_REMINDER_24H', 'PAYMENT_REMINDER_48H', 'PAYMENT_REMINDER_72H']
     case 'S6_ZOOM':
@@ -424,7 +439,6 @@ export function resolveAbTestFlowTimerIdsForStage(stage: AbTestStageId): readonl
     case 'S7_PLATFORM_INVITE':
     case 'S8_PLATFORM_READY':
       return ['PLATFORM_INVITE_AFTER_ZOOM_1', 'PLATFORM_INVITE_AFTER_ZOOM_2']
-    case 'S4_FOCUS_INVITE':
     case 'S1_TEST_STARTED':
     case 'S2_TEST_QUESTIONS':
     default:

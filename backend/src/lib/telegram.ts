@@ -98,6 +98,29 @@ function createBotProxy(resolver: () => Telegraf): Telegraf {
   }) as Telegraf
 }
 
+type SeedableTelegraf = Telegraf & { botInfo?: unknown }
+
+export function seedBotInfo(
+  targetBot: Telegraf,
+  input: {
+    id?: number
+    firstName: string
+    username: string
+  },
+): void {
+  const botInfo = {
+    id: input.id ?? 0,
+    is_bot: true as const,
+    first_name: input.firstName,
+    username: input.username,
+    can_join_groups: true,
+    can_read_all_group_messages: false,
+    supports_inline_queries: false,
+  }
+
+  ;(targetBot as SeedableTelegraf).botInfo = botInfo
+}
+
 export const bot = createBotProxy(getTelegramBotInstance)
 export const contentBot = createBotProxy(getContentBotInstance)
 export const coachBot = createBotProxy(getCoachBotInstance)
@@ -122,6 +145,10 @@ export async function launchBot(
   webhookUrl?: string,
 ): Promise<void> {
   try {
+    seedBotInfo(targetBot, {
+      firstName: name,
+      username: name.toLowerCase().replace(/\s+/g, '_'),
+    })
     const normalizedWebhookUrl = String(webhookUrl ?? '').trim()
     if (normalizedWebhookUrl) {
       await targetBot.telegram.setWebhook(normalizedWebhookUrl)

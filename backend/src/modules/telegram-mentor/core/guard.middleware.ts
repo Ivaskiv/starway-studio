@@ -17,11 +17,11 @@ function isAllowedPreAccessCallback(action: string): boolean {
   if (action === 'open_faq') return true
   if (action.startsWith('faq:')) return true
   if (action === 'ab_test:entry' || action === 'ab_test:intro' || action === 'ab_test:start' || action === 'ab_test:restart' || action === 'ab_test:show_result') return true
-  if (action === 'ab_test:email_continue' || action === 'ab_test:email_skip') return true
   if (action === 'ab_test:menu' || action === 'ab_test:focus_info') return true
   if (action.startsWith('ab_test_answer:') || action.startsWith('ab_test_edit:')) return true
   if (action === 'open_focus_payment' || action.startsWith('open_focus_payment:')) return true
   if (action === 'resend_focus_block12') return true
+  if (action === 'skip_email_before_result' || action.startsWith('show_inside_')) return true
   return false
 }
 

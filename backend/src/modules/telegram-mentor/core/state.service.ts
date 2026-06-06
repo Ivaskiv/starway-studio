@@ -12,6 +12,13 @@ export type UserState =
   | 'ACTIVE'
   | 'PAUSED'
 
+type LinkedUserState = {
+  userId?: string | null
+  userIdResolved?: boolean
+}
+
+const linkedUserResolutionCache = new WeakMap<Context, Promise<string | null>>()
+
 function isWaitlistFlag(value: string | null | undefined): boolean {
   const normalized = String(value ?? '').trim().toUpperCase()
   return normalized.includes('WAITLIST') || normalized.includes('EARLY_ACCESS')
@@ -29,19 +36,33 @@ export function isLeadMagnetPayload(payload: string): boolean {
 }
 
 export async function resolveLinkedUserIdFromContext(ctx: Context): Promise<string | null> {
-  const chatId = ctx.chat?.id ? String(ctx.chat.id) : null
-  const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
-  const telegramUserName = ctx.from?.username ?? null
-
-  if (!chatId || !telegramUserId) {
-    return null
+  const cached = linkedUserResolutionCache.get(ctx)
+  if (cached) {
+    return cached
   }
 
-  return findLinkedUserId({
-    chatId,
-    telegramUserId,
-    telegramUserName,
-  })
+  const resolver = (async () => {
+    const chatId = ctx.chat?.id ? String(ctx.chat.id) : null
+    const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
+    const telegramUserName = ctx.from?.username ?? null
+
+    if (!chatId || !telegramUserId) {
+      return null
+    }
+
+    const resolvedUserId = await findLinkedUserId({
+      chatId,
+      telegramUserId,
+      telegramUserName,
+    })
+    const state = ctx.state as LinkedUserState
+    state.userId = resolvedUserId
+    state.userIdResolved = true
+    return resolvedUserId
+  })()
+
+  linkedUserResolutionCache.set(ctx, resolver)
+  return resolver
 }
 
 export async function resolveUserState(userId: string): Promise<UserState> {

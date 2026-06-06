@@ -2,6 +2,7 @@ import type {
   AbTestAnswerKey,
   AbTestQuestionId,
 } from '../content/abTest.questions.js'
+import type { AbTestResultKey } from '../content/abTest.results.js'
 
 export type AbTestCallbackAction =
   | { kind: 'entry' }
@@ -9,12 +10,13 @@ export type AbTestCallbackAction =
   | { kind: 'resume' }
   | { kind: 'restart' }
   | { kind: 'show_result' }
+  | { kind: 'test_drive' }
   | { kind: 'start' }
-  | { kind: 'email_continue' }
-  | { kind: 'email_skip' }
   | { kind: 'restore' }
   | { kind: 'menu' }
   | { kind: 'subscription' }
+  | { kind: 'skip_email_before_result' }
+  | { kind: 'show_inside'; resultKey: AbTestResultKey }
   | { kind: 'edit'; questionId: AbTestQuestionId }
   | {
       kind: 'answer'
@@ -31,12 +33,17 @@ export function parseAbTestCallback(
   if (action === 'ab_test:resume') return { kind: 'resume' }
   if (action === 'ab_test:restart') return { kind: 'restart' }
   if (action === 'ab_test:show_result') return { kind: 'show_result' }
+  if (action === 'ab_test:test_drive') return { kind: 'test_drive' }
   if (action === 'ab_test:start') return { kind: 'start' }
-  if (action === 'ab_test:email_continue') return { kind: 'email_continue' }
-  if (action === 'ab_test:email_skip') return { kind: 'email_skip' }
   if (action === 'ab_test:restore') return { kind: 'restore' }
   if (action === 'ab_test:menu') return { kind: 'menu' }
   if (action === 'ab_test:subscription') return { kind: 'subscription' }
+  if (action === 'skip_email_before_result') return { kind: 'skip_email_before_result' }
+
+  const showInsideMatch = action.match(/^show_inside_(STATE|GOAL|CHOICE|DECISION|ACTION)$/)
+  if (showInsideMatch) {
+    return { kind: 'show_inside', resultKey: showInsideMatch[1].toLowerCase() as AbTestResultKey }
+  }
 
   const editMatch = action.match(/^ab_test_edit:(q[1-8])$/)
   if (editMatch) {

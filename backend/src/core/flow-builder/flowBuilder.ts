@@ -98,16 +98,17 @@ export function buildAbTestResultFlow(progress: AbTestProgress): TelegramFlow {
   }
 
   const buttons: TelegramButton[][] = [
-    [{ text: result.focus_cta, callback_data: 'start_wheel' }],
+    [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+    [{ text: 'Як це виглядає зсередини?', callback_data: `show_inside_${progress.result_key?.toUpperCase() ?? 'STATE'}` }],
   ]
 
   return createTelegramFlow({
     id: 'ab_test_result',
     title: '',
-    body: [result.body, '', result.msg2],
+    body: [result.body],
     buttons,
     blocks: [
-      { type: 'movement_interpretation', tone: 'behavioral', priority: 1, body: [result.body, result.msg2] },
+      { type: 'movement_interpretation', tone: 'behavioral', priority: 1, body: [result.body] },
     ],
   })
 }

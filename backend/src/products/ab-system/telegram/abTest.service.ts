@@ -26,7 +26,8 @@ import {
 } from '../content/abTest.faq.js'
 import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
-import { BLOCK10_FOCUS, BLOCK9_POST_RESULT, getAbTestResultDefinition } from '../content/abTest.results.js'
+import { BLOCK10_FOCUS, BLOCK9_POST_RESULT } from '../content/abTest.results.js'
+import { getTestDriveInsideSurface, getTestDriveInsideResponseSurface } from '../content/testDrive.content.js'
 import {
   FOCUS_ALREADY_ACTIVE_MSG,
   FOCUS_PAYMENT_ISSUE_COACH_MSG,
@@ -51,11 +52,19 @@ import {
   getAbTestProgressFromUiSettings,
   loadAbTestProgress,
   loadUserUiSettings,
+  ensureAbTestEmailCapturedFromProfile,
   saveAbTestProgress,
 } from './abTest.progress.js'
+import {
+  clearPendingTelegramIdentity,
+  setPendingTelegramIdentity,
+} from '../../../modules/telegram-mentor/services/pendingIdentity.service.js'
 import { scheduleFollowups } from './abTest.scheduler.js'
 import {
   renderCurrentView,
+  renderAbTestCompletedResult,
+  renderAbTestResultThenOffer,
+  renderAbTestPostEmailSubmitSequence,
   sendActionMessage,
 } from './abTest.views.js'
 import { planAck, planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
@@ -106,6 +115,27 @@ function logFlowResume(event: string, payload: Record<string, unknown>) {
 
 function logFlowRender(event: string, payload: Record<string, unknown>) {
   console.info('[FLOW_RENDER]', event, payload)
+}
+
+async function resolveAbTestEmailTargetUserId(
+  ctx: Context,
+  fallbackUserId: string,
+): Promise<string> {
+  const chatId = String(ctx.chat?.id ?? '').trim()
+  const telegramUserId = String(ctx.from?.id ?? '').trim()
+
+  const candidate = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { id: fallbackUserId },
+        ...(telegramUserId ? [{ telegramUserId }] : []),
+        ...(chatId ? [{ telegramChatId: chatId }] : []),
+      ],
+    },
+    select: { id: true },
+  })
+
+  return candidate?.id ?? fallbackUserId
 }
 
 function logMessageSent(event: string, payload: Record<string, unknown>) {
@@ -348,10 +378,11 @@ async function sendQuestionDirect(
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) return
   const question = getAbTestQuestion(questionId)
-  const questionNumber = resolveAbTestQuestionOrder().indexOf(question.question_id) + 1
+  const questionOrder = resolveAbTestQuestionOrder()
+  const questionNumber = questionOrder.indexOf(question.question_id) + 1
   await ctx.telegram.sendMessage(
     chatId,
-    `Питання ${questionNumber} з 8\n\n${question.prompt}`,
+    `Питання ${questionNumber} з ${questionOrder.length}\n\n${question.prompt}`,
     {
       reply_markup: {
         inline_keyboard: question.answers.map((answer) => ([{
@@ -359,28 +390,6 @@ async function sendQuestionDirect(
           callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${revision}`,
         }])),
       },
-    },
-  )
-}
-
-async function sendAbTestEmailStep(ctx: Context): Promise<void> {
-  await planMessage(
-    ctx,
-    'ctx.reply',
-    'ab_test_email_step',
-    [
-      'Введіть email, щоб:',
-      '— зберегти ваш результат',
-      '— продовжити з будь-якого пристрою',
-      '— отримати персональні рекомендації після тесту',
-      '',
-      'Можна пропустити на цьому кроці.',
-    ].join('\n'),
-    {
-      inline_keyboard: [
-        [{ text: 'Продовжити', callback_data: 'ab_test:email_continue' }],
-        [{ text: 'Пропустити поки що', callback_data: 'ab_test:email_skip' }],
-      ],
     },
   )
 }
@@ -536,59 +545,96 @@ export async function handleAbTestEmailCaptureText(
 
   const normalizedEmail = text.trim().toLowerCase()
   if (!isValidEmail(normalizedEmail)) {
-    await planMessage(ctx, 'ctx.reply', 'ab_test_email_invalid', 'Схоже, це не email. Введіть коректний email або натисніть «Пропустити поки що».')
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (chatId) {
+      await ctx.telegram.sendMessage(
+        chatId,
+        'Схоже, це не email. Введіть коректний email одним повідомленням.',
+      )
+    }
     return true
   }
 
-  await attachEmailToUser(userId, normalizedEmail)
-
   const chatId = String(ctx.chat?.id ?? '').trim()
   const telegramUserId = String(ctx.from?.id ?? '').trim()
-  if (chatId && telegramUserId) {
-    await upsertTelegramBinding({
-      userId,
-      chatId,
-      telegramUserId,
-      telegramUserName: ctx.from?.username ?? null,
-      firstName: ctx.from?.first_name ?? null,
+  const resolvedUserId = await resolveAbTestEmailTargetUserId(ctx, userId)
+
+  try {
+    const attachment = await attachEmailToUser(resolvedUserId, normalizedEmail)
+    const persistedUserId = attachment.userId
+
+    if (chatId && telegramUserId) {
+      await upsertTelegramBinding({
+        userId: persistedUserId,
+        chatId,
+        telegramUserId,
+        telegramUserName: ctx.from?.username ?? null,
+        firstName: ctx.from?.first_name ?? null,
+      })
+    }
+
+    const deepLink = await generateDeepLink({
+      userId: persistedUserId,
+      action: 'magic_login',
+      source: 'telegram',
+      target: 'web',
+      path: '/onboarding/continue',
+      payload: { origin: 'ab_test_email_capture' } satisfies Prisma.InputJsonValue,
     })
+    const magicLoginUrl = buildWebDeepLink(deepLink.token, deepLink.path)
+    const mailSent = await sendMagicLoginEmail({
+      to: normalizedEmail,
+      loginUrl: magicLoginUrl,
+    })
+
+    const nowIso = new Date().toISOString()
+    const next = buildAbTestProgressPatch(progress, {
+      email_stage: 'captured',
+      email_captured_at: nowIso,
+      last_event_at: nowIso,
+    })
+    await saveAbTestProgress(persistedUserId, next)
+    if (chatId) {
+      await clearPendingTelegramIdentity(chatId)
+    }
+
+    await prisma.user.update({
+      where: { id: persistedUserId },
+      data: {
+        email: normalizedEmail,
+        testStartedAt: progress.started_at ? new Date(progress.started_at) : undefined,
+        testCompletedAt: nowIso,
+        testResultType: progress.result_key ?? undefined,
+        funnelStage: 'LEAD',
+        lifecycleState: 'TEST_DONE',
+      },
+    })
+
+    if (!mailSent) {
+      console.warn('[AB_TEST_EMAIL_CAPTURE] magic_login_email_not_sent', {
+        userId: persistedUserId,
+        email: normalizedEmail,
+      })
+    }
+
+    await renderAbTestPostEmailSubmitSequence(ctx, persistedUserId, next)
+    return true
+  } catch (error) {
+    console.error('[AB_TEST_EMAIL_CAPTURE] persistence_failed', {
+      userId,
+      chatId: chatId || null,
+      telegramUserId: telegramUserId || null,
+      error: error instanceof Error ? error.message : String(error),
+    })
+
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'ab_test_email_retry',
+      'Не вдалося зберегти email. Спробуйте ще раз.',
+    )
+    return true
   }
-
-  const deepLink = await generateDeepLink({
-    userId,
-    action: 'magic_login',
-    source: 'telegram',
-    target: 'web',
-    path: '/onboarding/continue',
-    payload: { origin: 'ab_test_email_capture' } satisfies Prisma.InputJsonValue,
-  })
-  const magicLoginUrl = buildWebDeepLink(deepLink.token, deepLink.path)
-  const mailSent = await sendMagicLoginEmail({
-    to: normalizedEmail,
-    loginUrl: magicLoginUrl,
-  })
-
-  const next = buildAbTestProgressPatch(progress, {
-    email_stage: 'captured',
-    email_captured_at: new Date().toISOString(),
-    last_event_at: new Date().toISOString(),
-  })
-  await saveAbTestProgress(userId, next)
-
-  await planMessage(
-    ctx,
-    'ctx.reply',
-    'ab_test_email_saved',
-    mailSent
-      ? 'Email збережено. Ми надіслали магічне посилання для входу в платформу.'
-      : 'Email збережено. Відкрити платформу можна одразу з цього посилання:',
-    {
-      inline_keyboard: [[{ text: 'Відкрити платформу', url: magicLoginUrl }]],
-    },
-  )
-
-  await startAbTestFlow(ctx, userId, AB_TEST_ACTIONS.START)
-  return true
 }
 
 export async function handleAbTestCallback(
@@ -712,10 +758,10 @@ export async function handleAbTestCallback(
       + '— яке рішення переносиш,\n'
       + '— яка ціль не рухається.\n\n'
       + 'Тарифи:\n'
-      + '1 місяць — 780 грн\n'
-      + '3 місяці — 1990 грн'
-    const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць — 780 грн'
-    const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 1990 грн'
+      + '1 місяць — 15 євро\n'
+      + '3 місяці — 39 євро'
+    const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць — 15 євро'
+    const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 39 євро'
     let testButtonRow: Array<{ text: string; url: string }> = []
     if (payingUserId && isTestPaymentEnabled()) {
       try {
@@ -936,7 +982,7 @@ export async function handleAbTestCallback(
     // FIX 2025-05-25 F2: send q1 using canonical answer ids to keep parser-compatible flow
     await ctx.telegram.sendMessage(
       q1ChatId,
-      `Питання 1 з 8\n\n${q1Question.prompt}`,
+      `Питання 1 з 5\n\n${q1Question.prompt}`,
       {
         reply_markup: {
           inline_keyboard: q1Question.answers.map((answer) => ([{
@@ -1053,29 +1099,12 @@ export async function handleAbTestCallback(
     const progress = await loadAbTestProgress(userId)
     const answers = progress.answers ?? []
     const nextQ = answers.length + 1
-    if (nextQ > 8) {
-      const resultKey = progress.result_key
-      if (resultKey) {
-        const resultDef = getAbTestResultDefinition(resultKey)
-        const chatId = ctx.chat?.id ?? ctx.from?.id
-        if (chatId) {
-          await ctx.telegram.sendMessage(
-            chatId,
-            `${resultDef.title}\n\n${resultDef.body}`,
-            {
-              reply_markup: {
-                inline_keyboard: [[{
-                  text: 'Що з цим робити?',
-                  callback_data: 'ab_test:start_wheel',
-                }]],
-              },
-            },
-          )
-        }
-      }
+    const questionOrder = resolveAbTestQuestionOrder()
+    if (nextQ > questionOrder.length) {
+      await renderCurrentView(ctx, userId, progress)
       return true
     }
-    const questionId = resolveAbTestQuestionOrder()[nextQ - 1]
+    const questionId = questionOrder[nextQ - 1]
     if (questionId) {
       await sendQuestionDirect(ctx, questionId, progress.revision)
     }
@@ -1086,7 +1115,38 @@ export async function handleAbTestCallback(
     // FIX 2025-05-25 E: show_result — return saved result or fallback to start.
     await ctx.answerCbQuery().catch(() => null)
     const progress = await loadAbTestProgress(userId)
-    const resultKey = progress.result_key
+    const resolvedProgress = await ensureAbTestEmailCapturedFromProfile(userId, progress)
+    if (resolvedProgress.email_stage === 'pending') {
+      const next = buildAbTestProgressPatch(progress, {
+        email_stage: 'pending',
+        last_event_at: new Date().toISOString(),
+      })
+      await saveAbTestProgress(userId, next)
+      const chatId = ctx.chat?.id ?? ctx.from?.id
+      if (chatId) {
+        await ctx.telegram.sendMessage(
+          chatId,
+          'Введи email — надішлемо аналіз результату.\n\nАбо натисни «Пропустити» щоб продовжити без email.',
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: 'Пропустити →', callback_data: 'skip_email_before_result' },
+              ]],
+            },
+          },
+        )
+        await setPendingTelegramIdentity({
+          chatId: String(chatId),
+          telegramUserId: String(ctx.from?.id ?? ''),
+          telegramUserName: ctx.from?.username ?? null,
+          firstName: ctx.from?.first_name ?? null,
+          source: 'email_after_test',
+          requestId: null,
+        })
+      }
+      return true
+    }
+    const resultKey = resolvedProgress.result_key
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) return true
     if (!resultKey) {
@@ -1104,43 +1164,75 @@ export async function handleAbTestCallback(
       )
       return true
     }
-    const resultDef = getAbTestResultDefinition(resultKey)
+    await renderAbTestCompletedResult(ctx, userId, resolvedProgress)
+    return true
+  }
+
+  if (parsed.kind === 'skip_email_before_result') {
+    await ctx.answerCbQuery().catch(() => null)
+    const progress = await loadAbTestProgress(userId)
+    const nowIso = new Date().toISOString()
+    const next = buildAbTestProgressPatch(progress, {
+      email_stage: 'skipped',
+      last_event_at: nowIso,
+    })
+    await saveAbTestProgress(userId, next)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (chatId) {
+      await clearPendingTelegramIdentity(String(chatId))
+    }
+    await renderAbTestResultThenOffer(ctx, userId, next, { typing: false })
+    return true
+  }
+
+  if (parsed.kind === 'show_inside') {
+    await ctx.answerCbQuery().catch(() => null)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
+    const surface = getTestDriveInsideResponseSurface({
+      resultKey: parsed.resultKey,
+    })
+    if (!surface) {
+      const progress = await loadAbTestProgress(userId)
+      await renderCurrentView(ctx, userId, progress)
+      return true
+    }
     await ctx.telegram.sendMessage(
       chatId,
-      `${resultDef.title}\n\n${resultDef.body}`,
+      `${surface.title}\n\n${surface.bodyLines.join('\n')}`,
       {
         reply_markup: {
-          inline_keyboard: [[{
-            text: 'Що з цим робити?',
-            callback_data: 'ab_test:start_wheel',
-          }]],
+          inline_keyboard: surface.buttons,
         },
       },
     )
     return true
   }
 
-  if (parsed.kind === 'email_continue') {
+  if (parsed.kind === 'test_drive') {
+    await ctx.answerCbQuery().catch(() => null)
     const progress = await loadAbTestProgress(userId)
-    const next = buildAbTestProgressPatch(progress, {
-      email_stage: 'pending',
-      last_event_at: new Date().toISOString(),
+    const insideSurface = getTestDriveInsideSurface({
+      resultKey: progress.result_key,
+      startedAt: progress.started_at,
     })
-    await saveAbTestProgress(userId, next)
-    await planMessage(ctx, 'ctx.reply', 'ab_test_email_continue_prompt', 'Введіть email одним повідомленням у цьому чаті.')
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_email_continue_ack').catch(() => undefined)
-    return true
-  }
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId || !insideSurface) {
+      await renderCurrentView(ctx, userId, progress)
+      return true
+    }
 
-  if (parsed.kind === 'email_skip') {
-    const progress = await loadAbTestProgress(userId)
-    const next = buildAbTestProgressPatch(progress, {
-      email_stage: 'skipped',
-      last_event_at: new Date().toISOString(),
-    })
-    await saveAbTestProgress(userId, next)
-    await startAbTestFlow(ctx, userId, action)
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_email_skip_ack').catch(() => undefined)
+    await ctx.telegram.sendMessage(
+      chatId,
+      `${insideSurface.title}\n\n${insideSurface.bodyLines.join('\n')}`,
+      {
+        reply_markup: {
+          inline_keyboard: insideSurface.buttons,
+        },
+      },
+    )
     return true
   }
 
@@ -1154,7 +1246,7 @@ export async function handleAbTestCallback(
     // FIX 2025-05-25 D: bypass orchestrator dedupe for direct start flow message
     await ctx.telegram.sendMessage(
       startChatId,
-      'У тесті буде 8 питань.\n'
+      'У тесті буде 5 питань.\n'
       + 'Обирай той варіант, який найбільше схожий на тебе зараз.\n\n'
       + 'Не треба відповідати «правильно».\n'
       + 'Треба чесно.',
@@ -1464,40 +1556,95 @@ export async function handleAbTestCallback(
     } satisfies Prisma.JsonObject,
   })
 
-  // ── COMPLETE (8th answer) ──────────────────────────────────
-  if (complete && resultKey) {
+  // ── COMPLETE (final answer) ────────────────────────────────
+  console.info('[AB_TEST_Q8_TRACE] result_complete_branch_entered', {
+    userId,
+    questionId: parsed.questionId,
+    complete,
+    resultKey,
+    nextQuestionId,
+  })
+  if (complete) {
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) {
+      console.info('[AB_TEST_Q8_TRACE] result_complete_branch_skipped_no_chat', {
+        userId,
+      })
       return true
     }
-    const scheduled = await scheduleFollowups(userId, next, 'S3_TEST_RESULT')
-    const finalProgress = await saveAbTestProgress(userId, scheduled)
-    const resultDef = getAbTestResultDefinition(resultKey)
-    // FIX 2025-05-25 E1: summary message removed; replaced by inline checkmarks.
-    // FIX 2025-05-25 B3: direct send result to bypass orchestrator timeout/retry paths
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        testStartedAt: next.started_at ? new Date(next.started_at) : undefined,
+        testCompletedAt: answeredAt,
+        testResultType: resultKey ?? undefined,
+        funnelStage: 'LEAD',
+        lifecycleState: 'TEST_DONE',
+      },
+    }).catch(() => undefined)
+
+    const pendingEmailProgress = buildAbTestProgressPatch(next, {
+      email_stage: 'pending',
+      last_event_at: new Date().toISOString(),
+    })
+    console.info('[AB_TEST_Q8_TRACE] result_progress_before_email_gate_saved', {
+      userId,
+      emailStage: pendingEmailProgress.email_stage,
+      resultKey: pendingEmailProgress.result_key,
+    })
+    await saveAbTestProgress(userId, pendingEmailProgress)
+    const resolvedProgress = await ensureAbTestEmailCapturedFromProfile(userId, pendingEmailProgress)
+    if (resolvedProgress.email_stage === 'captured') {
+      console.info('[AB_TEST_Q8_TRACE] result_email_gate_auto_captured', {
+        userId,
+        transition: 'ab_test_email_prompt_before_result',
+        deliveryKind: 'ab_test_email_gate',
+      })
+      await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+      await scheduleFollowups(userId, resolvedProgress, 'S3_TEST_RESULT').catch((error) => {
+        console.error('[AB_TEST_Q8_TRACE] result_followups_failed', {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+      await renderAbTestResultThenOffer(ctx, userId, resolvedProgress)
+      return true
+    }
+    await scheduleFollowups(userId, pendingEmailProgress, 'S3_TEST_RESULT').catch((error) => {
+      console.error('[AB_TEST_Q8_TRACE] result_followups_failed', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+    console.info('[AB_TEST_Q8_TRACE] result_email_prompt_sent', {
+      userId,
+      transition: 'ab_test_email_prompt_before_result',
+      deliveryKind: 'ab_test_email_gate',
+    })
     await ctx.telegram.sendMessage(
       chatId,
-      `${resultDef.title}\n\n${resultDef.body}`,
+      'Введи email — надішлемо аналіз результату.\n\nАбо натисни «Пропустити» щоб продовжити без email.',
       {
         reply_markup: {
           inline_keyboard: [[
-            {
-              text: 'Що з цим робити?',
-              callback_data: 'ab_test:start_wheel',
-            },
+            { text: 'Пропустити →', callback_data: 'skip_email_before_result' },
           ]],
         },
       },
     )
-    // DISABLED 2025-05-25: replaced by direct send fix
-    // await sendLogMessage(ctx, finalProgress)
-    // await renderCurrentView(ctx, userId, finalProgress)
-    // await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_complete_result_ack').catch(() => undefined)
+    await setPendingTelegramIdentity({
+      chatId: String(ctx.chat?.id ?? ''),
+      telegramUserId: String(ctx.from?.id ?? ''),
+      telegramUserName: ctx.from?.username ?? null,
+      firstName: ctx.from?.first_name ?? null,
+      source: 'email_after_test',
+      requestId: null,
+    })
     return true
     // [FIX] early return — does NOT fall through to next question render
   }
 
-  // ── NON-COMPLETE (questions 1-7) ──────────────────────────
+  // ── NON-COMPLETE (questions 1-4) ──────────────────────────
   const nextQuestion = nextQuestionId ? getAbTestQuestion(nextQuestionId) : null
   if (!nextQuestion) {
     await renderCurrentView(ctx, userId, next)

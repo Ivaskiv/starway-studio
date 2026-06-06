@@ -58,7 +58,8 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
     text: 'Твій результат готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.',
     buttons: [
       [{ text: 'Показати результат', callback_data: 'ab_test:show_result' }],
-      [{ text: 'Хочу у ФОКУС', callback_data: 'open_focus_payment' }],
+      [{ text: 'Почати тест заново', callback_data: 'ab_test:restart' }],
+      [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
     ],
   })
 }
@@ -66,7 +67,7 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
 export function offerShownMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Нагадую про оффер ФОКУС. Доступ ще відкритий, можна зайти прямо зараз.',
-    buttons: [[{ text: 'Хочу у ФОКУС', callback_data: 'open_focus_payment' }]],
+    buttons: [[{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }]],
   })
 }
 
@@ -77,6 +78,16 @@ export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
       [{ text: 'Календар Zoom-практик', callback_data: 'focus:calendar' }],
       [{ text: 'ABSystem AI', callback_data: 'focus:ai' }],
     ],
+  })
+}
+
+export function magicLinkReadyMessage(link: string): ReturnType<typeof withKeyboard> {
+  return withKeyboard({
+    text: [
+      'Ось твоє магічне посилання для входу без пароля.',
+      'Відкрий його на цьому або іншому пристрої — воно діє 15 хвилин.',
+    ].join('\n\n'),
+    buttons: [[{ text: 'Відкрити платформу', url: link }]],
   })
 }
 

@@ -5,7 +5,7 @@ export type PendingTelegramIdentity = {
   telegramUserId: string
   telegramUserName: string | null
   firstName: string | null
-  source: 'telegram_start' | 'telegram_miniapp'
+  source: 'telegram_start' | 'telegram_miniapp' | 'email_after_test'
   requestId: string | null
   createdAt: string
 }

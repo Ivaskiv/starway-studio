@@ -1,6 +1,11 @@
 // backend/src/products/ab-system/content/abTest.followups.ts
 
 import type { AbTestResultKey } from './abTest.results.js'
+import { interpolateFirstName } from './abTest.results.js'
+import {
+  getTestDriveFollowupBodyLines,
+  type TestDriveContentVersion,
+} from './testDrive.content.js'
 
 export type FollowupCopy = {
   title: string
@@ -52,22 +57,19 @@ export type AbTestFollowupTimerId =
   | 'PLATFORM_INVITE_AFTER_ZOOM_2'
   | 'PLATFORM_INVITE_AFTER_ZOOM'
 
-const CTA_FOCUS = 'Приєднатись'
-const CTA_FOCUS_ALT = 'Хочу у ФОКУС'
-const CTA_PAY = 'Оплатити ФОКУС'
-const CTA_JOIN_FOCUS = 'Приєднатись до ФОКУСУ'
+const CTA_JOIN_FOCUS = 'Приєднатись до ФОКУСУ →'
 
 const DOJIM_24H: FollowupCopy = {
   title: 'ФОКУС',
   body: [
-    'Ти вже побачила свій результат у тесті.',
+    '{firstName}, ти вже побачила свій результат у тесті.',
     'Тепер головне — не залишити це просто думкою.',
     'Бо часто так і буває: прочитала, впізнала себе, погодилась,',
     'і знову пішла у свій звичний день.',
     '',
     'Якщо хочеш розібрати свою ситуацію не в голові, а на практиці — заходь у ФОКУС.',
-    '1 місяць — 780 грн',
-    '3 місяці — 1990 грн',
+    '1 місяць — 15 євро',
+    '3 місяці — 39 євро',
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
 }
@@ -75,7 +77,7 @@ const DOJIM_24H: FollowupCopy = {
 const DOJIM_48H: FollowupCopy = {
   title: 'ФОКУС',
   body: [
-    'Можна ще місяць думати про те, що ти давно хочеш зробити.',
+    '{firstName}, можна ще місяць думати про те, що ти давно хочеш зробити.',
     'А можна взяти одну ситуацію і нарешті подивитись чесно:',
     '— що ти відкладаєш;',
     '— чому переносиш;',
@@ -84,55 +86,57 @@ const DOJIM_48H: FollowupCopy = {
     '',
     'Саме для цього є ФОКУС.',
   ].join('\n'),
-  cta: CTA_FOCUS_ALT,
+  cta: CTA_JOIN_FOCUS,
 }
 
 const DOJIM_72H: FollowupCopy = {
   title: 'ФОКУС',
   body: [
-    'Я не буду переконувати тебе «терміново змінювати життя».',
+    '{firstName}, я не буду переконувати тебе «терміново змінювати життя».',
     'Але якщо є щось, що ти давно відкладаєш, воно саме не зникне.',
     'Його треба побачити. Розібрати. І довести до кроку.',
     '',
     'У ФОКУСІ ми це робимо на живих Zoom-практиках.',
   ].join('\n'),
-  cta: CTA_PAY,
+  cta: CTA_JOIN_FOCUS,
 }
 
 function buildBranchCopy(): BranchFollowupCopy {
   return {
     RESULT_FOLLOWUP_24H: {
       title: 'ФОКУС',
-      body: `Ти вже побачила свій результат у тесті.
+      body: `{firstName}, ти вже побачила свій результат у тесті.
 
 Тепер головне — не залишити це просто думкою.
 
 Часто так:
 прочитала, впізнала — і знову повернулась у звичний день.`,
-      cta: CTA_FOCUS,
+      cta: CTA_JOIN_FOCUS,
     },
 
     RESULT_FOLLOWUP_48H: {
       title: 'ФОКУС',
-      body: `Можна ще місяць думати про те, що давно хочеш зробити.
+      body: `{firstName}, можна ще місяць думати про те, що давно хочеш зробити.
 
 А можна взяти одну ситуацію і нарешті подивитись чесно:
 що відкладаєш;
 чому переносиш;
 який крок реально зробити.`,
-      cta: CTA_FOCUS_ALT,
+      cta: CTA_JOIN_FOCUS,
     },
 
     RESULT_FOLLOWUP_72H: {
       title: 'ФОКУС',
-      body: `Я не буду переконувати «терміново змінювати життя».
+      body: `{firstName}, я не буду переконувати «терміново змінювати життя».
 
 Але якщо є щось, що давно відкладаєш — воно само не зникне.
 
 Його треба побачити.
 Розібрати.
-Довести до кроку.`,
-      cta: CTA_PAY,
+Довести до кроку.
+
+[ЦИТАТА УЧАСНИЦІ]`,
+      cta: CTA_JOIN_FOCUS,
     },
 
     RESULT_DOJIM_24H: DOJIM_24H,
@@ -141,25 +145,25 @@ function buildBranchCopy(): BranchFollowupCopy {
 
     RESULT_DOJIM_5D: {
       title: 'ФОКУС',
-      body: `Задай собі одне питання:
+      body: `{firstName}, задай собі одне питання:
 
 Те, що я відкладаю, само вирішиться за цей місяць?
 
 Якщо чесна відповідь «ні» — не чекай ідеального моменту.`,
-      cta: CTA_FOCUS,
+      cta: CTA_JOIN_FOCUS,
     },
 
     RESULT_DOJIM_7D: {
       title: 'ФОКУС',
-      body: `Останнє нагадування про ФОКУС.
+      body: `{firstName}, останнє нагадування про ФОКУС.
 
 Якщо пройшла тест і впізнала себе — тема вже є.
 
 Можна залишити в голові.
 А можна прийти і розібрати.
 
-780 грн / 1 місяць | 1990 грн / 3 місяці`,
-      cta: CTA_PAY,
+15 євро / 1 місяць | 39 євро / 3 місяці`,
+      cta: CTA_JOIN_FOCUS,
     },
   }
 }
@@ -176,41 +180,41 @@ const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = 
   DOJIM_0_IMMEDIATE: {
     title: 'ФОКУС',
     body: [
-      'Супер.',
+      '{firstName}, супер.',
       'Ось доступ у ФОКУС:',
       '',
-      '1 місяць — 780 грн',
-      '3 місяці — 1990 грн',
+      '1 місяць — 15 євро',
+      '3 місяці — 39 євро',
       '',
       'Після оплати ти отримаєш посилання на закритий Telegram-канал',
       'і доступ до живих Zoom-практик.',
     ].join('\n'),
-    cta: 'Оплатити',
+    cta: CTA_JOIN_FOCUS,
   },
   PAYMENT_REMINDER_24H: {
     title: 'ФОКУС',
     body: 'Якщо хочеш продовжити, контекст уже збережено.',
-    cta: CTA_PAY,
+    cta: CTA_JOIN_FOCUS,
   },
   PAYMENT_REMINDER_48H: {
     title: 'ФОКУС',
     body: 'Повертаємось до рішення: що саме дає тобі зараз найбільше користі.',
-    cta: CTA_PAY,
+    cta: CTA_JOIN_FOCUS,
   },
   PAYMENT_REMINDER_72H: {
     title: 'ФОКУС',
     body: 'Незавершений крок теж впливає на ритм. Можна мʼяко повернутись до нього.',
-    cta: CTA_FOCUS,
+    cta: CTA_JOIN_FOCUS,
   },
   PAYMENT_REMINDER_5D: {
     title: 'ФОКУС',
     body: 'Пауза вже показує ціну відкладання. Повернутись можна одним кроком.',
-    cta: CTA_FOCUS,
+    cta: CTA_JOIN_FOCUS,
   },
   PAYMENT_REMINDER_7D: {
     title: 'ФОКУС',
     body: 'Можна повернутись до збереженого прогресу і свого темпу.',
-    cta: CTA_FOCUS,
+    cta: CTA_JOIN_FOCUS,
   },
   ZOOM_REMINDER_24H: {
     title: 'Zoom через добу',
@@ -242,12 +246,47 @@ const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = 
 export function resolveAbTestFollowupCopy(
   timerId: AbTestFollowupTimerId,
   resultKey?: AbTestResultKey | null,
+  version: TestDriveContentVersion = 'legacy',
+  options: { firstName?: string | null } = {},
 ) {
   if (resultKey && timerId in AB_TEST_FOLLOWUPS[resultKey]) {
-    return AB_TEST_FOLLOWUPS[resultKey][timerId as keyof BranchFollowupCopy]
+    const base = AB_TEST_FOLLOWUPS[resultKey][timerId as keyof BranchFollowupCopy]
+    const extraBodyLines = getTestDriveFollowupBodyLines({
+      timerId,
+      resultKey,
+      version,
+    })
+
+    if (!extraBodyLines.length) {
+      return {
+        ...base,
+        body: interpolateFirstName(base.body, options.firstName),
+      }
+    }
+
+    return {
+      ...base,
+      body: interpolateFirstName([base.body, ...extraBodyLines].join('\n'), options.firstName),
+    }
   }
 
-  return GENERIC_FOLLOWUPS[timerId] ?? AB_TEST_FOLLOWUPS.action.RESULT_FOLLOWUP_24H
+  const generic = GENERIC_FOLLOWUPS[timerId] ?? AB_TEST_FOLLOWUPS.action.RESULT_FOLLOWUP_24H
+  const extraBodyLines = getTestDriveFollowupBodyLines({
+    timerId,
+    resultKey,
+    version,
+  })
+  if (!extraBodyLines.length) {
+    return {
+      ...generic,
+      body: interpolateFirstName(generic.body, options.firstName),
+    }
+  }
+
+  return {
+    ...generic,
+    body: interpolateFirstName([generic.body, ...extraBodyLines].join('\n'), options.firstName),
+  }
 }
 
 export const AB_TEST_LIFECYCLE_REMINDERS: Record<LifecycleReminderKey, FollowupCopy> = {
@@ -279,17 +318,17 @@ export const AB_TEST_LIFECYCLE_REMINDERS: Record<LifecycleReminderKey, FollowupC
   R6_RESULT_48H: {
     title: 'Повернись до результату',
     body: 'Минуло 48 годин після тесту. Результат працює тільки коли переходиш до дії.',
-    cta: 'Хочу у ФОКУС',
+    cta: CTA_JOIN_FOCUS,
   },
   R7_OFFER_6H: {
     title: 'Оффер ФОКУС активний',
     body: 'Минуло 6 годин після показу офферу. Можеш зайти у ФОКУС у зручний момент.',
-    cta: 'Хочу у ФОКУС',
+    cta: CTA_JOIN_FOCUS,
   },
   R8_OFFER_3D: {
     title: 'Останнє нагадування про оффер',
     body: 'Минуло 3 дні. Якщо готова рухатись у темпі з підтримкою, заходь у ФОКУС.',
-    cta: 'Оплатити ФОКУС',
+    cta: 'Оплатити 1 місяць — 15 євро',
   },
   Z1_ZOOM_MON_1800: {
     title: 'Zoom сьогодні о 19:00',

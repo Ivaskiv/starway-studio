@@ -1,5 +1,6 @@
 import type { UserLifecycleState } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
+import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 import { UserCreationSource } from '../../user/userCreation.service.js'
 import { upsertTelegramBinding } from '../services/linking.service.js'
@@ -7,6 +8,7 @@ import { clearPendingTelegramIdentity, getPendingTelegramIdentity, isValidEmail,
 import { planMessage } from '../conversation/delivery/planDelivery.js'
 import {
   type StartContext,
+  getStartPayload,
   resolveLinkedUserIdFromContext,
   syncAccessAwareChatEntryPoints,
 } from './start.shared.js'
@@ -15,12 +17,15 @@ import {
   aiMentorMenuMessage,
   fallbackByLifecycle,
   focusPaidMessage,
+  magicLinkReadyMessage,
   offerShownMessage,
   testDoneMessage,
   testInProgressMessage,
   welcomeMessage,
   zoomMemberMessage,
 } from './abTest.start.js'
+import { generateMagicLink } from '../../deeplinks/service.js'
+import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTest.service.js'
 
 export * from './start.shared.js'
 
@@ -136,6 +141,24 @@ export async function handlePendingTelegramIdentityText(ctx: StartContext, text:
     },
   })
 
+  if (pending.source === 'email_after_test') {
+    if (!existingByTelegram) {
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'telegram_identity_email_after_test_missing_user',
+        'Не вдалося знайти прив’язаний акаунт. Натисни /start і спробуй ще раз.',
+      )
+      return true
+    }
+
+    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = existingByTelegram.id
+    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
+    await clearPendingTelegramIdentity(chatId)
+    await handleAbTestEmailCaptureText(ctx, existingByTelegram.id, email)
+    return true
+  }
+
   if (existingByTelegram) {
     const hasRealEmail =
       Boolean(existingByTelegram.email) && !existingByTelegram.email.includes('@placeholder.starway.app')
@@ -174,7 +197,8 @@ export async function handlePendingTelegramIdentityText(ctx: StartContext, text:
     })
 
     await clearPendingTelegramIdentity(chatId)
-    ;(ctx.state as { userId?: string | null }).userId = existingByTelegram.id
+    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = existingByTelegram.id
+    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
     await handleStart(ctx)
     return true
   }
@@ -195,9 +219,10 @@ export async function handlePendingTelegramIdentityText(ctx: StartContext, text:
         currentState: 'NEW',
         currentStep: 'LINK_TELEGRAM',
         activeRole: 'USER',
+        telegramLinkedAt: new Date(),
       },
     },
-  )
+    )
 
   await upsertTelegramBinding({
     userId: resolved.user.id,
@@ -208,7 +233,8 @@ export async function handlePendingTelegramIdentityText(ctx: StartContext, text:
   })
 
   await clearPendingTelegramIdentity(chatId)
-  ;(ctx.state as { userId?: string | null }).userId = resolved.user.id
+  ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = resolved.user.id
+  ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
   await handleStart(ctx)
   return true
 }
@@ -232,6 +258,7 @@ export async function handleStart(ctx: StartContext) {
 
   try {
     const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
+    const startPayload = getStartPayload(ctx)
     let resolvedUserId = await resolveLinkedUserIdFromContext(ctx)
 
     if (!resolvedUserId) {
@@ -256,6 +283,7 @@ export async function handleStart(ctx: StartContext) {
             telegramChatId: chatId,
             telegramUserName: ctx.from?.username ?? null,
             firstName: ctx.from?.first_name ?? null,
+            telegramLinkedAt: new Date(),
           },
         },
       )
@@ -278,9 +306,39 @@ export async function handleStart(ctx: StartContext) {
     }
 
     const user = await loadUserSnapshot(resolvedUserId)
+    const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
+    const showOfferFromLifecycle =
+      user.lifecycleState === 'OFFER_SHOWN' &&
+      Boolean(abTestProgress?.result_opened_at)
 
-    ;(ctx.state as { userId?: string | null }).userId = user.id
+    if (user.lifecycleState === 'OFFER_SHOWN' && !showOfferFromLifecycle) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          lifecycleState: 'TEST_DONE',
+          offerShownAt: null,
+        },
+      }).catch(() => undefined)
+      user.lifecycleState = 'TEST_DONE'
+    }
+
+    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = user.id
+    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
     await syncAccessAwareChatEntryPoints(chatId, user.id)
+
+    if (startPayload.startsWith('ml_')) {
+      const requestToken = startPayload.replace(/^ml_/, '').trim()
+      const magicLink = await generateMagicLink(user.id)
+
+      console.log('[START] magic login requested', {
+        userId: user.id,
+        telegramId: telegramUserId,
+        requestToken: requestToken || null,
+      })
+
+      await deliver(ctx, magicLinkReadyMessage(magicLink))
+      return
+    }
 
     switch (user.lifecycleState) {
       case 'NEW_USER': {
@@ -302,7 +360,7 @@ export async function handleStart(ctx: StartContext) {
         return
       }
       case 'OFFER_SHOWN': {
-        await deliver(ctx, offerShownMessage())
+        await deliver(ctx, showOfferFromLifecycle ? offerShownMessage() : testDoneMessage())
         return
       }
       case 'FOCUS_PAID': {

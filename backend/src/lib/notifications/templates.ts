@@ -3,12 +3,14 @@ import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 export type { AbTestFollowupTimerId } from '@/products/ab-system/content/abTest.followups.js'
 import { resolveAbTestFollowupCopy, type AbTestFollowupTimerId } from '@/products/ab-system/content/abTest.followups.js'
 import type { AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
+import type { TestDriveContentVersion } from '@/products/ab-system/content/testDrive.content.js'
 
 type NotificationTemplateKey = NotificationEvent | 'MISSED_DAY_CATCHUP' | AbTestFollowupTimerId
 
 type NotificationContext = {
   userName?: string
   resultKey?: AbTestResultKey | null
+  contentVersion?: TestDriveContentVersion
   streakDays?: number
   tasksLeft?: number
   daysUntilExpiry?: number
@@ -174,14 +176,16 @@ export function buildNotificationContent(
     case 'ZOOM_REMINDER_2H':
     case 'PLATFORM_INVITE_AFTER_ZOOM_1':
     case 'PLATFORM_INVITE_AFTER_ZOOM_2': {
-      const copy = resolveAbTestFollowupCopy(type as AbTestFollowupTimerId, ctx.resultKey ?? null)
-      const isPlainReminder = type === 'ZOOM_REMINDER_24H'
-        || type === 'ZOOM_REMINDER_2H'
-        || type === 'PLATFORM_INVITE_AFTER_ZOOM_1'
-        || type === 'PLATFORM_INVITE_AFTER_ZOOM_2'
+      const followupName = userName === 'Привіт' ? null : userName
+      const copy = resolveAbTestFollowupCopy(
+        type as AbTestFollowupTimerId,
+        ctx.resultKey ?? null,
+        ctx.contentVersion ?? 'legacy',
+        { firstName: followupName },
+      )
       return {
         title: copy.title,
-        body: isPlainReminder ? copy.body : `${userName}, ${copy.body}`,
+        body: copy.body,
         ctaText: copy.cta,
       }
     }

@@ -8,7 +8,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './app.js'
 import { prisma, withRetry } from './db/client.js'
-import { bot, coachBot, launchBot, testBot } from './lib/telegram.js'
+import { bot, coachBot, launchBot, seedBotInfo, testBot } from './lib/telegram.js'
 import { registerDailyTelegramCommands } from './modules/daily-cycle/telegram.js'
 import { readCoachBotToken } from './modules/telegram-mentor/runtime/botConfig.js'
 import { resolveRuntimeBotRegistry } from './platform/index.js'
@@ -129,6 +129,12 @@ async function startTelegramBot() {
         polling: TELEGRAM_POLLING_ENABLED,
         webhook: Boolean(TELEGRAM_WEBHOOK_URL),
         production: isProduction,
+      })
+
+      seedBotInfo(bot, {
+        id: 0,
+        firstName: 'Starway',
+        username: telegramBotConfig.username,
       })
 
       try {

@@ -27,15 +27,20 @@ import {
   getAbTestResultDefinition,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
+import { resolveAbTestFollowupCopy } from '../content/abTest.followups.js'
+import { resolveTestDriveVersion } from '../content/testDrive.content.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { buildWebAppButton, resolveBrowserTestUrlOrNull } from './abTest.buttons.js'
 import {
   getAbTestProgressFromUiSettings,
   getUiSettings,
+  ensureAbTestEmailCapturedFromProfile,
   loadUserUiSettings,
   saveAbTestProgress,
 } from './abTest.progress.js'
 import { planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
+import { interpolateFirstName } from '../content/abTest.results.js'
+import { setPendingTelegramIdentity } from '../../../modules/telegram-mentor/services/pendingIdentity.service.js'
 
 const QUESTION_LABELS: Record<AbTestQuestionId, string> = {
   q1: 'Що відбувається',
@@ -146,6 +151,170 @@ export async function sendActionMessage(
   await planMessage(ctx, 'ctx.reply', 'ab_test_send_action_reply', text, markup.reply_markup, 'Markdown')
 }
 
+export async function renderAbTestCompletedResult(
+  ctx: Context,
+  userId: string,
+  progress: AbTestProgress,
+): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firstName: true, telegramUserName: true, settings: true },
+  })
+  console.info('[AB_TEST_Q8_TRACE] result_render_entered', {
+    userId,
+    resultKey: progress.result_key,
+    emailStage: progress.email_stage,
+  })
+  const resolvedAnswers = progress.answers.flatMap((item) => {
+    const answer = getAbTestAnswer(item.question_id, item.answer_id)
+    return answer
+      ? [
+          {
+            category: answer.category as any,
+            text: answer.text,
+            score: answer.score,
+            questionId: item.question_id,
+            answerId: item.answer_id,
+          },
+        ]
+      : []
+  })
+
+  const snapshot = buildBehavioralSnapshot({ answers: resolvedAnswers })
+  const canonicalResult = resolveCanonicalTestResult(
+    progress.answers.map((answer) => ({
+      questionId: answer.question_id,
+      answerId: answer.answer_id,
+    }))
+  )
+  const dominantBlock = canonicalResult.type
+  const prompt = await PromptProvider.getPrompt(
+    `test.result.${String(dominantBlock).toLowerCase()}`,
+    {
+      userName: user?.firstName || 'Сяюча зірка',
+      unresolvedGoal: snapshot.unresolvedGoal || '',
+      dominantBlock: String(dominantBlock),
+    }
+  )
+  const next = buildAbTestProgressPatch(progress, {
+    result_opened_at: progress.result_opened_at ?? new Date().toISOString(),
+    last_event_at: new Date().toISOString(),
+    last_message_key: resolveCanonicalMessageKeyByTestEvent('RESULT_OPENED'),
+  })
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      currentStep: 'START_FLOW',
+      settings: {
+        ...getUiSettings(user?.settings),
+        ui: {
+          ...getUiSettings(getUiSettings(user?.settings).ui),
+          dominantBlock,
+          [AB_TEST_UI_SETTINGS_KEY]: next,
+        },
+      } as Prisma.InputJsonValue,
+    },
+  })
+
+  await trackAbTestEvent({
+    userId,
+    type: 'AB_TEST_RESULT_OPENED',
+    state: next.stage,
+    payload: {
+      result_key: next.result_key,
+      dominantBlock,
+      prompt_source: prompt.source,
+    } satisfies Prisma.JsonObject,
+  })
+
+  const resultKey = dominantBlock.toLowerCase() as AbTestResultKey
+  const resultDef = getAbTestResultDefinition(resultKey)
+  const flow = buildAbTestResultFlow(next)
+  const firstName = user?.firstName ?? user?.telegramUserName ?? null
+  flow.body = [`*${resultDef.title}*`, '', interpolateFirstName(resultDef.body, firstName)]
+  await deliverTelegramFlow(ctx, flow, 'reply')
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export async function renderAbTestFocusOffer(
+  ctx: Context,
+  userId: string,
+  progress: AbTestProgress,
+): Promise<void> {
+  if (!progress.result_key) {
+    return
+  }
+
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+  if (!chatId) {
+    return
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firstName: true, telegramUserName: true },
+  })
+  const version = progress.started_at ? resolveTestDriveVersion(progress.started_at) : 'legacy'
+  const copy = resolveAbTestFollowupCopy('DOJIM_0_IMMEDIATE', progress.result_key, version, {
+    firstName: user?.firstName ?? user?.telegramUserName ?? null,
+  })
+
+  await ctx.telegram.sendMessage(
+    chatId,
+    [copy.title, '', copy.body].join('\n'),
+    {
+      reply_markup: {
+        inline_keyboard: [[
+          {
+            text: copy.cta ?? 'Приєднатись до ФОКУСУ →',
+            callback_data: 'open_focus_payment',
+          },
+        ]],
+      },
+    },
+  )
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      offerShownAt: new Date(),
+      lifecycleState: 'OFFER_SHOWN',
+    },
+  }).catch(() => undefined)
+}
+
+export async function renderAbTestResultThenOffer(
+  ctx: Context,
+  userId: string,
+  progress: AbTestProgress,
+  options: { typing?: boolean } = {},
+): Promise<void> {
+  if (options.typing ?? true) {
+    await sleep(1000)
+  }
+  await renderAbTestCompletedResult(ctx, userId, progress)
+  await sleep(500)
+  await renderAbTestFocusOffer(ctx, userId, progress)
+}
+
+export async function renderAbTestPostEmailSubmitSequence(
+  ctx: Context,
+  userId: string,
+  progress: AbTestProgress,
+): Promise<void> {
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+  if (!chatId) {
+    return
+  }
+
+  await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+  await renderAbTestResultThenOffer(ctx, userId, progress)
+}
+
 export async function renderCurrentView(
   ctx: Context,
   userId: string,
@@ -159,104 +328,46 @@ export async function renderCurrentView(
   }
 
   if (progress.status === 'completed' && progress.result_key) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { firstName: true, settings: true },
-    })
-    const resolvedAnswers = progress.answers.flatMap((item) => {
-      const answer = getAbTestAnswer(item.question_id, item.answer_id)
-      return answer
-        ? [
-            {
-              category: answer.category as any,
-              text: answer.text,
-              score: answer.score,
-              questionId: item.question_id,
-              answerId: item.answer_id,
+    const resolvedProgress = await ensureAbTestEmailCapturedFromProfile(userId, progress)
+    if (resolvedProgress.email_stage === 'pending') {
+      console.info('[AB_TEST_Q8_TRACE] result_render_blocked_by_email_gate', {
+        userId,
+        resultKey: resolvedProgress.result_key,
+        emailStage: resolvedProgress.email_stage,
+      })
+      const chatId = ctx.chat?.id ?? ctx.from?.id
+      if (chatId) {
+        await ctx.telegram.sendMessage(
+          chatId,
+          'Введи email — надішлемо аналіз результату.\n\nАбо натисни «Пропустити» щоб продовжити без email.',
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: 'Пропустити →', callback_data: 'skip_email_before_result' },
+              ]],
             },
-          ]
-        : []
-    })
-
-    const snapshot = buildBehavioralSnapshot({ answers: resolvedAnswers })
-    const canonicalResult = resolveCanonicalTestResult(
-      progress.answers.map((answer) => ({
-        questionId: answer.question_id,
-        answerId: answer.answer_id,
-      }))
-    )
-    const dominantBlock = canonicalResult.type
-    const prompt = await PromptProvider.getPrompt(
-      `test.result.${String(dominantBlock).toLowerCase()}`,
-      {
-        userName: user?.firstName || 'Сяюча зірка',
-        unresolvedGoal: snapshot.unresolvedGoal || '',
-        dominantBlock: String(dominantBlock),
-      }
-    )
-    const next = buildAbTestProgressPatch(progress, {
-      result_opened_at: progress.result_opened_at ?? new Date().toISOString(),
-      last_event_at: new Date().toISOString(),
-      last_message_key: resolveCanonicalMessageKeyByTestEvent('RESULT_OPENED'),
-    })
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        currentStep: 'START_FLOW',
-        settings: {
-          ...getUiSettings(user?.settings),
-          ui: {
-            ...getUiSettings(getUiSettings(user?.settings).ui),
-            dominantBlock,
-            [AB_TEST_UI_SETTINGS_KEY]: next,
           },
-        } as Prisma.InputJsonValue,
-      },
-    })
-
-    await trackAbTestEvent({
-      userId,
-      type: 'AB_TEST_RESULT_OPENED',
-      state: next.stage,
-      payload: {
-        result_key: next.result_key,
-        dominantBlock,
-        prompt_source: prompt.source,
-      } satisfies Prisma.JsonObject,
-    })
-
-    // [FIX] ТЗ Блоки 4-8: єдине джерело — abTest.results.ts
-    const resultKey = dominantBlock.toLowerCase() as AbTestResultKey
-    const resultDef = getAbTestResultDefinition(resultKey)
-    const flow = buildAbTestResultFlow(next)
-    flow.body = [`*${resultDef.title}*`, '', resultDef.body]
-    await deliverTelegramFlow(ctx, flow, 'reply')
-
-    if (next.email_stage !== 'captured') {
-      await planMessage(
-        ctx,
-        'ctx.reply',
-        'ab_test_email_prompt',
-        [
-          'Хочете зберегти результат і отримати персональний план дій?',
-          'Введіть email — і ми відкриємо вам платформу.',
-        ].join('\n'),
-        {
-          inline_keyboard: [
-            [{ text: 'Ввести email', callback_data: 'ab_test:email_continue' }],
-            [{ text: 'Пропустити поки що', callback_data: 'ab_test:email_skip' }],
-          ],
-        },
-      )
+        )
+        await setPendingTelegramIdentity({
+          chatId: String(chatId),
+          telegramUserId: String(ctx.from?.id ?? ''),
+          telegramUserName: ctx.from?.username ?? null,
+          firstName: ctx.from?.first_name ?? null,
+          source: 'email_after_test',
+          requestId: null,
+        })
+      }
+      return
     }
+    await renderAbTestCompletedResult(ctx, userId, resolvedProgress)
 
     return
   }
 
   const activeIndex = progress.answers.length
+  const questionOrder = resolveAbTestQuestionOrder()
   const questionId =
-    resolveAbTestQuestionOrder()[Math.min(activeIndex, 7)] ?? 'q1'
+    questionOrder[Math.min(activeIndex, questionOrder.length - 1)] ?? 'q1'
   const question = getAbTestQuestion(questionId)
   const next = buildAbTestProgressPatch(progress, {
     stage: 'S2_TEST_QUESTIONS',
