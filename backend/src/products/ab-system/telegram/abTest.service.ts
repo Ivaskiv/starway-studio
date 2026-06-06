@@ -616,6 +616,13 @@ export async function handleAbTestEmailCaptureText(
       })
     }
 
+    await scheduleFollowups(persistedUserId, next, 'S3_TEST_RESULT').catch((error) => {
+      console.error('[AB_TEST_EMAIL_CAPTURE] followups_failed', {
+        userId: persistedUserId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+
     await renderAbTestPostEmailSubmitSequence(ctx, persistedUserId, next)
     return true
   } catch (error) {
@@ -1184,6 +1191,12 @@ export async function handleAbTestCallback(
       last_event_at: nowIso,
     })
     await saveAbTestProgress(userId, next)
+    await scheduleFollowups(userId, next, 'S3_TEST_RESULT').catch((error) => {
+      console.error('[AB_TEST_Q8_TRACE] result_followups_failed', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (chatId) {
       await clearPendingTelegramIdentity(String(chatId))
@@ -1617,12 +1630,6 @@ export async function handleAbTestCallback(
       await renderAbTestResultThenOffer(ctx, userId, resolvedProgress)
       return true
     }
-    await scheduleFollowups(userId, pendingEmailProgress, 'S3_TEST_RESULT').catch((error) => {
-      console.error('[AB_TEST_Q8_TRACE] result_followups_failed', {
-        userId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    })
     console.info('[AB_TEST_Q8_TRACE] result_email_prompt_sent', {
       userId,
       transition: 'ab_test_email_prompt_before_result',
