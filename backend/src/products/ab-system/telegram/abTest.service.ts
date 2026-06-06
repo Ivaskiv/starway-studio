@@ -982,7 +982,7 @@ export async function handleAbTestCallback(
     // FIX 2025-05-25 F2: send q1 using canonical answer ids to keep parser-compatible flow
     await ctx.telegram.sendMessage(
       q1ChatId,
-      `Питання 1 з 5\n\n${q1Question.prompt}`,
+      `Питання 1 з 8\n\n${q1Question.prompt}`,
       {
         reply_markup: {
           inline_keyboard: q1Question.answers.map((answer) => ([{
@@ -1246,7 +1246,7 @@ export async function handleAbTestCallback(
     // FIX 2025-05-25 D: bypass orchestrator dedupe for direct start flow message
     await ctx.telegram.sendMessage(
       startChatId,
-      'У тесті буде 5 питань.\n'
+      'У тесті буде 8 питань.\n'
       + 'Обирай той варіант, який найбільше схожий на тебе зараз.\n\n'
       + 'Не треба відповідати «правильно».\n'
       + 'Треба чесно.',

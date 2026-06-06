@@ -68,7 +68,7 @@ function buildQuestion(
   }
 }
 
-// ТЗ Блок 2 — активні 5 питань точно за текстом
+// ТЗ Блок 2 — активні 8 питань точно за текстом
 export const AB_TEST_QUESTIONS: Record<AbTestQuestionId, AbTestQuestion> = {
   q1: buildQuestion(
     'q1',
@@ -133,11 +133,11 @@ export const AB_TEST_QUESTIONS: Record<AbTestQuestionId, AbTestQuestion> = {
       decision: '«Я все розумію. Але чомусь не роблю. Що зі мною не так?»',
       action: '«Я стараюсь але нічого не виходить. Мабуть я роблю щось не так.»',
     },
-    null,
+    'q6',
   ),
   q6: buildQuestion(
     'q6',
-    '6. Чого тобі зараз найбільше не вистачає?',
+    'Чого тобі зараз найбільше не вистачає?',
     'decision',
     {
       state: 'Спокою і сил',
@@ -150,7 +150,7 @@ export const AB_TEST_QUESTIONS: Record<AbTestQuestionId, AbTestQuestion> = {
   ),
   q7: buildQuestion(
     'q7',
-    '7. Коли ти відкладаєш важливе, що за цим найчастіше стоїть?',
+    'Коли ти відкладаєш важливе, що за цим найчастіше стоїть?',
     'choice',
     {
       state: 'Я просто виснажена',
@@ -163,7 +163,7 @@ export const AB_TEST_QUESTIONS: Record<AbTestQuestionId, AbTestQuestion> = {
   ),
   q8: buildQuestion(
     'q8',
-    '8. Що тобі зараз допомогло б найбільше?',
+    'Що тобі зараз допомогло б найбільше?',
     'action',
     {
       state: 'Повернути себе в нормальний стан',
@@ -176,7 +176,7 @@ export const AB_TEST_QUESTIONS: Record<AbTestQuestionId, AbTestQuestion> = {
   ),
 } as const
 
-export const AB_TEST_QUESTION_ORDER = ['q1', 'q2', 'q3', 'q4', 'q5'] as const satisfies readonly AbTestQuestionId[]
+export const AB_TEST_QUESTION_ORDER = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8'] as const satisfies readonly AbTestQuestionId[]
 
 export function getAbTestQuestion(questionId: AbTestQuestionId): AbTestQuestion {
   return AB_TEST_QUESTIONS[questionId]
