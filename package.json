@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": ">=22 <23"
+    "node": "22.x"
   },
   "scripts": {
     "preinstall": "node -e \"const v=process.versions.node; const major=Number(v.split('.')[0]); if(major!==22){console.error('Node ' + v + ' is not allowed. Use Node 22.x only.'); process.exit(1);}\"",

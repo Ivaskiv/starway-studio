@@ -2,7 +2,7 @@
   "name": "starway-backend",
   "type": "module",
   "engines": {
-    "node": ">=22 <23"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && tsx watch --clear-screen=false --ignore dist --ignore node_modules --ignore .turbo --ignore coverage --ignore .git src/index.ts",

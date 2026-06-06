@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22 <23"
+    "node": "22.x"
   },
   "main": "./dist/providers/index.js",
   "types": "./dist/providers/index.d.ts",
