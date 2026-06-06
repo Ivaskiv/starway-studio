@@ -6,7 +6,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
-    "preinstall": "node -e \"const v=process.versions.node; const major=Number(v.split('.')[0]); if(major!==22){console.error(`Node ${v} is not allowed. Use Node 22.x only.`); process.exit(1);}\"",
+    "preinstall": "node -e \"const v=process.versions.node; const major=Number(v.split('.')[0]); if(major!==22){console.error('Node ' + v + ' is not allowed. Use Node 22.x only.'); process.exit(1);}\"",
     "dev": "concurrently -c blue,magenta -n backend,web \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\"",
     "dev:parallel": "bash scripts/dev-parallel.sh",
     "dev:tunnel": "concurrently -c blue,magenta,green -n backend,web,tunnel \"pnpm --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir apps/web dev'\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; pnpm --dir backend exec tsx ../scripts/dev/sync-ngrok.ts'\"",

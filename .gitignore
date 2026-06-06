@@ -88,6 +88,8 @@ cloudflared.log
 *.pem
 *.json
 !vercel.json
+!tsconfig.json
+!packages/ai/tsconfig.json
 
 ngrok.yml
 
