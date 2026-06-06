@@ -2,7 +2,7 @@
   "redirects": [
     {
       "source": "/",
-      "destination": "/focus",
+      "destination": "/lead-ab-test",
       "permanent": false
     }
   ],

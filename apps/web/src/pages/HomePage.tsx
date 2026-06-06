@@ -72,7 +72,7 @@ export default function HomePage() {
     navigate(resolveResumeRoute())
   }
   const handleLearnMore = () => { howItWorksRef.current?.scrollIntoView({ behavior: 'smooth' }) }
-  const handleOpenTest = () => navigate(ROUTES.AB_TEST)
+  const handleOpenTest = () => navigate(ROUTES.LEAD_AB_TEST)
   const handleSelectPlan = () => {
     if (user) navigate(ROUTES.SUBSCRIPTION)
     else openAuth()

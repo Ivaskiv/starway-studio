@@ -152,6 +152,7 @@ const PROTECTED_PATH_PREFIXES = [
 const PUBLIC_PATH_PREFIXES = [
   ROUTES.MINIAPP,
   ROUTES.AB_TEST,
+  ROUTES.LEAD_AB_TEST, // [FIX 2026-06-06] Lead landing page alias — public, no auth
   '/test', // [FIX] alias for AbTestPage — matches /test and /test/*
   '/focus',
   '/products',
@@ -176,6 +177,7 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
   '/planner',
   '/content',
   '/zoom-calendar',
+  ROUTES.LEAD_AB_TEST, // [FIX 2026-06-06] Exact public path for lead-ab-test landing
   ROUTES.MAGIC_LOGIN,
   ROUTES.TELEGRAM_SUCCESS,
   ROUTES.ONBOARDING_START,
@@ -816,6 +818,8 @@ function PublicAppRouter() {
   return (
     <Routes>
       <Route path={ROUTES.AB_TEST} element={<AbTestLandingRouteView />} />
+      <Route path={ROUTES.LEAD_AB_TEST} element={<AbTestLandingRouteView />} />
+      <Route path={`${ROUTES.LEAD_AB_TEST}/*`} element={<AbTestLandingRouteView />} />
       <Route path={ROUTES.AB_TEST_QUIZ} element={<AbTestPage />} />
       <Route path={`${ROUTES.AB_TEST_QUIZ}/*`} element={<AbTestPage />} />
       <Route
@@ -894,6 +898,8 @@ function GuestAppRouter() {
   return (
     <Routes>
       <Route path={ROUTES.AB_TEST} element={<AbTestLandingRouteView />} />
+      <Route path={ROUTES.LEAD_AB_TEST} element={<AbTestLandingRouteView />} />
+      <Route path={`${ROUTES.LEAD_AB_TEST}/*`} element={<AbTestLandingRouteView />} />
       <Route path={ROUTES.AB_TEST_QUIZ} element={<AbTestPage />} />
       <Route path={`${ROUTES.AB_TEST_QUIZ}/*`} element={<AbTestPage />} />
       <Route

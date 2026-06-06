@@ -1,4 +1,4 @@
-export const AB_TEST_LANDING_ROUTE = '/ab-test'
+export const AB_TEST_LANDING_ROUTE = '/lead-ab-test'
 export const AB_TEST_LANDING_QUIZ_ROUTE = '/test'
 export const AB_TEST_LANDING_RESULT_ROUTE = '/ab-test/result'
 
