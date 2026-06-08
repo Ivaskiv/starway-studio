@@ -44,8 +44,29 @@ if (existsSync(backendEnvPath)) {
   loadEnv({ path: backendEnvPath, override: true });
 }
 
-const databaseUrl = process.env.DATABASE_URL;
+function resolveSupabasePassword(input: string | undefined): string | undefined {
+  const raw = String(input ?? '').trim();
+  if (!raw) {
+    return undefined;
+  }
+
+  const password = process.env.SUPABASE_DB_PASSWORD?.trim();
+  if (!password) {
+    return raw;
+  }
+
+  try {
+    const url = new URL(raw);
+    url.password = password;
+    return url.toString();
+  } catch {
+    return raw.replace(/\$\{SUPABASE_DB_PASSWORD\}/g, password);
+  }
+}
+
+const databaseUrl = resolveSupabasePassword(process.env.DATABASE_URL);
 if (!databaseUrl) throw new Error('DATABASE_URL is required for seed');
+process.env.DATABASE_URL = databaseUrl;
 
 const prisma = new PrismaClient()
 

@@ -45,7 +45,35 @@ function normalizeDatabaseUrl(input: string | undefined): string | undefined {
   return raw
 }
 
-const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL)
+function resolveSupabasePassword(input: string | undefined): string | undefined {
+  const raw = String(input ?? '').trim()
+  if (!raw) {
+    return undefined
+  }
+
+  const password = process.env.SUPABASE_DB_PASSWORD?.trim()
+  if (!password) {
+    return normalizeDatabaseUrl(raw)
+  }
+
+  try {
+    const url = new URL(raw)
+    url.password = password
+    return normalizeDatabaseUrl(url.toString())
+  } catch {
+    return normalizeDatabaseUrl(raw.replace(/\$\{SUPABASE_DB_PASSWORD\}/g, password))
+  }
+}
+
+const databaseUrl = resolveSupabasePassword(process.env.DATABASE_URL)
+const directUrl = resolveSupabasePassword(process.env.DIRECT_URL)
+
+if (databaseUrl) {
+  process.env.DATABASE_URL = databaseUrl
+}
+if (directUrl) {
+  process.env.DIRECT_URL = directUrl
+}
 
 function isRecoverableConnectionMessage(message: string): boolean {
   const normalized = message.toLowerCase()
