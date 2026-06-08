@@ -77,6 +77,7 @@ export interface RegisterInput {
   password: string;
   name?: string;
   role?: UserRole;
+  phone?: string;
 }
 
 

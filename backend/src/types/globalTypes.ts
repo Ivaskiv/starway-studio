@@ -14,6 +14,7 @@ export type UserRole = 'SUPERADMIN' | 'EXPERT' | 'USER' | 'ADMIN' | 'MENTOR' | '
 export interface User {
   id: string
   expertId?: string | null
+  phone?: string | null
   email: string | null
   name?: string | null
   firstName: string | null
@@ -41,6 +42,7 @@ export interface UserWithSub extends User {
 export interface SafeUser {
   id: string
   expertId?: string | null
+  phone?: string | null
   email: string | null
   name: string | null
   firstName: string | null

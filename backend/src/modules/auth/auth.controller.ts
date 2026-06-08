@@ -105,6 +105,14 @@ function sendControllerError(res: Response, error: unknown) {
       })
     }
 
+    if (error.code === 'phone_already_registered') {
+      return res.status(error.status).json({
+        success: false,
+        message: 'Цей номер телефону вже використовується',
+        error: error.code,
+      })
+    }
+
     return res.status(error.status).json({ success: false, error: error.code })
   }
   return res.status(400).json({ success: false, error: 'internal_error' })
@@ -124,6 +132,7 @@ export async function register(req: Request, res: Response) {
       password,
       name,
       expertId,
+      phone: req.body?.phone,
       telegramId: String(telegramId ?? '').trim() || null,
       requestId: resolveRequestId(req),
     })

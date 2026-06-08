@@ -52,6 +52,13 @@ function validatePassword(value: string) {
   return undefined
 }
 
+function validatePhone(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  if (!/^\+?[0-9\s().-]{8,20}$/.test(trimmed)) return 'Невірний формат телефону'
+  return undefined
+}
+
 const FieldInfo = ({ field }: { field: AnyFieldApi }) =>
   field.state.meta.isTouched && !field.state.meta.isValid ? (
     <p className="text-red-400 text-sm">{field.state.meta.errors.join(', ')}</p>
@@ -63,13 +70,14 @@ export function RegisterForm({ email: initialEmail = '', name: initialName = '',
   const isSocialEmail = !!initialEmail
 
   const form = useForm({
-    defaultValues: { name: initialName, email: initialEmail, password: '', confirmPassword: '', companyWebsite: '' },
+    defaultValues: { name: initialName, email: initialEmail, phone: '', password: '', confirmPassword: '', companyWebsite: '' },
     onSubmit: async ({ value }) => {
       try {
         const response = await registerUser({
           email: value.email.trim(),
           password: value.password,
           name: value.name.trim(),
+          phone: value.phone.trim() || undefined,
           companyWebsite: value.companyWebsite,
           turnstileToken: getTurnstileToken(),
           telegramId: getTelegramRuntimeUserId(),
@@ -82,6 +90,8 @@ export function RegisterForm({ email: initialEmail = '', name: initialName = '',
             ? 'Схоже на автоматичну спробу. Спробуй ще раз.'
             : err?.data?.error === 'human_verification_required' || err?.data?.error === 'human_verification_failed'
               ? 'Потрібно підтвердити, що ти не бот.'
+            : err?.data?.error === 'phone_already_registered'
+              ? 'Цей номер телефону вже використовується'
             : err?.data?.error === 'email_already_registered'
             ? getToastMessage('auth.registerEmailExists', lang)
             : err?.data?.message || getToastMessage('auth.registerFailed', lang),
@@ -136,6 +146,20 @@ export function RegisterForm({ email: initialEmail = '', name: initialName = '',
                 readOnly={isSocialEmail}
                 className={isSocialEmail ? 'opacity-60 cursor-not-allowed' : ''} />
               {isSocialEmail && <p className="text-xs text-white/50">Email отримано з соцмережі</p>}
+              <FieldInfo field={field} />
+            </>
+          )}
+        </form.Field>
+
+        {/* Phone */}
+        <form.Field name="phone" validators={{ onChange: ({ value }) => validatePhone(value) }}>
+          {field => (
+            <>
+              <Input label="Телефон (необовʼязково)" type="tel" placeholder="+380501234567"
+                value={field.state.value} onChange={e => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                error={field.state.meta.isTouched && !field.state.meta.isValid ? field.state.meta.errors.join(', ') : undefined}
+                disabled={isLoading || form.state.isSubmitting} />
               <FieldInfo field={field} />
             </>
           )}

@@ -32,6 +32,11 @@ function normalizeEmail(email: string): string {
   return String(email ?? '').trim().toLowerCase()
 }
 
+function normalizePhone(phone: string | null | undefined): string | null {
+  const digits = String(phone ?? '').replace(/\D/g, '')
+  return digits ? `+${digits}` : null
+}
+
 async function validateExpertId(expertId: string | null | undefined): Promise<string | null> {
   const value = String(expertId ?? '').trim()
   if (!value) return null
@@ -230,6 +235,7 @@ async function resolveTelegramSocialUser(input: SocialAuthInput): Promise<{ id: 
 const USER_BASE_SELECT = Prisma.validator<Prisma.UserSelect>()({
   id: true,
   email: true,
+  phone: true,
     firstName: true,
   lastName: true,
   expertId: true,
@@ -510,6 +516,7 @@ function toUserWithSub(baseUser: PrismaUserBase, decorations: UserDecorations): 
   return {
     id: baseUser.id,
     email: baseUser.email,
+    phone: baseUser.phone ?? null,
         firstName: baseUser.firstName,
     lastName: baseUser.lastName,
     expertId: baseUser.expertId,
@@ -570,6 +577,7 @@ function toSafeUserFromBase(user: PrismaUserBase): SafeUser {
     id: user.id,
     email: user.email,
     name: null,
+    phone: user.phone ?? null,
         firstName: user.firstName,
     lastName: user.lastName,
     telegramUserId: user.telegramUserId,
@@ -959,11 +967,13 @@ export async function registerUser(input: {
   password: string
   name?: string | null
   expertId?: string | null
+  phone?: string | null
   telegramId?: string | null
   requestId?: string | null
 }): Promise<AuthTokensPayload> {
   const email = normalizeEmail(input.email)
   const password = String(input.password ?? '')
+  const phone = normalizePhone(input.phone)
 
   if (!email || !password) {
     throw new AuthServiceError('missing_fields', 400)
@@ -976,27 +986,71 @@ export async function registerUser(input: {
       : await validateExpertId(input.expertId)
     const existing = await prisma.user.findUnique({
       where: { email },
-      select: { id: true },
+      select: { id: true, passwordHash: true, phone: true },
     })
-
-    if (existing) {
-      throw new AuthServiceError('email_already_registered', 400)
-    }
 
     const passwordHash = await hashPassword(password)
 
-    const createdUser = await createUserCompat({
-      email,
-      passwordHash,
-      role: initialRole,
-      expertId: validatedExpertId,
-      source: UserCreationSource.SYSTEM,
-      requestId: input.requestId ?? null,
-    })
+    let userId: string
 
-    await linkTelegramIdentityToUser(createdUser.id, input.telegramId ?? null)
+    if (existing) {
+      if (existing.passwordHash) {
+        throw new AuthServiceError('email_already_registered', 400)
+      }
+      if (phone && existing.phone && existing.phone !== phone) {
+        throw new AuthServiceError('phone_already_registered', 400)
+      }
 
-    const user = await findUserById(createdUser.id)
+      if (phone && !existing.phone) {
+        const phoneOwner = await prisma.user.findUnique({
+          where: { phone },
+          select: { id: true },
+        })
+        if (phoneOwner && phoneOwner.id !== existing.id) {
+          throw new AuthServiceError('phone_already_registered', 400)
+        }
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          passwordHash,
+          phone: phone ?? existing.phone ?? null,
+        },
+        select: { id: true },
+      })
+
+      userId = updated.id
+    } else {
+      const resolved = await resolveOrCreateUser(
+        {
+          email,
+          phone: phone ?? undefined,
+          telegramId: input.telegramId ?? undefined,
+        },
+        {
+          source: UserCreationSource.SYSTEM,
+          requestId: input.requestId ?? null,
+          name: input.name ?? null,
+          role: initialRole,
+          expertId: validatedExpertId,
+          passwordHash,
+          createData: {
+            phone: phone ?? null,
+          },
+        },
+      )
+
+      if (resolved.conflict) {
+        throw new AuthServiceError(phone ? 'phone_already_registered' : 'email_already_registered', 400)
+      }
+
+      userId = resolved.user.id
+    }
+
+    await linkTelegramIdentityToUser(userId, input.telegramId ?? null)
+
+    const user = await findUserById(userId)
     if (!user) {
       throw new AuthServiceError('user_creation_failed', 500)
     }

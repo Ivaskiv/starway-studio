@@ -21,6 +21,11 @@ async function resolveExpertId(expertId: string | null | undefined): Promise<str
   return expert?.id ?? null
 }
 
+function normalizePhone(phone: string | null | undefined): string | null {
+  const digits = String(phone ?? '').replace(/\D/g, '')
+  return digits ? `+${digits}` : null
+}
+
 export async function registerLeadMagnet(req: Request, res: Response) {
   const { name, phone, email, packageType = 'free', expertId, utm_source, utm_campaign, product_id } = req.body as {
     name: string
@@ -40,12 +45,13 @@ export async function registerLeadMagnet(req: Request, res: Response) {
   try {
     const validatedExpertId = await resolveExpertId(expertId)
     const resolvedOwnerExpertId = validatedExpertId ?? await resolveDefaultMentorOwnerExpertId()
+    const normalizedPhone = normalizePhone(phone)
     // Генеруємо email якщо немає (phone-only реєстрація)
-    const userEmail = email ?? `${phone?.replace(/\D/g, '')}@starway.app`
+    const userEmail = email ?? `${normalizedPhone?.replace(/\D/g, '')}@starway.app`
 
     const passwordHash = await bcrypt.hash(Math.random().toString(36), 10)
     const resolved = await resolveOrCreateUser(
-      { email: userEmail },
+      { email: userEmail, phone: normalizedPhone ?? undefined },
       {
         source: UserCreationSource.LEAD_MAGNET,
         requestId: String(req.headers['x-request-id'] ?? '').trim() || null,
@@ -54,6 +60,7 @@ export async function registerLeadMagnet(req: Request, res: Response) {
         passwordHash,
         createData: {
           currentStep: 'START_FLOW',
+          phone: normalizedPhone ?? null,
         },
       },
     ).catch((error) => {

@@ -27,6 +27,7 @@ export interface RegisterInput {
   firstName?: string;
   lastName?: string;
   expertId?: string;
+  phone?: string;
 }
 
 export interface LoginInput {
@@ -62,6 +63,7 @@ export function toUserWithSub(user: PrismaUserWithRelations): UserWithSub {
     name: user.name,
     firstName: user.firstName,
     lastName: user.lastName,
+    phone: user.phone ?? null,
     role: user.role,
     activeRole: user.activeRole,
     lastLoginAt: user.lastLoginAt,
@@ -84,6 +86,7 @@ export interface PrismaUserWithRelations {
   firstName: string | null
   lastName: string | null
   expertId?: string | null
+  phone?: string | null
   role: UserRole
   activeRole: UserRole
   passwordHash: string | null

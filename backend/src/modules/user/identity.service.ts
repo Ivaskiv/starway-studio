@@ -10,6 +10,7 @@ type MergeReason = 'email_attach' | 'telegram_identity'
 type MergeCandidate = {
   id: string
   email: string
+  phone: string | null
   role: Role
   firstName: string | null
   lastName: string | null
@@ -106,6 +107,7 @@ async function getMergeCandidate(tx: Tx, userId: string): Promise<MergeCandidate
     select: {
       id: true,
       email: true,
+      phone: true,
       role: true,
             firstName: true,
       lastName: true,
@@ -946,6 +948,7 @@ async function mergeUsersTx(
       telegramUserId: null,
       telegramUserName: null,
       telegramChatId: null,
+      phone: null,
       deletedAt: new Date(),
     },
   })
@@ -960,6 +963,7 @@ async function mergeUsersTx(
       firstName: target.firstName ?? source.firstName,
       lastName: target.lastName ?? source.lastName,
       passwordHash: target.passwordHash ?? source.passwordHash,
+      phone: target.phone ?? source.phone,
       telegramUserId: target.telegramUserId ?? source.telegramUserId,
       telegramUserName: target.telegramUserName ?? source.telegramUserName,
       telegramChatId: target.telegramChatId ?? source.telegramChatId,

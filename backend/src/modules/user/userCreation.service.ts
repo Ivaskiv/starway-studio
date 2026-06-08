@@ -36,6 +36,7 @@ const AUTO_CREATION_DISABLED =
 function summarizePayload(data: Prisma.UserUncheckedCreateInput): Prisma.InputJsonValue {
   return {
     email: typeof data.email === 'string' ? data.email : null,
+    phone: typeof data.phone === 'string' ? data.phone : null,
     firstName: typeof data.firstName === 'string' ? data.firstName : null,
     role: typeof data.role === 'string' ? data.role : 'USER',
     expertId: typeof data.expertId === 'string' ? data.expertId : null,

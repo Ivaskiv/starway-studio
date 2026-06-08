@@ -71,6 +71,7 @@ export interface ProductMember {
 export interface User {
   id:        string
   expertId?: string | null
+  phone?:    string | null
   email:     string | null
   name:      string | null
   firstName: string | null

@@ -10,6 +10,7 @@ export function toSafeUser(user: UserWithSub): SafeUser {
 
   return {
     id: user.id,
+    phone: user.phone ?? null,
     email: user.email,
     name: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
     firstName: user.firstName,

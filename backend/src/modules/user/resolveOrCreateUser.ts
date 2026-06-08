@@ -8,11 +8,12 @@ export interface ResolveIdentity {
   telegramId?: string
   chatId?: string
   email?: string
+  phone?: string
   telegramUserName?: string
 }
 
 export interface ResolveResult {
-  user: { id: string; email: string; role: string }
+  user: { id: string; email: string; phone?: string | null; role: string }
   created: boolean
   linked: boolean
   conflict: boolean
@@ -31,6 +32,7 @@ type ResolveOptions = {
 type ResolveCandidate = {
   id: string
   email: string
+  phone: string | null
   role: string
   telegramUserId: string | null
   telegramChatId: string | null
@@ -42,6 +44,11 @@ type ResolveCandidate = {
 function normalizeEmail(email: string | null | undefined): string | null {
   const normalized = String(email ?? '').trim().toLowerCase()
   return normalized || null
+}
+
+function normalizePhone(phone: string | null | undefined): string | null {
+  const digits = String(phone ?? '').replace(/\D/g, '')
+  return digits ? `+${digits}` : null
 }
 
 function normalizeTelegramValue(value: string | null | undefined): string | null {
@@ -103,6 +110,7 @@ export async function resolveOrCreateUser(
   const telegramId = normalizeTelegramValue(identity.telegramId)
   const chatId = normalizeTelegramValue(identity.chatId)
   const email = normalizeEmail(identity.email)
+  const phone = normalizePhone(identity.phone)
   const telegramUserName = normalizeTelegramValue(identity.telegramUserName)
 
   const candidates = new Map<string, ResolveCandidate>()
@@ -118,6 +126,7 @@ export async function resolveOrCreateUser(
       select: {
         id: true,
         email: true,
+        phone: true,
         role: true,
         telegramUserId: true,
         telegramChatId: true,
@@ -137,6 +146,7 @@ export async function resolveOrCreateUser(
           select: {
             id: true,
             email: true,
+            phone: true,
             role: true,
             telegramUserId: true,
             telegramChatId: true,
@@ -156,6 +166,7 @@ export async function resolveOrCreateUser(
       select: {
         id: true,
         email: true,
+        phone: true,
         role: true,
         telegramUserId: true,
         telegramChatId: true,
@@ -174,6 +185,7 @@ export async function resolveOrCreateUser(
       select: {
         id: true,
         email: true,
+        phone: true,
         role: true,
         telegramUserId: true,
         telegramChatId: true,
@@ -218,7 +230,7 @@ export async function resolveOrCreateUser(
     }
 
     return {
-      user: winner ?? { id: Array.from(candidates.keys())[0] ?? '', email: email ?? '', role: 'USER', telegramUserId: null, telegramChatId: null, telegramUserName: null, telegramLinkedAt: null, createdAt: new Date(0) },
+      user: winner ?? { id: Array.from(candidates.keys())[0] ?? '', email: email ?? '', phone: phone ?? null, role: 'USER', telegramUserId: null, telegramChatId: null, telegramUserName: null, telegramLinkedAt: null, createdAt: new Date(0) },
       created: false,
       linked: mergedAny,
       conflict: false,
@@ -229,6 +241,7 @@ export async function resolveOrCreateUser(
     const found = candidates.values().next().value as {
       id: string
       email: string
+      phone: string | null
       role: string
       telegramUserId: string | null
       telegramChatId: string | null
@@ -287,6 +300,22 @@ export async function resolveOrCreateUser(
       }
     }
 
+    if (phone && found.phone && found.phone !== phone) {
+      await logConflict({
+        candidateIds: [found.id],
+        telegramId,
+        chatId,
+        email,
+        telegramUserName,
+      })
+      return {
+        user: found,
+        created: false,
+        linked: false,
+        conflict: true,
+      }
+    }
+
     if (email && email !== found.email && isPlaceholderEmail(found.email)) {
       const emailOwner = await prisma.user.findUnique({
         where: { email },
@@ -310,6 +339,25 @@ export async function resolveOrCreateUser(
       }
 
       updates.email = email
+      linked = true
+    } else if (email && email !== found.email && !isPlaceholderEmail(found.email)) {
+      await logConflict({
+        candidateIds: [found.id],
+        telegramId,
+        chatId,
+        email,
+        telegramUserName,
+      })
+      return {
+        user: found,
+        created: false,
+        linked: false,
+        conflict: true,
+      }
+    }
+
+    if (phone && !found.phone) {
+      updates.phone = phone
       linked = true
     }
 
@@ -360,6 +408,7 @@ export async function resolveOrCreateUser(
     data: {
       ...(options.createData ?? {}),
       email: resolvedEmail,
+      phone: phone ?? options.createData?.phone ?? null,
       firstName: options.name ?? options.createData?.firstName ?? null,
       passwordHash: options.passwordHash ?? options.createData?.passwordHash ?? null,
       role: options.role ?? options.createData?.role ?? 'USER',
@@ -372,11 +421,11 @@ export async function resolveOrCreateUser(
 
   const newUser = await prisma.user.findUnique({
     where: { id: created.id },
-    select: { id: true, email: true, role: true },
+    select: { id: true, email: true, phone: true, role: true },
   })
 
   return {
-    user: newUser ?? { id: created.id, email: resolvedEmail, role: String(options.role ?? 'USER') },
+    user: newUser ?? { id: created.id, email: resolvedEmail, phone: phone ?? null, role: String(options.role ?? 'USER') },
     created: true,
     linked: false,
     conflict: false,

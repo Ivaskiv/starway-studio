@@ -25,6 +25,7 @@ export interface RegisterInput {
   name?: string
   role?: UserRole
   expertId?: string
+  phone?: string
   companyWebsite?: string
   turnstileToken?: string
   telegramId?: string | null

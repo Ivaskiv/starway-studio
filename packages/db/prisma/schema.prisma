@@ -59,6 +59,7 @@ model User {
   id                     String                        @id @default(uuid())
   expertId               String?
   email                  String                        @unique
+  phone                  String?                       @unique
   firstName              String?
   lastName               String?
   telegramUserId         String?                       @unique

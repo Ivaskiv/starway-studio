@@ -8,6 +8,7 @@ export type UserRole =
 
 export interface SafeUser {
   id: string
+  phone?: string | null
   email: string | null
   name: string | null
   firstName: string | null

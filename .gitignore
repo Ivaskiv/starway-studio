@@ -70,6 +70,7 @@ pnpm-debug.log*
 *.sqlite
 *.db
 *.sql
+!packages/db/prisma/migrations/**/*.sql
 
 # ============================================
 # PRISMA
