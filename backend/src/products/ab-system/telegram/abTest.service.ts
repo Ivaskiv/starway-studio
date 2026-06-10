@@ -16,7 +16,11 @@ import {
   type AbTestProgress,
 } from '../../../core/state-machine/abTestFoundation.js'
 import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
-import { absystemButtons, absystemContent } from '@/products/absystem/config/absystem.content.js'
+import {
+  absystemButtons,
+  absystemContent,
+  AB_TEST_START_STEP2,
+} from '@/products/absystem/config/absystem.content.js'
 import { prisma } from '../../../db/client.js'
 import { abTestContent } from '../content/abTest.content.js'
 import {
@@ -26,8 +30,17 @@ import {
 } from '../content/abTest.faq.js'
 import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
-import { BLOCK10_FOCUS, BLOCK9_POST_RESULT, getAbTestResultDefinition, interpolateFirstName, type AbTestResultKey } from '../content/abTest.results.js'
-import { getTestDriveInsideSurface, getTestDriveInsideResponseSurface } from '../content/testDrive.content.js'
+import {
+  BLOCK10_FOCUS,
+  BLOCK9_POST_RESULT,
+  getAbTestResultDefinition,
+  interpolateFirstName,
+  type AbTestResultKey,
+} from '../content/abTest.results.js'
+import {
+  getTestDriveInsideSurface,
+  getTestDriveInsideResponseSurface,
+} from '../content/testDrive.content.js'
 import {
   FOCUS_ALREADY_ACTIVE_MSG,
   FOCUS_PAYMENT_ISSUE_COACH_MSG,
@@ -43,43 +56,45 @@ import {
 } from './abTest.aiSeller.js'
 import { buildEcosystemPaymentCheckoutSession } from '../../../modules/subscriptions/payments/business.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
-import { buildWebAppButton, resolveBrowserTestUrlOrNull } from './abTest.buttons.js'
 import {
   parseAbTestCallback,
   type AbTestCallbackAction,
 } from './abTest.callback.js'
 import {
   getAbTestProgressFromUiSettings,
-  buildAbTestEmailGateMessage,
-  getAbTestProfileEmail,
   loadAbTestProgress,
   loadUserUiSettings,
   saveAbTestProgress,
 } from './abTest.progress.js'
-import {
-  clearPendingTelegramIdentity,
-  setPendingTelegramIdentity,
-} from '../../../modules/telegram-mentor/services/pendingIdentity.service.js'
+import { cacheGet, cacheSet } from '../../../lib/cache/index.js'
+import { clearPendingTelegramIdentity } from '../../../modules/telegram-mentor/services/pendingIdentity.service.js'
 import { scheduleFollowups } from './abTest.scheduler.js'
 import {
   renderCurrentView,
-  renderAbTestResultThenOffer,
   renderAbTestPostEmailSubmitSequence,
+  renderAbTestEmailGate,
   sendActionMessage,
 } from './abTest.views.js'
-import { planAck, planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
+import {
+  planAck,
+  planMessage,
+} from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus.access.js'
-import { getConfiguredFocusProduct } from '@/modules/subscriptions/payments/focus.access.js'
 import { sendAbTestBlock12Welcome } from '@/modules/subscriptions/payments/callback.notifications.js'
-import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { markAbTestPaymentSuccess } from './abTest.markers.js'
 import { attachEmailToUser } from '../../../modules/user/identity.service.js'
 import { upsertTelegramBinding } from '../../../modules/telegram-mentor/services/linking.service.js'
-import { buildWebDeepLink, generateDeepLink } from '../../../modules/deeplinks/service.js'
+import {
+  buildWebDeepLink,
+  generateDeepLink,
+} from '../../../modules/deeplinks/service.js'
 import { sendMagicLoginEmail } from '../../../modules/auth/mail.service.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { alertCoachAboutPaymentIssue } from '@/modules/subscriptions/payments/coachAlert.service.js'
 import { coachBot } from '../../../lib/telegram.js'
+import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
+import { canSendAdvertising } from '@/modules/telegram-mentor/core/advertisingGuard.js'
+
 export {
   observeAbTestCanonicalAction,
   resolveAbTestButtonLabel,
@@ -100,6 +115,8 @@ export { resolveAiSellerMode }
 export type { AbTestCallbackAction }
 
 const AB_TEST_START_DEBUG_PREFIX = '[AB_TEST_START_DEBUG]'
+const AB_TEST_EMAIL_SKIP_GUARD_TTL_MS = 10_000
+const activeEmailSkipGuards = new Map<string, number>()
 
 function logAbTestStartDebug(event: string, payload: Record<string, unknown>) {
   console.info(AB_TEST_START_DEBUG_PREFIX, event, payload)
@@ -119,7 +136,7 @@ function logFlowRender(event: string, payload: Record<string, unknown>) {
 
 async function resolveAbTestEmailTargetUserId(
   ctx: Context,
-  fallbackUserId: string,
+  fallbackUserId: string
 ): Promise<string> {
   const chatId = String(ctx.chat?.id ?? '').trim()
   const telegramUserId = String(ctx.from?.id ?? '').trim()
@@ -149,6 +166,8 @@ function logCallbackReceived(payload: Record<string, unknown>) {
 function logCallbackHandled(payload: Record<string, unknown>) {
   console.info('[CALLBACK_HANDLED]', payload)
 }
+
+const AB_TEST_EMAIL_SKIP_LOG_PREFIX = '[ab-test-email-skip]'
 
 function resolveQuestionLatency(
   progress: AbTestProgress,
@@ -182,10 +201,15 @@ function firstNonEmptyUrl(...values: Array<string | null | undefined>): string {
 }
 
 function isTestPaymentEnabled(): boolean {
-  return process.env.NODE_ENV !== 'production' && process.env.TEST_PAYMENT_ENABLED?.trim() === 'true'
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.TEST_PAYMENT_ENABLED?.trim() === 'true'
+  )
 }
 
-function formatSubscriptionDate(value: Date | string | null | undefined): string {
+function formatSubscriptionDate(
+  value: Date | string | null | undefined
+): string {
   if (!value) return '—'
   const date = value instanceof Date ? value : new Date(value)
   if (!Number.isFinite(date.getTime())) return '—'
@@ -201,53 +225,87 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;')
 }
 
-async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promise<void> {
+async function claimEmailSkipGuard(userId: string): Promise<boolean> {
+  const now = Date.now()
+  const existing = activeEmailSkipGuards.get(userId)
+  if (existing && existing > now) {
+    return false
+  }
+
+  const cacheKey = `ab-test-email-skip:${userId}`
+  if (await cacheGet<boolean>(cacheKey)) {
+    return false
+  }
+
+  const expiresAt = now + AB_TEST_EMAIL_SKIP_GUARD_TTL_MS
+  activeEmailSkipGuards.set(userId, expiresAt)
+  void cacheSet(cacheKey, true, AB_TEST_EMAIL_SKIP_GUARD_TTL_MS / 1000)
+
+  const timeout = setTimeout(() => {
+    if (activeEmailSkipGuards.get(userId) === expiresAt) {
+      activeEmailSkipGuards.delete(userId)
+    }
+  }, AB_TEST_EMAIL_SKIP_GUARD_TTL_MS)
+  timeout.unref?.()
+  return true
+}
+
+async function renderFocusSubscriptionCard(
+  ctx: Context,
+  userId: string
+): Promise<void> {
   const focusProductId = '68c3e55a-4b70-4680-a26c-15fdd607fd59'
   const productName = 'ФОКУС'
   const productCode = 'focus'
   const currency = 'UAH'
   const [active, subscription, checkout, user] = await Promise.all([
     hasActiveFocusSubscription(userId).catch(() => false),
-    prisma.productSubscription.findFirst({
-      where: {
-        userId,
-        productId: focusProductId,
-      },
-      orderBy: { updatedAt: 'desc' },
-      select: {
-        id: true,
-        status: true,
-        amount: true,
-        createdAt: true,
-        updatedAt: true,
-        paidAt: true,
-        trialEndsAt: true,
-        expiresAt: true,
-        focusWelcomedAt: true,
-        channelJoinedAt: true,
-        manuallyGrantedBy: true,
-        manualGrantNote: true,
-        paymentIssueCount: true,
-        lastPaymentIssueAt: true,
-      },
-    }).catch(() => null),
-    prisma.checkoutSession.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        status: true,
-        amount: true,
-        currency: true,
-        createdAt: true,
-        completedAt: true,
-        lastOpenedAt: true,
-        paymentIssueReportedAt: true,
-      },
-    }).catch(() => null),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    }).catch(() => null),
+    prisma.productSubscription
+      .findFirst({
+        where: {
+          userId,
+          productId: focusProductId,
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          amount: true,
+          createdAt: true,
+          updatedAt: true,
+          paidAt: true,
+          trialEndsAt: true,
+          expiresAt: true,
+          focusWelcomedAt: true,
+          channelJoinedAt: true,
+          manuallyGrantedBy: true,
+          manualGrantNote: true,
+          paymentIssueCount: true,
+          lastPaymentIssueAt: true,
+        },
+      })
+      .catch(() => null),
+    prisma.checkoutSession
+      .findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          status: true,
+          amount: true,
+          currency: true,
+          createdAt: true,
+          completedAt: true,
+          lastOpenedAt: true,
+          paymentIssueReportedAt: true,
+        },
+      })
+      .catch(() => null),
+    prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { email: true },
+      })
+      .catch(() => null),
   ])
 
   if (!subscription) {
@@ -263,28 +321,39 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
       ].join('\n'),
       {
         inline_keyboard: [
-          [{ text: 'Оплатити ФОКУС', callback_data: AB_TEST_ACTIONS.FOCUS_PAY }],
+          [
+            {
+              text: 'Оплатити ФОКУС',
+              callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
+            },
+          ],
           [{ text: '← Меню', callback_data: 'ab_test:menu' }],
         ],
       },
-      'HTML',
+      'HTML'
     )
     return
   }
 
   const statusValue = String(subscription.status ?? '—')
   const activeLabel = active ? 'так' : 'ні'
-  const amountLabel = subscription.amount !== null && subscription.amount !== undefined
-    ? `${subscription.amount} ${currency}`
-    : '—'
-  const inviteUrl = String(process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? '').trim()
+  const amountLabel =
+    subscription.amount !== null && subscription.amount !== undefined
+      ? `${subscription.amount} ${currency}`
+      : '—'
+  const inviteUrl = String(
+    process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? ''
+  ).trim()
   const manualGrantLabel = subscription.manuallyGrantedBy
     ? `🔧 ручна активація: <code>${escapeHtml(subscription.manuallyGrantedBy)}</code>`
     : 'Автоактивація'
   const daysLeft = subscription.expiresAt
-    ? Math.max(0, Math.ceil(
-        (new Date(subscription.expiresAt).getTime() - Date.now()) / 86400000
-      ))
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(subscription.expiresAt).getTime() - Date.now()) / 86400000
+        )
+      )
     : null
   const manualGrantNoteLabel = subscription.manualGrantNote
     ? `Примітка: ${escapeHtml(subscription.manualGrantNote)}`
@@ -319,7 +388,7 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
       `Створено: ${escapeHtml(formatSubscriptionDate(checkout.createdAt))}`,
       `Відкривали: ${escapeHtml(formatSubscriptionDate(checkout.lastOpenedAt))}`,
       `Завершено: ${escapeHtml(formatSubscriptionDate(checkout.completedAt))}`,
-      `Проблема з оплатою: ${checkout.paymentIssueReportedAt ? '✅ зафіксовано' : '❌ немає'}`,
+      `Проблема з оплатою: ${checkout.paymentIssueReportedAt ? '✅ зафіксовано' : '❌ немає'}`
     )
   }
 
@@ -333,17 +402,20 @@ async function renderFocusSubscriptionCard(ctx: Context, userId: string): Promis
         ...(inviteUrl
           ? [[{ text: '🔗 Посилання на канал', url: inviteUrl }]]
           : []),
-        [{ text: '🔄 Відновити доступ', callback_data: 'resend_focus_block12' }],
+        [
+          {
+            text: '🔄 Відновити доступ',
+            callback_data: 'resend_focus_block12',
+          },
+        ],
         [{ text: '← Меню', callback_data: 'ab_test:menu' }],
       ],
     },
-    'HTML',
+    'HTML'
   )
 }
 
-async function resolveContextUserId(
-  ctx: Context,
-): Promise<string | null> {
+async function resolveContextUserId(ctx: Context): Promise<string | null> {
   const stateUserId = (ctx.state as { userId?: string | null }).userId ?? null
   if (stateUserId) {
     return stateUserId
@@ -369,11 +441,10 @@ async function resolveContextUserId(
   return user?.id ?? null
 }
 
-// FIX 2025-05-25 C: shared direct sender for question rendering used by resume and answer flow.
 async function sendQuestionDirect(
   ctx: Context,
   questionId: ReturnType<typeof resolveAbTestQuestionOrder>[number],
-  revision: number,
+  revision: number
 ): Promise<void> {
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) return
@@ -382,15 +453,18 @@ async function sendQuestionDirect(
   const questionNumber = questionOrder.indexOf(question.question_id) + 1
   await ctx.telegram.sendMessage(
     chatId,
-    `Питання ${questionNumber} з ${questionOrder.length}\n\n${question.prompt}`,
+    `*Питання ${questionNumber} з ${questionOrder.length}*\n\n${question.prompt}`,
     {
+      parse_mode: 'Markdown',
       reply_markup: {
-        inline_keyboard: question.answers.map((answer) => ([{
-          text: answer.text,
-          callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${revision}`,
-        }])),
+        inline_keyboard: question.answers.map((answer) => [
+          {
+            text: answer.text,
+            callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${revision}`,
+          },
+        ]),
       },
-    },
+    }
   )
 }
 
@@ -412,7 +486,6 @@ export async function startAbTestFlow(
   userId: string,
   payload?: string | null
 ): Promise<void> {
-  // FIX 2026-05-25 C2: temporary start-flow diagnostic log
   console.log('[AB_TEST][START] telegramId:', ctx.from?.id)
   logFlowStart('entered', {
     userId,
@@ -516,7 +589,6 @@ export async function resumeAbTestFlow(
     chatId: String(ctx.chat?.id ?? ''),
     fromId: String(ctx.from?.id ?? ''),
   })
-  // FIX 2025-05-25 B1: ack immediately for answer callbacks before any async work
   await ctx.answerCbQuery().catch(() => null)
   const progress = await loadAbTestProgress(userId)
   const validation = validateAbTestProgress(progress)
@@ -538,7 +610,8 @@ export async function handleAbTestEmailCaptureText(
   userId: string,
   text: string
 ): Promise<boolean> {
-  const progress = await loadAbTestProgress(userId)
+  const resolvedUserId = await resolveAbTestEmailTargetUserId(ctx, userId)
+  const progress = await loadAbTestProgress(resolvedUserId)
   if (progress.email_stage !== 'pending') {
     return false
   }
@@ -549,7 +622,7 @@ export async function handleAbTestEmailCaptureText(
     if (chatId) {
       await ctx.telegram.sendMessage(
         chatId,
-        'Схоже, це не email. Введіть коректний email одним повідомленням.',
+        'Схоже, це не email. Введіть коректний email одним повідомленням.'
       )
     }
     return true
@@ -557,7 +630,6 @@ export async function handleAbTestEmailCaptureText(
 
   const chatId = String(ctx.chat?.id ?? '').trim()
   const telegramUserId = String(ctx.from?.id ?? '').trim()
-  const resolvedUserId = await resolveAbTestEmailTargetUserId(ctx, userId)
 
   try {
     const attachment = await attachEmailToUser(resolvedUserId, normalizedEmail)
@@ -579,7 +651,9 @@ export async function handleAbTestEmailCaptureText(
       source: 'telegram',
       target: 'web',
       path: '/onboarding/continue',
-      payload: { origin: 'ab_test_email_capture' } satisfies Prisma.InputJsonValue,
+      payload: {
+        origin: 'ab_test_email_capture',
+      } satisfies Prisma.InputJsonValue,
     })
     const magicLoginUrl = buildWebDeepLink(deepLink.token, deepLink.path)
     const mailSent = await sendMagicLoginEmail({
@@ -598,17 +672,16 @@ export async function handleAbTestEmailCaptureText(
       await clearPendingTelegramIdentity(chatId)
     }
 
-    await prisma.user.update({
-      where: { id: persistedUserId },
-      data: {
-        email: normalizedEmail,
-        testStartedAt: progress.started_at ? new Date(progress.started_at) : undefined,
-        testCompletedAt: nowIso,
-        testResultType: progress.result_key ?? undefined,
-        funnelStage: 'LEAD',
-        lifecycleState: 'TEST_DONE',
-      },
-    })
+    await testOrchestrator.onTestCompleted(
+      persistedUserId,
+      progress.result_key ?? null,
+      normalizedEmail,
+      {
+        startedAt: progress.started_at
+          ? new Date(progress.started_at)
+          : undefined,
+      }
+    )
 
     if (!mailSent) {
       console.warn('[AB_TEST_EMAIL_CAPTURE] magic_login_email_not_sent', {
@@ -617,7 +690,11 @@ export async function handleAbTestEmailCaptureText(
       })
     }
 
-    const scheduled = await scheduleFollowups(persistedUserId, next, 'S3_TEST_RESULT').catch((error) => {
+    const scheduled = await scheduleFollowups(
+      persistedUserId,
+      next,
+      'S3_TEST_RESULT'
+    ).catch((error) => {
       console.error('[AB_TEST_EMAIL_CAPTURE] followups_failed', {
         userId: persistedUserId,
         error: error instanceof Error ? error.message : String(error),
@@ -642,7 +719,7 @@ export async function handleAbTestEmailCaptureText(
       ctx,
       'ctx.reply',
       'ab_test_email_retry',
-      'Не вдалося зберегти email. Спробуйте ще раз.',
+      'Не вдалося зберегти email. Спробуйте ще раз.'
     )
     return true
   }
@@ -676,32 +753,39 @@ export async function handleAbTestCallback(
   }
 
   if (action === 'ab_test:start_wheel' || action === 'start_wheel') {
-    // FIX 2025-05-25 C: Block 9 after [Що з цим робити?] with direct send
     await ctx.answerCbQuery().catch(() => null)
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) {
       return true
     }
-    await ctx.telegram.sendMessage(
-      chatId,
-      BLOCK9_POST_RESULT.text,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [[{ text: BLOCK9_POST_RESULT.cta, callback_data: BLOCK9_POST_RESULT.callbackData }]],
-        },
+    await ctx.telegram.sendMessage(chatId, BLOCK9_POST_RESULT.text, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: BLOCK9_POST_RESULT.cta,
+              callback_data: BLOCK9_POST_RESULT.callbackData,
+            },
+          ],
+        ],
       },
-    )
+    })
     return true
   }
 
-  const focusPaymentAction = action.match(/^open_focus_payment(?::(1month|3month))?$/)
+  const focusPaymentAction = action.match(
+    /^open_focus_payment(?::(1month|3month))?$/
+  )
   if (focusPaymentAction) {
-    // FIX 2025-05-25 D1: direct send Block 10 with robust fallback and diagnostics.
     await ctx.answerCbQuery().catch(() => null)
-    const payingUserId = (ctx.state as { userId?: string | null }).userId ?? null
+    const payingUserId =
+      (ctx.state as { userId?: string | null }).userId ?? null
     const chatId = ctx.chat?.id ?? ctx.from?.id
-    console.log('[FOCUS_PAY] reached', { userId: payingUserId, chatId: ctx.chat?.id })
+    console.log('[FOCUS_PAY] reached', {
+      userId: payingUserId,
+      chatId: ctx.chat?.id,
+    })
     if (!chatId) {
       return true
     }
@@ -719,10 +803,16 @@ export async function handleAbTestCallback(
             parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [
-                ...(inviteUrl ? [[{
-                  text: '🔗 Перейти в канал ФОКУС',
-                  url: inviteUrl,
-                }]] : []),
+                ...(inviteUrl
+                  ? [
+                      [
+                        {
+                          text: '🔗 Перейти в канал ФОКУС',
+                          url: inviteUrl,
+                        },
+                      ],
+                    ]
+                  : []),
                 [
                   {
                     text: '🔄 Відновити доступ',
@@ -743,7 +833,7 @@ export async function handleAbTestCallback(
                 ],
               ],
             },
-          },
+          }
         )
         return true
       }
@@ -753,25 +843,26 @@ export async function handleAbTestCallback(
       process.env.WAYFORPAY_FOCUS_BOT_1M_URL,
       process.env.WAYFORPAY_FOCUS_1M_URL,
       process.env.FOCUS_1M_URL,
-      process.env.WAYFORPAY_FOCUS_LANDING_URL,
+      process.env.WAYFORPAY_FOCUS_LANDING_URL
     )
     const url3m = firstNonEmptyUrl(
       process.env.WAYFORPAY_FOCUS_BOT_3M_URL,
       process.env.WAYFORPAY_FOCUS_3M_URL,
       process.env.FOCUS_3M_URL,
-      process.env.WAYFORPAY_FOCUS_LANDING_URL,
+      process.env.WAYFORPAY_FOCUS_LANDING_URL
     )
-    const text = BLOCK10_FOCUS?.text
-      ?? 'ФОКУС | Zoom-практики AB System\n\n'
-      + 'ФОКУС — це живі Zoom-практики раз на тиждень.\n'
-      + 'Ти приходиш із реальною ситуацією:\n'
-      + '— що відкладаєш,\n'
-      + '— яке рішення переносиш,\n'
-      + '— яка ціль не рухається.\n\n'
-      + 'Тарифи:\n'
-      + '1 місяць — 15 євро\n'
-      + '3 місяці — 39 євро'
-    const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць — 15 євро'
+    const text =
+      BLOCK10_FOCUS?.text ??
+      'ФОКУС | Zoom-практики AB System\n\n' +
+        'ФОКУС — це живі Zoom-практики раз на тиждень.\n' +
+        'Ти приходиш із реальною ситуацією:\n' +
+        '— що відкладаєш,\n' +
+        '— яке рішення переносиш,\n' +
+        '— яка ціль не рухається.\n\n' +
+        'Тарифи:\n' +
+        '1 місяць — 15 євро\n' +
+        '3 місяці — 39 євро'
+    const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць\n— 15 євро'
     const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 39 євро'
     let testButtonRow: Array<{ text: string; url: string }> = []
     if (payingUserId && isTestPaymentEnabled()) {
@@ -783,43 +874,47 @@ export async function handleAbTestCallback(
           {
             amountOverride: 1,
             orderRefTag: 'test1uah',
-          },
+          }
         )
-        testButtonRow = [{ text: '🧪 Тест 1 грн', url: testSession.checkoutUrl }]
+        testButtonRow = [
+          { text: '🧪 Тест 1 грн', url: testSession.checkoutUrl },
+        ]
       } catch (error) {
         console.error('[TEST_PAYMENT] failed_to_build_checkout', error)
       }
     }
     try {
-      await ctx.telegram.sendMessage(
-        chatId,
-        text,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: cta1m, url: url1m }],
-              [{ text: cta3m, url: url3m }],
-              ...testButtonRow.map((row) => [row]),
-              [{ text: '⚠️ Проблема з оплатою', callback_data: 'focus:payment_issue' }],
+      await ctx.telegram.sendMessage(chatId, text, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: cta1m, url: url1m }],
+            [{ text: cta3m, url: url3m }],
+            ...testButtonRow.map((row) => [row]),
+            [
+              {
+                text: '⚠️ Проблема з оплатою',
+                callback_data: 'focus:payment_issue',
+              },
             ],
-          },
+          ],
         },
-      )
+      })
       console.log('[FOCUS_PAY] sent ok', { userId: payingUserId, chatId })
     } catch (error) {
       console.error('[FOCUS_PAY] FAILED', error)
     }
     if (payingUserId) {
-      // FIX 2025-05-25 D2: non-blocking save.
       loadAbTestProgress(payingUserId)
         .then((progressAfterFocusClick) =>
           saveAbTestProgress(
             payingUserId,
             buildAbTestProgressPatch(progressAfterFocusClick, {
-              focus_opened_at: progressAfterFocusClick.focus_opened_at ?? new Date().toISOString(),
+              focus_opened_at:
+                progressAfterFocusClick.focus_opened_at ??
+                new Date().toISOString(),
               last_event_at: new Date().toISOString(),
-            }),
+            })
           )
         )
         .catch((error: Error) =>
@@ -834,9 +929,16 @@ export async function handleAbTestCallback(
     if (!targetUserId) {
       const chatId = ctx.chat?.id ?? ctx.from?.id
       if (chatId) {
-        await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_MISSING_USER_MSG)
+        await ctx.telegram.sendMessage(
+          String(chatId),
+          FOCUS_RESEND_MISSING_USER_MSG
+        )
       }
-      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_missing_user_ack').catch(() => undefined)
+      await planAck(
+        ctx,
+        'ctx.answerCbQuery',
+        'ab_test_resend_missing_user_ack'
+      ).catch(() => undefined)
       return true
     }
     const hasActiveFocus = await hasActiveFocusSubscription(targetUserId)
@@ -845,23 +947,31 @@ export async function handleAbTestCallback(
       if (chatId) {
         await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_NO_SUB_MSG)
       }
-      await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_inactive_ack').catch(() => undefined)
+      await planAck(
+        ctx,
+        'ctx.answerCbQuery',
+        'ab_test_resend_inactive_ack'
+      ).catch(() => undefined)
       return true
     }
     await markAbTestPaymentSuccess(targetUserId)
     await sendAbTestBlock12Welcome(targetUserId)
-    await prisma.productSubscription.updateMany({
-      where: {
-        userId: targetUserId,
-        productId: '68c3e55a-4b70-4680-a26c-15fdd607fd59',
-      },
-      data: { focusWelcomedAt: new Date() },
-    }).catch(() => undefined)
+    await prisma.productSubscription
+      .updateMany({
+        where: {
+          userId: targetUserId,
+          productId: '68c3e55a-4b70-4680-a26c-15fdd607fd59',
+        },
+        data: { focusWelcomedAt: new Date() },
+      })
+      .catch(() => undefined)
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (chatId) {
       await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_SUCCESS_MSG)
     }
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_sent_ack').catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_sent_ack').catch(
+      () => undefined
+    )
     return true
   }
 
@@ -873,7 +983,7 @@ export async function handleAbTestCallback(
       if (chatId) {
         await ctx.telegram.sendMessage(
           String(chatId),
-          FOCUS_PAYMENT_ISSUE_NO_USER_MSG,
+          FOCUS_PAYMENT_ISSUE_NO_USER_MSG
         )
       }
       return true
@@ -883,7 +993,7 @@ export async function handleAbTestCallback(
       await ctx.telegram.sendMessage(
         String(chatId),
         FOCUS_PAYMENT_ISSUE_USER_MSG,
-        { parse_mode: 'HTML' },
+        { parse_mode: 'HTML' }
       )
     }
 
@@ -897,25 +1007,22 @@ export async function handleAbTestCallback(
       },
     })
 
-    // if (lastCheckout) {
-    //   await prisma.checkoutSession.update({
-    //     where: { id: lastCheckout.id },
-    //     data: { paymentIssueReportedAt: new Date() },
-    //   }).catch(() => undefined)
-    // }
+    await prisma.productSubscription
+      .updateMany({
+        where: {
+          userId: issueUserId,
+          product: { is: { code: { in: ['focus', 'FOCUS'] } } },
+        },
+        data: {
+          paymentIssueCount: { increment: 1 },
+          lastPaymentIssueAt: new Date(),
+        },
+      })
+      .catch(() => undefined)
 
-    await prisma.productSubscription.updateMany({
-      where: {
-        userId: issueUserId,
-        product: { is: { code: { in: ['focus', 'FOCUS'] } } },
-      },
-      data: {
-        paymentIssueCount: { increment: 1 },
-        lastPaymentIssueAt: new Date(),
-      },
-    }).catch(() => undefined)
-
-    const coachChatId = String(process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
+    const coachChatId = String(
+      process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? ''
+    ).trim()
     if (coachChatId) {
       await alertCoachAboutPaymentIssue({
         bot: coachBot,
@@ -930,27 +1037,50 @@ export async function handleAbTestCallback(
         }),
         scenario: 'E',
       }).catch((error) =>
-        console.error('[PAYMENT_ISSUE] coach alert failed', error),
+        console.error('[PAYMENT_ISSUE] coach alert failed', error)
       )
     }
 
     return true
   }
 
-  // [FIX] ТЗ Блоки 16-21: FAQ відповіді
   if (action === AB_TEST_ACTIONS.OPEN_FAQ) {
-    await planMessage(ctx, 'ctx.reply', 'ab_test_open_faq', 'Оберіть питання:', buildFaqKeyboard() as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> })
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_open_faq_ack').catch(() => undefined)
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'ab_test_open_faq',
+      'Оберіть питання:',
+      buildFaqKeyboard() as {
+        inline_keyboard: Array<Array<{ text: string; callback_data: string }>>
+      }
+    )
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_open_faq_ack').catch(
+      () => undefined
+    )
     return true
   }
 
   if (action === AB_TEST_ACTIONS.FOCUS_INFO) {
-    await planMessage(ctx, 'ctx.reply', 'ab_test_focus_info', BLOCK10_FOCUS.text, {
-      inline_keyboard: [[
-        { text: 'Оплатити ФОКУС', callback_data: AB_TEST_ACTIONS.FOCUS_PAY },
-      ]],
-    }, 'Markdown')
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_info_ack').catch(() => undefined)
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'ab_test_focus_info',
+      BLOCK10_FOCUS.text,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: 'Оплатити ФОКУС',
+              callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
+            },
+          ],
+        ],
+      },
+      'Markdown'
+    )
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_info_ack').catch(
+      () => undefined
+    )
     return true
   }
 
@@ -971,12 +1101,20 @@ export async function handleAbTestCallback(
         ],
       }
     }
-    await planMessage(ctx, 'ctx.reply', 'ab_test_faq_item', faqItem.text, replyOptions?.reply_markup, 'Markdown')
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_faq_item_ack').catch(() => undefined)
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'ab_test_faq_item',
+      faqItem.text,
+      replyOptions?.reply_markup,
+      'Markdown'
+    )
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_faq_item_ack').catch(
+      () => undefined
+    )
     return true
   }
 
-  // FIX 2025-05-25 D: question 1 after [Продовжити]
   if (action === 'ab_test:q1') {
     await ctx.answerCbQuery().catch(() => null)
     const q1ChatId = ctx.chat?.id
@@ -990,24 +1128,25 @@ export async function handleAbTestCallback(
     const progress = await loadAbTestProgress(q1UserId)
     const revision = Number(progress.revision ?? 1)
     const q1Question = getAbTestQuestion('q1')
-    // FIX 2025-05-25 F2: send q1 using canonical answer ids to keep parser-compatible flow
     await ctx.telegram.sendMessage(
       q1ChatId,
-      `Питання 1 з 8\n\n${q1Question.prompt}`,
+      `*Питання 1 з 8*\n\n${q1Question.prompt}`,
       {
+        parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: q1Question.answers.map((answer) => ([{
-            text: answer.text,
-            callback_data: `ab_test_answer:q1:${answer.id}:${revision}`,
-          }])),
+          inline_keyboard: q1Question.answers.map((answer) => [
+            {
+              text: answer.text,
+              callback_data: `ab_test_answer:q1:${answer.id}:${revision}`,
+            },
+          ]),
         },
-      },
+      }
     )
     return true
   }
 
   const parsed = parseAbTestCallback(action)
-  // FIX 2026-05-25 C2: temporary callback diagnostic log with parsed kind
   console.log('[AB_TEST][CB] action:', action, 'kind:', parsed?.kind)
   if (!parsed) {
     logCallbackHandled({
@@ -1024,7 +1163,11 @@ export async function handleAbTestCallback(
     kind: parsed.kind,
   })
 
-  const userId = (ctx.state as { userId?: string | null }).userId ?? null
+  let userId = (ctx.state as { userId?: string | null }).userId ?? null
+  if (!userId && parsed.kind === 'skip_email_before_result') {
+    userId = await resolveContextUserId(ctx)
+    ;(ctx.state as { userId?: string | null }).userId = userId
+  }
   if (!userId) {
     logCallbackHandled({
       action,
@@ -1041,8 +1184,7 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_missing_user_ack',
       abTestContent.errors.invalid.join(' ')
-    )
-      .catch(() => undefined)
+    ).catch(() => undefined)
     return true
   }
 
@@ -1056,7 +1198,9 @@ export async function handleAbTestCallback(
       action,
     })
     await startAbTestFlow(ctx, userId, 'legacy_intro_callback')
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_intro_ack').catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_intro_ack').catch(
+      () => undefined
+    )
     logCallbackHandled({
       action,
       handled: true,
@@ -1068,7 +1212,9 @@ export async function handleAbTestCallback(
 
   if (parsed.kind === 'entry') {
     await renderAbTestEntry(ctx, userId, action)
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_entry_ack').catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_entry_ack').catch(
+      () => undefined
+    )
     logCallbackHandled({
       action,
       handled: true,
@@ -1079,54 +1225,51 @@ export async function handleAbTestCallback(
   }
 
   if (parsed.kind === 'restart') {
-    // FIX 2025-05-25 D: restart — reset progress and send MSG1 directly.
     await ctx.answerCbQuery().catch(() => null)
     const chatId = ctx.chat?.id ?? ctx.from?.id
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        lifecycleState: 'TEST_NOT_STARTED',
-        testStartedAt: null,
-        testCompletedAt: null,
-        offerShownAt: null,
-        testResultType: null,
-      },
-    }).catch(() => undefined)
-    if (chatId) {
-      await prisma.notificationJob.updateMany({
-        where: {
-          status: 'PENDING',
-          type: 'AI_REMINDER',
-          payload: { path: ['userId'], equals: userId },
+    await prisma.user
+      .update({
+        where: { id: userId },
+        data: {
+          lifecycleState: 'TEST_NOT_STARTED',
+          testStartedAt: null,
+          testCompletedAt: null,
+          offerShownAt: null,
+          testResultType: null,
         },
-        data: { status: 'FAILED', lastError: 'cancelled_by_ab_test_restart' },
-      }).catch(() => undefined)
+      })
+      .catch(() => undefined)
+    if (chatId) {
+      await prisma.notificationJob
+        .updateMany({
+          where: {
+            status: 'PENDING',
+            type: 'AI_REMINDER',
+            payload: { path: ['userId'], equals: userId },
+          },
+          data: { status: 'FAILED', lastError: 'cancelled_by_ab_test_restart' },
+        })
+        .catch(() => undefined)
       await clearPendingTelegramIdentity(String(chatId)).catch(() => undefined)
     }
     await saveAbTestProgress(userId, normalizeAbTestProgress(undefined))
     if (chatId) {
       await ctx.telegram.sendMessage(
         chatId,
-        'Привіт.\n'
-        + 'Це тест AB System:\n'
-        + '«Чому ти відкладаєш те, що давно хочеш зробити?»\n\n'
-        + 'Він допоможе побачити, чому ти знову переносиш важливе і з чого почати.\n'
-        + 'Тут не буде складних питань.\n'
-        + 'Просто відповідай так, як є зараз.',
+        absystemContent.START_BLOCK1.MSG1,
         {
           reply_markup: {
-            inline_keyboard: [[
-              { text: 'Почати тест', callback_data: 'ab_test:start' },
-            ]],
+            inline_keyboard: [
+              [{ text: 'Почати тест', callback_data: 'ab_test:start' }],
+            ],
           },
-        },
+        }
       )
     }
     return true
   }
 
   if (parsed.kind === 'resume') {
-    // FIX 2025-05-25 C: resume — continue from next unanswered question.
     await ctx.answerCbQuery().catch(() => null)
     const progress = await loadAbTestProgress(userId)
     const answers = progress.answers ?? []
@@ -1144,7 +1287,6 @@ export async function handleAbTestCallback(
   }
 
   if (parsed.kind === 'show_result') {
-    // FIX 2025-05-25 E: show_result — return saved result or fallback to start.
     await ctx.answerCbQuery().catch(() => null)
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) return true
@@ -1153,19 +1295,24 @@ export async function handleAbTestCallback(
       where: { id: userId },
       select: { testResultType: true, telegramUserName: true },
     })
-    const resultKey = (userRecord?.testResultType ?? null) as AbTestResultKey | null
+    const resultKey = (userRecord?.testResultType ??
+      null) as AbTestResultKey | null
     if (!resultKey) {
       await ctx.telegram.sendMessage(
         chatId,
         'Результат не знайдено. Спробуй пройти тест заново.',
         {
           reply_markup: {
-            inline_keyboard: [[{
-              text: 'Почати тест',
-              callback_data: 'ab_test:start',
-            }]],
+            inline_keyboard: [
+              [
+                {
+                  text: 'Почати тест',
+                  callback_data: 'ab_test:start',
+                },
+              ],
+            ],
           },
-        },
+        }
       )
       return true
     }
@@ -1178,39 +1325,64 @@ export async function handleAbTestCallback(
       {
         reply_markup: {
           inline_keyboard: [
-            [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
-            [{ text: 'Як це виглядає зсередини?', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+            [
+              {
+                text: 'Показати\nяк проходить\nпрактика',
+                callback_data: `show_inside_${resultKey.toUpperCase()}`,
+              },
+            ],
           ],
         },
-      },
+      }
     )
     return true
   }
 
   if (parsed.kind === 'skip_email_before_result') {
     await ctx.answerCbQuery().catch(() => null)
+
     const progress = await loadAbTestProgress(userId)
-    const nowIso = new Date().toISOString()
-    const next = buildAbTestProgressPatch(progress, {
-      email_stage: 'skipped',
-      last_event_at: nowIso,
+    console.info(AB_TEST_EMAIL_SKIP_LOG_PREFIX, 'received', {
+      userId,
+      emailStage: progress.email_stage,
+      status: progress.status,
+      resultKey: progress.result_key,
     })
-    await saveAbTestProgress(userId, next)
-    const scheduled = await scheduleFollowups(userId, next, 'S3_TEST_RESULT').catch((error) => {
-      console.error('[AB_TEST_Q8_TRACE] result_followups_failed', {
+
+    if (progress.status === 'completed' && progress.result_key) {
+      const progressForResult =
+        progress.email_stage === 'pending'
+          ? buildAbTestProgressPatch(progress, {
+              email_stage: 'skipped',
+              last_event_at: new Date().toISOString(),
+            })
+          : progress
+
+      const savedProgress =
+        progress.email_stage === 'pending'
+          ? await saveAbTestProgress(userId, progressForResult)
+          : progressForResult
+
+      const chatId = ctx.chat?.id ?? ctx.from?.id
+      if (chatId) {
+        await clearPendingTelegramIdentity(String(chatId))
+      }
+
+      console.info(AB_TEST_EMAIL_SKIP_LOG_PREFIX, 'continue_flow', {
         userId,
-        error: error instanceof Error ? error.message : String(error),
+        emailStage: savedProgress.email_stage,
+        resultKey: savedProgress.result_key,
       })
-      return next
+
+      await renderAbTestPostEmailSubmitSequence(ctx, userId, savedProgress)
+      return true
+    }
+
+    console.info(AB_TEST_EMAIL_SKIP_LOG_PREFIX, 'ignored_not_completed', {
+      userId,
+      emailStage: progress.email_stage,
+      status: progress.status,
     })
-    if (scheduled !== next) {
-      await saveAbTestProgress(userId, scheduled)
-    }
-    const chatId = ctx.chat?.id ?? ctx.from?.id
-    if (chatId) {
-      await clearPendingTelegramIdentity(String(chatId))
-    }
-    await renderAbTestResultThenOffer(ctx, userId, next, { typing: false })
     return true
   }
 
@@ -1235,7 +1407,7 @@ export async function handleAbTestCallback(
         reply_markup: {
           inline_keyboard: surface.buttons,
         },
-      },
+      }
     )
     return true
   }
@@ -1260,39 +1432,30 @@ export async function handleAbTestCallback(
         reply_markup: {
           inline_keyboard: insideSurface.buttons,
         },
-      },
+      }
     )
     return true
   }
 
   if (parsed.kind === 'start') {
-    // FIX 2025-05-25 C: MSG2 direct send after [Почати тест]
     await ctx.answerCbQuery().catch(() => null)
     const startChatId = ctx.chat?.id
     if (!startChatId) {
       return true
     }
-    // FIX 2025-05-25 D: bypass orchestrator dedupe for direct start flow message
-    await ctx.telegram.sendMessage(
-      startChatId,
-      'У тесті буде 8 питань.\n'
-      + 'Обирай той варіант, який найбільше схожий на тебе зараз.\n\n'
-      + 'Не треба відповідати «правильно».\n'
-      + 'Треба чесно.',
-      {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: 'Продовжити', callback_data: 'ab_test:q1' },
-          ]],
-        },
+    await ctx.telegram.sendMessage(startChatId, AB_TEST_START_STEP2, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Продовжити', callback_data: 'ab_test:q1' }],
+        ],
       },
-    )
+    })
     logAbTestStartDebug('callback:start_pressed', {
       action,
       userId,
       chatId: String(ctx.chat?.id ?? ''),
     })
-    // FIX 2025-05-25 B2: do not set active question stage before first answer (prevents auto-recovery reset)
     const currentProgress = await loadAbTestProgress(userId)
     const nowIso = new Date().toISOString()
     const warmedProgress = buildAbTestProgressPatch(currentProgress, {
@@ -1311,10 +1474,9 @@ export async function handleAbTestCallback(
       last_event_at: nowIso,
     })
     await saveAbTestProgress(userId, warmedProgress)
-    // DISABLED 2025-05-25: replaced by direct send fix
-    // await startAbTestFlow(ctx, userId, action)
-    // DISABLED 2025-05-25: replaced by direct ack fix
-    // await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_start_ack', absystemButtons.startTest).catch(() => undefined)
+    await testOrchestrator
+      .recordTestStart(userId, new Date(nowIso))
+      .catch(() => undefined)
     logCallbackHandled({
       action,
       handled: true,
@@ -1335,13 +1497,11 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_restore_ack',
       absystemButtons.restoreProgress
-    )
-      .catch(() => undefined)
+    ).catch(() => undefined)
     return true
   }
 
   if (parsed.kind === 'menu') {
-    // ACK first so Telegram does not time out while we render the menu payload.
     await ctx.answerCbQuery().catch(() => null)
     await deliverTelegramFlow(
       ctx,
@@ -1398,16 +1558,16 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_menu_ack',
       abTestMenuContent.cta.continue
-    )
-      .catch(() => undefined)
+    ).catch(() => undefined)
     return true
   }
 
   if (parsed.kind === 'subscription') {
-    // ACK first so the subscription card can load without callback timeout risk.
     await ctx.answerCbQuery().catch(() => null)
     await renderFocusSubscriptionCard(ctx, userId)
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_subscription_ack').catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_subscription_ack').catch(
+      () => undefined
+    )
     return true
   }
 
@@ -1430,8 +1590,7 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_edit_ack',
       absystemContent.RESUME_FLOW.EDIT_OPENING
-    )
-      .catch(() => undefined)
+    ).catch(() => undefined)
     return true
   }
 
@@ -1441,7 +1600,9 @@ export async function handleAbTestCallback(
 
   if (progress.status === 'completed') {
     await renderCurrentView(ctx, userId, progress)
-    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_completed_ack').catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_completed_ack').catch(
+      () => undefined
+    )
     return true
   }
 
@@ -1464,8 +1625,7 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_stale_question_ack',
       abTestContent.errors.stale.join(' ')
-    )
-      .catch(() => undefined)
+    ).catch(() => undefined)
     return true
   }
 
@@ -1488,8 +1648,7 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_replay_rejected_ack',
       abTestContent.errors.stale.join(' ')
-    )
-      .catch(() => undefined)
+    ).catch(() => undefined)
     return true
   }
 
@@ -1504,8 +1663,7 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_invalid_answer_ack',
       abTestContent.errors.invalid.join(' ')
-    )
-      .catch(() => undefined)
+    ).catch(() => undefined)
     return true
   }
 
@@ -1555,18 +1713,25 @@ export async function handleAbTestCallback(
 
   await saveAbTestProgress(userId, next)
   const callbackMessage = ctx.callbackQuery?.message
-  if (callbackMessage && 'message_id' in callbackMessage && callbackMessage.message_id) {
-    const updatedKeyboard = question.answers.map((answer) => ([{
-      // FIX 2025-05-25 C1: mark selected answer on current question before moving to next.
-      text: answer.id === selected.id ? `✅ ${answer.text}` : answer.text,
-      callback_data: `ab_test_answer:${parsed.questionId}:${answer.id}:${next.revision}`,
-    }]))
-    await ctx.telegram.editMessageReplyMarkup(
-      callbackMessage.chat.id,
-      callbackMessage.message_id,
-      undefined,
-      { inline_keyboard: updatedKeyboard },
-    ).catch(() => null)
+  if (
+    callbackMessage &&
+    'message_id' in callbackMessage &&
+    callbackMessage.message_id
+  ) {
+    const updatedKeyboard = question.answers.map((answer) => [
+      {
+        text: answer.id === selected.id ? `✅ ${answer.text}` : answer.text,
+        callback_data: `ab_test_answer:${parsed.questionId}:${answer.id}:${next.revision}`,
+      },
+    ])
+    await ctx.telegram
+      .editMessageReplyMarkup(
+        callbackMessage.chat.id,
+        callbackMessage.message_id,
+        undefined,
+        { inline_keyboard: updatedKeyboard }
+      )
+      .catch(() => null)
   }
   await trackAbTestEvent({
     userId,
@@ -1585,7 +1750,6 @@ export async function handleAbTestCallback(
     } satisfies Prisma.JsonObject,
   })
 
-  // ── COMPLETE (final answer) ────────────────────────────────
   console.info('[AB_TEST_Q8_TRACE] result_complete_branch_entered', {
     userId,
     questionId: parsed.questionId,
@@ -1596,21 +1760,19 @@ export async function handleAbTestCallback(
   if (complete) {
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) {
-      console.info('[AB_TEST_Q8_TRACE] result_complete_branch_skipped_no_chat', {
-        userId,
-      })
+      console.info(
+        '[AB_TEST_Q8_TRACE] result_complete_branch_skipped_no_chat',
+        {
+          userId,
+        }
+      )
       return true
     }
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        testStartedAt: next.started_at ? new Date(next.started_at) : undefined,
-        testCompletedAt: answeredAt,
-        testResultType: resultKey ?? undefined,
-        funnelStage: 'LEAD',
-        lifecycleState: 'TEST_DONE',
-      },
-    }).catch(() => undefined)
+    await testOrchestrator
+      .onTestCompleted(userId, resultKey ?? null, null, {
+        startedAt: next.started_at ? new Date(next.started_at) : undefined,
+      })
+      .catch(() => undefined)
 
     const pendingEmailProgress = buildAbTestProgressPatch(next, {
       email_stage: 'pending',
@@ -1622,36 +1784,15 @@ export async function handleAbTestCallback(
       resultKey: pendingEmailProgress.result_key,
     })
     await saveAbTestProgress(userId, pendingEmailProgress)
-    const profileEmail = await getAbTestProfileEmail(userId)
     console.info('[AB_TEST_Q8_TRACE] result_email_prompt_sent', {
       userId,
-      transition: profileEmail ? 'ab_test_email_prompt_confirm_existing' : 'ab_test_email_prompt_before_result',
+      transition: 'ab_test_email_prompt_before_result',
       deliveryKind: 'ab_test_email_gate',
     })
-    await ctx.telegram.sendMessage(
-      chatId,
-      buildAbTestEmailGateMessage(Boolean(profileEmail)),
-      {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: 'Пропустити →', callback_data: 'skip_email_before_result' },
-          ]],
-        },
-      },
-    )
-    await setPendingTelegramIdentity({
-      chatId: String(ctx.chat?.id ?? ''),
-      telegramUserId: String(ctx.from?.id ?? ''),
-      telegramUserName: ctx.from?.username ?? null,
-      firstName: ctx.from?.first_name ?? null,
-      source: 'email_after_test',
-      requestId: null,
-    })
+    await renderAbTestEmailGate(ctx, userId, pendingEmailProgress)
     return true
-    // [FIX] early return — does NOT fall through to next question render
   }
 
-  // ── NON-COMPLETE (questions 1-4) ──────────────────────────
   const nextQuestion = nextQuestionId ? getAbTestQuestion(nextQuestionId) : null
   if (!nextQuestion) {
     await renderCurrentView(ctx, userId, next)
@@ -1660,29 +1801,21 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_next_question_missing_ack',
       abTestContent.progress.resumeHint
-    )
-      .catch(() => undefined)
+    ).catch(() => undefined)
     return true
   }
 
-  // [FIX] use next.stage not hardcoded 'S3_TEST_RESULT'
   const scheduled = await scheduleFollowups(userId, next, next.stage)
   const finalProgress = await saveAbTestProgress(userId, scheduled)
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) {
     return true
   }
-  // FIX 2025-05-25 B2: direct send next question to bypass orchestrator timeout/retry paths
-  await sendQuestionDirect(ctx, nextQuestion.question_id, finalProgress.revision)
-  // DISABLED 2025-05-25: replaced by direct send fix
-  // const flow = buildAbTestQuestionFlow(
-  //   finalProgress,
-  //   nextQuestion.question_id,
-  //   finalProgress.revision
-  // )
-  // flow.body = [nextQuestion.prompt]
-  // await deliverTelegramFlow(ctx, flow, 'reply')
-  // await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_next_question_ack').catch(() => undefined)
+  await sendQuestionDirect(
+    ctx,
+    nextQuestion.question_id,
+    finalProgress.revision
+  )
   return true
 }
 
@@ -1704,9 +1837,11 @@ export async function renderAbTestIntro(
     'ab_test_entry_intro',
     absystemContent.START_BLOCK1.MSG1,
     {
-      inline_keyboard: [[{ text: 'Далі', callback_data: AB_TEST_ACTIONS.ENTRY }]],
+      inline_keyboard: [
+        [{ text: 'Далі', callback_data: AB_TEST_ACTIONS.ENTRY }],
+      ],
     },
-    'Markdown',
+    'Markdown'
   )
   logMessageSent('start_block1_intro_with_next_sent', {
     userId,
@@ -1738,9 +1873,16 @@ export async function renderAbTestEntry(
     'ab_test_entry_msg2',
     absystemContent.START_BLOCK1.MSG2,
     {
-      inline_keyboard: [[{ text: absystemContent.START_BLOCK1.CTA1, callback_data: AB_TEST_ACTIONS.START }]],
+      inline_keyboard: [
+        [
+          {
+            text: absystemContent.START_BLOCK1.CTA1,
+            callback_data: AB_TEST_ACTIONS.START,
+          },
+        ],
+      ],
     },
-    'Markdown',
+    'Markdown'
   )
   logMessageSent('start_block1_msg2_with_cta_sent', {
     userId,
@@ -1784,7 +1926,12 @@ export async function broadcastBlock9Update(
   let sent = 0
   let failed = 0
   const inline_keyboard = [
-    [{ text: BLOCK9_POST_RESULT.cta, callback_data: BLOCK9_POST_RESULT.callbackData }],
+    [
+      {
+        text: BLOCK9_POST_RESULT.cta,
+        callback_data: BLOCK9_POST_RESULT.callbackData,
+      },
+    ],
   ]
 
   for (const user of subscribers) {
@@ -1793,6 +1940,13 @@ export async function broadcastBlock9Update(
       failed += 1
       continue
     }
+
+    const allowed = await canSendAdvertising(user.id)
+    if (!allowed) {
+      console.log(`[broadcast] blocked by guard: ${user.id}`)
+      continue
+    }
+
     try {
       await bot.telegram.sendMessage(tgId, BLOCK9_POST_RESULT.text, {
         parse_mode: 'Markdown',

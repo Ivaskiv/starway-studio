@@ -122,7 +122,7 @@ export default function MainLayout({
   const miniAppRouteTarget = useMemo(() => {
     if (!isMiniAppContext) return null
 
-    if (normalizedPathname === '/dashboard') return '/miniapp'
+    if (normalizedPathname === '/dashboard') return '/miniapp/zoom-calendar'
     if (normalizedPathname.startsWith('/dashboard/cycle')) {
       const search = new URLSearchParams(location.search)
       const session = search.get('session')

@@ -175,7 +175,9 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
   '/tasks',
   '/planner',
   '/content',
+  '/zoom',
   '/zoom-calendar',
+  '/miniapp/zoom-calendar',
   ROUTES.MAGIC_LOGIN,
   ROUTES.TELEGRAM_SUCCESS,
   ROUTES.ONBOARDING_START,
@@ -359,6 +361,10 @@ function MiniAppZoomRoute() {
       </div>
     </div>
   )
+}
+
+function MiniAppZoomCalendar() {
+  return <ZoomCalendarPage />
 }
 
 function MiniAppZoomWeekPanel() {
@@ -878,15 +884,16 @@ function PublicAppRouter() {
           />
         ))}
       </Route>
-      <Route path="/miniapp" element={<PublicMiniAppRoute />} />
+      <Route path="/miniapp" element={<Navigate to="/miniapp/zoom-calendar" replace />} />
+      <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
-      <Route path="/zoom-calendar" element={<ZoomCalendarPage />} />
-      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage />} />
+      <Route path="/zoom-calendar" element={<ZoomCalendarPage isPublic={true} />} />
+      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage isPublic={true} />} />
       <Route path="/task" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
       <Route path="/tasks" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
       <Route path="/planner" element={<Navigate to="/miniapp/mentor?section=tasks" replace />} />
       <Route path="/content" element={<Navigate to="/miniapp/library" replace />} />
-      <Route path="/zoom" element={<MiniAppZoomRoute />} />
+      <Route path="/zoom" element={<Navigate to="/miniapp/zoom-calendar" replace />} />
       <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
     </Routes>
   )
@@ -937,8 +944,10 @@ function GuestAppRouter() {
           />
         ))}
       </Route>
-      <Route path="/zoom-calendar" element={<ZoomCalendarPage />} />
-      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage />} />
+      <Route path="/zoom" element={<Navigate to="/miniapp/zoom-calendar" replace />} />
+      <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
+      <Route path="/zoom-calendar" element={<ZoomCalendarPage isPublic={true} />} />
+      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage isPublic={true} />} />
       <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
     </Routes>
   )
@@ -1032,13 +1041,14 @@ function AppRouter() {
     location.pathname.startsWith(ROUTES.MINIAPP) ||
     location.pathname === '/zoom' ||
     location.pathname === '/zoom-calendar' ||
+    location.pathname === '/miniapp/zoom-calendar' ||
     location.pathname === '/task' ||
     location.pathname === '/tasks' ||
     location.pathname === '/planner' ||
     location.pathname === '/content'
 
   if (isTelegramRuntime && !isTelegramProductRoute) {
-    return <Navigate to={ROUTES.MINIAPP} replace />
+    return <Navigate to="/miniapp/zoom-calendar" replace />
   }
 
   if (!user) {

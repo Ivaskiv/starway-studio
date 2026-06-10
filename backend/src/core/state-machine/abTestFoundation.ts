@@ -338,9 +338,6 @@ export function resolveAbTestQuestionOrder(): readonly AbTestQuestionId[] {
 }
 
 export function resolveAbTestCurrentQuestion(progress: AbTestProgress): AbTestQuestion | null {
-  // [DEPRECATED] do not use in rendering — use progress.answers.length instead
-  // Safe to call only from analytics/tracking paths
-  // Will be removed in next cleanup pass
   return isActiveAbTestQuestionId(progress.current_question_id) ? getAbTestQuestion(progress.current_question_id) : null
 }
 

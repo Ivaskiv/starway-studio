@@ -49,7 +49,7 @@ export const FAQ_WHAT_IS_FOCUS = {
     '1 місяць — 15 євро',
     '3 місяці — 39 євро',
   ].join('\n'),
-  cta: 'Приєднатись до ФОКУСУ →',
+  cta: 'Приєднатись до\nФОКУСУ →',
   ctaCallback: 'open_focus_payment',
 } as const
 

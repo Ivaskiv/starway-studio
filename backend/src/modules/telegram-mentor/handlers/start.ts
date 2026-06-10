@@ -14,13 +14,13 @@ import {
 import {
   type StartMessagePayload,
   aiMentorMenuMessage,
-  fallbackByLifecycle,
   focusPaidMessage,
   magicLinkReadyMessage,
   offerShownMessage,
   testDoneMessage,
   testInProgressMessage,
   welcomeMessage,
+  testNotStartedMessage,
   zoomMemberMessage,
 } from './abTest.start.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
@@ -81,6 +81,7 @@ async function deliver(
   const deliveryChatId = ctx.chat?.id ?? ctx.from?.id
   if (!deliveryChatId) return
   await ctx.telegram.sendMessage(deliveryChatId, payload.text, {
+    parse_mode: 'Markdown',
     reply_markup: payload.reply_markup,
   })
 }
@@ -256,6 +257,7 @@ export async function handleStart(ctx: StartContext) {
   }
 
   activeStartProcessing.add(chatId)
+  let startMessageSent = false
 
   try {
     const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
@@ -329,11 +331,13 @@ export async function handleStart(ctx: StartContext) {
     switch (user.lifecycleState) {
       case 'NEW_USER': {
         await deliver(ctx, welcomeMessage())
+        startMessageSent = true
         await setLifecycleState(user.id, 'TEST_NOT_STARTED')
         return
       }
       case 'TEST_NOT_STARTED': {
-        await deliver(ctx, welcomeMessage())
+        await deliver(ctx, testNotStartedMessage({ escalated: false }))
+        startMessageSent = true
         return
       }
       case 'TEST_IN_PROGRESS': {
@@ -348,10 +352,12 @@ export async function handleStart(ctx: StartContext) {
               ]],
             },
           })
+          startMessageSent = true
           return
         }
 
         await deliver(ctx, testInProgressMessage({ r3: hoursSince > 4 }))
+        startMessageSent = true
         return
       }
       case 'TEST_DONE': {
@@ -365,32 +371,39 @@ export async function handleStart(ctx: StartContext) {
               ],
             },
           })
+          startMessageSent = true
           return
         }
 
         await deliver(ctx, testDoneMessage())
+        startMessageSent = true
         return
       }
       case 'OFFER_SHOWN': {
         await deliver(ctx, offerShownMessage())
+        startMessageSent = true
         return
       }
       case 'FOCUS_PAID': {
         await deliver(ctx, focusPaidMessage())
+        startMessageSent = true
         return
       }
       case 'ZOOM_MEMBER': {
         await deliver(ctx, zoomMemberMessage())
+        startMessageSent = true
         return
       }
       case 'POST_ZOOM_1':
       case 'UPSELL':
       case 'EXPIRED': {
         await deliver(ctx, aiMentorMenuMessage())
+        startMessageSent = true
         return
       }
       default: {
-        await deliver(ctx, fallbackByLifecycle(user.lifecycleState))
+        await deliver(ctx, welcomeMessage())
+        startMessageSent = true
         return
       }
     }
@@ -400,7 +413,9 @@ export async function handleStart(ctx: StartContext) {
       fromId: String(ctx.from?.id ?? ''),
       error: error instanceof Error ? error.message : String(error),
     })
-    await deliver(ctx, fallbackByLifecycle('TEST_NOT_STARTED'))
+    if (!startMessageSent) {
+      await deliver(ctx, welcomeMessage())
+    }
   } finally {
     activeStartProcessing.delete(chatId)
   }

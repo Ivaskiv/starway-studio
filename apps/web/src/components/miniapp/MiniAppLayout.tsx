@@ -12,7 +12,7 @@ type MiniAppLayoutProps = {
 }
 
 const START_PARAM_ROUTE_MAP: Record<string, string> = {
-  home: '/miniapp',
+  home: '/miniapp/zoom-calendar',
   ai: '/miniapp/mentor',
   ai_morning: '/miniapp/mentor?context=morning',
   ai_evening: '/miniapp/mentor?context=evening',
@@ -24,7 +24,7 @@ const START_PARAM_ROUTE_MAP: Record<string, string> = {
   journal: '/miniapp/journal',
   library: '/miniapp/library',
   content: '/miniapp/library',
-  zoom: '/zoom',
+  zoom: '/miniapp/zoom-calendar',
   profile: '/miniapp/profile',
   subscription: '/miniapp/profile?panel=subscription',
   level_up: '/miniapp/profile?panel=level_up',
@@ -123,7 +123,7 @@ export default function MiniAppLayout({
               navigate('/miniapp/profile')
               return
             default:
-              navigate('/miniapp')
+              navigate('/miniapp/zoom-calendar')
           }
         }}
       />

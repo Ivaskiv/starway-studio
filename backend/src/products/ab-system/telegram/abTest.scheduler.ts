@@ -7,11 +7,9 @@ import {
   type AbTestStageId,
 } from '../../../core/state-machine/abTestFoundation.js'
 import { CANONICAL_FLOW_TIMER_REGISTRY } from '../../../core/state-machine/flowTimingFoundation.js'
-import { prisma } from '../../../db/client.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
-import { getAbTestResultDefinition } from '../content/abTest.results.js'
 import { resolveTestDriveVersion } from '@/products/ab-system/content/testDrive.content.js'
 
 export async function scheduleFollowups(
@@ -19,66 +17,6 @@ export async function scheduleFollowups(
   progress: AbTestProgress,
   stage: AbTestStageId
 ) {
-  const dojimImmediateTimerId = 'DOJIM_0_IMMEDIATE' as const
-  const currentDojimTimers = new Set(progress.timers.dojim as string[])
-
-  if (
-    stage === 'S3_TEST_RESULT'
-    && progress.result_key
-    && (progress.email_stage === 'captured' || progress.email_stage === 'skipped')
-    && !currentDojimTimers.has(dojimImmediateTimerId)
-  ) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { firstName: true, telegramUserName: true },
-    })
-    const resultDef = getAbTestResultDefinition(progress.result_key)
-    const firstName = user?.firstName ?? user?.telegramUserName ?? null
-    const resultName = resultDef.title.replace(/^Твоя точка зупинки —\s*/, '').replace(/[.。]$/, '')
-    const dojim0Body = [
-      `${firstName ? `${firstName}, ` : ''}ти вже побачила свій результат.`,
-      '',
-      `Твоя точка зупинки — ${resultName}.`,
-      '',
-      'Це не вирок — це точка, з якої починається зміна.',
-      'У ФОКУСІ ми розбираємо саме те, що показав твій результат.',
-      '',
-      '1 місяць — 15 євро | 3 місяці — 39 євро',
-    ].join('\n')
-
-    const payload = {
-      flow_timer_id: dojimImmediateTimerId,
-      lifecycle_stage: 'S3_TEST_RESULT',
-      delay_ms: 0,
-      message_key: resultDef.message_key,
-      ab_test_stage: stage,
-      result_key: progress.result_key,
-      content_version: resolveTestDriveVersion(progress.started_at),
-      message_body: dojim0Body,
-    } satisfies Prisma.JsonObject
-
-    const runAt = new Date()
-    await notificationService.schedule(
-      NotificationEvent.AB_TEST_FOLLOWUP,
-      userId,
-      runAt,
-      payload,
-    )
-    await trackAbTestEvent({
-      userId,
-      type: 'AB_TEST_FOLLOWUP_SCHEDULED',
-      state: stage,
-      payload,
-    })
-
-    currentDojimTimers.add(dojimImmediateTimerId)
-    progress = buildAbTestProgressPatch(progress, {
-      timers: {
-        dojim: [...currentDojimTimers] as AbTestProgress['timers']['dojim'],
-      },
-    })
-  }
-
   const timerIds = resolveAbTestFlowTimerIdsForStage(stage)
   if (!timerIds.length) {
     return progress

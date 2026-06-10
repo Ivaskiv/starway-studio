@@ -1,10 +1,12 @@
+//backend/src/products/ab-system/telegram/abTest.views.ts
 import type { Prisma } from '@starway/db/prisma-client'
 import type { Context } from 'telegraf'
-
-import { buildBehavioralSnapshot } from '../../../core/behavioral/behavioralSnapshot.js'
-import {
-  buildAbTestQuestionFlow,
-} from '../../../core/flow-builder/flowBuilder.js'
+import type { InlineKeyboardMarkup } from 'telegraf/types'
+import { hasTelegramCtaInteraction } from '@/modules/telegram-mentor/services/ctaInteraction.service.js'
+import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
+// import { buildBehavioralSnapshot } from '../../../core/behavioral/behavioralSnapshot.js'
+import { buildAbTestQuestionFlow } from '../../../core/flow-builder/flowBuilder.js'
+import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import {
   AB_TEST_UI_SETTINGS_KEY,
   buildAbTestProgressPatch,
@@ -15,8 +17,10 @@ import { resolveCanonicalMessageKeyByTestEvent } from '../../../core/state-machi
 import { resolveCanonicalTestResult } from '../../../core/state-machine/testFoundation.js'
 import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
 import { prisma } from '../../../db/client.js'
-import { PromptProvider } from '../../../PromptProvider.js'
-import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
+import { planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
+import { setPendingTelegramIdentity } from '../../../modules/telegram-mentor/services/pendingIdentity.service.js'
+// import { PromptProvider } from '../../../PromptProvider.js'
+import { resolveAbTestFollowupCopy } from '../content/abTest.followups.js'
 import {
   getAbTestAnswer,
   getAbTestQuestion,
@@ -24,23 +28,23 @@ import {
 } from '../content/abTest.questions.js'
 import {
   getAbTestResultDefinition,
+  interpolateFirstName,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
-import { resolveAbTestFollowupCopy } from '../content/abTest.followups.js'
 import { resolveTestDriveVersion } from '../content/testDrive.content.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
-import { buildWebAppButton, resolveBrowserTestUrlOrNull } from './abTest.buttons.js'
 import {
-  getAbTestProgressFromUiSettings,
+  buildWebAppButton,
+  resolveBrowserTestUrlOrNull,
+} from './abTest.buttons.js'
+import {
   buildAbTestEmailGateMessage,
-  getUiSettings,
   getAbTestProfileEmail,
+  getAbTestProgressFromUiSettings,
+  getUiSettings,
   loadUserUiSettings,
   saveAbTestProgress,
 } from './abTest.progress.js'
-import { planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
-import { interpolateFirstName } from '../content/abTest.results.js'
-import { setPendingTelegramIdentity } from '../../../modules/telegram-mentor/services/pendingIdentity.service.js'
 
 const QUESTION_LABELS: Record<AbTestQuestionId, string> = {
   q1: 'Що відбувається',
@@ -58,10 +62,7 @@ const UI_COPY = {
   browser: absystemButtons.openInBrowser,
 } as const
 
-export async function sendLogMessage(
-  ctx: Context,
-  progress: AbTestProgress
-): Promise<void> {
+export async function sendLogMessage(ctx: Context, progress: AbTestProgress) {
   if (progress.answers.length === 0) {
     return
   }
@@ -76,8 +77,22 @@ export async function sendLogMessage(
     )
   }
 
-  // [FIX] removed edit buttons — editing broken, not in ТЗ Block 3
-  await planMessage(ctx, 'ctx.reply', 'ab_test_send_log', lines.join('\n'), undefined, 'Markdown')
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'ab_test_send_log',
+    lines.join('\n'),
+    undefined,
+    'Markdown'
+  )
+}
+
+function formatTelegramButtonText(value: string): string {
+  return value
+    .replace(/^([А-ЯҐЄІЇA-Z])\./, '$1.\n')
+    .replace(/\. /g, '.\n')
+    .replace(/ — /g, '\n— ')
+    .replace(/, /g, ',\n')
 }
 
 export async function sendActionMessage(
@@ -86,7 +101,7 @@ export async function sendActionMessage(
   progress: AbTestProgress,
   questionIndex: number,
   mode: 'reply' | 'edit' = 'reply'
-): Promise<void> {
+) {
   const questionOrder = resolveAbTestQuestionOrder()
   if (questionIndex < 0 || questionIndex >= questionOrder.length) {
     await renderCurrentView(ctx, userId, progress)
@@ -102,15 +117,18 @@ export async function sendActionMessage(
   const miniAppButton = buildWebAppButton(UI_COPY.miniApp, '/ab-test')
   const text = `*${question.prompt}*`
 
-  const answerRows = question.answers.map((answer) => [
-    {
-      text:
-        selectedAnswerId === answer.id
-          ? `✅ ${answer.text} (Обрано)`
-          : answer.text,
-      callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${progress.revision}`,
-    },
-  ])
+  const answerRows = question.answers.map((answer) => {
+    const cleanText = answer.text.replace(/^[А-Д]\.\n/, '')
+    return [
+      {
+        text:
+          selectedAnswerId === answer.id
+            ? `✅ ${formatTelegramButtonText(answer.text)}`
+            : formatTelegramButtonText(answer.text),
+        callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${progress.revision}`,
+      },
+    ]
+  })
 
   const markup = {
     parse_mode: 'Markdown' as const,
@@ -118,10 +136,14 @@ export async function sendActionMessage(
       inline_keyboard: [
         ...answerRows,
         ...(miniAppButton || browserUrl
-          ? [[
-              ...(miniAppButton ? [miniAppButton] : []),
-              ...(browserUrl ? [{ text: UI_COPY.browser, url: browserUrl }] : []),
-            ]]
+          ? [
+              [
+                ...(miniAppButton ? [miniAppButton] : []),
+                ...(browserUrl
+                  ? [{ text: UI_COPY.browser, url: browserUrl }]
+                  : []),
+              ],
+            ]
           : []),
       ],
     },
@@ -140,7 +162,7 @@ export async function sendActionMessage(
         'ab_test_send_action_edit',
         text,
         markup.reply_markup,
-        'Markdown',
+        'Markdown'
       )
       return
     } catch {
@@ -148,14 +170,21 @@ export async function sendActionMessage(
     }
   }
 
-  await planMessage(ctx, 'ctx.reply', 'ab_test_send_action_reply', text, markup.reply_markup, 'Markdown')
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'ab_test_send_action_reply',
+    text,
+    markup.reply_markup,
+    'Markdown'
+  )
 }
 
 export async function renderAbTestCompletedResult(
   ctx: Context,
   userId: string,
-  progress: AbTestProgress,
-): Promise<void> {
+  progress: AbTestProgress
+) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { firstName: true, telegramUserName: true, settings: true },
@@ -180,7 +209,7 @@ export async function renderAbTestCompletedResult(
       : []
   })
 
-  const snapshot = buildBehavioralSnapshot({ answers: resolvedAnswers })
+  // const snapshot = buildBehavioralSnapshot({ answers: resolvedAnswers })
   const canonicalResult = resolveCanonicalTestResult(
     progress.answers.map((answer) => ({
       questionId: answer.question_id,
@@ -188,14 +217,14 @@ export async function renderAbTestCompletedResult(
     }))
   )
   const dominantBlock = canonicalResult.type
-  const prompt = await PromptProvider.getPrompt(
-    `test.result.${String(dominantBlock).toLowerCase()}`,
-    {
-      userName: user?.firstName || 'Сяюча зірка',
-      unresolvedGoal: snapshot.unresolvedGoal || '',
-      dominantBlock: String(dominantBlock),
-    }
-  )
+  // const prompt = await PromptProvider.getPrompt(
+  //   `test.result.${String(dominantBlock).toLowerCase()}`,
+  //   {
+  //     userName: user?.firstName || 'Сяюча зірка',
+  //     unresolvedGoal: snapshot.unresolvedGoal || '',
+  //     dominantBlock: String(dominantBlock),
+  //   }
+  // )
   const next = buildAbTestProgressPatch(progress, {
     result_opened_at: progress.result_opened_at ?? new Date().toISOString(),
     last_event_at: new Date().toISOString(),
@@ -224,7 +253,7 @@ export async function renderAbTestCompletedResult(
     payload: {
       result_key: next.result_key,
       dominantBlock,
-      prompt_source: prompt.source,
+      // prompt_source: prompt.source,
     } satisfies Prisma.JsonObject,
   })
 
@@ -237,22 +266,99 @@ export async function renderAbTestCompletedResult(
   }
 
   const resultBody = interpolateFirstName(resultDef.body, firstName)
-  await ctx.telegram.sendMessage(
-    chatId,
-    escapeHtml(resultBody),
-    {
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
-          [{ text: 'Як це виглядає зсередини?', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
-        ],
-      },
-    },
+  const hasPreviewClick = await hasTelegramCtaInteraction(
+    userId,
+    `show_inside_${resultKey.toUpperCase()}`
   )
+  const inlineKeyboard = {
+    inline_keyboard: [
+      [{ text: 'Хочу у\nФОКУС →', callback_data: 'open_focus_payment' }],
+      ...(hasPreviewClick
+        ? []
+        : [
+            [
+              {
+                text: 'Показати\nяк проходить\nпрактика',
+                callback_data: `show_inside_${resultKey.toUpperCase()}`,
+              },
+            ],
+          ]),
+    ],
+  }
+  const sections = splitResultSections(resultBody)
+  const hasAnyResultSection =
+    sections.intro.length > 0 ||
+    sections.practice.length > 0 ||
+    sections.proof.length > 0
+
+  if (!hasAnyResultSection) {
+    await ctx.telegram.sendMessage(
+      chatId,
+      buildTelegramHtmlCard(resultDef.title, resultBody.trim() ? resultBody.split('\n') : ['Твій результат готовий.']),
+      {
+        parse_mode: 'HTML',
+        reply_markup: inlineKeyboard,
+      },
+    )
+
+    console.info('[AB_TEST_RESULT_SEND_OK]', {
+      transition: 'ab_test_result_fallback',
+      chatId: String(chatId),
+    })
+
+    return
+  }
+
+
+  if (sections.intro.length) {
+    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    const ctxIntro = {
+      ...ctx,
+      update: { ...ctx.update, update_id: Date.now() + 1 },
+    } as Context
+    await sendTelegramHtmlCard(
+      ctxIntro,
+      'ab_test_result_intro',
+      resultDef.title,
+      sections.intro,
+      inlineKeyboard
+    )
+  }
+
+  if (sections.practice.length) {
+    await sleep(3000)
+    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    const ctxPractice = {
+      ...ctx,
+      update: { ...ctx.update, update_id: Date.now() + 2 },
+    } as Context
+    await sendTelegramHtmlCard(
+      ctxPractice,
+      'ab_test_result_practice',
+      'Як це виглядає зсередини?',
+      sections.practice,
+      inlineKeyboard
+    )
+  }
+
+  if (sections.proof.length) {
+    await sleep(3000)
+    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    const ctxProof = {
+      ...ctx,
+      update: { ...ctx.update, update_id: Date.now() + 3 },
+    } as Context
+    await sendTelegramHtmlCard(
+      ctxProof,
+      'ab_test_result_proof',
+      'Відгук і умови',
+      sections.proof,
+      inlineKeyboard
+    )
+  }
 }
 
-function sleep(ms: number): Promise<void> {
+function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
@@ -263,11 +369,117 @@ function escapeHtml(value: string) {
     .replaceAll('>', '&gt;')
 }
 
+function buildTelegramHtmlCard(title: string, lines: string[]): string {
+  const toQuotedLine = (value: string) => {
+    const normalized = value.trim()
+    if (!normalized) {
+      return null
+    }
+
+    if (
+      (normalized.startsWith('"') && normalized.endsWith('"')) ||
+      normalized.startsWith('📸 [СКРІН')
+    ) {
+      return `<blockquote>${escapeHtml(normalized.replace(/^"|"$/g, ''))}</blockquote>`
+    }
+
+    if (normalized.startsWith('[ЦИТАТА]')) {
+      return `<blockquote>${escapeHtml(normalized.slice('[ЦИТАТА]'.length).trim())}</blockquote>`
+    }
+
+    if (normalized.startsWith('ЦИТАТА:')) {
+      return `<blockquote>${escapeHtml(normalized.slice('ЦИТАТА:'.length).trim())}</blockquote>`
+    }
+
+    if (normalized.startsWith('QUOTE:')) {
+      return `<blockquote>${escapeHtml(normalized.slice('QUOTE:'.length).trim())}</blockquote>`
+    }
+
+    return null
+  }
+
+  const body = lines
+    .map((line) => {
+      const normalized = line.trim()
+      if (!normalized) {
+        return ''
+      }
+
+      const quotedLine = toQuotedLine(line)
+      if (quotedLine) {
+        return quotedLine
+      }
+
+      if (normalized.startsWith('· ')) {
+        return `• ${escapeHtml(normalized.slice(2))}`
+      }
+
+      return escapeHtml(line)
+    })
+    .join('\n')
+
+  return [`<b>${escapeHtml(title)}</b>`, '', body].join('\n')
+}
+
+async function sendTelegramHtmlCard(
+  ctx: Context,
+  transition: string,
+  title: string,
+  lines: string[],
+  inlineKeyboard?: InlineKeyboardMarkup,
+): Promise<void> {
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+  if (!chatId) return
+
+  await ctx.telegram.sendMessage(chatId, buildTelegramHtmlCard(title, lines), {
+    parse_mode: 'HTML',
+    reply_markup: inlineKeyboard,
+  })
+
+  console.info('[AB_TEST_RESULT_SEND_OK]', {
+    transition,
+    chatId: String(chatId),
+  })
+}
+
+function splitResultSections(body: string) {
+  const lines = body.split('\n')
+  const practiceStart = lines.findIndex(
+    (line) =>
+      line.startsWith('Що відбувається у ФОКУСІ —') ||
+      line.startsWith('У ФОКУСІ ми якраз працюємо з такими ситуаціями.') ||
+      line.startsWith(
+        'У ФОКУСІ ми працюємо не з красивими цілями, а з реальними.'
+      ) ||
+      line.startsWith(
+        'У ФОКУСІ ми будемо працювати саме з такими моментами.'
+      ) ||
+      line.startsWith(
+        'У ФОКУСІ ми працюємо з рішеннями через реальні ситуації.'
+      ) ||
+      line.startsWith(
+        'У ФОКУСІ ми не будемо просто говорити про твою ситуацію.'
+      )
+  )
+  const proofStart = lines.findIndex((line) =>
+    line.startsWith('( вставка відгуку — скрін )')
+  )
+
+  const introEnd = practiceStart > 0 ? practiceStart : lines.length
+  const proofBegin = proofStart > 0 ? proofStart : lines.length
+
+  return {
+    intro: lines.slice(0, introEnd),
+    practice: practiceStart > 0 ? lines.slice(practiceStart, proofBegin) : [],
+    proof: proofStart > 0 ? lines.slice(proofStart) : [],
+  }
+}
+
 export async function renderAbTestFocusOffer(
   ctx: Context,
   userId: string,
-  progress: AbTestProgress,
-): Promise<void> {
+  progress: AbTestProgress
+) {
   if (!progress.result_key) {
     return
   }
@@ -281,70 +493,245 @@ export async function renderAbTestFocusOffer(
     where: { id: userId },
     select: { firstName: true, telegramUserName: true },
   })
-  const version = progress.started_at ? resolveTestDriveVersion(progress.started_at) : 'legacy'
-  const copy = resolveAbTestFollowupCopy('DOJIM_0_IMMEDIATE', progress.result_key, version, {
-    firstName: user?.firstName ?? user?.telegramUserName ?? null,
-  })
+  const version = progress.started_at
+    ? resolveTestDriveVersion(progress.started_at)
+    : 'legacy'
+  const copy = resolveAbTestFollowupCopy(
+    'DOJIM_0_IMMEDIATE',
+    progress.result_key,
+    version,
+    {
+      firstName: user?.firstName ?? user?.telegramUserName ?? null,
+    }
+  )
+  const hasPreviewClick = await hasTelegramCtaInteraction(
+    userId,
+    `show_inside_${progress.result_key.toUpperCase()}`
+  )
+  const inlineKeyboard = [
+    [
+      {
+        text: copy.cta ?? 'Приєднатись до\nФОКУСУ →',
+        callback_data: 'open_focus_payment',
+      },
+    ],
+    ...(hasPreviewClick
+      ? []
+      : [
+          [
+            {
+              text: 'Показати\nяк проходить\nпрактика',
+              callback_data: `show_inside_${progress.result_key.toUpperCase()}`,
+            },
+          ],
+        ]),
+  ]
 
   await ctx.telegram.sendMessage(
     chatId,
     [copy.title, '', copy.body].join('\n'),
     {
       reply_markup: {
-        inline_keyboard: [[
-          {
-            text: copy.cta ?? 'Приєднатись до ФОКУСУ →',
-            callback_data: 'open_focus_payment',
-          },
-        ]],
+        inline_keyboard: inlineKeyboard,
       },
-    },
+    }
   )
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      offerShownAt: new Date(),
-      lifecycleState: 'OFFER_SHOWN',
-    },
-  }).catch(() => undefined)
+  await testOrchestrator.onDojimSequenceComplete(userId).catch(() => undefined)
 }
 
 export async function renderAbTestResultThenOffer(
   ctx: Context,
   userId: string,
   progress: AbTestProgress,
-  options: { typing?: boolean } = {},
-): Promise<void> {
+  options: { typing?: boolean } = {}
+) {
   if (options.typing ?? true) {
     await sleep(1000)
   }
   await renderAbTestCompletedResult(ctx, userId, progress)
-  await sleep(500)
-  await renderAbTestFocusOffer(ctx, userId, progress)
 }
 
 export async function renderAbTestPostEmailSubmitSequence(
   ctx: Context,
   userId: string,
-  progress: AbTestProgress,
-): Promise<void> {
+  progress: AbTestProgress
+) {
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+  if (!chatId) return
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firstName: true, telegramUserName: true },
+  })
+
+  const resultKey = String(progress.result_key ?? '').toLowerCase() as AbTestResultKey
+  const resultDef = getAbTestResultDefinition(resultKey)
+  const firstName = user?.firstName ?? user?.telegramUserName ?? null
+  const resultBody = interpolateFirstName(resultDef.body, firstName)
+
+  const audioUrl = 'https://drive.google.com/file/d/1mu9OXCu65KGHth7dktSdbj6zbuE2HjQ7/view?usp=drive_link'
+  const rawLines = resultBody
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('[КНОПКА:'))
+
+  const voiceIndex = rawLines.findIndex((line) => line.startsWith('[ГОЛОСОВЕ'))
+  const resultLines = voiceIndex >= 0 ? rawLines.slice(0, voiceIndex) : rawLines
+
+  const chunks: string[][] = []
+  let current: string[] = []
+  let currentLength = 0
+
+  for (const line of resultLines) {
+    if (line.toLowerCase().includes('прослухати голосове повідомлення')) continue
+
+    if (currentLength + line.length > 850 && current.length) {
+      chunks.push(current)
+      current = []
+      currentLength = 0
+    }
+
+    current.push(line)
+    currentLength += line.length
+  }
+
+  if (current.length) chunks.push(current)
+
+  const boldLines = new Set([
+    resultDef.title,
+    'Тримаєшся з останніх сил.',
+    'Ти активна. Робиш багато.',
+    'Більше дій — не вихід.',
+    'Ти приходиш з тим що робиш але що нікуди не веде.',
+    'Замість списку нових дій ти виходиш з одним кроком. Але точним.',
+    'Ксенія написала після роботи зі мною:',
+    'Мене звати Надя.',
+    'AB System — це система з 5 елементів: СТАН, ЦІЛЬ, ВИБІР, РІШЕННЯ, ДІЯ.',
+    'Тест показав де саме зупиняєшся ти.',
+    'Я знаю як допомогти тобі це пройти…',
+  ])
+
+  const htmlBlock = (title: string | null, lines: string[]) => {
+    const body = lines.map((line) => {
+      const clean = line.trim()
+      if (!clean) return ''
+
+      if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith('«') && clean.endsWith('»'))) {
+        return `<blockquote>${escapeHtml(clean.replace(/^"|"$/g, ''))}</blockquote>`
+      }
+
+      if (boldLines.has(clean)) {
+        return `<b>${escapeHtml(clean)}</b>`
+      }
+
+      if (clean.startsWith('· ')) {
+        return `• ${escapeHtml(clean.slice(2))}`
+      }
+
+      return escapeHtml(clean)
+    }).join('\n\n')
+
+    return title ? `<b>${escapeHtml(title)}</b>\n\n${body}` : body
+  }
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    if (index > 0) await sleep(3000)
+
+    await ctx.telegram.sendMessage(
+      chatId,
+      htmlBlock(
+        null,
+        index === 0
+          ? [`${firstName ?? ''}, ось твій результат.`, resultDef.title, ...chunks[index]]
+          : chunks[index],
+      ),
+      { parse_mode: 'HTML' }
+    )
+  }
+
+  await sleep(3000)
+  await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+  await ctx.telegram.sendMessage(
+    chatId,
+    [
+      '🎧 <b>Голосове від Наді</b>',
+      '',
+      `Чому ти отримала результат «${escapeHtml(resultDef.title)}» і що з цим робити далі.`,
+      '',
+      `<a href="${audioUrl}">[АУДІОЗАГЛУШКА · замінити на реальне голосове 60–90 сек]</a>`,
+    ].join('\n'),
+    { parse_mode: 'HTML' }
+  )
+
+  await sleep(3000)
+  await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+  await ctx.telegram.sendMessage(
+    chatId,
+    '<b>Хочеш подивитись, як це проходить на практиці?</b>',
+    {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+          [{ text: 'Показати практику', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+        ],
+      },
+    }
+  )
+
+  console.info('[AB_TEST_SKIP_DIRECT_RESULT_OK]', {
+    userId,
+    chatId: String(chatId),
+    resultKey,
+    messageKey: resultDef.message_key,
+  })
+}
+
+export async function renderAbTestEmailGate(
+  ctx: Context,
+  userId: string,
+  progress: AbTestProgress
+) {
+  const profileEmail = await getAbTestProfileEmail(userId)
+  console.info('[AB_TEST_Q8_TRACE] result_render_blocked_by_email_gate', {
+    userId,
+    resultKey: progress.result_key,
+    emailStage: progress.email_stage,
+  })
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) {
     return
   }
 
-  await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-  await renderAbTestResultThenOffer(ctx, userId, progress)
+  await ctx.telegram.sendMessage(
+    chatId,
+    buildAbTestEmailGateMessage(profileEmail),
+    {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Пропустити →', callback_data: 'skip_email_before_result' }],
+        ],
+      },
+    }
+  )
+  await setPendingTelegramIdentity({
+    chatId: String(chatId),
+    telegramUserId: String(ctx.from?.id ?? ''),
+    telegramUserName: ctx.from?.username ?? null,
+    firstName: ctx.from?.first_name ?? null,
+    source: 'email_after_test',
+    requestId: null,
+  })
 }
 
 export async function renderCurrentView(
   ctx: Context,
   userId: string,
   progress: AbTestProgress
-): Promise<void> {
-  // [FIX] only re-read DB for non-completed progress
-  // completed progress is passed directly to avoid race condition
+) {
   if (progress.status !== 'completed') {
     const uiSettings = await loadUserUiSettings(userId)
     progress = getAbTestProgressFromUiSettings(uiSettings)
@@ -352,34 +739,7 @@ export async function renderCurrentView(
 
   if (progress.status === 'completed' && progress.result_key) {
     if (progress.email_stage === 'pending') {
-      const profileEmail = await getAbTestProfileEmail(userId)
-      console.info('[AB_TEST_Q8_TRACE] result_render_blocked_by_email_gate', {
-        userId,
-        resultKey: progress.result_key,
-        emailStage: progress.email_stage,
-      })
-      const chatId = ctx.chat?.id ?? ctx.from?.id
-      if (chatId) {
-        await ctx.telegram.sendMessage(
-          chatId,
-          buildAbTestEmailGateMessage(Boolean(profileEmail)),
-          {
-            reply_markup: {
-              inline_keyboard: [[
-                { text: 'Пропустити →', callback_data: 'skip_email_before_result' },
-              ]],
-            },
-          },
-        )
-        await setPendingTelegramIdentity({
-          chatId: String(chatId),
-          telegramUserId: String(ctx.from?.id ?? ''),
-          telegramUserName: ctx.from?.username ?? null,
-          firstName: ctx.from?.first_name ?? null,
-          source: 'email_after_test',
-          requestId: null,
-        })
-      }
+      await renderAbTestEmailGate(ctx, userId, progress)
       return
     }
     await renderAbTestCompletedResult(ctx, userId, progress)

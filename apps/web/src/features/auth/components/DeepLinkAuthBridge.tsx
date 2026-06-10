@@ -80,7 +80,7 @@ export default function DeepLinkAuthBridge() {
       processedTokenRef.current = token
       search.delete('dl')
       if (isTelegramMiniApp(location.pathname)) {
-        navigate('/miniapp', { replace: true })
+        navigate('/miniapp/zoom-calendar', { replace: true })
         return
       }
       navigate(
@@ -116,7 +116,7 @@ export default function DeepLinkAuthBridge() {
         const targetPath = result.link.path
 
         if (isTelegramMiniApp(location.pathname)) {
-          navigate('/miniapp', { replace: true })
+          navigate('/miniapp/zoom-calendar', { replace: true })
           return
         }
 

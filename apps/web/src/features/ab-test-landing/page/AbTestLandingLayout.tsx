@@ -35,7 +35,7 @@ type AbTestLandingLayoutProps = {
   children: ReactNode
 }
 
-export default function AbTestLandingLayout({ children }: AbTestLandingLayoutProps) {
+export default function  AbTestLandingLayout({ children }: AbTestLandingLayoutProps) {
   useEffect(() => {
     const hideAssistant = () => {
       const selectors = [
@@ -146,7 +146,7 @@ export default function AbTestLandingLayout({ children }: AbTestLandingLayoutPro
     descriptionTag.setAttribute('content', AB_TEST_LANDING_SEO.description)
     viewportTag.setAttribute(
       'content',
-      'width=device-width, initial-scale=1.0, maximum-scale=1.0'
+      'width=device-width, initial-scale=1, viewport-fit=cover'
     )
     ogTitleTag.setAttribute('content', AB_TEST_LANDING_SEO.title)
     ogDescriptionTag.setAttribute('content', AB_TEST_LANDING_SEO.description)
@@ -165,7 +165,7 @@ export default function AbTestLandingLayout({ children }: AbTestLandingLayoutPro
       descriptionTag.setAttribute('content', previousValues.description ?? '')
       viewportTag.setAttribute(
         'content',
-        previousValues.viewport ?? 'width=device-width, initial-scale=1.0, maximum-scale=1.0'
+        previousValues.viewport ?? 'width=device-width, initial-scale=1, viewport-fit=cover'
       )
       ogTitleTag.setAttribute('content', previousValues.ogTitle ?? '')
       ogDescriptionTag.setAttribute('content', previousValues.ogDescription ?? '')

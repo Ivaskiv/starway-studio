@@ -324,7 +324,8 @@ function resolveScoreRows(
 
 function chooseWinner(
   categoryBreakdown: Record<AbTestResultType, number>,
-  tieBreakBreakdown: Record<AbTestResultType, number>
+  tieBreakBreakdown: Record<AbTestResultType, number>,
+  tiebreakerAnswersReversed: Array<{ type: AbTestResultType }>
 ): AbTestResultType {
   const highestScore = Math.max(
     ...RESULT_ORDER.map((type) => categoryBreakdown[type])
@@ -344,7 +345,17 @@ function chooseWinner(
     (type) => tieBreakBreakdown[type] === highestTieBreakScore
   )
 
-  return tieBreakCandidates[0] ?? topCandidates[0] ?? 'STATE'
+  if (tieBreakCandidates.length === 1) {
+    return tieBreakCandidates[0]
+  }
+
+  for (const answer of tiebreakerAnswersReversed) {
+    if (tieBreakCandidates.includes(answer.type)) {
+      return answer.type
+    }
+  }
+
+  return topCandidates[0] ?? 'STATE'
 }
 
 function resolveCanonicalTestResultLocal(
@@ -368,7 +379,16 @@ function resolveCanonicalTestResultLocal(
     }
   }
 
-  const type = chooseWinner(categoryBreakdown, tieBreakBreakdown)
+  const tiebreakerAnswersReversed = [...scoredAnswers]
+    .filter((answer) => tieBreakQuestionIds.has(answer.questionId))
+    .sort((left, right) => right.questionId.localeCompare(left.questionId, undefined, { numeric: true }))
+    .map((answer) => ({ type: ANSWER_TO_RESULT[answer.answerId] }))
+
+  const type = chooseWinner(
+    categoryBreakdown,
+    tieBreakBreakdown,
+    tiebreakerAnswersReversed
+  )
 
   return {
     type,
@@ -1250,7 +1270,7 @@ export default function AbTestPage() {
               {!isAuthenticated ? (
                 <Button
                   type="button"
-                  onClick={() => navigate(isTelegramMiniApp() ? '/miniapp' : '/register?from=ab-test')}
+                  onClick={() => navigate(isTelegramMiniApp() ? '/miniapp/zoom-calendar' : '/register?from=ab-test')}
                   variant="glass"
                   fullWidth
                 >

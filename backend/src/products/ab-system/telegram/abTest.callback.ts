@@ -31,6 +31,7 @@ export function parseAbTestCallback(
   if (action === 'ab_test:entry') return { kind: 'entry' }
   if (action === 'ab_test:intro') return { kind: 'intro' }
   if (action === 'ab_test:resume') return { kind: 'resume' }
+  if (action === 'ab_test:continue') return { kind: 'resume' }
   if (action === 'ab_test:restart') return { kind: 'restart' }
   if (action === 'ab_test:show_result') return { kind: 'show_result' }
   if (action === 'ab_test:test_drive') return { kind: 'test_drive' }

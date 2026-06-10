@@ -2,6 +2,7 @@ import type { Prisma } from '@starway/db/prisma-client'
 
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 import { prisma } from '../../../db/client.js'
+import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import {
   AB_TEST_UI_SETTINGS_KEY,
   buildAbTestProgressPatch,
@@ -100,16 +101,31 @@ export async function getAbTestProfileEmail(userId: string): Promise<string | nu
   return email
 }
 
-export function buildAbTestEmailGateMessage(hasProfileEmail: boolean): string {
-  if (hasProfileEmail) {
-    return 'У профілі вже є email. Підтверди його, надіславши ще раз одним повідомленням.\n\nЯкщо він змінився — введи актуальний email.'
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+export function buildAbTestEmailGateMessage(profileEmail: string | null): string {
+  if (profileEmail) {
+    const email = escapeHtml(profileEmail)
+    return [
+      `У профілі вже є email: <a href="mailto:${email}">${email}</a>`,
+      '',
+      'Підтвердь його, надіславши ще раз одним повідомленням.',
+      'Якщо він змінився — надішли актуальний email.',
+    ].join('\n')
   }
 
-  return 'Введи email одним повідомленням, щоб:\n\n'
-    + '• зберегти результат\n'
-    + '• отримати персональний розбір\n'
-    + '• побачити свій наступний крок\n\n'
-    + 'Після цього я підготую твій результат.'
+  return [
+    'Щоб зберегти результат, надішли email одним повідомленням.',
+    '',
+    'Після цього я покажу твій результат і наступний крок.',
+  ].join('\n')
 }
 
 export async function ensureAbTestEmailCapturedFromProfile(userId: string, progress: AbTestProgress): Promise<AbTestProgress> {
@@ -134,17 +150,14 @@ export async function ensureAbTestEmailCapturedFromProfile(userId: string, progr
   })
 
   await saveAbTestProgress(userId, next)
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      email: email ?? undefined,
-      testStartedAt: progress.started_at ? new Date(progress.started_at) : undefined,
-      testCompletedAt: nowIso,
-      testResultType: progress.result_key ?? undefined,
-      funnelStage: 'LEAD',
-      lifecycleState: 'TEST_DONE',
+  await testOrchestrator.onTestCompleted(
+    userId,
+    progress.result_key ?? null,
+    email,
+    {
+      startedAt: progress.started_at ? new Date(progress.started_at) : undefined,
     },
-  })
+  )
 
   return next
 }

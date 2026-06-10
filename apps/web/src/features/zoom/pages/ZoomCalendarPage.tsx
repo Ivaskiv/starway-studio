@@ -9,6 +9,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 type ViewState = 'public' | 'personal' | 'pending'
 
+type ZoomCalendarPageProps = {
+  isPublic?: boolean
+}
+
 function formatRange(week: ZoomWeekOverview['week']): string {
   const from = new Date(week.from)
   const to = new Date(week.to)
@@ -64,20 +68,25 @@ function PublicWeekOverview({ overview }: { overview: ZoomWeekOverview }) {
   )
 }
 
-export default function ZoomCalendarPage() {
+export default function ZoomCalendarPage({ isPublic = false }: ZoomCalendarPageProps) {
   const user = useAppSelector(selectCurrentUser)
   const authStatus = useAppSelector(selectAuthStatus)
   const [telegramMiniAppAuth] = useTelegramMiniAppAuthMutation()
-  const [viewState, setViewState] = useState<ViewState>(user ? 'personal' : 'public')
+  const [viewState, setViewState] = useState<ViewState>(isPublic ? 'public' : (user ? 'personal' : 'public'))
   const authAttemptedRef = useRef(false)
   const isTelegramRuntime = isTelegramMiniApp('/zoom-calendar')
 
   const { data: publicOverview, isLoading: isPublicLoading, isError: isPublicError } = useGetPublicWeekOverviewQuery(undefined, {
-    skip: Boolean(user) || viewState === 'pending',
+    skip: isPublic ? false : (Boolean(user) || viewState === 'pending'),
     refetchOnMountOrArgChange: true,
   })
 
   useEffect(() => {
+    if (isPublic) {
+      setViewState('public')
+      return
+    }
+
     if (user) {
       setViewState('personal')
       return
@@ -102,14 +111,14 @@ export default function ZoomCalendarPage() {
       .unwrap()
       .then(() => setViewState('personal'))
       .catch(() => setViewState('public'))
-  }, [isTelegramRuntime, telegramMiniAppAuth, user])
+  }, [isPublic, isTelegramRuntime, telegramMiniAppAuth, user])
 
   const personalMode = useMemo(() => {
     if (!user) return 'user'
     return user.role === 'EXPERT' || user.role === 'SUPERADMIN' ? 'coach' : 'user'
   }, [user])
 
-  if (viewState === 'pending' || (isTelegramRuntime && authStatus === 'loading' && !user)) {
+  if (viewState === 'pending' || (!isPublic && isTelegramRuntime && authStatus === 'loading' && !user)) {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/80">
         Авторизуємо Zoom Calendar…
@@ -117,7 +126,7 @@ export default function ZoomCalendarPage() {
     )
   }
 
-  if (user) {
+  if (!isPublic && user) {
     return (
       <div className="mx-auto w-full max-w-6xl px-4 py-6">
         <ZoomCalendar mode={personalMode} userId={user.id} expertId={user.expertId ?? undefined} />

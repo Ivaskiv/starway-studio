@@ -332,25 +332,6 @@ export async function syncAccessAwareChatMenuButton(
   const normalizedChatId = typeof chatId === 'string' ? Number(chatId) : chatId
   if (!Number.isFinite(normalizedChatId)) return
   try {
-    if (await hasOpenStarwayAccess(userId)) {
-      const appUrl = getTelegramAppUrl('/miniapp?startapp=ai')
-      if (!appUrl) {
-        await bot.telegram.setChatMenuButton({
-          chatId: normalizedChatId,
-          menuButton: { type: 'default' },
-        })
-        return
-      }
-      await bot.telegram.setChatMenuButton({
-        chatId: normalizedChatId,
-        menuButton: {
-          type: 'web_app',
-          text: stankeyContent.telegram.buttons.openStarway,
-          web_app: { url: appUrl },
-        },
-      })
-      return
-    }
     await bot.telegram.setChatMenuButton({
       chatId: normalizedChatId,
       menuButton: { type: 'default' },
@@ -395,7 +376,7 @@ export async function getAccessAwareAppReplyMarkupForContext(
   }
   return openAppKeyboard(
     '/miniapp?startapp=ai',
-    stankeyContent.telegram.buttons.openStarway
+    'Starway'
   ).reply_markup
 }
 async function trackLeadPayloadEntry(
@@ -426,7 +407,7 @@ async function sendProductPriorityChoice(
   )
   const replyMarkup = openAppKeyboard(
     '/miniapp?startapp=ai',
-    stankeyContent.telegram.buttons.openStarway
+    'Starway'
   ).reply_markup
   await planMessage(
     ctx,
@@ -435,10 +416,9 @@ async function sendProductPriorityChoice(
     stankeyContent.telegram.product.productPriorityLines.join('\n'),
     {
       inline_keyboard: [
-        ...(replyMarkup.inline_keyboard ?? []),
         [
           {
-            text: stankeyContent.telegram.buttons.repeatMaterial,
+            text: stankeyContent.telegram.buttons.continueMaterial,
             callback_data: 'lm_continue_material',
           },
         ],

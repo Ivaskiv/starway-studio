@@ -27,9 +27,9 @@ export const stankeyContent = {
       openOffer: '🚀 Відкрити пропозицію',
       openPaidAccess: '💎 Відкрити доступ',
       continueMaterial: '🎁 Продовжити практикум',
-      repeatMaterial: '🎁 Пройти матеріал ще раз',
-      openStarway: 'Відкрити Starway',
-      restoreAccess: '🚀 Відновити доступ',
+      // repeatMaterial: '🎁 Пройти матеріал ще раз',
+      // openStarway: 'Відкрити Starway',
+      // restoreAccess: '🚀 Відновити доступ',
     },
     onboarding: {
       waitlistLines: [
@@ -45,18 +45,20 @@ export const stankeyContent = {
         '',
         'Відкрий Starway і продовжуй у своєму робочому просторі.',
       ],
-      continueFromCurrentLesson: (lesson: string | null | undefined) => lesson
-        ? [
-            `▶️ Повернись до: ${lesson}`,
-            'Твій рух уже готовий до продовження.',
-          ]
-        : [
-            'Твій рух уже готовий до продовження.',
-          ],
+      continueFromCurrentLesson: (lesson: string | null | undefined) =>
+        lesson
+          ? [
+              `▶️ Повернись до: ${lesson}`,
+              'Твій рух уже готовий до продовження.',
+            ]
+          : ['Твій рух уже готовий до продовження.'],
       activeLeadMagnet: (stage: string, insight: string) =>
         `Практикум активний.${stage}${insight}\n\nПродовжуй із того місця, де ритм уже зібрався.`,
-      activeTrial: (trialDay: string | undefined, stage: string, insight: string) =>
-        `Сесія активна.\nДень ${trialDay ?? '?'} із 7.${stage}${insight}`,
+      activeTrial: (
+        trialDay: string | undefined,
+        stage: string,
+        insight: string
+      ) => `Сесія активна.\nДень ${trialDay ?? '?'} із 7.${stage}${insight}`,
       activeSubscription: (stage: string, insight: string) =>
         `Сесія активна.${stage}${insight}`,
       pausedAccess: (stage: string, insight: string) =>
@@ -97,7 +99,8 @@ export const stankeyContent = {
         '',
         'Заверши поточний етап, щоб відкрити наступний ритм.',
       ],
-      showFunnel: 'Почни з діагностики або відразу переходь до наступного кроку входу.',
+      showFunnel:
+        'Почни з діагностики або відразу переходь до наступного кроку входу.',
       winbackLines: (firstName: string) => [
         `${firstName}, твій доступ завершився.`,
         '',

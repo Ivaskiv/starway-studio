@@ -1,8 +1,6 @@
 import { randomBytes } from 'crypto'
 import { prisma } from '../../../db/client.js'
 import { trackEvent } from '../../events/service.js'
-import { getInstantInsight } from '../../ai-mentor/services.js'
-import { sendDedupedTelegramMessage } from '../../../lib/telegram.js'
 import { reconcileTelegramIdentityUsers } from '../../user/identity.service.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 import { UserCreationSource } from '../../user/userCreation.service.js'
@@ -190,16 +188,4 @@ export async function upsertTelegramBinding(params: {
     },
   }).catch(() => undefined)
 
-  const firstInsight = await getInstantInsight(userId).catch(() => null)
-  const rewardText = [
-    `${firstName ?? 'Ти'} тепер підключений 🎉`,
-    '',
-    'Нагадування, захист стріку й AI-інсайти тепер активні в Telegram.',
-    '',
-    firstInsight
-      ? `Перший інсайт готовий:\n${firstInsight.insight}`
-      : 'Перший інсайт уже готується. Відкрий ABsystem і забери наступний крок.',
-  ].join('\n')
-
-  await sendDedupedTelegramMessage(chatId, rewardText).catch(() => undefined)
 }

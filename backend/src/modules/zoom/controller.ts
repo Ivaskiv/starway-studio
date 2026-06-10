@@ -331,3 +331,23 @@ export async function getPublicCurrentWeekSessions(req: Request, res: Response, 
     next(err)
   }
 }
+
+export async function getPublicCalendarSessionsCompat(req: Request, res: Response, next: NextFunction) {
+  try {
+    const type = typeof req.query.type === 'string' ? req.query.type : 'public'
+    if (type !== 'public') {
+      return res.status(200).json({ sessions: [] })
+    }
+
+    const overview = await getPublicCurrentWeekZoomOverview()
+    return res.status(200).json({
+      sessions: overview.sessions.map((session) => ({
+        id: session.id,
+        title: session.topic,
+        startTime: session.scheduledAt,
+      })),
+    })
+  } catch (err) {
+    next(err)
+  }
+}

@@ -45,7 +45,7 @@ export default function WheelStartPage() {
           <p className="text-sm text-[var(--text-secondary)]">
             Діагностика доступна після входу в систему
           </p>
-          <Button onClick={() => navigate(isTelegramMiniApp() ? '/miniapp' : '/login')} variant="solid" className="hero-cta-primary w-full">
+          <Button onClick={() => navigate(isTelegramMiniApp() ? '/miniapp/zoom-calendar' : '/login')} variant="solid" className="hero-cta-primary w-full">
             Увійти
           </Button>
         </div>

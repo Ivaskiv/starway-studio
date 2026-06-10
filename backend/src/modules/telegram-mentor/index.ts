@@ -1,42 +1,32 @@
-import { Markup } from 'telegraf'
-import type { Context } from 'telegraf'
 import { ZoomStatus } from '@starway/db/prisma-client'
+import type { Context } from 'telegraf'
+import { Markup } from 'telegraf'
 
-import { bot, sendOpsTelegramMessage } from '../../lib/telegram.js'
-import { prisma } from '../../db/client.js'
-import { trackDmStartFromContent } from '../events/contentAttribution.service.js'
-import { guard } from './core/guard.middleware.js'
-import { handleChat } from './handlers/chat.js'
-import { handleEvening } from './handlers/evening.js'
-import { handleMorning } from './handlers/morning.js'
-import { handlePrivacy } from './handlers/privacy.js'
-import { handleStatus } from './handlers/status.js'
-import { handleVoice } from './handlers/voice.js'
-import { getSession, parseQuestionState } from './session.js'
-import { handleEveningAnswer } from './handlers/evening.js'
-import { handleMorningAnswer } from './handlers/morning.js'
-import { getAccessAwareAppReplyMarkupForContext, handlePendingTelegramIdentityText, handleStart } from './handlers/start.js'
-import { logger } from '../../utils/logger.js'
-import { resolveLinkedUserIdFromContext } from './core/state.service.js'
-import { resolveDecision, shouldRenderDecisionBeforeTransport } from '../../core/decision/decision.resolver.js'
-import { renderTelegram } from './renderers/decisionTelegram.js'
-import { dispatchTelegramCallbackEvent } from './services/telegram-event-bus.service.js'
-import { handleFocusChannelJoinByTelegramUserId, sendAbTestBlock12Welcome } from '../subscriptions/payments/callback.notifications.js'
-import { callProviderSafe } from '../sales-assistant/sales-assistant.providers.js'
-import { conversationOrchestrator } from './conversation/orchestrator/ConversationOrchestrator.js'
-import type { OrchestratedContext } from './conversation/types.js'
-import { planAck, planMessage } from './conversation/delivery/planDelivery.js'
-import {
-  AB_TEST_ACTIONS,
-} from '@/packages/abTestActions.js'
+import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import {
   handleAbTestCallback,
   handleAbTestEmailCaptureText,
   markAbTestPaymentSuccess,
 } from '@/products/ab-system/telegram/abTest.service.js'
-import { hasActiveFocusSubscription } from '../subscriptions/payments/focus.access.js'
-import { parseZoomChannelPost } from '../zoom/zoom.channel-parser.js'
 import { resolveModelStrategyTier } from '@starway/ai/providers/routing'
+import {
+  resolveDecision,
+  shouldRenderDecisionBeforeTransport,
+} from '../../core/decision/decision.resolver.js'
+import { prisma } from '../../db/client.js'
+import { bot, sendOpsTelegramMessage } from '../../lib/telegram.js'
+import { logger } from '../../utils/logger.js'
+import {
+  dispatchPipelineCallback,
+  registerPipelineCommands,
+} from '../content-pipeline/pipeline.controller.js'
+import { trackDmStartFromContent } from '../events/contentAttribution.service.js'
+import { callProviderSafe } from '../sales-assistant/sales-assistant.providers.js'
+import {
+  handleFocusChannelJoinByTelegramUserId,
+  sendAbTestBlock12Welcome,
+} from '../subscriptions/payments/callback.notifications.js'
+import { hasActiveFocusSubscription } from '../subscriptions/payments/focus.access.js'
 import {
   afterZoomOperation,
   createFullSession,
@@ -44,7 +34,27 @@ import {
   syncChannelPost,
   updateSession,
 } from '../zoom/service.js'
-import { dispatchPipelineCallback, registerPipelineCommands } from '../content-pipeline/pipeline.controller.js'
+import { parseZoomChannelPost } from '../zoom/zoom.channel-parser.js'
+import { planAck, planMessage } from './conversation/delivery/planDelivery.js'
+import { conversationOrchestrator } from './conversation/orchestrator/conversationOrchestrator.js'
+import type { OrchestratedContext } from './conversation/types.js'
+import { guard } from './core/guard.middleware.js'
+import { resolveLinkedUserIdFromContext } from './core/state.service.js'
+import { handleChat } from './handlers/chat.js'
+import { handleEvening, handleEveningAnswer } from './handlers/evening.js'
+import { handleMorning, handleMorningAnswer } from './handlers/morning.js'
+import { handlePrivacy } from './handlers/privacy.js'
+import {
+  getAccessAwareAppReplyMarkupForContext,
+  handlePendingTelegramIdentityText,
+  handleStart,
+} from './handlers/start.js'
+import { handleStatus } from './handlers/status.js'
+import { handleVoice } from './handlers/voice.js'
+import { renderTelegram } from './renderers/decisionTelegram.js'
+import { recordTelegramCtaInteraction } from './services/ctaInteraction.service.js'
+import { dispatchTelegramCallbackEvent } from './services/telegram-event-bus.service.js'
+import { getSession, parseQuestionState } from './session.js'
 
 let mentorBotRegistered = false
 const processedUpdates = new Set<number>()
@@ -55,7 +65,11 @@ interface MentorBotRegistrationOptions {
 
 function hasStructuredFields(text: string): boolean {
   const lowered = text.toLowerCase()
-  return lowered.includes('дата:') && lowered.includes('час:') && lowered.includes('тема:')
+  return (
+    lowered.includes('дата:') &&
+    lowered.includes('час:') &&
+    lowered.includes('тема:')
+  )
 }
 
 interface MonthSessionLine {
@@ -81,7 +95,9 @@ function isMissingAnthropicKey(): boolean {
   return !apiKey || apiKey === 'SET'
 }
 
-function isRetryableClaudeError(error?: { status?: number; code?: string } | null): boolean {
+function isRetryableClaudeError(
+  error?: { status?: number; code?: string } | null
+): boolean {
   if (!error) return true
   return (
     error.status === 429 ||
@@ -98,12 +114,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function handleNotebookChannelPost(ctx: Context, post: {
-  chat?: { id?: number | string }
-  message_id?: number
-  text?: string
-  caption?: string | null
-}): Promise<boolean> {
+async function handleNotebookChannelPost(
+  ctx: Context,
+  post: {
+    chat?: { id?: number | string }
+    message_id?: number
+    text?: string
+    caption?: string | null
+  }
+): Promise<boolean> {
   const rawText = String(post.text ?? post.caption ?? '').trim()
   if (!rawText) return false
 
@@ -111,10 +130,13 @@ async function handleNotebookChannelPost(ctx: Context, post: {
   if (!chatId) return false
 
   if (isMissingAnthropicKey()) {
-    console.warn('[NOTEBOOK] ANTHROPIC_API_KEY missing — skip Claude notebook call', {
-      chatId,
-      messageId: typeof post.message_id === 'number' ? post.message_id : null,
-    })
+    console.warn(
+      '[NOTEBOOK] ANTHROPIC_API_KEY missing — skip Claude notebook call',
+      {
+        chatId,
+        messageId: typeof post.message_id === 'number' ? post.message_id : null,
+      }
+    )
     return true
   }
 
@@ -124,14 +146,11 @@ async function handleNotebookChannelPost(ctx: Context, post: {
   let result = await callProviderSafe(
     'claude',
     buildNotebookSystemPrompt(),
-    [
-      'Нотатка з Telegram-каналу:',
-      rawText,
-    ].join('\n\n'),
+    ['Нотатка з Telegram-каналу:', rawText].join('\n\n'),
     {
       contentType: 'CUSTOM',
       strategyTier,
-    },
+    }
   )
 
   for (let attempt = 2; attempt <= 3 && !result.content?.trim(); attempt += 1) {
@@ -146,35 +165,44 @@ async function handleNotebookChannelPost(ctx: Context, post: {
     result = await callProviderSafe(
       'claude',
       buildNotebookSystemPrompt(),
-      [
-        'Нотатка з Telegram-каналу:',
-        rawText,
-      ].join('\n\n'),
+      ['Нотатка з Telegram-каналу:', rawText].join('\n\n'),
       {
         contentType: 'CUSTOM',
         strategyTier,
-      },
+      }
     )
   }
 
   if (!result.content?.trim()) {
     const err = result.error
-    const isBalance = err?.status === 400 &&
-      String(err?.message ?? '').toLowerCase().includes('баланс')
+    const isBalance =
+      err?.status === 400 &&
+      String(err?.message ?? '')
+        .toLowerCase()
+        .includes('баланс')
     const isBadRequest = err?.code === 'INVALID_PROVIDER_REQUEST'
-    const reason = (isBalance || isBadRequest)
-      ? '💳 Вичерпано баланс Anthropic API'
-      : '⚠️ Claude API тимчасово недоступний'
-    const buttons = (isBalance || isBadRequest)
-      ? Markup.inlineKeyboard([[
-          Markup.button.url(
-            '💳 Поповнити баланс',
-            'https://console.anthropic.com/settings/billing',
-          ),
-        ]])
-      : Markup.inlineKeyboard([[
-          Markup.button.callback('🔄 Спробувати ще раз', 'retry_last_action'),
-        ]])
+    const reason =
+      isBalance || isBadRequest
+        ? '💳 Вичерпано баланс Anthropic API'
+        : '⚠️ Claude API тимчасово недоступний'
+    const buttons =
+      isBalance || isBadRequest
+        ? Markup.inlineKeyboard([
+            [
+              Markup.button.url(
+                '💳 Поповнити баланс',
+                'https://console.anthropic.com/settings/billing'
+              ),
+            ],
+          ])
+        : Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                '🔄 Спробувати ще раз',
+                'retry_last_action'
+              ),
+            ],
+          ])
 
     console.warn('[NOTEBOOK] Claude returned empty response', {
       chatId,
@@ -182,11 +210,13 @@ async function handleNotebookChannelPost(ctx: Context, post: {
       hasError: Boolean(result.error),
       error: result.error ?? null,
     })
-    await ctx.telegram.sendMessage(
-      chatId,
-      `❌ Не вдалося передати нотатку в Claude.\n\n${reason}`,
-      buttons,
-    ).catch(() => undefined)
+    await ctx.telegram
+      .sendMessage(
+        chatId,
+        `❌ Не вдалося передати нотатку в Claude.\n\n${reason}`,
+        buttons
+      )
+      .catch(() => undefined)
     return true
   }
 
@@ -197,16 +227,13 @@ async function handleNotebookChannelPost(ctx: Context, post: {
     responseLength: replyText.length,
   })
 
-  await ctx.telegram.sendMessage(
-    chatId,
-    replyText,
-  ).catch(() => undefined)
+  await ctx.telegram.sendMessage(chatId, replyText).catch(() => undefined)
   return true
 }
 
 function parseMonthSchedule(
   text: string,
-  year: number,
+  year: number
 ): { lines: MonthSessionLine[]; errors: string[] } {
   const errors: string[] = []
   const lines: MonthSessionLine[] = []
@@ -236,10 +263,10 @@ function parseMonthSchedule(
     const scheduledAt = new Date(year, month - 1, day, hours, minutes, 0, 0)
 
     if (
-      Number.isNaN(scheduledAt.getTime())
-      || scheduledAt <= new Date()
-      || scheduledAt.getMonth() !== month - 1
-      || scheduledAt.getDate() !== day
+      Number.isNaN(scheduledAt.getTime()) ||
+      scheduledAt <= new Date() ||
+      scheduledAt.getMonth() !== month - 1 ||
+      scheduledAt.getDate() !== day
     ) {
       errors.push(`Дата в минулому або невірна: ${parts[0]}`)
       continue
@@ -289,10 +316,13 @@ async function handleTextMessage(ctx: Context) {
       })
       return
     }
-    console.warn('[AB_TEST_START_DEBUG] text_fallback:start_button_not_handled', {
-      text,
-      chatId,
-    })
+    console.warn(
+      '[AB_TEST_START_DEBUG] text_fallback:start_button_not_handled',
+      {
+        text,
+        chatId,
+      }
+    )
   }
 
   if (normalizedText === 'задати питання') {
@@ -327,7 +357,10 @@ async function handleTextMessage(ctx: Context) {
     normalizedText === 'я вже оплатила' ||
     normalizedText === 'я вже оплатив / оплатила'
   ) {
-    const opened = await handleAbTestCallback(ctx, AB_TEST_ACTIONS.FOCUS_ALREADY_PAID)
+    const opened = await handleAbTestCallback(
+      ctx,
+      AB_TEST_ACTIONS.FOCUS_ALREADY_PAID
+    )
     if (opened) return
   }
 
@@ -347,20 +380,33 @@ async function handleTextMessage(ctx: Context) {
   }
 
   const userId = (ctx.state as { userId?: string | null }).userId ?? null
-  const userState = (ctx.state as { userState?: string | null }).userState ?? null
+  const userState =
+    (ctx.state as { userState?: string | null }).userState ?? null
   if (userId) {
-    const handledEmailCapture = await handleAbTestEmailCaptureText(ctx, userId, text)
+    const handledEmailCapture = await handleAbTestEmailCaptureText(
+      ctx,
+      userId,
+      text
+    )
     if (handledEmailCapture) {
       return
     }
   } else {
-    const handledPendingIdentity = await handlePendingTelegramIdentityText(ctx, text)
+    const handledPendingIdentity = await handlePendingTelegramIdentityText(
+      ctx,
+      text
+    )
     if (handledPendingIdentity) {
       return
     }
   }
   if (userId) {
-    await trackDmStartFromContent(userId, text, 'telegram', typeof userState === 'string' ? userState : null)
+    await trackDmStartFromContent(
+      userId,
+      text,
+      'telegram',
+      typeof userState === 'string' ? userState : null
+    )
   }
 
   const { decision } = await resolveDecision(userId, 'chat_requested', { text })
@@ -373,7 +419,11 @@ async function handleTextMessage(ctx: Context) {
 }
 
 function isStaleCallback(ctx: Context, maxAgeMs = 2 * 60 * 60 * 1000): boolean {
-  if (!('callbackQuery' in ctx) || !ctx.callbackQuery || !('message' in ctx.callbackQuery)) {
+  if (
+    !('callbackQuery' in ctx) ||
+    !ctx.callbackQuery ||
+    !('message' in ctx.callbackQuery)
+  ) {
     return false
   }
 
@@ -390,7 +440,9 @@ function isStaleCallback(ctx: Context, maxAgeMs = 2 * 60 * 60 * 1000): boolean {
   return Date.now() - messageDate > maxAgeMs
 }
 
-export async function registerMentorBot(_options?: MentorBotRegistrationOptions) {
+export async function registerMentorBot(
+  _options?: MentorBotRegistrationOptions
+) {
   if (mentorBotRegistered) return
   mentorBotRegistered = true
 
@@ -412,8 +464,12 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
   bot.use(async (ctx, next) => {
     const resolvedUserId = await resolveLinkedUserIdFromContext(ctx)
-    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = resolvedUserId
-    ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
+    ;(
+      ctx.state as { userId?: string | null; userIdResolved?: boolean }
+    ).userId = resolvedUserId
+    ;(
+      ctx.state as { userId?: string | null; userIdResolved?: boolean }
+    ).userIdResolved = true
     await next()
   })
 
@@ -463,9 +519,14 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       return
     }
 
-    const resent = await handleAbTestCallback(ctx, AB_TEST_ACTIONS.FOCUS_ALREADY_PAID)
+    const resent = await handleAbTestCallback(
+      ctx,
+      AB_TEST_ACTIONS.FOCUS_ALREADY_PAID
+    )
     if (!resent) {
-      await ctx.reply('Не вдалося повторно надіслати Block 12. Спробуй через меню «Я вже оплатив / оплатила».')
+      await ctx.reply(
+        'Не вдалося повторно надіслати Block 12. Спробуй через меню «Я вже оплатив / оплатила».'
+      )
       return
     }
     await ctx.reply('✅ Block 12 повторно надіслано.')
@@ -473,30 +534,36 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
   registerPipelineCommands(bot)
   bot.command('zoomhelp', async (ctx) => {
     const coachTelegramId = process.env.COACH_TELEGRAM_ID?.trim()
-    if (!coachTelegramId || String(ctx.from?.id ?? '') !== coachTelegramId) return
+    if (!coachTelegramId || String(ctx.from?.id ?? '') !== coachTelegramId)
+      return
 
     await ctx.reply(
-      'Команди управління розкладом:\n\n'
-      + '/zoom month ММ.РРРР\n'
-      + 'Пн ДД.ММ | Тема | https://link\n'
-      + '  Додати місячний розклад\n\n'
-      + '/zoom edit <id> link https://новий-link\n'
-      + '  Оновити Zoom-посилання\n\n'
-      + '/zoom edit <id> time РРРР-ММ-ДД ГГ:ХХ\n'
-      + '  Перенести час сесії\n\n'
-      + '/zoomhelp — цей список',
+      'Команди управління розкладом:\n\n' +
+        '/zoom month ММ.РРРР\n' +
+        'Пн ДД.ММ | Тема | https://link\n' +
+        '  Додати місячний розклад\n\n' +
+        '/zoom edit <id> link https://новий-link\n' +
+        '  Оновити Zoom-посилання\n\n' +
+        '/zoom edit <id> time РРРР-ММ-ДД ГГ:ХХ\n' +
+        '  Перенести час сесії\n\n' +
+        '/zoomhelp — цей список'
     )
   })
   bot.hears(/^\/zoom edit ([a-z0-9-]+) (link|time) (.+)$/i, async (ctx) => {
     try {
       const coachTelegramId = process.env.COACH_TELEGRAM_ID?.trim()
-      if (!coachTelegramId || String(ctx.from?.id ?? '') !== coachTelegramId) return
+      if (!coachTelegramId || String(ctx.from?.id ?? '') !== coachTelegramId)
+        return
 
       const sessionId = String(ctx.match[1] ?? '').trim()
-      const field = String(ctx.match[2] ?? '').trim().toLowerCase()
+      const field = String(ctx.match[2] ?? '')
+        .trim()
+        .toLowerCase()
       const value = String(ctx.match[3] ?? '').trim()
 
-      const session = await prisma.zoomSession.findUnique({ where: { id: sessionId } })
+      const session = await prisma.zoomSession.findUnique({
+        where: { id: sessionId },
+      })
       if (!session) {
         await ctx.reply(`Сесію ${sessionId} не знайдено.`)
         return
@@ -508,7 +575,9 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
           return
         }
         const existingMeta =
-          session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests)
+          session.requests &&
+          typeof session.requests === 'object' &&
+          !Array.isArray(session.requests)
             ? (session.requests as Record<string, unknown>)
             : {}
 
@@ -520,16 +589,24 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         })
         await ctx.reply(`Zoom-посилання оновлено.\n${session.topic}`)
         const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-        const panelUrl = panelBase ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom` : ''
+        const panelUrl = panelBase
+          ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom`
+          : ''
         void sendOpsTelegramMessage(
-          `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n`
-          + `Тип події: Редагування сесії\n`
-          + `Сесія: ${session.topic}\n`
-          + `Зміна: Zoom-посилання\n`
-          + `Нове значення: ${value}`,
+          `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n` +
+            `Тип події: Редагування сесії\n` +
+            `Сесія: ${session.topic}\n` +
+            `Зміна: Zoom-посилання\n` +
+            `Нове значення: ${value}`,
           panelUrl
-            ? { reply_markup: { inline_keyboard: [[{ text: 'Панель керування', url: panelUrl }]] } }
-            : undefined,
+            ? {
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: 'Панель керування', url: panelUrl }],
+                  ],
+                },
+              }
+            : undefined
         ).catch((err) => console.error('[zoom edit] ops report:', err))
         return
       }
@@ -537,7 +614,9 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       const normalized = value.replace(' ', 'T')
       const parsedDate = new Date(normalized)
       if (Number.isNaN(parsedDate.getTime())) {
-        await ctx.reply('Невірний формат.\nПриклад: /zoom edit <id> time 2026-06-09 19:00')
+        await ctx.reply(
+          'Невірний формат.\nПриклад: /zoom edit <id> time 2026-06-09 19:00'
+        )
         return
       }
 
@@ -555,21 +634,29 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       }).catch((err) => console.error('[zoom edit] afterZoomOperation:', err))
 
       await ctx.reply(
-        `Час сесії оновлено.\n${updated.topic}\n`
-        + `Новий час: ${updated.scheduledAt.toLocaleString('uk-UA')}\n`
-        + 'Нагадування перераховано.',
+        `Час сесії оновлено.\n${updated.topic}\n` +
+          `Новий час: ${updated.scheduledAt.toLocaleString('uk-UA')}\n` +
+          'Нагадування перераховано.'
       )
       const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-      const panelUrl = panelBase ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom` : ''
+      const panelUrl = panelBase
+        ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom`
+        : ''
       void sendOpsTelegramMessage(
-        `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n`
-        + `Тип події: Редагування сесії\n`
-        + `Сесія: ${updated.topic}\n`
-        + `Зміна: Час\n`
-        + `Нове значення: ${updated.scheduledAt.toLocaleString('uk-UA')}`,
+        `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n` +
+          `Тип події: Редагування сесії\n` +
+          `Сесія: ${updated.topic}\n` +
+          `Зміна: Час\n` +
+          `Нове значення: ${updated.scheduledAt.toLocaleString('uk-UA')}`,
         panelUrl
-          ? { reply_markup: { inline_keyboard: [[{ text: 'Панель керування', url: panelUrl }]] } }
-          : undefined,
+          ? {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: 'Панель керування', url: panelUrl }],
+                ],
+              },
+            }
+          : undefined
       ).catch((err) => console.error('[zoom edit] ops report:', err))
     } catch (error) {
       logger.error('[telegram-thin-client:zoom_edit]', error)
@@ -579,12 +666,15 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
   bot.hears(/^\/zoom month\s+([\s\S]+)/, async (ctx) => {
     try {
       const coachTelegramId = process.env.COACH_TELEGRAM_ID?.trim()
-      if (!coachTelegramId || String(ctx.from?.id ?? '') !== coachTelegramId) return
+      if (!coachTelegramId || String(ctx.from?.id ?? '') !== coachTelegramId)
+        return
 
       const raw = ctx.match[1]
       const fullText = typeof raw === 'string' ? raw.trim() : ''
       if (!fullText) {
-        await ctx.reply('Не передано тіло розкладу. Формат: /zoom month ММ.РРРР + рядки сесій.')
+        await ctx.reply(
+          'Не передано тіло розкладу. Формат: /zoom month ММ.РРРР + рядки сесій.'
+        )
         return
       }
 
@@ -593,14 +683,18 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
       const headerMatch = fullText.match(/(\d{2})\.(\d{4})/)
       if (!headerMatch) {
-        await ctx.reply('Не вдалось розпізнати місяць. Формат першого рядка: /zoom month ММ.РРРР')
+        await ctx.reply(
+          'Не вдалось розпізнати місяць. Формат першого рядка: /zoom month ММ.РРРР'
+        )
         return
       }
       const year = Number(headerMatch[2])
       const { lines, errors } = parseMonthSchedule(fullText, year)
 
       if (errors.length > 0) {
-        await ctx.reply(`Знайдено помилки в розкладі:\n\n${errors.join('\n')}\n\nВиправ і надішли ще раз.`)
+        await ctx.reply(
+          `Знайдено помилки в розкладі:\n\n${errors.join('\n')}\n\nВиправ і надішли ще раз.`
+        )
         return
       }
       if (lines.length === 0) {
@@ -608,14 +702,16 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         return
       }
 
-      const expert = await prisma.expert.findFirst({
-        where: { users: { some: { telegramUserId: coachTelegramId } } },
-        select: { id: true },
-      }) ?? await prisma.expert.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true },
-      })
+      const expert =
+        (await prisma.expert.findFirst({
+          where: { users: { some: { telegramUserId: coachTelegramId } } },
+          select: { id: true },
+        })) ??
+        (await prisma.expert.findFirst({
+          where: { isActive: true },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        }))
 
       if (!expert) {
         await ctx.reply('Expert не знайдено в БД.')
@@ -636,26 +732,31 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         })
 
         if (existing) {
-          skipped.push(`${line.scheduledAt.toLocaleDateString('uk-UA')} — вже існує`)
+          skipped.push(
+            `${line.scheduledAt.toLocaleDateString('uk-UA')} — вже існує`
+          )
           continue
         }
 
-        const session = await createFullSession({
-          expertId: expert.id,
-          scheduledAt: line.scheduledAt,
-          topic: line.topic,
-          requests: {
-            type: 'group_practice',
-            zoomLink: line.zoomLink,
-            notify24h: true,
-            notify2h: true,
-            notifiedAt24h: null,
-            notifiedAt2h: null,
+        const session = await createFullSession(
+          {
+            expertId: expert.id,
+            scheduledAt: line.scheduledAt,
+            topic: line.topic,
+            requests: {
+              type: 'group_practice',
+              zoomLink: line.zoomLink,
+              notify24h: true,
+              notify2h: true,
+              notifiedAt24h: null,
+              notifiedAt2h: null,
+            },
           },
-        }, {
-          suppressAutomation: true,
-          suppressSessionNotification: true,
-        })
+          {
+            suppressAutomation: true,
+            suppressSessionNotification: true,
+          }
+        )
         created.push(session)
       }
 
@@ -673,15 +774,21 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         .join('\n')
 
       await ctx.reply(
-        `Розклад збережено: ${created.length} сесій.\n\n`
-          + `${createdLines || 'Нових сесій не створено.'}`
-          + (skipped.length > 0 ? `\n\nПропущено (вже існує):\n${skipped.join('\n')}` : ''),
+        `Розклад збережено: ${created.length} сесій.\n\n` +
+          `${createdLines || 'Нових сесій не створено.'}` +
+          (skipped.length > 0
+            ? `\n\nПропущено (вже існує):\n${skipped.join('\n')}`
+            : '')
       )
 
       if (created.length === 0) return
 
-      void syncChannelPost(bot).catch((err) => console.error('[zoom month] syncChannelPost:', err))
-      void notifyMonthSchedule(bot, created).catch((err) => console.error('[zoom month] notifyMonth:', err))
+      void syncChannelPost(bot).catch((err) =>
+        console.error('[zoom month] syncChannelPost:', err)
+      )
+      void notifyMonthSchedule(bot, created).catch((err) =>
+        console.error('[zoom month] notifyMonth:', err)
+      )
     } catch (error) {
       logger.error('[telegram-thin-client:zoom_month]', error)
       await ctx.reply('Не вдалося обробити розклад. Перевір формат і повтори.')
@@ -694,7 +801,13 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
     } catch (error) {
       logger.error('[telegram-thin-client:text]', error)
       const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-      await planMessage(ctx, 'ctx.reply', 'telegram_text_error', 'Не вдалося обробити повідомлення.', replyMarkup)
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'telegram_text_error',
+        'Не вдалося обробити повідомлення.',
+        replyMarkup
+      )
     }
   })
 
@@ -704,12 +817,19 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
     } catch (error) {
       logger.error('[telegram-thin-client:voice]', error)
       const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-      await planMessage(ctx, 'ctx.reply', 'telegram_voice_error', 'Не вдалося обробити голосове повідомлення.', replyMarkup)
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'telegram_voice_error',
+        'Не вдалося обробити голосове повідомлення.',
+        replyMarkup
+      )
     }
   })
 
   bot.on('callback_query', async (ctx) => {
-    const action = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+    const action =
+      'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
     // FIX 2025-05-25 B1: remove global callback ack; ack is handled inside concrete callback handlers
     // FIX 2026-05-25 C2: temporary callback diagnostic log
     console.log('[BOT][CB] data:', action, 'from:', ctx.from?.id)
@@ -720,12 +840,23 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       userId: (ctx.state as { userId?: string | null }).userId ?? null,
     })
     try {
+      const userId =
+        (ctx.state as { userId?: string | null }).userId ??
+        (await resolveLinkedUserIdFromContext(ctx).catch(() => null))
       if (await dispatchPipelineCallback(bot, ctx, action)) {
+        if (userId) {
+          await recordTelegramCtaInteraction(userId, action)
+        }
         return
       }
 
       if (isStaleCallback(ctx)) {
-        await planAck(ctx, 'ctx.answerCbQuery', 'telegram_stale_callback', 'Посилання застаріло — натисни /start').catch(() => undefined)
+        await planAck(
+          ctx,
+          'ctx.answerCbQuery',
+          'telegram_stale_callback',
+          'Посилання застаріло — натисни /start'
+        ).catch(() => undefined)
         console.warn('[AB_TEST_START_DEBUG] callback_query:stale_rejected', {
           action,
           chatId: String(ctx.chat?.id ?? ''),
@@ -734,17 +865,25 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       }
 
       const handled = await dispatchTelegramCallbackEvent(ctx, action)
+      if (handled && userId) {
+        await recordTelegramCtaInteraction(userId, action)
+      }
       console.info('[CALLBACK_FLOW_RESULT]', {
-  action,
-  handled,
-})
+        action,
+        handled,
+      })
 
       if (!handled) {
         console.warn('[AB_TEST_START_DEBUG] callback_query:not_handled', {
           action,
           chatId: String(ctx.chat?.id ?? ''),
         })
-        await planAck(ctx, 'ctx.answerCbQuery', 'telegram_callback_not_handled', 'Відкрий Mini App для продовження').catch(() => undefined)
+        await planAck(
+          ctx,
+          'ctx.answerCbQuery',
+          'telegram_callback_not_handled',
+          'Відкрий Mini App для продовження'
+        ).catch(() => undefined)
       } else {
         console.info('[AB_TEST_START_DEBUG] callback_query:handled', {
           action,
@@ -753,12 +892,20 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
       }
     } catch (error) {
       logger.error('[telegram-thin-client:callback]', error)
-      await planAck(ctx, 'ctx.answerCbQuery', 'telegram_callback_restore_failed', 'Не вдалося відновити сесію').catch(() => undefined)
+      await planAck(
+        ctx,
+        'ctx.answerCbQuery',
+        'telegram_callback_restore_failed',
+        'Не вдалося відновити сесію'
+      ).catch(() => undefined)
     }
   })
 
   const isParticipantStatus = (status: string | undefined): boolean =>
-    status === 'member' || status === 'administrator' || status === 'creator' || status === 'restricted'
+    status === 'member' ||
+    status === 'administrator' ||
+    status === 'creator' ||
+    status === 'restricted'
 
   const handleChannelJoinUpdate = async (ctx: Context) => {
     const update = ctx.update as {
@@ -779,16 +926,21 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
     const oldStatus = memberUpdate.old_chat_member?.status
     const newStatus = memberUpdate.new_chat_member?.status
-    const becameParticipant = !isParticipantStatus(oldStatus) && isParticipantStatus(newStatus)
+    const becameParticipant =
+      !isParticipantStatus(oldStatus) && isParticipantStatus(newStatus)
     if (!becameParticipant) return
 
-    const telegramUserId = String(memberUpdate.new_chat_member?.user?.id ?? '').trim()
+    const telegramUserId = String(
+      memberUpdate.new_chat_member?.user?.id ?? ''
+    ).trim()
     const chatId = String(memberUpdate.chat?.id ?? '').trim()
     if (!telegramUserId || !chatId) return
 
-    await handleFocusChannelJoinByTelegramUserId(telegramUserId, chatId).catch((error) => {
-      logger.warn('[focus:block12:post-join] failed', error)
-    })
+    await handleFocusChannelJoinByTelegramUserId(telegramUserId, chatId).catch(
+      (error) => {
+        logger.warn('[focus:block12:post-join] failed', error)
+      }
+    )
   }
 
   bot.on('chat_member', async (ctx) => {
@@ -801,28 +953,34 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
   bot.on('channel_post', async (ctx) => {
     try {
-      const post = (ctx.update as {
-        channel_post?: {
-          chat?: { id?: number | string }
-          message_id?: number
-          text?: string
-          caption?: string | null
-          from?: { id?: number | string }
-          voice?: { file_id?: string; file_unique_id?: string; mime_type?: string | null }
-          audio?: {
-            file_id?: string
-            file_unique_id?: string
-            mime_type?: string | null
-            file_name?: string | null
-          }
-          document?: {
-            file_id?: string
-            file_unique_id?: string
-            mime_type?: string | null
-            file_name?: string | null
+      const post = (
+        ctx.update as {
+          channel_post?: {
+            chat?: { id?: number | string }
+            message_id?: number
+            text?: string
+            caption?: string | null
+            from?: { id?: number | string }
+            voice?: {
+              file_id?: string
+              file_unique_id?: string
+              mime_type?: string | null
+            }
+            audio?: {
+              file_id?: string
+              file_unique_id?: string
+              mime_type?: string | null
+              file_name?: string | null
+            }
+            document?: {
+              file_id?: string
+              file_unique_id?: string
+              mime_type?: string | null
+              file_name?: string | null
+            }
           }
         }
-      }).channel_post
+      ).channel_post
       console.log('[DEBUG channel_post] отримано update:', {
         chatId: post?.chat?.id,
         text: post?.text?.slice(0, 100),
@@ -852,14 +1010,14 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
             if (expertTgId) {
               await ctx.telegram.sendMessage(
                 expertTgId,
-                'Помилка в шаблоні Zoom-сесії:\n\n'
-                  + parsed.errors.join('\n')
-                  + '\n\nШаблон:\n'
-                  + '#zoom\n'
-                  + 'Дата: DD.MM.YYYY\n'
-                  + 'Час: HH:MM\n'
-                  + 'Тема: назва практики\n'
-                  + 'Link: https://zoom.us/j/...',
+                'Помилка в шаблоні Zoom-сесії:\n\n' +
+                  parsed.errors.join('\n') +
+                  '\n\nШаблон:\n' +
+                  '#zoom\n' +
+                  'Дата: DD.MM.YYYY\n' +
+                  'Час: HH:MM\n' +
+                  'Тема: назва практики\n' +
+                  'Link: https://zoom.us/j/...'
               )
             }
           }
@@ -867,7 +1025,11 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
         }
 
         const coachTelegramId = process.env.COACH_TELEGRAM_ID?.trim()
-        if (coachTelegramId && post.from?.id && String(post.from.id) !== coachTelegramId) {
+        if (
+          coachTelegramId &&
+          post.from?.id &&
+          String(post.from.id) !== coachTelegramId
+        ) {
           return
         }
 
@@ -899,7 +1061,9 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
 
         if (existing) {
           const existingMeta =
-            existing.requests && typeof existing.requests === 'object' && !Array.isArray(existing.requests)
+            existing.requests &&
+            typeof existing.requests === 'object' &&
+            !Array.isArray(existing.requests)
               ? (existing.requests as Record<string, unknown>)
               : {}
 
@@ -939,10 +1103,10 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
           })
           await ctx.telegram.sendMessage(
             expertTgId,
-            `Zoom-сесію ${isCreated ? 'додано' : 'оновлено'} в системі.\n\n`
-              + `${dateStr}\n`
-              + `${parsed.topic}\n\n`
-              + 'Нагадування заплановані.',
+            `Zoom-сесію ${isCreated ? 'додано' : 'оновлено'} в системі.\n\n` +
+              `${dateStr}\n` +
+              `${parsed.topic}\n\n` +
+              'Нагадування заплановані.'
           )
         }
         return
@@ -965,7 +1129,13 @@ export async function registerMentorBot(_options?: MentorBotRegistrationOptions)
     void (async () => {
       logger.error('[telegram-thin-client:catch]', err)
       const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
-      await planMessage(ctx, 'ctx.reply', 'telegram_global_catch', 'Спробуй ще раз за хвилину.', replyMarkup).catch(() => undefined)
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'telegram_global_catch',
+        'Спробуй ще раз за хвилину.',
+        replyMarkup
+      ).catch(() => undefined)
     })()
   })
 

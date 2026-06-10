@@ -1,7 +1,11 @@
+// backend/src/modules/telegram-mentor/conversation/orchestrator/conversationOrchestrator.ts
 import crypto from 'node:crypto'
 import type { Context } from 'telegraf'
 
-import { cleanupDuplicateUpdates, isDuplicateUpdate } from '../dedupe/updateDedupe.js'
+import {
+  cleanupDuplicateUpdates,
+  isDuplicateUpdate,
+} from '../dedupe/updateDedupe.js'
 import { getQueueDepth, runInPerChatQueue } from '../queue/perChatQueue.js'
 import type {
   ConversationMessagePlanItem,
@@ -22,6 +26,7 @@ const DELIVERY_DEDUPE_TTL_MS = 10_000
 
 export class ConversationOrchestrator {
   private sendOrderByChat = new Map<string, number>()
+  private messageSequenceByChat = new Map<string, number>()
   private activeOperationByChat = new Set<string>()
   private deliveredKeys = new Map<string, number>()
 
@@ -48,7 +53,9 @@ export class ConversationOrchestrator {
     }) as Context['reply']
 
     if (originalEdit) {
-      ctx.editMessageText = (async (...args: Parameters<NonNullable<Context['editMessageText']>>) => {
+      ctx.editMessageText = (async (
+        ...args: Parameters<NonNullable<Context['editMessageText']>>
+      ) => {
         const text = typeof args[0] === 'string' ? args[0] : ''
         return this.enqueue(ctx, {
           source: 'ctx.editMessageText',
@@ -61,7 +68,9 @@ export class ConversationOrchestrator {
     }
 
     if (originalAnswer) {
-      ctx.answerCbQuery = (async (...args: Parameters<NonNullable<Context['answerCbQuery']>>) => {
+      ctx.answerCbQuery = (async (
+        ...args: Parameters<NonNullable<Context['answerCbQuery']>>
+      ) => {
         const text = typeof args[0] === 'string' ? args[0] : ''
         return this.enqueue(ctx, {
           source: 'ctx.answerCbQuery',
@@ -78,13 +87,15 @@ export class ConversationOrchestrator {
     ctx: OrchestratedContext,
     source: ConversationRenderSource,
     transition: string,
-    items: ConversationMessagePlanItem[],
+    items: ConversationMessagePlanItem[]
   ): Promise<void> {
-    const sorted = [...items].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+    const sorted = [...items].sort(
+      (a, b) => (a.priority ?? 0) - (b.priority ?? 0)
+    )
     for (const item of sorted) {
       const delayMs = item.delayMs ?? 0
       if (delayMs > 0) {
-        await new Promise(resolve => setTimeout(resolve, delayMs))
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
       }
 
       if (item.type === 'message') {
@@ -94,13 +105,17 @@ export class ConversationOrchestrator {
           flowState: this.resolveFlowState(ctx),
           key: this.buildDeliveryKey(
             ctx,
-            item.deliveryKind === 'ab_test_email_gate' ? 'ab_test_email_gate' : 'plan_message',
-            item.deliveryKind === 'ab_test_email_gate' ? transition : item.text,
+            item.deliveryKind === 'ab_test_email_gate'
+              ? 'ab_test_email_gate'
+              : 'plan_message',
+            item.deliveryKind === 'ab_test_email_gate' ? transition : item.text
           ),
           execute: () =>
             ctx.reply(item.text, {
               ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
-              ...(item.keyboard ? { reply_markup: item.keyboard as never } : {}),
+              ...(item.keyboard
+                ? { reply_markup: item.keyboard as never }
+                : {}),
             }),
         })
         continue
@@ -113,13 +128,17 @@ export class ConversationOrchestrator {
           flowState: this.resolveFlowState(ctx),
           key: this.buildDeliveryKey(
             ctx,
-            item.deliveryKind === 'ab_test_email_gate' ? 'ab_test_email_gate' : 'plan_edit',
-            item.deliveryKind === 'ab_test_email_gate' ? transition : item.text,
+            item.deliveryKind === 'ab_test_email_gate'
+              ? 'ab_test_email_gate'
+              : 'plan_edit',
+            item.deliveryKind === 'ab_test_email_gate' ? transition : item.text
           ),
           execute: () =>
             ctx.editMessageText?.(item.text, {
               ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
-              ...(item.keyboard ? { reply_markup: item.keyboard as never } : {}),
+              ...(item.keyboard
+                ? { reply_markup: item.keyboard as never }
+                : {}),
             }),
         })
         continue
@@ -139,7 +158,7 @@ export class ConversationOrchestrator {
 
   private async enqueue(
     ctx: OrchestratedContext,
-    op: DeliveryOperation,
+    op: DeliveryOperation
   ): Promise<unknown> {
     cleanupDuplicateUpdates()
 
@@ -240,7 +259,9 @@ export class ConversationOrchestrator {
 
   private resolveUpdateId(ctx: Context): number | null {
     const updateId = (ctx.update as { update_id?: unknown }).update_id
-    return typeof updateId === 'number' && Number.isFinite(updateId) ? updateId : null
+    return typeof updateId === 'number' && Number.isFinite(updateId)
+      ? updateId
+      : null
   }
 
   private resolveFlowState(ctx: Context): string | null {
@@ -256,12 +277,23 @@ export class ConversationOrchestrator {
     return next
   }
 
+  private getNextSequence(chatId: string): number {
+    const current = this.messageSequenceByChat.get(chatId) ?? 0
+    const next = current + 1
+    this.messageSequenceByChat.set(chatId, next)
+    return next
+  }
+
   private buildDeliveryKey(ctx: Context, kind: string, text: string): string {
     const updateId = this.resolveUpdateId(ctx) ?? 0
+    const chatId = this.resolveChatId(ctx)
+    const sequence = this.getNextSequence(chatId)
+
     if (kind === 'ab_test_email_gate') {
-      return `${this.resolveChatId(ctx)}:${updateId}:${kind}:${text}`
+      return `${chatId}:${updateId}:${kind}:${sequence}:${text}`
     }
-    return `${this.resolveChatId(ctx)}:${updateId}:${kind}:${crypto
+
+    return `${chatId}:${updateId}:${kind}:${sequence}:${crypto
       .createHash('sha1')
       .update(text.slice(0, 256))
       .digest('hex')}`

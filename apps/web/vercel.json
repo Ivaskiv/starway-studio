@@ -1,4 +1,6 @@
 {
+  "buildCommand": "pnpm vercel-build",
+  "outputDirectory": "dist",
   "redirects": [
     {
       "source": "/",

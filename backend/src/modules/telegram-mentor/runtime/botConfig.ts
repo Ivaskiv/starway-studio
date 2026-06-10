@@ -4,6 +4,12 @@ export type TelegramBotConfig = {
   botLink: string
 }
 
+export type TelegramBotNames = {
+  main: string
+  coach: string
+  test: string
+}
+
 function normalizeEnv(value: string | undefined): string {
   return String(value ?? '').trim()
 }
@@ -16,6 +22,14 @@ export function readTelegramBotConfig(): TelegramBotConfig {
     token,
     username,
     botLink: username ? `https://t.me/${username}` : '',
+  }
+}
+
+export function readTelegramBotNames(): TelegramBotNames {
+  return {
+    main: normalizeEnv(process.env.TELEGRAM_BOT_NAME) || 'Starway Main',
+    coach: normalizeEnv(process.env.COACH_BOT_NAME) || 'Starway DNA Coach',
+    test: normalizeEnv(process.env.TEST_BOT_NAME) || 'Starway Test',
   }
 }
 

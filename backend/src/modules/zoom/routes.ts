@@ -13,6 +13,7 @@ import {
   postSessionReport,
   getAttendees,
   getMySessions,
+  getPublicCalendarSessionsCompat,
 } from './controller.js';
 import {
   handleCreateSession,
@@ -53,6 +54,7 @@ router.patch('/session/:sessionId/report',     authRequired, postSessionReport);
 router.get('/session/:sessionId/attendees',    authRequired, getAttendees);
 router.get('/my',                              authRequired, getMySessions);
 router.get('/public/week',                     getPublicCurrentWeekSessions);
+router.get('/calendar',                        getPublicCalendarSessionsCompat);
 
 // ── Calendar sessions ─────────────────────────────────────────────────────────
 router.get('/sessions/calendar',               authRequired, handleGetCalendarSessions);

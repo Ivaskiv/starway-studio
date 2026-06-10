@@ -26,21 +26,24 @@ type HeroSectionProps = {
   onPrimaryAction: () => void
 }
 
+const heroVariants = [
+  {
+    headline: abTestLandingHero.headline,
+    subheadline: abTestLandingHero.subheadline,
+  },
+  ...abTestLandingHero.variantHeadlines,
+]
+
 export default function HeroSection({
   phone,
   onPhoneChange,
   onPrimaryAction,
 }: HeroSectionProps) {
   const hook = useMemo(() => {
-    const variants = [
-      {
-        headline: abTestLandingHero.headline,
-        subheadline: abTestLandingHero.subheadline,
-      },
-      ...abTestLandingHero.variantHeadlines,
-    ]
-
-    return variants[Math.floor(Math.random() * variants.length)] ?? variants[0]
+    return (
+      heroVariants[Math.floor(Math.random() * heroVariants.length)] ??
+      heroVariants[0]
+    )
   }, [])
 
   return (

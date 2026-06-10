@@ -252,11 +252,11 @@ export async function grantUserProductAccess(req: AuthenticatedRequest, res: Res
     product,
     role,
     text: '',
-    cta: {
-      label: '🌐 Відкрити Starway',
-      type: 'url' as const,
-      url: (process.env.FRONTEND_URL?.trim() || 'http://localhost:5173').replace(/\/$/, '') + '/miniapp?startapp=admin',
-    },
+    // cta: {
+    //   label: '🌐 Відкрити Starway',
+    //   type: 'url' as const,
+    //   url: (process.env.FRONTEND_URL?.trim() || 'http://localhost:5173').replace(/\/$/, '') + '/miniapp?startapp=admin',
+    // },
   }))
 
   return res.json({

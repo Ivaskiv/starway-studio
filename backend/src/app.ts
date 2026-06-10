@@ -423,6 +423,23 @@ export function createApp(): Express {
   app.use('/api/courses', miniCoursesRoutes)
   app.use('/api/social', socialRoutes)
   app.use('/api/subscriptions', subscriptionsRoutes)
+  app.post('/api/user/focus-access', async (req: Request, res: Response) => {
+    try {
+      const telegramId = req.body?.telegramId
+      if (!telegramId) {
+        return res.status(400).json({ error: 'telegramId required' })
+      }
+
+      const user = await prisma.user.findFirst({
+        where: { telegramUserId: String(telegramId) },
+        select: { id: true, focusPaid: true },
+      })
+
+      return res.json({ userId: user?.id ?? null, hasFocus: user?.focusPaid === true })
+    } catch {
+      return res.status(500).json({ error: 'Server error' })
+    }
+  })
   app.post('/api/dev/focus/block12/resend', resendFocusBlock12DevHandler)
   app.get(
     '/api/payments/wayforpay/checkout/:token',

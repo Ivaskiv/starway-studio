@@ -1,3 +1,22 @@
 {
-  "installCommand": "pnpm install --no-frozen-lockfile"
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm --dir apps/web vercel-build",
+  "outputDirectory": "apps/web/dist",
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/ab-test",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/deliverables/(.*)",
+      "destination": "/deliverables/$1"
+    },
+    {
+      "source": "/((?!deliverables/).*)",
+      "destination": "/index.html"
+    }
+  ]
 }

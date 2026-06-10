@@ -3,6 +3,7 @@ import {
   AI_PRODUCER_SYSTEM_PROMPT,
 } from './config/prompts.js'
 import { prisma } from './db/client.js'
+import { AB_TEST_START_INTRO, AB_TEST_START_STEP2 } from './products/absystem/config/absystem.content.js'
 
 export interface PromptResult {
   content: string
@@ -14,14 +15,10 @@ const FORBIDDEN_WORDS = ['stage', 'status_id', 'runtime', 'db_index']
 
 export class PromptProvider {
   private static fallbackRegistry: Record<string, string> = {
-    'start.welcome':
-      'Привіт.\nЦе тест AB System:\n«Чому ти відкладаєш те, що давно хочеш зробити?»\n\nПросто відповідай так, як є зараз.',
-    'start.lead_active':
-      'Привіт.\nЦе тест AB System:\n«Чому ти відкладаєш те, що давно хочеш зробити?»\n\nПросто відповідай так, як є зараз.',
-    'start.test_in_progress':
-      'У тесті буде 8 питань.\nОбирай той варіант, який найбільше схожий на тебе зараз.\n\nНе треба відповідати «правильно».\nТреба чесно.',
-    'test.welcome_back':
-      'У тесті буде 8 питань.\nОбирай той варіант, який найбільше схожий на тебе зараз.\n\nНе треба відповідати «правильно».\nТреба чесно.',
+    'start.welcome': AB_TEST_START_INTRO,
+    'start.lead_active': AB_TEST_START_INTRO,
+    'start.test_in_progress': AB_TEST_START_STEP2,
+    'test.welcome_back': AB_TEST_START_STEP2,
     'mentor.system': AI_MENTOR_PROMPTS.SYSTEM,
     'mentor.morning.system': AI_MENTOR_PROMPTS.MORNING.SYSTEM,
     'mentor.morning.user': AI_MENTOR_PROMPTS.MORNING.USER_TEMPLATE,

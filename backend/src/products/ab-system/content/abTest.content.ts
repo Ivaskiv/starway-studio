@@ -1,4 +1,4 @@
-import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
+import { absystemButtons, AB_TEST_START_STEP2 } from '@/products/absystem/config/absystem.content.js'
 
 export const abTestContent = {
   meta: {
@@ -24,10 +24,7 @@ export const abTestContent = {
   },
   entry: {
     title: '',
-    intro: [
-      'Давай спокійно пройдемо кілька коротких запитань.',
-      'Це допоможе мені точніше відчути, де ти зараз і як найкраще тебе підтримати.',
-    ],
+    intro: AB_TEST_START_STEP2.split('\n'),
     resume: [],
   },
   progress: {

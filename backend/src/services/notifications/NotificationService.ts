@@ -104,7 +104,6 @@ const TELEGRAM_SAFE_FRONTEND_URL = (() => {
       return url.toString().replace(/\/$/, '')
     }
   } catch {
-    // fall through to hosted frontend fallback
   }
 
   return LOCAL_FRONTEND_URL.replace(/\/$/, '')
@@ -239,10 +238,52 @@ function buildTelegramCard(input: {
   note?: string
   closing?: string
 }) {
+  const toQuotedLine = (value: string): string | null => {
+    const normalized = value.trim()
+    if (!normalized) {
+      return null
+    }
+
+    if ((normalized.startsWith('"') && normalized.endsWith('"')) || normalized.startsWith('📸 [СКРІН')) {
+      return `<blockquote>${escapeHtml(normalized.replace(/^"|"$/g, ''))}</blockquote>`
+    }
+
+    if (normalized.startsWith('[ЦИТАТА]')) {
+      return `<blockquote>${escapeHtml(normalized.slice('[ЦИТАТА]'.length).trim())}</blockquote>`
+    }
+
+    if (normalized.startsWith('ЦИТАТА:')) {
+      return `<blockquote>${escapeHtml(normalized.slice('ЦИТАТА:'.length).trim())}</blockquote>`
+    }
+
+    if (normalized.startsWith('QUOTE:')) {
+      return `<blockquote>${escapeHtml(normalized.slice('QUOTE:'.length).trim())}</blockquote>`
+    }
+
+    return null
+  }
+
   const lines: string[] = [`<b>${escapeHtml(input.title)}</b>`]
 
   if (input.intro) {
-    lines.push('', escapeHtml(input.intro))
+    const introLines = input.intro.split('\n').map((line) => {
+      const normalized = line.trim()
+      if (!normalized) {
+        return ''
+      }
+
+      const quotedLine = toQuotedLine(line)
+      if (quotedLine) {
+        return quotedLine
+      }
+
+      if (normalized.startsWith('· ')) {
+        return `• ${escapeHtml(normalized.slice(2))}`
+      }
+
+      return escapeHtml(line)
+    })
+    lines.push('', ...introLines)
   }
 
   if (input.facts?.length) {
@@ -250,7 +291,7 @@ function buildTelegramCard(input: {
   }
 
   if (input.note) {
-    lines.push('', `<blockquote>${escapeHtml(input.note)}</blockquote>`)
+    lines.push('', toQuotedLine(input.note) ?? `<blockquote>${escapeHtml(input.note)}</blockquote>`)
   }
 
   if (input.closing) {

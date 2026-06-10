@@ -13,13 +13,13 @@ export default function LeadForm({
 }: LeadFormProps) {
   return (
     <div className="input-wrap">
-      <div className="input-lbl">
+      <label className="input-lbl" htmlFor="ab-test-phone">
         <span>*</span> {label}
-      </div>
+      </label>
       <input
         className="phone-input"
         type="tel"
-        id="ph"
+        id="ab-test-phone"
         inputMode="tel"
         autoComplete="tel"
         value={phone}

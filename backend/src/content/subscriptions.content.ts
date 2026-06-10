@@ -351,7 +351,7 @@ const products: Record<SubscriptionProductId, SubscriptionProduct> = {
     navigation: {
       publicRoute: '/focus',
       appRoute: '/app/dashboard',
-      miniAppRoute: '/miniapp',
+      miniAppRoute: '/miniapp/zoom-calendar',
       subscriptionRoute: '/app/dashboard/subscription',
     },
     access: {

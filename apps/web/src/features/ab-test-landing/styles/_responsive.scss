@@ -1,96 +1,18 @@
 @use '../../landings/focus/styles/mixins' as *;
 
-@include below('tablet') {
-  .shell {
-    max-width: 430px;
-  }
-
-  .hook-text {
-    font-size: clamp(1.65rem, 7vw, 2.2rem);
-  }
-
-  .bottom-stmt p {
-    font-size: 1.2rem;
-  }
-}
-
-@include below('phablet') {
-  .shell {
-    max-width: 100%;
-  }
-
-  .logo-bar {
-    padding-inline: 16px;
-  }
-
-  .hero,
-  .offer-wrap,
-  .cta-hook,
-  .input-wrap,
-  .btn-wrap,
-  .author,
-  .bottom-stmt,
-  .bullets {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .hero {
-    padding-top: 12px;
-  }
-
-  .hero-card {
-    padding: 18px 16px 16px;
-  }
-
+@include between('phablet', 'tablet') {
   .value-strip {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .proof-card,
-  .transform-card {
-    min-height: auto;
-  }
-
-  .counter-strip {
-    padding-inline: 16px;
-  }
-
-  .ctr-label {
-    font-size: 8.5px;
-  }
-
-  .offer-card {
-    padding: 12px 13px;
-  }
-
-  .cta-btn {
-    min-height: 50px;
-  }
-
-  .author {
-    gap: 8px;
-  }
-
-  .bottom-stmt {
-    padding-bottom: 24px;
+  .proof-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@include below('mobile-xs') {
-  .hook-text {
-    font-size: 1.55rem;
-  }
-
-  .hero-outcome {
-    font-size: 11.5px;
-  }
-
-  .vs-item {
-    padding: 7px 9px;
-  }
-
-  .offer-title {
-    font-size: 11.5px;
+@include above('desktop') {
+  .shell {
+    --ab-shell-gutter: clamp(24px, 2.6vw, 44px);
+    --ab-shell-section-gap: clamp(14px, 1.6vw, 24px);
   }
 }

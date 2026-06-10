@@ -98,7 +98,7 @@ export function resolveStarwayAppAccessFromState(
     return {
       hasAccess: true,
       hideAppUi: false,
-      preferredStartPath: '/miniapp',
+      preferredStartPath: '/miniapp/zoom-calendar',
     }
   }
 
@@ -107,7 +107,6 @@ export function resolveStarwayAppAccessFromState(
   return {
     hasAccess: true,
     hideAppUi: false,
-    preferredStartPath: matchedProduct?.startPath ?? '/miniapp',
+    preferredStartPath: matchedProduct?.startPath ?? '/miniapp/zoom-calendar',
   }
 }
-

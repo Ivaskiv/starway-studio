@@ -1,5 +1,7 @@
-import { sendDedupedTelegramMessage } from '../../../lib/telegram.js'
-import type { ProductAccessProduct, ProductAccessRole } from '../../access/types.js'
+import type {
+  ProductAccessProduct,
+  ProductAccessRole,
+} from '../../access/types.js'
 
 type AccessNotificationUser = {
   id: string
@@ -11,11 +13,19 @@ type AccessNotificationUser = {
 }
 
 function resolveChatId(user: AccessNotificationUser) {
-  return user.telegramLinks[0]?.chatId ?? user.telegramChatId ?? user.telegramUserId ?? null
+  return (
+    user.telegramLinks[0]?.chatId ??
+    user.telegramChatId ??
+    user.telegramUserId ??
+    null
+  )
 }
 
 function buildFrontendUrl() {
-  return (process.env.FRONTEND_URL?.trim() || 'http://localhost:5173').replace(/\/$/, '')
+  return (process.env.FRONTEND_URL?.trim() || 'http://localhost:5173').replace(
+    /\/$/,
+    ''
+  )
 }
 
 function buildOpenUrl() {
@@ -55,7 +65,8 @@ export async function sendAccessGrantedNotification(input: {
   const productLabel = escapeHtml(toProductLabel(input.product))
   const roleLabel = escapeHtml(toRoleLabel(input.role))
   const openUrl = buildOpenUrl()
-  const isSafeWebApp = openUrl.startsWith('https://') && !openUrl.includes('localhost')
+  const isSafeWebApp =
+    openUrl.startsWith('https://') && !openUrl.includes('localhost')
   const text = [
     '<b>🚀 Тобі відкрито доступ</b>',
     '',
@@ -75,30 +86,30 @@ export async function sendAccessGrantedNotification(input: {
     product: input.product,
     role: input.role,
     text,
-    cta: {
-      label: '🌐 Відкрити Starway',
-      type: isSafeWebApp ? 'web_app' as const : 'url' as const,
-      url: openUrl,
-    },
+    // cta: {
+    //   label: '🌐 Відкрити Starway',
+    //   type: isSafeWebApp ? 'web_app' as const : 'url' as const,
+    //   url: openUrl,
+    // },
   }
 
   if (!chatId) {
     return preview
   }
 
-  const delivered = await sendDedupedTelegramMessage(chatId, text, {
-    parse_mode: 'HTML',
-    reply_markup: {
-      inline_keyboard: [[
-        isSafeWebApp
-          ? { text: '🌐 Відкрити Starway', web_app: { url: openUrl } }
-          : { text: '🌐 Відкрити Starway', url: openUrl },
-      ]],
-    },
-  })
+  // const delivered = await sendDedupedTelegramMessage(chatId, text, {
+  //   parse_mode: 'HTML',
+  //   reply_markup: {
+  //     inline_keyboard: [[
+  //       isSafeWebApp
+  //         ? { text: '🌐 Відкрити Starway', web_app: { url: openUrl } }
+  //         : { text: '🌐 Відкрити Starway', url: openUrl },
+  //     ]],
+  //   },
+  // })
 
   return {
     ...preview,
-    delivered,
+    // delivered,
   }
 }

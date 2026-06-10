@@ -60,8 +60,8 @@ export function useMiniAppTelegram({
       onOpenStarway()
     }
 
-    Telegram.WebApp.MainButton.setText(page === 'mentor' ? 'Відкрити асистента' : 'Відкрити Starway')
-    Telegram.WebApp.MainButton.offClick?.(handleMainButtonClick)
+    // Telegram.WebApp.MainButton.setText(page === 'mentor' ? 'Відкрити асистента' : 'Відкрити Starway')
+    // Telegram.WebApp.MainButton.offClick?.(handleMainButtonClick)
     Telegram.WebApp.MainButton.onClick(handleMainButtonClick)
     Telegram.WebApp.MainButton.show()
 

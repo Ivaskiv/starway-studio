@@ -61,7 +61,7 @@ export function buildAbTestQuestionFlow(progress: AbTestProgress, questionId: Ab
   const questionOrder = resolveAbTestQuestionOrder()
   const questionIndex = Math.max(0, questionOrder.indexOf(questionId))
   const body = [
-    `**Питання ${questionIndex + 1} з ${questionOrder.length}:**`,
+    `*Питання ${questionIndex + 1} з ${questionOrder.length}*`,
     '',
     question.prompt,
   ]
@@ -98,8 +98,7 @@ export function buildAbTestResultFlow(progress: AbTestProgress): TelegramFlow {
   }
 
   const buttons: TelegramButton[][] = [
-    [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
-    [{ text: 'Як це виглядає зсередини?', callback_data: `show_inside_${progress.result_key?.toUpperCase() ?? 'STATE'}` }],
+    [{ text: 'Показати як проходить практика', callback_data: `show_inside_${progress.result_key?.toUpperCase() ?? 'STATE'}` }],
   ]
 
   return createTelegramFlow({

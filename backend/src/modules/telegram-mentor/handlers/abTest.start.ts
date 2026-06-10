@@ -1,4 +1,3 @@
-import type { UserLifecycleState } from '@starway/db/prisma-client'
 import { absystemButtons, absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
@@ -36,7 +35,7 @@ export function welcomeMessage(): ReturnType<typeof withKeyboard> {
 export function testNotStartedMessage(input: { escalated: boolean }): ReturnType<typeof withKeyboard> {
   void input
   return withKeyboard({
-    text: absystemContent.START_BLOCK1.MSG1,
+    text: absystemContent.START_BLOCK1.MSG3,
     buttons: [[{ text: 'Пройти тест', callback_data: 'ab_test:start' }]],
   })
 }
@@ -55,7 +54,7 @@ export function testInProgressMessage(input: { r3: boolean }): ReturnType<typeof
 
 export function testDoneMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Твій результат готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.',
+    text: 'Твій *результат* готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.',
     buttons: [
       [{ text: 'Показати результат', callback_data: 'ab_test:show_result' }],
       [{ text: 'Почати тест заново', callback_data: 'ab_test:restart' }],
@@ -66,7 +65,7 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
 
 export function offerShownMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Ти вже проходила тест і бачила результат.\n\nХочеш повернутися до ФОКУСУ або пройти тест заново?',
+    text: 'У тебе вже є *результат* тесту.\n\nХочеш відкрити його ще раз або пройти тест заново?',
     buttons: [
       [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
       [{ text: 'Пройти тест заново', callback_data: 'ab_test:restart' }],
@@ -113,12 +112,5 @@ export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {
       [{ text: 'AI Mentor меню', callback_data: 'ai_mentor:menu' }],
       [{ text: 'Мій план дій', callback_data: 'ai_mentor:plan' }],
     ],
-  })
-}
-
-export function fallbackByLifecycle(lifecycleState: UserLifecycleState): ReturnType<typeof withKeyboard> {
-  return withKeyboard({
-    text: `Стан: ${lifecycleState}. Онови старт і продовжимо.`,
-    buttons: [[{ text: 'Оновити /start', callback_data: 'ab_test:menu' }]],
   })
 }

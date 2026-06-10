@@ -10,8 +10,9 @@ import { createApp } from './app.js'
 import { prisma, withRetry } from './db/client.js'
 import { bot, coachBot, launchBot, seedBotInfo, testBot } from './lib/telegram.js'
 import { registerDailyTelegramCommands } from './modules/daily-cycle/telegram.js'
-import { readCoachBotToken } from './modules/telegram-mentor/runtime/botConfig.js'
+import { readCoachBotToken, readTelegramBotNames } from './modules/telegram-mentor/runtime/botConfig.js'
 import { resolveRuntimeBotRegistry } from './platform/index.js'
+import { getPublicCurrentWeekZoomOverview } from './modules/zoom/service.js'
 import { registerStankeyBot } from './products/stankey/index.js'
 import { startScheduler, stopScheduler } from './services/scheduler/index.js'
 import { startZoomNotificationsCron, startBattleCron, seedDefaultAvailability } from './modules/zoom/index.js'
@@ -45,6 +46,7 @@ const MINIAPP_URL =
   process.env.MINIAPP_URL?.trim() ||
   'https://starway-frontend.vercel.app/miniapp'
 const MINIAPP_VERSION = process.env.MINIAPP_VERSION?.trim() || 'dev'
+const telegramBotNames = readTelegramBotNames()
 const botRegistry = resolveRuntimeBotRegistry('backend startup')
 const telegramBotConfig = botRegistry.main
 
@@ -133,7 +135,7 @@ async function startTelegramBot() {
 
       seedBotInfo(bot, {
         id: 0,
-        firstName: 'Starway',
+        firstName: telegramBotNames.main,
         username: telegramBotConfig.username,
       })
 
@@ -270,17 +272,17 @@ async function startTelegramBot() {
           }
 
           await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
-          await launchBot(bot, 'Starway Main')
+          await launchBot(bot, telegramBotNames.main)
           telegramRunningMode = 'polling'
         })(),
         (async () => {
           if (!coachToken) return
-          await launchBot(coachBot, 'Starway DNA Coach', coachWebhookUrl || undefined)
+          await launchBot(coachBot, telegramBotNames.coach, coachWebhookUrl || undefined)
           coachTelegramRunningMode = coachWebhookUrl ? 'webhook' : 'polling'
         })(),
         (async () => {
           if (!testBotToken) return
-          await launchBot(testBot, 'Starway Test', testWebhookUrl || undefined)
+          await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined)
           testTelegramRunningMode = testWebhookUrl ? 'webhook' : 'polling'
         })(),
       ])
