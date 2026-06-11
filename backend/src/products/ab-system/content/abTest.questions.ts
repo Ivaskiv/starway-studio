@@ -60,8 +60,7 @@ function buildQuestion(
     prompt,
     answers: AB_TEST_ANSWER_KEYS.map((id, index) => ({
       id,
-      // Переносимо текст на новий рядок, щоб inline-кнопки не обрізали зміст.
-      text: `${ANSWER_LETTERS[index]}.\n${answerTexts[id]}`,
+      text: `${ANSWER_LETTERS[index]}. ${answerTexts[id]}`,
       score: 5 - index,
       category: id,
     })),
