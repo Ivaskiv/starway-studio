@@ -1,8 +1,8 @@
 import type { Context } from 'telegraf'
-import { conversationOrchestrator } from '../../modules/telegram-mentor/conversation/orchestrator/conversationOrchestrator.js'
 import type { OrchestratedContext } from '../../modules/telegram-mentor/conversation/types.js'
 import type { TelegramFlow } from '../flow-builder/flowTemplates.js'
 import { composeTelegramUx } from '../rendering/uxComposition.js'
+import { conversationOrchestrator } from '../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 
 export async function deliverTelegramFlow(
   ctx: Context,
