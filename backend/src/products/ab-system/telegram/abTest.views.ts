@@ -279,8 +279,8 @@ export async function renderAbTestCompletedResult(
   const sections = splitResultSections(resultBody)
   const hasAnyResultSection =
     sections.intro.length > 0 ||
-    sections.practice.length > 0 ||
-    sections.proof.length > 0
+    sections.proof.length > 0 ||
+    resultDef.msg2.trim().length > 0
 
   if (!hasAnyResultSection) {
     await ctx.telegram.sendMessage(
@@ -312,22 +312,6 @@ export async function renderAbTestCompletedResult(
       'ab_test_result_intro',
       resultDef.title,
       sections.intro,
-      inlineKeyboard
-    )
-  }
-
-  if (sections.practice.length) {
-    await sleep(3000)
-    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-    const ctxPractice = {
-      ...ctx,
-      update: { ...ctx.update, update_id: Date.now() + 2 },
-    } as Context
-    await sendTelegramHtmlCard(
-      ctxPractice,
-      'ab_test_result_practice',
-      'Як це виглядає зсередини?',
-      sections.practice,
       inlineKeyboard
     )
   }
@@ -375,6 +359,30 @@ function escapeHtml(value: string) {
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+}
+
+function splitTelegramLines(lines: string[], maxChars = 850): string[][] {
+  const chunks: string[][] = []
+  let current: string[] = []
+  let currentLength = 0
+
+  for (const line of lines) {
+    const lineLength = line.length
+    if (current.length > 0 && currentLength + lineLength > maxChars) {
+      chunks.push(current)
+      current = []
+      currentLength = 0
+    }
+
+    current.push(line)
+    currentLength += lineLength + 1
+  }
+
+  if (current.length) {
+    chunks.push(current)
+  }
+
+  return chunks
 }
 
 function buildTelegramHtmlCard(title: string, lines: string[]): string {
@@ -448,10 +456,24 @@ async function sendTelegramHtmlCard(
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) return
 
-  await ctx.telegram.sendMessage(chatId, buildTelegramHtmlCard(title, lines), {
-    parse_mode: 'HTML',
-    reply_markup: inlineKeyboard,
-  })
+  const chunks = splitTelegramLines(lines)
+  for (let index = 0; index < chunks.length; index += 1) {
+    if (index === 0) {
+      await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    } else {
+      await sleep(3000)
+      await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    }
+
+    await ctx.telegram.sendMessage(
+      chatId,
+      buildTelegramHtmlCard(index === 0 ? title : '', chunks[index]),
+      {
+        parse_mode: 'HTML',
+        reply_markup: index === chunks.length - 1 ? inlineKeyboard : undefined,
+      }
+    )
+  }
 
   console.info('[AB_TEST_RESULT_SEND_OK]', {
     transition,
@@ -544,13 +566,13 @@ export async function renderAbTestFocusOffer(
         ]),
   ]
 
-  await ctx.telegram.sendMessage(
-    chatId,
-    [copy.title, '', copy.body].join('\n'),
+  await sendTelegramHtmlCard(
+    ctx,
+    'ab_test_focus_offer',
+    copy.title,
+    copy.body.split('\n'),
     {
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
+      inline_keyboard: inlineKeyboard,
     }
   )
 

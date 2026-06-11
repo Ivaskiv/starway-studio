@@ -1,6 +1,7 @@
 //backend/src/products/ab-system/telegram/abTest.service.ts
 import type { Prisma } from '@starway/db/prisma-client'
 import type { Context, Telegraf } from 'telegraf'
+import type { InlineKeyboardMarkup } from 'telegraf/types'
 
 import { buildAbTestQuestionFlow } from '../../../core/flow-builder/flowBuilder.js'
 import {
@@ -482,6 +483,55 @@ function formatMobileAnswerListForMessage(answers: ReadonlyArray<{ text: string 
       return `<b>${escapeHtml(letter)}.</b> ${escapeHtml(body)}`
     })
     .join('\n\n')
+}
+
+function splitTextLinesIntoChunks(lines: string[], maxChars = 850): string[][] {
+  const chunks: string[][] = []
+  let current: string[] = []
+  let currentLength = 0
+
+  for (const line of lines) {
+    const nextLength = currentLength + line.length + (current.length > 0 ? 1 : 0)
+    if (current.length > 0 && nextLength > maxChars) {
+      chunks.push(current)
+      current = []
+      currentLength = 0
+    }
+
+    current.push(line)
+    currentLength += line.length + 1
+  }
+
+  if (current.length) {
+    chunks.push(current)
+  }
+
+  return chunks
+}
+
+async function sendChunkedPlainTextMessage(
+  ctx: Context,
+  chatId: string | number,
+  title: string,
+  lines: string[],
+  replyMarkup?: InlineKeyboardMarkup
+): Promise<void> {
+  const chunks = splitTextLinesIntoChunks(lines)
+  for (let index = 0; index < chunks.length; index += 1) {
+    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    if (index > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+
+    const chunkText = chunks[index].join('\n')
+    await ctx.telegram.sendMessage(
+      chatId,
+      index === 0 ? [title, '', chunkText].join('\n') : chunkText,
+      {
+        reply_markup: index === chunks.length - 1 ? replyMarkup : undefined,
+      }
+    )
+  }
 }
 
 export function isAbTestStartPayload(
@@ -1416,13 +1466,13 @@ export async function handleAbTestCallback(
       await renderCurrentView(ctx, userId, progress)
       return true
     }
-    await ctx.telegram.sendMessage(
+    await sendChunkedPlainTextMessage(
+      ctx,
       chatId,
-      `${surface.title}\n\n${surface.bodyLines.join('\n')}`,
+      surface.title,
+      surface.bodyLines,
       {
-        reply_markup: {
-          inline_keyboard: surface.buttons,
-        },
+        inline_keyboard: surface.buttons,
       }
     )
     return true
@@ -1441,34 +1491,13 @@ export async function handleAbTestCallback(
       return true
     }
 
-    const audioUrl = 'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
-    const insideHtmlBody = insideSurface.bodyLines
-      .map((line) => {
-        const clean = line.trim()
-        if (!clean) {
-          return ''
-        }
-        if (clean === '🎧 Голосове повідомлення від Наді:') {
-          return `<b>${escapeHtml(clean)}</b>`
-        }
-        if (clean === 'Прослухати голосове повідомлення') {
-          return `<a href="${audioUrl}">Прослухати голосове повідомлення</a>`
-        }
-        if (clean.startsWith('· ')) {
-          return `• ${escapeHtml(clean.slice(2))}`
-        }
-        return escapeHtml(clean)
-      })
-      .join('\n')
-
-    await ctx.telegram.sendMessage(
+    await sendChunkedPlainTextMessage(
+      ctx,
       chatId,
-      `<b>${escapeHtml(insideSurface.title)}</b>\n\n${insideHtmlBody}`,
+      insideSurface.title,
+      insideSurface.bodyLines,
       {
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: insideSurface.buttons,
-        },
+        inline_keyboard: insideSurface.buttons,
       }
     )
     return true
