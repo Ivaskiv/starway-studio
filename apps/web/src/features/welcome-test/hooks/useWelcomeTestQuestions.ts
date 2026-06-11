@@ -5,6 +5,7 @@ import type {
   WelcomeTestQuestionsResponse,
 } from '@/features/welcome-test/types/welcomeTestQuestions.types'
 import { WELCOME_TEST_QUESTION_ORDER } from '@/features/welcome-test/types/welcomeTest.types'
+import { AB_TEST_FALLBACK_QUESTIONS_RESPONSE } from '@/features/ab-test/data/abTest.questions'
 import { resolveApiUrl } from '@/services/api'
 
 export function useWelcomeTestQuestions() {
@@ -37,13 +38,19 @@ export function useWelcomeTestQuestions() {
         if (!cancelled) {
           setQuestions(ordered.length > 0 ? ordered : data.questions.slice(0, 8))
         }
-      } catch (loadError) {
+      } catch {
         if (!cancelled) {
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : 'Не вдалося завантажити питання'
+          const fallbackOrdered = WELCOME_TEST_QUESTION_ORDER.flatMap((questionId) => {
+            const question = AB_TEST_FALLBACK_QUESTIONS_RESPONSE.questions.find((item) => item.id === questionId)
+            return question ? [question] : []
+          })
+
+          setQuestions(
+            fallbackOrdered.length > 0
+              ? (fallbackOrdered as WelcomeTestQuestion[])
+              : (AB_TEST_FALLBACK_QUESTIONS_RESPONSE.questions as WelcomeTestQuestion[])
           )
+          setError(null)
         }
       } finally {
         if (!cancelled) {

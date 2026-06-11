@@ -9,6 +9,7 @@ import { selectAccessToken } from '@/features/auth/services/auth.slice'
 import { getToken } from '@/features/auth/services/token'
 import { getTelegramMiniAppAuthHeader } from '@/lib/miniapp/apiClient'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
+import { AB_TEST_FALLBACK_QUESTIONS_RESPONSE } from '@/features/ab-test/data/abTest.questions'
 import { Button } from '@/ui'
 import { resolveApiUrl } from '@/services/api'
 
@@ -902,13 +903,12 @@ export default function AbTestPage() {
         if (!cancelled) {
           setQuestions(data.questions.slice(0, 8))
         }
-      } catch (loadError) {
+      } catch {
         if (!cancelled) {
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : 'Failed to load AB test'
+          setQuestions(
+            AB_TEST_FALLBACK_QUESTIONS_RESPONSE.questions.slice(0, 8)
           )
+          setError(null)
         }
       } finally {
         if (!cancelled) {
