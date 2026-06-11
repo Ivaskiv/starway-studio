@@ -2,6 +2,7 @@
 
 import type { AbTestResultKey } from './abTest.results.js'
 import { interpolateFirstName } from './abTest.results.js'
+import { buildAbTestScreenshotMarker } from './abTest.shared.js'
 import type { TestDriveContentVersion } from './testDrive.content.js'
 import { PAYMENT_REMINDER_FOLLOWUP_COPY } from '@/core/state-machine/paymentReminderFoundation.js'
 
@@ -204,7 +205,7 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 Нижче відгук після першої практики.
 
-📸 [СКРІН — Неоніла: "Тааак, головне в голові думки поміняти — і таки визнати що я головна, а не мої думки/стан"]
+${buildAbTestScreenshotMarker('dojim_7d_review')}
 
 Почати можна з одного місяця. Це 15 євро — менше ніж одна консультація.
 

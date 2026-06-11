@@ -1,6 +1,11 @@
 import type { TelegramButton } from '@/core/flow-builder/flowTemplates.js'
 
 import type { AbTestFollowupTimerId } from './abTest.followups.js'
+import {
+  AB_TEST_NEONILA_REVIEW_HEADER,
+  buildAbTestScreenshotMarker,
+  AB_TEST_VOICE_NOTE_LINES,
+} from './abTest.shared.js'
 import type { AbTestResultKey } from './abTest.results.js'
 
 export type TestDriveContentVersion = 'legacy' | 'v2'
@@ -26,13 +31,6 @@ const SOCIAL_PROOF_LINES = [
   'Valentyna: "Замість хаосу з’явився один зрозумілий наступний крок."',
 ]
 
-const VOICE_NOTE_LINES = [
-  '',
-  '🎧 Голосове повідомлення від Наді:',
-  'Прослухати голосове повідомлення',
-  '',
-]
-
 const TEST_DRIVE_INSIDE_STORIES: Record<TestDriveCode, {
   title: string
   bodyLines: string[]
@@ -43,7 +41,7 @@ const TEST_DRIVE_INSIDE_STORIES: Record<TestDriveCode, {
       'Ми не тиснемо на «зроби ще більше».',
       'Спершу дивимось, у якому стані ти зараз заходиш у дію.',
       'Потім зводимо все до одного маленького кроку, який реально зробити сьогодні.',
-      ...VOICE_NOTE_LINES,
+      ...AB_TEST_VOICE_NOTE_LINES,
     ],
   },
   B: {
@@ -52,7 +50,7 @@ const TEST_DRIVE_INSIDE_STORIES: Record<TestDriveCode, {
       'Ми розбираємо не красиву ціль, а ту, яку ти справді тягнеш всередині.',
       'В результаті лишається одна ясна лінія руху без зайвого шуму.',
       'Саме так ціль перестає розтікатися і починає тримати дію.',
-      ...VOICE_NOTE_LINES,
+      ...AB_TEST_VOICE_NOTE_LINES,
     ],
   },
   V: {
@@ -61,7 +59,7 @@ const TEST_DRIVE_INSIDE_STORIES: Record<TestDriveCode, {
       'Ми не розводимо тебе по багатьох варіантах.',
       'Показуємо, що саме ти боїшся втратити, коли обираєш.',
       'І допомагаємо лишити один напрямок, який не розпадається на півдорозі.',
-      ...VOICE_NOTE_LINES,
+      ...AB_TEST_VOICE_NOTE_LINES,
     ],
   },
   G: {
@@ -70,7 +68,7 @@ const TEST_DRIVE_INSIDE_STORIES: Record<TestDriveCode, {
       'Тут усе про момент, коли «я вже знаю» перетворюється на «я роблю».',
       'Ми збираємо рішення так, щоб воно не розвалювалось після першої ж паузи.',
       'У результаті з’являється не обіцянка собі, а конкретний наступний крок.',
-      ...VOICE_NOTE_LINES,
+      ...AB_TEST_VOICE_NOTE_LINES,
     ],
   },
   D: {
@@ -79,7 +77,7 @@ const TEST_DRIVE_INSIDE_STORIES: Record<TestDriveCode, {
       'Ми переводимо дію з разового ривка в повторюваний ритм.',
       'Щоб ти не починала з нуля щоразу, коли день стає складнішим.',
       'Саме ритм робить результат стабільним, а не випадковим.',
-      ...VOICE_NOTE_LINES,
+      ...AB_TEST_VOICE_NOTE_LINES,
     ],
   },
 }
@@ -154,14 +152,11 @@ export function getTestDriveResultSurface(input: {
       '',
       'Наприкінці практики ти виходиш з одним кроком. Не списком. Одним — але точним.',
       '',
-      '( вставка відгуку — скрін )',
-      '',
-      'Неоніла написала після практики:',
-      '',
-      '"Зранку стала як побита. А потім згадала як Надя казала — що це я обираю як пройде мій день. Поміняла пластинку в голові і всьо заграло новими барвами."',
+      AB_TEST_NEONILA_REVIEW_HEADER,
+      buildAbTestScreenshotMarker('test_drive_result_review'),
       '',
       'Почати можна з одного місяця участі.',
-      ...VOICE_NOTE_LINES,
+      ...AB_TEST_VOICE_NOTE_LINES,
       'За цей час ти проходиш 4 живі практики і можеш розібрати кілька своїх ситуацій через AB System.',
       '',
       '1 місяць — 15 євро',
@@ -211,14 +206,11 @@ export function getTestDriveInsideSurface(input: {
       '',
       'Наприкінці практики ти виходиш з одним кроком. Не списком. Одним — але точним.',
       '',
-      '( вставка відгуку — скрін )',
-      '',
-      'Неоніла написала після практики:',
-      '',
-      '"Зранку стала як побита. А потім згадала як Надя казала — що це я обираю як пройде мій день. Поміняла пластинку в голові і всьо заграло новими барвами."',
+      AB_TEST_NEONILA_REVIEW_HEADER,
+      buildAbTestScreenshotMarker('test_drive_inside_review'),
       '',
       'Почати можна з одного місяця участі.',
-      ...VOICE_NOTE_LINES,
+      ...AB_TEST_VOICE_NOTE_LINES,
       'За цей час ти проходиш 4 живі практики і можеш розібрати кілька своїх ситуацій через AB System.',
       '',
       '1 місяць — 15 євро',
@@ -266,14 +258,11 @@ export function getTestDriveInsideResponseSurface(input: {
       '',
       'Наприкінці практики ти виходиш з одним кроком. Не списком. Одним — але точним.',
       '',
-      '( вставка відгуку — скрін )',
-      '',
-      'Неоніла написала після практики:',
-      '',
-      '"Зранку стала як побита. А потім згадала як Надя казала — що це я обираю як пройде мій день. Поміняла пластинку в голові і всьо заграло новими барвами."',
+      AB_TEST_NEONILA_REVIEW_HEADER,
+      buildAbTestScreenshotMarker('test_drive_response_review'),
       '',
       'Почати можна з одного місяця участі.',
-      ...VOICE_NOTE_LINES,
+      ...AB_TEST_VOICE_NOTE_LINES,
       'За цей час ти проходиш 4 живі практики і можеш розібрати кілька своїх ситуацій через AB System.',
       '',
       '1 місяць — 15 євро',

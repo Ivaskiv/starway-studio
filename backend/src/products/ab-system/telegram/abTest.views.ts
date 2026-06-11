@@ -31,6 +31,16 @@ import {
   interpolateFirstName,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
+import {
+  AB_TEST_NEONILA_REVIEW_HEADER,
+  AB_TEST_VALENTYNA_REVIEW_HEADER,
+  AB_TEST_YELYZAVETA_REVIEW_HEADER,
+  AB_TEST_KSENIIA_REVIEW_HEADER,
+  AB_TEST_SCREENSHOT_URLS,
+  AB_TEST_VOICE_NOTE_HEADER,
+  AB_TEST_VOICE_NOTE_LINK_TEXT,
+  type AbTestScreenshotKey,
+} from '../content/abTest.shared.js'
 import { resolveTestDriveVersion } from '../content/testDrive.content.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import {
@@ -102,11 +112,19 @@ const AB_TEST_BOLD_PREFIXES = [
   'Ти приходиш зі своєю реальною ситуацією — тим що давно відкладаєш або що не дає спокою.',
   'Ми не розбираємо всю твою історію. Ми беремо одну ситуацію і дивимось що саме там відбувається.',
   'Наприкінці практики ти виходиш з одним кроком. Не списком. Одним — але точним.',
-  'Ксенія написала після роботи зі мною:',
-  'Неоніла написала після практики:',
-  'Валентина написала після практики:',
-  'Єлизавета написала після роботи зі мною:',
+  AB_TEST_KSENIIA_REVIEW_HEADER,
+  AB_TEST_NEONILA_REVIEW_HEADER,
+  AB_TEST_VALENTYNA_REVIEW_HEADER,
+  AB_TEST_YELYZAVETA_REVIEW_HEADER,
 ]
+
+type TelegramContentBlockKind = 'text' | 'quote' | 'audio' | 'screenshot'
+
+type TelegramContentBlock = {
+  kind: TelegramContentBlockKind
+  lines: string[]
+  screenshotKey?: AbTestScreenshotKey
+}
 
 function shouldBoldAbTestLine(normalized: string): boolean {
   return (
@@ -121,26 +139,131 @@ function isQuoteLine(normalized: string): boolean {
     (normalized.startsWith('«') && normalized.endsWith('»')) ||
     normalized.startsWith('[ЦИТАТА]') ||
     normalized.startsWith('ЦИТАТА:') ||
-    normalized.startsWith('QUOTE:') ||
-    normalized.startsWith('📸 [СКРІН')
+    normalized.startsWith('QUOTE:')
   )
 }
 
+function isScreenshotLine(normalized: string): boolean {
+  return normalized.startsWith('📸 [СКРІН — ') && normalized.endsWith(']')
+}
+
+function extractScreenshotKey(normalized: string): AbTestScreenshotKey | null {
+  const match = normalized.match(/^📸 \[СКРІН — ([a-z0-9_]+)\]$/i)
+  if (!match) return null
+  const key = match[1] as AbTestScreenshotKey
+  return AB_TEST_SCREENSHOT_URLS[key] ? key : null
+}
+
+const AB_TEST_PROOF_PREFIXES = [
+  AB_TEST_NEONILA_REVIEW_HEADER,
+  AB_TEST_VALENTYNA_REVIEW_HEADER,
+  AB_TEST_YELYZAVETA_REVIEW_HEADER,
+  AB_TEST_KSENIIA_REVIEW_HEADER,
+]
+
 export function splitTelegramLines(lines: string[], maxChars = 650): string[][] {
-  const chunks: string[][] = []
-  let current: string[] = []
+  const blocks = splitTelegramContentBlocks(lines)
+  return packTelegramContentBlocks(blocks, maxChars).map((chunk) =>
+    chunk.flatMap((block) => (block.lines.length > 0 ? [...block.lines, ''] : [])),
+  )
+}
+
+export function splitTelegramContentBlocks(lines: string[]): TelegramContentBlock[] {
+  const blocks: TelegramContentBlock[] = []
+  let currentText: string[] = []
+
+  const flushText = () => {
+    const trimmed = currentText.map((line) => line.trim()).filter(Boolean)
+    if (trimmed.length) {
+      blocks.push({ kind: 'text', lines: trimmed })
+    }
+    currentText = []
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index]
+    const normalized = raw.trim()
+
+    if (!normalized) {
+      flushText()
+      continue
+    }
+
+    if (normalized.startsWith('[КНОПКА:')) {
+      continue
+    }
+
+    if (normalized === AB_TEST_VOICE_NOTE_HEADER) {
+      flushText()
+      const next = lines[index + 1]?.trim()
+      const audioLines = [normalized]
+      if (next === AB_TEST_VOICE_NOTE_LINK_TEXT) {
+        audioLines.push(next)
+        index += 1
+      }
+      blocks.push({ kind: 'audio', lines: audioLines })
+      continue
+    }
+
+    if (isScreenshotLine(normalized)) {
+      flushText()
+      const screenshotKey = extractScreenshotKey(normalized)
+      if (screenshotKey) {
+        blocks.push({ kind: 'screenshot', lines: [], screenshotKey })
+      }
+      continue
+    }
+
+    if (isQuoteLine(normalized)) {
+      flushText()
+      const quoteLines = [normalized]
+      while (index + 1 < lines.length) {
+        const next = lines[index + 1].trim()
+        if (!next || !isQuoteLine(next)) break
+        quoteLines.push(next)
+        index += 1
+      }
+      blocks.push({ kind: 'quote', lines: quoteLines })
+      continue
+    }
+
+    currentText.push(raw)
+  }
+
+  flushText()
+  return blocks
+}
+
+export function packTelegramContentBlocks(
+  blocks: TelegramContentBlock[],
+  maxChars = 3000,
+): TelegramContentBlock[][] {
+  const chunks: TelegramContentBlock[][] = []
+  let current: TelegramContentBlock[] = []
   let currentLength = 0
 
-  for (const line of lines) {
-    const nextLength = currentLength + line.length + (current.length > 0 ? 1 : 0)
+  for (const block of blocks) {
+    if (block.kind === 'quote' || block.kind === 'audio' || block.kind === 'screenshot') {
+      if (current.length) {
+        chunks.push(current)
+        current = []
+        currentLength = 0
+      }
+      chunks.push([block])
+      continue
+    }
+
+    const rendered = renderTelegramContentBlock(block)
+    const nextLength = currentLength + rendered.length + (current.length > 0 ? 2 : 0)
+
     if (current.length > 0 && nextLength > maxChars) {
       chunks.push(current)
       current = []
       currentLength = 0
     }
 
-    current.push(line)
-    currentLength += line.length + 1
+    current.push(block)
+    currentLength += rendered.length + (current.length > 1 ? 2 : 0)
   }
 
   if (current.length) {
@@ -171,12 +294,12 @@ export function formatAbTestTelegramLine(line: string): string {
     return `• ${escapeHtml(normalized.slice(2))}`
   }
 
-  if (normalized === '🎧 Голосове повідомлення від Наді:') {
+  if (normalized === AB_TEST_VOICE_NOTE_HEADER) {
     return `<b>${escapeHtml(normalized)}</b>`
   }
 
-  if (normalized === 'Прослухати голосове повідомлення') {
-    return `<a href="${AB_TEST_AUDIO_URL}">Прослухати голосове повідомлення</a>`
+  if (normalized === AB_TEST_VOICE_NOTE_LINK_TEXT) {
+    return `<a href="${AB_TEST_AUDIO_URL}">${escapeHtml(AB_TEST_VOICE_NOTE_LINK_TEXT)}</a>`
   }
 
   if (shouldBoldAbTestLine(normalized)) {
@@ -190,8 +313,86 @@ export function formatAbTestTelegramCard(
   title: string,
   lines: string[],
 ): string {
-  const body = lines.map(formatAbTestTelegramLine).join('\n\n')
+  const body = renderTelegramContentBlocks(splitTelegramContentBlocks(lines))
   return title ? `<b>${escapeHtml(title)}</b>\n\n${body}` : body
+}
+
+export function renderTelegramContentMessage(
+  title: string,
+  blocks: TelegramContentBlock[],
+): string {
+  const body = renderTelegramContentBlocks(blocks)
+  return title ? `<b>${escapeHtml(title)}</b>\n\n${body}` : body
+}
+
+export function resolveTelegramContentPhotoUrl(
+  blocks: TelegramContentBlock[]
+): string | null {
+  if (blocks.length !== 1) {
+    return null
+  }
+
+  const [block] = blocks
+  if (block.kind !== 'screenshot' || !block.screenshotKey) {
+    return null
+  }
+
+  return AB_TEST_SCREENSHOT_URLS[block.screenshotKey] ?? null
+}
+
+export async function sendTelegramContentChunk(
+  ctx: Context,
+  chatId: string | number,
+  title: string,
+  blocks: TelegramContentBlock[],
+  options?: {
+    inlineKeyboard?: InlineKeyboardMarkup
+    parseMode?: 'HTML' | 'Markdown'
+  }
+): Promise<void> {
+  const photoUrl = resolveTelegramContentPhotoUrl(blocks)
+  if (photoUrl) {
+    await ctx.telegram.sendPhoto(chatId, photoUrl, {
+      reply_markup: options?.inlineKeyboard,
+    })
+    return
+  }
+
+  await ctx.telegram.sendMessage(
+    chatId,
+    renderTelegramContentMessage(title, blocks),
+    {
+      parse_mode: options?.parseMode ?? 'HTML',
+      reply_markup: options?.inlineKeyboard,
+    }
+  )
+}
+
+function renderTelegramContentBlocks(blocks: TelegramContentBlock[]): string {
+  return blocks.map(renderTelegramContentBlock).join('\n\n')
+}
+
+function renderTelegramContentBlock(block: TelegramContentBlock): string {
+  if (block.kind === 'audio') {
+    const [header, link] = block.lines
+    const rendered = [formatAbTestTelegramLine(header)]
+    if (link) {
+      rendered.push(formatAbTestTelegramLine(link))
+    }
+    return rendered.join('\n')
+  }
+
+  if (block.kind === 'quote') {
+    return block.lines
+      .map((line) => formatAbTestTelegramLine(line))
+      .join('\n')
+  }
+
+  if (block.kind === 'screenshot') {
+    return ''
+  }
+
+  return block.lines.map((line) => formatAbTestTelegramLine(line)).join('\n\n')
 }
 
 export async function sendLogMessage(ctx: Context, progress: AbTestProgress) {
@@ -506,7 +707,7 @@ async function sendTelegramHtmlCard(
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) return
 
-  const chunks = splitTelegramLines(lines)
+  const chunks = packTelegramContentBlocks(splitTelegramContentBlocks(lines))
   for (let index = 0; index < chunks.length; index += 1) {
     if (index === 0) {
       await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
@@ -514,15 +715,10 @@ async function sendTelegramHtmlCard(
       await sleep(3000)
       await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
     }
-
-    await ctx.telegram.sendMessage(
-      chatId,
-      formatAbTestTelegramCard(index === 0 ? title : '', chunks[index]),
-      {
-        parse_mode: 'HTML',
-        reply_markup: index === chunks.length - 1 ? inlineKeyboard : undefined,
-      }
-    )
+    await sendTelegramContentChunk(ctx, chatId, index === 0 ? title : '', chunks[index], {
+      inlineKeyboard: index === chunks.length - 1 ? inlineKeyboard : undefined,
+      parseMode: 'HTML',
+    })
   }
 
   console.info('[AB_TEST_RESULT_SEND_OK]', {
@@ -551,7 +747,8 @@ function splitResultSections(body: string) {
       )
   )
   const proofStart = lines.findIndex((line) =>
-    line.startsWith('( вставка відгуку — скрін )')
+    AB_TEST_PROOF_PREFIXES.some((prefix) => line.startsWith(prefix)) ||
+    line.startsWith('📸 [СКРІН — ')
   )
 
   const introEnd = practiceStart > 0 ? practiceStart : lines.length
@@ -661,26 +858,26 @@ export async function renderAbTestPostEmailSubmitSequence(
 
   const rawLines = resultBody
     .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith('[КНОПКА:'))
-  const chunks = splitTelegramLines(rawLines)
-
-  const htmlBlock = (title: string | null, lines: string[]) =>
-    formatAbTestTelegramCard(title ?? '', lines)
+    .filter((line) => !line.trim().startsWith('[КНОПКА:'))
+  const resultBlocks = splitTelegramContentBlocks(rawLines)
+  if (firstName) {
+    resultBlocks.unshift({
+      kind: 'text',
+      lines: [`${firstName}, ось твій результат.`],
+    })
+  }
+  const chunks = packTelegramContentBlocks(resultBlocks)
 
   for (let index = 0; index < chunks.length; index += 1) {
     await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
     if (index > 0) await sleep(3000)
 
-    await ctx.telegram.sendMessage(
+    await sendTelegramContentChunk(
+      ctx,
       chatId,
-      htmlBlock(
-        index === 0 ? resultDef.title : '',
-        index === 0
-          ? [`${firstName ?? ''}, ось твій результат.`, ...chunks[index]]
-          : chunks[index],
-      ),
-      { parse_mode: 'HTML' }
+      index === 0 ? resultDef.title : '',
+      chunks[index],
+      { parseMode: 'HTML' }
     )
   }
 

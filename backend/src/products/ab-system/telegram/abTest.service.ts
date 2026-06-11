@@ -43,6 +43,11 @@ import {
   getTestDriveInsideResponseSurface,
 } from '../content/testDrive.content.js'
 import {
+  packTelegramContentBlocks,
+  sendTelegramContentChunk,
+  splitTelegramContentBlocks,
+} from './abTest.views.js'
+import {
   FOCUS_ALREADY_ACTIVE_MSG,
   FOCUS_PAYMENT_ISSUE_COACH_MSG,
   FOCUS_PAYMENT_ISSUE_NO_USER_MSG,
@@ -494,21 +499,17 @@ async function sendChunkedPlainTextMessage(
   lines: string[],
   replyMarkup?: InlineKeyboardMarkup
 ): Promise<void> {
-  const chunks = splitTelegramLines(lines)
+  const chunks = packTelegramContentBlocks(splitTelegramContentBlocks(lines))
   for (let index = 0; index < chunks.length; index += 1) {
     await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
     if (index > 0) {
       await new Promise((resolve) => setTimeout(resolve, 3000))
     }
 
-    await ctx.telegram.sendMessage(
-      chatId,
-      formatAbTestTelegramCard(index === 0 ? title : '', chunks[index]),
-      {
-        parse_mode: 'HTML',
-        reply_markup: index === chunks.length - 1 ? replyMarkup : undefined,
-      }
-    )
+    await sendTelegramContentChunk(ctx, chatId, index === 0 ? title : '', chunks[index], {
+      inlineKeyboard: index === chunks.length - 1 ? replyMarkup : undefined,
+      parseMode: 'HTML',
+    })
   }
 }
 
