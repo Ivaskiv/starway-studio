@@ -75,6 +75,8 @@ import {
   renderAbTestPostEmailSubmitSequence,
   renderAbTestEmailGate,
   sendActionMessage,
+  formatAbTestTelegramCard,
+  splitTelegramLines,
 } from './abTest.views.js'
 import {
   planAck,
@@ -485,30 +487,6 @@ function formatMobileAnswerListForMessage(answers: ReadonlyArray<{ text: string 
     .join('\n\n')
 }
 
-function splitTextLinesIntoChunks(lines: string[], maxChars = 850): string[][] {
-  const chunks: string[][] = []
-  let current: string[] = []
-  let currentLength = 0
-
-  for (const line of lines) {
-    const nextLength = currentLength + line.length + (current.length > 0 ? 1 : 0)
-    if (current.length > 0 && nextLength > maxChars) {
-      chunks.push(current)
-      current = []
-      currentLength = 0
-    }
-
-    current.push(line)
-    currentLength += line.length + 1
-  }
-
-  if (current.length) {
-    chunks.push(current)
-  }
-
-  return chunks
-}
-
 async function sendChunkedPlainTextMessage(
   ctx: Context,
   chatId: string | number,
@@ -516,18 +494,18 @@ async function sendChunkedPlainTextMessage(
   lines: string[],
   replyMarkup?: InlineKeyboardMarkup
 ): Promise<void> {
-  const chunks = splitTextLinesIntoChunks(lines)
+  const chunks = splitTelegramLines(lines)
   for (let index = 0; index < chunks.length; index += 1) {
     await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
     if (index > 0) {
       await new Promise((resolve) => setTimeout(resolve, 3000))
     }
 
-    const chunkText = chunks[index].join('\n')
     await ctx.telegram.sendMessage(
       chatId,
-      index === 0 ? [title, '', chunkText].join('\n') : chunkText,
+      formatAbTestTelegramCard(index === 0 ? title : '', chunks[index]),
       {
+        parse_mode: 'HTML',
         reply_markup: index === chunks.length - 1 ? replyMarkup : undefined,
       }
     )
@@ -824,19 +802,23 @@ export async function handleAbTestCallback(
     if (!chatId) {
       return true
     }
-    await ctx.telegram.sendMessage(chatId, BLOCK9_POST_RESULT.text, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: BLOCK9_POST_RESULT.cta,
-              callback_data: BLOCK9_POST_RESULT.callbackData,
-            },
+    await ctx.telegram.sendMessage(
+      chatId,
+      formatAbTestTelegramCard('', BLOCK9_POST_RESULT.text.split('\n')),
+      {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: BLOCK9_POST_RESULT.cta,
+                callback_data: BLOCK9_POST_RESULT.callbackData,
+              },
+            ],
           ],
-        ],
-      },
-    })
+        },
+      }
+    )
     return true
   }
 
@@ -2014,10 +1996,14 @@ export async function broadcastBlock9Update(
     }
 
     try {
-      await bot.telegram.sendMessage(tgId, BLOCK9_POST_RESULT.text, {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard },
-      })
+      await bot.telegram.sendMessage(
+        tgId,
+        formatAbTestTelegramCard('', BLOCK9_POST_RESULT.text.split('\n')),
+        {
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard },
+        }
+      )
       sent += 1
       await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (err) {

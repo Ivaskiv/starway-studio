@@ -62,6 +62,138 @@ const UI_COPY = {
   browser: absystemButtons.openInBrowser,
 } as const
 
+export const AB_TEST_AUDIO_URL =
+  'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
+
+const AB_TEST_BOLD_LINES = new Set([
+  'Тримаєшся з останніх сил.',
+  'Мене звати Надя. Вже 3 роки я допомагаю жінкам виходити з цього кола через систему AB System.',
+  'Мене звати Надя. Вже 3 роки я допомагаю жінкам знаходити свій напрямок через систему AB System.',
+  'Мене звати Надя. Вже 3 роки я допомагаю жінкам робити вибір через систему AB System.',
+  'Мене звати Надя. Вже 3 роки я допомагаю жінкам переходити від "знаю але не роблю" до реальних кроків через систему AB System.',
+  'AB System — це система з 5 елементів: СТАН, ЦІЛЬ, ВИБІР, РІШЕННЯ, ДІЯ.',
+  'Тест показав де саме зупиняєшся ти. Коли це видно — стає зрозуміло що змінити і як іти далі.',
+  'Тест показав твою головну точку на зараз.',
+  'Я знаю як допомогти тобі це пройти…',
+  'Що ти отримуєш у ФОКУСІ:',
+  'Що входить у ФОКУС:',
+  'Почати можна з одного місяця участі.',
+  'Хочеш подивитись, як це проходить на практиці?',
+  'Ти активна. Робиш багато. Але ходиш по колу — і сама не розумієш чому нічого не змінюється.',
+  'Більше дій — не вихід.',
+  'Ти приходиш з тим що робиш але що нікуди не веде.',
+  'Замість списку нових дій ти виходиш з одним кроком. Але точним.',
+  'Коли рішення не прийняте всередині, дія стає важкою.',
+  'Якщо ти відчуваєш, що відкладаєш важливе через нечіткість у цілі, заходь у ФОКУС.',
+])
+
+const AB_TEST_BOLD_PREFIXES = [
+  'Що відбувається у ФОКУСІ —',
+  'У ФОКУСІ ми якраз працюємо з такими ситуаціями.',
+  'У ФОКУСІ ми працюємо не з красивими цілями, а з реальними.',
+  'У ФОКУСІ ми будемо працювати саме з такими моментами.',
+  'У ФОКУСІ ми працюємо з рішеннями через реальні ситуації.',
+  'У ФОКУСІ ми не будемо просто говорити про твою ситуацію.',
+  'На практиці ми не розбираємо все життя одразу.',
+  'Спочатку знаходимо де саме ти зупиняєшся.',
+  'Потім бачимо що саме це підтримує.',
+  'Після цього визначаємо один конкретний крок який допомагає вийти з цього кола.',
+  'Саме тому після практики ти йдеш не з новою інформацією — а з розумінням що робити далі саме тобі у твоїй ситуації.',
+  'Ти приходиш зі своєю реальною ситуацією — тим що давно відкладаєш або що не дає спокою.',
+  'Ми не розбираємо всю твою історію. Ми беремо одну ситуацію і дивимось що саме там відбувається.',
+  'Наприкінці практики ти виходиш з одним кроком. Не списком. Одним — але точним.',
+  'Ксенія написала після роботи зі мною:',
+  'Неоніла написала після практики:',
+  'Валентина написала після практики:',
+  'Єлизавета написала після роботи зі мною:',
+]
+
+function shouldBoldAbTestLine(normalized: string): boolean {
+  return (
+    AB_TEST_BOLD_LINES.has(normalized) ||
+    AB_TEST_BOLD_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+  )
+}
+
+function isQuoteLine(normalized: string): boolean {
+  return (
+    (normalized.startsWith('"') && normalized.endsWith('"')) ||
+    (normalized.startsWith('«') && normalized.endsWith('»')) ||
+    normalized.startsWith('[ЦИТАТА]') ||
+    normalized.startsWith('ЦИТАТА:') ||
+    normalized.startsWith('QUOTE:') ||
+    normalized.startsWith('📸 [СКРІН')
+  )
+}
+
+export function splitTelegramLines(lines: string[], maxChars = 650): string[][] {
+  const chunks: string[][] = []
+  let current: string[] = []
+  let currentLength = 0
+
+  for (const line of lines) {
+    const nextLength = currentLength + line.length + (current.length > 0 ? 1 : 0)
+    if (current.length > 0 && nextLength > maxChars) {
+      chunks.push(current)
+      current = []
+      currentLength = 0
+    }
+
+    current.push(line)
+    currentLength += line.length + 1
+  }
+
+  if (current.length) {
+    chunks.push(current)
+  }
+
+  return chunks
+}
+
+export function formatAbTestTelegramLine(line: string): string {
+  const normalized = line.trim()
+  if (!normalized) {
+    return ''
+  }
+
+  if (isQuoteLine(normalized)) {
+    const clean = normalized
+      .replace(/^"|"$/g, '')
+      .replace(/^«|»$/g, '')
+      .replace(/^\[ЦИТАТА\]\s*/i, '')
+      .replace(/^ЦИТАТА:\s*/i, '')
+      .replace(/^QUOTE:\s*/i, '')
+      .trim()
+    return `<blockquote>${escapeHtml(clean)}</blockquote>`
+  }
+
+  if (normalized.startsWith('· ')) {
+    return `• ${escapeHtml(normalized.slice(2))}`
+  }
+
+  if (normalized === '🎧 Голосове повідомлення від Наді:') {
+    return `<b>${escapeHtml(normalized)}</b>`
+  }
+
+  if (normalized === 'Прослухати голосове повідомлення') {
+    return `<a href="${AB_TEST_AUDIO_URL}">Прослухати голосове повідомлення</a>`
+  }
+
+  if (shouldBoldAbTestLine(normalized)) {
+    return `<b>${escapeHtml(normalized)}</b>`
+  }
+
+  return escapeHtml(normalized)
+}
+
+export function formatAbTestTelegramCard(
+  title: string,
+  lines: string[],
+): string {
+  const body = lines.map(formatAbTestTelegramLine).join('\n\n')
+  return title ? `<b>${escapeHtml(title)}</b>\n\n${body}` : body
+}
+
 export async function sendLogMessage(ctx: Context, progress: AbTestProgress) {
   if (progress.answers.length === 0) {
     return
@@ -263,7 +395,6 @@ export async function renderAbTestCompletedResult(
   )
   const inlineKeyboard = {
     inline_keyboard: [
-      [{ text: 'Хочу у\nФОКУС →', callback_data: 'open_focus_payment' }],
       ...(hasPreviewClick
         ? []
         : [
@@ -274,6 +405,7 @@ export async function renderAbTestCompletedResult(
               },
             ],
           ]),
+      [{ text: 'Хочу у\nФОКУС →', callback_data: 'open_focus_payment' }],
     ],
   }
   const sections = splitResultSections(resultBody)
@@ -285,7 +417,10 @@ export async function renderAbTestCompletedResult(
   if (!hasAnyResultSection) {
     await ctx.telegram.sendMessage(
       chatId,
-      buildTelegramHtmlCard(resultDef.title, resultBody.trim() ? resultBody.split('\n') : ['Твій результат готовий.']),
+      formatAbTestTelegramCard(
+        resultDef.title,
+        resultBody.trim() ? resultBody.split('\n') : ['Твій результат готовий.']
+      ),
       {
         parse_mode: 'HTML',
         reply_markup: inlineKeyboard,
@@ -361,91 +496,6 @@ function escapeHtml(value: string) {
     .replaceAll('>', '&gt;')
 }
 
-function splitTelegramLines(lines: string[], maxChars = 850): string[][] {
-  const chunks: string[][] = []
-  let current: string[] = []
-  let currentLength = 0
-
-  for (const line of lines) {
-    const lineLength = line.length
-    if (current.length > 0 && currentLength + lineLength > maxChars) {
-      chunks.push(current)
-      current = []
-      currentLength = 0
-    }
-
-    current.push(line)
-    currentLength += lineLength + 1
-  }
-
-  if (current.length) {
-    chunks.push(current)
-  }
-
-  return chunks
-}
-
-function buildTelegramHtmlCard(title: string, lines: string[]): string {
-  const audioUrl = 'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
-  const toQuotedLine = (value: string) => {
-    const normalized = value.trim()
-    if (!normalized) {
-      return null
-    }
-
-    if (
-      (normalized.startsWith('"') && normalized.endsWith('"')) ||
-      normalized.startsWith('📸 [СКРІН')
-    ) {
-      return `<blockquote>${escapeHtml(normalized.replace(/^"|"$/g, ''))}</blockquote>`
-    }
-
-    if (normalized.startsWith('[ЦИТАТА]')) {
-      return `<blockquote>${escapeHtml(normalized.slice('[ЦИТАТА]'.length).trim())}</blockquote>`
-    }
-
-    if (normalized.startsWith('ЦИТАТА:')) {
-      return `<blockquote>${escapeHtml(normalized.slice('ЦИТАТА:'.length).trim())}</blockquote>`
-    }
-
-    if (normalized.startsWith('QUOTE:')) {
-      return `<blockquote>${escapeHtml(normalized.slice('QUOTE:'.length).trim())}</blockquote>`
-    }
-
-    return null
-  }
-
-  const body = lines
-    .map((line) => {
-      const normalized = line.trim()
-      if (!normalized) {
-        return ''
-      }
-
-      const quotedLine = toQuotedLine(line)
-      if (quotedLine) {
-        return quotedLine
-      }
-
-      if (normalized.startsWith('· ')) {
-        return `• ${escapeHtml(normalized.slice(2))}`
-      }
-
-      if (normalized === '🎧 Голосове повідомлення від Наді:') {
-        return `<b>${escapeHtml(normalized)}</b>`
-      }
-
-      if (normalized === 'Прослухати голосове повідомлення') {
-        return `<a href="${audioUrl}">Прослухати голосове повідомлення</a>`
-      }
-
-      return escapeHtml(line)
-    })
-    .join('\n')
-
-  return [`<b>${escapeHtml(title)}</b>`, '', body].join('\n')
-}
-
 async function sendTelegramHtmlCard(
   ctx: Context,
   transition: string,
@@ -467,7 +517,7 @@ async function sendTelegramHtmlCard(
 
     await ctx.telegram.sendMessage(
       chatId,
-      buildTelegramHtmlCard(index === 0 ? title : '', chunks[index]),
+      formatAbTestTelegramCard(index === 0 ? title : '', chunks[index]),
       {
         parse_mode: 'HTML',
         reply_markup: index === chunks.length - 1 ? inlineKeyboard : undefined,
@@ -609,78 +659,14 @@ export async function renderAbTestPostEmailSubmitSequence(
   const firstName = user?.firstName ?? user?.telegramUserName ?? null
   const resultBody = interpolateFirstName(resultDef.body, firstName)
 
-  const audioUrl = 'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
   const rawLines = resultBody
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith('[КНОПКА:'))
+  const chunks = splitTelegramLines(rawLines)
 
-  const voiceIndex = rawLines.findIndex((line) => line.startsWith('[ГОЛОСОВЕ'))
-  const resultLines = voiceIndex >= 0 ? rawLines.slice(0, voiceIndex) : rawLines
-
-  const chunks: string[][] = []
-  let current: string[] = []
-  let currentLength = 0
-
-  for (const line of resultLines) {
-    if (line.toLowerCase().includes('прослухати голосове повідомлення')) continue
-
-    if (currentLength + line.length > 850 && current.length) {
-      chunks.push(current)
-      current = []
-      currentLength = 0
-    }
-
-    current.push(line)
-    currentLength += line.length
-  }
-
-  if (current.length) chunks.push(current)
-
-  const boldLines = new Set([
-    resultDef.title,
-    'Тримаєшся з останніх сил.',
-    'Ти активна. Робиш багато.',
-    'Більше дій — не вихід.',
-    'Ти приходиш з тим що робиш але що нікуди не веде.',
-    'Замість списку нових дій ти виходиш з одним кроком. Але точним.',
-    'Ксенія написала після роботи зі мною:',
-    'Мене звати Надя.',
-    'AB System — це система з 5 елементів: СТАН, ЦІЛЬ, ВИБІР, РІШЕННЯ, ДІЯ.',
-    'Тест показав де саме зупиняєшся ти.',
-    'Я знаю як допомогти тобі це пройти…',
-  ])
-
-  const htmlBlock = (title: string | null, lines: string[]) => {
-    const body = lines.map((line) => {
-      const clean = line.trim()
-      if (!clean) return ''
-
-      if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith('«') && clean.endsWith('»'))) {
-        return `<blockquote>${escapeHtml(clean.replace(/^"|"$/g, ''))}</blockquote>`
-      }
-
-      if (boldLines.has(clean)) {
-        return `<b>${escapeHtml(clean)}</b>`
-      }
-
-      if (clean.startsWith('· ')) {
-        return `• ${escapeHtml(clean.slice(2))}`
-      }
-
-      if (clean === '🎧 Голосове повідомлення від Наді:') {
-        return `<b>${escapeHtml(clean)}</b>`
-      }
-
-      if (clean === 'Прослухати голосове повідомлення') {
-        return `<a href="${audioUrl}">Прослухати голосове повідомлення</a>`
-      }
-
-      return escapeHtml(clean)
-    }).join('\n\n')
-
-    return title ? `<b>${escapeHtml(title)}</b>\n\n${body}` : body
-  }
+  const htmlBlock = (title: string | null, lines: string[]) =>
+    formatAbTestTelegramCard(title ?? '', lines)
 
   for (let index = 0; index < chunks.length; index += 1) {
     await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
@@ -689,9 +675,9 @@ export async function renderAbTestPostEmailSubmitSequence(
     await ctx.telegram.sendMessage(
       chatId,
       htmlBlock(
-        null,
+        index === 0 ? resultDef.title : '',
         index === 0
-          ? [`${firstName ?? ''}, ось твій результат.`, resultDef.title, ...chunks[index]]
+          ? [`${firstName ?? ''}, ось твій результат.`, ...chunks[index]]
           : chunks[index],
       ),
       { parse_mode: 'HTML' }
