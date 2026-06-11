@@ -124,15 +124,13 @@ type ReminderDispatch = {
   triggerField: 'updatedAt' | 'testStartedAt' | 'testCompletedAt' | 'offerShownAt'
 }
 
-async function wasReminderSentRecently(userId: string, reminderKey: LifecycleReminderKey, thresholdHours: number): Promise<boolean> {
-  const since = new Date(Date.now() - thresholdHours * 60 * 60 * 1000)
+async function wasReminderSentRecently(userId: string, reminderKey: LifecycleReminderKey): Promise<boolean> {
   const hit = await prisma.notification.findFirst({
     where: {
       userId,
       type: NotificationType.AI_REMINDER,
       templateKey: reminderKey,
       status: NotificationStatus.SENT,
-      sentAt: { gte: since },
     },
     select: { id: true },
   })
@@ -161,7 +159,7 @@ async function dispatchLifecycleReminder(
 
   for (const user of users) {
     if (!user.telegramChatId) continue
-    const sentRecently = await wasReminderSentRecently(user.id, config.reminderKey, config.minHoursSinceUpdate)
+    const sentRecently = await wasReminderSentRecently(user.id, config.reminderKey)
     if (sentRecently) continue
 
     const copy = AB_TEST_LIFECYCLE_REMINDERS[config.reminderKey]
@@ -225,21 +223,21 @@ export async function scheduleProgressReminders(telegramBot: Telegraf): Promise<
     reminderKey: 'R3_PROGRESS_4H',
     minHoursSinceUpdate: 10 / 60,
     ctaAction: 'ab_test:resume',
-    triggerField: 'testStartedAt',
+    triggerField: 'updatedAt',
   })
   await dispatchLifecycleReminder(telegramBot, {
     lifecycleState: 'TEST_IN_PROGRESS',
     reminderKey: 'R4_PROGRESS_24H',
     minHoursSinceUpdate: 1,
     ctaAction: 'ab_test:resume',
-    triggerField: 'testStartedAt',
+    triggerField: 'updatedAt',
   })
   await dispatchLifecycleReminder(telegramBot, {
     lifecycleState: 'TEST_IN_PROGRESS',
     reminderKey: 'R9_PROGRESS_1D',
     minHoursSinceUpdate: 24,
     ctaAction: 'ab_test:resume',
-    triggerField: 'testStartedAt',
+    triggerField: 'updatedAt',
   })
 }
 
