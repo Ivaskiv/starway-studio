@@ -453,16 +453,16 @@ async function sendQuestionDirect(
   const questionNumber = questionOrder.indexOf(question.question_id) + 1
   await ctx.telegram.sendMessage(
     chatId,
-    `*Питання ${questionNumber} з ${questionOrder.length}*\n\n${question.prompt}\n\n${formatMobileAnswerListForMessage(question.answers)}`,
+    `*Питання ${questionNumber} з ${questionOrder.length}*\n\n*${question.prompt}*\n\n${formatMobileAnswerListForMessage(question.answers)}`,
     {
       parse_mode: 'Markdown',
       reply_markup: {
-        inline_keyboard: question.answers.map((answer) => [
-          {
+        inline_keyboard: [
+          question.answers.map((answer) => ({
             text: formatMobileAnswerButtonText(answer.text),
             callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${revision}`,
-          },
-        ]),
+          })),
+        ],
       },
     }
   )
@@ -1141,16 +1141,16 @@ export async function handleAbTestCallback(
     const q1Question = getAbTestQuestion('q1')
     await ctx.telegram.sendMessage(
       q1ChatId,
-      `*Питання 1 з 8*\n\n${q1Question.prompt}\n\n${formatMobileAnswerListForMessage(q1Question.answers)}`,
+      `*Питання 1 з 8*\n\n*${q1Question.prompt}*\n\n${formatMobileAnswerListForMessage(q1Question.answers)}`,
       {
         parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: q1Question.answers.map((answer) => [
-            {
+          inline_keyboard: [
+            q1Question.answers.map((answer) => ({
               text: formatMobileAnswerButtonText(answer.text),
               callback_data: `ab_test_answer:q1:${answer.id}:${revision}`,
-            },
-          ]),
+            })),
+          ],
         },
       }
     )
@@ -1729,12 +1729,12 @@ export async function handleAbTestCallback(
     'message_id' in callbackMessage &&
     callbackMessage.message_id
   ) {
-    const updatedKeyboard = question.answers.map((answer) => [
-      {
+    const updatedKeyboard = [
+      question.answers.map((answer) => ({
         text: answer.id === selected.id ? `✅ ${formatMobileAnswerButtonText(answer.text)}` : formatMobileAnswerButtonText(answer.text),
         callback_data: `ab_test_answer:${parsed.questionId}:${answer.id}:${next.revision}`,
-      },
-    ])
+      })),
+    ]
     await ctx.telegram
       .editMessageReplyMarkup(
         callbackMessage.chat.id,
