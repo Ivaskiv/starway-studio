@@ -46,9 +46,16 @@ const getApiMode = (): ApiMode => {
   return 'auto';
 };
 
+const normalizeApiBaseUrl = (value: string): string => {
+  const trimmed = value.trim().replace(/\/+$/, '');
+  if (!trimmed) return DEFAULT_REMOTE_API_URL;
+  if (/\/api$/i.test(trimmed)) return trimmed;
+  return `${trimmed}/api`;
+};
+
 const getApiBaseUrl = (): string => {
   const mode = getApiMode();
-  const remoteUrl = import.meta.env.VITE_API_URL?.trim() || DEFAULT_REMOTE_API_URL;
+  const remoteUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL?.trim() || DEFAULT_REMOTE_API_URL);
 
   if (mode === 'local') return '/api';
   if (mode === 'remote') return remoteUrl;
