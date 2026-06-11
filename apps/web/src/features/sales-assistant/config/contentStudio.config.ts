@@ -1,4 +1,8 @@
-import { type LexItem } from '@/features/sales-assistant/components/LexiconPanel'
+type LexItem = {
+  id: string
+  word: string
+  type: 'REQUIRED' | 'FORBIDDEN'
+}
 import { ContentType, type ModelProvider } from '@ai/types/salesAssistant.types'
 
 type ContentKey =

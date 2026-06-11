@@ -527,58 +527,6 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
       await handleStart(ctx as never)
       return true
     }
-    if (action === 'ab_test:show_result' && userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { focusPaid: true, testResultType: true },
-      })
-      const activeFocusSubscription = await prisma.productSubscription.findFirst({
-        where: {
-          userId,
-          status: 'active',
-          product: { is: { code: { in: ['focus', 'FOCUS'] } } },
-          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-        },
-        select: { id: true },
-      })
-      const isFocusPaid = Boolean(user?.focusPaid) || Boolean(activeFocusSubscription)
-      if (isFocusPaid) {
-        await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_show_result_paid_ack').catch(() => undefined)
-        const chatId = ctx.chat?.id ?? ctx.from?.id
-        if (!chatId) return true
-        const resultKey = user?.testResultType ?? 'UNKNOWN'
-        const resultLabel = RESULT_LABEL[resultKey] ?? 'не визначено'
-        const resultContext = RESULT_FOCUS_CONTEXT[resultKey]
-          ?? 'Для уточнення діагностики — пройти тест повторно.'
-        const webAppBaseUrl = (process.env.TELEGRAM_WEBAPP_BASE_URL ?? '').trim().replace(/\/+$/, '')
-        const publicFrontend = (process.env.PUBLIC_FRONTEND_URL ?? '').trim().replace(/\/+$/, '')
-        const zoomUrl = webAppBaseUrl
-          ? `${webAppBaseUrl}/zoom`
-          : `${publicFrontend}/zoom`
-        const text =
-          `Результат діагностики: ${resultLabel}\n\n`
-          + `${resultContext}\n\n`
-          + 'Наступна дія: відкрити Календар і підготувати одну ситуацію для розбору на практиці.'
-        const inline_keyboard = [
-          [
-            webAppBaseUrl
-              ? { text: 'Календар Zoom-практик', web_app: { url: zoomUrl } }
-              : { text: 'Календар Zoom-практик', url: zoomUrl },
-          ],
-          [{ text: 'Повернутись до кабінету', callback_data: 'back_to_dashboard' }],
-        ]
-        await ctx.telegram.sendMessage(
-          chatId,
-          text,
-          {
-            reply_markup: {
-              inline_keyboard,
-            },
-          },
-        )
-        return true
-      }
-    }
     if (await handleAbTestCallback(ctx, action)) {
       console.info('[AB_TEST_START_DEBUG] event_bus:handled_by_ab_test', {
         action,

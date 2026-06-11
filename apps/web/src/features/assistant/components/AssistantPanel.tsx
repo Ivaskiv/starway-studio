@@ -73,8 +73,8 @@ export function AssistantPanel({
 }: Props) {
   const [input, setInput] = useState('')
   const [activeTab, setActiveTab] = useState<'chat' | 'steps'>('chat')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const isGuestMode = mode === 'chat-only'
   const hasSteps = steps.length > 0
@@ -375,7 +375,7 @@ function MessagesArea({ messages, isSending, suggestions, onSuggestion, messages
           <span className="ap-dots"><span /><span /><span /></span>
         </div>
       )}
-      <div ref={messagesEndRef} />
+      <div ref={messagesEndRef as unknown as React.Ref<HTMLDivElement>} />
     </div>
   )
 }
@@ -392,7 +392,7 @@ function InputRow({ input, setInput, onSend, isSending, textareaRef, isGuest }: 
   return (
     <div className="ap-input-row">
       <textarea
-        ref={textareaRef}
+        ref={textareaRef as unknown as React.Ref<HTMLTextAreaElement>}
         className="ap-textarea ap-textarea--main"
         rows={1}
         value={input}

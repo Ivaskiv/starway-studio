@@ -18,7 +18,7 @@ type Props = {
   pain: string
   goal: string
   customTask: string
-  audioInputRef: RefObject<HTMLInputElement | null>
+  audioInputRef: RefObject<HTMLInputElement>
   onClear: () => void
   onSetInputMethod: (method: InputMethod) => void
   onStartDictation: (field: 'pain' | 'goal' | 'custom') => void

@@ -88,11 +88,7 @@ export async function sendLogMessage(ctx: Context, progress: AbTestProgress) {
 }
 
 function formatTelegramButtonText(value: string): string {
-  return value
-    .replace(/^([А-ЯҐЄІЇA-Z])\./, '$1.\n')
-    .replace(/\. /g, '.\n')
-    .replace(/ — /g, '\n— ')
-    .replace(/, /g, ',\n')
+  return value.match(/^([А-ДA-E])\./)?.[1] ?? value.slice(0, 1)
 }
 
 export async function sendActionMessage(
@@ -549,7 +545,7 @@ export async function renderAbTestResultThenOffer(
   if (options.typing ?? true) {
     await sleep(1000)
   }
-  await renderAbTestCompletedResult(ctx, userId, progress)
+  await renderAbTestPostEmailSubmitSequence(ctx, userId, progress)
 }
 
 export async function renderAbTestPostEmailSubmitSequence(
@@ -742,7 +738,7 @@ export async function renderCurrentView(
       await renderAbTestEmailGate(ctx, userId, progress)
       return
     }
-    await renderAbTestCompletedResult(ctx, userId, progress)
+    await renderAbTestPostEmailSubmitSequence(ctx, userId, progress)
 
     return
   }
