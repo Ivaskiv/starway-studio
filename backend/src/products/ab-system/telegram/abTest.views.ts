@@ -113,24 +113,19 @@ export async function sendActionMessage(
   const miniAppButton = buildWebAppButton(UI_COPY.miniApp, '/ab-test')
   const text = `*${question.prompt}*`
 
-  const answerRows = question.answers.map((answer) => {
-    const cleanText = answer.text.replace(/^[А-Д]\.\n/, '')
-    return [
-      {
-        text:
-          selectedAnswerId === answer.id
-            ? `✅ ${formatTelegramButtonText(answer.text)}`
-            : formatTelegramButtonText(answer.text),
-        callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${progress.revision}`,
-      },
-    ]
-  })
+  const answerRow = question.answers.map((answer) => ({
+    text:
+      selectedAnswerId === answer.id
+        ? `✅ ${formatTelegramButtonText(answer.text)}`
+        : formatTelegramButtonText(answer.text),
+    callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${progress.revision}`,
+  }))
 
   const markup = {
     parse_mode: 'Markdown' as const,
     reply_markup: {
       inline_keyboard: [
-        ...answerRows,
+        answerRow,
         ...(miniAppButton || browserUrl
           ? [
               [
@@ -337,6 +332,23 @@ export async function renderAbTestCompletedResult(
     )
   }
 
+  const practiceLines = resultDef.msg2.split('\n')
+  if (practiceLines.some((line) => line.trim())) {
+    await sleep(3000)
+    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    const ctxPractice = {
+      ...ctx,
+      update: { ...ctx.update, update_id: Date.now() + 2 },
+    } as Context
+    await sendTelegramHtmlCard(
+      ctxPractice,
+      'ab_test_result_practice',
+      'Як це виглядає зсередини?',
+      practiceLines,
+      inlineKeyboard
+    )
+  }
+
   if (sections.proof.length) {
     await sleep(3000)
     await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
@@ -366,6 +378,7 @@ function escapeHtml(value: string) {
 }
 
 function buildTelegramHtmlCard(title: string, lines: string[]): string {
+  const audioUrl = 'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
   const toQuotedLine = (value: string) => {
     const normalized = value.trim()
     if (!normalized) {
@@ -408,6 +421,14 @@ function buildTelegramHtmlCard(title: string, lines: string[]): string {
 
       if (normalized.startsWith('· ')) {
         return `• ${escapeHtml(normalized.slice(2))}`
+      }
+
+      if (normalized === '🎧 Голосове повідомлення від Наді:') {
+        return `<b>${escapeHtml(normalized)}</b>`
+      }
+
+      if (normalized === 'Прослухати голосове повідомлення') {
+        return `<a href="${audioUrl}">Прослухати голосове повідомлення</a>`
       }
 
       return escapeHtml(line)
@@ -566,7 +587,7 @@ export async function renderAbTestPostEmailSubmitSequence(
   const firstName = user?.firstName ?? user?.telegramUserName ?? null
   const resultBody = interpolateFirstName(resultDef.body, firstName)
 
-  const audioUrl = 'https://drive.google.com/file/d/1mu9OXCu65KGHth7dktSdbj6zbuE2HjQ7/view?usp=drive_link'
+  const audioUrl = 'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
   const rawLines = resultBody
     .split('\n')
     .map((line) => line.trim())
@@ -625,6 +646,14 @@ export async function renderAbTestPostEmailSubmitSequence(
         return `• ${escapeHtml(clean.slice(2))}`
       }
 
+      if (clean === '🎧 Голосове повідомлення від Наді:') {
+        return `<b>${escapeHtml(clean)}</b>`
+      }
+
+      if (clean === 'Прослухати голосове повідомлення') {
+        return `<a href="${audioUrl}">Прослухати голосове повідомлення</a>`
+      }
+
       return escapeHtml(clean)
     }).join('\n\n')
 
@@ -651,30 +680,16 @@ export async function renderAbTestPostEmailSubmitSequence(
   await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
   await ctx.telegram.sendMessage(
     chatId,
-    [
-      '🎧 <b>Голосове від Наді</b>',
-      '',
-      `Чому ти отримала результат «${escapeHtml(resultDef.title)}» і що з цим робити далі.`,
-      '',
-      `<a href="${audioUrl}">[АУДІОЗАГЛУШКА · замінити на реальне голосове 60–90 сек]</a>`,
-    ].join('\n'),
-    { parse_mode: 'HTML' }
-  )
-
-  await sleep(3000)
-  await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-  await ctx.telegram.sendMessage(
-    chatId,
     '<b>Хочеш подивитись, як це проходить на практиці?</b>',
     {
       parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
-          [{ text: 'Показати практику', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
-        ],
-      },
-    }
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'Показати практику', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+        [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+      ],
+    },
+  }
   )
 
   console.info('[AB_TEST_SKIP_DIRECT_RESULT_OK]', {

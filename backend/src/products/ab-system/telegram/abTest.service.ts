@@ -453,9 +453,9 @@ async function sendQuestionDirect(
   const questionNumber = questionOrder.indexOf(question.question_id) + 1
   await ctx.telegram.sendMessage(
     chatId,
-    `*Питання ${questionNumber} з ${questionOrder.length}*\n\n*${question.prompt}*\n\n${formatMobileAnswerListForMessage(question.answers)}`,
+    `<b>Питання ${questionNumber} з ${questionOrder.length}</b>\n\n<b>${escapeHtml(question.prompt)}</b>\n\n${formatMobileAnswerListForMessage(question.answers)}`,
     {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
           question.answers.map((answer) => ({
@@ -475,7 +475,12 @@ function formatMobileAnswerButtonText(value: string): string {
 
 function formatMobileAnswerListForMessage(answers: ReadonlyArray<{ text: string }>): string {
   return answers
-    .map((answer) => answer.text.replace(/^([А-ДA-E])\./, '*$1.* '))
+    .map((answer) => {
+      const match = answer.text.match(/^([А-ДA-E])\.\s*(.*)$/s)
+      const letter = match?.[1] ?? answer.text.slice(0, 1)
+      const body = match?.[2] ?? answer.text.slice(2).trim()
+      return `<b>${escapeHtml(letter)}.</b> ${escapeHtml(body)}`
+    })
     .join('\n\n')
 }
 
@@ -1436,10 +1441,31 @@ export async function handleAbTestCallback(
       return true
     }
 
+    const audioUrl = 'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
+    const insideHtmlBody = insideSurface.bodyLines
+      .map((line) => {
+        const clean = line.trim()
+        if (!clean) {
+          return ''
+        }
+        if (clean === '🎧 Голосове повідомлення від Наді:') {
+          return `<b>${escapeHtml(clean)}</b>`
+        }
+        if (clean === 'Прослухати голосове повідомлення') {
+          return `<a href="${audioUrl}">Прослухати голосове повідомлення</a>`
+        }
+        if (clean.startsWith('· ')) {
+          return `• ${escapeHtml(clean.slice(2))}`
+        }
+        return escapeHtml(clean)
+      })
+      .join('\n')
+
     await ctx.telegram.sendMessage(
       chatId,
-      `${insideSurface.title}\n\n${insideSurface.bodyLines.join('\n')}`,
+      `<b>${escapeHtml(insideSurface.title)}</b>\n\n${insideHtmlBody}`,
       {
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: insideSurface.buttons,
         },
