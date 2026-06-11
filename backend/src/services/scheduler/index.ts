@@ -223,13 +223,20 @@ export async function scheduleProgressReminders(telegramBot: Telegraf): Promise<
   await dispatchLifecycleReminder(telegramBot, {
     lifecycleState: 'TEST_IN_PROGRESS',
     reminderKey: 'R3_PROGRESS_4H',
-    minHoursSinceUpdate: 4,
+    minHoursSinceUpdate: 10 / 60,
     ctaAction: 'ab_test:resume',
     triggerField: 'testStartedAt',
   })
   await dispatchLifecycleReminder(telegramBot, {
     lifecycleState: 'TEST_IN_PROGRESS',
     reminderKey: 'R4_PROGRESS_24H',
+    minHoursSinceUpdate: 1,
+    ctaAction: 'ab_test:resume',
+    triggerField: 'testStartedAt',
+  })
+  await dispatchLifecycleReminder(telegramBot, {
+    lifecycleState: 'TEST_IN_PROGRESS',
+    reminderKey: 'R9_PROGRESS_1D',
     minHoursSinceUpdate: 24,
     ctaAction: 'ab_test:resume',
     triggerField: 'testStartedAt',
@@ -347,7 +354,7 @@ export function startScheduler(options?: { startNotificationWorker?: boolean; co
   safeSchedule('aiSellerReactivation30dCron', '5 10 * * *', () => { runScheduled('aiSellerReactivation30dCron', async () => { await aiSellerReactivationCron(30) }) }, timezone)
   safeSchedule('zoomSwapMonthlyResetSE2Cron', '0 0 1 * *', () => { runScheduled('zoomSwapMonthlyResetSE2Cron', async () => { await resetMonthlySwapUsage() }) }, timezone)
   safeSchedule('abTestR1R2Cron', '0 * * * *', () => { runScheduled('abTestR1R2Cron', async () => { await scheduleTestReminders(bot) }) }, timezone)
-  safeSchedule('abTestR3R4Cron', '5 * * * *', () => { runScheduled('abTestR3R4Cron', async () => { await scheduleProgressReminders(bot) }) }, timezone)
+  safeSchedule('abTestR3R4Cron', '*/10 * * * *', () => { runScheduled('abTestR3R4Cron', async () => { await scheduleProgressReminders(bot) }) }, timezone)
   safeSchedule('abTestR5R6Cron', '10 * * * *', () => { runScheduled('abTestR5R6Cron', async () => { await scheduleResultReminders(bot) }) }, timezone)
   safeSchedule('abTestR7R8Cron', '15 * * * *', () => { runScheduled('abTestR7R8Cron', async () => { await scheduleOfferReminders(bot) }) }, timezone)
   safeSchedule('abTestZoomZ1Cron', '0 18 * * 1', () => { runScheduled('abTestZoomZ1Cron', async () => { await scheduleZoomReminders(bot, 'Z1_ZOOM_MON_1800') }) }, timezone)

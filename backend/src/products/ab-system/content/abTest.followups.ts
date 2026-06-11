@@ -16,6 +16,7 @@ export type LifecycleReminderKey =
   | 'R2_TEST_72H'
   | 'R3_PROGRESS_4H'
   | 'R4_PROGRESS_24H'
+  | 'R9_PROGRESS_1D'
   | 'R5_RESULT_2H'
   | 'R6_RESULT_48H'
   | 'R7_OFFER_6H'
@@ -290,12 +291,17 @@ export const AB_TEST_LIFECYCLE_REMINDERS: Record<LifecycleReminderKey, FollowupC
   },
   R3_PROGRESS_4H: {
     title: 'Повернись до тесту',
-    body: 'Ти зупинилась у процесі. Повернись і закрий тест за кілька хвилин.',
+    body: 'Ти зупинилась у процесі. Повернись і закрий тест за 10 хвилин.',
     cta: 'Продовжити тест',
   },
   R4_PROGRESS_24H: {
     title: 'Тест не завершено',
-    body: 'Минуло 24 години з останньої активності в тесті. Дотисни до результату.',
+    body: 'Минула 1 година з останньої активності в тесті. Дотисни до результату.',
+    cta: 'Продовжити тест',
+  },
+  R9_PROGRESS_1D: {
+    title: 'Тест не завершено',
+    body: 'Минув 1 день з останньої активності в тесті. Дотисни до результату.',
     cta: 'Продовжити тест',
   },
   R5_RESULT_2H: {
