@@ -35,9 +35,15 @@ export function readTelegramBotNames(): TelegramBotNames {
 
 export function requireTelegramBotConfig(context = 'startup'): TelegramBotConfig {
   const config = readTelegramBotConfig()
-  if (!config.token || !config.username) {
+  if (!config.token) {
     throw new Error(
-      `[Telegram] Missing required env vars during ${context}: TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME`,
+      `[Telegram] Missing required env var during ${context}: TELEGRAM_BOT_TOKEN`,
+    )
+  }
+
+  if (!config.username) {
+    console.warn(
+      `[Telegram] TELEGRAM_BOT_USERNAME is missing during ${context}; bot links will be degraded until it is configured`,
     )
   }
 
