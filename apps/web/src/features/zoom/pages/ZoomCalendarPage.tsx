@@ -2,9 +2,11 @@ import { useAppSelector } from '@/app/hooks'
 import { selectCurrentUser, selectAuthStatus } from '@/features/auth/services/auth.slice'
 import { useTelegramMiniAppAuthMutation } from '@/features/auth/services/auth.api'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
+import { buildTelegramDeepLink } from '@/shared/telegram/telegramDeepLinks'
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import { useGetPublicWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
+import { hasPaidAccess } from '@/features/user/types/user.types'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 type ViewState = 'public' | 'personal' | 'pending'
@@ -19,7 +21,15 @@ function formatRange(week: ZoomWeekOverview['week']): string {
   return `${from.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: week.timezone })}–${to.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: week.timezone })}`
 }
 
-function PublicWeekOverview({ overview }: { overview: ZoomWeekOverview }) {
+function PublicWeekOverview({
+  overview,
+  showTelegramButton,
+  hint,
+}: {
+  overview: ZoomWeekOverview
+  showTelegramButton: boolean
+  hint: string
+}) {
   const range = formatRange(overview.week)
 
   return (
@@ -27,7 +37,26 @@ function PublicWeekOverview({ overview }: { overview: ZoomWeekOverview }) {
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
         <p className="text-[11px] uppercase tracking-[0.24em] text-white/40">Публічний календар</p>
         <h1 className="mt-2 text-2xl font-semibold">Zoom Calendar</h1>
-        <p className="mt-2 text-sm text-white/70">Період {range}. Увійди через Telegram, щоб побачити персональний календар.</p>
+        <p className="mt-2 text-sm text-white/70">Період {range}. Публічний розклад доступний одразу, а персональний календар відкривається через Telegram Mini App.</p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <a
+            href="/focus"
+            className="inline-flex items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-400/15 px-4 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/22"
+          >
+            Активувати ФОКУС
+          </a>
+          {showTelegramButton && (
+            <a
+              href={buildTelegramDeepLink({ source: 'DIRECT', startParam: 'zoom_calendar' })}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/90 transition hover:bg-white/10"
+            >
+              Відкрити в Telegram
+            </a>
+          )}
+        </div>
+        <p className="mt-3 text-xs text-white/45">{hint}</p>
       </div>
 
       <div className="grid gap-3">
@@ -72,12 +101,20 @@ export default function ZoomCalendarPage({ isPublic = false }: ZoomCalendarPageP
   const user = useAppSelector(selectCurrentUser)
   const authStatus = useAppSelector(selectAuthStatus)
   const [telegramMiniAppAuth] = useTelegramMiniAppAuthMutation()
-  const [viewState, setViewState] = useState<ViewState>(isPublic ? 'public' : (user ? 'personal' : 'public'))
+  const [viewState, setViewState] = useState<ViewState>(isPublic ? 'public' : 'public')
   const authAttemptedRef = useRef(false)
   const isTelegramRuntime = isTelegramMiniApp('/zoom-calendar')
+  const hasTelegramInitData = Boolean(
+    typeof window !== 'undefined' &&
+      (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim()
+  )
+  const isCoach = Boolean(user && ['SUPERADMIN', 'ADMIN', 'EXPERT'].includes(user.role))
+  const canSeePersonalCalendar = Boolean(user && (isCoach || hasPaidAccess(user)))
+  const shouldShowPersonalCalendar = !isPublic && canSeePersonalCalendar
+  const isBrowserFallback = !isTelegramRuntime || !hasTelegramInitData
 
   const { data: publicOverview, isLoading: isPublicLoading, isError: isPublicError } = useGetPublicWeekOverviewQuery(undefined, {
-    skip: isPublic ? false : (Boolean(user) || viewState === 'pending'),
+    skip: shouldShowPersonalCalendar || viewState === 'pending',
     refetchOnMountOrArgChange: true,
   })
 
@@ -87,12 +124,12 @@ export default function ZoomCalendarPage({ isPublic = false }: ZoomCalendarPageP
       return
     }
 
-    if (user) {
+    if (canSeePersonalCalendar) {
       setViewState('personal')
       return
     }
 
-    if (!isTelegramRuntime) {
+    if (isBrowserFallback) {
       setViewState('public')
       return
     }
@@ -111,14 +148,13 @@ export default function ZoomCalendarPage({ isPublic = false }: ZoomCalendarPageP
       .unwrap()
       .then(() => setViewState('personal'))
       .catch(() => setViewState('public'))
-  }, [isPublic, isTelegramRuntime, telegramMiniAppAuth, user])
+  }, [canSeePersonalCalendar, isBrowserFallback, isPublic, telegramMiniAppAuth])
 
   const personalMode = useMemo(() => {
-    if (!user) return 'user'
-    return user.role === 'EXPERT' || user.role === 'SUPERADMIN' ? 'coach' : 'user'
-  }, [user])
+    return isCoach ? 'coach' : 'user'
+  }, [isCoach])
 
-  if (viewState === 'pending' || (!isPublic && isTelegramRuntime && authStatus === 'loading' && !user)) {
+  if (viewState === 'pending' || (!isPublic && isTelegramRuntime && authStatus === 'loading' && !user && hasTelegramInitData)) {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/80">
         Авторизуємо Zoom Calendar…
@@ -126,7 +162,7 @@ export default function ZoomCalendarPage({ isPublic = false }: ZoomCalendarPageP
     )
   }
 
-  if (!isPublic && user) {
+  if (shouldShowPersonalCalendar && user) {
     return (
       <div className="mx-auto w-full max-w-6xl px-4 py-6">
         <ZoomCalendar mode={personalMode} userId={user.id} expertId={user.expertId ?? undefined} />
@@ -145,10 +181,20 @@ export default function ZoomCalendarPage({ isPublic = false }: ZoomCalendarPageP
   if (isPublicLoading || !publicOverview) {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/80">
-        Завантажуємо публічний Zoom Calendar…
+        {isTelegramRuntime && hasTelegramInitData ? 'Підключаємо Telegram та завантажуємо календар…' : 'Завантажуємо публічний Zoom Calendar…'}
       </div>
     )
   }
 
-  return <PublicWeekOverview overview={publicOverview} />
+  return (
+    <PublicWeekOverview
+      overview={publicOverview}
+      showTelegramButton={!isTelegramRuntime}
+      hint={
+        isTelegramRuntime
+          ? 'Публічний розклад показується одразу. Персональний календар відкриється після автоматичного Telegram-входу.'
+          : 'Щоб побачити персональний календар, відкрий сторінку через Telegram Mini App.'
+      }
+    />
+  )
 }

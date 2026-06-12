@@ -55,7 +55,11 @@ const normalizeApiBaseUrl = (value: string): string => {
 
 const getApiBaseUrl = (): string => {
   const mode = getApiMode();
-  const remoteUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL?.trim() || DEFAULT_REMOTE_API_URL);
+  const remoteApiUrl =
+    import.meta.env.VITE_API_BASE_URL?.trim() ||
+    import.meta.env.VITE_API_URL?.trim() ||
+    DEFAULT_REMOTE_API_URL;
+  const remoteUrl = normalizeApiBaseUrl(remoteApiUrl);
 
   if (mode === 'local') return '/api';
   if (mode === 'remote') return remoteUrl;
