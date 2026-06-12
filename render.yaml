@@ -11,6 +11,12 @@ services:
         value: 22
       - key: NODE_ENV
         value: production
+      - key: TELEGRAM_DELIVERY_MODE
+        value: webhook
+      - key: TELEGRAM_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL

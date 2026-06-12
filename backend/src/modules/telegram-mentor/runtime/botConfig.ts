@@ -10,13 +10,55 @@ export type TelegramBotNames = {
   test: string
 }
 
+export type TelegramDeliveryMode = 'polling' | 'webhook'
+
 function normalizeEnv(value: string | undefined): string {
   return String(value ?? '').trim()
 }
 
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production'
+}
+
+function readTelegramToken(preferLocal: boolean): string {
+  if (preferLocal) {
+    return (
+      normalizeEnv(process.env.TELEGRAM_LOCAL_BOT_TOKEN) ||
+      normalizeEnv(process.env.TELEGRAM_BOT_TOKEN)
+    )
+  }
+
+  return normalizeEnv(process.env.TELEGRAM_BOT_TOKEN)
+}
+
+function readTelegramUsername(preferLocal: boolean): string {
+  if (preferLocal) {
+    return (
+      normalizeEnv(process.env.TELEGRAM_LOCAL_BOT_USERNAME) ||
+      normalizeEnv(process.env.TELEGRAM_BOT_USERNAME)
+    )
+  }
+
+  return normalizeEnv(process.env.TELEGRAM_BOT_USERNAME)
+}
+
+export function resolveTelegramDeliveryMode(): TelegramDeliveryMode {
+  const explicit = normalizeEnv(process.env.TELEGRAM_DELIVERY_MODE).toLowerCase()
+  if (explicit === 'polling' || explicit === 'webhook') {
+    return explicit
+  }
+
+  if (isProductionRuntime() && normalizeEnv(process.env.TELEGRAM_WEBHOOK_URL)) {
+    return 'webhook'
+  }
+
+  return 'polling'
+}
+
 export function readTelegramBotConfig(): TelegramBotConfig {
-  const token = normalizeEnv(process.env.TELEGRAM_BOT_TOKEN)
-  const username = normalizeEnv(process.env.TELEGRAM_BOT_USERNAME)
+  const preferLocal = !isProductionRuntime()
+  const token = readTelegramToken(preferLocal)
+  const username = readTelegramUsername(preferLocal)
 
   return {
     token,

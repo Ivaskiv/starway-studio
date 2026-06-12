@@ -16,7 +16,11 @@ import {
   testBot,
 } from './lib/telegram.js'
 import { registerDailyTelegramCommands } from './modules/daily-cycle/telegram.js'
-import { readCoachBotToken, readTelegramBotNames } from './modules/telegram-mentor/runtime/botConfig.js'
+import {
+  readCoachBotToken,
+  readTelegramBotNames,
+  resolveTelegramDeliveryMode,
+} from './modules/telegram-mentor/runtime/botConfig.js'
 import { resolveRuntimeBotRegistry } from './platform/index.js'
 import { getPublicCurrentWeekZoomOverview } from './modules/zoom/service.js'
 import { registerStankeyBot } from './products/stankey/index.js'
@@ -42,6 +46,7 @@ const PORT = Number(process.env.PORT) || 3001
 const isProduction = process.env.NODE_ENV === 'production'
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
+const telegramDeliveryMode = resolveTelegramDeliveryMode()
 const MINIAPP_URL =
   process.env.MINIAPP_URL?.trim() ||
   'https://starway-frontend.vercel.app/miniapp'
@@ -128,8 +133,7 @@ async function startTelegramBot() {
         username: telegramBotConfig.username,
         botId: botRegistry.main.id,
         productOwnership: botRegistry.main.productOwnership,
-        polling: true,
-        webhook: false,
+        deliveryMode: telegramDeliveryMode,
         production: isProduction,
       })
 
@@ -157,6 +161,18 @@ async function startTelegramBot() {
       }
 
       const testBotToken = String(process.env.TEST_BOT_TOKEN ?? '').trim()
+      const mainWebhookUrl =
+        telegramDeliveryMode === 'webhook'
+          ? TELEGRAM_WEBHOOK_URL
+          : ''
+      const coachWebhookUrl =
+        telegramDeliveryMode === 'webhook'
+          ? process.env.COACH_BOT_WEBHOOK_URL?.trim() || ''
+          : ''
+      const testWebhookUrl =
+        telegramDeliveryMode === 'webhook'
+          ? process.env.TEST_BOT_WEBHOOK_URL?.trim() || ''
+          : ''
 
       await Promise.allSettled([
         (async () => {
@@ -242,28 +258,32 @@ async function startTelegramBot() {
               console.warn('⚠️ [Telegram] main bot identity/setup failed:', error)
             }
 
-          await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
-          if (TELEGRAM_WEBHOOK_URL) {
-            console.warn(
-              '🤖 [Telegram] Webhook URL detected, but runtime now uses polling by default for stability',
-              {
-                webhookUrl: TELEGRAM_WEBHOOK_URL,
-                production: isProduction,
-              }
-            )
+          if (mainWebhookUrl) {
+            const webhookInfoBefore = await bot.telegram.getWebhookInfo()
+            if (webhookInfoBefore.url !== mainWebhookUrl) {
+              await bot.telegram.setWebhook(mainWebhookUrl, {
+                drop_pending_updates: false,
+                allowed_updates: ['message', 'callback_query', 'channel_post', 'edited_channel_post', 'chat_member', 'my_chat_member'],
+              })
+            }
+            telegramRunningMode = 'webhook'
+            console.log(`🤖 Telegram bot ready (webhook mode): ${mainWebhookUrl}`)
+            return
           }
+
+          await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
           await launchBot(bot, telegramBotNames.main)
           telegramRunningMode = 'polling'
         })(),
         (async () => {
           if (!coachToken) return
-          await launchBot(coachBot, telegramBotNames.coach)
-          coachTelegramRunningMode = 'polling'
+          await launchBot(coachBot, telegramBotNames.coach, coachWebhookUrl || undefined)
+          coachTelegramRunningMode = coachWebhookUrl ? 'webhook' : 'polling'
         })(),
         (async () => {
           if (!testBotToken) return
-          await launchBot(testBot, telegramBotNames.test)
-          testTelegramRunningMode = 'polling'
+          await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined)
+          testTelegramRunningMode = testWebhookUrl ? 'webhook' : 'polling'
         })(),
       ])
     } catch (error) {

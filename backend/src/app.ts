@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import { prisma } from './db/client.js'
+import { resolveTelegramDeliveryMode } from './modules/telegram-mentor/runtime/botConfig.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
@@ -271,12 +272,13 @@ export function createApp(): Express {
   )
 
   app.get('/api/telegram/webhook/health', (_req: Request, res: Response) => {
-    const enabled = START_TELEGRAM_BOT
+    const deliveryMode = resolveTelegramDeliveryMode()
+    const enabled = START_TELEGRAM_BOT && deliveryMode === 'webhook'
     return res.status(200).json({
       ok: true,
       webhook: {
         enabled,
-        deliveryMode: START_TELEGRAM_BOT ? 'polling' : 'disabled',
+        deliveryMode: START_TELEGRAM_BOT ? deliveryMode : 'disabled',
         startTelegramBot: START_TELEGRAM_BOT,
         hasWebhookUrl: Boolean(TELEGRAM_WEBHOOK_URL),
       },
@@ -285,7 +287,7 @@ export function createApp(): Express {
 
   // Keep webhook route in createApp so it is registered regardless of bootstrap entrypoint.
   app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
-    if (!START_TELEGRAM_BOT) {
+    if (!START_TELEGRAM_BOT || resolveTelegramDeliveryMode() !== 'webhook') {
       return res
         .status(404)
         .json({ ok: false, message: 'telegram webhook disabled' })
