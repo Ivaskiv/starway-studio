@@ -42,6 +42,7 @@ export default defineConfig(({ mode }) => {
       preprocessorOptions: {
         scss: {
           api: 'modern-compiler',
+          includePaths: [path.resolve(__dirname, 'src/styles')],
         },
       },
     },

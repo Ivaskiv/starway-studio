@@ -1,0 +1,3 @@
+/* Canonical SCSS entrypoint for shared core styles.
+   Keep this file stable so bare imports like `components/core` can resolve
+   when the Sass load path points at `src/styles`. */
