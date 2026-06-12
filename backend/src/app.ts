@@ -271,11 +271,12 @@ export function createApp(): Express {
   )
 
   app.get('/api/telegram/webhook/health', (_req: Request, res: Response) => {
-    const enabled = START_TELEGRAM_BOT && Boolean(TELEGRAM_WEBHOOK_URL)
+    const enabled = START_TELEGRAM_BOT
     return res.status(200).json({
       ok: true,
       webhook: {
         enabled,
+        deliveryMode: START_TELEGRAM_BOT ? 'polling' : 'disabled',
         startTelegramBot: START_TELEGRAM_BOT,
         hasWebhookUrl: Boolean(TELEGRAM_WEBHOOK_URL),
       },
@@ -284,7 +285,7 @@ export function createApp(): Express {
 
   // Keep webhook route in createApp so it is registered regardless of bootstrap entrypoint.
   app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
-    if (!START_TELEGRAM_BOT || !TELEGRAM_WEBHOOK_URL) {
+    if (!START_TELEGRAM_BOT) {
       return res
         .status(404)
         .json({ ok: false, message: 'telegram webhook disabled' })

@@ -12,7 +12,6 @@ import {
   bot,
   coachBot,
   launchBot,
-  normalizeTelegramWebhookUrl,
   seedBotInfo,
   testBot,
 } from './lib/telegram.js'
@@ -42,11 +41,7 @@ if (existsSync(backendEnvPath)) {
 const PORT = Number(process.env.PORT) || 3001
 const isProduction = process.env.NODE_ENV === 'production'
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
-const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
-const TELEGRAM_POLLING_ENABLED =
-  process.env.TELEGRAM_POLLING_ENABLED === 'true' ||
-  (!TELEGRAM_WEBHOOK_URL && process.env.TELEGRAM_POLLING_ENABLED !== 'false')
 const MINIAPP_URL =
   process.env.MINIAPP_URL?.trim() ||
   'https://starway-frontend.vercel.app/miniapp'
@@ -133,8 +128,8 @@ async function startTelegramBot() {
         username: telegramBotConfig.username,
         botId: botRegistry.main.id,
         productOwnership: botRegistry.main.productOwnership,
-        polling: TELEGRAM_POLLING_ENABLED,
-        webhook: Boolean(TELEGRAM_WEBHOOK_URL),
+        polling: true,
+        webhook: false,
         production: isProduction,
       })
 
@@ -161,10 +156,7 @@ async function startTelegramBot() {
         console.log('🤖 [CoachBot] skipped: COACH_BOT_TOKEN is not set')
       }
 
-      const mainWebhookUrl = normalizeTelegramWebhookUrl(TELEGRAM_WEBHOOK_URL)
-      const coachWebhookUrl = process.env.COACH_BOT_WEBHOOK_URL?.trim() || ''
       const testBotToken = String(process.env.TEST_BOT_TOKEN ?? '').trim()
-      const testWebhookUrl = process.env.TEST_BOT_WEBHOOK_URL?.trim() || ''
 
       await Promise.allSettled([
         (async () => {
@@ -246,33 +238,18 @@ async function startTelegramBot() {
                   error
                 )
               })
-          } catch (error) {
-            console.warn('⚠️ [Telegram] main bot identity/setup failed:', error)
-          }
-
-          if (mainWebhookUrl) {
-            const webhookInfoBefore = await bot.telegram.getWebhookInfo()
-            if (webhookInfoBefore.url !== mainWebhookUrl) {
-              await bot.telegram.setWebhook(mainWebhookUrl, {
-                drop_pending_updates: false,
-                allowed_updates: ['message', 'callback_query', 'channel_post', 'edited_channel_post', 'chat_member', 'my_chat_member'],
-                ...(TELEGRAM_WEBHOOK_SECRET ? { secret_token: TELEGRAM_WEBHOOK_SECRET } : {}),
-              })
+            } catch (error) {
+              console.warn('⚠️ [Telegram] main bot identity/setup failed:', error)
             }
-            telegramRunningMode = 'webhook'
-            console.log(`🤖 Telegram bot ready (webhook mode): ${mainWebhookUrl}`)
-            return
-          }
-
-          if (!TELEGRAM_POLLING_ENABLED) {
-            console.log('🤖 [Telegram] Polling skipped (set TELEGRAM_POLLING_ENABLED=true to enable local polling)')
-            return
-          }
 
           await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
-          if (isProduction) {
+          if (TELEGRAM_WEBHOOK_URL) {
             console.warn(
-              '🤖 [Telegram] Production fallback: running polling because TELEGRAM_WEBHOOK_URL is missing'
+              '🤖 [Telegram] Webhook URL detected, but runtime now uses polling by default for stability',
+              {
+                webhookUrl: TELEGRAM_WEBHOOK_URL,
+                production: isProduction,
+              }
             )
           }
           await launchBot(bot, telegramBotNames.main)
@@ -280,13 +257,13 @@ async function startTelegramBot() {
         })(),
         (async () => {
           if (!coachToken) return
-          await launchBot(coachBot, telegramBotNames.coach, coachWebhookUrl || undefined)
-          coachTelegramRunningMode = coachWebhookUrl ? 'webhook' : 'polling'
+          await launchBot(coachBot, telegramBotNames.coach)
+          coachTelegramRunningMode = 'polling'
         })(),
         (async () => {
           if (!testBotToken) return
-          await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined)
-          testTelegramRunningMode = testWebhookUrl ? 'webhook' : 'polling'
+          await launchBot(testBot, telegramBotNames.test)
+          testTelegramRunningMode = 'polling'
         })(),
       ])
     } catch (error) {
