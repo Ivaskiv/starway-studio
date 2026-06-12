@@ -8,7 +8,14 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './app.js'
 import { prisma, withRetry } from './db/client.js'
-import { bot, coachBot, launchBot, seedBotInfo, testBot } from './lib/telegram.js'
+import {
+  bot,
+  coachBot,
+  launchBot,
+  normalizeTelegramWebhookUrl,
+  seedBotInfo,
+  testBot,
+} from './lib/telegram.js'
 import { registerDailyTelegramCommands } from './modules/daily-cycle/telegram.js'
 import { readCoachBotToken, readTelegramBotNames } from './modules/telegram-mentor/runtime/botConfig.js'
 import { resolveRuntimeBotRegistry } from './platform/index.js'
@@ -39,9 +46,7 @@ const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || '
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
 const TELEGRAM_POLLING_ENABLED =
   process.env.TELEGRAM_POLLING_ENABLED === 'true' ||
-  (!TELEGRAM_WEBHOOK_URL &&
-    !isProduction &&
-    process.env.TELEGRAM_POLLING_ENABLED !== 'false')
+  (!TELEGRAM_WEBHOOK_URL && process.env.TELEGRAM_POLLING_ENABLED !== 'false')
 const MINIAPP_URL =
   process.env.MINIAPP_URL?.trim() ||
   'https://starway-frontend.vercel.app/miniapp'
@@ -156,9 +161,7 @@ async function startTelegramBot() {
         console.log('🤖 [CoachBot] skipped: COACH_BOT_TOKEN is not set')
       }
 
-      const mainWebhookUrl = TELEGRAM_WEBHOOK_URL
-        ? `${TELEGRAM_WEBHOOK_URL.replace(/\/$/, '')}/api/telegram/webhook`
-        : ''
+      const mainWebhookUrl = normalizeTelegramWebhookUrl(TELEGRAM_WEBHOOK_URL)
       const coachWebhookUrl = process.env.COACH_BOT_WEBHOOK_URL?.trim() || ''
       const testBotToken = String(process.env.TEST_BOT_TOKEN ?? '').trim()
       const testWebhookUrl = process.env.TEST_BOT_WEBHOOK_URL?.trim() || ''
@@ -266,12 +269,12 @@ async function startTelegramBot() {
             return
           }
 
-          if (isProduction) {
-            console.log('🤖 Telegram: production mode (polling disabled)')
-            return
-          }
-
           await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
+          if (isProduction) {
+            console.warn(
+              '🤖 [Telegram] Production fallback: running polling because TELEGRAM_WEBHOOK_URL is missing'
+            )
+          }
           await launchBot(bot, telegramBotNames.main)
           telegramRunningMode = 'polling'
         })(),

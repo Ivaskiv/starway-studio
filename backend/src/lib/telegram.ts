@@ -25,6 +25,52 @@ function readTelegramApiRoot(envKey: string): string {
   return value || 'https://api.telegram.org'
 }
 
+export function normalizeTelegramWebhookUrl(
+  baseUrl: string,
+  endpointPath = '/api/telegram/webhook',
+): string {
+  const trimmedBaseUrl = String(baseUrl ?? '').trim().replace(/\/+$/, '')
+  if (!trimmedBaseUrl) {
+    return ''
+  }
+
+  const normalizedEndpointPath = endpointPath.startsWith('/')
+    ? endpointPath
+    : `/${endpointPath}`
+
+  try {
+    const url = new URL(trimmedBaseUrl)
+    const normalizedPath = url.pathname.replace(/\/+$/, '') || '/'
+
+    if (normalizedPath.endsWith(normalizedEndpointPath)) {
+      return url.toString().replace(/\/$/, '')
+    }
+
+    if (normalizedPath === '/api') {
+      url.pathname = normalizedEndpointPath
+      return url.toString().replace(/\/$/, '')
+    }
+
+    if (normalizedPath === '/') {
+      url.pathname = normalizedEndpointPath
+      return url.toString().replace(/\/$/, '')
+    }
+
+    url.pathname = `${normalizedPath}${normalizedEndpointPath}`
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    if (trimmedBaseUrl.endsWith(normalizedEndpointPath)) {
+      return trimmedBaseUrl
+    }
+
+    if (trimmedBaseUrl.endsWith('/api')) {
+      return `${trimmedBaseUrl}${normalizedEndpointPath.slice('/api'.length)}`
+    }
+
+    return `${trimmedBaseUrl}${normalizedEndpointPath}`
+  }
+}
+
 function getContentBotInstance(): Telegraf {
   if (contentBotInstance) {
     return contentBotInstance
