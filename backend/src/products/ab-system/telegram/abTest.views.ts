@@ -89,6 +89,20 @@ function shouldBoldAbTestLine(normalized: string): boolean {
   return AB_TEST_BOLD_LINES.has(normalized)
 }
 
+function renderInlineBoldMarkdown(value: string): string {
+  const parts = value.split(/(\*\*[\s\S]+?\*\*)/g)
+
+  return parts
+    .map((part) => {
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+        return `<b>${escapeHtml(part.slice(2, -2))}</b>`
+      }
+
+      return escapeHtml(part)
+    })
+    .join('')
+}
+
 function isQuoteLine(normalized: string): boolean {
   return (
     (normalized.startsWith('"') && normalized.endsWith('"')) ||
@@ -254,11 +268,11 @@ export function formatAbTestTelegramLine(line: string): string {
       .replace(/^ЦИТАТА:\s*/i, '')
       .replace(/^QUOTE:\s*/i, '')
       .trim()
-    return `<blockquote>${escapeHtml(clean)}</blockquote>`
+    return `<blockquote>${renderInlineBoldMarkdown(clean)}</blockquote>`
   }
 
   if (normalized.startsWith('· ')) {
-    return `• ${escapeHtml(normalized.slice(2))}`
+    return `• ${renderInlineBoldMarkdown(normalized.slice(2))}`
   }
 
   if (normalized === AB_TEST_VOICE_NOTE_HEADER) {
@@ -270,10 +284,10 @@ export function formatAbTestTelegramLine(line: string): string {
   }
 
   if (shouldBoldAbTestLine(normalized)) {
-    return `<b>${escapeHtml(normalized)}</b>`
+    return `<b>${renderInlineBoldMarkdown(normalized)}</b>`
   }
 
-  return escapeHtml(normalized)
+  return renderInlineBoldMarkdown(normalized)
 }
 
 export function formatAbTestTelegramCard(
