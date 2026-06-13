@@ -11,6 +11,7 @@ import { prisma, withRetry } from './db/client.js'
 import {
   bot,
   coachBot,
+  destroyTelegramClientTransports,
   launchBot,
   normalizeTelegramWebhookUrl,
   seedBotInfo,
@@ -66,6 +67,18 @@ let isShuttingDown = false
 let prismaKeepAliveInterval: NodeJS.Timeout | null = null
 let databaseReady = false
 let prismaDisconnectPromise: Promise<void> | null = null
+
+async function runShutdownStep(name: string, step: () => void | Promise<void>) {
+  const startedAt = Date.now()
+  console.log(`[shutdown] START ${name}`)
+  try {
+    await step()
+  } finally {
+    console.log(
+      `[shutdown] STOP ${name} duration=${Date.now() - startedAt}ms`
+    )
+  }
+}
 
 function describeDatabaseTarget(databaseUrl: string | undefined) {
   if (!databaseUrl) {
@@ -485,47 +498,64 @@ async function shutdown(signal: string) {
   }, 5_000).unref()
 
   try {
-    try {
-      stopScheduler()
-    } catch {
-      // silent
-    }
-
-    await stopDnaQueueWorkers().catch(() => undefined)
-
-    try {
-      if (START_TELEGRAM_BOT) {
-        bot.stop(signal)
-        if (coachTelegramRunningMode) {
-          coachBot.stop(signal)
-        }
-        if (testTelegramRunningMode) {
-          testBot.stop(signal)
-        }
+    await runShutdownStep('stop scheduler', async () => {
+      try {
+        stopScheduler()
+      } catch {
+        // silent
       }
-    } catch {
-      // silent
-    }
+    })
 
-    if (prismaKeepAliveInterval) {
-      clearInterval(prismaKeepAliveInterval)
-      prismaKeepAliveInterval = null
-    }
+    await runShutdownStep('stop dna workers', async () => {
+      await stopDnaQueueWorkers().catch(() => undefined)
+    })
 
-    connections.forEach((s) => s.destroy())
-    connections.clear()
+    await runShutdownStep('stop telegram', async () => {
+      try {
+        if (START_TELEGRAM_BOT) {
+          bot.stop(signal)
+          if (coachTelegramRunningMode) {
+            coachBot.stop(signal)
+          }
+          if (testTelegramRunningMode) {
+            testBot.stop(signal)
+          }
+        }
+      } catch {
+        // silent
+      }
 
-    if (server) {
+      destroyTelegramClientTransports()
+    })
+
+    await runShutdownStep('stop prisma keepalive', async () => {
+      if (prismaKeepAliveInterval) {
+        clearInterval(prismaKeepAliveInterval)
+        prismaKeepAliveInterval = null
+      }
+    })
+
+    await runShutdownStep('stop sockets', async () => {
+      connections.forEach((s) => s.destroy())
+      connections.clear()
+    })
+
+    await runShutdownStep('stop http server', async () => {
+      if (!server) return
       server.closeIdleConnections?.()
       server.closeAllConnections?.()
       await new Promise<void>((resolve, reject) =>
         server!.close((err) => (err ? reject(err) : resolve()))
       )
       console.log('🔌 HTTP server closed')
-    }
+    })
 
-    await safePrismaDisconnect(`shutdown:${signal}`)
-    console.log('🔌 Database disconnected\n✅ Shutdown complete')
+    await runShutdownStep('disconnect prisma', async () => {
+      await safePrismaDisconnect(`shutdown:${signal}`)
+      console.log('🔌 Database disconnected')
+    })
+
+    console.log('✅ Shutdown complete')
 
     clearTimeout(forceKill)
     setImmediate(() => process.exit(0))

@@ -174,6 +174,31 @@ export const testBot = createBotProxy(getTestBotInstance)
 const LAST_MESSAGE_TTL_MS = 6 * 60 * 60 * 1000
 const lastMessageHashes = new Map<string, { hash: string; sentAt: number }>()
 
+function destroyTelegramTransportClient(client: Telegraf | null): void {
+  if (!client) return
+
+  const options = client.telegram?.options as {
+    agent?: unknown
+    attachmentAgent?: unknown
+  } | undefined
+
+  for (const agent of [options?.agent, options?.attachmentAgent]) {
+    if (!agent || typeof agent !== 'object') continue
+
+    const maybeDestroy = (agent as { destroy?: () => void }).destroy
+    if (typeof maybeDestroy === 'function') {
+      maybeDestroy.call(agent)
+    }
+  }
+}
+
+export function destroyTelegramClientTransports(): void {
+  destroyTelegramTransportClient(telegramBotInstance)
+  destroyTelegramTransportClient(contentBotInstance)
+  destroyTelegramTransportClient(coachBotInstance)
+  destroyTelegramTransportClient(testBotInstance)
+}
+
 const getBotLink = () =>
   requireTelegramBotConfig('telegram bot link').botLink || 'https://t.me/'
 
