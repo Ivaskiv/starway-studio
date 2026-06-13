@@ -12,7 +12,6 @@ export type AbTestResultDefinition = {
     | 'TEST_RESULT_DECISION'
     | 'TEST_RESULT_ACTION'
   title: string
-  body: string
   msg1: string
   msg1_audio: string
   msg2_practice: string
@@ -34,6 +33,12 @@ export type AbTestResultDefinition = {
   analytics_hooks: readonly string[]
 }
 
+function defineAbTestResultBase<T extends Record<AbTestResultKey, { msg1: string }>>(
+  value: T
+): T {
+  return value
+}
+
 export function interpolateFirstName(
   text: string,
   firstName?: string | null
@@ -47,8 +52,7 @@ export function interpolateFirstName(
 }
 
 // ── Блок 4: СТАН ─────────────────────────────────────────────
-const AB_TEST_RESULTS_BASE =
-  {
+const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
     state: {
       message_key: 'TEST_RESULT_STATE',
       title: 'СТАН',
@@ -313,7 +317,7 @@ const AB_TEST_RESULTS_BASE =
         'return_after_message_rate',
       ],
     },
-  } as const
+} as const)
 
 export const AB_TEST_RESULTS = AB_TEST_RESULTS_BASE as unknown as Record<
   AbTestResultKey,
@@ -323,7 +327,6 @@ export const AB_TEST_RESULTS = AB_TEST_RESULTS_BASE as unknown as Record<
 for (const key of Object.keys(AB_TEST_RESULTS) as AbTestResultKey[]) {
   const result = AB_TEST_RESULTS[key]
 
-  result.body = result.msg1
   result.msg2 = [
     result.msg2_practice,
     result.msg2_benefits,
@@ -331,7 +334,7 @@ for (const key of Object.keys(AB_TEST_RESULTS) as AbTestResultKey[]) {
     result.msg2_howItWorks,
     result.msg2_review,
     result.msg3_pricing,
-  ].join('\n')
+  ].join('\n\n')
 }
 
 export function getAbTestResultDefinition(
@@ -362,12 +365,14 @@ export const BLOCK10_FOCUS = {
     '*ФОКУС │ Zoom-практики AB System*',
     '',
     'ФОКУС — це живі Zoom-практики раз на тиждень.',
+    '',
     'Ти приходиш із реальною ситуацією:',
     '— що відкладаєш,',
     '— яке рішення переносиш,',
     '— яка ціль не рухається.',
     '',
     'Тарифи:',
+    '',
     '1 місяць — 15 євро',
     '3 місяці — 39 євро',
   ].join('\n'),
