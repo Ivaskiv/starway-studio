@@ -12,6 +12,7 @@ import {
   bot,
   coachBot,
   launchBot,
+  normalizeTelegramWebhookUrl,
   seedBotInfo,
   testBot,
 } from './lib/telegram.js'
@@ -163,15 +164,19 @@ async function startTelegramBot() {
       const testBotToken = String(process.env.TEST_BOT_TOKEN ?? '').trim()
       const mainWebhookUrl =
         telegramDeliveryMode === 'webhook'
-          ? TELEGRAM_WEBHOOK_URL
+          ? normalizeTelegramWebhookUrl(TELEGRAM_WEBHOOK_URL)
           : ''
       const coachWebhookUrl =
         telegramDeliveryMode === 'webhook'
-          ? process.env.COACH_BOT_WEBHOOK_URL?.trim() || ''
+          ? normalizeTelegramWebhookUrl(
+              process.env.COACH_BOT_WEBHOOK_URL?.trim() || '',
+            )
           : ''
       const testWebhookUrl =
         telegramDeliveryMode === 'webhook'
-          ? process.env.TEST_BOT_WEBHOOK_URL?.trim() || ''
+          ? normalizeTelegramWebhookUrl(
+              process.env.TEST_BOT_WEBHOOK_URL?.trim() || '',
+            )
           : ''
 
       await Promise.allSettled([
