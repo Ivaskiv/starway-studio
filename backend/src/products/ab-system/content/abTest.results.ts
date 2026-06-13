@@ -321,15 +321,7 @@ export const AB_TEST_RESULTS = AB_TEST_RESULTS_BASE as unknown as Record<
 >
 
 for (const key of Object.keys(AB_TEST_RESULTS) as AbTestResultKey[]) {
-  const result = AB_TEST_RESULTS[key] as AbTestResultDefinition & {
-    msg1: string
-    msg2_practice: string
-    msg2_benefits: string
-    msg2_included: string
-    msg2_howItWorks: string
-    msg2_review: string
-    msg3_pricing: string
-  }
+  const result = AB_TEST_RESULTS[key]
 
   result.body = result.msg1
   result.msg2 = [
