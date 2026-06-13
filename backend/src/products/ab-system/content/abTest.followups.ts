@@ -2,7 +2,10 @@
 
 import type { AbTestResultKey } from './abTest.results.js'
 import { interpolateFirstName } from './abTest.results.js'
-import { buildAbTestScreenshotMarker } from './abTest.shared.js'
+import {
+  AB_TEST_DOJIM_7D_REVIEW_QUOTE,
+  buildAbTestScreenshotMarker,
+} from './abTest.shared.js'
 import type { TestDriveContentVersion } from './testDrive.content.js'
 import { PAYMENT_REMINDER_FOLLOWUP_COPY } from '@/core/state-machine/paymentReminderFoundation.js'
 
@@ -204,6 +207,8 @@ function buildBranchCopy(): BranchFollowupCopy {
 Ти вже знаєш що тебе зупиняє. Це не так часто буває — що людина бачить це чесно.
 
 Нижче відгук після першої практики.
+
+${AB_TEST_DOJIM_7D_REVIEW_QUOTE}
 
 ${buildAbTestScreenshotMarker('dojim_7d_review')}
 

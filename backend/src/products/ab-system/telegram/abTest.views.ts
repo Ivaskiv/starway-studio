@@ -32,10 +32,12 @@ import {
   type AbTestResultKey,
 } from '../content/abTest.results.js'
 import {
-  AB_TEST_NEONILA_REVIEW_HEADER,
-  AB_TEST_VALENTYNA_REVIEW_HEADER,
-  AB_TEST_YELYZAVETA_REVIEW_HEADER,
-  AB_TEST_KSENIIA_REVIEW_HEADER,
+  AB_TEST_BOLD_LINES,
+  AB_TEST_REVIEW_HEADERS,
+  AB_TEST_FOCUS_BENEFIT_HEADER,
+  AB_TEST_FOCUS_INCLUDED_HEADER,
+  AB_TEST_FOCUS_OPENING_LINES,
+  AB_TEST_SHOW_INSIDE_CTA_TEXT,
   AB_TEST_SCREENSHOT_URLS,
   AB_TEST_VOICE_NOTE_HEADER,
   AB_TEST_VOICE_NOTE_LINK_TEXT,
@@ -75,49 +77,6 @@ const UI_COPY = {
 export const AB_TEST_AUDIO_URL =
   'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
 
-const AB_TEST_BOLD_LINES = new Set([
-  'Тримаєшся з останніх сил.',
-  'Мене звати Надя. Вже 3 роки я допомагаю жінкам виходити з цього кола через систему AB System.',
-  'Мене звати Надя. Вже 3 роки я допомагаю жінкам знаходити свій напрямок через систему AB System.',
-  'Мене звати Надя. Вже 3 роки я допомагаю жінкам робити вибір через систему AB System.',
-  'Мене звати Надя. Вже 3 роки я допомагаю жінкам переходити від "знаю але не роблю" до реальних кроків через систему AB System.',
-  'AB System — це система з 5 елементів: СТАН, ЦІЛЬ, ВИБІР, РІШЕННЯ, ДІЯ.',
-  'Тест показав де саме зупиняєшся ти. Коли це видно — стає зрозуміло що змінити і як іти далі.',
-  'Тест показав твою головну точку на зараз.',
-  'Я знаю як допомогти тобі це пройти…',
-  'Що ти отримуєш у ФОКУСІ:',
-  'Що входить у ФОКУС:',
-  'Почати можна з одного місяця участі.',
-  'Хочеш подивитись, як це проходить на практиці?',
-  'Ти активна. Робиш багато. Але ходиш по колу — і сама не розумієш чому нічого не змінюється.',
-  'Більше дій — не вихід.',
-  'Ти приходиш з тим що робиш але що нікуди не веде.',
-  'Замість списку нових дій ти виходиш з одним кроком. Але точним.',
-  'Коли рішення не прийняте всередині, дія стає важкою.',
-  'Якщо ти відчуваєш, що відкладаєш важливе через нечіткість у цілі, заходь у ФОКУС.',
-])
-
-const AB_TEST_BOLD_PREFIXES = [
-  'Що відбувається у ФОКУСІ —',
-  'У ФОКУСІ ми якраз працюємо з такими ситуаціями.',
-  'У ФОКУСІ ми працюємо не з красивими цілями, а з реальними.',
-  'У ФОКУСІ ми будемо працювати саме з такими моментами.',
-  'У ФОКУСІ ми працюємо з рішеннями через реальні ситуації.',
-  'У ФОКУСІ ми не будемо просто говорити про твою ситуацію.',
-  'На практиці ми не розбираємо все життя одразу.',
-  'Спочатку знаходимо де саме ти зупиняєшся.',
-  'Потім бачимо що саме це підтримує.',
-  'Після цього визначаємо один конкретний крок який допомагає вийти з цього кола.',
-  'Саме тому після практики ти йдеш не з новою інформацією — а з розумінням що робити далі саме тобі у твоїй ситуації.',
-  'Ти приходиш зі своєю реальною ситуацією — тим що давно відкладаєш або що не дає спокою.',
-  'Ми не розбираємо всю твою історію. Ми беремо одну ситуацію і дивимось що саме там відбувається.',
-  'Наприкінці практики ти виходиш з одним кроком. Не списком. Одним — але точним.',
-  AB_TEST_KSENIIA_REVIEW_HEADER,
-  AB_TEST_NEONILA_REVIEW_HEADER,
-  AB_TEST_VALENTYNA_REVIEW_HEADER,
-  AB_TEST_YELYZAVETA_REVIEW_HEADER,
-]
-
 type TelegramContentBlockKind = 'text' | 'quote' | 'audio' | 'screenshot'
 
 type TelegramContentBlock = {
@@ -127,10 +86,7 @@ type TelegramContentBlock = {
 }
 
 function shouldBoldAbTestLine(normalized: string): boolean {
-  return (
-    AB_TEST_BOLD_LINES.has(normalized) ||
-    AB_TEST_BOLD_PREFIXES.some((prefix) => normalized.startsWith(prefix))
-  )
+  return AB_TEST_BOLD_LINES.has(normalized)
 }
 
 function isQuoteLine(normalized: string): boolean {
@@ -147,6 +103,10 @@ function isScreenshotLine(normalized: string): boolean {
   return normalized.startsWith('📸 [СКРІН — ') && normalized.endsWith(']')
 }
 
+function isReviewHeaderLine(normalized: string): boolean {
+  return AB_TEST_REVIEW_HEADERS.includes(normalized as (typeof AB_TEST_REVIEW_HEADERS)[number])
+}
+
 function extractScreenshotKey(normalized: string): AbTestScreenshotKey | null {
   const match = normalized.match(/^📸 \[СКРІН — ([a-z0-9_]+)\]$/i)
   if (!match) return null
@@ -154,12 +114,7 @@ function extractScreenshotKey(normalized: string): AbTestScreenshotKey | null {
   return AB_TEST_SCREENSHOT_URLS[key] ? key : null
 }
 
-const AB_TEST_PROOF_PREFIXES = [
-  AB_TEST_NEONILA_REVIEW_HEADER,
-  AB_TEST_VALENTYNA_REVIEW_HEADER,
-  AB_TEST_YELYZAVETA_REVIEW_HEADER,
-  AB_TEST_KSENIIA_REVIEW_HEADER,
-]
+const AB_TEST_PROOF_PREFIXES = [...AB_TEST_REVIEW_HEADERS]
 
 export function splitTelegramLines(lines: string[], maxChars = 650): string[][] {
   const blocks = splitTelegramContentBlocks(lines)
@@ -215,6 +170,18 @@ export function splitTelegramContentBlocks(lines: string[]): TelegramContentBloc
     }
 
     if (isQuoteLine(normalized)) {
+      const lastTextLine = currentText[currentText.length - 1]?.trim()
+      if (lastTextLine && isReviewHeaderLine(lastTextLine)) {
+        currentText.push(raw)
+        while (index + 1 < lines.length) {
+          const next = lines[index + 1].trim()
+          if (!next || !isQuoteLine(next)) break
+          currentText.push(lines[index + 1])
+          index += 1
+        }
+        continue
+      }
+
       flushText()
       const quoteLines = [normalized]
       while (index + 1 < lines.length) {
@@ -601,7 +568,7 @@ export async function renderAbTestCompletedResult(
         : [
             [
               {
-                text: 'Показати\nяк проходить\nпрактика',
+                text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
                 callback_data: `show_inside_${resultKey.toUpperCase()}`,
               },
             ],
@@ -806,7 +773,7 @@ export async function renderAbTestFocusOffer(
       : [
           [
             {
-              text: 'Показати\nяк проходить\nпрактика',
+              text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
               callback_data: `show_inside_${progress.result_key.toUpperCase()}`,
             },
           ],
@@ -890,7 +857,7 @@ export async function renderAbTestPostEmailSubmitSequence(
       parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
-        [{ text: 'Показати практику', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+        [{ text: AB_TEST_SHOW_INSIDE_CTA_TEXT, callback_data: `show_inside_${resultKey.toUpperCase()}` }],
         [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
       ],
     },

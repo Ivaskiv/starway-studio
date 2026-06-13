@@ -77,11 +77,19 @@ describe('telegram bot config', () => {
     })
   })
 
-  it('resolves webhook mode only in production when a webhook url exists', () => {
-    process.env.NODE_ENV = 'production'
+  it('resolves webhook mode when a webhook url exists', () => {
+    process.env.NODE_ENV = 'development'
     process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com'
     delete process.env.TELEGRAM_DELIVERY_MODE
 
     expect(resolveTelegramDeliveryMode()).toBe('webhook')
+  })
+
+  it('keeps explicit polling override even when webhook url exists', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com'
+    process.env.TELEGRAM_DELIVERY_MODE = 'polling'
+
+    expect(resolveTelegramDeliveryMode()).toBe('polling')
   })
 })

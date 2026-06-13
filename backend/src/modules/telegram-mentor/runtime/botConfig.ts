@@ -48,7 +48,7 @@ export function resolveTelegramDeliveryMode(): TelegramDeliveryMode {
     return explicit
   }
 
-  if (isProductionRuntime() && normalizeEnv(process.env.TELEGRAM_WEBHOOK_URL)) {
+  if (normalizeEnv(process.env.TELEGRAM_WEBHOOK_URL)) {
     return 'webhook'
   }
 
