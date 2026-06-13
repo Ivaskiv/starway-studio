@@ -1384,17 +1384,7 @@ export async function handleAbTestCallback(
     }
     await saveAbTestProgress(userId, normalizeAbTestProgress(undefined))
     if (chatId) {
-      await ctx.telegram.sendMessage(
-        chatId,
-        absystemContent.START_BLOCK1.MSG1,
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'Почати тест', callback_data: 'ab_test:start' }],
-            ],
-          },
-        }
-      )
+      await startAbTestFlow(ctx, userId, 'ab_test:restart')
     }
     return true
   }
