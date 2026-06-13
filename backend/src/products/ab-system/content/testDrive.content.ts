@@ -5,8 +5,9 @@ import {
   AB_TEST_FOCUS_PRACTICE_TITLE,
   AB_TEST_FOCUS_PRACTICE_FULL_LINES,
   AB_TEST_FOCUS_PITCH_LINES,
-  buildAbTestScreenshotMarker,
   AB_TEST_VOICE_NOTE_LINES,
+  AB_TEST_SCREENSHOT_URLS,
+  telegramBlock,
 } from './abTest.shared.js'
 import type { AbTestResultKey } from './abTest.results.js'
 
@@ -16,6 +17,7 @@ export type TestDriveCode = 'A' | 'B' | 'V' | 'G' | 'D'
 export type TestDriveResultSurface = {
   title: string
   bodyLines: string[]
+  blocks?: import('./abTest.shared.js').TelegramContentBlock[]
   buttons: TelegramButton[][]
 }
 
@@ -129,9 +131,23 @@ export function getTestDriveResultSurface(input: {
     bodyLines: [
       ...AB_TEST_FOCUS_PRACTICE_FULL_LINES,
       '',
-      buildAbTestScreenshotMarker('test_drive_result_review'),
+      '📸 [СКРІН — test_drive_result_review]',
       '',
       ...AB_TEST_FOCUS_PITCH_LINES,
+    ],
+    blocks: [
+      telegramBlock.text(AB_TEST_FOCUS_PRACTICE_TITLE),
+      telegramBlock.text('На практиці ми не розбираємо все життя одразу.'),
+      telegramBlock.text('Ми беремо одну ситуацію яка зараз найбільше тебе зупиняє.'),
+      telegramBlock.text('Спочатку знаходимо де саме ти зупиняєшся.'),
+      telegramBlock.text('Потім бачимо що саме це підтримує.'),
+      telegramBlock.text('Після цього визначаємо один конкретний крок який допомагає вийти з цього кола.'),
+      telegramBlock.image(AB_TEST_SCREENSHOT_URLS.test_drive_result_review),
+      telegramBlock.text('Що ти отримуєш у ФОКУСІ:'),
+      telegramBlock.text('Розуміння де саме зараз зупиняєшся'),
+      telegramBlock.text('Причину через яку ситуація повторюється знову і знову'),
+      telegramBlock.text('Один конкретний крок який допомагає іти далі'),
+      telegramBlock.text('Можливість розібрати свою ситуацію наживо разом зі мною'),
     ],
     buttons: [
       [{ text: 'Показати\nяк проходить\nпрактика', callback_data: 'ab_test:test_drive' }],
@@ -152,9 +168,23 @@ export function getTestDriveInsideSurface(input: {
     bodyLines: [
       ...AB_TEST_FOCUS_PRACTICE_FULL_LINES,
       '',
-      buildAbTestScreenshotMarker('test_drive_inside_review'),
+      '📸 [СКРІН — test_drive_inside_review]',
       '',
       ...AB_TEST_FOCUS_PITCH_LINES,
+    ],
+    blocks: [
+      telegramBlock.text(AB_TEST_FOCUS_PRACTICE_TITLE),
+      telegramBlock.text('На практиці ми не розбираємо все життя одразу.'),
+      telegramBlock.text('Ми беремо одну ситуацію яка зараз найбільше тебе зупиняє.'),
+      telegramBlock.text('Спочатку знаходимо де саме ти зупиняєшся.'),
+      telegramBlock.text('Потім бачимо що саме це підтримує.'),
+      telegramBlock.text('Після цього визначаємо один конкретний крок який допомагає вийти з цього кола.'),
+      telegramBlock.image(AB_TEST_SCREENSHOT_URLS.test_drive_inside_review),
+      telegramBlock.text('Що ти отримуєш у ФОКУСІ:'),
+      telegramBlock.text('Розуміння де саме зараз зупиняєшся'),
+      telegramBlock.text('Причину через яку ситуація повторюється знову і знову'),
+      telegramBlock.text('Один конкретний крок який допомагає іти далі'),
+      telegramBlock.text('Можливість розібрати свою ситуацію наживо разом зі мною'),
     ],
     buttons: [
       [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
@@ -173,9 +203,23 @@ export function getTestDriveInsideResponseSurface(input: {
     bodyLines: [
       ...AB_TEST_FOCUS_PRACTICE_FULL_LINES,
       '',
-      buildAbTestScreenshotMarker('test_drive_response_review'),
+      '📸 [СКРІН — test_drive_response_review]',
       '',
       ...AB_TEST_FOCUS_PITCH_LINES,
+    ],
+    blocks: [
+      telegramBlock.text(AB_TEST_FOCUS_PRACTICE_TITLE),
+      telegramBlock.text('На практиці ми не розбираємо все життя одразу.'),
+      telegramBlock.text('Ми беремо одну ситуацію яка зараз найбільше тебе зупиняє.'),
+      telegramBlock.text('Спочатку знаходимо де саме ти зупиняєшся.'),
+      telegramBlock.text('Потім бачимо що саме це підтримує.'),
+      telegramBlock.text('Після цього визначаємо один конкретний крок який допомагає вийти з цього кола.'),
+      telegramBlock.image(AB_TEST_SCREENSHOT_URLS.test_drive_response_review),
+      telegramBlock.text('Що ти отримуєш у ФОКУСІ:'),
+      telegramBlock.text('Розуміння де саме зараз зупиняєшся'),
+      telegramBlock.text('Причину через яку ситуація повторюється знову і знову'),
+      telegramBlock.text('Один конкретний крок який допомагає іти далі'),
+      telegramBlock.text('Можливість розібрати свою ситуацію наживо разом зі мною'),
     ],
     buttons: [
       [{ text: 'Приєднатись до ФОКУСУ →', callback_data: 'open_focus_payment' }],

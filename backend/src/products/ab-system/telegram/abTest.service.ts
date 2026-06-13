@@ -924,6 +924,10 @@ export async function handleAbTestCallback(
         '3 місяці — 39 євро'
     const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць\n— 15 євро'
     const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 39 євро'
+    const focusPaymentBlocks =
+      BLOCK10_FOCUS.blocks
+        ? [...BLOCK10_FOCUS.blocks]
+        : splitTelegramContentBlocks(text.split('\n'))
     let testButtonRow: Array<{ text: string; url: string }> = []
     if (payingUserId && isTestPaymentEnabled()) {
       try {
@@ -948,7 +952,7 @@ export async function handleAbTestCallback(
         ctx,
         chatId,
         '',
-        splitTelegramContentBlocks(text.split('\n')),
+        focusPaymentBlocks,
         {
           inlineKeyboard: {
             inline_keyboard: [
@@ -1146,11 +1150,15 @@ export async function handleAbTestCallback(
     if (!chatId) {
       return true
     }
+    const focusBlocks =
+      BLOCK10_FOCUS.blocks
+        ? [...BLOCK10_FOCUS.blocks]
+        : splitTelegramContentBlocks(BLOCK10_FOCUS.text.split('\n'))
     await sendTelegramContentChunk(
       ctx,
       chatId,
       '',
-      splitTelegramContentBlocks(BLOCK10_FOCUS.text.split('\n')),
+      focusBlocks,
       {
         inlineKeyboard: {
           inline_keyboard: [
@@ -1188,14 +1196,18 @@ export async function handleAbTestCallback(
                   callback_data: faqItem.ctaCallback,
                 },
               ],
-            ],
-          }
-        : undefined
+          ],
+        }
+      : undefined
+    const faqBlocks =
+      'blocks' in faqItem && faqItem.blocks
+        ? [...faqItem.blocks]
+        : splitTelegramContentBlocks(faqItem.text.split('\n'))
     await sendTelegramContentChunk(
       ctx,
       chatId,
       '',
-      splitTelegramContentBlocks(faqItem.text.split('\n')),
+      faqBlocks,
       {
         inlineKeyboard: replyMarkup,
         parseMode: 'HTML',
@@ -1441,15 +1453,16 @@ export async function handleAbTestCallback(
       return true
     }
 
-    const resultDef = getAbTestResultDefinition(resultKey)
-    const firstName = userRecord?.telegramUserName ?? ''
-    await sendTelegramContentChunk(
+  const resultDef = getAbTestResultDefinition(resultKey)
+  const firstName = userRecord?.telegramUserName ?? ''
+  const resultBlocks =
+    resultDef.blocks?.intro ??
+    splitTelegramContentBlocks(interpolateFirstName(resultDef.msg1, firstName).split('\n'))
+  await sendTelegramContentChunk(
       ctx,
       chatId,
       resultDef.title,
-      splitTelegramContentBlocks(
-        interpolateFirstName(resultDef.msg1, firstName).split('\n')
-      ),
+      resultBlocks,
       {
         inlineKeyboard: {
           inline_keyboard: [
@@ -2074,17 +2087,12 @@ export async function broadcastBlock9Update(
         BLOCK9_POST_RESULT.text.split('\n')
       )
       for (let index = 0; index < blockChunks.length; index += 1) {
-        await bot.telegram.sendMessage(
-          tgId,
-          formatAbTestTelegramCard('', blockChunks[index].lines),
-          {
-            parse_mode: 'HTML',
-            reply_markup:
-              index === blockChunks.length - 1
-                ? { inline_keyboard }
-                : undefined,
-          }
-        )
+        await sendTelegramContentChunk(bot as unknown as Context, tgId, '', [blockChunks[index]], {
+          inlineKeyboard:
+            index === blockChunks.length - 1 ? { inline_keyboard } : undefined,
+          parseMode: 'HTML',
+          separateBlocks: true,
+        })
       }
       sent += 1
       await new Promise((resolve) => setTimeout(resolve, 100))

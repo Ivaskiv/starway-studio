@@ -1,6 +1,12 @@
 //backend/src/products/ab-system/content/abTest.results.ts
 import { abTestContent } from './abTest.content.js'
 import type { AbTestAnswerKey } from './abTest.questions.js'
+import {
+  AB_TEST_AUDIO_URL,
+  AB_TEST_SCREENSHOT_URLS,
+  telegramBlock,
+  type TelegramContentBlock,
+} from './abTest.shared.js'
 
 export type AbTestResultKey = AbTestAnswerKey
 
@@ -31,6 +37,11 @@ export type AbTestResultDefinition = {
   zoom_cta: string
   platform_cta: string
   analytics_hooks: readonly string[]
+  blocks?: {
+    intro: TelegramContentBlock[]
+    practice: TelegramContentBlock[]
+    proof: TelegramContentBlock[]
+  }
 }
 
 function defineAbTestResultBase<T extends Record<AbTestResultKey, { msg1: string }>>(
@@ -335,6 +346,63 @@ for (const key of Object.keys(AB_TEST_RESULTS) as AbTestResultKey[]) {
     result.msg2_review,
     result.msg3_pricing,
   ].join('\n\n')
+
+  result.blocks = buildAbTestResultBlocks(key, result)
+}
+
+function buildAbTestResultBlocks(
+  resultKey: AbTestResultKey,
+  result: AbTestResultDefinition,
+): NonNullable<AbTestResultDefinition['blocks']> {
+  const reviewHeader = extractReviewHeader(result.msg2_review)
+  const reviewQuote = extractReviewQuote(result.msg2_review)
+  const screenshotKey = resultKeyToScreenshotKey(resultKey)
+
+  return {
+    intro: [
+      telegramBlock.text(result.msg1),
+      telegramBlock.audio(AB_TEST_AUDIO_URL, 'Я знаю як допомогти тобі це пройти…'),
+    ],
+    practice: [
+      telegramBlock.text(result.msg2_practice),
+      telegramBlock.text(result.msg2_benefits),
+      telegramBlock.text(result.msg2_included),
+      telegramBlock.text(result.msg2_howItWorks),
+      telegramBlock.text(reviewHeader),
+      telegramBlock.image(AB_TEST_SCREENSHOT_URLS[screenshotKey]),
+      telegramBlock.quote(reviewQuote),
+    ],
+    proof: [
+      telegramBlock.text(result.msg3_pricing),
+    ],
+  }
+}
+
+function extractReviewHeader(text: string): string {
+  const firstLine = text.split('\n').find((line) => line.trim())
+  return firstLine?.replace(/^📸 \*\*\[СКРІН\]\*\*\s*/i, '').trim() ?? ''
+}
+
+function extractReviewQuote(text: string): string {
+  const match = text.match(/>\s*"([\s\S]+?)"/)
+  return match?.[1] ?? ''
+}
+
+function resultKeyToScreenshotKey(
+  resultKey: AbTestResultKey,
+): keyof typeof AB_TEST_SCREENSHOT_URLS {
+  switch (resultKey) {
+    case 'state':
+      return 'state_review'
+    case 'goal':
+      return 'goal_review'
+    case 'choice':
+      return 'choice_review'
+    case 'decision':
+      return 'decision_review'
+    case 'action':
+      return 'action_review_1'
+  }
 }
 
 export function getAbTestResultDefinition(
@@ -358,6 +426,13 @@ export const BLOCK9_POST_RESULT = {
   ].join('\n'),
   cta: 'Хочу у\nФОКУС →',
   callbackData: 'open_focus_payment',
+  blocks: [
+    telegramBlock.text('Тест показав твою головну точку на зараз.'),
+    telegramBlock.text('У ФОКУСІ ми раз на тиждень працюємо з такими ситуаціями наживо.'),
+    telegramBlock.text('Ти приходиш із реальною темою: що відкладаєш, яке рішення переносиш, яка ціль не рухається, який крок можна зробити цього тижня.'),
+    telegramBlock.text('ФОКУС — це перший платний вхід в AB System.'),
+    telegramBlock.cta('Хочу у ФОКУС →'),
+  ],
 } as const
 
 export const BLOCK10_FOCUS = {
@@ -378,4 +453,12 @@ export const BLOCK10_FOCUS = {
   ].join('\n'),
   cta_1m: 'Оплатити 1 місяць\n— 15 євро',
   cta_3m: 'Оплатити 3 місяці — 39 євро',
+  blocks: [
+    telegramBlock.text('ФОКУС │ Zoom-практики AB System'),
+    telegramBlock.text('ФОКУС — це живі Zoom-практики раз на тиждень.'),
+    telegramBlock.text('Ти приходиш із реальною ситуацією: що відкладаєш, яке рішення переносиш, яка ціль не рухається.'),
+    telegramBlock.text('Тарифи:'),
+    telegramBlock.pricing('1 місяць — 15 євро'),
+    telegramBlock.pricing('3 місяці — 39 євро'),
+  ],
 } as const

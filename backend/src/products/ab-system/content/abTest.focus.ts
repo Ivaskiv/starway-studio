@@ -1,3 +1,5 @@
+import { AB_TEST_FOCUS_CTA_BLOCK, telegramBlock } from './abTest.shared.js'
+
 // FIX 2025-05-25 B: split Block 12 into msg1 (post-payment) and msg2 (post-channel-join)
 export const FOCUS_CHANNEL_URL =
   process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ??
@@ -28,6 +30,14 @@ export const FOCUS_WELCOME = {
       'Перейди і закріпи його, щоб не загубити.',
     ].join('\n'),
     cta: 'Перейти в канал',
+    blocks: [
+      telegramBlock.text('Оплата пройшла — вхід у ФОКУС'),
+      telegramBlock.text('Оплата пройшла.'),
+      telegramBlock.text('Вітаю, ти у ФОКУСІ.'),
+      telegramBlock.text('Тут ми не будемо просто говорити про зміни. Раз на тиждень на Zoom-практиці ти будеш дивитись на свою реальну ситуацію: що відкладаєш, чому переносиш, яке рішення не приймаєш, який крок треба зробити зараз.'),
+      telegramBlock.text('Ось посилання на закритий канал. Перейди і закріпи його, щоб не загубити.'),
+      AB_TEST_FOCUS_CTA_BLOCK,
+    ],
   },
   msg2: {
     body: [
@@ -42,6 +52,14 @@ export const FOCUS_WELCOME = {
       '',
       'На першій практиці ми почнемо саме з цього.',
     ].join('\n'),
+    blocks: [
+      telegramBlock.text('Ти вже в каналі ФОКУС.'),
+      telegramBlock.text('Що зробити зараз:'),
+      telegramBlock.text('1. Прочитай закріплене повідомлення.'),
+      telegramBlock.text('2. Подивись дату найближчого Zoom.'),
+      telegramBlock.text('3. Напиши собі одну ситуацію, яку хочеш розібрати: що саме ти давно відкладаєш.'),
+      telegramBlock.text('На першій практиці ми почнемо саме з цього.'),
+    ],
   },
 } as const
 

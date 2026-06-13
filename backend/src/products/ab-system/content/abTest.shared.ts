@@ -25,9 +25,48 @@ export const AB_TEST_KSENIIA_REVIEW_QUOTE_2 =
 export const AB_TEST_DOJIM_7D_REVIEW_QUOTE =
   '"Тааак, головне в голові думки поміняти — і таки визнати що я головна, а не мої думки/стан"'
 
+export const AB_TEST_AUDIO_URL =
+  'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
+
+export type TelegramContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'quote'; text: string }
+  | { type: 'image'; assetKey: string; caption?: string }
+  | { type: 'video'; assetKey: string; caption?: string }
+  | { type: 'audio'; assetKey: string; caption?: string }
+  | { type: 'pricing'; text: string }
+  | { type: 'cta'; text: string }
+
+export const telegramBlock = {
+  text: (text: string): TelegramContentBlock => ({ type: 'text', text }),
+  quote: (text: string): TelegramContentBlock => ({ type: 'quote', text }),
+  image: (assetKey: string, caption?: string): TelegramContentBlock => ({
+    type: 'image',
+    assetKey,
+    ...(caption ? { caption } : {}),
+  }),
+  video: (assetKey: string, caption?: string): TelegramContentBlock => ({
+    type: 'video',
+    assetKey,
+    ...(caption ? { caption } : {}),
+  }),
+  audio: (assetKey: string, caption?: string): TelegramContentBlock => ({
+    type: 'audio',
+    assetKey,
+    ...(caption ? { caption } : {}),
+  }),
+  pricing: (text: string): TelegramContentBlock => ({ type: 'pricing', text }),
+  cta: (text: string): TelegramContentBlock => ({ type: 'cta', text }),
+} as const
+
 export const AB_TEST_VOICE_NOTE_HEADER = 'Тест показав де ти застрягла. Слухай голосове — розповім чому це відбувається і як мені це вдалось змінити.👇'
 
 export const AB_TEST_VOICE_NOTE_LINK_TEXT = '🎧 Прослухати'
+
+export const AB_TEST_VOICE_NOTE_BLOCK = telegramBlock.audio(
+  AB_TEST_AUDIO_URL,
+  AB_TEST_VOICE_NOTE_HEADER
+)
 
 export const AB_TEST_VOICE_NOTE_LINES = [
   '',
@@ -120,6 +159,20 @@ export const AB_TEST_FOCUS_PRICING_LINES = [
   ...AB_TEST_FOCUS_OPENING_LINES,
   '',
   ...AB_TEST_FOCUS_PRICE_LINES,
+] as const
+
+export const AB_TEST_FOCUS_TARIFF_BLOCKS = [
+  telegramBlock.pricing('1 місяць — 15 євро'),
+  telegramBlock.pricing('3 місяці — 39 євро'),
+] as const
+
+export const AB_TEST_FOCUS_CTA_BLOCK = telegramBlock.cta('Хочу у ФОКУС →')
+
+export const AB_TEST_FOCUS_PITCH_BLOCKS = [
+  telegramBlock.text(AB_TEST_FOCUS_BENEFIT_HEADER),
+  ...AB_TEST_FOCUS_BENEFIT_LINES.map((line) => telegramBlock.text(line)),
+  telegramBlock.text(AB_TEST_FOCUS_INCLUDED_HEADER),
+  ...AB_TEST_FOCUS_INCLUDED_LINES.map((line) => telegramBlock.text(line)),
 ] as const
 
 export const AB_TEST_FOCUS_PITCH_LINES = [
