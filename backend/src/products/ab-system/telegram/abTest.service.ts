@@ -33,6 +33,15 @@ import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
 import {
   AB_TEST_AUDIO_URL,
+  AB_TEST_FOCUS_PAYMENT_CTA_1M,
+  AB_TEST_FOCUS_PAYMENT_CTA_3M,
+  AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_3M,
+  AB_TEST_FOCUS_REAL_SITUATION_HEADER,
+  AB_TEST_FOCUS_REAL_SITUATION_LINES,
+  AB_TEST_FOCUS_TARIFF_HEADER,
+  AB_TEST_FOCUS_TITLE,
+  AB_TEST_FOCUS_WEEKLY_TEXT,
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
 } from '../content/abTest.shared.js'
 import {
@@ -912,19 +921,17 @@ export async function handleAbTestCallback(
     )
     const text =
       BLOCK10_FOCUS?.text ??
-      'ФОКУС | Zoom-практики AB System\n\n' +
-        'ФОКУС — це живі Zoom-практики раз на тиждень.\n' +
+      `${AB_TEST_FOCUS_TITLE}\n\n` +
+        `${AB_TEST_FOCUS_WEEKLY_TEXT}\n` +
         '\n' +
-        'Ти приходиш із реальною ситуацією:\n' +
-        '— що відкладаєш,\n' +
-        '— яке рішення переносиш,\n' +
-        '— яка ціль не рухається.\n\n' +
-        'Тарифи:\n' +
+        `${AB_TEST_FOCUS_REAL_SITUATION_HEADER}\n` +
+        `${AB_TEST_FOCUS_REAL_SITUATION_LINES.join('\n')}\n\n` +
+        `${AB_TEST_FOCUS_TARIFF_HEADER}\n` +
         '\n' +
-        '1 місяць — 15 євро\n' +
-        '3 місяці — 39 євро'
-    const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць\n— 15 євро'
-    const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 39 євро'
+        `${AB_TEST_FOCUS_PRICE_1M}\n` +
+        AB_TEST_FOCUS_PRICE_3M
+    const cta1m = BLOCK10_FOCUS?.cta_1m ?? AB_TEST_FOCUS_PAYMENT_CTA_1M
+    const cta3m = BLOCK10_FOCUS?.cta_3m ?? AB_TEST_FOCUS_PAYMENT_CTA_3M
     const focusPaymentBlocks =
       BLOCK10_FOCUS.blocks
         ? [...BLOCK10_FOCUS.blocks]

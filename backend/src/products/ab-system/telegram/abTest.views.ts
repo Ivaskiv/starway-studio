@@ -36,8 +36,11 @@ import {
   AB_TEST_REVIEW_HEADERS,
   AB_TEST_AUDIO_URL,
   AB_TEST_FOCUS_BENEFIT_HEADER,
+  AB_TEST_FOCUS_CTA_TEXT,
   AB_TEST_FOCUS_INCLUDED_HEADER,
+  AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   AB_TEST_FOCUS_OPENING_LINES,
+  AB_TEST_FOCUS_PRACTICE_TITLE,
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
   AB_TEST_SCREENSHOT_URLS,
   AB_TEST_VOICE_NOTE_HEADER,
@@ -768,7 +771,7 @@ function splitResultSections(body: string) {
   const lines = body.split('\n')
   const practiceStart = lines.findIndex(
     (line) =>
-      line.startsWith('Що відбувається у ФОКУСІ —') ||
+      line.startsWith(AB_TEST_FOCUS_PRACTICE_TITLE) ||
       line.startsWith('У ФОКУСІ ми якраз працюємо з такими ситуаціями.') ||
       line.startsWith(
         'У ФОКУСІ ми працюємо не з красивими цілями, а з реальними.'
@@ -856,7 +859,7 @@ export async function renderAbTestFocusOffer(
   const inlineKeyboard = [
     [
       {
-        text: copy.cta ?? 'Приєднатись до\nФОКУСУ →',
+        text: copy.cta ?? AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
         callback_data: 'open_focus_payment',
       },
     ],
@@ -941,7 +944,7 @@ export async function renderAbTestPostEmailSubmitSequence(
     reply_markup: {
       inline_keyboard: [
         [{ text: AB_TEST_SHOW_INSIDE_CTA_TEXT, callback_data: `show_inside_${resultKey.toUpperCase()}` }],
-        [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+        [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
       ],
     },
   }

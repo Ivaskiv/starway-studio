@@ -1,4 +1,13 @@
-import { AB_TEST_FOCUS_CTA_BLOCK, AB_TEST_FOCUS_TARIFF_BLOCKS, telegramBlock } from './abTest.shared.js'
+import {
+  AB_TEST_FOCUS_CTA_BLOCK,
+  AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
+  AB_TEST_FOCUS_REAL_SITUATION_INLINE,
+  AB_TEST_FOCUS_TARIFF_BLOCKS,
+  AB_TEST_FOCUS_WEEKLY_TEXT,
+  AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_3M,
+  telegramBlock,
+} from './abTest.shared.js'
 
 // ТЗ Блоки 15-21 — Меню та FAQ-відповіді
 // Єдине джерело правди для всіх FAQ повідомлень бота.
@@ -40,7 +49,7 @@ export const FAQ_WHAT_IS_FOCUS = {
   trigger: 'Що таке ФОКУС?',
   callbackData: 'faq:what_is_focus',
   text: [
-    'ФОКУС — це живі Zoom-практики раз на тиждень за системою AB System.',
+    `${AB_TEST_FOCUS_WEEKLY_TEXT} за системою AB System.`,
     '',
     'Ти приходиш із реальною ситуацією:',
     '',
@@ -49,14 +58,14 @@ export const FAQ_WHAT_IS_FOCUS = {
     'На практиці ми дивимось, чому це повторюється,',
     'і доводимо до одного конкретного кроку на тиждень.',
     '',
-    '1 місяць — 15 євро',
-    '3 місяці — 39 євро',
+    AB_TEST_FOCUS_PRICE_1M,
+    AB_TEST_FOCUS_PRICE_3M,
   ].join('\n'),
-  cta: 'Приєднатись до\nФОКУСУ →',
+  cta: AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   ctaCallback: 'open_focus_payment',
   blocks: [
-    telegramBlock.text('ФОКУС — це живі Zoom-практики раз на тиждень за системою AB System.'),
-    telegramBlock.text('Ти приходиш із реальною ситуацією: що давно відкладаєш, яке рішення переносиш, яка ціль не рухається.'),
+    telegramBlock.text(`${AB_TEST_FOCUS_WEEKLY_TEXT} за системою AB System.`),
+    telegramBlock.text(AB_TEST_FOCUS_REAL_SITUATION_INLINE),
     telegramBlock.text('На практиці ми дивимось, чому це повторюється, і доводимо до одного конкретного кроку на тиждень.'),
     ...AB_TEST_FOCUS_TARIFF_BLOCKS,
     AB_TEST_FOCUS_CTA_BLOCK,

@@ -4,7 +4,12 @@ import type { AbTestResultKey } from './abTest.results.js'
 import { interpolateFirstName } from './abTest.results.js'
 import {
   AB_TEST_DOJIM_7D_REVIEW_QUOTE,
+  AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   AB_TEST_FOCUS_CTA_BLOCK,
+  AB_TEST_FOCUS_PAYMENT_CTA_1M,
+  AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_3M,
+  AB_TEST_FOCUS_PRICE_SUMMARY,
   AB_TEST_FOCUS_TARIFF_BLOCKS,
   AB_TEST_SCREENSHOT_URLS,
   buildAbTestScreenshotMarker,
@@ -66,7 +71,7 @@ export type AbTestFollowupTimerId =
   | 'PLATFORM_INVITE_AFTER_ZOOM_2'
   | 'PLATFORM_INVITE_AFTER_ZOOM'
 
-const CTA_JOIN_FOCUS = 'Приєднатись до\nФОКУСУ →'
+const CTA_JOIN_FOCUS = AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT
 
 function interpolateTelegramBlock(
   block: TelegramContentBlock,
@@ -103,8 +108,8 @@ const DOJIM_24H: FollowupCopy = {
     '',
     'У ФОКУСІ ми працюємо саме з тим що показав твій результат. Наживо. На реальних ситуаціях.',
     '',
-    '1 місяць — 15 євро',
-    '3 місяці — 39 євро',
+    AB_TEST_FOCUS_PRICE_1M,
+    AB_TEST_FOCUS_PRICE_3M,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
   blocks: [
@@ -134,7 +139,7 @@ const DOJIM_48H: FollowupCopy = {
     '',
     'На практиці ми дивимось не на симптом. А на те що його створює.',
     '',
-    '1 місяць — 15 євро | 3 місяці — 39 євро',
+    AB_TEST_FOCUS_PRICE_SUMMARY,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
   blocks: [
@@ -164,7 +169,7 @@ const DOJIM_72H: FollowupCopy = {
     '',
     'Саме такі ситуації ми розбираємо на Zoom-практиках.',
     '',
-    '1 місяць — 15 євро | 3 місяці — 39 євро',
+    AB_TEST_FOCUS_PRICE_SUMMARY,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
   blocks: [
@@ -193,7 +198,7 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 У ФОКУСІ ми працюємо саме з тим що показав твій результат. Наживо. На реальних ситуаціях.
 
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: DOJIM_24H.blocks,
     },
@@ -213,7 +218,7 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 На практиці ми дивимось не на симптом. А на те що його створює.
 
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: DOJIM_48H.blocks,
     },
@@ -232,7 +237,7 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 Саме такі ситуації ми розбираємо на Zoom-практиках.
 
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: DOJIM_72H.blocks,
     },
@@ -255,7 +260,7 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 Тому багато учасниць отримують відповідь вже на першій практиці.
 
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: [
         telegramBlock.text('{firstName}.'),
@@ -286,7 +291,7 @@ ${buildAbTestScreenshotMarker('dojim_7d_review')}
 Почати можна з одного місяця. Це 15 євро — менше ніж одна консультація.
 
 ФОКУС | Zoom-практики AB System
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: [
         telegramBlock.text('{firstName}.'),
@@ -415,7 +420,7 @@ export const AB_TEST_LIFECYCLE_REMINDERS: Record<LifecycleReminderKey, FollowupC
   R8_OFFER_3D: {
     title: 'ФОКУС чекає на тебе',
     body: 'Минуло 3 дні. Якщо готова рухатись далі з підтримкою, відкрий ФОКУС у зручний момент.',
-    cta: 'Оплатити 1 місяць\n— 15 євро',
+    cta: AB_TEST_FOCUS_PAYMENT_CTA_1M,
   },
   Z1_ZOOM_MON_1800: {
     title: 'Zoom сьогодні о 19:00',

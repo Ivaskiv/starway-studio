@@ -1,4 +1,5 @@
 import { absystemButtons, absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { AB_TEST_FOCUS_CTA_TEXT } from '@/products/ab-system/content/abTest.shared.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
 export type StartMessagePayload = {
@@ -58,7 +59,7 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
     buttons: [
       [{ text: 'Показати результат', callback_data: 'ab_test:show_result' }],
       [{ text: 'Почати тест заново', callback_data: 'ab_test:restart' }],
-      [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+      [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
     ],
   })
 }
@@ -67,7 +68,7 @@ export function offerShownMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'У тебе вже є *результат* тесту.\n\nХочеш відкрити його ще раз або пройти тест заново?',
     buttons: [
-      [{ text: 'Хочу у ФОКУС →', callback_data: 'open_focus_payment' }],
+      [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
       [{ text: 'Пройти тест заново', callback_data: 'ab_test:restart' }],
       [{ text: 'Мій результат', callback_data: 'ab_test:show_result' }],
     ],
