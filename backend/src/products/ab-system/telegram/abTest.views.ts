@@ -278,7 +278,7 @@ export function formatAbTestTelegramLine(line: string): string {
   }
 
   if (normalized === AB_TEST_VOICE_NOTE_LINK_TEXT) {
-    return `<a href="${AB_TEST_AUDIO_URL}">${escapeHtml(AB_TEST_VOICE_NOTE_LINK_TEXT)}</a>`
+    return ''
   }
 
   if (/^\*[^*].*[^*]\*$/.test(normalized)) {
@@ -914,8 +914,19 @@ export async function renderAbTestPostEmailSubmitSequence(
   const resultBlocks =
     resultDef.blocks?.intro ??
     splitTelegramContentBlocks(interpolateFirstName(resultDef.msg1, firstName).split('\n'))
+  const audioKeyboard: InlineKeyboardMarkup = {
+    inline_keyboard: [
+      [
+        {
+          text: AB_TEST_VOICE_NOTE_LINK_TEXT,
+          callback_data: `play_audio_${resultKey.toUpperCase()}`,
+        },
+      ],
+    ],
+  }
 
   await sendTelegramContentChunk(ctx, chatId, resultDef.title, resultBlocks, {
+    inlineKeyboard: audioKeyboard,
     parseMode: 'HTML',
     separateBlocks: true,
   })

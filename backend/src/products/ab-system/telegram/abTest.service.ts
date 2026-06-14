@@ -32,6 +32,7 @@ import {
 import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
 import {
+  AB_TEST_AUDIO_URL,
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
 } from '../content/abTest.shared.js'
 import {
@@ -1248,6 +1249,25 @@ export async function handleAbTestCallback(
         },
       }
     )
+    return true
+  }
+
+  if (action.startsWith('play_audio_')) {
+    await ctx.answerCbQuery('Надсилаю голосове...').catch(() => null)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
+
+    const resultKey = action
+      .replace('play_audio_', '')
+      .trim()
+      .toLowerCase() as AbTestResultKey
+    const resultDef = getAbTestResultDefinition(resultKey)
+
+    await ctx.telegram.sendVoice(chatId, AB_TEST_AUDIO_URL, {
+      caption: resultDef.msg1_audio,
+    })
     return true
   }
 
