@@ -14,6 +14,8 @@ import {
   destroyTelegramClientTransports,
   launchBot,
   normalizeTelegramWebhookUrl,
+  readTestBotToken,
+  resolveTelegramWebhookSecret,
   seedBotInfo,
   testBot,
 } from './lib/telegram.js'
@@ -174,7 +176,7 @@ async function startTelegramBot() {
         console.log('🤖 [CoachBot] skipped: COACH_BOT_TOKEN is not set')
       }
 
-      const testBotToken = String(process.env.TEST_BOT_TOKEN ?? '').trim()
+      const testBotToken = readTestBotToken()
       const mainWebhookUrl =
         telegramDeliveryMode === 'webhook'
           ? normalizeTelegramWebhookUrl(TELEGRAM_WEBHOOK_URL)
@@ -191,6 +193,22 @@ async function startTelegramBot() {
               process.env.TEST_BOT_WEBHOOK_URL?.trim() || '',
             )
           : ''
+      const mainWebhookSecret = resolveTelegramWebhookSecret({
+        botId: 'main',
+        token: telegramBotConfig.token,
+      })
+      const coachWebhookSecret = coachToken
+        ? resolveTelegramWebhookSecret({
+            botId: 'coach',
+            token: coachToken,
+          })
+        : ''
+      const testWebhookSecret = testBotToken
+        ? resolveTelegramWebhookSecret({
+            botId: 'test',
+            token: testBotToken,
+          })
+        : ''
 
       await Promise.allSettled([
         (async () => {
@@ -282,6 +300,7 @@ async function startTelegramBot() {
               await bot.telegram.setWebhook(mainWebhookUrl, {
                 drop_pending_updates: false,
                 allowed_updates: ['message', 'callback_query', 'channel_post', 'edited_channel_post', 'chat_member', 'my_chat_member'],
+                ...(mainWebhookSecret ? { secret_token: mainWebhookSecret } : {}),
               })
             }
             telegramRunningMode = 'webhook'
@@ -295,12 +314,16 @@ async function startTelegramBot() {
         })(),
         (async () => {
           if (!coachToken) return
-          await launchBot(coachBot, telegramBotNames.coach, coachWebhookUrl || undefined)
+          await launchBot(coachBot, telegramBotNames.coach, coachWebhookUrl || undefined, {
+            webhookSecret: coachWebhookSecret || undefined,
+          })
           coachTelegramRunningMode = coachWebhookUrl ? 'webhook' : 'polling'
         })(),
         (async () => {
           if (!testBotToken) return
-          await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined)
+          await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined, {
+            webhookSecret: testWebhookSecret || undefined,
+          })
           testTelegramRunningMode = testWebhookUrl ? 'webhook' : 'polling'
         })(),
       ])

@@ -25,9 +25,23 @@ import {
 } from './schedule.handler.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
+const COACH_CALENDAR_ROUTE = '/miniapp/zoom-calendar'
+
 function resolveCoachCalendarWebAppUrl(): string {
   const base = resolveTelegramWebappBaseUrl()
-  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar`
+  const finalUrl = `${base.replace(/\/$/, '')}${COACH_CALENDAR_ROUTE}`
+  console.info('[ZOOM_CALENDAR_BUTTON_DEBUG]', {
+    source: 'coachStart.resolveCoachCalendarWebAppUrl',
+    chatId: null,
+    finalUrl,
+    mode: 'web_app',
+    envBase: {
+      TELEGRAM_WEBAPP_BASE_URL: process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
+      PUBLIC_FRONTEND_URL: process.env.PUBLIC_FRONTEND_URL?.trim() ?? null,
+    },
+    route: COACH_CALENDAR_ROUTE,
+  })
+  return finalUrl
 }
 
 function getCommandPayload(ctx: Context): string {
@@ -68,12 +82,24 @@ async function checkCoachAccess(ctx: Context): Promise<boolean> {
 
 async function showCoachMenu(ctx: Context): Promise<void> {
   const text = `${coachBotContent.start.title}\n\n${coachBotContent.start.subtitle}`
+  const finalUrl = resolveCoachCalendarWebAppUrl()
+  console.info('[ZOOM_CALENDAR_BUTTON_DEBUG]', {
+    source: 'coachStart.showCoachMenu',
+    chatId: String(ctx.chat?.id ?? ctx.from?.id ?? ''),
+    finalUrl,
+    mode: 'web_app',
+    envBase: {
+      TELEGRAM_WEBAPP_BASE_URL: process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
+      PUBLIC_FRONTEND_URL: process.env.PUBLIC_FRONTEND_URL?.trim() ?? null,
+    },
+    route: COACH_CALENDAR_ROUTE,
+  })
   await ctx.reply(text, {
     reply_markup: {
       keyboard: [
         [
           Markup.button.text(coachBotContent.menu.audio),
-          Markup.button.webApp(coachBotContent.menu.schedule, resolveCoachCalendarWebAppUrl()),
+          Markup.button.webApp(coachBotContent.menu.schedule, finalUrl),
         ],
         [
           Markup.button.text(coachBotContent.menu.planner),

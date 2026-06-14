@@ -71,6 +71,74 @@ export function normalizeTelegramWebhookUrl(
   }
 }
 
+export type TelegramWebhookBotId = 'main' | 'coach' | 'test'
+
+type TelegramWebhookSecretInput = {
+  botId: TelegramWebhookBotId
+  token: string
+}
+
+function readTelegramWebhookSecretSeed(): string {
+  const botTokenSecretKey = String(process.env.BOT_TOKEN_SECRET_KEY ?? '').trim()
+  if (botTokenSecretKey.length === 64) {
+    return botTokenSecretKey
+  }
+
+  const legacyWebhookSecret = String(process.env.TELEGRAM_WEBHOOK_SECRET ?? '').trim()
+  if (legacyWebhookSecret) {
+    return legacyWebhookSecret
+  }
+
+  return ''
+}
+
+export function readTestBotToken(): string {
+  return String(process.env.TEST_BOT_TOKEN ?? '').trim()
+}
+
+export function resolveTelegramWebhookSecret({
+  botId,
+  token,
+}: TelegramWebhookSecretInput): string {
+  const normalizedToken = String(token ?? '').trim()
+  if (!normalizedToken) {
+    return ''
+  }
+
+  if (botId === 'main') {
+    const legacyWebhookSecret = String(process.env.TELEGRAM_WEBHOOK_SECRET ?? '').trim()
+    if (legacyWebhookSecret) {
+      return legacyWebhookSecret
+    }
+  }
+
+  const seed = readTelegramWebhookSecretSeed()
+  if (!seed) {
+    return ''
+  }
+
+  return crypto
+    .createHmac('sha256', seed)
+    .update(`${botId}:${normalizedToken}`)
+    .digest('hex')
+}
+
+export function resolveTelegramWebhookSecretMap(): Partial<Record<TelegramWebhookBotId, string>> {
+  const mainToken = requireTelegramBotConfig('telegram webhook secret map').token
+  const coachToken = readCoachBotToken()
+  const testToken = readTestBotToken()
+
+  return {
+    main: resolveTelegramWebhookSecret({ botId: 'main', token: mainToken }),
+    coach: coachToken
+      ? resolveTelegramWebhookSecret({ botId: 'coach', token: coachToken })
+      : '',
+    test: testToken
+      ? resolveTelegramWebhookSecret({ botId: 'test', token: testToken })
+      : '',
+  }
+}
+
 function getContentBotInstance(): Telegraf {
   if (contentBotInstance) {
     return contentBotInstance
@@ -117,7 +185,7 @@ function getTestBotInstance(): Telegraf {
     return testBotInstance
   }
 
-  const token = String(process.env.TEST_BOT_TOKEN ?? '').trim()
+  const token = readTestBotToken()
   if (!token) {
     throw new Error('[Telegram] Missing required env var during test bot bootstrap: TEST_BOT_TOKEN')
   }
@@ -214,6 +282,9 @@ export async function launchBot(
   targetBot: Telegraf,
   name: string,
   webhookUrl?: string,
+  options?: {
+    webhookSecret?: string
+  },
 ): Promise<void> {
   try {
     seedBotInfo(targetBot, {
@@ -222,7 +293,10 @@ export async function launchBot(
     })
     const normalizedWebhookUrl = String(webhookUrl ?? '').trim()
     if (normalizedWebhookUrl) {
-      await targetBot.telegram.setWebhook(normalizedWebhookUrl)
+      const webhookSecret = String(options?.webhookSecret ?? '').trim()
+      await targetBot.telegram.setWebhook(normalizedWebhookUrl, {
+        ...(webhookSecret ? { secret_token: webhookSecret } : {}),
+      })
       console.log(`✓ ${name} started [webhook]`)
       return
     }

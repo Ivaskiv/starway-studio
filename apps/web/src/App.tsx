@@ -17,6 +17,7 @@ import {
   FOCUS_ROUTE,
 } from '@/features/landings/focus/content/constants'
 import { useGetWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
+import { useGetAudioListQuery } from '@/features/zoom/services/audio.api'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
@@ -369,7 +370,12 @@ function MiniAppZoomCalendar() {
 
 function MiniAppZoomWeekPanel() {
   const user = useAppSelector(selectCurrentUser)
+  const [audioMonth, setAudioMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const { data, isLoading, isError } = useGetWeekOverviewQuery(undefined, {
+    skip: !user,
+    refetchOnMountOrArgChange: true,
+  })
+  const { data: audioArchive, isLoading: isAudioArchiveLoading } = useGetAudioListQuery(audioMonth, {
     skip: !user,
     refetchOnMountOrArgChange: true,
   })
@@ -499,6 +505,58 @@ function MiniAppZoomWeekPanel() {
                   <p className="mt-2 break-all font-mono text-[11px] text-white/45">
                     {audio.audioFileId}
                   </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Архів аудіо</p>
+            <input
+              type="month"
+              value={audioMonth}
+              onChange={(event) => setAudioMonth(event.target.value)}
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/75 outline-none focus:border-white/25"
+            />
+          </div>
+
+          {isAudioArchiveLoading ? (
+            <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+              Завантажуємо архів аудіо...
+            </div>
+          ) : !(audioArchive?.items.length) ? (
+            <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+              За вибраний місяць аудіо не знайдено.
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {audioArchive.items.map((audio) => (
+                <div key={audio.assetId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <p className="text-sm font-medium text-white">{audio.fileName}</p>
+                  <p className="mt-1 text-xs text-white/55">
+                    {audio.createdAt ? formatDateTime(audio.createdAt) : 'Дата невідома'}
+                    {audio.duration ? ` · ${Math.round(audio.duration)}s` : ''}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a
+                      href={`/api/audio/stream/${encodeURIComponent(audio.assetId)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200"
+                    >
+                      🎧 Слухати
+                    </a>
+                    <a
+                      href={`/api/audio/stream/${encodeURIComponent(audio.assetId)}?download=1`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/70"
+                    >
+                      💾 Завантажити
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>
