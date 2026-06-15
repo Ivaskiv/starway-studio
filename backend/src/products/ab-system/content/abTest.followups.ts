@@ -1,6 +1,6 @@
 // backend/src/products/ab-system/content/abTest.followups.ts
 
-import type { AbTestResultKey } from './abTest.results.js'
+import type { AbTestResultKey, TestDriveContentVersion } from './abTest.results.js'
 import { interpolateFirstName } from './abTest.results.js'
 import {
   AB_TEST_DOJIM_7D_REVIEW_QUOTE,
@@ -16,7 +16,6 @@ import {
   telegramBlock,
   type TelegramContentBlock,
 } from './abTest.shared.js'
-import type { TestDriveContentVersion } from './testDrive.content.js'
 import { PAYMENT_REMINDER_FOLLOWUP_COPY } from '@/core/state-machine/paymentReminderFoundation.js'
 
 export type FollowupCopy = {
