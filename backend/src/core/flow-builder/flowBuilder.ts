@@ -6,6 +6,7 @@ import type { AbTestProgress } from '../state-machine/abTestFoundation.js'
 import { getAbTestQuestion, type AbTestQuestionId } from '../../products/ab-system/content/abTest.questions.js'
 import { resolveAbTestQuestionOrder, resolveAbTestResultDefinition } from '../state-machine/abTestFoundation.js'
 import { abTestContent } from '../../products/ab-system/content/abTest.content.js'
+import { AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT } from '../../products/ab-system/content/abTest.shared.js'
 
 function buttonRow(...buttons: TelegramButton[]): TelegramButton[][] {
   return [buttons]
@@ -98,16 +99,16 @@ export function buildAbTestResultFlow(progress: AbTestProgress): TelegramFlow {
   }
 
   const buttons: TelegramButton[][] = [
-    [{ text: 'Показати як проходить практика', callback_data: `show_inside_${progress.result_key?.toUpperCase() ?? 'STATE'}` }],
+    [{ text: AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT, callback_data: `show_inside_${progress.result_key?.toUpperCase() ?? 'STATE'}` }],
   ]
 
   return createTelegramFlow({
     id: 'ab_test_result',
     title: '',
-    body: [result.body],
+    body: [result.msg1],
     buttons,
     blocks: [
-      { type: 'movement_interpretation', tone: 'behavioral', priority: 1, body: [result.body] },
+      { type: 'movement_interpretation', tone: 'behavioral', priority: 1, body: [result.msg1] },
     ],
   })
 }

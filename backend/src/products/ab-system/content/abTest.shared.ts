@@ -1,11 +1,79 @@
+//backend/src/products/ab-system/content/abTest.shared.ts
 export const AB_TEST_NEONILA_REVIEW_HEADER = 'Неоніла написала після практики:'
+export const AB_TEST_NATALIIA_REVIEW_HEADER = 'Наталія написала після практики:'
 export const AB_TEST_VALENTYNA_REVIEW_HEADER = 'Валентина написала після практики:'
 export const AB_TEST_YELYZAVETA_REVIEW_HEADER = 'Єлизавета написала після роботи зі мною:'
 export const AB_TEST_KSENIIA_REVIEW_HEADER = 'Ксенія написала після роботи зі мною:'
 
-export const AB_TEST_VOICE_NOTE_HEADER = '🎧 Голосове повідомлення від Наді:'
+export const AB_TEST_REVIEW_HEADERS = [
+  AB_TEST_NEONILA_REVIEW_HEADER,
+  AB_TEST_NATALIIA_REVIEW_HEADER,
+  AB_TEST_VALENTYNA_REVIEW_HEADER,
+  AB_TEST_YELYZAVETA_REVIEW_HEADER,
+  AB_TEST_KSENIIA_REVIEW_HEADER,
+] as const
 
-export const AB_TEST_VOICE_NOTE_LINK_TEXT = 'Прослухати голосове повідомлення'
+export const AB_TEST_NEONILA_REVIEW_QUOTE =
+  '"Зранку стала як побита. А потім згадала як Надя казала — що це я обираю як пройде мій день. Поміняла пластинку в голові і всьо заграло новими барвами."'
+export const AB_TEST_NATALIIA_REVIEW_QUOTE =
+  '"Стан спокою і впевненості, бо ціль таки є. Стати фінансово незалежною. Полюбити себе — слухати себе і чого я хочу."'
+export const AB_TEST_NATALIIA_PROOF_QUOTE =
+  '"Моя ціль-бачення сформувалася вчора. Я так включилась — одразу почала шукати будинки, навіть написала рієлтору."'
+export const AB_TEST_VALENTYNA_REVIEW_QUOTE =
+  '"Зрозуміла що я тут для того щоб змінити щось. А початок — з чесного зізнання собі."'
+export const AB_TEST_CHOICE_PROOF_QUOTE =
+  '"Боялась втратити ілюзорну стабільну роботу, страшно було вийти за межи звичного. А початок — з чесності з собою."'
+export const AB_TEST_YELYZAVETA_REVIEW_QUOTE =
+  '"Вона веде мене до реалізації себе, показує як це — діяти, приймати рішення, не відкладати."'
+export const AB_TEST_DECISION_PROOF_QUOTE =
+  '"Вона веде мене до реалізації себе, показує як це — діяти, приймати рішення, не відкладати, не сумніватися у власних кроках."'
+export const AB_TEST_KSENIIA_REVIEW_QUOTE_1 =
+  '"Я не шукаю дешевших шляхів — я шукаю результат. І вкладаю не в навчання, а вкладаю в себе."'
+export const AB_TEST_KSENIIA_REVIEW_QUOTE_2 =
+  '"Запуск 3.0 — оголошую старт 20 березня. Проводжу 2 Zoom зустрічі. Прийняла рішення — 3 дні взагалі не їм солодкого і не купую додому нічого."'
+export const AB_TEST_ACTION_PROOF_QUOTE =
+  '"Я не шукаю дешевших шляхів — я шукаю результат. І вкладаю не в навчання, а вкладаю в себе. Бо з кожним вкладом моє життя змінюється."'
+
+export const AB_TEST_DOJIM_7D_REVIEW_QUOTE =
+  '"Тааак, головне в голові думки поміняти — і таки визнати що я головна, а не мої думки/стан"'
+
+export const AB_TEST_AUDIO_URL =
+  'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
+
+export type TelegramContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'quote'; text: string }
+  | { type: 'image'; assetKey: string; caption?: string }
+  | { type: 'video'; assetKey: string; caption?: string }
+  | { type: 'audio'; assetKey: string; caption?: string }
+  | { type: 'pricing'; text: string }
+  | { type: 'cta'; text: string }
+
+export const telegramBlock = {
+  text: (text: string): TelegramContentBlock => ({ type: 'text', text }),
+  quote: (text: string): TelegramContentBlock => ({ type: 'quote', text }),
+  image: (assetKey: string, caption?: string): TelegramContentBlock => ({
+    type: 'image',
+    assetKey,
+    ...(caption ? { caption } : {}),
+  }),
+  video: (assetKey: string, caption?: string): TelegramContentBlock => ({
+    type: 'video',
+    assetKey,
+    ...(caption ? { caption } : {}),
+  }),
+  audio: (assetKey: string, caption?: string): TelegramContentBlock => ({
+    type: 'audio',
+    assetKey,
+    ...(caption ? { caption } : {}),
+  }),
+  pricing: (text: string): TelegramContentBlock => ({ type: 'pricing', text }),
+  cta: (text: string): TelegramContentBlock => ({ type: 'cta', text }),
+} as const
+
+export const AB_TEST_VOICE_NOTE_HEADER = 'Тест показав де ти застрягла. Слухай голосове — розповім чому це відбувається і як мені це вдалось змінити.👇'
+
+export const AB_TEST_VOICE_NOTE_LINK_TEXT = '🎧 Прослухати'
 
 export const AB_TEST_VOICE_NOTE_LINES = [
   '',
@@ -13,6 +81,208 @@ export const AB_TEST_VOICE_NOTE_LINES = [
   AB_TEST_VOICE_NOTE_LINK_TEXT,
   '',
 ] as const
+export const AB_TEST_RESULT_AUDIO_INTRO_TEXT =
+  '**AB System** — це система з **5 елементів: СТАН, ЦІЛЬ, ВИБІР, РІШЕННЯ, ДІЯ**.\n\nСаме вони визначають чому одні люди отримують результат — а інші зупиняються на одному місці роками.\n\nТест показав де саме зупиняєшся ти. Коли це видно — стає зрозуміло що змінити і як іти далі.\n\n**Я знаю як допомогти тобі це пройти…**\n\nпрослухати голосове повідомлення 👇'
+export const AB_TEST_RESULT_AUDIO_PROMPT_TEXT =
+  '**Слухай голосове — розповім чому це відбувається і як мені це вдалось змінити**.\n\n🎧 **[ГОЛОСОВЕ]**'
+
+export const AB_TEST_SHOW_INSIDE_CTA_TEXT = 'Показати практику'
+export const AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT =
+  'Показати\nяк проходить\nпрактика'
+
+export const AB_TEST_FOCUS_CTA_TEXT = 'Хочу у ФОКУС →'
+export const AB_TEST_FOCUS_CTA_RESULT_VALUE = ' Хочу у ФОКУС →'
+export const AB_TEST_FOCUS_JOIN_CTA_TEXT = 'Приєднатись до ФОКУСУ →'
+export const AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT =
+  'Приєднатись до\nФОКУСУ →'
+export const AB_TEST_FOCUS_PAY_CTA_TEXT = 'Оплатити ФОКУС →'
+export const AB_TEST_FOCUS_CTA_MARKER =
+  `[КНОПКА: ${AB_TEST_FOCUS_CTA_TEXT}] → WAYFORPAY_LINK`
+export const AB_TEST_FOCUS_PAY_CTA_MARKER =
+  `[КНОПКА: ${AB_TEST_FOCUS_PAY_CTA_TEXT}] → WAYFORPAY_LINK`
+export const AB_TEST_FOCUS_PAYMENT_CTA_1M = 'Оплатити 1 місяць\n— 15 євро'
+export const AB_TEST_FOCUS_PAYMENT_CTA_3M = 'Оплатити 3 місяці — 39 євро'
+export const AB_TEST_FOCUS_PRICE_1M = '1 місяць — 15 євро'
+export const AB_TEST_FOCUS_PRICE_3M = '3 місяці — 39 євро'
+export const AB_TEST_FOCUS_PRICE_SUMMARY =
+  `${AB_TEST_FOCUS_PRICE_1M} | ${AB_TEST_FOCUS_PRICE_3M}`
+export const AB_TEST_FOCUS_TITLE = 'ФОКУС | Zoom-практики AB System'
+export const AB_TEST_FOCUS_TITLE_STYLED = '*ФОКУС │ Zoom-практики AB System*'
+export const AB_TEST_FOCUS_TITLE_PLAIN = 'ФОКУС │ Zoom-практики AB System'
+export const AB_TEST_FOCUS_WEEKLY_TEXT =
+  'ФОКУС — це живі Zoom-практики раз на тиждень.'
+export const AB_TEST_FOCUS_WEEKLY_TEXT_BOLD =
+  '**ФОКУС — це живі Zoom-практики раз на тиждень**.'
+export const AB_TEST_FOCUS_REAL_SITUATION_HEADER =
+  'Ти приходиш із реальною ситуацією:'
+export const AB_TEST_FOCUS_REAL_SITUATION_LINES = [
+  '— що відкладаєш,',
+  '— яке рішення переносиш,',
+  '— яка ціль не рухається.',
+] as const
+export const AB_TEST_FOCUS_REAL_SITUATION_INLINE =
+  'Ти приходиш із реальною ситуацією: що відкладаєш, яке рішення переносиш, яка ціль не рухається.'
+export const AB_TEST_FOCUS_TARIFF_HEADER = 'Тарифи:'
+export const AB_TEST_FOCUS_TARIFF_HEADER_BOLD = '**Тарифи:**'
+export const AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER = '📸 **[СКРІН]**'
+export const AB_TEST_FOCUS_RESULT_WORK_TEXT =
+  'У ФОКУСІ ми працюємо саме з **тим що показав твій результат**. Наживо. На реальних ситуаціях.'
+
+export const AB_TEST_FOCUS_BENEFIT_HEADER = 'Що ти отримуєш у ФОКУСІ:'
+export const AB_TEST_FOCUS_BENEFIT_LINES = [
+  '· Розуміння де саме зараз зупиняєшся',
+  '· Причину через яку ситуація повторюється знову і знову',
+  '· Один конкретний крок який допомагає іти далі',
+  '· Можливість розібрати свою ситуацію наживо разом зі мною',
+] as const
+
+export const AB_TEST_FOCUS_INCLUDED_HEADER = 'Що входить у ФОКУС:'
+export const AB_TEST_FOCUS_INCLUDED_LINES = [
+  '· 4 живі Zoom-практики на місяць — розбір саме твоєї ситуації',
+  '· Закритий Telegram-канал з підтримкою між зустрічами',
+  '· Чат зі мною і дівчатами — не сама',
+  '· Запис кожної Zoom-практики',
+] as const
+
+export const AB_TEST_FOCUS_PRACTICE_TEXT =
+  '**Що відбувається у ФОКУСІ** — закритому просторі де ми працюємо через **AB System**.'
+export const AB_TEST_FOCUS_HOW_IT_WORKS_TEXT =
+  'Ти приходиш зі своєю **реальною ситуацією** — тим що давно відкладаєш або що не дає спокою.\n\nМи не розбираємо всю твою історію. Ми беремо одну ситуацію і дивимось що саме там відбувається.\n\nНаприкінці практики ти виходиш з одним кроком. **Не списком. Одним — але точним.**'
+export const AB_TEST_FOCUS_BENEFITS_TEXT =
+  `**${AB_TEST_FOCUS_BENEFIT_HEADER}**\n\n${AB_TEST_FOCUS_BENEFIT_LINES.join('\n')}`
+export const AB_TEST_FOCUS_INCLUDED_TEXT =
+  `**${AB_TEST_FOCUS_INCLUDED_HEADER}**\n\n${AB_TEST_FOCUS_INCLUDED_LINES.join('\n')}`
+export const AB_TEST_FOCUS_PRICING_TEXT =
+  `Почати можна з одного місяця участі.\n\nЗа цей час ти проходиш **4 живі практики** і можеш розібрати **кілька своїх ситуацій** через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n${AB_TEST_FOCUS_CTA_MARKER}`
+export const AB_TEST_FOCUS_PROOF_PRICING_TEXT =
+  `Почати можна з **одного місяця**. Це **15 євро** — менше ніж одна консультація.\n\n**${AB_TEST_FOCUS_TITLE}**\n${AB_TEST_FOCUS_PRICE_SUMMARY}\n\n${AB_TEST_FOCUS_PAY_CTA_MARKER}`
+export const AB_TEST_FOCUS_TEST_DRIVE_PITCH_BLOCKS = [
+  telegramBlock.text(AB_TEST_FOCUS_BENEFIT_HEADER),
+  ...AB_TEST_FOCUS_BENEFIT_LINES.map((line) =>
+    telegramBlock.text(line.replace(/^·\s*/, ''))
+  ),
+] as const
+
+export const AB_TEST_FOCUS_OPENING_LINES = [
+  'Почати можна з одного місяця участі.',
+  ...AB_TEST_VOICE_NOTE_LINES,
+] as const
+
+export const AB_TEST_FOCUS_PRACTICE_TITLE =
+  'Що відбувається у ФОКУСІ — закритому просторі де ми працюємо через AB System.'
+
+export const AB_TEST_FOCUS_PRACTICE_CORE_LINES = [
+  'На практиці ми не розбираємо все життя одразу.',
+  'Ми беремо одну ситуацію яка зараз найбільше тебе зупиняє.',
+  '',
+  'Спочатку знаходимо де саме ти зупиняєшся.',
+  'Потім бачимо що саме це підтримує.',
+  'Після цього визначаємо один конкретний крок який допомагає вийти з цього кола.',
+  '',
+  'Саме тому після практики ти йдеш не з новою інформацією — а з розумінням що робити далі саме тобі у твоїй ситуації.',
+] as const
+
+export const AB_TEST_FOCUS_PRACTICE_BENEFIT_LINES = [
+  AB_TEST_FOCUS_BENEFIT_HEADER,
+  ...AB_TEST_FOCUS_BENEFIT_LINES,
+] as const
+
+export const AB_TEST_FOCUS_PRACTICE_INCLUDED_LINES = [
+  AB_TEST_FOCUS_INCLUDED_HEADER,
+  ...AB_TEST_FOCUS_INCLUDED_LINES,
+] as const
+
+export const AB_TEST_FOCUS_PRACTICE_REVIEW_LINES = [
+  AB_TEST_NEONILA_REVIEW_HEADER,
+  AB_TEST_NEONILA_REVIEW_QUOTE,
+] as const
+
+export const AB_TEST_FOCUS_PRACTICE_WRAPUP_LINES = [
+  'Ти приходиш зі своєю реальною ситуацією — тим що давно відкладаєш або що не дає спокою.',
+  '',
+  'Ми не розбираємо всю твою історію. Ми беремо одну ситуацію і дивимось що саме там відбувається.',
+  '',
+  'Наприкінці практики ти виходиш з одним кроком. Не списком. Одним — але точним.',
+] as const
+
+export const AB_TEST_FOCUS_PRACTICE_FULL_LINES = [
+  ...AB_TEST_FOCUS_PRACTICE_CORE_LINES,
+  '',
+  ...AB_TEST_FOCUS_PRACTICE_BENEFIT_LINES,
+  '',
+  ...AB_TEST_FOCUS_PRACTICE_INCLUDED_LINES,
+  '',
+  ...AB_TEST_FOCUS_PRACTICE_WRAPUP_LINES,
+  '',
+  ...AB_TEST_FOCUS_PRACTICE_REVIEW_LINES,
+] as const
+
+export const AB_TEST_FOCUS_PRICE_LINES = [
+  'За цей час ти проходиш 4 живі практики і можеш розібрати кілька своїх ситуацій через AB System.',
+  '',
+  AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_3M,
+] as const
+
+export const AB_TEST_FOCUS_PRICING_LINES = [
+  ...AB_TEST_FOCUS_OPENING_LINES,
+  '',
+  ...AB_TEST_FOCUS_PRICE_LINES,
+] as const
+
+export const AB_TEST_FOCUS_TARIFF_BLOCKS = [
+  telegramBlock.pricing(AB_TEST_FOCUS_PRICE_1M),
+  telegramBlock.pricing(AB_TEST_FOCUS_PRICE_3M),
+] as const
+
+export const AB_TEST_FOCUS_CTA_BLOCK = telegramBlock.cta(AB_TEST_FOCUS_CTA_TEXT)
+
+export const AB_TEST_FOCUS_PITCH_BLOCKS = [
+  telegramBlock.text(AB_TEST_FOCUS_BENEFIT_HEADER),
+  ...AB_TEST_FOCUS_BENEFIT_LINES.map((line) => telegramBlock.text(line)),
+  telegramBlock.text(AB_TEST_FOCUS_INCLUDED_HEADER),
+  ...AB_TEST_FOCUS_INCLUDED_LINES.map((line) => telegramBlock.text(line)),
+] as const
+
+export const AB_TEST_FOCUS_PITCH_LINES = [
+  AB_TEST_FOCUS_BENEFIT_HEADER,
+  ...AB_TEST_FOCUS_BENEFIT_LINES,
+  '',
+  AB_TEST_FOCUS_INCLUDED_HEADER,
+  ...AB_TEST_FOCUS_INCLUDED_LINES,
+  '',
+  ...AB_TEST_FOCUS_PRICING_LINES,
+] as const
+
+export const AB_TEST_BOLD_LINES = new Set<string>([
+  'Тримаєшся з останніх сил.',
+  'Тест показав твою головну точку на зараз.',
+  'Я знаю як допомогти тобі це пройти…',
+  AB_TEST_FOCUS_BENEFIT_HEADER,
+  AB_TEST_FOCUS_INCLUDED_HEADER,
+  AB_TEST_VOICE_NOTE_HEADER,
+  'Хочеш подивитись, як це проходить на практиці?',
+  'Більше дій — не вихід.',
+  'Коли рішення не прийняте всередині, дія стає важкою.',
+  'Якщо ти відчуваєш, що відкладаєш важливе через нечіткість у цілі, заходь у ФОКУС.',
+  ...AB_TEST_REVIEW_HEADERS,
+])
+
+export const AB_TEST_ACTION_REVIEW_1_EXTRA_LINES = [
+  'Раз на тиждень — 2-3 години живого Zoom.',
+  'Між зустрічами — закритий канал щоб не загубити те що відбулось.',
+] as const
+
+export const AB_TEST_ACTION_AUDIO_REVIEW_TEXT =
+  `**${AB_TEST_KSENIIA_REVIEW_HEADER}**\n\n> ${AB_TEST_KSENIIA_REVIEW_QUOTE_1}\n\n${AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER}\n\nПочати можна з одного місяця участі.\n\nЗа цей час ти проходиш **4 живі практики** і можеш розібрати **кілька своїх ситуацій** через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n${AB_TEST_ACTION_REVIEW_1_EXTRA_LINES.join('\n')}`
+
+export function buildAbTestReviewText(header: string, quote: string): string {
+  return `${AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER}\n\n**${header}**\n\n> ${quote}`
+}
+
+export function buildAbTestFocusTariffSummaryText(): string {
+  return AB_TEST_FOCUS_PRICE_SUMMARY
+}
 
 export type AbTestScreenshotKey =
   | 'state_review'

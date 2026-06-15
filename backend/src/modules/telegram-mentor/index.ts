@@ -42,6 +42,7 @@ import { guard } from './core/guard.middleware.js'
 import { resolveLinkedUserIdFromContext } from './core/state.service.js'
 import { handleChat } from './handlers/chat.js'
 import { handleEvening, handleEveningAnswer } from './handlers/evening.js'
+import { handleIntelligentMessage } from './handlers/intelligence.handler.js'
 import { handleMorning, handleMorningAnswer } from './handlers/morning.js'
 import { handlePrivacy } from './handlers/privacy.js'
 import {
@@ -407,6 +408,11 @@ async function handleTextMessage(ctx: Context) {
       'telegram',
       typeof userState === 'string' ? userState : null
     )
+  }
+
+  const handledIntelligence = await handleIntelligentMessage(ctx)
+  if (handledIntelligence) {
+    return
   }
 
   const { decision } = await resolveDecision(userId, 'chat_requested', { text })
@@ -810,7 +816,6 @@ export async function registerMentorBot(
       )
     }
   })
-
   bot.on(['voice', 'audio'], async (ctx) => {
     try {
       await handleVoice(ctx)

@@ -82,7 +82,7 @@ export default defineConfig([
   },
 ]);
 ```
-# 🌟 Starway AI-Mentor - Full Stack Application
+## 🌟 Starway AI-Mentor - Full Stack Application
 
 AI-powered mentoring system with Ukrainian language support, built with modern tech stack.
 
@@ -126,8 +126,12 @@ DIRECT_URL="postgresql://postgres:YOUR_SUPABASE_DB_PASSWORD_URLENCODED@db.YOUR_P
 OPENAI_API_KEY=sk-...
 JWT_ACCESS_SECRET=your-access-secret
 JWT_REFRESH_SECRET=your-refresh-secret
-TELEGRAM_BOT_TOKEN=your-token
+TELEGRAM_DELIVERY_MODE=polling
+TELEGRAM_LOCAL_BOT_TOKEN=your-local-test-bot-token
+TELEGRAM_LOCAL_BOT_USERNAME=your_local_test_bot
 ```
+
+For parallel local + production testing, keep Render on the production bot token and use a separate local bot token here. Telegram update delivery is single-writer per bot token, so the same token cannot be active in polling locally and webhook in production at the same time.
 
 Run migrations:
 ```bash

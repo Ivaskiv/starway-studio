@@ -2,6 +2,7 @@ export type AiTaskTier = 'cheap' | 'balanced' | 'premium'
 
 export type AiTaskType =
   | 'mentor_reply'
+  | 'telegram_intelligence'
   | 'weekly_insight'
   | 'daily_analysis'
   | 'web_map_adaptation'
@@ -49,6 +50,19 @@ export const AI_TASK_REGISTRY: Record<AiTaskType, AiTaskRegistryEntry> = {
     cachePolicy: { ttlSeconds: 300, enabled: true },
     streaming: true,
     label: 'mentor-reply',
+  },
+  telegram_intelligence: {
+    type: 'telegram_intelligence',
+    priority: 'high',
+    tier: 'balanced',
+    model: AI_MODEL_TIERS.balanced,
+    maxTokens: 420,
+    timeoutMs: 20_000,
+    throttleMs: 5_000,
+    retryPolicy: { retries: 1, baseDelayMs: 400 },
+    cachePolicy: { ttlSeconds: 120, enabled: true },
+    streaming: false,
+    label: 'telegram-intelligence',
   },
   weekly_insight: {
     type: 'weekly_insight',

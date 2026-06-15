@@ -1,15 +1,28 @@
 // backend/src/products/ab-system/content/abTest.followups.ts
 
-import type { AbTestResultKey } from './abTest.results.js'
+import type { AbTestResultKey, TestDriveContentVersion } from './abTest.results.js'
 import { interpolateFirstName } from './abTest.results.js'
-import { buildAbTestScreenshotMarker } from './abTest.shared.js'
-import type { TestDriveContentVersion } from './testDrive.content.js'
+import {
+  AB_TEST_DOJIM_7D_REVIEW_QUOTE,
+  AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
+  AB_TEST_FOCUS_CTA_BLOCK,
+  AB_TEST_FOCUS_PAYMENT_CTA_1M,
+  AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_3M,
+  AB_TEST_FOCUS_PRICE_SUMMARY,
+  AB_TEST_FOCUS_TARIFF_BLOCKS,
+  AB_TEST_SCREENSHOT_URLS,
+  buildAbTestScreenshotMarker,
+  telegramBlock,
+  type TelegramContentBlock,
+} from './abTest.shared.js'
 import { PAYMENT_REMINDER_FOLLOWUP_COPY } from '@/core/state-machine/paymentReminderFoundation.js'
 
 export type FollowupCopy = {
   title: string
   body: string
   cta?: string
+  blocks?: TelegramContentBlock[]
 }
 
 export type LifecycleReminderKey =
@@ -57,7 +70,30 @@ export type AbTestFollowupTimerId =
   | 'PLATFORM_INVITE_AFTER_ZOOM_2'
   | 'PLATFORM_INVITE_AFTER_ZOOM'
 
-const CTA_JOIN_FOCUS = 'Приєднатись до\nФОКУСУ →'
+const CTA_JOIN_FOCUS = AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT
+
+function interpolateTelegramBlock(
+  block: TelegramContentBlock,
+  firstName?: string | null,
+): TelegramContentBlock {
+  if (
+    block.type === 'text' ||
+    block.type === 'quote' ||
+    block.type === 'pricing' ||
+    block.type === 'cta'
+  ) {
+    return { ...block, text: interpolateFirstName(block.text, firstName) }
+  }
+
+  if (
+    (block.type === 'image' || block.type === 'video' || block.type === 'audio') &&
+    block.caption
+  ) {
+    return { ...block, caption: interpolateFirstName(block.caption, firstName) }
+  }
+
+  return block
+}
 
 const DOJIM_24H: FollowupCopy = {
   title: 'ФОКУС',
@@ -71,10 +107,19 @@ const DOJIM_24H: FollowupCopy = {
     '',
     'У ФОКУСІ ми працюємо саме з тим що показав твій результат. Наживо. На реальних ситуаціях.',
     '',
-    '1 місяць — 15 євро',
-    '3 місяці — 39 євро',
+    AB_TEST_FOCUS_PRICE_1M,
+    AB_TEST_FOCUS_PRICE_3M,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
+  blocks: [
+    telegramBlock.text('{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.'),
+    telegramBlock.text('Більшість так і не доходить навіть до цього.'),
+    telegramBlock.text('Тест показав де ти зараз — взагалі без сил і нічого не хочеться. І в цьому стані ти все одно намагаєшся щось робити. І злишся що не виходить.'),
+    telegramBlock.text('Саме тому ти отримала цей результат. Це не вирок — це точка з якої починається зміна.'),
+    telegramBlock.text('У ФОКУСІ ми працюємо саме з тим що показав твій результат. Наживо. На реальних ситуаціях.'),
+    ...AB_TEST_FOCUS_TARIFF_BLOCKS,
+    AB_TEST_FOCUS_CTA_BLOCK,
+  ],
 }
 
 const DOJIM_48H: FollowupCopy = {
@@ -93,9 +138,19 @@ const DOJIM_48H: FollowupCopy = {
     '',
     'На практиці ми дивимось не на симптом. А на те що його створює.',
     '',
-    '1 місяць — 15 євро | 3 місяці — 39 євро',
+    AB_TEST_FOCUS_PRICE_SUMMARY,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
+  blocks: [
+    telegramBlock.text('{firstName}.'),
+    telegramBlock.text('Скільки часу ти вже тримаєшся з останніх сил?'),
+    telegramBlock.text('Місяць? Пів року? Рік?'),
+    telegramBlock.text('І що змінилось за цей час?'),
+    telegramBlock.text('Якщо нічого не зміниться — де ти будеш через ще один рік? У тому самому місці. Просто ще більш втомлена.'),
+    telegramBlock.text('На практиці ми дивимось не на симптом. А на те що його створює.'),
+    ...AB_TEST_FOCUS_TARIFF_BLOCKS,
+    AB_TEST_FOCUS_CTA_BLOCK,
+  ],
 }
 
 const DOJIM_72H: FollowupCopy = {
@@ -113,9 +168,19 @@ const DOJIM_72H: FollowupCopy = {
     '',
     'Саме такі ситуації ми розбираємо на Zoom-практиках.',
     '',
-    '1 місяць — 15 євро | 3 місяці — 39 євро',
+    AB_TEST_FOCUS_PRICE_SUMMARY,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
+  blocks: [
+    telegramBlock.text('{firstName}.'),
+    telegramBlock.text('Юля тиждень не могла змусити себе взятися за справи. Зранку — як побита. Ввечері — нічого не хочеться.'),
+    telegramBlock.text('На практиці побачила що сама обирає як пройде її день — просто ніколи не думала про це так.'),
+    telegramBlock.text('Наступного ранку згадала це і поміняла пластинку в голові.'),
+    telegramBlock.text('Через тиждень написала що вперше за довгий час перестала прокидатися з думкою "як пережити цей день."'),
+    telegramBlock.text('Саме такі ситуації ми розбираємо на Zoom-практиках.'),
+    ...AB_TEST_FOCUS_TARIFF_BLOCKS,
+    AB_TEST_FOCUS_CTA_BLOCK,
+  ],
 }
 
 function buildBranchCopy(): BranchFollowupCopy {
@@ -132,8 +197,9 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 У ФОКУСІ ми працюємо саме з тим що показав твій результат. Наживо. На реальних ситуаціях.
 
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
+      blocks: DOJIM_24H.blocks,
     },
 
     RESULT_FOLLOWUP_48H: {
@@ -151,8 +217,9 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 На практиці ми дивимось не на симптом. А на те що його створює.
 
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
+      blocks: DOJIM_48H.blocks,
     },
 
     RESULT_FOLLOWUP_72H: {
@@ -169,8 +236,9 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 Саме такі ситуації ми розбираємо на Zoom-практиках.
 
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
+      blocks: DOJIM_72H.blocks,
     },
 
     RESULT_DOJIM_24H: DOJIM_24H,
@@ -191,8 +259,18 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 Тому багато учасниць отримують відповідь вже на першій практиці.
 
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
+      blocks: [
+        telegramBlock.text('{firstName}.'),
+        telegramBlock.text('Можливо ти вже проходила щось схоже. Читала. Слухала. Пробувала.'),
+        telegramBlock.text('Більшість наших учасниць приходили саме з думкою: "Я вже все це проходила."'),
+        telegramBlock.text('Можливо тому ти досі тут і читаєш це повідомлення.'),
+        telegramBlock.text('Різниця одна: там ти отримувала інформацію. Тут ми працюємо з твоєю конкретною ситуацією. Не загальні поради — а розбір саме того що тебе зупиняє.'),
+        telegramBlock.text('Тому багато учасниць отримують відповідь вже на першій практиці.'),
+        ...AB_TEST_FOCUS_TARIFF_BLOCKS,
+        AB_TEST_FOCUS_CTA_BLOCK,
+      ],
     },
 
     RESULT_DOJIM_7D: {
@@ -205,13 +283,27 @@ function buildBranchCopy(): BranchFollowupCopy {
 
 Нижче відгук після першої практики.
 
+${AB_TEST_DOJIM_7D_REVIEW_QUOTE}
+
 ${buildAbTestScreenshotMarker('dojim_7d_review')}
 
 Почати можна з одного місяця. Це 15 євро — менше ніж одна консультація.
 
 ФОКУС | Zoom-практики AB System
-1 місяць — 15 євро | 3 місяці — 39 євро`,
+${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
+      blocks: [
+        telegramBlock.text('{firstName}.'),
+        telegramBlock.text('Через тиждень після тесту більшість людей повертаються до звичного життя і відкладають це ще на кілька місяців.'),
+        telegramBlock.text('Ти вже знаєш що тебе зупиняє. Це не так часто буває — що людина бачить це чесно.'),
+        telegramBlock.text('Нижче відгук після першої практики.'),
+        telegramBlock.image(AB_TEST_SCREENSHOT_URLS.dojim_7d_review),
+        telegramBlock.quote(AB_TEST_DOJIM_7D_REVIEW_QUOTE),
+        telegramBlock.text('Почати можна з одного місяця. Це 15 євро — менше ніж одна консультація.'),
+        telegramBlock.pricing('ФОКУС | Zoom-практики AB System'),
+        ...AB_TEST_FOCUS_TARIFF_BLOCKS,
+        AB_TEST_FOCUS_CTA_BLOCK,
+      ],
     },
   }
 }
@@ -269,6 +361,9 @@ export function resolveAbTestFollowupCopy(
     return {
       ...base,
       body: interpolateFirstName(base.body, options.firstName),
+      blocks: base.blocks?.map((block) =>
+        interpolateTelegramBlock(block, options.firstName),
+      ),
     }
   }
 
@@ -276,6 +371,7 @@ export function resolveAbTestFollowupCopy(
   return {
     ...generic,
     body: interpolateFirstName(generic.body, options.firstName),
+    blocks: generic.blocks?.map((block) => interpolateTelegramBlock(block, options.firstName)),
   }
 }
 
@@ -323,7 +419,7 @@ export const AB_TEST_LIFECYCLE_REMINDERS: Record<LifecycleReminderKey, FollowupC
   R8_OFFER_3D: {
     title: 'ФОКУС чекає на тебе',
     body: 'Минуло 3 дні. Якщо готова рухатись далі з підтримкою, відкрий ФОКУС у зручний момент.',
-    cta: 'Оплатити 1 місяць\n— 15 євро',
+    cta: AB_TEST_FOCUS_PAYMENT_CTA_1M,
   },
   Z1_ZOOM_MON_1800: {
     title: 'Zoom сьогодні о 19:00',

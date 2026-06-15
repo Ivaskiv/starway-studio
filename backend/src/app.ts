@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import { prisma } from './db/client.js'
+import { resolveTelegramDeliveryMode } from './modules/telegram-mentor/runtime/botConfig.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
@@ -150,7 +151,7 @@ import analyticsRoutes from './modules/analytics/routes.js'
 import assistantRoutes from './modules/assistant/routes.js'
 import authRoutes, { telegramRouter } from './modules/auth/auth.routes.js'
 import { authRequired } from './modules/auth/middleware/auth.js'
-import { bot } from './lib/telegram.js'
+import { bot, coachBot, resolveTelegramWebhookSecretMap, testBot } from './lib/telegram.js'
 import billingRoutes from './modules/billing/billing.module.js'
 import consultationRoutes from './modules/consultation/routes.js'
 import dailyRoutes from './modules/daily-cycle/routes.js'
@@ -187,8 +188,45 @@ import webMapRouter from './modules/web-map/web-map.router.js'
 import wheelRoutes from './modules/wheel/routes.js'
 import zoomRoutes from './modules/zoom/routes.js'
 import zoomCoachRoutes from './modules/zoom/zoom.coach.routes.js'
+import audioRoutes from './modules/audio/routes.js'
 import testSyncRoutes from './products/absystem/config/testSync.router.js'
+import intelligenceRoutes from './routes/intelligence.routes.js'
 import salesAssistantRouter from './routers/salesAssistant.router.js'
+
+type TelegramWebhookTarget = {
+  id: 'main' | 'coach' | 'test'
+  secret: string
+  handleUpdate: (update: unknown) => Promise<unknown>
+}
+
+function resolveTelegramWebhookTarget(
+  incomingSecret: string,
+): TelegramWebhookTarget | null {
+  const targets: TelegramWebhookTarget[] = [
+    {
+      id: 'main',
+      secret: String(resolveTelegramWebhookSecretMap().main ?? '').trim(),
+      handleUpdate: (update) => bot.handleUpdate(update as Parameters<typeof bot.handleUpdate>[0]),
+    },
+    {
+      id: 'coach',
+      secret: String(resolveTelegramWebhookSecretMap().coach ?? '').trim(),
+      handleUpdate: (update) => coachBot.handleUpdate(update as Parameters<typeof coachBot.handleUpdate>[0]),
+    },
+    {
+      id: 'test',
+      secret: String(resolveTelegramWebhookSecretMap().test ?? '').trim(),
+      handleUpdate: (update) => testBot.handleUpdate(update as Parameters<typeof testBot.handleUpdate>[0]),
+    },
+  ]
+
+  const normalizedSecret = incomingSecret.trim()
+  if (!normalizedSecret) {
+    return targets[0] ?? null
+  }
+
+  return targets.find((target) => target.secret && target.secret === normalizedSecret) ?? null
+}
 
 export function createApp(): Express {
   const app = express()
@@ -271,11 +309,13 @@ export function createApp(): Express {
   )
 
   app.get('/api/telegram/webhook/health', (_req: Request, res: Response) => {
-    const enabled = START_TELEGRAM_BOT && Boolean(TELEGRAM_WEBHOOK_URL)
+    const deliveryMode = resolveTelegramDeliveryMode()
+    const enabled = START_TELEGRAM_BOT && deliveryMode === 'webhook'
     return res.status(200).json({
       ok: true,
       webhook: {
         enabled,
+        deliveryMode: START_TELEGRAM_BOT ? deliveryMode : 'disabled',
         startTelegramBot: START_TELEGRAM_BOT,
         hasWebhookUrl: Boolean(TELEGRAM_WEBHOOK_URL),
       },
@@ -284,28 +324,42 @@ export function createApp(): Express {
 
   // Keep webhook route in createApp so it is registered regardless of bootstrap entrypoint.
   app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
-    if (!START_TELEGRAM_BOT || !TELEGRAM_WEBHOOK_URL) {
+    if (!START_TELEGRAM_BOT || resolveTelegramDeliveryMode() !== 'webhook') {
       return res
         .status(404)
         .json({ ok: false, message: 'telegram webhook disabled' })
     }
 
-    if (TELEGRAM_WEBHOOK_SECRET) {
-      const incomingSecret =
-        req.get('x-telegram-bot-api-secret-token')?.trim() || ''
-      if (!incomingSecret || incomingSecret !== TELEGRAM_WEBHOOK_SECRET) {
-        return res
-          .status(401)
-          .json({ ok: false, message: 'invalid telegram webhook secret' })
-      }
+    const incomingSecret =
+      req.get('x-telegram-bot-api-secret-token')?.trim() || ''
+    const webhookTarget = resolveTelegramWebhookTarget(incomingSecret)
+
+    if (incomingSecret && !webhookTarget) {
+      return res
+        .status(401)
+        .json({ ok: false, message: 'invalid telegram webhook secret' })
+    }
+
+    if (!incomingSecret && TELEGRAM_WEBHOOK_SECRET) {
+      return res
+        .status(401)
+        .json({ ok: false, message: 'missing telegram webhook secret' })
     }
 
     // ACK immediately to avoid webhook caller timeout/retries;
     // update processing runs in background.
     res.status(200).send('OK')
     setImmediate(() => {
-      void bot.handleUpdate(req.body).catch((error) => {
-        console.error('❌ [TELEGRAM WEBHOOK ERROR]', error)
+      const target = webhookTarget ?? resolveTelegramWebhookTarget('')
+      if (!target) {
+        console.error('❌ [TELEGRAM WEBHOOK ERROR] no target bot resolved')
+        return
+      }
+      void target.handleUpdate(req.body).catch((error) => {
+        console.error('❌ [TELEGRAM WEBHOOK ERROR]', {
+          botId: target.id,
+          error,
+        })
       })
     })
     return
@@ -419,6 +473,7 @@ export function createApp(): Express {
   app.use('/api/test', testSyncRoutes)
   app.use('/api/zoom', zoomRoutes)
   app.use('/api/coach', zoomCoachRoutes)
+  app.use('/api/audio', audioRoutes)
   app.use('/api/mentorship', mentorshipRoutes)
   app.use('/api/courses', miniCoursesRoutes)
   app.use('/api/social', socialRoutes)
@@ -447,6 +502,7 @@ export function createApp(): Express {
   )
   app.use('/api/landing', landingRoutes)
   app.use('/api/assistant', assistantRoutes)
+  app.use('/api/intelligence', intelligenceRoutes)
   app.use('/api/ai/sales-assistant', authRequired, salesAssistantRouter)
   app.use('/api/billing', billingRoutes)
   app.use('/api/users', userRoutes)

@@ -125,12 +125,14 @@ type ReminderDispatch = {
 }
 
 async function wasReminderSentRecently(userId: string, reminderKey: LifecycleReminderKey): Promise<boolean> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
   const hit = await prisma.notification.findFirst({
     where: {
       userId,
       type: NotificationType.AI_REMINDER,
       templateKey: reminderKey,
       status: NotificationStatus.SENT,
+      createdAt: { gte: cutoff },
     },
     select: { id: true },
   })

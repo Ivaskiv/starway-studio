@@ -217,6 +217,7 @@ async function updateBackendEnv(publicUrl: string) {
   const updates = {
     PUBLIC_API_URL: publicUrl,
     TELEGRAM_WEBHOOK_URL: publicUrl,
+    TELEGRAM_DELIVERY_MODE: 'webhook',
     TELEGRAM_WEBAPP_BASE_URL: '',
     WAYFORPAY_CALLBACK_URL: `${publicUrl}${WAYFORPAY_CALLBACK_PATH}`,
   }

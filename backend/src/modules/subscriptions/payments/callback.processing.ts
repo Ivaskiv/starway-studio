@@ -1,4 +1,5 @@
 import { findByAmount } from '@/lib/payments/registry.js'
+import { sendOpsTelegramMessage } from '@/lib/telegram.js'
 import type { PaymentCallbackData } from '../types.js'
 import { prisma } from '../../../db/client.js'
 import { ensureUserExpertId } from '../../ai-mentor/helpers.js'
@@ -283,6 +284,12 @@ export async function processPaymentWebhook(
         },
       },
     })
+
+    if (result.status === 'approved' && resolvedUserId) {
+      void sendOpsTelegramMessage(
+        `✅ FOCUS_PAID | User: ${resolvedUserId} | Plan: ${target.planId} | Amount: €${amount}`,
+      )
+    }
 
     return {
       duplicate: false,

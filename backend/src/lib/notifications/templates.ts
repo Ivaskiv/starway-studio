@@ -2,8 +2,7 @@ import { NotificationEvent } from '../../services/notifications/NotificationEven
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 export type { AbTestFollowupTimerId } from '@/products/ab-system/content/abTest.followups.js'
 import { resolveAbTestFollowupCopy, type AbTestFollowupTimerId } from '@/products/ab-system/content/abTest.followups.js'
-import type { AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
-import type { TestDriveContentVersion } from '@/products/ab-system/content/testDrive.content.js'
+import type { AbTestResultKey, TestDriveContentVersion } from '@/products/ab-system/content/abTest.results.js'
 
 type NotificationTemplateKey = NotificationEvent | 'MISSED_DAY_CATCHUP' | AbTestFollowupTimerId
 

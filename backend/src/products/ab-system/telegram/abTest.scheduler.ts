@@ -10,7 +10,7 @@ import { CANONICAL_FLOW_TIMER_REGISTRY } from '../../../core/state-machine/flowT
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
-import { resolveTestDriveVersion } from '@/products/ab-system/content/testDrive.content.js'
+import { resolveTestDriveVersion } from '@/products/ab-system/content/abTest.results.js'
 
 export async function scheduleFollowups(
   userId: string,

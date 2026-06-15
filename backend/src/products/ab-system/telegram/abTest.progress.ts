@@ -116,7 +116,7 @@ export function buildAbTestEmailGateMessage(profileEmail: string | null): string
     return [
       `У профілі вже є email: <a href="mailto:${email}">${email}</a>`,
       '',
-      'Підтвердь його, надіславши ще раз одним повідомленням.',
+      'Підтвердь його, надіславши ще раз одним повідомленням або просто натисни кнопку Пропустити',
       'Якщо він змінився — надішли актуальний email.',
     ].join('\n')
   }
@@ -213,6 +213,14 @@ export async function saveAbTestProgress(
     },
   })
   return progress
+}
+
+export function isAbTestFocusFunnelLocked(progress: AbTestProgress): boolean {
+  return (
+    progress.status === 'completed' &&
+    Boolean(progress.result_key) &&
+    !progress.payment_success_at
+  )
 }
 
 export async function patchAbTestProgress(

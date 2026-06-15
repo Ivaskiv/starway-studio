@@ -683,6 +683,12 @@ export const absystemContent = {
   },
 } as const
 
+import {
+  AB_TEST_FOCUS_JOIN_CTA_TEXT,
+  AB_TEST_FOCUS_PAYMENT_CTA_1M,
+  AB_TEST_FOCUS_PAYMENT_CTA_3M,
+} from '../../ab-system/content/abTest.shared.js'
+
 export const absystemButtons = {
   startTest: 'Почати тест',
   continueTest: 'Продовжити тест',
@@ -693,10 +699,10 @@ export const absystemButtons = {
   whatToDo: 'Що з цим робити?',
   joinFocus: 'Хочу у ФОКУС',
   payFocus: 'Оплатити ФОКУС',
-  joinFocusNow: 'Приєднатись до ФОКУСУ',
+  joinFocusNow: AB_TEST_FOCUS_JOIN_CTA_TEXT.replace(/ →$/, ''),
   joinChannel: 'Перейти в канал',
-    focusMonthly: 'Оплатити 1 місяць\n— 15 євро',
-  focusQuarterly: 'Оплатити 3 місяці — 39 євро',
+  focusMonthly: AB_TEST_FOCUS_PAYMENT_CTA_1M,
+  focusQuarterly: AB_TEST_FOCUS_PAYMENT_CTA_3M,
   openPlatform: 'Перейти в ABSystem AI',
   openDashboard: 'Відкрити платформу',
   openDailyCycle: 'Відкрити щоденник',

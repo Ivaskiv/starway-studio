@@ -5,7 +5,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "dev": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && tsx watch --clear-screen=false --ignore dist --ignore node_modules --ignore .turbo --ignore coverage --ignore .git src/index.ts",
+    "dev": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && tsx watch --clear-screen=false --ignore dist --ignore node_modules --ignore .turbo --ignore coverage --ignore .git --ignore ../packages/shared/dist --ignore ../packages/ai/dist --ignore ../packages/db/dist --ignore ../packages/db/generated --ignore ../packages/db/generated/client --ignore ../node_modules/.prisma --ignore ../node_modules/@prisma --ignore ../packages/db/node_modules/.prisma --ignore ../packages/db/node_modules/@prisma src/index.ts",
     "build": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc && tsc-alias -p tsconfig.json",
     "start": "tsx dist/index.js",
     "clean": "rm -rf dist",

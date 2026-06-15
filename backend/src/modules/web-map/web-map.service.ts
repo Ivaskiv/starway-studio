@@ -2,7 +2,7 @@ import { prisma } from '@starway/db'
 import { openai } from '../../lib/openai.js'
 import { runGuardedAiTask, stableHash } from '../../services/aiGuard.service.js'
 import { sendTelegramNotification } from '@/modules/web-map/notifications/telegram.js'
-import { parseVisionSystemContent } from '../vision/system.js'
+import { parseVisionSystemContent, type VisionSystem, type VisionSystemGoal } from '../vision/system.js'
 import { generateWebMapAI } from './ai/generateWebMap.js'
 import { buildWebMapDraft, getWeakAreas, type WheelScores } from './utils/webMapFactory.js'
 
@@ -17,6 +17,25 @@ type MonthlyAnalysisPayload = {
     actions: string[]
     goalIds: string[]
   }
+}
+
+type WebMapGoalRow = {
+  id: string
+  sphere: string
+  title: string
+  description: string | null
+  monthlyActions: unknown
+  priority: number | null
+}
+
+type WebMapMonthlyReviewRow = {
+  id: string
+  month: number
+  year: number
+  aiAnalysis: string | null
+  completedActions: string[] | null
+  skippedActions: string[] | null
+  nextStepsByAi: unknown
 }
 
 function validateMonthlyAnalysis(value: unknown): value is MonthlyAnalysisPayload {
@@ -89,7 +108,7 @@ async function getVisionSystemForMap(userId: string) {
 }
 
 export async function getWebMap(userId: string) {
-  const system = await getVisionSystemForMap(userId)
+  const system = (await getVisionSystemForMap(userId)) as VisionSystem | null
 
   try {
     const map = await prisma.annualStrategyMap.findUnique({
@@ -102,15 +121,21 @@ export async function getWebMap(userId: string) {
 
     if (!map) return null
 
-    const mainGoal = system?.goals.find((goal) => goal.sphere === system.mainGoalSphere) ?? system?.goals[0] ?? null
+    const mainGoal =
+      system?.goals.find((goal: VisionSystemGoal) => goal.sphere === system.mainGoalSphere) ??
+      system?.goals[0] ??
+      null
+
+    const mapGoals = map.goals as WebMapGoalRow[]
+    const monthlyReviews = map.monthlyReviews as WebMapMonthlyReviewRow[]
 
     return {
       ...map,
       identityStatement: system?.identityStatement ?? null,
-      mainGoalId: map.goals.find((goal) => goal.sphere === mainGoal?.sphere)?.id ?? null,
+      mainGoalId: mapGoals.find((goal: WebMapGoalRow) => goal.sphere === mainGoal?.sphere)?.id ?? null,
       system: system ?? null,
-      status: map.goals.length ? 'active' : 'draft',
-      goals: map.goals.map((goal, index) => ({
+      status: mapGoals.length ? 'active' : 'draft',
+      goals: mapGoals.map((goal: WebMapGoalRow, index: number) => ({
         ...goal,
         monthlyActions: Array.isArray(goal.monthlyActions)
           ? goal.monthlyActions.filter((item): item is string => typeof item === 'string')
@@ -132,7 +157,7 @@ export async function getWebMap(userId: string) {
         scoreTo: parseGoalDescriptionPayload(goal.description)?.scoreTo ?? null,
         timeframeMonths: parseGoalDescriptionPayload(goal.description)?.timeframeMonths ?? null,
       })),
-      monthlyReviews: map.monthlyReviews.map((month) => ({
+      monthlyReviews: monthlyReviews.map((month: WebMapMonthlyReviewRow) => ({
         ...month,
         focus: null,
         actions: [],
@@ -146,33 +171,38 @@ export async function getWebMap(userId: string) {
   } catch (error) {
     if (!isMissingWebMapColumn(error)) throw error
 
-    const maps = await prisma.$queryRawUnsafe<Array<{ id: string; userId: string; year: number; vision: string | null; createdAt: Date; updatedAt: Date }>>(
+    const maps = (await prisma.$queryRawUnsafe(
       'SELECT "id","userId","year","vision","createdAt","updatedAt" FROM "AnnualStrategyMap" WHERE "userId" = $1 LIMIT 1',
       userId,
-    )
+    )) as Array<{ id: string; userId: string; year: number; vision: string | null; createdAt: Date; updatedAt: Date }>
     const map = maps[0]
     if (!map) return null
 
     const [goals, monthlyReviews] = await Promise.all([
-      prisma.$queryRawUnsafe<Array<{ id: string; sphere: string; title: string; description: string | null; monthlyActions: unknown; priority: number | null }>>(
+      (await prisma.$queryRawUnsafe(
         'SELECT "id","sphere","title","description","monthlyActions","priority" FROM "StrategyGoal" WHERE "mapId" = $1 ORDER BY "priority" ASC',
         map.id,
-      ),
-      prisma.$queryRawUnsafe<Array<{ id: string; month: number; year: number; aiAnalysis: string | null; completedActions: string[] | null; skippedActions: string[] | null; nextStepsByAi: unknown }>>(
+      )) as Array<WebMapGoalRow>,
+      (await prisma.$queryRawUnsafe(
         'SELECT "id","month","year","aiAnalysis","completedActions","skippedActions","nextStepsByAi" FROM "MonthlyStrategyReview" WHERE "mapId" = $1 ORDER BY "year" DESC, "month" DESC LIMIT 12',
         map.id,
-      ),
+      )) as Array<WebMapMonthlyReviewRow>,
     ])
 
-    const mainGoal = system?.goals.find((goal) => goal.sphere === system.mainGoalSphere) ?? system?.goals[0] ?? null
+    const mainGoal =
+      system?.goals.find((goal: VisionSystemGoal) => goal.sphere === system.mainGoalSphere) ??
+      system?.goals[0] ??
+      null
+
+    const webMapGoals = goals as WebMapGoalRow[]
 
     return {
       ...map,
       identityStatement: system?.identityStatement ?? null,
-      mainGoalId: goals.find((goal) => goal.sphere === mainGoal?.sphere)?.id ?? null,
+      mainGoalId: webMapGoals.find((goal: WebMapGoalRow) => goal.sphere === mainGoal?.sphere)?.id ?? null,
       system: system ?? null,
-      status: goals.length ? 'active' : 'draft',
-      goals: goals.map((goal, index) => ({
+      status: webMapGoals.length ? 'active' : 'draft',
+      goals: webMapGoals.map((goal: WebMapGoalRow, index: number) => ({
         ...goal,
         monthlyActions: Array.isArray(goal.monthlyActions)
           ? goal.monthlyActions.filter((item): item is string => typeof item === 'string')
@@ -194,7 +224,7 @@ export async function getWebMap(userId: string) {
         scoreTo: parseGoalDescriptionPayload(goal.description)?.scoreTo ?? null,
         timeframeMonths: parseGoalDescriptionPayload(goal.description)?.timeframeMonths ?? null,
       })),
-      monthlyReviews: monthlyReviews.map((month) => ({
+      monthlyReviews: monthlyReviews.map((month: WebMapMonthlyReviewRow) => ({
         ...month,
         focus: null,
         actions: [],

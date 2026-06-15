@@ -1,3 +1,5 @@
+import { AB_TEST_FOCUS_PRICE_3M } from '../content/abTest.shared.js'
+
 export const aiSellerContent = {
   LEAD: {
     msg1: {
@@ -73,7 +75,7 @@ export const aiSellerContent = {
     price_1m: '15 євро',
     price_3m: '39 євро',
     cta_1m: 'Приєднатись — 15 євро',
-    cta_3m: '3 місяці — 39 євро',
+    cta_3m: AB_TEST_FOCUS_PRICE_3M,
     callback_1m: 'pay_focus_1m',
     callback_3m: 'pay_focus_3m',
   },

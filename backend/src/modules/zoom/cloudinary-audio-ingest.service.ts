@@ -328,6 +328,24 @@ export async function listCloudinaryZoomAudio(
   return items.sort((left, right) => String(right.createdAt ?? '').localeCompare(String(left.createdAt ?? '')))
 }
 
+export async function findCloudinaryZoomAudioById(
+  audioId: string,
+  options: ListCloudinaryZoomAudioOptions = {},
+): Promise<CloudinaryZoomAudioItem | null> {
+  const normalizedAudioId = String(audioId ?? '').trim()
+  if (!normalizedAudioId) {
+    return null
+  }
+
+  const items = await listCloudinaryZoomAudio({
+    limitPerFolder: Math.max(options.limitPerFolder ?? CLOUDINARY_PAGE_SIZE, CLOUDINARY_PAGE_SIZE),
+    from: options.from,
+    to: options.to,
+  })
+
+  return items.find((item) => item.assetId === normalizedAudioId || item.publicId === normalizedAudioId) ?? null
+}
+
 async function ingestCloudinaryFolder(folder: string) {
   const { resources, diagnostics } = await fetchCloudinaryFolderResources(folder)
   const zoomType = resolveZoomTypeFromFolder(folder)

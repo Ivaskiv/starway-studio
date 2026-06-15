@@ -32,17 +32,27 @@ import {
 import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
 import {
+  AB_TEST_AUDIO_URL,
+  AB_TEST_FOCUS_PAYMENT_CTA_1M,
+  AB_TEST_FOCUS_PAYMENT_CTA_3M,
+  AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_3M,
+  AB_TEST_FOCUS_REAL_SITUATION_HEADER,
+  AB_TEST_FOCUS_REAL_SITUATION_LINES,
+  AB_TEST_FOCUS_TARIFF_HEADER,
+  AB_TEST_FOCUS_TITLE,
+  AB_TEST_FOCUS_WEEKLY_TEXT,
+} from '../content/abTest.shared.js'
+import {
   BLOCK10_FOCUS,
   BLOCK9_POST_RESULT,
+  getTestDriveInsideResponseSurface,
+  getTestDriveInsideSurface,
   getAbTestResultDefinition,
-  interpolateFirstName,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
 import {
-  getTestDriveInsideSurface,
-  getTestDriveInsideResponseSurface,
-} from '../content/testDrive.content.js'
-import {
+  dispatchAbTestResultSequence,
   packTelegramContentBlocks,
   sendTelegramContentChunk,
   splitTelegramContentBlocks,
@@ -68,6 +78,7 @@ import {
 } from './abTest.callback.js'
 import {
   getAbTestProgressFromUiSettings,
+  isAbTestFocusFunnelLocked,
   loadAbTestProgress,
   loadUserUiSettings,
   saveAbTestProgress,
@@ -81,7 +92,6 @@ import {
   renderAbTestEmailGate,
   sendActionMessage,
   formatAbTestTelegramCard,
-  splitTelegramLines,
 } from './abTest.views.js'
 import {
   planAck,
@@ -461,7 +471,7 @@ async function sendQuestionDirect(
   const questionNumber = questionOrder.indexOf(question.question_id) + 1
   await ctx.telegram.sendMessage(
     chatId,
-    `<b>Питання ${questionNumber} з ${questionOrder.length}</b>\n\n<b>${escapeHtml(question.prompt)}</b>\n\n${formatMobileAnswerListForMessage(question.answers)}`,
+    `<b>Питання ${questionNumber} з ${questionOrder.length}</b>\n\n<b>${escapeHtml(question.prompt)}</b>\n\n${escapeHtml(formatMobileAnswerListForMessage(question.answers))}`,
     {
       parse_mode: 'HTML',
       reply_markup: {
@@ -487,19 +497,23 @@ function formatMobileAnswerListForMessage(answers: ReadonlyArray<{ text: string 
       const match = answer.text.match(/^([А-ДA-E])\.\s*(.*)$/s)
       const letter = match?.[1] ?? answer.text.slice(0, 1)
       const body = match?.[2] ?? answer.text.slice(2).trim()
-      return `<b>${escapeHtml(letter)}.</b> ${escapeHtml(body)}`
+      return `${letter}. ${body}`
     })
     .join('\n\n')
 }
 
-async function sendChunkedPlainTextMessage(
+async function sendStructuredTelegramMessage(
   ctx: Context,
   chatId: string | number,
   title: string,
   lines: string[],
   replyMarkup?: InlineKeyboardMarkup
 ): Promise<void> {
-  const chunks = packTelegramContentBlocks(splitTelegramContentBlocks(lines))
+  const chunks = packTelegramContentBlocks(
+    splitTelegramContentBlocks(lines),
+    900
+  )
+
   for (let index = 0; index < chunks.length; index += 1) {
     await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
     if (index > 0) {
@@ -508,7 +522,6 @@ async function sendChunkedPlainTextMessage(
 
     await sendTelegramContentChunk(ctx, chatId, index === 0 ? title : '', chunks[index], {
       inlineKeyboard: index === chunks.length - 1 ? replyMarkup : undefined,
-      parseMode: 'HTML',
     })
   }
 }
@@ -803,12 +816,13 @@ export async function handleAbTestCallback(
     if (!chatId) {
       return true
     }
-    await ctx.telegram.sendMessage(
+    await sendTelegramContentChunk(
+      ctx,
       chatId,
-      formatAbTestTelegramCard('', BLOCK9_POST_RESULT.text.split('\n')),
+      '',
+      splitTelegramContentBlocks(BLOCK9_POST_RESULT.text.split('\n')),
       {
-        parse_mode: 'HTML',
-        reply_markup: {
+        inlineKeyboard: {
           inline_keyboard: [
             [
               {
@@ -818,6 +832,8 @@ export async function handleAbTestCallback(
             ],
           ],
         },
+        parseMode: 'HTML',
+        separateBlocks: true,
       }
     )
     return true
@@ -902,17 +918,21 @@ export async function handleAbTestCallback(
     )
     const text =
       BLOCK10_FOCUS?.text ??
-      'ФОКУС | Zoom-практики AB System\n\n' +
-        'ФОКУС — це живі Zoom-практики раз на тиждень.\n' +
-        'Ти приходиш із реальною ситуацією:\n' +
-        '— що відкладаєш,\n' +
-        '— яке рішення переносиш,\n' +
-        '— яка ціль не рухається.\n\n' +
-        'Тарифи:\n' +
-        '1 місяць — 15 євро\n' +
-        '3 місяці — 39 євро'
-    const cta1m = BLOCK10_FOCUS?.cta_1m ?? 'Оплатити 1 місяць\n— 15 євро'
-    const cta3m = BLOCK10_FOCUS?.cta_3m ?? 'Оплатити 3 місяці — 39 євро'
+      `${AB_TEST_FOCUS_TITLE}\n\n` +
+        `${AB_TEST_FOCUS_WEEKLY_TEXT}\n` +
+        '\n' +
+        `${AB_TEST_FOCUS_REAL_SITUATION_HEADER}\n` +
+        `${AB_TEST_FOCUS_REAL_SITUATION_LINES.join('\n')}\n\n` +
+        `${AB_TEST_FOCUS_TARIFF_HEADER}\n` +
+        '\n' +
+        `${AB_TEST_FOCUS_PRICE_1M}\n` +
+        AB_TEST_FOCUS_PRICE_3M
+    const cta1m = BLOCK10_FOCUS?.cta_1m ?? AB_TEST_FOCUS_PAYMENT_CTA_1M
+    const cta3m = BLOCK10_FOCUS?.cta_3m ?? AB_TEST_FOCUS_PAYMENT_CTA_3M
+    const focusPaymentBlocks =
+      BLOCK10_FOCUS.blocks
+        ? [...BLOCK10_FOCUS.blocks]
+        : splitTelegramContentBlocks(text.split('\n'))
     let testButtonRow: Array<{ text: string; url: string }> = []
     if (payingUserId && isTestPaymentEnabled()) {
       try {
@@ -933,22 +953,29 @@ export async function handleAbTestCallback(
       }
     }
     try {
-      await ctx.telegram.sendMessage(chatId, text, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: cta1m, url: url1m }],
-            [{ text: cta3m, url: url3m }],
-            ...testButtonRow.map((row) => [row]),
-            [
-              {
-                text: '⚠️ Проблема з оплатою',
-                callback_data: 'focus:payment_issue',
-              },
+      await sendTelegramContentChunk(
+        ctx,
+        chatId,
+        '',
+        focusPaymentBlocks,
+        {
+          inlineKeyboard: {
+            inline_keyboard: [
+              [{ text: cta1m, url: url1m }],
+              [{ text: cta3m, url: url3m }],
+              ...testButtonRow.map((row) => [row]),
+              [
+                {
+                  text: '⚠️ Проблема з оплатою',
+                  callback_data: 'focus:payment_issue',
+                },
+              ],
             ],
-          ],
-        },
-      })
+          },
+          parseMode: 'HTML',
+          separateBlocks: true,
+        }
+      )
       console.log('[FOCUS_PAY] sent ok', { userId: payingUserId, chatId })
     } catch (error) {
       console.error('[FOCUS_PAY] FAILED', error)
@@ -1094,6 +1121,20 @@ export async function handleAbTestCallback(
   }
 
   if (action === AB_TEST_ACTIONS.OPEN_FAQ) {
+    const focusUserId = (ctx.state as { userId?: string | null }).userId ?? await resolveContextUserId(ctx)
+    if (focusUserId) {
+      const currentFocusProgress = await loadAbTestProgress(focusUserId)
+      if (isAbTestFocusFunnelLocked(currentFocusProgress)) {
+        await renderCurrentView(ctx, focusUserId, currentFocusProgress)
+        await planAck(
+          ctx,
+          'ctx.answerCbQuery',
+          'ab_test_open_faq_blocked',
+          'Повертаю у ФОКУС-воронку'
+        ).catch(() => undefined)
+        return true
+      }
+    }
     await planMessage(
       ctx,
       'ctx.reply',
@@ -1110,22 +1151,33 @@ export async function handleAbTestCallback(
   }
 
   if (action === AB_TEST_ACTIONS.FOCUS_INFO) {
-    await planMessage(
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
+    const focusBlocks =
+      BLOCK10_FOCUS.blocks
+        ? [...BLOCK10_FOCUS.blocks]
+        : splitTelegramContentBlocks(BLOCK10_FOCUS.text.split('\n'))
+    await sendTelegramContentChunk(
       ctx,
-      'ctx.reply',
-      'ab_test_focus_info',
-      BLOCK10_FOCUS.text,
+      chatId,
+      '',
+      focusBlocks,
       {
-        inline_keyboard: [
-          [
-            {
-              text: 'Оплатити ФОКУС',
-              callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
-            },
+        inlineKeyboard: {
+          inline_keyboard: [
+            [
+              {
+                text: 'Оплатити ФОКУС',
+                callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
+              },
+            ],
           ],
-        ],
-      },
-      'Markdown'
+        },
+        parseMode: 'HTML',
+        separateBlocks: true,
+      }
     )
     await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_focus_info_ack').catch(
       () => undefined
@@ -1135,28 +1187,37 @@ export async function handleAbTestCallback(
 
   const faqItem = getFaqItem(action as FaqCallbackData)
   if (faqItem) {
-    const replyOptions: Parameters<typeof ctx.reply>[1] = {
-      parse_mode: 'Markdown',
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
     }
-    if (faqItem.ctaCallback && faqItem.cta) {
-      replyOptions.reply_markup = {
-        inline_keyboard: [
-          [
-            {
-              text: faqItem.cta,
-              callback_data: faqItem.ctaCallback,
-            },
+    const replyMarkup: InlineKeyboardMarkup | undefined =
+      faqItem.ctaCallback && faqItem.cta
+        ? {
+            inline_keyboard: [
+              [
+                {
+                  text: faqItem.cta,
+                  callback_data: faqItem.ctaCallback,
+                },
+              ],
           ],
-        ],
-      }
-    }
-    await planMessage(
+        }
+      : undefined
+    const faqBlocks =
+      'blocks' in faqItem && faqItem.blocks
+        ? [...faqItem.blocks]
+        : splitTelegramContentBlocks(faqItem.text.split('\n'))
+    await sendTelegramContentChunk(
       ctx,
-      'ctx.reply',
-      'ab_test_faq_item',
-      faqItem.text,
-      replyOptions?.reply_markup,
-      'Markdown'
+      chatId,
+      '',
+      faqBlocks,
+      {
+        inlineKeyboard: replyMarkup,
+        parseMode: 'HTML',
+        separateBlocks: true,
+      }
     )
     await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_faq_item_ack').catch(
       () => undefined
@@ -1179,9 +1240,9 @@ export async function handleAbTestCallback(
     const q1Question = getAbTestQuestion('q1')
     await ctx.telegram.sendMessage(
       q1ChatId,
-      `*Питання 1 з 8*\n\n*${q1Question.prompt}*\n\n${formatMobileAnswerListForMessage(q1Question.answers)}`,
+      `<b>Питання 1 з 8</b>\n\n<b>${escapeHtml(q1Question.prompt)}</b>\n\n${escapeHtml(formatMobileAnswerListForMessage(q1Question.answers))}`,
       {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             q1Question.answers.map((answer) => ({
@@ -1192,6 +1253,25 @@ export async function handleAbTestCallback(
         },
       }
     )
+    return true
+  }
+
+  if (action.startsWith('play_audio_')) {
+    await ctx.answerCbQuery('Надсилаю голосове...').catch(() => null)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
+
+    const resultKey = action
+      .replace('play_audio_', '')
+      .trim()
+      .toLowerCase() as AbTestResultKey
+    const resultDef = getAbTestResultDefinition(resultKey)
+
+    await ctx.telegram.sendVoice(chatId, AB_TEST_AUDIO_URL, {
+      caption: resultDef.msg1_audio,
+    })
     return true
   }
 
@@ -1233,6 +1313,31 @@ export async function handleAbTestCallback(
       'ctx.answerCbQuery',
       'ab_test_missing_user_ack',
       abTestContent.errors.invalid.join(' ')
+    ).catch(() => undefined)
+    return true
+  }
+
+  const focusProgress = await loadAbTestProgress(userId)
+  const focusFlowLocked = isAbTestFocusFunnelLocked(focusProgress)
+  const allowedDuringFocusLock = new Set<string>([
+    AB_TEST_ACTIONS.SHOW_RESULT,
+    AB_TEST_ACTIONS.FOCUS_INFO,
+    AB_TEST_ACTIONS.FOCUS_PAY,
+    AB_TEST_ACTIONS.FOCUS_ALREADY_PAID,
+  ])
+  const isAllowedFocusLockAction =
+    allowedDuringFocusLock.has(action) ||
+    action === 'skip_email_before_result' ||
+    action.startsWith('show_inside_') ||
+    action.startsWith('open_focus_payment:')
+
+  if (focusFlowLocked && !isAllowedFocusLockAction) {
+    await renderCurrentView(ctx, userId, focusProgress)
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_focus_lock_redirect',
+      'Повертаю у ФОКУС-воронку'
     ).catch(() => undefined)
     return true
   }
@@ -1303,17 +1408,7 @@ export async function handleAbTestCallback(
     }
     await saveAbTestProgress(userId, normalizeAbTestProgress(undefined))
     if (chatId) {
-      await ctx.telegram.sendMessage(
-        chatId,
-        absystemContent.START_BLOCK1.MSG1,
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'Почати тест', callback_data: 'ab_test:start' }],
-            ],
-          },
-        }
-      )
+      await startAbTestFlow(ctx, userId, 'ab_test:restart')
     }
     return true
   }
@@ -1342,7 +1437,7 @@ export async function handleAbTestCallback(
 
     const userRecord = await prisma.user.findUnique({
       where: { id: userId },
-      select: { testResultType: true, telegramUserName: true },
+      select: { testResultType: true, telegramUserName: true, firstName: true },
     })
     const resultKey = (userRecord?.testResultType ??
       null) as AbTestResultKey | null
@@ -1366,24 +1461,22 @@ export async function handleAbTestCallback(
       return true
     }
 
-    const resultDef = getAbTestResultDefinition(resultKey)
-    const firstName = userRecord?.telegramUserName ?? ''
-    await ctx.telegram.sendMessage(
+    const progress = await loadAbTestProgress(userId)
+    if (progress.status === 'completed' && progress.result_key) {
+      await renderAbTestPostEmailSubmitSequence(ctx, userId, progress, {
+        notifyOps: false,
+      })
+      return true
+    }
+
+    await dispatchAbTestResultSequence(ctx, {
       chatId,
-      interpolateFirstName(resultDef.body, firstName),
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: 'Показати\nяк проходить\nпрактика',
-                callback_data: `show_inside_${resultKey.toUpperCase()}`,
-              },
-            ],
-          ],
-        },
-      }
-    )
+      userId,
+      resultKey,
+      firstName: userRecord?.firstName ?? userRecord?.telegramUserName ?? null,
+      deliverySource: 'show_result',
+      notifyOps: false,
+    })
     return true
   }
 
@@ -1449,7 +1542,7 @@ export async function handleAbTestCallback(
       await renderCurrentView(ctx, userId, progress)
       return true
     }
-    await sendChunkedPlainTextMessage(
+    await sendStructuredTelegramMessage(
       ctx,
       chatId,
       surface.title,
@@ -1474,7 +1567,7 @@ export async function handleAbTestCallback(
       return true
     }
 
-    await sendChunkedPlainTextMessage(
+    await sendStructuredTelegramMessage(
       ctx,
       chatId,
       insideSurface.title,
@@ -1493,7 +1586,7 @@ export async function handleAbTestCallback(
       return true
     }
     await ctx.telegram.sendMessage(startChatId, AB_TEST_START_STEP2, {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
           [{ text: 'Продовжити', callback_data: 'ab_test:q1' }],
@@ -1574,12 +1667,6 @@ export async function handleAbTestCallback(
           ],
           [
             {
-              text: '📋 Моя підписка',
-              callback_data: AB_TEST_ACTIONS.SUBSCRIPTION,
-            },
-          ],
-          [
-            {
               text: 'Оплатити ФОКУС',
               callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
             },
@@ -1596,7 +1683,6 @@ export async function handleAbTestCallback(
               callback_data: 'return_main_menu',
             },
           ],
-          [{ text: 'Задати питання', callback_data: AB_TEST_ACTIONS.OPEN_FAQ }],
         ],
         blocks: [],
       },
@@ -1880,18 +1966,18 @@ export async function renderAbTestIntro(
     buttonCallbackData: AB_TEST_ACTIONS.ENTRY,
     buttonText: 'Далі',
   })
-  await planMessage(
-    ctx,
-    'ctx.reply',
-    'ab_test_entry_intro',
-    absystemContent.START_BLOCK1.MSG1,
-    {
-      inline_keyboard: [
-        [{ text: 'Далі', callback_data: AB_TEST_ACTIONS.ENTRY }],
-      ],
-    },
-    'Markdown'
-  )
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'ab_test_entry_intro',
+      formatAbTestTelegramCard('', absystemContent.START_BLOCK1.MSG1.split('\n')),
+      {
+        inline_keyboard: [
+          [{ text: 'Далі', callback_data: AB_TEST_ACTIONS.ENTRY }],
+        ],
+      },
+      'HTML'
+    )
   logMessageSent('start_block1_intro_with_next_sent', {
     userId,
     chatId: String(ctx.chat?.id ?? ''),
@@ -1920,7 +2006,7 @@ export async function renderAbTestEntry(
     ctx,
     'ctx.reply',
     'ab_test_entry_msg2',
-    absystemContent.START_BLOCK1.MSG2,
+    formatAbTestTelegramCard('', absystemContent.START_BLOCK1.MSG2.split('\n')),
     {
       inline_keyboard: [
         [
@@ -1931,7 +2017,7 @@ export async function renderAbTestEntry(
         ],
       ],
     },
-    'Markdown'
+    'HTML'
   )
   logMessageSent('start_block1_msg2_with_cta_sent', {
     userId,
@@ -1997,14 +2083,17 @@ export async function broadcastBlock9Update(
     }
 
     try {
-      await bot.telegram.sendMessage(
-        tgId,
-        formatAbTestTelegramCard('', BLOCK9_POST_RESULT.text.split('\n')),
-        {
-          parse_mode: 'HTML',
-          reply_markup: { inline_keyboard },
-        }
+      const blockChunks = splitTelegramContentBlocks(
+        BLOCK9_POST_RESULT.text.split('\n')
       )
+      for (let index = 0; index < blockChunks.length; index += 1) {
+        await sendTelegramContentChunk(bot as unknown as Context, tgId, '', [blockChunks[index]], {
+          inlineKeyboard:
+            index === blockChunks.length - 1 ? { inline_keyboard } : undefined,
+          parseMode: 'HTML',
+          separateBlocks: true,
+        })
+      }
       sent += 1
       await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (err) {

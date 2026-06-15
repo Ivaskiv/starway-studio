@@ -1,3 +1,14 @@
+import {
+  AB_TEST_FOCUS_CTA_BLOCK,
+  AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
+  AB_TEST_FOCUS_REAL_SITUATION_INLINE,
+  AB_TEST_FOCUS_TARIFF_BLOCKS,
+  AB_TEST_FOCUS_WEEKLY_TEXT,
+  AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_3M,
+  telegramBlock,
+} from './abTest.shared.js'
+
 // ТЗ Блоки 15-21 — Меню та FAQ-відповіді
 // Єдине джерело правди для всіх FAQ повідомлень бота.
 // Handlers НЕ авторять тексти — тільки читають звідси.
@@ -38,19 +49,27 @@ export const FAQ_WHAT_IS_FOCUS = {
   trigger: 'Що таке ФОКУС?',
   callbackData: 'faq:what_is_focus',
   text: [
-    'ФОКУС — це живі Zoom-практики раз на тиждень за системою AB System.',
+    `${AB_TEST_FOCUS_WEEKLY_TEXT} за системою AB System.`,
     '',
     'Ти приходиш із реальною ситуацією:',
+    '',
     'що давно відкладаєш, яке рішення переносиш, яка ціль не рухається.',
     '',
     'На практиці ми дивимось, чому це повторюється,',
     'і доводимо до одного конкретного кроку на тиждень.',
     '',
-    '1 місяць — 15 євро',
-    '3 місяці — 39 євро',
+    AB_TEST_FOCUS_PRICE_1M,
+    AB_TEST_FOCUS_PRICE_3M,
   ].join('\n'),
-  cta: 'Приєднатись до\nФОКУСУ →',
+  cta: AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   ctaCallback: 'open_focus_payment',
+  blocks: [
+    telegramBlock.text(`${AB_TEST_FOCUS_WEEKLY_TEXT} за системою AB System.`),
+    telegramBlock.text(AB_TEST_FOCUS_REAL_SITUATION_INLINE),
+    telegramBlock.text('На практиці ми дивимось, чому це повторюється, і доводимо до одного конкретного кроку на тиждень.'),
+    ...AB_TEST_FOCUS_TARIFF_BLOCKS,
+    AB_TEST_FOCUS_CTA_BLOCK,
+  ],
 } as const
 
 // ── Блок 17: «Кому підходить?» ───────────────────────────────
@@ -117,6 +136,11 @@ export const FAQ_FOCUS_VS_COURSE = {
   ].join('\n'),
   cta: null,
   ctaCallback: null,
+  blocks: [
+    telegramBlock.text('Курс ти проходиш у своєму темпі.'),
+    telegramBlock.text('ФОКУС — це живі практики раз на тиждень.'),
+    telegramBlock.text('Тут важливо не просто отримати інформацію, а прийти, подивитись на свою ситуацію і вийти з конкретним кроком.'),
+  ],
 } as const
 
 // ── Блок 21: «Що буде після ФОКУСУ?» ────────────────────────
@@ -137,6 +161,11 @@ export const FAQ_AFTER_FOCUS = {
   ].join('\n'),
   cta: null,
   ctaCallback: null,
+  blocks: [
+    telegramBlock.text('Після ФОКУСУ для учасників відкривається перехід в ABSystem AI.'),
+    telegramBlock.text('Це платформа, яка веде тебе щодня між Zoom-практиками: допомагає прописати цілі, зібрати стратегію, проходити колесо балансу, відстежувати кроки, бачити, де ти знову переносиш важливе.'),
+    telegramBlock.text('Але в платформу можна перейти тільки після входу у ФОКУС.'),
+  ],
 } as const
 
 // ── Загальний реєстр FAQ ─────────────────────────────────────

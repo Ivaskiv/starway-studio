@@ -1,4 +1,5 @@
 import type { Context, Telegraf } from 'telegraf'
+import { Markup } from 'telegraf'
 
 import { prisma } from '../../db/client.js'
 import { sendUserTelegramMessage } from '../../lib/telegram.js'
@@ -11,6 +12,7 @@ import {
   getRetentionStats,
 } from '../../modules/analytics/service.js'
 import {
+  findCloudinaryZoomAudioById,
   ingestCloudinaryZoomAudio,
   listCloudinaryZoomAudio,
 } from '../../modules/zoom/cloudinary-audio-ingest.service.js'
@@ -99,6 +101,56 @@ function endOfWeekSunday(weekStart: Date): Date {
   return date
 }
 
+function startOfMonth(value: string): { from: Date; to: Date; label: string } | null {
+  const normalized = value.trim()
+  if (!/^\d{4}-\d{2}$/.test(normalized)) return null
+
+  const [yearValue, monthValue] = normalized.split('-')
+  const year = Number(yearValue)
+  const monthIndex = Number(monthValue) - 1
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+    return null
+  }
+
+  return {
+    from: new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0, 0)),
+    to: new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999)),
+    label: normalized,
+  }
+}
+
+function resolvePublicApiBaseUrl(): string {
+  const candidates = [
+    process.env.PUBLIC_API_URL?.trim(),
+    process.env.TELEGRAM_WEBHOOK_URL?.trim(),
+    process.env.INTERNAL_API_URL?.trim(),
+    'http://localhost:3001',
+  ].filter((value): value is string => Boolean(value))
+
+  for (const candidate of candidates) {
+    try {
+      const url = new URL(candidate)
+      if (url.pathname === '/api') {
+        url.pathname = '/'
+      }
+      return url.toString().replace(/\/$/, '')
+    } catch {
+      continue
+    }
+  }
+
+  return 'http://localhost:3001'
+}
+
+function buildAudioStreamUrl(audioId: string, download = false): string {
+  const base = resolvePublicApiBaseUrl()
+  const url = new URL(`/api/audio/stream/${encodeURIComponent(audioId)}`, `${base}/`)
+  if (download) {
+    url.searchParams.set('download', '1')
+  }
+  return url.toString()
+}
+
 function splitPayload(payload: string): string[] {
   return payload.trim().split(/\s+/u).filter(Boolean)
 }
@@ -171,6 +223,7 @@ function formatUserRow(user: {
 }
 
 function formatAudioRow(item: {
+  assetId: string
   folder: string
   fileName: string
   secureUrl: string
@@ -188,6 +241,15 @@ function formatAudioRow(item: {
     `  duration: ${typeof item.duration === 'number' ? `${Math.round(item.duration)}s` : '—'}`,
     `  url: ${item.secureUrl}`,
   ].join('\n')
+}
+
+function buildAudioActionsKeyboard(audioId: string) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('🎧 Слухати', `coach-content:audio-play:${audioId}`),
+      Markup.button.callback('💾 Завантажити', `coach-content:audio-download:${audioId}`),
+    ],
+  ])
 }
 
 async function resolveCoachAccess(ctx: Context): Promise<CoachAccess | null> {
@@ -229,6 +291,8 @@ export async function handleCoachAudioCommand(ctx: Context, payload = ''): Promi
   if (!coach || !chatId) return false
 
   const [action] = splitPayload(payload.toLowerCase())
+  const normalizedPayloadParts = splitPayload(payload)
+  const monthQuery = normalizedPayloadParts.find((part) => /^\d{4}-\d{2}$/.test(part))
 
   if (action === 'run' || action === 'ingest' || action === 'sync') {
     await replyOrEditPanelMessage(ctx, coachPanelContent.audio.ingestStarted)
@@ -253,18 +317,23 @@ export async function handleCoachAudioCommand(ctx: Context, payload = ''): Promi
     return true
   }
 
+  const monthRange = monthQuery ? startOfMonth(monthQuery) : null
   const weekStart = startOfWeekMonday()
   const weekEnd = endOfWeekSunday(weekStart)
+  const rangeFrom = monthRange?.from ?? weekStart
+  const rangeTo = monthRange?.to ?? weekEnd
   const items = await listCloudinaryZoomAudio({
     limitPerFolder: 50,
-    from: weekStart,
-    to: weekEnd,
+    from: rangeFrom,
+    to: rangeTo,
   })
   if (items.length === 0) {
     await replyOrEditPanelMessage(ctx, [
       `🎧 ${coachPanelContent.audio.title}`,
       '',
-      'Поки що Cloudinary-аудіо за поточний тиждень не знайдено.',
+      monthRange
+        ? `Поки що Cloudinary-аудіо за ${monthRange.label} не знайдено.`
+        : 'Поки що Cloudinary-аудіо за поточний тиждень не знайдено.',
       '',
       coachPanelContent.audio.usage,
     ].join('\n'))
@@ -274,10 +343,53 @@ export async function handleCoachAudioCommand(ctx: Context, payload = ''): Promi
   await replyOrEditPanelMessage(ctx, [
     `🎧 ${coachPanelContent.audio.title}`,
     '',
-    `Аудіо за поточний тиждень: ${weekStart.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: KYIV_TZ })}–${weekEnd.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: KYIV_TZ })}`,
+    monthRange
+      ? `Аудіо за місяць: ${monthRange.label}`
+      : `Аудіо за поточний тиждень: ${weekStart.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: KYIV_TZ })}–${weekEnd.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: KYIV_TZ })}`,
     '',
-    ...items.map((item) => formatAudioRow(item)),
+    'Вибери запис нижче, щоб прослухати або завантажити.',
   ].join('\n\n'))
+
+  for (const item of items) {
+    await ctx.reply(
+      formatAudioRow(item),
+      buildAudioActionsKeyboard(item.assetId),
+    ).catch(() => undefined)
+  }
+  return true
+}
+
+async function handleCoachAudioAction(ctx: Context, action: string): Promise<boolean> {
+  const parts = action.split(':')
+  const intent = parts[1] ?? ''
+  const audioId = parts.slice(2).join(':').trim()
+  if (!audioId) return false
+
+  const item = await findCloudinaryZoomAudioById(audioId)
+  if (!item) {
+    await ctx.answerCbQuery('Аудіо не знайдено').catch(() => undefined)
+    await ctx.reply('❌ Не вдалося знайти аудіо. Спробуй оновити список через /audio.').catch(() => undefined)
+    return true
+  }
+
+  const playUrl = buildAudioStreamUrl(item.assetId)
+  const downloadUrl = buildAudioStreamUrl(item.assetId, true)
+  const isDownload = intent === 'audio-download'
+  const primaryLabel = isDownload ? '💾 Завантажити аудіо' : '🎧 Слухати аудіо'
+  const primaryUrl = isDownload ? downloadUrl : playUrl
+
+  await ctx.answerCbQuery(isDownload ? 'Готую download' : 'Відкриваю аудіо').catch(() => undefined)
+  await ctx.reply(
+    [
+      `🎧 ${item.fileName}`,
+      '',
+      isDownload ? 'Завантаж аудіо за кнопкою нижче.' : 'Відкрий аудіо за кнопкою нижче.',
+    ].join('\n'),
+    Markup.inlineKeyboard([
+      [Markup.button.url(primaryLabel, primaryUrl)],
+      [Markup.button.url('💾 Завантажити', downloadUrl)],
+    ]),
+  ).catch(() => undefined)
   return true
 }
 
@@ -580,6 +692,10 @@ async function handleCoachPanelAction(ctx: Context, action: string): Promise<boo
   if (action === 'coach-content:audio') {
     await ctx.answerCbQuery('Audio').catch(() => undefined)
     return handleCoachAudioCommand(ctx, 'list')
+  }
+
+  if (action.startsWith('coach-content:audio-play:') || action.startsWith('coach-content:audio-download:')) {
+    return handleCoachAudioAction(ctx, action)
   }
 
   if (action === 'coach-content:planner') {

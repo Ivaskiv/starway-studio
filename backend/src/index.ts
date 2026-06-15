@@ -11,13 +11,20 @@ import { prisma, withRetry } from './db/client.js'
 import {
   bot,
   coachBot,
+  destroyTelegramClientTransports,
   launchBot,
   normalizeTelegramWebhookUrl,
+  readTestBotToken,
+  resolveTelegramWebhookSecret,
   seedBotInfo,
   testBot,
 } from './lib/telegram.js'
 import { registerDailyTelegramCommands } from './modules/daily-cycle/telegram.js'
-import { readCoachBotToken, readTelegramBotNames } from './modules/telegram-mentor/runtime/botConfig.js'
+import {
+  readCoachBotToken,
+  readTelegramBotNames,
+  resolveTelegramDeliveryMode,
+} from './modules/telegram-mentor/runtime/botConfig.js'
 import { resolveRuntimeBotRegistry } from './platform/index.js'
 import { getPublicCurrentWeekZoomOverview } from './modules/zoom/service.js'
 import { registerStankeyBot } from './products/stankey/index.js'
@@ -42,11 +49,8 @@ if (existsSync(backendEnvPath)) {
 const PORT = Number(process.env.PORT) || 3001
 const isProduction = process.env.NODE_ENV === 'production'
 const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
-const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
-const TELEGRAM_POLLING_ENABLED =
-  process.env.TELEGRAM_POLLING_ENABLED === 'true' ||
-  (!TELEGRAM_WEBHOOK_URL && process.env.TELEGRAM_POLLING_ENABLED !== 'false')
+const telegramDeliveryMode = resolveTelegramDeliveryMode()
 const MINIAPP_URL =
   process.env.MINIAPP_URL?.trim() ||
   'https://starway-frontend.vercel.app/miniapp'
@@ -65,6 +69,18 @@ let isShuttingDown = false
 let prismaKeepAliveInterval: NodeJS.Timeout | null = null
 let databaseReady = false
 let prismaDisconnectPromise: Promise<void> | null = null
+
+async function runShutdownStep(name: string, step: () => void | Promise<void>) {
+  const startedAt = Date.now()
+  console.log(`[shutdown] START ${name}`)
+  try {
+    await step()
+  } finally {
+    console.log(
+      `[shutdown] STOP ${name} duration=${Date.now() - startedAt}ms`
+    )
+  }
+}
 
 function describeDatabaseTarget(databaseUrl: string | undefined) {
   if (!databaseUrl) {
@@ -133,8 +149,7 @@ async function startTelegramBot() {
         username: telegramBotConfig.username,
         botId: botRegistry.main.id,
         productOwnership: botRegistry.main.productOwnership,
-        polling: TELEGRAM_POLLING_ENABLED,
-        webhook: Boolean(TELEGRAM_WEBHOOK_URL),
+        deliveryMode: telegramDeliveryMode,
         production: isProduction,
       })
 
@@ -161,10 +176,39 @@ async function startTelegramBot() {
         console.log('🤖 [CoachBot] skipped: COACH_BOT_TOKEN is not set')
       }
 
-      const mainWebhookUrl = normalizeTelegramWebhookUrl(TELEGRAM_WEBHOOK_URL)
-      const coachWebhookUrl = process.env.COACH_BOT_WEBHOOK_URL?.trim() || ''
-      const testBotToken = String(process.env.TEST_BOT_TOKEN ?? '').trim()
-      const testWebhookUrl = process.env.TEST_BOT_WEBHOOK_URL?.trim() || ''
+      const testBotToken = readTestBotToken()
+      const mainWebhookUrl =
+        telegramDeliveryMode === 'webhook'
+          ? normalizeTelegramWebhookUrl(TELEGRAM_WEBHOOK_URL)
+          : ''
+      const coachWebhookUrl =
+        telegramDeliveryMode === 'webhook'
+          ? normalizeTelegramWebhookUrl(
+              process.env.COACH_BOT_WEBHOOK_URL?.trim() || '',
+            )
+          : ''
+      const testWebhookUrl =
+        telegramDeliveryMode === 'webhook'
+          ? normalizeTelegramWebhookUrl(
+              process.env.TEST_BOT_WEBHOOK_URL?.trim() || '',
+            )
+          : ''
+      const mainWebhookSecret = resolveTelegramWebhookSecret({
+        botId: 'main',
+        token: telegramBotConfig.token,
+      })
+      const coachWebhookSecret = coachToken
+        ? resolveTelegramWebhookSecret({
+            botId: 'coach',
+            token: coachToken,
+          })
+        : ''
+      const testWebhookSecret = testBotToken
+        ? resolveTelegramWebhookSecret({
+            botId: 'test',
+            token: testBotToken,
+          })
+        : ''
 
       await Promise.allSettled([
         (async () => {
@@ -246,9 +290,9 @@ async function startTelegramBot() {
                   error
                 )
               })
-          } catch (error) {
-            console.warn('⚠️ [Telegram] main bot identity/setup failed:', error)
-          }
+            } catch (error) {
+              console.warn('⚠️ [Telegram] main bot identity/setup failed:', error)
+            }
 
           if (mainWebhookUrl) {
             const webhookInfoBefore = await bot.telegram.getWebhookInfo()
@@ -256,7 +300,7 @@ async function startTelegramBot() {
               await bot.telegram.setWebhook(mainWebhookUrl, {
                 drop_pending_updates: false,
                 allowed_updates: ['message', 'callback_query', 'channel_post', 'edited_channel_post', 'chat_member', 'my_chat_member'],
-                ...(TELEGRAM_WEBHOOK_SECRET ? { secret_token: TELEGRAM_WEBHOOK_SECRET } : {}),
+                ...(mainWebhookSecret ? { secret_token: mainWebhookSecret } : {}),
               })
             }
             telegramRunningMode = 'webhook'
@@ -264,28 +308,22 @@ async function startTelegramBot() {
             return
           }
 
-          if (!TELEGRAM_POLLING_ENABLED) {
-            console.log('🤖 [Telegram] Polling skipped (set TELEGRAM_POLLING_ENABLED=true to enable local polling)')
-            return
-          }
-
           await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
-          if (isProduction) {
-            console.warn(
-              '🤖 [Telegram] Production fallback: running polling because TELEGRAM_WEBHOOK_URL is missing'
-            )
-          }
           await launchBot(bot, telegramBotNames.main)
           telegramRunningMode = 'polling'
         })(),
         (async () => {
           if (!coachToken) return
-          await launchBot(coachBot, telegramBotNames.coach, coachWebhookUrl || undefined)
+          await launchBot(coachBot, telegramBotNames.coach, coachWebhookUrl || undefined, {
+            webhookSecret: coachWebhookSecret || undefined,
+          })
           coachTelegramRunningMode = coachWebhookUrl ? 'webhook' : 'polling'
         })(),
         (async () => {
           if (!testBotToken) return
-          await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined)
+          await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined, {
+            webhookSecret: testWebhookSecret || undefined,
+          })
           testTelegramRunningMode = testWebhookUrl ? 'webhook' : 'polling'
         })(),
       ])
@@ -483,47 +521,64 @@ async function shutdown(signal: string) {
   }, 5_000).unref()
 
   try {
-    try {
-      stopScheduler()
-    } catch {
-      // silent
-    }
-
-    await stopDnaQueueWorkers().catch(() => undefined)
-
-    try {
-      if (START_TELEGRAM_BOT) {
-        bot.stop(signal)
-        if (coachTelegramRunningMode) {
-          coachBot.stop(signal)
-        }
-        if (testTelegramRunningMode) {
-          testBot.stop(signal)
-        }
+    await runShutdownStep('stop scheduler', async () => {
+      try {
+        stopScheduler()
+      } catch {
+        // silent
       }
-    } catch {
-      // silent
-    }
+    })
 
-    if (prismaKeepAliveInterval) {
-      clearInterval(prismaKeepAliveInterval)
-      prismaKeepAliveInterval = null
-    }
+    await runShutdownStep('stop dna workers', async () => {
+      await stopDnaQueueWorkers().catch(() => undefined)
+    })
 
-    connections.forEach((s) => s.destroy())
-    connections.clear()
+    await runShutdownStep('stop telegram', async () => {
+      try {
+        if (START_TELEGRAM_BOT) {
+          bot.stop(signal)
+          if (coachTelegramRunningMode) {
+            coachBot.stop(signal)
+          }
+          if (testTelegramRunningMode) {
+            testBot.stop(signal)
+          }
+        }
+      } catch {
+        // silent
+      }
 
-    if (server) {
+      destroyTelegramClientTransports()
+    })
+
+    await runShutdownStep('stop prisma keepalive', async () => {
+      if (prismaKeepAliveInterval) {
+        clearInterval(prismaKeepAliveInterval)
+        prismaKeepAliveInterval = null
+      }
+    })
+
+    await runShutdownStep('stop sockets', async () => {
+      connections.forEach((s) => s.destroy())
+      connections.clear()
+    })
+
+    await runShutdownStep('stop http server', async () => {
+      if (!server) return
       server.closeIdleConnections?.()
       server.closeAllConnections?.()
       await new Promise<void>((resolve, reject) =>
         server!.close((err) => (err ? reject(err) : resolve()))
       )
       console.log('🔌 HTTP server closed')
-    }
+    })
 
-    await safePrismaDisconnect(`shutdown:${signal}`)
-    console.log('🔌 Database disconnected\n✅ Shutdown complete')
+    await runShutdownStep('disconnect prisma', async () => {
+      await safePrismaDisconnect(`shutdown:${signal}`)
+      console.log('🔌 Database disconnected')
+    })
+
+    console.log('✅ Shutdown complete')
 
     clearTimeout(forceKill)
     setImmediate(() => process.exit(0))

@@ -30,9 +30,8 @@ import { getUserAccess } from '../../modules/access/service.js'
 import { isNotificationAllowedForUser } from '../../modules/flow-control/service.js'
 import { resolvePausedMentorContext } from './mentorLifecycle.js'
 import { buildNotificationContent, type AbTestFollowupTimerId } from '../../lib/notifications/templates.js'
-import type { TestDriveContentVersion } from '@/products/ab-system/content/testDrive.content.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
-import type { AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
+import type { AbTestResultKey, TestDriveContentVersion } from '@/products/ab-system/content/abTest.results.js'
 import {
   canSendCrossChannelNotification,
   markCrossChannelNotificationSent,

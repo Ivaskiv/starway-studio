@@ -20,9 +20,6 @@
 
   "types": ["vite/client"],
 
-  "baseUrl": ".",
-  "ignoreDeprecations": "5.0",
-
   "paths": {
     "@/*": ["./src/*"],
     "@/types/*": ["./src/types/*"],

@@ -27,9 +27,9 @@
     "prisma:db:push": "pnpm exec prisma db push --schema ./prisma/schema.prisma",
     "prisma:migrate": "pnpm exec prisma migrate dev --schema ./prisma/schema.prisma",
     "prisma:migrate:deploy": "pnpm exec prisma migrate deploy --schema ./prisma/schema.prisma",
-    "build": "pnpm run prisma:generate && tsc -p tsconfig.json",
+    "build": "pnpm run prisma:generate && sleep 3 && node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",

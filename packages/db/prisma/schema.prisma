@@ -116,6 +116,7 @@ model User {
   goalsSets              GoalsSet[]
   mentorConfig           MentorConfig?
   mentorWeeklyProfiles   MentorWeeklyProfile[]
+  messageLogs            MessageLog[]
   mentorships            Mentorship[]
   mentorshipOffers       MentorshipOffer[]
   microSupportItems      MicroSupportItem[]
@@ -239,6 +240,19 @@ model UserCreationAudit {
 
   @@index([userId, createdAt])
   @@index([source, createdAt])
+}
+
+model MessageLog {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  content   String   @db.Text
+  intent    String?
+  timestamp DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@index([userId])
 }
 
 model RefreshToken {

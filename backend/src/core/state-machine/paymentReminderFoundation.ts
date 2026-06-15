@@ -1,3 +1,5 @@
+import { AB_TEST_FOCUS_JOIN_CTA_TEXT } from '../../products/ab-system/content/abTest.shared.js'
+
 export type PaymentReminderFollowupCopy = {
   title: string
   body: string
@@ -28,26 +30,26 @@ export const PAYMENT_REMINDER_FOLLOWUP_COPY: Record<PaymentReminderTimerId, Paym
   PAYMENT_REMINDER_24H: {
     title: 'ФОКУС',
     body: 'Якщо хочеш продовжити, контекст уже збережено.',
-    cta: 'Приєднатись до ФОКУСУ →',
+    cta: AB_TEST_FOCUS_JOIN_CTA_TEXT,
   },
   PAYMENT_REMINDER_48H: {
     title: 'ФОКУС',
     body: 'Повертаємось до рішення: що саме дає тобі зараз найбільше користі.',
-    cta: 'Приєднатись до ФОКУСУ →',
+    cta: AB_TEST_FOCUS_JOIN_CTA_TEXT,
   },
   PAYMENT_REMINDER_72H: {
     title: 'ФОКУС',
     body: 'Незавершений крок теж впливає на ритм. Можна мʼяко повернутись до нього.',
-    cta: 'Приєднатись до ФОКУСУ →',
+    cta: AB_TEST_FOCUS_JOIN_CTA_TEXT,
   },
   PAYMENT_REMINDER_5D: {
     title: 'ФОКУС',
     body: 'Пауза вже показує ціну відкладання. Повернутись можна одним кроком.',
-    cta: 'Приєднатись до ФОКУСУ →',
+    cta: AB_TEST_FOCUS_JOIN_CTA_TEXT,
   },
   PAYMENT_REMINDER_7D: {
     title: 'ФОКУС',
     body: 'Можна повернутись до збереженого прогресу і свого темпу.',
-    cta: 'Приєднатись до ФОКУСУ →',
+    cta: AB_TEST_FOCUS_JOIN_CTA_TEXT,
   },
 } as const
