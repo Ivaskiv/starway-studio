@@ -36,16 +36,19 @@ import {
 import {
   AB_TEST_AUDIO_URL,
   AB_TEST_BOLD_LINES,
+  AB_TEST_FINAL_CTA_PROMPT,
   AB_TEST_REVIEW_HEADERS,
   AB_TEST_FOCUS_BENEFIT_HEADER,
   AB_TEST_FOCUS_CTA_TEXT,
   AB_TEST_FOCUS_INCLUDED_HEADER,
   AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   AB_TEST_FOCUS_OPENING_LINES,
+  AB_TEST_PRACTICE_PREVIEW_PROMPT,
   AB_TEST_FOCUS_PRACTICE_TITLE,
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
   AB_TEST_SCREENSHOT_URLS,
   AB_TEST_VOICE_NOTE_HEADER,
+  AB_TEST_VOICE_MESSAGE_PROMPT,
   AB_TEST_VOICE_NOTE_LINK_TEXT,
   buildAbTestScreenshotMarker,
   telegramBlock,
@@ -128,6 +131,56 @@ function extractScreenshotKey(normalized: string): AbTestScreenshotKey | null {
 const AB_TEST_PROOF_PREFIXES = [...AB_TEST_REVIEW_HEADERS]
 
 const TELEGRAM_CONTENT_MAX_CHARS = 900
+
+function resolveTypingDelayMs(blocks: TelegramContentBlock[]): number {
+  const textLength = blocks.reduce((sum, block) => {
+    if ('text' in block && typeof block.text === 'string') {
+      return sum + block.text.length
+    }
+    if ('caption' in block && typeof block.caption === 'string') {
+      return sum + block.caption.length
+    }
+    return sum
+  }, 0)
+
+  const hasMedia = blocks.some((block) =>
+    block.type === 'image' || block.type === 'audio' || block.type === 'video',
+  )
+
+  if (hasMedia) {
+    return 2200
+  }
+  if (textLength <= 220) {
+    return 1400
+  }
+  if (textLength <= 700) {
+    return 2400
+  }
+  return 3800
+}
+
+async function sendTypingBeforeBlocks(
+  ctx: Context,
+  chatId: string | number,
+  blocks: TelegramContentBlock[],
+): Promise<void> {
+  await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+  await sleep(resolveTypingDelayMs(blocks))
+}
+
+function splitReviewSequence(
+  blocks: TelegramContentBlock[],
+): {
+  header: TelegramContentBlock[]
+  quote: TelegramContentBlock[]
+  screenshot: TelegramContentBlock[]
+} {
+  return {
+    header: blocks.filter((block) => block.type === 'text' || block.type === 'pricing' || block.type === 'cta').slice(0, 1),
+    quote: blocks.filter((block) => block.type === 'quote'),
+    screenshot: blocks.filter((block) => block.type === 'image'),
+  }
+}
 
 function interpolateFirstNameInBlocks(
   blocks: TelegramContentBlock[],
@@ -356,6 +409,19 @@ export function resolveTelegramContentPhotoUrl(
   return block.assetKey || null
 }
 
+function resolveSingleMediaBlock(
+  blocks: TelegramContentBlock[]
+): Extract<TelegramContentBlock, { type: 'image' | 'video' | 'audio' }> | null {
+  if (blocks.length !== 1) {
+    return null
+  }
+
+  const [block] = blocks
+  return block.type === 'image' || block.type === 'video' || block.type === 'audio'
+    ? block
+    : null
+}
+
 export async function sendTelegramContentChunk(
   ctx: Context,
   chatId: string | number,
@@ -367,10 +433,37 @@ export async function sendTelegramContentChunk(
     separateBlocks?: boolean
   }
 ): Promise<void> {
-  const photoUrl = resolveTelegramContentPhotoUrl(blocks)
-  if (photoUrl) {
-    await ctx.telegram.sendPhoto(chatId, photoUrl, {
-      caption: blocks[0]?.type === 'image' ? blocks[0].caption : undefined,
+  const mediaBlock = resolveSingleMediaBlock(blocks)
+
+  const renderedMessage = renderTelegramContentMessage(title, blocks).trim()
+
+  if (!renderedMessage && !mediaBlock) {
+    console.warn('[AB_TEST_EMPTY_MESSAGE_SKIPPED]', {
+      title,
+      blocksCount: blocks.length,
+    })
+    return
+  }
+
+  if (mediaBlock?.type === 'image') {
+    await ctx.telegram.sendPhoto(chatId, mediaBlock.assetKey, {
+      caption: mediaBlock.caption,
+      reply_markup: options?.inlineKeyboard,
+    })
+    return
+  }
+
+  if (mediaBlock?.type === 'audio') {
+    await ctx.telegram.sendVoice(chatId, mediaBlock.assetKey, {
+      caption: mediaBlock.caption,
+      reply_markup: options?.inlineKeyboard,
+    })
+    return
+  }
+
+  if (mediaBlock?.type === 'video') {
+    await ctx.telegram.sendVideo(chatId, mediaBlock.assetKey, {
+      caption: mediaBlock.caption,
       reply_markup: options?.inlineKeyboard,
     })
     return
@@ -411,14 +504,10 @@ export async function sendTelegramContentChunk(
     return
   }
 
-  await ctx.telegram.sendMessage(
-    chatId,
-    renderTelegramContentMessage(title, blocks),
-    {
-      parse_mode: options?.parseMode ?? 'HTML',
-      reply_markup: options?.inlineKeyboard,
-    }
-  )
+  await ctx.telegram.sendMessage(chatId, renderedMessage, {
+    parse_mode: options?.parseMode ?? 'HTML',
+    reply_markup: options?.inlineKeyboard,
+  })
 }
 
 function renderTelegramContentBlocks(blocks: TelegramContentBlock[]): string {
@@ -755,15 +844,6 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function buildAbTestResultCtaKeyboard(resultKey: AbTestResultKey): InlineKeyboardMarkup {
-  return {
-    inline_keyboard: [
-      [{ text: AB_TEST_SHOW_INSIDE_CTA_TEXT, callback_data: `show_inside_${resultKey.toUpperCase()}` }],
-      [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
-    ],
-  }
-}
-
 async function sendAbTestDeliveryTelemetry(input: {
   userId: string
   resultKey: AbTestResultKey
@@ -777,23 +857,40 @@ async function sendAbTestDeliveryTelemetry(input: {
     `messageKey: ${input.messageKey}`,
     `source: ${input.deliverySource}`,
     'blocks: intro, voice, practice, review, pricing, cta',
-  ].join('\n')).catch(() => false)
+  ].join('\n'), undefined, {
+    messageType: 'ab_test_result_delivered',
+    source: 'sendAbTestDeliveryTelemetry',
+  }).catch(() => false)
 
   const coachChatId = String(
     process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? '',
   ).trim()
   if (!coachChatId) return
 
+  const analyticsText = [
+    '📊 AB mentor analytics',
+    `userId: ${input.userId}`,
+    `result: ${input.resultKey}`,
+    `messageKey: ${input.messageKey}`,
+    `source: ${input.deliverySource}`,
+  ].join('\n')
+
+  console.info(
+    `[OPS_ROUTE_DEBUG] messageType=ab_mentor_analytics chatId=${coachChatId} source=sendAbTestDeliveryTelemetry bot=coachBot`,
+  )
   await coachBot.telegram.sendMessage(
     coachChatId,
-    [
-      '📊 AB mentor analytics',
-      `userId: ${input.userId}`,
-      `result: ${input.resultKey}`,
-      `messageKey: ${input.messageKey}`,
-      `source: ${input.deliverySource}`,
-    ].join('\n'),
-  ).catch(() => undefined)
+    analyticsText,
+  ).then(() => {
+    console.info(
+      `[OPS_ROUTE_OK] messageType=ab_mentor_analytics chatId=${coachChatId} source=sendAbTestDeliveryTelemetry bot=coachBot`,
+    )
+  }).catch((error) => {
+    console.error(
+      `[OPS_ROUTE_ERROR] messageType=ab_mentor_analytics chatId=${coachChatId} source=sendAbTestDeliveryTelemetry bot=coachBot`,
+      error,
+    )
+  })
 }
 
 export async function dispatchAbTestResultSequence(
@@ -820,45 +917,29 @@ export async function dispatchAbTestResultSequence(
   const pricingBlocks = resultDef.blocks?.pricing
     ? interpolateFirstNameInBlocks(resultDef.blocks.pricing, input.firstName)
     : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg3_pricing, input.firstName).split('\n'))
-  const ctaKeyboard = buildAbTestResultCtaKeyboard(input.resultKey)
+  const previewKeyboard: InlineKeyboardMarkup = {
+    inline_keyboard: [
+      [{ text: AB_TEST_SHOW_INSIDE_CTA_TEXT, callback_data: `show_inside_${input.resultKey.toUpperCase()}` }],
+    ],
+  }
 
+  await sendTypingBeforeBlocks(ctx, input.chatId, introBlocks)
   await sendTelegramContentChunk(ctx, input.chatId, resultDef.title, introBlocks, {
-    inlineKeyboard: ctaKeyboard,
     parseMode: 'HTML',
-    separateBlocks: true,
+    separateBlocks: false,
   })
 
-  await sleep(1500)
-  await ctx.telegram.sendChatAction(input.chatId, 'record_voice').catch(() => undefined)
+  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_VOICE_MESSAGE_PROMPT)])
+  await ctx.telegram.sendMessage(input.chatId, AB_TEST_VOICE_MESSAGE_PROMPT)
+
+  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.audio(AB_TEST_AUDIO_URL, interpolateFirstName(resultDef.msg1_audio, input.firstName))])
   await ctx.telegram.sendVoice(input.chatId, AB_TEST_AUDIO_URL, {
     caption: interpolateFirstName(resultDef.msg1_audio, input.firstName),
-    reply_markup: ctaKeyboard,
   })
 
-  await sleep(3000)
-  await ctx.telegram.sendChatAction(input.chatId, 'typing').catch(() => undefined)
-  await sendTelegramContentChunk(ctx, input.chatId, 'Як це виглядає зсередини?', practiceBlocks, {
-    parseMode: 'HTML',
-    separateBlocks: true,
-  })
-
-  await sleep(3000)
-  await ctx.telegram.sendChatAction(input.chatId, 'typing').catch(() => undefined)
-  await sendTelegramContentChunk(ctx, input.chatId, 'Відгук після практики', reviewBlocks, {
-    parseMode: 'HTML',
-    separateBlocks: true,
-  })
-
-  await sleep(3000)
-  await ctx.telegram.sendChatAction(input.chatId, 'typing').catch(() => undefined)
-  await sendTelegramContentChunk(ctx, input.chatId, 'Формат і участь', pricingBlocks, {
-    parseMode: 'HTML',
-    separateBlocks: true,
-  })
-
-  await sleep(1500)
-  await ctx.telegram.sendMessage(input.chatId, 'Обери наступний крок:', {
-    reply_markup: ctaKeyboard,
+  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_PRACTICE_PREVIEW_PROMPT)])
+  await ctx.telegram.sendMessage(input.chatId, AB_TEST_PRACTICE_PREVIEW_PROMPT, {
+    reply_markup: previewKeyboard,
   })
 
   if (input.notifyOps && input.userId) {
@@ -869,6 +950,69 @@ export async function dispatchAbTestResultSequence(
       deliverySource: input.deliverySource,
     }).catch(() => undefined)
   }
+}
+
+export async function dispatchAbTestPracticeSequence(
+  ctx: Context,
+  input: {
+    chatId: string | number
+    resultKey: AbTestResultKey
+    firstName?: string | null
+  },
+): Promise<void> {
+  const resultDef = getAbTestResultDefinition(input.resultKey)
+  const practiceBlocks = resultDef.blocks?.practice
+    ? interpolateFirstNameInBlocks(resultDef.blocks.practice, input.firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg2, input.firstName).split('\n'))
+  const reviewBlocks = resultDef.blocks?.review
+    ? interpolateFirstNameInBlocks(resultDef.blocks.review, input.firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg2_review, input.firstName).split('\n'))
+  const pricingBlocks = resultDef.blocks?.pricing
+    ? interpolateFirstNameInBlocks(resultDef.blocks.pricing, input.firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg3_pricing, input.firstName).split('\n'))
+  const reviewSequence = splitReviewSequence(reviewBlocks)
+
+  await sendTypingBeforeBlocks(ctx, input.chatId, practiceBlocks)
+  await sendTelegramContentChunk(ctx, input.chatId, 'Як це виглядає зсередини?', practiceBlocks, {
+    parseMode: 'HTML',
+    separateBlocks: false,
+  })
+
+  if (reviewSequence.header.length) {
+    await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.header)
+    await sendTelegramContentChunk(ctx, input.chatId, '', reviewSequence.header, {
+      parseMode: 'HTML',
+    })
+  }
+
+  if (reviewSequence.quote.length) {
+    await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.quote)
+    await sendTelegramContentChunk(ctx, input.chatId, '', reviewSequence.quote, {
+      parseMode: 'HTML',
+    })
+  }
+
+  if (reviewSequence.screenshot.length) {
+    await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.screenshot)
+    await sendTelegramContentChunk(ctx, input.chatId, '', reviewSequence.screenshot, {
+      parseMode: 'HTML',
+    })
+  }
+
+  await sendTypingBeforeBlocks(ctx, input.chatId, pricingBlocks)
+  await sendTelegramContentChunk(ctx, input.chatId, 'Формат і участь', pricingBlocks, {
+    parseMode: 'HTML',
+    separateBlocks: false,
+  })
+
+  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_FINAL_CTA_PROMPT)])
+  await ctx.telegram.sendMessage(input.chatId, AB_TEST_FINAL_CTA_PROMPT, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
+      ],
+    },
+  })
 }
 
 function escapeHtml(value: string) {
@@ -1122,7 +1266,13 @@ export async function renderAbTestEmailGate(
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: 'Пропустити →', callback_data: 'skip_email_before_result' }],
+          ...(profileEmail
+            ? [
+                [{ text: 'Так, це мій email', callback_data: 'confirm_profile_email_for_result' }],
+                [{ text: 'Змінити email', callback_data: 'change_email_for_result' }],
+              ]
+            : []),
+          [{ text: 'Пропустити', callback_data: 'skip_email_before_result' }],
         ],
       },
     }
