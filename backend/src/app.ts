@@ -190,6 +190,7 @@ import zoomRoutes from './modules/zoom/routes.js'
 import zoomCoachRoutes from './modules/zoom/zoom.coach.routes.js'
 import audioRoutes from './modules/audio/routes.js'
 import testSyncRoutes from './products/absystem/config/testSync.router.js'
+import intelligenceRoutes from './routes/intelligence.routes.js'
 import salesAssistantRouter from './routers/salesAssistant.router.js'
 
 type TelegramWebhookTarget = {
@@ -501,6 +502,7 @@ export function createApp(): Express {
   )
   app.use('/api/landing', landingRoutes)
   app.use('/api/assistant', assistantRoutes)
+  app.use('/api/intelligence', intelligenceRoutes)
   app.use('/api/ai/sales-assistant', authRequired, salesAssistantRouter)
   app.use('/api/billing', billingRoutes)
   app.use('/api/users', userRoutes)

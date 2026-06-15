@@ -42,20 +42,17 @@ import {
   AB_TEST_FOCUS_TARIFF_HEADER,
   AB_TEST_FOCUS_TITLE,
   AB_TEST_FOCUS_WEEKLY_TEXT,
-  AB_TEST_SHOW_INSIDE_CTA_TEXT,
 } from '../content/abTest.shared.js'
 import {
   BLOCK10_FOCUS,
   BLOCK9_POST_RESULT,
+  getTestDriveInsideResponseSurface,
+  getTestDriveInsideSurface,
   getAbTestResultDefinition,
-  interpolateFirstName,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
 import {
-  getTestDriveInsideSurface,
-  getTestDriveInsideResponseSurface,
-} from '../content/testDrive.content.js'
-import {
+  dispatchAbTestResultSequence,
   packTelegramContentBlocks,
   sendTelegramContentChunk,
   splitTelegramContentBlocks,
@@ -1440,7 +1437,7 @@ export async function handleAbTestCallback(
 
     const userRecord = await prisma.user.findUnique({
       where: { id: userId },
-      select: { testResultType: true, telegramUserName: true },
+      select: { testResultType: true, telegramUserName: true, firstName: true },
     })
     const resultKey = (userRecord?.testResultType ??
       null) as AbTestResultKey | null
@@ -1466,34 +1463,20 @@ export async function handleAbTestCallback(
 
     const progress = await loadAbTestProgress(userId)
     if (progress.status === 'completed' && progress.result_key) {
-      await renderAbTestPostEmailSubmitSequence(ctx, userId, progress)
+      await renderAbTestPostEmailSubmitSequence(ctx, userId, progress, {
+        notifyOps: false,
+      })
       return true
     }
 
-  const resultDef = getAbTestResultDefinition(resultKey)
-  const firstName = userRecord?.telegramUserName ?? ''
-  const resultBlocks =
-    resultDef.blocks?.intro ??
-    splitTelegramContentBlocks(interpolateFirstName(resultDef.msg1, firstName).split('\n'))
-  await sendTelegramContentChunk(
-      ctx,
+    await dispatchAbTestResultSequence(ctx, {
       chatId,
-      resultDef.title,
-      resultBlocks,
-      {
-        inlineKeyboard: {
-          inline_keyboard: [
-            [
-              {
-                text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
-                callback_data: `show_inside_${resultKey.toUpperCase()}`,
-              },
-            ],
-          ],
-        },
-        separateBlocks: true,
-      }
-    )
+      userId,
+      resultKey,
+      firstName: userRecord?.firstName ?? userRecord?.telegramUserName ?? null,
+      deliverySource: 'show_result',
+      notifyOps: false,
+    })
     return true
   }
 

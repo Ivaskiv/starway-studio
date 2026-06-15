@@ -4,6 +4,7 @@ import type { Context } from 'telegraf'
 import type { InlineKeyboardMarkup } from 'telegraf/types'
 import { hasTelegramCtaInteraction } from '@/modules/telegram-mentor/services/ctaInteraction.service.js'
 import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
+import { coachBot, sendOpsTelegramMessage } from '../../../lib/telegram.js'
 // import { buildBehavioralSnapshot } from '../../../core/behavioral/behavioralSnapshot.js'
 import { buildAbTestQuestionFlow } from '../../../core/flow-builder/flowBuilder.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
@@ -29,12 +30,13 @@ import {
 import {
   getAbTestResultDefinition,
   interpolateFirstName,
+  resolveTestDriveVersion,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
 import {
+  AB_TEST_AUDIO_URL,
   AB_TEST_BOLD_LINES,
   AB_TEST_REVIEW_HEADERS,
-  AB_TEST_AUDIO_URL,
   AB_TEST_FOCUS_BENEFIT_HEADER,
   AB_TEST_FOCUS_CTA_TEXT,
   AB_TEST_FOCUS_INCLUDED_HEADER,
@@ -50,7 +52,6 @@ import {
   type TelegramContentBlock,
   type AbTestScreenshotKey,
 } from '../content/abTest.shared.js'
-import { resolveTestDriveVersion } from '../content/testDrive.content.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import {
   buildWebAppButton,
@@ -127,6 +128,35 @@ function extractScreenshotKey(normalized: string): AbTestScreenshotKey | null {
 const AB_TEST_PROOF_PREFIXES = [...AB_TEST_REVIEW_HEADERS]
 
 const TELEGRAM_CONTENT_MAX_CHARS = 900
+
+function interpolateFirstNameInBlocks(
+  blocks: TelegramContentBlock[],
+  firstName?: string | null,
+): TelegramContentBlock[] {
+  return blocks.map((block) => {
+    switch (block.type) {
+      case 'text':
+      case 'quote':
+      case 'pricing':
+      case 'cta':
+        return {
+          ...block,
+          text: interpolateFirstName(block.text, firstName),
+        }
+      case 'image':
+      case 'video':
+      case 'audio':
+        return {
+          ...block,
+          ...(block.caption
+            ? { caption: interpolateFirstName(block.caption, firstName) }
+            : {}),
+        }
+      default:
+        return block
+    }
+  })
+}
 
 export function splitTelegramLines(lines: string[], maxChars = TELEGRAM_CONTENT_MAX_CHARS): string[][] {
   const blocks = splitTelegramContentBlocks(lines)
@@ -606,7 +636,9 @@ export async function renderAbTestCompletedResult(
   }
 
   const resultBody = interpolateFirstName(resultDef.msg1, firstName)
-  const resultBlocks = resultDef.blocks?.intro ?? splitTelegramContentBlocks(resultBody.split('\n'))
+  const resultBlocks = resultDef.blocks?.intro
+    ? interpolateFirstNameInBlocks(resultDef.blocks.intro, firstName)
+    : splitTelegramContentBlocks(resultBody.split('\n'))
   const hasPreviewClick = await hasTelegramCtaInteraction(
     userId,
     `show_inside_${resultKey.toUpperCase()}`
@@ -667,7 +699,9 @@ export async function renderAbTestCompletedResult(
     })
   }
 
-  const practiceBlocks = resultDef.blocks?.practice ?? splitTelegramContentBlocks(resultDef.msg2.split('\n'))
+  const practiceBlocks = resultDef.blocks?.practice
+    ? interpolateFirstNameInBlocks(resultDef.blocks.practice, firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg2, firstName).split('\n'))
   if (practiceBlocks.length) {
     await sleep(3000)
     await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
@@ -682,15 +716,34 @@ export async function renderAbTestCompletedResult(
     })
   }
 
-  const proofBlocks = resultDef.blocks?.proof ?? splitTelegramContentBlocks(resultDef.msg3_pricing.split('\n'))
-  if (proofBlocks.length) {
+  const reviewBlocks = resultDef.blocks?.review
+    ? interpolateFirstNameInBlocks(resultDef.blocks.review, firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg2_review, firstName).split('\n'))
+  if (reviewBlocks.length) {
     await sleep(3000)
     await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-    const ctxProof = {
+    const ctxReview = {
       ...ctx,
       update: { ...ctx.update, update_id: Date.now() + 3 },
     } as Context
-    await sendTelegramContentChunk(ctxProof, chatId, 'Відгук і умови', proofBlocks, {
+    await sendTelegramContentChunk(ctxReview, chatId, 'Відгук після практики', reviewBlocks, {
+      inlineKeyboard,
+      parseMode: 'HTML',
+      separateBlocks: true,
+    })
+  }
+
+  const pricingBlocks = resultDef.blocks?.pricing
+    ? interpolateFirstNameInBlocks(resultDef.blocks.pricing, firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg3_pricing, firstName).split('\n'))
+  if (pricingBlocks.length) {
+    await sleep(3000)
+    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    const ctxPricing = {
+      ...ctx,
+      update: { ...ctx.update, update_id: Date.now() + 4 },
+    } as Context
+    await sendTelegramContentChunk(ctxPricing, chatId, 'Формат і участь', pricingBlocks, {
       inlineKeyboard,
       parseMode: 'HTML',
       separateBlocks: true,
@@ -700,6 +753,122 @@ export async function renderAbTestCompletedResult(
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function buildAbTestResultCtaKeyboard(resultKey: AbTestResultKey): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: AB_TEST_SHOW_INSIDE_CTA_TEXT, callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+      [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
+    ],
+  }
+}
+
+async function sendAbTestDeliveryTelemetry(input: {
+  userId: string
+  resultKey: AbTestResultKey
+  messageKey: string
+  deliverySource: 'post_email' | 'show_result'
+}): Promise<void> {
+  await sendOpsTelegramMessage([
+    'AB test result delivered',
+    `userId: ${input.userId}`,
+    `result: ${input.resultKey}`,
+    `messageKey: ${input.messageKey}`,
+    `source: ${input.deliverySource}`,
+    'blocks: intro, voice, practice, review, pricing, cta',
+  ].join('\n')).catch(() => false)
+
+  const coachChatId = String(
+    process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? '',
+  ).trim()
+  if (!coachChatId) return
+
+  await coachBot.telegram.sendMessage(
+    coachChatId,
+    [
+      '📊 AB mentor analytics',
+      `userId: ${input.userId}`,
+      `result: ${input.resultKey}`,
+      `messageKey: ${input.messageKey}`,
+      `source: ${input.deliverySource}`,
+    ].join('\n'),
+  ).catch(() => undefined)
+}
+
+export async function dispatchAbTestResultSequence(
+  ctx: Context,
+  input: {
+    chatId: string | number
+    userId?: string
+    resultKey: AbTestResultKey
+    firstName?: string | null
+    deliverySource: 'post_email' | 'show_result'
+    notifyOps?: boolean
+  },
+): Promise<void> {
+  const resultDef = getAbTestResultDefinition(input.resultKey)
+  const introBlocks = resultDef.blocks?.intro
+    ? interpolateFirstNameInBlocks(resultDef.blocks.intro, input.firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg1, input.firstName).split('\n'))
+  const practiceBlocks = resultDef.blocks?.practice
+    ? interpolateFirstNameInBlocks(resultDef.blocks.practice, input.firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg2, input.firstName).split('\n'))
+  const reviewBlocks = resultDef.blocks?.review
+    ? interpolateFirstNameInBlocks(resultDef.blocks.review, input.firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg2_review, input.firstName).split('\n'))
+  const pricingBlocks = resultDef.blocks?.pricing
+    ? interpolateFirstNameInBlocks(resultDef.blocks.pricing, input.firstName)
+    : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg3_pricing, input.firstName).split('\n'))
+  const ctaKeyboard = buildAbTestResultCtaKeyboard(input.resultKey)
+
+  await sendTelegramContentChunk(ctx, input.chatId, resultDef.title, introBlocks, {
+    inlineKeyboard: ctaKeyboard,
+    parseMode: 'HTML',
+    separateBlocks: true,
+  })
+
+  await sleep(1500)
+  await ctx.telegram.sendChatAction(input.chatId, 'record_voice').catch(() => undefined)
+  await ctx.telegram.sendVoice(input.chatId, AB_TEST_AUDIO_URL, {
+    caption: interpolateFirstName(resultDef.msg1_audio, input.firstName),
+    reply_markup: ctaKeyboard,
+  })
+
+  await sleep(3000)
+  await ctx.telegram.sendChatAction(input.chatId, 'typing').catch(() => undefined)
+  await sendTelegramContentChunk(ctx, input.chatId, 'Як це виглядає зсередини?', practiceBlocks, {
+    parseMode: 'HTML',
+    separateBlocks: true,
+  })
+
+  await sleep(3000)
+  await ctx.telegram.sendChatAction(input.chatId, 'typing').catch(() => undefined)
+  await sendTelegramContentChunk(ctx, input.chatId, 'Відгук після практики', reviewBlocks, {
+    parseMode: 'HTML',
+    separateBlocks: true,
+  })
+
+  await sleep(3000)
+  await ctx.telegram.sendChatAction(input.chatId, 'typing').catch(() => undefined)
+  await sendTelegramContentChunk(ctx, input.chatId, 'Формат і участь', pricingBlocks, {
+    parseMode: 'HTML',
+    separateBlocks: true,
+  })
+
+  await sleep(1500)
+  await ctx.telegram.sendMessage(input.chatId, 'Обери наступний крок:', {
+    reply_markup: ctaKeyboard,
+  })
+
+  if (input.notifyOps && input.userId) {
+    await sendAbTestDeliveryTelemetry({
+      userId: input.userId,
+      resultKey: input.resultKey,
+      messageKey: resultDef.message_key,
+      deliverySource: input.deliverySource,
+    }).catch(() => undefined)
+  }
 }
 
 function escapeHtml(value: string) {
@@ -901,7 +1070,8 @@ export async function renderAbTestResultThenOffer(
 export async function renderAbTestPostEmailSubmitSequence(
   ctx: Context,
   userId: string,
-  progress: AbTestProgress
+  progress: AbTestProgress,
+  options: { notifyOps?: boolean } = {},
 ) {
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) return
@@ -912,49 +1082,20 @@ export async function renderAbTestPostEmailSubmitSequence(
   })
 
   const resultKey = String(progress.result_key ?? '').toLowerCase() as AbTestResultKey
-  const resultDef = getAbTestResultDefinition(resultKey)
   const firstName = user?.firstName ?? user?.telegramUserName ?? null
-  const resultBlocks =
-    resultDef.blocks?.intro ??
-    splitTelegramContentBlocks(interpolateFirstName(resultDef.msg1, firstName).split('\n'))
-  const audioKeyboard: InlineKeyboardMarkup = {
-    inline_keyboard: [
-      [
-        {
-          text: AB_TEST_VOICE_NOTE_LINK_TEXT,
-          callback_data: `play_audio_${resultKey.toUpperCase()}`,
-        },
-      ],
-    ],
-  }
-
-  await sendTelegramContentChunk(ctx, chatId, resultDef.title, resultBlocks, {
-    inlineKeyboard: audioKeyboard,
-    parseMode: 'HTML',
-    separateBlocks: true,
-  })
-
-  await sleep(3000)
-  await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-  await ctx.telegram.sendMessage(
+  await dispatchAbTestResultSequence(ctx, {
     chatId,
-    '<b>Хочеш подивитись, як це проходить на практиці?</b>',
-    {
-      parse_mode: 'HTML',
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: AB_TEST_SHOW_INSIDE_CTA_TEXT, callback_data: `show_inside_${resultKey.toUpperCase()}` }],
-        [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
-      ],
-    },
-  }
-  )
+    userId,
+    resultKey,
+    firstName,
+    deliverySource: 'post_email',
+    notifyOps: options.notifyOps ?? true,
+  })
 
   console.info('[AB_TEST_SKIP_DIRECT_RESULT_OK]', {
     userId,
     chatId: String(chatId),
     resultKey,
-    messageKey: resultDef.message_key,
   })
 }
 

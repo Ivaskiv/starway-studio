@@ -82,7 +82,7 @@ export default defineConfig([
   },
 ]);
 ```
-# 🌟 Starway AI-Mentor - Full Stack Application
+## 🌟 Starway AI-Mentor - Full Stack Application
 
 AI-powered mentoring system with Ukrainian language support, built with modern tech stack.
 
