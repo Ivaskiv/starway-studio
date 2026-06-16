@@ -48,7 +48,7 @@ import {
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
   AB_TEST_SCREENSHOT_URLS,
   AB_TEST_VOICE_NOTE_HEADER,
-  AB_TEST_VOICE_MESSAGE_PROMPT,
+  AB_TEST_VOICE_CAPTION_PROMPT,
   AB_TEST_VOICE_NOTE_LINK_TEXT,
   buildAbTestScreenshotMarker,
   telegramBlock,
@@ -65,6 +65,7 @@ import {
   getAbTestProfileEmail,
   getAbTestProgressFromUiSettings,
   getUiSettings,
+  loadAbTestProgress,
   loadUserUiSettings,
   saveAbTestProgress,
 } from './abTest.progress.js'
@@ -171,13 +172,11 @@ async function sendTypingBeforeBlocks(
 function splitReviewSequence(
   blocks: TelegramContentBlock[],
 ): {
-  header: TelegramContentBlock[]
-  quote: TelegramContentBlock[]
+  message: TelegramContentBlock[]
   screenshot: TelegramContentBlock[]
 } {
   return {
-    header: blocks.filter((block) => block.type === 'text' || block.type === 'pricing' || block.type === 'cta').slice(0, 1),
-    quote: blocks.filter((block) => block.type === 'quote'),
+    message: blocks.filter((block) => block.type === 'text' || block.type === 'quote'),
     screenshot: blocks.filter((block) => block.type === 'image'),
   }
 }
@@ -209,6 +208,26 @@ function interpolateFirstNameInBlocks(
         return block
     }
   })
+}
+
+function buildAbTestVoiceCaption(input: {
+  body: string
+  firstName?: string | null
+  leadText?: string | null
+}): string {
+  return [
+    input.leadText ? renderTelegramContentBlock(telegramBlock.text(input.leadText)) : null,
+    escapeHtml(AB_TEST_VOICE_CAPTION_PROMPT).replace(/\n/g, '<br>'),
+    renderInlineBoldMarkdown(interpolateFirstName(input.body, input.firstName)),
+  ].filter(Boolean).join('\n\n')
+}
+
+export function buildAbTestVoiceMessageCaption(input: {
+  body: string
+  firstName?: string | null
+  leadText?: string | null
+}): string {
+  return buildAbTestVoiceCaption(input)
 }
 
 export function splitTelegramLines(lines: string[], maxChars = TELEGRAM_CONTENT_MAX_CHARS): string[][] {
@@ -254,7 +273,7 @@ export function splitTelegramContentBlocks(lines: string[]): TelegramContentBloc
       if (next === AB_TEST_VOICE_NOTE_LINK_TEXT) {
         index += 1
       }
-      blocks.push(telegramBlock.audio(AB_TEST_AUDIO_URL, normalized))
+      blocks.push(telegramBlock.audio(AB_TEST_AUDIO_URL, AB_TEST_VOICE_CAPTION_PROMPT))
       continue
     }
 
@@ -448,6 +467,7 @@ export async function sendTelegramContentChunk(
   if (mediaBlock?.type === 'image') {
     await ctx.telegram.sendPhoto(chatId, mediaBlock.assetKey, {
       caption: mediaBlock.caption,
+      parse_mode: options?.parseMode ?? 'HTML',
       reply_markup: options?.inlineKeyboard,
     })
     return
@@ -456,6 +476,7 @@ export async function sendTelegramContentChunk(
   if (mediaBlock?.type === 'audio') {
     await ctx.telegram.sendVoice(chatId, mediaBlock.assetKey, {
       caption: mediaBlock.caption,
+      parse_mode: options?.parseMode ?? 'HTML',
       reply_markup: options?.inlineKeyboard,
     })
     return
@@ -464,6 +485,7 @@ export async function sendTelegramContentChunk(
   if (mediaBlock?.type === 'video') {
     await ctx.telegram.sendVideo(chatId, mediaBlock.assetKey, {
       caption: mediaBlock.caption,
+      parse_mode: options?.parseMode ?? 'HTML',
       reply_markup: options?.inlineKeyboard,
     })
     return
@@ -809,17 +831,32 @@ export async function renderAbTestCompletedResult(
     ? interpolateFirstNameInBlocks(resultDef.blocks.review, firstName)
     : splitTelegramContentBlocks(interpolateFirstName(resultDef.msg2_review, firstName).split('\n'))
   if (reviewBlocks.length) {
+    const reviewSequence = splitReviewSequence(reviewBlocks)
+
     await sleep(3000)
-    await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-    const ctxReview = {
-      ...ctx,
-      update: { ...ctx.update, update_id: Date.now() + 3 },
-    } as Context
-    await sendTelegramContentChunk(ctxReview, chatId, 'Відгук після практики', reviewBlocks, {
-      inlineKeyboard,
-      parseMode: 'HTML',
-      separateBlocks: true,
-    })
+    if (reviewSequence.message.length) {
+      await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+      const ctxReview = {
+        ...ctx,
+        update: { ...ctx.update, update_id: Date.now() + 3 },
+      } as Context
+      await sendTelegramContentChunk(ctxReview, chatId, 'Відгук після практики', reviewSequence.message, {
+        parseMode: 'HTML',
+      })
+    }
+
+    if (reviewSequence.screenshot.length) {
+      await sleep(3000)
+      await ctx.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+      const ctxReviewScreenshot = {
+        ...ctx,
+        update: { ...ctx.update, update_id: Date.now() + 31 },
+      } as Context
+      await sendTelegramContentChunk(ctxReviewScreenshot, chatId, '', reviewSequence.screenshot, {
+        inlineKeyboard,
+        parseMode: 'HTML',
+      })
+    }
   }
 
   const pricingBlocks = resultDef.blocks?.pricing
@@ -922,24 +959,78 @@ export async function dispatchAbTestResultSequence(
       [{ text: AB_TEST_SHOW_INSIDE_CTA_TEXT, callback_data: `show_inside_${input.resultKey.toUpperCase()}` }],
     ],
   }
+  const introBlocksForMessage = [...introBlocks]
+  const lastIntroBlock = introBlocksForMessage[introBlocksForMessage.length - 1]
+  const trailingVoiceLeadBlock =
+    lastIntroBlock?.type === 'text' && lastIntroBlock.text.startsWith('Мене звати')
+      ? introBlocksForMessage.pop() ?? null
+      : null
+  const voiceCaption = buildAbTestVoiceCaption({
+    leadText: trailingVoiceLeadBlock?.type === 'text' ? trailingVoiceLeadBlock.text : null,
+    body: resultDef.msg1_audio,
+    firstName: input.firstName,
+  })
 
-  await sendTypingBeforeBlocks(ctx, input.chatId, introBlocks)
-  await sendTelegramContentChunk(ctx, input.chatId, resultDef.title, introBlocks, {
+  console.info('[RESULT_FLOW]', {
+    step: 'result_sequence_started',
+    userId: input.userId ?? null,
+    chatId: String(input.chatId),
+    resultKey: input.resultKey,
+    deliverySource: input.deliverySource,
+  })
+
+  await sendTypingBeforeBlocks(ctx, input.chatId, introBlocksForMessage)
+  await sendTelegramContentChunk(ctx, input.chatId, resultDef.title, introBlocksForMessage, {
     parseMode: 'HTML',
     separateBlocks: false,
   })
-
-  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_VOICE_MESSAGE_PROMPT)])
-  await ctx.telegram.sendMessage(input.chatId, AB_TEST_VOICE_MESSAGE_PROMPT)
-
-  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.audio(AB_TEST_AUDIO_URL, interpolateFirstName(resultDef.msg1_audio, input.firstName))])
-  await ctx.telegram.sendVoice(input.chatId, AB_TEST_AUDIO_URL, {
-    caption: interpolateFirstName(resultDef.msg1_audio, input.firstName),
+  console.info('[RESULT_SENT]', {
+    step: 'result_intro_sent',
+    userId: input.userId ?? null,
+    chatId: String(input.chatId),
+    resultKey: input.resultKey,
+    deliverySource: input.deliverySource,
   })
 
+  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.audio(AB_TEST_AUDIO_URL, voiceCaption)])
+  const voiceMessage = await ctx.telegram.sendVoice(input.chatId, AB_TEST_AUDIO_URL, {
+    caption: voiceCaption,
+    parse_mode: 'HTML',
+  }).catch((error) => {
+    console.error('[RESULT_FLOW]', {
+      step: 'voice_send_failed_but_continuing',
+      userId: input.userId ?? null,
+      chatId: String(input.chatId),
+      resultKey: input.resultKey,
+      deliverySource: input.deliverySource,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  })
+  if (voiceMessage) {
+    console.info('[VOICE_SENT]', {
+      userId: input.userId ?? null,
+      segment: input.resultKey,
+      messageId:
+        'message_id' in voiceMessage ? voiceMessage.message_id : null,
+      callback: null,
+    })
+  }
+
   await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_PRACTICE_PREVIEW_PROMPT)])
-  await ctx.telegram.sendMessage(input.chatId, AB_TEST_PRACTICE_PREVIEW_PROMPT, {
+  const practicePreviewMessage = await ctx.telegram.sendMessage(input.chatId, AB_TEST_PRACTICE_PREVIEW_PROMPT, {
     reply_markup: previewKeyboard,
+  })
+  console.info('[PRACTICE_BUTTON_RENDERED]', {
+    userId: input.userId ?? null,
+    chatId: String(input.chatId),
+    resultKey: input.resultKey,
+    callbackData: `show_inside_${input.resultKey.toUpperCase()}`,
+    deliverySource: input.deliverySource,
+    messageId:
+      'message_id' in practicePreviewMessage
+        ? practicePreviewMessage.message_id
+        : null,
   })
 
   if (input.notifyOps && input.userId) {
@@ -977,17 +1068,16 @@ export async function dispatchAbTestPracticeSequence(
     parseMode: 'HTML',
     separateBlocks: false,
   })
+  console.info('[FOCUS_DESCRIPTION_SENT]', {
+    userId: null,
+    segment: input.resultKey,
+    messageId: null,
+    callback: `show_inside_${input.resultKey.toUpperCase()}`,
+  })
 
-  if (reviewSequence.header.length) {
-    await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.header)
-    await sendTelegramContentChunk(ctx, input.chatId, '', reviewSequence.header, {
-      parseMode: 'HTML',
-    })
-  }
-
-  if (reviewSequence.quote.length) {
-    await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.quote)
-    await sendTelegramContentChunk(ctx, input.chatId, '', reviewSequence.quote, {
+  if (reviewSequence.message.length) {
+    await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.message)
+    await sendTelegramContentChunk(ctx, input.chatId, '', reviewSequence.message, {
       parseMode: 'HTML',
     })
   }
@@ -1006,12 +1096,26 @@ export async function dispatchAbTestPracticeSequence(
   })
 
   await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_FINAL_CTA_PROMPT)])
-  await ctx.telegram.sendMessage(input.chatId, AB_TEST_FINAL_CTA_PROMPT, {
+  const paymentButtonMessage = await ctx.telegram.sendMessage(input.chatId, AB_TEST_FINAL_CTA_PROMPT, {
     reply_markup: {
       inline_keyboard: [
         [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
       ],
     },
+  })
+  console.info('[FOCUS_OFFER_SENT]', {
+    chatId: String(input.chatId),
+    resultKey: input.resultKey,
+    callbackData: 'open_focus_payment',
+  })
+  console.info('[PAYMENT_BUTTON_RENDERED]', {
+    userId: null,
+    segment: input.resultKey,
+    messageId:
+      'message_id' in paymentButtonMessage
+        ? paymentButtonMessage.message_id
+        : null,
+    callback: 'open_focus_payment',
   })
 }
 
@@ -1215,7 +1319,7 @@ export async function renderAbTestPostEmailSubmitSequence(
   ctx: Context,
   userId: string,
   progress: AbTestProgress,
-  options: { notifyOps?: boolean } = {},
+  options: { notifyOps?: boolean; forceRedelivery?: boolean } = {},
 ) {
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) return
@@ -1227,6 +1331,47 @@ export async function renderAbTestPostEmailSubmitSequence(
 
   const resultKey = String(progress.result_key ?? '').toLowerCase() as AbTestResultKey
   const firstName = user?.firstName ?? user?.telegramUserName ?? null
+  const shouldSkipRedelivery =
+    !options.forceRedelivery &&
+    progress.status === 'completed' &&
+    progress.email_stage !== 'pending' &&
+    Boolean(progress.result_opened_at)
+
+  console.info('[RESULT_FLOW]', {
+    step: shouldSkipRedelivery
+      ? 'post_email_sequence_skipped_duplicate'
+      : 'post_email_sequence_dispatching',
+    userId,
+    chatId: String(chatId),
+    resultKey,
+    emailStage: progress.email_stage,
+    resultOpenedAt: progress.result_opened_at,
+    forceRedelivery: options.forceRedelivery ?? false,
+  })
+
+  if (shouldSkipRedelivery) {
+    return
+  }
+
+  // Атомарно виставляємо result_opened_at: якщо вже виставлено (race condition / duplicate callback) — виходимо.
+  if (!progress.result_opened_at) {
+    const freshProgress = await loadAbTestProgress(userId)
+    if (freshProgress.result_opened_at) {
+      console.info('[RESULT_FLOW]', {
+        step: 'post_email_sequence_race_condition_skipped',
+        userId,
+        chatId: String(chatId),
+        resultKey,
+      })
+      return
+    }
+    const nextProgress = buildAbTestProgressPatch(freshProgress, {
+      result_opened_at: new Date().toISOString(),
+      last_event_at: new Date().toISOString(),
+    })
+    await saveAbTestProgress(userId, nextProgress)
+  }
+
   await dispatchAbTestResultSequence(ctx, {
     chatId,
     userId,
