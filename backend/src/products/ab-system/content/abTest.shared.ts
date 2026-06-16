@@ -1,4 +1,95 @@
 //backend/src/products/ab-system/content/abTest.shared.ts
+
+export const AB_TEST_START_BUTTON_TEXT = 'Почати тест'
+export const AB_TEST_CONTINUE_BUTTON_TEXT = 'Продовжити тест'
+export const AB_TEST_CONTINUE_SHORT_BUTTON_TEXT = 'Продовжити'
+export const AB_TEST_OPEN_FOCUS_BUTTON_TEXT = 'Хочу у ФОКУС'
+export const AB_TEST_PAY_1M_BUTTON_TEXT = 'Оплатити 1 місяць'
+export const AB_TEST_PAY_3M_BUTTON_TEXT = 'Оплатити 3 місяці'
+export const AB_TEST_JOIN_CHANNEL_BUTTON_TEXT = 'Перейти в канал'
+export const AB_TEST_OPEN_ZOOM_BUTTON_TEXT = 'Відкрити Zoom'
+export const AB_TEST_OPEN_PLATFORM_BUTTON_TEXT = 'Відкрити платформу'
+
+export const abTestContent = {
+  meta: {
+    productId: 'absystem',
+    funnelId: 'ab_test',
+  },
+  buttons: {
+    startTest: AB_TEST_START_BUTTON_TEXT,
+    continueTest: AB_TEST_CONTINUE_BUTTON_TEXT,
+    restoreProgress: AB_TEST_CONTINUE_SHORT_BUTTON_TEXT,
+    openFocus: AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
+    payFocus1m: AB_TEST_PAY_1M_BUTTON_TEXT,
+    payFocus3m: AB_TEST_PAY_3M_BUTTON_TEXT,
+    joinChannel: AB_TEST_JOIN_CHANNEL_BUTTON_TEXT,
+    openZoom: AB_TEST_OPEN_ZOOM_BUTTON_TEXT,
+    openPlatform: AB_TEST_OPEN_PLATFORM_BUTTON_TEXT,
+    continueFlow: AB_TEST_CONTINUE_SHORT_BUTTON_TEXT,
+    answerState: 'Стан',
+    answerGoal: 'Ціль',
+    answerChoice: 'Вибір',
+    answerDecision: 'Рішення',
+    answerAction: 'Дія',
+  },
+  entry: {
+    title: '',
+    intro: [
+      'У тесті буде 8 питань.',
+      '',
+      'Обирай той варіант який найбільше схожий на тебе зараз.',
+      '',
+      'Не треба відповідати "правильно". Треба чесно.',
+    ],
+    resume: [],
+  },
+  progress: {
+    label: '',
+    stepPrefix: '',
+    resumeHint: '',
+    completionHint: '',
+  },
+  restore: {
+    title: 'Прогрес збережено',
+    body: [
+      'Ми відновили останній збережений крок тесту.',
+      'Можеш продовжити з того місця, де зупинився/лася.',
+    ],
+  },
+  errors: {
+    stale: [
+      'Дякую, бачу твою дію.',
+      'Повертаю нас до поточного запитання.',
+    ],
+    invalid: ['Не вдалося розпізнати дію.', 'Повертаюсь до поточного кроку.'],
+    retry: ['Спробуй ще раз за кілька секунд.', 'Прогрес уже збережений.'],
+  },
+  menu: {
+    title: '',
+    body: [
+      'Повертаємось до твоєї діагностики з поточного кроку.',
+    ],
+  },
+} as const
+
+// export const abTestPlatformContent = {
+//   bridge: {
+//     title: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_TITLE,
+//     body: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT,
+//     cta: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_CTA,
+//   },
+// } as const
+
+export const abTestMenuContent = {
+  title: '',
+  body: 'Повертаємось до діалогу. Обери, як тобі зручніше продовжити.',
+  cta: {
+    start: abTestContent.buttons.startTest,
+    restore: abTestContent.buttons.restoreProgress,
+    continue: abTestContent.buttons.continueTest,
+  },
+} as const
+
 export const AB_TEST_NEONILA_REVIEW_HEADER = 'Неоніла написала після практики:'
 export const AB_TEST_NATALIIA_REVIEW_HEADER = 'Наталія написала після практики:'
 export const AB_TEST_VALENTYNA_REVIEW_HEADER = 'Валентина написала після практики:'
@@ -23,22 +114,26 @@ export const AB_TEST_VALENTYNA_REVIEW_QUOTE =
   '"Зрозуміла що я тут для того щоб змінити щось. А початок — з чесного зізнання собі."'
 export const AB_TEST_CHOICE_PROOF_QUOTE =
   '"Боялась втратити ілюзорну стабільну роботу, страшно було вийти за межи звичного. А початок — з чесності з собою."'
-export const AB_TEST_YELYZAVETA_REVIEW_QUOTE =
-  '"Вона веде мене до реалізації себе, показує як це — діяти, приймати рішення, не відкладати."'
 export const AB_TEST_DECISION_PROOF_QUOTE =
   '"Вона веде мене до реалізації себе, показує як це — діяти, приймати рішення, не відкладати, не сумніватися у власних кроках."'
-export const AB_TEST_KSENIIA_REVIEW_QUOTE_1 =
-  '"Я не шукаю дешевших шляхів — я шукаю результат. І вкладаю не в навчання, а вкладаю в себе."'
+export const AB_TEST_YELYZAVETA_REVIEW_QUOTE =
+  '"Завдяки її підтримці я стала впевненішою в собі, навчилася помічати свої внутрішні зміни — а не боротися з собою як робила це раніше."'
 export const AB_TEST_KSENIIA_REVIEW_QUOTE_2 =
   '"Запуск 3.0 — оголошую старт 20 березня. Проводжу 2 Zoom зустрічі. Прийняла рішення — 3 дні взагалі не їм солодкого і не купую додому нічого."'
 export const AB_TEST_ACTION_PROOF_QUOTE =
   '"Я не шукаю дешевших шляхів — я шукаю результат. І вкладаю не в навчання, а вкладаю в себе. Бо з кожним вкладом моє життя змінюється."'
+export const AB_TEST_KSENIIA_REVIEW_QUOTE_1 =
+  `${AB_TEST_ACTION_PROOF_QUOTE.replace(' Бо з кожним вкладом моє життя змінюється.', '')}`
 
 export const AB_TEST_DOJIM_7D_REVIEW_QUOTE =
   '"Тааак, головне в голові думки поміняти — і таки визнати що я головна, а не мої думки/стан"'
 
-export const AB_TEST_AUDIO_URL =
-  'https://drive.google.com/file/d/12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17/view?usp=drive_link'
+function buildGoogleDriveDownloadUrl(fileId: string): string {
+  return `https://drive.google.com/uc?export=download&id=${fileId}`
+}
+
+export const AB_TEST_AUDIO_FILE_ID = '12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17'
+export const AB_TEST_AUDIO_URL = buildGoogleDriveDownloadUrl(AB_TEST_AUDIO_FILE_ID)
 
 export type TelegramContentBlock =
   | { type: 'text'; text: string }
@@ -71,7 +166,11 @@ export const telegramBlock = {
   cta: (text: string): TelegramContentBlock => ({ type: 'cta', text }),
 } as const
 
-export const AB_TEST_VOICE_NOTE_HEADER = 'Тест показав де ти застрягла. Слухай голосове — розповім чому це відбувається і як мені це вдалось змінити.👇'
+export const AB_TEST_VOICE_CAPTION_PROMPT =
+  'Слухай голосове — розповім чому це відбувається і як мені це вдалось змінити.\n👇'
+export const AB_TEST_VOICE_NOTE_HEADER = `Тест показав де ти застрягла. ${AB_TEST_VOICE_CAPTION_PROMPT.replace('\n', '')}`
+export const AB_TEST_PRACTICE_PREVIEW_PROMPT = 'Хочеш подивитись як це проходить на практиці?'
+export const AB_TEST_FINAL_CTA_PROMPT = 'Хочеш приєднатись до ФОКУСУ?'
 
 export const AB_TEST_VOICE_NOTE_LINK_TEXT = '🎧 Прослухати'
 
@@ -84,7 +183,7 @@ export const AB_TEST_VOICE_NOTE_LINES = [
 export const AB_TEST_RESULT_AUDIO_INTRO_TEXT =
   '**AB System** — це система з **5 елементів: СТАН, ЦІЛЬ, ВИБІР, РІШЕННЯ, ДІЯ**.\n\nСаме вони визначають чому одні люди отримують результат — а інші зупиняються на одному місці роками.\n\nТест показав де саме зупиняєшся ти. Коли це видно — стає зрозуміло що змінити і як іти далі.\n\n**Я знаю як допомогти тобі це пройти…**\n\nпрослухати голосове повідомлення 👇'
 export const AB_TEST_RESULT_AUDIO_PROMPT_TEXT =
-  '**Слухай голосове — розповім чому це відбувається і як мені це вдалось змінити**.\n\n🎧 **[ГОЛОСОВЕ]**'
+  AB_TEST_VOICE_CAPTION_PROMPT
 
 export const AB_TEST_SHOW_INSIDE_CTA_TEXT = 'Показати практику'
 export const AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT =
@@ -96,14 +195,18 @@ export const AB_TEST_FOCUS_JOIN_CTA_TEXT = 'Приєднатись до ФОКУ
 export const AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT =
   'Приєднатись до\nФОКУСУ →'
 export const AB_TEST_FOCUS_PAY_CTA_TEXT = 'Оплатити ФОКУС →'
-export const AB_TEST_FOCUS_CTA_MARKER =
-  `[КНОПКА: ${AB_TEST_FOCUS_CTA_TEXT}] → WAYFORPAY_LINK`
-export const AB_TEST_FOCUS_PAY_CTA_MARKER =
-  `[КНОПКА: ${AB_TEST_FOCUS_PAY_CTA_TEXT}] → WAYFORPAY_LINK`
-export const AB_TEST_FOCUS_PAYMENT_CTA_1M = 'Оплатити 1 місяць\n— 15 євро'
+export const AB_TEST_FOCUS_CTA_MARKER = ''
+export const AB_TEST_FOCUS_PAY_CTA_MARKER = ''
+export const AB_TEST_FOCUS_PAYMENT_CTA_1M = 'Оплатити 1 місяць — 15 євро'
 export const AB_TEST_FOCUS_PAYMENT_CTA_3M = 'Оплатити 3 місяці — 39 євро'
 export const AB_TEST_FOCUS_PRICE_1M = '1 місяць — 15 євро'
 export const AB_TEST_FOCUS_PRICE_3M = '3 місяці — 39 євро'
+export const abTestPaymentsContent = {
+  title: '💳 Focus payment',
+  body: 'Оплата відкриває стабільний Focus-ритм, щоб рух не розсипався після рішення.',
+  ctaMonthly: AB_TEST_FOCUS_PAYMENT_CTA_1M,
+  ctaQuarterly: AB_TEST_FOCUS_PAYMENT_CTA_3M,
+} as const
 export const AB_TEST_FOCUS_PRICE_SUMMARY =
   `${AB_TEST_FOCUS_PRICE_1M} | ${AB_TEST_FOCUS_PRICE_3M}`
 export const AB_TEST_FOCUS_TITLE = 'ФОКУС | Zoom-практики AB System'
@@ -312,7 +415,7 @@ const AB_TEST_SCREENSHOT_FILE_IDS: Record<AbTestScreenshotKey, string> = {
 export const AB_TEST_SCREENSHOT_URLS: Record<AbTestScreenshotKey, string> = Object.fromEntries(
   Object.entries(AB_TEST_SCREENSHOT_FILE_IDS).map(([key, fileId]) => [
     key,
-    `https://drive.google.com/uc?export=download&id=${fileId}`,
+    buildGoogleDriveDownloadUrl(fileId),
   ])
 ) as Record<AbTestScreenshotKey, string>
 

@@ -5,6 +5,12 @@ import {
   getAbTestResultDefinition,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
+import { normalizeAbTestProgress, buildAbTestProgressPatch } from '../../../core/state-machine/abTestFoundation.js'
+import {
+  AB_TEST_YELYZAVETA_REVIEW_HEADER,
+  AB_TEST_YELYZAVETA_REVIEW_QUOTE,
+  AB_TEST_SCREENSHOT_URLS,
+} from '../content/abTest.shared.js'
 
 const prismaMock = {
   user: {
@@ -202,9 +208,12 @@ describe('focus_funnel_e2e', () => {
     expect(savedProgress.result_opened_at).toBeTruthy()
 
     expect(ctx.telegram.sendVoice).toHaveBeenCalledTimes(1)
+    const voiceCall = ctx.telegram.sendVoice.mock.calls[0]
+    expect(voiceCall?.[2]?.caption).toBeUndefined()
 
     const sendMessageCalls = ctx.telegram.sendMessage.mock.calls
     expect(sendMessageCalls.length).toBeGreaterThanOrEqual(2)
+    expect(sendMessageCalls[1]?.[1]).toContain('прослухати голосове')
 
     const previewCall = sendMessageCalls.at(-1)
     expect(previewCall?.[1]).toBe('Хочеш подивитись як це проходить на практиці?')
@@ -265,7 +274,13 @@ describe('focus_funnel_e2e', () => {
       firstName: 'Віра',
     })
 
+    expect(ctx.telegram.sendPhoto).toHaveBeenCalledTimes(1)
     const sendMessageCalls = ctx.telegram.sendMessage.mock.calls
+    expect(
+      sendMessageCalls.some(
+        (call) => typeof call[1] === 'string' && String(call[1]).includes('<blockquote>')
+      )
+    ).toBe(true)
     const paymentCall = sendMessageCalls.at(-1)
     expect(paymentCall?.[1]).toBe('Хочеш приєднатись до ФОКУСУ?')
     expect(paymentCall?.[2]?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data).toBe(
@@ -273,6 +288,73 @@ describe('focus_funnel_e2e', () => {
     )
 
     expect('open_focus_payment'.match(/^open_focus_payment(?::(1month|3month))?$/)).not.toBeNull()
+  })
+})
+
+describe('ab_test_restart_flow', () => {
+  it('[PASS] restart is allowed during focus lock', () => {
+    const allowedDuringFocusLock = new Set([
+      'ab_test:show_result',
+      'ab_test:restart',
+      'ab_test:focus_info',
+      'open_focus_payment',
+      'focus:already_paid',
+    ])
+
+    expect(allowedDuringFocusLock.has('ab_test:restart')).toBe(true)
+  })
+
+  it('[PASS] restart reset clears result/email state before new run', () => {
+    const reset = buildAbTestProgressPatch(normalizeAbTestProgress(undefined), {
+      answers: [],
+      questions_shown: [],
+      current_question_id: null,
+      result_key: null,
+      result_opened_at: null,
+      email_stage: null,
+      email_captured_at: null,
+      focus_opened_at: null,
+      payment_started_at: null,
+      payment_success_at: null,
+      zoom_registered_at: null,
+      zoom_attended_at: null,
+      platform_invited_at: null,
+      platform_ready_at: null,
+      last_callback_key: 'ab_test:restart',
+      last_message_key: null,
+      last_event_at: '2026-06-16T13:00:00.000Z',
+    })
+
+    expect(reset.answers).toEqual([])
+    expect(reset.result_key).toBeNull()
+    expect(reset.result_opened_at).toBeNull()
+    expect(reset.email_stage).toBeNull()
+    expect(reset.focus_opened_at).toBeNull()
+    expect(reset.payment_started_at).toBeNull()
+  })
+
+  it('[PASS] restart second phase moves test into active q1 state', () => {
+    const fresh = buildAbTestProgressPatch(normalizeAbTestProgress(undefined), {
+      last_callback_key: 'ab_test:restart',
+      last_event_at: '2026-06-16T13:00:00.000Z',
+    })
+
+    const restarted = buildAbTestProgressPatch(fresh, {
+      status: 'active',
+      stage: 'S2_TEST_QUESTIONS',
+      current_question_id: 'q1',
+      started_at: '2026-06-16T13:00:01.000Z',
+      revision: fresh.revision + 1,
+      questions_shown: ['q1'],
+      last_callback_key: 'ab_test:restart',
+      last_message_key: 'TEST_Q1',
+      last_event_at: '2026-06-16T13:00:01.000Z',
+    })
+
+    expect(restarted.status).toBe('active')
+    expect(restarted.stage).toBe('S2_TEST_QUESTIONS')
+    expect(restarted.current_question_id).toBe('q1')
+    expect(restarted.questions_shown).toEqual(['q1'])
   })
 })
 
@@ -289,6 +371,50 @@ describe('content_drift_audit', () => {
       expect(result.blocks?.practice.length ?? 0).toBeGreaterThan(0)
       expect(result.blocks?.review.length ?? 0).toBeGreaterThan(0)
       expect(result.blocks?.pricing.length ?? 0).toBeGreaterThan(0)
+      expect(result.blocks?.intro.some((block) => block.type === 'audio')).toBe(true)
+      expect(result.blocks?.review.some((block) => block.type === 'quote')).toBe(true)
+      expect(result.blocks?.review.some((block) => block.type === 'image')).toBe(true)
+      expect(result.blocks?.pricing.every((block) => block.type === 'text')).toBe(true)
     })
   }
+})
+
+describe('decision_review_regression', () => {
+  it('[PASS] DECISION review uses Єлизавета header', () => {
+    expect(AB_TEST_YELYZAVETA_REVIEW_HEADER).toContain('Єлизавета')
+  })
+
+  it('[PASS] DECISION review quote matches ТЗ', () => {
+    expect(AB_TEST_YELYZAVETA_REVIEW_QUOTE).toContain('Завдяки її підтримці')
+    expect(AB_TEST_YELYZAVETA_REVIEW_QUOTE).toContain('впевненішою в собі')
+    expect(AB_TEST_YELYZAVETA_REVIEW_QUOTE).not.toContain('Вона веде мене до реалізації')
+  })
+
+  it('[PASS] DECISION review screenshot uses decision_review asset', () => {
+    const result = getAbTestResultDefinition('decision')
+    const imageBlock = result.blocks?.review.find((b) => b.type === 'image')
+    expect(imageBlock).toBeDefined()
+    if (imageBlock?.type === 'image') {
+      expect(imageBlock.assetKey).toBe(AB_TEST_SCREENSHOT_URLS.decision_review)
+    }
+  })
+
+  it('[PASS] DECISION review blocks — header+quote combined in ONE quote block (not two messages)', () => {
+    const result = getAbTestResultDefinition('decision')
+    const reviewBlocks = result.blocks?.review ?? []
+
+    // Header і quote — один quote-блок, не два окремих повідомлення
+    const textBlocks = reviewBlocks.filter((b) => b.type === 'text')
+    expect(textBlocks).toHaveLength(0) // жодного окремого text-блоку в review
+
+    const quoteBlock = reviewBlocks.find((b) => b.type === 'quote')
+    expect(quoteBlock).toBeDefined()
+    if (quoteBlock?.type === 'quote') {
+      expect(quoteBlock.text).toContain('Єлизавета')
+      expect(quoteBlock.text).toContain('Завдяки її підтримці')
+    }
+
+    // Ровно: 1 quote + 1 image = 2 блоки
+    expect(reviewBlocks).toHaveLength(2)
+  })
 })
