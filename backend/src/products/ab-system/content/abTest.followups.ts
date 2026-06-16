@@ -14,7 +14,6 @@ import {
   AB_TEST_FOCUS_PRICE_SUMMARY,
   AB_TEST_FOCUS_TARIFF_BLOCKS,
   AB_TEST_SCREENSHOT_URLS,
-  buildAbTestScreenshotMarker,
   telegramBlock,
   type TelegramContentBlock,
 } from './abTest.shared.js'
@@ -78,6 +77,30 @@ const CTA_START_TEST = 'Пройти тест'
 const CTA_SHOW_RESULT = 'Показати результат'
 const PLATFORM_CTA_TEXT = 'Перейти в ABSystem AI'
 
+// Правило: суміжні text-блоки → один text, розділені '\n\n'.
+// pricing / quote / image / audio / cta — завжди окремими блоками.
+function mergeTextBlocks(blocks: TelegramContentBlock[]): TelegramContentBlock[] {
+  const result: TelegramContentBlock[] = []
+  const pending: string[] = []
+
+  function flushText() {
+    if (pending.length === 0) return
+    result.push(telegramBlock.text(pending.join('\n\n')))
+    pending.length = 0
+  }
+
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      pending.push(block.text)
+    } else {
+      flushText()
+      result.push(block)
+    }
+  }
+  flushText()
+  return result
+}
+
 function interpolateTelegramBlock(
   block: TelegramContentBlock,
   firstName?: string | null,
@@ -101,7 +124,10 @@ function interpolateTelegramBlock(
   return block
 }
 
-// SHARED fallback — використовується для 48H, 72H, 5D, 7D де персоналізація не критична
+// ─── DOJIM 24H — сегментовані ────────────────────────────────────────────────
+// Правило: весь текст в одному блоці, тарифи окремо через AB_TEST_FOCUS_TARIFF_BLOCKS
+
+// SHARED fallback (state-сегмент)
 const DOJIM_24H: FollowupCopy = {
   title: FOCUS_FOLLOWUP_TITLE,
   body: [
@@ -118,20 +144,22 @@ const DOJIM_24H: FollowupCopy = {
     AB_TEST_FOCUS_PRICE_3M,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
-  blocks: [
-    telegramBlock.text('{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.'),
-    telegramBlock.text('Більшість так і не доходить навіть до цього.'),
-    telegramBlock.text('Тест показав де ти зараз — взагалі без сил і нічого не хочеться. І в цьому стані ти все одно намагаєшся щось робити. І злишся що не виходить.'),
-    telegramBlock.text('Саме тому ти отримала цей результат. Це не вирок — це точка з якої починається зміна.'),
-    telegramBlock.text('У ФОКУСІ ми працюємо саме з тим що показав твій результат. Наживо. На реальних ситуаціях.'),
+  blocks: mergeTextBlocks([
+    telegramBlock.text(
+      '{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.\n\n' +
+      'Більшість так і не доходить навіть до цього.\n\n' +
+      'Тест показав де ти зараз — взагалі без сил і нічого не хочеться. І в цьому стані ти все одно намагаєшся щось робити. І злишся що не виходить.\n\n' +
+      'Саме тому ти отримала цей результат. Це не вирок — це точка з якої починається зміна.\n\n' +
+      'У ФОКУСІ ми працюємо саме з тим що показав твій результат. Наживо. На реальних ситуаціях.'
+    ),
     ...AB_TEST_FOCUS_TARIFF_BLOCKS,
     AB_TEST_FOCUS_CTA_BLOCK,
-  ],
+  ]),
 }
 
 // Персоналізовані DOJIM_24H по сегментах
 const DOJIM_24H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
-  state: DOJIM_24H, // вже написаний про стан ("без сил")
+  state: DOJIM_24H,
   goal: {
     title: FOCUS_FOLLOWUP_TITLE,
     body: [
@@ -147,14 +175,16 @@ const DOJIM_24H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
       AB_TEST_FOCUS_PRICE_3M,
     ].join('\n'),
     cta: CTA_JOIN_FOCUS,
-    blocks: [
-      telegramBlock.text('{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.'),
-      telegramBlock.text('Тест показав де ти зараз — хочеш змін, але не знаєш як саме хочеш жити. І від цього стоїш на місці ще більше.'),
-      telegramBlock.text('Це не слабкість. Ціль, яку ти не дозволяєш собі хотіти, — це і є точка входу.'),
-      telegramBlock.text('У ФОКУСІ ми знаходимо твій напрямок. Наживо. На реальних ситуаціях.'),
+    blocks: mergeTextBlocks([
+      telegramBlock.text(
+        '{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.\n\n' +
+        'Тест показав де ти зараз — хочеш змін, але не знаєш як саме хочеш жити. І від цього стоїш на місці ще більше.\n\n' +
+        'Це не слабкість. Ціль, яку ти не дозволяєш собі хотіти, — це і є точка входу.\n\n' +
+        'У ФОКУСІ ми знаходимо твій напрямок. Наживо. На реальних ситуаціях.'
+      ),
       ...AB_TEST_FOCUS_TARIFF_BLOCKS,
       AB_TEST_FOCUS_CTA_BLOCK,
-    ],
+    ]),
   },
   choice: {
     title: FOCUS_FOLLOWUP_TITLE,
@@ -171,14 +201,16 @@ const DOJIM_24H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
       AB_TEST_FOCUS_PRICE_3M,
     ].join('\n'),
     cta: CTA_JOIN_FOCUS,
-    blocks: [
-      telegramBlock.text('{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.'),
-      telegramBlock.text('Тест показав де ти зараз — варіанти є, але обрати один страшно. Бо вибір завжди щось залишає позаду.'),
-      telegramBlock.text('Справа не у варіантах. А у страху всередині. Як тільки побачиш що саме лякає — вибір стається сам.'),
-      telegramBlock.text('У ФОКУСІ ми дивимось саме на це. Наживо. На твоїй ситуації.'),
+    blocks: mergeTextBlocks([
+      telegramBlock.text(
+        '{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.\n\n' +
+        'Тест показав де ти зараз — варіанти є, але обрати один страшно. Бо вибір завжди щось залишає позаду.\n\n' +
+        'Справа не у варіантах. А у страху всередині. Як тільки побачиш що саме лякає — вибір стається сам.\n\n' +
+        'У ФОКУСІ ми дивимось саме на це. Наживо. На твоїй ситуації.'
+      ),
       ...AB_TEST_FOCUS_TARIFF_BLOCKS,
       AB_TEST_FOCUS_CTA_BLOCK,
-    ],
+    ]),
   },
   decision: {
     title: FOCUS_FOLLOWUP_TITLE,
@@ -195,14 +227,16 @@ const DOJIM_24H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
       AB_TEST_FOCUS_PRICE_3M,
     ].join('\n'),
     cta: CTA_JOIN_FOCUS,
-    blocks: [
-      telegramBlock.text('{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.'),
-      telegramBlock.text('Тест показав де ти зараз — ти вже все знаєш що треба зробити. Але між "вирішила" і "зробила" — пусто.'),
-      telegramBlock.text('"Я все розумію але не роблю" — це проходить. Не через силу волі, а через те що ти побачиш де саме зупиняєшся.'),
-      telegramBlock.text('У ФОКУСІ ми переходимо від "знаю" до реального кроку. Наживо.'),
+    blocks: mergeTextBlocks([
+      telegramBlock.text(
+        '{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.\n\n' +
+        'Тест показав де ти зараз — ти вже все знаєш що треба зробити. Але між "вирішила" і "зробила" — пусто.\n\n' +
+        '"Я все розумію але не роблю" — це проходить. Не через силу волі, а через те що ти побачиш де саме зупиняєшся.\n\n' +
+        'У ФОКУСІ ми переходимо від "знаю" до реального кроку. Наживо.'
+      ),
       ...AB_TEST_FOCUS_TARIFF_BLOCKS,
       AB_TEST_FOCUS_CTA_BLOCK,
-    ],
+    ]),
   },
   action: {
     title: FOCUS_FOLLOWUP_TITLE,
@@ -217,15 +251,19 @@ const DOJIM_24H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
       AB_TEST_FOCUS_PRICE_3M,
     ].join('\n'),
     cta: CTA_JOIN_FOCUS,
-    blocks: [
-      telegramBlock.text('{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.'),
-      telegramBlock.text('Тест показав де ти зараз — ти активна, робиш багато, але ходиш по колу. І самі дії вже не допомагають.'),
-      telegramBlock.text('Більше дій — не вихід. У ФОКУСІ ми дивимось де саме все розсипається — і замість нового списку ти виходиш з одним точним кроком.'),
+    blocks: mergeTextBlocks([
+      telegramBlock.text(
+        '{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.\n\n' +
+        'Тест показав де ти зараз — ти активна, робиш багато, але ходиш по колу. І самі дії вже не допомагають.\n\n' +
+        'Більше дій — не вихід. У ФОКУСІ ми дивимось де саме все розсипається — і замість нового списку ти виходиш з одним точним кроком.'
+      ),
       ...AB_TEST_FOCUS_TARIFF_BLOCKS,
       AB_TEST_FOCUS_CTA_BLOCK,
-    ],
+    ]),
   },
 }
+
+// ─── DOJIM 48H ───────────────────────────────────────────────────────────────
 
 const DOJIM_48H: FollowupCopy = {
   title: FOCUS_FOLLOWUP_TITLE,
@@ -246,17 +284,21 @@ const DOJIM_48H: FollowupCopy = {
     AB_TEST_FOCUS_PRICE_SUMMARY,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
-  blocks: [
-    telegramBlock.text('{firstName}.'),
-    telegramBlock.text('Скільки часу ти вже тримаєшся з останніх сил?'),
-    telegramBlock.text('Місяць? Пів року? Рік?'),
-    telegramBlock.text('І що змінилось за цей час?'),
-    telegramBlock.text('Якщо нічого не зміниться — де ти будеш через ще один рік? У тому самому місці. Просто ще більш втомлена.'),
-    telegramBlock.text('На практиці ми дивимось не на симптом. А на те що його створює.'),
+  blocks: mergeTextBlocks([
+    telegramBlock.text(
+      '{firstName}.\n\n' +
+      'Скільки часу ти вже тримаєшся з останніх сил?\n\n' +
+      'Місяць? Пів року? Рік?\n\n' +
+      'І що змінилось за цей час?\n\n' +
+      'Якщо нічого не зміниться — де ти будеш через ще один рік? У тому самому місці. Просто ще більш втомлена.\n\n' +
+      'На практиці ми дивимось не на симптом. А на те що його створює.'
+    ),
     ...AB_TEST_FOCUS_TARIFF_BLOCKS,
     AB_TEST_FOCUS_CTA_BLOCK,
-  ],
+  ]),
 }
+
+// ─── DOJIM 72H ───────────────────────────────────────────────────────────────
 
 const DOJIM_72H: FollowupCopy = {
   title: FOCUS_FOLLOWUP_TITLE,
@@ -276,30 +318,25 @@ const DOJIM_72H: FollowupCopy = {
     AB_TEST_FOCUS_PRICE_SUMMARY,
   ].join('\n'),
   cta: CTA_JOIN_FOCUS,
-  blocks: [
-    telegramBlock.text('{firstName}.'),
-    telegramBlock.text('Юля тиждень не могла змусити себе взятися за справи. Зранку — як побита. Ввечері — нічого не хочеться.'),
-    telegramBlock.text('На практиці побачила що сама обирає як пройде її день — просто ніколи не думала про це так.'),
-    telegramBlock.text('Наступного ранку згадала це і поміняла пластинку в голові.'),
-    telegramBlock.text('Через тиждень написала що вперше за довгий час перестала прокидатися з думкою "як пережити цей день."'),
-    telegramBlock.text('Саме такі ситуації ми розбираємо на Zoom-практиках.'),
+  blocks: mergeTextBlocks([
+    telegramBlock.text(
+      '{firstName}.\n\n' +
+      'Юля тиждень не могла змусити себе взятися за справи. Зранку — як побита. Ввечері — нічого не хочеться.\n\n' +
+      'На практиці побачила що сама обирає як пройде її день — просто ніколи не думала про це так.\n\n' +
+      'Наступного ранку згадала це і поміняла пластинку в голові.\n\n' +
+      'Через тиждень написала що вперше за довгий час перестала прокидатися з думкою "як пережити цей день."\n\n' +
+      'Саме такі ситуації ми розбираємо на Zoom-практиках.'
+    ),
     ...AB_TEST_FOCUS_TARIFF_BLOCKS,
     AB_TEST_FOCUS_CTA_BLOCK,
-  ],
+  ]),
 }
 
-function buildFocusFollowup(base: FollowupCopy): FollowupCopy {
-  return {
-    title: base.title,
-    body: base.body,
-    cta: base.cta,
-    blocks: base.blocks,
-  }
-}
+// ─── DOJIM 5D ────────────────────────────────────────────────────────────────
 
 const DOJIM_5D: FollowupCopy = {
   title: FOCUS_FOLLOWUP_TITLE,
-  body: `{firstName}. 
+  body: `{firstName}.
 
 Можливо ти вже проходила щось схоже. Читала. Слухала. Пробувала.
 
@@ -313,17 +350,21 @@ const DOJIM_5D: FollowupCopy = {
 
 ${AB_TEST_FOCUS_PRICE_SUMMARY}`,
   cta: CTA_JOIN_FOCUS,
-  blocks: [
-    telegramBlock.text('{firstName}.'),
-    telegramBlock.text('Можливо ти вже проходила щось схоже. Читала. Слухала. Пробувала.'),
-    telegramBlock.text('Більшість наших учасниць приходили саме з думкою: "Я вже все це проходила."'),
-    telegramBlock.text('Можливо тому ти досі тут і читаєш це повідомлення.'),
-    telegramBlock.text('Різниця одна: там ти отримувала інформацію. Тут ми працюємо з твоєю конкретною ситуацією. Не загальні поради — а розбір саме того що тебе зупиняє.'),
-    telegramBlock.text('Тому багато учасниць отримують відповідь вже на першій практиці.'),
+  blocks: mergeTextBlocks([
+    telegramBlock.text(
+      '{firstName}.\n\n' +
+      'Можливо ти вже проходила щось схоже. Читала. Слухала. Пробувала.\n\n' +
+      'Більшість наших учасниць приходили саме з думкою: "Я вже все це проходила."\n\n' +
+      'Можливо тому ти досі тут і читаєш це повідомлення.\n\n' +
+      'Різниця одна: там ти отримувала інформацію. Тут ми працюємо з твоєю конкретною ситуацією. Не загальні поради — а розбір саме того що тебе зупиняє.\n\n' +
+      'Тому багато учасниць отримують відповідь вже на першій практиці.'
+    ),
     ...AB_TEST_FOCUS_TARIFF_BLOCKS,
     AB_TEST_FOCUS_CTA_BLOCK,
-  ],
+  ]),
 }
+
+// ─── DOJIM 7D ────────────────────────────────────────────────────────────────
 
 const DOJIM_7D: FollowupCopy = {
   title: FOCUS_FOLLOWUP_TITLE,
@@ -337,25 +378,36 @@ const DOJIM_7D: FollowupCopy = {
 
 ${AB_TEST_DOJIM_7D_REVIEW_QUOTE}
 
-${buildAbTestScreenshotMarker('dojim_7d_review')}
-
 Почати можна з одного місяця. Це 15 євро — менше ніж одна консультація.
 
 ФОКУС | Zoom-практики AB System
 ${AB_TEST_FOCUS_PRICE_SUMMARY}`,
   cta: CTA_JOIN_FOCUS,
-  blocks: [
-    telegramBlock.text('{firstName}.'),
-    telegramBlock.text('Через тиждень після тесту більшість людей повертаються до звичного життя і відкладають це ще на кілька місяців.'),
-    telegramBlock.text('Ти вже знаєш що тебе зупиняє. Це не так часто буває — що людина бачить це чесно.'),
-    telegramBlock.text('Нижче відгук після першої практики.'),
+  blocks: mergeTextBlocks([
+    telegramBlock.text(
+      '{firstName}.\n\n' +
+      'Через тиждень після тесту більшість людей повертаються до звичного життя і відкладають це ще на кілька місяців.\n\n' +
+      'Ти вже знаєш що тебе зупиняє. Це не так часто буває — що людина бачить це чесно.\n\n' +
+      'Нижче відгук після першої практики.'
+    ),
     telegramBlock.quote(AB_TEST_DOJIM_7D_REVIEW_QUOTE),
     telegramBlock.image(AB_TEST_SCREENSHOT_URLS.dojim_7d_review),
     telegramBlock.text('Почати можна з одного місяця. Це 15 євро — менше ніж одна консультація.'),
     telegramBlock.pricing('ФОКУС | Zoom-практики AB System'),
     ...AB_TEST_FOCUS_TARIFF_BLOCKS,
     AB_TEST_FOCUS_CTA_BLOCK,
-  ],
+  ]),
+}
+
+// ─── Builder ─────────────────────────────────────────────────────────────────
+
+function buildFocusFollowup(base: FollowupCopy): FollowupCopy {
+  return {
+    title: base.title,
+    body: base.body,
+    cta: base.cta,
+    blocks: base.blocks,
+  }
 }
 
 function buildBranchCopy(segment: AbTestResultKey): BranchFollowupCopy {
@@ -379,6 +431,8 @@ export const AB_TEST_FOLLOWUPS: Record<AbTestResultKey, BranchFollowupCopy> = {
   decision: buildBranchCopy('decision'),
   action: buildBranchCopy('action'),
 }
+
+// ─── Generic / system followups ──────────────────────────────────────────────
 
 const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = {
   DOJIM_0_IMMEDIATE: {
@@ -414,6 +468,8 @@ const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = 
   },
 }
 
+// ─── Public resolver ─────────────────────────────────────────────────────────
+
 export function resolveAbTestFollowupCopy(
   timerId: AbTestFollowupTimerId,
   resultKey?: AbTestResultKey | null,
@@ -438,6 +494,8 @@ export function resolveAbTestFollowupCopy(
     blocks: generic.blocks?.map((block) => interpolateTelegramBlock(block, options.firstName)),
   }
 }
+
+// ─── Lifecycle reminders ─────────────────────────────────────────────────────
 
 export const AB_TEST_LIFECYCLE_REMINDERS: Record<LifecycleReminderKey, FollowupCopy> = {
   R1_TEST_24H: {
