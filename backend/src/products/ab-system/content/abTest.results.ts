@@ -828,11 +828,14 @@ export const BLOCK10_FOCUS = {
   cta_1m: AB_TEST_FOCUS_PAYMENT_CTA_1M,
   cta_3m: AB_TEST_FOCUS_PAYMENT_CTA_3M,
   blocks: [
-    telegramBlock.text(AB_TEST_FOCUS_TITLE_PLAIN),
-    telegramBlock.text(AB_TEST_FOCUS_WEEKLY_TEXT),
-    telegramBlock.text(AB_TEST_FOCUS_REAL_SITUATION_INLINE),
-    telegramBlock.text(AB_TEST_FOCUS_TARIFF_HEADER),
-    telegramBlock.pricing(AB_TEST_FOCUS_PRICE_1M),
-    telegramBlock.pricing(AB_TEST_FOCUS_PRICE_3M),
+    // Весь текстовий опис ФОКУС — одне повідомлення.
+    // **...** → <b>...</b> через renderInlineBoldMarkdown в рендерері.
+    telegramBlock.text(
+      `**${AB_TEST_FOCUS_TITLE_PLAIN}**\n\n` +
+      `**${AB_TEST_FOCUS_WEEKLY_TEXT}**\n\n` +
+      `${AB_TEST_FOCUS_REAL_SITUATION_INLINE}\n\n` +
+      `**${AB_TEST_FOCUS_TARIFF_HEADER}**\n\n` +
+      `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}`
+    ),
   ],
 } as const
