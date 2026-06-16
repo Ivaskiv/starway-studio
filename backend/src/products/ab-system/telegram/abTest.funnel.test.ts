@@ -399,22 +399,34 @@ describe('decision_review_regression', () => {
     }
   })
 
-  it('[PASS] DECISION review blocks — header+quote combined in ONE quote block (not two messages)', () => {
+  it('[PASS] DECISION review — text(header) + quote(quote) = ONE message, then image separately', () => {
     const result = getAbTestResultDefinition('decision')
     const reviewBlocks = result.blocks?.review ?? []
 
-    // Header і quote — один quote-блок, не два окремих повідомлення
-    const textBlocks = reviewBlocks.filter((b) => b.type === 'text')
-    expect(textBlocks).toHaveLength(0) // жодного окремого text-блоку в review
+    // Структура: [text(header), quote(quote_only), image]
+    // text + quote → splitReviewSequence.message → одне sendTelegramContentChunk → одне повідомлення
+    // image → splitReviewSequence.screenshot → окреме повідомлення
+
+    // Рівно: 1 text + 1 quote + 1 image = 3 блоки
+    expect(reviewBlocks).toHaveLength(3)
+
+    const textBlock = reviewBlocks.find((b) => b.type === 'text')
+    expect(textBlock).toBeDefined()
+    if (textBlock?.type === 'text') {
+      expect(textBlock.text).toContain('Єлизавета')
+      // Header НЕ містить цитату
+      expect(textBlock.text).not.toContain('Завдяки її підтримці')
+    }
 
     const quoteBlock = reviewBlocks.find((b) => b.type === 'quote')
     expect(quoteBlock).toBeDefined()
     if (quoteBlock?.type === 'quote') {
-      expect(quoteBlock.text).toContain('Єлизавета')
+      // Quote НЕ містить header
+      expect(quoteBlock.text).not.toContain('Єлизавета')
       expect(quoteBlock.text).toContain('Завдяки її підтримці')
     }
 
-    // Ровно: 1 quote + 1 image = 2 блоки
-    expect(reviewBlocks).toHaveLength(2)
+    const imageBlock = reviewBlocks.find((b) => b.type === 'image')
+    expect(imageBlock).toBeDefined()
   })
 })

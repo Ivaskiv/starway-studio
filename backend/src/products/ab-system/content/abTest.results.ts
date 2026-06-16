@@ -593,7 +593,11 @@ function buildAbTestResultBlocks(
       telegramBlock.text(result.msg2_howItWorks),
     ],
     review: [
-      telegramBlock.quote(`${reviewHeader}\n\n${reviewQuote}`),
+      // text + quote рендеряться одним повідомленням через splitReviewSequence:
+      // [text(header), quote(quote)] → renderTelegramContentBlocks → join('\n\n')
+      // Результат: "Єлизавета написала...\n\n<blockquote>Завдяки...</blockquote>"
+      telegramBlock.text(reviewHeader),
+      telegramBlock.quote(reviewQuote),
       telegramBlock.image(AB_TEST_SCREENSHOT_URLS[screenshotKey]),
     ],
     pricing: [telegramBlock.text(result.msg3_pricing)],
