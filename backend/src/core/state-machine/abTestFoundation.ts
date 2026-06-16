@@ -27,6 +27,7 @@ import {
   type AbTestResultDefinition,
   type AbTestResultKey,
 } from '@/products/ab-system/content/abTest.results.js'
+import { resolveCanonicalTestResult } from './testFoundation.js'
 
 export const AB_TEST_STAGE_IDS = [
   'S1_TEST_STARTED',
@@ -382,22 +383,12 @@ export function buildAbTestQuestionAnalyticsHook(question: AbTestQuestion, answe
 }
 
 export function resolveAbTestResultKey(answers: AbTestAnswer[]): AbTestResultKey {
-  // FIX 2025-05-25 B1: result must be resolved by COUNT of answers, not score sum.
-  const counts = new Map<AbTestResultKey, number>()
-  for (const answer of answers) {
-    const key = answer.answer_id as AbTestResultKey
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-
-  const ranked = AB_TEST_ANSWER_ORDER
-    .map((key) => ({
-      key,
-      count: counts.get(key) ?? 0,
-      priority: AB_TEST_ANSWER_ORDER.indexOf(key),
-    }))
-    .sort((left, right) => right.count - left.count || left.priority - right.priority)
-
-  return ranked[0]?.key ?? 'action'
+  // Делегуємо до єдиного canonical resolver з тай-брекером q6-q8.
+  // Це усуває дублювання логіки між resolveAbTestResultKey і resolveCanonicalTestResult.
+  const result = resolveCanonicalTestResult(
+    answers.map((a) => ({ questionId: a.question_id, answerId: a.answer_id }))
+  )
+  return result.type.toLowerCase() as AbTestResultKey
 }
 
 export function resolveAbTestResultDefinition(resultKey: AbTestResultKey): AbTestResultDefinition {
