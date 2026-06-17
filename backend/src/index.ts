@@ -59,6 +59,27 @@ const telegramBotNames = readTelegramBotNames()
 const botRegistry = resolveRuntimeBotRegistry('backend startup')
 const telegramBotConfig = botRegistry.main
 
+// Runtime check: log active bot identity on every startup
+console.info('[TELEGRAM_RUNTIME_CHECK]', {
+  tokenPrefix: telegramBotConfig.token ? telegramBotConfig.token.split(':')[0] : 'MISSING',
+  username: telegramBotConfig.username || 'UNKNOWN',
+  deliveryMode: telegramDeliveryMode,
+  nodeEnv: process.env.NODE_ENV || 'undefined',
+  webhookUrl: TELEGRAM_WEBHOOK_URL || '(empty)',
+  isProduction,
+})
+
+if (isProduction) {
+  const localToken = process.env.TELEGRAM_LOCAL_BOT_TOKEN?.trim()
+  const mainToken = telegramBotConfig.token
+  if (localToken && localToken === mainToken) {
+    throw new Error(
+      '[TELEGRAM_RUNTIME_CHECK] FATAL: production is running with TELEGRAM_LOCAL_BOT_TOKEN. ' +
+      'Set NODE_ENV=production in Render Dashboard and remove TELEGRAM_LOCAL_BOT_TOKEN.'
+    )
+  }
+}
+
 const app: Express = createApp()
 let server: Server | null = null
 let telegramRunningMode: 'webhook' | 'polling' | null = null
