@@ -1,3 +1,11 @@
+// botConfig.ts — єдине місце вибору Telegram bot токену.
+//
+// ПРАВИЛО:
+//   production (NODE_ENV=production) → TELEGRAM_BOT_TOKEN     (@Test_ABsystem_bot)
+//   local/dev  (NODE_ENV≠production) → TEST_TELEGRAM_BOT_TOKEN (@test_starway_bot)
+//
+// Жодних fallback між ними. Якщо env var відсутній — процес падає.
+
 export type TelegramBotConfig = {
   token: string
   username: string
@@ -12,53 +20,28 @@ export type TelegramBotNames = {
 
 export type TelegramDeliveryMode = 'polling' | 'webhook'
 
+// Expected bot identities per environment — used for runtime guard in index.ts
+export const EXPECTED_BOT_PRODUCTION = 'Test_ABsystem_bot'
+export const EXPECTED_BOT_LOCAL      = 'test_starway_bot'
+
 function normalizeEnv(value: string | undefined): string {
   return String(value ?? '').trim()
 }
 
-function isProductionRuntime(): boolean {
+export function isProductionRuntime(): boolean {
   return process.env.NODE_ENV === 'production'
 }
 
-function readTelegramToken(preferLocal: boolean): string {
-  if (preferLocal) {
-    return (
-      normalizeEnv(process.env.TELEGRAM_LOCAL_BOT_TOKEN) ||
-      normalizeEnv(process.env.TELEGRAM_BOT_TOKEN)
-    )
-  }
-
-  return normalizeEnv(process.env.TELEGRAM_BOT_TOKEN)
-}
-
-function readTelegramUsername(preferLocal: boolean): string {
-  if (preferLocal) {
-    return (
-      normalizeEnv(process.env.TELEGRAM_LOCAL_BOT_USERNAME) ||
-      normalizeEnv(process.env.TELEGRAM_BOT_USERNAME)
-    )
-  }
-
-  return normalizeEnv(process.env.TELEGRAM_BOT_USERNAME)
-}
-
-export function resolveTelegramDeliveryMode(): TelegramDeliveryMode {
-  const explicit = normalizeEnv(process.env.TELEGRAM_DELIVERY_MODE).toLowerCase()
-  if (explicit === 'polling' || explicit === 'webhook') {
-    return explicit
-  }
-
-  if (normalizeEnv(process.env.TELEGRAM_WEBHOOK_URL)) {
-    return 'webhook'
-  }
-
-  return 'polling'
-}
-
 export function readTelegramBotConfig(): TelegramBotConfig {
-  const preferLocal = !isProductionRuntime()
-  const token = readTelegramToken(preferLocal)
-  const username = readTelegramUsername(preferLocal)
+  const isProd = isProductionRuntime()
+
+  const token = isProd
+    ? normalizeEnv(process.env.TELEGRAM_BOT_TOKEN)
+    : normalizeEnv(process.env.TEST_TELEGRAM_BOT_TOKEN)
+
+  const username = isProd
+    ? normalizeEnv(process.env.TELEGRAM_BOT_USERNAME)
+    : normalizeEnv(process.env.TEST_TELEGRAM_BOT_USERNAME)
 
   return {
     token,
@@ -67,25 +50,44 @@ export function readTelegramBotConfig(): TelegramBotConfig {
   }
 }
 
+export function resolveTelegramDeliveryMode(): TelegramDeliveryMode {
+  // production → завжди webhook; local → завжди polling
+  if (isProductionRuntime()) {
+    return 'webhook'
+  }
+
+  // Дозволяємо явне override тільки для локальних тестів webhook
+  const explicit = normalizeEnv(process.env.TELEGRAM_DELIVERY_MODE).toLowerCase()
+  if (explicit === 'webhook') {
+    return 'webhook'
+  }
+
+  return 'polling'
+}
+
 export function readTelegramBotNames(): TelegramBotNames {
   return {
-    main: normalizeEnv(process.env.TELEGRAM_BOT_NAME) || 'Starway Main',
-    coach: normalizeEnv(process.env.COACH_BOT_NAME) || 'Starway DNA Coach',
-    test: normalizeEnv(process.env.TEST_BOT_NAME) || 'Starway Test',
+    main:  normalizeEnv(process.env.TELEGRAM_BOT_NAME)  || 'Starway Main',
+    coach: normalizeEnv(process.env.COACH_BOT_NAME)     || 'Starway DNA Coach',
+    test:  normalizeEnv(process.env.TEST_BOT_NAME)       || 'Starway Test',
   }
 }
 
 export function requireTelegramBotConfig(context = 'startup'): TelegramBotConfig {
   const config = readTelegramBotConfig()
+  const isProd = isProductionRuntime()
+
   if (!config.token) {
+    const envVar = isProd ? 'TELEGRAM_BOT_TOKEN' : 'TEST_TELEGRAM_BOT_TOKEN'
     throw new Error(
-      `[Telegram] Missing required env var during ${context}: TELEGRAM_BOT_TOKEN`,
+      `[Telegram] Missing required env var during ${context}: ${envVar}`
     )
   }
 
   if (!config.username) {
+    const envVar = isProd ? 'TELEGRAM_BOT_USERNAME' : 'TEST_TELEGRAM_BOT_USERNAME'
     console.warn(
-      `[Telegram] TELEGRAM_BOT_USERNAME is missing during ${context}; bot links will be degraded until it is configured`,
+      `[Telegram] ${envVar} is missing during ${context}; bot links will be degraded`
     )
   }
 

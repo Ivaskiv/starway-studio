@@ -24,6 +24,9 @@ import {
   readCoachBotToken,
   readTelegramBotNames,
   resolveTelegramDeliveryMode,
+  isProductionRuntime,
+  EXPECTED_BOT_PRODUCTION,
+  EXPECTED_BOT_LOCAL,
 } from './modules/telegram-mentor/runtime/botConfig.js'
 import { resolveRuntimeBotRegistry } from './platform/index.js'
 import { getPublicCurrentWeekZoomOverview } from './modules/zoom/service.js'
@@ -59,24 +62,25 @@ const telegramBotNames = readTelegramBotNames()
 const botRegistry = resolveRuntimeBotRegistry('backend startup')
 const telegramBotConfig = botRegistry.main
 
-// Runtime check: log active bot identity on every startup
-console.info('[TELEGRAM_RUNTIME_CHECK]', {
-  tokenPrefix: telegramBotConfig.token ? telegramBotConfig.token.split(':')[0] : 'MISSING',
-  username: telegramBotConfig.username || 'UNKNOWN',
-  deliveryMode: telegramDeliveryMode,
-  nodeEnv: process.env.NODE_ENV || 'undefined',
-  webhookUrl: TELEGRAM_WEBHOOK_URL || '(empty)',
-  isProduction,
-})
+// Runtime identity check — logs and hard-guards on every startup
+{
+  const expectedUsername = isProductionRuntime() ? EXPECTED_BOT_PRODUCTION : EXPECTED_BOT_LOCAL
+  const tokenPrefix = telegramBotConfig.token ? telegramBotConfig.token.split(':')[0] : 'MISSING'
 
-if (isProduction) {
-  const localToken = process.env.TELEGRAM_LOCAL_BOT_TOKEN?.trim()
-  const mainToken = telegramBotConfig.token
-  if (localToken && localToken === mainToken) {
-    throw new Error(
-      '[TELEGRAM_RUNTIME_CHECK] FATAL: production is running with TELEGRAM_LOCAL_BOT_TOKEN. ' +
-      'Set NODE_ENV=production in Render Dashboard and remove TELEGRAM_LOCAL_BOT_TOKEN.'
-    )
+  console.info('[TELEGRAM_RUNTIME_CHECK]', {
+    tokenPrefix,
+    username: telegramBotConfig.username || 'UNKNOWN',
+    expectedUsername,
+    deliveryMode: telegramDeliveryMode,
+    nodeEnv: process.env.NODE_ENV || 'undefined',
+    webhookUrl: TELEGRAM_WEBHOOK_URL || '(empty)',
+    isProduction,
+  })
+
+  // Hard guard — verified again after getMe() inside startTelegramBot()
+  if (!telegramBotConfig.token) {
+    const envVar = isProductionRuntime() ? 'TELEGRAM_BOT_TOKEN' : 'TEST_TELEGRAM_BOT_TOKEN'
+    throw new Error(`[TELEGRAM_RUNTIME_CHECK] FATAL: ${envVar} is not set`)
   }
 }
 
@@ -238,6 +242,18 @@ async function startTelegramBot() {
             console.log('🤖 [Telegram] Checking bot identity...')
             const me = await bot.telegram.getMe()
             console.log(`🤖 [Telegram] Bot: @${me.username} (id: ${me.id})`)
+
+            // Hard guard: fail fast if wrong bot is running
+            const expectedUsername = isProductionRuntime() ? EXPECTED_BOT_PRODUCTION : EXPECTED_BOT_LOCAL
+            if (me.username !== expectedUsername) {
+              throw new Error(
+                `[TELEGRAM_BOT_MISMATCH] Expected @${expectedUsername} but got @${me.username}. ` +
+                (isProductionRuntime()
+                  ? 'Ensure TELEGRAM_BOT_TOKEN=8878569107:... in Render Dashboard.'
+                  : 'Ensure TEST_TELEGRAM_BOT_TOKEN=8674915973:... in backend/.env.local')
+              )
+            }
+            console.log(`✅ [Telegram] Bot identity confirmed: @${me.username}`)
             await bot.telegram
               .setChatMenuButton({
                 menuButton: {
