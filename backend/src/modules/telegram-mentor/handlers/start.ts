@@ -325,7 +325,8 @@ export async function handleStart(ctx: StartContext) {
 
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = user.id
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
-    await syncAccessAwareChatEntryPoints(chatId, user.id)
+    // fire-and-forget: не блокуємо deliver() якщо Telegram API зависає
+    void syncAccessAwareChatEntryPoints(chatId, user.id).catch(() => undefined)
 
     if (startPayload.startsWith('ml_')) {
       const requestToken = startPayload.replace(/^ml_/, '').trim()
