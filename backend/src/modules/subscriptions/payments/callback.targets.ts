@@ -51,6 +51,33 @@ export function resolveWebhookPaymentTarget(
     }
   }
 
+  if (payRef.startsWith('zoom_swap_')) {
+    return {
+      scope: 'zoom',
+      userId:
+        typeof data.clientAccountId === 'string' ? data.clientAccountId : null,
+      productId: 'zoom_swap',
+      planId: null,
+      amount,
+      payRef,
+    }
+  }
+
+  if (payRef.startsWith('battle_entry_99_')) {
+    const battleUserIdMatch = payRef.match(/^battle_entry_99_([0-9a-f-]+)_\d+$/i)
+    return {
+      scope: 'zoom',
+      userId:
+        typeof data.clientAccountId === 'string'
+          ? data.clientAccountId
+          : battleUserIdMatch?.[1] ?? null,
+      productId: 'battle_entry',
+      planId: 'single',
+      amount,
+      payRef,
+    }
+  }
+
   const catalogEntry = findByAmount(amount)
   if (catalogEntry) {
     console.log(`[WayForPay] Catalog match`, {

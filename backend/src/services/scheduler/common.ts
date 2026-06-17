@@ -97,14 +97,20 @@ export async function getTelegramChatId(userId: string): Promise<string | null> 
 export async function sendUpgradeOfferTelegramMessage(userId: string, text: string, ctaText: string, url: string): Promise<boolean> {
   const chatId = await getTelegramChatId(userId)
   if (!chatId) return false
-  await sendDedupedTelegramMessage(chatId, text, { reply_markup: { inline_keyboard: [[{ text: ctaText, url }]] } })
+  await sendDedupedTelegramMessage(chatId, text, {
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [[{ text: ctaText, url }]] },
+  })
   return true
 }
 
 export async function sendAiSellerTelegramMessage(userId: string, text: string, buttons?: Array<Array<{ text: string; callback_data: string }>>): Promise<boolean> {
   const chatId = await getTelegramChatId(userId)
   if (!chatId) return false
-  await sendDedupedTelegramMessage(chatId, text, buttons ? { reply_markup: { inline_keyboard: buttons } } : undefined)
+  await sendDedupedTelegramMessage(chatId, text, {
+    parse_mode: 'HTML',
+    ...(buttons ? { reply_markup: { inline_keyboard: buttons } } : {}),
+  })
   return true
 }
 

@@ -23,6 +23,9 @@ export async function notifyCoachAboutFailedPayment(params: {
     'Натисни кнопку щоб відкрити доступ вручну:',
   ].filter(Boolean).join('\n')
 
+  console.info(
+    `[OPS_ROUTE_DEBUG] messageType=payment_attention_required chatId=${coachChatId} source=notifyCoachAboutFailedPayment bot=coachBot`,
+  )
   await coachBot.telegram.sendMessage(coachChatId, text, {
     parse_mode: 'HTML',
     reply_markup: {
@@ -37,5 +40,15 @@ export async function notifyCoachAboutFailedPayment(params: {
         },
       ]],
     },
+  }).then(() => {
+    console.info(
+      `[OPS_ROUTE_OK] messageType=payment_attention_required chatId=${coachChatId} source=notifyCoachAboutFailedPayment bot=coachBot`,
+    )
+  }).catch((error) => {
+    console.error(
+      `[OPS_ROUTE_ERROR] messageType=payment_attention_required chatId=${coachChatId} source=notifyCoachAboutFailedPayment bot=coachBot`,
+      error,
+    )
+    throw error
   })
 }

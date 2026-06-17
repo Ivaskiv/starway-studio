@@ -23,7 +23,7 @@ export const MAIN_MENU = {
     },
     {
       label: 'Дізнатись про ФОКУС',
-      callbackData: 'open_focus_info',
+      callbackData: 'ab_test:focus_info',
       description: 'Показати опис ФОКУСУ',
     },
     {

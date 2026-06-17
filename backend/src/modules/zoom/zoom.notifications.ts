@@ -84,11 +84,11 @@ async function getAttendeeTelegramIds(sessionId: string): Promise<{ userId: stri
   }));
 }
 
-async function getPaidSubscriberTelegramIds(): Promise<{ userId: string; chatId: string | null }[]> {
+async function getGroupPracticeRecipientTelegramIds(): Promise<{ userId: string; chatId: string | null }[]> {
   const users = await prisma.user.findMany({
     where: {
-      productSubscriptions: { some: { status: 'ACTIVE' } },
       deletedAt: null,
+      telegramEnabled: { not: false },
     },
     select: {
       id: true,
@@ -127,7 +127,7 @@ async function runNotificationCheck() {
     if (meta.notify24h && !meta.notifiedAt24h && hoursUntil <= 25 && hoursUntil > 1.5) {
       const attendees =
         sessionType === 'group_practice'
-          ? await getPaidSubscriberTelegramIds()
+          ? await getGroupPracticeRecipientTelegramIds()
           : await getAttendeeTelegramIds(session.id);
       const time = scheduledAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
       const dateStr = scheduledAt.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
@@ -146,7 +146,7 @@ async function runNotificationCheck() {
     if (meta.notify2h && !meta.notifiedAt2h && hoursUntil <= 2.5 && hoursUntil > 0) {
       const attendees =
         sessionType === 'group_practice'
-          ? await getPaidSubscriberTelegramIds()
+          ? await getGroupPracticeRecipientTelegramIds()
           : await getAttendeeTelegramIds(session.id);
       const time = scheduledAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
       for (const { chatId } of attendees) {

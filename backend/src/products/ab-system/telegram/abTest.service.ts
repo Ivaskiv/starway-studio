@@ -3,7 +3,6 @@ import type { Prisma } from '@starway/db/prisma-client'
 import type { Context, Telegraf } from 'telegraf'
 import type { InlineKeyboardMarkup } from 'telegraf/types'
 
-import { buildAbTestQuestionFlow } from '../../../core/flow-builder/flowBuilder.js'
 import {
   buildAbTestProgressPatch,
   cloneAbTestProgress,
@@ -23,16 +22,13 @@ import {
   AB_TEST_START_STEP2,
 } from '@/products/absystem/config/absystem.content.js'
 import { prisma } from '../../../db/client.js'
-import { abTestContent } from '../content/abTest.content.js'
 import {
   buildFaqKeyboard,
   getFaqItem,
   type FaqCallbackData,
 } from '../content/abTest.faq.js'
-import { abTestMenuContent } from '../content/abTest.menu.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
 import {
-  AB_TEST_AUDIO_URL,
   AB_TEST_FOCUS_PAYMENT_CTA_1M,
   AB_TEST_FOCUS_PAYMENT_CTA_3M,
   AB_TEST_FOCUS_PRICE_1M,
@@ -42,17 +38,18 @@ import {
   AB_TEST_FOCUS_TARIFF_HEADER,
   AB_TEST_FOCUS_TITLE,
   AB_TEST_FOCUS_WEEKLY_TEXT,
+  abTestMenuContent,
+  abTestContent,
 } from '../content/abTest.shared.js'
 import {
   BLOCK10_FOCUS,
   BLOCK9_POST_RESULT,
-  getTestDriveInsideResponseSurface,
-  getTestDriveInsideSurface,
   getAbTestResultDefinition,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
 import {
   dispatchAbTestResultSequence,
+  dispatchAbTestPracticeSequence,
   packTelegramContentBlocks,
   sendTelegramContentChunk,
   splitTelegramContentBlocks,
@@ -77,7 +74,9 @@ import {
   type AbTestCallbackAction,
 } from './abTest.callback.js'
 import {
+  ensureAbTestEmailCapturedFromProfile,
   getAbTestProgressFromUiSettings,
+  getAbTestProfileEmail,
   isAbTestFocusFunnelLocked,
   loadAbTestProgress,
   loadUserUiSettings,
@@ -112,6 +111,9 @@ import { alertCoachAboutPaymentIssue } from '@/modules/subscriptions/payments/co
 import { coachBot } from '../../../lib/telegram.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import { canSendAdvertising } from '@/modules/telegram-mentor/core/advertisingGuard.js'
+import { handleStatus } from '../../../modules/telegram-mentor/handlers/status.js'
+import { handleAIMentor } from '../../../modules/telegram-mentor/handlers/aiMentor.js'
+import { sendStateMenu } from '../../../modules/telegram-mentor/handlers/start.menu.js'
 
 export {
   observeAbTestCanonicalAction,
@@ -232,6 +234,93 @@ function formatSubscriptionDate(
   const date = value instanceof Date ? value : new Date(value)
   if (!Number.isFinite(date.getTime())) return '—'
   return date.toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' })
+}
+
+async function deactivateCallbackMarkup(
+  ctx: Context
+): Promise<void> {
+  const callbackMessage =
+    ctx.callbackQuery && 'message' in ctx.callbackQuery
+      ? ctx.callbackQuery.message
+      : null
+  const pressedCallbackData =
+    ctx.callbackQuery && 'data' in ctx.callbackQuery
+      ? ctx.callbackQuery.data
+      : null
+
+  const currentKeyboard =
+    callbackMessage &&
+    'reply_markup' in callbackMessage &&
+    callbackMessage.reply_markup &&
+    typeof callbackMessage.reply_markup === 'object' &&
+    'inline_keyboard' in callbackMessage.reply_markup &&
+    Array.isArray(callbackMessage.reply_markup.inline_keyboard)
+      ? callbackMessage.reply_markup.inline_keyboard
+      : null
+
+  const inline_keyboard = currentKeyboard?.length
+    ? currentKeyboard.map((row) =>
+        row.map((button) => {
+          if (!('callback_data' in button) || button.callback_data !== pressedCallbackData) {
+            return button
+          }
+
+          return {
+            ...button,
+            text: button.text.startsWith('✅ ') ? button.text : `✅ ${button.text}`,
+            callback_data: 'disabled',
+          }
+        })
+      )
+    : [
+        [
+          {
+            text: '✅ Переглянуто',
+            callback_data: 'disabled',
+          },
+        ],
+      ]
+
+  await ctx
+    .editMessageReplyMarkup({ inline_keyboard })
+    .catch(() => undefined)
+}
+
+async function resolveFocusShortcutCallback(
+  ctx: Context,
+  action: string,
+  userId: string
+): Promise<boolean> {
+  if (action === 'open_focus_info') {
+    return handleAbTestCallback(ctx, AB_TEST_ACTIONS.FOCUS_INFO)
+  }
+
+  if (action === 'focus:calendar' || action === 'focus:next_zoom') {
+    await deactivateCallbackMarkup(ctx)
+    await ctx.answerCbQuery().catch(() => null)
+    await handleStatus(ctx)
+    return true
+  }
+
+  if (action === 'focus:menu') {
+    await deactivateCallbackMarkup(ctx)
+    await ctx.answerCbQuery().catch(() => null)
+    await sendStateMenu(ctx, userId)
+    return true
+  }
+
+  if (
+    action === 'focus:ai' ||
+    action === 'ai_mentor:menu' ||
+    action === 'ai_mentor:plan'
+  ) {
+    await deactivateCallbackMarkup(ctx)
+    await ctx.answerCbQuery().catch(() => null)
+    await handleAIMentor(ctx)
+    return true
+  }
+
+  return false
 }
 
 function escapeHtml(value: string): string {
@@ -618,13 +707,7 @@ export async function startAbTestFlow(
   })
 
   const questionIdToOpen = next.current_question_id ?? nextQuestionFromState
-  const firstQuestion = getAbTestQuestion(questionIdToOpen)
-
-  const flow = buildAbTestQuestionFlow(next, questionIdToOpen, next.revision)
-
-  flow.body = [firstQuestion.prompt]
-
-  await deliverTelegramFlow(ctx, flow, 'reply')
+  await sendQuestionDirect(ctx, questionIdToOpen, next.revision)
   logMessageSent('question_sent', {
     userId,
     questionId: questionIdToOpen,
@@ -740,6 +823,12 @@ export async function handleAbTestEmailCaptureText(
           : undefined,
       }
     )
+    console.info('[TEST_COMPLETED]', {
+      userId: persistedUserId,
+      segment: progress.result_key,
+      messageId: null,
+      callback: 'email_capture',
+    })
 
     if (!mailSent) {
       console.warn('[AB_TEST_EMAIL_CAPTURE] magic_login_email_not_sent', {
@@ -763,7 +852,15 @@ export async function handleAbTestEmailCaptureText(
       await saveAbTestProgress(persistedUserId, scheduled)
     }
 
-    await renderAbTestPostEmailSubmitSequence(ctx, persistedUserId, next)
+await renderAbTestPostEmailSubmitSequence(
+  ctx,
+  userId,
+  progress,
+  {
+    notifyOps: false,
+    forceRedelivery: true,
+  }
+)
     return true
   } catch (error) {
     console.error('[AB_TEST_EMAIL_CAPTURE] persistence_failed', {
@@ -843,6 +940,7 @@ export async function handleAbTestCallback(
     /^open_focus_payment(?::(1month|3month))?$/
   )
   if (focusPaymentAction) {
+    await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
     const payingUserId =
       (ctx.state as { userId?: string | null }).userId ?? null
@@ -1268,9 +1366,13 @@ export async function handleAbTestCallback(
       .trim()
       .toLowerCase() as AbTestResultKey
     const resultDef = getAbTestResultDefinition(resultKey)
-
-    await ctx.telegram.sendVoice(chatId, AB_TEST_AUDIO_URL, {
-      caption: resultDef.msg1_audio,
+    const audioBlocks = (resultDef.blocks?.intro ?? []).slice(1)
+    if (!audioBlocks.length) {
+      return true
+    }
+    await sendTelegramContentChunk(ctx, chatId, '', audioBlocks, {
+      parseMode: 'HTML',
+      separateBlocks: true,
     })
     return true
   }
@@ -1317,16 +1419,23 @@ export async function handleAbTestCallback(
     return true
   }
 
+  if (await resolveFocusShortcutCallback(ctx, action, userId)) {
+    return true
+  }
+
   const focusProgress = await loadAbTestProgress(userId)
   const focusFlowLocked = isAbTestFocusFunnelLocked(focusProgress)
   const allowedDuringFocusLock = new Set<string>([
     AB_TEST_ACTIONS.SHOW_RESULT,
+    AB_TEST_ACTIONS.RESTART,
     AB_TEST_ACTIONS.FOCUS_INFO,
     AB_TEST_ACTIONS.FOCUS_PAY,
     AB_TEST_ACTIONS.FOCUS_ALREADY_PAID,
   ])
   const isAllowedFocusLockAction =
     allowedDuringFocusLock.has(action) ||
+    action === 'confirm_profile_email_for_result' ||
+    action === 'change_email_for_result' ||
     action === 'skip_email_before_result' ||
     action.startsWith('show_inside_') ||
     action.startsWith('open_focus_payment:')
@@ -1381,6 +1490,13 @@ export async function handleAbTestCallback(
   if (parsed.kind === 'restart') {
     await ctx.answerCbQuery().catch(() => null)
     const chatId = ctx.chat?.id ?? ctx.from?.id
+    const currentProgress = await loadAbTestProgress(userId)
+    console.info('[AB_TEST_RESTART_BEGIN]', {
+      userId,
+      oldAnswers: currentProgress.answers.length,
+      oldEmailStage: currentProgress.email_stage,
+      oldResultOpenedAt: currentProgress.result_opened_at,
+    })
     await prisma.user
       .update({
         where: { id: userId },
@@ -1406,11 +1522,44 @@ export async function handleAbTestCallback(
         .catch(() => undefined)
       await clearPendingTelegramIdentity(String(chatId)).catch(() => undefined)
     }
-    await saveAbTestProgress(userId, normalizeAbTestProgress(undefined))
-    if (chatId) {
-      await startAbTestFlow(ctx, userId, 'ab_test:restart')
-    }
-    return true
+    const freshProgress = buildAbTestProgressPatch(
+      normalizeAbTestProgress(undefined),
+      {
+        answers: [],
+        questions_shown: [],
+        current_question_id: null,
+        result_key: null,
+        result_opened_at: null,
+        email_stage: null,
+        email_captured_at: null,
+        focus_opened_at: null,
+        payment_started_at: null,
+        payment_success_at: null,
+        zoom_registered_at: null,
+        zoom_attended_at: null,
+        platform_invited_at: null,
+        platform_ready_at: null,
+        last_callback_key: action,
+        last_message_key: null,
+        last_event_at: new Date().toISOString(),
+      }
+    )
+await saveAbTestProgress(userId, freshProgress)
+
+console.info('[AB_TEST_RESTART_RESET_DONE]', {
+  userId,
+  answersAfterReset: freshProgress.answers.length,
+  emailStageAfterReset: freshProgress.email_stage,
+  resultOpenedAtAfterReset: freshProgress.result_opened_at,
+})
+
+await startAbTestFlow(
+  ctx,
+  userId,
+  'ab_test:restart'
+)
+
+return true
   }
 
   if (parsed.kind === 'resume') {
@@ -1431,6 +1580,7 @@ export async function handleAbTestCallback(
   }
 
   if (parsed.kind === 'show_result') {
+    await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) return true
@@ -1465,6 +1615,7 @@ export async function handleAbTestCallback(
     if (progress.status === 'completed' && progress.result_key) {
       await renderAbTestPostEmailSubmitSequence(ctx, userId, progress, {
         notifyOps: false,
+        forceRedelivery: true,
       })
       return true
     }
@@ -1516,7 +1667,14 @@ export async function handleAbTestCallback(
         resultKey: savedProgress.result_key,
       })
 
-      await renderAbTestPostEmailSubmitSequence(ctx, userId, savedProgress)
+await renderAbTestPostEmailSubmitSequence(
+  ctx,
+  userId,
+  savedProgress,
+  {
+    forceRedelivery: true,
+  }
+)
       return true
     }
 
@@ -1528,54 +1686,104 @@ export async function handleAbTestCallback(
     return true
   }
 
+  if (parsed.kind === 'confirm_profile_email_for_result') {
+    await ctx.answerCbQuery().catch(() => null)
+    const progress = await loadAbTestProgress(userId)
+    const profileEmail = await getAbTestProfileEmail(userId)
+    if (!profileEmail || progress.status !== 'completed' || !progress.result_key) {
+      await renderCurrentView(ctx, userId, progress)
+      return true
+    }
+
+    const savedProgress = await ensureAbTestEmailCapturedFromProfile(userId, progress)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (chatId) {
+      await clearPendingTelegramIdentity(String(chatId))
+    }
+    await renderAbTestPostEmailSubmitSequence(ctx, userId, savedProgress, {
+      notifyOps: false,
+    })
+    return true
+  }
+
+if (parsed.kind === 'change_email_for_result') {
+  await ctx.answerCbQuery().catch(() => null)
+
+  const progress = await loadAbTestProgress(userId)
+
+  const next = buildAbTestProgressPatch(progress, {
+    email_stage: 'pending',
+    last_event_at: new Date().toISOString(),
+  })
+
+  await saveAbTestProgress(userId, next)
+
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+
+  if (chatId) {
+    await ctx.telegram.sendMessage(
+      chatId,
+      'Надішли новий email одним повідомленням. Поточний email залишиться без змін, доки ти не надішлеш новий.'
+    )
+  }
+
+  return true
+}
+
   if (parsed.kind === 'show_inside') {
+    await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) {
       return true
     }
-    const surface = getTestDriveInsideResponseSurface({
-      resultKey: parsed.resultKey,
-    })
-    if (!surface) {
-      const progress = await loadAbTestProgress(userId)
+    const progress = await loadAbTestProgress(userId)
+    if (progress.result_key !== parsed.resultKey) {
       await renderCurrentView(ctx, userId, progress)
+      await planAck(
+        ctx,
+        'ctx.answerCbQuery',
+        'ab_test_show_inside_stale_result',
+        'Показую актуальний крок'
+      ).catch(() => undefined)
       return true
     }
-    await sendStructuredTelegramMessage(
-      ctx,
+    const userRecord = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, telegramUserName: true },
+    })
+    console.info('[PRACTICE_BUTTON_CLICKED]', {
+      userId,
+      chatId: String(chatId),
+      resultKey: parsed.resultKey,
+      callbackData: `show_inside_${parsed.resultKey.toUpperCase()}`,
+    })
+    await dispatchAbTestPracticeSequence(ctx, {
       chatId,
-      surface.title,
-      surface.bodyLines,
-      {
-        inline_keyboard: surface.buttons,
-      }
-    )
+      resultKey: parsed.resultKey,
+      firstName: userRecord?.firstName ?? userRecord?.telegramUserName ?? null,
+    })
     return true
   }
 
   if (parsed.kind === 'test_drive') {
+    await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
     const progress = await loadAbTestProgress(userId)
-    const insideSurface = getTestDriveInsideSurface({
-      resultKey: progress.result_key,
-      startedAt: progress.started_at,
-    })
     const chatId = ctx.chat?.id ?? ctx.from?.id
-    if (!chatId || !insideSurface) {
+    if (!chatId || !progress.result_key) {
       await renderCurrentView(ctx, userId, progress)
       return true
     }
-
-    await sendStructuredTelegramMessage(
-      ctx,
+    const userRecord = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, telegramUserName: true },
+    })
+    await dispatchAbTestPracticeSequence(ctx, {
       chatId,
-      insideSurface.title,
-      insideSurface.bodyLines,
-      {
-        inline_keyboard: insideSurface.buttons,
-      }
-    )
+      resultKey: progress.result_key,
+      firstName: userRecord?.firstName ?? userRecord?.telegramUserName ?? null,
+    })
     return true
   }
 
@@ -1855,8 +2063,11 @@ export async function handleAbTestCallback(
   ) {
     const updatedKeyboard = [
       question.answers.map((answer) => ({
-        text: answer.id === selected.id ? `✅ ${formatMobileAnswerButtonText(answer.text)}` : formatMobileAnswerButtonText(answer.text),
-        callback_data: `ab_test_answer:${parsed.questionId}:${answer.id}:${next.revision}`,
+        text:
+          answer.id === selected.id
+            ? `✅ ${formatMobileAnswerButtonText(answer.text)}`
+            : `${formatMobileAnswerButtonText(answer.text)}`,
+        callback_data: 'answered',
       })),
     ]
     await ctx.telegram
@@ -1893,6 +2104,12 @@ export async function handleAbTestCallback(
     nextQuestionId,
   })
   if (complete) {
+    console.info('[SEGMENT_DETECTED]', {
+      userId,
+      segment: resultKey,
+      messageId: null,
+      callback: action,
+    })
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (!chatId) {
       console.info(
@@ -1908,6 +2125,12 @@ export async function handleAbTestCallback(
         startedAt: next.started_at ? new Date(next.started_at) : undefined,
       })
       .catch(() => undefined)
+    console.info('[TEST_COMPLETED]', {
+      userId,
+      segment: resultKey,
+      messageId: null,
+      callback: action,
+    })
 
     const pendingEmailProgress = buildAbTestProgressPatch(next, {
       email_stage: 'pending',

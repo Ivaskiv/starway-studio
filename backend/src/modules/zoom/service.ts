@@ -6,6 +6,7 @@ import { bot, sendDedupedTelegramMessage, sendOpsTelegramMessage } from '../../l
 import type { Telegraf } from 'telegraf';
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js';
 import { abTestZoomContent } from '@/products/ab-system/content/abTest.zoom.js';
+import { FOCUS_PRODUCT_CODE } from '@/products/focus/config/focus.constants.js';
 import { buildShortWayForPayCheckoutUrl } from '../subscriptions/payments/wayforpay.checkout.js';
 import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js';
 import { parseZoomPostReport } from './zoomPostReport.types.js';
@@ -69,6 +70,26 @@ function extractZoomLinkFromRequests(requests: unknown): string {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return ''
   const meta = requests as Record<string, unknown>
   return typeof meta.zoomLink === 'string' ? meta.zoomLink : ''
+}
+
+export async function isActiveFocusSubscriber(userId: string): Promise<boolean> {
+  const now = new Date()
+  const subscription = await prisma.productSubscription.findFirst({
+    where: {
+      userId,
+      status: 'ACTIVE',
+      product: {
+        code: FOCUS_PRODUCT_CODE,
+      },
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: now } },
+      ],
+    },
+    select: { id: true },
+  })
+
+  return Boolean(subscription)
 }
 
 export async function getCurrentWeekZoomOverview(args: {
@@ -354,9 +375,40 @@ export async function getCalendarSessions(args: {
     return rows.map(r => ({ ...r.session, isMyBooking: true }));
   }
 
+  const userIsSubscriber = await isActiveFocusSubscriber(userId)
+
+  if (!userIsSubscriber) {
+    const sessions = await prisma.zoomSession.findMany({
+      where: {
+        expertId,
+        scheduledAt: { gte: from, lte: to },
+        status: { not: ZoomStatus.CANCELLED },
+        OR: [
+          { requests: { path: ['type'], equals: 'group_practice' } },
+          { type: ZoomSessionType.GROUP },
+        ],
+      },
+      include: { _count: { select: { attendees: true } } },
+      orderBy: { scheduledAt: 'asc' },
+    })
+
+    const bookedIds = new Set(
+      (await prisma.zoomSessionAttendee.findMany({
+        where: { userId, sessionId: { in: sessions.map((session) => session.id) } },
+        select: { sessionId: true },
+      })).map((attendee) => attendee.sessionId),
+    )
+
+    return sessions.map((session) => ({ ...session, isMyBooking: bookedIds.has(session.id) }))
+  }
+
   // Show all expert sessions, flagging which ones the user booked
   const sessions = await prisma.zoomSession.findMany({
-    where: { expertId, scheduledAt: { gte: from, lte: to } },
+    where: {
+      expertId,
+      scheduledAt: { gte: from, lte: to },
+      status: { not: ZoomStatus.CANCELLED },
+    },
     include: { _count: { select: { attendees: true } } },
     orderBy: { scheduledAt: 'asc' },
   });
@@ -704,6 +756,9 @@ export async function getAvailablePrivateSlots(expertId: string, from: Date, to:
 }
 
 export async function bookPrivateSlot(userId: string, sessionId: string) {
+  const isSubscriber = await isActiveFocusSubscriber(userId)
+  if (!isSubscriber) throw new Error('focus_subscription_required')
+
   const session = await prisma.zoomSession.findUnique({
     where: { id: sessionId },
     include: { _count: { select: { attendees: true } } },
@@ -760,6 +815,9 @@ export async function createSwapRequest(
   targetUserIds?: string[],
 ) {
   try {
+    const isSubscriber = await isActiveFocusSubscriber(requesterId)
+    if (!isSubscriber) throw new Error('focus_subscription_required')
+
     const sessionFrom = await prisma.zoomSession.findUnique({ where: { id: sessionIdFrom } })
     if (!sessionFrom) throw new Error('session_not_found')
     if (sessionFrom.type !== ZoomSessionType.PRIVATE) throw new Error('not_private_session')
@@ -967,6 +1025,9 @@ export async function toggleCoachSlotStatus(input: {
 }
 
 export async function initiateZoomSwap(initiatorId: string, targetSlotId: string) {
+  const isSubscriber = await isActiveFocusSubscriber(initiatorId)
+  if (!isSubscriber) throw new Error('focus_subscription_required')
+
   const user = await prisma.user.findUnique({
     where: { id: initiatorId },
     select: { id: true, swapsUsedThisMonth: true },
@@ -1042,27 +1103,204 @@ export async function initiateZoomSwap(initiatorId: string, targetSlotId: string
   }
 }
 
-export async function confirmZoomSwapPaymentByOrderRef(orderRef: string) {
+async function notifyZoomSwapPaymentCompleted(input: {
+  swapId: string
+  requesterChatId: string | null
+  requesterFirstName: string | null
+  coachChatId: string | null
+  slotDate: Date | null
+  slotHour: number | null
+}) {
+  const slotLabel =
+    input.slotDate && typeof input.slotHour === 'number'
+      ? `${input.slotDate.toLocaleDateString('uk-UA')} о ${String(input.slotHour).padStart(2, '0')}:00`
+      : 'у вибраний слот'
+
+  await Promise.all([
+    input.requesterChatId
+      ? sendDedupedTelegramMessage(
+          input.requesterChatId,
+          `✅ Оплату за Zoom swap підтверджено. Ваш запит #${input.swapId} зарезервовано ${slotLabel}.`,
+        ).catch(() => undefined)
+      : Promise.resolve(),
+    input.coachChatId
+      ? sendDedupedTelegramMessage(
+          input.coachChatId,
+          `💱 Оплачений Zoom swap #${input.swapId}. ${getSafeName(input.requesterFirstName) || 'Учасник'} зарезервував слот ${slotLabel}.`,
+        ).catch(() => undefined)
+      : Promise.resolve(),
+  ])
+}
+
+export async function confirmZoomSwapPaymentByOrderRef(
+  orderRef: string,
+  paymentContext?: {
+    amount?: number
+    currency?: string
+    transactionId?: string | null
+  },
+) {
   const swap = await prisma.zoomSlotSwapRequest.findFirst({
     where: { orderRef },
-    select: { id: true, requesterId: true, paymentStatus: true },
+    select: {
+      id: true,
+      requesterId: true,
+      paymentStatus: true,
+      paymentLogId: true,
+      fee: true,
+      targetSlotId: true,
+      requester: {
+        select: {
+          expertId: true,
+          firstName: true,
+          telegramChatId: true,
+        },
+      },
+      sessionFrom: {
+        select: {
+          expertId: true,
+        },
+      },
+      targetSlot: {
+        select: {
+          id: true,
+          coachId: true,
+          date: true,
+          hour: true,
+          status: true,
+          coach: {
+            select: {
+              telegramChatId: true,
+              expertId: true,
+            },
+          },
+        },
+      },
+    },
   })
-  if (!swap || swap.paymentStatus === ZoomSwapStatus.CONFIRMED) {
-    return { updated: false }
+
+  if (!swap) {
+    console.warn('[ZOOM_SWAP] swap_not_found', { orderRef })
+    return { updated: false, error: 'swap_not_found' as const }
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.zoomSlotSwapRequest.update({
-      where: { id: swap.id },
-      data: { paymentStatus: ZoomSwapStatus.CONFIRMED, paidAt: new Date() },
+  if (swap.paymentStatus === ZoomSwapStatus.CONFIRMED) {
+    console.info('[ZOOM_SWAP_IDEMPOTENT] already_confirmed', {
+      swapId: swap.id,
+      orderRef,
     })
-    await tx.user.update({
-      where: { id: swap.requesterId },
-      data: { swapsUsedThisMonth: { increment: 1 } },
-    })
-  })
+    return { updated: false, duplicate: true as const, swapId: swap.id }
+  }
 
-  return { updated: true, swapId: swap.id }
+  const existingPaymentLog = await prisma.paymentLog.findUnique({
+    where: { orderReference: orderRef },
+    select: { id: true },
+  }).catch(() => null)
+
+  const expertId =
+    swap.requester.expertId
+    ?? swap.sessionFrom?.expertId
+    ?? swap.targetSlot?.coach.expertId
+    ?? null
+
+  if (!expertId) {
+    console.error('[ZOOM_SWAP] missing_expert_id', {
+      swapId: swap.id,
+      orderRef,
+    })
+    return { updated: false, error: 'missing_expert_id' as const, swapId: swap.id }
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      let paymentLogId = existingPaymentLog?.id ?? swap.paymentLogId ?? null
+
+      if (!paymentLogId) {
+        const createdPaymentLog = await tx.paymentLog.create({
+          data: {
+            orderReference: orderRef,
+            userId: swap.requesterId,
+            expertId,
+            amountCents: Math.round((paymentContext?.amount ?? swap.fee) * 100),
+            currency: paymentContext?.currency ?? 'UAH',
+            status: 'SUCCESS',
+            processedAt: new Date(),
+            metadata: {
+              scope: 'zoom',
+              type: 'zoom_swap',
+              swapId: swap.id,
+              targetSlotId: swap.targetSlotId,
+              transactionId: paymentContext?.transactionId ?? null,
+            },
+          },
+          select: { id: true },
+        })
+        paymentLogId = createdPaymentLog.id
+      }
+
+      if (swap.targetSlot?.id) {
+        const reservation = await tx.zoomSlot.updateMany({
+          where: {
+            id: swap.targetSlot.id,
+            status: ZoomSlotStatus.OPEN,
+          },
+          data: {
+            status: ZoomSlotStatus.CLOSED,
+          },
+        })
+
+        if (reservation.count === 0) {
+          throw new Error('target_slot_unavailable')
+        }
+      }
+
+      await tx.zoomSlotSwapRequest.update({
+        where: { id: swap.id },
+        data: {
+          paymentStatus: ZoomSwapStatus.CONFIRMED,
+          paidAt: new Date(),
+          paymentLogId,
+          status: SwapStatus.ACCEPTED,
+          resolvedAt: new Date(),
+        },
+      })
+
+      await tx.user.update({
+        where: { id: swap.requesterId },
+        data: { swapsUsedThisMonth: { increment: 1 } },
+      })
+
+      return { paymentLogId }
+    })
+
+    await notifyZoomSwapPaymentCompleted({
+      swapId: swap.id,
+      requesterChatId: swap.requester.telegramChatId ?? null,
+      requesterFirstName: swap.requester.firstName ?? null,
+      coachChatId: swap.targetSlot?.coach.telegramChatId ?? null,
+      slotDate: swap.targetSlot?.date ?? null,
+      slotHour: swap.targetSlot?.hour ?? null,
+    }).catch(() => undefined)
+
+    console.info('[ZOOM_SWAP_COMPLETED]', {
+      swapId: swap.id,
+      orderRef,
+      paymentLogId: result.paymentLogId,
+    })
+
+    return {
+      updated: true,
+      swapId: swap.id,
+      paymentLogId: result.paymentLogId,
+    }
+  } catch (error) {
+    console.error('[ZOOM_SWAP_FAILED]', {
+      swapId: swap.id,
+      orderRef,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
 }
 
 export async function resetMonthlySwapUsage() {

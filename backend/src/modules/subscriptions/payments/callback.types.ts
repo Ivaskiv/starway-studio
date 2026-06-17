@@ -1,7 +1,7 @@
 import type { processEcosystemPayment, processPayment } from './business.js'
 import type { EcosystemPaymentPlanId, EcosystemPaymentProduct } from './business.js'
 
-export type WebhookPaymentScope = 'stankey' | 'ecosystem' | 'legacy'
+export type WebhookPaymentScope = 'stankey' | 'ecosystem' | 'zoom' | 'legacy'
 
 export type ResolvedWebhookTarget = {
   scope: WebhookPaymentScope

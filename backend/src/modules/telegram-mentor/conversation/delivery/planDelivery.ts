@@ -245,6 +245,9 @@ function patchContext(ctx: OrchestratedContext): void {
     ctx.answerCbQuery = (async (
       ...args: Parameters<NonNullable<Context['answerCbQuery']>>
     ) => {
+      if (ctx.state.__callback_ack_sent__) {
+        return true
+      }
       const text = typeof args[0] === 'string' ? args[0] : ''
 
       return enqueue(ctx, {
@@ -252,7 +255,11 @@ function patchContext(ctx: OrchestratedContext): void {
         transition: 'callback_ack',
         flowState: resolveFlowState(ctx),
         key: buildDeliveryKey(ctx, 'ack', text),
-        execute: () => originalAnswer(...args),
+        execute: async () => {
+          const result = await originalAnswer(...args)
+          ctx.state.__callback_ack_sent__ = true
+          return result
+        },
       })
     }) as Context['answerCbQuery']
   }
@@ -358,5 +365,12 @@ export const planAck = async (
   transition: string,
   text?: string
 ): Promise<boolean> => {
-  return ctx.answerCbQuery?.(text) ?? false
+  void method
+  void transition
+  if ((ctx.state as { __callback_ack_sent__?: boolean } | undefined)?.__callback_ack_sent__) {
+    return true
+  }
+  const result = await (ctx.answerCbQuery?.(text) ?? false)
+  ;(ctx.state as { __callback_ack_sent__?: boolean }).__callback_ack_sent__ = true
+  return result
 }

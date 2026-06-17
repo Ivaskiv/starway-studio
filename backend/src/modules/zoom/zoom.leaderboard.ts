@@ -3,6 +3,7 @@
 
 import { prisma } from '../../db/client.js';
 import type { BattleMeta } from './battle.service.js';
+import { FOCUS_PRODUCT_CODE } from '@/products/focus/config/focus.constants.js';
 
 export interface LeaderboardEntry {
   userId: string;
@@ -17,7 +18,22 @@ export async function getZoomLeaderboard(
   limit = 10,
 ): Promise<LeaderboardEntry[]> {
   const profiles = await prisma.gamificationProfile.findMany({
-    where: { user: { expertId } },
+    where: {
+      user: {
+        expertId,
+        deletedAt: null,
+        productSubscriptions: {
+          some: {
+            status: 'ACTIVE',
+            product: { code: FOCUS_PRODUCT_CODE },
+            OR: [
+              { expiresAt: null },
+              { expiresAt: { gt: new Date() } },
+            ],
+          },
+        },
+      },
+    },
     orderBy: { mindXP: 'desc' },
     take: limit,
     select: { userId: true, mindXP: true, level: true },

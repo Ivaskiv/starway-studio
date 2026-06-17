@@ -4,7 +4,7 @@
 import { Markup } from 'telegraf'
 
 import { prisma, withRetry } from '../../db/client.js'
-import { bot, coachBot } from '../../lib/telegram.js'
+import { bot, coachBot, sendOpsTelegramMessage } from '../../lib/telegram.js'
 import { NotificationEvent } from '../notifications/NotificationEvent.js'
 import { notificationService } from '../notifications/NotificationService.js'
 import { runWeeklyAnalysis } from '../../modules/ai-mentor/weekly-analysis/service.js'
@@ -263,14 +263,17 @@ export async function weeklyContentReminderCron(): Promise<void> {
     'Натисни кнопку нижче, щоб почати планування 👇',
   ].join('\n')
 
-  await bot.telegram.sendMessage(coachChatId, reportText, {
+  await sendOpsTelegramMessage(reportText, {
     parse_mode: 'HTML',
     reply_markup: Markup.inlineKeyboard([
       Markup.button.callback('📝 Аналізуємо і плануємо контент', 'content_os:start_planning'),
     ]).reply_markup,
-    }).catch((error) => {
-      console.error('[scheduler] weekly content reminder failed', error)
-    })
+  }, {
+    messageType: 'weekly_content_reminder',
+    source: 'weeklyContentReminderCron',
+  }).catch((error) => {
+    console.error('[scheduler] weekly content reminder failed', error)
+  })
 }
 
 type CurrencyAggregate = {

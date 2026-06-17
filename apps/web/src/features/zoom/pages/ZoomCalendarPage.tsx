@@ -93,6 +93,43 @@ function PublicWeekOverview({
           </div>
         )}
       </div>
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-white/40">Past recordings</p>
+            <h2 className="mt-2 text-lg font-semibold">Останні записи групових Zoom</h2>
+          </div>
+          <span className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-white/50">
+            {overview.audios.length}
+          </span>
+        </div>
+
+        {overview.audios.length > 0 ? (
+          <div className="mt-4 grid gap-3">
+            {overview.audios.map((audio) => (
+              <div key={audio.audioFileId} className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-xs text-white/45">
+                  {new Date(audio.scheduledAt).toLocaleString('uk-UA', {
+                    weekday: 'short',
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: overview.week.timezone,
+                  })}
+                </p>
+                <h3 className="mt-1 text-sm font-medium text-white">{audio.topic}</h3>
+                <p className="mt-1 text-xs text-white/45">
+                  Запис видно у публічному режимі як прев’ю, а повний доступ відкривається після активації ФОКУС.
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-white/60">Записи з’являться тут після найближчих групових практик.</p>
+        )}
+      </div>
     </div>
   )
 }
@@ -181,7 +218,7 @@ export default function ZoomCalendarPage({ isPublic = false }: ZoomCalendarPageP
   if (isPublicLoading || !publicOverview) {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/80">
-        {isTelegramRuntime && hasTelegramInitData ? 'Підключаємо Telegram та завантажуємо календар…' : 'Завантажуємо публічний Zoom Calendar…'}
+        {isTelegramRuntime && hasTelegramInitData ? 'Підключаємо Telegram та завантажуємо календар…' : 'Завантажуємо Zoom Calendar…'}
       </div>
     )
   }

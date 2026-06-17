@@ -50,5 +50,6 @@ export type OrchestratedContext = Context & {
   state: Context['state'] & {
     __conversation_patched__?: boolean
     __orchestration_pass_id__?: string
+    __callback_ack_sent__?: boolean
   }
 }

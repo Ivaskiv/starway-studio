@@ -3,7 +3,7 @@
 
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
-import { aiSellerContent } from '@/products/ab-system/config/aiSeller.content.js'
+import { aiSellerContent } from '@/products/ab-system/content/abTest.aiSeller.js'
 import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js'
 import { daysBetween, ensureNotificationPreferenceTableAvailability, getEndOfUtcDay, getSettingsObject, getStartOfUtcDay, readTimestamp, sendAiSellerTelegramMessage } from './common.js'
 

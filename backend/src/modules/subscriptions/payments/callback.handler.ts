@@ -21,7 +21,6 @@ import { sendBillingSuccessTelegramMessage } from '../../telegram-mentor/handler
 import { resolveUserState } from '../../telegram-mentor/handlers/start.js'
 import {
   getUpcomingGroupSessions,
-  confirmZoomSwapPaymentByOrderRef,
   scheduleReminders,
 } from '../../zoom/service.js'
 import type { PaymentCallbackData } from '../types.js'
@@ -330,9 +329,11 @@ export async function wayForPayCallback(req: Request, res: Response) {
 
     const isZoomSwapPayment = typeof data.order_reference === 'string'
       && data.order_reference.startsWith('zoom_swap_')
-    if (isZoomSwapPayment && data.transaction_status === 'Approved') {
-      await confirmZoomSwapPaymentByOrderRef(data.order_reference).catch(() => undefined)
-      return res.status(200).send('OK')
+    if (isZoomSwapPayment) {
+      console.info('[PAYMENT_CALLBACK] zoom_swap_detected', {
+        orderReference: data.order_reference,
+        transactionStatus: data.transaction_status,
+      })
     }
 
     const target = resolveWebhookPaymentTarget(data)

@@ -58,7 +58,7 @@ function buildReplyMarkup(
     case 'show_focus':
       return {
         inline_keyboard: [[
-          { text: 'Дізнатись про ФОКУС', callback_data: 'open_focus_info' },
+          { text: 'Дізнатись про ФОКУС', callback_data: 'ab_test:focus_info' },
           { text: 'Написати Наді', url: CONTACT_NADYA_URL },
         ]],
       }

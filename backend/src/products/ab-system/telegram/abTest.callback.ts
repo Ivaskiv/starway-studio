@@ -16,6 +16,8 @@ export type AbTestCallbackAction =
   | { kind: 'menu' }
   | { kind: 'subscription' }
   | { kind: 'skip_email_before_result' }
+  | { kind: 'confirm_profile_email_for_result' }
+  | { kind: 'change_email_for_result' }
   | { kind: 'show_inside'; resultKey: AbTestResultKey }
   | { kind: 'edit'; questionId: AbTestQuestionId }
   | {
@@ -40,6 +42,8 @@ export function parseAbTestCallback(
   if (action === 'ab_test:menu') return { kind: 'menu' }
   if (action === 'ab_test:subscription') return { kind: 'subscription' }
   if (action === 'skip_email_before_result') return { kind: 'skip_email_before_result' }
+  if (action === 'confirm_profile_email_for_result') return { kind: 'confirm_profile_email_for_result' }
+  if (action === 'change_email_for_result') return { kind: 'change_email_for_result' }
 
   const showInsideMatch = action.match(/^show_inside_(STATE|GOAL|CHOICE|DECISION|ACTION)$/)
   if (showInsideMatch) {

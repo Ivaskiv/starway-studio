@@ -47,7 +47,8 @@ export const zoomCalendarApi = api.injectEndpoints({
     }),
 
     initiateBattle: build.mutation<
-      { id: string },
+      | { type: 'subscriber'; costUAH: 0; battle: { id: string } }
+      | { type: 'non_subscriber'; costUAH: 99; orderReference: string; checkoutUrl: string; message: string },
       { challengerId: string; opponentId: string; goalA?: string; goalB?: string }
     >({
       query: body => ({ url: '/zoom/battle/initiate', method: 'POST', body }),

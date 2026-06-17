@@ -5,6 +5,7 @@
 import { prisma } from '../../db/client.js';
 import { ZoomStatus, Prisma } from '@starway/db/prisma-client';
 import type { ZoomSession } from '@starway/db/prisma-client';
+import { FOCUS_PRODUCT_CODE } from '@/products/focus/config/focus.constants.js';
 
 export type BattleStatus = 'pending' | 'active' | 'completed' | 'cancelled';
 
@@ -23,6 +24,7 @@ export interface BattleMeta {
   notifiedAt24h?: string | null;
   notifiedAt2h?: string | null;
   zoomLink?: string;
+  paymentOrderReference?: string | null;
 }
 
 function toJson(obj: BattleMeta): Prisma.InputJsonValue {
@@ -47,8 +49,20 @@ export async function initiateBattle(args: {
   goalB?: string;
   entryFee?: number;
   scheduledAt?: Date;
+  paymentOrderReference?: string | null;
+  dbClient?: Pick<typeof prisma, 'zoomSession'>;
 }): Promise<ZoomSession> {
-  const { expertId, challengerId, opponentId, goalA, goalB, entryFee, scheduledAt } = args;
+  const {
+    expertId,
+    challengerId,
+    opponentId,
+    goalA,
+    goalB,
+    entryFee,
+    scheduledAt,
+    paymentOrderReference,
+    dbClient,
+  } = args;
   const battleMeta: BattleMeta = {
     type: 'battle_review',
     battleStatus: 'active',
@@ -63,9 +77,12 @@ export async function initiateBattle(args: {
     notify2h: true,
     notifiedAt24h: null,
     notifiedAt2h: null,
+    paymentOrderReference: paymentOrderReference ?? null,
   };
 
-  return prisma.zoomSession.create({
+  const client = dbClient ?? prisma
+
+  return client.zoomSession.create({
     data: {
       expertId,
       scheduledAt: scheduledAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -138,7 +155,16 @@ export async function getEligibleBattleOpponents(args: {
       id: { not: userId },
       expertId,
       deletedAt: null,
-      subscriptions: { some: { status: 'ACTIVE' } },
+      productSubscriptions: {
+        some: {
+          status: 'ACTIVE',
+          product: { code: FOCUS_PRODUCT_CODE },
+          OR: [
+            { expiresAt: null },
+            { expiresAt: { gt: new Date() } },
+          ],
+        },
+      },
     },
     select: { id: true, firstName: true, lastName: true, email: true },
     take: 50,

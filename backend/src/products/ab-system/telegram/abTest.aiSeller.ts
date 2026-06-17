@@ -6,7 +6,7 @@ import { resolveUserLifecycle } from '../../../modules/users/runtime/resolveUser
 import {
   aiSellerContent,
   type AiSellerMode,
-} from '../config/aiSeller.content.js'
+} from '../content/abTest.aiSeller.js'
 import { planAck, planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 
 export function resolveAiSellerMode(user: {
@@ -44,7 +44,7 @@ export async function handleAiSellerCallback(
         [{ text: aiSellerContent.LEAD.cta_1m, callback_data: aiSellerContent.LEAD.callback_1m }],
         [{ text: aiSellerContent.LEAD.cta_3m, callback_data: aiSellerContent.LEAD.callback_3m }],
       ],
-    })
+    }, 'HTML')
     await planAck(ctx, 'ctx.answerCbQuery', 'ai_seller_lead_soft_cta_ack').catch(() => undefined)
     return true
   }
@@ -52,7 +52,7 @@ export async function handleAiSellerCallback(
   if (action === aiSellerContent.FOCUS.callback_learn_more) {
     await planMessage(ctx, 'ctx.reply', 'ai_seller_focus_learn_more', aiSellerContent.FOCUS.platform_details, {
       inline_keyboard: [[{ text: aiSellerContent.FOCUS.cta_upgrade, callback_data: aiSellerContent.FOCUS.callback_upgrade }]],
-    })
+    }, 'HTML')
     await planAck(ctx, 'ctx.answerCbQuery', 'ai_seller_focus_learn_more_ack').catch(() => undefined)
     return true
   }
@@ -127,7 +127,7 @@ export async function handleAiSellerCallback(
     return true
   }
 
-  await planMessage(ctx, 'ctx.reply', 'ai_seller_objection_reply', replyText)
+  await planMessage(ctx, 'ctx.reply', 'ai_seller_objection_reply', replyText, undefined, 'HTML')
   await planAck(ctx, 'ctx.answerCbQuery', 'ai_seller_objection_reply_ack').catch(() => undefined)
   return true
 }

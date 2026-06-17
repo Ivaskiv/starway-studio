@@ -315,6 +315,7 @@ export async function sendDedupedTelegramMessage(
   chatId: string,
   text: string,
   options?: Parameters<typeof bot.telegram.sendMessage>[2],
+  transportBot: Telegraf = bot,
 ): Promise<boolean> {
   const hash = crypto.createHash('sha256').update(text).digest('hex')
   const now = Date.now()
@@ -325,7 +326,7 @@ export async function sendDedupedTelegramMessage(
     return false
   }
 
-  await bot.telegram.sendMessage(chatId, text, options)
+  await transportBot.telegram.sendMessage(chatId, text, options)
   lastMessageHashes.set(chatId, { hash, sentAt: now })
   return true
 }
@@ -341,17 +342,42 @@ export async function sendUserTelegramMessage(
 export async function sendOpsTelegramMessage(
   text: string,
   options?: Parameters<typeof bot.telegram.sendMessage>[2],
+  routeMeta?: {
+    messageType?: string
+    source?: string
+  },
 ): Promise<boolean> {
-  const chatId = process.env.STARWAY_OPS_CHAT_ID?.trim()
+  const chatId =
+    process.env.STARWAY_OPS_CHAT_ID?.trim() ||
+    process.env.OPS_TELEGRAM_CHAT_ID?.trim() ||
+    ''
   if (!chatId) {
-    console.warn('[telegram:ops] STARWAY_OPS_CHAT_ID is not configured')
+    console.warn('[telegram:ops] STARWAY_OPS_CHAT_ID / OPS_TELEGRAM_CHAT_ID is not configured')
     return false
   }
 
+  const messageType =
+    routeMeta?.messageType?.trim() ||
+    text.split('\n')[0]?.trim() ||
+    'ops_message'
+  const source = routeMeta?.source?.trim() || 'sendOpsTelegramMessage'
+  const botName = 'coachBot'
+
+  console.info(
+    `[OPS_ROUTE_DEBUG] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName}`,
+  )
+
   try {
-    return await sendDedupedTelegramMessage(chatId, text, options)
+    const sent = await sendDedupedTelegramMessage(chatId, text, options, coachBot)
+    console.info(
+      `[OPS_ROUTE_OK] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName} delivered=${sent}`,
+    )
+    return sent
   } catch (error) {
-    console.error('[telegram:ops] Failed to send OPS message', error)
+    console.error(
+      `[OPS_ROUTE_ERROR] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName}`,
+      error,
+    )
     return false
   }
 }

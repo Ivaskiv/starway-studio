@@ -610,6 +610,7 @@ model PaymentLog {
   processedAt    DateTime?     @db.Timestamp(6)
   expert         Expert        @relation(fields: [expertId], references: [id])
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zoomSwapRequests ZoomSlotSwapRequest[]
 
   @@index([userId, status])
   @@index([expertId, createdAt])
@@ -1414,6 +1415,7 @@ model ZoomSlot {
   updatedAt DateTime       @updatedAt
   coach     User           @relation("CoachZoomSlots", fields: [coachId], references: [id], onDelete: Cascade)
   swaps     ZoomSwap[]     @relation("TargetZoomSlot")
+  swapRequests ZoomSlotSwapRequest[] @relation("TargetSlotSwapRequests")
 
   @@unique([coachId, date, hour])
   @@index([coachId, date])
@@ -1449,6 +1451,7 @@ model ZoomSlotSwapRequest {
   fee           Int            @default(75)
   month         String?
   paymentStatus ZoomSwapStatus @default(PENDING_PAYMENT)
+  paymentLogId  String?
   paidAt        DateTime?
   orderRef      String?        @unique
   status        SwapStatus @default(PENDING)
@@ -1458,10 +1461,13 @@ model ZoomSlotSwapRequest {
 
   requester   User        @relation("SwapRequester", fields: [requesterId], references: [id])
   sessionFrom ZoomSession? @relation("SwapFrom", fields: [sessionIdFrom], references: [id])
+  targetSlot  ZoomSlot?   @relation("TargetSlotSwapRequests", fields: [targetSlotId], references: [id])
+  paymentLog  PaymentLog? @relation(fields: [paymentLogId], references: [id], onDelete: SetNull)
 
   @@index([requesterId])
   @@index([sessionIdFrom])
   @@index([targetSlotId, createdAt])
+  @@index([paymentLogId])
   @@index([paymentStatus, createdAt])
   @@index([status, expiresAt])
 }

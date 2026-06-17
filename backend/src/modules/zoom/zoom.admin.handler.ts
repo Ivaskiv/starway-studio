@@ -20,6 +20,7 @@ import {
   declineSwapRequest,
   toggleCoachSlotStatus,
   initiateZoomSwap,
+  isActiveFocusSubscriber,
 } from './service.js';
 import { getZoomLeaderboard } from './zoom.leaderboard.js';
 import {
@@ -33,6 +34,16 @@ import { sendOpsTelegramMessage } from '../../lib/telegram.js';
 import { SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/prisma-client';
 
 type BattleOutcome = 'challenger' | 'opponent' | 'both' | 'none';
+
+async function requireActiveFocusSubscription(userId: string, res: Response): Promise<boolean> {
+  const isSubscriber = await isActiveFocusSubscriber(userId)
+  if (!isSubscriber) {
+    res.status(403).json({ error: 'focus_subscription_required' })
+    return false
+  }
+
+  return true
+}
 
 export async function finalizeBattleResult(
   req: AuthenticatedRequest,
@@ -258,6 +269,7 @@ export async function handleGetLeaderboard(
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!(await requireActiveFocusSubscription(userId, res))) return
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -283,13 +295,77 @@ export async function handleInitiateBattle(
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { expertId: true },
+      select: { expertId: true, firstName: true, email: true, phone: true },
     });
     if (!user?.expertId) return res.status(403).json({ error: 'Expert context required' });
 
     const { challengerId, opponentId, goalA, goalB, entryFee } = req.body;
     if (!challengerId || !opponentId) {
       return res.status(400).json({ error: 'challengerId and opponentId required' });
+    }
+
+    if (challengerId !== userId) {
+      return res.status(403).json({ error: 'forbidden_challenger_mismatch' })
+    }
+
+    const opponent = await prisma.user.findFirst({
+      where: {
+        id: opponentId,
+        expertId: user.expertId,
+        deletedAt: null,
+      },
+      select: { id: true, firstName: true },
+    })
+    if (!opponent) {
+      return res.status(404).json({ error: 'opponent_not_found' })
+    }
+
+    const challengerIsSubscriber = await isActiveFocusSubscriber(userId)
+    if (!challengerIsSubscriber) {
+      const orderReference = `battle_entry_99_${userId}_${Date.now()}`
+      const { buildPaymentRequest } = await import('../subscriptions/payments/wayforpay.js')
+      const { buildShortWayForPayCheckoutUrl } = await import('../subscriptions/payments/wayforpay.checkout.js')
+      const backendBaseUrl = (
+        process.env.PUBLIC_API_URL?.trim()
+        || process.env.APP_URL?.trim()
+        || process.env.TELEGRAM_WEBHOOK_URL?.trim()
+        || process.env.INTERNAL_API_URL?.trim()?.replace(/\/api$/, '')
+        || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : 'http://127.0.0.1:3001')
+      ).replace(/\/$/, '')
+
+      const scheduledAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      const payment = buildPaymentRequest({
+        userId,
+        productId: 'battle_entry',
+        amount: 99,
+        currency: 'UAH',
+        payRef: orderReference,
+        product_name: [`Zoom Battle vs ${opponent.firstName ?? opponent.id}`],
+        product_count: [1],
+        product_price: [99],
+      }) as Record<string, unknown>
+
+      payment.battleEntryMeta = {
+        expertId: user.expertId,
+        challengerId: userId,
+        opponentId,
+        goalA: goalA ?? null,
+        goalB: goalB ?? null,
+        scheduledAt: scheduledAt.toISOString(),
+      }
+
+      const checkoutUrl = await buildShortWayForPayCheckoutUrl(backendBaseUrl, payment, {
+        product: 'battle_entry',
+        opponentId,
+      })
+
+      return res.status(200).json({
+        type: 'non_subscriber',
+        costUAH: 99,
+        orderReference,
+        checkoutUrl,
+        message: 'Оплатіть 99 грн, і battle буде створено автоматично після підтвердження платежу.',
+      })
     }
 
     const { initiateBattle } = await import('./battle.service.js');
@@ -301,7 +377,11 @@ export async function handleInitiateBattle(
       goalB,
       entryFee,
     });
-    return res.status(201).json(session);
+    return res.status(201).json({
+      type: 'subscriber',
+      costUAH: 0,
+      battle: session,
+    });
   } catch (err) {
     next(err);
   }
@@ -452,6 +532,10 @@ export async function handleGetAvailablePrivateSlots(
   next: NextFunction,
 ) {
   try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
+
     const { expertId, from, to } = req.query as { expertId?: string; from?: string; to?: string }
     if (!expertId || !from || !to) return res.status(400).json({ error: 'expertId, from, to required' })
 
@@ -490,6 +574,7 @@ export async function handleBookPrivateSlot(
   try {
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
     const { id } = req.params
     const result = await bookPrivateSlot(userId, id)
     return res.status(200).json(result)
@@ -528,6 +613,7 @@ export async function handleCreateSwapRequest(
   try {
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
     const { sessionIdFrom, targetUserIds } = req.body as { sessionIdFrom?: string; targetUserIds?: string[] }
     if (!sessionIdFrom) return res.status(400).json({ error: 'sessionIdFrom required' })
     const result = await createSwapRequest(userId, sessionIdFrom, targetUserIds)
@@ -546,6 +632,7 @@ export async function handleAcceptSwapRequest(
   try {
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
     const { swapId } = req.params
     const { sessionIdTo } = req.body as { sessionIdTo?: string }
     if (!sessionIdTo) return res.status(400).json({ error: 'sessionIdTo required' })
@@ -565,6 +652,7 @@ export async function handleDeclineSwapRequest(
   try {
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
     const { swapId } = req.params
     const result = await declineSwapRequest(swapId, userId)
     return res.status(200).json(result)
@@ -582,6 +670,7 @@ export async function handleGetPendingSwapRequests(
   try {
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
     const pending = await prisma.zoomSlotSwapRequest.findMany({
       where: {
         status: SwapStatus.PENDING,
@@ -634,6 +723,7 @@ export async function handleInitiateZoomSwap(
   try {
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
     const { targetSlotId } = req.body as { targetSlotId?: string }
     if (!targetSlotId) return res.status(400).json({ error: 'targetSlotId required' })
     const result = await initiateZoomSwap(userId, targetSlotId)

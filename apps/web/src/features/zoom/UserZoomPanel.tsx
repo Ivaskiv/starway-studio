@@ -14,6 +14,7 @@ import {
 import { isZoomLinkActive } from './zoom.utils';
 import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './zoom.types';
 import ZoomCalendar from './ZoomCalendar';
+import { openExternalPaymentUrl } from '@/features/subscription/utils/openExternalPaymentUrl';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -229,7 +230,10 @@ function BattleCallSection({ userId }: { userId: string }) {
 
   const handleSend = async () => {
     if (!selectedOpponent) return;
-    await initiate({ challengerId: userId, opponentId: selectedOpponent }).unwrap();
+    const response = await initiate({ challengerId: userId, opponentId: selectedOpponent }).unwrap();
+    if (response.type === 'non_subscriber') {
+      openExternalPaymentUrl(response.checkoutUrl)
+    }
     setSelectedOpponent('');
   };
 

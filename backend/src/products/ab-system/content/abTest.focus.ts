@@ -1,4 +1,8 @@
-import { AB_TEST_FOCUS_CTA_BLOCK, telegramBlock } from './abTest.shared.js'
+import {
+  AB_TEST_FOCUS_CTA_BLOCK,
+  AB_TEST_JOIN_CHANNEL_BUTTON_TEXT,
+  telegramBlock,
+} from './abTest.shared.js'
 
 // FIX 2025-05-25 B: split Block 12 into msg1 (post-payment) and msg2 (post-channel-join)
 export const FOCUS_CHANNEL_URL =
@@ -10,55 +14,79 @@ export const FOCUS_CHANNEL_URL =
   process.env.TELEGRAM_FOCUS_INVITE_URL ??
   ''
 
+const FOCUS_WELCOME_MSG1_TITLE = 'Оплата пройшла — вхід у ФОКУС'
+const FOCUS_WELCOME_MSG1_GREETING_LINES = [
+  'Оплата пройшла.',
+  'Вітаю, ти у ФОКУСІ.',
+] as const
+const FOCUS_WELCOME_MSG1_PRACTICE_INTRO =
+  'Тут ми не будемо просто говорити про зміни.'
+const FOCUS_WELCOME_MSG1_PRACTICE_LINES = [
+  'Раз на тиждень на Zoom-практиці ти будеш дивитись на свою реальну ситуацію:',
+  '— що відкладаєш;',
+  '— чому переносиш;',
+  '— яке рішення не приймаєш;',
+  '— який крок треба зробити зараз.',
+] as const
+const FOCUS_WELCOME_MSG1_CHANNEL_LINES = [
+  'Ось посилання на закритий канал:',
+  'Перейди і закріпи його, щоб не загубити.',
+] as const
+
+const FOCUS_WELCOME_MSG2_TITLE = 'Ти вже в каналі ФОКУС.'
+const FOCUS_WELCOME_MSG2_STEPS_HEADER = 'Що зробити зараз:'
+const FOCUS_WELCOME_MSG2_STEPS = [
+  '1. Прочитай закріплене повідомлення.',
+  '2. Подивись дату найближчого Zoom.',
+  '3. Напиши собі одну ситуацію, яку хочеш розібрати:',
+  '   що саме ти давно відкладаєш.',
+] as const
+const FOCUS_WELCOME_MSG2_FOOTER =
+  'На першій практиці ми почнемо саме з цього.'
+
 export const FOCUS_WELCOME = {
   msg1: {
     body: [
-      'Оплата пройшла — вхід у ФОКУС',
+      FOCUS_WELCOME_MSG1_TITLE,
       '',
-      'Оплата пройшла.',
-      'Вітаю, ти у ФОКУСІ.',
+      ...FOCUS_WELCOME_MSG1_GREETING_LINES,
       '',
-      'Тут ми не будемо просто говорити про зміни.',
-      'Раз на тиждень на Zoom-практиці ти будеш дивитись на свою реальну ситуацію:',
-      '— що відкладаєш;',
-      '— чому переносиш;',
-      '— яке рішення не приймаєш;',
-      '— який крок треба зробити зараз.',
+      FOCUS_WELCOME_MSG1_PRACTICE_INTRO,
+      ...FOCUS_WELCOME_MSG1_PRACTICE_LINES,
       '',
-      'Ось посилання на закритий канал:',
+      FOCUS_WELCOME_MSG1_CHANNEL_LINES[0],
       '',
-      'Перейди і закріпи його, щоб не загубити.',
+      FOCUS_WELCOME_MSG1_CHANNEL_LINES[1],
     ].join('\n'),
-    cta: 'Перейти в канал',
+    cta: AB_TEST_JOIN_CHANNEL_BUTTON_TEXT,
     blocks: [
-      telegramBlock.text('Оплата пройшла — вхід у ФОКУС'),
-      telegramBlock.text('Оплата пройшла.'),
-      telegramBlock.text('Вітаю, ти у ФОКУСІ.'),
-      telegramBlock.text('Тут ми не будемо просто говорити про зміни. Раз на тиждень на Zoom-практиці ти будеш дивитись на свою реальну ситуацію: що відкладаєш, чому переносиш, яке рішення не приймаєш, який крок треба зробити зараз.'),
-      telegramBlock.text('Ось посилання на закритий канал. Перейди і закріпи його, щоб не загубити.'),
+      telegramBlock.text(FOCUS_WELCOME_MSG1_TITLE),
+      ...FOCUS_WELCOME_MSG1_GREETING_LINES.map((line) => telegramBlock.text(line)),
+      telegramBlock.text(
+        [
+          FOCUS_WELCOME_MSG1_PRACTICE_INTRO,
+          FOCUS_WELCOME_MSG1_PRACTICE_LINES.join(' '),
+        ].join(' ')
+      ),
+      telegramBlock.text(FOCUS_WELCOME_MSG1_CHANNEL_LINES.join(' ')),
       AB_TEST_FOCUS_CTA_BLOCK,
     ],
   },
   msg2: {
     body: [
       '',
-      'Ти вже в каналі ФОКУС.',
+      FOCUS_WELCOME_MSG2_TITLE,
       '',
-      'Що зробити зараз:',
-      '1. Прочитай закріплене повідомлення.',
-      '2. Подивись дату найближчого Zoom.',
-      '3. Напиши собі одну ситуацію, яку хочеш розібрати:',
-      '   що саме ти давно відкладаєш.',
+      FOCUS_WELCOME_MSG2_STEPS_HEADER,
+      ...FOCUS_WELCOME_MSG2_STEPS,
       '',
-      'На першій практиці ми почнемо саме з цього.',
+      FOCUS_WELCOME_MSG2_FOOTER,
     ].join('\n'),
     blocks: [
-      telegramBlock.text('Ти вже в каналі ФОКУС.'),
-      telegramBlock.text('Що зробити зараз:'),
-      telegramBlock.text('1. Прочитай закріплене повідомлення.'),
-      telegramBlock.text('2. Подивись дату найближчого Zoom.'),
-      telegramBlock.text('3. Напиши собі одну ситуацію, яку хочеш розібрати: що саме ти давно відкладаєш.'),
-      telegramBlock.text('На першій практиці ми почнемо саме з цього.'),
+      telegramBlock.text(FOCUS_WELCOME_MSG2_TITLE),
+      telegramBlock.text(FOCUS_WELCOME_MSG2_STEPS_HEADER),
+      ...FOCUS_WELCOME_MSG2_STEPS.map((line) => telegramBlock.text(line)),
+      telegramBlock.text(FOCUS_WELCOME_MSG2_FOOTER),
     ],
   },
 } as const

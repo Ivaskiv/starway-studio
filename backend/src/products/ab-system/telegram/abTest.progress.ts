@@ -114,10 +114,13 @@ export function buildAbTestEmailGateMessage(profileEmail: string | null): string
   if (profileEmail) {
     const email = escapeHtml(profileEmail)
     return [
-      `У профілі вже є email: <a href="mailto:${email}">${email}</a>`,
+      'У тебе вже є email:',
       '',
-      'Підтвердь його, надіславши ще раз одним повідомленням або просто натисни кнопку Пропустити',
-      'Якщо він змінився — надішли актуальний email.',
+      `<a href="mailto:${email}">${email}</a>`,
+      '',
+      'Через нього ти отримуватимеш записи Zoom, матеріали та доступи до ФОКУСу.',
+      '',
+      'Все актуально?',
     ].join('\n')
   }
 

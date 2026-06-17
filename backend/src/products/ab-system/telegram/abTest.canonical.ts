@@ -12,7 +12,7 @@ import {
 } from '../../../core/state-machine/ctaFoundation.js'
 import { resolveUserLifecycle } from '../../../modules/flow-control/service.js'
 import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
-import { abTestPaymentsContent } from '../content/abTest.payments.js'
+import { abTestPaymentsContent } from '../content/abTest.shared.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { loadAbTestProgress, saveAbTestProgress } from './abTest.progress.js'
 import { scheduleFollowups } from './abTest.scheduler.js'

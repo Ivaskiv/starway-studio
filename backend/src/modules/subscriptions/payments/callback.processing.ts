@@ -3,6 +3,8 @@ import { sendOpsTelegramMessage } from '@/lib/telegram.js'
 import type { PaymentCallbackData } from '../types.js'
 import { prisma } from '../../../db/client.js'
 import { ensureUserExpertId } from '../../ai-mentor/helpers.js'
+import { initiateBattle } from '../../zoom/battle.service.js'
+import { confirmZoomSwapPaymentByOrderRef } from '../../zoom/service.js'
 import {
   processEcosystemPayment,
   processPayment,
@@ -16,6 +18,216 @@ function extractUuidUserIdFromPayRef(payRef: string): string | null {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(part),
   )
   return uuidPart ?? null
+}
+
+function readBattleEntryMeta(payload: unknown): {
+  expertId: string | null
+  opponentId: string
+  goalA: string | null
+  goalB: string | null
+  scheduledAt: string
+} | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null
+  }
+
+  const raw = payload as Record<string, unknown>
+  const meta = raw.battleEntryMeta
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    return null
+  }
+
+  const typedMeta = meta as Record<string, unknown>
+  const opponentId = typeof typedMeta.opponentId === 'string' ? typedMeta.opponentId.trim() : ''
+  const scheduledAt = typeof typedMeta.scheduledAt === 'string' ? typedMeta.scheduledAt.trim() : ''
+  if (!opponentId || !scheduledAt) {
+    return null
+  }
+
+  return {
+    expertId: typeof typedMeta.expertId === 'string' ? typedMeta.expertId : null,
+    opponentId,
+    goalA: typeof typedMeta.goalA === 'string' ? typedMeta.goalA : null,
+    goalB: typeof typedMeta.goalB === 'string' ? typedMeta.goalB : null,
+    scheduledAt,
+  }
+}
+
+async function processZoomSwapWebhook(input: {
+  data: PaymentCallbackData
+  payRef: string
+  amount: number
+  userId: string
+  db: typeof prisma
+}): Promise<ProcessPaymentWebhookResult> {
+  const result = await confirmZoomSwapPaymentByOrderRef(input.payRef, {
+    amount: input.amount,
+    currency: input.data.currency ?? 'UAH',
+    transactionId: input.data.transaction_id ?? null,
+  })
+
+  if ('duplicate' in result && result.duplicate) {
+    return {
+      duplicate: true,
+      scope: 'zoom',
+      productId: 'zoom_swap',
+      planId: null,
+      payRef: input.payRef,
+      amount: input.amount,
+      result: null,
+    }
+  }
+
+  if (!result.updated) {
+    return {
+      duplicate: false,
+      scope: 'zoom',
+      productId: 'zoom_swap',
+      planId: null,
+      payRef: input.payRef,
+      amount: input.amount,
+      result: {
+        status: 'failed',
+        userId: input.userId,
+        reason: result.error ?? 'ZOOM_SWAP_NOT_UPDATED',
+      },
+    }
+  }
+
+  return {
+    duplicate: false,
+    scope: 'zoom',
+    productId: 'zoom_swap',
+    planId: null,
+    payRef: input.payRef,
+    amount: input.amount,
+    result: {
+      status: 'approved',
+      userId: input.userId,
+      productId: 'zoom_swap',
+      enrollmentId: result.swapId ?? null,
+      expertId: null,
+    },
+  }
+}
+
+async function processBattleEntryWebhook(input: {
+  data: PaymentCallbackData
+  payRef: string
+  amount: number
+  userId: string
+  expertId: string
+  db: typeof prisma
+}): Promise<ProcessPaymentWebhookResult> {
+  const existingPaymentLog = await input.db.paymentLog.findUnique({
+    where: { orderReference: input.payRef },
+    select: { id: true },
+  }).catch(() => null)
+
+  if (existingPaymentLog) {
+    return {
+      duplicate: true,
+      scope: 'zoom',
+      productId: 'battle_entry',
+      planId: 'single',
+      payRef: input.payRef,
+      amount: input.amount,
+      result: null,
+    }
+  }
+
+  const checkoutSession = await input.db.checkoutSession.findFirst({
+    where: { orderReference: input.payRef },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      payload: true,
+    },
+  })
+
+  const battleEntryMeta = readBattleEntryMeta(checkoutSession?.payload ?? null)
+  if (!battleEntryMeta) {
+    return {
+      duplicate: false,
+      scope: 'zoom',
+      productId: 'battle_entry',
+      planId: 'single',
+      payRef: input.payRef,
+      amount: input.amount,
+      result: {
+        status: 'failed',
+        userId: input.userId,
+        reason: 'BATTLE_ENTRY_METADATA_NOT_FOUND',
+      },
+    }
+  }
+
+  const battle = await input.db.$transaction(async (tx) => {
+    const paymentLog = await tx.paymentLog.create({
+      data: {
+        orderReference: input.payRef,
+        userId: input.userId,
+        expertId: battleEntryMeta.expertId ?? input.expertId,
+        amountCents: Math.round(input.amount * 100),
+        currency: input.data.currency ?? 'UAH',
+        status: 'SUCCESS',
+        processedAt: new Date(),
+        metadata: {
+          scope: 'zoom',
+          type: 'battle_entry',
+          orderReference: input.payRef,
+          amount: input.amount,
+          currency: input.data.currency ?? 'UAH',
+          transactionId: input.data.transaction_id ?? null,
+        },
+      },
+      select: { id: true },
+    })
+
+    const createdBattle = await initiateBattle({
+      expertId: battleEntryMeta.expertId ?? input.expertId,
+      challengerId: input.userId,
+      opponentId: battleEntryMeta.opponentId,
+      goalA: battleEntryMeta.goalA ?? undefined,
+      goalB: battleEntryMeta.goalB ?? undefined,
+      entryFee: input.amount,
+      scheduledAt: new Date(battleEntryMeta.scheduledAt),
+      paymentOrderReference: input.payRef,
+      dbClient: tx,
+    })
+
+    await tx.paymentLog.update({
+      where: { id: paymentLog.id },
+      data: {
+        metadata: {
+          scope: 'zoom',
+          type: 'battle_entry',
+          orderReference: input.payRef,
+          amount: input.amount,
+          currency: input.data.currency ?? 'UAH',
+          transactionId: input.data.transaction_id ?? null,
+          battleId: createdBattle.id,
+        },
+      },
+    })
+
+    return createdBattle
+  })
+
+  return {
+    duplicate: false,
+    scope: 'zoom',
+    productId: 'battle_entry',
+    planId: 'single',
+    payRef: input.payRef,
+    amount: input.amount,
+    result: {
+      status: 'approved',
+      userId: input.userId,
+      productId: 'battle_entry',
+      enrollmentId: battle.id,
+      expertId: battle.expertId ?? input.expertId,
+    },
+  }
 }
 
 export async function isProcessedPayment(
@@ -122,6 +334,16 @@ export async function processPaymentWebhook(
     }
   }
 
+  if (target.scope === 'zoom' && target.productId === 'zoom_swap') {
+    return processZoomSwapWebhook({
+      data,
+      payRef,
+      amount,
+      userId: resolvedUserId,
+      db,
+    })
+  }
+
   const existingPaymentLog = await db.paymentLog
     .findUnique({
       where: { orderReference: payRef },
@@ -161,6 +383,17 @@ export async function processPaymentWebhook(
       amount,
       result: { status: 'failed', userId: resolvedUserId, reason: 'MISSING_EXPERT_ID' },
     }
+  }
+
+  if (target.scope === 'zoom' && target.productId === 'battle_entry') {
+    return processBattleEntryWebhook({
+      data,
+      payRef,
+      amount,
+      userId: resolvedUserId,
+      expertId,
+      db,
+    })
   }
 
   let paymentLog: { id: string }

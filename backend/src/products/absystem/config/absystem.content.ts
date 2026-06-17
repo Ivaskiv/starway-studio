@@ -1,3 +1,4 @@
+//backend/src/products/absystem/config/absystem.content.ts
 import type { RelationshipMemoryProfile, RelationshipTrustProgression } from '../../../core/memory/relationshipMemory.js'
 import { buildBehavioralNarrative } from '../../../core/behavioral/behavioralNarrative.js'
 
