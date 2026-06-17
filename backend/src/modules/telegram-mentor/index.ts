@@ -464,7 +464,7 @@ export async function registerMentorBot(
     }
 
     processedUpdates.add(updateId)
-    setTimeout(() => processedUpdates.delete(updateId), 5_000)
+    setTimeout(() => processedUpdates.delete(updateId), 30_000)
     await next()
   })
 
