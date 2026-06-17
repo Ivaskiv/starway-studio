@@ -79,11 +79,23 @@ async function deliver(
   payload: { text: string; reply_markup: { inline_keyboard: StartMessagePayload['buttons'] } },
 ): Promise<void> {
   const deliveryChatId = ctx.chat?.id ?? ctx.from?.id
-  if (!deliveryChatId) return
-  await ctx.telegram.sendMessage(deliveryChatId, payload.text, {
-    parse_mode: 'HTML',
-    reply_markup: payload.reply_markup,
-  })
+  console.info('[START_DELIVER]', { deliveryChatId, textLen: payload.text?.length ?? 0 })
+  if (!deliveryChatId) {
+    console.warn('[START_DELIVER] no chatId — skipped')
+    return
+  }
+  try {
+    await ctx.telegram.sendMessage(deliveryChatId, payload.text, {
+      parse_mode: 'HTML',
+      reply_markup: payload.reply_markup,
+    })
+    console.info('[START_DELIVER_OK]', { deliveryChatId })
+  } catch (err) {
+    console.error('[START_DELIVER_ERROR]', {
+      deliveryChatId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
 }
 
 async function promptForEmail(ctx: StartContext, chatId: string, telegramUserId: string): Promise<void> {
@@ -309,6 +321,7 @@ export async function handleStart(ctx: StartContext) {
     }
 
     const user = await loadUserSnapshot(resolvedUserId)
+    console.info('[START_SNAPSHOT]', { userId: user.id, lifecycleState: user.lifecycleState, chatId })
 
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = user.id
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
