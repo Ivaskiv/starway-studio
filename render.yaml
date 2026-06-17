@@ -15,7 +15,7 @@ services:
       - key: TELEGRAM_DELIVERY_MODE
         value: webhook
       - key: TELEGRAM_WEBHOOK_URL
-        value: https://starway-api.onrender.com
+        value: https://starway-api.onrender.com/api/telegram/webhook
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
       - key: DATABASE_URL
