@@ -6,6 +6,7 @@ services:
     plan: starter
     buildCommand: "npm install -g pnpm && pnpm install && pnpm --dir backend run build"
     startCommand: cd backend && node dist/src/index.js
+    healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: 22
@@ -27,9 +28,9 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-      - key: WAYFORPAY_MERCHANT_LOGIN
+      - key: WAYFORPAY_MERCHANT
         sync: false
-      - key: WAYFORPAY_MERCHANT_SECRET
+      - key: WAYFORPAY_SECRET
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
