@@ -50,6 +50,7 @@ import {
   handlePendingTelegramIdentityText,
   handleStart,
 } from './handlers/start.js'
+import { hasPendingName, clearPendingName } from './services/pendingIdentity.service.js'
 import { handleStatus } from './handlers/status.js'
 import { handleVoice } from './handlers/voice.js'
 import { renderTelegram } from './renderers/decisionTelegram.js'
@@ -383,6 +384,21 @@ async function handleTextMessage(ctx: Context) {
   const userId = (ctx.state as { userId?: string | null }).userId ?? null
   const userState =
     (ctx.state as { userState?: string | null }).userState ?? null
+
+  // Handle pending name capture (asked when Telegram profile has no first_name)
+  if (userId && chatId && await hasPendingName(chatId)) {
+    const name = text.trim().slice(0, 50) // max 50 chars
+    if (name) {
+      await prisma.user.update({ where: { id: userId }, data: { firstName: name } })
+      await clearPendingName(chatId)
+      await ctx.telegram.sendMessage(chatId,
+        `Приємно познайомитись, ${name}! 👋\n\nТепер давай почнемо тест.`,
+      )
+      await handleAbTestCallback(ctx, AB_TEST_ACTIONS.ENTRY)
+      return
+    }
+  }
+
   if (userId) {
     const handledEmailCapture = await handleAbTestEmailCaptureText(
       ctx,

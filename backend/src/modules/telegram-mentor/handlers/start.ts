@@ -3,7 +3,7 @@ import { prisma } from '../../../db/client.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 import { UserCreationSource } from '../../user/userCreation.service.js'
 import { upsertTelegramBinding } from '../services/linking.service.js'
-import { clearPendingTelegramIdentity, getPendingTelegramIdentity, isValidEmail, setPendingTelegramIdentity } from '../services/pendingIdentity.service.js'
+import { clearPendingTelegramIdentity, getPendingTelegramIdentity, isValidEmail, setPendingTelegramIdentity, setPendingName, hasPendingName, clearPendingName } from '../services/pendingIdentity.service.js'
 import { planMessage } from '../conversation/delivery/planDelivery.js'
 import {
   type StartContext,
@@ -39,6 +39,7 @@ type StartUserSnapshot = {
   offerShownAt: Date | null
   testResultType: string | null
   updatedAt: Date
+  firstName: string | null
 }
 
 function getHoursSince(date: Date | null | undefined): number {
@@ -70,6 +71,7 @@ async function loadUserSnapshot(userId: string): Promise<StartUserSnapshot> {
       offerShownAt: true,
       testResultType: true,
       updatedAt: true,
+      firstName: true,
     },
   })
 }
@@ -344,6 +346,14 @@ export async function handleStart(ctx: StartContext) {
 
     switch (user.lifecycleState) {
       case 'NEW_USER': {
+        // Якщо ім'я невідоме — запитати перед тестом
+        if (!ctx.from?.first_name && !user.firstName) {
+          await ctx.telegram.sendMessage(chatId, 'Як тебе звати?')
+          await setPendingName(chatId)
+          startMessageSent = true
+          await setLifecycleState(user.id, 'TEST_NOT_STARTED')
+          return
+        }
         await deliver(ctx, welcomeMessage())
         startMessageSent = true
         await setLifecycleState(user.id, 'TEST_NOT_STARTED')

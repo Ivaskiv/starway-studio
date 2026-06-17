@@ -46,3 +46,24 @@ export async function clearPendingTelegramIdentity(chatId: string): Promise<void
 export function normalizePendingEmail(text: string): string {
   return normalizeEmail(text)
 }
+
+// ─── Pending name capture ────────────────────────────────────────────────────
+
+const PENDING_NAME_TTL_SECONDS = 10 * 60 // 10 хвилин
+const PENDING_NAME_PREFIX = 'telegram:pending_name:'
+
+function nameKeyFor(chatId: string): string {
+  return `${PENDING_NAME_PREFIX}${String(chatId ?? '').trim()}`
+}
+
+export async function setPendingName(chatId: string): Promise<void> {
+  await cacheSet(nameKeyFor(chatId), true, PENDING_NAME_TTL_SECONDS)
+}
+
+export async function hasPendingName(chatId: string): Promise<boolean> {
+  return Boolean(await cacheGet<boolean>(nameKeyFor(chatId)))
+}
+
+export async function clearPendingName(chatId: string): Promise<void> {
+  await cacheDel(nameKeyFor(chatId))
+}
