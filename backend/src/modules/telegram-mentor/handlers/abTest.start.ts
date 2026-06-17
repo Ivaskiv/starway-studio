@@ -55,7 +55,7 @@ export function testInProgressMessage(input: { r3: boolean }): ReturnType<typeof
 
 export function testDoneMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Твій *результат* готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.',
+    text: 'Твій <b>результат</b> готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.',
     buttons: [
       [{ text: 'Показати результат', callback_data: 'ab_test:show_result' }],
       [{ text: 'Почати тест заново', callback_data: 'ab_test:restart' }],
@@ -66,7 +66,7 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
 
 export function offerShownMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'У тебе вже є *результат* тесту.\n\nХочеш відкрити його ще раз або пройти тест заново?',
+    text: 'У тебе вже є <b>результат</b> тесту.\n\nХочеш відкрити його ще раз або пройти тест заново?',
     buttons: [
       [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
       [{ text: 'Пройти тест заново', callback_data: 'ab_test:restart' }],

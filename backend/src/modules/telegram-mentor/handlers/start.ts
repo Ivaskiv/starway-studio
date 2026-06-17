@@ -81,7 +81,7 @@ async function deliver(
   const deliveryChatId = ctx.chat?.id ?? ctx.from?.id
   if (!deliveryChatId) return
   await ctx.telegram.sendMessage(deliveryChatId, payload.text, {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: payload.reply_markup,
   })
 }
