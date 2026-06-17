@@ -128,7 +128,13 @@ export function interpolateFirstName(
 ): string {
   const normalizedName = String(firstName ?? '').trim()
   if (!normalizedName) {
-    return text.replace(/\{firstName\}/g, '').replace(/^[\s,؛:—–-]+/, '')
+    // Remove {firstName} plus any surrounding punctuation/spaces:
+    // handles "**{firstName}, text**" → "**text**"
+    // and "{firstName}, text" → "text"
+    return text
+      .replace(/\{firstName\}[,؛:—–\-\s]*/g, '')
+      .replace(/[\s,؛:—–\-]*\{firstName\}/g, '')
+      .trim()
   }
 
   return text.replace(/\{firstName\}/g, normalizedName)

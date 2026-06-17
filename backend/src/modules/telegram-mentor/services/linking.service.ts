@@ -157,6 +157,8 @@ export async function upsertTelegramBinding(params: {
       telegramUserId,
       telegramUserName,
       telegramLinkedAt: existingUser?.telegramLinkedAt ?? new Date(),
+      // Always sync firstName from Telegram so interpolation works
+      ...(firstName ? { firstName } : {}),
     },
   })
 
