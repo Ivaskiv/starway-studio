@@ -466,14 +466,17 @@ export async function handleFocusPaymentAction(
   payingUserId: string | null,
   chatId: string | number | null
 ): Promise<boolean> {
-  const { deactivateCallbackMarkup } = await import('./abTest.callback.js')
+  const { deactivateCallbackMarkup, resolveContextUserId } = await import('./abTest.callback.js')
 
   if (!chatId) {
     return true
   }
 
-  if (payingUserId) {
-    const hasActive = await hasActiveFocusSubscription(payingUserId)
+  // Fallback: if caller didn't resolve userId, try from ctx (handles middleware gaps)
+  const resolvedUserId = payingUserId ?? await resolveContextUserId(ctx)
+
+  if (resolvedUserId) {
+    const hasActive = await hasActiveFocusSubscription(resolvedUserId)
     if (hasActive) {
       const inviteUrl = String(
         process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? ''
@@ -551,12 +554,12 @@ export async function handleFocusPaymentAction(
       ? [...BLOCK10_FOCUS.blocks]
       : splitTelegramContentBlocks(text.split('\n'))
   let testButtonRow: Array<{ text: string; url: string }> = []
-  if (payingUserId && isTestPaymentEnabled()) {
+  if (resolvedUserId && isTestPaymentEnabled()) {
     try {
       const testSession = await buildEcosystemPaymentCheckoutSession(
         'focus',
         '1month',
-        payingUserId,
+        resolvedUserId,
         {
           amountOverride: 1,
           orderRefTag: 'test1uah',
@@ -593,15 +596,15 @@ export async function handleFocusPaymentAction(
         separateBlocks: true,
       }
     )
-    console.log('[FOCUS_PAY] sent ok', { userId: payingUserId, chatId })
+    console.log('[FOCUS_PAY] sent ok', { userId: resolvedUserId, chatId })
   } catch (error) {
     console.error('[FOCUS_PAY] FAILED', error)
   }
-  if (payingUserId) {
-    loadAbTestProgress(payingUserId)
+  if (resolvedUserId) {
+    loadAbTestProgress(resolvedUserId)
       .then((progressAfterFocusClick) =>
         saveAbTestProgress(
-          payingUserId,
+          resolvedUserId,
           buildAbTestProgressPatch(progressAfterFocusClick, {
             focus_opened_at:
               progressAfterFocusClick.focus_opened_at ??
