@@ -256,7 +256,7 @@ export const AB_TEST_FOCUS_BENEFITS_TEXT =
 export const AB_TEST_FOCUS_INCLUDED_TEXT =
   `**${AB_TEST_FOCUS_INCLUDED_HEADER}**\n\n${AB_TEST_FOCUS_INCLUDED_LINES.join('\n')}`
 export const AB_TEST_FOCUS_PRICING_TEXT =
-  `Почати можна з одного місяця участі.\n\nЗа цей час ти проходиш **4 живі практики** і можеш розібрати **кілька своїх ситуацій** через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n${AB_TEST_FOCUS_CTA_MARKER}`
+  `Почати можна з одного місяця участі.\n\nЗа цей час ти проходиш **4 живі практики** і можеш розібрати **кілька своїх ситуацій** через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n✅ **100% повернення грошей за 7 днів** — якщо результату немає\n\n${AB_TEST_FOCUS_CTA_MARKER}`
 export const AB_TEST_FOCUS_PROOF_PRICING_TEXT =
   `Почати можна з **одного місяця**. Це **15 євро** — менше ніж одна консультація.\n\n**${AB_TEST_FOCUS_TITLE}**\n${AB_TEST_FOCUS_PRICE_SUMMARY}\n\n${AB_TEST_FOCUS_PAY_CTA_MARKER}`
 export const AB_TEST_FOCUS_TEST_DRIVE_PITCH_BLOCKS = [
