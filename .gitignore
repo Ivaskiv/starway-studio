@@ -185,3 +185,5 @@ apps/web/src/features/**/styles/components/
 
 !packages/ai/
 !packages/ai/package.json
+backend/.env
+backend/.env.local
