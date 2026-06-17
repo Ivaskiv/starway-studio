@@ -60,6 +60,10 @@ import {
   loadUserUiSettings,
   saveAbTestProgress,
 } from './abTest.progress.js'
+import {
+  formatMobileAnswerButtonText,
+  formatMobileAnswerListForMessage,
+} from './abTest.helpers.js'
 
 const QUESTION_LABELS: Record<AbTestQuestionId, string> = {
   q1: 'Що відбувається',
@@ -953,22 +957,6 @@ export async function dispatchAbTestPracticeSequence(
   })
 }
 
-function formatMobileAnswerButtonText(value: string): string {
-  return value.match(/^([А-ДA-E])\./)?.[1] ?? value.slice(0, 1)
-}
-
-function formatMobileAnswerListForMessage(
-  answers: ReadonlyArray<{ text: string }>
-): string {
-  return answers
-    .map((answer) => {
-      const match = answer.text.match(/^([А-ДA-E])\.\s*(.*)$/s)
-      const letter = match?.[1] ?? answer.text.slice(0, 1)
-      const body = match?.[2] ?? answer.text.slice(2).trim()
-      return `${letter}. ${body}`
-    })
-    .join('\n\n')
-}
 
 async function sendTelegramHtmlCard(
   ctx: Context,
@@ -1356,7 +1344,6 @@ export async function sendQuestionDirect(
   
   const { getAbTestQuestion } = await import('../content/abTest.questions.js')
   const { resolveAbTestQuestionOrder } = await import('../../../core/state-machine/abTestFoundation.js')
-  const { formatMobileAnswerButtonText, formatMobileAnswerListForMessage } = await import('./abTest.helpers.js')
   
   const question = getAbTestQuestion(questionId as any)
   const questionOrder = resolveAbTestQuestionOrder()
