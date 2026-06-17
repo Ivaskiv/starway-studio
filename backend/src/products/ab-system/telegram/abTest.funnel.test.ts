@@ -1,33 +1,38 @@
 import { beforeAll, beforeEach, describe, expect, it, vi, afterEach } from 'vitest'
 
-import { parseAbTestCallback } from './abTest.callback.js'
-import {
-  getAbTestResultDefinition,
-  type AbTestResultKey,
-} from '../content/abTest.results.js'
-import { normalizeAbTestProgress, buildAbTestProgressPatch } from '../../../core/state-machine/abTestFoundation.js'
-import {
-  AB_TEST_YELYZAVETA_REVIEW_HEADER,
-  AB_TEST_YELYZAVETA_REVIEW_QUOTE,
-  AB_TEST_SCREENSHOT_URLS,
-} from '../content/abTest.shared.js'
-
-const prismaMock = {
-  user: {
-    findUnique: vi.fn(),
-    update: vi.fn(),
-  },
-}
-
-const sendOpsTelegramMessageMock = vi.fn().mockResolvedValue(true)
-const coachBotSendMessageMock = vi.fn().mockResolvedValue({ message_id: 999 })
-const hasTelegramCtaInteractionMock = vi.fn().mockResolvedValue(false)
-const trackAbTestEventMock = vi.fn().mockResolvedValue(undefined)
-const setPendingTelegramIdentityMock = vi.fn().mockResolvedValue(undefined)
-const getAbTestProfileEmailMock = vi.fn()
-const loadAbTestProgressMock = vi.fn()
-const loadUserUiSettingsMock = vi.fn()
-const saveAbTestProgressMock = vi.fn()
+// vi.mock factories are hoisted to the top of the file by vitest.
+// Use vi.hoisted() for any values referenced inside vi.mock factories.
+const {
+  prismaMock,
+  sendOpsTelegramMessageMock,
+  coachBotSendMessageMock,
+  hasTelegramCtaInteractionMock,
+  trackAbTestEventMock,
+  setPendingTelegramIdentityMock,
+  getAbTestProfileEmailMock,
+  loadAbTestProgressMock,
+  loadUserUiSettingsMock,
+  saveAbTestProgressMock,
+} = vi.hoisted(() => {
+  const prismaMock = {
+    user: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+  }
+  return {
+    prismaMock,
+    sendOpsTelegramMessageMock: vi.fn().mockResolvedValue(true),
+    coachBotSendMessageMock: vi.fn().mockResolvedValue({ message_id: 999 }),
+    hasTelegramCtaInteractionMock: vi.fn().mockResolvedValue(false),
+    trackAbTestEventMock: vi.fn().mockResolvedValue(undefined),
+    setPendingTelegramIdentityMock: vi.fn().mockResolvedValue(undefined),
+    getAbTestProfileEmailMock: vi.fn(),
+    loadAbTestProgressMock: vi.fn(),
+    loadUserUiSettingsMock: vi.fn(),
+    saveAbTestProgressMock: vi.fn(),
+  }
+})
 
 vi.mock('../../../db/client.js', () => ({
   prisma: prismaMock,
@@ -64,6 +69,18 @@ vi.mock('./abTest.progress.js', async () => {
     saveAbTestProgress: saveAbTestProgressMock,
   }
 })
+
+import { parseAbTestCallback } from './abTest.callback.js'
+import {
+  getAbTestResultDefinition,
+  type AbTestResultKey,
+} from '../content/abTest.results.js'
+import { normalizeAbTestProgress, buildAbTestProgressPatch } from '../../../core/state-machine/abTestFoundation.js'
+import {
+  AB_TEST_YELYZAVETA_REVIEW_HEADER,
+  AB_TEST_YELYZAVETA_REVIEW_QUOTE,
+  AB_TEST_SCREENSHOT_URLS,
+} from '../content/abTest.shared.js'
 
 type ViewsModule = typeof import('./abTest.views.js')
 

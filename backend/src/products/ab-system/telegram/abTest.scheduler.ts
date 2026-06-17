@@ -49,6 +49,16 @@ export async function scheduleFollowups(
     }
 
     const runAt = new Date(Date.now() + timer.delay_ms)
+    const paymentUrl: string | null =
+      stage === 'S5_PAYMENT'
+        ? (
+            process.env.WAYFORPAY_FOCUS_BOT_1M_URL ??
+            process.env.WAYFORPAY_FOCUS_1M_URL ??
+            process.env.FOCUS_1M_URL ??
+            null
+          )
+        : null
+
     const payload = {
       flow_timer_id: timer.id,
       lifecycle_stage: timer.source_stage,
@@ -57,6 +67,7 @@ export async function scheduleFollowups(
       ab_test_stage: stage,
       result_key: nextProgress.result_key,
       content_version: resolveTestDriveVersion(nextProgress.started_at),
+      ...(paymentUrl ? { payment_url: paymentUrl } : {}),
     } satisfies Prisma.JsonObject
 
     await notificationService.schedule(

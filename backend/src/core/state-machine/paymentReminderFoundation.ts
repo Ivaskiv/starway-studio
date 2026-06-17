@@ -29,8 +29,8 @@ export type PaymentReminderTimerId = typeof PAYMENT_REMINDER_TIMER_IDS[number]
 export const PAYMENT_REMINDER_FOLLOWUP_COPY: Record<PaymentReminderTimerId, PaymentReminderFollowupCopy> = {
   PAYMENT_REMINDER_24H: {
     title: 'ФОКУС',
-    body: 'Якщо хочеш продовжити, контекст уже збережено.',
-    cta: AB_TEST_FOCUS_JOIN_CTA_TEXT,
+    body: 'Більшість моїх учасниць бачать результат вже на 3-й день ФОКУС.\n\nТвій результат збережено — можна продовжити з того де зупинилась.',
+    cta: 'Спробувати заново',
   },
   PAYMENT_REMINDER_48H: {
     title: 'ФОКУС',
