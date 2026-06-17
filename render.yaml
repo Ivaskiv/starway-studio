@@ -15,7 +15,7 @@ services:
       - key: TELEGRAM_DELIVERY_MODE
         value: webhook
       - key: TELEGRAM_WEBHOOK_URL
-        sync: false
+        value: https://starway-api.onrender.com
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
       - key: DATABASE_URL
@@ -39,7 +39,7 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: PUBLIC_API_URL
-        sync: false
+        value: https://starway-api.onrender.com
       - key: FRONTEND_URL
         sync: false
       - key: WEBAPP_URL
