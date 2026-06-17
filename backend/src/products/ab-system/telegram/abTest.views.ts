@@ -843,7 +843,7 @@ export async function dispatchAbTestPracticeSequence(
     practiceBlocks,
     {
       parseMode: 'HTML',
-      separateBlocks: false,
+      separateBlocks: true,
     }
   )
   console.info('[FOCUS_DESCRIPTION_SENT]', {
@@ -887,7 +887,7 @@ export async function dispatchAbTestPracticeSequence(
     pricingBlocks,
     {
       parseMode: 'HTML',
-      separateBlocks: false,
+      separateBlocks: true,
     }
   )
 
@@ -924,13 +924,6 @@ export async function dispatchAbTestPracticeSequence(
         : null,
     callback: 'open_focus_payment',
   })
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
 }
 
 function formatMobileAnswerButtonText(value: string): string {
@@ -1142,7 +1135,20 @@ export async function renderAbTestPostEmailSubmitSequence(
   const resultKey = String(
     progress.result_key ?? ''
   ).toLowerCase() as AbTestResultKey
-  const firstName = user?.firstName ?? user?.telegramUserName ?? null
+  // ctx.from?.first_name as last resort if DB has no name yet
+  const firstName =
+    user?.firstName ??
+    user?.telegramUserName ??
+    ctx.from?.first_name ??
+    null
+
+  // Persist to DB if we got name from Telegram but DB was empty
+  if (!user?.firstName && ctx.from?.first_name) {
+    void prisma.user.update({
+      where: { id: userId },
+      data: { firstName: ctx.from.first_name },
+    }).catch(() => undefined)
+  }
   const shouldSkipRedelivery =
     !options.forceRedelivery &&
     progress.status === 'completed' &&
@@ -1320,4 +1326,50 @@ export async function renderCurrentView(
       },
     }
   )
+}
+
+// ============================================================================
+// SEND QUESTION DIRECT
+// ============================================================================
+
+export async function sendQuestionDirect(
+  ctx: Context,
+  questionId: string,
+  revision: number
+): Promise<void> {
+  const chatId = ctx.chat?.id ?? ctx.from?.id
+  if (!chatId) return
+  
+  const { getAbTestQuestion } = await import('../content/abTest.questions.js')
+  const { resolveAbTestQuestionOrder } = await import('../../../core/state-machine/abTestFoundation.js')
+  const { formatMobileAnswerButtonText, formatMobileAnswerListForMessage } = await import('./abTest.helpers.js')
+  
+  const question = getAbTestQuestion(questionId as any)
+  const questionOrder = resolveAbTestQuestionOrder()
+  const questionNumber = questionOrder.indexOf(question.question_id) + 1
+  
+  await ctx.telegram.sendMessage(
+    chatId,
+    `<b>Питання ${questionNumber} з ${questionOrder.length}</b>\n\n<b>${escapeHtml(question.prompt)}</b>\n\n${escapeHtml(formatMobileAnswerListForMessage(question.answers))}`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          question.answers.map((answer) => ({
+            text: formatMobileAnswerButtonText(answer.text),
+            callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${revision}`,
+          })),
+        ],
+      },
+    }
+  )
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
 }
