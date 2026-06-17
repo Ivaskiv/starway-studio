@@ -132,15 +132,21 @@ export async function sendAbTestBlock12Welcome(userId: string): Promise<boolean>
   })
 
   const block12Url = inviteUrl || FOCUS_CHANNEL_URL
+  const zoomBookingUrl = (
+    String(process.env.WEBAPP_URL ?? '').trim() ||
+    'https://starway-frontend.vercel.app'
+  ).replace(/\/$/, '') + '/zoom-booking.html'
+
   await bot.telegram.sendMessage(
     chatId,
     `${FOCUS_WELCOME.msg1.body}\n${block12Url}`.trim(),
     {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: FOCUS_WELCOME.msg1.cta, url: block12Url }],
-      ],
-    },
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: FOCUS_WELCOME.msg1.cta, url: block12Url }],
+          [{ text: '🗓️ Обрати день практики', web_app: { url: zoomBookingUrl } }],
+        ],
+      },
     }
   )
   console.log('[BLOCK12_DIAG]', { userId, chatId, step: 'after_send' })
