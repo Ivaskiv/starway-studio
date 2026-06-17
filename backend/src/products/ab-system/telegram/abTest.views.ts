@@ -202,6 +202,33 @@ function interpolateFirstNameInBlocks(
   })
 }
 
+/**
+ * Resolves display name from all available sources in priority order.
+ * Safe: never returns empty string with comma — either a name or null.
+ * Backfills DB if name was missing (fire-and-forget, no await).
+ */
+export function resolveFirstName(
+  user: { firstName?: string | null; telegramUserName?: string | null } | null | undefined,
+  ctx: Context,
+  userId?: string,
+): string | null {
+  const name =
+    user?.firstName?.trim() ||
+    user?.telegramUserName?.trim() ||
+    ctx.from?.first_name?.trim() ||
+    null
+
+  // Backfill DB if we got name from Telegram ctx but DB was empty
+  if (userId && !user?.firstName?.trim() && ctx.from?.first_name?.trim()) {
+    void prisma.user.update({
+      where: { id: userId },
+      data: { firstName: ctx.from.first_name.trim() },
+    }).catch(() => undefined)
+  }
+
+  return name || null
+}
+
 export function splitTelegramLines(
   lines: string[],
   maxChars = TELEGRAM_CONTENT_MAX_CHARS
@@ -1067,7 +1094,7 @@ export async function renderAbTestFocusOffer(
     progress.result_key,
     version,
     {
-      firstName: user?.firstName ?? user?.telegramUserName ?? null,
+      firstName: resolveFirstName(user, ctx, userId),
     }
   )
   const focusBlocks =
@@ -1135,20 +1162,7 @@ export async function renderAbTestPostEmailSubmitSequence(
   const resultKey = String(
     progress.result_key ?? ''
   ).toLowerCase() as AbTestResultKey
-  // ctx.from?.first_name as last resort if DB has no name yet
-  const firstName =
-    user?.firstName ??
-    user?.telegramUserName ??
-    ctx.from?.first_name ??
-    null
-
-  // Persist to DB if we got name from Telegram but DB was empty
-  if (!user?.firstName && ctx.from?.first_name) {
-    void prisma.user.update({
-      where: { id: userId },
-      data: { firstName: ctx.from.first_name },
-    }).catch(() => undefined)
-  }
+  const firstName = resolveFirstName(user, ctx, userId)
   const shouldSkipRedelivery =
     !options.forceRedelivery &&
     progress.status === 'completed' &&
