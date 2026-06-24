@@ -49,6 +49,16 @@ export const authenticate = authRequired
 export function telegramWebAppAuth(allowedRoles?: string[]) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
+      const sessionUser = await getServerUser(req).catch(() => null)
+      if (sessionUser) {
+        if (allowedRoles?.length && !allowedRoles.includes(sessionUser.role)) {
+          return res.status(403).json({ error: 'forbidden_role' })
+        }
+
+        req.user = sessionUser
+        return next()
+      }
+
       const initData =
         String(req.headers['x-telegram-init-data'] ?? '').trim()
         || String(req.headers.authorization ?? '').replace(/^tma\s+/i, '').trim()
