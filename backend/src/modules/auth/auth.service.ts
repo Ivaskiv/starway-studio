@@ -1194,8 +1194,28 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
   }
 }
 
-export async function telegramMiniAppLoginUser(initData: string, requestId?: string | null): Promise<AuthTokensPayload> {
-  const telegramUser = verifyTelegramInitData(initData)
+export async function telegramMiniAppLoginUser(
+  initData: string,
+  fallbackEmail?: string | null,
+  requestId?: string | null,
+): Promise<AuthTokensPayload> {
+  const normalizedInitData = String(initData ?? '').trim()
+  const normalizedFallbackEmail = String(fallbackEmail ?? '').trim().toLowerCase()
+
+  if (!normalizedInitData) {
+    if (!normalizedFallbackEmail) {
+      throw new AuthServiceError('missing_fields', 400)
+    }
+
+    const existingUser = await findUserByEmail(normalizedFallbackEmail)
+    if (!existingUser?.id) {
+      throw new AuthServiceError('user_not_registered', 404, 'Користувач ще не зареєстрований')
+    }
+
+    return createSessionForUserId(existingUser.id)
+  }
+
+  const telegramUser = verifyTelegramInitData(normalizedInitData)
 
   return socialLoginUser({
     provider: 'telegram',

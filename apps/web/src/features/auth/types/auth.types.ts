@@ -51,6 +51,7 @@ export interface SocialAuthApiInput {
 
 export interface TelegramMiniAppAuthInput {
   initData: string
+  fallbackEmail?: string
 }
 
 export interface UpdateUserSettingsInput {

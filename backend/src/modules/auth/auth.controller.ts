@@ -223,8 +223,12 @@ export async function social(req: Request, res: Response) {
 
 export async function telegram(req: Request, res: Response) {
   try {
-    const { initData } = req.body ?? {}
-    const result = await telegramMiniAppLoginUser(String(initData ?? ''), resolveRequestId(req))
+    const { initData, fallbackEmail } = req.body ?? {}
+    const result = await telegramMiniAppLoginUser(
+      String(initData ?? ''),
+      typeof fallbackEmail === 'string' ? fallbackEmail : null,
+      resolveRequestId(req),
+    )
 
     res.cookie('refreshToken', result.refreshToken, COOKIE_OPTIONS)
 

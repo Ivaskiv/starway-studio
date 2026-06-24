@@ -1,10 +1,12 @@
 import { useAppSelector } from '@/app/hooks'
+import { getStoredUser } from '@/features/auth/services/token'
 import { selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
 import {
   useTelegramMiniAppAuthMutation,
   useUpdateUserSettingsMutation,
 } from '@/features/auth/services/auth.api'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
+import type { User } from '@/features/user/types/user.types'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
@@ -340,6 +342,18 @@ export function MiniAppZoomRoute() {
   }, [])
 
   useEffect(() => {
+    const telegramWebApp = getTelegramWindow().Telegram?.WebApp
+    const hasWebApp = Boolean(telegramWebApp)
+    const initData = telegramWebApp?.initData?.trim() ?? ''
+
+    console.log('[MiniAppZoomRoute] Debug:', {
+      isTelegramRuntime,
+      hasWebApp,
+      initDataLength: initData.length,
+      initDataExists: Boolean(initData),
+      user: user?.id ?? null,
+    })
+
     if (user) {
       if (isTelegramRuntime) {
         setNeedsOnboarding(false)
@@ -361,9 +375,33 @@ export function MiniAppZoomRoute() {
     }
 
     authAttemptedRef.current = true
-    const initData = getTelegramWindow().Telegram?.WebApp?.initData?.trim() ?? ''
 
     if (!initData) {
+      const storedUser = getStoredUser<User>()
+      const fallbackEmail =
+        storedUser?.email?.trim().toLowerCase() ||
+        localStorage.getItem('user_email')?.trim().toLowerCase() ||
+        ''
+
+      if (fallbackEmail) {
+        console.log('[MiniAppZoomRoute] Using fallback email:', fallbackEmail)
+        void telegramMiniAppAuth({
+          initData: '',
+          fallbackEmail,
+        })
+          .unwrap()
+          .then(() => {
+            setError(null)
+            setNeedsOnboarding(false)
+          })
+          .catch((authError) => {
+            console.warn('[MiniAppZoomRoute] Fallback auth failed', authError)
+            setError(null)
+            setNeedsOnboarding(false)
+          })
+        return
+      }
+
       setError(null)
       setNeedsOnboarding(false)
       return
