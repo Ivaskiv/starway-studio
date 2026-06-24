@@ -1173,6 +1173,8 @@ export async function renderAbTestPostEmailSubmitSequence(
     return
   }
 
+  let openedTracked = false
+
   // Атомарно виставляємо result_opened_at: якщо вже виставлено (race condition / duplicate callback) — виходимо.
   if (!progress.result_opened_at) {
     const freshProgress = await loadAbTestProgress(userId)
@@ -1190,6 +1192,19 @@ export async function renderAbTestPostEmailSubmitSequence(
       last_event_at: new Date().toISOString(),
     })
     await saveAbTestProgress(userId, nextProgress)
+    openedTracked = true
+  }
+
+  if (openedTracked) {
+    await trackAbTestEvent({
+      userId,
+      type: 'RESULT_OPENED',
+      state: 'S3_TEST_RESULT',
+      payload: {
+        result_key: resultKey,
+        delivery_source: options.forceRedelivery ? 'forced_redelivery' : 'post_email',
+      } satisfies Prisma.JsonObject,
+    })
   }
 
   await dispatchAbTestResultSequence(ctx, {

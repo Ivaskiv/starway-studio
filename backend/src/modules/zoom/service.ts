@@ -717,6 +717,21 @@ export async function scheduleReminders(
   console.log(`[scheduleReminders] userId=${userId} sessionId=${session.id} jobs=${jobs.length}`)
 }
 
+async function getCoachReminderUserIds(expertId: string | null | undefined): Promise<string[]> {
+  if (!expertId) return []
+
+  const coaches = await prisma.user.findMany({
+    where: {
+      expertId,
+      deletedAt: null,
+      role: { in: ['EXPERT', 'SUPERADMIN'] },
+    },
+    select: { id: true },
+  })
+
+  return coaches.map((coach) => coach.id)
+}
+
 export async function rescheduleReminders(
   userId: string,
   session: { id: string; scheduledAt: Date; topic: string; requests: unknown },
@@ -1915,7 +1930,11 @@ export async function afterZoomOperation(
   }).catch((err) => console.error('[afterZoomOp] processScheduleNotification:', err))
 
   if (operation === 'book') {
-    for (const userId of affectedUserIds) {
+    const reminderUserIds = [...new Set([
+      ...affectedUserIds,
+      ...(await getCoachReminderUserIds(session.expertId)),
+    ])]
+    for (const userId of reminderUserIds) {
       void scheduleReminders(userId, session).catch((err) =>
         console.error('[afterZoomOp] scheduleReminders:', err),
       )
@@ -1923,7 +1942,11 @@ export async function afterZoomOperation(
   }
 
   if (operation === 'update' || operation === 'swap_accept') {
-    for (const userId of affectedUserIds) {
+    const reminderUserIds = [...new Set([
+      ...affectedUserIds,
+      ...(await getCoachReminderUserIds(session.expertId)),
+    ])]
+    for (const userId of reminderUserIds) {
       void rescheduleReminders(userId, session).catch((err) =>
         console.error('[afterZoomOp] rescheduleReminders:', err),
       )
@@ -1931,7 +1954,11 @@ export async function afterZoomOperation(
   }
 
   if (operation === 'cancel' || operation === 'unbook') {
-    for (const userId of affectedUserIds) {
+    const reminderUserIds = [...new Set([
+      ...affectedUserIds,
+      ...(await getCoachReminderUserIds(session.expertId)),
+    ])]
+    for (const userId of reminderUserIds) {
       void cancelExistingReminders(userId, sessionId).catch((err) =>
         console.error('[afterZoomOp] cancelExistingReminders:', err),
       )
@@ -2075,6 +2102,12 @@ export async function notifyMonthSchedule(
       await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (err) {
       console.warn(`[notifyMonth paid] ${tgId}:`, err)
+    }
+  }
+
+  for (const session of upcomingGroupSessions) {
+    for (const coachId of await getCoachReminderUserIds(session.expertId)) {
+      await scheduleReminders(coachId, session)
     }
   }
 

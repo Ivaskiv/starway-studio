@@ -93,8 +93,7 @@ export function schedulePostZoomBridge(
 ): PostZoomBridgePlan {
   const paymentUrl = buildAbsystemAiUpgradeCheckoutUrl(userId)
   const canBridge =
-    input.productKey !== 'STANKEY' &&
-    input.lifecycle === 'focus_active' &&
+    input.productKey === 'FOCUS' &&
     !input.bridgeSentAt &&
     input.zoomCount >= 1 &&
     input.zoomCount <= 2
@@ -120,8 +119,7 @@ export function scheduleUpgradeOffer(
 ): UpgradeOfferPlan {
   const paymentUrl = buildAbsystemAiUpgradeCheckoutUrl(userId)
   const scheduled =
-    input.productKey !== 'STANKEY' &&
-    input.lifecycle === 'focus_active' &&
+    input.productKey === 'FOCUS' &&
     Boolean(input.bridgeSentAt) &&
     !input.hardBridgeSentAt &&
     input.zoomCount >= 4

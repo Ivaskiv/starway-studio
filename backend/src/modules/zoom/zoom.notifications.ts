@@ -85,6 +85,48 @@ async function getAttendeeTelegramIds(sessionId: string): Promise<{ userId: stri
   }));
 }
 
+async function getCoachRecipientTelegramIds(expertId: string | null | undefined): Promise<{ userId: string; chatId: string | null }[]> {
+  if (!expertId) return []
+
+  const coaches = await prisma.user.findMany({
+    where: {
+      expertId,
+      deletedAt: null,
+      role: { in: ['EXPERT', 'SUPERADMIN'] },
+    },
+    select: {
+      id: true,
+      telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+    },
+  })
+
+  return coaches.map((coach) => ({
+    userId: coach.id,
+    chatId: coach.telegramChatId ?? coach.telegramLinks[0]?.chatId ?? null,
+  }))
+}
+
+function mergeRecipients(...groups: Array<Array<{ userId: string; chatId: string | null }>>): Array<{ userId: string; chatId: string | null }> {
+  const deduped = new Map<string, { userId: string; chatId: string | null }>()
+
+  for (const group of groups) {
+    for (const recipient of group) {
+      const key = recipient.chatId?.trim() || `user:${recipient.userId}`
+      if (!deduped.has(key)) {
+        deduped.set(key, recipient)
+      }
+    }
+  }
+
+  return [...deduped.values()]
+}
+
 async function getGroupPracticeRecipientTelegramIds(): Promise<{ userId: string; chatId: string | null }[]> {
   const users = await prisma.user.findMany({
     where: {
@@ -140,9 +182,11 @@ async function runNotificationCheck() {
         sessionType === 'group_practice'
           ? await getGroupPracticeRecipientTelegramIds()
           : await getAttendeeTelegramIds(session.id);
+      const coachRecipients = await getCoachRecipientTelegramIds(session.expertId)
+      const recipients = mergeRecipients(attendees, coachRecipients)
       const time = scheduledAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
       const dateStr = scheduledAt.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
-      for (const { chatId } of attendees) {
+      for (const { chatId } of recipients) {
         if (!chatId) continue;
         await sendDedupedTelegramMessage(
           chatId,
@@ -159,8 +203,10 @@ async function runNotificationCheck() {
         sessionType === 'group_practice'
           ? await getGroupPracticeRecipientTelegramIds()
           : await getAttendeeTelegramIds(session.id);
+      const coachRecipients = await getCoachRecipientTelegramIds(session.expertId)
+      const recipients = mergeRecipients(attendees, coachRecipients)
       const time = scheduledAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-      for (const { chatId } of attendees) {
+      for (const { chatId } of recipients) {
         if (!chatId) continue;
         await sendDedupedTelegramMessage(
           chatId,

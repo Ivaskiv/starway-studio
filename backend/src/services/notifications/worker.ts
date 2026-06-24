@@ -1,5 +1,6 @@
 import { notificationService } from './NotificationService.js'
 import { notificationJobService } from './services/NotificationJobService.js'
+import { sendOpsTelegramMessage } from '../../lib/telegram.js'
 
 const MAX_RETRIES = 3
 const POLL_INTERVAL_MS = 60_000
@@ -28,6 +29,15 @@ export async function processDueNotificationJobs(limit = 100) {
 
         if (nextAttempts >= MAX_RETRIES) {
           await notificationJobService.markFailed(job.id, message)
+          void sendOpsTelegramMessage(
+            [
+              '🚨 notification_failure',
+              `jobId: ${job.id}`,
+              `type: ${job.type}`,
+              `userId: ${String((job.payload as { userId?: unknown })?.userId ?? 'unknown')}`,
+              `error: ${message}`,
+            ].join('\n'),
+          ).catch(() => undefined)
           continue
         }
 
@@ -61,6 +71,14 @@ export function startNotificationWorker() {
       consecutiveErrors++
       const backoffMs = Math.min(1000 * Math.pow(2, consecutiveErrors), 60_000)
       console.error(`[NotificationWorker] process failed (error #${consecutiveErrors}, backoff ${backoffMs}ms)`, error)
+      void sendOpsTelegramMessage(
+        [
+          '🚨 scheduler_failure',
+          'component: notification_worker',
+          `attempt: ${consecutiveErrors}`,
+          `error: ${error instanceof Error ? error.message : 'unknown_error'}`,
+        ].join('\n'),
+      ).catch(() => undefined)
       await new Promise(r => setTimeout(r, backoffMs))
     }
   }
