@@ -22,6 +22,7 @@ import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
+import HomeTab from '@/features/zoom/tabs/HomeTab'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
 import MainLayout from '@/layout/MainLayout'
@@ -365,7 +366,7 @@ function MiniAppZoomRoute() {
 }
 
 function MiniAppZoomCalendar() {
-  return <ZoomCalendarPage />
+  return <HomeTab />
 }
 
 function MiniAppZoomWeekPanel() {

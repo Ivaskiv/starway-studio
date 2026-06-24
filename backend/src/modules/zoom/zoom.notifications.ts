@@ -5,6 +5,7 @@ import cron from 'node-cron';
 import { Prisma } from '@starway/db/prisma-client';
 import { prisma } from '../../db/client.js';
 import { bot, sendDedupedTelegramMessage } from '../../lib/telegram.js';
+import { FOCUS_PRODUCT_CODES } from '../subscriptions/payments/focus.access.js';
 import {
   getAllUpcomingSessionsForNotification,
   patchSessionRequests,
@@ -89,6 +90,16 @@ async function getGroupPracticeRecipientTelegramIds(): Promise<{ userId: string;
     where: {
       deletedAt: null,
       telegramEnabled: { not: false },
+      productSubscriptions: {
+        some: {
+          status: 'ACTIVE',
+          product: {
+            is: {
+              code: { in: [...FOCUS_PRODUCT_CODES] },
+            },
+          },
+        },
+      },
     },
     select: {
       id: true,
@@ -167,11 +178,7 @@ async function runNotificationCheck() {
 }
 
 export function startZoomNotificationsCron(): void {
-  cron.schedule('*/15 * * * *', () => {
-    runNotificationCheck().catch(err =>
-      console.error('[zoom-notifications] cron error', err),
-    );
-  });
+  console.info('[zoom-notifications] legacy pre-session reminder cron disabled; queue-based reminder jobs are the source of truth');
 
   // Every Sunday 18:00 — keep pinned channel schedule post up-to-date.
   cron.schedule('0 18 * * 0', () => {

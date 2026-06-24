@@ -1,7 +1,7 @@
 # Zoom Booking Test
 
 ## Test Steps
-1. Open mini app URL: `/zoom-booking.html` from Telegram user flow.
+1. Open mini app URL: `/zoom` from Telegram user flow.
 2. Verify available slots list is loaded.
 3. Click "Записатись" for one open slot.
 4. Confirm button state changes to booked.

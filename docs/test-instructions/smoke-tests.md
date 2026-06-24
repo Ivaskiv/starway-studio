@@ -2,7 +2,7 @@
 
 ## Checklist
 - `coach-schedule.html` -> `200`
-- `zoom-booking.html` -> `200`
+- `zoom` -> `200`
 - `api/zoom/slots/available` -> `401` (without auth)
 - `api/coach/schedule` -> `401` (without auth)
 

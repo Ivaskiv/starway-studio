@@ -53,6 +53,28 @@ const getTelegramChatId = async (userId: string): Promise<string | null> => {
   return user?.telegramChatId ?? user?.telegramLinks[0]?.chatId ?? null;
 };
 
+export async function syncZoomRegistrationLifecycle(userId: string, sessionId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      lifecycleState: 'ZOOM_MEMBER',
+    },
+  });
+  const state = await resolveUserState(userId).catch(() => null);
+  await trackEvent({
+    userId,
+    type: 'ZOOM_REGISTERED',
+    source: 'web',
+    state,
+    payload: {
+      sessionId,
+      attended_live: false,
+      zoom_index: 1,
+    },
+  });
+  await markAbTestZoomRegistered(userId, sessionId).catch(() => undefined)
+}
+
 export async function createSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id;
@@ -108,19 +130,7 @@ export async function register(req: AuthenticatedRequest, res: Response, next: N
     if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
 
     const attendee = await registerAttendee(userId, sessionId);
-    const state = await resolveUserState(userId).catch(() => null);
-    await trackEvent({
-      userId,
-      type: 'ZOOM_REGISTERED',
-      source: 'web',
-      state,
-      payload: {
-        sessionId,
-        attended_live: false,
-        zoom_index: 1,
-      },
-    });
-    await markAbTestZoomRegistered(userId, sessionId).catch(() => undefined)
+    await syncZoomRegistrationLifecycle(userId, sessionId)
     return res.status(201).json(attendee);
   } catch (err) {
     next(err);

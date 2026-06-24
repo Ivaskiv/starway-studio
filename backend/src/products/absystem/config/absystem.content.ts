@@ -5,7 +5,7 @@ import { buildBehavioralNarrative } from '../../../core/behavioral/behavioralNar
 export const AB_TEST_START_INTRO = [
   'Привіт.',
   '',
-  'Це тест AB System: <b>«Чому ти відкладаєш те що давно хочеш зробити?»</b>',
+  'Це тест AB System: <b>Чому ти відкладаєш те що давно хочеш зробити?</b>',
   '',
   'Він допоможе побачити чому ти знову переносиш важливе і <b>з чого почати</b>.',
   '',

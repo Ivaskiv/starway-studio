@@ -68,6 +68,7 @@ import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/foc
 import { sendAbTestBlock12Welcome } from '@/modules/subscriptions/payments/callback.notifications.js'
 import { alertCoachAboutPaymentIssue } from '@/modules/subscriptions/payments/coachAlert.service.js'
 import { coachBot } from '../../../lib/telegram.js'
+import { trackEvent } from '@/modules/events/service.js'
 import {
   planMessage,
   planAck,
@@ -597,6 +598,19 @@ export async function handleFocusPaymentAction(
       }
     )
     console.log('[FOCUS_PAY] sent ok', { userId: resolvedUserId, chatId })
+    if (resolvedUserId) {
+      await trackEvent({
+        userId: resolvedUserId,
+        type: 'PAYMENT_OPENED',
+        source: 'telegram',
+        state: 'S5_PAYMENT',
+        productId: 'focus',
+        payload: {
+          checkout_urls: [url1m, url3m].filter((value): value is string => Boolean(value)),
+          source_action: 'open_focus_payment',
+        } satisfies Prisma.JsonObject,
+      })
+    }
   } catch (error) {
     console.error('[FOCUS_PAY] FAILED', error)
   }
@@ -730,25 +744,40 @@ export async function handleFocusPaymentIssue(
     })
     .catch(() => undefined)
 
+  const orderReference = lastCheckout?.orderReference ?? 'unknown'
   const coachChatId = String(
     process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? ''
   ).trim()
-  if (coachChatId) {
+  if (!coachChatId) {
+    console.error('[PAYMENT_ISSUE] coach alert skipped: missing ops chat id', {
+      userId: issueUserId,
+      orderReference,
+      coachChatId,
+    })
+    return true
+  }
+
+  try {
     await alertCoachAboutPaymentIssue({
       bot: coachBot,
       coachChatId,
       userId: issueUserId,
-      orderReference: lastCheckout?.orderReference ?? 'unknown',
+      orderReference,
       amount: lastCheckout?.amount ?? 0,
       reason: FOCUS_PAYMENT_ISSUE_COACH_MSG({
         userId: issueUserId,
-        orderReference: lastCheckout?.orderReference ?? 'unknown',
+        orderReference,
         amount: lastCheckout?.amount ?? 0,
       }),
       scenario: 'E',
-    }).catch((error) =>
-      console.error('[PAYMENT_ISSUE] coach alert failed', error)
-    )
+    })
+  } catch (error) {
+    console.error('[PAYMENT_ISSUE] coach alert failed', {
+      userId: issueUserId,
+      orderReference,
+      coachChatId,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   return true

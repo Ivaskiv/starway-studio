@@ -14,9 +14,8 @@ import {
 import {
   findCloudinaryZoomAudioById,
   ingestCloudinaryZoomAudio,
-  listCloudinaryZoomAudio,
 } from '../../modules/zoom/cloudinary-audio-ingest.service.js'
-import { formatZoomAudioSizeMB } from '../../modules/voice/voice.service.js'
+import { parseZoomPostReport } from '../../modules/zoom/zoomPostReport.types.js'
 import { coachBotContent } from '../content/coachBot.content.js'
 import { coachContent } from '../content/coachContent.content.js'
 import {
@@ -26,6 +25,7 @@ import {
   handleCoachContentText,
   handleCoachContentZooms,
 } from '../flows/contentPlanner.flow.js'
+import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 
 type CoachAccess = {
   id: string
@@ -181,6 +181,153 @@ async function reportCoachRuntimeError(ctx: Context, scope: string, error: unkno
   await ctx.reply(COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
 }
 
+async function showCoachAudioLibraryHome(ctx: Context, coach: CoachAccess): Promise<void> {
+  const months = await listCoachAudioLibraryMonths(coach)
+
+  await replyOrEditPanelMessage(ctx, [
+    '🎧 Аудіо ЗУМИ ФОКУС',
+    '',
+    'Натисни "Завантажити Zoom" і просто надішли файл у цей чат.',
+    'Далі система сама зробить upload → transcript → analysis → content → library.',
+    '',
+    months.length > 0
+      ? 'Нижче доступні місяці бібліотеки.'
+      : 'У бібліотеці ще немає оброблених Zoom-аудіо.',
+  ].join('\n'))
+
+  if (months.length > 0) {
+    await ctx.reply(
+      'Бібліотека по місяцях:',
+      Markup.inlineKeyboard(
+        months.map((month) => [Markup.button.callback(formatMonthLabel(month), `coach-library:month:${month}`)]),
+      ),
+    ).catch(() => undefined)
+  }
+}
+
+async function showCoachAudioLibraryMonth(ctx: Context, coach: CoachAccess, month: string): Promise<void> {
+  const sessions = await listCoachAudioLibrarySessions(coach, month)
+  if (sessions.length === 0) {
+    await replyOrEditPanelMessage(ctx, `За ${month} оброблених Zoom-сесій поки немає.`)
+    return
+  }
+
+  await replyOrEditPanelMessage(ctx, `📚 ${formatMonthLabel(month)}\n\nВибери Zoom-сесію:`)
+
+  for (const session of sessions) {
+    const report = session.report
+    const text = [
+      `• ${formatKyivDateTime(session.scheduledAt)} — ${session.topic}`,
+      `  type: ${resolveZoomTypeLabel(report?.sessionType ?? session.type)}`,
+      `  audio: ${report?.audioUrl || report?.audioFileId ? 'yes' : 'no'}`,
+      `  transcript: ${report?.transcript ? 'yes' : 'no'}`,
+      `  analysis: ${report?.summary || report?.coachReport ? 'yes' : 'no'}`,
+    ].join('\n')
+
+    await ctx.reply(
+      text,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('Відкрити картку Zoom', `coach-library:session:${session.id}:overview`)],
+      ]),
+    ).catch(() => undefined)
+  }
+}
+
+async function showCoachAudioLibrarySession(ctx: Context, coach: CoachAccess, sessionId: string, section = 'overview'): Promise<void> {
+  const session = await loadCoachAudioLibrarySession(coach, sessionId)
+  if (!session) {
+    await ctx.reply('❌ Zoom-сесію не знайдено.').catch(() => undefined)
+    return
+  }
+
+  const report = session.report
+  const audioId = report?.audioFileId ?? null
+  const audioUrl = audioId ? buildAudioStreamUrl(audioId) : null
+  const audioDownloadUrl = audioId ? buildAudioStreamUrl(audioId, true) : null
+  const header = [
+    `🎙 ${session.topic}`,
+    `📅 ${formatKyivDateTime(session.scheduledAt)}`,
+    `🎯 ${resolveZoomTypeLabel(report?.sessionType ?? session.type)}`,
+  ].join('\n')
+
+  let body = ''
+  if (section === 'audio') {
+    body = [
+      header,
+      '',
+      report?.audioUrl || audioId
+        ? `Аудіо готове${report?.audioDuration ? ` • ${Math.round(report.audioDuration)}s` : ''}.`
+        : 'Аудіо ще не готове.',
+    ].join('\n')
+  } else if (section === 'transcript') {
+    body = [
+      header,
+      '',
+      '📝 Транскрипт',
+      clipText(report?.transcript, 3500),
+    ].join('\n')
+  } else if (section === 'analysis') {
+    body = [
+      header,
+      '',
+      '📊 Аналіз',
+      report?.summary ? `Summary: ${report.summary}` : 'Summary: —',
+      '',
+      report?.coachReport ? `Coach report:\n${clipText(report.coachReport, 2200)}` : 'Coach report: —',
+    ].join('\n')
+  } else if (section === 'content') {
+    body = [
+      header,
+      '',
+      '🎬 Контент',
+      ...(report?.contentIdeas?.length
+        ? report.contentIdeas.map((item, index) => `${index + 1}. ${item}`)
+        : ['Ідей контенту поки немає.']),
+    ].join('\n')
+  } else if (section === 'insights') {
+    body = [
+      header,
+      '',
+      '📈 Інсайти',
+      ...(report?.insights?.length ? ['Insights:', ...report.insights.map((item) => `• ${item}`)] : ['Insights: —']),
+      '',
+      ...(report?.wins?.length ? ['Wins:', ...report.wins.map((item) => `• ${item}`)] : ['Wins: —']),
+      '',
+      ...(report?.objections?.length ? ['Objections:', ...report.objections.map((item) => `• ${item}`)] : ['Objections: —']),
+      '',
+      ...(report?.recurringThemes?.length ? ['Recurring themes:', ...report.recurringThemes.map((item) => `• ${item}`)] : ['Recurring themes: —']),
+    ].join('\n')
+  } else {
+    body = [
+      header,
+      '',
+      `🎧 Аудіо: ${report?.audioUrl || audioId ? 'готове' : 'очікується'}`,
+      `📝 Транскрипт: ${report?.transcript ? 'готовий' : 'очікується'}`,
+      `📊 Аналіз: ${report?.summary || report?.coachReport ? 'готовий' : 'очікується'}`,
+      `🎬 Контент: ${report?.contentIdeas?.length ? `${report.contentIdeas.length} ідей` : 'очікується'}`,
+      `📈 Інсайти: ${report?.insights?.length ? `${report.insights.length} знайдено` : 'очікується'}`,
+    ].join('\n')
+  }
+
+  const sectionKeyboard = buildCoachLibrarySectionsKeyboard(session.id)
+  if ((section === 'audio' || section === 'overview') && audioUrl && audioDownloadUrl) {
+    await ctx.reply(
+      body,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [Markup.button.url('🎧 Слухати', audioUrl), Markup.button.url('💾 Завантажити', audioDownloadUrl)],
+            ...sectionKeyboard.inline_keyboard,
+          ],
+        },
+      },
+    ).catch(() => undefined)
+    return
+  }
+
+  await ctx.reply(body, { reply_markup: sectionKeyboard }).catch(() => undefined)
+}
+
 function withCoachRuntimeProtection<T extends Context>(
   scope: string,
   handler: (ctx: T) => Promise<unknown>,
@@ -222,34 +369,128 @@ function formatUserRow(user: {
   ].join('\n')
 }
 
-function formatAudioRow(item: {
-  assetId: string
-  folder: string
-  fileName: string
-  secureUrl: string
-  createdAt: string | null
-  bytes: number | null
-  duration: number | null
-}): string {
-  const sizeMB = formatZoomAudioSizeMB(item.bytes)
-  const createdAt = item.createdAt ? formatKyivDateTime(item.createdAt) : '—'
-  return [
-    `• ${item.fileName}`,
-    `  folder: ${item.folder}`,
-    `  created: ${createdAt}`,
-    `  size: ${sizeMB ? `${sizeMB} MB` : '—'}`,
-    `  duration: ${typeof item.duration === 'number' ? `${Math.round(item.duration)}s` : '—'}`,
-    `  url: ${item.secureUrl}`,
-  ].join('\n')
+function resolveCoachExpertScopeId(coach: CoachAccess): string {
+  return coach.expertId ?? coach.id
 }
 
-function buildAudioActionsKeyboard(audioId: string) {
-  return Markup.inlineKeyboard([
-    [
-      Markup.button.callback('🎧 Слухати', `coach-content:audio-play:${audioId}`),
-      Markup.button.callback('💾 Завантажити', `coach-content:audio-download:${audioId}`),
+function formatMonthLabel(month: string): string {
+  const [yearValue, monthValue] = month.split('-')
+  const year = Number(yearValue)
+  const monthIndex = Number(monthValue) - 1
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+    return month
+  }
+
+  return new Date(Date.UTC(year, monthIndex, 1)).toLocaleDateString('uk-UA', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: KYIV_TZ,
+  })
+}
+
+function resolveZoomTypeLabel(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (normalized === 'INDIVIDUAL' || normalized === 'PRIVATE') return 'INDIVIDUAL'
+  return 'GROUP'
+}
+
+function clipText(value: string | null | undefined, limit = 1400): string {
+  const normalized = String(value ?? '').trim()
+  if (!normalized) return '—'
+  return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 1)}…`
+}
+
+async function listCoachAudioLibraryMonths(coach: CoachAccess): Promise<string[]> {
+  const sessions = await prisma.zoomSession.findMany({
+    where: {
+      expertId: resolveCoachExpertScopeId(coach),
+      status: { not: 'CANCELLED' },
+    },
+    orderBy: [{ scheduledAt: 'desc' }],
+    select: {
+      scheduledAt: true,
+      postSessionReport: true,
+    },
+  })
+
+  const months = new Set<string>()
+  for (const session of sessions) {
+    const report = parseZoomPostReport(session.postSessionReport)
+    if (!report?.transcript && !report?.audioFileId && !report?.audioUrl) continue
+    months.add(session.scheduledAt.toISOString().slice(0, 7))
+  }
+
+  return Array.from(months).sort((left, right) => right.localeCompare(left)).slice(0, 12)
+}
+
+async function listCoachAudioLibrarySessions(coach: CoachAccess, month: string) {
+  const monthRange = startOfMonth(month)
+  if (!monthRange) return []
+
+  const sessions = await prisma.zoomSession.findMany({
+    where: {
+      expertId: resolveCoachExpertScopeId(coach),
+      scheduledAt: { gte: monthRange.from, lte: monthRange.to },
+      status: { not: 'CANCELLED' },
+    },
+    orderBy: [{ scheduledAt: 'desc' }],
+    select: {
+      id: true,
+      scheduledAt: true,
+      topic: true,
+      type: true,
+      postSessionReport: true,
+    },
+  })
+
+  return sessions
+    .map((session) => ({
+      ...session,
+      report: parseZoomPostReport(session.postSessionReport),
+    }))
+    .filter((session) => Boolean(session.report?.transcript || session.report?.audioFileId || session.report?.audioUrl))
+}
+
+async function loadCoachAudioLibrarySession(coach: CoachAccess, sessionId: string) {
+  const session = await prisma.zoomSession.findFirst({
+    where: {
+      id: sessionId,
+      expertId: resolveCoachExpertScopeId(coach),
+      status: { not: 'CANCELLED' },
+    },
+    select: {
+      id: true,
+      scheduledAt: true,
+      topic: true,
+      type: true,
+      status: true,
+      postSessionReport: true,
+    },
+  })
+
+  if (!session) return null
+  return {
+    ...session,
+    report: parseZoomPostReport(session.postSessionReport),
+  }
+}
+
+function buildCoachLibrarySectionsKeyboard(sessionId: string) {
+  return {
+    inline_keyboard: [
+      [
+        Markup.button.callback('🎧 Аудіо', `coach-library:session:${sessionId}:audio`),
+        Markup.button.callback('📝 Транскрипт', `coach-library:session:${sessionId}:transcript`),
+      ],
+      [
+        Markup.button.callback('📊 Аналіз', `coach-library:session:${sessionId}:analysis`),
+        Markup.button.callback('🎬 Контент', `coach-library:session:${sessionId}:content`),
+      ],
+      [
+        Markup.button.callback('📈 Інсайти', `coach-library:session:${sessionId}:insights`),
+      ],
     ],
-  ])
+  }
 }
 
 async function resolveCoachAccess(ctx: Context): Promise<CoachAccess | null> {
@@ -317,45 +558,95 @@ export async function handleCoachAudioCommand(ctx: Context, payload = ''): Promi
     return true
   }
 
-  const monthRange = monthQuery ? startOfMonth(monthQuery) : null
-  const weekStart = startOfWeekMonday()
-  const weekEnd = endOfWeekSunday(weekStart)
-  const rangeFrom = monthRange?.from ?? weekStart
-  const rangeTo = monthRange?.to ?? weekEnd
-  const items = await listCloudinaryZoomAudio({
-    limitPerFolder: 50,
-    from: rangeFrom,
-    to: rangeTo,
-  })
-  if (items.length === 0) {
-    await replyOrEditPanelMessage(ctx, [
-      `🎧 ${coachPanelContent.audio.title}`,
-      '',
-      monthRange
-        ? `Поки що Cloudinary-аудіо за ${monthRange.label} не знайдено.`
-        : 'Поки що Cloudinary-аудіо за поточний тиждень не знайдено.',
-      '',
-      coachPanelContent.audio.usage,
-    ].join('\n'))
+  if (monthQuery) {
+    await showCoachAudioLibraryMonth(ctx, coach, monthQuery)
     return true
   }
 
-  await replyOrEditPanelMessage(ctx, [
-    `🎧 ${coachPanelContent.audio.title}`,
-    '',
-    monthRange
-      ? `Аудіо за місяць: ${monthRange.label}`
-      : `Аудіо за поточний тиждень: ${weekStart.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: KYIV_TZ })}–${weekEnd.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', timeZone: KYIV_TZ })}`,
-    '',
-    'Вибери запис нижче, щоб прослухати або завантажити.',
-  ].join('\n\n'))
+  await showCoachAudioLibraryHome(ctx, coach)
+  return true
+}
 
-  for (const item of items) {
-    await ctx.reply(
-      formatAudioRow(item),
-      buildAudioActionsKeyboard(item.assetId),
-    ).catch(() => undefined)
+async function enqueueCoachAudioUpload(ctx: Context): Promise<boolean> {
+  const coach = await resolveCoachAccess(ctx)
+  const chatId = ctx.chat?.id ? String(ctx.chat.id) : ''
+  const message = ('message' in ctx ? ctx.message : null) as Record<string, unknown> | null
+  if (!coach || !chatId || !message) return false
+
+  const audio = message.audio && typeof message.audio === 'object' ? message.audio as Record<string, unknown> : null
+  const document = message.document && typeof message.document === 'object' ? message.document as Record<string, unknown> : null
+  const voice = message.voice && typeof message.voice === 'object' ? message.voice as Record<string, unknown> : null
+
+  const media = audio ?? document ?? voice
+  if (!media) return false
+
+  const mimeType = String(media.mime_type ?? '').trim() || null
+  const fileName = String(media.file_name ?? '').trim() || (audio ? 'telegram-audio' : voice ? 'telegram-voice.ogg' : 'telegram-document')
+  const isAudioLike = Boolean(audio || voice)
+    || Boolean(mimeType && mimeType.startsWith('audio/'))
+    || /\.(mp3|m4a|wav|ogg|oga|aac|flac|mp4|mpeg|webm)$/i.test(fileName)
+
+  if (!isAudioLike) {
+    await ctx.reply('Надішли аудіо Zoom у форматі audio або document з аудіо-файлом.').catch(() => undefined)
+    return true
   }
+
+  const fileId = String(media.file_id ?? '').trim()
+  const fileUniqueId = String(media.file_unique_id ?? '').trim() || null
+  if (!fileId) {
+    await ctx.reply('Не вдалося прочитати файл Telegram. Спробуй надіслати його ще раз.').catch(() => undefined)
+    return true
+  }
+
+  const messageId = typeof message.message_id === 'number' ? message.message_id : null
+  const uploadedAt = typeof message.date === 'number'
+    ? new Date(message.date * 1000)
+    : new Date()
+
+  const mediaType = audio
+    ? 'audio'
+    : voice
+      ? 'voice'
+      : 'document_audio'
+
+  const outbox = await enqueueRuntimeOutboxItem({
+    scope: 'zoom_audio_ingest',
+    type: 'ZOOM_AUDIO_UPLOADED',
+    source: 'telegram',
+    userId: coach.id,
+    state: 'uploaded',
+    tenantId: chatId,
+    runtime: {
+      requestFingerprint: fileUniqueId ?? fileId,
+      orchestrationPath: ['coach_bot_zoom_audio_upload', chatId],
+    },
+    payload: {
+      fileId,
+      fileUniqueId,
+      chatId,
+      messageId,
+      mediaType,
+      fileName,
+      mimeType,
+      caption: typeof message.caption === 'string' ? message.caption : null,
+      source: 'telegram',
+      observedAt: uploadedAt.toISOString(),
+      uploadedAt: uploadedAt.toISOString(),
+      duration: typeof media.duration === 'number' ? media.duration : null,
+      sizeBytes: typeof media.file_size === 'number' ? media.file_size : null,
+    },
+  })
+
+  if (outbox.duplicate) {
+    await ctx.reply('Цей файл уже в обробці або вже був завантажений.').catch(() => undefined)
+    return true
+  }
+
+  await ctx.reply([
+    '🎧 Zoom-аудіо прийнято.',
+    'Далі під капотом підуть upload → transcript → analysis → content → library.',
+    'Статус я надішлю сюди в цей чат.',
+  ].join('\n')).catch(() => undefined)
   return true
 }
 
@@ -691,7 +982,25 @@ async function handleCoachPanelAction(ctx: Context, action: string): Promise<boo
 
   if (action === 'coach-content:audio') {
     await ctx.answerCbQuery('Audio').catch(() => undefined)
-    return handleCoachAudioCommand(ctx, 'list')
+    return handleCoachAudioCommand(ctx, '')
+  }
+
+  if (action.startsWith('coach-library:month:')) {
+    const month = action.replace('coach-library:month:', '').trim()
+    await ctx.answerCbQuery('Місяць').catch(() => undefined)
+    const coach = await resolveCoachAccess(ctx)
+    if (!coach) return false
+    await showCoachAudioLibraryMonth(ctx, coach, month)
+    return true
+  }
+
+  if (action.startsWith('coach-library:session:')) {
+    const [, , sessionId, section = 'overview'] = action.split(':')
+    await ctx.answerCbQuery('Zoom card').catch(() => undefined)
+    const coach = await resolveCoachAccess(ctx)
+    if (!coach || !sessionId) return false
+    await showCoachAudioLibrarySession(ctx, coach, sessionId, section)
+    return true
   }
 
   if (action.startsWith('coach-content:audio-play:') || action.startsWith('coach-content:audio-download:')) {
@@ -800,4 +1109,8 @@ export function registerCoachContentHandlers(telegramBot: Telegraf): void {
       await reportCoachRuntimeError(ctx, 'text', error)
     }
   })
+
+  telegramBot.on(['audio', 'document', 'voice'], coachOnly, withCoachRuntimeProtection('media:zoom-audio-upload', async (ctx) => {
+    await enqueueCoachAudioUpload(ctx)
+  }))
 }

@@ -7,6 +7,7 @@ import type { Telegraf } from 'telegraf';
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js';
 import { abTestZoomContent } from '@/products/ab-system/content/abTest.zoom.js';
 import { FOCUS_PRODUCT_CODE } from '@/products/focus/config/focus.constants.js';
+import { FOCUS_PRODUCT_CODES } from '../subscriptions/payments/focus.access.js';
 import { buildShortWayForPayCheckoutUrl } from '../subscriptions/payments/wayforpay.checkout.js';
 import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js';
 import { parseZoomPostReport } from './zoomPostReport.types.js';
@@ -1450,7 +1451,14 @@ export async function notifySubscribersNewSession(
   const paidUsers = await prisma.user.findMany({
     where: {
       productSubscriptions: {
-        some: { status: 'ACTIVE' },
+        some: {
+          status: 'ACTIVE',
+          product: {
+            is: {
+              code: { in: [...FOCUS_PRODUCT_CODES] },
+            },
+          },
+        },
       },
       deletedAt: null,
     },
@@ -1906,6 +1914,14 @@ export async function afterZoomOperation(
     coachMetadata,
   }).catch((err) => console.error('[afterZoomOp] processScheduleNotification:', err))
 
+  if (operation === 'book') {
+    for (const userId of affectedUserIds) {
+      void scheduleReminders(userId, session).catch((err) =>
+        console.error('[afterZoomOp] scheduleReminders:', err),
+      )
+    }
+  }
+
   if (operation === 'update' || operation === 'swap_accept') {
     for (const userId of affectedUserIds) {
       void rescheduleReminders(userId, session).catch((err) =>
@@ -1962,7 +1978,7 @@ export async function notifyMonthSchedule(
   const firstDt = new Date(upcomingGroupSessions[0].scheduledAt)
   const monthLabel = firstDt.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })
 
-  const paidUsers = await prisma.user.findMany({
+  const activeSubscriptionUsers = await prisma.user.findMany({
     where: {
       productSubscriptions: { some: { status: 'ACTIVE' } },
       deletedAt: null,
@@ -1977,8 +1993,57 @@ export async function notifyMonthSchedule(
         take: 1,
         select: { chatId: true },
       },
+      productSubscriptions: {
+        where: { status: 'ACTIVE' },
+        select: {
+          product: {
+            select: { code: true },
+          },
+        },
+      },
     },
   })
+
+  const paidUsers = await prisma.user.findMany({
+    where: {
+      productSubscriptions: {
+        some: {
+          status: 'ACTIVE',
+          product: {
+            is: {
+              code: { in: [...FOCUS_PRODUCT_CODES] },
+            },
+          },
+        },
+      },
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+    },
+  })
+
+  const selectedUserIds = new Set(paidUsers.map((user) => user.id))
+  for (const user of activeSubscriptionUsers) {
+    const products = user.productSubscriptions
+      .map((subscription) => subscription.product.code)
+      .filter((code): code is string => Boolean(code))
+    const selected = selectedUserIds.has(user.id)
+    console.info('[FOCUS_AUDIENCE]', {
+      userId: user.id,
+      product: products.length > 0 ? products.join(',') : 'none',
+      selected,
+      reason: selected ? 'active_focus_subscription' : 'active_non_focus_subscription',
+    })
+  }
 
   const paidText =
     `Розклад Zoom-практик ФОКУС — ${monthLabel}\n\n`

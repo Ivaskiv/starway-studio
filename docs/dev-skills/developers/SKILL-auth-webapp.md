@@ -49,7 +49,7 @@ Markup.button.webApp('📅 Розклад',
 apps/web/public/
   coach-schedule.html    ← розклад коуча
   coach-analytics.html   ← аналітика (майбутнє)
-  zoom-booking.html      ← запис учасника (майбутнє)
+  /zoom                  ← запис учасника
 ```
 Vite автоматично публікує `public/` як статику на Vercel.
 URL: `https://your-app.vercel.app/coach-schedule.html`

@@ -135,7 +135,7 @@ export async function sendAbTestBlock12Welcome(userId: string): Promise<boolean>
   const zoomBookingUrl = (
     String(process.env.WEBAPP_URL ?? '').trim() ||
     'https://starway-frontend.vercel.app'
-  ).replace(/\/$/, '') + '/zoom-booking.html'
+  ).replace(/\/$/, '') + '/zoom'
 
   await bot.telegram.sendMessage(
     chatId,

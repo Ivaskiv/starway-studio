@@ -32,6 +32,7 @@ import type { AvailabilitySlot } from './zoom.availability.service.js';
 import { prisma } from '../../db/client.js';
 import { sendOpsTelegramMessage } from '../../lib/telegram.js';
 import { SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/prisma-client';
+import { syncZoomRegistrationLifecycle } from './controller.js';
 
 type BattleOutcome = 'challenger' | 'opponent' | 'both' | 'none';
 
@@ -577,6 +578,7 @@ export async function handleBookPrivateSlot(
     if (!(await requireActiveFocusSubscription(userId, res))) return
     const { id } = req.params
     const result = await bookPrivateSlot(userId, id)
+    await syncZoomRegistrationLifecycle(userId, id)
     return res.status(200).json(result)
   } catch (err) {
     if (err instanceof Error) {

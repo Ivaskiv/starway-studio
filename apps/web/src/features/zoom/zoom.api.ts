@@ -119,8 +119,28 @@ export const zoomCalendarApi = api.injectEndpoints({
       providesTags: ['ZoomSession'],
     }),
 
+    getTelegramAvailableSlots: build.query<
+      Array<{ id: string; date: string; hour: number; bookedCount: number; isBooked: boolean }>,
+      void
+    >({
+      query: () => ({
+        url: '/zoom/slots/available',
+        headers: { 'x-skip-access-token': '1' },
+      }),
+      providesTags: ['ZoomSession'],
+    }),
+
     bookPrivateSlot: build.mutation<{ success: boolean }, string>({
       query: sessionId => ({ url: `/zoom/sessions/${sessionId}/book`, method: 'POST' }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    bookTelegramSlot: build.mutation<{ success: boolean }, string>({
+      query: sessionId => ({
+        url: `/zoom/sessions/${sessionId}/book`,
+        method: 'POST',
+        headers: { 'x-skip-access-token': '1' },
+      }),
       invalidatesTags: ['ZoomSession'],
     }),
 
@@ -176,7 +196,9 @@ export const {
   useBookSlotMutation,
   useUnbookSlotMutation,
   useGetAvailablePrivateSlotsQuery,
+  useGetTelegramAvailableSlotsQuery,
   useBookPrivateSlotMutation,
+  useBookTelegramSlotMutation,
   useCancelPrivateBookingMutation,
   useGetPendingSwapsQuery,
   useCreateSwapRequestMutation,

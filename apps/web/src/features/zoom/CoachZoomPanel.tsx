@@ -11,6 +11,8 @@ import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './z
 import ZoomCalendar from './ZoomCalendar';
 import { ZoomAvailabilityEditor } from './ZoomAvailabilityEditor';
 import { useAppSelector } from '@/app/hooks';
+import { useGetAttendeesQuery, useMarkAttendedMutation } from './services/zoom.api';
+import type { ZoomAttendeeDTO } from './types/zoom.types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -122,6 +124,24 @@ function fmtDateTime(iso: string): string {
   return `${dd}.${mm} · ${hh}:${mi}`;
 }
 
+type CoachZoomAttendee = ZoomAttendeeDTO & {
+  user?: {
+    id?: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  };
+};
+
+function formatAttendeeName(attendee: CoachZoomAttendee): string {
+  const firstName = attendee.user?.firstName?.trim() ?? '';
+  const lastName = attendee.user?.lastName?.trim() ?? '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  if (fullName) return fullName;
+  if (attendee.user?.email?.trim()) return attendee.user.email.trim();
+  return attendee.userId;
+}
+
 // ── SectionLabel ──────────────────────────────────────────────────────────────
 
 function SectionLabel({
@@ -171,6 +191,22 @@ function SectionLabel({
 // ── UpcomingSessionCard ───────────────────────────────────────────────────────
 
 function UpcomingSessionCard({ session }: { session: ZoomCalendarSession }) {
+  const [isAttendeesOpen, setIsAttendeesOpen] = useState(false);
+  const { data: attendees = [], isFetching, refetch } = useGetAttendeesQuery(session.id, {
+    skip: !isAttendeesOpen,
+    refetchOnMountOrArgChange: true,
+  });
+  const [markAttended, { isLoading: isMarkingAttended }] = useMarkAttendedMutation();
+
+  const handleMarkAttended = async (attendeeId: string) => {
+    try {
+      await markAttended({ attendeeId }).unwrap();
+      await refetch();
+    } catch (error) {
+      console.error('[zoom/attendance] markAttended failed', { attendeeId, error });
+    }
+  };
+
   return (
     <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] p-3">
       <div className="flex items-center gap-3">
@@ -203,6 +239,62 @@ function UpcomingSessionCard({ session }: { session: ZoomCalendarSession }) {
           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400">✓ Zoom є</span>
         ) : (
           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400">⚠ Zoom-посилання немає</span>
+        )}
+      </div>
+      <div className="mt-3 border-t border-[var(--border-primary)] pt-3">
+        <button
+          type="button"
+          onClick={() => setIsAttendeesOpen((current) => !current)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--accent-soft-rgb))]">
+            Учасники
+          </span>
+          <span className="text-[11px] text-[var(--text-muted)]">
+            {isAttendeesOpen ? 'Сховати' : 'Показати'}
+          </span>
+        </button>
+        {isAttendeesOpen && (
+          <div className="mt-3 flex flex-col gap-2">
+            {isFetching ? (
+              <p className="text-xs text-[var(--text-muted)]">Завантажуємо учасників…</p>
+            ) : attendees.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)]">Поки немає записаних учасників.</p>
+            ) : (
+              attendees.map((attendee) => {
+                const attendeeRecord = attendee as CoachZoomAttendee;
+                return (
+                  <div
+                    key={attendee.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-primary)] px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                        {formatAttendeeName(attendeeRecord)}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                        {attendee.attended ? 'Статус: присутній' : 'Статус: не відмічений'}
+                      </p>
+                    </div>
+                    {attendee.attended ? (
+                      <span className="rounded-full bg-green-500/15 px-2 py-1 text-[11px] font-medium text-green-400">
+                        ✓ Присутній
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleMarkAttended(attendee.id)}
+                        disabled={isMarkingAttended}
+                        className="rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-[11px] font-semibold text-green-300 transition-colors hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        ✅ Присутній
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         )}
       </div>
     </div>

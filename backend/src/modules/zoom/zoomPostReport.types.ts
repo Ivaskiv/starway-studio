@@ -5,6 +5,18 @@ export interface ZoomPostSessionReport {
   summary?: string
   transcribedAt?: string
   audioFileId?: string
+  audioUrl?: string
+  audioDuration?: number
+  sessionDate?: string
+  sessionType?: string
+  audioFileName?: string
+  coachReport?: string
+  insights?: string[]
+  objections?: string[]
+  wins?: string[]
+  recurringThemes?: string[]
+  contentIdeas?: string[]
+  analyzedAt?: string
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -23,5 +35,17 @@ export function parseZoomPostReport(v: unknown): ZoomPostSessionReport | null {
     summary: typeof r.summary === 'string' ? r.summary : undefined,
     transcribedAt: typeof r.transcribedAt === 'string' ? r.transcribedAt : undefined,
     audioFileId: typeof r.audioFileId === 'string' ? r.audioFileId : undefined,
+    audioUrl: typeof r.audioUrl === 'string' ? r.audioUrl : undefined,
+    audioDuration: typeof r.audioDuration === 'number' ? r.audioDuration : undefined,
+    sessionDate: typeof r.sessionDate === 'string' ? r.sessionDate : undefined,
+    sessionType: typeof r.sessionType === 'string' ? r.sessionType : undefined,
+    audioFileName: typeof r.audioFileName === 'string' ? r.audioFileName : undefined,
+    coachReport: typeof r.coachReport === 'string' ? r.coachReport : undefined,
+    insights: isStringArray(r.insights) ? r.insights : undefined,
+    objections: isStringArray(r.objections) ? r.objections : undefined,
+    wins: isStringArray(r.wins) ? r.wins : undefined,
+    recurringThemes: isStringArray(r.recurringThemes) ? r.recurringThemes : undefined,
+    contentIdeas: isStringArray(r.contentIdeas) ? r.contentIdeas : undefined,
+    analyzedAt: typeof r.analyzedAt === 'string' ? r.analyzedAt : undefined,
   }
 }

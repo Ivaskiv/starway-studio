@@ -1,7 +1,7 @@
 import { ZoomStatus, type Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
-import { bot, contentBot } from '../../lib/telegram.js'
+import { bot, coachBot, contentBot } from '../../lib/telegram.js'
 import {
   compressZoomAudioFile,
   downloadTelegramAudioSourceToTempFile,
@@ -14,6 +14,8 @@ import {
   transcribeTelegramAudio,
   type ZoomAudioProcessingStrategy,
 } from '../../modules/voice/voice.service.js'
+import { uploadZoomAudioToCloudinary, resolveZoomAudioStorageType } from '../../modules/zoom/zoomAudioStorage.service.js'
+import { generateZoomTranscriptInsight } from '../../modules/zoom/zoomInsight.service.js'
 import type { EventSource } from '../../modules/events/service.js'
 import { buildRuntimeTelemetry, claimRuntimeEventReplay, withRuntimeAdvisoryLock, type RuntimeIdempotencyInput } from './runtimeIdempotency.js'
 
@@ -53,21 +55,24 @@ function buildZoomCoachStatusText(lines: string[], fileName?: string | null, zoo
   return `${body}${fileLine}${zoomTypeLine}`
 }
 
-async function sendZoomCoachStatusMessage(chatId: string, text: string) {
-  const message = await bot.telegram.sendMessage(chatId, text)
+async function sendZoomCoachStatusMessage(chatId: string, text: string, runtime: 'bot' | 'coachBot' = 'bot') {
+  const client = runtime === 'coachBot' ? coachBot : bot
+  const message = await client.telegram.sendMessage(chatId, text)
   return { chatId, messageId: message.message_id }
 }
 
 async function editZoomCoachStatusMessage(
   ref: CoachStatusMessageRef | null,
   text: string,
+  runtime: 'bot' | 'coachBot' = 'bot',
   replyMarkup?: CoachInlineKeyboardMarkup,
 ) {
   if (!ref) return null
+  const client = runtime === 'coachBot' ? coachBot : bot
   const options = replyMarkup
-    ? ({ reply_markup: replyMarkup } as Parameters<typeof bot.telegram.editMessageText>[4])
+    ? ({ reply_markup: replyMarkup } as Parameters<typeof client.telegram.editMessageText>[4])
     : undefined
-  await bot.telegram.editMessageText(ref.chatId, ref.messageId, undefined, text, options)
+  await client.telegram.editMessageText(ref.chatId, ref.messageId, undefined, text, options)
   return ref
 }
 
@@ -112,6 +117,112 @@ function mergeZoomPostSessionReport(existing: unknown, next: Prisma.JsonObject):
     ...existing,
     ...next,
   }
+}
+
+type MatchedZoomSession = {
+  id: string
+  expertId: string | null
+  topic: string
+  type: string
+  scheduledAt: Date
+  postSessionReport: Prisma.JsonValue | null
+  attendees: Array<{
+    user: {
+      telegramUserName: string | null
+      firstName: string | null
+      email: string
+    }
+  }>
+}
+
+function sanitizeZoomUsernameCandidate(value: string | null | undefined): string | null {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/g, '')
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+
+  return normalized || null
+}
+
+function resolveZoomSessionUsername(session: MatchedZoomSession | null): string | null {
+  const attendee = session?.attendees[0]?.user
+  if (!attendee) return null
+
+  return sanitizeZoomUsernameCandidate(
+    attendee.telegramUserName
+      ?? attendee.firstName
+      ?? attendee.email.split('@')[0]
+      ?? null,
+  )
+}
+
+async function matchZoomSessionForAudio(observedAt: Date): Promise<{ session: MatchedZoomSession | null; matchMethod: 'scheduled_at_match' | 'heuristic_fallback' | 'not_found' }> {
+  const session = await prisma.zoomSession.findFirst({
+    where: {
+      scheduledAt: { lte: observedAt },
+      status: { not: ZoomStatus.CANCELLED },
+    },
+    orderBy: [{ scheduledAt: 'desc' }, { updatedAt: 'desc' }],
+    select: {
+      id: true,
+      expertId: true,
+      topic: true,
+      type: true,
+      scheduledAt: true,
+      postSessionReport: true,
+      attendees: {
+        take: 1,
+        select: {
+          user: {
+            select: {
+              telegramUserName: true,
+              firstName: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+  }).catch(() => null)
+
+  if (session) {
+    return { session, matchMethod: 'scheduled_at_match' }
+  }
+
+  const fallback = await prisma.zoomSession.findFirst({
+    where: {
+      status: { not: ZoomStatus.CANCELLED },
+    },
+    orderBy: [{ scheduledAt: 'desc' }, { updatedAt: 'desc' }],
+    select: {
+      id: true,
+      expertId: true,
+      topic: true,
+      type: true,
+      scheduledAt: true,
+      postSessionReport: true,
+      attendees: {
+        take: 1,
+        select: {
+          user: {
+            select: {
+              telegramUserName: true,
+              firstName: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+  }).catch(() => null)
+
+  if (fallback) {
+    return { session: fallback, matchMethod: 'heuristic_fallback' }
+  }
+
+  return { session: null, matchMethod: 'not_found' }
 }
 
 export async function enqueueRuntimeOutboxItem(input: RuntimeOutboxItem): Promise<{ duplicate: boolean; dedupeKey: string }> {
@@ -279,7 +390,12 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
         const mediaType = audioPayload.mediaType === 'voice'
           ? 'TELEGRAM_VOICE'
           : 'TELEGRAM_AUDIO'
-        const opsChatId = process.env.STARWAY_OPS_CHAT_ID?.trim() || process.env.OPS_TELEGRAM_CHAT_ID?.trim()
+        const opsChatId = (typeof audioPayload.chatId === 'string' && audioPayload.chatId.trim())
+          || process.env.STARWAY_OPS_CHAT_ID?.trim()
+          || process.env.OPS_TELEGRAM_CHAT_ID?.trim()
+        const statusRuntime = typeof audioPayload.chatId === 'string' && audioPayload.chatId.trim()
+          ? 'coachBot'
+          : 'bot'
         const cleanupTasks: Array<() => Promise<void>> = []
         let transcript = ''
 
@@ -342,7 +458,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
 
           if (opsChatId) {
             try {
-              coachStatusRef = await sendZoomCoachStatusMessage(opsChatId, coachStatusText)
+              coachStatusRef = await sendZoomCoachStatusMessage(opsChatId, coachStatusText, statusRuntime)
             } catch (error) {
               console.error('[ZOOM_TRANSCRIPT] intake notify failed', error)
             }
@@ -352,7 +468,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             if (!opsChatId || !coachStatusRef) return
             const text = buildZoomCoachStatusText(lines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null)
             try {
-              await editZoomCoachStatusMessage(coachStatusRef, text, options?.replyMarkup)
+              await editZoomCoachStatusMessage(coachStatusRef, text, statusRuntime, options?.replyMarkup)
             } catch (error) {
               console.error('[ZOOM_TRANSCRIPT] coach status update failed', error)
             }
@@ -403,12 +519,79 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             }
           }
 
-          let chunkPaths: string[] = []
-
-          const mimeType = typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null
           const fileName = typeof zoomAudioPayload?.fileName === 'string' && zoomAudioPayload.fileName.trim()
             ? zoomAudioPayload.fileName
             : 'zoom_audio'
+          const mimeType = typeof zoomAudioPayload?.mimeType === 'string' ? zoomAudioPayload.mimeType : null
+          const observedAt = typeof zoomAudioPayload?.observedAt === 'string'
+            ? new Date(zoomAudioPayload.observedAt)
+            : item.createdAt
+
+          const needsLocalFile = audioPayload.source !== 'cloudinary' || processingStrategy !== 'DIRECT_TRANSCRIPT'
+          const rawFile = needsLocalFile
+            ? await downloadTelegramAudioSourceToTempFile(downloadUrl, fileName)
+            : null
+          if (rawFile) {
+            cleanupTasks.push(rawFile.cleanup)
+          }
+
+          const matchedSessionResult = await matchZoomSessionForAudio(observedAt)
+          const matchedSession = matchedSessionResult.session
+          let finalMatchedSession = matchedSession
+
+          if (audioPayload.source !== 'cloudinary') {
+            if (!rawFile) {
+              throw new Error('zoom_audio_local_file_missing')
+            }
+            const storageType = resolveZoomAudioStorageType(
+              matchedSession?.type ?? (typeof zoomAudioPayload.zoomType === 'string' ? zoomAudioPayload.zoomType : null),
+            )
+            const uploadedAsset = await uploadZoomAudioToCloudinary({
+              localFilePath: rawFile.filePath,
+              sessionDate: matchedSession?.scheduledAt ?? observedAt,
+              sessionType: storageType,
+              username: storageType === 'INDIVIDUAL' ? resolveZoomSessionUsername(matchedSession) : null,
+            })
+
+            telegramFileSizeBytes = uploadedAsset.bytes ?? telegramFileSizeBytes
+            telegramDurationSeconds = uploadedAsset.duration ?? telegramDurationSeconds
+            const uploadedSizeMB = formatZoomAudioSizeMB(telegramFileSizeBytes)
+
+            zoomAudioPayload = {
+              ...zoomAudioPayload,
+              zoomType: storageType,
+              duration: telegramDurationSeconds,
+              sizeBytes: telegramFileSizeBytes,
+              sizeMB: uploadedSizeMB,
+              downloadUrl: uploadedAsset.secureUrl,
+              cloudinaryUrl: uploadedAsset.secureUrl,
+              cloudinaryPublicId: uploadedAsset.publicId,
+              cloudinaryAssetId: uploadedAsset.assetId,
+              cloudinaryFolder: uploadedAsset.folder,
+              cloudinaryFormat: uploadedAsset.format,
+              cloudinaryResourceType: uploadedAsset.resourceType,
+            }
+
+            await prisma.runtimeOutbox.update({
+              where: { id: item.id },
+              data: {
+                payload: zoomAudioPayload as Prisma.InputJsonValue,
+              },
+            }).catch(() => undefined)
+
+            downloadUrl = uploadedAsset.secureUrl
+
+            console.log('[ZOOM_DEBUG] step 2.5 — cloudinary upload ok', {
+              sessionId: matchedSession?.id ?? null,
+              matchMethod: matchedSessionResult.matchMethod,
+              publicId: uploadedAsset.publicId,
+              assetId: uploadedAsset.assetId,
+              folder: uploadedAsset.folder,
+              secureUrl: `${uploadedAsset.secureUrl.substring(0, 60)}...`,
+            })
+          }
+
+          let chunkPaths: string[] = []
           const transcribeChunkedAudio = async (sourcePath: string, sourceLabel: string) => {
             const chunks = await splitZoomAudioFile(sourcePath, 240)
             chunkPaths = chunks.filePaths
@@ -479,10 +662,11 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
               '',
               '⬇️ Завантаження...',
             ])
-            const rawFile = await downloadTelegramAudioSourceToTempFile(downloadUrl, fileName)
-            cleanupTasks.push(rawFile.cleanup)
 
             if (processingStrategy === 'NORMALIZE_TRANSCRIPT') {
+              if (!rawFile) {
+                throw new Error('zoom_audio_local_file_missing')
+              }
               await updateCoachStatus([
                 '🎙 Аудіо отримано',
                 '',
@@ -533,6 +717,9 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 await transcribeChunkedAudio(normalized.filePath, 'normalized')
               }
             } else {
+              if (!rawFile) {
+                throw new Error('zoom_audio_local_file_missing')
+              }
               let chunkSourcePath = rawFile.filePath
               if (processingStrategy === 'COMPRESS_CHUNK_TRANSCRIPT') {
                 await updateCoachStatus([
@@ -568,44 +755,48 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             throw new Error('zoom_audio_transcription_empty')
           }
 
-          const observedAt = typeof zoomAudioPayload?.observedAt === 'string'
-            ? new Date(zoomAudioPayload.observedAt)
-            : item.createdAt
-          const session = await prisma.zoomSession.findFirst({
-            where: {
-              scheduledAt: { lte: observedAt },
-              status: { not: ZoomStatus.CANCELLED },
-            },
-            orderBy: [{ scheduledAt: 'desc' }, { updatedAt: 'desc' }],
-            select: {
-              id: true,
-              postSessionReport: true,
-            },
-          }).catch(() => null)
-
-          const fallbackSession = session ?? await prisma.zoomSession.findFirst({
-            where: {
-              status: { not: ZoomStatus.CANCELLED },
-            },
-            orderBy: [{ scheduledAt: 'desc' }, { updatedAt: 'desc' }],
-            select: {
-              id: true,
-              postSessionReport: true,
-            },
-          }).catch(() => null)
+          const fallbackSession = finalMatchedSession
 
           if (fallbackSession?.id) {
             console.log('[ZOOM_TRANSCRIPT] session matched', {
               sessionId: fallbackSession.id,
-              matchMethod: session?.id ? 'scheduled_at_match' : 'heuristic_fallback',
+              matchMethod: matchedSessionResult.matchMethod,
               audioItemId: item.id,
             })
 
+            const transcriptInsight = await generateZoomTranscriptInsight({
+              sessionId: fallbackSession.id,
+              expertId: fallbackSession.expertId ?? 'zoom-session',
+              topic: fallbackSession.topic,
+              sessionType: fallbackSession.type,
+              sessionDate: fallbackSession.scheduledAt.toISOString().slice(0, 10),
+              transcript,
+            })
+
             const canonicalReport = mergeZoomPostSessionReport(fallbackSession.postSessionReport, {
+              sessionDate: fallbackSession.scheduledAt.toISOString().slice(0, 10),
+              sessionType: fallbackSession.type,
+              audioUrl: typeof zoomAudioPayload?.cloudinaryUrl === 'string' ? zoomAudioPayload.cloudinaryUrl : null,
+              audioDuration: typeof zoomAudioPayload?.duration === 'number' ? zoomAudioPayload.duration : null,
+              audioFileName: typeof zoomAudioPayload?.fileName === 'string' ? zoomAudioPayload.fileName : null,
+              audioFileId: typeof zoomAudioPayload?.cloudinaryAssetId === 'string'
+                ? zoomAudioPayload.cloudinaryAssetId
+                : typeof zoomAudioPayload?.cloudinaryPublicId === 'string'
+                  ? zoomAudioPayload.cloudinaryPublicId
+                  : fileId,
               transcript,
               transcriptLength: transcript.length,
               transcriptSource: typeof zoomAudioPayload?.source === 'string' ? zoomAudioPayload.source : 'telegram',
               transcriptStoredAt: new Date().toISOString(),
+              transcribedAt: new Date().toISOString(),
+              summary: transcriptInsight.summary,
+              insights: transcriptInsight.insights,
+              objections: transcriptInsight.objections,
+              wins: transcriptInsight.wins,
+              recurringThemes: transcriptInsight.recurringThemes,
+              contentIdeas: transcriptInsight.contentIdeas,
+              coachReport: transcriptInsight.coachReport,
+              analyzedAt: new Date().toISOString(),
               transcriptMeta: {
                 fileId,
                 fileUniqueId: typeof zoomAudioPayload?.fileUniqueId === 'string' ? zoomAudioPayload.fileUniqueId : null,
@@ -757,10 +948,10 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
                 : 'Дія: перевірте Cloudinary файл і повторіть ingest',
             ]
             if (coachStatusRef) {
-              await editZoomCoachStatusMessage(coachStatusRef, buildZoomCoachStatusText(recoveryLines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null))
+              await editZoomCoachStatusMessage(coachStatusRef, buildZoomCoachStatusText(recoveryLines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null), statusRuntime)
                 .catch((error) => console.error('[ZOOM_TRANSCRIPT] coach failure status update failed', error))
             } else {
-              await sendZoomCoachStatusMessage(opsChatId, buildZoomCoachStatusText(recoveryLines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null))
+              await sendZoomCoachStatusMessage(opsChatId, buildZoomCoachStatusText(recoveryLines, audioPayload.fileName ?? null, audioPayload.zoomType ?? null), statusRuntime)
                 .catch((error) => console.error('[ZOOM_TRANSCRIPT] coach failure notify failed', error))
             }
           }

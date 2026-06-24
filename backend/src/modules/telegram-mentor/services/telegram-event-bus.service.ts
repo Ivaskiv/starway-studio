@@ -291,6 +291,18 @@ async function handleRoomAction(ctx: Context, userId: string | null, action: str
 
   if (action === 'open_platform') {
     await handleStatus(ctx)
+    if (userId) {
+      await trackEvent({
+        userId,
+        type: 'PLATFORM_OPENED',
+        source: 'telegram',
+        state: (ctx.state as { userState?: string | null }).userState ?? null,
+        payload: {
+          action,
+          target: 'platform',
+        },
+      })
+    }
     return true
   }
 
