@@ -87,16 +87,40 @@ async function deliver(
     return
   }
   try {
-    await ctx.telegram.sendMessage(deliveryChatId, payload.text, {
+    const sentMessage = await ctx.reply(payload.text, {
       parse_mode: 'HTML',
       reply_markup: payload.reply_markup,
     })
-    console.info('[START_DELIVER_OK]', { deliveryChatId })
+    console.info('[START_DELIVER_OK]', {
+      deliveryChatId,
+      messageId: sentMessage.message_id,
+      via: 'ctx.reply',
+    })
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
     console.error('[START_DELIVER_ERROR]', {
       deliveryChatId,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage,
+      via: 'ctx.reply',
     })
+
+    try {
+      const sentMessage = await ctx.telegram.sendMessage(deliveryChatId, payload.text, {
+        parse_mode: 'HTML',
+        reply_markup: payload.reply_markup,
+      })
+      console.info('[START_DELIVER_OK]', {
+        deliveryChatId,
+        messageId: sentMessage.message_id,
+        via: 'ctx.telegram.sendMessage:fallback',
+      })
+    } catch (fallbackErr) {
+      console.error('[START_DELIVER_ERROR]', {
+        deliveryChatId,
+        error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+        via: 'ctx.telegram.sendMessage:fallback',
+      })
+    }
   }
 }
 
