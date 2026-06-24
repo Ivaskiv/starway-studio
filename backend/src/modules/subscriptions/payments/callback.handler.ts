@@ -118,7 +118,7 @@ function resolveZoomCalendarUrl(): string | null {
     try {
       const parsed = new URL(candidate)
       if (!parsed.host) continue
-      return `${candidate.replace(/\/$/, '')}/zoom`
+      return `${candidate.replace(/\/$/, '')}/miniapp/zoom-calendar`
     } catch {
       continue
     }

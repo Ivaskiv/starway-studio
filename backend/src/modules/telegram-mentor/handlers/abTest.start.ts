@@ -23,7 +23,7 @@ function withKeyboard(payload: StartMessagePayload) {
 function resolveZoomBookingWebAppUrl(): string {
   const configured = String(process.env.WEBAPP_URL ?? '').trim()
   const base = configured || resolveTelegramWebappBaseUrl()
-  return `${base.replace(/\/$/, '')}/zoom`
+  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar`
 }
 
 export function welcomeMessage(): ReturnType<typeof withKeyboard> {

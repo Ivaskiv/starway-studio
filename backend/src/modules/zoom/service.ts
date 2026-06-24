@@ -1390,7 +1390,7 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
   const text = await formatChannelPost();
   console.log('[syncChannelPost] text length:', text.length);
   const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? '';
-  const zoomUrl = webAppBaseUrl ? `${webAppBaseUrl.replace(/\/$/, '')}/zoom` : null;
+  const zoomUrl = webAppBaseUrl ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar` : null;
   const replyMarkup = zoomUrl
     ? {
         inline_keyboard: [[{ text: 'Повний календар', web_app: { url: zoomUrl } }]],
@@ -1444,8 +1444,8 @@ export async function notifySubscribersNewSession(
   const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? '';
   const publicFrontend = process.env.PUBLIC_FRONTEND_URL?.trim() ?? '';
   const zoomUrl = webAppBaseUrl
-    ? `${webAppBaseUrl.replace(/\/$/, '')}/zoom`
-    : `${publicFrontend.replace(/\/$/, '')}/zoom`;
+    ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar`
+    : `${publicFrontend.replace(/\/$/, '')}/miniapp/zoom-calendar`;
   const inviteUrl = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? '';
 
   const paidUsers = await prisma.user.findMany({
@@ -1655,7 +1655,7 @@ export async function notifyAffectedUsers(
   }
 
   const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? ''
-  const zoomUrl = webAppBaseUrl ? `${webAppBaseUrl.replace(/\/$/, '')}/zoom` : null
+  const zoomUrl = webAppBaseUrl ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar` : null
   const calendarButton = zoomUrl
     ? { text: 'Переглянути календар', web_app: { url: zoomUrl } }
     : null
@@ -1701,7 +1701,7 @@ export async function processScheduleNotification(
   const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? ''
   const publicFrontend = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
   const baseUrl = webAppBaseUrl || publicFrontend
-  const zoomUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/zoom` : null
+  const zoomUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar` : null
   const bookingUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/zoom/booking` : null
 
   if (affectedUserIds.length > 0 && eventType !== 'SWAP') {
@@ -1961,8 +1961,8 @@ export async function notifyMonthSchedule(
   const publicFrontend = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
   const focusInviteUrl = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
   const zoomUrl = webAppBaseUrl
-    ? `${webAppBaseUrl.replace(/\/$/, '')}/zoom`
-    : `${publicFrontend.replace(/\/$/, '')}/zoom`
+    ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar`
+    : `${publicFrontend.replace(/\/$/, '')}/miniapp/zoom-calendar`
 
   const scheduleLines = upcomingGroupSessions.map((session) => {
     const dt = new Date(session.scheduledAt)

@@ -366,7 +366,7 @@ function MiniAppZoomRoute() {
 }
 
 function MiniAppZoomCalendar() {
-  return <HomeTab />
+  return <MiniAppZoomRoute />
 }
 
 function MiniAppZoomWeekPanel() {
