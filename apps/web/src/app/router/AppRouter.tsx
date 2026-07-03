@@ -106,8 +106,8 @@ function PublicAppRouter() {
       <Route path="/miniapp" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
       <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
-      <Route path="/zoom-calendar" element={<ZoomCalendarPage isPublic />} />
-      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage isPublic />} />
+      <Route path="/zoom-calendar" element={<ZoomCalendarPage />} />
+      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage />} />
       {renderTaskRedirectRoutes()}
       <Route path="/content" element={<Navigate to="/miniapp/library" replace />} />
       <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
@@ -139,8 +139,8 @@ function GuestAppRouter() {
       </Route>
       <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
       <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
-      <Route path="/zoom-calendar" element={<ZoomCalendarPage isPublic />} />
-      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage isPublic />} />
+      <Route path="/zoom-calendar" element={<ZoomCalendarPage />} />
+      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage />} />
       {/* <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} /> */}
     </Routes>
   )

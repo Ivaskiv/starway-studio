@@ -82,9 +82,31 @@ async function checkCoachAccess(ctx: Context): Promise<boolean> {
 
 async function showCoachMenu(ctx: Context): Promise<void> {
   const text = `${coachBotContent.start.title}\n\n${coachBotContent.start.subtitle}`
+  await ctx.reply(text, {
+    reply_markup: {
+      keyboard: [
+        [
+          Markup.button.text(coachBotContent.menu.newZoom),
+          Markup.button.text(coachBotContent.menu.audio),
+        ],
+        [
+          Markup.button.text(coachBotContent.menu.dna),
+          Markup.button.text(coachBotContent.menu.content),
+        ],
+        [
+          Markup.button.text(coachBotContent.menu.system),
+        ],
+      ],
+      resize_keyboard: true,
+      is_persistent: true,
+    },
+  })
+}
+
+async function showCoachSystemMenu(ctx: Context): Promise<void> {
   const finalUrl = resolveCoachCalendarWebAppUrl()
   console.info('[ZOOM_CALENDAR_BUTTON_DEBUG]', {
-    source: 'coachStart.showCoachMenu',
+    source: 'coachStart.showCoachSystemMenu',
     chatId: String(ctx.chat?.id ?? ctx.from?.id ?? ''),
     finalUrl,
     mode: 'web_app',
@@ -94,25 +116,21 @@ async function showCoachMenu(ctx: Context): Promise<void> {
     },
     route: COACH_CALENDAR_ROUTE,
   })
-  await ctx.reply(text, {
-    reply_markup: {
-      keyboard: [
-        [
-          Markup.button.text(coachBotContent.menu.audio),
-          Markup.button.webApp(coachBotContent.menu.schedule, finalUrl),
-        ],
-        [
-          Markup.button.text(coachBotContent.menu.planner),
-          Markup.button.text(coachBotContent.menu.dna),
-        ],
-        [
-          Markup.button.text(coachBotContent.menu.script),
-        ],
-      ],
-      resize_keyboard: true,
-      is_persistent: true,
-    },
-  })
+
+  await ctx.reply(
+    `${coachBotContent.system.title}\n\n${coachBotContent.system.subtitle}`,
+    Markup.inlineKeyboard([
+      [Markup.button.webApp(coachBotContent.menu.schedule, finalUrl)],
+      [Markup.button.callback(coachBotContent.menu.members, 'coach:participants')],
+      [Markup.button.callback(coachBotContent.menu.notifications, 'coach:notifications')],
+      [Markup.button.callback(coachBotContent.menu.payments, 'coach-content:payments')],
+      [Markup.button.callback('📈 Повна аналітика', 'coach:analytics')],
+    ]),
+  )
+}
+
+async function showCoachNewZoomPrompt(ctx: Context): Promise<void> {
+  await ctx.reply(coachBotContent.audio.uploadPrompt)
 }
 
 async function checkCoachRole(ctx: Context): Promise<boolean> {
@@ -228,17 +246,21 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     if (!await checkCoachAccess(ctx)) return
     await handleCoachAudioCommand(ctx, '')
   }))
-  telegramBot.hears(coachBotContent.menu.planner, withCoachRuntimeProtection('menu:planner', async (ctx) => {
+  telegramBot.hears(coachBotContent.menu.newZoom, withCoachRuntimeProtection('menu:newZoom', async (ctx) => {
+    if (!await checkCoachAccess(ctx)) return
+    await showCoachNewZoomPrompt(ctx)
+  }))
+  telegramBot.hears(coachBotContent.menu.content, withCoachRuntimeProtection('menu:content', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await handleCoachContentCommand(ctx, 'WEEKLY_PLAN')
-  }))
-  telegramBot.hears(coachBotContent.menu.script, withCoachRuntimeProtection('menu:script', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
-    await handleCoachContentCommand(ctx, 'FULL_CONTENT')
   }))
   telegramBot.hears(coachBotContent.menu.dna, withCoachRuntimeProtection('menu:analytics', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await analyticsHandler(ctx)
+  }))
+  telegramBot.hears(coachBotContent.menu.system, withCoachRuntimeProtection('menu:system', async (ctx) => {
+    if (!await checkCoachAccess(ctx)) return
+    await showCoachSystemMenu(ctx)
   }))
   telegramBot.action(/^admin:grant_focus:/, withCoachRuntimeProtection('action:admin:grant_focus', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()

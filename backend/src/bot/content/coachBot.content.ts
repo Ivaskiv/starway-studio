@@ -1,15 +1,18 @@
 export const coachBotContent = {
   start: {
-    title: 'Starway Coach Panel',
-    subtitle: 'Єдина операційна панель коуча: Zoom, Audio, Content, Users, Notifications, Analytics, Payments.',
+    title: 'Coach OS',
+    subtitle: 'Єдиний потік коуча: новий Zoom, бібліотека, аналітика, контент і системні дії.',
   },
   menu: {
-    schedule: '📅 Zoom Calendar',
+    newZoom: '🎙 Новий Zoom',
+    audio: '📚 Бібліотека Zoom',
+    dna: '📊 Аналітика',
+    content: '🎬 Контент',
+    system: '⚙️ Система',
+    schedule: '📅 Календар Zoom',
     nextWeek: '➕ Schedule add',
-    dna: '📈 Аналітика',
     members: '👥 Users',
     notifications: '🔔 Notify',
-    audio: '🎧 Аудіо ЗУМИ ФОКУС',
     planner: '📝 Плануємо контент',
     script: '✏️ Мій сценарій',
     payments: '💳 Payments',
@@ -65,7 +68,15 @@ export const coachBotContent = {
     listHeader: 'Zoom library',
     ingestStarted: 'Запускаю ручну обробку аудіо...',
     ingestDone: 'Ручну обробку аудіо завершено.',
-    usage: '/audio — завантаження + library\n/audio 2026-06 — бібліотека за місяць\n/audio run — ручний Cloudinary ingest',
+    uploadPrompt: [
+      'Надішли сюди MP3, M4A, WAV або voice-повідомлення.',
+      'Далі система сама проведе файл через Cloudinary, транскрипцію, AI-аналіз і збереже Zoom у бібліотеку.',
+    ].join('\n\n'),
+    usage: '/audio — бібліотека Zoom\n/audio 2026-06 — бібліотека за місяць\n/audio run — ручний Cloudinary ingest',
+  },
+  system: {
+    title: 'Система',
+    subtitle: 'Службові дії, які не повинні бути окремими entry point у головному меню.',
   },
   users: {
     title: 'Users',

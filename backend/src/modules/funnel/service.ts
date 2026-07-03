@@ -286,7 +286,7 @@ export async function createFullWorkflow(input: WorkflowInput): Promise<Workflow
       const productIds: string[] = [];
 
       for (const courseId of stageInput.courseIds) {
-        const productId = await generateProductFromCourse(courseId, input.ownerId);
+        const productId = await generateProductFromCourse(courseId, input.ownerId, tx);
         productIds.push(productId);
         totalProductsCreated++;
       }

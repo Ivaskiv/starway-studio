@@ -779,7 +779,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
         const upcoming = await getUpcomingGroupSessions(8)
         const paidChatId =
           paidUser?.telegramChatId ?? paidUser?.telegramLinks[0]?.chatId ?? null
-        if (upcoming.length > 0 && paidChatId && paidUser) {
+        if (paidChatId && paidUser) {
           const zoomUrl = resolveZoomCalendarUrl()
           const lines = upcoming
             .map((session) => {
@@ -827,29 +827,31 @@ export async function wayForPayCallback(req: Request, res: Response) {
                 console.error('[payment] send focus access message:', err)
               )
 
-            await bot.telegram
-              .sendMessage(
-                paidChatId,
-                `Календар Zoom-практик:\n\n${lines}\n\n` +
-                  'Посилання на підключення надходить автоматично за 2 години до початку кожної сесії.',
-                {
-                  reply_markup: {
-                    inline_keyboard: [
-                      [
-                        process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
-                          ? {
-                              text: 'Переглянути календар',
-                              web_app: { url: zoomUrl },
-                            }
-                          : { text: 'Переглянути календар', url: zoomUrl },
+            if (upcoming.length > 0) {
+              await bot.telegram
+                .sendMessage(
+                  paidChatId,
+                  `Календар Zoom-практик:\n\n${lines}\n\n` +
+                    'Посилання на підключення надходить автоматично за 2 години до початку кожної сесії.',
+                  {
+                    reply_markup: {
+                      inline_keyboard: [
+                        [
+                          process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
+                            ? {
+                                text: 'Переглянути календар',
+                                web_app: { url: zoomUrl },
+                              }
+                            : { text: 'Переглянути календар', url: zoomUrl },
+                        ],
                       ],
-                    ],
-                  },
-                }
-              )
-              .catch((err: unknown) =>
-                console.error('[payment] send upcoming schedule:', err)
-              )
+                    },
+                  }
+                )
+                .catch((err: unknown) =>
+                  console.error('[payment] send upcoming schedule:', err)
+                )
+            }
           }
 
           for (const session of upcoming) {

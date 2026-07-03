@@ -31,6 +31,8 @@ export interface CourseWithProducts {
   productCount?: number;
 }
 
+type CourseDbClient = typeof prisma | Prisma.TransactionClient
+
 // ==========================================
 // GET ALL COURSES
 // ==========================================
@@ -152,15 +154,16 @@ export async function toggleCourseStatus(id: string, isActive: boolean) {
 
 export async function generateProductFromCourse(
   courseId: string,
-  ownerId: string
+  ownerId: string,
+  db: CourseDbClient = prisma,
 ): Promise<string> {
-  const course = await prisma.miniCourse.findUnique({
+  const course = await db.miniCourse.findUnique({
     where: { id: courseId }
   });
 
   if (!course) throw new Error('Course not found');
 
-  const product = await prisma.product.create({
+  const product = await db.product.create({
     data: {
       code: `course_${course.slug}_${Date.now()}`,
       ownerId,

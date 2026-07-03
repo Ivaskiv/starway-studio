@@ -861,11 +861,24 @@ export async function registerMentorBot(
       userId: (ctx.state as { userId?: string | null }).userId ?? null,
     })
     try {
-      await planAck(
-        ctx,
-        'ctx.answerCbQuery',
-        'telegram_callback_immediate_ack',
-      ).catch(() => undefined)
+      const isFocusPaymentCallback =
+        action === 'open_focus_payment' ||
+        action.startsWith('open_focus_payment:')
+      if (isFocusPaymentCallback && ctx.callbackQuery?.id) {
+        const directAckResult = await ctx.telegram
+          .answerCbQuery(String(ctx.callbackQuery.id))
+          .catch(() => undefined)
+        if (directAckResult) {
+          ;(ctx.state as { __callback_ack_sent__?: boolean }).__callback_ack_sent__ =
+            true
+        }
+      } else {
+        await planAck(
+          ctx,
+          'ctx.answerCbQuery',
+          'telegram_callback_immediate_ack',
+        ).catch(() => undefined)
+      }
       const userId =
         (ctx.state as { userId?: string | null }).userId ??
         (await resolveLinkedUserIdFromContext(ctx).catch(() => null))

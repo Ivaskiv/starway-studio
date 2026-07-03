@@ -2,12 +2,13 @@ import { processRuntimeOutbox } from '../../core/runtime/runtimeOutbox.js'
 
 const OUTBOX_WORKER_DISABLED = process.env.DISABLE_RUNTIME_OUTBOX_WORKER === 'true'
 const POLL_INTERVAL_MS = 5_000
+const OUTBOX_BATCH_LIMIT = 25
 
 let workerTimer: NodeJS.Timeout | null = null
 let workerRunning = false
 let workerStopping = false
 
-export async function processDueRuntimeOutbox(limit = 100) {
+export async function processDueRuntimeOutbox(limit = OUTBOX_BATCH_LIMIT) {
   if (workerRunning || workerStopping) return
   workerRunning = true
 

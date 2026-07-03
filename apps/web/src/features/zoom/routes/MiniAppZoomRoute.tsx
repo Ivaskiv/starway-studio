@@ -9,11 +9,15 @@ import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import type { User } from '@/features/user/types/user.types'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
+import HomeTab from '@/features/zoom/tabs/HomeTab'
+
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import { useGetAudioListQuery } from '@/features/zoom/services/audio.api'
 import { useGetWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+
+type MiniAppZoomTabId = 'home' | 'calendar' | 'battle' | 'progress' | 'profile'
 
 type TelegramWindow = Window & {
   Telegram?: {
@@ -462,7 +466,7 @@ export function MiniAppZoomRoute() {
   }
 
   if (!user) {
-    return <ZoomCalendarPage isPublic />
+    return <ZoomCalendarPage />
   }
 
   return (
@@ -475,6 +479,85 @@ export function MiniAppZoomRoute() {
   )
 }
 
+function BattleTabStub() {
+  return (
+    <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/60">
+      <div className="text-center">
+        <p className="mb-2 text-lg font-semibold">⚔️ Батли</p>
+        <p className="text-sm">Скоро запустимо обмін місцями та виклики</p>
+      </div>
+    </div>
+  )
+}
+
+function ProgressTabStub() {
+  return (
+    <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/60">
+      <div className="text-center">
+        <p className="mb-2 text-lg font-semibold">📈 Прогрес</p>
+        <p className="text-sm">Статистика та досягнення з&apos;являться тут</p>
+      </div>
+    </div>
+  )
+}
+
+function ProfileTabStub() {
+  return (
+    <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/60">
+      <div className="text-center">
+        <p className="mb-2 text-lg font-semibold">👤 Профіль</p>
+        <p className="text-sm">Налаштування та облік скоро</p>
+      </div>
+    </div>
+  )
+}
+
+function TabBar({
+  activeTab,
+  onTabChange,
+}: {
+  activeTab: MiniAppZoomTabId
+  onTabChange: (tab: MiniAppZoomTabId) => void
+}) {
+  const tabs: Array<{ id: MiniAppZoomTabId; label: string }> = [
+    { id: 'home', label: '🏠' },
+    { id: 'calendar', label: '📅' },
+    { id: 'battle', label: '⚔️' },
+    { id: 'progress', label: '📈' },
+    { id: 'profile', label: '👤' },
+  ]
+
+  return (
+    <div className="fixed right-0 bottom-0 left-0 flex justify-around border-t border-[#2A3543] bg-[#0F1419] py-3">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => onTabChange(tab.id)}
+          className={`text-2xl transition-colors ${
+            activeTab === tab.id ? 'text-[#4A90FF]' : 'text-[#6B7280]'
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function MiniAppZoomCalendar() {
-  return <MiniAppZoomRoute />
+  const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>('home')
+
+  return (
+    <div className="flex h-screen flex-col bg-[#0F1419]">
+      <div className="flex-1 overflow-y-auto pb-24">
+        {activeTab === 'home' && <HomeTab />}
+        {activeTab === 'calendar' && <MiniAppZoomRoute />}
+        {activeTab === 'battle' && <BattleTabStub />}
+        {activeTab === 'progress' && <ProgressTabStub />}
+        {activeTab === 'profile' && <ProfileTabStub />}
+      </div>
+
+      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+    </div>
+  )
 }

@@ -9,9 +9,11 @@ import Problem from '../components/Problem'
 import AboutFocus from '@/features/landings/focus/components/AboutFocus'
 import Final from '@/features/landings/focus/components/Final'
 import Fit from '@/features/landings/focus/components/Fit'
+import GenericSection from '@/features/landings/focus/components/GenericSection'
 import Mechanism from '@/features/landings/focus/components/Mechanism'
 import Nav from '@/features/landings/focus/components/Nav'
 import Subscription from '@/features/landings/focus/components/Subscription'
+import { FOCUS_PAGE } from '@/features/landings/focus/content/focus.content'
 import { useScrollReveal } from '../hooks/useScrollReveal'
 import WelcomePractice from '@/features/landings/focus/components/WelcomePractice'
 
@@ -23,6 +25,11 @@ export default function FocusLandingPage() {
       {/* <Nav /> */}
       <Hero />
       <AboutFocus />
+      <GenericSection
+        id="testimonials"
+        {...FOCUS_PAGE.testimon_section}
+        variant="testimonials"
+      />
       <Problem />
       <Difference />
       <HowItWorks />
@@ -32,6 +39,16 @@ export default function FocusLandingPage() {
       <Subscription />
       <FirstPractice />
       <WelcomePractice />
+      <GenericSection
+        id="bonuses"
+        {...FOCUS_PAGE.bonuses_section}
+        variant="bonuses"
+      />
+      <GenericSection
+        id="faq"
+        {...FOCUS_PAGE.faq_section}
+        variant="faq"
+      />
       <Final />
       {/* <Pricing /> */}
       {/* <CTA /> */}

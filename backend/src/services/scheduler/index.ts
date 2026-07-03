@@ -9,7 +9,6 @@ import { withRuntimeAdvisoryLock } from '../../core/runtime/runtimeIdempotency.j
 import { bot, sendOpsTelegramMessage } from '../../lib/telegram.js'
 import { prisma } from '../../db/client.js'
 import { AB_TEST_LIFECYCLE_REMINDERS, type LifecycleReminderKey } from '../../products/ab-system/content/abTest.followups.js'
-import { startNotificationWorker, stopNotificationWorker } from '../notifications/worker.js'
 import { startRuntimeOutboxWorker, stopRuntimeOutboxWorker } from '../runtimeOutbox/worker.js'
 import { aiSellerFocusCheck24hCron, aiSellerFocusDojimBeforeZoom2Cron, aiSellerLeadFollowup3dCron, aiSellerLeadFollowup7dCron, aiSellerReactivationCron, aiSellerRetentionCron } from './ai-seller.jobs.js'
 import { scheduleBillingExpiryCheck, scheduleBillingExpiryWarning, scheduleInactivityComeback } from './billing.jobs.js'
@@ -29,6 +28,9 @@ const registeredCronKeys = new Set<string>()
 let schedulerStarted = false
 let schedulerStopping = false
 const SCHEDULERS_DISABLED = process.env.DISABLE_SCHEDULERS === 'true'
+const SCHEDULER_CONCURRENCY_LIMIT = 2
+let activeScheduledTasks = 0
+const scheduledTaskWaiters: Array<() => void> = []
 
 type CronTaskOptions = {
   critical?: boolean
@@ -37,6 +39,23 @@ type CronTaskOptions = {
 function register(task: ScheduledTask) {
   scheduledTasks.push(task)
   return task
+}
+
+async function runInSchedulerSlot<T>(task: () => Promise<T>): Promise<T> {
+  if (activeScheduledTasks >= SCHEDULER_CONCURRENCY_LIMIT) {
+    await new Promise<void>((resolve) => {
+      scheduledTaskWaiters.push(resolve)
+    })
+  }
+
+  activeScheduledTasks += 1
+  try {
+    return await task()
+  } finally {
+    activeScheduledTasks = Math.max(0, activeScheduledTasks - 1)
+    const next = scheduledTaskWaiters.shift()
+    next?.()
+  }
 }
 
 function safeSchedule(key: string, expression: string, task: () => void, timezone: string) {
@@ -53,8 +72,10 @@ function safeSchedule(key: string, expression: string, task: () => void, timezon
 
 function runScheduled(key: string, task: () => Promise<void>, options?: CronTaskOptions) {
   if (schedulerStopping || !schedulerStarted) return
-  void withRuntimeAdvisoryLock({ scope: 'cron', type: key, source: 'internal', runtimeStage: 'scheduler' }, async () => {
-    await task()
+  void runInSchedulerSlot(async () => {
+    await withRuntimeAdvisoryLock({ scope: 'cron', type: key, source: 'internal', runtimeStage: 'scheduler' }, async () => {
+      await task()
+    })
   }).catch(error => {
     const message =
       error instanceof Error
@@ -287,7 +308,7 @@ export async function scheduleZoomReminders(telegramBot: Telegraf, reminderKey: 
   })
 }
 
-export function startScheduler(options?: { startNotificationWorker?: boolean; coachBot?: Telegraf | null }) {
+export function startScheduler(options?: { coachBot?: Telegraf | null }) {
   if (SCHEDULERS_DISABLED) {
     console.log('⏸️ [runtime] scheduler disabled (DISABLE_SCHEDULERS=true)')
     return
@@ -299,7 +320,6 @@ export function startScheduler(options?: { startNotificationWorker?: boolean; co
   schedulerStarted = true
   schedulerStopping = false
   const timezone = 'Europe/Kyiv'
-  if (options?.startNotificationWorker !== false) startNotificationWorker()
   startRuntimeOutboxWorker()
   console.log(`⏰ [runtime] scheduler enabled (timezone=${timezone})`, {
     cronJobs: PLATFORM_CRON_REGISTRY.length,
@@ -369,7 +389,6 @@ export function stopScheduler() {
     task.destroy()
   }
   registeredCronKeys.clear()
-  stopNotificationWorker()
   stopRuntimeOutboxWorker()
   schedulerStarted = false
   console.log('🛑 [runtime] scheduler stopped')
