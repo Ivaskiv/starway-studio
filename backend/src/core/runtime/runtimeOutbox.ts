@@ -1007,8 +1007,6 @@ export function stopRuntimeOutboxAutoProcessor(): void {
   runtimeOutboxPollTimer = null
 }
 
-startRuntimeOutboxAutoProcessor()
-
 export function validateRuntimeOutboxFoundation(): { ok: boolean; errors: string[] } {
   const errors: string[] = []
   const dedupeKey = buildOutboxDedupeKey({

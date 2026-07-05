@@ -91,7 +91,6 @@ let coachTelegramRunningMode: 'webhook' | 'polling' | null = null
 let testTelegramRunningMode: 'webhook' | 'polling' | null = null
 let telegramStartupPromise: Promise<void> | null = null
 let isShuttingDown = false
-let prismaKeepAliveInterval: NodeJS.Timeout | null = null
 let databaseReady = false
 let prismaDisconnectPromise: Promise<void> | null = null
 
@@ -474,18 +473,6 @@ async function bootstrap() {
 
       databaseReady = true
 
-      prismaKeepAliveInterval = setInterval(
-        async () => {
-          try {
-            await withRetry(() => prisma.$queryRaw`SELECT 1`)
-          } catch {
-            await withRetry(() => prisma.$connect()).catch(() => undefined)
-          }
-        },
-        30 * 60 * 1000
-      )
-
-      prismaKeepAliveInterval.unref()
     } catch (err: unknown) {
       console.warn(
         '⚠️ [BOOT] Database unavailable, API continues in degraded mode',
@@ -586,13 +573,6 @@ async function shutdown(signal: string) {
       }
 
       destroyTelegramClientTransports()
-    })
-
-    await runShutdownStep('stop prisma keepalive', async () => {
-      if (prismaKeepAliveInterval) {
-        clearInterval(prismaKeepAliveInterval)
-        prismaKeepAliveInterval = null
-      }
     })
 
     await runShutdownStep('stop sockets', async () => {

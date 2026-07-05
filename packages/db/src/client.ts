@@ -65,8 +65,29 @@ function resolveSupabasePassword(input: string | undefined): string | undefined 
   }
 }
 
+function applyRuntimePoolLimit(input: string | undefined): string | undefined {
+  const raw = String(input ?? '').trim()
+  if (!raw) {
+    return undefined
+  }
+
+  try {
+    const url = new URL(raw)
+    if (!url.searchParams.has('connection_limit')) {
+      const configuredLimit =
+        process.env.PRISMA_POOL_CONNECTION_LIMIT?.trim() || '5'
+      url.searchParams.set('connection_limit', configuredLimit)
+    }
+    return url.toString()
+  } catch {
+    return raw
+  }
+}
+
 const databaseUrl = resolveSupabasePassword(process.env.DATABASE_URL)
-const directUrl = resolveSupabasePassword(process.env.DIRECT_URL)
+const directUrl = applyRuntimePoolLimit(
+  resolveSupabasePassword(process.env.DIRECT_URL)
+)
 
 if (databaseUrl) {
   process.env.DATABASE_URL = databaseUrl
@@ -90,7 +111,7 @@ const prismaClientSingleton = () =>
     log: ['error'],
     datasources: {
       db: {
-        url: databaseUrl,
+        url: directUrl ?? databaseUrl,
       },
     },
   })
