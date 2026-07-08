@@ -17,7 +17,7 @@
     "prisma": "pnpm --filter @starway/db exec prisma",
     "prisma:generate": "pnpm --filter @starway/db run prisma:generate",
     "prisma:db:push": "pnpm --filter @starway/db run prisma:db:push",
-    "prisma:migrate": "pnpm --filter @starway/db run prisma:migrate",
+    "prisma:migrate": "node -e \"const {spawnSync}=require('node:child_process'); const args=process.argv.slice(1); if(args[0]==='deploy'){console.error('Use pnpm prisma:migrate:deploy instead of pnpm prisma:migrate deploy.'); process.exit(1)} const cmd=['--filter','@starway/db','run','prisma:migrate']; if(args.length){cmd.push('--', ...args)} const result=spawnSync('pnpm', cmd, {stdio:'inherit', shell: process.platform==='win32'}); process.exit(result.status ?? 1)\"",
     "prisma:migrate:deploy": "pnpm --filter @starway/db run prisma:migrate:deploy",
     "build": "pnpm --dir packages/shared build && pnpm --dir packages/db build && pnpm --filter @starway/ai run build && pnpm --dir backend build && pnpm --dir apps/web build",
     "start": "pnpm --dir backend start",

@@ -25,7 +25,7 @@
   "scripts": {
     "prisma:generate": "pnpm exec prisma generate --schema ./prisma/schema.prisma",
     "prisma:db:push": "pnpm exec prisma db push --schema ./prisma/schema.prisma",
-    "prisma:migrate": "pnpm exec prisma migrate dev --schema ./prisma/schema.prisma",
+    "prisma:migrate": "node -e \"const {spawnSync}=require('node:child_process'); const args=process.argv.slice(1); if(args[0]==='deploy'){console.error('Use pnpm prisma:migrate:deploy or pnpm exec prisma migrate deploy --schema ./prisma/schema.prisma.'); process.exit(1)} const cmd=['exec','prisma','migrate','dev','--schema','./prisma/schema.prisma', ...args]; const result=spawnSync('pnpm', cmd, {stdio:'inherit', shell: process.platform==='win32'}); process.exit(result.status ?? 1)\"",
     "prisma:migrate:deploy": "pnpm exec prisma migrate deploy --schema ./prisma/schema.prisma",
     "build": "pnpm run prisma:generate && sleep 3 && node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
     "clean": "rm -rf dist",
