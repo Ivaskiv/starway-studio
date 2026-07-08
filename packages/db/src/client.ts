@@ -35,7 +35,14 @@ function normalizeDatabaseUrl(input: string | undefined): string | undefined {
     const url = new URL(raw)
     if (url.hostname.includes('pooler.supabase.com')) {
       url.searchParams.set('pgbouncer', 'true')
-      url.searchParams.set('connection_limit', '1')
+      url.searchParams.set(
+        'connection_limit',
+        getConfiguredPoolLimit({
+          url,
+          envKey: 'PRISMA_POOL_CONNECTION_LIMIT',
+          fallback: '10',
+        })
+      )
       return url.toString()
     }
   } catch {
@@ -43,6 +50,27 @@ function normalizeDatabaseUrl(input: string | undefined): string | undefined {
   }
 
   return raw
+}
+
+function getConfiguredPoolLimit(input: {
+  url: URL
+  envKey: string
+  fallback: string
+}): string {
+  const configured = process.env[input.envKey]?.trim() || input.fallback
+  const parsed = Number.parseInt(configured, 10)
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return input.fallback
+  }
+
+  // Keep pool sizes conservative by default to avoid exhausting Postgres slots
+  // across multiple backend instances while still allowing normal request parallelism.
+  if (input.url.hostname.includes('pooler.supabase.com')) {
+    return String(Math.min(parsed, 10))
+  }
+
+  return String(Math.min(parsed, 5))
 }
 
 function resolveSupabasePassword(input: string | undefined): string | undefined {
@@ -74,9 +102,14 @@ function applyRuntimePoolLimit(input: string | undefined): string | undefined {
   try {
     const url = new URL(raw)
     if (!url.searchParams.has('connection_limit')) {
-      const configuredLimit =
-        process.env.PRISMA_POOL_CONNECTION_LIMIT?.trim() || '5'
-      url.searchParams.set('connection_limit', configuredLimit)
+      const envKey = url.hostname.includes('pooler.supabase.com')
+        ? 'PRISMA_POOL_CONNECTION_LIMIT'
+        : 'PRISMA_DIRECT_CONNECTION_LIMIT'
+      const fallback = url.hostname.includes('pooler.supabase.com') ? '5' : '3'
+      url.searchParams.set(
+        'connection_limit',
+        getConfiguredPoolLimit({ url, envKey, fallback })
+      )
     }
     return url.toString()
   } catch {
@@ -84,7 +117,9 @@ function applyRuntimePoolLimit(input: string | undefined): string | undefined {
   }
 }
 
-const databaseUrl = resolveSupabasePassword(process.env.DATABASE_URL)
+const databaseUrl = applyRuntimePoolLimit(
+  resolveSupabasePassword(process.env.DATABASE_URL)
+)
 const directUrl = applyRuntimePoolLimit(
   resolveSupabasePassword(process.env.DIRECT_URL)
 )
@@ -111,7 +146,7 @@ const prismaClientSingleton = () =>
     log: ['error'],
     datasources: {
       db: {
-        url: directUrl ?? databaseUrl,
+        url: databaseUrl ?? directUrl,
       },
     },
   })
@@ -161,17 +196,14 @@ function isRecoverableConnectionError(error: unknown): boolean {
   return isRecoverableConnectionMessage(error.message)
 }
 
-async function reconnectPrisma() {
-  await prisma.$disconnect().catch(() => undefined)
-  await prisma.$connect().catch(() => undefined)
-}
-
 export async function ensureDbConnected(): Promise<void> {
   try {
     await prisma.$queryRaw`SELECT 1`
-  } catch {
-    console.warn('[prisma] connection lost, attempting reconnect...')
-    await reconnectPrisma()
+  } catch (error) {
+    console.warn('[prisma] connection check failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
   }
 }
 
@@ -186,7 +218,6 @@ export async function withRetry<T>(
     } catch (error: unknown) {
       if (isRecoverableConnectionError(error) && index < retries - 1) {
         await new Promise<void>(resolve => setTimeout(resolve, delayMs * (index + 1)))
-        await reconnectPrisma()
         continue
       }
 

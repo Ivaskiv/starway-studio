@@ -375,8 +375,11 @@ export function startScheduler(options?: { coachBot?: Telegraf | null }) {
   safeSchedule('zoomSwapMonthlyResetSE2Cron', '0 0 1 * *', () => { runScheduled('zoomSwapMonthlyResetSE2Cron', async () => { await resetMonthlySwapUsage() }) }, timezone)
   safeSchedule('abTestR1R2Cron', '0 * * * *', () => { runScheduled('abTestR1R2Cron', async () => { await scheduleTestReminders(bot) }) }, timezone)
   safeSchedule('abTestR3R4Cron', '*/10 * * * *', () => { runScheduled('abTestR3R4Cron', async () => { await scheduleProgressReminders(bot) }) }, timezone)
-  safeSchedule('abTestR5R6Cron', '10 * * * *', () => { runScheduled('abTestR5R6Cron', async () => { await scheduleResultReminders(bot) }) }, timezone)
-  safeSchedule('abTestR7R8Cron', '15 * * * *', () => { runScheduled('abTestR7R8Cron', async () => { await scheduleOfferReminders(bot) }) }, timezone)
+  // DEACTIVATED 2026-07-07: дубльює RESULT_FOLLOWUP_24H/48H/72H і
+  // RESULT_DOJIM_24H..7D з abTestFoundation.ts (Двигун B). Див.
+  // docs/audit/dojim-engine-consolidation.md.
+  // safeSchedule('abTestR5R6Cron', '10 * * * *', () => { runScheduled('abTestR5R6Cron', async () => { await scheduleResultReminders(bot) }) }, timezone)
+  // safeSchedule('abTestR7R8Cron', '15 * * * *', () => { runScheduled('abTestR7R8Cron', async () => { await scheduleOfferReminders(bot) }) }, timezone)
   safeSchedule('abTestZoomZ1Cron', '0 18 * * 1', () => { runScheduled('abTestZoomZ1Cron', async () => { await scheduleZoomReminders(bot, 'Z1_ZOOM_MON_1800') }) }, timezone)
   safeSchedule('abTestZoomZ2Cron', '55 18 * * 1', () => { runScheduled('abTestZoomZ2Cron', async () => { await scheduleZoomReminders(bot, 'Z2_ZOOM_MON_1855') }) }, timezone)
 }

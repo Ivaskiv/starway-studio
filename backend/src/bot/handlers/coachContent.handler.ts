@@ -42,6 +42,13 @@ const REQUIRED_PLANNER_SECTIONS = ['planner', 'buttons', 'note', 'mode', 'topics
 
 let coachContentCatalogValidated = false
 
+function maskTelegramToken(token: string | null | undefined): string | null {
+  const normalized = String(token ?? '').trim()
+  if (!normalized) return null
+  if (normalized.length <= 8) return normalized
+  return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`
+}
+
 export function validateCoachContentCatalog(): void {
   if (coachContentCatalogValidated) return
   coachContentCatalogValidated = true
@@ -602,6 +609,20 @@ async function enqueueCoachAudioUpload(ctx: Context): Promise<boolean> {
   const uploadedAt = typeof message.date === 'number'
     ? new Date(message.date * 1000)
     : new Date()
+  const coachBotToken = String(process.env.COACH_BOT_TOKEN ?? '').trim()
+  const coachBotId = coachBotToken.split(':')[0] || null
+  const coachBotUsername = String(process.env.COACH_BOT_NAME ?? '').trim() || null
+
+  console.info('[ZOOM_AUDIO_TELEGRAM] update:received', {
+    botInstance: 'coachBot',
+    botUsername: coachBotUsername,
+    botId: coachBotId,
+    tokenHash: maskTelegramToken(coachBotToken),
+    fileId,
+    fileUniqueId,
+    messageId,
+    chatId,
+  })
 
   const mediaType = audio
     ? 'audio'

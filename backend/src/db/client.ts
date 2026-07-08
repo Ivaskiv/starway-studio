@@ -6,10 +6,11 @@ export const prisma: GeneratedPrismaClient = dbPrisma as unknown as GeneratedPri
 export async function ensureDbConnected(): Promise<void> {
   try {
     await prisma.$queryRaw`SELECT 1`
-  } catch {
-    console.warn('[prisma] connection lost, attempting reconnect...')
-    await prisma.$disconnect().catch(() => undefined)
-    await prisma.$connect().catch(() => undefined)
+  } catch (error) {
+    console.warn('[prisma] connection check failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
   }
 }
 

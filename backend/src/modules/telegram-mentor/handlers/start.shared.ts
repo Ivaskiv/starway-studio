@@ -60,6 +60,7 @@ export type TelegramInlineButton =
   | { text: string; url: string }
   | { text: string; web_app: { url: string } }
 
+// TODO: duplicate of router.ts:33, consolidate separately
 export function getStartPayload(ctx: StartContext): string {
   if (ctx.startPayload) {
     return ctx.startPayload.trim()
@@ -72,6 +73,29 @@ export function getStartPayload(ctx: StartContext): string {
   return String(text ?? '')
     .replace('/start', '')
     .trim()
+}
+
+export function parseFirstTouchPayload(payload: string): {
+  product: string | null
+  source: string | null
+  campaign: string | null
+} {
+  const normalized = String(payload ?? '').trim()
+  if (!normalized || normalized.startsWith('ml_')) {
+    return {
+      product: null,
+      source: null,
+      campaign: null,
+    }
+  }
+
+  const [rawProduct, rawSource, rawCampaign] = normalized.split('.')
+
+  return {
+    product: rawProduct?.trim() || null,
+    source: rawSource?.trim() || null,
+    campaign: rawCampaign?.trim() || null,
+  }
 }
 
 export function asRecord(value: unknown): Record<string, unknown> {

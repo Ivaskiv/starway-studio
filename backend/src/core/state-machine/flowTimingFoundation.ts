@@ -69,6 +69,11 @@ export type CanonicalFlowOrchestrationRule = {
   next_expected_transition: CanonicalFlowStageId
 }
 
+// ВАЖЛИВО: назви timer ID (24H/48H/72H/5D/7D) більше НЕ відповідають
+// буквальним delay_ms після синхронізації з ТЗ (fokus_tayming_dlya_teh.pdf,
+// Розділ 3). RESULT_DOJIM_48H = 4 дні, RESULT_DOJIM_72H = 7 днів,
+// RESULT_DOJIM_5D = 12 днів, RESULT_DOJIM_7D = 18 днів. Дивись
+// фактичне значення delay_ms, не покладайся на назву константи.
 export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, CanonicalFlowTimerDefinition> = {
   RESULT_FOLLOWUP_24H: {
     id: 'RESULT_FOLLOWUP_24H',
@@ -114,7 +119,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     id: 'RESULT_DOJIM_48H',
     source_stage: 'S4_FOCUS_INVITE',
     trigger_event: 'RESULT_OPENED',
-    delay_ms: 48 * 60 * 60 * 1000,
+    delay_ms: 4 * 24 * 60 * 60 * 1000,
     allowed_states: ['S0_TRAFFIC', 'S3_TEST_RESULT', 'S4_FOCUS_INVITE'],
     blocked_states: ['S5_PAYMENT', 'S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY', 'S9_RETENTION', 'S10_RETENTION_WINBACK'],
     message_key: 'TEST_RESULT_ACTION',
@@ -124,7 +129,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     id: 'RESULT_DOJIM_72H',
     source_stage: 'S4_FOCUS_INVITE',
     trigger_event: 'RESULT_OPENED',
-    delay_ms: 72 * 60 * 60 * 1000,
+    delay_ms: 7 * 24 * 60 * 60 * 1000,
     allowed_states: ['S0_TRAFFIC', 'S3_TEST_RESULT', 'S4_FOCUS_INVITE'],
     blocked_states: ['S5_PAYMENT', 'S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY', 'S9_RETENTION', 'S10_RETENTION_WINBACK'],
     message_key: 'TEST_RESULT_ACTION',
@@ -134,7 +139,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     id: 'RESULT_DOJIM_5D',
     source_stage: 'S4_FOCUS_INVITE',
     trigger_event: 'RESULT_OPENED',
-    delay_ms: 5 * 24 * 60 * 60 * 1000,
+    delay_ms: 12 * 24 * 60 * 60 * 1000,
     allowed_states: ['S0_TRAFFIC', 'S3_TEST_RESULT', 'S4_FOCUS_INVITE'],
     blocked_states: ['S5_PAYMENT', 'S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY', 'S9_RETENTION', 'S10_RETENTION_WINBACK'],
     message_key: 'TEST_RESULT_ACTION',
@@ -144,7 +149,7 @@ export const CANONICAL_FLOW_TIMER_REGISTRY: Record<CanonicalFlowTimerId, Canonic
     id: 'RESULT_DOJIM_7D',
     source_stage: 'S4_FOCUS_INVITE',
     trigger_event: 'RESULT_OPENED',
-    delay_ms: 7 * 24 * 60 * 60 * 1000,
+    delay_ms: 18 * 24 * 60 * 60 * 1000,
     allowed_states: ['S0_TRAFFIC', 'S3_TEST_RESULT', 'S4_FOCUS_INVITE'],
     blocked_states: ['S5_PAYMENT', 'S6_ZOOM', 'S7_PLATFORM_INVITE', 'S8_PLATFORM_READY', 'S9_RETENTION', 'S10_RETENTION_WINBACK'],
     message_key: 'TEST_RESULT_ACTION',

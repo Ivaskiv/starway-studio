@@ -525,18 +525,37 @@ export async function handleFocusPaymentAction(
     }
   }
 
-  const url1m = firstNonEmptyUrl(
+  const staticUrl1m = firstNonEmptyUrl(
     process.env.WAYFORPAY_FOCUS_BOT_1M_URL,
     process.env.WAYFORPAY_FOCUS_1M_URL,
     process.env.FOCUS_1M_URL,
     process.env.WAYFORPAY_FOCUS_LANDING_URL
   )
-  const url3m = firstNonEmptyUrl(
+  const staticUrl3m = firstNonEmptyUrl(
     process.env.WAYFORPAY_FOCUS_BOT_3M_URL,
     process.env.WAYFORPAY_FOCUS_3M_URL,
     process.env.FOCUS_3M_URL,
     process.env.WAYFORPAY_FOCUS_LANDING_URL
   )
+  // FIX: static hosted-button URL не містить clientAccountId — webhook не може
+  // прив'язати оплату до userId (MISSING_WEBHOOK_FIELDS), Subscription не створюється.
+  // Динамічний checkout (той самий механізм, що вже працює для тестової 1 грн кнопки
+  // нижче) коректно ставить clientAccountId=userId. Статичний лінк лишається fallback-ом
+  // ТІЛЬКИ якщо resolvedUserId відсутній — щоб кнопка не зникала повністю в edge-кейсі.
+  let url1m = staticUrl1m
+  let url3m = staticUrl3m
+  if (resolvedUserId) {
+    try {
+      const [session1m, session3m] = await Promise.all([
+        buildEcosystemPaymentCheckoutSession('focus', '1month', resolvedUserId),
+        buildEcosystemPaymentCheckoutSession('focus', '3month', resolvedUserId),
+      ])
+      url1m = session1m.checkoutUrl
+      url3m = session3m.checkoutUrl
+    } catch (error) {
+      console.error('[FOCUS_PAY] dynamic_checkout_failed_fallback_to_static', error)
+    }
+  }
   const text =
     BLOCK10_FOCUS?.text ??
     `${AB_TEST_FOCUS_TITLE}\n\n` +

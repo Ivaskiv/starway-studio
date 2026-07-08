@@ -6,12 +6,8 @@ import {
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { createOnceInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { hasActiveFocusSubscription } from './focus.access.js'
-import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { bot, sendDedupedTelegramMessage } from '../../../lib/telegram.js'
-import { resolveNotificationType } from '../../../services/notifications/domain/notificationPolicy.js'
-import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
-import { FOCUS_DOJIM_TIMER_IDS } from './business.js'
 import { FOCUS_PRODUCT_CODES } from './focus.access.js'
 
 export async function sendFocusPaymentSuccessTelegramMessage(userId: string) {
@@ -225,64 +221,6 @@ export async function handleFocusChannelJoinByTelegramUserId(
   if (!focusActive) return false
 
   return sendAbTestBlock12PostJoin(user.id)
-}
-
-export async function cancelPendingFocusDojims(
-  userId: string,
-  tx?: Prisma.TransactionClient // fix with kimi 2026-05-28: optional tx for atomic post-payment orchestration
-): Promise<number> {
-  const client = tx ?? prisma
-  const jobs = await client.notificationJob
-    .findMany({
-      where: {
-        type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),
-        status: 'PENDING',
-        payload: { path: ['userId'], equals: userId },
-      },
-      select: {
-        id: true,
-        payload: true,
-      },
-    })
-    .catch(() => [])
-
-  const ids = jobs
-    .filter((job) => {
-      const payload = job.payload as Prisma.JsonObject | null
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        return false
-      }
-
-      const payloadUserId =
-        typeof payload.userId === 'string' ? payload.userId : null
-      const flowTimerId =
-        typeof payload.flow_timer_id === 'string'
-          ? payload.flow_timer_id
-          : typeof payload.flowTimerId === 'string'
-            ? payload.flowTimerId
-            : null
-
-      return (
-        payloadUserId === userId &&
-        flowTimerId !== null &&
-        FOCUS_DOJIM_TIMER_IDS.includes(
-          flowTimerId as (typeof FOCUS_DOJIM_TIMER_IDS)[number]
-        )
-      )
-    })
-    .map((job) => job.id)
-
-  if (!ids.length) {
-    return 0
-  }
-
-  await client.notificationJob.deleteMany({
-    where: {
-      id: { in: ids },
-    },
-  })
-
-  return ids.length
 }
 
 export async function sendAbsystemPaymentSuccessTelegramMessage(userId: string) {

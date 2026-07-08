@@ -8,6 +8,7 @@ import { planMessage } from '../conversation/delivery/planDelivery.js'
 import {
   type StartContext,
   getStartPayload,
+  parseFirstTouchPayload,
   resolveLinkedUserIdFromContext,
   syncAccessAwareChatEntryPoints,
 } from './start.shared.js'
@@ -300,6 +301,7 @@ export async function handleStart(ctx: StartContext) {
   try {
     const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
     const startPayload = getStartPayload(ctx)
+    const firstTouch = parseFirstTouchPayload(startPayload)
     let resolvedUserId = await resolveLinkedUserIdFromContext(ctx)
 
     if (!resolvedUserId) {
@@ -324,6 +326,9 @@ export async function handleStart(ctx: StartContext) {
             telegramChatId: chatId,
             telegramUserName: ctx.from?.username ?? null,
             firstName: ctx.from?.first_name ?? null,
+            firstTouchProduct: firstTouch.product,
+            firstTouchSource: firstTouch.source,
+            firstTouchCampaign: firstTouch.campaign,
             telegramLinkedAt: new Date(),
           },
         },
@@ -338,6 +343,17 @@ export async function handleStart(ctx: StartContext) {
       })
 
       resolvedUserId = resolved.user.id
+
+      if (resolved.created) {
+        console.info('[FIRST_TOUCH]', {
+          userId: resolvedUserId,
+          telegramId: telegramUserId,
+          startPayload,
+          product: firstTouch.product,
+          source: firstTouch.source,
+          campaign: firstTouch.campaign,
+        })
+      }
 
       console.log('[START] new user created', {
         userId: resolvedUserId,

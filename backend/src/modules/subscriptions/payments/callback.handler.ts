@@ -30,7 +30,6 @@ import {
   simulateFocusActivation,
 } from './business.js'
 import {
-  cancelPendingFocusDojims,
   sendAbsystemPaymentSuccessTelegramMessage,
   sendPaymentFailedTelegramMessage,
 } from './callback.notifications.js'
@@ -592,8 +591,14 @@ export async function wayForPayCallback(req: Request, res: Response) {
               })
             }
 
-            await cancelPendingFocusDojims(userId, tx).catch(() => undefined)
-            await markAbTestPaymentSuccess(userId, tx).catch(() => undefined)
+            await markAbTestPaymentSuccess(userId, tx).catch((err: unknown) => {
+              console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+                userId,
+                payRef,
+                stage: 'markAbTestPaymentSuccess',
+                error: err instanceof Error ? err.message : String(err),
+              })
+            })
           }
         },
         { maxWait: 5000, timeout: 10000 }

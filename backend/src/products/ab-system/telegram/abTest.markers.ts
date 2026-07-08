@@ -5,18 +5,52 @@ import {
   type AbTestProgress,
   type AbTestStageId,
 } from '../../../core/state-machine/abTestFoundation.js'
+import { prisma } from '../../../db/client.js'
 import { resolveNotificationType } from '../../../services/notifications/domain/notificationPolicy.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
-import { notificationJobService } from '../../../services/notifications/services/NotificationJobService.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { loadAbTestProgress, saveAbTestProgress } from './abTest.progress.js'
+
+async function finalizeAbTestPaymentSuccess(
+  userId: string,
+  tx?: Prisma.TransactionClient,
+): Promise<void> {
+  const applyWithClient = async (client: Prisma.TransactionClient) => {
+    await client.user.update({
+      where: { id: userId },
+      data: { lifecycleState: 'FOCUS_PAID' },
+    })
+    await client.notificationJob.deleteMany({
+      where: {
+        type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),
+        status: 'PENDING',
+        payload: {
+          path: ['userId'],
+          equals: userId,
+        },
+      },
+    })
+  }
+
+  if (tx) {
+    await applyWithClient(tx)
+    return
+  }
+
+  await prisma.$transaction(async (innerTx) => {
+    await applyWithClient(innerTx)
+  })
+}
 
 export async function markAbTestPaymentSuccess(
   userId: string,
   tx?: Prisma.TransactionClient // fix with kimi 2026-05-28: optional tx for atomic post-payment orchestration
 ): Promise<void> {
   const current = await loadAbTestProgress(userId)
-  if (current.payment_success_at) return
+  if (current.payment_success_at) {
+    await finalizeAbTestPaymentSuccess(userId, tx)
+    return
+  }
 
   await saveAbTestProgress(
     userId,
@@ -32,23 +66,7 @@ export async function markAbTestPaymentSuccess(
     state: current.stage === 'S5_PAYMENT' ? 'S6_ZOOM' : current.stage,
     payload: { stage: current.stage } satisfies Prisma.JsonObject,
   })
-
-  const cancelPendingFollowups = tx
-    ? tx.notificationJob.deleteMany({
-      where: {
-        type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),
-        status: 'PENDING',
-        payload: {
-          path: ['userId'],
-          equals: userId,
-        },
-      },
-    })
-    : notificationJobService.cancelByUserAndTypes(userId, [resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP)])
-
-  await cancelPendingFollowups.catch((err) =>
-    console.warn('[AbTest] Failed to cancel pending followups on payment', err)
-  )
+  await finalizeAbTestPaymentSuccess(userId, tx)
 }
 
 export async function markAbTestZoomRegistered(

@@ -1,7 +1,7 @@
 import { ZoomStatus, type Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
-import { bot, coachBot, contentBot } from '../../lib/telegram.js'
+import { bot, coachBot } from '../../lib/telegram.js'
 import {
   compressZoomAudioFile,
   downloadTelegramAudioSourceToTempFile,
@@ -46,6 +46,13 @@ type CoachInlineKeyboardMarkup = {
     text: string
     callback_data: string
   }>>
+}
+
+function maskTelegramToken(token: string | null | undefined): string | null {
+  const normalized = String(token ?? '').trim()
+  if (!normalized) return null
+  if (normalized.length <= 8) return normalized
+  return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`
 }
 
 function buildZoomCoachStatusText(lines: string[], fileName?: string | null, zoomType?: string | null): string {
@@ -390,6 +397,11 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
         const mediaType = audioPayload.mediaType === 'voice'
           ? 'TELEGRAM_VOICE'
           : 'TELEGRAM_AUDIO'
+        const telegramRuntime = coachBot
+        const telegramRuntimeName = 'coachBot'
+        const telegramBotToken = String(process.env.COACH_BOT_TOKEN ?? '').trim()
+        const telegramBotUsername = String(process.env.COACH_BOT_NAME ?? '').trim() || null
+        const telegramBotId = telegramBotToken.split(':')[0] || null
         const opsChatId = (typeof audioPayload.chatId === 'string' && audioPayload.chatId.trim())
           || process.env.STARWAY_OPS_CHAT_ID?.trim()
           || process.env.OPS_TELEGRAM_CHAT_ID?.trim()
@@ -400,9 +412,18 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
         let transcript = ''
 
         try {
-          if (!contentBot) {
-            console.error('[ZOOM_DEBUG] contentBot is undefined — check CONTENT_BOT_TOKEN')
-            throw new Error('contentBot not initialized')
+          if (!telegramBotToken) {
+            console.error('[ZOOM_AUDIO_TELEGRAM] missing runtime token', {
+              botInstance: telegramRuntimeName,
+              botUsername: telegramBotUsername,
+              botId: telegramBotId,
+              tokenHash: maskTelegramToken(telegramBotToken),
+              fileId,
+              fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+              messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+              chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
+            })
+            throw new Error('zoom_audio_runtime_token_missing')
           }
 
           const uploadedAt = typeof audioPayload.uploadedAt === 'string' ? new Date(audioPayload.uploadedAt) : null
@@ -422,7 +443,27 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             : null
 
           if (!telegramFileSizeBytes) {
-            const telegramFile = await contentBot.telegram.getFile(fileId)
+            console.info('[ZOOM_AUDIO_TELEGRAM] getFile:start', {
+              botInstance: telegramRuntimeName,
+              botUsername: telegramBotUsername,
+              botId: telegramBotId,
+              tokenHash: maskTelegramToken(telegramBotToken),
+              fileId,
+              fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+              messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+              chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
+            })
+            const telegramFile = await telegramRuntime.telegram.getFile(fileId)
+            console.info('[ZOOM_AUDIO_TELEGRAM] getFile:ok', {
+              botInstance: telegramRuntimeName,
+              botUsername: telegramBotUsername,
+              botId: telegramBotId,
+              tokenHash: maskTelegramToken(telegramBotToken),
+              fileId,
+              fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+              messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+              chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
+            })
             telegramFileSizeBytes = typeof telegramFile.file_size === 'number' && Number.isFinite(telegramFile.file_size) && telegramFile.file_size > 0
               ? telegramFile.file_size
               : null
@@ -501,19 +542,40 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             })
           } else {
             try {
-              const fileLink = await contentBot.telegram.getFileLink(fileId)
-              downloadUrl = fileLink.href ?? String(fileLink)
-              console.log('[ZOOM_DEBUG] step 2 — getFileLink ok', {
-                downloadUrl: `${downloadUrl.substring(0, 60)}...`,
+              console.info('[ZOOM_AUDIO_TELEGRAM] getFileLink:start', {
+                botInstance: telegramRuntimeName,
+                botUsername: telegramBotUsername,
+                botId: telegramBotId,
+                tokenHash: maskTelegramToken(telegramBotToken),
                 fileId,
+                fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+                messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+                chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
+              })
+              const fileLink = await telegramRuntime.telegram.getFileLink(fileId)
+              downloadUrl = fileLink.href ?? String(fileLink)
+              console.info('[ZOOM_AUDIO_TELEGRAM] getFileLink:ok', {
+                botInstance: telegramRuntimeName,
+                botUsername: telegramBotUsername,
+                botId: telegramBotId,
+                tokenHash: maskTelegramToken(telegramBotToken),
+                fileId,
+                fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+                messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+                chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
+                downloadUrl: `${downloadUrl.substring(0, 60)}...`,
               })
             } catch (err) {
-              console.error('[ZOOM_DEBUG] step 2 FAILED — getFileLink error', {
+              console.error('[ZOOM_AUDIO_TELEGRAM] getFileLink:failed', {
+                botInstance: telegramRuntimeName,
+                botUsername: telegramBotUsername,
+                botId: telegramBotId,
+                tokenHash: maskTelegramToken(telegramBotToken),
                 fileId,
+                fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+                messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+                chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
                 error: err instanceof Error ? err.message : String(err),
-                botToken: process.env.CONTENT_BOT_TOKEN
-                  ? 'CONTENT_BOT_TOKEN set'
-                  : 'CONTENT_BOT_TOKEN missing — falling back to TELEGRAM_BOT_TOKEN',
               })
               throw err
             }
@@ -528,9 +590,31 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             : item.createdAt
 
           const needsLocalFile = audioPayload.source !== 'cloudinary' || processingStrategy !== 'DIRECT_TRANSCRIPT'
+          console.info('[ZOOM_AUDIO_TELEGRAM] download:start', {
+            botInstance: telegramRuntimeName,
+            botUsername: telegramBotUsername,
+            botId: telegramBotId,
+            tokenHash: maskTelegramToken(telegramBotToken),
+            fileId,
+            fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+            messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+            chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
+            viaDirectUrl: Boolean(directDownloadUrl),
+          })
           const rawFile = needsLocalFile
             ? await downloadTelegramAudioSourceToTempFile(downloadUrl, fileName)
             : null
+          console.info('[ZOOM_AUDIO_TELEGRAM] download:ok', {
+            botInstance: telegramRuntimeName,
+            botUsername: telegramBotUsername,
+            botId: telegramBotId,
+            tokenHash: maskTelegramToken(telegramBotToken),
+            fileId,
+            fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+            messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+            chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
+            localFileReady: Boolean(rawFile),
+          })
           if (rawFile) {
             cleanupTasks.push(rawFile.cleanup)
           }
@@ -546,11 +630,31 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
             const storageType = resolveZoomAudioStorageType(
               matchedSession?.type ?? (typeof zoomAudioPayload.zoomType === 'string' ? zoomAudioPayload.zoomType : null),
             )
+            console.info('[ZOOM_AUDIO_CLOUDINARY] upload:start', {
+              botInstance: telegramRuntimeName,
+              botUsername: telegramBotUsername,
+              botId: telegramBotId,
+              tokenHash: maskTelegramToken(telegramBotToken),
+              fileId,
+              fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+              messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+              chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
+            })
             const uploadedAsset = await uploadZoomAudioToCloudinary({
               localFilePath: rawFile.filePath,
               sessionDate: matchedSession?.scheduledAt ?? observedAt,
               sessionType: storageType,
               username: storageType === 'INDIVIDUAL' ? resolveZoomSessionUsername(matchedSession) : null,
+            })
+            console.info('[ZOOM_AUDIO_CLOUDINARY] upload:ok', {
+              botInstance: telegramRuntimeName,
+              botUsername: telegramBotUsername,
+              botId: telegramBotId,
+              tokenHash: maskTelegramToken(telegramBotToken),
+              fileId,
+              fileUniqueId: typeof audioPayload.fileUniqueId === 'string' ? audioPayload.fileUniqueId : null,
+              messageId: typeof audioPayload.messageId === 'number' ? audioPayload.messageId : null,
+              chatId: typeof audioPayload.chatId === 'string' ? audioPayload.chatId : null,
             })
 
             telegramFileSizeBytes = uploadedAsset.bytes ?? telegramFileSizeBytes

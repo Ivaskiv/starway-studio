@@ -56,7 +56,7 @@ This file:
 
 - Reads `DATABASE_URL` and `DIRECT_URL`
 - Replaces `${SUPABASE_DB_PASSWORD}` if present
-- Normalizes pooler URLs by forcing `pgbouncer=true` and `connection_limit=1`
+- Normalizes pooler URLs by forcing `pgbouncer=true` and an env-driven `connection_limit`
 - Passes only `databaseUrl` into `new PrismaClient({ datasources: { db: { url }}})`
 
 ### CURRENT vs EXPECTED
@@ -65,14 +65,14 @@ This file:
 |---|---|---|---|
 | `url` | `env("DATABASE_URL")` in Prisma schema, runtime client uses `process.env.DATABASE_URL` | `DATABASE_URL` should point to the session pooler for server deploys on IPv4-only networks | Match |
 | `directUrl` | `env("DIRECT_URL")` in Prisma schema, used by seed/CLI paths | `DIRECT_URL` should point to the direct host `db.<project-ref>.supabase.co:5432` | Match |
-| pooler behavior | Runtime helper rewrites pooler URLs to `pgbouncer=true&connection_limit=1` | Prisma docs recommend pooler-safe connection behavior for persistent backend usage | Match |
+| pooler behavior | Runtime helper rewrites pooler URLs to `pgbouncer=true` and `connection_limit=${PRISMA_POOL_CONNECTION_LIMIT:-10}` for `pooler.supabase.com` hosts | Prisma docs recommend pooler-safe connection behavior for persistent backend usage | Match |
 
 ### Current vs File Examples
 
 | Source file | Current pattern | Expected pattern | Match |
 |---|---|---|---|
 | [`README.md`](/Users/viravira/Documents/starway-studio/README.md#L122-L130) | Direct host example for both URLs | For production runtime, `DATABASE_URL` should be session pooler; `DIRECT_URL` should be direct host | Partial mismatch |
-| [`packages/db/.env`](/Users/viravira/Documents/starway-studio/packages/db/.env#L5-L8) | Session pooler URL with `connection_limit=3` and direct host URL | Session pooler URL is correct in shape, but runtime helper forces `connection_limit=1` | Partial mismatch |
+| [`packages/db/.env`](/Users/viravira/Documents/starway-studio/packages/db/.env#L5-L8) | Session pooler URL with `connection_limit=3` and direct host URL | Session pooler URL is correct in shape, but runtime helper now normalizes pooler hosts to `connection_limit=${PRISMA_POOL_CONNECTION_LIMIT:-10}` | Match after 2026-07-07 fix |
 | [`backend/.env`](/Users/viravira/Documents/starway-studio/backend/.env#L79-L83) | Session pooler URL with `pgbouncer=true` and direct host URL | Shape matches official guidance | Match |
 
 ## Phase 3. Supabase Project Ref Validation
@@ -140,6 +140,7 @@ Official docs reviewed:
 - The checked-in local DB files do not show a single authoritative production secret source.
 - `packages/db/.env` and `backend/.env` do not carry the same password value.
 - That is not a schema problem, but it is a deployment-risk problem because production can easily be pointed at a different Supabase tenant/user than the one expected by the code.
+- Historical gap closed on 2026-07-07: `packages/db/src/client.ts` no longer hardcodes `connection_limit=1` for Supabase pooler URLs. The runtime now forces `pgbouncer=true` and reads `connection_limit` from `PRISMA_POOL_CONNECTION_LIMIT`, defaulting to `10` when the env var is absent.
 
 ## Phase 6. Root Cause
 

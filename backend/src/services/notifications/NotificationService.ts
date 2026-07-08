@@ -47,6 +47,9 @@ import {
 } from '../../core/runtime/runtimeIdempotency.js'
 import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 import { FOCUS_DOJIM_TIMER_IDS } from '../../modules/subscriptions/payments/business.types.js'
+import { bot } from '../../lib/telegram.js'
+import { resolveAbTestFollowupCopy } from '@/products/ab-system/content/abTest.followups.js'
+import type { TelegramContentBlock } from '@/products/ab-system/content/abTest.shared.js'
 
 type EventPayload = Record<string, unknown>
 type DojimSeriesScheduleResult = {
@@ -300,6 +303,115 @@ function buildTelegramCard(input: {
   return lines.join('\n')
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function resolveDeliveryChatId(user: DeliveryUser) {
+  return user.telegramLinks[0]?.chatId ?? user.telegramChatId ?? user.telegramUserId ?? null
+}
+
+function isSafeTelegramWebAppUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isSafeTelegramUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return ['https:', 'http:'].includes(url.protocol) && !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function buildTelegramReplyMarkup(message: DeliveryMessage) {
+  if (message.ctaActions?.length) {
+    const buttons = message.ctaActions
+      .map(action => {
+        if (action.mode === 'callback') {
+          return { text: action.text, callback_data: action.url }
+        }
+
+        if (action.mode === 'url') {
+          if (!isSafeTelegramUrl(action.url)) {
+            return null
+          }
+
+          return { text: action.text, url: action.url }
+        }
+
+        if (isSafeTelegramWebAppUrl(action.url)) {
+          return { text: action.text, web_app: { url: action.url } }
+        }
+
+        if (isSafeTelegramUrl(action.url)) {
+          return { text: action.text, url: action.url }
+        }
+
+        return null
+      })
+      .filter((
+        button,
+      ): button is { text: string; url: string } | { text: string; web_app: { url: string } } | { text: string; callback_data: string } => Boolean(button))
+
+    if (buttons.length) {
+      const rows = buttons.length > 2
+        ? [buttons.slice(0, 2), buttons.slice(2)]
+        : [buttons]
+
+      return {
+        inline_keyboard: rows,
+      }
+    }
+  }
+
+  if (!message.ctaText || !message.ctaUrl) {
+    return undefined
+  }
+
+  if (message.ctaMode === 'url') {
+    if (!isSafeTelegramUrl(message.ctaUrl)) {
+      return undefined
+    }
+
+    return {
+      inline_keyboard: [[{ text: message.ctaText, url: message.ctaUrl }]],
+    }
+  }
+
+  if (!isSafeTelegramWebAppUrl(message.ctaUrl)) {
+    if (!isSafeTelegramUrl(message.ctaUrl)) {
+      return undefined
+    }
+
+    return {
+      inline_keyboard: [[{ text: message.ctaText, url: message.ctaUrl }]],
+    }
+  }
+
+  return {
+    inline_keyboard: [[{ text: message.ctaText, web_app: { url: message.ctaUrl } }]],
+  }
+}
+
+function extractFocusDojimPricingText(blocks: TelegramContentBlock[] | undefined): string | null {
+  if (!blocks?.length) return null
+
+  const pricingLines = blocks
+    .filter((block): block is Extract<TelegramContentBlock, { type: 'pricing' }> => block.type === 'pricing')
+    .map((block) => block.text.trim())
+    .filter(Boolean)
+
+  return pricingLines.length > 0
+    ? pricingLines.map((line) => escapeHtml(line)).join('\n')
+    : null
+}
+
 async function loadEligibleUsers(): Promise<Array<Pick<User, 'id' | 'firstName' | 'email' | 'telegramChatId' | 'telegramUserId'> & { telegramLinks: Array<{ chatId: string | null }> }>> {
   return prisma.user.findMany({
     where: {
@@ -532,6 +644,54 @@ export class NotificationService {
     })
 
     return sent
+  }
+
+  private async sendFocusDojimTelegramSequence(input: {
+    user: DeliveryUser
+    message: DeliveryMessage
+    flowTimerId: AbTestFollowupTimerId
+    payload?: EventPayload
+  }): Promise<boolean> {
+    const chatId = resolveDeliveryChatId(input.user)
+    if (!chatId) return false
+
+    const firstName = input.user.firstName ?? 'Привіт'
+    const followupName = firstName === 'Привіт' ? null : firstName
+    const resultKey = asString(input.payload?.result_key ?? input.payload?.resultKey) as AbTestResultKey | null
+    const contentVersion = (asString(input.payload?.content_version ?? input.payload?.contentVersion) ?? 'legacy') as TestDriveContentVersion
+    const copy = resolveAbTestFollowupCopy(
+      input.flowTimerId,
+      resultKey,
+      contentVersion,
+      { firstName: followupName },
+    )
+    const pricingText = extractFocusDojimPricingText(copy.blocks)
+    const replyMarkup = buildTelegramReplyMarkup(input.message)
+
+    if (!pricingText || !replyMarkup) {
+      return notificationDeliveryLayer.sendTelegram(input.user, input.message)
+    }
+
+    await bot.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    await sleep(2000)
+    await bot.telegram.sendMessage(chatId, input.message.telegramHtml ?? buildTelegramCard({
+      title: input.message.title,
+      intro: input.message.body,
+    }), {
+      parse_mode: 'HTML',
+    })
+
+    await sleep(5000)
+    await bot.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+    await sleep(2000)
+    const pricingMessage = await bot.telegram.sendMessage(chatId, pricingText, {
+      parse_mode: 'HTML',
+    })
+
+    await sleep(3000)
+    await bot.telegram.editMessageReplyMarkup(chatId, pricingMessage.message_id, undefined, replyMarkup)
+
+    return true
   }
 
   async emit(event: NotificationEvent, userId: string, payload?: EventPayload): Promise<NotificationJob> {
@@ -1005,7 +1165,19 @@ export class NotificationService {
       }
     }
 
-    const sent = await notificationDeliveryLayer.sendTelegram(user, message)
+    const flowTimerId = persisted.event === NotificationEvent.AB_TEST_FOLLOWUP
+      ? asString(payload?.flow_timer_id ?? payload?.flowTimerId)
+      : null
+    const sent = persisted.event === NotificationEvent.AB_TEST_FOLLOWUP
+      && flowTimerId
+      && FOCUS_DOJIM_TIMER_IDS.includes(flowTimerId as (typeof FOCUS_DOJIM_TIMER_IDS)[number])
+      ? await this.sendFocusDojimTelegramSequence({
+        user,
+        message,
+        flowTimerId: flowTimerId as AbTestFollowupTimerId,
+        payload,
+      })
+      : await notificationDeliveryLayer.sendTelegram(user, message)
 
     await this.createNotification({
       userId: user.id,
@@ -1810,6 +1982,13 @@ export class NotificationService {
         const flowTimerId = (asString(payload?.flow_timer_id ?? payload?.flowTimerId) ?? 'RESULT_FOLLOWUP_24H') as AbTestFollowupTimerId
         const contentVersion = (asString(payload?.content_version ?? payload?.contentVersion) ?? 'legacy') as TestDriveContentVersion
         const customBody = asString(payload?.message_body ?? payload?.messageBody)
+        const followupName = firstName === 'Привіт' ? null : firstName
+        const copy = resolveAbTestFollowupCopy(
+          flowTimerId,
+          asString(payload?.result_key ?? payload?.resultKey) as AbTestResultKey | null,
+          contentVersion,
+          { firstName: followupName },
+        )
         const content = buildNotificationContent(flowTimerId, {
           userName: firstName,
           resultKey: asString(payload?.result_key ?? payload?.resultKey) as AbTestResultKey | null,
@@ -1831,7 +2010,11 @@ export class NotificationService {
           body: customBody ?? content.body,
           telegramHtml: buildTelegramCard({
             title: content.title,
-            intro: isPlainBridge || customBody ? (customBody ?? content.body) : `${firstName}, ${content.body}`,
+            intro: isPlainBridge || customBody
+              ? (customBody ?? content.body)
+              : FOCUS_DOJIM_TIMER_IDS.includes(flowTimerId as (typeof FOCUS_DOJIM_TIMER_IDS)[number])
+              ? (copy.blocks?.find((block): block is Extract<TelegramContentBlock, { type: 'text' }> => block.type === 'text')?.text ?? `${firstName}, ${content.body}`)
+              : `${firstName}, ${content.body}`,
           }),
           ctaText: content.ctaText,
           ctaActions: isPlainBridge && bridgeUrl && content.ctaText

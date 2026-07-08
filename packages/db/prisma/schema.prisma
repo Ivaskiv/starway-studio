@@ -87,6 +87,9 @@ model User {
   focusPaid              Boolean                       @default(false)
   onboardingDone         Boolean                       @default(false)
   lifecycleState         UserLifecycleState            @default(NEW_USER)
+  firstTouchProduct      String?
+  firstTouchSource       String?
+  firstTouchCampaign     String?
   testStartedAt          DateTime?
   testCompletedAt        DateTime?
   offerShownAt           DateTime?
