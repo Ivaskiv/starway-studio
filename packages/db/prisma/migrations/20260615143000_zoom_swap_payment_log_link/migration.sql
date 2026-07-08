@@ -1,5 +1,5 @@
 ALTER TABLE "ZoomSlotSwapRequest"
-ADD COLUMN "paymentLogId" UUID;
+ADD COLUMN "paymentLogId" TEXT;
 
 ALTER TABLE "ZoomSlotSwapRequest"
 ADD CONSTRAINT "ZoomSlotSwapRequest_paymentLogId_fkey"
