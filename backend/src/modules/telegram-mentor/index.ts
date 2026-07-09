@@ -894,7 +894,9 @@ export async function registerMentorBot(
         action === 'ab_test:restart' ||
         action === 'ab_test:show_result' ||
         action === 'ab_test:menu' ||
-        action === 'skip_email_before_result'
+        action === 'skip_email_before_result' ||
+        action === 'open_focus_payment' ||
+        action.startsWith('open_focus_payment:')
       if (!isStaleExempt && isStaleCallback(ctx)) {
         await planAck(
           ctx,
