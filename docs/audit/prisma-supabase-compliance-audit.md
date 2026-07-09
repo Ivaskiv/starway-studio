@@ -140,7 +140,7 @@ Official docs reviewed:
 - The checked-in local DB files do not show a single authoritative production secret source.
 - `packages/db/.env` and `backend/.env` do not carry the same password value.
 - That is not a schema problem, but it is a deployment-risk problem because production can easily be pointed at a different Supabase tenant/user than the one expected by the code.
-- Historical gap closed on 2026-07-07: `packages/db/src/client.ts` no longer hardcodes `connection_limit=1` for Supabase pooler URLs. The runtime now forces `pgbouncer=true` and reads `connection_limit` from `PRISMA_POOL_CONNECTION_LIMIT`, defaulting to `10` when the env var is absent.
+<!-- - Historical gap closed on 2026-07-07: `packages/db/src/client.ts` no longer hardcodes `connection_limit=1` for Supabase pooler URLs. The runtime now forces `pgbouncer=true` and reads `connection_limit` from `PRISMA_POOL_CONNECTION_LIMIT`, defaulting to `10` when the env var is absent. -->
 
 ## Phase 6. Root Cause
 

@@ -218,8 +218,8 @@ export function resolveFirstName(
 ): string | null {
   const name =
     user?.firstName?.trim() ||
-    user?.telegramUserName?.trim() ||
     ctx.from?.first_name?.trim() ||
+    user?.telegramUserName?.trim() ||
     null
 
   // Backfill DB if we got name from Telegram ctx but DB was empty
