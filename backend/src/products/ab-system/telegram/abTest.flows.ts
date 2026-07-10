@@ -61,6 +61,7 @@ import {
 import {
   clearPendingTelegramIdentity,
 } from '../../../modules/telegram-mentor/services/pendingIdentity.service.js'
+import { hasTelegramCtaInteraction } from '@/modules/telegram-mentor/services/ctaInteraction.service.js'
 import { scheduleFollowups } from './abTest.scheduler.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import { buildEcosystemPaymentCheckoutSession } from '../../../modules/subscriptions/payments/business.js'
@@ -573,6 +574,26 @@ export async function handleFocusPaymentAction(
     BLOCK10_FOCUS.blocks
       ? [...BLOCK10_FOCUS.blocks]
       : splitTelegramContentBlocks(text.split('\n'))
+  let paymentBlocksToSend = focusPaymentBlocks
+  let progressForCheckout = null
+  if (resolvedUserId) {
+    progressForCheckout = await loadAbTestProgress(resolvedUserId).catch(() => null)
+    const previewSeen =
+      progressForCheckout?.result_key
+        ? await hasTelegramCtaInteraction(
+            resolvedUserId,
+            `show_inside_${progressForCheckout.result_key.toUpperCase()}`
+          ).catch(() => false)
+        : false
+
+    if (previewSeen) {
+      paymentBlocksToSend = [
+        { type: 'text', text: 'Супер. Якщо відгукується — нижче можеш одразу вибрати формат участі.' },
+        { type: 'text', text: 'Обирай зручний варіант, і після оплати ми відкриємо тобі доступ у ФОКУС.' },
+        { type: 'pricing', text: `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}` },
+      ]
+    }
+  }
   let testButtonRow: Array<{ text: string; url: string }> = []
   if (resolvedUserId && isTestPaymentEnabled()) {
     try {
@@ -597,7 +618,7 @@ export async function handleFocusPaymentAction(
       ctx,
       chatId,
       '',
-      focusPaymentBlocks,
+      paymentBlocksToSend,
       {
         inlineKeyboard: {
           inline_keyboard: [
@@ -649,6 +670,9 @@ export async function handleFocusPaymentAction(
       .catch((error: Error) =>
         console.error('[FOCUS_PAYMENT] save progress failed', error)
       )
+  }
+  if (resolvedUserId && progressForCheckout) {
+    await scheduleFollowups(resolvedUserId, progressForCheckout, 'S4_FOCUS_INVITE')
   }
   return true
 }

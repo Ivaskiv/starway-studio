@@ -14,5 +14,4 @@ export function startBattleCron(): void {
       console.error('[battle-cron] error', err);
     }
   });
-  console.info('[battle-cron] started');
 }

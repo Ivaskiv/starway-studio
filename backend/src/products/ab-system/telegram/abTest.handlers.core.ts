@@ -537,6 +537,7 @@ export async function handleShowInside(
     resultKey: resultKey as AbTestResultKey,
     firstName: resolveFirstName(userRecord, ctx, userId),
   })
+  await scheduleFollowups(userId, progress, 'S4_FOCUS_INVITE')
   return true
 }
 

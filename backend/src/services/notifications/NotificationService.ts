@@ -48,6 +48,7 @@ import {
 import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 import { FOCUS_DOJIM_TIMER_IDS } from '../../modules/subscriptions/payments/business.types.js'
 import { bot } from '../../lib/telegram.js'
+import { readTelegramBotConfig } from '../../modules/telegram-mentor/runtime/botConfig.js'
 import { resolveAbTestFollowupCopy } from '@/products/ab-system/content/abTest.followups.js'
 import type { TelegramContentBlock } from '@/products/ab-system/content/abTest.shared.js'
 
@@ -399,17 +400,65 @@ function buildTelegramReplyMarkup(message: DeliveryMessage) {
   }
 }
 
-function extractFocusDojimPricingText(blocks: TelegramContentBlock[] | undefined): string | null {
-  if (!blocks?.length) return null
+function renderFocusDojimBlock(block: TelegramContentBlock): string | null {
+  switch (block.type) {
+    case 'text':
+      return escapeHtml(block.text)
+    case 'quote':
+      return `<blockquote>${escapeHtml(block.text.replace(/^"|"$/g, '').replace(/^«|»$/g, '').trim())}</blockquote>`
+    case 'pricing':
+    case 'cta':
+      return `<b>${escapeHtml(block.text)}</b>`
+    case 'image':
+    case 'video':
+    case 'audio':
+      return block.caption ? escapeHtml(block.caption) : null
+    default:
+      return null
+  }
+}
 
-  const pricingLines = blocks
-    .filter((block): block is Extract<TelegramContentBlock, { type: 'pricing' }> => block.type === 'pricing')
-    .map((block) => block.text.trim())
-    .filter(Boolean)
+async function sendFocusDojimBlockMessage(input: {
+  chatId: string | number
+  block: TelegramContentBlock
+  replyMarkup?: ReturnType<typeof buildTelegramReplyMarkup>
+}): Promise<void> {
+  const { chatId, block, replyMarkup } = input
 
-  return pricingLines.length > 0
-    ? pricingLines.map((line) => escapeHtml(line)).join('\n')
-    : null
+  if (block.type === 'image') {
+    await bot.telegram.sendPhoto(chatId, block.assetKey, {
+      caption: block.caption ? renderFocusDojimBlock(block) ?? undefined : undefined,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup,
+    })
+    return
+  }
+
+  if (block.type === 'audio') {
+    await bot.telegram.sendVoice(chatId, block.assetKey, {
+      caption: block.caption ? renderFocusDojimBlock(block) ?? undefined : undefined,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup,
+    })
+    return
+  }
+
+  if (block.type === 'video') {
+    await bot.telegram.sendVideo(chatId, block.assetKey, {
+      caption: block.caption ? renderFocusDojimBlock(block) ?? undefined : undefined,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup,
+    })
+    return
+  }
+
+  const text = renderFocusDojimBlock(block)
+  if (!text) return
+
+  await bot.telegram.sendMessage(chatId, text, {
+    parse_mode: 'HTML',
+    reply_markup: replyMarkup,
+  })
 }
 
 async function loadEligibleUsers(): Promise<Array<Pick<User, 'id' | 'firstName' | 'email' | 'telegramChatId' | 'telegramUserId'> & { telegramLinks: Array<{ chatId: string | null }> }>> {
@@ -654,6 +703,7 @@ export class NotificationService {
   }): Promise<boolean> {
     const chatId = resolveDeliveryChatId(input.user)
     if (!chatId) return false
+    const telegramBotConfig = readTelegramBotConfig()
 
     const firstName = input.user.firstName ?? 'Привіт'
     const followupName = firstName === 'Привіт' ? null : firstName
@@ -665,31 +715,43 @@ export class NotificationService {
       contentVersion,
       { firstName: followupName },
     )
-    const pricingText = extractFocusDojimPricingText(copy.blocks)
     const replyMarkup = buildTelegramReplyMarkup(input.message)
+    const sequenceBlocks = copy.blocks?.filter((block) => block.type !== 'cta') ?? []
 
-    if (!pricingText || !replyMarkup) {
+    if (!sequenceBlocks.length) {
       return notificationDeliveryLayer.sendTelegram(input.user, input.message)
     }
 
-    await bot.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-    await sleep(2000)
-    await bot.telegram.sendMessage(chatId, input.message.telegramHtml ?? buildTelegramCard({
-      title: input.message.title,
-      intro: input.message.body,
-    }), {
-      parse_mode: 'HTML',
+    console.info('[DOJIM_DEBUG] send start', {
+      flowTimerId: input.flowTimerId,
+      userId: input.user.id,
+      chatId: String(chatId),
+      botUsername: telegramBotConfig.username || null,
+      resultKey,
+      blocksCount: sequenceBlocks.length,
     })
 
-    await sleep(5000)
-    await bot.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
-    await sleep(2000)
-    const pricingMessage = await bot.telegram.sendMessage(chatId, pricingText, {
-      parse_mode: 'HTML',
-    })
+    for (let index = 0; index < sequenceBlocks.length; index += 1) {
+      const block = sequenceBlocks[index]
+      const isLastBlock = index === sequenceBlocks.length - 1
 
-    await sleep(3000)
-    await bot.telegram.editMessageReplyMarkup(chatId, pricingMessage.message_id, undefined, replyMarkup)
+      await bot.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+      await sleep(index === 0 ? 2000 : 3000)
+      await sendFocusDojimBlockMessage({
+        chatId,
+        block,
+        replyMarkup: isLastBlock ? replyMarkup : undefined,
+      })
+    }
+
+    console.info('[DOJIM_DEBUG] send done', {
+      flowTimerId: input.flowTimerId,
+      userId: input.user.id,
+      chatId: String(chatId),
+      botUsername: telegramBotConfig.username || null,
+      resultKey,
+      blocksCount: sequenceBlocks.length,
+    })
 
     return true
   }

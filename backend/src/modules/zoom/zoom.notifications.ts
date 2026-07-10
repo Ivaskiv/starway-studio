@@ -224,8 +224,6 @@ async function runNotificationCheck() {
 }
 
 export function startZoomNotificationsCron(): void {
-  console.info('[zoom-notifications] legacy pre-session reminder cron disabled; queue-based reminder jobs are the source of truth');
-
   // Every Sunday 18:00 — keep pinned channel schedule post up-to-date.
   cron.schedule('0 18 * * 0', () => {
     syncChannelPost(bot).catch((err) =>
@@ -269,5 +267,4 @@ export function startZoomNotificationsCron(): void {
       .catch(err => console.error('[zoom-notifications] Sunday cron error', err));
   });
 
-  console.info('[zoom-notifications] cron started');
 }

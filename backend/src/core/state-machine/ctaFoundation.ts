@@ -250,6 +250,7 @@ const CTA_BY_ACTION: Record<string, CanonicalCtaId> = {
   start_trial: 'START_TEST',
   waitlist_early_access: 'START_TEST',
   open_lidmagnet: 'START_TEST',
+  open_focus_payment: 'OPEN_FOCUS',
   open_focus_portal: 'OPEN_FOCUS',
   open_status: 'RESTORE_PROGRESS',
   start_wheel: 'OPEN_FOCUS',
@@ -307,6 +308,10 @@ function asNumber(value: unknown): number | null {
 export function resolveCanonicalCtaId(action: string): CanonicalCtaId | null {
   if (action.startsWith('pay_stankey_')) {
     return action.includes('quarterly') ? 'PAY_FOCUS_3M' : 'PAY_FOCUS_1M'
+  }
+
+  if (action.startsWith('show_inside_')) {
+    return 'OPEN_FOCUS'
   }
 
   return CTA_BY_ACTION[action] ?? null

@@ -58,13 +58,6 @@ function findRepoRoot(startDir: string) {
   }
 }
 
-function log(
-  scope: 'NGROK' | 'ENV' | 'TELEGRAM',
-  message: string,
-) {
-  console.log(`[${scope}] ${message}`)
-}
-
 function sleep(ms: number) {
   return new Promise(resolveSleep => setTimeout(resolveSleep, ms))
 }
@@ -229,13 +222,6 @@ async function updateBackendEnv(publicUrl: string) {
 
   if (nextContent !== envContent) {
     await writeFile(BACKEND_ENV_PATH, nextContent)
-
-    log('ENV', `updated backend/.env for ${publicUrl}`)
-  } else {
-    log(
-      'ENV',
-      `backend/.env already points at ${publicUrl}`,
-    )
   }
 
   return {
@@ -287,11 +273,6 @@ async function syncTelegramWebhook(
   const token = env.TELEGRAM_BOT_TOKEN?.trim()
 
   if (!token) {
-    log(
-      'TELEGRAM',
-      'TELEGRAM_BOT_TOKEN missing, skipped setWebhook',
-    )
-
     return
   }
 
@@ -313,10 +294,6 @@ async function syncTelegramWebhook(
 
   const currentWebhookUrl = infoBody?.result?.url?.trim() ?? ''
   if (currentWebhookUrl === webhookUrl) {
-    log(
-      'TELEGRAM',
-      `webhook already up-to-date (${webhookUrl}), skipping setWebhook`,
-    )
     return
   }
 
@@ -347,13 +324,11 @@ async function syncTelegramWebhook(
       | null
 
     if (response.ok && body?.ok !== false) {
-      log('TELEGRAM', `setWebhook -> ${webhookUrl}`)
       return
     }
 
     if (body?.error_code === 429 && attempt < 5) {
       const retryAfterMs = Math.max(1, Number(body.parameters?.retry_after ?? 3)) * 1000
-      log('TELEGRAM', `setWebhook 429, retry in ${retryAfterMs}ms (attempt ${attempt}/5)`)
       await sleep(retryAfterMs)
       continue
     }
@@ -370,19 +345,12 @@ async function main() {
 
   process.once('SIGTERM', () => shutdown(0))
 
-  log(
-    'NGROK',
-    `starting tunnel for http://127.0.0.1:${BACKEND_PORT}`,
-  )
-
   spawnProcess('NGROK', 'ngrok', [
     'http',
     String(BACKEND_PORT),
   ])
 
   const publicUrl = await readNgrokPublicUrl()
-
-  log('NGROK', `public URL: ${publicUrl}`)
 
   const env = await updateBackendEnv(publicUrl)
 
@@ -394,16 +362,8 @@ async function main() {
         ? error.message
         : String(error)
 
-    log(
-      'TELEGRAM',
-      `setWebhook failed: ${message}`,
-    )
+    console.error(`[TELEGRAM] setWebhook failed: ${message}`)
   }
-
-  log(
-    'ENV',
-    'backend/.env synced successfully',
-  )
 
   await new Promise(() => undefined)
 }

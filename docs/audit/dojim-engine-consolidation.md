@@ -45,3 +45,31 @@ Date: 2026-07-07
 - Text mismatch found: [`backend/src/products/ab-system/content/abTest.followups.ts`](/Users/viravira/Documents/starway-studio/backend/src/products/ab-system/content/abTest.followups.ts:373) and the block variant at [abTest.followups.ts](/Users/viravira/Documents/starway-studio/backend/src/products/ab-system/content/abTest.followups.ts:389) say "Через тиждень після тесту...", but `RESULT_DOJIM_7D` is now delivered after 18 days.
 - The underlying text source is also mirrored in [`backend/src/products/ab-system/content/abTest.results.ts`](/Users/viravira/Documents/starway-studio/backend/src/products/ab-system/content/abTest.results.ts:253), so the mismatch is content-level, not just one rendered followup file.
 - No direct timing-language mismatch was found in `DOJIM_48H`, `DOJIM_72H`, or `DOJIM_5D` copy by grep inspection; the main confirmed contradiction is the former 7-day proof message now firing at day 18.
+
+## Session Update (2026-07-10)
+
+### Current scheduler persistence chain
+
+The active scheduler-to-queue chain remains:
+
+1. `scheduleFollowups(...)` calls `notificationService.schedule(...)` at [backend/src/products/ab-system/telegram/abTest.scheduler.ts](/Users/viravira/Documents/starway-studio/backend/src/products/ab-system/telegram/abTest.scheduler.ts:73)
+2. `NotificationService.schedule(...)` forwards to `enqueueJob(...)` at [backend/src/services/notifications/NotificationService.ts](/Users/viravira/Documents/starway-studio/backend/src/services/notifications/NotificationService.ts:735)
+3. `enqueueJob(...)` forwards to `notificationJobService.enqueue(...)` at [backend/src/services/notifications/NotificationService.ts](/Users/viravira/Documents/starway-studio/backend/src/services/notifications/NotificationService.ts:870)
+4. `NotificationJobService.enqueue(...)` forwards to repository create at [backend/src/services/notifications/services/NotificationJobService.ts](/Users/viravira/Documents/starway-studio/backend/src/services/notifications/services/NotificationJobService.ts:10)
+5. Repository create persists via `prisma.notificationJob.create(...)` at [backend/src/services/notifications/repositories/NotificationJobRepository.ts](/Users/viravira/Documents/starway-studio/backend/src/services/notifications/repositories/NotificationJobRepository.ts:79)
+
+### `RESULT_OPENED` vs scheduler caller
+
+- `RESULT_OPENED` tracking is independently confirmed at [backend/src/products/ab-system/telegram/abTest.views.ts](/Users/viravira/Documents/starway-studio/backend/src/products/ab-system/telegram/abTest.views.ts:1208).
+- That branch does **not** call `scheduleFollowups(...)`; it proceeds directly to `dispatchAbTestResultSequence(...)` at [backend/src/products/ab-system/telegram/abTest.views.ts](/Users/viravira/Documents/starway-studio/backend/src/products/ab-system/telegram/abTest.views.ts:1220).
+- The canonical `S3_TEST_RESULT` scheduler caller exists in [backend/src/products/ab-system/telegram/abTest.canonical.ts](/Users/viravira/Documents/starway-studio/backend/src/products/ab-system/telegram/abTest.canonical.ts:65), not in the `RESULT_OPENED` tracking branch.
+
+### `show_inside_*` historical root cause and current working tree state
+
+- Session-confirmed historical root cause:
+  - event bus returned early after handled AB-test callback at [backend/src/modules/telegram-mentor/services/telegram-event-bus.service.ts](/Users/viravira/Documents/starway-studio/backend/src/modules/telegram-mentor/services/telegram-event-bus.service.ts:542)
+  - therefore `observeAbTestCanonicalAction(...)` was skipped at [backend/src/modules/telegram-mentor/services/telegram-event-bus.service.ts](/Users/viravira/Documents/starway-studio/backend/src/modules/telegram-mentor/services/telegram-event-bus.service.ts:590)
+  - therefore `scheduleFollowups(..., 'S3_TEST_RESULT')` in [backend/src/products/ab-system/telegram/abTest.canonical.ts](/Users/viravira/Documents/starway-studio/backend/src/products/ab-system/telegram/abTest.canonical.ts:73) did not run on that path
+- Current working tree state:
+  - `resolveCanonicalCtaId()` now maps `show_inside_*` to `OPEN_FOCUS` at [backend/src/core/state-machine/ctaFoundation.ts](/Users/viravira/Documents/starway-studio/backend/src/core/state-machine/ctaFoundation.ts:312)
+- Because the repository state changed during this session, the historical FAIL and the current working tree PASS must not be conflated.

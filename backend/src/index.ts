@@ -63,20 +63,9 @@ const telegramBotNames = readTelegramBotNames()
 const botRegistry = resolveRuntimeBotRegistry('backend startup')
 const telegramBotConfig = botRegistry.main
 
-// Runtime identity check — logs and hard-guards on every startup
+// Runtime identity check — hard-guards on every startup
 {
   const expectedUsername = isProductionRuntime() ? EXPECTED_BOT_PRODUCTION : EXPECTED_BOT_LOCAL
-  const tokenPrefix = telegramBotConfig.token ? telegramBotConfig.token.split(':')[0] : 'MISSING'
-
-  console.info('[TELEGRAM_RUNTIME_CHECK]', {
-    tokenPrefix,
-    username: telegramBotConfig.username || 'UNKNOWN',
-    expectedUsername,
-    deliveryMode: telegramDeliveryMode,
-    nodeEnv: process.env.NODE_ENV || 'undefined',
-    webhookUrl: TELEGRAM_WEBHOOK_URL || '(empty)',
-    isProduction,
-  })
 
   // Hard guard — verified again after getMe() inside startTelegramBot()
   if (!telegramBotConfig.token) {
@@ -186,14 +175,6 @@ async function startTelegramBot() {
     }
 
     try {
-      console.log('🤖 [runtime] telegram runtime enabled', {
-        username: telegramBotConfig.username,
-        botId: botRegistry.main.id,
-        productOwnership: botRegistry.main.productOwnership,
-        deliveryMode: telegramDeliveryMode,
-        production: isProduction,
-      })
-
       seedBotInfo(bot, {
         id: 0,
         firstName: telegramBotNames.main,
@@ -255,9 +236,7 @@ async function startTelegramBot() {
         (async () => {
           if (!telegramBotConfig.token) return
           try {
-            console.log('🤖 [Telegram] Checking bot identity...')
             const me = await bot.telegram.getMe()
-            console.log(`🤖 [Telegram] Bot: @${me.username} (id: ${me.id})`)
 
             // Hard guard: fail fast if wrong bot is running
             const expectedUsername = isProductionRuntime() ? EXPECTED_BOT_PRODUCTION : EXPECTED_BOT_LOCAL
@@ -269,7 +248,6 @@ async function startTelegramBot() {
                   : 'Ensure TEST_TELEGRAM_BOT_TOKEN=8674915973:... in backend/.env.local')
               )
             }
-            console.log(`✅ [Telegram] Bot identity confirmed: @${me.username}`)
             await bot.telegram
               .setChatMenuButton({
                 menuButton: {
@@ -357,7 +335,7 @@ async function startTelegramBot() {
               })
             }
             telegramRunningMode = 'webhook'
-            console.log(`🤖 Telegram bot ready (webhook mode): ${mainWebhookUrl}`)
+            console.log(`🤖 Telegram ready @${telegramBotConfig.username} [${telegramDeliveryMode}]`)
             return
           }
 
@@ -428,11 +406,6 @@ async function bootstrap() {
       console.warn(`⚠️ [CONFIG] Missing critical environment variable: ${key}`)
   })
 
-  console.log('🧭 [runtime] startup config', {
-    ...criticalEnvs,
-    schedulerEnabled,
-  })
-
   const startHttpServer = () => {
     if (server) return
 
@@ -459,7 +432,6 @@ async function bootstrap() {
     for (let index = 0; index < retries; index += 1) {
       try {
         await withRetry(() => prisma.$connect())
-        console.log('✅ DB connected')
         return
       } catch (error: unknown) {
         if (index < retries - 1) {
@@ -480,13 +452,15 @@ async function bootstrap() {
         process.env.DATABASE_URL?.trim()
       )
 
-      console.log('🧪 [BOOT] Connecting to database...', databaseTarget)
-
       await connectWithRetry()
 
-      const result = await withRetry(() => prisma.$queryRaw`SELECT 1`)
-
-      console.log('✅ [PRISMA] Database connected | Test query result:', result)
+      await withRetry(() => prisma.$queryRaw`SELECT 1`)
+      console.log('✅ Runtime ready', {
+        port: PORT,
+        env: process.env.NODE_ENV || 'development',
+        dbHost: databaseTarget.host,
+        bot: telegramBotConfig.username || 'unknown',
+      })
 
       databaseReady = true
 
@@ -507,7 +481,6 @@ async function bootstrap() {
     )
 
     if (schedulerEnabled && databaseReady) {
-      console.log('⏰ [runtime] Starting scheduler...')
       startScheduler({ coachBot: readCoachBotToken() ? coachBot : null })
       startZoomNotificationsCron()
       startBattleCron()

@@ -52,6 +52,7 @@ import {
   buildWebAppButton,
   resolveBrowserTestUrlOrNull,
 } from './abTest.buttons.js'
+import { scheduleFollowups } from './abTest.scheduler.js'
 import {
   buildAbTestEmailGateMessage,
   getAbTestProfileEmail,
@@ -203,6 +204,20 @@ function interpolateFirstNameInBlocks(
       default:
         return block
     }
+  })
+}
+
+function buildBlockPausePlan(
+  blocks: TelegramContentBlock[],
+): number[] {
+  return blocks.slice(1).map((block) => {
+    if (block.type === 'image' || block.type === 'video' || block.type === 'audio') {
+      return 1800
+    }
+    const textLength = 'text' in block ? block.text.length : 0
+    if (textLength <= 90) return 1100
+    if (textLength <= 180) return 1500
+    return 2100
   })
 }
 
@@ -876,7 +891,7 @@ export async function dispatchAbTestPracticeSequence(
   )
   const reviewSequence = splitReviewSequence(reviewBlocks)
 
-  await sendTypingBeforeBlocks(ctx, input.chatId, practiceBlocks)
+  await sendTypingBeforeBlocks(ctx, input.chatId, practiceBlocks.slice(0, 1))
   await sendTelegramContentChunk(
     ctx,
     input.chatId,
@@ -885,6 +900,7 @@ export async function dispatchAbTestPracticeSequence(
     {
       parseMode: 'HTML',
       separateBlocks: true,
+      pauseMsBetweenBlocks: buildBlockPausePlan(practiceBlocks),
     }
   )
   console.info('[FOCUS_DESCRIPTION_SENT]', {
@@ -920,7 +936,7 @@ export async function dispatchAbTestPracticeSequence(
     )
   }
 
-  await sendTypingBeforeBlocks(ctx, input.chatId, pricingBlocks)
+  await sendTypingBeforeBlocks(ctx, input.chatId, pricingBlocks.slice(0, 1))
   await sendTelegramContentChunk(
     ctx,
     input.chatId,
@@ -929,12 +945,11 @@ export async function dispatchAbTestPracticeSequence(
     {
       parseMode: 'HTML',
       separateBlocks: true,
+      pauseMsBetweenBlocks: buildBlockPausePlan(pricingBlocks),
     }
   )
 
-  await sendTypingBeforeBlocks(ctx, input.chatId, [
-    telegramBlock.text(AB_TEST_FINAL_CTA_PROMPT),
-  ])
+  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_FINAL_CTA_PROMPT)])
   const paymentButtonMessage = await ctx.telegram.sendMessage(
     input.chatId,
     AB_TEST_FINAL_CTA_PROMPT,
@@ -1201,7 +1216,12 @@ export async function renderAbTestPostEmailSubmitSequence(
       result_opened_at: new Date().toISOString(),
       last_event_at: new Date().toISOString(),
     })
-    await saveAbTestProgress(userId, nextProgress)
+    const scheduledProgress = await scheduleFollowups(
+      userId,
+      nextProgress,
+      'S4_FOCUS_INVITE'
+    )
+    await saveAbTestProgress(userId, scheduledProgress)
     openedTracked = true
   }
 

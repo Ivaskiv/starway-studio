@@ -1194,5 +1194,4 @@ export async function registerMentorBot(
   //   { command: 'privacy', description: 'Політика приватності' },
   // ])
 
-  console.log('✅ [TelegramMentor] Thin client handlers registered')
 }

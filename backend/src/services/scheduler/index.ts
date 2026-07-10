@@ -9,6 +9,7 @@ import { withRuntimeAdvisoryLock } from '../../core/runtime/runtimeIdempotency.j
 import { bot, sendOpsTelegramMessage } from '../../lib/telegram.js'
 import { prisma } from '../../db/client.js'
 import { AB_TEST_LIFECYCLE_REMINDERS, type LifecycleReminderKey } from '../../products/ab-system/content/abTest.followups.js'
+import { startNotificationJobWorker, stopNotificationJobWorker } from '../notifications/worker.js'
 import { startRuntimeOutboxWorker, stopRuntimeOutboxWorker } from '../runtimeOutbox/worker.js'
 import { aiSellerFocusCheck24hCron, aiSellerFocusDojimBeforeZoom2Cron, aiSellerLeadFollowup3dCron, aiSellerLeadFollowup7dCron, aiSellerReactivationCron, aiSellerRetentionCron } from './ai-seller.jobs.js'
 import { scheduleBillingExpiryCheck, scheduleBillingExpiryWarning, scheduleInactivityComeback } from './billing.jobs.js'
@@ -323,6 +324,7 @@ export function startScheduler(options?: { coachBot?: Telegraf | null }) {
   schedulerStarted = true
   schedulerStopping = false
   const timezone = 'Europe/Kyiv'
+  startNotificationJobWorker()
   startRuntimeOutboxWorker()
   console.log(`⏰ [runtime] scheduler enabled (timezone=${timezone})`, {
     cronJobs: PLATFORM_CRON_REGISTRY.length,
@@ -395,6 +397,7 @@ export function stopScheduler() {
     task.destroy()
   }
   registeredCronKeys.clear()
+  stopNotificationJobWorker()
   stopRuntimeOutboxWorker()
   schedulerStarted = false
   console.log('🛑 [runtime] scheduler stopped')
