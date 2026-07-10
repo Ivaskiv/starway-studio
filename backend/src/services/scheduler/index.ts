@@ -28,7 +28,9 @@ const registeredCronKeys = new Set<string>()
 let schedulerStarted = false
 let schedulerStopping = false
 const SCHEDULERS_DISABLED = process.env.DISABLE_SCHEDULERS === 'true'
-const SCHEDULER_CONCURRENCY_LIMIT = 2
+// Minimum 4 cron jobs can collide at once on '0 * * * *' and '0 9 * * *'.
+// With limit 2 we guarantee queueing; raise to 4 to cover the known peak without a queue.
+const SCHEDULER_CONCURRENCY_LIMIT = 4
 let activeScheduledTasks = 0
 const scheduledTaskWaiters: Array<() => void> = []
 
@@ -43,6 +45,7 @@ function register(task: ScheduledTask) {
 
 async function runInSchedulerSlot<T>(task: () => Promise<T>): Promise<T> {
   if (activeScheduledTasks >= SCHEDULER_CONCURRENCY_LIMIT) {
+    console.warn('[scheduler] slot queue', { waiting: scheduledTaskWaiters.length + 1 })
     await new Promise<void>((resolve) => {
       scheduledTaskWaiters.push(resolve)
     })

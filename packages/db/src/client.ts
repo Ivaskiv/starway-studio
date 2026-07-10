@@ -21,8 +21,54 @@ const globalForPrisma = globalThis as unknown as {
 const globalPrismaKeepAlive = globalThis as typeof globalThis & {
   __starwayDbKeepAliveInterval?: NodeJS.Timeout
 }
+const DB_FORENSIC_LOGGING = process.env.DB_FORENSIC_LOGGING === 'true'
+const RUNTIME_APPLICATION_NAME = `starway-backend-${process.env.NODE_ENV ?? 'development'}-${process.pid}`
 type PrismaErrorListenerClient = PrismaClient & {
   $on(event: 'error', callback: (event: { message: string }) => void): void
+  $on(
+    event: 'warn',
+    callback: (event: { message: string }) => void
+  ): void
+  $on(
+    event: 'query',
+    callback: (event: { query: string; duration: number; target: string }) => void
+  ): void
+}
+type ForensicQuerySnapshot = {
+  at: string
+  target: string
+  duration: number
+  query: string
+}
+const forensicQueryRingBuffer: ForensicQuerySnapshot[] = []
+let lastForensicSnapshotAt = 0
+
+function ensureRuntimeApplicationName(url: URL): void {
+  if (!url.searchParams.has('application_name')) {
+    url.searchParams.set('application_name', RUNTIME_APPLICATION_NAME)
+  }
+}
+
+function pushForensicQuerySnapshot(snapshot: ForensicQuerySnapshot): void {
+  if (!DB_FORENSIC_LOGGING) {
+    return
+  }
+
+  forensicQueryRingBuffer.push(snapshot)
+  if (forensicQueryRingBuffer.length > 5) {
+    forensicQueryRingBuffer.shift()
+  }
+}
+
+function dumpForensicQuerySnapshots(source: string): void {
+  if (!DB_FORENSIC_LOGGING) {
+    return
+  }
+
+  console.warn('[DB_FORENSIC_LAST_QUERIES]', {
+    source,
+    lastQueries: forensicQueryRingBuffer,
+  })
 }
 
 function normalizeDatabaseUrl(input: string | undefined): string | undefined {
@@ -33,6 +79,7 @@ function normalizeDatabaseUrl(input: string | undefined): string | undefined {
 
   try {
     const url = new URL(raw)
+    ensureRuntimeApplicationName(url)
     if (url.hostname.includes('pooler.supabase.com')) {
       url.searchParams.set('pgbouncer', 'true')
       url.searchParams.set(
@@ -101,6 +148,7 @@ function applyRuntimePoolLimit(input: string | undefined): string | undefined {
 
   try {
     const url = new URL(raw)
+    ensureRuntimeApplicationName(url)
     if (!url.searchParams.has('connection_limit')) {
       const envKey = url.hostname.includes('pooler.supabase.com')
         ? 'PRISMA_POOL_CONNECTION_LIMIT'
@@ -114,6 +162,55 @@ function applyRuntimePoolLimit(input: string | undefined): string | undefined {
     return url.toString()
   } catch {
     return raw
+  }
+}
+
+async function captureForensicPgStatActivitySnapshot(): Promise<void> {
+  if (!DB_FORENSIC_LOGGING || !directUrl) {
+    return
+  }
+
+  const now = Date.now()
+  if (now - lastForensicSnapshotAt < 60_000) {
+    return
+  }
+  lastForensicSnapshotAt = now
+
+  const directClient = new PrismaClient({
+    log: ['error'],
+    datasources: {
+      db: {
+        url: directUrl,
+      },
+    },
+  })
+
+  try {
+    const snapshot = await directClient.$queryRaw<
+      Array<{
+        application_name: string | null
+        state: string | null
+        count: bigint
+      }>
+    >`SELECT application_name, state, count(*)
+      FROM pg_stat_activity
+      GROUP BY application_name, state
+      ORDER BY count(*) DESC`
+
+    console.warn('[DB_FORENSIC_SNAPSHOT]', {
+      at: new Date(now).toISOString(),
+      rows: snapshot.map((row) => ({
+        application_name: row.application_name,
+        state: row.state,
+        count: Number(row.count),
+      })),
+    })
+  } catch (error) {
+    console.warn('[DB_FORENSIC_SNAPSHOT_FAILED]', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  } finally {
+    await directClient.$disconnect().catch(() => undefined)
   }
 }
 
@@ -143,7 +240,13 @@ function isRecoverableConnectionMessage(message: string): boolean {
 
 const prismaClientSingleton = () =>
   new PrismaClient({
-    log: ['error'],
+    log: DB_FORENSIC_LOGGING
+      ? [
+          { emit: 'event', level: 'query' },
+          { emit: 'event', level: 'warn' },
+          { emit: 'event', level: 'error' },
+        ]
+      : ['error'],
     datasources: {
       db: {
         url: databaseUrl ?? directUrl,
@@ -153,7 +256,32 @@ const prismaClientSingleton = () =>
 
 export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
 
+if (DB_FORENSIC_LOGGING) {
+  ;(prisma as PrismaErrorListenerClient).$on('query', (event) => {
+    if (event.duration <= 500) {
+      return
+    }
+
+    const snapshot = {
+      at: new Date().toISOString(),
+      target: event.target,
+      duration: event.duration,
+      query: event.query.slice(0, 200),
+    }
+    pushForensicQuerySnapshot(snapshot)
+    console.warn('[DB_SLOW_QUERY]', snapshot)
+  })
+
+  ;(prisma as PrismaErrorListenerClient).$on('warn', (event) => {
+    console.warn('[PRISMA_WARN]', event.message)
+  })
+}
+
 ;(prisma as PrismaErrorListenerClient).$on('error', (event) => {
+  if (DB_FORENSIC_LOGGING && isRecoverableConnectionMessage(event.message)) {
+    dumpForensicQuerySnapshots('prisma_error_event')
+    void captureForensicPgStatActivitySnapshot()
+  }
   if (isRecoverableConnectionMessage(event.message)) {
     return
   }
@@ -217,6 +345,7 @@ export async function withRetry<T>(
       return await fn()
     } catch (error: unknown) {
       if (isRecoverableConnectionError(error) && index < retries - 1) {
+        dumpForensicQuerySnapshots('withRetry_recoverable_connection_error')
         await new Promise<void>(resolve => setTimeout(resolve, delayMs * (index + 1)))
         continue
       }

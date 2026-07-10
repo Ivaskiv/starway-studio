@@ -3,7 +3,6 @@ import type { TelegramButton } from '@/core/flow-builder/flowTemplates.js'
 import type { AbTestFollowupTimerId } from './abTest.followups.js'
 import type { AbTestAnswerKey } from './abTest.questions.js'
 import {
-  AB_TEST_ACTION_AUDIO_REVIEW_TEXT,
   AB_TEST_AUDIO_URL,
   AB_TEST_ACTION_PROOF_QUOTE,
   AB_TEST_CHOICE_PROOF_QUOTE,
@@ -48,7 +47,6 @@ import {
   AB_TEST_NATALIIA_REVIEW_QUOTE,
   AB_TEST_NEONILA_REVIEW_HEADER,
   AB_TEST_NEONILA_REVIEW_QUOTE,
-  AB_TEST_RESULT_AUDIO_INTRO_TEXT,
   AB_TEST_RESULT_AUDIO_PROMPT_TEXT,
   AB_TEST_SCREENSHOT_URLS,
   AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT,
@@ -75,6 +73,7 @@ export type AbTestResultDefinition = {
     | 'TEST_RESULT_ACTION'
   title: string
   msg1: string
+  msg1_story: string
   msg1_audio: string
   msg2_audio: string
   msg2_practice: string
@@ -117,7 +116,7 @@ export type TestDriveFollowupSurface = {
 }
 
 function defineAbTestResultBase<
-  T extends Record<AbTestResultKey, { msg1: string }>,
+  T extends Record<AbTestResultKey, { msg1: string; msg1_story: string }>,
 >(value: T): T {
   return value
 }
@@ -145,7 +144,10 @@ const AB_TEST_RESULT_BENEFITS_TEXT = AB_TEST_FOCUS_BENEFITS_TEXT
 const AB_TEST_RESULT_INCLUDED_TEXT = AB_TEST_FOCUS_INCLUDED_TEXT
 const AB_TEST_RESULT_HOW_IT_WORKS_TEXT = AB_TEST_FOCUS_HOW_IT_WORKS_TEXT
 const AB_TEST_RESULT_PRICING_TEXT = AB_TEST_FOCUS_PRICING_TEXT
-const AB_TEST_RESULT_AUDIO_TEXT = AB_TEST_RESULT_AUDIO_INTRO_TEXT
+const AB_TEST_RESULT_BRIDGE_TEXT =
+  'Я не можу пообіцяти що все зміниться за один день. Але коли людина бачить що насправді створює її ситуацію — вона перестає ходити по колу.'
+const AB_TEST_RESULT_NADYA_INTRO_TEXT =
+  'Мене звати Надя. Вже 3 роки я допомагаю дівчатам виходити з цього кола. Я знаю як допомогти тобі це пройти — послухай 👇'
 const AB_TEST_RESULT_AUDIO_PROMPT = AB_TEST_RESULT_AUDIO_PROMPT_TEXT
 const AB_TEST_RESULT_TARIFF_SUMMARY = buildAbTestFocusTariffSummaryText()
 const AB_TEST_RESULT_CTA_VALUE = AB_TEST_FOCUS_CTA_RESULT_VALUE
@@ -257,11 +259,13 @@ function buildDojimProofText(proofQuote: string): string {
 const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
   state: {
     message_key: 'TEST_RESULT_STATE',
-    msg1: '**{firstName}, ось твій результат.**\n\n**Тримаєшся з останніх сил.**\n\nЗараз навіть прості речі забирають більше сил ніж повинні. Через це відкладається те що для тебе важливо.\n\nТривога, втома, нічого не хочеться — але все одно намагаєшся. Бо треба. Бо інакше взагалі нічого не буде.\n\nЯ сама так жила. І знаю що скільки не намагайся з цього стану — воно не змінюється. Не тому що ти недостатньо стараєшся. А тому що неможливо кудись іти коли немає сил навіть почати.\n\nМене звати **Надя**. Вже **3 роки** я допомагаю жінкам виходити з цього кола через систему **AB System**.',
+    msg1: '{firstName}, ось твій результат. Ти тримаєшся з останніх сил. Зараз навіть прості речі забирають більше сил ніж повинні. Тривога, втома, нічого не хочеться — але все одно намагаєшся.',
+    msg1_story:
+      'Я сама так жила. І знаю що скільки не намагайся з цього стану — воно не змінюється. Не тому що ти недостатньо стараєшся. А тому що неможливо кудись йти коли немає сил навіть почати.',
 
     title: 'СТАН',
 
-    msg1_audio: AB_TEST_RESULT_AUDIO_TEXT,
+    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
     msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
     msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
     msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
@@ -317,11 +321,13 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   goal: {
     message_key: 'TEST_RESULT_GOAL',
-    msg1: '**{firstName}, ось твій результат.**\n\n**Хочеш змін — але не знаєш як саме хочеш жити.** І від цього стоїш на місці ще більше.\n\n**Лишити як є — не хочеш.** Але й куди іти — не знаєш. І це відчуття що стоїш на роздоріжжі може тривати роками.\n\nНасправді ти знаєш чого хочеш. Просто десь по дорозі перестала собі це дозволяти. Або перестала вірити що це реально саме для тебе.\n\nМене звати **Надя**. Вже **3 роки** я допомагаю жінкам знаходити свій напрямок через систему **AB System**.',
+    msg1: '{firstName}, ось твій результат. Ти хочеш змін — але куди саме іти, не відчуваєш. Це не відсутність бажань. Це момент коли власний голос перекрили чужі очікування або старі цілі що вже не твої.',
+    msg1_story:
+      'Насправді ти знаєш чого хочеш. Просто ще не дозволила собі це почути. Я теж так жила — поки не навчилась чути себе а не чужі голоси навколо.',
 
     title: 'ЦІЛЬ',
 
-    msg1_audio: AB_TEST_RESULT_AUDIO_TEXT,
+    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
     msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
     msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
     msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
@@ -377,11 +383,13 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   choice: {
     message_key: 'TEST_RESULT_CHOICE',
-    msg1: '**{firstName}, ось твій результат.**\n\n**Варіанти є. Ти розумієш що треба обрати. Але обрати один — страшно.**\n\nБо вибір завжди щось залишає позаду. І страшно помилитись. Тому думаєш, порівнюєш, чекаєш ще трошки. І так роками.\n\nПоки шукаєш правильний варіант — життя йде. Іноді роками.\n\nЯ теж довго кружляла в одних і тих самих варіантах. Поки не зрозуміла що справа не у варіантах — а у страху всередині. Як тільки побачила що саме лякає — вибір стався сам.\n\nМене звати **Надя**. Вже **3 роки** я допомагаю жінкам робити вибір через систему **AB System**.',
+    msg1: '{firstName}, ось твій результат. Варіанти є. Ти думаєш, порівнюєш, зважуєш — і все одно не обираєш. Справа не у варіантах. Справа у страху що стоїть за ними.',
+    msg1_story:
+      'Я теж довго кружляла в одних і тих самих варіантах. Поки не знайшла де насправді затик. Як тільки побачила що саме лякає — вибір стався сам.',
 
     title: 'ВИБІР',
 
-    msg1_audio: AB_TEST_RESULT_AUDIO_TEXT,
+    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
     msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
     msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
     msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
@@ -437,11 +445,13 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   decision: {
     message_key: 'TEST_RESULT_DECISION',
-    msg1: '**{firstName}, ось твій результат.**\n\n**Ти вже все розумієш. Навіть знаєш що треба зробити. Але між "вирішила" і "зробила" — пусто.** І ти сама не розумієш чому.\n\nІ так може бути роками. Знову починаєш. Знову переносиш. Знову питаєш себе що зі мною не так.\n\nІ найболючіше — що **ти вже давно знаєш відповідь**. Знаєш що треба зробити. Просто щоразу щось зупиняє в останній момент.\n\n**"Я все розумію але не роблю"** — це було про мене. Роками. Я сама з цього виходила. І знаю що це проходить.\n\nМене звати **Надя**. Вже **3 роки** я допомагаю жінкам переходити від **"знаю але не роблю"** до реальних кроків через систему **AB System**.',
+    msg1: '{firstName}, ось твій результат. Ти вже вирішила. Давно. Але щоразу в останній момент щось зупиняє. Це не слабкість і не відсутність волі.',
+    msg1_story:
+      '«Я все розумію але не роблю» — це була я. Роками. Рішення без внутрішнього «так» не тримається — воно зупиняється перед першим кроком. І знаю як це проходить.',
 
     title: 'РІШЕННЯ',
 
-    msg1_audio: AB_TEST_RESULT_AUDIO_TEXT,
+    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
     msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
     msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
     msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
@@ -497,11 +507,13 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   action: {
     message_key: 'TEST_RESULT_ACTION',
-    msg1: '**{firstName}, ось твій результат.**\n\n**Ти активна. Робиш багато. Але ходиш по колу — і сама не розумієш чому нічого не змінюється.**\n\nЦе виснажує більше ніж взагалі нічого не робити. Робиш — але **відчуття що все це нікуди не веде**. І **злість на себе що знову те саме**.\n\nЯ знаю це відчуття. Багато дій — але злюся що нічого не виходить. Поки не зрозуміла **звідки починати**.\n\n**Більше дій — не вихід.** Для цього є ФОКУС.\nТи приходиш з тим що робиш але що нікуди не веде. Ми дивимось де саме все розсипається — і замість списку нових дій ти виходиш з одним кроком. Але точним.',
+    msg1: '{firstName}, ось твій результат. Ти робиш. Багато і постійно. Але відчуття що крутишся на місці — не минає. Більше дій — не вихід.',
+    msg1_story:
+      'Одна точна дія дає більше ніж десять хаотичних. Я сама так кружляла — поки не зрозуміла де справжня точка входу.',
 
     title: 'ДІЯ',
 
-    msg1_audio: AB_TEST_ACTION_AUDIO_REVIEW_TEXT,
+    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
     msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
     msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
     msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
@@ -589,7 +601,9 @@ function buildAbTestResultBlocks(
   return {
     intro: [
       telegramBlock.text(result.msg1),
-      telegramBlock.text(result.msg1_audio),
+      telegramBlock.text(result.msg1_story),
+      telegramBlock.text(AB_TEST_RESULT_BRIDGE_TEXT),
+      telegramBlock.text(AB_TEST_RESULT_NADYA_INTRO_TEXT),
       telegramBlock.audio(AB_TEST_AUDIO_URL),
     ],
     practice: [

@@ -214,3 +214,45 @@ Safe next step, if cleanup is desired later:
 3. only after that evaluate deleting the legacy-shaped source fields
 
 At the moment this is not dead code; it is active content feeding the production result-delivery path.
+
+## STEP 6 fix applied
+
+The intro delivery path was updated to match the approved TZ sequence without touching practice, review, pricing, TEST_DRIVE_V2, or the post-audio wait-for-click flow.
+
+Runtime changes:
+
+1. `backend/src/products/ab-system/content/abTest.results.ts`
+   `AbTestResultDefinition` now carries `msg1_story` in addition to `msg1`.
+
+2. `backend/src/products/ab-system/content/abTest.results.ts`
+   each result segment (`state`, `goal`, `choice`, `decision`, `action`) now stores:
+   - `msg1` as step 1 only
+   - `msg1_story` as step 2 only
+   - `msg1_audio` as the shared Nadya intro text
+
+3. `backend/src/products/ab-system/content/abTest.results.ts`
+   `buildAbTestResultBlocks()` now builds `intro` as five blocks:
+   - `text(msg1)`
+   - `text(msg1_story)`
+   - `text(AB_TEST_RESULT_BRIDGE_TEXT)`
+   - `text(AB_TEST_RESULT_NADYA_INTRO_TEXT)`
+   - `audio(AB_TEST_AUDIO_URL)`
+
+4. `backend/src/products/ab-system/telegram/abTest.views.ts`
+   `sendTelegramContentChunk()` now accepts optional `pauseMsBetweenBlocks?: number[]`.
+   This pacing is only applied when explicitly passed.
+
+5. `backend/src/products/ab-system/telegram/abTest.views.ts`
+   `dispatchAbTestResultSequence()` now passes intro pacing
+   `[5000, 7000, 5000, 0]`, so the active intro send order is:
+   - first bubble: `msg1`
+   - wait 5s, typing, second bubble: `msg1_story`
+   - wait 7s, typing, third bubble: bridge text
+   - wait 5s, typing, fourth bubble: Nadya intro
+   - wait 0s, typing, fifth send: audio
+
+Why `msg1_audio` no longer contains `AB System 5 елементів`:
+
+- that text did not match the approved result intro flow from the TZ
+- the shared step 4 is now the Nadya intro text
+- the actual 5-message intro is assembled from explicit step blocks instead of a mixed legacy intro payload

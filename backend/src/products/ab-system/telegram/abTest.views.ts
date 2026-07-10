@@ -472,6 +472,7 @@ export async function sendTelegramContentChunk(
     inlineKeyboard?: InlineKeyboardMarkup
     parseMode?: 'HTML' | 'Markdown'
     separateBlocks?: boolean
+    pauseMsBetweenBlocks?: number[]
   }
 ): Promise<void> {
   const mediaBlock = resolveSingleMediaBlock(blocks)
@@ -519,6 +520,10 @@ export async function sendTelegramContentChunk(
   )
   if (hasMedia && blocks.length > 1) {
     for (let index = 0; index < blocks.length; index += 1) {
+      if (index > 0 && options?.pauseMsBetweenBlocks) {
+        await sleep(options.pauseMsBetweenBlocks[index - 1] ?? 0)
+        await sendTypingBeforeBlocks(ctx, chatId, [blocks[index]])
+      }
       await sendTelegramContentChunk(
         ctx,
         chatId,
@@ -536,6 +541,10 @@ export async function sendTelegramContentChunk(
 
   if (options?.separateBlocks && blocks.length > 1) {
     for (let index = 0; index < blocks.length; index += 1) {
+      if (index > 0 && options.pauseMsBetweenBlocks) {
+        await sleep(options.pauseMsBetweenBlocks[index - 1] ?? 0)
+        await sendTypingBeforeBlocks(ctx, chatId, [blocks[index]])
+      }
       await sendTelegramContentChunk(
         ctx,
         chatId,
@@ -802,6 +811,7 @@ export async function dispatchAbTestResultSequence(
     {
       parseMode: 'HTML',
       separateBlocks: true,
+      pauseMsBetweenBlocks: [5000, 7000, 5000, 0],
     }
   )
   console.info('[RESULT_SENT]', {

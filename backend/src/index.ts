@@ -5,6 +5,7 @@ import { type Express } from 'express'
 import { existsSync } from 'node:fs'
 import { type Server } from 'node:http'
 import { dirname, resolve } from 'node:path'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './app.js'
 import { prisma, withRetry } from './db/client.js'
@@ -93,6 +94,22 @@ let telegramStartupPromise: Promise<void> | null = null
 let isShuttingDown = false
 let databaseReady = false
 let prismaDisconnectPromise: Promise<void> | null = null
+const DB_FORENSIC_LOGGING = process.env.DB_FORENSIC_LOGGING === 'true'
+const eventLoopMonitor = DB_FORENSIC_LOGGING
+  ? monitorEventLoopDelay({ resolution: 20 })
+  : null
+
+if (eventLoopMonitor) {
+  eventLoopMonitor.enable()
+  const forensicEventLoopInterval = setInterval(() => {
+    console.log('[EVENT_LOOP]', {
+      mean: Math.round(eventLoopMonitor.mean / 1e6),
+      max: Math.round(eventLoopMonitor.max / 1e6),
+    })
+    eventLoopMonitor.reset()
+  }, 30000)
+  forensicEventLoopInterval.unref?.()
+}
 
 async function runShutdownStep(name: string, step: () => void | Promise<void>) {
   const startedAt = Date.now()
