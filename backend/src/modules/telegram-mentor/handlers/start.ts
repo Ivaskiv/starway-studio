@@ -26,6 +26,7 @@ import {
 } from './abTest.start.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
 import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTest.service.js'
+import { resolveTelegramProductSummary } from '../services/productSummary.service.js'
 
 export * from './start.shared.js'
 
@@ -123,6 +124,28 @@ async function deliver(
       })
     }
   }
+}
+
+async function deliverProductSummary(
+  ctx: StartContext,
+  userId: string,
+): Promise<boolean> {
+  const summary = await resolveTelegramProductSummary(userId).catch(() => null)
+  const text = summary?.lines.join('\n')?.trim() ?? ''
+
+  if (!summary || !text || !summary.reply_markup) {
+    return false
+  }
+
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'telegram_focus_product_summary',
+    text,
+    summary.reply_markup,
+  )
+
+  return true
 }
 
 async function promptForEmail(ctx: StartContext, chatId: string, telegramUserId: string): Promise<void> {
@@ -449,12 +472,16 @@ export async function handleStart(ctx: StartContext) {
         return
       }
       case 'FOCUS_PAID': {
-        await deliver(ctx, focusPaidMessage())
+        if (!(await deliverProductSummary(ctx, user.id))) {
+          await deliver(ctx, focusPaidMessage())
+        }
         startMessageSent = true
         return
       }
       case 'ZOOM_MEMBER': {
-        await deliver(ctx, zoomMemberMessage())
+        if (!(await deliverProductSummary(ctx, user.id))) {
+          await deliver(ctx, zoomMemberMessage())
+        }
         startMessageSent = true
         return
       }

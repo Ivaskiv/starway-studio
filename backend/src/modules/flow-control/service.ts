@@ -82,7 +82,8 @@ export async function resolveUserLifecycle(userId: string, db: FlowDbClient = pr
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
-            onboardingStartedAt: true,
+      focusPaid: true,
+      onboardingStartedAt: true,
       currentStep: true,
       trialStartsAt: true,
       trialEndsAt: true,
@@ -132,8 +133,10 @@ export async function resolveUserLifecycle(userId: string, db: FlowDbClient = pr
   )
   const hasWaitlistFlag = isWaitlistFlag(currentStep) || isWaitlistFlag(user.currentStep)
   const isPaidActive =
-    subscription?.status === 'ACTIVE' &&
-    (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
+    user.focusPaid === true || (
+      subscription?.status === 'ACTIVE' &&
+      (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
+    )
   const isTrialActive =
     (!isPaidActive && subscription?.status === 'TRIAL' && !!subscription.trialEndsAt && subscription.trialEndsAt > now)
     || (!!user.trialStartsAt && !!user.trialEndsAt && user.trialEndsAt > now)

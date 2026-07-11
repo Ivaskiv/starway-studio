@@ -26,6 +26,12 @@ function resolveExpiresAt(base: Date, months: number): Date {
   return expiresAt
 }
 
+function resolvePlanCode(productCode: string, planMonths?: number): string {
+  const normalizedProductCode = String(productCode ?? '').trim().toLowerCase() || 'subscription'
+  const normalizedPlanMonths = Math.max(1, planMonths ?? 1)
+  return `${normalizedProductCode}_${normalizedPlanMonths}m`
+}
+
 export async function activateProductSubscription(params: {
   userId: string
   productCode: string
@@ -75,6 +81,7 @@ export async function activateProductSubscription(params: {
   const paidAt = new Date()
   const expiresAt = resolveExpiresAt(paidAt, planMonths ?? 1)
   const manualBy = resolveManualGrantBy(source)
+  const planCode = resolvePlanCode(product.code, planMonths)
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -99,6 +106,35 @@ export async function activateProductSubscription(params: {
           manualGrantNote: manualNote ?? null,
         },
       })
+
+      const canonicalSubscription = await tx.subscription.findFirst({
+        where: { userId, productId: product.id },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      })
+
+      if (canonicalSubscription) {
+        await tx.subscription.update({
+          where: { id: canonicalSubscription.id },
+          data: {
+            status: 'ACTIVE',
+            startsAt: paidAt,
+            currentPeriodEnd: expiresAt,
+            planCode,
+          },
+        })
+      } else {
+        await tx.subscription.create({
+          data: {
+            userId,
+            productId: product.id,
+            startsAt: paidAt,
+            status: 'ACTIVE',
+            planCode,
+            currentPeriodEnd: expiresAt,
+          },
+        })
+      }
 
       if (product.code.toLowerCase() === 'focus') {
         await tx.user.update({
