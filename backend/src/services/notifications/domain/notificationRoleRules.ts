@@ -25,6 +25,10 @@ export function isNotificationRoleAllowed(
   role: string | null | undefined,
   activeRole?: string | null | undefined,
 ): boolean {
+  if (event === NotificationEvent.AB_TEST_FOLLOWUP) {
+    return true
+  }
+
   const normalizedRole = String(role ?? '').toUpperCase() as NotificationRole
   const normalizedActiveRole = String(activeRole ?? '').toUpperCase() as NotificationRole
 

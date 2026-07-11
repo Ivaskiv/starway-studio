@@ -50,7 +50,11 @@ import { FOCUS_DOJIM_TIMER_IDS } from '../../modules/subscriptions/payments/busi
 import { bot } from '../../lib/telegram.js'
 import { readTelegramBotConfig } from '../../modules/telegram-mentor/runtime/botConfig.js'
 import { resolveAbTestFollowupCopy } from '@/products/ab-system/content/abTest.followups.js'
-import type { TelegramContentBlock } from '@/products/ab-system/content/abTest.shared.js'
+import {
+  AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
+  AB_TEST_SHOW_INSIDE_CTA_TEXT,
+  type TelegramContentBlock,
+} from '@/products/ab-system/content/abTest.shared.js'
 
 type EventPayload = Record<string, unknown>
 type DojimSeriesScheduleResult = {
@@ -401,12 +405,25 @@ function buildTelegramReplyMarkup(message: DeliveryMessage) {
 }
 
 function renderFocusDojimBlock(block: TelegramContentBlock): string | null {
+  const renderInlineBold = (value: string) =>
+    value
+      .split(/(\*\*[\s\S]+?\*\*)/g)
+      .map((part) => {
+        if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+          return `<b>${escapeHtml(part.slice(2, -2))}</b>`
+        }
+
+        return escapeHtml(part)
+      })
+      .join('')
+
   switch (block.type) {
     case 'text':
-      return escapeHtml(block.text)
+      return renderInlineBold(block.text)
     case 'quote':
       return `<blockquote>${escapeHtml(block.text.replace(/^"|"$/g, '').replace(/^«|»$/g, '').trim())}</blockquote>`
     case 'pricing':
+      return renderInlineBold(`**${block.text}**`)
     case 'cta':
       return `<b>${escapeHtml(block.text)}</b>`
     case 'image':
@@ -416,6 +433,44 @@ function renderFocusDojimBlock(block: TelegramContentBlock): string | null {
     default:
       return null
   }
+}
+
+function compactFocusDojimBlocks(blocks: TelegramContentBlock[]): TelegramContentBlock[] {
+  const compacted: TelegramContentBlock[] = []
+
+  for (const block of blocks) {
+    const previous = compacted[compacted.length - 1]
+
+    if (block.type === 'text' && previous?.type === 'text') {
+      compacted[compacted.length - 1] = {
+        ...previous,
+        text: `${previous.text}\n\n${block.text}`,
+      }
+      continue
+    }
+
+    if (block.type === 'pricing') {
+      if (previous?.type === 'text') {
+        compacted[compacted.length - 1] = {
+          ...previous,
+          text: `${previous.text}\n\n**${block.text}**`,
+        }
+        continue
+      }
+
+      if (previous?.type === 'pricing') {
+        compacted[compacted.length - 1] = {
+          ...previous,
+          text: `${previous.text}\n**${block.text}**`,
+        }
+        continue
+      }
+    }
+
+    compacted.push(block)
+  }
+
+  return compacted
 }
 
 async function sendFocusDojimBlockMessage(input: {
@@ -716,7 +771,9 @@ export class NotificationService {
       { firstName: followupName },
     )
     const replyMarkup = buildTelegramReplyMarkup(input.message)
-    const sequenceBlocks = copy.blocks?.filter((block) => block.type !== 'cta') ?? []
+    const sequenceBlocks = compactFocusDojimBlocks(
+      copy.blocks?.filter((block) => block.type !== 'cta') ?? [],
+    )
 
     if (!sequenceBlocks.length) {
       return notificationDeliveryLayer.sendTelegram(input.user, input.message)
@@ -1018,6 +1075,15 @@ export class NotificationService {
     }
 
     const currentState = await resolveUserState(persisted.userId).catch(() => null)
+    const flowGuardState =
+      persisted.event === NotificationEvent.AB_TEST_FOLLOWUP
+        ? asString(
+            payload.ab_test_stage ??
+            payload.lifecycle_stage ??
+            payload.abTestStage ??
+            payload.lifecycleStage,
+          ) ?? currentState
+        : currentState
     const readinessLevel = asString(payload.readiness_level ?? payload.readinessLevel)
       ?? (isJsonObject(payload.behavioral) && isJsonObject(payload.behavioral.readiness)
         ? asString(payload.behavioral.readiness.level)
@@ -1043,11 +1109,11 @@ export class NotificationService {
           select: { id: true },
         }).catch(() => null))
       : false
-    const activeUser = Boolean(currentState && !String(currentState).toLowerCase().includes('retention'))
+    const activeUser = Boolean(flowGuardState && !String(flowGuardState).toLowerCase().includes('retention'))
 
     if (flow.timer) {
       const guard = shouldSkipFlowTimerDelivery({
-        currentState,
+        currentState: flowGuardState,
         timer: flow.timer,
         payload,
         hasPaymentSuccess: paymentSuccessSeen,
@@ -1061,11 +1127,11 @@ export class NotificationService {
           userId: persisted.userId,
           type: 'FLOW_SKIPPED',
           source: 'web',
-          state: currentState,
+          state: flowGuardState,
           payload: buildFlowTimerAnalytics({
             timer: flow.timer,
             reason: guard.reason ?? 'state_changed',
-            currentState,
+            currentState: flowGuardState,
           }),
         }).catch(() => undefined)
         return
@@ -2067,6 +2133,22 @@ export class NotificationService {
           ?? payload?.ctaUrl,
         )
         ?? null
+        const resultKey = asString(payload?.result_key ?? payload?.resultKey) as AbTestResultKey | null
+        const focusDojimActions =
+          FOCUS_DOJIM_TIMER_IDS.includes(flowTimerId as (typeof FOCUS_DOJIM_TIMER_IDS)[number]) && resultKey
+            ? [
+                {
+                  text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
+                  url: `show_inside_${resultKey.toUpperCase()}`,
+                  mode: 'callback' as const,
+                },
+                {
+                  text: AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
+                  url: 'open_focus_payment',
+                  mode: 'callback' as const,
+                },
+              ]
+            : undefined
         return {
           title: content.title,
           body: customBody ?? content.body,
@@ -2079,11 +2161,12 @@ export class NotificationService {
               : `${firstName}, ${content.body}`,
           }),
           ctaText: content.ctaText,
-          ctaActions: isPlainBridge && bridgeUrl && content.ctaText
+          ctaActions: focusDojimActions
+            ?? (isPlainBridge && bridgeUrl && content.ctaText
             ? [{ text: content.ctaText, url: bridgeUrl, mode: 'url' }]
             : content.ctaUrl
             ? [{ text: content.ctaText ?? 'Відкрити', url: content.ctaUrl, mode: 'url' }]
-            : undefined,
+            : undefined),
         }
       }
     }

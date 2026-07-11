@@ -221,6 +221,24 @@ function buildBlockPausePlan(
   })
 }
 
+function buildPracticeBlockPausePlan(
+  blocks: TelegramContentBlock[],
+): number[] {
+  return blocks.slice(1).map((block) => {
+    if (block.type === 'image' || block.type === 'video' || block.type === 'audio') {
+      return 3200
+    }
+    const textLength = 'text' in block ? block.text.length : 0
+    if (textLength <= 90) return 2600
+    if (textLength <= 180) return 4200
+    return 6500
+  })
+}
+
+async function pauseBetweenPracticeSections(): Promise<void> {
+  await sleep(2600)
+}
+
 /**
  * Resolves display name from all available sources in priority order.
  * Safe: never returns empty string with comma — either a name or null.
@@ -900,7 +918,7 @@ export async function dispatchAbTestPracticeSequence(
     {
       parseMode: 'HTML',
       separateBlocks: true,
-      pauseMsBetweenBlocks: buildBlockPausePlan(practiceBlocks),
+      pauseMsBetweenBlocks: buildPracticeBlockPausePlan(practiceBlocks),
     }
   )
   console.info('[FOCUS_DESCRIPTION_SENT]', {
@@ -911,6 +929,7 @@ export async function dispatchAbTestPracticeSequence(
   })
 
   if (reviewSequence.message.length) {
+    await pauseBetweenPracticeSections()
     await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.message)
     await sendTelegramContentChunk(
       ctx,
@@ -924,6 +943,7 @@ export async function dispatchAbTestPracticeSequence(
   }
 
   if (reviewSequence.screenshot.length) {
+    await pauseBetweenPracticeSections()
     await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.screenshot)
     await sendTelegramContentChunk(
       ctx,
@@ -936,6 +956,7 @@ export async function dispatchAbTestPracticeSequence(
     )
   }
 
+  await pauseBetweenPracticeSections()
   await sendTypingBeforeBlocks(ctx, input.chatId, pricingBlocks.slice(0, 1))
   await sendTelegramContentChunk(
     ctx,
@@ -945,10 +966,11 @@ export async function dispatchAbTestPracticeSequence(
     {
       parseMode: 'HTML',
       separateBlocks: true,
-      pauseMsBetweenBlocks: buildBlockPausePlan(pricingBlocks),
+      pauseMsBetweenBlocks: buildPracticeBlockPausePlan(pricingBlocks),
     }
   )
 
+  await pauseBetweenPracticeSections()
   await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_FINAL_CTA_PROMPT)])
   const paymentButtonMessage = await ctx.telegram.sendMessage(
     input.chatId,

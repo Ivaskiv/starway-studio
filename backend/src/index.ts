@@ -386,6 +386,10 @@ async function safePrismaDisconnect(reason: string) {
   return prismaDisconnectPromise
 }
 
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
 // ─────────────────────────────────────────────
 // BOOTSTRAP
 // ─────────────────────────────────────────────
@@ -406,26 +410,53 @@ async function bootstrap() {
       console.warn(`⚠️ [CONFIG] Missing critical environment variable: ${key}`)
   })
 
-  const startHttpServer = () => {
+  const startHttpServer = async () => {
     if (server) return
 
-    server = app.listen(PORT, '0.0.0.0', () => {
-      trackConnections()
-      console.log(
-        `🚀 Server running on port ${PORT} (${process.env.NODE_ENV || 'development'})`
-      )
-    })
+    const maxPortRetries = isProduction ? 1 : 20
+    const portRetryDelayMs = 250
 
-    server.on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        console.error(
-          `❌ Port ${PORT} is already in use. Stop existing process or change PORT.`
+    for (let attempt = 1; attempt <= maxPortRetries; attempt += 1) {
+      try {
+        const startedServer = await new Promise<Server>((resolve, reject) => {
+          const candidate = app.listen(PORT, '0.0.0.0')
+
+          candidate.once('listening', () => resolve(candidate))
+          candidate.once('error', (error) => reject(error))
+        })
+
+        server = startedServer
+        trackConnections()
+        console.log(
+          `🚀 Server running on port ${PORT} (${process.env.NODE_ENV || 'development'})`
         )
+        return
+      } catch (error) {
+        const bindError = error as NodeJS.ErrnoException
+        const canRetry =
+          bindError?.code === 'EADDRINUSE' &&
+          !isProduction &&
+          attempt < maxPortRetries
+
+        if (canRetry) {
+          console.warn(
+            `[dev-reload] port ${PORT} still busy, waiting for previous process to exit (${attempt}/${maxPortRetries - 1})`
+          )
+          await wait(portRetryDelayMs)
+          continue
+        }
+
+        if (bindError?.code === 'EADDRINUSE') {
+          console.error(
+            `❌ Port ${PORT} is already in use. Stop existing process or change PORT.`
+          )
+          process.exit(1)
+        }
+
+        console.error('❌ Server error:', error)
         process.exit(1)
       }
-      console.error('❌ Server error:', error)
-      process.exit(1)
-    })
+    }
   }
 
   async function connectWithRetry(retries = 3, delay = 3000) {
@@ -444,7 +475,7 @@ async function bootstrap() {
     }
   }
 
-  startHttpServer()
+  await startHttpServer()
 
   void (async () => {
     try {
