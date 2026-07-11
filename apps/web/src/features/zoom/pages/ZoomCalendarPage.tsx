@@ -1,12 +1,11 @@
 import { useAppSelector } from '@/app/hooks'
 import { selectCurrentUser, selectAuthStatus } from '@/features/auth/services/auth.slice'
-import { useTelegramMiniAppAuthMutation } from '@/features/auth/services/auth.api'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { buildTelegramDeepLink } from '@/shared/telegram/telegramDeepLinks'
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import { useBookTelegramSlotMutation, useGetTelegramAvailableSlotsQuery } from '@/features/zoom/zoom.api'
 import { hasPaidAccess } from '@/features/user/types/user.types'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type ViewState = 'locked' | 'personal' | 'pending'
 
@@ -139,10 +138,8 @@ function TelegramSlotBookingView() {
 export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
   const user = useAppSelector(selectCurrentUser)
   const authStatus = useAppSelector(selectAuthStatus)
-  const [telegramMiniAppAuth] = useTelegramMiniAppAuthMutation()
   const [viewState, setViewState] = useState<ViewState>('pending')
-  const authAttemptedRef = useRef(false)
-  const isTelegramRuntime = isTelegramMiniApp('/zoom-calendar')
+  const isTelegramRuntime = isTelegramMiniApp(window.location.pathname)
   const hasTelegramInitData = Boolean(
     typeof window !== 'undefined' &&
       (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim()
@@ -164,21 +161,13 @@ export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
       return
     }
 
-    if (authAttemptedRef.current) return
-    authAttemptedRef.current = true
-    setViewState('pending')
-
-    const initData = (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim() ?? ''
-    if (!initData) {
-      setViewState('locked')
+    if (authStatus === 'loading') {
+      setViewState('pending')
       return
     }
 
-    void telegramMiniAppAuth({ initData })
-      .unwrap()
-      .then(() => setViewState('personal'))
-      .catch(() => setViewState('locked'))
-  }, [canSeePersonalCalendar, isBrowserFallback, telegramMiniAppAuth])
+    setViewState('locked')
+  }, [canSeePersonalCalendar, isBrowserFallback, authStatus])
 
   const personalMode = useMemo(() => {
     return isCoach ? 'coach' : 'user'

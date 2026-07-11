@@ -1,8 +1,12 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import BottomNav from '@/components/miniapp/BottomNav'
+import type { AppDispatch } from '@/app/store'
+import { useTelegramMiniAppAuthMutation } from '@/features/auth/services/auth.api'
+import { selectAuthStatus, setLoading } from '@/features/auth/services/auth.slice'
 import DashboardSideRails from '@/layout/DashboardSideRails'
 import type { MiniAppPageId } from '@/features/social/types/miniapp'
 
@@ -58,6 +62,10 @@ export default function MiniAppLayout({
   const location = useLocation()
   const handledRef = useRef(false)
   const lastAppliedParamRef = useRef<string | null>(null)
+  const dispatch = useDispatch<AppDispatch>()
+  const authStatus = useSelector(selectAuthStatus)
+  const [telegramMiniAppAuth] = useTelegramMiniAppAuthMutation()
+  const authBootstrapRef = useRef(false)
 
   useEffect(() => {
     const telegram = (window as {
@@ -94,6 +102,21 @@ export default function MiniAppLayout({
       telegram?.WebApp?.offEvent?.('activated', applyStartParam)
     }
   }, [location.pathname, location.search, navigate])
+
+  useEffect(() => {
+    if (authBootstrapRef.current) return
+    if (authStatus === 'authenticated' || authStatus === 'loading') return
+
+    const initData = (window as {
+      Telegram?: { WebApp?: { initData?: string } }
+    }).Telegram?.WebApp?.initData?.trim() ?? ''
+
+    if (!initData) return
+
+    authBootstrapRef.current = true
+    dispatch(setLoading())
+    void telegramMiniAppAuth({ initData })
+  }, [authStatus, dispatch, telegramMiniAppAuth])
 
   return (
     <div className="miniapp-page-shell mx-auto flex w-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
