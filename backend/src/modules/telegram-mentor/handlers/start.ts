@@ -14,34 +14,21 @@ import {
 } from './start.shared.js'
 import {
   type StartMessagePayload,
-  aiMentorMenuMessage,
-  focusPaidMessage,
   magicLinkReadyMessage,
-  offerShownMessage,
-  postZoom1Message,
-  upsellMessage,
-  expiredMessage,
-  testDoneMessage,
-  testDoneWithResultMessage,
-  testInProgressMessage,
   welcomeMessage,
-  testNotStartedMessage,
-  zoomSection,
-  zoomMemberMessage,
 } from './abTest.start.js'
+import { buildHomeScreen } from './homeScreen.builder.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
 import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTest.service.js'
-import { AB_TEST_MY_RESULT_BUTTON_TEXT } from '@/products/ab-system/content/abTest.shared.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
-import { resolveTelegramProductSummary } from '../services/productSummary.service.js'
 
 export * from './start.shared.js'
 
 const processedStartUpdateIds = new Set<number>()
 const activeStartProcessing = new Set<string>()
 
-type StartUserSnapshot = {
+export type StartUserSnapshot = {
   id: string
   lifecycleState: UserLifecycleState
   testStartedAt: Date | null
@@ -52,7 +39,7 @@ type StartUserSnapshot = {
   firstName: string | null
 }
 
-function getHoursSince(date: Date | null | undefined): number {
+export function getHoursSince(date: Date | null | undefined): number {
   if (!date) return Number.POSITIVE_INFINITY
   const diffMs = Date.now() - date.getTime()
   return diffMs > 0 ? diffMs / 3_600_000 : 0
@@ -132,50 +119,6 @@ async function deliver(
       })
     }
   }
-}
-
-async function deliverProductSummary(
-  ctx: StartContext,
-  userId: string,
-  lifecycleState: string,
-): Promise<boolean> {
-  const summary = await resolveTelegramProductSummary(userId).catch(() => null)
-  const text = summary?.lines.join('\n')?.trim() ?? ''
-
-  if (!summary || !text || !summary.reply_markup) {
-    return false
-  }
-
-  if (lifecycleState === 'ZOOM_MEMBER') {
-    const zoom = zoomSection()
-    const combinedText = `${text}\n\n${zoom.text}`
-    const existingButtons = 'inline_keyboard' in summary.reply_markup
-      ? summary.reply_markup.inline_keyboard
-      : []
-    const combinedMarkup = {
-      inline_keyboard: [...existingButtons, ...zoom.buttons],
-    }
-
-    await planMessage(
-      ctx,
-      'ctx.reply',
-      'telegram_focus_product_summary',
-      combinedText,
-      combinedMarkup,
-    )
-
-    return true
-  }
-
-  await planMessage(
-    ctx,
-    'ctx.reply',
-    'telegram_focus_product_summary',
-    text,
-    summary.reply_markup,
-  )
-
-  return true
 }
 
 async function promptForEmail(ctx: StartContext, chatId: string, telegramUserId: string): Promise<void> {
@@ -437,97 +380,22 @@ export async function handleStart(ctx: StartContext) {
       return
     }
 
-    switch (user.lifecycleState) {
-      case 'NEW_USER': {
-        // Якщо ім'я невідоме — запитати перед тестом
-        if (!ctx.from?.first_name && !user.firstName) {
-          await ctx.telegram.sendMessage(chatId, 'Як тебе звати?')
-          await setPendingName(chatId)
-          startMessageSent = true
-          await setLifecycleState(user.id, 'TEST_NOT_STARTED')
-          return
-        }
-        await deliver(ctx, welcomeMessage())
-        startMessageSent = true
-        await setLifecycleState(user.id, 'TEST_NOT_STARTED')
-        return
-      }
-      case 'TEST_NOT_STARTED': {
-        await deliver(ctx, testNotStartedMessage({ escalated: false }))
-        startMessageSent = true
-        return
-      }
-      case 'TEST_IN_PROGRESS': {
-        const hoursSince = getHoursSince(user.updatedAt)
-        if (hoursSince > 168) {
-          await deliver(ctx, {
-            text: 'Ти вже починала тест, але пройшло більше тижня.\n\nВідповіді можуть бути неактуальні.',
-            reply_markup: {
-              inline_keyboard: [[
-                { text: 'Продовжити', callback_data: 'ab_test:resume' },
-                { text: 'Почати заново', callback_data: 'ab_test:restart' },
-              ]],
-            },
-          })
-          startMessageSent = true
-          return
-        }
-
-        await deliver(ctx, testInProgressMessage({ r3: hoursSince > 4 }))
-        startMessageSent = true
-        return
-      }
-      case 'TEST_DONE': {
-        if (user.testResultType) {
-          await deliver(ctx, testDoneWithResultMessage())
-          startMessageSent = true
-          return
-        }
-
-        await deliver(ctx, testDoneMessage())
-        startMessageSent = true
-        return
-      }
-      case 'OFFER_SHOWN': {
-        await deliver(ctx, offerShownMessage())
-        startMessageSent = true
-        return
-      }
-      case 'FOCUS_PAID': {
-        if (!(await deliverProductSummary(ctx, user.id, user.lifecycleState))) {
-          await deliver(ctx, focusPaidMessage())
-        }
-        startMessageSent = true
-        return
-      }
-      case 'ZOOM_MEMBER': {
-        if (!(await deliverProductSummary(ctx, user.id, user.lifecycleState))) {
-          await deliver(ctx, zoomMemberMessage())
-        }
-        startMessageSent = true
-        return
-      }
-      case 'POST_ZOOM_1': {
-        await deliver(ctx, postZoom1Message(user.id))
-        startMessageSent = true
-        return
-      }
-      case 'UPSELL': {
-        await deliver(ctx, upsellMessage(user.id))
-        startMessageSent = true
-        return
-      }
-      case 'EXPIRED': {
-        await deliver(ctx, expiredMessage())
-        startMessageSent = true
-        return
-      }
-      default: {
-        await deliver(ctx, welcomeMessage())
-        startMessageSent = true
-        return
-      }
+    if (user.lifecycleState === 'NEW_USER' && !ctx.from?.first_name && !user.firstName) {
+      await ctx.telegram.sendMessage(chatId, 'Як тебе звати?')
+      await setPendingName(chatId)
+      startMessageSent = true
+      await setLifecycleState(user.id, 'TEST_NOT_STARTED')
+      return
     }
+
+    const screen = await buildHomeScreen(user, ctx)
+    await deliver(ctx, screen)
+    startMessageSent = true
+
+    if (user.lifecycleState === 'NEW_USER') {
+      await setLifecycleState(user.id, 'TEST_NOT_STARTED')
+    }
+    return
   } catch (error) {
     console.error('[FLOW_ERROR] start_handler_failed', {
       chatId,
