@@ -26,6 +26,9 @@
     "vercel-build": "pnpm build",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:funnel": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.builder.test.ts",
+    "test:golden": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.golden.test.ts",
+    "test:golden:update": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.golden.test.ts -u",
     "test:unit": "vitest",
     "sync:docs": "tsx scripts/sync-instructions.ts",
     "sync:docs:watch": "tsx scripts/sync-instructions.ts --watch"
@@ -42,6 +45,7 @@
     "tsx": "^4.22.3",
     "telegraf": "^4.16.3",
     "typescript": "^6.0.3",
+    "vite": "^6.4.1",
     "vitest": "^4.1.7"
   },
   "packageManager": "pnpm@11.3.0"

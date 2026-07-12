@@ -1,0 +1,389 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Golden Master — /start screens per lifecycleState > EXPIRED 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "open_focus_payment",
+          "text": "Відновити доступ",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Твій доступ завершено. Всі твої цілі, карта балансу і звіти збережені. Коли будеш готова повернутись — вони тебе чекають.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > FOCUS_PAID — fallback (summary unresolved) 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "focus:calendar",
+          "text": "Календар Zoom-практик",
+        },
+      ],
+      [
+        {
+          "callback_data": "focus:ai",
+          "text": "ABSystem AI",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Доступ до ФОКУС активний. Обери наступну дію в меню.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > FOCUS_PAID — with resolved summary 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "focus:progress",
+          "text": "Мій прогрес",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+ФОКУС
+Підписка активна до 01.08.2026",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > NEW_USER 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "ab_test:start",
+          "text": "Почати тест",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Привіт.
+
+Це тест AB System: <b>Чому ти відкладаєш те що давно хочеш зробити?</b>
+
+Він допоможе побачити чому ти знову переносиш важливе і <b>з чого почати</b>.
+
+Тут не буде складних питань. Просто відповідай так як є зараз.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > NEW_USER without firstName — no header line 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "ab_test:start",
+          "text": "Почати тест",
+        },
+      ],
+    ],
+  },
+  "text": "Привіт.
+
+Це тест AB System: <b>Чому ти відкладаєш те що давно хочеш зробити?</b>
+
+Він допоможе побачити чому ти знову переносиш важливе і <b>з чого почати</b>.
+
+Тут не буде складних питань. Просто відповідай так як є зараз.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > OFFER_SHOWN 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "open_focus_payment",
+          "text": "Хочу у ФОКУС →",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:restart",
+          "text": "Пройти тест заново",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:show_result",
+          "text": "Мій результат",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+У тебе вже є <b>результат</b> тесту.
+
+Хочеш відкрити його ще раз або пройти тест заново?",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > POST_ZOOM_1 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "text": "Перейти в ABSystem AI",
+          "url": "https://overrational-unimprisonable-annabella.ngrok-free.dev/api/payments/wayforpay/checkout/52a8f2a010644a09bafb6173cc03673e?product=absystem_ai&plan=1month_upgrade",
+        },
+      ],
+      [
+        {
+          "callback_data": "focus:next_zoom",
+          "text": "Наступний Zoom",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+🚀 ABSystem AI після Zoom
+
+На Zoom ти вже побачила свою точку зупинки. Але між практиками — 7 днів. Саме там рух часто зникає. ABSystem AI — це те, що тримає твій фокус щодня між Zoom.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > TEST_DONE with result 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "ab_test:show_result",
+          "text": "Мій результат",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:restart",
+          "text": "🔄 Пройти заново",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Ти вже пройшла тест.
+
+Подивитись результат або пройти заново?",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > TEST_DONE without result (edge case) 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "ab_test:show_result",
+          "text": "Показати результат",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:restart",
+          "text": "Почати тест заново",
+        },
+      ],
+      [
+        {
+          "callback_data": "open_focus_payment",
+          "text": "Хочу у ФОКУС →",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Твій <b>результат</b> готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > TEST_IN_PROGRESS (recent) 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "ab_test:resume",
+          "text": "Продовжити тест",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:restart",
+          "text": "🔄 Пройти заново",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Ти вже почала тест. Продовжимо з того місця, де зупинилась?",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > TEST_IN_PROGRESS (stale, >168h) 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "ab_test:resume",
+          "text": "Продовжити",
+        },
+        {
+          "callback_data": "ab_test:restart",
+          "text": "Почати заново",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Ти вже починала тест, але пройшло більше тижня.
+
+Відповіді можуть бути неактуальні.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > TEST_NOT_STARTED 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "ab_test:start",
+          "text": "Почати тест",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Ти вже тут.
+
+Натисни "Пройти тест", щоб почати.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > UPSELL 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "text": "Перейти в ABSystem AI",
+          "url": "https://overrational-unimprisonable-annabella.ngrok-free.dev/api/payments/wayforpay/checkout/1c0a20b7594d4db0b884c18d7d13d322?product=absystem_ai&plan=1month_upgrade",
+        },
+      ],
+      [
+        {
+          "callback_data": "focus:next_zoom",
+          "text": "Наступний Zoom",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+🚀 ABSystem AI наступний крок
+
+Ти вже 4 тижні у ФОКУСІ. ABSystem AI — наступний рівень: щоденна підтримка між практиками. Доплата — 1120 грн (твій ФОКУС зараховується).",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > ZOOM_MEMBER — fallback (summary unresolved) 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "text": "📅 Записатись на Zoom",
+          "web_app": {
+            "url": "https://starway-frontend.vercel.app/miniapp/zoom-calendar",
+          },
+        },
+      ],
+      [
+        {
+          "callback_data": "focus:next_zoom",
+          "text": "Наступний Zoom",
+        },
+      ],
+      [
+        {
+          "callback_data": "focus:menu",
+          "text": "Меню ФОКУС",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+Ти в Zoom-групі. Ось меню та найближча Zoom-зустріч.",
+}
+`;
+
+exports[`Golden Master — /start screens per lifecycleState > ZOOM_MEMBER — with resolved summary (composed with Zoom section) 1`] = `
+{
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "focus:progress",
+          "text": "Мій прогрес",
+        },
+      ],
+      [
+        {
+          "text": "📅 Записатись на Zoom",
+          "web_app": {
+            "url": "https://starway-frontend.vercel.app/miniapp/zoom-calendar",
+          },
+        },
+      ],
+      [
+        {
+          "callback_data": "focus:next_zoom",
+          "text": "Наступний Zoom",
+        },
+      ],
+      [
+        {
+          "callback_data": "focus:menu",
+          "text": "Меню ФОКУС",
+        },
+      ],
+    ],
+  },
+  "text": "👋 Тестова
+
+ФОКУС
+Підписка активна до 01.08.2026
+
+Ти в Zoom-групі. Ось меню та найближча Zoom-зустріч.",
+}
+`;
