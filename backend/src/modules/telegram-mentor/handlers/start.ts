@@ -18,6 +18,9 @@ import {
   focusPaidMessage,
   magicLinkReadyMessage,
   offerShownMessage,
+  postZoom1Message,
+  upsellMessage,
+  expiredMessage,
   testDoneMessage,
   testDoneWithResultMessage,
   testInProgressMessage,
@@ -504,10 +507,18 @@ export async function handleStart(ctx: StartContext) {
         startMessageSent = true
         return
       }
-      case 'POST_ZOOM_1':
-      case 'UPSELL':
+      case 'POST_ZOOM_1': {
+        await deliver(ctx, postZoom1Message(user.id))
+        startMessageSent = true
+        return
+      }
+      case 'UPSELL': {
+        await deliver(ctx, upsellMessage(user.id))
+        startMessageSent = true
+        return
+      }
       case 'EXPIRED': {
-        await deliver(ctx, aiMentorMenuMessage())
+        await deliver(ctx, expiredMessage())
         startMessageSent = true
         return
       }

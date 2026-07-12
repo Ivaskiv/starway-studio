@@ -20,6 +20,7 @@ import {
   AB_TEST_ZOOM_MEMBER_MENU_TEXT,
 } from '@/products/ab-system/content/abTest.shared.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
+import { buildAbsystemAiUpgradeCheckoutUrl } from '@/modules/subscriptions/payments/business.checkout.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
 export type StartMessagePayload = {
@@ -146,6 +147,35 @@ export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {
     buttons: [
       [{ text: AB_TEST_AI_MENTOR_MENU_BUTTON_TEXT, callback_data: 'ai_mentor:menu' }],
       [{ text: AB_TEST_AI_MENTOR_PLAN_BUTTON_TEXT, callback_data: 'ai_mentor:plan' }],
+    ],
+  })
+}
+
+export function postZoom1Message(userId: string): ReturnType<typeof withKeyboard> {
+  return withKeyboard({
+    text: `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_TITLE}\n\n${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT}`,
+    buttons: [
+      [{ text: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_CTA, url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
+      [{ text: 'Наступний Zoom', callback_data: 'focus:next_zoom' }],
+    ],
+  })
+}
+
+export function upsellMessage(userId: string): ReturnType<typeof withKeyboard> {
+  return withKeyboard({
+    text: `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD_TITLE}\n\n${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD}`,
+    buttons: [
+      [{ text: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD_CTA, url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
+      [{ text: 'Наступний Zoom', callback_data: 'focus:next_zoom' }],
+    ],
+  })
+}
+
+export function expiredMessage(): ReturnType<typeof withKeyboard> {
+  return withKeyboard({
+    text: absystemContent.BILLING.SUB_EXPIRED.text,
+    buttons: [
+      [{ text: absystemContent.BILLING.SUB_EXPIRED.cta, callback_data: 'open_focus_payment' }],
     ],
   })
 }
