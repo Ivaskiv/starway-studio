@@ -37,7 +37,12 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: pnpm --filter @starway/db run prisma:migrate:deploy
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "DIRECT_URL secret is empty, falling back to DATABASE_URL"
+            export DIRECT_URL="$DATABASE_URL"
+          fi
+          pnpm --filter @starway/db run prisma:migrate:deploy
 
       - name: Trigger Render deploy
         if: success()
