@@ -270,7 +270,7 @@ async function syncTelegramWebhook(
   env: EnvValues,
   publicUrl: string,
 ) {
-  const token = env.TELEGRAM_BOT_TOKEN?.trim()
+  const token = env.TEST_TELEGRAM_BOT_TOKEN?.trim()
 
   if (!token) {
     return
