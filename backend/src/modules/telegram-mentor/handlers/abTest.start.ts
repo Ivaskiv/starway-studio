@@ -1,5 +1,25 @@
-import { absystemButtons, absystemContent } from '@/products/absystem/config/absystem.content.js'
-import { AB_TEST_FOCUS_CTA_TEXT } from '@/products/ab-system/content/abTest.shared.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import {
+  AB_TEST_AI_MENTOR_MENU_BUTTON_TEXT,
+  AB_TEST_AI_MENTOR_MENU_TEXT,
+  AB_TEST_AI_MENTOR_PLAN_BUTTON_TEXT,
+  AB_TEST_CONTINUE_BUTTON_TEXT,
+  AB_TEST_FOCUS_ACTIVE_MENU_TEXT,
+  AB_TEST_FOCUS_AI_BUTTON_TEXT,
+  AB_TEST_FOCUS_CALENDAR_BUTTON_TEXT,
+  AB_TEST_FOCUS_CTA_TEXT,
+  AB_TEST_FOCUS_MENU_BUTTON_TEXT,
+  AB_TEST_MAGIC_LINK_EXPIRY_TEXT,
+  AB_TEST_MAGIC_LINK_INTRO_TEXT,
+  AB_TEST_MY_RESULT_BUTTON_TEXT,
+  AB_TEST_NEXT_ZOOM_BUTTON_TEXT,
+  AB_TEST_OPEN_PLATFORM_BUTTON_TEXT,
+  AB_TEST_RESTART_BUTTON_TEXT,
+  AB_TEST_RETAKE_BUTTON_TEXT,
+  AB_TEST_SHOW_RESULT_BUTTON_TEXT,
+  AB_TEST_ZOOM_MEMBER_MENU_TEXT,
+} from '@/products/ab-system/content/abTest.shared.js'
+import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
 export type StartMessagePayload = {
@@ -29,7 +49,7 @@ function resolveZoomBookingWebAppUrl(): string {
 export function welcomeMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: absystemContent.START_BLOCK1.MSG1,
-    buttons: [[{ text: 'Пройти тест', callback_data: 'ab_test:start' }]],
+    buttons: [[{ text: absystemContent.START_BLOCK1.CTA1, callback_data: AB_TEST_ACTIONS.START }]],
   })
 }
 
@@ -37,7 +57,7 @@ export function testNotStartedMessage(input: { escalated: boolean }): ReturnType
   void input
   return withKeyboard({
     text: absystemContent.START_BLOCK1.MSG3,
-    buttons: [[{ text: 'Пройти тест', callback_data: 'ab_test:start' }]],
+    buttons: [[{ text: absystemContent.START_BLOCK1.CTA1, callback_data: AB_TEST_ACTIONS.START }]],
   })
 }
 
@@ -47,8 +67,8 @@ export function testInProgressMessage(input: { r3: boolean }): ReturnType<typeof
       ? 'Ти зупинилась посеред тесту. Повернемось і закінчимо зараз, щоб не втрачати фокус.'
       : 'Ти вже почала тест. Продовжимо з того місця, де зупинилась?',
     buttons: [
-      [{ text: 'Продовжити тест', callback_data: 'ab_test:resume' }],
-      [{ text: 'Почати заново', callback_data: 'ab_test:restart' }],
+      [{ text: AB_TEST_CONTINUE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESUME }],
+      [{ text: absystemContent.RESUME_FLOW.CTA_RESTART, callback_data: AB_TEST_ACTIONS.RESTART }],
     ],
   })
 }
@@ -57,8 +77,8 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Твій <b>результат</b> готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.',
     buttons: [
-      [{ text: 'Показати результат', callback_data: 'ab_test:show_result' }],
-      [{ text: 'Почати тест заново', callback_data: 'ab_test:restart' }],
+      [{ text: AB_TEST_SHOW_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: AB_TEST_RESTART_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
       [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
     ],
   })
@@ -69,18 +89,18 @@ export function offerShownMessage(): ReturnType<typeof withKeyboard> {
     text: 'У тебе вже є <b>результат</b> тесту.\n\nХочеш відкрити його ще раз або пройти тест заново?',
     buttons: [
       [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
-      [{ text: 'Пройти тест заново', callback_data: 'ab_test:restart' }],
-      [{ text: 'Мій результат', callback_data: 'ab_test:show_result' }],
+      [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
+      [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
     ],
   })
 }
 
 export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Доступ до ФОКУС активний. Обери наступну дію в меню.',
+    text: AB_TEST_FOCUS_ACTIVE_MENU_TEXT,
     buttons: [
-      [{ text: 'Календар Zoom-практик', callback_data: 'focus:calendar' }],
-      [{ text: 'ABSystem AI', callback_data: 'focus:ai' }],
+      [{ text: AB_TEST_FOCUS_CALENDAR_BUTTON_TEXT, callback_data: 'focus:calendar' }],
+      [{ text: AB_TEST_FOCUS_AI_BUTTON_TEXT, callback_data: 'focus:ai' }],
     ],
   })
 }
@@ -88,30 +108,34 @@ export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
 export function magicLinkReadyMessage(link: string): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: [
-      'Ось твоє магічне посилання для входу без пароля.',
-      'Відкрий його на цьому або іншому пристрої — воно діє 15 хвилин.',
+      AB_TEST_MAGIC_LINK_INTRO_TEXT,
+      AB_TEST_MAGIC_LINK_EXPIRY_TEXT,
     ].join('\n\n'),
-    buttons: [[{ text: 'Відкрити платформу', url: link }]],
+    buttons: [[{ text: AB_TEST_OPEN_PLATFORM_BUTTON_TEXT, url: link }]],
   })
 }
 
-export function zoomMemberMessage(): ReturnType<typeof withKeyboard> {
-  return withKeyboard({
-    text: 'Ти в Zoom-групі. Ось меню та найближча Zoom-зустріч.',
+export function zoomSection(): StartMessagePayload {
+  return {
+    text: AB_TEST_ZOOM_MEMBER_MENU_TEXT,
     buttons: [
       [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
-      [{ text: 'Наступний Zoom', callback_data: 'focus:next_zoom' }],
-      [{ text: 'Меню ФОКУС', callback_data: 'focus:menu' }],
+      [{ text: AB_TEST_NEXT_ZOOM_BUTTON_TEXT, callback_data: 'focus:next_zoom' }],
+      [{ text: AB_TEST_FOCUS_MENU_BUTTON_TEXT, callback_data: 'focus:menu' }],
     ],
-  })
+  }
+}
+
+export function zoomMemberMessage(): ReturnType<typeof withKeyboard> {
+  return withKeyboard(zoomSection())
 }
 
 export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Переходимо в AI Mentor режим. Обери, з чого почнемо.',
+    text: AB_TEST_AI_MENTOR_MENU_TEXT,
     buttons: [
-      [{ text: 'AI Mentor меню', callback_data: 'ai_mentor:menu' }],
-      [{ text: 'Мій план дій', callback_data: 'ai_mentor:plan' }],
+      [{ text: AB_TEST_AI_MENTOR_MENU_BUTTON_TEXT, callback_data: 'ai_mentor:menu' }],
+      [{ text: AB_TEST_AI_MENTOR_PLAN_BUTTON_TEXT, callback_data: 'ai_mentor:plan' }],
     ],
   })
 }

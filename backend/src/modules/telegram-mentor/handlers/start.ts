@@ -22,10 +22,14 @@ import {
   testInProgressMessage,
   welcomeMessage,
   testNotStartedMessage,
+  zoomSection,
   zoomMemberMessage,
 } from './abTest.start.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
 import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTest.service.js'
+import { AB_TEST_MY_RESULT_BUTTON_TEXT } from '@/products/ab-system/content/abTest.shared.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { resolveTelegramProductSummary } from '../services/productSummary.service.js'
 
 export * from './start.shared.js'
@@ -129,12 +133,34 @@ async function deliver(
 async function deliverProductSummary(
   ctx: StartContext,
   userId: string,
+  lifecycleState: string,
 ): Promise<boolean> {
   const summary = await resolveTelegramProductSummary(userId).catch(() => null)
   const text = summary?.lines.join('\n')?.trim() ?? ''
 
   if (!summary || !text || !summary.reply_markup) {
     return false
+  }
+
+  if (lifecycleState === 'ZOOM_MEMBER') {
+    const zoom = zoomSection()
+    const combinedText = `${text}\n\n${zoom.text}`
+    const existingButtons = 'inline_keyboard' in summary.reply_markup
+      ? summary.reply_markup.inline_keyboard
+      : []
+    const combinedMarkup = {
+      inline_keyboard: [...existingButtons, ...zoom.buttons],
+    }
+
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'telegram_focus_product_summary',
+      combinedText,
+      combinedMarkup,
+    )
+
+    return true
   }
 
   await planMessage(
@@ -453,8 +479,8 @@ export async function handleStart(ctx: StartContext) {
             text: 'Ти вже пройшла тест.\n\nПодивитись результат або пройти заново?',
             reply_markup: {
               inline_keyboard: [
-                [{ text: 'Мій результат', callback_data: 'ab_test:show_result' }],
-                [{ text: 'Пройти заново', callback_data: 'ab_test:restart' }],
+                [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+                [{ text: absystemContent.RESUME_FLOW.CTA_RESTART, callback_data: AB_TEST_ACTIONS.RESTART }],
               ],
             },
           })
@@ -472,14 +498,14 @@ export async function handleStart(ctx: StartContext) {
         return
       }
       case 'FOCUS_PAID': {
-        if (!(await deliverProductSummary(ctx, user.id))) {
+        if (!(await deliverProductSummary(ctx, user.id, user.lifecycleState))) {
           await deliver(ctx, focusPaidMessage())
         }
         startMessageSent = true
         return
       }
       case 'ZOOM_MEMBER': {
-        if (!(await deliverProductSummary(ctx, user.id))) {
+        if (!(await deliverProductSummary(ctx, user.id, user.lifecycleState))) {
           await deliver(ctx, zoomMemberMessage())
         }
         startMessageSent = true
