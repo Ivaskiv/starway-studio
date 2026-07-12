@@ -84,6 +84,16 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
   })
 }
 
+export function testDoneWithResultMessage(): ReturnType<typeof withKeyboard> {
+  return withKeyboard({
+    text: 'Ти вже пройшла тест.\n\nПодивитись результат або пройти заново?',
+    buttons: [
+      [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: absystemContent.RESUME_FLOW.CTA_RESTART, callback_data: AB_TEST_ACTIONS.RESTART }],
+    ],
+  })
+}
+
 export function offerShownMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'У тебе вже є <b>результат</b> тесту.\n\nХочеш відкрити його ще раз або пройти тест заново?',

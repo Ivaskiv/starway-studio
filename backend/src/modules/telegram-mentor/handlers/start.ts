@@ -19,6 +19,7 @@ import {
   magicLinkReadyMessage,
   offerShownMessage,
   testDoneMessage,
+  testDoneWithResultMessage,
   testInProgressMessage,
   welcomeMessage,
   testNotStartedMessage,
@@ -475,15 +476,7 @@ export async function handleStart(ctx: StartContext) {
       }
       case 'TEST_DONE': {
         if (user.testResultType) {
-          await deliver(ctx, {
-            text: 'Ти вже пройшла тест.\n\nПодивитись результат або пройти заново?',
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
-                [{ text: absystemContent.RESUME_FLOW.CTA_RESTART, callback_data: AB_TEST_ACTIONS.RESTART }],
-              ],
-            },
-          })
+          await deliver(ctx, testDoneWithResultMessage())
           startMessageSent = true
           return
         }
