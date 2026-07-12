@@ -1,6 +1,7 @@
 export const AB_TEST_ACTIONS = {
   ENTRY: 'ab_test:entry',
   START: 'ab_test:start',
+  RESUME: 'ab_test:resume',
   RESTORE: 'ab_test:restore',
   RESTART: 'ab_test:restart',
   INTRO: 'ab_test:intro',

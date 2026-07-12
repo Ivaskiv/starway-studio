@@ -3,12 +3,29 @@
 export const AB_TEST_START_BUTTON_TEXT = 'Почати тест'
 export const AB_TEST_CONTINUE_BUTTON_TEXT = 'Продовжити тест'
 export const AB_TEST_CONTINUE_SHORT_BUTTON_TEXT = 'Продовжити'
+export const AB_TEST_SHOW_RESULT_BUTTON_TEXT = 'Показати результат'
+export const AB_TEST_MY_RESULT_BUTTON_TEXT = 'Мій результат'
+export const AB_TEST_RESTART_BUTTON_TEXT = 'Почати тест заново'
+export const AB_TEST_RETAKE_BUTTON_TEXT = 'Пройти тест заново'
 export const AB_TEST_OPEN_FOCUS_BUTTON_TEXT = 'Хочу у ФОКУС'
 export const AB_TEST_PAY_1M_BUTTON_TEXT = 'Оплатити 1 місяць'
 export const AB_TEST_PAY_3M_BUTTON_TEXT = 'Оплатити 3 місяці'
 export const AB_TEST_JOIN_CHANNEL_BUTTON_TEXT = 'Перейти в канал'
 export const AB_TEST_OPEN_ZOOM_BUTTON_TEXT = 'Відкрити Zoom'
 export const AB_TEST_OPEN_PLATFORM_BUTTON_TEXT = 'Відкрити платформу'
+export const AB_TEST_OPEN_ABSYSTEM_AI_BUTTON_TEXT = 'Перейти в ABSystem AI'
+export const AB_TEST_FOCUS_CALENDAR_BUTTON_TEXT = 'Календар Zoom-практик'
+export const AB_TEST_FOCUS_AI_BUTTON_TEXT = 'ABSystem AI'
+export const AB_TEST_NEXT_ZOOM_BUTTON_TEXT = 'Наступний Zoom'
+export const AB_TEST_FOCUS_MENU_BUTTON_TEXT = 'Меню ФОКУС'
+export const AB_TEST_AI_MENTOR_MENU_BUTTON_TEXT = 'AI Mentor меню'
+export const AB_TEST_AI_MENTOR_PLAN_BUTTON_TEXT = 'Мій план дій'
+export const AB_TEST_FOCUS_ACTIVE_MENU_TEXT = 'Доступ до ФОКУС активний. Обери наступну дію в меню.'
+export const AB_TEST_ZOOM_MEMBER_MENU_TEXT = 'Ти в Zoom-групі. Ось меню та дата найближчої Zoom-зустрічі'
+export const AB_TEST_AI_MENTOR_MENU_TEXT = 'Переходимо в AI Mentor режим. Обери, з чого почнемо.'
+export const AB_TEST_MAGIC_LINK_INTRO_TEXT = 'Ось твоє магічне посилання для входу без пароля.'
+export const AB_TEST_MAGIC_LINK_EXPIRY_TEXT = 'Відкрий його на цьому або іншому пристрої — воно діє 15 хвилин.'
+export const AB_TEST_NO_RESULT_YET_TEXT = 'Результат не знайдено. Спробуй пройти тест заново.'
 
 export const abTestContent = {
   meta: {
@@ -19,12 +36,23 @@ export const abTestContent = {
     startTest: AB_TEST_START_BUTTON_TEXT,
     continueTest: AB_TEST_CONTINUE_BUTTON_TEXT,
     restoreProgress: AB_TEST_CONTINUE_SHORT_BUTTON_TEXT,
+    showResult: AB_TEST_SHOW_RESULT_BUTTON_TEXT,
+    myResult: AB_TEST_MY_RESULT_BUTTON_TEXT,
+    restart: AB_TEST_RESTART_BUTTON_TEXT,
+    retake: AB_TEST_RETAKE_BUTTON_TEXT,
     openFocus: AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
     payFocus1m: AB_TEST_PAY_1M_BUTTON_TEXT,
     payFocus3m: AB_TEST_PAY_3M_BUTTON_TEXT,
     joinChannel: AB_TEST_JOIN_CHANNEL_BUTTON_TEXT,
     openZoom: AB_TEST_OPEN_ZOOM_BUTTON_TEXT,
     openPlatform: AB_TEST_OPEN_PLATFORM_BUTTON_TEXT,
+    openAbsystemAi: AB_TEST_OPEN_ABSYSTEM_AI_BUTTON_TEXT,
+    focusCalendar: AB_TEST_FOCUS_CALENDAR_BUTTON_TEXT,
+    focusAi: AB_TEST_FOCUS_AI_BUTTON_TEXT,
+    nextZoom: AB_TEST_NEXT_ZOOM_BUTTON_TEXT,
+    focusMenu: AB_TEST_FOCUS_MENU_BUTTON_TEXT,
+    aiMentorMenu: AB_TEST_AI_MENTOR_MENU_BUTTON_TEXT,
+    aiMentorPlan: AB_TEST_AI_MENTOR_PLAN_BUTTON_TEXT,
     continueFlow: AB_TEST_CONTINUE_SHORT_BUTTON_TEXT,
     answerState: 'Стан',
     answerGoal: 'Ціль',
