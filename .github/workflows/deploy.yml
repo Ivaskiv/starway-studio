@@ -33,17 +33,6 @@ jobs:
       - name: Type-check backend
         run: pnpm --dir backend exec tsc --noEmit
 
-      - name: Run database migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: |
-          if [ -z "$DIRECT_URL" ]; then
-            echo "DIRECT_URL secret is empty, falling back to DATABASE_URL"
-            export DIRECT_URL="$DATABASE_URL"
-          fi
-          pnpm --filter @starway/db run prisma:migrate:deploy
-
       - name: Trigger Render deploy
         if: success()
         run: |
@@ -77,11 +66,11 @@ jobs:
         run: |
           curl -sf -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.STARWAY_OPS_CHAT_ID }}" \
-            -d text="✅ Deploy succeeded: migrated, typechecked, healthy, webhook verified. commit ${{ github.sha }}"
+            -d text="✅ Deploy succeeded: deps built, typechecked, healthy, webhook verified. commit ${{ github.sha }}"
 
       - name: Notify OPS on failure
         if: failure()
         run: |
           curl -sf -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.STARWAY_OPS_CHAT_ID }}" \
-            -d text="🚨 Deploy pipeline failed for commit ${{ github.sha }}. Check GitHub Actions logs. Render was NOT updated if migration or typecheck failed before the trigger step."
+            -d text="🚨 Deploy pipeline failed for commit ${{ github.sha }}. Check GitHub Actions logs. Render was NOT updated if dependency build or typecheck failed before the trigger step."
