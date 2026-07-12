@@ -4,6 +4,7 @@ services:
     runtime: node
     region: frankfurt
     plan: starter
+    autoDeploy: false
     buildCommand: "npm install -g pnpm && pnpm install && pnpm --dir backend run build"
     startCommand: cd backend && node dist/src/index.js
     healthCheckPath: /health
