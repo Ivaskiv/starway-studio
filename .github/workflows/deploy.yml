@@ -1,11 +1,11 @@
-name: Migrate and Deploy
+name: CI
 
 on:
   push:
     branches: [main]
 
 jobs:
-  migrate-and-deploy:
+  backend-typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,45 +32,3 @@ jobs:
 
       - name: Type-check backend
         run: pnpm --dir backend exec tsc --noEmit
-
-      - name: Trigger Render deploy
-        if: success()
-        run: |
-          curl -f -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
-
-      - name: Wait for new deploy to become healthy
-        if: success()
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf https://starway-api.onrender.com/health/ready > /dev/null; then
-              echo "healthy"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "health check timed out after 5 minutes"
-          exit 1
-
-      - name: Verify Telegram webhook still points at production
-        if: success()
-        run: |
-          WEBHOOK_URL=$(curl -sf "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getWebhookInfo" | node -e "process.stdin.resume();let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).result.url)}catch(e){console.log('')}})")
-          if [ "$WEBHOOK_URL" != "https://starway-api.onrender.com/api/telegram/webhook" ]; then
-            echo "webhook mismatch: got '$WEBHOOK_URL'"
-            exit 1
-          fi
-          echo "webhook ok"
-
-      - name: Notify OPS on success
-        if: success()
-        run: |
-          curl -sf -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.STARWAY_OPS_CHAT_ID }}" \
-            -d text="✅ Deploy succeeded: deps built, typechecked, healthy, webhook verified. commit ${{ github.sha }}"
-
-      - name: Notify OPS on failure
-        if: failure()
-        run: |
-          curl -sf -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.STARWAY_OPS_CHAT_ID }}" \
-            -d text="🚨 Deploy pipeline failed for commit ${{ github.sha }}. Check GitHub Actions logs. Render was NOT updated if dependency build or typecheck failed before the trigger step."
