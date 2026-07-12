@@ -11,6 +11,7 @@ import { runWeeklyAnalysis } from '../../modules/ai-mentor/weekly-analysis/servi
 import { getCanonicalRevenueMetrics } from '../../modules/analytics/service.js'
 import { resolvePausedMentorContext } from '../notifications/mentorLifecycle.js'
 import { ensureNotificationPreferenceTableAvailability, getMinutesInTimezone, getStartOfUtcDay, getWeekdayInTimezone, hasMentorNotificationAccess, isWithinScheduledMinute } from './common.js'
+import { generateAiBriefingInsights } from './dailyBriefing.ai.js'
 import { parseZoomPostReport } from '../../modules/zoom/zoomPostReport.types.js'
 
 function startOfWeekMonday(date = new Date()): Date {
@@ -300,7 +301,7 @@ type CoachReportButton =
       url: string
     }
 
-type DailyCoachBriefingData = {
+export type DailyCoachBriefingData = {
   since: Date
   monthStart: Date
   monthNow: Date
@@ -775,7 +776,8 @@ function pickSlippingProduct(rows: ProductRevenueAggregate[]): string {
   return `${weakest.name} (${weakest.code}) — ${formatMoney(weakest.sumCents, weakest.currency)}`
 }
 
-function buildCoachDailyBriefingText(snapshot: DailyCoachBriefingData): string {
+async function buildCoachDailyBriefingText(snapshot: DailyCoachBriefingData): Promise<string> {
+  const aiInsights = await generateAiBriefingInsights(snapshot)
   const resultBreakdown = snapshot.resultCounts.length > 0
     ? snapshot.resultCounts.map((item) => `${item.label}: ${item.count}`).join(' | ')
     : 'невизначено: 0'
@@ -822,14 +824,14 @@ function buildCoachDailyBriefingText(snapshot: DailyCoachBriefingData): string {
     `• Focus Offer: ${snapshot.focusOfferShown} побачили / ${snapshot.checkoutOpenedUsers} відкрили checkout / ${snapshot.blockedOfferUsers} не відкрили checkout`,
     `• Checkout: ${snapshot.checkoutOpenedUsers} відкрили / ${snapshot.focusPaidUsers} оплатили / ${snapshot.blockedCheckoutUsers} не завершили оплату`,
     '',
-    `5) <b>AI Recommendations</b>`,
-    `• Найбільший вузол втрати: ${pickWeakestBlock(snapshot)}`,
-    `• Найкраща конверсія: ${pickBestConversion(snapshot)}`,
-    `• Що потребує уваги: ${snapshot.blockedCheckoutUsers > snapshot.blockedOfferUsers ? 'Checkout — тут втрачаємо найбільше грошей' : 'Focus Offer — слабко веде в checkout'}`,
-    `• Який продукт просідає: ${pickSlippingProduct(snapshot.productRevenue)}`,
+    `5) <b>AI Recommendations</b>${aiInsights ? '' : ' <i>(стандартний режим)</i>'}`,
+    `• Найбільший вузол втрати: ${aiInsights?.weakestBlock ?? pickWeakestBlock(snapshot)}`,
+    `• Найкраща конверсія: ${aiInsights?.bestConversion ?? pickBestConversion(snapshot)}`,
+    `• Що потребує уваги: ${aiInsights?.attentionNeeded ?? (snapshot.blockedCheckoutUsers > snapshot.blockedOfferUsers ? 'Checkout — тут втрачаємо найбільше грошей' : 'Focus Offer — слабко веде в checkout')}`,
+    `• Який продукт просідає: ${aiInsights?.slippingProduct ?? pickSlippingProduct(snapshot.productRevenue)}`,
     '',
     `6) <b>Coach Prompt</b>`,
-    `Що робимо сьогодні?`,
+    aiInsights?.coachPrompt ?? 'Що робимо сьогодні?',
   ].join('\n')
 }
 
@@ -957,7 +959,7 @@ async function sendCoachPanelReport(
 
 export async function coachDailyBriefingCron(): Promise<void> {
   const snapshot = await loadDailyCoachBriefingData()
-  const text = buildCoachDailyBriefingText(snapshot)
+  const text = await buildCoachDailyBriefingText(snapshot)
   await sendCoachPanelReport(text, [
     [
       { text: 'Контент', callback_data: 'coach-content:planner' },
