@@ -22,6 +22,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build workspace dependencies (generates Prisma client and shared/ai exports)
+        env:
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: "1"
+        run: |
+          pnpm --filter @starway/shared run build
+          pnpm --filter @starway/ai run build
+          pnpm --filter @starway/db run build
+
       - name: Type-check backend
         run: pnpm --dir backend exec tsc --noEmit
 
