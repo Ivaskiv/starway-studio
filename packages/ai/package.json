@@ -29,6 +29,10 @@
       "types": "./dist/providers/pricing.d.ts",
       "import": "./dist/providers/pricing.js"
     },
+    "./providers/spendGuard": {
+      "types": "./dist/providers/spendGuard.d.ts",
+      "import": "./dist/providers/spendGuard.js"
+    },
     "./prompts/salesPsychologist": {
       "types": "./dist/prompts/salesPsychologist.prompts.d.ts",
       "import": "./dist/prompts/salesPsychologist.prompts.js"

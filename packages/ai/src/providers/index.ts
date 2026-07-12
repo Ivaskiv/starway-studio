@@ -65,3 +65,5 @@ export const AI_PROVIDERS = {
   claude: anthropic,
   gemini,
 } as const
+
+export * from './spendGuard.js'
