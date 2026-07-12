@@ -26,6 +26,8 @@
     "vercel-build": "pnpm build",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:integration": "vitest run backend/src/modules/telegram-mentor/handlers/start.integration.test.ts",
+    "test:all": "pnpm test:funnel && pnpm test:golden && pnpm test:integration",
     "test:funnel": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.builder.test.ts",
     "test:golden": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.golden.test.ts",
     "test:golden:update": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.golden.test.ts -u",
