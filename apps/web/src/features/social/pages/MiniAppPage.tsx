@@ -67,7 +67,8 @@ export default function MiniAppPage() {
   const { appState: sessionStatus } = useSessionOrchestrator()
   const shouldSkipProtectedQueries = sessionStatus !== 'authenticated'
   const userName = user?.firstName ?? user?.name ?? 'Учень'
-  const { subscription } = useSystemState()
+  const { subscription, getModuleAccess } = useSystemState()
+  const mentorAccess = getModuleAccess('AI_MENTOR')
   const { data: trial } = useGetTrialStatusQuery(undefined, { skip: shouldSkipProtectedQueries || !userId })
   const { data: summary } = useGetSummaryQuery(undefined, { skip: shouldSkipProtectedQueries || !userId })
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, {
@@ -208,7 +209,20 @@ export default function MiniAppPage() {
           />
         )}
 
-        {!isBootstrappingAuth && page === 'mentor' && (
+        {!isBootstrappingAuth && page === 'mentor' && mentorAccess.isLocked && (
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
+            <p className="text-sm font-semibold text-white">
+              {mentorAccess.lockReason === 'TRIAL_EXPIRED'
+                ? 'Пробний період AI-асистента закінчився.'
+                : 'AI-асистент доступний з підпискою на ABSystem.'}
+            </p>
+            <p className="text-xs text-white/65">
+              Оформи підписку, щоб отримати доступ до персонального асистента.
+            </p>
+          </div>
+        )}
+
+        {!isBootstrappingAuth && page === 'mentor' && !mentorAccess.isLocked && (
           <MiniAppMentorSection
             context={mentorContext}
             chatInput={chatInput}

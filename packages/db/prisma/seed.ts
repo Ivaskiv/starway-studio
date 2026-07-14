@@ -57,6 +57,15 @@ function resolveSupabasePassword(input: string | undefined): string | undefined 
 
   try {
     const url = new URL(raw);
+    const isLocalhost =
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname === '::1';
+
+    if (isLocalhost) {
+      return raw;
+    }
+
     url.password = password;
     return url.toString();
   } catch {
@@ -148,8 +157,10 @@ const expert = await prisma.expert.upsert({
         telegramUserName: item.telegramUserName ?? null,
         role: item.role,
         passwordHash: item.role === Role.USER ? passwordHash : null,
-        expertId: expert.id,
-        uiSettings: {
+        expert: {
+          connect: { id: expert.id },
+        },
+        settings: {
           accentColor: '#0c1d32',
           theme: 'dark',
           language: 'uk',

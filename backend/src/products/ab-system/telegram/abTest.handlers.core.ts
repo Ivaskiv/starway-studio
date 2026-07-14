@@ -354,7 +354,7 @@ export async function handleShowResult(
 
   const userRecord = await prisma.user.findUnique({
     where: { id: userId },
-    select: { testResultType: true, telegramUserName: true, firstName: true },
+    select: { testResultType: true, telegramUserName: true, firstName: true, lifecycleState: true },
   })
   const resultKey = (userRecord?.testResultType ?? null) as string | null
   if (!resultKey) {
@@ -374,6 +374,21 @@ export async function handleShowResult(
         },
       }
     )
+    return true
+  }
+
+  const alreadyConverted = userRecord?.lifecycleState
+    ? ['FOCUS_PAID', 'ZOOM_MEMBER', 'POST_ZOOM_1', 'UPSELL'].includes(userRecord.lifecycleState)
+    : false
+
+  if (alreadyConverted) {
+    const { sendResultSnapshot } = await import('./abTest.views.js')
+    await sendResultSnapshot(ctx, {
+      chatId,
+      userId,
+      resultKey: resultKey as AbTestResultKey,
+      firstName: resolveFirstName(userRecord, ctx, userId),
+    })
     return true
   }
 

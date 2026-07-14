@@ -700,7 +700,8 @@ export async function handleResendFocusBlock12(
     ).catch(() => undefined)
     return true
   }
-  const [verifiedFocusPayment, paidFocusSubscription] = await Promise.all([
+  const [hasCanonicalAccess, verifiedFocusPayment, paidFocusSubscription] = await Promise.all([
+    hasActiveFocusSubscription(targetUserId),
     prisma.paymentLog.findFirst({
       where: {
         userId: targetUserId,
@@ -725,7 +726,7 @@ export async function handleResendFocusBlock12(
     }),
   ])
 
-  if (!verifiedFocusPayment && !paidFocusSubscription) {
+  if (!hasCanonicalAccess && !verifiedFocusPayment && !paidFocusSubscription) {
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (chatId) {
       await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_NO_SUB_MSG)

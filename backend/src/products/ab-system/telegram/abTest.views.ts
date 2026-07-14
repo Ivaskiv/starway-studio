@@ -886,6 +886,57 @@ export async function dispatchAbTestResultSequence(
   }
 }
 
+export async function sendResultSnapshot(
+  ctx: Context,
+  input: {
+    chatId: string | number
+    userId: string
+    resultKey: AbTestResultKey
+    firstName?: string | null
+  }
+): Promise<void> {
+  const resultDef = getAbTestResultDefinition(input.resultKey)
+  const shortMessage = interpolateFirstNameInBlocks(
+    [telegramBlock.text(resultDef.msg1)],
+    input.firstName
+  )
+
+  const [attendedCount, totalBookedCount, activeSubscription] = await Promise.all([
+    prisma.zoomSessionAttendee.count({
+      where: { userId: input.userId, attended: true },
+    }),
+    prisma.zoomSessionAttendee.count({
+      where: { userId: input.userId },
+    }),
+    prisma.subscription.findFirst({
+      where: { userId: input.userId, status: 'ACTIVE' },
+      orderBy: { currentPeriodEnd: 'desc' },
+      select: { currentPeriodEnd: true },
+    }),
+  ])
+
+  const subscriptionLine = activeSubscription?.currentPeriodEnd
+    ? `Підписка активна до ${activeSubscription.currentPeriodEnd.toLocaleDateString('uk-UA')}`
+    : 'Підписка неактивна'
+
+  const zoomLine = totalBookedCount > 0
+    ? `Zoom-практики: ${attendedCount} відвідано з ${totalBookedCount} записаних`
+    : 'Zoom-практики: ще не записувалась'
+
+  const text = [
+    `🎯 Твій результат: ${resultDef.title}`,
+    '',
+    shortMessage[0]?.type === 'text' ? shortMessage[0].text : resultDef.msg1,
+    '',
+    `📅 ${zoomLine}`,
+    `💳 ${subscriptionLine}`,
+  ].join('\n')
+
+  await ctx.telegram
+    .sendMessage(input.chatId, text, { parse_mode: 'HTML' })
+    .catch(() => undefined)
+}
+
 export async function dispatchAbTestPracticeSequence(
   ctx: Context,
   input: {
