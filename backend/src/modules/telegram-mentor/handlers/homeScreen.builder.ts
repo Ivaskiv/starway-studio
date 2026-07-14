@@ -28,7 +28,15 @@ async function resolveProductSummarySection(
   userId: string,
   lifecycleState: string,
 ): Promise<StartMessagePayload | null> {
-  const summary = await resolveTelegramProductSummary(userId).catch(() => null)
+  const summary = await resolveTelegramProductSummary(userId).catch((error) => {
+    console.error('[HOME_SCREEN] resolveTelegramProductSummary failed', {
+      userId,
+      lifecycleState,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    return null
+  })
   const text = summary?.lines.join('\n')?.trim() ?? ''
 
   if (!summary || !text || !summary.reply_markup) {
