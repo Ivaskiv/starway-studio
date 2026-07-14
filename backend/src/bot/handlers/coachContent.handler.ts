@@ -36,7 +36,7 @@ type CoachAccess = {
 const coachPanelContent = coachBotContent
 
 const KYIV_TZ = 'Europe/Kyiv'
-const COACH_RUNTIME_ERROR_MESSAGE = '❌ Сталася помилка. Спробуй ще раз.'
+const COACH_RUNTIME_ERROR_MESSAGE = coachBotContent.runtime.error
 const REQUIRED_PANEL_SECTIONS = ['start', 'menu', 'schedule', 'nextWeek', 'analytics', 'stats', 'audio', 'users', 'notify', 'payments'] as const
 const REQUIRED_PLANNER_SECTIONS = ['planner', 'buttons', 'note', 'mode', 'topics', 'prompts'] as const
 

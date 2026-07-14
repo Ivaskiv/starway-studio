@@ -42,7 +42,12 @@ import {
 import {
   planAck,
 } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
-import { abTestContent } from '../content/abTest.shared.js'
+import {
+  AB_TEST_NO_RESULT_YET_TEXT,
+  AB_TEST_START_BUTTON_TEXT,
+  abTestContent,
+} from '../content/abTest.shared.js'
+import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import { normalizeAbTestProgress } from '../../../core/state-machine/abTestFoundation.js'
 
@@ -284,11 +289,8 @@ export async function handleAbTestRestart(
     .update({
       where: { id: userId },
       data: {
-        lifecycleState: 'TEST_NOT_STARTED',
-        testStartedAt: null,
-        testCompletedAt: null,
-        offerShownAt: null,
-        testResultType: null,
+        lifecycleState: 'TEST_IN_PROGRESS',
+        testStartedAt: new Date(),
       },
     })
     .catch(() => undefined)
@@ -358,14 +360,14 @@ export async function handleShowResult(
   if (!resultKey) {
     await ctx.telegram.sendMessage(
       chatId,
-      'Результат не знайдено. Спробуй пройти тест заново.',
+      AB_TEST_NO_RESULT_YET_TEXT,
       {
         reply_markup: {
           inline_keyboard: [
             [
               {
-                text: 'Почати тест',
-                callback_data: 'ab_test:start',
+                text: AB_TEST_START_BUTTON_TEXT,
+                callback_data: AB_TEST_ACTIONS.START,
               },
             ],
           ],

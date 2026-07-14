@@ -52,7 +52,7 @@ function getCommandPayload(ctx: Context): string {
   return typeof match[1] === 'string' ? match[1].trim() : ''
 }
 
-const COACH_RUNTIME_ERROR_MESSAGE = '❌ Сталася помилка. Спробуй ще раз.'
+const COACH_RUNTIME_ERROR_MESSAGE = coachBotContent.runtime.error
 
 async function reportCoachRuntimeError(ctx: Context, scope: string, error: unknown): Promise<void> {
   console.error(`[coach-start:${scope}] failed`, error)
@@ -156,10 +156,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
   telegramBot.start(withCoachRuntimeProtection('start', async (ctx) => {
     const isCoach = await checkCoachAccess(ctx)
     if (!isCoach) {
-      await ctx.reply(
-        'Цей бот для коуча Starway Studio.\n'
-        + 'Якщо ти коуч — відкрий його в особистому чаті та звернись до адміністратора.',
-      )
+      await ctx.reply(coachBotContent.access.denied)
       return
     }
     await showCoachMenu(ctx)
@@ -167,10 +164,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
   telegramBot.command('start', withCoachRuntimeProtection('command:start', async (ctx) => {
     const isCoach = await checkCoachAccess(ctx)
     if (!isCoach) {
-      await ctx.reply(
-        'Цей бот для коуча Starway Studio.\n'
-        + 'Якщо ти коуч — відкрий його в особистому чаті та звернись до адміністратора.',
-      )
+      await ctx.reply(coachBotContent.access.denied)
       return
     }
     await showCoachMenu(ctx)
@@ -266,12 +260,25 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
     const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
     const parts = raw.split(':')
-    const userId = parts[2] ?? ''
-    const orderReference = parts.slice(3).join(':') || undefined
-    if (!userId) {
-      await ctx.answerCbQuery('Некоректний userId').catch(() => undefined)
+    const checkoutToken = parts[2] ?? ''
+    if (!checkoutToken) {
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
       return
     }
+    const checkoutSession = await prisma.checkoutSession.findUnique({
+      where: { token: checkoutToken },
+      select: {
+        userId: true,
+        orderReference: true,
+        amount: true,
+      },
+    })
+    if (!checkoutSession) {
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.checkoutNotFound).catch(() => undefined)
+      return
+    }
+    const userId = checkoutSession.userId
+    const orderReference = checkoutSession.orderReference
     const result = await activateProductSubscription({
       userId,
       productCode: 'focus',
@@ -282,19 +289,36 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     })
     if (result.success) {
       await sendAbTestBlock12Welcome(userId).catch(() => undefined)
-      await ctx.answerCbQuery('Доступ відкрито').catch(() => undefined)
-      await ctx.reply(`✅ Доступ до ФОКУС відкрито вручну.\nuserId: ${userId}`)
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.accessGranted).catch(() => undefined)
+      await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessGranted}\nuserId: ${userId}`)
       return
     }
-    await ctx.answerCbQuery('Помилка').catch(() => undefined)
-    await ctx.reply(`❌ Не вдалося відкрити доступ.\nПричина: ${result.message}\nuserId: ${userId}`)
+    await ctx.answerCbQuery(coachBotContent.paymentAdmin.error).catch(() => undefined)
+    await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessFailed}\nПричина: ${result.message}\nuserId: ${userId}`)
   }))
   telegramBot.action(/^admin:deny_focus:/, withCoachRuntimeProtection('action:admin:deny_focus', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
     const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
     const parts = raw.split(':')
-    const userId = parts[2] ?? ''
-    await ctx.answerCbQuery('Відхилено').catch(() => undefined)
-    await ctx.reply(`❌ Ручне надання доступу відхилено.\nuserId: ${userId}`)
+    const checkoutToken = parts[2] ?? ''
+    if (!checkoutToken) {
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
+      return
+    }
+    const checkoutSession = await prisma.checkoutSession.findUnique({
+      where: { token: checkoutToken },
+      select: {
+        userId: true,
+        orderReference: true,
+        amount: true,
+      },
+    })
+    if (!checkoutSession) {
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.checkoutNotFound).catch(() => undefined)
+      return
+    }
+    const userId = checkoutSession.userId
+    await ctx.answerCbQuery(coachBotContent.paymentAdmin.denied).catch(() => undefined)
+    await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: ${userId}`)
   }))
 }

@@ -1,13 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { calculateAiCostUsd } from '@starway/ai/providers/pricing'
-import { assertWithinDailyAiBudget, recordAiSpend } from '@starway/ai/providers/spendGuard'
+import { assertWithinDailyAiBudget, reconcileAiSpend } from '@starway/ai/providers/spendGuard'
 
 import type { DailyCoachBriefingData } from './daily.jobs.js'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514'
 const JOB_KEY = 'coach-daily-briefing'
 const DAILY_CAP_USD = Number(process.env.AI_DAILY_BRIEFING_CAP_USD ?? '2')
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514'
 
 export type AiBriefingInsights = {
   weakestBlock: string
@@ -55,25 +55,20 @@ export async function generateAiBriefingInsights(
 
   try {
     const prompt = buildPrompt(snapshot)
-    const maxTokens = 400
-    const roughEstimateUsd = calculateAiCostUsd(MODEL, Math.ceil(prompt.length / 4), maxTokens)
-
+    const roughEstimateUsd = calculateAiCostUsd(MODEL, Math.ceil(prompt.length / 4), 400)
     await assertWithinDailyAiBudget(JOB_KEY, roughEstimateUsd, DAILY_CAP_USD)
 
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: maxTokens,
+      max_tokens: 400,
       messages: [{ role: 'user', content: prompt }],
     })
 
-    const textParts = response.content.filter((part) => part.type === 'text').map((part) => part.text)
-    const insights = parseInsights(textParts.join('\n'))
-    if (!insights) return null
-
     const actualCostUsd = calculateAiCostUsd(MODEL, response.usage.input_tokens, response.usage.output_tokens)
-    await recordAiSpend(JOB_KEY, actualCostUsd).catch(() => undefined)
+    await reconcileAiSpend(JOB_KEY, roughEstimateUsd, actualCostUsd).catch(() => undefined)
 
-    return insights
+    const textParts = response.content.filter((part) => part.type === 'text').map((part) => part.text)
+    return parseInsights(textParts.join('\n'))
   } catch {
     return null
   }

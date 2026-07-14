@@ -6,6 +6,7 @@ import {
 } from '@/products/ab-system/content/abTest.shared.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { buildAbsystemAiUpgradeCheckoutUrl } from '@/modules/subscriptions/payments/business.checkout.js'
+import { withDevTestPaymentButton } from '../keyboards.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
 const MINI_APP_ENTRY_INTENT = {
@@ -25,7 +26,7 @@ function withKeyboard(payload: StartMessagePayload) {
   return {
     text: payload.text,
     reply_markup: {
-      inline_keyboard: payload.buttons,
+      inline_keyboard: withDevTestPaymentButton(payload.buttons),
     },
   }
 }
@@ -51,15 +52,21 @@ export function testNotStartedMessage(input: { escalated: boolean }): ReturnType
   })
 }
 
-export function testInProgressMessage(input: { r3: boolean }): ReturnType<typeof withKeyboard> {
+export function testInProgressMessage(input: { r3: boolean; hasExistingResult?: boolean }): ReturnType<typeof withKeyboard> {
+  const baseButtons: Array<Array<{ text: string; callback_data: string }>> = [
+    [{ text: AB_TEST_CONTINUE_BUTTON_TEXT, callback_data: 'ab_test:resume' }],
+    [{ text: absystemContent.RESUME_FLOW.CTA_RESTART, callback_data: AB_TEST_ACTIONS.RESTART }],
+  ]
+
+  if (input.hasExistingResult) {
+    baseButtons.push([{ text: 'Мій попередній результат', callback_data: 'ab_test:show_result' }])
+  }
+
   return withKeyboard({
     text: input.r3
       ? 'Ти зупинилась посеред тесту. Повернемось і закінчимо зараз, щоб не втрачати фокус.'
       : 'Ти вже почала тест. Продовжимо з того місця, де зупинилась?',
-    buttons: [
-      [{ text: AB_TEST_CONTINUE_BUTTON_TEXT, callback_data: 'ab_test:resume' }],
-      [{ text: absystemContent.RESUME_FLOW.CTA_RESTART, callback_data: AB_TEST_ACTIONS.RESTART }],
-    ],
+    buttons: baseButtons,
   })
 }
 
@@ -100,6 +107,7 @@ export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
     text: 'Доступ до ФОКУС активний. Обери наступну дію в меню.',
     buttons: [
       [{ text: 'ABSystem AI', callback_data: 'focus:ai' }],
+      [{ text: '🎯 Мій результат', callback_data: 'ab_test:show_result' }],
     ],
   })
 }
@@ -121,6 +129,7 @@ export function zoomSection(): StartMessagePayload {
       [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
       [{ text: 'Наступний Zoom', callback_data: 'focus:next_zoom' }],
       [{ text: 'Меню ФОКУС', callback_data: 'focus:menu' }],
+      [{ text: '🎯 Мій результат', callback_data: 'ab_test:show_result' }],
     ],
   }
 }

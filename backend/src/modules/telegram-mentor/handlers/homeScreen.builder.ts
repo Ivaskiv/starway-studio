@@ -79,16 +79,23 @@ async function resolveBodySection(
     }
     case 'TEST_IN_PROGRESS': {
       const hoursSince = getHoursSince(user.updatedAt)
+      const hasExistingResult = Boolean(user.testResultType)
       if (hoursSince > 168) {
-        return {
-          text: 'Ти вже починала тест, але пройшло більше тижня.\n\nВідповіді можуть бути неактуальні.',
-          buttons: [[
+        const staleButtons: Array<Array<{ text: string; callback_data: string }>> = [
+          [
             { text: 'Продовжити', callback_data: 'ab_test:resume' },
             { text: 'Почати заново', callback_data: 'ab_test:restart' },
-          ]],
+          ],
+        ]
+        if (hasExistingResult) {
+          staleButtons.push([{ text: 'Мій попередній результат', callback_data: 'ab_test:show_result' }])
+        }
+        return {
+          text: 'Ти вже починала тест, але пройшло більше тижня.\n\nВідповіді можуть бути неактуальні.',
+          buttons: staleButtons,
         }
       }
-      const payload = testInProgressMessage({ r3: hoursSince > 4 })
+      const payload = testInProgressMessage({ r3: hoursSince > 4, hasExistingResult })
       return { text: payload.text, buttons: payload.reply_markup.inline_keyboard }
     }
     case 'TEST_DONE': {
@@ -105,9 +112,7 @@ async function resolveBodySection(
       const payload = focusPaidMessage()
       const zoom = zoomSection()
       return {
-        text: `${payload.text}
-
-${zoom.text}`,
+        text: `${payload.text}\n\n${zoom.text}`,
         buttons: [...zoom.buttons, ...payload.reply_markup.inline_keyboard],
       }
     }

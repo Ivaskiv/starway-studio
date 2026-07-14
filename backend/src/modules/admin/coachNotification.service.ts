@@ -1,4 +1,5 @@
 import type { Telegraf } from 'telegraf'
+import { coachBotContent } from '../../bot/content/coachBot.content.js'
 
 export async function notifyCoachAboutFailedPayment(params: {
   coachBot: Telegraf
@@ -12,7 +13,7 @@ export async function notifyCoachAboutFailedPayment(params: {
   const { coachBot, coachChatId, userId, userTelegramId, orderReference, amount, reason } = params
 
   const text = [
-    '⚠️ <b>Оплата потребує уваги</b>',
+    coachBotContent.paymentAdmin.paymentAttentionTitle,
     '',
     `👤 userId: <code>${userId}</code>`,
     userTelegramId ? `📱 tg: <code>${userTelegramId}</code>` : null,
@@ -20,7 +21,7 @@ export async function notifyCoachAboutFailedPayment(params: {
     `💰 Сума: ${amount} грн`,
     `❌ Причина: ${reason}`,
     '',
-    'Натисни кнопку щоб відкрити доступ вручну:',
+    coachBotContent.paymentAdmin.paymentAttentionPrompt,
   ].filter(Boolean).join('\n')
 
   console.info(
@@ -31,11 +32,11 @@ export async function notifyCoachAboutFailedPayment(params: {
     reply_markup: {
       inline_keyboard: [[
         {
-          text: '✅ Відкрити доступ до ФОКУС',
+          text: coachBotContent.paymentAdmin.paymentAttentionOpen,
           callback_data: `admin:grant_focus:${userId}:${orderReference}`,
         },
         {
-          text: '❌ Відхилити',
+          text: coachBotContent.paymentAdmin.paymentAttentionDeny,
           callback_data: `admin:deny_focus:${userId}`,
         },
       ]],

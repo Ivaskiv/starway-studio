@@ -239,10 +239,19 @@ export async function wayForPayCallback(req: Request, res: Response) {
             : NaN
       const coachChatId = String(process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? '').trim()
       if (rawOrderRef && Number.isFinite(rawAmountNumber) && coachChatId) {
+        const checkoutSession = await prisma.checkoutSession.findFirst({
+          where: { orderReference: rawOrderRef },
+          orderBy: { createdAt: 'desc' },
+          select: { token: true },
+        }).catch(() => null)
+        if (!checkoutSession?.token) {
+          return res.status(200).json({ status: 'skipped' })
+        }
         await alertCoachAboutPaymentIssue({
           bot: coachBot,
           coachChatId,
           userId: extractUserIdFromOrderRef(rawOrderRef) ?? 'unknown',
+          checkoutToken: checkoutSession.token,
           orderReference: rawOrderRef,
           amount: rawAmountNumber,
           reason: 'webhook_parse_failed',
@@ -363,6 +372,14 @@ export async function wayForPayCallback(req: Request, res: Response) {
       const rawOrderRef = String(data.order_reference ?? '').trim()
       const amountNumber = Number(data.amount ?? 0)
       if (coachChatId && rawOrderRef && Number.isFinite(amountNumber)) {
+        const checkoutSession = await prisma.checkoutSession.findFirst({
+          where: { orderReference: rawOrderRef },
+          orderBy: { createdAt: 'desc' },
+          select: { token: true },
+        }).catch(() => null)
+        if (!checkoutSession?.token) {
+          return res.status(200).send('OK')
+        }
         await alertCoachAboutPaymentIssue({
           bot: coachBot,
           coachChatId,
@@ -370,6 +387,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
             (typeof data.clientAccountId === 'string' && data.clientAccountId.trim())
               || extractUserIdFromOrderRef(rawOrderRef)
               || 'unknown',
+          checkoutToken: checkoutSession.token,
           orderReference: rawOrderRef,
           amount: amountNumber,
           reason: `transaction_${String(data.transaction_status ?? 'unknown')}`,

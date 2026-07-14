@@ -32,7 +32,6 @@ import {
 } from '@/features/landings/focus/content/constants'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { MiniAppZoomCalendar, MiniAppZoomRoute } from '@/features/zoom/routes/MiniAppZoomRoute'
-import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
 import MainLayout from '@/layout/MainLayout'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
@@ -106,8 +105,6 @@ function PublicAppRouter() {
       <Route path="/miniapp" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
       <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
-      <Route path="/zoom-calendar" element={<ZoomCalendarPage />} />
-      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage />} />
       {renderTaskRedirectRoutes()}
       <Route path="/content" element={<Navigate to="/miniapp/library" replace />} />
       <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
@@ -139,8 +136,6 @@ function GuestAppRouter() {
       </Route>
       <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
       <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
-      <Route path="/zoom-calendar" element={<ZoomCalendarPage />} />
-      <Route path="/zoom-calendar/*" element={<ZoomCalendarPage />} />
       {/* <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} /> */}
     </Routes>
   )

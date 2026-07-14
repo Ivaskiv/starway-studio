@@ -146,7 +146,7 @@ exports[`Golden Master — /start screens per lifecycleState > POST_ZOOM_1 1`] =
       [
         {
           "text": "Перейти в ABSystem AI",
-          "url": "https://overrational-unimprisonable-annabella.ngrok-free.dev/api/payments/wayforpay/checkout/52a8f2a010644a09bafb6173cc03673e?product=absystem_ai&plan=1month_upgrade",
+          "url": "https://example.com/checkout/golden-user-id?product=absystem_ai&plan=1month_upgrade",
         },
       ],
       [
@@ -296,7 +296,7 @@ exports[`Golden Master — /start screens per lifecycleState > UPSELL 1`] = `
       [
         {
           "text": "Перейти в ABSystem AI",
-          "url": "https://overrational-unimprisonable-annabella.ngrok-free.dev/api/payments/wayforpay/checkout/1c0a20b7594d4db0b884c18d7d13d322?product=absystem_ai&plan=1month_upgrade",
+          "url": "https://example.com/checkout/golden-user-id?product=absystem_ai&plan=1month_upgrade",
         },
       ],
       [

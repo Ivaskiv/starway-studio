@@ -793,6 +793,7 @@ export async function handleFocusPaymentIssue(
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
+      token: true,
       orderReference: true,
       amount: true,
     },
@@ -825,19 +826,22 @@ export async function handleFocusPaymentIssue(
   }
 
   try {
-    await alertCoachAboutPaymentIssue({
-      bot: coachBot,
-      coachChatId,
-      userId: issueUserId,
-      orderReference,
-      amount: lastCheckout?.amount ?? 0,
-      reason: FOCUS_PAYMENT_ISSUE_COACH_MSG({
+    if (lastCheckout?.token) {
+      await alertCoachAboutPaymentIssue({
+        bot: coachBot,
+        coachChatId,
         userId: issueUserId,
+        checkoutToken: lastCheckout.token,
         orderReference,
         amount: lastCheckout?.amount ?? 0,
-      }),
-      scenario: 'E',
-    })
+        reason: FOCUS_PAYMENT_ISSUE_COACH_MSG({
+          userId: issueUserId,
+          orderReference,
+          amount: lastCheckout?.amount ?? 0,
+        }),
+        scenario: 'E',
+      })
+    }
   } catch (error) {
     console.error('[PAYMENT_ISSUE] coach alert failed', {
       userId: issueUserId,

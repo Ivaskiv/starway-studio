@@ -8,6 +8,11 @@ vi.mock('../services/productSummary.service.js', () => ({
   resolveTelegramProductSummary: vi.fn(),
 }))
 
+vi.mock('@/modules/subscriptions/payments/business.checkout.js', () => ({
+  buildAbsystemAiUpgradeCheckoutUrl: vi.fn((userId: string) =>
+    `https://example.com/checkout/${userId}?product=absystem_ai&plan=1month_upgrade`),
+}))
+
 import { resolveTelegramProductSummary } from '../services/productSummary.service.js'
 
 function makeSnapshot(overrides: Partial<StartUserSnapshot>): StartUserSnapshot {

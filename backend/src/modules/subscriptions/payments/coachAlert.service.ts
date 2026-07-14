@@ -1,9 +1,12 @@
 import type { Context, Telegraf } from 'telegraf'
+import { prisma } from '../../../db/client.js'
+import { coachBotContent } from '../../../bot/content/coachBot.content.js'
 
 interface AlertParams {
   bot: Telegraf<Context>
   coachChatId: string
   userId: string
+  checkoutToken: string
   orderReference: string
   amount: number
   reason: string
@@ -17,6 +20,11 @@ const SCENARIO_LABELS: Record<AlertParams['scenario'], string> = {
 }
 
 export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<void> {
+  await prisma.checkoutSession.update({
+    where: { token: params.checkoutToken },
+    data: { paymentIssueReportedAt: new Date() },
+  }).catch(() => undefined)
+
   const text = [
     SCENARIO_LABELS[params.scenario],
     '',
@@ -26,7 +34,7 @@ export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<
     `❗ ${params.reason}`,
     `📌 Сценарій: ${params.scenario}`,
     '',
-    'Перевір WayForPay кабінет і натисни:',
+    coachBotContent.paymentAdmin.reviewPrompt,
   ].join('\n')
 
   await params.bot.telegram.sendMessage(params.coachChatId, text, {
@@ -34,12 +42,12 @@ export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<
     reply_markup: {
       inline_keyboard: [[
         {
-          text: '✅ Оплата є — відкрити ФОКУС',
-          callback_data: `admin:grant_focus:${params.userId}:${params.orderReference}`,
+          text: coachBotContent.paymentAdmin.paymentExists,
+          callback_data: `admin:grant_focus:${params.checkoutToken}`,
         },
         {
-          text: '❌ Оплати немає',
-          callback_data: `admin:deny_focus:${params.userId}`,
+          text: coachBotContent.paymentAdmin.paymentMissing,
+          callback_data: `admin:deny_focus:${params.checkoutToken}`,
         },
       ]],
     },

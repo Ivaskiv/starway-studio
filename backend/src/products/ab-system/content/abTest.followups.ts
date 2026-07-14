@@ -4,7 +4,9 @@ import type { AbTestResultKey, TestDriveContentVersion } from './abTest.results.
 import { interpolateFirstName } from './abTest.results.js'
 import {
   AB_TEST_CONTINUE_BUTTON_TEXT,
+  AB_TEST_OPEN_ABSYSTEM_AI_BUTTON_TEXT,
   AB_TEST_OPEN_ZOOM_BUTTON_TEXT,
+  AB_TEST_SHOW_RESULT_BUTTON_TEXT,
   AB_TEST_DOJIM_7D_REVIEW_QUOTE,
   AB_TEST_FOCUS_CTA_TEXT,
   AB_TEST_FOCUS_PAYMENT_CTA_1M,
@@ -34,6 +36,9 @@ export type LifecycleReminderKey =
   | 'R6_RESULT_48H'
   | 'R7_OFFER_6H'
   | 'R8_OFFER_3D'
+  | 'SUBSCRIPTION_EXPIRING_7D'
+  | 'SUBSCRIPTION_EXPIRING_3D'
+  | 'SUBSCRIPTION_EXPIRING_1D'
   | 'Z1_ZOOM_MON_1800'
   | 'Z2_ZOOM_MON_1855'
 
@@ -72,8 +77,8 @@ export type AbTestFollowupTimerId =
 const CTA_JOIN_FOCUS = AB_TEST_FOCUS_CTA_TEXT
 const FOCUS_FOLLOWUP_TITLE = 'ФОКУС'
 const CTA_START_TEST = 'Пройти тест'
-const CTA_SHOW_RESULT = 'Показати результат'
-const PLATFORM_CTA_TEXT = 'Перейти в ABSystem AI'
+const CTA_SHOW_RESULT = AB_TEST_SHOW_RESULT_BUTTON_TEXT
+const PLATFORM_CTA_TEXT = AB_TEST_OPEN_ABSYSTEM_AI_BUTTON_TEXT
 
 const DOJIM_72H_ZOOM_CASES_TEXT = 'Саме такі ситуації ми розбираємо на Zoom-практиках.'
 const DOJIM_5D_ALREADY_TRIED_TEXT = 'Більшість наших учасниць приходили саме з думкою: «Я вже все це проходила.»'
@@ -85,10 +90,18 @@ const DOJIM_7D_OPENING_TEXT =
   'Через тиждень після тесту більшість людей повертаються до звичного життя і відкладають це ще на кілька місяців.'
 const DOJIM_7D_HONESTY_TEXT = 'Ти вже знаєш що тебе зупиняє. Це не так часто буває — що людина бачить це чесно.'
 const DOJIM_7D_REVIEW_INTRO_TEXT = '**Нижче — відгук після першої практики.**'
-const DOJIM_7D_GOAL_HONESTY_TEXT = '**Ти вже знаєш, що тебе зупиняє.**\nТак буває нечасто — щоб людина побачила це настільки чесно.'
+const DOJIM_7D_GOAL_HONESTY_TEXT = '**Ти вже знаєш, що тебе зупиняє.** Так буває нечасто — щоб людина побачила це настільки чесно.'
 const DOJIM_7D_GOAL_REVIEW_INTRO_TEXT = '**Нижче — відгук після першої практики.**'
 
-// Правило: суміжні text-блоки → один text, розділені '\n\n'.
+function buildSubscriptionReminder(days: 7 | 3 | 1, title: string, cta: string): FollowupCopy {
+  return {
+    title,
+    body: `TODO: текст нагадування про поновлення, вікно ${days} ${days === 3 ? 'дні' : 'днів'}`,
+    cta,
+  }
+}
+
+// Правило: суміжні text-блоки → один text, розділені '  '.
 // pricing / quote / image / audio / cta — завжди окремими блоками.
 function mergeTextBlocks(blocks: TelegramContentBlock[]): TelegramContentBlock[] {
   const result: TelegramContentBlock[] = []
@@ -96,7 +109,7 @@ function mergeTextBlocks(blocks: TelegramContentBlock[]): TelegramContentBlock[]
 
   function flushText() {
     if (pending.length === 0) return
-    result.push(telegramBlock.text(pending.join('\n\n')))
+    result.push(telegramBlock.text(pending.join('  ')))
     pending.length = 0
   }
 
@@ -141,13 +154,13 @@ function stripStandaloneFirstNamePrefix(
 ): string {
   const normalizedName = String(firstName ?? '').trim()
   if (!normalizedName) {
-    return value.replace(/^\{firstName\}\.\s*\n*/u, '')
+    return value.replace(/^\{firstName\}\.\s* */u, '')
   }
 
   const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return value
-    .replace(/^\{firstName\}\.\s*\n*/u, '')
-    .replace(new RegExp(`^${escapedName}\\.\\s*\\n*`, 'u'), '')
+    .replace(/^\{firstName\}\.\s* */u, '')
+    .replace(new RegExp(`^${escapedName}\\.\\s*\ *`, 'u'), '')
 }
 
 function buildFocusFooterBlocks(): TelegramContentBlock[] {
@@ -157,7 +170,7 @@ function buildFocusFooterBlocks(): TelegramContentBlock[] {
 }
 
 function buildFocusFooterText(): string {
-  return `**${AB_TEST_FOCUS_PRICE_1M}**\n\n**${AB_TEST_FOCUS_PRICE_3M}**`
+  return `**${AB_TEST_FOCUS_PRICE_1M}**  **${AB_TEST_FOCUS_PRICE_3M}**`
 }
 
 // ─── ЄДИНИЙ спільний builder для 24H / 48H / 72H / 5D ────────────────────────
@@ -170,14 +183,14 @@ function buildFollowup(
   paragraphs: string[],
   priceMode: 'dual' | 'summary' = 'summary',
 ): FollowupCopy {
-  const mainText = paragraphs.join('\n\n')
+  const mainText = paragraphs.join('  ')
   const priceLine = priceMode === 'dual'
-    ? `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}`
+    ? `${AB_TEST_FOCUS_PRICE_1M} ${AB_TEST_FOCUS_PRICE_3M}`
     : AB_TEST_FOCUS_PRICE_SUMMARY
 
   return {
     title: FOCUS_FOLLOWUP_TITLE,
-    body: `${mainText}\n\n${priceLine}`,
+    body: `${mainText}  ${priceLine}`,
     cta: CTA_JOIN_FOCUS,
     blocks: mergeTextBlocks([telegramBlock.text(mainText), ...buildFocusFooterBlocks()]),
   }
@@ -189,14 +202,14 @@ function buildDojim5dText(options: {
   tutText: string
   closingText: string
 }): string {
-  const alreadyParagraph = `${DOJIM_5D_ALREADY_TRIED_TEXT}\n\n${DOJIM_5D_STILL_READING_TEXT}`
+  const alreadyParagraph = `${DOJIM_5D_ALREADY_TRIED_TEXT}  ${DOJIM_5D_STILL_READING_TEXT}`
   const differenceText = [
     '**Різниця одна:**',
     `**ТАМ:** ${options.tamText}`,
     `**ТУТ:** ${options.tutText}`,
-  ].join('\n')
+  ].join(' ')
 
-  return `{firstName}.\n\n${options.introText}\n\n${alreadyParagraph}\n\n${differenceText}\n\n${options.closingText}`
+  return `{firstName}.  ${options.introText}  ${alreadyParagraph}  ${differenceText}  ${options.closingText}`
 }
 
 // ─── 7D лишається окремим — реальна відмінність структури (quote + image) ───
@@ -214,9 +227,9 @@ function buildDojim7dReviewBlocks(introText: string, quoteText: string, oneMonth
 function buildDojim7dFollowup(options: { introText: string; quoteText: string }): FollowupCopy {
   return {
     title: FOCUS_FOLLOWUP_TITLE,
-    body: `{firstName}.\n\n${options.introText}\n\n${options.quoteText}\n\n${DOJIM_7D_ONE_MONTH_TEXT}\n\n${buildFocusFooterText()}`,
+    body: `{firstName}.  ${options.introText}  ${options.quoteText}  ${DOJIM_7D_ONE_MONTH_TEXT}  ${buildFocusFooterText()}`,
     cta: CTA_JOIN_FOCUS,
-    blocks: buildDojim7dReviewBlocks(`{firstName}.\n\n${options.introText}`, options.quoteText, DOJIM_7D_ONE_MONTH_TEXT),
+    blocks: buildDojim7dReviewBlocks(`{firstName}.  ${options.introText}`, options.quoteText, DOJIM_7D_ONE_MONTH_TEXT),
   }
 }
 
@@ -224,7 +237,7 @@ function buildDojim7dFollowup(options: { introText: string; quoteText: string })
 
 const DOJIM_24H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
   state: buildFollowup([
-    '{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.\n\nБільшість так і не доходить навіть до цього.',
+    '{firstName}, ти вже зробила перший крок — пройшла тест і відповіла собі чесно.  Більшість так і не доходить навіть до цього.',
     'Тест показав де ти зараз — взагалі без сил і нічого не хочеться. І в цьому стані ти все одно намагаєшся щось робити. І злишся що не виходить.',
     'Саме тому ти отримала цей результат. Це не вирок — це точка з якої починається зміна.',
     'У ФОКУСІ ми працюємо саме з тим що показав твій результат. Наживо. На реальних ситуаціях.',
@@ -262,7 +275,7 @@ const DOJIM_48H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
     'Скільки часу ти вже тримаєшся з останніх сил?',
     'Місяць? Пів року? Рік?',
     'І що змінилось за цей час?',
-    'Якщо нічого не зміниться — де ти будеш через ще один рік?\nУ тому самому місці. Просто ще більш втомлена.',
+    'Якщо нічого не зміниться — де ти будеш через ще один рік? У тому самому місці. Просто ще більш втомлена.',
     'На практиці ми дивимось не на симптом. А на те що його створює.',
   ]),
   goal: buildFollowup([
@@ -270,14 +283,14 @@ const DOJIM_48H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
     '**Скільки часу ти вже живеш з відчуттям що йдеш не туди?**',
     'Місяць? Рік? Кілька років?',
     'І що змінилось за цей час?',
-    'Якщо нічого не зміниться — де ти будеш через ще один рік?\nУ тому самому місці. Просто ще більш розгублена.',
+    'Якщо нічого не зміниться — де ти будеш через ще один рік? У тому самому місці. Просто ще більш розгублена.',
     'На практиці ми дивимось не на симптом. А на те що його створює.',
   ]),
   choice: buildFollowup([
     '{firstName}.',
     'Скільки часу ти вже боїшся зробити неправильно?',
     'І що змінилось поки чекала правильного моменту?',
-    'Якщо нічого не зміниться — де ти будеш через ще один рік?\nТам само. Тільки варіантів стане більше — а рішення все одно не буде.',
+    'Якщо нічого не зміниться — де ти будеш через ще один рік? Там само. Тільки варіантів стане більше — а рішення все одно не буде.',
     'На практиці ми дивимось не на варіанти. А на страх що за ними стоїть.',
   ]),
   decision: buildFollowup([
@@ -285,16 +298,16 @@ const DOJIM_48H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
     'Скільки часу ти вже знаєш що треба зробити — але не робиш?',
     'Місяць? Пів року? Рік?',
     'І що змінилось за цей час?',
-    'Якщо нічого не зміниться — де ти будеш через ще один рік?\nУ тому самому місці. З тим самим рішенням яке так і не стало дією.',
-    'На практиці ми дивимось не на рішення. А на те що заважає його\nприйняти до кінця.',
+    'Якщо нічого не зміниться — де ти будеш через ще один рік? У тому самому місці. З тим самим рішенням яке так і не стало дією.',
+    'На практиці ми дивимось не на рішення. А на те що заважає його прийняти до кінця.',
   ]),
   action: buildFollowup([
     '{firstName}.',
     'Скільки часу ти вже робиш багато — але воно нікуди не веде?',
     'Місяць? Пів року? Рік?',
     'І що змінилось за цей час?',
-    'Якщо нічого не зміниться — де ти будеш через ще один рік?\nТам само. Тільки ще більш втомлена від дій які нічого не дають.',
-    'На практиці ми дивимось не на дії. А на те чому вони не ведуть до\nрезультату.',
+    'Якщо нічого не зміниться — де ти будеш через ще один рік? Там само. Тільки ще більш втомлена від дій які нічого не дають.',
+    'На практиці ми дивимось не на дії. А на те чому вони не ведуть до результату.',
   ]),
 }
 
@@ -311,17 +324,17 @@ const DOJIM_72H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
   ]),
   goal: buildFollowup([
     '{firstName}.',
-    'Наталія прийшла з відчуттям що давно хоче щось змінити — але не\nможе пояснити навіщо і куди.',
-    'На практиці побачила що насправді хоче — і дозволила собі це\nвизнати.',
+    'Наталія прийшла з відчуттям що давно хоче щось змінити — але не може пояснити навіщо і куди.',
+    'На практиці побачила що насправді хоче — і дозволила собі це визнати.',
     'Наступного дня написала рієлтору і почала шукати будинки.',
-    'Каже: «Я так включилася — побачила скільки можливостей втрачаю\nпросто через якісь свої блоки і думки в голові.»',
+    'Каже: «Я так включилася — побачила скільки можливостей втрачаю просто через якісь свої блоки і думки в голові.»',
     DOJIM_72H_ZOOM_CASES_TEXT,
   ]),
   choice: buildFollowup([
     '{firstName}.',
     'Валентина довго не могла обрати — залишити роботу чи ні.',
-    'Казала: «Боюсь втратити ілюзорну стабільну роботу. Страшно вийти\nза межі звичного. Страшно ризикнути.»',
-    'На практиці побачила що тримається не за роботу — а за страх що\nскажуть інші.',
+    'Казала: «Боюсь втратити ілюзорну стабільну роботу. Страшно вийти за межі звичного. Страшно ризикнути.»',
+    'На практиці побачила що тримається не за роботу — а за страх що скажуть інші.',
     'Як тільки побачила це — вибір стався сам.',
     'Каже: «Початок — з чесності з собою.»',
     DOJIM_72H_ZOOM_CASES_TEXT,
@@ -330,8 +343,8 @@ const DOJIM_72H_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
     '{firstName}.',
     'Єлизавета знала що треба змінити роботу — вже рік.',
     'Казала собі: «Я все розумію але не роблю. Що зі мною не так?»',
-    'На практиці побачила що рішення вже прийняте — але кожного разу\nтихенько замінялось на «почекати ще трошки.»',
-    'Після практики вперше зробила конкретний крок. Не тому що стало\nлегше. А тому що побачила що саме її тримало.',
+    'На практиці побачила що рішення вже прийняте — але кожного разу тихенько замінялось на «почекати ще трошки.»',
+    'Після практики вперше зробила конкретний крок. Не тому що стало легше. А тому що побачила що саме її тримало.',
     DOJIM_72H_ZOOM_CASES_TEXT,
   ]),
   action: buildFollowup([
@@ -356,7 +369,7 @@ const DOJIM_5D_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
     })
     return {
       title: FOCUS_FOLLOWUP_TITLE,
-      body: `${text}\n\n${AB_TEST_FOCUS_PRICE_SUMMARY}`,
+      body: `${text}  ${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: mergeTextBlocks([telegramBlock.text(text), ...buildFocusFooterBlocks()]),
     }
@@ -370,7 +383,7 @@ const DOJIM_5D_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
     })
     return {
       title: FOCUS_FOLLOWUP_TITLE,
-      body: `${text}\n\n${AB_TEST_FOCUS_PRICE_SUMMARY}`,
+      body: `${text}  ${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: mergeTextBlocks([telegramBlock.text(text), ...buildFocusFooterBlocks()]),
     }
@@ -384,7 +397,7 @@ const DOJIM_5D_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
     })
     return {
       title: FOCUS_FOLLOWUP_TITLE,
-      body: `${text}\n\n${AB_TEST_FOCUS_PRICE_SUMMARY}`,
+      body: `${text}  ${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: mergeTextBlocks([telegramBlock.text(text), ...buildFocusFooterBlocks()]),
     }
@@ -398,21 +411,21 @@ const DOJIM_5D_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
     })
     return {
       title: FOCUS_FOLLOWUP_TITLE,
-      body: `${text}\n\n${AB_TEST_FOCUS_PRICE_SUMMARY}`,
+      body: `${text}  ${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: mergeTextBlocks([telegramBlock.text(text), ...buildFocusFooterBlocks()]),
     }
   })(),
   action: (() => {
     const text = buildDojim5dText({
-      introText: 'Може ти вже брала нові курси. Читала книги про продуктивність.\nПробувала нові підходи.',
+      introText: 'Може ти вже брала нові курси. Читала книги про продуктивність. Пробувала нові підходи.',
       tamText: 'ти додавала ще більше дій.',
       tutText: 'ми знаходимо, де саме все розсипається — і замість списку нових дій ти виходиш з одним кроком. Але точним. Тим, що нарешті веде до результату.',
       closingText: 'Тому багато учасниць після першої практики вперше відчувають, що бачать результат, а не просто зайняті.',
     })
     return {
       title: FOCUS_FOLLOWUP_TITLE,
-      body: `${text}\n\n${AB_TEST_FOCUS_PRICE_SUMMARY}`,
+      body: `${text}  ${AB_TEST_FOCUS_PRICE_SUMMARY}`,
       cta: CTA_JOIN_FOCUS,
       blocks: mergeTextBlocks([telegramBlock.text(text), ...buildFocusFooterBlocks()]),
     }
@@ -421,8 +434,8 @@ const DOJIM_5D_BY_SEGMENT: Record<AbTestResultKey, FollowupCopy> = {
 
 // ─── DOJIM 7D ────────────────────────────────────────────────────────────────
 
-const DOJIM_7D_STANDARD_INTRO = `${DOJIM_7D_OPENING_TEXT}\n\n${DOJIM_7D_HONESTY_TEXT}\n\n${DOJIM_7D_REVIEW_INTRO_TEXT}`
-const DOJIM_7D_GOAL_INTRO = `${DOJIM_7D_OPENING_TEXT}\n\n${DOJIM_7D_GOAL_HONESTY_TEXT}\n\n${DOJIM_7D_GOAL_REVIEW_INTRO_TEXT}`
+const DOJIM_7D_STANDARD_INTRO = `${DOJIM_7D_OPENING_TEXT}  ${DOJIM_7D_HONESTY_TEXT}  ${DOJIM_7D_REVIEW_INTRO_TEXT}`
+const DOJIM_7D_GOAL_INTRO = `${DOJIM_7D_OPENING_TEXT}  ${DOJIM_7D_GOAL_HONESTY_TEXT}  ${DOJIM_7D_GOAL_REVIEW_INTRO_TEXT}`
 
 const AB_TEST_DOJIM_7D_REVIEW_QUOTE_GOAL =
   '"Моя ціль-бачення сформувалася вчора. Я так включилася — одразу почала шукати будинки, навіть написала рієлтору."'
@@ -472,7 +485,7 @@ export const AB_TEST_FOLLOWUPS: Record<AbTestResultKey, BranchFollowupCopy> = {
 const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = {
   DOJIM_0_IMMEDIATE: {
     title: FOCUS_FOLLOWUP_TITLE,
-    body: 'Твій результат уже готовий.\n\nВідкрий його і переходь до наступного кроку у ФОКУС.',
+    body: 'Твій результат уже готовий.  Відкрий його і переходь до наступного кроку у ФОКУС.',
     cta: CTA_JOIN_FOCUS,
   },
   ...PAYMENT_REMINDER_FOLLOWUP_COPY,
@@ -604,6 +617,9 @@ export const AB_TEST_LIFECYCLE_REMINDERS: Record<LifecycleReminderKey, FollowupC
     body: 'Минуло 3 дні. Якщо готова рухатись далі з підтримкою, відкрий ФОКУС у зручний момент.',
     cta: AB_TEST_FOCUS_PAYMENT_CTA_1M,
   },
+  SUBSCRIPTION_EXPIRING_7D: buildSubscriptionReminder(7, 'TODO', 'TODO'),
+  SUBSCRIPTION_EXPIRING_3D: buildSubscriptionReminder(3, 'TODO', 'TODO'),
+  SUBSCRIPTION_EXPIRING_1D: buildSubscriptionReminder(1, 'TODO', 'TODO'),
   Z1_ZOOM_MON_1800: {
     title: 'Zoom сьогодні о 19:00',
     body: 'За годину Zoom-практика. Підготуй одну ситуацію, яку хочеш розібрати.',

@@ -1,7 +1,12 @@
 import type { ContentPlanMode, ContentPlanScope } from '../../modules/coach-content/contentPlanner.service.js'
 
+const COACH_CONTENT_ACCESS_DENIED = 'Цей модуль доступний тільки для коуча.'
+const COACH_CONTENT_NOTE_PROMPT = 'Надішли наступним повідомленням текст нотатки.'
+const COACH_CONTENT_NOTE_SAVED = '✅ Нотатку збережено.'
+const COACH_CONTENT_NOTE_EMPTY = 'Нотатка порожня. Спробуй ще раз.'
+
 export const coachContent = {
-  accessDenied: 'Цей модуль доступний тільки для коуча.',
+  accessDenied: COACH_CONTENT_ACCESS_DENIED,
   planner: {
     title: 'Планер контенту',
     intro: 'Я зберу останні Zoom-транскрипції та нотатки, а потім згенерую чернетку.',
@@ -17,9 +22,9 @@ export const coachContent = {
     notesTitle: 'Нотатки:',
     saved: '✅ План збережено.',
     noData: 'Поки немає достатньо контексту, але я все одно можу зібрати чернетку.',
-    noteSaved: '✅ Нотатку збережено для наступного планера.',
-    noteWaiting: 'Надішли наступним повідомленням текст нотатки.',
-    noteEmpty: 'Нотатка порожня. Спробуй ще раз.',
+    noteSaved: `${COACH_CONTENT_NOTE_SAVED} для наступного планера.`,
+    noteWaiting: COACH_CONTENT_NOTE_PROMPT,
+    noteEmpty: COACH_CONTENT_NOTE_EMPTY,
     zoomListTitle: '📅 Zoom на цей тиждень',
     zoomListEmpty: 'На цей тиждень ще немає запланованих Zoom-сесій.',
     zoomListCaption: 'Ось поточний розклад.',
@@ -43,8 +48,8 @@ export const coachContent = {
   },
   note: {
     title: 'Нотатка',
-    prompt: 'Надішли наступним повідомленням текст нотатки.',
-    saved: '✅ Нотатку збережено.',
+    prompt: COACH_CONTENT_NOTE_PROMPT,
+    saved: COACH_CONTENT_NOTE_SAVED,
   },
   mode: {
     WEEKLY_PLAN: 'Планер тижня',

@@ -54,7 +54,6 @@ export const ROUTES = {
   WELCOME_TEST: '/welcome-test',
   PRODUCT_INFO_BASE: '/products',
   RESET_PASSWORD: '/reset-password',
-  ZOOM_CALENDAR: '/zoom-calendar',
   APP: ROUTE_NAMESPACES.APP,
   MINIAPP: ROUTE_NAMESPACES.MINIAPP,
   ADMIN: ROUTE_NAMESPACES.ADMIN,

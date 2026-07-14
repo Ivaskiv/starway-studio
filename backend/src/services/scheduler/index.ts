@@ -113,6 +113,12 @@ function endOfDay(date: Date): Date {
   return normalized
 }
 
+function startOfDay(date: Date): Date {
+  const normalized = new Date(date)
+  normalized.setHours(0, 0, 0, 0)
+  return normalized
+}
+
 function addDays(date: Date, days: number): Date {
   const normalized = new Date(date)
   normalized.setDate(normalized.getDate() + days)
@@ -312,6 +318,83 @@ export async function scheduleZoomReminders(telegramBot: Telegraf, reminderKey: 
   })
 }
 
+export async function scheduleSubscriptionExpiryReminders(telegramBot: Telegraf): Promise<void> {
+  const reminderWindows: Array<{ reminderKey: LifecycleReminderKey; daysFromNow: 7 | 3 | 1 }> = [
+    { reminderKey: 'SUBSCRIPTION_EXPIRING_7D', daysFromNow: 7 },
+    { reminderKey: 'SUBSCRIPTION_EXPIRING_3D', daysFromNow: 3 },
+    { reminderKey: 'SUBSCRIPTION_EXPIRING_1D', daysFromNow: 1 },
+  ]
+  const today = startOfDay(new Date())
+
+  for (const window of reminderWindows) {
+    const windowStart = startOfDay(addDays(today, window.daysFromNow))
+    const windowEnd = endOfDay(addDays(today, window.daysFromNow))
+    const subscriptions = await prisma.productSubscription.findMany({
+      where: {
+        status: 'active',
+        expiresAt: {
+          gte: windowStart,
+          lte: windowEnd,
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            telegramChatId: true,
+            expertId: true,
+          },
+        },
+      },
+      take: 500,
+    })
+
+    for (const subscription of subscriptions) {
+      const user = subscription.user
+      if (!user?.telegramChatId) continue
+
+      const sentRecently = await wasReminderSentRecently(user.id, window.reminderKey)
+      if (sentRecently) continue
+
+      const copy = AB_TEST_LIFECYCLE_REMINDERS[window.reminderKey]
+      try {
+        await telegramBot.telegram.sendMessage(user.telegramChatId, `${copy.title}\n\n${copy.body}`, {
+          reply_markup: {
+            inline_keyboard: [[{ text: copy.cta ?? 'Відкрити', callback_data: 'open_focus_payment' }]],
+          },
+        })
+        await prisma.notification.create({
+          data: {
+            expertId: user.expertId,
+            userId: user.id,
+            channel: NotificationChannel.TELEGRAM,
+            type: NotificationType.AI_REMINDER,
+            templateKey: window.reminderKey,
+            title: copy.title,
+            body: copy.body,
+            status: NotificationStatus.SENT,
+            sentAt: new Date(),
+          },
+        })
+      } catch (error) {
+        await prisma.notification.create({
+          data: {
+            expertId: user.expertId,
+            userId: user.id,
+            channel: NotificationChannel.TELEGRAM,
+            type: NotificationType.AI_REMINDER,
+            templateKey: window.reminderKey,
+            title: copy.title,
+            body: copy.body,
+            status: NotificationStatus.FAILED,
+            failureReason: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
+    }
+  }
+}
+
 export function startScheduler(options?: { coachBot?: Telegraf | null }) {
   if (SCHEDULERS_DISABLED) {
     console.log('⏸️ [runtime] scheduler disabled (DISABLE_SCHEDULERS=true)')
@@ -355,6 +438,7 @@ export function startScheduler(options?: { coachBot?: Telegraf | null }) {
   safeSchedule('markMissedDaysCron', '5 0 * * *', () => { runScheduled('markMissedDaysCron', markMissedDaysCron) }, timezone)
   safeSchedule('subscriptionExpiringCron', '0 * * * *', () => { runScheduled('subscriptionExpiringCron', subscriptionExpiringCron) }, timezone)
   safeSchedule('subscriptionExpiredCron', '5 * * * *', () => { runScheduled('subscriptionExpiredCron', subscriptionExpiredCron) }, timezone)
+  safeSchedule('subscriptionExpiryCron', '0 10 * * *', () => { runScheduled('subscriptionExpiryCron', async () => { await scheduleSubscriptionExpiryReminders(bot) }) }, timezone)
   safeSchedule('mentorReadinessCheckCron', '0 11 * * 1', () => { runScheduled('mentorReadinessCheckCron', mentorReadinessCheckCron) }, timezone)
   safeSchedule('personalProgramCheckCron', '0 11 1 * *', () => { runScheduled('personalProgramCheckCron', personalProgramCheckCron) }, timezone)
   safeSchedule('winback3dCron', '0 9 * * *', () => { runScheduled('winback3dCron', async () => { await scheduleWinbackNotification(3, 'WINBACK_3D') }) }, timezone)

@@ -1,7 +1,36 @@
+const COACH_RUNTIME_ERROR_MESSAGE = '❌ Сталася помилка. Спробуй ще раз.'
+const COACH_ACCESS_DENIED_MESSAGE = [
+  'Цей бот для коуча Starway Studio.',
+  'Якщо ти коуч — відкрий його в особистому чаті та звернись до адміністратора.',
+].join('\n')
+
 export const coachBotContent = {
   start: {
     title: 'Coach OS',
     subtitle: 'Єдиний потік коуча: новий Zoom, бібліотека, аналітика, контент і системні дії.',
+  },
+  access: {
+    denied: COACH_ACCESS_DENIED_MESSAGE,
+  },
+  runtime: {
+    error: COACH_RUNTIME_ERROR_MESSAGE,
+  },
+  paymentAdmin: {
+    invalidToken: 'Некоректний token',
+    checkoutNotFound: 'Checkout не знайдено',
+    accessGranted: 'Доступ відкрито',
+    denied: 'Відхилено',
+    error: 'Помилка',
+    manualAccessGranted: '✅ Доступ до ФОКУС відкрито вручну.',
+    manualAccessDenied: '❌ Ручне надання доступу відхилено.',
+    manualAccessFailed: '❌ Не вдалося відкрити доступ.',
+    reviewPrompt: 'Перевір WayForPay кабінет і натисни:',
+    paymentExists: '✅ Оплата є — відкрити ФОКУС',
+    paymentMissing: '❌ Оплати немає',
+    paymentAttentionTitle: '⚠️ <b>Оплата потребує уваги</b>',
+    paymentAttentionPrompt: 'Натисни кнопку щоб відкрити доступ вручну:',
+    paymentAttentionOpen: '✅ Відкрити доступ до ФОКУС',
+    paymentAttentionDeny: '❌ Відхилити',
   },
   menu: {
     newZoom: '🎙 Новий Zoom',
