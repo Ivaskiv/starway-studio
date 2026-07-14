@@ -103,7 +103,13 @@ async function resolveBodySection(
       const summarySection = await resolveProductSummarySection(user.id, user.lifecycleState)
       if (summarySection) return summarySection
       const payload = focusPaidMessage()
-      return { text: payload.text, buttons: payload.reply_markup.inline_keyboard }
+      const zoom = zoomSection()
+      return {
+        text: `${payload.text}
+
+${zoom.text}`,
+        buttons: [...zoom.buttons, ...payload.reply_markup.inline_keyboard],
+      }
     }
     case 'ZOOM_MEMBER': {
       const summarySection = await resolveProductSummarySection(user.id, user.lifecycleState)

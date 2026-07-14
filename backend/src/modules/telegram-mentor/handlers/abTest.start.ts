@@ -99,7 +99,6 @@ export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Доступ до ФОКУС активний. Обери наступну дію в меню.',
     buttons: [
-      [{ text: 'Календар Zoom-практик', callback_data: 'focus:calendar' }],
       [{ text: 'ABSystem AI', callback_data: 'focus:ai' }],
     ],
   })
