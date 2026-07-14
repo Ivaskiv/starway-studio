@@ -27,6 +27,7 @@ const MINI_APP_ENTRY_INTENT = {
 type TelegramWindow = Window & {
   Telegram?: {
     WebApp?: {
+      ready: () => void
       initData?: string
       initDataUnsafe?: {
         user?: {
@@ -39,6 +40,17 @@ type TelegramWindow = Window & {
 
 function getTelegramWindow(): TelegramWindow {
   return window as TelegramWindow
+}
+
+function prepareTelegramWebApp() {
+  const webApp = getTelegramWindow().Telegram?.WebApp
+
+  if (!webApp) {
+    return null
+  }
+
+  webApp.ready()
+  return webApp
 }
 
 function resolveMiniAppEntryIntent(search: string): string | null {
@@ -345,25 +357,37 @@ export function MiniAppZoomRoute() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const authAttemptedRef = useRef(false)
-  const isTelegramRuntime = isTelegramMiniApp('/zoom')
+  const isTelegramRuntime = isTelegramMiniApp(window.location.pathname)
+  const [telegramInitData, setTelegramInitData] = useState('')
+  const [isTelegramWebAppReady, setIsTelegramWebAppReady] = useState(false)
 
   useEffect(() => {
-    const telegramUser = getTelegramWindow().Telegram?.WebApp?.initDataUnsafe?.user
+    const telegramWebApp = prepareTelegramWebApp()
+    const telegramUser = telegramWebApp?.initDataUnsafe?.user
     const telegramFirstName = telegramUser?.first_name?.trim()
+    const nextInitData = telegramWebApp?.initData?.trim() ?? ''
 
     if (telegramFirstName) {
       setFirstName(telegramFirstName)
     }
+
+    setTelegramInitData(nextInitData)
+    setIsTelegramWebAppReady(true)
   }, [])
 
   useEffect(() => {
+    if (!isTelegramWebAppReady) {
+      return
+    }
+
     const telegramWebApp = getTelegramWindow().Telegram?.WebApp
     const hasWebApp = Boolean(telegramWebApp)
-    const initData = telegramWebApp?.initData?.trim() ?? ''
+    const initData = telegramInitData
 
     console.log('[MiniAppZoomRoute] Debug:', {
       isTelegramRuntime,
       hasWebApp,
+      isTelegramWebAppReady,
       initDataLength: initData.length,
       initDataExists: Boolean(initData),
       user: user?.id ?? null,
@@ -433,7 +457,7 @@ export function MiniAppZoomRoute() {
         console.error('[MiniAppZoomRoute] telegram auth failed', authError)
         setError('Не вдалося авторизуватись через Telegram. Спробуй ще раз.')
       })
-  }, [dispatch, isTelegramRuntime, telegramMiniAppAuth, user])
+  }, [dispatch, isTelegramRuntime, isTelegramWebAppReady, telegramInitData, telegramMiniAppAuth, user])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -560,9 +584,34 @@ function TabBar({
 export function MiniAppZoomCalendar() {
   const search = typeof window === 'undefined' ? '' : window.location.search
   const intent = resolveMiniAppEntryIntent(search)
-  const hasTelegramInitData = Boolean(getTelegramWindow().Telegram?.WebApp?.initData?.trim())
   const isBookingIntent = intent === MINI_APP_ENTRY_INTENT.BOOKING
   const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>(isBookingIntent ? 'calendar' : 'home')
+  const [hasTelegramInitData, setHasTelegramInitData] = useState(false)
+  const [isTelegramBootstrapReady, setIsTelegramBootstrapReady] = useState(!isBookingIntent)
+
+  useEffect(() => {
+    if (!isBookingIntent) {
+      return
+    }
+
+    const telegramWebApp = prepareTelegramWebApp()
+    const initData = telegramWebApp?.initData?.trim() ?? ''
+
+    setHasTelegramInitData(Boolean(initData))
+    setIsTelegramBootstrapReady(true)
+  }, [isBookingIntent])
+
+  if (isBookingIntent && !isTelegramBootstrapReady) {
+    return (
+      <div className="flex h-screen flex-col bg-[#0F1419]">
+        <div className="flex-1 overflow-y-auto pb-24">
+          <MiniAppZoomMessage>Синхронізуємо вхід у Zoom-календар...</MiniAppZoomMessage>
+        </div>
+
+        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      </div>
+    )
+  }
 
   if (isBookingIntent && !hasTelegramInitData) {
     return (
