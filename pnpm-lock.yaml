@@ -41,6 +41,9 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+      vite:
+        specifier: ^5.4.21
+        version: 5.4.21(@types/node@25.9.1)(sass-embedded@1.100.0)(sass@1.100.0)
       vitest:
         specifier: ^4.1.7
         version: 4.1.8(@types/node@25.9.1)(vite@5.4.21(@types/node@25.9.1)(sass-embedded@1.100.0)(sass@1.100.0))

@@ -47,7 +47,7 @@
     "tsx": "^4.22.3",
     "telegraf": "^4.16.3",
     "typescript": "^6.0.3",
-    "vite": "^6.4.1",
+    "vite": "^5.4.21",
     "vitest": "^4.1.7"
   },
   "packageManager": "pnpm@11.3.0"
