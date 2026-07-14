@@ -381,6 +381,7 @@ export function MiniAppZoomRoute() {
     }
 
     const telegramWebApp = getTelegramWindow().Telegram?.WebApp
+    telegramWebApp?.ready?.()
     const hasWebApp = Boolean(telegramWebApp)
     const initData = telegramInitData
 
