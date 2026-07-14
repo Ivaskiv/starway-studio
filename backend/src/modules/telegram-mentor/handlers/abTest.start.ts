@@ -8,6 +8,10 @@ import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { buildAbsystemAiUpgradeCheckoutUrl } from '@/modules/subscriptions/payments/business.checkout.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
+const MINI_APP_ENTRY_INTENT = {
+  BOOKING: 'booking',
+} as const
+
 export type StartMessagePayload = {
   text: string
   buttons: Array<Array<
@@ -29,7 +33,7 @@ function withKeyboard(payload: StartMessagePayload) {
 function resolveZoomBookingWebAppUrl(): string {
   const configured = String(process.env.WEBAPP_URL ?? '').trim()
   const base = configured || resolveTelegramWebappBaseUrl()
-  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar`
+  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar?intent=${MINI_APP_ENTRY_INTENT.BOOKING}`
 }
 
 export function welcomeMessage(): ReturnType<typeof withKeyboard> {

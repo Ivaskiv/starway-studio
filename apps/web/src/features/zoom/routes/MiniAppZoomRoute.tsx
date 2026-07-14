@@ -1,6 +1,6 @@
 import { useAppSelector } from '@/app/hooks'
 import { getStoredUser } from '@/features/auth/services/token'
-import { selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
+import { selectCurrentUser, selectUserRole, setLoading } from '@/features/auth/services/auth.slice'
 import {
   useTelegramMiniAppAuthMutation,
   useUpdateUserSettingsMutation,
@@ -16,8 +16,13 @@ import { useGetAudioListQuery } from '@/features/zoom/services/audio.api'
 import { useGetWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useDispatch } from 'react-redux'
 
 type MiniAppZoomTabId = 'home' | 'calendar' | 'battle' | 'progress' | 'profile'
+
+const MINI_APP_ENTRY_INTENT = {
+  BOOKING: 'booking',
+} as const
 
 type TelegramWindow = Window & {
   Telegram?: {
@@ -34,6 +39,11 @@ type TelegramWindow = Window & {
 
 function getTelegramWindow(): TelegramWindow {
   return window as TelegramWindow
+}
+
+function resolveMiniAppEntryIntent(search: string): string | null {
+  const intent = new URLSearchParams(search).get('intent')?.trim()
+  return intent || null
 }
 
 function MiniAppZoomMessage({
@@ -326,6 +336,7 @@ export function ZoomPageWrapper() {
 }
 
 export function MiniAppZoomRoute() {
+  const dispatch = useDispatch()
   const user = useAppSelector(selectCurrentUser)
   const [telegramMiniAppAuth, { isLoading: isAuthLoading }] = useTelegramMiniAppAuthMutation()
   const [updateUserSettings, { isLoading: isSaving }] = useUpdateUserSettingsMutation()
@@ -389,6 +400,7 @@ export function MiniAppZoomRoute() {
 
       if (fallbackEmail) {
         console.log('[MiniAppZoomRoute] Using fallback email:', fallbackEmail)
+        dispatch(setLoading())
         void telegramMiniAppAuth({
           initData: '',
           fallbackEmail,
@@ -411,6 +423,7 @@ export function MiniAppZoomRoute() {
       return
     }
 
+    dispatch(setLoading())
     void telegramMiniAppAuth({ initData })
       .unwrap()
       .then((result) => {
@@ -420,7 +433,7 @@ export function MiniAppZoomRoute() {
         console.error('[MiniAppZoomRoute] telegram auth failed', authError)
         setError('Не вдалося авторизуватись через Telegram. Спробуй ще раз.')
       })
-  }, [isTelegramRuntime, telegramMiniAppAuth, user])
+  }, [dispatch, isTelegramRuntime, telegramMiniAppAuth, user])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -545,7 +558,23 @@ function TabBar({
 }
 
 export function MiniAppZoomCalendar() {
-  const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>('home')
+  const search = typeof window === 'undefined' ? '' : window.location.search
+  const intent = resolveMiniAppEntryIntent(search)
+  const hasTelegramInitData = Boolean(getTelegramWindow().Telegram?.WebApp?.initData?.trim())
+  const isBookingIntent = intent === MINI_APP_ENTRY_INTENT.BOOKING
+  const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>(isBookingIntent ? 'calendar' : 'home')
+
+  if (isBookingIntent && !hasTelegramInitData) {
+    return (
+      <div className="flex h-screen flex-col bg-[#0F1419]">
+        <div className="flex-1 overflow-y-auto pb-24">
+          <MiniAppZoomMessage>Відкрийте Mini App через Telegram.</MiniAppZoomMessage>
+        </div>
+
+        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen flex-col bg-[#0F1419]">
