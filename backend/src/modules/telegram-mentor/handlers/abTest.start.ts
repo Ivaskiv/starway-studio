@@ -5,9 +5,8 @@ import {
   AB_TEST_OPEN_PLATFORM_BUTTON_TEXT,
 } from '@/products/ab-system/content/abTest.shared.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
-import { buildAbsystemAiUpgradeCheckoutUrl } from '@/modules/subscriptions/payments/business.checkout.js'
+import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutUrl } from '@/modules/subscriptions/payments/business.checkout.js'
 import { prisma } from '@/db/client.js'
-import { getPaymentUrl } from '@/lib/payments/registry.js'
 import { getUpcomingZoom } from '@/modules/zoom/service.js'
 import { getAbTestResultDefinition, type AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
@@ -226,8 +225,8 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
       ? '🔄 Продовжити 3 місяці — 1990 грн'
       : '💳 Активувати 3 місяці — 1990 грн'
 
-    buttons.push([{ text: monthlyLabel, url: getPaymentUrl('focus_monthly') }])
-    buttons.push([{ text: quarterlyLabel, url: getPaymentUrl('focus_quarterly') }])
+    buttons.push([{ text: monthlyLabel, url: buildEcosystemPaymentCheckoutUrl('focus', '1month', userId) }])
+    buttons.push([{ text: quarterlyLabel, url: buildEcosystemPaymentCheckoutUrl('focus', '3month', userId) }])
   }
 
   buttons.push([{ text: '🎯 Переглянути результат', callback_data: 'ab_test:show_result' }])
