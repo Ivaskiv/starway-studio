@@ -600,11 +600,7 @@ export async function handleFocusPaymentAction(
       const testSession = await buildEcosystemPaymentCheckoutSession(
         'focus',
         '1month',
-        resolvedUserId,
-        {
-          amountOverride: 1,
-          orderRefTag: 'test1uah',
-        }
+        resolvedUserId
       )
       testButtonRow = [
         { text: '🧪 Тест 1 грн', url: testSession.checkoutUrl },

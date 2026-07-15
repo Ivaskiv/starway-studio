@@ -552,37 +552,35 @@ export async function wayForPayCallback(req: Request, res: Response) {
             await markCheckoutSessionCompleted(
               data.order_reference.trim(),
               tx
-            ).catch(() => undefined)
+            ).catch(async (err: unknown) => {
+              const errorMessage =
+                err instanceof Error ? err.message : String(err)
+              console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+                operation: 'mark_checkout_session_completed',
+                userId,
+                payRef,
+                orderReference: data.order_reference,
+                error: errorMessage,
+              })
+              await sendOpsTelegramMessage(
+                `[PAYMENT_LIFECYCLE] markCheckoutSessionCompleted failed\nuserId: ${userId}\npayRef: ${payRef}\norderReference: ${data.order_reference}\nerror: ${errorMessage}`
+              ).catch((opsErr: unknown) => {
+                console.error('[PAYMENT_LIFECYCLE] ops_alert_failed', {
+                  operation: 'mark_checkout_session_completed',
+                  userId,
+                  payRef,
+                  orderReference: data.order_reference,
+                  error:
+                    opsErr instanceof Error ? opsErr.message : String(opsErr),
+                })
+              })
+            })
           }
 
           if (
             webhookResult.scope === 'ecosystem' &&
             webhookResult.productId === 'focus'
           ) {
-            await tx.productSubscription.updateMany({
-              where: {
-                userId,
-                product: {
-                  is: {
-                    code: {
-                      in: ['focus', 'FOCUS', 'stankey', 'STANKEY'],
-                    },
-                  },
-                },
-              },
-              data: {
-                status: 'active',
-                paidAt: new Date(),
-              },
-            }).catch(() => undefined)
-
-            await tx.user
-              .update({
-                where: { id: userId },
-                data: { focusPaid: true },
-              })
-              .catch(() => undefined)
-
             if (webhookResult.planId === 'welcome_test') {
               const linkToken = payRef.split('_')[1]
               await tx.user.update({
@@ -609,14 +607,31 @@ export async function wayForPayCallback(req: Request, res: Response) {
               })
             }
 
-            await markAbTestPaymentSuccess(userId, tx).catch((err: unknown) => {
-              console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
-                userId,
-                payRef,
-                stage: 'markAbTestPaymentSuccess',
-                error: err instanceof Error ? err.message : String(err),
-              })
-            })
+            await markAbTestPaymentSuccess(userId, tx).catch(
+              async (err: unknown) => {
+                const errorMessage =
+                  err instanceof Error ? err.message : String(err)
+                console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+                  userId,
+                  payRef,
+                  orderReference: data.order_reference,
+                  stage: 'markAbTestPaymentSuccess',
+                  error: errorMessage,
+                })
+                await sendOpsTelegramMessage(
+                  `[PAYMENT_LIFECYCLE] markAbTestPaymentSuccess failed\nuserId: ${userId}\npayRef: ${payRef}\norderReference: ${data.order_reference}\nerror: ${errorMessage}`
+                ).catch((opsErr: unknown) => {
+                  console.error('[PAYMENT_LIFECYCLE] ops_alert_failed', {
+                    operation: 'mark_ab_test_payment_success',
+                    userId,
+                    payRef,
+                    orderReference: data.order_reference,
+                    error:
+                      opsErr instanceof Error ? opsErr.message : String(opsErr),
+                  })
+                })
+              }
+            )
           }
         },
         { maxWait: 5000, timeout: 10000 }
@@ -912,7 +927,29 @@ export async function wayForPayCallback(req: Request, res: Response) {
               await prisma.productSubscription.update({
                 where: { id: focusSubscription.id },
                 data: { focusWelcomedAt: new Date() },
-              }).catch(() => undefined)
+              }).catch(async (err: unknown) => {
+                const errorMessage =
+                  err instanceof Error ? err.message : String(err)
+                console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+                  operation: 'focus_subscription_mark_welcomed',
+                  userId,
+                  payRef,
+                  orderReference: data.order_reference,
+                  error: errorMessage,
+                })
+                await sendOpsTelegramMessage(
+                  `[PAYMENT_LIFECYCLE] focusWelcomedAt update failed\nuserId: ${userId}\npayRef: ${payRef}\norderReference: ${data.order_reference}\nsubscriptionId: ${focusSubscription.id}\nerror: ${errorMessage}`
+                ).catch((opsErr: unknown) => {
+                  console.error('[PAYMENT_LIFECYCLE] ops_alert_failed', {
+                    operation: 'focus_subscription_mark_welcomed',
+                    userId,
+                    payRef,
+                    orderReference: data.order_reference,
+                    error:
+                      opsErr instanceof Error ? opsErr.message : String(opsErr),
+                  })
+                })
+              })
             }
             console.log('[FOCUS_BLOCK12] sent', {
               userId,

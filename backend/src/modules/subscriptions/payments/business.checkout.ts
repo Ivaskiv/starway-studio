@@ -3,6 +3,31 @@ import { buildPaymentRequest } from './wayforpay.js'
 import { buildShortWayForPayCheckoutUrl, buildShortWayForPayCheckoutUrlSync } from './wayforpay.checkout.js'
 import { resolveEcosystemPaymentPlan } from './business.catalog.js'
 
+function resolveDevelopmentPaymentAmount(
+  productId: EcosystemPaymentProduct,
+  planId: EcosystemPaymentPlanId,
+  originalAmount: number
+) {
+  if (process.env.NODE_ENV !== 'development') {
+    return originalAmount
+  }
+
+  const shouldOverride =
+    (productId === 'focus' && (planId === '1month' || planId === '3month')) ||
+    (productId === 'absystem_ai' &&
+      (planId === '1month' || planId === '6month' || planId === '1year'))
+
+  if (!shouldOverride) {
+    return originalAmount
+  }
+
+  console.log('[DEV PAYMENT MODE]')
+  console.log(`Original amount: ${originalAmount}`)
+  console.log('Sandbox amount: 1 UAH')
+
+  return 1
+}
+
 function getBackendBaseUrl() {
   return (
     process.env.PUBLIC_API_URL?.trim() ||
@@ -45,15 +70,20 @@ export function buildEcosystemPaymentCheckoutUrl(
     throw new Error('invalid_ecosystem_plan')
   }
   const payRef = `${productId}_${planId}_${userId}_${Date.now()}`
+  const checkoutAmount = resolveDevelopmentPaymentAmount(
+    productId,
+    planId,
+    plan.amount
+  )
   const payment = buildPaymentRequest({
     userId,
     productId,
-    amount: plan.amount,
+    amount: checkoutAmount,
     currency: 'UAH',
     payRef,
     product_name: [productId === 'focus' ? 'FOCUS' : 'ABSystem AI'],
     product_count: [1],
-    product_price: [plan.amount],
+    product_price: [checkoutAmount],
   })
   const checkoutUrl = buildShortWayForPayCheckoutUrlSync(getBackendBaseUrl(), payment, {
     product: productId,
@@ -65,11 +95,7 @@ export function buildEcosystemPaymentCheckoutUrl(
 export async function buildEcosystemPaymentCheckoutSession(
   productId: EcosystemPaymentProduct,
   planId: EcosystemPaymentPlanId,
-  userId: string,
-  options?: {
-    amountOverride?: number
-    orderRefTag?: string
-  }
+  userId: string
 ): Promise<EcosystemPaymentCheckoutSession> {
   const plan = resolveEcosystemPaymentPlan(productId, planId)
   if (!plan) {
@@ -89,11 +115,12 @@ export async function buildEcosystemPaymentCheckoutSession(
     throw new Error('WAYFORPAY_CREDENTIALS_MISSING')
   }
 
-  const payRefTag = options?.orderRefTag?.trim() ? `_${options.orderRefTag.trim()}` : ''
-  const payRef = `${productId}_${planId}_${userId}_${Date.now()}${payRefTag}`
-  const checkoutAmount = typeof options?.amountOverride === 'number' && Number.isFinite(options.amountOverride)
-    ? options.amountOverride
-    : plan.amount
+  const payRef = `${productId}_${planId}_${userId}_${Date.now()}`
+  const checkoutAmount = resolveDevelopmentPaymentAmount(
+    productId,
+    planId,
+    plan.amount
+  )
   const payment = buildPaymentRequest({
     userId,
     productId,
