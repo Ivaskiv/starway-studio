@@ -49,7 +49,7 @@ async function resolveProductSummarySection(
   const normalizedButtons = existingButtons as StartMessagePayload['buttons']
 
   if (lifecycleState === 'ZOOM_MEMBER') {
-    const zoom = zoomSection()
+    const zoom = await zoomSection(userId)
     return {
       text: `${text}\n\n${zoom.text}`,
       buttons: [...normalizedButtons, ...zoom.buttons],
@@ -110,7 +110,7 @@ async function resolveBodySection(
       const summarySection = await resolveProductSummarySection(user.id, user.lifecycleState)
       if (summarySection) return summarySection
       const payload = focusPaidMessage()
-      const zoom = zoomSection()
+      const zoom = await zoomSection(user.id)
       return {
         text: `${payload.text}\n\n${zoom.text}`,
         buttons: [...zoom.buttons, ...payload.reply_markup.inline_keyboard],
@@ -119,7 +119,7 @@ async function resolveBodySection(
     case 'ZOOM_MEMBER': {
       const summarySection = await resolveProductSummarySection(user.id, user.lifecycleState)
       if (summarySection) return summarySection
-      const payload = zoomMemberMessage()
+      const payload = await zoomMemberMessage(user.id)
       return { text: payload.text, buttons: payload.reply_markup.inline_keyboard }
     }
     case 'POST_ZOOM_1': {

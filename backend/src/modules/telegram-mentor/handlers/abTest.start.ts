@@ -6,6 +6,10 @@ import {
 } from '@/products/ab-system/content/abTest.shared.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { buildAbsystemAiUpgradeCheckoutUrl } from '@/modules/subscriptions/payments/business.checkout.js'
+import { prisma } from '@/db/client.js'
+import { getPaymentUrl } from '@/lib/payments/registry.js'
+import { getUpcomingZoom } from '@/modules/zoom/service.js'
+import { getAbTestResultDefinition, type AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
@@ -122,20 +126,102 @@ export function magicLinkReadyMessage(link: string): ReturnType<typeof withKeybo
   })
 }
 
-export function zoomSection(): StartMessagePayload {
+function formatDate(value: Date): string {
+  return value.toLocaleDateString('uk-UA')
+}
+
+function formatZoomDate(value: Date): string {
+  return value.toLocaleString('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function resolveDaysUntilExpiry(currentPeriodEnd: Date | null): number | null {
+  if (!currentPeriodEnd) return null
+  return Math.max(0, Math.ceil((currentPeriodEnd.getTime() - Date.now()) / 86400000))
+}
+
+export async function zoomSection(userId: string): Promise<StartMessagePayload> {
+  const [upcomingZoom, attendedPracticesCount, bookedPracticesCount, activeSubscription, user] = await Promise.all([
+    getUpcomingZoom(),
+    prisma.zoomSessionAttendee.count({
+      where: { userId, attended: true },
+    }),
+    prisma.zoomSessionAttendee.count({
+      where: { userId },
+    }),
+    prisma.subscription.findFirst({
+      where: { userId, status: 'ACTIVE' },
+      orderBy: { currentPeriodEnd: 'desc' },
+      select: { currentPeriodEnd: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { testResultType: true },
+    }),
+  ])
+
+  const resultTitle = user?.testResultType
+    ? getAbTestResultDefinition(user.testResultType as AbTestResultKey).title
+    : 'Результат ще не визначено'
+  const nextZoomLine = upcomingZoom?.scheduledAt
+    ? `📅 Наступний Zoom: ${formatZoomDate(upcomingZoom.scheduledAt)}`
+    : '📅 Наступний Zoom: дату оголосимо скоро'
+  const practiceLine = bookedPracticesCount > 0
+    ? `🙌 Zoom-практики: ${attendedPracticesCount} з ${bookedPracticesCount}`
+    : '🙌 Zoom-практики: ще не записувалась'
+  const daysUntilExpiry = resolveDaysUntilExpiry(activeSubscription?.currentPeriodEnd ?? null)
+  const hasActiveSubscription = Boolean(activeSubscription)
+  const shouldShowRenewalButtons = !hasActiveSubscription || (daysUntilExpiry !== null && daysUntilExpiry <= 7)
+
+  const lines = [
+    'Твій Zoom-кабінет',
+    '',
+    `🎯 Результат: ${resultTitle}`,
+    nextZoomLine,
+    practiceLine,
+  ]
+
+  if (!hasActiveSubscription) {
+    lines.push('💳 Підписка неактивна')
+  } else if (activeSubscription?.currentPeriodEnd) {
+    lines.push(`💳 Підписка активна до ${formatDate(activeSubscription.currentPeriodEnd)}`)
+    if (daysUntilExpiry !== null && daysUntilExpiry <= 7) {
+      lines.push(`Підписка закінчується через ${daysUntilExpiry} днів`)
+    }
+  } else {
+    lines.push('💳 Підписка активна')
+  }
+
+  const buttons: StartMessagePayload['buttons'] = [
+    [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
+    [{ text: '🎯 Переглянути результат', callback_data: 'ab_test:show_result' }],
+    [{ text: '📚 Меню ФОКУС', callback_data: 'focus:menu' }],
+  ]
+
+  if (shouldShowRenewalButtons) {
+    const monthlyLabel = hasActiveSubscription
+      ? '🔄 Продовжити 1 місяць — 780 грн'
+      : '💳 Активувати 1 місяць — 780 грн'
+    const quarterlyLabel = hasActiveSubscription
+      ? '🔄 Продовжити 3 місяці — 1990 грн'
+      : '💳 Активувати 3 місяці — 1990 грн'
+
+    buttons.push([{ text: monthlyLabel, url: getPaymentUrl('focus_monthly') }])
+    buttons.push([{ text: quarterlyLabel, url: getPaymentUrl('focus_quarterly') }])
+  }
+
   return {
-    text: 'Ти в Zoom-групі. Ось меню та найближча Zoom-зустріч.',
-    buttons: [
-      [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
-      [{ text: 'Наступний Zoom', callback_data: 'focus:next_zoom' }],
-      [{ text: 'Меню ФОКУС', callback_data: 'focus:menu' }],
-      [{ text: '🎯 Мій результат', callback_data: 'ab_test:show_result' }],
-    ],
+    text: lines.join('\n'),
+    buttons,
   }
 }
 
-export function zoomMemberMessage(): ReturnType<typeof withKeyboard> {
-  return withKeyboard(zoomSection())
+export async function zoomMemberMessage(userId: string): Promise<ReturnType<typeof withKeyboard>> {
+  return withKeyboard(await zoomSection(userId))
 }
 
 export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {

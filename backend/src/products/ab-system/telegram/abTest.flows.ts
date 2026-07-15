@@ -254,7 +254,7 @@ export async function resolveFocusShortcutCallback(
     return handleAbTestCallback(ctx, AB_TEST_ACTIONS.FOCUS_INFO)
   }
 
-  if (action === 'focus:calendar' || action === 'focus:next_zoom') {
+  if (action === 'focus:next_zoom') {
     await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
     await handleStatus(ctx)

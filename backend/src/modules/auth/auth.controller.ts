@@ -223,10 +223,9 @@ export async function social(req: Request, res: Response) {
 
 export async function telegram(req: Request, res: Response) {
   try {
-    const { initData, fallbackEmail } = req.body ?? {}
+    const { initData } = req.body ?? {}
     const result = await telegramMiniAppLoginUser(
       String(initData ?? ''),
-      typeof fallbackEmail === 'string' ? fallbackEmail : null,
       resolveRequestId(req),
     )
 

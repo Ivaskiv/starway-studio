@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom'
 
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import {
+  MINI_APP_SESSION_RETRY_TEXT,
+  MINI_APP_TELEGRAM_REQUIRED_TEXT,
+} from '@/features/social/content/miniAppFallback.content'
 import { useGetCalendarSessionsQuery } from '@/features/zoom/zoom.api'
 import type { ZoomCalendarMode, ZoomCalendarSession } from '@/features/zoom/zoom.types'
 
@@ -24,7 +28,11 @@ function resolveRole(role: string | null | undefined): ZoomCalendarMode {
   return role === 'EXPERT' || role === 'ADMIN' || role === 'SUPERADMIN' ? 'coach' : 'user'
 }
 
-export default function HomeTab() {
+type HomeTabProps = {
+  isTelegramRuntime: boolean
+}
+
+export default function HomeTab({ isTelegramRuntime }: HomeTabProps) {
   const navigate = useNavigate()
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth()
   const { subscription } = useSystemState()
@@ -75,7 +83,9 @@ export default function HomeTab() {
     return (
       <div className="mx-auto w-full max-w-3xl px-4 pt-6">
         <div className="rounded-3xl border border-amber-400/20 bg-amber-400/10 p-5 text-sm text-amber-100">
-          Потрібна авторизація через Telegram Mini App.
+          {isTelegramRuntime
+            ? MINI_APP_SESSION_RETRY_TEXT
+            : MINI_APP_TELEGRAM_REQUIRED_TEXT}
         </div>
       </div>
     )

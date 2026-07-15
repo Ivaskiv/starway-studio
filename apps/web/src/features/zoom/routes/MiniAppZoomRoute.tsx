@@ -1,12 +1,10 @@
 import { useAppSelector } from '@/app/hooks'
-import { getStoredUser } from '@/features/auth/services/token'
 import { selectCurrentUser, selectUserRole, setLoading } from '@/features/auth/services/auth.slice'
 import {
   useTelegramMiniAppAuthMutation,
   useUpdateUserSettingsMutation,
 } from '@/features/auth/services/auth.api'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
-import type { User } from '@/features/user/types/user.types'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
 import HomeTab from '@/features/zoom/tabs/HomeTab'
@@ -417,32 +415,6 @@ export function MiniAppZoomRoute() {
     authAttemptedRef.current = true
 
     if (!initData) {
-      const storedUser = getStoredUser<User>()
-      const fallbackEmail =
-        storedUser?.email?.trim().toLowerCase() ||
-        localStorage.getItem('user_email')?.trim().toLowerCase() ||
-        ''
-
-      if (fallbackEmail) {
-        console.log('[MiniAppZoomRoute] Using fallback email:', fallbackEmail)
-        dispatch(setLoading())
-        void telegramMiniAppAuth({
-          initData: '',
-          fallbackEmail,
-        })
-          .unwrap()
-          .then(() => {
-            setError(null)
-            setNeedsOnboarding(false)
-          })
-          .catch((authError) => {
-            console.warn('[MiniAppZoomRoute] Fallback auth failed', authError)
-            setError(null)
-            setNeedsOnboarding(false)
-          })
-        return
-      }
-
       setError(null)
       setNeedsOnboarding(false)
       return
@@ -584,6 +556,7 @@ function TabBar({
 
 export function MiniAppZoomCalendar() {
   const search = typeof window === 'undefined' ? '' : window.location.search
+  const isTelegramRuntime = isTelegramMiniApp(window.location.pathname)
   const intent = resolveMiniAppEntryIntent(search)
   const isBookingIntent = intent === MINI_APP_ENTRY_INTENT.BOOKING
   const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>(isBookingIntent ? 'calendar' : 'home')
@@ -629,7 +602,7 @@ export function MiniAppZoomCalendar() {
   return (
     <div className="flex h-screen flex-col bg-[#0F1419]">
       <div className="flex-1 overflow-y-auto pb-24">
-        {activeTab === 'home' && <HomeTab />}
+        {activeTab === 'home' && <HomeTab isTelegramRuntime={isTelegramRuntime} />}
         {activeTab === 'calendar' && <MiniAppZoomRoute />}
         {activeTab === 'battle' && <BattleTabStub />}
         {activeTab === 'progress' && <ProgressTabStub />}
