@@ -132,6 +132,7 @@ function formatDate(value: Date): string {
 
 function formatZoomDate(value: Date): string {
   return value.toLocaleString('uk-UA', {
+    timeZone: 'Europe/Kyiv',
     day: 'numeric',
     month: 'long',
     hour: '2-digit',
@@ -167,39 +168,54 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
   const resultTitle = user?.testResultType
     ? getAbTestResultDefinition(user.testResultType as AbTestResultKey).title
     : 'Результат ще не визначено'
-  const nextZoomLine = upcomingZoom?.scheduledAt
-    ? `📅 Наступний Zoom: ${formatZoomDate(upcomingZoom.scheduledAt)}`
-    : '📅 Наступний Zoom: дату оголосимо скоро'
-  const practiceLine = bookedPracticesCount > 0
-    ? `🙌 Zoom-практики: ${attendedPracticesCount} з ${bookedPracticesCount}`
-    : '🙌 Zoom-практики: ще не записувалась'
+  const nextZoomValue = upcomingZoom?.scheduledAt
+    ? formatZoomDate(upcomingZoom.scheduledAt)
+    : 'Щопонеділка • 19:00 (Europe/Kyiv)'
+  const practiceValue = `${attendedPracticesCount} із ${bookedPracticesCount}`
   const daysUntilExpiry = resolveDaysUntilExpiry(activeSubscription?.currentPeriodEnd ?? null)
   const hasActiveSubscription = Boolean(activeSubscription)
   const shouldShowRenewalButtons = !hasActiveSubscription || (daysUntilExpiry !== null && daysUntilExpiry <= 7)
 
   const lines = [
-    'Твій Zoom-кабінет',
+    `🎯 Твій результат — ${resultTitle}`,
     '',
-    `🎯 Результат: ${resultTitle}`,
-    nextZoomLine,
-    practiceLine,
+    'Ти зараз у програмі ФОКУС.',
   ]
 
   if (!hasActiveSubscription) {
-    lines.push('💳 Підписка неактивна')
-  } else if (activeSubscription?.currentPeriodEnd) {
-    lines.push(`💳 Підписка активна до ${formatDate(activeSubscription.currentPeriodEnd)}`)
-    if (daysUntilExpiry !== null && daysUntilExpiry <= 7) {
-      lines.push(`Підписка закінчується через ${daysUntilExpiry} днів`)
-    }
-  } else {
-    lines.push('💳 Підписка активна')
+    lines.push('Твій результат вже збережений, а наступний крок — регулярна практика.')
   }
 
+  lines.push(
+    '',
+    '━━━━━━━━━━━━━━',
+    '',
+    '📅 Наступний Zoom',
+    nextZoomValue,
+    '',
+    '📊 Практики',
+    practiceValue,
+    '',
+    '💳 Підписка',
+  )
+
+  if (!hasActiveSubscription) {
+    lines.push('Неактивна')
+  } else if (activeSubscription?.currentPeriodEnd) {
+    lines.push(`Активна до ${formatDate(activeSubscription.currentPeriodEnd)}`)
+    if (daysUntilExpiry !== null && daysUntilExpiry <= 7) {
+      lines.push('', `💳 Підписка закінчується через ${daysUntilExpiry} днів`)
+    }
+  } else {
+    lines.push('Активна')
+  }
+
+  lines.push('', '━━━━━━━━━━━━━━', '')
+
   const buttons: StartMessagePayload['buttons'] = [
-    [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
-    [{ text: '🎯 Переглянути результат', callback_data: 'ab_test:show_result' }],
-    [{ text: '📚 Меню ФОКУС', callback_data: 'focus:menu' }],
+    hasActiveSubscription
+      ? [{ text: '📅 Наступний Zoom', callback_data: 'focus:next_zoom' }]
+      : [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
   ]
 
   if (shouldShowRenewalButtons) {
@@ -213,6 +229,9 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
     buttons.push([{ text: monthlyLabel, url: getPaymentUrl('focus_monthly') }])
     buttons.push([{ text: quarterlyLabel, url: getPaymentUrl('focus_quarterly') }])
   }
+
+  buttons.push([{ text: '🎯 Переглянути результат', callback_data: 'ab_test:show_result' }])
+  buttons.push([{ text: '📚 Меню ФОКУС', callback_data: 'focus:menu' }])
 
   return {
     text: lines.join('\n'),
