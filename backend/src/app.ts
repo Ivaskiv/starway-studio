@@ -284,13 +284,24 @@ export function createApp(): Express {
   // Middleware
   // =====================
   // Webhook endpoints — публічні receivers, CORS не потрібен.
-  // WayForPay надсилає Origin: https://secure.wayforpay.com —
+  // WayForPay browser return may arrive with Origin: null, and webhook calls may
+  // use an external origin that will never be present in allowedOrigins.
   // він ніколи не буде в allowedOrigins, тому cors({ origin: '*' }) тут.
   const webhookCors = cors({ origin: '*' })
   app.use('/api/payments/wayforpay', webhookCors)
   app.use('/api/subscriptions/payments/wayforpay', webhookCors)
 
-  app.use(corsOptions)
+  app.use((req, res, next) => {
+    if (
+      req.path.startsWith('/api/payments/wayforpay') ||
+      req.path.startsWith('/api/subscriptions/payments/wayforpay')
+    ) {
+      next()
+      return
+    }
+
+    corsOptions(req, res, next)
+  })
   app.options('*', corsOptions)
   app.use(securityHeaders)
 
