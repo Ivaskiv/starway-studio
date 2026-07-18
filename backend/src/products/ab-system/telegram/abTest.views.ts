@@ -53,6 +53,7 @@ import {
   resolveBrowserTestUrlOrNull,
 } from './abTest.buttons.js'
 import { scheduleFollowups } from './abTest.scheduler.js'
+import { buildFocusActionButtons } from '@/modules/telegram-mentor/handlers/abTest.start.js'
 import {
   buildAbTestEmailGateMessage,
   getAbTestProfileEmail,
@@ -932,9 +933,21 @@ export async function sendResultSnapshot(
     `💳 ${subscriptionLine}`,
   ].join('\n')
 
-  await ctx.telegram
-    .sendMessage(input.chatId, text, { parse_mode: 'HTML' })
-    .catch(() => undefined)
+  const buttons = await buildFocusActionButtons(input.userId)
+  buttons.push([{ text: '📚 Меню ФОКУС', callback_data: 'focus:menu' }])
+
+  await ctx.telegram.sendMessage(input.chatId, text, {
+    parse_mode: 'HTML',
+    reply_markup: {
+      inline_keyboard: buttons,
+    },
+  }).catch((error) => {
+    console.error('[sendResultSnapshot] failed', {
+      userId: input.userId,
+      resultKey: input.resultKey,
+      error,
+    })
+  })
 }
 
 export async function dispatchAbTestPracticeSequence(
