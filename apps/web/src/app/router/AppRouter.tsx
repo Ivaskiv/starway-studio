@@ -39,6 +39,23 @@ const HOME_ALIASES = ['/home', '/landing', '/welcome'] as const
 const TASK_REDIRECT_PATHS = ['/task', '/tasks', '/planner'] as const
 const MINIAPP_TASK_TARGET = '/miniapp/mentor?section=tasks'
 const MINIAPP_ZOOM_TARGET = '/miniapp/zoom-calendar'
+const MINIAPP_MENTOR_TARGET = '/miniapp/mentor'
+
+function resolveTelegramRuntimeTarget(pathname: string, search: string): string {
+  if (pathname.startsWith('/dashboard/ai-mentor')) {
+    return `${MINIAPP_MENTOR_TARGET}${search}`
+  }
+
+  if (pathname.startsWith('/dashboard/profile') || pathname.startsWith('/dashboard/settings')) {
+    return `/miniapp/profile${search}`
+  }
+
+  if (pathname.startsWith('/dashboard/progress') || pathname.startsWith('/dashboard/journal')) {
+    return `/miniapp/tracker${search}`
+  }
+
+  return MINIAPP_ZOOM_TARGET
+}
 
 function renderAbTestRoutes() {
   return (
@@ -193,7 +210,7 @@ export default function AppRouter() {
     location.pathname === '/content'
 
   if (isTelegramRuntime && !isTelegramProductRoute) {
-    return <Navigate to={MINIAPP_ZOOM_TARGET} replace />
+    return <Navigate to={resolveTelegramRuntimeTarget(location.pathname, location.search)} replace />
   }
 
   if (!user) {

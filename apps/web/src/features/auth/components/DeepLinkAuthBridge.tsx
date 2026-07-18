@@ -16,6 +16,22 @@ const AUTH_CALLBACK_PARAMS = ['token', 'accessToken', 'authToken', 'refreshToken
 const TOKEN_PARAM_SAFE_PATHS = new Set(['/reset-password', '/auth/magic'])
 const PENDING_DEEPLINK_TOKEN_KEY = 'starway_pending_deeplink_token'
 
+function resolveTelegramMiniAppFallback(pathname: string, search: string): string {
+  if (pathname.startsWith('/dashboard/ai-mentor')) {
+    return `/miniapp/mentor${search}`
+  }
+
+  if (pathname.startsWith('/dashboard/profile') || pathname.startsWith('/dashboard/settings')) {
+    return `/miniapp/profile${search}`
+  }
+
+  if (pathname.startsWith('/dashboard/progress') || pathname.startsWith('/dashboard/journal')) {
+    return `/miniapp/tracker${search}`
+  }
+
+  return '/miniapp/zoom-calendar'
+}
+
 function safeAccent(color?: string | null): string {
   if (!color || BAD_COLORS.has(color)) return DEFAULT_ACCENT
   return color
@@ -139,6 +155,15 @@ export default function DeepLinkAuthBridge() {
       .catch(error => {
         console.warn('[DeepLinkAuthBridge] failed to restore deeplink session', error)
         processedTokenRef.current = null
+
+        if (isTelegramMiniApp(location.pathname)) {
+          const nextSearch = new URLSearchParams(location.search)
+          nextSearch.delete('dl')
+          navigate(resolveTelegramMiniAppFallback(
+            location.pathname,
+            nextSearch.toString() ? `?${nextSearch.toString()}` : '',
+          ), { replace: true })
+        }
       })
   }, [dispatch, location.hash, location.pathname, location.search, navigate, restoreDeepLinkSession, status, theme])
 
