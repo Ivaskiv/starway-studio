@@ -762,7 +762,22 @@ export async function wayForPayCallback(req: Request, res: Response) {
             },
           },
           orderBy: { updatedAt: 'desc' },
-          select: { id: true, focusWelcomedAt: true },
+          select: { id: true, focusWelcomedAt: true, expiresAt: true },
+        })
+        const canonicalSubscription = await prisma.subscription.findFirst({
+          where: {
+            userId,
+            status: 'ACTIVE',
+            product: {
+              is: {
+                code: {
+                  in: ['focus', 'FOCUS', 'stankey', 'STANKEY'],
+                },
+              },
+            },
+          },
+          orderBy: { currentPeriodEnd: 'desc' },
+          select: { currentPeriodEnd: true },
         })
         const planLabelMap: Record<string, string> = {
           focus_1month: '1 місяць',
@@ -819,6 +834,13 @@ export async function wayForPayCallback(req: Request, res: Response) {
           paidUser?.telegramChatId ?? paidUser?.telegramLinks[0]?.chatId ?? null
         if (paidChatId && paidUser) {
           const zoomUrl = resolveZoomCalendarUrl()
+          const accessUntilDate =
+            canonicalSubscription?.currentPeriodEnd ??
+            focusSubscription?.expiresAt ??
+            null
+          const accessUntilLine = accessUntilDate
+            ? `Доступ активний до ${accessUntilDate.toLocaleDateString('uk-UA')}`
+            : 'Доступ уже активний'
           const lines = upcoming
             .map((session) => {
               const dt = new Date(session.scheduledAt)
@@ -842,10 +864,15 @@ export async function wayForPayCallback(req: Request, res: Response) {
             await bot.telegram
               .sendMessage(
                 paidChatId,
-                `${greeting}доступ до модуля ФОКУС активовано.\n\n` +
+                `${greeting}оплата пройшла успішно ✅\n\n` +
                   `Тариф: ${planLabel}\n` +
-                  `Статус: активний\n\n` +
-                  'Нижче доступний актуальний календар Zoom-практик.',
+                  `${accessUntilLine}\n\n` +
+                  'Що тобі вже доступно:\n' +
+                  '• календар Zoom-практик\n' +
+                  '• запис на найближчий Zoom\n' +
+                  '• канал ФОКУС\n' +
+                  '• /start відкриває твій екран ФОКУС\n\n' +
+                  'Почни з календаря практик нижче.',
                 {
                   reply_markup: {
                     inline_keyboard: [

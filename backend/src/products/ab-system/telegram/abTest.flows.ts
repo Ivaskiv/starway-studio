@@ -74,6 +74,14 @@ import {
   planAck,
 } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
+import {
+  clearSession,
+  getSession,
+  updateSession,
+} from '../../../modules/telegram-mentor/session.js'
+import {
+  postZoomAbsystemCtaMessage,
+} from '../../../modules/telegram-mentor/handlers/abTest.start.js'
 
 // ============================================================================
 // EMAIL CAPTURE
@@ -84,6 +92,31 @@ export async function handleAbTestEmailCaptureText(
   userId: string,
   text: string
 ): Promise<boolean> {
+  const currentChatId = String(ctx.chat?.id ?? '').trim()
+  if (currentChatId) {
+    const session = await getSession(currentChatId)
+    if (session?.userId === userId && session.data?.postZoomInsightAwaiting === true) {
+      await clearSession(userId, currentChatId)
+
+      await ctx.telegram.sendMessage(
+        currentChatId,
+        [
+          '🌿 Дякую.',
+          '',
+          'Навіть один зафіксований інсайт',
+          'часто стає початком великих змін.',
+        ].join('\n')
+      )
+
+      const payload = postZoomAbsystemCtaMessage(userId)
+      await ctx.telegram.sendMessage(currentChatId, payload.text, {
+        parse_mode: 'HTML',
+        reply_markup: payload.reply_markup,
+      })
+      return true
+    }
+  }
+
   const resolvedUserId = await resolveAbTestEmailTargetUserId(ctx, userId)
   const progress = await loadAbTestProgress(resolvedUserId)
   if (progress.email_stage !== 'pending') {
@@ -264,6 +297,48 @@ export async function resolveFocusShortcutCallback(
     await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
     await sendStateMenu(ctx, userId)
+    return true
+  }
+
+  if (action === 'post_zoom:leave_insight') {
+    const chatId = String(ctx.chat?.id ?? '').trim()
+    await ctx.answerCbQuery().catch(() => null)
+    if (!chatId) {
+      return true
+    }
+
+    await updateSession(
+      userId,
+      chatId,
+      'chat',
+      { postZoomInsightAwaiting: true },
+      0,
+    )
+
+    await ctx.telegram.sendMessage(
+      chatId,
+      [
+        '💭 Напиши одним повідомленням:',
+        '',
+        '1. Який інсайт був найціннішим?',
+        '2. Який один крок зробиш до наступної практики?',
+      ].join('\n')
+    )
+    return true
+  }
+
+  if (action === 'post_zoom:absystem_cta') {
+    await ctx.answerCbQuery().catch(() => null)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
+
+    const payload = postZoomAbsystemCtaMessage(userId)
+    await ctx.telegram.sendMessage(chatId, payload.text, {
+      parse_mode: 'HTML',
+      reply_markup: payload.reply_markup,
+    })
     return true
   }
 
@@ -534,8 +609,8 @@ export async function handleFocusPaymentAction(
   let url3m: string
   try {
     const [session1m, session3m] = await Promise.all([
-      buildEcosystemPaymentCheckoutSession('focus', '1month', resolvedUserId),
-      buildEcosystemPaymentCheckoutSession('focus', '3month', resolvedUserId),
+      buildEcosystemPaymentCheckoutSession('focus', '1month', resolvedUserId, 'telegram'),
+      buildEcosystemPaymentCheckoutSession('focus', '3month', resolvedUserId, 'telegram'),
     ])
     url1m = session1m.checkoutUrl
     url3m = session3m.checkoutUrl
@@ -586,7 +661,8 @@ export async function handleFocusPaymentAction(
       const testSession = await buildEcosystemPaymentCheckoutSession(
         'focus',
         '1month',
-        resolvedUserId
+        resolvedUserId,
+        'telegram'
       )
       testButtonRow = [
         { text: '🧪 Тест 1 грн', url: testSession.checkoutUrl },

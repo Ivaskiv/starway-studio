@@ -3,6 +3,8 @@ import { buildPaymentRequest } from './wayforpay.js'
 import { buildShortWayForPayCheckoutUrl, buildShortWayForPayCheckoutUrlSync } from './wayforpay.checkout.js'
 import { resolveEcosystemPaymentPlan } from './business.catalog.js'
 
+type CheckoutEntrySource = 'web' | 'telegram'
+
 function resolveDevelopmentPaymentAmount(
   productId: EcosystemPaymentProduct,
   planId: EcosystemPaymentPlanId,
@@ -49,8 +51,15 @@ function getFrontendBaseUrl() {
   ).replace(/\/$/, '')
 }
 
-export function buildWayForPayReturnUrl(backendBaseUrl: string, frontendBaseUrl?: string): string {
+export function buildWayForPayReturnUrl(
+  backendBaseUrl: string,
+  frontendBaseUrl?: string,
+  source: CheckoutEntrySource = 'web'
+): string {
   const safeBackend = backendBaseUrl.replace(/\/$/, '')
+  if (source === 'telegram') {
+    return `${safeBackend}/api/subscriptions/payments/wayforpay/return?source=telegram`
+  }
   const target = (frontendBaseUrl ?? '').replace(/\/$/, '')
   if (target) {
     return `${safeBackend}/api/subscriptions/payments/wayforpay/return?target=${encodeURIComponent(
@@ -63,7 +72,8 @@ export function buildWayForPayReturnUrl(backendBaseUrl: string, frontendBaseUrl?
 export function buildEcosystemPaymentCheckoutUrl(
   productId: EcosystemPaymentProduct,
   planId: EcosystemPaymentPlanId,
-  userId: string
+  userId: string,
+  source: CheckoutEntrySource = 'web'
 ) {
   const plan = resolveEcosystemPaymentPlan(productId, planId)
   if (!plan) {
@@ -85,6 +95,7 @@ export function buildEcosystemPaymentCheckoutUrl(
     product_count: [1],
     product_price: [checkoutAmount],
   })
+  payment.returnUrl = buildWayForPayReturnUrl(getBackendBaseUrl(), getFrontendBaseUrl(), source)
   const checkoutUrl = buildShortWayForPayCheckoutUrlSync(getBackendBaseUrl(), payment, {
     product: productId,
     plan: planId,
@@ -95,7 +106,8 @@ export function buildEcosystemPaymentCheckoutUrl(
 export async function buildEcosystemPaymentCheckoutSession(
   productId: EcosystemPaymentProduct,
   planId: EcosystemPaymentPlanId,
-  userId: string
+  userId: string,
+  source: CheckoutEntrySource = 'web'
 ): Promise<EcosystemPaymentCheckoutSession> {
   const plan = resolveEcosystemPaymentPlan(productId, planId)
   if (!plan) {
@@ -134,7 +146,7 @@ export async function buildEcosystemPaymentCheckoutSession(
 
   const backendBase = getBackendBaseUrl()
   const frontendBaseUrl = getFrontendBaseUrl()
-  payment.returnUrl = buildWayForPayReturnUrl(backendBase, frontendBaseUrl)
+  payment.returnUrl = buildWayForPayReturnUrl(backendBase, frontendBaseUrl, source)
   const isProduction = process.env.NODE_ENV === 'production'
   if (
     isProduction &&
@@ -180,6 +192,7 @@ export function buildAbsystemAiUpgradeCheckoutUrl(userId: string) {
   return buildEcosystemPaymentCheckoutUrl(
     'absystem_ai',
     '1month_upgrade',
-    userId
+    userId,
+    'telegram'
   )
 }

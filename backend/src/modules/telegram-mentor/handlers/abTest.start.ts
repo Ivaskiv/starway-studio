@@ -5,7 +5,7 @@ import {
   AB_TEST_OPEN_PLATFORM_BUTTON_TEXT,
 } from '@/products/ab-system/content/abTest.shared.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
-import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutUrl } from '@/modules/subscriptions/payments/business.checkout.js'
+import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business.checkout.js'
 import { prisma } from '@/db/client.js'
 import { getUpcomingZoom } from '@/modules/zoom/service.js'
 import { getAbTestResultDefinition, type AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
@@ -144,6 +144,42 @@ function resolveDaysUntilExpiry(currentPeriodEnd: Date | null): number | null {
   return Math.max(0, Math.ceil((currentPeriodEnd.getTime() - Date.now()) / 86400000))
 }
 
+export async function buildFocusActionButtons(userId: string): Promise<StartMessagePayload['buttons']> {
+  const [activeSubscription, monthlyCheckout, quarterlyCheckout] = await Promise.all([
+    prisma.subscription.findFirst({
+      where: { userId, status: 'ACTIVE' },
+      orderBy: { currentPeriodEnd: 'desc' },
+      select: { currentPeriodEnd: true },
+    }),
+    buildEcosystemPaymentCheckoutSession('focus', '1month', userId, 'telegram'),
+    buildEcosystemPaymentCheckoutSession('focus', '3month', userId, 'telegram'),
+  ])
+
+  const hasActiveSubscription = Boolean(activeSubscription)
+  const daysUntilExpiry = resolveDaysUntilExpiry(activeSubscription?.currentPeriodEnd ?? null)
+  const shouldShowRenewalButtons = !hasActiveSubscription || (daysUntilExpiry !== null && daysUntilExpiry <= 7)
+
+  const buttons: StartMessagePayload['buttons'] = [
+    hasActiveSubscription
+      ? [{ text: '📅 Наступний Zoom', callback_data: 'focus:next_zoom' }]
+      : [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
+  ]
+
+  if (shouldShowRenewalButtons) {
+    const monthlyLabel = hasActiveSubscription
+      ? '🔄 Продовжити 1 місяць — 780 грн'
+      : '🟢 Приєднатися на 1 місяць — 780 грн'
+    const quarterlyLabel = hasActiveSubscription
+      ? '🔄 Продовжити 3 місяці — 1990 грн'
+      : '🟢 Приєднатися на 3 місяці — 1990 грн'
+
+    buttons.push([{ text: monthlyLabel, url: monthlyCheckout.checkoutUrl }])
+    buttons.push([{ text: quarterlyLabel, url: quarterlyCheckout.checkoutUrl }])
+  }
+
+  return buttons
+}
+
 export async function zoomSection(userId: string): Promise<StartMessagePayload> {
   const [upcomingZoom, attendedPracticesCount, bookedPracticesCount, activeSubscription, user] = await Promise.all([
     getUpcomingZoom(),
@@ -173,7 +209,6 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
   const practiceValue = `${attendedPracticesCount} із ${bookedPracticesCount}`
   const daysUntilExpiry = resolveDaysUntilExpiry(activeSubscription?.currentPeriodEnd ?? null)
   const hasActiveSubscription = Boolean(activeSubscription)
-  const shouldShowRenewalButtons = !hasActiveSubscription || (daysUntilExpiry !== null && daysUntilExpiry <= 7)
 
   const lines = [
     `🎯 Твій результат — ${resultTitle}`,
@@ -211,24 +246,7 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
 
   lines.push('', '━━━━━━━━━━━━━━', '')
 
-  const buttons: StartMessagePayload['buttons'] = [
-    hasActiveSubscription
-      ? [{ text: '📅 Наступний Zoom', callback_data: 'focus:next_zoom' }]
-      : [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
-  ]
-
-  if (shouldShowRenewalButtons) {
-    const monthlyLabel = hasActiveSubscription
-      ? '🔄 Продовжити 1 місяць — 780 грн'
-      : '💳 Активувати 1 місяць — 780 грн'
-    const quarterlyLabel = hasActiveSubscription
-      ? '🔄 Продовжити 3 місяці — 1990 грн'
-      : '💳 Активувати 3 місяці — 1990 грн'
-
-    buttons.push([{ text: monthlyLabel, url: buildEcosystemPaymentCheckoutUrl('focus', '1month', userId) }])
-    buttons.push([{ text: quarterlyLabel, url: buildEcosystemPaymentCheckoutUrl('focus', '3month', userId) }])
-  }
-
+  const buttons = await buildFocusActionButtons(userId)
   buttons.push([{ text: '🎯 Переглянути результат', callback_data: 'ab_test:show_result' }])
   buttons.push([{ text: '📚 Меню ФОКУС', callback_data: 'focus:menu' }])
 
@@ -254,10 +272,58 @@ export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {
 
 export function postZoom1Message(userId: string): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_TITLE}\n\n${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT}`,
+    text: [
+      `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_TITLE}`,
+      '',
+      absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT,
+      '',
+      '────────────────────────────────',
+      '',
+      '🌿 <b>Практика завершилась.</b>',
+      '',
+      'Щоб цей крок не загубився,',
+      'зафіксуй для себе лише дві речі.',
+      '',
+      '<b>1. Який інсайт був найціннішим?</b>',
+      '',
+      '<b>2. Який один крок зробиш до наступної практики?</b>',
+    ].join('\n'),
     buttons: [
-      [{ text: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_CTA, url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
-      [{ text: 'Наступний Zoom', callback_data: 'focus:next_zoom' }],
+      [{ text: '💭 Залишити інсайт', callback_data: 'post_zoom:leave_insight' }],
+      [{ text: '🚀 Продовжити з ABSystem', callback_data: 'post_zoom:absystem_cta' }],
+      [{ text: '📅 Наступний Zoom', callback_data: 'focus:next_zoom' }],
+    ],
+  })
+}
+
+export function postZoomAbsystemCtaMessage(userId: string): ReturnType<typeof withKeyboard> {
+  return withKeyboard({
+    text: [
+      '🚀 <b>Найважче — не зробити один крок.</b>',
+      '',
+      'Найважче —',
+      'перетворити його',
+      'на власну систему.',
+      '',
+      'Саме для цього існує ABSystem.',
+      '',
+      'Він допомагає між Zoom-практиками:',
+      '',
+      '• тримати фокус;',
+      '• фіксувати рішення;',
+      '• бачити прогрес;',
+      '• працювати регулярно.',
+      '',
+      '<b>Мета —',
+      'досягати бажаних результатів',
+      'завдяки системності,',
+      'власному фокусу,',
+      'своїм сильним сторонам',
+      'і маленьким щоденним діям.</b>',
+    ].join('\n'),
+    buttons: [
+      [{ text: '🟢 Активувати ABSystem', url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
+      [{ text: '📊 Дізнатися більше', callback_data: 'focus:ai' }],
     ],
   })
 }

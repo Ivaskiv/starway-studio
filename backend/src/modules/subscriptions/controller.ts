@@ -598,12 +598,29 @@ export async function renderWayForPayCheckoutPageHandler(req: Request, res: Resp
   const token = typeof req.params.token === 'string' ? req.params.token.trim() : ''
   const storedPayload = token ? await getCheckoutSession(token) : null
   const payloadFromSession = storedPayload ? decodeStoredCheckoutPayload(storedPayload) : null
+  const expiredSession = !payloadFromSession && token
+    ? await prisma.checkoutSession.findUnique({
+        where: { token },
+        select: {
+          payload: true,
+          status: true,
+          expiresAt: true,
+        },
+      })
+    : null
+  const payloadFromExpiredSession =
+    expiredSession?.status === 'EXPIRED' &&
+    expiredSession.payload &&
+    typeof expiredSession.payload === 'object' &&
+    !Array.isArray(expiredSession.payload)
+      ? expiredSession.payload as Record<string, unknown>
+      : null
   const fallbackPayloadRaw = typeof req.query.payload === 'string' ? req.query.payload.trim() : ''
   // FIX 2026-05-25 TP3: recover from token miss using signed payload fallback in query.
   const payloadFromFallback = !payloadFromSession && fallbackPayloadRaw
     ? decodeStoredCheckoutPayload(fallbackPayloadRaw)
     : null
-  const payload = payloadFromSession ?? payloadFromFallback
+  const payload = payloadFromSession ?? payloadFromExpiredSession ?? payloadFromFallback
 
   if (!payload) {
     console.error('[WAYFORPAY_CHECKOUT] ❌ Invalid or expired checkout token', {
@@ -621,6 +638,15 @@ export async function renderWayForPayCheckoutPageHandler(req: Request, res: Resp
       plan: req.query.plan,
       hasToken: Boolean(token),
       hasFallbackPayload: true,
+    })
+  }
+
+  if (!payloadFromSession && payloadFromExpiredSession) {
+    console.warn('[CHECKOUT_TRACE] expired_token_payload_recovered', {
+      token,
+      product: req.query.product,
+      plan: req.query.plan,
+      expiresAt: expiredSession?.expiresAt?.toISOString() ?? null,
     })
   }
 
@@ -686,6 +712,7 @@ export async function renderWayForPayCheckoutPageHandler(req: Request, res: Resp
 
 export async function wayForPayReturnHandler(req: Request, res: Response) {
   const targetRaw = typeof req.query.target === 'string' ? req.query.target.trim() : ''
+  const source = typeof req.query.source === 'string' ? req.query.source.trim() : ''
   const frontendBase = (
     process.env.TELEGRAM_PUBLIC_FRONTEND_URL?.trim() ||
     process.env.PUBLIC_FRONTEND_URL?.trim() ||
@@ -693,6 +720,19 @@ export async function wayForPayReturnHandler(req: Request, res: Response) {
     ''
   ).replace(/\/$/, '')
   const fallbackTarget = frontendBase ? `${frontendBase}/miniapp?startapp=billing-success` : ''
+
+  if (source === 'telegram') {
+    const html = [
+      '<!doctype html>',
+      '<html lang="uk"><head><meta charset="utf-8" /><title>Оплата успішна</title></head><body>',
+      '<h3>Оплата успішна ✅</h3>',
+      '<p>Повернись у Telegram.</p>',
+      '<p>Підтвердження оплати та доступи вже надіслані тобі в бот.</p>',
+      '</body></html>',
+    ].join('')
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(html)
+  }
 
   const target = targetRaw || fallbackTarget
   if (target.startsWith('http://') || target.startsWith('https://')) {
