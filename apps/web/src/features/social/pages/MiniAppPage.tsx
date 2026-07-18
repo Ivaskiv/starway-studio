@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import type { RootState } from '@/app/store'
 import MiniAppLayout from '@/components/miniapp/MiniAppLayout'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
+import { MINI_APP_SESSION_RETRY_TEXT, MINI_APP_TELEGRAM_REQUIRED_TEXT } from '@/features/social/content/miniAppFallback.content'
 import MiniAppJournalSection from '@/features/social/components/MiniAppJournalSection'
 import MiniAppLibrarySection from '@/features/social/components/MiniAppLibrarySection'
 import MiniAppMentorSection from '@/features/social/components/MiniAppMentorSection'
@@ -182,7 +183,17 @@ export default function MiniAppPage() {
     return (
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-md items-center justify-center px-4 py-8 text-center">
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-6 text-sm text-white/75 shadow-[0_20px_80px_rgba(0,0,0,0.16)]">
-          Відкрий в Telegram
+          {MINI_APP_TELEGRAM_REQUIRED_TEXT}
+        </div>
+      </div>
+    )
+  }
+
+  if (!isBootstrappingAuth && hasTelegramInitData && !userId) {
+    return (
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-md items-center justify-center px-4 py-8 text-center">
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-5 py-6 text-sm text-amber-100 shadow-[0_20px_80px_rgba(0,0,0,0.16)]">
+          {MINI_APP_SESSION_RETRY_TEXT}
         </div>
       </div>
     )
