@@ -22,6 +22,7 @@ const router = Router();
 router.post('/payments/wayforpay/callback', wayForPayCallback);
 router.get('/payments/wayforpay/checkout/:token', renderWayForPayCheckoutPageHandler);
 router.get('/payments/wayforpay/return', wayForPayReturnHandler);
+router.post('/payments/wayforpay/return', wayForPayReturnHandler);
 
 router.get('/status', authRequired, getSubscriptionStatus);
 router.get('/',       authRequired, listSubscriptions);
