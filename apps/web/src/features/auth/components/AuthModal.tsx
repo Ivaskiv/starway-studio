@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { useAuth } from '../hooks/useAuth'
 import { LoginForm } from './LoginForm'
 import { RegisterForm } from './RegisterForm'
@@ -30,6 +31,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
   const orchestrator = useSessionOrchestrator()
   const location = useLocation()
   const navigate = useNavigate()
+  const isMiniAppRuntime = isTelegramMiniApp(location.pathname)
   const lang: ToastLang = 'uk'
   const postAuthNavigate = usePostAuthNavigation()
 
@@ -39,6 +41,14 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
   const deferToPendingProtectedNavigation =
     orchestrator.sessionModal.kind === 'auth' &&
     (orchestrator.sessionModal.reason === 'protected_route' || orchestrator.sessionModal.reason === 'telegram_required')
+
+  useEffect(() => {
+    if (!isOpen || !isMiniAppRuntime) {
+      return
+    }
+
+    onClose()
+  }, [isMiniAppRuntime, isOpen, onClose])
 
   useEffect(() => {
     if (isOpen) {
@@ -140,6 +150,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Pr
     formKey.current += 1
   }
 
+  if (isMiniAppRuntime) return null
   if (!isOpen) return null
 
   return (

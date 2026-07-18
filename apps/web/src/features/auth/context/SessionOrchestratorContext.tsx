@@ -10,6 +10,7 @@ import {
   shouldAllowSessionProbeWithoutHint,
   syncAuthSession,
 } from '@/features/auth/utils/sessionSync'
+import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { BaseModal } from '@/features/modals/BaseModal'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
 import { useThemeContext } from '@/theme/ThemeProvider'
@@ -133,8 +134,14 @@ function hasRecoverableSessionEvidence(): boolean {
 function SessionModalHost() {
   const orchestrator = useSessionOrchestrator()
   const navigate = useNavigate()
+  const location = useLocation()
+  const isMiniAppRuntime = isTelegramMiniApp(location.pathname)
 
   if (orchestrator.sessionModal.kind === 'auth') {
+    if (isMiniAppRuntime) {
+      return null
+    }
+
     return (
       <AuthModal
         isOpen
