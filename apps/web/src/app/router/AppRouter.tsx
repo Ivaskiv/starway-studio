@@ -151,8 +151,10 @@ function GuestAppRouter() {
         <Route path="/products/:slug" element={<ProductInfoPage />} />
         {renderInfoRoutes()}
       </Route>
+      <Route path="/miniapp" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
       <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
       <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
+      <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
       {/* <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} /> */}
     </Routes>
   )
