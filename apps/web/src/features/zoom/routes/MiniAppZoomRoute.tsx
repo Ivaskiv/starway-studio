@@ -1,9 +1,10 @@
 import { useAppSelector } from '@/app/hooks'
-import { selectCurrentUser, selectUserRole, setLoading } from '@/features/auth/services/auth.slice'
+import { useAuth } from '@/features/auth/hooks/useAuth'
+import { selectAuthStatus, selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
 import {
-  useTelegramMiniAppAuthMutation,
   useUpdateUserSettingsMutation,
 } from '@/features/auth/services/auth.api'
+import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
@@ -14,7 +15,6 @@ import { useGetAudioListQuery } from '@/features/zoom/services/audio.api'
 import { useGetWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { useDispatch } from 'react-redux'
 
 type MiniAppZoomTabId = 'home' | 'calendar' | 'battle' | 'progress' | 'profile'
 
@@ -29,7 +29,9 @@ type TelegramWindow = Window & {
       initData?: string
       initDataUnsafe?: {
         user?: {
+          id?: number
           first_name?: string
+          username?: string
         }
       }
     }
@@ -346,15 +348,12 @@ export function ZoomPageWrapper() {
 }
 
 export function MiniAppZoomRoute() {
-  const dispatch = useDispatch()
   const user = useAppSelector(selectCurrentUser)
-  const [telegramMiniAppAuth, { isLoading: isAuthLoading }] = useTelegramMiniAppAuthMutation()
   const [updateUserSettings, { isLoading: isSaving }] = useUpdateUserSettingsMutation()
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null)
   const [firstName, setFirstName] = useState('')
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const authAttemptedRef = useRef(false)
   const isTelegramRuntime = isTelegramMiniApp(window.location.pathname)
   const [telegramInitData, setTelegramInitData] = useState('')
   const [isTelegramWebAppReady, setIsTelegramWebAppReady] = useState(false)
@@ -378,20 +377,6 @@ export function MiniAppZoomRoute() {
       return
     }
 
-    const telegramWebApp = getTelegramWindow().Telegram?.WebApp
-    telegramWebApp?.ready?.()
-    const hasWebApp = Boolean(telegramWebApp)
-    const initData = telegramInitData
-
-    console.log('[MiniAppZoomRoute] Debug:', {
-      isTelegramRuntime,
-      hasWebApp,
-      isTelegramWebAppReady,
-      initDataLength: initData.length,
-      initDataExists: Boolean(initData),
-      user: user?.id ?? null,
-    })
-
     if (user) {
       if (isTelegramRuntime) {
         setNeedsOnboarding(false)
@@ -408,29 +393,14 @@ export function MiniAppZoomRoute() {
       return
     }
 
-    if (authAttemptedRef.current) {
-      return
-    }
-
-    authAttemptedRef.current = true
-
-    if (!initData) {
+    if (!telegramInitData) {
       setError(null)
       setNeedsOnboarding(false)
       return
     }
 
-    dispatch(setLoading())
-    void telegramMiniAppAuth({ initData })
-      .unwrap()
-      .then((result) => {
-        setNeedsOnboarding(isTelegramRuntime ? false : Boolean(result.needsOnboarding))
-      })
-      .catch((authError) => {
-        console.error('[MiniAppZoomRoute] telegram auth failed', authError)
-        setError('Не вдалося авторизуватись через Telegram. Спробуй ще раз.')
-      })
-  }, [dispatch, isTelegramRuntime, isTelegramWebAppReady, telegramInitData, telegramMiniAppAuth, user])
+    setNeedsOnboarding(false)
+  }, [isTelegramRuntime, isTelegramWebAppReady, telegramInitData, user])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -457,7 +427,7 @@ export function MiniAppZoomRoute() {
     return <MiniAppZoomMessage>{error}</MiniAppZoomMessage>
   }
 
-  if (isAuthLoading || needsOnboarding === null) {
+  if (needsOnboarding === null) {
     return <MiniAppZoomMessage>Синхронізуємо вхід у Zoom-календар...</MiniAppZoomMessage>
   }
 
@@ -555,27 +525,107 @@ function TabBar({
 }
 
 export function MiniAppZoomCalendar() {
+  const authStatus = useAppSelector(selectAuthStatus)
+  const { isAuthenticated, loginWithSocial, loginWithTelegramMiniApp } = useAuth()
+  const { authRestoreStatus } = useSessionOrchestrator()
   const search = typeof window === 'undefined' ? '' : window.location.search
-  const isTelegramRuntime = isTelegramMiniApp(window.location.pathname)
+  const searchParams = new URLSearchParams(search)
   const intent = resolveMiniAppEntryIntent(search)
   const isBookingIntent = intent === MINI_APP_ENTRY_INTENT.BOOKING
+  const hasDeepLinkToken = searchParams.has('dl')
   const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>(isBookingIntent ? 'calendar' : 'home')
   const [hasTelegramInitData, setHasTelegramInitData] = useState(false)
-  const [isTelegramBootstrapReady, setIsTelegramBootstrapReady] = useState(!isBookingIntent)
+  const [isTelegramBootstrapReady, setIsTelegramBootstrapReady] = useState(false)
+  const [isMiniAppAuthBootstrapping, setIsMiniAppAuthBootstrapping] = useState(false)
+  const autoLoginAttemptedRef = useRef(false)
 
   useEffect(() => {
-    if (!isBookingIntent) {
+    let isCancelled = false
+
+    const resolveTelegramBootstrap = async () => {
+      const startedAt = Date.now()
+
+      while (!isCancelled && Date.now() - startedAt < 2200) {
+        const telegramWebApp = prepareTelegramWebApp()
+        const initData = telegramWebApp?.initData?.trim() ?? ''
+
+        if (initData) {
+          setHasTelegramInitData(true)
+          setIsTelegramBootstrapReady(true)
+          return
+        }
+
+        await new Promise(resolve => window.setTimeout(resolve, 100))
+      }
+
+      if (isCancelled) return
+
+      setHasTelegramInitData(false)
+      setIsTelegramBootstrapReady(true)
+    }
+
+    void resolveTelegramBootstrap()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const telegramWebApp = getTelegramWindow().Telegram?.WebApp
+    const telegramUserId = telegramWebApp?.initDataUnsafe?.user?.id
+    const telegramInitData = telegramWebApp?.initData?.trim() ?? ''
+    const allowDevFallback =
+      import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    const isAwaitingRestore = !isAuthenticated && (authRestoreStatus === 'idle' || authRestoreStatus === 'restoring')
+
+    if (isAuthenticated) {
+      setIsMiniAppAuthBootstrapping(false)
       return
     }
 
-    const telegramWebApp = prepareTelegramWebApp()
-    const initData = telegramWebApp?.initData?.trim() ?? ''
+    if (isAwaitingRestore) {
+      setIsMiniAppAuthBootstrapping(true)
+      return
+    }
 
-    setHasTelegramInitData(Boolean(initData))
-    setIsTelegramBootstrapReady(true)
-  }, [isBookingIntent])
+    if (!telegramUserId) {
+      setIsMiniAppAuthBootstrapping(false)
+      return
+    }
 
-  if (isBookingIntent && !isTelegramBootstrapReady) {
+    if (autoLoginAttemptedRef.current) {
+      return
+    }
+
+    autoLoginAttemptedRef.current = true
+    setIsMiniAppAuthBootstrapping(true)
+
+    const loginPromise = telegramInitData
+      ? loginWithTelegramMiniApp(telegramInitData)
+      : allowDevFallback
+        ? loginWithSocial('telegram')
+        : Promise.reject(new Error('Telegram initData is missing'))
+
+    void loginPromise
+      .then(() => {
+        setIsMiniAppAuthBootstrapping(false)
+      })
+      .catch((error) => {
+        console.warn('[MiniAppZoomCalendar] Telegram auto-login failed', error)
+        autoLoginAttemptedRef.current = false
+        setIsMiniAppAuthBootstrapping(false)
+      })
+  }, [authRestoreStatus, isAuthenticated, loginWithSocial, loginWithTelegramMiniApp])
+
+  const isDeepLinkRestorePending =
+    hasDeepLinkToken && authStatus !== 'authenticated'
+  const isSessionRestorePending =
+    authRestoreStatus === 'idle' || authRestoreStatus === 'restoring'
+  const isTelegramAuthPending =
+    hasTelegramInitData && (authStatus === 'loading' || isMiniAppAuthBootstrapping)
+
+  if (!isTelegramBootstrapReady || isSessionRestorePending || isTelegramAuthPending || isDeepLinkRestorePending) {
     return (
       <div className="flex h-screen flex-col bg-[#0F1419]">
         <div className="flex-1 overflow-y-auto pb-24">
@@ -587,7 +637,7 @@ export function MiniAppZoomCalendar() {
     )
   }
 
-  if (isBookingIntent && !hasTelegramInitData) {
+  if (!hasTelegramInitData && authStatus !== 'authenticated') {
     return (
       <div className="flex h-screen flex-col bg-[#0F1419]">
         <div className="flex-1 overflow-y-auto pb-24">
@@ -602,7 +652,7 @@ export function MiniAppZoomCalendar() {
   return (
     <div className="flex h-screen flex-col bg-[#0F1419]">
       <div className="flex-1 overflow-y-auto pb-24">
-        {activeTab === 'home' && <HomeTab isTelegramRuntime={isTelegramRuntime} />}
+        {activeTab === 'home' && <HomeTab hasTelegramInitData={hasTelegramInitData} />}
         {activeTab === 'calendar' && <MiniAppZoomRoute />}
         {activeTab === 'battle' && <BattleTabStub />}
         {activeTab === 'progress' && <ProgressTabStub />}
