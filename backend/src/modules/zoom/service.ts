@@ -316,9 +316,30 @@ export async function registerAttendee(
   userId: string,
   sessionId: string,
 ): Promise<ZoomSessionAttendee> {
-  return prisma.zoomSessionAttendee.create({
-    data: { userId, sessionId },
+  return prisma.zoomSessionAttendee.upsert({
+    where: { sessionId_userId: { sessionId, userId } },
+    create: { userId, sessionId },
+    update: {},
   });
+}
+
+export async function autoBookAllUpcomingGroupSessions(userId: string): Promise<void> {
+  const sessions = await prisma.zoomSession.findMany({
+    where: {
+      status: ZoomStatus.SCHEDULED,
+      scheduledAt: { gte: new Date() },
+      OR: [
+        { type: ZoomSessionType.GROUP },
+        { requests: { path: ['type'], equals: 'group_practice' } },
+      ],
+    },
+    select: { id: true },
+    orderBy: { scheduledAt: 'asc' },
+  })
+
+  for (const session of sessions) {
+    await registerAttendee(userId, session.id)
+  }
 }
 
 export async function markAttended(
@@ -1430,6 +1451,20 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
       console.log('[syncChannelPost] done', { messageId: existing.messageId, mode: 'edit' });
       return;
     } catch (err) {
+      const description =
+        err && typeof err === 'object' && 'description' in err
+          ? String(err.description ?? '')
+          : err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'description' in err.response
+            ? String(err.response.description ?? '')
+            : '';
+      if (description.includes('message is not modified')) {
+        console.log('[syncChannelPost] done', {
+          messageId: existing.messageId,
+          mode: 'edit',
+          note: 'message_not_modified',
+        });
+        return;
+      }
       console.error('[syncChannelPost] ERROR edit:', err);
       await prisma.zoomChannelPost.delete({ where: { id: existing.id } }).catch(() => undefined);
     }

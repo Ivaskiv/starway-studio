@@ -5,6 +5,7 @@ import {
   useUpdateUserSettingsMutation,
 } from '@/features/auth/services/auth.api'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
+import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
@@ -152,7 +153,7 @@ function formatZoomDateTime(iso: string): string {
   })
 }
 
-function MiniAppZoomWeekPanel() {
+export function MiniAppZoomWeekPanel() {
   const user = useAppSelector(selectCurrentUser)
   const [audioMonth, setAudioMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [registerAttendee, { isLoading: isRegisteringAttendee }] = useRegisterAttendeeMutation()
@@ -496,6 +497,23 @@ export function MiniAppZoomRoute() {
 }
 
 function BattleTabStub() {
+  const { getModuleAccess } = useSystemState()
+  const battlesAccess = getModuleAccess('FOCUS_BATTLES')
+
+  if (battlesAccess.isLocked) {
+    return (
+      <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/60">
+        <div className="text-center">
+          <div className="mb-2 flex items-center justify-center gap-2 text-lg font-semibold">
+            <Crosshair className="h-5 w-5" />
+            <p>Батли</p>
+          </div>
+          <p className="text-sm">Батли та обмін індивідуальними Zoom відкриваються з активною підпискою ФОКУС.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/60">
       <div className="text-center">
@@ -503,7 +521,7 @@ function BattleTabStub() {
           <Crosshair className="h-5 w-5" />
           <p>Батли</p>
         </div>
-        <p className="text-sm">Скоро запустимо обмін місцями та виклики</p>
+        <p className="text-sm">Скоро запустимо батли та обмін індивідуальними Zoom</p>
       </div>
     </div>
   )

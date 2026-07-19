@@ -4,7 +4,7 @@ import { useCallback, useMemo } from 'react';
 
 import { getCoreAccess } from '@/features/auth/selectors/getCoreAccess';
 
-type ModuleId = 'AI_GENERATOR' | 'AI_FUNNEL' | 'AI_MENTOR' | 'WHEEL_OF_BALANCE';
+type ModuleId = 'AI_GENERATOR' | 'AI_FUNNEL' | 'AI_MENTOR' | 'WHEEL_OF_BALANCE' | 'FOCUS_BATTLES';
 
 export function useSystemState() {
   const isAuthenticated = useAppSelector(state => state.auth.status === 'authenticated')
@@ -25,14 +25,21 @@ export function useSystemState() {
     return map;
   }, [state?.aiModules]);
 
-  const getModuleAccess = useCallback((moduleId: ModuleId) =>
-    moduleMap.get(moduleId) || { isLocked: true, accessLevel: 'NONE' as const, lockReason: 'NO_SUBSCRIPTION' as const }, [moduleMap]);
-
   const { trialActive, subscriptionActive, hasCoreAccess } = getCoreAccess({
     trial: state?.trial,
     subscription: state?.subscription,
     accessControl: state?.accessControl,
   })
+
+  const getModuleAccess = useCallback((moduleId: ModuleId) => {
+    if (moduleId === 'FOCUS_BATTLES') {
+      return subscriptionActive
+        ? { isLocked: false, accessLevel: 'PAID' as const, lockReason: null }
+        : { isLocked: true, accessLevel: 'NONE' as const, lockReason: 'NO_SUBSCRIPTION' as const }
+    }
+
+    return moduleMap.get(moduleId) || { isLocked: true, accessLevel: 'NONE' as const, lockReason: 'NO_SUBSCRIPTION' as const }
+  }, [moduleMap, subscriptionActive]);
 
   return useMemo(() => ({
     state,

@@ -1,4 +1,5 @@
 import { prisma } from '@/db/client.js'
+import { autoBookAllUpcomingGroupSessions } from '@/modules/zoom/service.js'
 
 import { FOCUS_DOJIM_TIMER_IDS } from './business.types.js'
 
@@ -187,6 +188,10 @@ export async function activateProductSubscription(params: {
         data: { status: 'DONE' },
       })
     })
+
+    if (product.code.toLowerCase() === 'focus') {
+      await autoBookAllUpcomingGroupSessions(userId)
+    }
 
     return { success: true, message: 'activated', userId, source }
   } catch (error) {
