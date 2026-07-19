@@ -1,6 +1,7 @@
 // apps/web/src/features/zoom/UserZoomPanel.tsx
 
 import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, Bell, CheckCircle2, Crosshair, Target, X } from 'lucide-react';
 import {
   useGetCalendarSessionsQuery,
   useGetLeaderboardQuery,
@@ -121,7 +122,7 @@ function MySessionRow({ session }: { session: ZoomCalendarSession }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-[var(--text-primary)] truncate">{session.topic}</p>
           <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-            📅 {fmtDateTime(session.scheduledAt)} · {TYPE_LABEL[session.type]}
+            {fmtDateTime(session.scheduledAt)} · {TYPE_LABEL[session.type]}
           </p>
         </div>
         {linkActive ? (
@@ -131,21 +132,24 @@ function MySessionRow({ session }: { session: ZoomCalendarSession }) {
             rel="noopener noreferrer"
             className="btn-liquid-primary inline-flex items-center text-[11px] font-semibold px-3 py-1 rounded-[var(--btn-radius)] flex-shrink-0"
           >
-            ▶ Zoom
+            <ArrowRight className="mr-1 h-3.5 w-3.5" />
+            Zoom
           </a>
         ) : (
           <button
             disabled
             className="btn-liquid-primary inline-flex items-center text-[11px] font-semibold px-3 py-1 rounded-[var(--btn-radius)] flex-shrink-0 opacity-40 cursor-not-allowed"
           >
-            ▶ Zoom
+            <ArrowRight className="mr-1 h-3.5 w-3.5" />
+            Zoom
           </button>
         )}
       </div>
       {session.notifiedAt24h && (
         <div className="flex gap-1.5 mt-2">
           <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-semibold">
-            🔔 Нагадування заплановано
+            <Bell className="h-3 w-3" />
+            Нагадування заплановано
           </span>
         </div>
       )}
@@ -186,7 +190,10 @@ function ActiveBattleSection({
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-semibold text-amber-400">⚔ {session.topic}</p>
+        <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-400">
+          <Crosshair className="h-4 w-4" />
+          {session.topic}
+        </p>
         <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold">
           День {day}/7
         </span>
@@ -270,7 +277,12 @@ function BattleCallSection({ userId }: { userId: string }) {
         disabled={!selectedOpponent || isLoading}
         className="glass-button inline-flex items-center gap-1.5 text-sm font-semibold px-5 py-2 rounded-[var(--btn-radius)] disabled:opacity-40"
       >
-        {isLoading ? 'Відправка...' : '⚔ Надіслати виклик'}
+        {isLoading ? 'Відправка...' : (
+          <>
+            <Crosshair className="h-4 w-4" />
+            Надіслати виклик
+          </>
+        )}
       </button>
     </div>
   );
@@ -413,7 +425,10 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
 
       {/* 1. Header */}
       <div>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">🎯 Панель учасника</h1>
+        <h1 className="inline-flex items-center gap-2 text-xl font-semibold text-[var(--text-primary)]">
+          <Target className="h-5 w-5" />
+          Панель учасника
+        </h1>
         <p className="text-sm text-[var(--text-muted)] mt-0.5">@{userId.slice(0, 8)} · ФОКУС активний</p>
       </div>
 
@@ -444,20 +459,26 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3">
             {pendingSwaps.slice(0, 3).map((swap) => (
               <div key={swap.id} className="rounded-lg border border-white/10 p-2 mb-2 last:mb-0">
-                <p className="text-xs text-white/80">💱 Запит на обмін слотом</p>
+                <p className="text-xs text-white/80">Запит на обмін слотом</p>
                 <p className="text-[11px] text-white/60 mt-1">ID: {swap.id}</p>
                 <div className="flex gap-2 mt-2">
                   <button
                     onClick={() => swap.sessionIdTo && acceptSwap({ swapId: swap.id, sessionIdTo: swap.sessionIdTo }).catch(console.error)}
                     className="rounded-lg bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300"
                   >
-                    ✅ Погодитись
+                    <span className="inline-flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Погодитись
+                    </span>
                   </button>
                   <button
                     onClick={() => declineSwap({ swapId: swap.id }).catch(console.error)}
                     className="rounded-lg bg-rose-500/20 px-3 py-1 text-xs text-rose-300"
                   >
-                    ❌ Відхилити
+                    <span className="inline-flex items-center gap-1">
+                      <X className="h-3.5 w-3.5" />
+                      Відхилити
+                    </span>
                   </button>
                 </div>
               </div>

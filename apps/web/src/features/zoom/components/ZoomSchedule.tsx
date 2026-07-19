@@ -3,6 +3,7 @@
 // Glassmorphism: dark teal bg, orange accents, frosted glass cards
 
 import { useState } from 'react';
+import { ArrowRight, CalendarDays, Clock3, Sparkles } from 'lucide-react';
 import { useZoom } from '../hooks/useZoom';
 import type { ZoomSessionWithAttendance } from '../types/zoom.types';
 import PostZoomReport from './PostZoomReport';
@@ -58,14 +59,18 @@ function UpcomingCard({
       {/* date row */}
       <div className="flex items-center gap-6 mb-5">
         <div className="flex items-center gap-2">
-          <span className="w-8 h-8 rounded-lg bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-[14px]">📅</span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.1] bg-white/[0.06] text-white/70">
+            <CalendarDays className="h-4 w-4" />
+          </span>
           <div>
             <p className="text-[11px] text-white/35 leading-none mb-0.5">Дата</p>
             <p className="text-[13px] font-medium text-white capitalize">{date}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-8 h-8 rounded-lg bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-[14px]">🕐</span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.1] bg-white/[0.06] text-white/70">
+            <Clock3 className="h-4 w-4" />
+          </span>
           <div>
             <p className="text-[11px] text-white/35 leading-none mb-0.5">Час</p>
             <p className="text-[13px] font-medium text-white">{time}</p>
@@ -88,7 +93,7 @@ function UpcomingCard({
             href="#"
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[rgba(var(--accent-rgb),0.15)] border border-[rgba(var(--accent-rgb),0.35)] text-[rgb(var(--accent-rgb))] text-[13px] font-semibold hover:bg-[rgba(var(--accent-rgb),0.22)] transition-all"
           >
-            <span>▶</span> Приєднатись до Zoom
+            <ArrowRight className="h-4 w-4" /> Приєднатись до Zoom
           </a>
         ) : (
           <button
@@ -170,7 +175,7 @@ function EmptyState({ onRequest }: { onRequest: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-3xl mb-5">
-        🌟
+        <Sparkles className="h-7 w-7 text-white/70" />
       </div>
       <p className="text-[15px] font-medium text-white/70 mb-1">Сесій ще немає</p>
       <p className="text-[12px] text-white/30 max-w-[220px] mb-6 leading-relaxed">

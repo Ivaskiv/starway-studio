@@ -5,6 +5,7 @@ import { buildTelegramDeepLink } from '@/shared/telegram/telegramDeepLinks'
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import { useBookTelegramSlotMutation, useGetTelegramAvailableSlotsQuery } from '@/features/zoom/zoom.api'
 import { hasPaidAccess } from '@/features/user/types/user.types'
+import { CalendarDays, Check } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 type ViewState = 'locked' | 'personal' | 'pending'
@@ -65,7 +66,7 @@ function TelegramSlotBookingView() {
     try {
       await bookTelegramSlot(slotId).unwrap()
       await refetch()
-      showTelegramBookingAlert('✅ Записано! Чекай на посилання перед зустріччю.')
+      showTelegramBookingAlert('Записано. Чекай на посилання перед зустріччю.')
     } catch (error) {
       showTelegramBookingAlert(`Помилка: ${formatBookingError(error)}`)
     } finally {
@@ -92,7 +93,10 @@ function TelegramSlotBookingView() {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 text-white">
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-        <h1 className="text-2xl font-semibold">📅 Записатись на Zoom</h1>
+        <div className="flex items-center gap-2 text-2xl font-semibold">
+          <CalendarDays className="h-6 w-6 text-white/80" />
+          <h1>Записатись на Zoom</h1>
+        </div>
         <p className="mt-2 text-sm text-white/65">Обери зручний час</p>
       </div>
 
@@ -120,7 +124,12 @@ function TelegramSlotBookingView() {
                       : 'bg-blue-500/20 text-blue-100 hover:bg-blue-500/30 disabled:opacity-70',
                   ].join(' ')}
                 >
-                  {slot.isBooked ? '✓ Записано' : isSubmitting ? '...' : 'Записатись'}
+                  {slot.isBooked ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Check className="h-4 w-4" />
+                      Записано
+                    </span>
+                  ) : isSubmitting ? '...' : 'Записатись'}
                 </button>
               </div>
             )

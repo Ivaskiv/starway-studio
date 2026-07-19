@@ -1,6 +1,7 @@
 // apps/web/src/features/zoom/CoachZoomPanel.tsx
 
 import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, CalendarDays, CheckCircle2, CircleUserRound, Crosshair, Users, Zap } from 'lucide-react';
 import {
   useGetCalendarSessionsQuery,
   useGetLeaderboardQuery,
@@ -30,11 +31,11 @@ interface BattleSession extends ZoomCalendarSession {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TYPE_ICON: Record<ZoomSessionType, string> = {
-  group_practice: '👥',
-  individual:     '👤',
-  intensive:      '⚡',
-  battle_review:  '⚔',
+const TYPE_ICON: Record<ZoomSessionType, typeof Users> = {
+  group_practice: Users,
+  individual:     CircleUserRound,
+  intensive:      Zap,
+  battle_review:  Crosshair,
 };
 const TYPE_LABEL: Record<ZoomSessionType, string> = {
   group_practice: 'Групова',
@@ -211,7 +212,10 @@ function UpcomingSessionCard({ session }: { session: ZoomCalendarSession }) {
     <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] p-3">
       <div className="flex items-center gap-3">
         <span className={['w-9 h-9 rounded-full flex items-center justify-center text-[16px] flex-shrink-0', TYPE_ICON_BG[session.type]].join(' ')}>
-          {TYPE_ICON[session.type]}
+          {(() => {
+            const Icon = TYPE_ICON[session.type];
+            return <Icon className="h-4 w-4" />;
+          })()}
         </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -238,7 +242,10 @@ function UpcomingSessionCard({ session }: { session: ZoomCalendarSession }) {
         {session.zoomLink ? (
           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400">✓ Zoom є</span>
         ) : (
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400">⚠ Zoom-посилання немає</span>
+          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400">
+            <AlertCircle className="h-3 w-3" />
+            Zoom-посилання немає
+          </span>
         )}
       </div>
       <div className="mt-3 border-t border-[var(--border-primary)] pt-3">
@@ -277,8 +284,9 @@ function UpcomingSessionCard({ session }: { session: ZoomCalendarSession }) {
                       </p>
                     </div>
                     {attendee.attended ? (
-                      <span className="rounded-full bg-green-500/15 px-2 py-1 text-[11px] font-medium text-green-400">
-                        ✓ Присутній
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-1 text-[11px] font-medium text-green-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Присутній
                       </span>
                     ) : (
                       <button
@@ -287,7 +295,10 @@ function UpcomingSessionCard({ session }: { session: ZoomCalendarSession }) {
                         disabled={isMarkingAttended}
                         className="rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-[11px] font-semibold text-green-300 transition-colors hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        ✅ Присутній
+                        <span className="inline-flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Присутній
+                        </span>
                       </button>
                     )}
                   </div>
@@ -337,7 +348,9 @@ function BattleCard({
     <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] p-3">
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm flex-shrink-0">⚔</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 flex-shrink-0">
+            <Crosshair className="h-4 w-4" />
+          </span>
           <p className="text-sm font-medium text-[var(--text-primary)] truncate">{session.topic}</p>
           <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-medium flex-shrink-0">battle</span>
           <span className="text-[11px] text-[var(--text-muted)] flex-shrink-0">День {day}/7</span>
@@ -483,7 +496,10 @@ const canManageZoom =
       {/* 1. Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">📅 Панель коуча</h1>
+          <h1 className="inline-flex items-center gap-2 text-xl font-semibold text-[var(--text-primary)]">
+            <CalendarDays className="h-5 w-5" />
+            Панель коуча
+          </h1>
           <p className="text-sm text-[var(--text-muted)] mt-0.5">Nadya Ivaskiv · Starway Studio</p>
         </div>
         <a

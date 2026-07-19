@@ -1,4 +1,4 @@
-import { ArrowRight, Sparkles } from 'lucide-react'
+import { ArrowRight, Globe, MessageCircle, Sparkles } from 'lucide-react'
 
 import type { MiniAppChatMessage } from '@/features/social/types/miniapp'
 
@@ -50,7 +50,8 @@ export default function MiniAppMentorSection({
               disabled={isSyncing}
               className="inline-flex items-center justify-center rounded-xl border border-[rgba(var(--accent-soft-rgb),0.34)] bg-[rgba(var(--accent-rgb),0.08)] px-3 py-2 text-xs font-semibold tracking-[0.04em] text-[rgb(var(--accent-soft-rgb))] transition-all hover:border-[rgba(var(--accent-soft-rgb),0.46)] hover:bg-[rgba(var(--accent-rgb),0.14)] disabled:opacity-70"
             >
-              💬 Відповідати в Telegram
+              <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+              Відповідати в Telegram
             </button>
             <button
               type="button"
@@ -58,7 +59,8 @@ export default function MiniAppMentorSection({
               disabled={isSyncing}
               className="inline-flex items-center justify-center rounded-xl border border-[rgba(var(--accent-rgb),0.26)] bg-[rgba(var(--accent-rgb),0.05)] px-3 py-2 text-xs font-semibold tracking-[0.04em] text-[var(--text-secondary)] transition-all hover:border-[rgba(var(--accent-soft-rgb),0.34)] hover:bg-[rgba(var(--accent-rgb),0.12)] hover:text-[var(--text-primary)] disabled:opacity-70"
             >
-              🌐 Відповідати на сайті
+              <Globe className="mr-1.5 h-3.5 w-3.5" />
+              Відповідати на сайті
             </button>
           </div>
         )}

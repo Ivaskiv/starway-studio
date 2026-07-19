@@ -12,8 +12,9 @@ import HomeTab from '@/features/zoom/tabs/HomeTab'
 
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import { useGetAudioListQuery } from '@/features/zoom/services/audio.api'
-import { useGetWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
+import { useGetWeekOverviewQuery, useRegisterAttendeeMutation } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
+import { BarChart3, CalendarDays, CircleUserRound, Crosshair, Home } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 type MiniAppZoomTabId = 'home' | 'calendar' | 'battle' | 'progress' | 'profile'
@@ -51,6 +52,10 @@ function prepareTelegramWebApp() {
 
   webApp.ready()
   return webApp
+}
+
+function readTelegramInitData(): string {
+  return prepareTelegramWebApp()?.initData?.trim() ?? ''
 }
 
 function resolveMiniAppEntryIntent(search: string): string | null {
@@ -150,6 +155,8 @@ function formatZoomDateTime(iso: string): string {
 function MiniAppZoomWeekPanel() {
   const user = useAppSelector(selectCurrentUser)
   const [audioMonth, setAudioMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [registerAttendee, { isLoading: isRegisteringAttendee }] = useRegisterAttendeeMutation()
+  const [registeringSessionId, setRegisteringSessionId] = useState<string | null>(null)
   const { data, isLoading, isError } = useGetWeekOverviewQuery(undefined, {
     skip: !user,
     refetchOnMountOrArgChange: true,
@@ -181,6 +188,20 @@ function MiniAppZoomWeekPanel() {
         </div>
       </div>
     )
+  }
+
+  const handleRegister = async (sessionId: string) => {
+    setRegisteringSessionId(sessionId)
+    try {
+      await registerAttendee({ sessionId }).unwrap()
+    } catch (error) {
+      console.error('[MiniAppZoomWeekPanel] register attendee failed', {
+        sessionId,
+        error,
+      })
+    } finally {
+      setRegisteringSessionId(null)
+    }
   }
 
   return (
@@ -225,6 +246,21 @@ function MiniAppZoomWeekPanel() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {session.isMyBooking ? (
+                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-200">
+                      Ви записані ✅
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleRegister(session.id)}
+                      disabled={isRegisteringAttendee && registeringSessionId === session.id}
+                      className="rounded-full border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-3 py-1.5 text-xs font-semibold text-[rgb(var(--accent-rgb))] disabled:opacity-60"
+                    >
+                      {isRegisteringAttendee && registeringSessionId === session.id ? 'Записуємо...' : 'Записатись'}
+                    </button>
+                  )}
+
                   {session.zoomLink ? (
                     <a
                       href={session.zoomLink}
@@ -463,7 +499,10 @@ function BattleTabStub() {
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/60">
       <div className="text-center">
-        <p className="mb-2 text-lg font-semibold">⚔️ Батли</p>
+        <div className="mb-2 flex items-center justify-center gap-2 text-lg font-semibold">
+          <Crosshair className="h-5 w-5" />
+          <p>Батли</p>
+        </div>
         <p className="text-sm">Скоро запустимо обмін місцями та виклики</p>
       </div>
     </div>
@@ -474,7 +513,10 @@ function ProgressTabStub() {
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/60">
       <div className="text-center">
-        <p className="mb-2 text-lg font-semibold">📈 Прогрес</p>
+        <div className="mb-2 flex items-center justify-center gap-2 text-lg font-semibold">
+          <BarChart3 className="h-5 w-5" />
+          <p>Прогрес</p>
+        </div>
         <p className="text-sm">Статистика та досягнення з&apos;являться тут</p>
       </div>
     </div>
@@ -485,7 +527,10 @@ function ProfileTabStub() {
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/60">
       <div className="text-center">
-        <p className="mb-2 text-lg font-semibold">👤 Профіль</p>
+        <div className="mb-2 flex items-center justify-center gap-2 text-lg font-semibold">
+          <CircleUserRound className="h-5 w-5" />
+          <p>Профіль</p>
+        </div>
         <p className="text-sm">Налаштування та облік скоро</p>
       </div>
     </div>
@@ -499,25 +544,25 @@ function TabBar({
   activeTab: MiniAppZoomTabId
   onTabChange: (tab: MiniAppZoomTabId) => void
 }) {
-  const tabs: Array<{ id: MiniAppZoomTabId; label: string }> = [
-    { id: 'home', label: '🏠' },
-    { id: 'calendar', label: '📅' },
-    { id: 'battle', label: '⚔️' },
-    { id: 'progress', label: '📈' },
-    { id: 'profile', label: '👤' },
+  const tabs: Array<{ id: MiniAppZoomTabId; Icon: typeof Home }> = [
+    { id: 'home', Icon: Home },
+    { id: 'calendar', Icon: CalendarDays },
+    { id: 'battle', Icon: Crosshair },
+    { id: 'progress', Icon: BarChart3 },
+    { id: 'profile', Icon: CircleUserRound },
   ]
 
   return (
     <div className="fixed right-0 bottom-0 left-0 flex justify-around border-t border-[#2A3543] bg-[#0F1419] py-3">
-      {tabs.map((tab) => (
+      {tabs.map(({ id, Icon }) => (
         <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
+          key={id}
+          onClick={() => onTabChange(id)}
           className={`text-2xl transition-colors ${
-            activeTab === tab.id ? 'text-[#4A90FF]' : 'text-[#6B7280]'
+            activeTab === id ? 'text-[#dce7ff]' : 'text-[#6B7280]'
           }`}
         >
-          {tab.label}
+          <Icon className="h-6 w-6" />
         </button>
       ))}
     </div>
@@ -533,21 +578,27 @@ export function MiniAppZoomCalendar() {
   const intent = resolveMiniAppEntryIntent(search)
   const isBookingIntent = intent === MINI_APP_ENTRY_INTENT.BOOKING
   const hasDeepLinkToken = searchParams.has('dl')
+  const initialTelegramInitData = typeof window === 'undefined' ? '' : readTelegramInitData()
   const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>(isBookingIntent ? 'calendar' : 'home')
-  const [hasTelegramInitData, setHasTelegramInitData] = useState(false)
-  const [isTelegramBootstrapReady, setIsTelegramBootstrapReady] = useState(false)
+  const [hasTelegramInitData, setHasTelegramInitData] = useState(Boolean(initialTelegramInitData))
+  const [isTelegramBootstrapReady, setIsTelegramBootstrapReady] = useState(Boolean(initialTelegramInitData))
   const [isMiniAppAuthBootstrapping, setIsMiniAppAuthBootstrapping] = useState(false)
   const autoLoginAttemptedRef = useRef(false)
 
   useEffect(() => {
+    if (initialTelegramInitData) {
+      setHasTelegramInitData(true)
+      setIsTelegramBootstrapReady(true)
+      return
+    }
+
     let isCancelled = false
 
     const resolveTelegramBootstrap = async () => {
       const startedAt = Date.now()
 
-      while (!isCancelled && Date.now() - startedAt < 2200) {
-        const telegramWebApp = prepareTelegramWebApp()
-        const initData = telegramWebApp?.initData?.trim() ?? ''
+      while (!isCancelled && Date.now() - startedAt < 300) {
+        const initData = readTelegramInitData()
 
         if (initData) {
           setHasTelegramInitData(true)
@@ -555,7 +606,7 @@ export function MiniAppZoomCalendar() {
           return
         }
 
-        await new Promise(resolve => window.setTimeout(resolve, 100))
+        await new Promise(resolve => window.setTimeout(resolve, 50))
       }
 
       if (isCancelled) return
@@ -569,7 +620,7 @@ export function MiniAppZoomCalendar() {
     return () => {
       isCancelled = true
     }
-  }, [])
+  }, [initialTelegramInitData])
 
   useEffect(() => {
     const telegramWebApp = getTelegramWindow().Telegram?.WebApp
@@ -577,7 +628,10 @@ export function MiniAppZoomCalendar() {
     const telegramInitData = telegramWebApp?.initData?.trim() ?? ''
     const allowDevFallback =
       import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    const isAwaitingRestore = !isAuthenticated && (authRestoreStatus === 'idle' || authRestoreStatus === 'restoring')
+    const isAwaitingRestore =
+      hasDeepLinkToken &&
+      !isAuthenticated &&
+      (authRestoreStatus === 'idle' || authRestoreStatus === 'restoring')
 
     if (isAuthenticated) {
       setIsMiniAppAuthBootstrapping(false)
@@ -616,16 +670,14 @@ export function MiniAppZoomCalendar() {
         autoLoginAttemptedRef.current = false
         setIsMiniAppAuthBootstrapping(false)
       })
-  }, [authRestoreStatus, isAuthenticated, loginWithSocial, loginWithTelegramMiniApp])
+  }, [authRestoreStatus, hasDeepLinkToken, isAuthenticated, loginWithSocial, loginWithTelegramMiniApp])
 
   const isDeepLinkRestorePending =
     hasDeepLinkToken && authStatus !== 'authenticated'
-  const isSessionRestorePending =
-    authRestoreStatus === 'idle' || authRestoreStatus === 'restoring'
   const isTelegramAuthPending =
     hasTelegramInitData && (authStatus === 'loading' || isMiniAppAuthBootstrapping)
 
-  if (!isTelegramBootstrapReady || isSessionRestorePending || isTelegramAuthPending || isDeepLinkRestorePending) {
+  if (!isTelegramBootstrapReady || isTelegramAuthPending || isDeepLinkRestorePending) {
     return (
       <div className="flex h-screen flex-col bg-[#0F1419]">
         <div className="flex-1 overflow-y-auto pb-24">
