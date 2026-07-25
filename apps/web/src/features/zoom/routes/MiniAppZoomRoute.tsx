@@ -24,6 +24,8 @@ const MINI_APP_ENTRY_INTENT = {
   BOOKING: 'booking',
 } as const
 
+const TELEGRAM_AUTH_TIMEOUT_MS = 3_000
+
 type TelegramWindow = Window & {
   Telegram?: {
     WebApp?: {
@@ -57,6 +59,18 @@ function prepareTelegramWebApp() {
 
 function readTelegramInitData(): string {
   return prepareTelegramWebApp()?.initData?.trim() ?? ''
+}
+
+function withTelegramAuthTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error('Telegram authentication timed out'))
+    }, TELEGRAM_AUTH_TIMEOUT_MS)
+
+    promise.then(resolve, reject).finally(() => {
+      window.clearTimeout(timeoutId)
+    })
+  })
 }
 
 function resolveMiniAppEntryIntent(search: string): string | null {
@@ -601,6 +615,8 @@ export function MiniAppZoomCalendar() {
   const [hasTelegramInitData, setHasTelegramInitData] = useState(Boolean(initialTelegramInitData))
   const [isTelegramBootstrapReady, setIsTelegramBootstrapReady] = useState(Boolean(initialTelegramInitData))
   const [isMiniAppAuthBootstrapping, setIsMiniAppAuthBootstrapping] = useState(false)
+  const [miniAppAuthError, setMiniAppAuthError] = useState<string | null>(null)
+  const [authRetryKey, setAuthRetryKey] = useState(0)
   const autoLoginAttemptedRef = useRef(false)
 
   useEffect(() => {
@@ -653,6 +669,7 @@ export function MiniAppZoomCalendar() {
 
     if (isAuthenticated) {
       setIsMiniAppAuthBootstrapping(false)
+      setMiniAppAuthError(null)
       return
     }
 
@@ -672,6 +689,7 @@ export function MiniAppZoomCalendar() {
 
     autoLoginAttemptedRef.current = true
     setIsMiniAppAuthBootstrapping(true)
+    setMiniAppAuthError(null)
 
     const loginPromise = telegramInitData
       ? loginWithTelegramMiniApp(telegramInitData)
@@ -679,21 +697,66 @@ export function MiniAppZoomCalendar() {
         ? loginWithSocial('telegram')
         : Promise.reject(new Error('Telegram initData is missing'))
 
-    void loginPromise
-      .then(() => {
-        setIsMiniAppAuthBootstrapping(false)
-      })
+    void withTelegramAuthTimeout(loginPromise)
       .catch((error) => {
         console.warn('[MiniAppZoomCalendar] Telegram auto-login failed', error)
-        autoLoginAttemptedRef.current = false
+        setMiniAppAuthError(
+          error instanceof Error && error.message === 'Telegram authentication timed out'
+            ? 'Не вдалося завершити вхід за 3 секунди. Спробуйте ще раз.'
+            : 'Не вдалося увійти через Telegram. Спробуйте ще раз.',
+        )
+      })
+      .finally(() => {
         setIsMiniAppAuthBootstrapping(false)
       })
-  }, [authRestoreStatus, hasDeepLinkToken, isAuthenticated, loginWithSocial, loginWithTelegramMiniApp])
+  }, [
+    authRestoreStatus,
+    authRetryKey,
+    hasDeepLinkToken,
+    isAuthenticated,
+    loginWithSocial,
+    loginWithTelegramMiniApp,
+  ])
 
   const isDeepLinkRestorePending =
-    hasDeepLinkToken && authStatus !== 'authenticated'
+    hasDeepLinkToken &&
+    !hasTelegramInitData &&
+    !isAuthenticated &&
+    (authRestoreStatus === 'idle' || authRestoreStatus === 'restoring')
+  const isWaitingForMiniAppAuthAttempt =
+    hasTelegramInitData &&
+    !isAuthenticated &&
+    !miniAppAuthError &&
+    !autoLoginAttemptedRef.current
   const isTelegramAuthPending =
-    hasTelegramInitData && (authStatus === 'loading' || isMiniAppAuthBootstrapping)
+    isWaitingForMiniAppAuthAttempt || isMiniAppAuthBootstrapping
+
+  const retryTelegramAuth = () => {
+    autoLoginAttemptedRef.current = false
+    setMiniAppAuthError(null)
+    setAuthRetryKey(current => current + 1)
+  }
+
+  if (miniAppAuthError && !isAuthenticated) {
+    return (
+      <div className="flex h-screen flex-col bg-[#0F1419]">
+        <div className="flex-1 overflow-y-auto pb-24">
+          <MiniAppZoomMessage tone="error">
+            <p>{miniAppAuthError}</p>
+            <button
+              type="button"
+              onClick={retryTelegramAuth}
+              className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-[#0F1419]"
+            >
+              Повторити вхід
+            </button>
+          </MiniAppZoomMessage>
+        </div>
+
+        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      </div>
+    )
+  }
 
   if (!isTelegramBootstrapReady || isTelegramAuthPending || isDeepLinkRestorePending) {
     return (
