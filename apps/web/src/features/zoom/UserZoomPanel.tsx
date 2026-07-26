@@ -12,26 +12,10 @@ import {
   useAcceptSwapMutation,
   useDeclineSwapMutation,
 } from './zoom.api';
-import { isZoomLinkActive } from './zoom.utils';
+import { getSessionBorderClass, getSessionMeta, isZoomLinkActive } from './zoom.utils';
 import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './zoom.types';
 import ZoomCalendar from './ZoomCalendar';
 import { openExternalPaymentUrl } from '@/features/subscription/utils/openExternalPaymentUrl';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const TYPE_BORDER: Record<ZoomSessionType, string> = {
-  group_practice: 'border-l-2 border-purple-500',
-  individual:     'border-l-2 border-teal-500',
-  intensive:      'border-l-2 border-blue-500',
-  battle_review:  'border-l-2 border-amber-500',
-};
-const TYPE_LABEL: Record<ZoomSessionType, string> = {
-  group_practice: 'Групова практика',
-  individual:     'Індивідуальна',
-  intensive:      'Інтенсив',
-  battle_review:  'Battle',
-};
-
 const RANK_EMOJI = ['🥇', '🥈', '🥉'];
 
 // ── Mock Data ─────────────────────────────────────────────────────────────────
@@ -115,14 +99,15 @@ function SectionLabel({ label, demo = false }: { label: string; demo?: boolean }
 
 function MySessionRow({ session }: { session: ZoomCalendarSession }) {
   const linkActive = isZoomLinkActive(session.scheduledAt) && !!session.zoomLink;
+  const sessionMeta = getSessionMeta(session);
 
   return (
-    <div className={['rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] p-3 pl-4', TYPE_BORDER[session.type]].join(' ')}>
+    <div className={['rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] p-3 pl-4', getSessionBorderClass(session)].join(' ')}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-[var(--text-primary)] truncate">{session.topic}</p>
           <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-            {fmtDateTime(session.scheduledAt)} · {TYPE_LABEL[session.type]}
+            {fmtDateTime(session.scheduledAt)} · {sessionMeta}
           </p>
         </div>
         {linkActive ? (

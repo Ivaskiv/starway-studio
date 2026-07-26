@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import * as aiService from './services.js';
 import { trackEvent, trackQuestionEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
+import { assistantChat } from '../assistant/service.js';
 import { createWheelAssessment } from '../wheel/controller.js';
 import type { StreamChatMessage } from './types.js';
 import { detectStateInstability, sendStateCourseOffer } from '@/products/ab-system/telegram/abTest.service.js';
@@ -25,6 +26,14 @@ const requireUser = (req: AuthenticatedRequest, res: Response): string | null =>
   return req.user.id;
 };
 
+const resolveRequestId = (req: AuthenticatedRequest, platform: 'website' | 'web' = 'website') => {
+  const headerValue = req.headers['x-request-id']
+  if (typeof headerValue === 'string' && headerValue.trim()) {
+    return headerValue.trim()
+  }
+  return `${platform}:${req.user?.id ?? 'anonymous'}:${Date.now()}`
+}
+
 const safeHandler = (fn: (req: AuthenticatedRequest, res: Response) => Promise<void>) =>
   async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -38,24 +47,28 @@ const safeHandler = (fn: (req: AuthenticatedRequest, res: Response) => Promise<v
 export const sendMessage = safeHandler(async (req, res) => {
   const userId = requireUser(req, res);
   if (!userId) return;
+  const message = String(req.body.message ?? '')
   const state = await resolveUserState(userId).catch(() => null)
   await trackQuestionEvent({
     userId,
     source: 'web',
     state,
-    text: String(req.body.message ?? ''),
+    text: message,
     detectedIntent: 'general',
     productContext: state?.startsWith('lm_') ? 'lead_magnet' : state === 'in_trial' ? 'trial' : state === 'subscribed' ? 'subscription' : 'general',
     category: 'general',
   })
-  const result = await aiService.sendMessage({ userId, message: req.body.message, context: req.body.context });
+  const result = await assistantChat(userId, message, {
+    platform: 'website',
+    requestId: resolveRequestId(req),
+  });
   await trackEvent({
     userId,
     type: 'web_ai_mentor_chat_completed',
     source: 'web',
     state,
     payload: {
-      replyLength: result.mentorMessage.content.length,
+      replyLength: result.message.length,
     },
   })
   res.json(result);
@@ -428,15 +441,13 @@ export const morningSession = safeHandler(async (req, res) => {
 
 export const streamChat = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = String(req.body.userId ?? '')
+    const userId = requireUser(req, res)
     if (!userId) {
-      res.status(400).json({ error: 'user_id_required' })
       return
     }
 
     const message = String(req.body.message ?? '')
     const history = (Array.isArray(req.body.history) ? req.body.history : []) as StreamChatMessage[]
-    const context = req.body.context as import('./types.js').MentorExtendedContext | undefined
     const state = await resolveUserState(userId).catch(() => null)
 
     await trackQuestionEvent({
@@ -454,11 +465,9 @@ export const streamChat = async (req: AuthenticatedRequest, res: Response) => {
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    const stream = await aiService.createMentorChatStream({
-      userId,
-      message,
-      history,
-      context,
+    const result = await assistantChat(userId, message, {
+      platform: 'website',
+      requestId: resolveRequestId(req),
     })
 
     let aborted = false
@@ -468,15 +477,16 @@ export const streamChat = async (req: AuthenticatedRequest, res: Response) => {
       aborted = true
     })
 
-    for await (const chunk of stream) {
+    const tokens = result.message.match(/.{1,80}/g) ?? ['']
+
+    for (const token of tokens) {
       if (aborted) {
         break
       }
 
-      const token = chunk.choices[0]?.delta?.content || ''
       if (token) {
         replyLength += token.length
-        res.write(`data: ${JSON.stringify({ token })}\n\n`)
+        res.write(`data: ${JSON.stringify({ delta: token, token })}\n\n`)
       }
     }
 
@@ -488,10 +498,13 @@ export const streamChat = async (req: AuthenticatedRequest, res: Response) => {
       payload: {
         replyLength,
         historySize: history.length,
+        scenario: result.meta.scenario,
+        fallbackActivated: result.meta.fallbackActivated,
       },
     })
 
     if (!aborted) {
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
       res.write('data: [DONE]\n\n')
       res.end()
     }

@@ -5,6 +5,7 @@ import { resolveDecision } from '../../../core/decision/decision.resolver.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
 import { planAck } from '../conversation/delivery/planDelivery.js'
+import { getTelegramAiRequestContext } from '../services/requestContext.service.js'
 
 type GuardState = {
   userId?: string | null
@@ -33,7 +34,8 @@ export const guard: MiddlewareFn<Context> = async (ctx, next) => {
     return next()
   }
 
-  const userState = await resolveUserState(userId)
+  const requestContext = await getTelegramAiRequestContext(ctx).catch(() => null)
+  const userState = requestContext?.userState ?? await resolveUserState(userId)
   state.userState = userState
 
   const { decision } = await resolveDecision(userId, 'guard_check')

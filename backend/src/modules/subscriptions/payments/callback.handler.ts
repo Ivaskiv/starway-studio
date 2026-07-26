@@ -3,6 +3,8 @@ import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progres
 import { scheduleFollowups } from '@/products/ab-system/telegram/abTest.scheduler.js'
 import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.service.js'
 import { FOCUS_WELCOME } from '@/products/ab-system/content/abTest.focus.js'
+import { telegramContentRegistry } from '@/modules/telegram-mentor/content/contentRegistry.js'
+import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import type { Prisma } from '@starway/db/prisma-client'
 import type { Request, Response } from 'express'
 import {
@@ -44,6 +46,8 @@ import {
   markCheckoutSessionCompleted,
   markCheckoutSessionProcessing,
 } from './wayforpay.checkout.js'
+
+const conversationRenderer = new TelegramConversationRenderer()
 
 type WayForPayPayload = {
   order_reference?: string
@@ -124,6 +128,108 @@ function resolveZoomCalendarUrl(): string | null {
   }
 
   return null
+}
+
+async function sendTelegramMessageWithFallback(
+  chatId: string,
+  text: string,
+  options?: Parameters<typeof bot.telegram.sendMessage>[2],
+): Promise<boolean> {
+  try {
+    await bot.telegram.sendMessage(chatId, text, options)
+    return true
+  } catch (error) {
+    console.error('[payment] rich telegram send failed, retrying plain text', {
+      chatId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  try {
+    await bot.telegram.sendMessage(chatId, text)
+    return true
+  } catch (error) {
+    console.error('[payment] plain telegram send failed', {
+      chatId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
+async function sendFocusAccessConfirmation(input: {
+  chatId: string
+  firstName: string | null
+  planLabel: string
+  accessUntilLine: string
+  zoomUrl: string | null
+}) {
+  const name = getSafeName(input.firstName)
+  const greeting = name ? `${name}, ` : ''
+  const baseText =
+    `${greeting}оплата пройшла успішно ✅\n\n` +
+    `Тариф: ${input.planLabel}\n` +
+    `${input.accessUntilLine}\n\n` +
+    'Що тобі вже доступно:\n' +
+    '• календар Zoom-практик\n' +
+    '• запис на найближчий Zoom\n' +
+    '• канал ФОКУС\n' +
+    '• /start відкриває твій екран ФОКУС'
+
+  if (!input.zoomUrl) {
+    return sendTelegramMessageWithFallback(
+      input.chatId,
+      `${baseText}\n\nКалендар тимчасово без кнопки. Напиши /start, щоб продовжити.`
+    )
+  }
+
+  return sendTelegramMessageWithFallback(
+    input.chatId,
+    `${baseText}\n\nПочни з календаря практик нижче.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
+              ? {
+                  text: 'Відкрити календар',
+                  web_app: { url: input.zoomUrl },
+                }
+              : { text: 'Відкрити календар', url: input.zoomUrl },
+          ],
+        ],
+      },
+    },
+  )
+}
+
+async function sendUpcomingScheduleSummary(input: {
+  chatId: string
+  lines: string
+  zoomUrl: string | null
+}) {
+  const text =
+    `Календар Zoom-практик:\n\n${input.lines}\n\n` +
+    'Посилання на підключення надходить автоматично за 2 години до початку кожної сесії.'
+
+  if (!input.zoomUrl) {
+    return sendTelegramMessageWithFallback(input.chatId, text)
+  }
+
+  return sendTelegramMessageWithFallback(input.chatId, text, {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
+            ? {
+                text: 'Переглянути календар',
+                web_app: { url: input.zoomUrl },
+              }
+            : { text: 'Переглянути календар', url: input.zoomUrl },
+        ],
+      ],
+    },
+  })
 }
 
 function extractUserIdFromOrderRef(orderReference: string): string | null {
@@ -853,70 +959,20 @@ export async function wayForPayCallback(req: Request, res: Response) {
               })} — ${session.topic}`
             })
             .join('\n')
-          const name = getSafeName(paidUser.firstName)
-          const greeting = name ? `${name}, ` : ''
+          await sendFocusAccessConfirmation({
+            chatId: paidChatId,
+            firstName: paidUser.firstName,
+            planLabel,
+            accessUntilLine,
+            zoomUrl,
+          })
 
-          if (!zoomUrl) {
-            console.warn(
-              '[payment] skip upcoming schedule message: no valid zoomUrl configured'
-            )
-          } else {
-            await bot.telegram
-              .sendMessage(
-                paidChatId,
-                `${greeting}оплата пройшла успішно ✅\n\n` +
-                  `Тариф: ${planLabel}\n` +
-                  `${accessUntilLine}\n\n` +
-                  'Що тобі вже доступно:\n' +
-                  '• календар Zoom-практик\n' +
-                  '• запис на найближчий Zoom\n' +
-                  '• канал ФОКУС\n' +
-                  '• /start відкриває твій екран ФОКУС\n\n' +
-                  'Почни з календаря практик нижче.',
-                {
-                  reply_markup: {
-                    inline_keyboard: [
-                      [
-                        process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
-                          ? {
-                              text: 'Відкрити календар',
-                              web_app: { url: zoomUrl },
-                            }
-                          : { text: 'Відкрити календар', url: zoomUrl },
-                      ],
-                    ],
-                  },
-                }
-              )
-              .catch((err: unknown) =>
-                console.error('[payment] send focus access message:', err)
-              )
-
-            if (upcoming.length > 0) {
-              await bot.telegram
-                .sendMessage(
-                  paidChatId,
-                  `Календар Zoom-практик:\n\n${lines}\n\n` +
-                    'Посилання на підключення надходить автоматично за 2 години до початку кожної сесії.',
-                  {
-                    reply_markup: {
-                      inline_keyboard: [
-                        [
-                          process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
-                            ? {
-                                text: 'Переглянути календар',
-                                web_app: { url: zoomUrl },
-                              }
-                            : { text: 'Переглянути календар', url: zoomUrl },
-                        ],
-                      ],
-                    },
-                  }
-                )
-                .catch((err: unknown) =>
-                  console.error('[payment] send upcoming schedule:', err)
-                )
-            }
+          if (upcoming.length > 0) {
+            await sendUpcomingScheduleSummary({
+              chatId: paidChatId,
+              lines,
+              zoomUrl,
+            })
           }
 
           for (const session of upcoming) {
@@ -929,20 +985,20 @@ export async function wayForPayCallback(req: Request, res: Response) {
             paidUser?.telegramChatId ?? paidUser?.telegramLinks[0]?.chatId ?? null
           const channelLink = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
           if (paidChatId) {
-            await bot.telegram.sendMessage(
-              paidChatId,
-              FOCUS_WELCOME.msg1.body,
-              channelLink
-                ? {
-                    reply_markup: {
-                      inline_keyboard: [[{
-                        text: 'Перейти в канал ФОКУС',
-                        url: channelLink,
-                      }]],
-                    },
-                  }
-                : undefined,
-            ).catch((err: unknown) => {
+            await conversationRenderer.renderOutbound({
+              chatId: paidChatId,
+              transportBot: bot,
+            }, {
+              text: FOCUS_WELCOME.msg1.body,
+              buttons: channelLink
+                ? [{ kind: 'url', label: telegramContentRegistry.buttons.focusChannel, value: channelLink }]
+                : [],
+              cards: [],
+              media: [],
+              nextActions: [],
+              telemetry: {},
+              analytics: {},
+            }).catch((err: unknown) => {
               console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
                 operation: 'focus_block12_send',
                 userId,

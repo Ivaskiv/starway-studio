@@ -15,6 +15,7 @@ export interface CreateNotificationJobInput {
 
 let notificationJobTableAvailable: boolean | undefined
 let hasWarnedAboutMissingNotificationJobTable = false
+const STALE_PROCESSING_MS = 15 * 60 * 1000
 
 async function ensureNotificationJobTableAvailability(): Promise<boolean> {
   if (typeof notificationJobTableAvailable !== 'undefined') {
@@ -85,19 +86,44 @@ export class NotificationJobRepository {
     }))
   }
 
-  async findDuePending(limit = 100) {
+  async claimDuePending(limit = 100) {
     if (!(await ensureNotificationJobTableAvailability())) {
       return []
     }
 
-    return withRetry(() => prisma.notificationJob.findMany({
-      where: {
-        status: 'PENDING',
-        runAt: { lte: new Date() },
-      },
-      orderBy: { runAt: 'asc' },
-      take: limit,
-    }))
+    const normalizedLimit = Math.max(1, Math.trunc(limit))
+
+    return withRetry(() => prisma.$queryRaw<NotificationJob[]>(Prisma.sql`
+      WITH claimed AS (
+        SELECT id
+        FROM "NotificationJob"
+        WHERE
+          (status = 'PENDING' AND "runAt" <= NOW())
+          OR
+          (status = 'PROCESSING' AND "updatedAt" <= NOW() - ${STALE_PROCESSING_MS} * INTERVAL '1 millisecond')
+        ORDER BY
+          CASE WHEN status = 'PENDING' THEN 0 ELSE 1 END,
+          "runAt" ASC,
+          "createdAt" ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT ${normalizedLimit}
+      )
+      UPDATE "NotificationJob" AS job
+      SET
+        status = 'PROCESSING',
+        attempts = CASE
+          WHEN job.status = 'PROCESSING' THEN job.attempts + 1
+          ELSE job.attempts
+        END,
+        "lastError" = CASE
+          WHEN job.status = 'PROCESSING' THEN COALESCE(job."lastError", 'stale_processing_reclaimed')
+          ELSE job."lastError"
+        END,
+        "updatedAt" = NOW()
+      FROM claimed
+      WHERE job.id = claimed.id
+      RETURNING job.*
+    `))
   }
 
   async updateStatus(id: string, status: NotificationJobStatus, lastError?: string | null) {

@@ -46,21 +46,27 @@ export default function MiniAppMentorSection({
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => { void onOpenTelegram?.() }}
-              disabled={isSyncing}
+              onClick={() => {
+                if (isSyncing) return
+                void onOpenTelegram?.()
+              }}
+              aria-busy={isSyncing}
               className="inline-flex items-center justify-center rounded-xl border border-[rgba(var(--accent-soft-rgb),0.34)] bg-[rgba(var(--accent-rgb),0.08)] px-3 py-2 text-xs font-semibold tracking-[0.04em] text-[rgb(var(--accent-soft-rgb))] transition-all hover:border-[rgba(var(--accent-soft-rgb),0.46)] hover:bg-[rgba(var(--accent-rgb),0.14)] disabled:opacity-70"
             >
               <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
-              Відповідати в Telegram
+              Telegram
             </button>
             <button
               type="button"
-              onClick={() => { void onOpenWebsite?.() }}
-              disabled={isSyncing}
+              onClick={() => {
+                if (isSyncing) return
+                void onOpenWebsite?.()
+              }}
+              aria-busy={isSyncing}
               className="inline-flex items-center justify-center rounded-xl border border-[rgba(var(--accent-rgb),0.26)] bg-[rgba(var(--accent-rgb),0.05)] px-3 py-2 text-xs font-semibold tracking-[0.04em] text-[var(--text-secondary)] transition-all hover:border-[rgba(var(--accent-soft-rgb),0.34)] hover:bg-[rgba(var(--accent-rgb),0.12)] hover:text-[var(--text-primary)] disabled:opacity-70"
             >
               <Globe className="mr-1.5 h-3.5 w-3.5" />
-              Відповідати на сайті
+              На сайт
             </button>
           </div>
         )}

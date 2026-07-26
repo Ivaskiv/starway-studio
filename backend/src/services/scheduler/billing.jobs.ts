@@ -60,32 +60,53 @@ export async function scheduleInactivityComeback(
     },
   })
 
-  for (const user of users) {
-    if (resolveUserLifecycle(user).value !== 'platform_active') continue
+  const candidates = users.flatMap((user) => {
+    if (resolveUserLifecycle(user).value !== 'platform_active') return []
     const preferences = user.notificationPreference
-    if (!preferences?.telegramEnabled || !preferences.aiRemindersEnabled) continue
-    if (resolvePrimaryProductKey(user.productAccesses) === 'STANKEY') continue
+    if (!preferences?.telegramEnabled || !preferences.aiRemindersEnabled) return []
+    if (resolvePrimaryProductKey(user.productAccesses) === 'STANKEY') return []
 
     const latestDailyCycle = user.dailyCycleLogs[0] ?? null
-    if (!latestDailyCycle) continue
+    if (!latestDailyCycle) return []
+    if (getActivityGapDays(latestDailyCycle.date, now) !== thresholdDays) return []
 
-    const gapDays = getActivityGapDays(latestDailyCycle.date, now)
-    if (gapDays !== thresholdDays) continue
+    return [{
+      user,
+      latestDailyCycle,
+      templateKey: `absystem_comeback_${comebackKey}_${getUtcDateKey(latestDailyCycle.date)}`,
+    }]
+  })
 
-    const templateKey = `absystem_comeback_${comebackKey}_${getUtcDateKey(latestDailyCycle.date)}`
-    const existing = await prisma.notificationJob.findFirst({
-      where: {
-        payload: {
-          path: ['template_key'],
-          equals: templateKey,
+  const candidateTemplateKeys = candidates.map((candidate) => candidate.templateKey)
+
+  const existingJobs = candidateTemplateKeys.length > 0
+    ? await prisma.notificationJob.findMany({
+        where: {
+          OR: candidateTemplateKeys.map((templateKey) => ({
+            payload: {
+              path: ['template_key'],
+              equals: templateKey,
+            },
+          })),
         },
-      },
-      select: {
-        id: true,
-      },
-    }).catch(() => null)
+        select: {
+          payload: true,
+        },
+      }).catch(() => [])
+    : []
 
-    if (existing) continue
+  const existingTemplateKeys = new Set<string>()
+  for (const job of existingJobs) {
+    if (!job.payload || typeof job.payload !== 'object' || Array.isArray(job.payload)) continue
+    const templateKey = (job.payload as Record<string, unknown>).template_key
+    if (typeof templateKey === 'string' && templateKey.trim()) {
+      existingTemplateKeys.add(templateKey)
+    }
+  }
+
+  for (const candidate of candidates) {
+    const { user, latestDailyCycle, templateKey } = candidate
+    if (existingTemplateKeys.has(templateKey)) continue
 
     const lastAction = readSettingsText(user.settings, 'lastAction')
       ?? user.microTasks[0]?.title?.trim()

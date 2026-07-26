@@ -1,32 +1,17 @@
-# ФОКУС: Тижневі Практики з Надею
+# Pointer: FOCUS Overview
 
-## Що це?
-ФОКУС — це жива Zoom-група до 15 жінок, де кожна розбирає свою конкретну ситуацію через ABSystem.
+Status: POINTER
 
-## Коли і скільки часу?
-- Чотири дні на тиждень
-- По 1 годині на сесію
-- Час залежить від групи та розкладу
+## Canonical Documents
 
-## Як це працює?
-1. Записуєшся на групу.
-2. Приходиш на Zoom у призначений час.
-3. Надя веде процес через СТАН → ЦІЛЬ → ВИБІР → ДІЯ.
-4. Ти розбираєш свою конкретну ситуацію.
-5. Участь з камерою обов'язкова.
+- Canonical file: `docs/agents/ai-mentor/focus-course-materials.md`
 
-## Результат
-- За 1-2 тижні: перші зрушення в розумінні
-- За 1 місяць: видимі зміни
-- За 3 місяці: стабільна система, яка працює
+## Historical Source
 
-## Ціна
-- 1 місяць (4 сесії): 15€
-- 3 місяці (12 сесій): 39€
-- Перша демо-сесія: безплатно за запитом
+- Archived copy: `docs/archive/migration-2026-07-21/agents/ai-assistant-bot/FOCUS-Overview.md`
 
-## Гарантія
-Якщо перший місяць не сподобається — повертаємо гроші.
+## Migration Note
 
-## Що далі?
-Після ФОКУСУ частина учасниць переходить у ABSystem як щоденну платформу.
+Assistant-bot duplicate removed; FOCUS product knowledge remains editable only in the AI mentor knowledge set.
+
+This pointer preserves the original path after the SSOT migration on 2026-07-21.

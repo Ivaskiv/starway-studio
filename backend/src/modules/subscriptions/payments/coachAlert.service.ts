@@ -1,4 +1,5 @@
 import type { Context, Telegraf } from 'telegraf'
+import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import { prisma } from '../../../db/client.js'
 import { coachBotContent } from '../../../bot/content/coachBot.content.js'
 
@@ -19,6 +20,8 @@ const SCENARIO_LABELS: Record<AlertParams['scenario'], string> = {
   E: '🆘 Юзер повідомив про проблему',
 }
 
+const renderer = new TelegramConversationRenderer()
+
 export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<void> {
   await prisma.checkoutSession.update({
     where: { token: params.checkoutToken },
@@ -37,19 +40,32 @@ export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<
     coachBotContent.paymentAdmin.reviewPrompt,
   ].join('\n')
 
-  await params.bot.telegram.sendMessage(params.coachChatId, text, {
-    parse_mode: 'HTML',
-    reply_markup: {
-      inline_keyboard: [[
+  await renderer.renderOutbound({
+    chatId: params.coachChatId,
+    transportBot: params.bot,
+  }, {
+    text: null,
+    buttons: [],
+    cards: [{
+      kind: 'message',
+      text,
+      parseMode: 'HTML',
+      buttons: [
         {
-          text: coachBotContent.paymentAdmin.paymentExists,
-          callback_data: `admin:grant_focus:${params.checkoutToken}`,
+          kind: 'callback',
+          label: coachBotContent.paymentAdmin.paymentExists,
+          value: `admin:grant_focus:${params.checkoutToken}`,
         },
         {
-          text: coachBotContent.paymentAdmin.paymentMissing,
-          callback_data: `admin:deny_focus:${params.checkoutToken}`,
+          kind: 'callback',
+          label: coachBotContent.paymentAdmin.paymentMissing,
+          value: `admin:deny_focus:${params.checkoutToken}`,
         },
-      ]],
-    },
+      ],
+    }],
+    media: [],
+    nextActions: [],
+    telemetry: {},
+    analytics: {},
   })
 }

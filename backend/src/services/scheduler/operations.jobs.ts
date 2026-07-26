@@ -139,26 +139,47 @@ export async function subscriptionExpiringCron(): Promise<void> {
     },
   })
 
-  for (const preference of preferences) {
-    if (getMinutesInTimezone(now, preference.timezone) !== 10 * 60) continue
+  const scheduledPreferences = preferences.filter((preference) => (
+    getMinutesInTimezone(now, preference.timezone) === 10 * 60
+  ))
+
+  const scheduledUserIds = scheduledPreferences.map((preference) => preference.userId)
+  const subscriptions = scheduledUserIds.length > 0
+    ? await prisma.subscription.findMany({
+        where: {
+          userId: { in: scheduledUserIds },
+          status: { in: ['ACTIVE', 'TRIAL'] },
+          OR: [
+            { currentPeriodEnd: { not: null } },
+            { trialEndsAt: { not: null } },
+          ],
+        },
+        orderBy: [
+          { userId: 'asc' },
+          { createdAt: 'desc' },
+        ],
+        select: {
+          userId: true,
+          currentPeriodEnd: true,
+          trialEndsAt: true,
+        },
+      })
+    : []
+
+  const latestSubscriptionByUserId = new Map<string, { currentPeriodEnd: Date | null; trialEndsAt: Date | null }>()
+  for (const subscription of subscriptions) {
+    if (!latestSubscriptionByUserId.has(subscription.userId)) {
+      latestSubscriptionByUserId.set(subscription.userId, {
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        trialEndsAt: subscription.trialEndsAt,
+      })
+    }
+  }
+
+  for (const preference of scheduledPreferences) {
     if (!(await hasMentorNotificationAccess(preference.userId))) continue
 
-    const subscription = await prisma.subscription.findFirst({
-      where: {
-        userId: preference.userId,
-        status: { in: ['ACTIVE', 'TRIAL'] },
-        OR: [
-          { currentPeriodEnd: { not: null } },
-          { trialEndsAt: { not: null } },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        currentPeriodEnd: true,
-        trialEndsAt: true,
-      },
-    })
-
+    const subscription = latestSubscriptionByUserId.get(preference.userId)
     const expiresAt = subscription?.currentPeriodEnd ?? subscription?.trialEndsAt
     if (!expiresAt) continue
 
@@ -186,6 +207,7 @@ export async function subscriptionExpiredCron(): Promise<void> {
     select: {
       id: true,
       funnelStage: true,
+      trialEndsAt: true,
       notificationPreference: {
         select: {
           telegramEnabled: true,
@@ -202,11 +224,10 @@ export async function subscriptionExpiredCron(): Promise<void> {
     const timezone = preference?.timezone ?? process.env.TZ ?? 'Europe/Kyiv'
     if (!isWithinScheduledMinute(now, timezone, 8 * 60, 1)) continue
 
-    const pausedContext = await resolvePausedMentorContext(user.id)
-    if (!pausedContext) continue
-    const generated = await runWeeklyAnalysis(user.id)
+    const expiresAt = user.trialEndsAt
+    if (!expiresAt) continue
 
-    const msSinceExpired = now.getTime() - pausedContext.expiresAt.getTime()
+    const msSinceExpired = now.getTime() - expiresAt.getTime()
     if (msSinceExpired < 0) continue
 
     const daysSinceExpired = Math.floor(msSinceExpired / (24 * 60 * 60 * 1000))
@@ -214,12 +235,14 @@ export async function subscriptionExpiredCron(): Promise<void> {
     if (!preference?.telegramEnabled || !preference.subscriptionEnabled) continue
 
     await notificationService.emit(NotificationEvent.SUBSCRIPTION_EXPIRED, user.id, {
-      expiresAt: pausedContext.expiresAt.toISOString(),
-      previousPlan: pausedContext.previousPlan,
+      expiresAt: expiresAt.toISOString(),
+      previousPlan: 'trial',
       daysSinceExpired,
     })
 
     if (daysSinceExpired > 0) continue
+
+    const generated = await runWeeklyAnalysis(user.id)
 
     await notificationService.emit(NotificationEvent.POST_TRIAL_REPORTS, user.id, {
       daysSinceExpired,
@@ -285,26 +308,16 @@ export async function microTaskReminderCron(): Promise<void> {
 export async function expireMicroTasksCron(): Promise<void> {
   if (!(await ensureNotificationPreferenceTableAvailability())) return
   const now = new Date()
-
-  const tasks = await prisma.microTask.findMany({
+  await prisma.microTask.updateMany({
     where: {
       status: 'active',
       isCompleted: false,
       dueAt: { lt: now },
     },
-    select: {
-      id: true,
-      userId: true,
-      title: true,
+    data: {
+      status: 'expired',
     },
   })
-
-  for (const task of tasks) {
-    await prisma.microTask.update({
-      where: { id: task.id },
-      data: { status: 'expired' },
-    })
-  }
 }
 
 export async function nudgeCron(): Promise<void> {

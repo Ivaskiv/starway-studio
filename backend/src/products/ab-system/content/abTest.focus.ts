@@ -14,73 +14,80 @@ export const FOCUS_CHANNEL_URL =
   process.env.TELEGRAM_FOCUS_INVITE_URL ??
   ''
 
-const FOCUS_WELCOME_MSG1_TITLE = 'Оплата пройшла — вхід у ФОКУС'
-const FOCUS_WELCOME_MSG1_GREETING_LINES = [
-  'Оплата пройшла.',
-  'Вітаю, ти у ФОКУСІ.',
-] as const
-const FOCUS_WELCOME_MSG1_PRACTICE_INTRO =
-  'Тут ми не будемо просто говорити про зміни.'
-const FOCUS_WELCOME_MSG1_PRACTICE_LINES = [
-  'Раз на тиждень на Zoom-практиці ти будеш дивитись на свою реальну ситуацію:',
-  '— що відкладаєш;',
-  '— чому переносиш;',
-  '— яке рішення не приймаєш;',
-  '— який крок треба зробити зараз.',
-] as const
-const FOCUS_WELCOME_MSG1_CHANNEL_LINES = [
-  'Ось посилання на закритий канал:',
-  'Перейди і закріпи його, щоб не загубити.',
-] as const
+const FOCUS_WELCOME_FALLBACK_GREETING = 'Вітаю'
+
+export function buildFocusWelcomeMessage(
+  firstName?: string | null,
+  inviteLink?: string | null,
+): string {
+  const safeFirstName = String(firstName ?? '').trim()
+  const greeting = safeFirstName
+    ? `Вітаю, ${safeFirstName}`
+    : FOCUS_WELCOME_FALLBACK_GREETING
+  const channelLine = String(inviteLink ?? '').trim()
+
+  return [
+    greeting,
+    '',
+    '<b>Оплата пройшла успішно — ти у ФОКУСІ.</b>',
+    '',
+    'Тут ми не будемо просто говорити про зміни.',
+    '',
+    'Раз на тиждень на Zoom-практиці ти будеш дивитись на свою реальну ситуацію:',
+    '',
+    '— що відкладаєш',
+    '— чому переносиш',
+    '— яке рішення не приймаєш',
+    '— який крок треба зробити зараз',
+    '',
+    '<b>Ти не думаєш. Ти дієш.</b>',
+    '',
+    'Ось закритий канал:',
+    ...(channelLine ? [channelLine] : []),
+    '',
+    '<b>Зайди зараз і закріпи канал.</b>',
+    '',
+    'Там будуть:',
+    '',
+    '— Zoom-посилання',
+    '— нагадування',
+    '— всі наступні кроки',
+    '',
+    '<b>Якщо не зайдеш — просто випадеш з процесу.</b>',
+  ].join('\n')
+}
 
 const FOCUS_WELCOME_MSG2_TITLE = 'Ти вже в каналі ФОКУС.'
 const FOCUS_WELCOME_MSG2_STEPS_HEADER = 'Що зробити зараз:'
 const FOCUS_WELCOME_MSG2_STEPS = [
-  '1. Прочитай закріплене повідомлення.',
-  '2. Подивись дату найближчого Zoom.',
-  '3. Напиши собі одну ситуацію, яку хочеш розібрати:',
-  '   що саме ти давно відкладаєш.',
+  '— відкрий календар Zoom',
+  '— обери найближчу практику',
+  '— запиши ситуацію, яку хочеш розібрати',
 ] as const
 const FOCUS_WELCOME_MSG2_FOOTER =
-  'На першій практиці ми почнемо саме з цього.'
+  'На найближчій практиці почнемо саме з цього.'
 
 export const FOCUS_WELCOME = {
   msg1: {
-    body: [
-      FOCUS_WELCOME_MSG1_TITLE,
-      '',
-      ...FOCUS_WELCOME_MSG1_GREETING_LINES,
-      '',
-      FOCUS_WELCOME_MSG1_PRACTICE_INTRO,
-      ...FOCUS_WELCOME_MSG1_PRACTICE_LINES,
-      '',
-      FOCUS_WELCOME_MSG1_CHANNEL_LINES[0],
-      '',
-      FOCUS_WELCOME_MSG1_CHANNEL_LINES[1],
-    ].join('\n'),
-    cta: AB_TEST_JOIN_CHANNEL_BUTTON_TEXT,
+    body: buildFocusWelcomeMessage(),
+    cta: 'Відкрити канал',
     blocks: [
-      telegramBlock.text(FOCUS_WELCOME_MSG1_TITLE),
-      ...FOCUS_WELCOME_MSG1_GREETING_LINES.map((line) => telegramBlock.text(line)),
-      telegramBlock.text(
-        [
-          FOCUS_WELCOME_MSG1_PRACTICE_INTRO,
-          FOCUS_WELCOME_MSG1_PRACTICE_LINES.join(' '),
-        ].join(' ')
-      ),
-      telegramBlock.text(FOCUS_WELCOME_MSG1_CHANNEL_LINES.join(' ')),
+      telegramBlock.text(buildFocusWelcomeMessage()),
       AB_TEST_FOCUS_CTA_BLOCK,
     ],
   },
   msg2: {
     body: [
+      `<b>${FOCUS_WELCOME_MSG2_TITLE}</b>`,
       '',
-      FOCUS_WELCOME_MSG2_TITLE,
+      'Доступ уже відкритий.',
       '',
       FOCUS_WELCOME_MSG2_STEPS_HEADER,
       ...FOCUS_WELCOME_MSG2_STEPS,
       '',
       FOCUS_WELCOME_MSG2_FOOTER,
+      '',
+      'Нижче кнопки: повернутись у канал або одразу записатись на Zoom.',
     ].join('\n'),
     blocks: [
       telegramBlock.text(FOCUS_WELCOME_MSG2_TITLE),

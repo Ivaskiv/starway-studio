@@ -124,6 +124,12 @@ export type ModuleLockReason = 'TRIAL_EXPIRED' | 'NO_SUBSCRIPTION' | null;
 
 export interface UserSystemState {
   accessControl: AccessControlState;
+  zoomAccess: {
+    state: 'NO_ACCESS' | 'FOCUS_ACTIVE' | 'PREMIUM';
+    isActive: boolean;
+    hasFocus: boolean;
+    expiresAt: Date | null;
+  };
   products: {
     owned: Array<{ id: string; name: string; type?: string | null; status?: string | null }>;
     subscribed: Array<{

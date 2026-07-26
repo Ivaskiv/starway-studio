@@ -3,6 +3,7 @@ import { prisma } from '../../db/client.js'
 import { getAllAbilities } from '../../modules/auth/abilities.js'
 import { getTrialStatus } from '../trial/service.js'
 import { ensureOwnerExpertIdForUser } from '../experts/ownership.service.js'
+import { getUserAccessState } from '../subscriptions/payments/focus.access.js'
 import {
   PRODUCT_ACCESS_PRODUCTS,
   PRODUCT_ACCESS_ROLES,
@@ -703,6 +704,7 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
   const accessControl = await getAccessControlState(userId)
   const access      = await getUserAccess(userId, accessControl)
   const trialStatus = await getTrialStatus(userId)
+  const zoomAccess = await getUserAccessState(userId)
   const now         = new Date()
   const isSuperAdmin = String(access.role).toUpperCase() === 'SUPERADMIN'
 
@@ -773,6 +775,12 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
 
   return {
     accessControl,
+    zoomAccess: {
+      state: zoomAccess.hasFocus ? 'FOCUS_ACTIVE' : 'NO_ACCESS',
+      isActive: zoomAccess.isActive,
+      hasFocus: zoomAccess.hasFocus,
+      expiresAt: zoomAccess.expiresAt,
+    },
     products: {
       owned: ownedRaw.map((p) => ({
         id:     p.id,

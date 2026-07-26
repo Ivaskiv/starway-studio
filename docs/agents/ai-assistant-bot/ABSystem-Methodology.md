@@ -1,31 +1,17 @@
-# ABSystem: 5 Елементів Методу
+# Pointer: ABSystem Methodology
 
-## Яку проблему вирішує система
-- "Я знаю, що мене блокує, але не можу розблокуватись"
-- "Я знаю, що треба робити, але не роблю"
-- "Я все розумію, але нічого не змінюється"
+Status: POINTER
 
-## 5 елементів
+## Canonical Documents
 
-### СТАН
-Де ти зараз? Без фільтрів і прикрас.
+- Canonical file: `docs/agents/ai-mentor/methodology-absystem.md`
 
-### ЦІЛЬ
-Де ти хочеш бути? Конкретна картинка, не абстракція.
+## Historical Source
 
-### ВИБІР
-Які варіанти у тебе є? Зазвичай 2-3, а не десяток.
+- Archived copy: `docs/archive/migration-2026-07-21/agents/ai-assistant-bot/ABSystem-Methodology.md`
 
-### РІШЕННЯ
-Яке рішення ти приймаєш саме ти?
+## Migration Note
 
-### ДІЯ
-Що ти робиш зараз, а не потім?
+Assistant-bot duplicate removed; methodology remains editable only in the AI mentor knowledge set.
 
-## Чому це працює
-Більшість людей застрягає на виборі або рішенні. ABSystem дає структуру, щоб вийти з петлі "знаю, але не роблю".
-
-## Де використовується
-- ФОКУС
-- ABSystem AI
-- Персональні сесії з Надею
+This pointer preserves the original path after the SSOT migration on 2026-07-21.

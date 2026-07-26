@@ -1,13 +1,20 @@
 {
   "name": "starway-backend",
   "type": "module",
+  "prisma": {
+    "schema": "../packages/db/prisma/schema.prisma"
+  },
   "engines": {
     "node": "22.x"
   },
   "scripts": {
     "dev": "env -u NO_COLOR PRISMA_HIDE_UPDATE_MESSAGE=1 pnpm -s --filter @starway/shared run build && env -u NO_COLOR PRISMA_HIDE_UPDATE_MESSAGE=1 pnpm -s --filter @starway/ai run build && env -u NO_COLOR PRISMA_HIDE_UPDATE_MESSAGE=1 pnpm -s --filter @starway/db run build && env -u NO_COLOR PRISMA_HIDE_UPDATE_MESSAGE=1 tsx watch --clear-screen=false --ignore dist --ignore node_modules --ignore .turbo --ignore coverage --ignore .git --ignore ../packages/shared/dist --ignore ../packages/ai/dist --ignore ../packages/db/dist --ignore ../packages/db/generated --ignore ../packages/db/generated/client --ignore ../node_modules/.prisma --ignore ../node_modules/@prisma --ignore ../packages/db/node_modules/.prisma --ignore ../packages/db/node_modules/@prisma src/index.ts",
+    "dev:interactive": "pnpm run dev",
+    "dev:background": "env -u NO_COLOR PRISMA_HIDE_UPDATE_MESSAGE=1 pnpm -s --filter @starway/shared run build && env -u NO_COLOR PRISMA_HIDE_UPDATE_MESSAGE=1 pnpm -s --filter @starway/ai run build && env -u NO_COLOR PRISMA_HIDE_UPDATE_MESSAGE=1 pnpm -s --filter @starway/db run build && env -u NO_COLOR PRISMA_HIDE_UPDATE_MESSAGE=1 tsx watch --clear-screen=false --ignore dist --ignore node_modules --ignore .turbo --ignore coverage --ignore .git --ignore ../packages/shared/dist --ignore ../packages/ai/dist --ignore ../packages/db/dist --ignore ../packages/db/generated --ignore ../packages/db/generated/client --ignore ../node_modules/.prisma --ignore ../node_modules/@prisma --ignore ../packages/db/node_modules/.prisma --ignore ../packages/db/node_modules/@prisma src/background/index.ts",
     "build": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc && tsc-alias -p tsconfig.json",
     "start": "tsx dist/index.js",
+    "start:interactive": "tsx dist/index.js",
+    "start:background": "tsx dist/background/index.js",
     "clean": "rm -rf dist",
     "typecheck": "pnpm --filter @starway/shared run build && pnpm --filter @starway/ai run build && pnpm --filter @starway/db run build && tsc --noEmit",
     "user:consolidation:dry": "tsx src/scripts/user-consolidation-backfill.ts",

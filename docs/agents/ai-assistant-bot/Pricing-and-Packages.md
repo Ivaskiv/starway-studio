@@ -1,32 +1,13 @@
-# Ціни і Пакети STARWAY Studio
+# Pointer: Pricing And Packages
 
-## Вхідний тест
-Ціна: безплатно.
+Status: POINTER
 
-## ФОКУС
-- 1 місяць: 15€
-- 3 місяці: 39€
+## Canonical Documents
 
-Що входить:
-- Живі Zoom-сесії
-- Група до 15 жінок
-- Прямий контакт з Надею
-- Записи сесій
+- Canonical file: `docs/client/business/pricing-and-packages.md`
 
-## ABSystem AI
-- 1 місяць: 29€
-- 3 місяці: 69€
+## Migration Note
 
-Що входить:
-- Щоденні практики
-- AI-консультант
-- Календар практик
-- Мобільний доступ
+Pricing ownership moved into the business documentation area so only one editable commercial source remains.
 
-## Персональна програма
-Ціна: за запитом.
-
-## Оплата
-- Картка
-- WayForPay
-- Розстрочка за запитом
+This pointer preserves the original path after the SSOT migration on 2026-07-21.

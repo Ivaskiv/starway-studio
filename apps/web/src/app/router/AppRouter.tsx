@@ -167,6 +167,7 @@ function ProtectedAppRouter() {
     <Routes>
       <Route element={<MainLayout dashboard />}>
         <Route path="/zoom" element={<MiniAppZoomRoute />} />
+        <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
         {protectedRoutes.map((route) => (
           <Route
             key={route.path}

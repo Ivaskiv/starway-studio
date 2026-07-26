@@ -15,6 +15,7 @@ import {
   createZoomSession,
   getCurrentWeekZoomOverview,
   getPublicCurrentWeekZoomOverview,
+  getSessionById,
   getSessionAttendees,
   getUpcomingZoom,
   markAttended,
@@ -22,6 +23,7 @@ import {
   savePostSessionReport,
 } from './service.js';
 import { ZoomSessionWithAttendance } from './types.js';
+import { EXCHANGE_PRICE, getUserAccessState, getZoomExchangeAccessPolicy } from '../subscriptions/payments/focus.access.js';
 
 // Отримуємо expertId з бази по userId (найнадійніше)
 const getCurrentExpertId = async (userId: string | undefined): Promise<string> => {
@@ -107,6 +109,12 @@ export async function createSession(req: AuthenticatedRequest, res: Response, ne
 
     return res.status(201).json(session);
   } catch (err) {
+    if (err instanceof Error && err.message === 'Цього тижня всі слоти зайняті. Запропонувати наступний тиждень?') {
+      return res.status(409).json({
+        error: err.message,
+        cta: 'Наступний тиждень',
+      })
+    }
     next(err);
   }
 }
@@ -129,11 +137,138 @@ export async function register(req: AuthenticatedRequest, res: Response, next: N
     const { sessionId } = req.body;
     if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
 
+    const session = await getSessionById(sessionId)
+    if (!session) return res.status(404).json({ error: 'session_not_found' })
+
+    const sessionMeta =
+      session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests)
+        ? session.requests as Record<string, unknown>
+        : {}
+    const sessionType = typeof sessionMeta.type === 'string' ? sessionMeta.type : session.type
+
+    if (sessionType === 'group_practice') {
+      const accessState = await getUserAccessState(userId)
+      if (!accessState.hasFocus) {
+        return res.status(403).json({ error: 'NO_ACTIVE_SUBSCRIPTION' })
+      }
+    }
+
     const attendee = await registerAttendee(userId, sessionId);
     await syncZoomRegistrationLifecycle(userId, sessionId)
     return res.status(201).json(attendee);
   } catch (err) {
     next(err);
+  }
+}
+
+export async function saveBookingQuestion(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const { sessionId, questionText } = req.body as {
+      sessionId?: string
+      questionText?: string
+    }
+
+    const normalizedSessionId = String(sessionId ?? '').trim()
+    const normalizedQuestionText = String(questionText ?? '').trim()
+
+    if (!normalizedSessionId) {
+      return res.status(400).json({ error: 'sessionId required' })
+    }
+
+    if (!normalizedQuestionText) {
+      return res.status(400).json({ error: 'questionText required' })
+    }
+
+    const attendee = await prisma.zoomSessionAttendee.findUnique({
+      where: {
+        sessionId_userId: {
+          sessionId: normalizedSessionId,
+          userId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    if (!attendee) {
+      return res.status(404).json({ error: 'booking_not_found' })
+    }
+
+    const event = await prisma.event.create({
+      data: {
+        userId,
+        type: 'ZOOM_BOOKING_QUESTION',
+        source: 'web',
+        payload: {
+          sessionId: normalizedSessionId,
+          questionText: normalizedQuestionText,
+        },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+      },
+    })
+
+    return res.status(201).json({
+      ok: true,
+      id: event.id,
+      createdAt: event.createdAt,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function exchangeRequest(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const { sessionIdFrom, sessionIdTo } = req.body as {
+      sessionIdFrom?: string
+      sessionIdTo?: string
+    }
+
+    if (!String(sessionIdFrom ?? '').trim()) {
+      return res.status(400).json({ error: 'sessionIdFrom required' })
+    }
+
+    if (!String(sessionIdTo ?? '').trim()) {
+      return res.status(400).json({ error: 'sessionIdTo required' })
+    }
+
+    const policy = await getZoomExchangeAccessPolicy(userId)
+
+    if (policy.state !== 'FOCUS_ACTIVE') {
+      return res.status(402).json({
+        error: 'PAID_REQUIRED',
+        message: 'Обмін доступний для учасників ФОКУС або за оплату',
+        price: EXCHANGE_PRICE,
+        accessState: policy.state,
+        upsell: {
+          title: policy.promo.title,
+          body: policy.promo.body,
+          benefits: policy.promo.benefits,
+          paymentLabel: 'Оплатити',
+          focusLabel: 'Вступити у ФОКУС',
+        },
+      })
+    }
+
+    return res.status(200).json({
+      ok: true,
+      accessState: policy.state,
+      isFree: true,
+      message: 'Обмін доступний безкоштовно для учасників ФОКУС',
+      nextAction: 'retry_exchange',
+    })
+  } catch (err) {
+    next(err)
   }
 }
 
@@ -167,6 +302,7 @@ export async function markAttendedHandler(req: AuthenticatedRequest, res: Respon
     const user = await prisma.user.findUnique({
       where: { id: attendee.userId },
       select: {
+        lifecycleState: true,
         currentState: true,
         currentStep: true,
         funnelStage: true,
@@ -183,6 +319,14 @@ export async function markAttendedHandler(req: AuthenticatedRequest, res: Respon
         attended: true,
       },
     })
+
+    if (zoomCount === 1 && (user?.lifecycleState === 'FOCUS_PAID' || user?.lifecycleState === 'ZOOM_MEMBER')) {
+      await prisma.user.update({
+        where: { id: attendee.userId },
+        data: { lifecycleState: 'POST_ZOOM_1' },
+      })
+    }
+
     const resolvedLifecycle = resolveUserLifecycle(user ?? {}).value
     const bridge = schedulePostZoomBridge(attendee.userId, {
       zoomCount,

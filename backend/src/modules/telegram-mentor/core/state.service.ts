@@ -3,6 +3,7 @@ import type { Context } from 'telegraf'
 import { prisma } from '../../../db/client.js'
 import { resolveUserLifecycle } from '../../flow-control/service.js'
 import { findLinkedUserId } from '../services/linking.service.js'
+import type { UserLifecycleSnapshot } from '../../flow-control/types.js'
 
 export type UserState =
   | 'LEAD_MAGNET'
@@ -54,6 +55,14 @@ export async function resolveLinkedUserIdFromContext(ctx: Context): Promise<stri
       chatId,
       telegramUserId,
       telegramUserName,
+    }).catch((error) => {
+      console.warn('[telegram/state] linked user resolution failed, fallback to anonymous context', {
+        chatId,
+        telegramUserId,
+        telegramUserName,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return null
     })
     const state = ctx.state as LinkedUserState
     state.userId = resolvedUserId
@@ -79,6 +88,23 @@ export async function resolveUserState(userId: string): Promise<UserState> {
   }
 
   const snapshot = await resolveUserLifecycle(userId)
+  return resolveUserStateFromSnapshot({
+    currentState: user?.currentState ?? null,
+    currentStep: user?.currentStep ?? null,
+    lifecycle: snapshot,
+  })
+}
+
+export function resolveUserStateFromSnapshot(input: {
+  currentState: string | null | undefined
+  currentStep: string | null | undefined
+  lifecycle: UserLifecycleSnapshot
+}): UserState {
+  if (isWaitlistFlag(input.currentState) || isWaitlistFlag(input.currentStep)) {
+    return 'WAITLIST'
+  }
+
+  const snapshot = input.lifecycle
   switch (snapshot.state) {
     case 'lead_magnet':
       return 'LEAD_MAGNET'

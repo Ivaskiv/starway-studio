@@ -1,6 +1,5 @@
 import { prisma } from '../../db/client.js';
 import type { DailyState, Prisma } from '@starway/db/prisma-client';
-import { stankeyPrompts } from '@/products/stankey/config/stankey.prompts.js';
 import { openai } from '../../lib/openai.js';
 import { logDailyCycle, recordMicroSupport, calculateStreak, triggerAICheckIn } from '../daily-cycle/service.js';
 import { getPrimaryGoal } from '../goals/service.js';
@@ -18,8 +17,6 @@ import { runGuardedAiTask, stableHash } from '../../services/aiGuard.service.js'
 import { runRegisteredAiTask } from '../../services/aiTaskRunner.service.js';
 import { resolveAiModel } from '../../platform/ai.registry.js';
 import {
-  SendMessageDto,
-  ChatResponse,
   AIGenerationRequest,
   AIGenerationResponse,
   MentorSession,
@@ -37,7 +34,6 @@ import {
   MicroSupportItem,
   MentorChatContext,
   MentorExtendedContext,
-  StreamChatInput,
 } from './types.js';
 import { rewardEngine } from '../gamification/reward.engine.js';
 
@@ -178,36 +174,6 @@ export async function logMessage(payload: {
   return message;
 }
 
-export async function sendMessage(params: SendMessageDto): Promise<ChatResponse> {
-  const session = await getOrCreateSession(params.userId, params.sessionId);
-  const userMessage = await logMessage({ sessionId: session.id, role: 'USER', text: params.message });
-  const contextPrompt = await buildContextPrompt(params.userId)
-  const activeTasks = await prisma.microTask.findMany({
-    where: {
-      userId: params.userId,
-      status: 'active',
-      isCompleted: false,
-    },
-    orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }],
-    take: 3,
-    select: { title: true, why: true },
-  })
-  const taskPrompt = activeTasks.length
-    ? `Активні задачі юзера:\n${activeTasks.map(task => `- ${task.title}${task.why ? ` — ${task.why}` : ''}`).join('\n')}`
-    : 'Активних задач зараз немає.'
-  const productPrompt = params.context?.product === 'stankey'
-    ? stankeyPrompts.mentor.system
-    : ''
-  const ai = await aiGenerate({
-    userId: params.userId,
-    prompt: `Прийми рішення по повідомленню користувача. Визнач розрив між станом і дією. Дай відповідь JSON: { "reply": "string", "actionables": ["string"] }. Повідомлення: ${params.message}`,
-    context: [productPrompt, contextPrompt, taskPrompt].filter(Boolean),
-  });
-  const mentorMessage = await logMessage({ sessionId: session.id, role: 'MENTOR', text: ai.text });
-  await rewardEngine.onMentorSessionCompleted(params.userId);
-  return { session, userMessage, mentorMessage };
-}
-
 export async function getChatHistory(userId: string) {
   const userMentor = await ensureMentor(userId);
   const sessions = await prisma.aiMentorSession.findMany({
@@ -317,57 +283,6 @@ export async function getMentorExtendedContext(userId: string): Promise<MentorEx
     visionText: vision?.content ?? null,
     recentDrains,
   }
-}
-
-export function buildStreamingSystemPrompt(ctx: MentorExtendedContext): string {
-  return `Ти — AI-ментор системи Starway.
-
-РОЛЬ: Ти не психолог і не мотиватор. Ти — керуючий модуль.
-Твоя єдина функція: вести людину по системі СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.
-
-СТИЛЬ:
-- Жорстка ясність. Без "ти молодець", без підтримки, без мотивації
-- Короткі речення. Максимум 3-4 речення за раз
-- Питання тільки одне — найважливіше
-- Якщо розмита відповідь — уточнюй конкретику
-- Мова: тільки українська
-
-КОНТЕКСТ КОРИСТУВАЧА:
-- Поточний стан: ${ctx.lastState ?? 'не визначено'}
-- Головна ціль: ${ctx.primaryGoal ?? 'не задана — потрібно з\'ясувати'}
-- Фокус-сфера: ${ctx.focusSphere ?? 'не визначена'}
-- Бал колеса: ${ctx.wheelScore != null ? `${ctx.wheelScore}/10` : 'не заповнено'}
-- Streak: ${ctx.streakDays} днів
-- Бачення: ${ctx.visionText ?? 'не задано'}
-- Дренажі тижня: ${ctx.recentDrains.join(', ') || 'немає даних'}
-
-ЛОГІКА:
-1. Якщо ціль не задана → веди до модулю E (5 цілей → 1 головна)
-2. Якщо є ціль → перевіряй чи кожен вибір веде до неї
-3. При дренажі → фіксуй "зраду рішенню", не жалій
-4. При streak < 3 → питай про перешкоди конкретно
-5. Ніколи не пропонуй курси або платні продукти — це робить система окремо`
-}
-
-export async function createMentorChatStream(input: StreamChatInput) {
-  const systemPrompt = input.context
-    ? buildStreamingSystemPrompt(input.context)
-    : 'Ти — AI-ментор системи Starway. Мова: українська. Жорстка ясність. СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.'
-
-  return openai.chat.completions.create({
-    model: 'gpt-4o',
-    temperature: 0.5,
-    max_tokens: 400,
-    stream: true,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...input.history.slice(-12).map(message => ({
-        role: message.role,
-        content: message.content,
-      })),
-      { role: 'user', content: input.message },
-    ],
-  })
 }
 
 export async function advanceOnboarding(userId: string): Promise<OnboardingStage> {

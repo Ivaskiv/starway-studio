@@ -6,8 +6,10 @@ import {
   type AbTestProgress,
   type AbTestStageId,
 } from '../../../core/state-machine/abTestFoundation.js'
+import { prisma } from '../../../db/client.js'
 import { CANONICAL_FLOW_TIMER_REGISTRY } from '../../../core/state-machine/flowTimingFoundation.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
+import { resolveNotificationType } from '../../../services/notifications/domain/notificationPolicy.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { resolveTestDriveVersion } from '@/products/ab-system/content/abTest.results.js'
@@ -37,6 +39,29 @@ export async function scheduleFollowups(
 
   const currentTimers = new Set(progress.timers[groupKey])
   let nextProgress = progress
+
+  if (stage === 'S4_FOCUS_INVITE') {
+    const resultTimerIds = resolveAbTestFlowTimerIdsForStage('S3_TEST_RESULT')
+
+    if (resultTimerIds.length > 0) {
+      await prisma.notificationJob.deleteMany({
+        where: {
+          type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),
+          status: 'PENDING',
+          payload: { path: ['userId'], equals: userId },
+          OR: resultTimerIds.map((timerId) => ({
+            payload: { path: ['payload', 'flow_timer_id'], equals: timerId },
+          })),
+        },
+      })
+    }
+
+    nextProgress = buildAbTestProgressPatch(nextProgress, {
+      timers: {
+        result: [],
+      },
+    })
+  }
 
   for (const timerId of timerIds) {
     if (currentTimers.has(timerId)) {

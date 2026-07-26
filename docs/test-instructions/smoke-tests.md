@@ -1,12 +1,17 @@
-# Smoke Tests
+# Pointer: Archived Smoke Tests
 
-## Checklist
-- `coach-schedule.html` -> `200`
-- `zoom` -> `200`
-- `api/zoom/slots/available` -> `401` (without auth)
-- `api/coach/schedule` -> `401` (without auth)
+Status: POINTER
 
-## Expected Results
-- Public mini app files are reachable with `200`.
-- Protected API routes reject unauthenticated access with `401`.
-- Any `000/404/5xx` is treated as fail and must be investigated.
+## Canonical Documents
+
+- Current testing hub: `docs/test-instructions/README.md`
+
+## Historical Source
+
+- Archived copy: `docs/archive/migration-2026-07-21/test-instructions/smoke-tests.md`
+
+## Migration Note
+
+This smoke-test list references outdated public routes and has been archived as historical QA evidence.
+
+This pointer preserves the original path after the SSOT migration on 2026-07-21.

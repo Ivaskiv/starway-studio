@@ -6,6 +6,33 @@ import { broadcastBlock9Update } from '../../products/ab-system/telegram/abTest.
 import { resolveNotificationType } from '../../services/notifications/domain/notificationPolicy.js'
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js'
 
+function normalizeMessageIds(input: unknown): number[] {
+  if (!Array.isArray(input)) return []
+
+  return input
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0)
+}
+
+function deleteMessageIdRange(params: {
+  centerMessageId: number
+  preserveMessageIds?: number[]
+  beforeCount: number
+  afterCount: number
+}): number[] {
+  const preserve = new Set(params.preserveMessageIds ?? [])
+  const from = Math.max(1, params.centerMessageId - params.beforeCount)
+  const to = Math.max(from, params.centerMessageId + params.afterCount)
+  const messageIds: number[] = []
+
+  for (let messageId = from; messageId <= to; messageId += 1) {
+    if (preserve.has(messageId)) continue
+    messageIds.push(messageId)
+  }
+
+  return messageIds
+}
+
 export const dbAudit = async (_req: Request, res: Response) => {
   try {
     return res.json({
@@ -90,6 +117,145 @@ export const resetChannelPost = async (_req: Request, res: Response) => {
       success: true,
       deleted: deleted.count,
       message: 'ZoomChannelPost очищено. Наступний syncChannelPost створить новий закріплений пост.',
+    })
+  } catch (e) {
+    const error = e instanceof Error ? e.message : 'Unknown error'
+    return res.status(500).json({ success: false, error })
+  }
+}
+
+export const deleteFocusChannelMessages = async (req: Request, res: Response) => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'FORBIDDEN_IN_PRODUCTION' })
+    }
+
+    const channelId = String(process.env.FOCUS_TELEGRAM_CHANNEL_ID ?? '').trim()
+    if (!channelId) {
+      return res.status(400).json({ error: 'FOCUS_TELEGRAM_CHANNEL_ID_NOT_SET' })
+    }
+
+    const rawMessageIds = normalizeMessageIds(req.body?.messageIds)
+    const fromMessageId = Number(req.body?.fromMessageId)
+    const toMessageId = Number(req.body?.toMessageId)
+    const includeNextMessage = req.body?.includeNextMessage === true
+
+    const rangeMessageIds =
+      Number.isInteger(fromMessageId) &&
+      Number.isInteger(toMessageId) &&
+      fromMessageId > 0 &&
+      toMessageId >= fromMessageId &&
+      toMessageId - fromMessageId <= 100
+        ? Array.from(
+            { length: toMessageId - fromMessageId + 1 },
+            (_, index) => fromMessageId + index,
+          )
+        : []
+
+    const messageIds = Array.from(
+      new Set([
+        ...rawMessageIds,
+        ...rangeMessageIds,
+        ...(includeNextMessage
+          ? [...rawMessageIds, ...rangeMessageIds].map((id) => id + 1)
+          : []),
+      ]),
+    ).sort((a, b) => a - b)
+
+    if (messageIds.length === 0) {
+      return res.status(400).json({
+        error: 'MESSAGE_IDS_REQUIRED',
+        message:
+          'Передай messageIds: number[] або fromMessageId/toMessageId. Для сервісного повідомлення про pin можна додати includeNextMessage=true.',
+      })
+    }
+
+    const deleted: number[] = []
+    const failed: Array<{ messageId: number; error: string }> = []
+
+    for (const messageId of messageIds) {
+      try {
+        await bot.telegram.deleteMessage(channelId, messageId)
+        deleted.push(messageId)
+      } catch (error) {
+        failed.push({
+          messageId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return res.json({
+      success: failed.length === 0,
+      channelId,
+      requested: messageIds,
+      deleted,
+      failed,
+    })
+  } catch (e) {
+    const error = e instanceof Error ? e.message : 'Unknown error'
+    return res.status(500).json({ success: false, error })
+  }
+}
+
+export const cleanupLatestFocusDuplicates = async (_req: Request, res: Response) => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'FORBIDDEN_IN_PRODUCTION' })
+    }
+
+    const channelId = String(process.env.FOCUS_TELEGRAM_CHANNEL_ID ?? '').trim()
+    if (!channelId) {
+      return res.status(400).json({ error: 'FOCUS_TELEGRAM_CHANNEL_ID_NOT_SET' })
+    }
+
+    const currentPost = await prisma.zoomChannelPost.findFirst({
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        messageId: true,
+        chatId: true,
+      },
+    })
+
+    if (!currentPost) {
+      return res.status(404).json({
+        error: 'ZOOM_CHANNEL_POST_NOT_FOUND',
+        message: 'У БД немає актуального pinned post для cleanup.',
+      })
+    }
+
+    const preserveMessageIds = [currentPost.messageId]
+    const candidateMessageIds = deleteMessageIdRange({
+      centerMessageId: currentPost.messageId,
+      preserveMessageIds,
+      beforeCount: 12,
+      afterCount: 4,
+    })
+
+    const deleted: number[] = []
+    const failed: Array<{ messageId: number; error: string }> = []
+
+    for (const messageId of candidateMessageIds) {
+      try {
+        await bot.telegram.deleteMessage(channelId, messageId)
+        deleted.push(messageId)
+      } catch (error) {
+        failed.push({
+          messageId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return res.json({
+      success: true,
+      channelId,
+      keptMessageId: currentPost.messageId,
+      requestedDeleteIds: candidateMessageIds,
+      deleted,
+      failed,
+      note: 'Cleanup keeps the current pinned post and removes a small message window around it. Review failed ids if some messages were already gone or not deletable.',
     })
   } catch (e) {
     const error = e instanceof Error ? e.message : 'Unknown error'

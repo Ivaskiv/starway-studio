@@ -23,7 +23,7 @@ function getOpenAiClient() {
 let cachedAnthropic: Anthropic | null = null
 let cachedAnthropicKey: string | undefined
 
-function getAnthropicClient() {
+export function getAnthropicClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!cachedAnthropic || cachedAnthropicKey !== apiKey) {
     cachedAnthropic = new Anthropic({ apiKey })
@@ -66,4 +66,12 @@ export const AI_PROVIDERS = {
   gemini,
 } as const
 
+export { AnthropicProvider } from './anthropic/anthropicProvider.js'
+export { GeminiProvider } from './gemini/geminiProvider.js'
+export { OllamaProvider } from './ollama/ollamaProvider.js'
+export { OpenAIProvider } from './openai/openaiProvider.js'
+export { OpenRouterProvider } from './openrouter/openrouterProvider.js'
+export * from './registry/index.js'
+export * from './pricing.js'
 export * from './spendGuard.js'
+export * from './usageLedger.js'

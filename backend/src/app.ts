@@ -1,12 +1,12 @@
 // backend/src/app.ts
-import { config as loadEnv } from 'dotenv'
+import { parse as parseEnv } from 'dotenv'
 import express, {
   type Express,
   type NextFunction,
   type Request,
   type Response,
 } from 'express'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -18,13 +18,27 @@ import { resolveTelegramDeliveryMode } from './modules/telegram-mentor/runtime/b
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
 const backendEnvPath = resolve(currentDirPath, '../.env')
+const backendLocalEnvPath = resolve(currentDirPath, '../.env.local')
 const rootEnvPath = resolve(currentDirPath, '../../.env')
+const rootLocalEnvPath = resolve(currentDirPath, '../../.env.local')
 const publicDeliverablesPath = resolve(currentDirPath, '../../public/deliverables')
-if (existsSync(rootEnvPath)) {
-  loadEnv({ path: rootEnvPath })
-}
-if (existsSync(backendEnvPath)) {
-  loadEnv({ path: backendEnvPath, override: true })
+
+{
+  const protectedKeys = new Set(Object.keys(process.env))
+  const applyEnvFile = (path: string) => {
+    if (!existsSync(path)) return
+
+    const parsed = parseEnv(readFileSync(path))
+    for (const [key, value] of Object.entries(parsed)) {
+      if (protectedKeys.has(key)) continue
+      process.env[key] = value
+    }
+  }
+
+  applyEnvFile(rootEnvPath)
+  applyEnvFile(rootLocalEnvPath)
+  applyEnvFile(backendEnvPath)
+  applyEnvFile(backendLocalEnvPath)
 }
 
 type FrontendRedirectTarget = {

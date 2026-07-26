@@ -536,7 +536,7 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
     }
     if (action === 'back_to_dashboard') {
       await planAck(ctx, 'ctx.answerCbQuery', 'back_to_dashboard_ack').catch(() => undefined)
-      await handleStart(ctx as never)
+      await handleStart(ctx)
       return true
     }
     if (await handleAbTestCallback(ctx, action)) {
@@ -705,8 +705,8 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
       if (action === 'open_paid_checkout') {
         if (userId) {
           await handleBillingPaywall(ctx, userId)
+          await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_paid_checkout', 'Показую тарифи').catch(() => undefined)
         }
-        await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_paid_checkout', 'Показую тарифи').catch(() => undefined)
         return duplicateFence
       }
 
@@ -714,8 +714,8 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
         if (userId) {
           const planId = action.slice('pay_stankey_'.length).trim() as 'monthly' | 'quarterly' | 'lifetime'
           await handleBillingCheckout(ctx, userId, planId)
+          await planAck(ctx, 'ctx.answerCbQuery', 'callback_pay_stankey', 'Готую оплату').catch(() => undefined)
         }
-        await planAck(ctx, 'ctx.answerCbQuery', 'callback_pay_stankey', 'Готую оплату').catch(() => undefined)
         return duplicateFence
       }
 
@@ -725,8 +725,8 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
           await renderTelegram(ctx, decision, ctx.from?.first_name ?? 'Привіт')
         } else {
           await handleStatus(ctx)
+          await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_status', 'Оновлюю стан').catch(() => undefined)
         }
-        await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_status', 'Оновлюю стан').catch(() => undefined)
         return duplicateFence
       }
 

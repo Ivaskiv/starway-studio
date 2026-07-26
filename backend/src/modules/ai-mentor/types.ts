@@ -103,19 +103,6 @@ export interface MentorMessage {
   createdAt: Date;
 }
 
-export interface SendMessageDto {
-  userId: string;
-  message: string;
-  sessionId?: string;
-  context?: Record<string, unknown>;
-}
-
-export interface ChatResponse {
-  session: MentorSession;
-  userMessage: MentorMessage;
-  mentorMessage: MentorMessage;
-}
-
 export interface MentorChatContext {
   lastState?: string;
   focusSphere?: string;
@@ -134,13 +121,6 @@ export interface MentorExtendedContext extends MentorChatContext {
 export interface StreamChatMessage {
   role: 'user' | 'assistant'
   content: string
-}
-
-export interface StreamChatInput {
-  userId: string
-  message: string
-  history: StreamChatMessage[]
-  context?: MentorExtendedContext
 }
 
 // Daily cycle

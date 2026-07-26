@@ -1,5 +1,5 @@
-import { config as loadEnv } from 'dotenv'
-import { existsSync } from 'node:fs'
+import { parse as parseEnv } from 'dotenv'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PrismaClient } from '../generated/client/index.js'
@@ -7,12 +7,26 @@ import { PrismaClient } from '../generated/client/index.js'
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
 const backendEnvPath = resolve(currentDirPath, '../../../backend/.env')
+const backendLocalEnvPath = resolve(currentDirPath, '../../../backend/.env.local')
 const rootEnvPath = resolve(currentDirPath, '../../../.env')
-if (existsSync(rootEnvPath)) {
-  loadEnv({ path: rootEnvPath })
-}
-if (existsSync(backendEnvPath)) {
-  loadEnv({ path: backendEnvPath, override: true })
+const rootLocalEnvPath = resolve(currentDirPath, '../../../.env.local')
+
+{
+  const protectedKeys = new Set(Object.keys(process.env))
+  const applyEnvFile = (path: string) => {
+    if (!existsSync(path)) return
+
+    const parsed = parseEnv(readFileSync(path))
+    for (const [key, value] of Object.entries(parsed)) {
+      if (protectedKeys.has(key)) continue
+      process.env[key] = value
+    }
+  }
+
+  applyEnvFile(rootEnvPath)
+  applyEnvFile(rootLocalEnvPath)
+  applyEnvFile(backendEnvPath)
+  applyEnvFile(backendLocalEnvPath)
 }
 
 const globalForPrisma = globalThis as unknown as {
@@ -120,6 +134,17 @@ function getConfiguredPoolLimit(input: {
   return String(Math.min(parsed, 5))
 }
 
+function shouldInjectSupabasePassword(url: URL, raw: string): boolean {
+  if (raw.includes('${SUPABASE_DB_PASSWORD}')) {
+    return true
+  }
+
+  return (
+    url.hostname.includes('supabase.co') ||
+    url.hostname.includes('pooler.supabase.com')
+  )
+}
+
 function resolveSupabasePassword(input: string | undefined): string | undefined {
   const raw = String(input ?? '').trim()
   if (!raw) {
@@ -133,9 +158,16 @@ function resolveSupabasePassword(input: string | undefined): string | undefined 
 
   try {
     const url = new URL(raw)
+    if (!shouldInjectSupabasePassword(url, raw)) {
+      return normalizeDatabaseUrl(raw)
+    }
     url.password = password
     return normalizeDatabaseUrl(url.toString())
   } catch {
+    if (!raw.includes('${SUPABASE_DB_PASSWORD}')) {
+      return normalizeDatabaseUrl(raw)
+    }
+
     return normalizeDatabaseUrl(raw.replace(/\$\{SUPABASE_DB_PASSWORD\}/g, password))
   }
 }

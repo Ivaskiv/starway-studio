@@ -88,6 +88,14 @@ export const zoomApi = api.injectEndpoints({
       invalidatesTags: ['ZoomSession', 'ZoomAttendee'],
     }),
 
+    submitBookingQuestion: build.mutation<
+      { ok: boolean; id: string; createdAt: string },
+      { sessionId: string; questionText: string }
+    >({
+      query: body => ({ url: '/zoom/booking-question', method: 'POST', body }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
     markAttended: build.mutation<ZoomAttendeeDTO, { attendeeId: string }>({
       query:           body => ({ url: '/zoom/attendee/attended', method: 'PATCH', body }),
       invalidatesTags: ['ZoomSession'],
@@ -108,6 +116,7 @@ export const {
   useGetWeekOverviewQuery,
   useGetPublicWeekOverviewQuery,
   useRegisterAttendeeMutation,
+  useSubmitBookingQuestionMutation,
   useMarkAttendedMutation,
   useGetAttendeesQuery,
 } = zoomApi

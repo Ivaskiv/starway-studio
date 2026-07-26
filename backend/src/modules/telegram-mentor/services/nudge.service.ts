@@ -5,13 +5,14 @@ import {
   NotificationType,
 } from '@starway/db/prisma-client'
 
-import { sendDedupedTelegramMessage } from '../../../lib/telegram.js'
 import { prisma } from '../../../db/client.js'
 import { listMicroTasksForUser } from '../../microTask/service.js'
 import { getUserAccess, getUserSystemState } from '../../access/service.js'
 import { notificationRecordService } from '../../../services/notifications/services/NotificationRecordService.js'
 import { syncAccessAwareChatMenuButton } from '../handlers/start.js'
 import { planMessage } from '../conversation/delivery/planDelivery.js'
+import { TelegramConversationRenderer } from '../conversation/renderers/telegramConversationRenderer.js'
+import { telegramContentRegistry } from '../content/contentRegistry.js'
 import { pickBestTask, type Task } from './taskPriority.service.js'
 import { resolveUserLifecycle } from '../../flow-control/service.js'
 import { resolveCentralLifecycleSnapshot } from '../../lifecycle/service.js'
@@ -23,6 +24,7 @@ const NUDGE_WAVE_DAY_PREFIX = 'NUDGE_WAVE_DAY:'
 const NUDGE_SIGNATURE_DAY_PREFIX = 'NUDGE_SIGNATURE_DAY:'
 const NUDGE_THRESHOLDS_HOURS = [12, 36, 84] as const
 const DISALLOWED_SUBSCRIPTION_STATUSES = new Set(['WAITLIST', 'CANCELLED', 'EXPIRED'])
+const conversationRenderer = new TelegramConversationRenderer()
 function normalizeTaskType(task: {
   title: string
   reason?: string
@@ -457,9 +459,22 @@ async function sendNudgeMessage(userId: string, task: Task, templateKey: string,
     return true
   }
 
-  const sent = await sendDedupedTelegramMessage(chatId, buildNudgeMessage(task), {
-    ...payload,
-    parse_mode: 'HTML',
+  const sent = await conversationRenderer.renderOutbound({ chatId }, {
+    text: null,
+    buttons: [],
+    cards: [{
+      kind: 'message',
+      text: buildNudgeMessage(task),
+      parseMode: 'HTML',
+      buttons: [
+        { kind: 'callback', label: telegramContentRegistry.buttons.continueTask, value: 'continue_task' },
+        { kind: 'callback', label: telegramContentRegistry.buttons.dismissTask, value: 'dismiss_task' },
+      ],
+    }],
+    media: [],
+    nextActions: [],
+    telemetry: {},
+    analytics: {},
   })
 
   if (!sent) {

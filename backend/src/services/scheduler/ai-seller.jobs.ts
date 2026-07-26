@@ -7,6 +7,32 @@ import { aiSellerContent } from '@/products/ab-system/content/abTest.aiSeller.js
 import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js'
 import { daysBetween, ensureNotificationPreferenceTableAvailability, getEndOfUtcDay, getSettingsObject, getStartOfUtcDay, readTimestamp, sendAiSellerTelegramMessage } from './common.js'
 
+function buildFirstAttendedAtByUserId(
+  rows: Array<{ userId: string; createdAt: Date }>,
+): Map<string, Date> {
+  const result = new Map<string, Date>()
+
+  for (const row of rows) {
+    if (!result.has(row.userId)) {
+      result.set(row.userId, row.createdAt)
+    }
+  }
+
+  return result
+}
+
+function buildCountByUserId(
+  rows: Array<{ userId: string }>,
+): Map<string, number> {
+  const result = new Map<string, number>()
+
+  for (const row of rows) {
+    result.set(row.userId, (result.get(row.userId) ?? 0) + 1)
+  }
+
+  return result
+}
+
 export async function aiSellerLeadFollowup3dCron(deps?: {
   db?: typeof prisma
   now?: Date
@@ -130,6 +156,32 @@ export async function aiSellerFocusCheck24hCron(): Promise<void> {
     },
   })
 
+  const candidateUserIds = users
+    .filter((user) => {
+      if (resolveUserLifecycle(user).value !== 'focus_active') return false
+      if (!user.notificationPreference?.telegramEnabled || !user.notificationPreference.aiRemindersEnabled) return false
+      const settings = getSettingsObject(user.settings)
+      return !readTimestamp(settings.focusCheck24hSentAt)
+    })
+    .map((user) => user.id)
+
+  const firstAttendedAtByUserId = candidateUserIds.length > 0
+    ? buildFirstAttendedAtByUserId(await prisma.zoomSessionAttendee.findMany({
+        where: {
+          userId: { in: candidateUserIds },
+          attended: true,
+        },
+        select: {
+          userId: true,
+          createdAt: true,
+        },
+        orderBy: [
+          { userId: 'asc' },
+          { createdAt: 'asc' },
+        ],
+      }))
+    : new Map<string, Date>()
+
   for (const user of users) {
     const lifecycle = resolveUserLifecycle(user).value
     if (lifecycle !== 'focus_active') continue
@@ -137,16 +189,10 @@ export async function aiSellerFocusCheck24hCron(): Promise<void> {
     const settings = getSettingsObject(user.settings)
     if (readTimestamp(settings.focusCheck24hSentAt)) continue
 
-    const firstAttended = await prisma.zoomSessionAttendee.findFirst({
-      where: { userId: user.id, attended: true },
-      orderBy: { createdAt: 'asc' },
-      select: { createdAt: true },
-    })
-    if (!firstAttended?.createdAt) continue
-    const diffHours = (now.getTime() - firstAttended.createdAt.getTime()) / (60 * 60 * 1000)
+    const firstAttendedAt = firstAttendedAtByUserId.get(user.id)
+    if (!firstAttendedAt) continue
+    const diffHours = (now.getTime() - firstAttendedAt.getTime()) / (60 * 60 * 1000)
     if (diffHours < 24 || diffHours > 36) continue
-    const zoomCount = await prisma.zoomSessionAttendee.count({ where: { userId: user.id, attended: true } })
-    if (zoomCount < 1) continue
     const sent = await sendAiSellerTelegramMessage(user.id, aiSellerContent.FOCUS.check_24h)
     if (!sent) continue
     await prisma.user.update({
@@ -176,24 +222,41 @@ export async function aiSellerFocusDojimBeforeZoom2Cron(): Promise<void> {
     },
   })
 
+  const candidateUserIds = users
+    .filter((user) => {
+      if (resolveUserLifecycle(user).value !== 'focus_active') return false
+      if (!user.notificationPreference?.telegramEnabled || !user.notificationPreference.aiRemindersEnabled) return false
+      const settings = getSettingsObject(user.settings)
+      return !readTimestamp(settings.focusDojimBeforeZoom2SentAt)
+    })
+    .map((user) => user.id)
+
+  const zoomCountByUserId = candidateUserIds.length > 0
+    ? buildCountByUserId(await prisma.zoomSessionAttendee.findMany({
+        where: {
+          userId: { in: candidateUserIds },
+          attended: true,
+        },
+        select: {
+          userId: true,
+        },
+      }))
+    : new Map<string, number>()
+
+  const nextZoom = await prisma.zoomSession.findFirst({
+    where: { scheduledAt: { gt: now } },
+    orderBy: { scheduledAt: 'asc' },
+    select: { scheduledAt: true },
+  })
+
   for (const user of users) {
     const lifecycle = resolveUserLifecycle(user).value
     if (lifecycle !== 'focus_active') continue
     if (!user.notificationPreference?.telegramEnabled || !user.notificationPreference.aiRemindersEnabled) continue
     const settings = getSettingsObject(user.settings)
     if (readTimestamp(settings.focusDojimBeforeZoom2SentAt)) continue
-    const zoomCount = await prisma.zoomSessionAttendee.count({ where: { userId: user.id, attended: true } })
+    const zoomCount = zoomCountByUserId.get(user.id) ?? 0
     if (zoomCount !== 1) continue
-    const latestLifecycle = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { currentState: true, currentStep: true, funnelStage: true },
-    })
-    if (latestLifecycle && resolveUserLifecycle(latestLifecycle).value === 'platform_active') continue
-    const nextZoom = await prisma.zoomSession.findFirst({
-      where: { scheduledAt: { gt: now } },
-      orderBy: { scheduledAt: 'asc' },
-      select: { scheduledAt: true },
-    })
     if (!nextZoom?.scheduledAt) continue
     const diffHours = (nextZoom.scheduledAt.getTime() - now.getTime()) / (60 * 60 * 1000)
     if (diffHours < 20 || diffHours > 28) continue

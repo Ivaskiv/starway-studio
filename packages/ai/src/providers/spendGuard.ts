@@ -3,6 +3,10 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 
 type AiSpendLedgerClient = {
+  findUnique(args: {
+    where: { jobKey_periodStart: { jobKey: string; periodStart: Date } }
+    select: { spentUsd: true; dailyCapUsd: true }
+  }): Promise<{ spentUsd: number; dailyCapUsd: number } | null>
   upsert(args: {
     where: { jobKey_periodStart: { jobKey: string; periodStart: Date } }
     create: { jobKey: string; periodStart: Date; spentUsd: number; callCount: number; dailyCapUsd: number }
@@ -29,10 +33,47 @@ function startOfUtcDay(date = new Date()): Date {
   return normalized
 }
 
+export type BudgetDecision = 'ALLOW' | 'DENY'
+
+export interface BudgetDecisionResult {
+  decision: BudgetDecision
+  jobKey: string
+  periodStart: string
+  currentSpendUsd: number
+  projectedSpendUsd: number
+  dailyCapUsd: number
+}
+
 export class AiBudgetExceededError extends Error {
   constructor(jobKey: string, capUsd: number) {
     super(`AI budget exceeded for job "${jobKey}": daily cap is $${capUsd.toFixed(2)}`)
     this.name = 'AiBudgetExceededError'
+  }
+}
+
+export async function decideDailyAiBudget(
+  jobKey: string,
+  estimatedCostUsd: number,
+  fallbackDailyCapUsd: number,
+): Promise<BudgetDecisionResult> {
+  const periodStart = startOfUtcDay()
+  const prisma = getPrisma()
+  const existing = await prisma.aiSpendLedger.findUnique({
+    where: { jobKey_periodStart: { jobKey, periodStart } },
+    select: { spentUsd: true, dailyCapUsd: true },
+  })
+
+  const currentSpendUsd = existing?.spentUsd ?? 0
+  const dailyCapUsd = existing?.dailyCapUsd ?? fallbackDailyCapUsd
+  const projectedSpendUsd = Number((currentSpendUsd + estimatedCostUsd).toFixed(6))
+
+  return {
+    decision: projectedSpendUsd <= dailyCapUsd ? 'ALLOW' : 'DENY',
+    jobKey,
+    periodStart: periodStart.toISOString(),
+    currentSpendUsd,
+    projectedSpendUsd,
+    dailyCapUsd,
   }
 }
 

@@ -119,7 +119,7 @@ export const billingApi = api.injectEndpoints({
         orderReference?: string
       }
       ),
-      { productId: string; planCode: string; linkToken?: string }
+      { productId: string; planCode: string; linkToken?: string; source?: 'web' | 'telegram'; targetPath?: string }
     >({
       query: (body) => ({
         url: '/subscriptions/payments/wayforpay/initiate',

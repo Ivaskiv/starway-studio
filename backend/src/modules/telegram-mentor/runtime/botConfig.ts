@@ -2,7 +2,7 @@
 //
 // ПРАВИЛО:
 //   production (NODE_ENV=production) → TELEGRAM_BOT_TOKEN     (@Test_ABsystem_bot)
-//   local/dev  (NODE_ENV≠production) → TEST_TELEGRAM_BOT_TOKEN (@test_starway_bot)
+//   local/dev  (NODE_ENV≠production) → TEST_TELEGRAM_BOT_TOKEN (@Test_ABsystem_bot)
 //
 // Жодних fallback між ними. Якщо env var відсутній — процес падає.
 
@@ -22,10 +22,14 @@ export type TelegramDeliveryMode = 'polling' | 'webhook'
 
 // Expected bot identities per environment — used for runtime guard in index.ts
 export const EXPECTED_BOT_PRODUCTION = 'Test_ABsystem_bot'
-export const EXPECTED_BOT_LOCAL      = 'test_starway_bot'
+export const EXPECTED_BOT_LOCAL      = 'Test_ABsystem_bot'
 
 function normalizeEnv(value: string | undefined): string {
   return String(value ?? '').trim()
+}
+
+function uniqueTokens(tokens: string[]): string[] {
+  return Array.from(new Set(tokens.filter(Boolean)))
 }
 
 export function isProductionRuntime(): boolean {
@@ -48,6 +52,19 @@ export function readTelegramBotConfig(): TelegramBotConfig {
     username,
     botLink: username ? `https://t.me/${username}` : '',
   }
+}
+
+export function readTelegramVerificationTokens(): string[] {
+  const runtimeToken = readTelegramBotConfig().token
+
+  return uniqueTokens([
+    runtimeToken,
+    normalizeEnv(process.env.TELEGRAM_BOT_TOKEN),
+    normalizeEnv(process.env.TEST_TELEGRAM_BOT_TOKEN),
+    normalizeEnv(process.env.CONTENT_BOT_TOKEN),
+    normalizeEnv(process.env.COACH_BOT_TOKEN),
+    normalizeEnv(process.env.TEST_BOT_TOKEN),
+  ])
 }
 
 export function resolveTelegramDeliveryMode(): TelegramDeliveryMode {

@@ -7,11 +7,13 @@
   },
   "scripts": {
     "preinstall": "node -e \"const v=process.versions.node; const major=Number(v.split('.')[0]); if(major!==22){console.error('Node ' + v + ' is not allowed. Use Node 22.x only.'); process.exit(1);}\"",
-    "dev": "concurrently -c blue,magenta -n backend,web \"env -u NO_COLOR pnpm -s --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; env -u NO_COLOR pnpm -s --dir apps/web dev'\"",
+    "dev": "concurrently -c blue,magenta -n backend,web \"env -u NO_COLOR -u TELEGRAM_BOT_TOKEN -u TEST_TELEGRAM_BOT_TOKEN -u TELEGRAM_BOT_USERNAME -u TEST_TELEGRAM_BOT_USERNAME -u COACH_BOT_TOKEN -u CONTENT_BOT_TOKEN -u TEST_BOT_TOKEN pnpm -s --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; env -u NO_COLOR pnpm -s --dir apps/web dev'\"",
     "dev:parallel": "bash scripts/dev-parallel.sh",
-    "dev:tunnel": "concurrently -c blue,magenta,green -n backend,web,tunnel \"env -u NO_COLOR pnpm -s --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; env -u NO_COLOR pnpm -s --dir apps/web dev'\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; env -u NO_COLOR pnpm -s --dir backend exec tsx ../scripts/dev/sync-ngrok.ts'\"",
+    "dev:tunnel": "concurrently -c blue,magenta,green -n backend,web,tunnel \"env -u NO_COLOR -u TELEGRAM_BOT_TOKEN -u TEST_TELEGRAM_BOT_TOKEN -u TELEGRAM_BOT_USERNAME -u TEST_TELEGRAM_BOT_USERNAME -u COACH_BOT_TOKEN -u CONTENT_BOT_TOKEN -u TEST_BOT_TOKEN pnpm -s --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; env -u NO_COLOR pnpm -s --dir apps/web dev'\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; env -u NO_COLOR pnpm -s --dir backend exec tsx ../scripts/dev/sync-ngrok.ts'\"",
     "dev:clean": "kill -15 $(lsof -ti :3001) $(lsof -ti :5173) 2>/dev/null || true; sleep 2; kill -9 $(lsof -ti :3001) $(lsof -ti :5173) 2>/dev/null || true; pkill ngrok 2>/dev/null || true; pnpm dev:tunnel",
     "dev:bot": "kill -15 $(lsof -ti :3001) $(lsof -ti :5173) 2>/dev/null || true; sleep 2; kill -9 $(lsof -ti :3001) $(lsof -ti :5173) 2>/dev/null || true; pkill ngrok 2>/dev/null || true; SCHEDULER_ENABLED=false NOTIFICATION_WORKER_ENABLED=false RUNTIME_OUTBOX_WORKER_ENABLED=false pnpm dev:tunnel",
+    "dev:keybot": "pnpm dev:bot",
+    "verify:local": "pnpm -C backend exec tsc --noEmit && pnpm -C apps/web exec tsc --noEmit && curl -fsS http://127.0.0.1:3001/health >/dev/null && curl -fsS http://127.0.0.1:3001/api/telegram/webhook/health >/dev/null",
     "webhook:set": "bash scripts/set-webhook.sh",
     "health": "curl -s http://localhost:3001/health/ready | jq",
     "prisma": "pnpm --filter @starway/db exec prisma",
@@ -31,6 +33,8 @@
     "test:funnel": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.builder.test.ts",
     "test:golden": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.golden.test.ts",
     "test:golden:update": "vitest run backend/src/modules/telegram-mentor/handlers/homeScreen.golden.test.ts -u",
+    "test:assistant:e2e": "pnpm exec vitest run backend/src/modules/assistant/assistant.e2e.test.ts backend/src/modules/assistant/assistant.scheduler.test.ts backend/src/modules/assistant/decisionEngine.test.ts backend/src/modules/assistant/service.test.ts backend/src/modules/ai/agentGateway.test.ts backend/src/modules/telegram-mentor/handlers/intelligence.runtime.test.ts backend/src/modules/telegram-mentor/conversation/engine/conversationEngine.test.ts backend/src/modules/telegram-mentor/router/messageRouter.test.ts && pnpm test:mentor:quality && pnpm --dir backend exec tsc --noEmit && pnpm --dir apps/web exec tsc --noEmit",
+    "test:mentor:quality": "pnpm exec vitest run backend/src/modules/assistant/mentorQuality.test.ts",
     "test:unit": "vitest",
     "sync:docs": "tsx scripts/sync-instructions.ts",
     "sync:docs:watch": "tsx scripts/sync-instructions.ts --watch"
@@ -48,7 +52,7 @@
     "telegraf": "^4.16.3",
     "typescript": "^6.0.3",
     "vite": "^5.4.21",
-    "vitest": "^4.1.7"
+    "vitest": "^3.2.4"
   },
   "packageManager": "pnpm@11.3.0"
 }

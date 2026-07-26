@@ -211,8 +211,7 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
   const hasActiveSubscription = Boolean(activeSubscription)
 
   const lines = [
-    `🎯 Твій результат — ${resultTitle}`,
-    '',
+    `🎯 Твій результат — <b>${resultTitle}</b>`,
     'Ти зараз у програмі ФОКУС.',
   ]
 
@@ -222,10 +221,8 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
 
   lines.push(
     '',
-    '━━━━━━━━━━━━━━',
-    '',
     '📅 Наступний Zoom',
-    nextZoomValue,
+    `<b>${nextZoomValue}</b>`,
     '',
     '📊 Практики',
     practiceValue,
@@ -234,17 +231,15 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
   )
 
   if (!hasActiveSubscription) {
-    lines.push('Неактивна')
+    lines.push('<b>Неактивна</b>')
   } else if (activeSubscription?.currentPeriodEnd) {
-    lines.push(`Активна до ${formatDate(activeSubscription.currentPeriodEnd)}`)
+    lines.push(`<b>Активна до ${formatDate(activeSubscription.currentPeriodEnd)}</b>`)
     if (daysUntilExpiry !== null && daysUntilExpiry <= 7) {
-      lines.push('', `💳 Підписка закінчується через ${daysUntilExpiry} днів`)
+      lines.push(`Підписка закінчується через ${daysUntilExpiry} днів`)
     }
   } else {
-    lines.push('Активна')
+    lines.push('<b>Активна</b>')
   }
-
-  lines.push('', '━━━━━━━━━━━━━━', '')
 
   const buttons = await buildFocusActionButtons(userId)
   buttons.push([{ text: '🎯 Переглянути результат', callback_data: 'ab_test:show_result' }])

@@ -14,10 +14,9 @@ export async function processDueNotificationJobs(limit = NOTIFICATION_BATCH_LIMI
   workerRunning = true
 
   try {
-    const jobs = await notificationJobService.getDuePending(limit)
+    const jobs = await notificationJobService.claimDuePending(limit)
     for (const job of jobs) {
       try {
-        await notificationJobService.markProcessing(job.id)
         await notificationService.processJob(job)
         await notificationJobService.markDone(job.id)
       } catch (error) {

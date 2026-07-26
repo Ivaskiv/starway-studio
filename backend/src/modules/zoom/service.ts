@@ -1,4 +1,5 @@
 // backend/src/modules/zoom/service.ts
+import { createHash } from 'node:crypto';
 import { prisma } from '../../db/client.js';
 import { NotificationType, Prisma, SwapStatus, ZoomSessionType, ZoomSlotStatus, ZoomStatus, ZoomSwapStatus } from '@starway/db/prisma-client';
 import type { ZoomAttendeeWithUser, ZoomSession, ZoomSessionAttendee } from './types.js';
@@ -11,6 +12,7 @@ import { FOCUS_PRODUCT_CODES } from '../subscriptions/payments/focus.access.js';
 import { buildShortWayForPayCheckoutUrl } from '../subscriptions/payments/wayforpay.checkout.js';
 import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js';
 import { parseZoomPostReport } from './zoomPostReport.types.js';
+import { getBotLink } from '../../lib/telegram.js';
 
 function isGroupPracticeRequest(requests: unknown): boolean {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return false;
@@ -46,6 +48,14 @@ function getSafeName(firstName?: string | null): string {
 }
 
 const KYIV_TIME_ZONE = 'Europe/Kyiv'
+const CHANNEL_POST_SYNC_TTL_MS = 60_000
+const WEEKLY_LIMIT = 3
+const WEEKLY_PRIVATE_LIMIT_MESSAGE = 'Цього тижня всі слоти зайняті. Запропонувати наступний тиждень?'
+
+let channelPostSyncInFlight: Promise<void> | null = null
+let lastChannelPostSyncSignature = ''
+let lastChannelPostSyncAt = 0
+let lastChannelPostContentHash = ''
 
 function getKyivNow(now = new Date()): Date {
   return new Date(now.toLocaleString('en-US', { timeZone: KYIV_TIME_ZONE }))
@@ -71,6 +81,36 @@ function extractZoomLinkFromRequests(requests: unknown): string {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return ''
   const meta = requests as Record<string, unknown>
   return typeof meta.zoomLink === 'string' ? meta.zoomLink : ''
+}
+
+function resolveRequestedSessionType(requests: unknown): string | null {
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object') return null
+  const rawType = (requests as Record<string, unknown>).type
+  return typeof rawType === 'string' ? rawType.trim().toLowerCase() : null
+}
+
+async function countWeeklyPrivateSessions(expertId: string, anchorDate: Date): Promise<number> {
+  const weekStart = startOfKyivWeek(anchorDate)
+  const weekEnd = endOfKyivWeek(anchorDate)
+
+  return prisma.zoomSession.count({
+    where: {
+      expertId,
+      type: ZoomSessionType.PRIVATE,
+      status: { not: ZoomStatus.CANCELLED },
+      scheduledAt: {
+        gte: weekStart,
+        lte: weekEnd,
+      },
+    },
+  })
+}
+
+async function assertWeeklyPrivateLimit(expertId: string, anchorDate: Date): Promise<void> {
+  const weeklyCount = await countWeeklyPrivateSessions(expertId, anchorDate)
+  if (weeklyCount >= WEEKLY_LIMIT) {
+    throw new Error(WEEKLY_PRIVATE_LIMIT_MESSAGE)
+  }
 }
 
 export async function isActiveFocusSubscriber(userId: string): Promise<boolean> {
@@ -263,6 +303,10 @@ export async function createZoomSession(
   topic: string,
   requests: any[] = [],
 ): Promise<ZoomSession> {
+  if (resolveRequestedSessionType(requests) === 'individual') {
+    await assertWeeklyPrivateLimit(expertId, scheduledAt)
+  }
+
   console.log('[zoom/service createZoomSession] input:', {
     expertId,
     scheduledAt: scheduledAt?.toISOString?.() ?? String(scheduledAt),
@@ -802,6 +846,9 @@ export async function bookPrivateSlot(userId: string, sessionId: string) {
   })
   if (!session) throw new Error('session_not_found')
   if (session.type !== ZoomSessionType.PRIVATE) throw new Error('not_private_session')
+  if (!session.expertId) throw new Error('expert_not_found')
+
+  await assertWeeklyPrivateLimit(session.expertId, session.scheduledAt)
 
   const exists = await prisma.zoomSessionAttendee.findUnique({
     where: { sessionId_userId: { sessionId, userId } },
@@ -846,10 +893,98 @@ export async function cancelPrivateBooking(userId: string, sessionId: string) {
   return { success: true }
 }
 
+function formatPrivateSessionSlotLabel(date: Date): string {
+  return date.toLocaleString('uk-UA', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: KYIV_TIME_ZONE,
+  })
+}
+
+export async function getSwapCandidates(requesterId: string, sessionIdFrom: string) {
+  const sessionFrom = await prisma.zoomSession.findUnique({
+    where: { id: sessionIdFrom },
+    select: {
+      id: true,
+      expertId: true,
+      scheduledAt: true,
+      type: true,
+      status: true,
+    },
+  })
+  if (!sessionFrom) throw new Error('session_not_found')
+  if (sessionFrom.type !== ZoomSessionType.PRIVATE) throw new Error('not_private_session')
+
+  const requesterAttendee = await prisma.zoomSessionAttendee.findUnique({
+    where: { sessionId_userId: { sessionId: sessionIdFrom, userId: requesterId } },
+    select: { id: true },
+  })
+  if (!requesterAttendee) throw new Error('requester_not_attendee')
+
+  const candidateSessions = await prisma.zoomSession.findMany({
+    where: {
+      expertId: sessionFrom.expertId,
+      type: ZoomSessionType.PRIVATE,
+      status: ZoomStatus.SCHEDULED,
+      scheduledAt: { gt: new Date() },
+      id: { not: sessionIdFrom },
+      attendees: {
+        some: {
+          userId: { not: requesterId },
+        },
+      },
+    },
+    select: {
+      id: true,
+      scheduledAt: true,
+      topic: true,
+      attendees: {
+        where: {
+          userId: { not: requesterId },
+        },
+        take: 1,
+        select: {
+          userId: true,
+          user: {
+            select: {
+              firstName: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { scheduledAt: 'asc' },
+    take: 12,
+  })
+
+  return candidateSessions
+    .map((session) => {
+      const attendee = session.attendees[0]
+      if (!attendee) return null
+
+      return {
+        sessionId: session.id,
+        scheduledAt: session.scheduledAt,
+        topic: session.topic,
+        targetUserId: attendee.userId,
+        targetUserName: getSafeName(attendee.user.firstName) || 'Учасник',
+        slotLabel: formatPrivateSessionSlotLabel(session.scheduledAt),
+      }
+    })
+    .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
+}
+
 export async function createSwapRequest(
   requesterId: string,
   sessionIdFrom: string,
-  targetUserIds?: string[],
+  options?: {
+    targetUserId?: string
+    sessionIdTo?: string
+    targetUserIds?: string[]
+  },
 ) {
   try {
     const isSubscriber = await isActiveFocusSubscriber(requesterId)
@@ -865,54 +1000,114 @@ export async function createSwapRequest(
     })
     if (!requesterAttendee) throw new Error('requester_not_attendee')
 
-    const swap = await prisma.zoomSlotSwapRequest.create({
-      data: {
-        requesterId,
-        sessionIdFrom,
-        expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
-        status: SwapStatus.PENDING,
-      },
-    })
+    const targetUserId = options?.targetUserId?.trim() || undefined
+    const sessionIdTo = options?.sessionIdTo?.trim() || undefined
 
-    let targets = targetUserIds?.filter(Boolean) ?? []
-    if (targets.length === 0) {
-      const dayStart = new Date(sessionFrom.scheduledAt)
-      dayStart.setHours(0, 0, 0, 0)
-      const dayEnd = new Date(sessionFrom.scheduledAt)
-      dayEnd.setHours(23, 59, 59, 999)
-      const sameDayPrivate = await prisma.zoomSession.findMany({
+    if ((targetUserId && !sessionIdTo) || (!targetUserId && sessionIdTo)) {
+      throw new Error('swap_target_incomplete')
+    }
+
+    if (targetUserId && sessionIdTo) {
+      const targetAttendee = await prisma.zoomSessionAttendee.findUnique({
+        where: { sessionId_userId: { sessionId: sessionIdTo, userId: targetUserId } },
+        select: {
+          id: true,
+          user: {
+            select: {
+              firstName: true,
+              telegramChatId: true,
+              telegramLinks: {
+                where: { isActive: true, chatId: { not: null } },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { chatId: true },
+              },
+            },
+          },
+          session: {
+            select: {
+              id: true,
+              type: true,
+              status: true,
+              expertId: true,
+              scheduledAt: true,
+            },
+          },
+        },
+      })
+      if (!targetAttendee) throw new Error('swap_target_not_found')
+      if (targetAttendee.session.type !== ZoomSessionType.PRIVATE) throw new Error('not_private_session')
+      if (targetAttendee.session.status === ZoomStatus.CANCELLED) throw new Error('swap_target_unavailable')
+      if (targetAttendee.session.expertId !== sessionFrom.expertId) throw new Error('swap_target_mismatch')
+      if (targetUserId === requesterId) throw new Error('swap_self_forbidden')
+
+      const duplicate = await prisma.zoomSlotSwapRequest.findFirst({
         where: {
-          expertId: sessionFrom.expertId,
-          type: ZoomSessionType.PRIVATE,
-          scheduledAt: { gte: dayStart, lte: dayEnd },
+          requesterId,
+          sessionIdFrom,
+          targetUserId,
+          sessionIdTo,
+          status: SwapStatus.PENDING,
         },
         select: { id: true },
       })
-      const attendees = await prisma.zoomSessionAttendee.findMany({
-        where: {
-          sessionId: { in: sameDayPrivate.map((s) => s.id) },
-          userId: { not: requesterId },
+      if (duplicate) throw new Error('swap_request_already_sent')
+
+      const swap = await prisma.zoomSlotSwapRequest.create({
+        data: {
+          requesterId,
+          sessionIdFrom,
+          targetUserId,
+          sessionIdTo,
+          expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+          status: SwapStatus.PENDING,
         },
-        select: { userId: true },
-        distinct: ['userId'],
       })
-      targets = attendees.map((a) => a.userId)
+
+      const requesterUser = await prisma.user.findUnique({
+        where: { id: requesterId },
+        select: { firstName: true },
+      })
+
+      const targetChatId =
+        targetAttendee.user.telegramChatId
+        ?? targetAttendee.user.telegramLinks[0]?.chatId
+        ?? null
+
+      if (targetChatId) {
+        const requesterName = getSafeName(requesterUser?.firstName) || 'Учасник'
+        await sendDedupedTelegramMessage(
+          targetChatId,
+          [
+            `💱 ${requesterName} пропонує обміняти слот.`,
+            '',
+            `Її слот: ${formatPrivateSessionSlotLabel(sessionFrom.scheduledAt)}`,
+            `Твій слот: ${formatPrivateSessionSlotLabel(targetAttendee.session.scheduledAt)}`,
+          ].join('\n'),
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: 'Прийняти', callback_data: `zoom:swap:accept:${swap.id}:${sessionIdTo}` },
+                { text: 'Відхилити', callback_data: `zoom:swap:decline:${swap.id}` },
+              ]],
+            },
+          },
+        ).catch(() => undefined)
+      }
+
+      return {
+        swapId: swap.id,
+        targetUserId,
+        sessionIdTo,
+        sent: true,
+      }
     }
 
-    if (targets.length > 0) {
-      const users = await prisma.user.findMany({
-        where: { id: { in: targets } },
-        select: { telegramChatId: true },
-      })
-      await Promise.all(
-        users
-          .map((user) => user.telegramChatId)
-          .filter((chatId): chatId is string => Boolean(chatId))
-          .map((chatId) => sendDedupedTelegramMessage(chatId, `💱 Новий запит на обмін слотом. ID: ${swap.id}`).catch(() => undefined)),
-      )
+    const candidates = await getSwapCandidates(requesterId, sessionIdFrom)
+    return {
+      swapId: null,
+      candidates,
     }
-
-    return { swapId: swap.id }
   } catch (err: unknown) {
     if (isPrismaTableMissingError(err)) {
       console.warn('[zoom/service] ZoomSlotSwapRequest table not found — run prisma migrate deploy to apply migration. Skipping createSwapRequest.')
@@ -933,6 +1128,8 @@ export async function acceptSwapRequest(swapId: string, acceptorId: string, sess
     if (!sessionIdFrom) throw new Error('swap_session_missing')
     if (swap.status !== SwapStatus.PENDING) throw new Error('swap_not_pending')
     if (swap.expiresAt <= new Date()) throw new Error('swap_expired')
+    if (swap.targetUserId && swap.targetUserId !== acceptorId) throw new Error('swap_for_another_user')
+    if (swap.sessionIdTo && swap.sessionIdTo !== sessionIdTo) throw new Error('swap_session_mismatch')
 
     const acceptorAttendee = await prisma.zoomSessionAttendee.findUnique({
       where: { sessionId_userId: { sessionId: sessionIdTo, userId: acceptorId } },
@@ -990,6 +1187,13 @@ export async function acceptSwapRequest(swapId: string, acceptorId: string, sess
 
 export async function declineSwapRequest(swapId: string, _declinerId: string) {
   try {
+    const existing = await prisma.zoomSlotSwapRequest.findUnique({
+      where: { id: swapId },
+      select: { id: true, targetUserId: true },
+    })
+    if (!existing) throw new Error('swap_not_found')
+    if (existing.targetUserId && existing.targetUserId !== _declinerId) throw new Error('swap_for_another_user')
+
     const swap = await prisma.zoomSlotSwapRequest.update({
       where: { id: swapId },
       data: { status: SwapStatus.DECLINED, resolvedAt: new Date() },
@@ -1384,38 +1588,80 @@ export async function formatChannelPost(): Promise<string> {
       scheduledAt: { gt: new Date() },
     },
     orderBy: { scheduledAt: 'asc' },
-    take: 6,
+    take: 1,
   });
 
-  const lines = sessions
-    .filter((session) => isGroupPracticeRequest(session.requests))
-    .map((session) => {
-      const dt = new Date(session.scheduledAt);
-      const dateStr = dt.toLocaleString('uk-UA', {
-        weekday: 'short',
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      return `${dateStr} — ${session.topic}`;
-    });
-
-  if (lines.length === 0) {
-    return (
-      'Zoom-практики ФОКУС\n\n'
-      + 'Розклад наступних сесій буде опубліковано найближчим часом.'
-    );
-  }
-
-  return (
-    'Zoom-практики ФОКУС — розклад\n\n'
-    + lines.join('\n') + '\n\n'
-    + 'Посилання на підключення надходить автоматично за 2 год до початку кожної практики.'
+  const nextGroupPractice = sessions.find((session) =>
+    isGroupPracticeRequest(session.requests)
   );
+
+  const nextSessionLine = nextGroupPractice
+    ? formatFocusChannelNextSessionLine(nextGroupPractice.scheduledAt)
+    : 'Скоро опублікуємо найближчу дату в каналі.';
+
+  return [
+    'Вітаю, ти всередині ФОКУСУ.',
+    '',
+    'Тут відбувається реальна робота.',
+    '',
+    'Що далі:',
+    '',
+    '— щотижня Zoom-практика',
+    '— розбір твоєї ситуації',
+    '— конкретні рішення і дії',
+    '',
+    '📅 Наступна Zoom-практика:',
+    nextSessionLine,
+    '',
+    'Що зробити зараз:',
+    '1. Натисни «Записатись на Zoom» під цим повідомленням.',
+    '2. Обери найближчу практику і забронюй місце.',
+    '',
+    'Якщо загубилась або хочеш повернутись назад — натисни «Відкрити чат-бот».',
+  ].join('\n');
+}
+
+function formatFocusChannelNextSessionLine(date: Date): string {
+  const weekday = date.toLocaleDateString('uk-UA', {
+    weekday: 'long',
+    timeZone: KYIV_TIME_ZONE,
+  });
+  const month = date.toLocaleDateString('uk-UA', {
+    month: 'long',
+    timeZone: KYIV_TIME_ZONE,
+  });
+  const time = date.toLocaleTimeString('uk-UA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: KYIV_TIME_ZONE,
+  });
+
+  return `${capitalizeLabel(weekday)}, ${date.getDate()} ${month} · ${time}`;
+}
+
+function capitalizeLabel(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function getChannelPostContentHash(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+async function cleanupExtraChannelPosts(keepId: string): Promise<void> {
+  await prisma.zoomChannelPost.deleteMany({
+    where: {
+      id: { not: keepId },
+    },
+  }).catch(() => undefined);
 }
 
 export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
+  if (channelPostSyncInFlight) {
+    console.log('[syncChannelPost] skipped: sync already in flight');
+    return channelPostSyncInFlight;
+  }
+
+  channelPostSyncInFlight = (async () => {
   const channelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID?.trim();
   console.log('[syncChannelPost] channelId:', channelId ?? null);
   if (!channelId) {
@@ -1425,20 +1671,54 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
 
   const text = await formatChannelPost();
   console.log('[syncChannelPost] text length:', text.length);
+  const contentHash = getChannelPostContentHash(text);
   const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? '';
-  const zoomUrl = webAppBaseUrl ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar` : null;
+  const zoomUrl = webAppBaseUrl
+    ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar?intent=booking`
+    : null;
+  const mainBotUrl = getBotLink() || 'https://t.me/Test_ABsystem_bot';
+  const syncSignature = JSON.stringify({ channelId, text, zoomUrl });
+  const now = Date.now();
+
+  if (
+    lastChannelPostSyncSignature === syncSignature &&
+    now - lastChannelPostSyncAt < CHANNEL_POST_SYNC_TTL_MS
+  ) {
+    console.log('[syncChannelPost] skipped: identical payload within ttl');
+    return;
+  }
+
   const replyMarkup = zoomUrl
     ? {
-        inline_keyboard: [[{ text: 'Повний календар', web_app: { url: zoomUrl } }]],
+        inline_keyboard: [[
+          { text: 'Записатись на Zoom', url: zoomUrl },
+          { text: 'Відкрити чат-бот', url: mainBotUrl },
+        ]],
       }
-    : undefined;
+    : {
+        inline_keyboard: [[{ text: 'Відкрити чат-бот', url: mainBotUrl }]],
+      };
 
-  const existing = await prisma.zoomChannelPost.findFirst();
+  const existing = await prisma.zoomChannelPost.findFirst({
+    orderBy: { updatedAt: 'desc' },
+  });
   console.log('[syncChannelPost] existing:', existing?.messageId ?? null);
-  console.log('[syncChannelPost] start', {
+  console.log('[CHANNEL_SYNC] start', {
     channelId,
     existing: existing?.messageId ?? null,
+    contentHash,
   });
+
+  if (existing && lastChannelPostContentHash === contentHash) {
+    lastChannelPostSyncSignature = syncSignature;
+    lastChannelPostSyncAt = now;
+    console.log('[CHANNEL_SYNC] mode: skip', {
+      reason: 'same_content_hash',
+      messageId: existing.messageId,
+    });
+    return;
+  }
+
   if (existing) {
     try {
       await telegramBot.telegram.editMessageText(
@@ -1446,9 +1726,16 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
         existing.messageId,
         undefined,
         text,
-        { reply_markup: replyMarkup },
+        {
+          reply_markup: replyMarkup,
+          link_preview_options: { is_disabled: true },
+        },
       );
-      console.log('[syncChannelPost] done', { messageId: existing.messageId, mode: 'edit' });
+      await cleanupExtraChannelPosts(existing.id);
+      lastChannelPostContentHash = contentHash;
+      lastChannelPostSyncSignature = syncSignature;
+      lastChannelPostSyncAt = now;
+      console.log('[CHANNEL_SYNC] mode: edit', { messageId: existing.messageId });
       return;
     } catch (err) {
       const description =
@@ -1458,10 +1745,12 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
             ? String(err.response.description ?? '')
             : '';
       if (description.includes('message is not modified')) {
-        console.log('[syncChannelPost] done', {
+        lastChannelPostContentHash = contentHash;
+        lastChannelPostSyncSignature = syncSignature;
+        lastChannelPostSyncAt = now;
+        console.log('[CHANNEL_SYNC] mode: skip', {
           messageId: existing.messageId,
-          mode: 'edit',
-          note: 'message_not_modified',
+          reason: 'message_not_modified',
         });
         return;
       }
@@ -1471,20 +1760,46 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
   }
 
   try {
-    const sent = await telegramBot.telegram.sendMessage(channelId, text, { reply_markup: replyMarkup });
-    console.log('[syncChannelPost] sent:', sent.message_id);
-    await telegramBot.telegram.pinChatMessage(channelId, sent.message_id).catch(() => undefined);
-    await prisma.zoomChannelPost.create({
-      data: {
-        messageId: sent.message_id,
-        chatId: channelId,
-      },
+    const sent = await telegramBot.telegram.sendMessage(channelId, text, {
+      reply_markup: replyMarkup,
+      link_preview_options: { is_disabled: true },
     });
-    console.log('[syncChannelPost] pinned and saved');
-    console.log('[syncChannelPost] done', { messageId: sent.message_id, mode: 'create' });
+    console.log('[syncChannelPost] sent:', sent.message_id);
+    if (existing?.messageId !== sent.message_id) {
+      await telegramBot.telegram.pinChatMessage(channelId, sent.message_id).catch(() => undefined);
+    }
+    let savedId: string
+    if (existing) {
+      const updated = await prisma.zoomChannelPost.update({
+        where: { id: existing.id },
+        data: {
+          messageId: sent.message_id,
+          chatId: channelId,
+        },
+      });
+      savedId = updated.id
+    } else {
+      const created = await prisma.zoomChannelPost.create({
+        data: {
+          messageId: sent.message_id,
+          chatId: channelId,
+        },
+      });
+      savedId = created.id
+    }
+    await cleanupExtraChannelPosts(savedId);
+    lastChannelPostContentHash = contentHash;
+    lastChannelPostSyncSignature = syncSignature;
+    lastChannelPostSyncAt = now;
+    console.log('[CHANNEL_SYNC] mode: create', { messageId: sent.message_id });
   } catch (err) {
     console.error('[syncChannelPost] ERROR create:', err);
   }
+  })().finally(() => {
+    channelPostSyncInFlight = null;
+  });
+
+  return channelPostSyncInFlight;
 }
 
 export async function notifySubscribersNewSession(

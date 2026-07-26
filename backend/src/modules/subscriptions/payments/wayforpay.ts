@@ -6,15 +6,20 @@ import crypto from 'crypto';
 import type { PaymentData } from '../types.js';
 import { getWayForPayCallbackUrl } from './callbackUrl.js';
 
-const MERCHANT_ACCOUNT  = process.env.WAYFORPAY_MERCHANT ?? '';
-const MERCHANT_DOMAIN   = process.env.WAYFORPAY_MERCHANT_DOMAIN ?? '';
-const MERCHANT_SECRET   = process.env.WAYFORPAY_SECRET ?? '';
+function readWayForPayCredentials() {
+  return {
+    merchantAccount: process.env.WAYFORPAY_MERCHANT ?? '',
+    merchantDomain: process.env.WAYFORPAY_MERCHANT_DOMAIN ?? '',
+    merchantSecret: process.env.WAYFORPAY_SECRET ?? '',
+  }
+}
 
 /** Генерує HMAC-MD5 підпис для ініціалізаційного запиту WayForPay */
 export function generatePaymentSignature(data: PaymentData, orderDate: number): string {
+  const { merchantAccount, merchantDomain, merchantSecret } = readWayForPayCredentials()
   const str = [
-    MERCHANT_ACCOUNT,
-    MERCHANT_DOMAIN,
+    merchantAccount,
+    merchantDomain,
     data.payRef,
     orderDate.toString(),
     data.amount.toString(),
@@ -24,11 +29,12 @@ export function generatePaymentSignature(data: PaymentData, orderDate: number): 
     ...(data.product_price ?? [data.amount]).map(String),
   ].join(';');
 
-  return crypto.createHmac('md5', MERCHANT_SECRET).update(str).digest('hex');
+  return crypto.createHmac('md5', merchantSecret).update(str).digest('hex');
 }
 
 /** Формує тіло запиту для WayForPay Purchase API */
 export function buildPaymentRequest(data: PaymentData): Record<string, unknown> {
+  const { merchantAccount, merchantDomain } = readWayForPayCredentials()
   const orderDate = Math.floor(Date.now() / 1000);
 
   const productNames  = data.product_name  ?? [data.productId];
@@ -39,8 +45,8 @@ export function buildPaymentRequest(data: PaymentData): Record<string, unknown> 
 
   return {
     transactionType:  'CREATE_INVOICE',
-    merchantAccount:   MERCHANT_ACCOUNT,
-    merchantDomainName: MERCHANT_DOMAIN,
+    merchantAccount,
+    merchantDomainName: merchantDomain,
     merchantSignature: signature,
     apiVersion:        1,
     language:          'UK',

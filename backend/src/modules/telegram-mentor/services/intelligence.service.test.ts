@@ -10,21 +10,21 @@ describe('telegram intelligence routing', () => {
   it('routes focus questions to the focus intent', () => {
     expect(quickDetectIntent('Що таке ФОКУС?')).toEqual({
       intent: 'about_focus',
-      confidence: 0.9,
+      confidence: 0.98,
     })
   })
 
   it('routes ABSystem methodology questions to the absystem intent', () => {
     expect(quickDetectIntent('Поясни 5 елементів ABSystem')).toEqual({
       intent: 'about_absystem',
-      confidence: 0.9,
+      confidence: 0.98,
     })
   })
 
   it('routes pricing questions to the pricing intent', () => {
     expect(quickDetectIntent('Яка ціна і скільки коштує участь?')).toEqual({
       intent: 'pricing',
-      confidence: 0.9,
+      confidence: 1,
     })
   })
 

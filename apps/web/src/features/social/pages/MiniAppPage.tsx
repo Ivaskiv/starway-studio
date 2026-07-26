@@ -21,8 +21,7 @@ import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import { useTrackFrontendEventMutation } from '@/features/analytics/services/events.api'
 import type { MiniAppLibraryItem, MiniAppPageId } from '@/features/social/types/miniapp'
 import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
-import { useGetWeekOverviewQuery } from '@/features/zoom/services/zoom.api'
-import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
+import { MiniAppZoomWeekPanel } from '@/features/zoom/routes/MiniAppZoomRoute'
 
 const LIBRARY_ITEMS: MiniAppLibraryItem[] = [
   { title: '5 точок опори', sub: 'Безкоштовно', locked: false },
@@ -75,10 +74,10 @@ export default function MiniAppPage() {
   const { data: latestWheel } = useGetLatestWheelAssessmentQuery(userId, {
     skip: shouldSkipProtectedQueries || !userId,
   })
-  const { data: weekOverview, isLoading: isWeekOverviewLoading, isError: isWeekOverviewError } = useGetWeekOverviewQuery(undefined, {
-    skip: shouldSkipProtectedQueries || !userId,
-    refetchOnMountOrArgChange: true,
-  })
+  // const { data: weekOverview, isLoading: isWeekOverviewLoading, isError: isWeekOverviewError } = useGetWeekOverviewQuery(undefined, {
+  //   skip: shouldSkipProtectedQueries || !userId,
+  //   refetchOnMountOrArgChange: true,
+  // })
   const [generateDeepLink, { isLoading: isGeneratingCrossChannelLink }] = useGenerateDeepLinkMutation()
   const [trackFrontendEvent] = useTrackFrontendEventMutation()
   const leadEntryTrackedRef = useRef(false)
@@ -212,13 +211,7 @@ export default function MiniAppPage() {
           </div>
         ) : null}
 
-        {!isBootstrappingAuth && page === 'home' && (
-          <MiniAppZoomWeekPanel
-            isError={isWeekOverviewError}
-            isLoading={isWeekOverviewLoading}
-            overview={weekOverview ?? null}
-          />
-        )}
+{!isBootstrappingAuth && page === 'home' && <MiniAppZoomWeekPanel />}
 
         {!isBootstrappingAuth && page === 'mentor' && mentorAccess.isLocked && (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
@@ -271,128 +264,3 @@ export default function MiniAppPage() {
   )
 }
 
-function MiniAppZoomWeekPanel({
-  overview,
-  isLoading,
-  isError,
-}: {
-  overview: ZoomWeekOverview | null
-  isLoading: boolean
-  isError: boolean
-}) {
-  const formatDateTime = (iso: string) => {
-    const date = new Date(iso)
-    return date.toLocaleString('uk-UA', {
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Europe/Kyiv',
-    })
-  }
-
-  if (isLoading) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 pt-4">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/70">
-          Завантажуємо Zoom-розклад поточного тижня...
-        </div>
-      </div>
-    )
-  }
-
-  if (isError || !overview) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 pt-4">
-        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
-          Не вдалося завантажити Zoom-розклад. Спробуй оновити сторінку.
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-3xl px-4 pt-4 pb-4">
-      <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_80px_rgba(0,0,0,0.16)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Zoom-календар</p>
-            <h2 className="mt-1 text-xl font-semibold text-white">Поточний тиждень</h2>
-            <p className="mt-1 text-sm text-white/55">
-              {new Date(overview.week.from).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' })}
-              {' '}—{' '}
-              {new Date(overview.week.to).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' })}
-              {' '}· {overview.week.timezone}
-            </p>
-          </div>
-          <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] text-white/60">
-            {overview.sessions.length} сесій
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {overview.sessions.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
-              На цей тиждень Zoom-сесій ще немає.
-            </div>
-          ) : (
-            overview.sessions.map((session) => (
-              <div key={session.id} className="rounded-2xl border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white">{session.topic}</p>
-                    <p className="mt-1 text-xs text-white/55">
-                      {formatDateTime(session.scheduledAt)}
-                      {' '}· {session.type}
-                      {session.attendeesCount ? ` · ${session.attendeesCount} учасн.` : ''}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-white/50">
-                    {session.status}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {session.zoomLink ? (
-                    <a
-                      href={session.zoomLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:opacity-90"
-                    >
-                      Відкрити Zoom
-                    </a>
-                  ) : null}
-
-                  {session.hasAudio ? (
-                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-100">
-                      Є аудіо-запис
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {overview.audios.length > 0 ? (
-          <div className="mt-5 border-t border-white/10 pt-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Аудіо цього тижня</p>
-            <div className="mt-3 space-y-2">
-              {overview.audios.map((audio) => (
-                <div key={audio.sessionId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/75">
-                  <p className="font-semibold text-white">{audio.topic}</p>
-                  <p className="mt-1 text-xs text-white/55">
-                    {formatDateTime(audio.scheduledAt)} · {audio.type}
-                  </p>
-                  <p className="mt-2 text-xs text-white/60">Audio file ID: {audio.audioFileId}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
-}

@@ -57,6 +57,7 @@ export function useSystemState() {
     ui: state?.ui,
     trial: state?.trial,
     subscription: state?.subscription,
+    zoomAccess: state?.zoomAccess,
     accessControl: state?.accessControl,
     trialActive,
     subscriptionActive,

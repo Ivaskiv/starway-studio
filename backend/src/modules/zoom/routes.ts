@@ -9,6 +9,7 @@ import {
   getPublicCurrentWeekSessions,
   getUpcoming,
   register,
+  saveBookingQuestion,
   markAttendedHandler,
   postSessionReport,
   getAttendees,
@@ -36,6 +37,7 @@ import {
   handleCreateSwapRequest,
   handleAcceptSwapRequest,
   handleDeclineSwapRequest,
+  handleGetSwapCandidates,
   handleGetPendingSwapRequests,
   handleToggleCoachSlot,
   handleInitiateZoomSwap,
@@ -49,6 +51,7 @@ router.post('/session',                        authRequired, createSession);
 router.get('/upcoming',                        authRequired, getUpcoming);
 router.get('/week',                            telegramWebAppAuth(), getCurrentWeekSessions);
 router.post('/register',                       authRequired, register);
+router.post('/booking-question',               authRequired, saveBookingQuestion);
 router.patch('/attendee/attended',             authRequired, markAttendedHandler);
 router.patch('/session/:sessionId/report',     authRequired, postSessionReport);
 router.get('/session/:sessionId/attendees',    authRequired, getAttendees);
@@ -81,6 +84,7 @@ router.post('/sessions/:id/unbook',            authRequired, handleUnbookSlot);
 router.get('/sessions/private/available',      authRequired, handleGetAvailablePrivateSlots);
 router.delete('/sessions/:id/book',            authRequired, handleCancelPrivateSlotBooking);
 router.post('/swap',                           authRequired, handleCreateSwapRequest);
+router.get('/swap/options',                    authRequired, handleGetSwapCandidates);
 router.post('/swap/:swapId/accept',            authRequired, handleAcceptSwapRequest);
 router.post('/swap/:swapId/decline',           authRequired, handleDeclineSwapRequest);
 router.get('/swap/pending',                    authRequired, handleGetPendingSwapRequests);

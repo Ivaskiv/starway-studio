@@ -2,13 +2,54 @@ import {
   FOCUS_CHANNEL_URL,
   FOCUS_WELCOME,
   abTestFocusContent,
+  buildFocusWelcomeMessage,
 } from '@/products/ab-system/content/abTest.focus.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { createOnceInviteLink } from '@/products/focus/payments/inviteLink.js'
+import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
+import type { ConversationButton, ConversationResponse } from '@/modules/telegram-mentor/conversation/engine/types.js'
+import { resolveTelegramWebappBaseUrl } from '@/config/webapp.js'
+import { bot } from '@/lib/telegram.js'
 import { hasActiveFocusSubscription } from './focus.access.js'
 import { prisma } from '../../../db/client.js'
-import { bot, sendDedupedTelegramMessage } from '../../../lib/telegram.js'
 import { FOCUS_PRODUCT_CODES } from './focus.access.js'
+
+const renderer = new TelegramConversationRenderer()
+
+async function sendOutboundConversation(
+  chatId: string,
+  response: ConversationResponse,
+): Promise<boolean> {
+  return renderer.renderOutbound({ chatId }, response)
+}
+
+function buildMessageResponse(
+  text: string,
+  buttons: ConversationButton[] = [],
+  parseMode?: 'Markdown' | 'HTML',
+): ConversationResponse {
+  return {
+    text: null,
+    buttons,
+    cards: [
+      {
+        kind: 'message',
+        text,
+        parseMode,
+      },
+    ],
+    media: [],
+    nextActions: [],
+    telemetry: {},
+    analytics: {},
+  }
+}
+
+function resolveZoomBookingWebAppUrl(): string {
+  const configured = String(process.env.WEBAPP_URL ?? '').trim()
+  const base = configured || resolveTelegramWebappBaseUrl()
+  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar?intent=booking`
+}
 
 export async function sendFocusPaymentSuccessTelegramMessage(userId: string) {
   const subscription = await prisma.productSubscription.findFirst({
@@ -29,6 +70,7 @@ export async function sendFocusPaymentSuccessTelegramMessage(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      firstName: true,
       telegramChatId: true,
       telegramLinks: {
         where: { isActive: true, chatId: { not: null } },
@@ -49,13 +91,11 @@ export async function sendFocusPaymentSuccessTelegramMessage(userId: string) {
 
   const inviteUrl = await createOnceInviteLink(chatId)
   const billing = absystemContent.BILLING.FOCUS_PAID
-  const text = billing.text.replace('{inviteLink}', inviteUrl)
+  const text = buildFocusWelcomeMessage(user?.firstName, inviteUrl)
 
-  const sent = await sendDedupedTelegramMessage(chatId, text, {
-    reply_markup: {
-      inline_keyboard: [[{ text: billing.cta, url: inviteUrl }]],
-    },
-  })
+  const sent = await sendOutboundConversation(chatId, buildMessageResponse(text, [
+    { kind: 'url', label: billing.cta, value: inviteUrl },
+  ], 'HTML'))
 
   if (sent && subscription?.id) {
     await prisma.productSubscription
@@ -83,6 +123,7 @@ export async function sendAbTestBlock12Welcome(userId: string): Promise<boolean>
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      firstName: true,
       telegramChatId: true,
       telegramLinks: {
         where: { isActive: true, chatId: { not: null } },
@@ -128,25 +169,25 @@ export async function sendAbTestBlock12Welcome(userId: string): Promise<boolean>
   })
 
   const block12Url = inviteUrl || FOCUS_CHANNEL_URL
-  const zoomBookingUrl = (
-    String(process.env.WEBAPP_URL ?? '').trim() ||
-    'https://starway-frontend.vercel.app'
-  ).replace(/\/$/, '') + '/miniapp/zoom-calendar'
-
-  await bot.telegram.sendMessage(
+  const sentMessage = await bot.telegram.sendMessage(
     chatId,
-    `${FOCUS_WELCOME.msg1.body}\n${block12Url}`.trim(),
+    buildFocusWelcomeMessage(user?.firstName, block12Url),
     {
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
           [{ text: FOCUS_WELCOME.msg1.cta, url: block12Url }],
-          [{ text: '🗓️ Обрати день практики', web_app: { url: zoomBookingUrl } }],
+          [{ text: 'Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
         ],
       },
-    }
-  )
+    },
+  ).catch((error) => {
+    console.error('[Focus] Block 12 direct send failed', error)
+    return null
+  })
+  const sent = Boolean(sentMessage)
   console.log('[BLOCK12_DIAG]', { userId, chatId, step: 'after_send' })
-  return true
+  return sent
 }
 
 function normalizeTelegramId(value: string | number | null | undefined): string {
@@ -181,7 +222,17 @@ export async function sendAbTestBlock12PostJoin(userId: string): Promise<boolean
   const chatId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null
   if (!chatId) return false
 
-  const sent = await sendDedupedTelegramMessage(chatId, abTestFocusContent.afterJoin.body)
+  const sent = await sendOutboundConversation(
+    chatId,
+    buildMessageResponse(
+      abTestFocusContent.afterJoin.body,
+      [
+        { kind: 'web_app', label: 'Записатись на Zoom', value: resolveZoomBookingWebAppUrl() },
+        { kind: 'url', label: 'Відкрити канал', value: FOCUS_CHANNEL_URL },
+      ],
+      'HTML',
+    ),
+  )
   if (!sent) return false
 
   await prisma.productSubscription.update({
@@ -190,6 +241,56 @@ export async function sendAbTestBlock12PostJoin(userId: string): Promise<boolean
   })
 
   return true
+}
+
+export async function resendFocusAccessTelegramMessage(userId: string): Promise<boolean> {
+  const subscription = await prisma.productSubscription.findFirst({
+    where: {
+      userId,
+      product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      channelJoinedAt: true,
+    },
+  })
+
+  if (!subscription) {
+    return false
+  }
+
+  if (subscription.channelJoinedAt) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        telegramChatId: true,
+        telegramLinks: {
+          where: { isActive: true, chatId: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { chatId: true },
+        },
+      },
+    })
+    if (!user) return false
+
+    const chatId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null
+    if (!chatId) return false
+
+    return sendOutboundConversation(
+      chatId,
+      buildMessageResponse(
+        abTestFocusContent.afterJoin.body,
+        [
+          { kind: 'web_app', label: 'Записатись на Zoom', value: resolveZoomBookingWebAppUrl() },
+          { kind: 'url', label: 'Відкрити канал', value: FOCUS_CHANNEL_URL },
+        ],
+        'HTML',
+      ),
+    )
+  }
+
+  return sendAbTestBlock12Welcome(userId)
 }
 
 export async function handleFocusChannelJoinByTelegramUserId(
@@ -252,13 +353,9 @@ export async function sendAbsystemPaymentSuccessTelegramMessage(userId: string) 
 
   const text = [billing.text].join('\n')
 
-  return sendDedupedTelegramMessage(chatId, text, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: billing.cta, url: `${platformUrl}/app/wheel` }],
-      ],
-    },
-  })
+  return sendOutboundConversation(chatId, buildMessageResponse(text, [
+    { kind: 'url', label: billing.cta, value: `${platformUrl}/app/wheel` },
+  ]))
 }
 
 export async function sendPaymentFailedTelegramMessage(
@@ -284,9 +381,7 @@ export async function sendPaymentFailedTelegramMessage(
   }
 
   const billing = absystemContent.BILLING.PAYMENT_FAILED
-  return sendDedupedTelegramMessage(chatId, billing.text, {
-    reply_markup: {
-      inline_keyboard: [[{ text: billing.cta, url: paymentUrl }]],
-    },
-  })
+  return sendOutboundConversation(chatId, buildMessageResponse(billing.text, [
+    { kind: 'url', label: billing.cta, value: paymentUrl },
+  ]))
 }

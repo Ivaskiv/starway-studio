@@ -4,6 +4,23 @@ import { buildShortWayForPayCheckoutUrl, buildShortWayForPayCheckoutUrlSync } fr
 import { resolveEcosystemPaymentPlan } from './business.catalog.js'
 
 type CheckoutEntrySource = 'web' | 'telegram'
+type CheckoutEntryOptions = {
+  source?: CheckoutEntrySource
+  targetPath?: string
+}
+
+function normalizeCheckoutEntryOptions(
+  input: CheckoutEntryOptions | CheckoutEntrySource | undefined,
+): Required<Pick<CheckoutEntryOptions, 'source'>> & Pick<CheckoutEntryOptions, 'targetPath'> {
+  if (typeof input === 'string') {
+    return { source: input }
+  }
+
+  return {
+    source: input?.source ?? 'web',
+    targetPath: input?.targetPath,
+  }
+}
 
 function resolveDevelopmentPaymentAmount(
   productId: EcosystemPaymentProduct,
@@ -54,7 +71,8 @@ function getFrontendBaseUrl() {
 export function buildWayForPayReturnUrl(
   backendBaseUrl: string,
   frontendBaseUrl?: string,
-  source: CheckoutEntrySource = 'web'
+  source: CheckoutEntrySource = 'web',
+  targetPath?: string
 ): string {
   const safeBackend = backendBaseUrl.replace(/\/$/, '')
   if (source === 'telegram') {
@@ -62,8 +80,12 @@ export function buildWayForPayReturnUrl(
   }
   const target = (frontendBaseUrl ?? '').replace(/\/$/, '')
   if (target) {
+    const resolvedTarget =
+      targetPath && targetPath.trim()
+        ? `${target}${targetPath.startsWith('/') ? targetPath : `/${targetPath}`}`
+        : `${target}/miniapp?startapp=billing-success`
     return `${safeBackend}/api/subscriptions/payments/wayforpay/return?target=${encodeURIComponent(
-      `${target}/miniapp?startapp=billing-success`
+      resolvedTarget
     )}`
   }
   return `${safeBackend}/api/subscriptions/payments/wayforpay/return`
@@ -73,8 +95,10 @@ export function buildEcosystemPaymentCheckoutUrl(
   productId: EcosystemPaymentProduct,
   planId: EcosystemPaymentPlanId,
   userId: string,
-  source: CheckoutEntrySource = 'web'
+  options: CheckoutEntryOptions | CheckoutEntrySource = {}
 ) {
+  const normalizedOptions = normalizeCheckoutEntryOptions(options)
+  const source = normalizedOptions.source
   const plan = resolveEcosystemPaymentPlan(productId, planId)
   if (!plan) {
     throw new Error('invalid_ecosystem_plan')
@@ -95,7 +119,12 @@ export function buildEcosystemPaymentCheckoutUrl(
     product_count: [1],
     product_price: [checkoutAmount],
   })
-  payment.returnUrl = buildWayForPayReturnUrl(getBackendBaseUrl(), getFrontendBaseUrl(), source)
+  payment.returnUrl = buildWayForPayReturnUrl(
+    getBackendBaseUrl(),
+    getFrontendBaseUrl(),
+    source,
+    normalizedOptions.targetPath,
+  )
   const checkoutUrl = buildShortWayForPayCheckoutUrlSync(getBackendBaseUrl(), payment, {
     product: productId,
     plan: planId,
@@ -107,8 +136,10 @@ export async function buildEcosystemPaymentCheckoutSession(
   productId: EcosystemPaymentProduct,
   planId: EcosystemPaymentPlanId,
   userId: string,
-  source: CheckoutEntrySource = 'web'
+  options: CheckoutEntryOptions | CheckoutEntrySource = {}
 ): Promise<EcosystemPaymentCheckoutSession> {
+  const normalizedOptions = normalizeCheckoutEntryOptions(options)
+  const source = normalizedOptions.source
   const plan = resolveEcosystemPaymentPlan(productId, planId)
   if (!plan) {
     throw new Error('invalid_ecosystem_plan')
@@ -146,7 +177,12 @@ export async function buildEcosystemPaymentCheckoutSession(
 
   const backendBase = getBackendBaseUrl()
   const frontendBaseUrl = getFrontendBaseUrl()
-  payment.returnUrl = buildWayForPayReturnUrl(backendBase, frontendBaseUrl, source)
+  payment.returnUrl = buildWayForPayReturnUrl(
+    backendBase,
+    frontendBaseUrl,
+    source,
+    normalizedOptions.targetPath,
+  )
   const isProduction = process.env.NODE_ENV === 'production'
   if (
     isProduction &&

@@ -24,6 +24,15 @@ import {
   toggleHourHandler,
 } from './schedule.handler.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
+import {
+  AI_OPERATOR_ACTIONS,
+  isCoachDialogueAwaiting,
+  isCoachPostEditingActive,
+  runCoachOperatorAction,
+  runCoachStartDay,
+  submitCoachDialogues,
+  submitCoachEditedPost,
+} from '../../../modules/ai-operator/operator.service.js'
 
 const COACH_CALENDAR_ROUTE = '/miniapp/zoom-calendar'
 
@@ -76,8 +85,24 @@ function withCoachRuntimeProtection<T extends Context>(
 }
 
 async function checkCoachAccess(ctx: Context): Promise<boolean> {
-  if (ctx.chat?.type && ctx.chat.type !== 'private') return false
+  if (ctx.chat?.type && ctx.chat.type !== 'private') {
+    const chatId = String(ctx.chat?.id ?? '').trim()
+    const opsChatId = String(
+      process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? ''
+    ).trim()
+    if (!chatId || !opsChatId || chatId !== opsChatId) {
+      return false
+    }
+  }
   return checkCoachRole(ctx)
+}
+
+function isStarwayOpsChat(ctx: Context): boolean {
+  const chatId = String(ctx.chat?.id ?? '').trim()
+  const opsChatId = String(
+    process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? ''
+  ).trim()
+  return Boolean(chatId && opsChatId && chatId === opsChatId)
 }
 
 async function showCoachMenu(ctx: Context): Promise<void> {
@@ -150,8 +175,68 @@ async function checkCoachRole(ctx: Context): Promise<boolean> {
   return user?.role === 'EXPERT' || user?.role === 'SUPERADMIN'
 }
 
+async function resolveCoachUserId(ctx: Context): Promise<string | null> {
+  const tgId = ctx.from?.id?.toString()
+  if (!tgId) return null
+
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { telegramUserId: tgId },
+        { telegramChatId: tgId },
+      ],
+    },
+    select: { id: true },
+  })
+
+  return user?.id ?? null
+}
+
 export function registerCoachBotHandlers(telegramBot: Telegraf): void {
   validateCoachContentCatalog()
+
+  telegramBot.use(async (ctx, next) => {
+    if (!ctx.message || !('text' in ctx.message)) {
+      return next()
+    }
+    if (!await checkCoachAccess(ctx)) {
+      return next()
+    }
+
+    const userId = await resolveCoachUserId(ctx)
+    if (!userId) {
+      return next()
+    }
+
+    const text = String(ctx.message.text ?? '').trim()
+    if (!text) {
+      return next()
+    }
+
+    if (await isCoachPostEditingActive(userId)) {
+      const step = await submitCoachEditedPost(userId, text)
+      await ctx.reply(step.text, {
+        parse_mode: 'HTML',
+        ...(step.buttons.length
+          ? { reply_markup: { inline_keyboard: step.buttons } }
+          : {}),
+      })
+      return
+    }
+
+    if (!await isCoachDialogueAwaiting(userId)) {
+      return next()
+    }
+
+    const step = await submitCoachDialogues(userId, text)
+    await ctx.reply(step.text, {
+      parse_mode: 'HTML',
+      ...(step.buttons.length
+        ? { reply_markup: { inline_keyboard: step.buttons } }
+        : {}),
+    })
+    return
+  })
 
   telegramBot.start(withCoachRuntimeProtection('start', async (ctx) => {
     const isCoach = await checkCoachAccess(ctx)
@@ -180,6 +265,26 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     }
 
     await scheduleMenuHandler(ctx)
+  }))
+  telegramBot.hears(/^\/start-day(?:@\w+)?$/iu, withCoachRuntimeProtection('command:start-day', async (ctx) => {
+    if (!await checkCoachAccess(ctx)) return
+
+    const userId = await resolveCoachUserId(ctx)
+    if (!userId) {
+      await ctx.reply('Не вдалося визначити профіль коуча.')
+      return
+    }
+
+    const step = await runCoachStartDay(userId)
+    await ctx.reply(
+      step.text,
+      {
+        parse_mode: 'HTML',
+        ...(step.buttons.length
+          ? { reply_markup: { inline_keyboard: step.buttons } }
+          : {}),
+      },
+    )
   }))
   telegramBot.action('coach:schedule', withCoachRuntimeProtection('action:coach:schedule', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
@@ -236,6 +341,27 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       'Або одразу плануємо — і ти розкажеш що було по ходу?',
     ].join('\n'))
   }))
+  telegramBot.action(/^aiop:/, withCoachRuntimeProtection('action:ai-operator', async (ctx) => {
+    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
+
+    const userId = await resolveCoachUserId(ctx)
+    if (!userId) {
+      await ctx.answerCbQuery('Профіль не знайдено').catch(() => undefined)
+      return
+    }
+
+    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+    const action = raw as typeof AI_OPERATOR_ACTIONS[keyof typeof AI_OPERATOR_ACTIONS]
+    const step = await runCoachOperatorAction(userId, action)
+
+    await ctx.answerCbQuery('Оновлено').catch(() => undefined)
+    await ctx.editMessageText(step.text, {
+      parse_mode: 'HTML',
+      ...(step.buttons.length
+        ? { reply_markup: { inline_keyboard: step.buttons } }
+        : {}),
+    }).catch(() => undefined)
+  }))
   telegramBot.hears(coachBotContent.menu.audio, withCoachRuntimeProtection('menu:audio', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await handleCoachAudioCommand(ctx, '')
@@ -257,7 +383,10 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     await showCoachSystemMenu(ctx)
   }))
   telegramBot.action(/^admin:grant_focus:/, withCoachRuntimeProtection('action:admin:grant_focus', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
+    const hasAccess = await checkCoachAccess(ctx)
+    if (!hasAccess && !isStarwayOpsChat(ctx)) {
+      return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
+    }
     const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
     const parts = raw.split(':')
     const checkoutToken = parts[2] ?? ''
@@ -297,7 +426,10 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessFailed}\nПричина: ${result.message}\nuserId: ${userId}`)
   }))
   telegramBot.action(/^admin:deny_focus:/, withCoachRuntimeProtection('action:admin:deny_focus', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
+    const hasAccess = await checkCoachAccess(ctx)
+    if (!hasAccess && !isStarwayOpsChat(ctx)) {
+      return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
+    }
     const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
     const parts = raw.split(':')
     const checkoutToken = parts[2] ?? ''

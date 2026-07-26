@@ -1,20 +1,23 @@
-# Temporary Testing Area
+# Test Instructions
 
-Purpose:
-Temporary testing and validation instructions.
+## Purpose
 
-Rules:
-- No source-of-truth content.
-- No duplicated documentation.
-- No business definitions.
-- No architecture copies.
+Temporary QA and manual verification instructions. This folder is not a source of business or architecture truth.
 
-Before production release:
-Review all files.
+## Contained Documents
 
-Either:
-- move to proper docs location
-- or delete
+- AI mentor test: `docs/test-instructions/ai-mentor-test.md`
+- AI seller test: `docs/test-instructions/ai-seller-test.md`
+- Coach schedule test: `docs/test-instructions/coach-schedule-test.md`
+- Archived smoke-tests pointer: `docs/test-instructions/smoke-tests.md`
+- Archived zoom-booking pointer: `docs/test-instructions/zoom-booking-test.md`
 
-Search token:
-REMOVE_TEST_DOCS
+## Canonical Documents
+
+- Canonical documents:
+  - `docs/test-instructions/README.md`
+
+## Related Folders
+
+- `docs/dev-skills/testing/`
+- `docs/archive/`

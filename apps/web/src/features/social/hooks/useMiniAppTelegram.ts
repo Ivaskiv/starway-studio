@@ -5,6 +5,8 @@ import { useAuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import type { MiniAppPageId } from '@/features/social/types/miniapp'
 
+const MINI_APP_AUTH_TIMEOUT_MS = 3_000
+
 declare const Telegram:
   | {
       WebApp: {
@@ -77,15 +79,30 @@ export function useMiniAppTelegram({
     import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   const isAwaitingRestore = !isAuthenticated && (authRestoreStatus === 'idle' || authRestoreStatus === 'restoring')
 
+  const withBootstrapTimeout = <T,>(promise: Promise<T>): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        reject(new Error('Mini App authentication timed out'))
+      }, MINI_APP_AUTH_TIMEOUT_MS)
+
+      promise.then(resolve, reject).finally(() => {
+        window.clearTimeout(timeoutId)
+      })
+    })
+
   useEffect(() => {
     if (isAwaitingRestore) {
       setIsBootstrappingAuth(true)
-      return
+      const timeoutId = window.setTimeout(() => {
+        setIsBootstrappingAuth(false)
+      }, MINI_APP_AUTH_TIMEOUT_MS)
+
+      return () => {
+        window.clearTimeout(timeoutId)
+      }
     }
 
-    if (!autoLoginAttemptedRef.current) {
-      setIsBootstrappingAuth(false)
-    }
+    setIsBootstrappingAuth(false)
   }, [isAwaitingRestore])
 
   useEffect(() => {
@@ -120,9 +137,8 @@ export function useMiniAppTelegram({
         ? loginWithSocial('telegram')
         : Promise.reject(new Error('Telegram initData is missing'))
 
-    void loginPromise
+    void withBootstrapTimeout(loginPromise)
       .then((result) => {
-        setIsBootstrappingAuth(false)
         if (import.meta.env.DEV) {
           console.info('[miniapp/auth] Telegram auto-login success', {
             email: result.email ?? null,
@@ -133,7 +149,8 @@ export function useMiniAppTelegram({
       })
       .catch((error) => {
         console.warn('[useMiniAppTelegram] Telegram auto-login failed', error)
-        autoLoginAttemptedRef.current = false
+      })
+      .finally(() => {
         setIsBootstrappingAuth(false)
       })
   }, [allowDevFallback, isAuthenticated, isAwaitingRestore, loginWithSocial, loginWithTelegramMiniApp, telegramInitData, telegramUser?.id])

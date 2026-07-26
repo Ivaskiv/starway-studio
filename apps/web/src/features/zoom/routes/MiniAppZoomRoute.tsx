@@ -1,4 +1,4 @@
-import { useAppSelector } from '@/app/hooks'
+import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { selectAuthStatus, selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
 import {
@@ -7,16 +7,21 @@ import {
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
+import { useCreateProductPaymentMutation } from '@/features/subscription/services/billing.api'
+import { openExternalPaymentUrl } from '@/features/subscription/utils/openExternalPaymentUrl'
 import { CoachZoomPanel, UserZoomPanel } from '@/features/zoom'
 import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
 import HomeTab from '@/features/zoom/tabs/HomeTab'
 
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import { useGetAudioListQuery } from '@/features/zoom/services/audio.api'
-import { useGetWeekOverviewQuery, useRegisterAttendeeMutation } from '@/features/zoom/services/zoom.api'
+import { useGetWeekOverviewQuery, useRegisterAttendeeMutation, useSubmitBookingQuestionMutation } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
+import { getSessionDateLabel, getSessionMeta } from '@/features/zoom/zoom.utils'
 import { BarChart3, CalendarDays, CircleUserRound, Crosshair, Home } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { api } from '@/services/api'
+import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 type MiniAppZoomTabId = 'home' | 'calendar' | 'battle' | 'progress' | 'profile'
 
@@ -118,7 +123,7 @@ function MiniAppZoomOnboarding({
     <div className="mx-auto w-full max-w-md px-4 pt-8 pb-10">
       <div className="rounded-2xl border border-white/10 bg-[var(--bg-secondary)] p-5">
         <p className="text-sm text-[var(--text-primary)]">
-          Щоб бачити розклад Zoom-практик і отримувати нагадування - залиш email. Це займе 10 секунд.
+          <strong>Ще один крок.</strong> Додай ім&apos;я та email, щоб відкрити Zoom-календар.
         </p>
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
           <label className="block">
@@ -146,7 +151,7 @@ function MiniAppZoomOnboarding({
             disabled={isSaving}
             className="w-full rounded-xl bg-[var(--accent-primary)] px-4 py-2 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-60"
           >
-            Зберегти і відкрити Zoom-календар
+            {isSaving ? 'Зберігаємо...' : 'Відкрити календар'}
           </button>
         </form>
       </div>
@@ -154,24 +159,33 @@ function MiniAppZoomOnboarding({
   )
 }
 
-function formatZoomDateTime(iso: string): string {
-  const date = new Date(iso)
-
-  return date.toLocaleString('uk-UA', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Europe/Kyiv',
-  })
-}
-
 export function MiniAppZoomWeekPanel() {
+  const dispatch = useAppDispatch()
   const user = useAppSelector(selectCurrentUser)
+  const navigate = useNavigate()
+  const isBookingIntent =
+    typeof window !== 'undefined' &&
+    resolveMiniAppEntryIntent(window.location.search) === MINI_APP_ENTRY_INTENT.BOOKING
+  const paymentSuccessFlag = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    const params = new URLSearchParams(window.location.search)
+    return params.get('payment') === 'success' || params.get('startapp') === 'billing-success'
+  }, [])
+  const { zoomAccess } = useSystemState()
   const [audioMonth, setAudioMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [registerAttendee, { isLoading: isRegisteringAttendee }] = useRegisterAttendeeMutation()
+  const [submitBookingQuestion, { isLoading: isSubmittingBookingQuestion }] = useSubmitBookingQuestionMutation()
+  const [createProductPayment, { isLoading: isOpeningAccessPayment }] = useCreateProductPaymentMutation()
   const [registeringSessionId, setRegisteringSessionId] = useState<string | null>(null)
+  const [bookingSuccessSessionId, setBookingSuccessSessionId] = useState<string | null>(null)
+  const [bookingError, setBookingError] = useState<string | null>(null)
+  const [showQuestionInput, setShowQuestionInput] = useState(false)
+  const [questionSessionId, setQuestionSessionId] = useState<string | null>(null)
+  const [bookingQuestionText, setBookingQuestionText] = useState('')
+  const [bookingQuestionError, setBookingQuestionError] = useState<string | null>(null)
+  const [questionSubmittedSessionId, setQuestionSubmittedSessionId] = useState<string | null>(null)
+  const [questionSkippedSessionId, setQuestionSkippedSessionId] = useState<string | null>(null)
+  const [accessOpenedMessageVisible, setAccessOpenedMessageVisible] = useState(false)
   const { data, isLoading, isError } = useGetWeekOverviewQuery(undefined, {
     skip: !user,
     refetchOnMountOrArgChange: true,
@@ -180,6 +194,50 @@ export function MiniAppZoomWeekPanel() {
     skip: !user,
     refetchOnMountOrArgChange: true,
   })
+  const highlightedSessionRef = useRef<HTMLDivElement | null>(null)
+  const highlightedSession =
+    data?.sessions.find((session) => !session.isMyBooking) ?? data?.sessions[0] ?? null
+  const hasFocusAccess = zoomAccess?.hasFocus === true
+
+  useEffect(() => {
+    if (!paymentSuccessFlag) return
+
+    dispatch(
+      api.util.invalidateTags([
+        'Access',
+        'Products',
+        'Subscription',
+        'ZoomSession',
+      ]),
+    )
+  }, [dispatch, paymentSuccessFlag])
+
+  useEffect(() => {
+    if (!isBookingIntent || !highlightedSessionRef.current || !highlightedSession) {
+      return
+    }
+
+    highlightedSessionRef.current.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    })
+  }, [highlightedSession, isBookingIntent])
+
+  useEffect(() => {
+    if (!paymentSuccessFlag || !hasFocusAccess) {
+      return
+    }
+
+    setAccessOpenedMessageVisible(true)
+    setBookingError(null)
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('payment')
+      url.searchParams.delete('startapp')
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    }
+  }, [hasFocusAccess, paymentSuccessFlag])
 
   if (!user) {
     return null
@@ -205,11 +263,75 @@ export function MiniAppZoomWeekPanel() {
     )
   }
 
+  const handleOpenAccess = async () => {
+    setBookingError(null)
+
+    try {
+      const response = await createProductPayment({
+        productId: 'focus',
+        planCode: '1month',
+        source: 'web',
+        targetPath: '/miniapp/zoom-calendar?payment=success',
+      }).unwrap()
+
+      if (response.status === 'already_active') {
+        dispatch(
+          api.util.invalidateTags([
+            'Access',
+            'Products',
+            'Subscription',
+            'ZoomSession',
+          ]),
+        )
+        setAccessOpenedMessageVisible(true)
+        return
+      }
+
+      const checkoutUrl = response.checkoutUrl ?? response.paymentUrl
+      if (!checkoutUrl) {
+        setBookingError('Не вдалося відкрити оплату. Спробуй ще раз.')
+        return
+      }
+
+      openExternalPaymentUrl(checkoutUrl)
+    } catch (error) {
+      console.error('[MiniAppZoomWeekPanel] open access payment failed', error)
+      setBookingError('Не вдалося відкрити оплату. Спробуй ще раз.')
+    }
+  }
+
   const handleRegister = async (sessionId: string) => {
+    if (!hasFocusAccess) {
+      await handleOpenAccess()
+      return
+    }
+
     setRegisteringSessionId(sessionId)
+    setBookingSuccessSessionId(null)
+    setBookingError(null)
+    setShowQuestionInput(false)
+    setQuestionSessionId(null)
+    setBookingQuestionText('')
+    setBookingQuestionError(null)
+    setQuestionSubmittedSessionId(null)
+    setQuestionSkippedSessionId(null)
     try {
       await registerAttendee({ sessionId }).unwrap()
+      setBookingSuccessSessionId(sessionId)
+      setQuestionSessionId(sessionId)
+      setShowQuestionInput(true)
     } catch (error) {
+      const normalizedError =
+        typeof error === 'object' && error && 'data' in error
+          ? (error as { data?: { error?: string } }).data?.error
+          : null
+
+      if (normalizedError === 'NO_ACTIVE_SUBSCRIPTION') {
+        setBookingError('Доступ до Zoom відкривається з активним ФОКУСОМ.')
+        return
+      }
+
+      setBookingError('Не вдалося записати на Zoom. Спробуй ще раз.')
       console.error('[MiniAppZoomWeekPanel] register attendee failed', {
         sessionId,
         error,
@@ -217,6 +339,41 @@ export function MiniAppZoomWeekPanel() {
     } finally {
       setRegisteringSessionId(null)
     }
+  }
+
+  const handleSubmitBookingQuestion = async () => {
+    const sessionId = questionSessionId?.trim()
+    const questionText = bookingQuestionText.trim()
+
+    if (!sessionId) return
+    if (!questionText) {
+      setBookingQuestionError('Напиши питання або ситуацію, щоб надіслати.')
+      return
+    }
+
+    setBookingQuestionError(null)
+
+    try {
+      await submitBookingQuestion({ sessionId, questionText }).unwrap()
+      setQuestionSubmittedSessionId(sessionId)
+      setShowQuestionInput(false)
+      setBookingQuestionText('')
+    } catch (error) {
+      console.error('[MiniAppZoomWeekPanel] booking question submit failed', {
+        sessionId,
+        error,
+      })
+      setBookingQuestionError('Не вдалося надіслати питання. Спробуй ще раз.')
+    }
+  }
+
+  const handleSkipBookingQuestion = () => {
+    if (questionSessionId) {
+      setQuestionSkippedSessionId(questionSessionId)
+    }
+    setShowQuestionInput(false)
+    setBookingQuestionText('')
+    setBookingQuestionError(null)
   }
 
   return (
@@ -239,20 +396,47 @@ export function MiniAppZoomWeekPanel() {
         </div>
 
         <div className="mt-4 space-y-3">
+          {accessOpenedMessageVisible && hasFocusAccess ? (
+            <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
+              <p className="font-semibold">Доступ відкрито.</p>
+              <p className="mt-1 text-emerald-100/90">Можеш записатись на Zoom.</p>
+            </div>
+          ) : null}
+
+          {!hasFocusAccess ? (
+            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-50">
+              <p className="font-semibold">Zoom-практика доступна після активації ФОКУС.</p>
+              <p className="mt-1 text-amber-100/85">Ти бачиш найближчу сесію, а запис відкриється після оплати.</p>
+            </div>
+          ) : null}
+
           {data.sessions.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
               На цей тиждень Zoom-сесій ще немає.
             </div>
           ) : (
             data.sessions.map((session: ZoomWeekOverview['sessions'][number]) => (
-              <div key={session.id} className="rounded-2xl border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+              <div
+                key={session.id}
+                ref={session.id === highlightedSession?.id ? highlightedSessionRef : null}
+                className={[
+                  'rounded-2xl border p-4 transition-all',
+                  session.id === highlightedSession?.id && isBookingIntent
+                    ? 'border-[rgba(var(--accent-rgb),0.42)] bg-[rgba(var(--accent-rgb),0.14)] shadow-[0_18px_48px_rgba(0,0,0,0.24)]'
+                    : 'border-white/10 bg-[rgba(255,255,255,0.03)]',
+                ].join(' ')}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    {session.id === highlightedSession?.id && isBookingIntent ? (
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[rgb(var(--accent-rgb))]">
+                        Найближча Zoom-практика
+                      </p>
+                    ) : null}
                     <p className="text-sm font-semibold text-white">{session.topic}</p>
                     <p className="mt-1 text-xs text-white/55">
-                      {formatZoomDateTime(session.scheduledAt)}
-                      {' '}· {session.type}
-                      {session.attendeesCount ? ` · ${session.attendeesCount} учасн.` : ''}
+                      {getSessionDateLabel(session.scheduledAt)}
+                      {' '}· {getSessionMeta(session)}
                     </p>
                   </div>
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-white/50">
@@ -269,10 +453,21 @@ export function MiniAppZoomWeekPanel() {
                     <button
                       type="button"
                       onClick={() => void handleRegister(session.id)}
-                      disabled={isRegisteringAttendee && registeringSessionId === session.id}
-                      className="rounded-full border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] px-3 py-1.5 text-xs font-semibold text-[rgb(var(--accent-rgb))] disabled:opacity-60"
+                      disabled={hasFocusAccess && isRegisteringAttendee && registeringSessionId === session.id}
+                      className={[
+                        'rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-60',
+                        session.id === highlightedSession?.id && isBookingIntent
+                          ? 'bg-[rgb(var(--accent-rgb))] text-[var(--bg-primary)] shadow-[0_12px_30px_rgba(0,0,0,0.24)]'
+                          : 'border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] text-[rgb(var(--accent-rgb))]',
+                      ].join(' ')}
                     >
-                      {isRegisteringAttendee && registeringSessionId === session.id ? 'Записуємо...' : 'Записатись'}
+                      {!hasFocusAccess
+                        ? isOpeningAccessPayment
+                          ? 'Відкриваємо оплату...'
+                          : 'Отримати доступ'
+                        : isRegisteringAttendee && registeringSessionId === session.id
+                          ? 'Записуємо...'
+                          : 'Записатись'}
                     </button>
                   )}
 
@@ -301,6 +496,79 @@ export function MiniAppZoomWeekPanel() {
                     </span>
                   )}
                 </div>
+
+                {bookingSuccessSessionId === session.id ? (
+                  <div className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-50">
+                    <p className="font-semibold">Ти записана на Zoom.</p>
+                    <p className="mt-1 text-emerald-100/90">📅 {getSessionDateLabel(session.scheduledAt)}</p>
+                    <p className="mt-2 text-emerald-100/90">&gt; Додай у календар і приходь вчасно.</p>
+
+                    {showQuestionInput && questionSessionId === session.id ? (
+                      <div className="mt-3 rounded-2xl border border-emerald-300/15 bg-black/10 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100/75">
+                          Питання до Zoom
+                        </p>
+                        <textarea
+                          value={bookingQuestionText}
+                          onChange={(event) => setBookingQuestionText(event.target.value)}
+                          placeholder="Напиши питання або ситуацію..."
+                          rows={3}
+                          className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white outline-none transition focus:border-white/25"
+                        />
+                        {bookingQuestionError ? (
+                          <p className="mt-2 text-xs text-amber-100">{bookingQuestionError}</p>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleSubmitBookingQuestion()}
+                            disabled={isSubmittingBookingQuestion}
+                            className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50 disabled:opacity-60"
+                          >
+                            {isSubmittingBookingQuestion ? 'Надсилаємо...' : 'Надіслати'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSkipBookingQuestion}
+                            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                          >
+                            Пропустити
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {!showQuestionInput && questionSubmittedSessionId === session.id ? (
+                      <div className="mt-3 rounded-2xl border border-emerald-300/15 bg-black/10 p-3 text-emerald-100/90">
+                        Питання збережено. Повернемось до нього на Zoom.
+                      </div>
+                    ) : null}
+
+                    {!showQuestionInput && questionSkippedSessionId === session.id ? (
+                      <div className="mt-3 rounded-2xl border border-white/10 bg-black/10 p-3">
+                        <p className="text-emerald-100/90">Можеш додати питання пізніше.</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuestionSessionId(session.id)
+                            setQuestionSkippedSessionId(null)
+                            setBookingQuestionError(null)
+                            setShowQuestionInput(true)
+                          }}
+                          className="mt-3 rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                        >
+                          Додати питання
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {bookingError && session.id === highlightedSession?.id ? (
+                  <div className="mt-3 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-sm text-amber-50">
+                    {bookingError}
+                  </div>
+                ) : null}
               </div>
             ))
           )}
@@ -318,7 +586,7 @@ export function MiniAppZoomWeekPanel() {
                 <div key={audio.sessionId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                   <p className="text-sm font-medium text-white">{audio.topic}</p>
                   <p className="mt-1 text-xs text-white/55">
-                    {formatZoomDateTime(audio.scheduledAt)} · {audio.type} · {audio.status}
+                    {getSessionDateLabel(audio.scheduledAt)} · {audio.type} · {audio.status}
                   </p>
                   <p className="mt-2 break-all font-mono text-[11px] text-white/45">
                     {audio.audioFileId}
@@ -329,57 +597,6 @@ export function MiniAppZoomWeekPanel() {
           )}
         </div>
 
-        <div className="mt-5">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Архів аудіо</p>
-            <input
-              type="month"
-              value={audioMonth}
-              onChange={(event) => setAudioMonth(event.target.value)}
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/75 outline-none focus:border-white/25"
-            />
-          </div>
-
-          {isAudioArchiveLoading ? (
-            <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
-              Завантажуємо архів аудіо...
-            </div>
-          ) : !(audioArchive?.items.length) ? (
-            <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
-              За вибраний місяць аудіо не знайдено.
-            </div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {audioArchive.items.map((audio) => (
-                <div key={audio.assetId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                  <p className="text-sm font-medium text-white">{audio.fileName}</p>
-                  <p className="mt-1 text-xs text-white/55">
-                    {audio.createdAt ? formatZoomDateTime(audio.createdAt) : 'Дата невідома'}
-                    {audio.duration ? ` · ${Math.round(audio.duration)}s` : ''}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <a
-                      href={`/api/audio/stream/${encodeURIComponent(audio.assetId)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200"
-                    >
-                      Слухати
-                    </a>
-                    <a
-                      href={`/api/audio/stream/${encodeURIComponent(audio.assetId)}?download=1`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/70"
-                    >
-                      Завантажити
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   )
@@ -401,6 +618,12 @@ export function ZoomPageWrapper() {
 export function MiniAppZoomRoute() {
   const user = useAppSelector(selectCurrentUser)
   const [updateUserSettings, { isLoading: isSaving }] = useUpdateUserSettingsMutation()
+  const initialTab: MiniAppZoomTabId =
+    typeof window !== 'undefined' &&
+    resolveMiniAppEntryIntent(window.location.search) === MINI_APP_ENTRY_INTENT.BOOKING
+      ? 'calendar'
+      : 'home'
+  const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>(initialTab)
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null)
   const [firstName, setFirstName] = useState('')
   const [email, setEmail] = useState('')
@@ -421,6 +644,14 @@ export function MiniAppZoomRoute() {
 
     setTelegramInitData(nextInitData)
     setIsTelegramWebAppReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    if (resolveMiniAppEntryIntent(window.location.search) === MINI_APP_ENTRY_INTENT.BOOKING) {
+      setActiveTab('calendar')
+    }
   }, [])
 
   useEffect(() => {
@@ -479,7 +710,14 @@ export function MiniAppZoomRoute() {
   }
 
   if (needsOnboarding === null) {
-    return <MiniAppZoomMessage>Синхронізуємо вхід у Zoom-календар...</MiniAppZoomMessage>
+    return (
+      <MiniAppZoomMessage>
+        <div className="space-y-2">
+          <p><strong>Готуємо Zoom-календар.</strong></p>
+          <p className="text-white/70">Зачекай кілька секунд.</p>
+        </div>
+      </MiniAppZoomMessage>
+    )
   }
 
   if (!isTelegramRuntime && needsOnboarding) {
@@ -502,10 +740,22 @@ export function MiniAppZoomRoute() {
 
   return (
     <div className="space-y-4 pb-6">
-      <MiniAppZoomWeekPanel />
-      <div className="mx-auto w-full max-w-5xl px-4 pb-4">
-        <ZoomCalendar mode="user" userId={user.id} />
-      </div>
+      {activeTab === 'home' && (
+        <HomeTab
+          hasTelegramInitData={Boolean(telegramInitData)}
+          onNavigateCalendar={() => setActiveTab('calendar')}
+          setActiveTab={(tab) => setActiveTab(tab)}
+        />
+      )}
+
+      {activeTab === 'calendar' && (
+        <>
+          <MiniAppZoomWeekPanel />
+          <div className="mx-auto w-full max-w-5xl px-4 pb-4">
+            <ZoomCalendar mode="user" userId={user.id} />
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -569,49 +819,14 @@ function ProfileTabStub() {
   )
 }
 
-function TabBar({
-  activeTab,
-  onTabChange,
-}: {
-  activeTab: MiniAppZoomTabId
-  onTabChange: (tab: MiniAppZoomTabId) => void
-}) {
-  const tabs: Array<{ id: MiniAppZoomTabId; Icon: typeof Home }> = [
-    { id: 'home', Icon: Home },
-    { id: 'calendar', Icon: CalendarDays },
-    { id: 'battle', Icon: Crosshair },
-    { id: 'progress', Icon: BarChart3 },
-    { id: 'profile', Icon: CircleUserRound },
-  ]
-
-  return (
-    <div className="fixed right-0 bottom-0 left-0 flex justify-around border-t border-[#2A3543] bg-[#0F1419] py-3">
-      {tabs.map(({ id, Icon }) => (
-        <button
-          key={id}
-          onClick={() => onTabChange(id)}
-          className={`text-2xl transition-colors ${
-            activeTab === id ? 'text-[#dce7ff]' : 'text-[#6B7280]'
-          }`}
-        >
-          <Icon className="h-6 w-6" />
-        </button>
-      ))}
-    </div>
-  )
-}
-
 export function MiniAppZoomCalendar() {
   const authStatus = useAppSelector(selectAuthStatus)
   const { isAuthenticated, loginWithSocial, loginWithTelegramMiniApp } = useAuth()
   const { authRestoreStatus } = useSessionOrchestrator()
   const search = typeof window === 'undefined' ? '' : window.location.search
   const searchParams = new URLSearchParams(search)
-  const intent = resolveMiniAppEntryIntent(search)
-  const isBookingIntent = intent === MINI_APP_ENTRY_INTENT.BOOKING
   const hasDeepLinkToken = searchParams.has('dl')
   const initialTelegramInitData = typeof window === 'undefined' ? '' : readTelegramInitData()
-  const [activeTab, setActiveTab] = useState<MiniAppZoomTabId>(isBookingIntent ? 'calendar' : 'home')
   const [hasTelegramInitData, setHasTelegramInitData] = useState(Boolean(initialTelegramInitData))
   const [isTelegramBootstrapReady, setIsTelegramBootstrapReady] = useState(Boolean(initialTelegramInitData))
   const [isMiniAppAuthBootstrapping, setIsMiniAppAuthBootstrapping] = useState(false)
@@ -739,10 +954,13 @@ export function MiniAppZoomCalendar() {
 
   if (miniAppAuthError && !isAuthenticated) {
     return (
-      <div className="flex h-screen flex-col bg-[#0F1419]">
-        <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex min-h-screen flex-col bg-[#0F1419]">
+        <div className="flex-1 overflow-y-auto">
           <MiniAppZoomMessage tone="error">
-            <p>{miniAppAuthError}</p>
+            <div className="space-y-2">
+              <p><strong>Вхід не завершився.</strong></p>
+              <p>{miniAppAuthError}</p>
+            </div>
             <button
               type="button"
               onClick={retryTelegramAuth}
@@ -752,47 +970,45 @@ export function MiniAppZoomCalendar() {
             </button>
           </MiniAppZoomMessage>
         </div>
-
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
     )
   }
 
   if (!isTelegramBootstrapReady || isTelegramAuthPending || isDeepLinkRestorePending) {
     return (
-      <div className="flex h-screen flex-col bg-[#0F1419]">
-        <div className="flex-1 overflow-y-auto pb-24">
-          <MiniAppZoomMessage>Синхронізуємо вхід у Zoom-календар...</MiniAppZoomMessage>
+      <div className="flex min-h-screen flex-col bg-[#0F1419]">
+        <div className="flex-1 overflow-y-auto">
+          <MiniAppZoomMessage>
+            <div className="space-y-2">
+              <p><strong>Готуємо Zoom-календар.</strong></p>
+              <p className="text-white/70">Відновлюємо доступ без повторного входу.</p>
+            </div>
+          </MiniAppZoomMessage>
         </div>
-
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
     )
   }
 
   if (!hasTelegramInitData && authStatus !== 'authenticated') {
     return (
-      <div className="flex h-screen flex-col bg-[#0F1419]">
-        <div className="flex-1 overflow-y-auto pb-24">
-          <MiniAppZoomMessage>Відкрийте Mini App через Telegram.</MiniAppZoomMessage>
+      <div className="flex min-h-screen flex-col bg-[#0F1419]">
+        <div className="flex-1 overflow-y-auto">
+          <MiniAppZoomMessage>
+            <div className="space-y-2">
+              <p><strong>Mini App недоступний.</strong></p>
+              <p className="text-white/70">Відкрий його через Telegram.</p>
+            </div>
+          </MiniAppZoomMessage>
         </div>
-
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
     )
   }
 
   return (
-    <div className="flex h-screen flex-col bg-[#0F1419]">
-      <div className="flex-1 overflow-y-auto pb-24">
-        {activeTab === 'home' && <HomeTab hasTelegramInitData={hasTelegramInitData} />}
-        {activeTab === 'calendar' && <MiniAppZoomRoute />}
-        {activeTab === 'battle' && <BattleTabStub />}
-        {activeTab === 'progress' && <ProgressTabStub />}
-        {activeTab === 'profile' && <ProfileTabStub />}
+    <div className="flex min-h-screen flex-col bg-[#0F1419]">
+      <div className="flex-1 overflow-y-auto">
+        <MiniAppZoomRoute />
       </div>
-
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   )
 }

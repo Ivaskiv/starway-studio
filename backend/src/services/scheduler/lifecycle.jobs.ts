@@ -10,6 +10,60 @@ import { buildEcosystemPaymentCheckoutUrl, resolveEcosystemPaymentTarget } from 
 import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js'
 import { ensureNotificationPreferenceTableAvailability, getSettingsObject, getUtcDateKey, readTimestamp, resolvePublicFrontendBaseUrl, sendUpgradeOfferTelegramMessage, type SchedulerNotifier } from './common.js'
 
+function buildCountByUserId(
+  rows: Array<{ userId: string | null }>,
+): Map<string, number> {
+  const result = new Map<string, number>()
+
+  for (const row of rows) {
+    if (!row.userId) continue
+    result.set(row.userId, (result.get(row.userId) ?? 0) + 1)
+  }
+
+  return result
+}
+
+function buildLimitedWeeklyReportCountByUserId(
+  rows: Array<{ userId: string | null; summaryText: string | null }>,
+  limitPerUser: number,
+): Map<string, number> {
+  const seenByUserId = new Map<string, number>()
+  const countByUserId = new Map<string, number>()
+
+  for (const row of rows) {
+    if (!row.userId) continue
+    const seen = seenByUserId.get(row.userId) ?? 0
+    if (seen >= limitPerUser) continue
+
+    seenByUserId.set(row.userId, seen + 1)
+
+    const normalized = typeof row.summaryText === 'string' ? row.summaryText.trim() : ''
+    if (!normalized) continue
+
+    countByUserId.set(row.userId, (countByUserId.get(row.userId) ?? 0) + 1)
+  }
+
+  return countByUserId
+}
+
+function buildLimitedWeeklySummariesByUserId(
+  rows: Array<{ userId: string | null; summaryText: string | null }>,
+  limitPerUser: number,
+): Map<string, string[]> {
+  const result = new Map<string, string[]>()
+
+  for (const row of rows) {
+    if (!row.userId) continue
+    const current = result.get(row.userId) ?? []
+    if (current.length >= limitPerUser) continue
+
+    current.push(row.summaryText ?? '')
+    result.set(row.userId, current)
+  }
+
+  return result
+}
+
 export async function mentorReadinessCheckCron(): Promise<void> {
   if (!(await ensureNotificationPreferenceTableAvailability())) return
   const now = new Date()
@@ -44,6 +98,46 @@ export async function mentorReadinessCheckCron(): Promise<void> {
     },
   })
 
+  const candidateUserIds = subscriptions
+    .filter((subscription) => {
+      const preferences = subscription.user.notificationPreference
+      if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) return false
+      if (resolveUserLifecycle(subscription.user).value !== 'platform_active') return false
+
+      const settings = getSettingsObject(subscription.user.settings)
+      return !readTimestamp(settings.mentorReadinessSentAt)
+    })
+    .map((subscription) => subscription.userId)
+
+  const [zoomCountByUserId, engagementSignalsByUserId] = candidateUserIds.length > 0
+    ? await Promise.all([
+        prisma.zoomSessionAttendee.findMany({
+          where: {
+            userId: { in: candidateUserIds },
+            attended: true,
+          },
+          select: {
+            userId: true,
+          },
+        }).then(buildCountByUserId),
+        prisma.weeklyReport.findMany({
+          where: {
+            userId: { in: candidateUserIds },
+            createdAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) },
+            summaryText: { not: null },
+          },
+          select: {
+            userId: true,
+            summaryText: true,
+          },
+          orderBy: [
+            { userId: 'asc' },
+            { createdAt: 'desc' },
+          ],
+        }).then((rows) => buildLimitedWeeklyReportCountByUserId(rows, 4)),
+      ])
+    : [new Map<string, number>(), new Map<string, number>()]
+
   for (const subscription of subscriptions) {
     const preferences = subscription.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) continue
@@ -52,28 +146,10 @@ export async function mentorReadinessCheckCron(): Promise<void> {
     const settings = getSettingsObject(subscription.user.settings)
     if (readTimestamp(settings.mentorReadinessSentAt)) continue
 
-    const zoomCount = await prisma.zoomSessionAttendee.count({
-      where: {
-        userId: subscription.userId,
-        attended: true,
-      },
-    })
+    const zoomCount = zoomCountByUserId.get(subscription.userId) ?? 0
     if (zoomCount < 2) continue
 
-    const weeklyReports = await prisma.weeklyReport.findMany({
-      where: {
-        userId: subscription.userId,
-        createdAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) },
-        summaryText: { not: null },
-      },
-      select: {
-        summaryText: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 4,
-    })
-
-    const engagementSignals = weeklyReports.filter((report) => typeof report.summaryText === 'string' && report.summaryText.trim().length > 0).length
+    const engagementSignals = engagementSignalsByUserId.get(subscription.userId) ?? 0
     if (engagementSignals < 2) continue
 
     const sent = await sendUpgradeOfferTelegramMessage(
@@ -131,6 +207,47 @@ export async function personalProgramCheckCron(): Promise<void> {
     },
   })
 
+  const candidateUserIds = subscriptions
+    .filter((subscription) => {
+      const preferences = subscription.user.notificationPreference
+      if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) return false
+      if (resolveUserLifecycle(subscription.user).value !== 'platform_active') return false
+
+      const settings = getSettingsObject(subscription.user.settings)
+      const sentAt = readTimestamp(settings.personalProgramSentAt)
+      return !(sentAt && now.getTime() - sentAt.getTime() < 60 * 24 * 60 * 60 * 1000)
+    })
+    .map((subscription) => subscription.userId)
+
+  const [zoomCountByUserId, weeklyReportCountByUserId] = candidateUserIds.length > 0
+    ? await Promise.all([
+        prisma.zoomSessionAttendee.findMany({
+          where: {
+            userId: { in: candidateUserIds },
+            attended: true,
+          },
+          select: {
+            userId: true,
+          },
+        }).then(buildCountByUserId),
+        prisma.weeklyReport.findMany({
+          where: {
+            userId: { in: candidateUserIds },
+            createdAt: { gte: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000) },
+            summaryText: { not: null },
+          },
+          select: {
+            userId: true,
+            summaryText: true,
+          },
+          orderBy: [
+            { userId: 'asc' },
+            { createdAt: 'desc' },
+          ],
+        }).then((rows) => buildLimitedWeeklyReportCountByUserId(rows, 8)),
+      ])
+    : [new Map<string, number>(), new Map<string, number>()]
+
   for (const subscription of subscriptions) {
     const preferences = subscription.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) continue
@@ -140,28 +257,10 @@ export async function personalProgramCheckCron(): Promise<void> {
     const sentAt = readTimestamp(settings.personalProgramSentAt)
     if (sentAt && now.getTime() - sentAt.getTime() < 60 * 24 * 60 * 60 * 1000) continue
 
-    const zoomCount = await prisma.zoomSessionAttendee.count({
-      where: {
-        userId: subscription.userId,
-        attended: true,
-      },
-    })
+    const zoomCount = zoomCountByUserId.get(subscription.userId) ?? 0
     if (zoomCount < 2) continue
 
-    const weeklyReports = await prisma.weeklyReport.findMany({
-      where: {
-        userId: subscription.userId,
-        createdAt: { gte: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000) },
-        summaryText: { not: null },
-      },
-      select: {
-        summaryText: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-    })
-
-    const engagementScore = weeklyReports.filter((report) => typeof report.summaryText === 'string' && report.summaryText.trim().length > 0).length + Math.min(zoomCount, 4)
+    const engagementScore = (weeklyReportCountByUserId.get(subscription.userId) ?? 0) + Math.min(zoomCount, 4)
     if (engagementScore < 6) continue
 
     const sent = await sendUpgradeOfferTelegramMessage(
@@ -273,6 +372,45 @@ export async function scheduleWinbackNotification(
     },
   })
 
+  const candidateUserIds = subscriptions
+    .filter((subscription) => {
+      const preferences = subscription.user.notificationPreference
+      if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) return false
+      if (resolveUserLifecycle(subscription.user).value !== 'expired') return false
+
+      const expiresAt = subscription.expiresAt ?? null
+      if (!expiresAt) return false
+
+      const expiredDays = Math.floor((now.getTime() - expiresAt.getTime()) / (24 * 60 * 60 * 1000))
+      if (expiredDays !== daysSinceExpired) return false
+
+      const settings = getSettingsObject(subscription.user.settings)
+      return !readTimestamp(settings[resolveWinbackSentAtKey(comebackKey)])
+    })
+    .map((subscription) => subscription.userId)
+
+  const [dailyCycleCountByUserId, decisionCountByUserId] = candidateUserIds.length > 0
+    ? await Promise.all([
+        database.dailyCycleLog.findMany({
+          where: {
+            userId: { in: candidateUserIds },
+          },
+          select: {
+            userId: true,
+          },
+        }).then(buildCountByUserId),
+        database.dailyCycleLog.findMany({
+          where: {
+            userId: { in: candidateUserIds },
+            choice: 'CHOSE_NEW',
+          },
+          select: {
+            userId: true,
+          },
+        }).then(buildCountByUserId),
+      ])
+    : [new Map<string, number>(), new Map<string, number>()]
+
   for (const subscription of subscriptions) {
     const preferences = subscription.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.subscriptionEnabled) continue
@@ -293,15 +431,8 @@ export async function scheduleWinbackNotification(
     if (!target) continue
 
     const paymentUrl = await buildEcosystemPaymentCheckoutUrl(target.productId, target.planId, subscription.userId)
-    const dailyCycles = await database.dailyCycleLog.count({
-      where: { userId: subscription.userId },
-    }).catch(() => 0)
-    const decisions = await database.dailyCycleLog.count({
-      where: {
-        userId: subscription.userId,
-        choice: 'CHOSE_NEW',
-      },
-    }).catch(() => 0)
+    const dailyCycles = dailyCycleCountByUserId.get(subscription.userId) ?? 0
+    const decisions = decisionCountByUserId.get(subscription.userId) ?? 0
 
     await notifier.schedule(NotificationEvent.ABSYSTEM_COMEBACK, subscription.userId, new Date(), {
       comeback_key: comebackKey,
@@ -372,6 +503,35 @@ export async function referralCheckCron(deps?: {
     },
   })
 
+  const candidateUserIds = subscriptions
+    .filter((subscription) => {
+      const preferences = subscription.user.notificationPreference
+      if (!preferences?.telegramEnabled || !preferences.aiRemindersEnabled) return false
+      if (resolveUserLifecycle(subscription.user).value !== 'platform_active') return false
+
+      const settings = getSettingsObject(subscription.user.settings)
+      return !readTimestamp(settings.referralSentAt)
+    })
+    .map((subscription) => subscription.userId)
+
+  const weeklySummariesByUserId = candidateUserIds.length > 0
+    ? await database.weeklyReport.findMany({
+        where: {
+          userId: { in: candidateUserIds },
+          createdAt: { gte: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000) },
+          summaryText: { not: null },
+        },
+        orderBy: [
+          { userId: 'asc' },
+          { createdAt: 'desc' },
+        ],
+        select: {
+          userId: true,
+          summaryText: true,
+        },
+      }).then((rows) => buildLimitedWeeklySummariesByUserId(rows, 3))
+    : new Map<string, string[]>()
+
   for (const subscription of subscriptions) {
     const preferences = subscription.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.aiRemindersEnabled) continue
@@ -380,20 +540,8 @@ export async function referralCheckCron(deps?: {
     const settings = getSettingsObject(subscription.user.settings)
     if (readTimestamp(settings.referralSentAt)) continue
 
-    const weeklyReports = await database.weeklyReport.findMany({
-      where: {
-        userId: subscription.userId,
-        createdAt: { gte: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000) },
-        summaryText: { not: null },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 3,
-      select: {
-        summaryText: true,
-      },
-    })
-
-    if (weeklyReports.length < 3 || !weeklyReports.every(report => isPositiveWeeklySummary(report.summaryText))) {
+    const weeklySummaries = weeklySummariesByUserId.get(subscription.userId) ?? []
+    if (weeklySummaries.length < 3 || !weeklySummaries.every((summary) => isPositiveWeeklySummary(summary))) {
       continue
     }
 

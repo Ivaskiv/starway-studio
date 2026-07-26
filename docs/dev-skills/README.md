@@ -1,33 +1,32 @@
-# docs/dev-skills
+# Developer Skills Hub
 
-Папка скілів розробника для Claude (Project Knowledge).
+## Purpose
 
-## Як використовувати
+Engineering skill library for implementation, auditing, payments, reliability, and testing.
 
-Додай вміст цієї папки в Claude Project Knowledge свого dev-проекту.
-Claude автоматично підтягує контекст при кожному запиті.
+## Contained Documents
 
-## Структура
+- Master skills index: `docs/dev-skills/MASTER-SKILLS.md`
+- Architecture skills: `docs/dev-skills/architecture/README.md`
+- Developers skills: `docs/dev-skills/developers/README.md`
+- Orchestration skills: `docs/dev-skills/orchestration/README.md`
+- Payments skills: `docs/dev-skills/payments/README.md`
+- Reliability skills: `docs/dev-skills/reliability/README.md`
+- Testing skills: `docs/dev-skills/testing/README.md`
+- Telegram skills: `docs/dev-skills/telegram/README.md`
+- Reports skills: `docs/dev-skills/reports/README.md`
+- Business skills: `docs/dev-skills/business/README.md`
+- Content skills: `docs/dev-skills/content/README.md`
+- Archived skills: `docs/dev-skills/archive/README.md`
 
-| Файл | Призначення |
-|---|---|
-| MASTER-SKILLS.md | Індекс всіх скілів — читати першим |
-| developers/ | Стек, архітектура, auth, env |
-| developers/SKILL-ai-tools-stack.md | AI стек: OpenAI, Claude API, Whisper |
-| orchestration/ | Lifecycle, scheduler, funnels |
-| payments/ | WayForPay, checkout, focus payment flow |
-| reliability/ | Webhooks, dedupe, retries, notification safety |
-| architecture/ | AI agent governance |
-| telegram/ | Telegram bot patterns and setup |
-| testing/ | AB test, spec and flow auditors |
-| business/ | Client business automation |
-| content/ | AI content automation |
-| reports/ | PDF reporting |
-| archive/ | Застарілі скіли (reference only) |
+## Canonical Documents
 
-## Правило оновлення
+- Canonical documents:
+  - `docs/dev-skills/MASTER-SKILLS.md`
+  - `docs/dev-skills/README.md`
 
-Після кожного нового архітектурного рішення або нового скілу:
-1. Додати файл SKILL-*.md у відповідну підпапку
-2. Оновити MASTER-SKILLS.md (таблиця)
-3. git commit -m "docs: add/update skill — [назва]"
+## Related Folders
+
+- `docs/architecture/`
+- `docs/client/`
+- `docs/agents/`

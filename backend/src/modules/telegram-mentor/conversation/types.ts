@@ -51,5 +51,6 @@ export type OrchestratedContext = Context & {
     __conversation_patched__?: boolean
     __orchestration_pass_id__?: string
     __callback_ack_sent__?: boolean
+    __conversation_transport_bypass__?: boolean
   }
 }

@@ -2,8 +2,6 @@ import { randomBytes } from 'crypto'
 import { prisma } from '../../../db/client.js'
 import { trackEvent } from '../../events/service.js'
 import { reconcileTelegramIdentityUsers } from '../../user/identity.service.js'
-import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
-import { UserCreationSource } from '../../user/userCreation.service.js'
 
 export async function findLinkedUserId(params: {
   chatId: string
@@ -69,28 +67,6 @@ export async function findLinkedUserId(params: {
 
   if (foundByTelegramIdentity?.id) {
     return foundByTelegramIdentity.id
-  }
-
-  const fallbackResolved = await resolveOrCreateUser(
-    {
-      telegramId: chatId,
-      chatId,
-      telegramUserName: telegramUserName ?? undefined,
-    },
-    {
-      source: UserCreationSource.TELEGRAM_START,
-    },
-  ).catch(() => null)
-
-  if (fallbackResolved) {
-    console.info('[telegram/linking] fallback resolved user', {
-      chatId,
-      telegramUserId,
-      telegramUserName,
-      linkedUserId: fallbackResolved.user.id,
-      source: fallbackResolved.created ? 'created' : 'resolved',
-    })
-    return fallbackResolved.user.id
   }
 
   return null

@@ -1,0 +1,63 @@
+export const telegramContentRegistry = {
+  routes: {
+    startTestTriggers: ['почати тест', 'продовжити тут', 'пройти тест'],
+    openFaqTriggers: ['задати питання'],
+    focusPaymentTriggers: ['оплатити фокус'],
+    alreadyPaidTriggers: ['я вже оплатив', 'я вже оплатила', 'я вже оплатив / оплатила'],
+    helpTriggers: ['допомога', 'help', 'меню'],
+    cancelTriggers: ['скасувати', 'cancel'],
+    greetingTriggers: ['привіт', 'добрий день', 'добрий вечір', 'добрий ранок'],
+    subscriptionKeywords: ['моя', 'статус', 'покажи', 'яка', 'який'],
+    focusInfoKeywords: ['хочу', 'цікаво', 'що', 'як', 'розкажи'],
+    paymentIssueKeywords: ['проблем', 'не працю', 'помил', 'не проход', 'зняло', 'failed'],
+  },
+  intelligenceDetection: {
+    memoryRequestTriggers: ['повтори', 'нагадай', 'покажи ще раз', 'що ти щойно', 'попередню відповідь'],
+    followupTriggers: ['чому', 'поясни', 'розкажи', 'розкажи більше', 'як так'],
+    personalSituationTriggers: ['не можу', 'боюсь', 'відкладаю', 'невизначеність', 'знаю але не', 'не знаю як почати'],
+    focusRelatedTriggers: ['фокус', 'абсистем', 'absystem', 'стан', 'ціль', 'вибір', 'рішення', 'дія', 'ціна', 'коштує', 'скільки'],
+    questionTriggers: ['як', 'де', 'що', 'коли'],
+    smallTalkTriggers: ['привіт', 'дякую', 'спасибо', 'як дела', 'ок', 'окей'],
+  },
+  replies: {
+    pendingNameGreeting: (name: string) =>
+      `Приємно познайомитись, ${name}! 👋\n\nТепер давай почнемо тест.`,
+    memoryFallback:
+      'На жаль, не бачу попередньої відповіді. Сформулюй питання ще раз.',
+    smallTalkGreeting: 'Привіт',
+    smallTalkThanks: 'Будь ласка.',
+    smallTalkHowAreYou: 'Добре. Чим допомогти?',
+    softBridge: [
+      'Я не даю порад поза темами STARWAY, ФОКУС і ABSystem.',
+      '',
+      'Але часто справа не тільки в інформації, а в тому, що саме тримає тебе зараз:',
+      '- невизначеність, з чого почати;',
+      '- страх перед змінами;',
+      '- відкладання рішення.',
+      '',
+      'Що саме з цього відгукується тобі зараз?',
+    ].join('\n'),
+    personalSituation: [
+      'Це саме те, з чим допомагає ФОКУС.',
+      'За 4 практики на тиждень ти розбираєш свою ситуацію через СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.',
+      '',
+      'Перші зміни видно вже за місяць.',
+      'Хочеш записатися на безплатну демо-сесію?',
+    ].join('\n'),
+    unknownIntent: 'Здається, я не до кінця зрозумів. Можеш переформулювати?',
+  },
+  buttons: {
+    bookDemo: 'Записатися на демо',
+    contactNadya: 'Написати Наді',
+    openFocus: 'Дізнатись про ФОКУС',
+    openAbsystem: 'Відкрити ABSystem',
+    chooseZoomDay: '🗓️ Календар подій',
+    focusChannel: 'Перейти в канал ФОКУС',
+    continueTask: '▶️ Продовжити',
+    dismissTask: '✕ Закрити',
+  },
+  system: {
+    telegramIntelligenceConversationTitle: 'telegram-intelligence',
+    telegramIntelligenceSource: 'telegram-intelligence',
+  },
+} as const

@@ -27,7 +27,7 @@ import { syncLifecycleForUser } from '../flow-control/service.js';
 import { invalidateFunnelStage } from '../../lib/funnel/getUserFunnelStage.js';
 import { getTelegramProductContext } from '@/content/telegram.product-context.js';
 import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.markers.js';
-import { sendAbTestBlock12Welcome } from './payments/callback.notifications.js';
+import { resendFocusAccessTelegramMessage } from './payments/callback.notifications.js';
 import { getConfiguredFocusProduct, hasActiveFocusSubscription } from './payments/focus.access.js';
 
 type AccessGrantLike = {
@@ -431,6 +431,8 @@ export async function initiateSubscriptionPaymentHandler(req: AuthenticatedReque
 
     const productId = typeof req.body?.productId === 'string' ? req.body.productId.trim() : ''
     const planCode = typeof req.body?.planCode === 'string' ? req.body.planCode.trim() : ''
+    const source = req.body?.source === 'telegram' ? 'telegram' : 'web'
+    const targetPath = typeof req.body?.targetPath === 'string' ? req.body.targetPath.trim() : ''
 
     if (productId === 'focus') {
       const configuredFocusProduct = await getConfiguredFocusProduct()
@@ -468,7 +470,10 @@ export async function initiateSubscriptionPaymentHandler(req: AuthenticatedReque
 
       let checkout: Awaited<ReturnType<typeof buildEcosystemPaymentCheckoutSession>>
       try {
-        checkout = await buildEcosystemPaymentCheckoutSession('focus', planId, userId)
+        checkout = await buildEcosystemPaymentCheckoutSession('focus', planId, userId, {
+          source,
+          targetPath: targetPath || undefined,
+        })
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
         console.error('[PAYMENT_INIT] ❌ Failed to build checkout URL', { reason })
@@ -584,7 +589,7 @@ export async function resendFocusBlock12DevHandler(req: Request, res: Response) 
   }
 
   await markAbTestPaymentSuccess(userId)
-  await sendAbTestBlock12Welcome(userId)
+  await resendFocusAccessTelegramMessage(userId)
 
   return res.json({
     ok: true,

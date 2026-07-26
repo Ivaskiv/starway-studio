@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockUpsert = vi.fn()
 const mockExecuteRaw = vi.fn()
 const mockUpdate = vi.fn()
+const mockFindUnique = vi.fn()
 
 vi.mock('node:module', () => ({
   createRequire: () => () => ({
     prisma: {
       aiSpendLedger: {
+        findUnique: (...args: unknown[]) => mockFindUnique(...args),
         upsert: (...args: unknown[]) => mockUpsert(...args),
         update: (...args: unknown[]) => mockUpdate(...args),
       },
@@ -16,12 +18,18 @@ vi.mock('node:module', () => ({
   }),
 }))
 
-import { AiBudgetExceededError, assertWithinDailyAiBudget, reconcileAiSpend } from './spendGuard.js'
+import {
+  AiBudgetExceededError,
+  assertWithinDailyAiBudget,
+  decideDailyAiBudget,
+  reconcileAiSpend,
+} from './spendGuard.js'
 
 beforeEach(() => {
   mockUpsert.mockReset()
   mockExecuteRaw.mockReset()
   mockUpdate.mockReset()
+  mockFindUnique.mockReset()
   mockUpsert.mockResolvedValue({})
 })
 
@@ -75,5 +83,33 @@ describe('spendGuard', () => {
         data: { spentUsd: { increment: -0.03 } },
       }),
     )
+  })
+
+  it('decideDailyAiBudget returns ALLOW when projected spend fits the cap', async () => {
+    mockFindUnique.mockResolvedValue({
+      spentUsd: 0.4,
+      dailyCapUsd: 1,
+    })
+
+    await expect(decideDailyAiBudget('budget-job', 0.2, 2)).resolves.toMatchObject({
+      decision: 'ALLOW',
+      currentSpendUsd: 0.4,
+      projectedSpendUsd: 0.6,
+      dailyCapUsd: 1,
+    })
+  })
+
+  it('decideDailyAiBudget returns DENY when projected spend would exceed the cap', async () => {
+    mockFindUnique.mockResolvedValue({
+      spentUsd: 0.95,
+      dailyCapUsd: 1,
+    })
+
+    await expect(decideDailyAiBudget('budget-job', 0.1, 2)).resolves.toMatchObject({
+      decision: 'DENY',
+      currentSpendUsd: 0.95,
+      projectedSpendUsd: 1.05,
+      dailyCapUsd: 1,
+    })
   })
 })

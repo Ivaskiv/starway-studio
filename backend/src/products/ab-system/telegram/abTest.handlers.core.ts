@@ -394,9 +394,36 @@ export async function handleShowResult(
 
   const progress = await loadAbTestProgress(userId)
   if (progress.status === 'completed' && progress.result_key) {
-    await renderAbTestPostEmailSubmitSequence(ctx, userId, progress, {
-      notifyOps: false,
-      forceRedelivery: true,
+    let snapshotProgress = progress
+
+    if (!snapshotProgress.result_opened_at) {
+      const nextProgress = buildAbTestProgressPatch(snapshotProgress, {
+        result_opened_at: new Date().toISOString(),
+        last_event_at: new Date().toISOString(),
+      })
+      const scheduledProgress = await scheduleFollowups(
+        userId,
+        nextProgress,
+        'S4_FOCUS_INVITE'
+      )
+      snapshotProgress = await saveAbTestProgress(userId, scheduledProgress)
+      await trackAbTestEvent({
+        userId,
+        type: 'RESULT_OPENED',
+        state: 'S3_TEST_RESULT',
+        payload: {
+          result_key: progress.result_key,
+          delivery_source: 'show_result',
+        } satisfies Prisma.JsonObject,
+      })
+    }
+
+    const { sendResultSnapshot } = await import('./abTest.views.js')
+    await sendResultSnapshot(ctx, {
+      chatId,
+      userId,
+      resultKey: snapshotProgress.result_key as AbTestResultKey,
+      firstName: resolveFirstName(userRecord, ctx, userId),
     })
     return true
   }

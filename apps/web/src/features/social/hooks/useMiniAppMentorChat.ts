@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
+import type { AssistantChatResponse } from '@/features/assistant/services/assistant.api'
 import { miniAppFetch } from '@/lib/miniapp/apiClient'
 import type { MiniAppChatMessage } from '@/features/social/types/miniapp'
 
@@ -32,11 +33,7 @@ export function useMiniAppMentorChat({ userId, context }: UseMiniAppMentorChatOp
     setIsSending(true)
 
     try {
-      const data = await miniAppFetch<{
-        message?: string
-        mentorMessage?: { content?: string }
-        reply?: string
-      }>('/api/assistant/chat', {
+      const data = await miniAppFetch<AssistantChatResponse>('/api/assistant/chat', {
         method: 'POST',
         body: JSON.stringify({ message: text }),
       })

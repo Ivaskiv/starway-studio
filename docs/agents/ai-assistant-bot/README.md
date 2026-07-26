@@ -1,17 +1,27 @@
 # AI Assistant Bot Knowledge
 
-Canonical knowledge files for the Telegram AI assistant live in this folder.
+## Purpose
 
-Use these files as the single source of truth:
-- `00-SURGICAL-SYSTEM-UPDATE.md`
-- `ANALYSIS-strict-guardrails.md`
-- `FOCUS-Overview.md`
-- `ABSystem-Methodology.md`
-- `Pricing-and-Packages.md`
-- `FAQs-Common-Objections.md`
-- `10-TEST-QUESTIONS.md`
+Agent-facing knowledge pack for the Telegram AI assistant.
 
-Runtime implementation:
-- `backend/src/modules/telegram-mentor/services/STRICT-SYSTEM-code.ts`
+## Contained Documents
 
-Deprecated duplicate filenames were removed during architecture cleanup to avoid split knowledge and drift.
+- Surgical update: `docs/agents/ai-assistant-bot/00-SURGICAL-SYSTEM-UPDATE.md`
+- Strict guardrails analysis: `docs/agents/ai-assistant-bot/ANALYSIS-strict-guardrails.md`
+- Pricing and packages pointer: `docs/agents/ai-assistant-bot/Pricing-and-Packages.md`
+- FAQ and objections: `docs/agents/ai-assistant-bot/FAQs-Common-Objections.md`
+- Test questions: `docs/agents/ai-assistant-bot/10-TEST-QUESTIONS.md`
+- ABSystem methodology pointer: `docs/agents/ai-assistant-bot/ABSystem-Methodology.md`
+- FOCUS overview pointer: `docs/agents/ai-assistant-bot/FOCUS-Overview.md`
+
+## Canonical Documents
+
+- Canonical documents:
+  - `docs/client/business/pricing-and-packages.md`
+  - `docs/agents/ai-mentor/methodology-absystem.md`
+  - `docs/agents/ai-mentor/focus-course-materials.md`
+
+## Related Folders
+
+- `docs/agents/ai-mentor/`
+- `docs/client/business/`

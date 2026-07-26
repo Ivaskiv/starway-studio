@@ -2,10 +2,7 @@
 import crypto from 'node:crypto'
 import type { Context } from 'telegraf'
 
-import {
-  cleanupDuplicateUpdates,
-  isDuplicateUpdate,
-} from '../dedupe/updateDedupe.js'
+import { cleanupDuplicateUpdates } from '../dedupe/updateDedupe.js'
 import { getQueueDepth, runInPerChatQueue } from '../queue/perChatQueue.js'
 import type {
   ConversationMessagePlanItem,
@@ -107,28 +104,8 @@ async function enqueue(
   const chatId = resolveChatId(ctx)
   const updateId = resolveUpdateId(ctx)
   const queuePosition = getQueueDepth(chatId)
-  const duplicateUpdate = isDuplicateUpdate(updateId)
 
   return runInPerChatQueue(chatId, async () => {
-    if (
-      duplicateUpdate &&
-      op.transition !== 'callback_ack' &&
-      !canReuseCallbackUpdate(op.transition)
-    ) {
-      trace({
-        update_id: updateId,
-        chat_id: chatId,
-        flow_state: op.flowState,
-        transition: op.transition,
-        render_source: op.source,
-        queue_position: queuePosition,
-        send_order: nextSendOrder(chatId),
-        delivery_result: 'deduped',
-      })
-
-      return null
-    }
-
     if (isDuplicateDelivery(op.key)) {
       trace({
         update_id: updateId,
@@ -165,6 +142,7 @@ async function enqueue(
     const sendOrder = nextSendOrder(chatId)
 
     try {
+      ctx.state.__conversation_transport_bypass__ = true
       const result = await op.execute()
 
       deliveredKeys.set(op.key, Date.now())
@@ -196,6 +174,7 @@ async function enqueue(
 
       throw error
     } finally {
+      ctx.state.__conversation_transport_bypass__ = false
       activeOperationByChat.delete(lockKey)
     }
   })
@@ -212,8 +191,19 @@ function patchContext(ctx: OrchestratedContext): void {
   const originalReply = ctx.reply.bind(ctx)
   const originalEdit = ctx.editMessageText?.bind(ctx)
   const originalAnswer = ctx.answerCbQuery?.bind(ctx)
+  const originalTelegramSendMessage = ctx.telegram.sendMessage.bind(ctx.telegram)
+  const originalTelegramSendPhoto = ctx.telegram.sendPhoto.bind(ctx.telegram)
+  const originalTelegramSendVoice = ctx.telegram.sendVoice.bind(ctx.telegram)
+  const originalTelegramSendVideo = ctx.telegram.sendVideo.bind(ctx.telegram)
+  const originalTelegramSendDocument = ctx.telegram.sendDocument.bind(ctx.telegram)
+  const originalTelegramSendChatAction = ctx.telegram.sendChatAction.bind(ctx.telegram)
+  const originalTelegramAnswerCbQuery = ctx.telegram.answerCbQuery.bind(ctx.telegram)
 
   ctx.reply = (async (...args: Parameters<Context['reply']>) => {
+    if (ctx.state.__conversation_transport_bypass__) {
+      return originalReply(...args)
+    }
+
     const text = typeof args[0] === 'string' ? args[0] : ''
 
     return enqueue(ctx, {
@@ -229,6 +219,10 @@ function patchContext(ctx: OrchestratedContext): void {
     ctx.editMessageText = (async (
       ...args: Parameters<NonNullable<Context['editMessageText']>>
     ) => {
+      if (ctx.state.__conversation_transport_bypass__) {
+        return originalEdit(...args)
+      }
+
       const text = typeof args[0] === 'string' ? args[0] : ''
 
       return enqueue(ctx, {
@@ -245,6 +239,10 @@ function patchContext(ctx: OrchestratedContext): void {
     ctx.answerCbQuery = (async (
       ...args: Parameters<NonNullable<Context['answerCbQuery']>>
     ) => {
+      if (ctx.state.__conversation_transport_bypass__) {
+        return originalAnswer(...args)
+      }
+
       if (ctx.state.__callback_ack_sent__) {
         return true
       }
@@ -263,6 +261,114 @@ function patchContext(ctx: OrchestratedContext): void {
       })
     }) as Context['answerCbQuery']
   }
+
+  Object.defineProperty(ctx, 'telegram', {
+    value: {
+      ...ctx.telegram,
+      sendMessage: (async (...args: Parameters<typeof ctx.telegram.sendMessage>) => {
+        if (ctx.state.__conversation_transport_bypass__) {
+          return originalTelegramSendMessage(...args)
+        }
+
+        const text = typeof args[1] === 'string' ? args[1] : ''
+        return enqueue(ctx, {
+          source: 'telegram_flow',
+          transition: 'telegram_send_message',
+          flowState: resolveFlowState(ctx),
+          key: buildDeliveryKey(ctx, 'telegram_send_message', text),
+          execute: () => originalTelegramSendMessage(...args),
+        })
+      }) as typeof ctx.telegram.sendMessage,
+      sendPhoto: (async (...args: Parameters<typeof ctx.telegram.sendPhoto>) => {
+        if (ctx.state.__conversation_transport_bypass__) {
+          return originalTelegramSendPhoto(...args)
+        }
+
+        return enqueue(ctx, {
+          source: 'telegram_flow',
+          transition: 'telegram_send_photo',
+          flowState: resolveFlowState(ctx),
+          key: buildDeliveryKey(ctx, 'telegram_send_photo', String(args[1] ?? '')),
+          execute: () => originalTelegramSendPhoto(...args),
+        })
+      }) as typeof ctx.telegram.sendPhoto,
+      sendVoice: (async (...args: Parameters<typeof ctx.telegram.sendVoice>) => {
+        if (ctx.state.__conversation_transport_bypass__) {
+          return originalTelegramSendVoice(...args)
+        }
+
+        return enqueue(ctx, {
+          source: 'telegram_flow',
+          transition: 'telegram_send_voice',
+          flowState: resolveFlowState(ctx),
+          key: buildDeliveryKey(ctx, 'telegram_send_voice', String(args[1] ?? '')),
+          execute: () => originalTelegramSendVoice(...args),
+        })
+      }) as typeof ctx.telegram.sendVoice,
+      sendVideo: (async (...args: Parameters<typeof ctx.telegram.sendVideo>) => {
+        if (ctx.state.__conversation_transport_bypass__) {
+          return originalTelegramSendVideo(...args)
+        }
+
+        return enqueue(ctx, {
+          source: 'telegram_flow',
+          transition: 'telegram_send_video',
+          flowState: resolveFlowState(ctx),
+          key: buildDeliveryKey(ctx, 'telegram_send_video', String(args[1] ?? '')),
+          execute: () => originalTelegramSendVideo(...args),
+        })
+      }) as typeof ctx.telegram.sendVideo,
+      sendDocument: (async (...args: Parameters<typeof ctx.telegram.sendDocument>) => {
+        if (ctx.state.__conversation_transport_bypass__) {
+          return originalTelegramSendDocument(...args)
+        }
+
+        return enqueue(ctx, {
+          source: 'telegram_flow',
+          transition: 'telegram_send_document',
+          flowState: resolveFlowState(ctx),
+          key: buildDeliveryKey(ctx, 'telegram_send_document', String(args[1] ?? '')),
+          execute: () => originalTelegramSendDocument(...args),
+        })
+      }) as typeof ctx.telegram.sendDocument,
+      sendChatAction: (async (...args: Parameters<typeof ctx.telegram.sendChatAction>) => {
+        if (ctx.state.__conversation_transport_bypass__) {
+          return originalTelegramSendChatAction(...args)
+        }
+
+        return enqueue(ctx, {
+          source: 'telegram_flow',
+          transition: 'telegram_send_chat_action',
+          flowState: resolveFlowState(ctx),
+          key: buildDeliveryKey(ctx, 'telegram_send_chat_action', String(args[1] ?? '')),
+          execute: () => originalTelegramSendChatAction(...args),
+        })
+      }) as typeof ctx.telegram.sendChatAction,
+      answerCbQuery: (async (...args: Parameters<typeof ctx.telegram.answerCbQuery>) => {
+        if (ctx.state.__conversation_transport_bypass__) {
+          return originalTelegramAnswerCbQuery(...args)
+        }
+
+        if (ctx.state.__callback_ack_sent__) {
+          return true
+        }
+
+        const text = typeof args[1] === 'string' ? args[1] : ''
+        return enqueue(ctx, {
+          source: 'telegram_flow',
+          transition: 'telegram_answer_callback_query',
+          flowState: resolveFlowState(ctx),
+          key: buildDeliveryKey(ctx, 'telegram_answer_callback_query', text),
+          execute: async () => {
+            const result = await originalTelegramAnswerCbQuery(...args)
+            ctx.state.__callback_ack_sent__ = true
+            return result
+          },
+        })
+      }) as typeof ctx.telegram.answerCbQuery,
+    },
+    configurable: true,
+  })
 }
 
 async function deliverPlan(

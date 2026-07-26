@@ -317,7 +317,13 @@ export async function sendDedupedTelegramMessage(
   options?: Parameters<typeof bot.telegram.sendMessage>[2],
   transportBot: Telegraf = bot,
 ): Promise<boolean> {
-  const hash = crypto.createHash('sha256').update(text).digest('hex')
+  const normalizedOptions = options
+    ? JSON.stringify(options)
+    : ''
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${text}::${normalizedOptions}`)
+    .digest('hex')
   const now = Date.now()
   const last = lastMessageHashes.get(chatId)
 

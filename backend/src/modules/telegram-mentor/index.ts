@@ -5,7 +5,6 @@ import { Markup } from 'telegraf'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import {
   handleAbTestCallback,
-  handleAbTestEmailCaptureText,
   markAbTestPaymentSuccess,
 } from '@/products/ab-system/telegram/abTest.service.js'
 import { resolveModelStrategyTier } from '@starway/ai/providers/routing'
@@ -24,6 +23,7 @@ import { trackDmStartFromContent } from '../events/contentAttribution.service.js
 import { callProviderSafe } from '../sales-assistant/sales-assistant.providers.js'
 import {
   handleFocusChannelJoinByTelegramUserId,
+  resendFocusAccessTelegramMessage,
   sendAbTestBlock12Welcome,
 } from '../subscriptions/payments/callback.notifications.js'
 import { hasActiveFocusSubscription } from '../subscriptions/payments/focus.access.js'
@@ -41,28 +41,35 @@ import { conversationOrchestrator } from './conversation/delivery/planDelivery.j
 import { guard } from './core/guard.middleware.js'
 import { resolveLinkedUserIdFromContext } from './core/state.service.js'
 import { handleChat } from './handlers/chat.js'
-import { handleEvening, handleEveningAnswer } from './handlers/evening.js'
-import { handleIntelligentMessage } from './handlers/intelligence.handler.js'
-import { handleMorning, handleMorningAnswer } from './handlers/morning.js'
+import { handleEvening } from './handlers/evening.js'
+import { handleMorning } from './handlers/morning.js'
 import { handlePrivacy } from './handlers/privacy.js'
 import {
   getAccessAwareAppReplyMarkupForContext,
-  handlePendingTelegramIdentityText,
   handleStart,
 } from './handlers/start.js'
-import { hasPendingName, clearPendingName } from './services/pendingIdentity.service.js'
 import { handleStatus } from './handlers/status.js'
 import { handleVoice } from './handlers/voice.js'
 import { renderTelegram } from './renderers/decisionTelegram.js'
 import { recordTelegramCtaInteraction } from './services/ctaInteraction.service.js'
 import { dispatchTelegramCallbackEvent } from './services/telegram-event-bus.service.js'
-import { getSession, parseQuestionState } from './session.js'
+import { getSession } from './session.js'
+import { routeTelegramTextMessage } from './router/messageRouter.js'
 
 let mentorBotRegistered = false
 const processedUpdates = new Set<number>()
 
 interface MentorBotRegistrationOptions {
   product?: string
+}
+
+const ASSISTANT_CALLBACK_MESSAGES: Record<string, string> = {
+  continue: 'Continue where we stopped. Use what you already know about me and tell me what matters most now.',
+  plan_today: 'Help me plan today based on my current context, progress, and subscription.',
+  prepare_zoom: 'Prepare me for my next Zoom practice using my current state and recent progress.',
+  review_progress: 'Review my progress and tell me what I should focus on next.',
+  talk: 'I want to talk to my AI assistant.',
+  unsure: 'I do not know what to do next. Recommend one clear next action based on what you know about me.',
 }
 
 function hasStructuredFields(text: string): boolean {
@@ -298,125 +305,9 @@ async function handleTextMessage(ctx: Context) {
   }
   const chatId = String(ctx.chat?.id ?? '')
 
-  const normalizedText = text.toLowerCase()
-  if (
-    normalizedText === 'почати тест' ||
-    normalizedText === 'продовжити тут' ||
-    normalizedText === 'пройти тест'
-  ) {
-    console.info('[AB_TEST_START_DEBUG] text_fallback:start_button_text', {
-      text,
-      normalizedText,
-      chatId,
-      userId: (ctx.state as { userId?: string | null }).userId ?? null,
-    })
-    const started = await handleAbTestCallback(ctx, AB_TEST_ACTIONS.START)
-    if (started) {
-      console.info('[AB_TEST_START_DEBUG] text_fallback:start_button_handled', {
-        text,
-        chatId,
-      })
-      return
-    }
-    console.warn(
-      '[AB_TEST_START_DEBUG] text_fallback:start_button_not_handled',
-      {
-        text,
-        chatId,
-      }
-    )
-  }
-
-  if (normalizedText === 'задати питання') {
-    console.info('[AB_TEST_START_DEBUG] text_fallback:faq_button_text', {
-      text,
-      chatId,
-      userId: (ctx.state as { userId?: string | null }).userId ?? null,
-    })
-    const opened = await handleAbTestCallback(ctx, AB_TEST_ACTIONS.OPEN_FAQ)
-    if (opened) {
-      return
-    }
-  }
-
-  if (normalizedText === 'дізнатись про фокус') {
-    const opened = await handleAbTestCallback(ctx, AB_TEST_ACTIONS.FOCUS_INFO)
-    if (opened) return
-  }
-
-  if (normalizedText === 'оплатити фокус') {
-    const opened = await handleAbTestCallback(ctx, AB_TEST_ACTIONS.FOCUS_PAY)
-    if (opened) return
-  }
-
-  if (normalizedText === 'підписка' || normalizedText === 'моя підписка') {
-    const opened = await handleAbTestCallback(ctx, AB_TEST_ACTIONS.SUBSCRIPTION)
-    if (opened) return
-  }
-
-  if (
-    normalizedText === 'я вже оплатив' ||
-    normalizedText === 'я вже оплатила' ||
-    normalizedText === 'я вже оплатив / оплатила'
-  ) {
-    const opened = await handleAbTestCallback(
-      ctx,
-      AB_TEST_ACTIONS.FOCUS_ALREADY_PAID
-    )
-    if (opened) return
-  }
-
-  if (chatId) {
-    const session = await getSession(chatId)
-    const parsed = session ? parseQuestionState(session.state) : null
-
-    if (parsed?.type === 'morning') {
-      await handleMorningAnswer(ctx, text)
-      return
-    }
-
-    if (parsed?.type === 'evening') {
-      await handleEveningAnswer(ctx, text)
-      return
-    }
-  }
-
   const userId = (ctx.state as { userId?: string | null }).userId ?? null
   const userState =
     (ctx.state as { userState?: string | null }).userState ?? null
-
-  // Handle pending name capture (asked when Telegram profile has no first_name)
-  if (userId && chatId && await hasPendingName(chatId)) {
-    const name = text.trim().slice(0, 50) // max 50 chars
-    if (name) {
-      await prisma.user.update({ where: { id: userId }, data: { firstName: name } })
-      await clearPendingName(chatId)
-      await ctx.telegram.sendMessage(chatId,
-        `Приємно познайомитись, ${name}! 👋\n\nТепер давай почнемо тест.`,
-      )
-      await handleAbTestCallback(ctx, AB_TEST_ACTIONS.ENTRY)
-      return
-    }
-  }
-
-  if (userId) {
-    const handledEmailCapture = await handleAbTestEmailCaptureText(
-      ctx,
-      userId,
-      text
-    )
-    if (handledEmailCapture) {
-      return
-    }
-  } else {
-    const handledPendingIdentity = await handlePendingTelegramIdentityText(
-      ctx,
-      text
-    )
-    if (handledPendingIdentity) {
-      return
-    }
-  }
   if (userId) {
     await trackDmStartFromContent(
       userId,
@@ -426,8 +317,7 @@ async function handleTextMessage(ctx: Context) {
     )
   }
 
-  const handledIntelligence = await handleIntelligentMessage(ctx)
-  if (handledIntelligence) {
+  if (await routeTelegramTextMessage(ctx, text)) {
     return
   }
 
@@ -495,14 +385,24 @@ export async function registerMentorBot(
     await next()
   })
 
-  bot.command('start', handleStart)
+  bot.command('start', async (ctx) => {
+    await handleStart(ctx)
+  })
 
   bot.use(guard)
 
-  bot.command('morning', handleMorning)
-  bot.command('evening', handleEvening)
-  bot.command('status', handleStatus)
-  bot.command('privacy', handlePrivacy)
+  bot.command('morning', async (ctx) => {
+    await handleMorning(ctx)
+  })
+  bot.command('evening', async (ctx) => {
+    await handleEvening(ctx)
+  })
+  bot.command('status', async (ctx) => {
+    await handleStatus(ctx)
+  })
+  bot.command('privacy', async (ctx) => {
+    await handlePrivacy(ctx)
+  })
   bot.command('resend_block12', async (ctx) => {
     if (process.env.NODE_ENV === 'production') {
       await ctx.reply('Команда доступна лише в dev середовищі.')
@@ -536,7 +436,7 @@ export async function registerMentorBot(
         return
       }
       await markAbTestPaymentSuccess(targetUser.id)
-      await sendAbTestBlock12Welcome(targetUser.id)
+      await resendFocusAccessTelegramMessage(targetUser.id)
       await ctx.reply(`✅ Block 12 відправлено користувачу ${telegramId}.`)
       return
     }
@@ -861,6 +761,41 @@ export async function registerMentorBot(
       userId: (ctx.state as { userId?: string | null }).userId ?? null,
     })
     try {
+      if (action.startsWith('assistant:')) {
+        const key = action.slice('assistant:'.length)
+        const syntheticMessage = ASSISTANT_CALLBACK_MESSAGES[key]
+
+        if (!syntheticMessage) {
+          await planAck(
+            ctx,
+            'ctx.answerCbQuery',
+            'assistant_callback_unknown',
+            'Дія більше недоступна',
+          ).catch(() => undefined)
+          return
+        }
+
+        await planAck(
+          ctx,
+          'ctx.answerCbQuery',
+          'assistant_callback_ack',
+          'Продовжуємо',
+        ).catch(() => undefined)
+
+        const handled = await routeTelegramTextMessage(ctx, syntheticMessage)
+
+        if (!handled) {
+          await planMessage(
+            ctx,
+            'ctx.reply',
+            'assistant_callback_fallback',
+            'Не вдалося продовжити розмову. Напиши мені повідомленням, що тобі потрібно зараз.',
+          ).catch(() => undefined)
+        }
+
+        return
+      }
+
       const isFocusPaymentCallback =
         action === 'open_focus_payment' ||
         action.startsWith('open_focus_payment:')

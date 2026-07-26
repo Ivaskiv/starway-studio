@@ -1,21 +1,17 @@
-# Zoom Booking Test
+# Pointer: Archived Zoom Booking Test
 
-## Test Steps
-1. Open mini app URL: `/zoom` from Telegram user flow.
-2. Verify available slots list is loaded.
-3. Click "Записатись" for one open slot.
-4. Confirm button state changes to booked.
-5. Verify success confirmation is shown.
-6. Re-open mini app and confirm booked state is reflected.
+Status: POINTER
 
-## Expected Behavior
-- Page loads successfully.
-- Slots are displayed in sorted chronological order.
-- Booking request succeeds for available slot.
-- Duplicate booking attempt is prevented by UI/API.
-- Unauthorized browser calls (no initData) are rejected.
+## Canonical Documents
 
-## Pass Criteria
-- Successful booking flow from load to confirmation.
-- Correct booked state after reopen.
-- Protected API behavior remains enforced.
+- Current testing hub: `docs/test-instructions/README.md`
+
+## Historical Source
+
+- Archived copy: `docs/archive/migration-2026-07-21/test-instructions/zoom-booking-test.md`
+
+## Migration Note
+
+This test document describes an outdated flow and has been archived as historical QA evidence.
+
+This pointer preserves the original path after the SSOT migration on 2026-07-21.

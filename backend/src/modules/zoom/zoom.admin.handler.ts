@@ -16,6 +16,7 @@ import {
   cancelPrivateBooking,
   getAvailableSlotsForUser,
   createSwapRequest,
+  getSwapCandidates,
   acceptSwapRequest,
   declineSwapRequest,
   toggleCoachSlotStatus,
@@ -33,13 +34,14 @@ import { prisma } from '../../db/client.js';
 import { sendOpsTelegramMessage } from '../../lib/telegram.js';
 import { SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/prisma-client';
 import { syncZoomRegistrationLifecycle } from './controller.js';
+import { getUserAccessState } from '../subscriptions/payments/focus.access.js';
 
 type BattleOutcome = 'challenger' | 'opponent' | 'both' | 'none';
 
 async function requireActiveFocusSubscription(userId: string, res: Response): Promise<boolean> {
-  const isSubscriber = await isActiveFocusSubscriber(userId)
-  if (!isSubscriber) {
-    res.status(403).json({ error: 'focus_subscription_required' })
+  const accessState = await getUserAccessState(userId)
+  if (!accessState.hasFocus) {
+    res.status(403).json({ error: 'NO_ACTIVE_SUBSCRIPTION' })
     return false
   }
 
@@ -559,6 +561,7 @@ export async function getAvailableSlots(
   try {
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
 
     const slots = await getAvailableSlotsForUser(userId)
     return res.status(200).json(slots)
@@ -616,10 +619,40 @@ export async function handleCreateSwapRequest(
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
     if (!(await requireActiveFocusSubscription(userId, res))) return
-    const { sessionIdFrom, targetUserIds } = req.body as { sessionIdFrom?: string; targetUserIds?: string[] }
+    const { sessionIdFrom, targetUserId, sessionIdTo, targetUserIds } = req.body as {
+      sessionIdFrom?: string
+      targetUserId?: string
+      sessionIdTo?: string
+      targetUserIds?: string[]
+    }
     if (!sessionIdFrom) return res.status(400).json({ error: 'sessionIdFrom required' })
-    const result = await createSwapRequest(userId, sessionIdFrom, targetUserIds)
+    const result = await createSwapRequest(userId, sessionIdFrom, {
+      targetUserId,
+      sessionIdTo,
+      targetUserIds,
+    })
     return res.status(200).json(result)
+  } catch (err) {
+    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    next(err)
+  }
+}
+
+export async function handleGetSwapCandidates(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await requireActiveFocusSubscription(userId, res))) return
+
+    const sessionIdFrom = String(req.query.sessionIdFrom ?? '').trim()
+    if (!sessionIdFrom) return res.status(400).json({ error: 'sessionIdFrom required' })
+
+    const candidates = await getSwapCandidates(userId, sessionIdFrom)
+    return res.status(200).json(candidates)
   } catch (err) {
     if (err instanceof Error) return res.status(409).json({ error: err.message })
     next(err)

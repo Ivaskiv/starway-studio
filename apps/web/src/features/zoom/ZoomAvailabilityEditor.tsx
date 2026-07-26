@@ -8,6 +8,7 @@ import {
   useGenerateSessionsMutation,
 } from './zoom.api';
 import type { AvailabilitySlot, ZoomSessionType } from './zoom.types';
+import { getSessionBadgeClass, getSessionMeta } from './zoom.utils';
 
 const DAY_NAMES = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon→Sun display order
@@ -200,13 +201,6 @@ function SlotForm({
 
 // ── SlotRow ───────────────────────────────────────────────────────────────────
 
-const TYPE_BADGE_CLASS: Record<ZoomSessionType, string> = {
-  group_practice: 'bg-purple-500/10 text-purple-400',
-  individual:     'bg-teal-500/10 text-teal-400',
-  intensive:      'bg-blue-500/10 text-blue-400',
-  battle_review:  'bg-amber-500/10 text-amber-400',
-};
-
 function SlotRow({
   slot,
   onEdit,
@@ -216,15 +210,19 @@ function SlotRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const typeOpt = TYPE_OPTIONS.find(o => o.value === slot.sessionType);
   const time = `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`;
+  const sessionLike = {
+    type: slot.sessionType,
+    maxParticipants: slot.maxSlots,
+    participantsCount: 0,
+  };
 
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
       <div className="flex items-center gap-2.5 min-w-0">
         <span className="text-[13px] font-semibold text-white/80 w-8 flex-shrink-0">{time}</span>
-        <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${TYPE_BADGE_CLASS[slot.sessionType]}`}>
-          {typeOpt?.label ?? slot.sessionType}
+        <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${getSessionBadgeClass(sessionLike)}`}>
+          {getSessionMeta(sessionLike)}
         </span>
         <span className="text-[12px] text-white/40 flex-shrink-0">{slot.durationMinutes} хв</span>
         <span className="text-[12px] text-white/40 flex-shrink-0">{slot.maxSlots} місць</span>

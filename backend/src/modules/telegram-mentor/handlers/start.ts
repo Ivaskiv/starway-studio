@@ -12,6 +12,7 @@ import {
   resolveLinkedUserIdFromContext,
   syncAccessAwareChatEntryPoints,
 } from './start.shared.js'
+import { resolveUserLifecycle } from '../../flow-control/service.js'
 import {
   type StartMessagePayload,
   magicLinkReadyMessage,
@@ -50,6 +51,18 @@ function buildTelegramGuestEmail(telegramUserId: string): string {
   return `telegram-${normalized}@starway.local`
 }
 
+async function resolveValidDefaultAiExpertId(): Promise<string | undefined> {
+  const expertId = String(process.env.DEFAULT_AI_EXPERT_ID ?? '').trim()
+  if (!expertId) return undefined
+
+  const expert = await prisma.expert.findUnique({
+    where: { id: expertId },
+    select: { id: true },
+  }).catch(() => null)
+
+  return expert?.id ?? undefined
+}
+
 async function setLifecycleState(userId: string, lifecycleState: UserLifecycleState): Promise<void> {
   await prisma.user.update({
     where: { id: userId },
@@ -58,7 +71,7 @@ async function setLifecycleState(userId: string, lifecycleState: UserLifecycleSt
 }
 
 async function loadUserSnapshot(userId: string): Promise<StartUserSnapshot> {
-  return prisma.user.findUniqueOrThrow({
+  const snapshot = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: {
       id: true,
@@ -71,11 +84,38 @@ async function loadUserSnapshot(userId: string): Promise<StartUserSnapshot> {
       firstName: true,
     },
   })
+
+  if (
+    !['FOCUS_PAID', 'ZOOM_MEMBER', 'POST_ZOOM_1', 'UPSELL'].includes(
+      snapshot.lifecycleState
+    )
+  ) {
+    const lifecycle = await resolveUserLifecycle(userId).catch(() => null)
+    if (lifecycle?.state === 'paid') {
+      await prisma.user
+        .update({
+          where: { id: userId },
+          data: { lifecycleState: 'FOCUS_PAID' },
+        })
+        .catch(() => undefined)
+
+      return {
+        ...snapshot,
+        lifecycleState: 'FOCUS_PAID',
+      }
+    }
+  }
+
+  return snapshot
 }
 
 async function deliver(
   ctx: StartContext,
-  payload: { text: string; reply_markup: { inline_keyboard: StartMessagePayload['buttons'] } },
+  payload: {
+    text: string
+    reply_markup: { inline_keyboard: StartMessagePayload['buttons'] }
+    parseMode?: 'HTML'
+  },
 ): Promise<void> {
   const deliveryChatId = ctx.chat?.id ?? ctx.from?.id
   console.info('[START_DELIVER]', { deliveryChatId, textLen: payload.text?.length ?? 0 })
@@ -84,40 +124,26 @@ async function deliver(
     return
   }
   try {
-    const sentMessage = await ctx.reply(payload.text, {
-      parse_mode: 'HTML',
-      reply_markup: payload.reply_markup,
-    })
+    const sentMessage = await planMessage(
+      ctx,
+      'ctx.reply',
+      'start_home_screen',
+      payload.text,
+      payload.reply_markup,
+      payload.parseMode,
+    )
     console.info('[START_DELIVER_OK]', {
       deliveryChatId,
-      messageId: sentMessage.message_id,
-      via: 'ctx.reply',
+      messageId: sentMessage?.message_id ?? null,
+      via: 'planMessage(ctx.reply)',
     })
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     console.error('[START_DELIVER_ERROR]', {
       deliveryChatId,
       error: errorMessage,
-      via: 'ctx.reply',
+      via: 'planMessage(ctx.reply)',
     })
-
-    try {
-      const sentMessage = await ctx.telegram.sendMessage(deliveryChatId, payload.text, {
-        parse_mode: 'HTML',
-        reply_markup: payload.reply_markup,
-      })
-      console.info('[START_DELIVER_OK]', {
-        deliveryChatId,
-        messageId: sentMessage.message_id,
-        via: 'ctx.telegram.sendMessage:fallback',
-      })
-    } catch (fallbackErr) {
-      console.error('[START_DELIVER_ERROR]', {
-        deliveryChatId,
-        error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
-        via: 'ctx.telegram.sendMessage:fallback',
-      })
-    }
   }
 }
 
@@ -301,6 +327,7 @@ export async function handleStart(ctx: StartContext) {
     let resolvedUserId = await resolveLinkedUserIdFromContext(ctx)
 
     if (!resolvedUserId) {
+      const validDefaultAiExpertId = await resolveValidDefaultAiExpertId()
       const resolved = await resolveOrCreateUser(
         {
           telegramId: telegramUserId,
@@ -309,7 +336,7 @@ export async function handleStart(ctx: StartContext) {
         },
         {
           source: UserCreationSource.TELEGRAM_START,
-          expertId: process.env.DEFAULT_AI_EXPERT_ID ?? undefined,
+          expertId: validDefaultAiExpertId,
           name: ctx.from?.first_name ?? undefined,
           createData: {
             email: buildTelegramGuestEmail(telegramUserId),

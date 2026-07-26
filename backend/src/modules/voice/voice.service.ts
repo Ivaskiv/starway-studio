@@ -360,9 +360,14 @@ async function buildDecision(userId: string, transcript: string, signalState: Da
     getUserMemorySummary(userId),
   ])
 
-  const actionItems = actions.actions.slice(0, 2).map((item) => ({
+  const actionItems = actions.actions.slice(0, 2).map((item: {
+    action: string
+    successCriteria?: string | null
+    targetConflict?: string | null
+    duration?: string | null
+  }) => ({
     title: item.action,
-    description: item.successCriteria || item.targetConflict || item.duration,
+    description: item.successCriteria || item.targetConflict || item.duration || '',
   }))
 
   const repeatedPattern = memory.dominantStates.includes(signalState)

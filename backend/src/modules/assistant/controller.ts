@@ -4,6 +4,14 @@ import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { assistantChat } from "./service.js"
 
+function resolveRequestId(req: AuthenticatedRequest): string {
+  const headerValue = req.headers['x-request-id']
+  if (typeof headerValue === 'string' && headerValue.trim()) {
+    return headerValue.trim()
+  }
+  return `web:${req.user?.id ?? 'anonymous'}:${Date.now()}`
+}
+
 export async function chat(req: AuthenticatedRequest, res: Response) {
   const userId = req.user?.id
   const message = typeof req.body?.message === 'string' ? req.body.message : ''
@@ -36,7 +44,10 @@ export async function chat(req: AuthenticatedRequest, res: Response) {
     })
   }
 
-  const data = await assistantChat(userId, message)
+  const data = await assistantChat(userId, message, {
+    platform: 'web',
+    requestId: resolveRequestId(req),
+  })
 
   await trackEvent({
     userId,

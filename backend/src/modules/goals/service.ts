@@ -8,6 +8,23 @@ import { prisma } from '../../db/client.js';
 import { openai } from '../../lib/openai.js';
 import { Goal, GoalsSet } from './types.js';
 
+function extractGoalTexts(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw.flatMap((item) => {
+    if (typeof item === 'string' && item.trim()) return [item.trim()];
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const text = (item as { text?: unknown }).text;
+      return typeof text === 'string' && text.trim() ? [text.trim()] : [];
+    }
+    return [];
+  });
+}
+
+export function getPrimaryGoalTextFromGoals(raw: unknown): string | null {
+  return extractGoalTexts(raw)[0] ?? null;
+}
+
 export async function setGoals(
   userId: string,
   goals: string[],

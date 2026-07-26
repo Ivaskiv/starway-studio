@@ -15,12 +15,8 @@ export class NotificationJobService {
     })
   }
 
-  async getDuePending(limit?: number): Promise<NotificationJob[]> {
-    return notificationJobRepository.findDuePending(limit)
-  }
-
-  async markProcessing(id: string): Promise<NotificationJob> {
-    return notificationJobRepository.updateStatus(id, 'PROCESSING')
+  async claimDuePending(limit?: number): Promise<NotificationJob[]> {
+    return notificationJobRepository.claimDuePending(limit)
   }
 
   async markDone(id: string): Promise<NotificationJob> {

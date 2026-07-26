@@ -6,7 +6,23 @@ type AssistantChatRequest = {
   message: string
 }
 
-type AssistantChatResponse = Record<string, unknown>
+export type AssistantChatResponse = {
+  message: string
+  reply: string
+  mentorMessage: {
+    content: string
+  }
+  meta: {
+    platform: 'telegram' | 'miniapp' | 'website' | 'web' | 'backend'
+    requestId: string
+    scenario: string
+    provider: string | null
+    lifecycle: string | null
+    subscription: string | null
+    fallbackActivated: boolean
+    durationMs: number
+  }
+}
 
 export const assistantApi = api.injectEndpoints({
   endpoints: builder => ({

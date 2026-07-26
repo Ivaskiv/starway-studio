@@ -1,24 +1,40 @@
 # Docs Navigation
 
-## Source Of Truth Zones
-- `docs/client/` — business and client operations truth
-- `docs/dev-skills/` — skills and execution truth
-- `docs/architecture/` — platform, lifecycle, callback, Telegram, and orchestration architecture truth
-- `docs/platform/` — transitional redirect layer for platform governance
-- `docs/automation/` — transitional redirect layer for lifecycle/callback/telegram maps
+## Purpose
 
-## Registry And Temporary Zones
-- `docs/agents/` — lightweight agent registry (references only)
-- `docs/test-instructions/` — temporary QA/smoke instructions (`REMOVE_TEST_DOCS`)
-- `docs/archive/` — historical one-off audits, runbooks, and legacy artifacts
+Navigation hub for the Starway / ABSystem documentation system.
 
-## Root Utility Docs
-- `docs/prompt.md` — prompt inventory and mapping
-- `docs/routes.md` — system route map
-- `docs/temporary-overrides.md` — temporary override registry
+## Contained Documents
 
-## Maintenance Rules
-1. Do not copy business/platform/skills content into registry folders.
-2. Add temporary QA instructions only under `docs/test-instructions/`.
-3. Move one-off dated audits/runbooks to `docs/archive/`.
-4. Keep production-facing source docs inside their truth zones.
+- Canonical architecture hub: `docs/architecture/README.md`
+- Business and client operations: `docs/client/README.md`
+- Engineering skills and execution playbooks: `docs/dev-skills/README.md`
+- Agent registry: `docs/agents/README.md`
+- Testing instructions: `docs/test-instructions/README.md`
+- Audit records: `docs/audit/README.md`
+- Archive: `docs/archive/README.md`
+- Prompt registry: `docs/prompt.md`
+- Route inventory: `docs/routes.md`
+- Temporary overrides: `docs/temporary-overrides.md`
+- User creation map: `docs/architecture/user-creation-map.md`
+
+## Canonical Documents
+
+- Canonical truth zones:
+  - `docs/architecture/`
+  - `docs/client/`
+  - `docs/dev-skills/`
+- Pointer-only compatibility zones:
+  - `docs/platform/`
+  - `docs/automation/`
+- Historical and temporary zones:
+  - `docs/audit/`
+  - `docs/archive/`
+  - `docs/test-instructions/`
+
+## Related Folders
+
+- `docs/architecture/`
+- `docs/client/`
+- `docs/dev-skills/`
+- `docs/agents/`

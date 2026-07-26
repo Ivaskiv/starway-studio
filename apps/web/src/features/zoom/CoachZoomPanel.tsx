@@ -9,6 +9,7 @@ import {
   useCreateZoomSessionMutation,
 } from './zoom.api';
 import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './zoom.types';
+import { getSessionDateLabel, getSessionIconBgClass, getSessionIconKey, getSessionMeta } from './zoom.utils';
 import ZoomCalendar from './ZoomCalendar';
 import { ZoomAvailabilityEditor } from './ZoomAvailabilityEditor';
 import { useAppSelector } from '@/app/hooks';
@@ -29,34 +30,13 @@ interface BattleSession extends ZoomCalendarSession {
   goalB?: string;
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const TYPE_ICON: Record<ZoomSessionType, typeof Users> = {
-  group_practice: Users,
-  individual:     CircleUserRound,
-  intensive:      Zap,
-  battle_review:  Crosshair,
-};
-const TYPE_LABEL: Record<ZoomSessionType, string> = {
-  group_practice: 'Групова',
-  individual:     'Індивідуальна',
-  intensive:      'Інтенсив',
-  battle_review:  'Battle',
-};
-const TYPE_ICON_BG: Record<ZoomSessionType, string> = {
-  group_practice: 'bg-purple-500/20 text-purple-400',
-  individual:     'bg-teal-500/20 text-teal-400',
-  intensive:      'bg-blue-500/20 text-blue-400',
-  battle_review:  'bg-amber-500/20 text-amber-400',
-};
-const TYPE_BADGE: Record<ZoomSessionType, string> = {
-  group_practice: 'bg-purple-500/20 text-purple-300',
-  individual:     'bg-teal-500/20 text-teal-300',
-  intensive:      'bg-blue-500/20 text-blue-300',
-  battle_review:  'bg-amber-500/20 text-amber-300',
-};
-
 const RANK_EMOJI = ['🥇', '🥈', '🥉'];
+const ICON_BY_KEY = {
+  users: Users,
+  person: CircleUserRound,
+  zap: Zap,
+  battle: Crosshair,
+} as const
 
 // ── Mock Data ─────────────────────────────────────────────────────────────────
 
@@ -117,12 +97,7 @@ const MOCK_LEADERBOARD: LeaderboardEntry[] = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDateTime(iso: string): string {
-  const d = new Date(iso);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${dd}.${mm} · ${hh}:${mi}`;
+  return getSessionDateLabel(iso);
 }
 
 type CoachZoomAttendee = ZoomAttendeeDTO & {
@@ -198,6 +173,8 @@ function UpcomingSessionCard({ session }: { session: ZoomCalendarSession }) {
     refetchOnMountOrArgChange: true,
   });
   const [markAttended, { isLoading: isMarkingAttended }] = useMarkAttendedMutation();
+  const SessionIcon = ICON_BY_KEY[getSessionIconKey(session)];
+  const sessionMeta = getSessionMeta(session);
 
   const handleMarkAttended = async (attendeeId: string) => {
     try {
@@ -211,22 +188,15 @@ function UpcomingSessionCard({ session }: { session: ZoomCalendarSession }) {
   return (
     <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] p-3">
       <div className="flex items-center gap-3">
-        <span className={['w-9 h-9 rounded-full flex items-center justify-center text-[16px] flex-shrink-0', TYPE_ICON_BG[session.type]].join(' ')}>
-          {(() => {
-            const Icon = TYPE_ICON[session.type];
-            return <Icon className="h-4 w-4" />;
-          })()}
+        <span className={['w-9 h-9 rounded-full flex items-center justify-center text-[16px] flex-shrink-0', getSessionIconBgClass(session)].join(' ')}>
+          <SessionIcon className="h-4 w-4" />
         </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-medium text-[var(--text-primary)] truncate">{session.topic}</p>
-            <span className={['inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0', TYPE_BADGE[session.type]].join(' ')}>
-              {TYPE_LABEL[session.type]}
-            </span>
           </div>
           <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-            {fmtDateTime(session.scheduledAt)}
-            {session.attendeesCount !== undefined && ` · ${session.attendeesCount} учасн.`}
+            {fmtDateTime(session.scheduledAt)} · {sessionMeta}
           </p>
         </div>
         <button className="text-xs px-2 py-1 rounded-lg border border-[var(--border-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] flex-shrink-0 transition-colors">

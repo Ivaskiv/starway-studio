@@ -158,6 +158,7 @@ export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
   const shouldShowPersonalCalendar = canSeePersonalCalendar
   const isBrowserFallback = !isTelegramRuntime || !hasTelegramInitData
   const shouldUseTelegramSlotBooking = shouldShowPersonalCalendar && !isCoach && isTelegramRuntime && hasTelegramInitData
+  const shouldWaitForStandaloneAuth = authStatus === 'loading' && !isTelegramRuntime
 
   useEffect(() => {
     if (canSeePersonalCalendar) {
@@ -170,19 +171,19 @@ export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
       return
     }
 
-    if (authStatus === 'loading') {
+    if (shouldWaitForStandaloneAuth) {
       setViewState('pending')
       return
     }
 
     setViewState('locked')
-  }, [canSeePersonalCalendar, isBrowserFallback, authStatus])
+  }, [canSeePersonalCalendar, isBrowserFallback, shouldWaitForStandaloneAuth])
 
   const personalMode = useMemo(() => {
     return isCoach ? 'coach' : 'user'
   }, [isCoach])
 
-  if (viewState === 'pending' || (isTelegramRuntime && authStatus === 'loading' && !user && hasTelegramInitData)) {
+  if (viewState === 'pending') {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center px-4 py-10 text-white/80">
         Авторизуємо Zoom Calendar…

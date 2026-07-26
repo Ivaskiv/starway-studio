@@ -33,6 +33,34 @@
       "types": "./dist/providers/spendGuard.d.ts",
       "import": "./dist/providers/spendGuard.js"
     },
+    "./providers/usageLedger": {
+      "types": "./dist/providers/usageLedger.d.ts",
+      "import": "./dist/providers/usageLedger.js"
+    },
+    "./providers/anthropic": {
+      "types": "./dist/providers/anthropic/index.d.ts",
+      "import": "./dist/providers/anthropic/index.js"
+    },
+    "./providers/gemini": {
+      "types": "./dist/providers/gemini/index.d.ts",
+      "import": "./dist/providers/gemini/index.js"
+    },
+    "./providers/ollama": {
+      "types": "./dist/providers/ollama/index.d.ts",
+      "import": "./dist/providers/ollama/index.js"
+    },
+    "./providers/openai": {
+      "types": "./dist/providers/openai/index.d.ts",
+      "import": "./dist/providers/openai/index.js"
+    },
+    "./providers/openrouter": {
+      "types": "./dist/providers/openrouter/index.d.ts",
+      "import": "./dist/providers/openrouter/index.js"
+    },
+    "./providers/registry": {
+      "types": "./dist/providers/registry/index.d.ts",
+      "import": "./dist/providers/registry/index.js"
+    },
     "./prompts/salesPsychologist": {
       "types": "./dist/prompts/salesPsychologist.prompts.d.ts",
       "import": "./dist/prompts/salesPsychologist.prompts.js"
@@ -50,6 +78,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
     "@google/generative-ai": "^0.24.1",
+    "@starway/db": "workspace:*",
     "openai": "^6.25.0"
   },
   "devDependencies": {

@@ -5,6 +5,12 @@
 import { prisma } from '../../db/client.js';
 import type { SubscriptionInfo } from './types.js';
 
+export type SubscriptionSnapshot = {
+  status: string;
+  trialEndsAt?: Date | null;
+  currentPeriodEnd?: Date | null;
+};
+
 // ── Plan resolver ─────────────────────────────────────────────────────────────
 
 /** Повертає SubscriptionInfo із запису підписки Prisma */
@@ -38,6 +44,29 @@ export function toSubscriptionInfo(sub: {
 
 // ── Cooldown ──────────────────────────────────────────────────────────────────
 
+export function resolveWheelCooldownFromSnapshot(
+  subscription: SubscriptionSnapshot | null,
+  lastEntryAt: Date | null,
+  now = new Date(),
+): { canFill: boolean; daysLeft: number } {
+  if (!subscription) return { canFill: false, daysLeft: 0 };
+
+  const info = toSubscriptionInfo(subscription);
+
+  if (info.status === 'trial') return { canFill: !lastEntryAt, daysLeft: 0 };
+  if (info.status !== 'active') return { canFill: false, daysLeft: 0 };
+  if (!lastEntryAt) return { canFill: true, daysLeft: 0 };
+
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (lastEntryAt < monthStart) return { canFill: true, daysLeft: 0 };
+
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return {
+    canFill: false,
+    daysLeft: Math.max(0, Math.ceil((nextMonth.getTime() - now.getTime()) / 86400000)),
+  };
+}
+
 /** Перевіряє чи може юзер заповнити колесо (trial=один раз, paid=раз на місяць) */
 export async function getWheelCooldown(userId: string): Promise<{ canFill: boolean; daysLeft: number }> {
   const [sub, lastEntry] = await Promise.all([
@@ -53,21 +82,10 @@ export async function getWheelCooldown(userId: string): Promise<{ canFill: boole
     }),
   ]);
 
-  if (!sub) return { canFill: false, daysLeft: 0 };
-
-  const now   = new Date();
-  const info  = toSubscriptionInfo(sub);
-
-  if (info.status === 'trial')    return { canFill: !lastEntry, daysLeft: 0 };
-  if (info.status !== 'active')   return { canFill: false, daysLeft: 0 };
-  if (!lastEntry)                 return { canFill: true, daysLeft: 0 };
-
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  if (lastEntry.createdAt < monthStart) return { canFill: true, daysLeft: 0 };
-
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const daysLeft  = Math.max(0, Math.ceil((nextMonth.getTime() - now.getTime()) / 86400000));
-  return { canFill: false, daysLeft };
+  return resolveWheelCooldownFromSnapshot(
+    sub,
+    lastEntry?.createdAt ?? null,
+  );
 }
 
 // ── getUserSubscriptionInfo ───────────────────────────────────────────────────

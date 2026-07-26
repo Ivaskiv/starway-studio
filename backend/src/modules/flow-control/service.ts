@@ -11,6 +11,29 @@ import { stopLeadMagnet } from '../integrations/sendpulse/sendpulse.service.js'
 type FlowDbClient = typeof prisma | Prisma.TransactionClient
 const LEAD_MAGNET_TTL_MS = 48 * 60 * 60 * 1000
 
+export type LifecycleResolutionUserRecord = {
+  focusPaid: boolean
+  onboardingStartedAt: Date | null
+  currentStep: string | null
+  trialStartsAt: Date | null
+  trialEndsAt: Date | null
+  fivePointsEnrollment: Array<{
+    createdAt: Date
+    progress: unknown
+    completedAt: Date | null
+  }>
+  subscriptions: Array<{
+    status: string
+    trialEndsAt: Date | null
+    currentPeriodEnd: Date | null
+    createdAt: Date
+  }>
+  funnelLeads: Array<{
+    status: string
+    updatedAt: Date
+  }>
+}
+
 function isWaitlistFlag(value: string | null | undefined): boolean {
   const normalized = String(value ?? '').trim().toUpperCase()
   return normalized.includes('WAITLIST') || normalized.includes('EARLY_ACCESS')
@@ -78,7 +101,6 @@ function isFreshLeadMagnetDate(value: Date | null | undefined, now: Date) {
 }
 
 export async function resolveUserLifecycle(userId: string, db: FlowDbClient = prisma): Promise<UserLifecycleSnapshot> {
-  const now = new Date()
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
@@ -120,6 +142,14 @@ export async function resolveUserLifecycle(userId: string, db: FlowDbClient = pr
   if (!user) {
     throw new Error('USER_NOT_FOUND')
   }
+
+  return resolveUserLifecycleFromRecord(user)
+}
+
+export function resolveUserLifecycleFromRecord(
+  user: LifecycleResolutionUserRecord,
+  now: Date = new Date(),
+): UserLifecycleSnapshot {
 
   const subscription = user.subscriptions[0] ?? null
   const leadEnrollment = user.fivePointsEnrollment[0] ?? null

@@ -1034,7 +1034,6 @@ export async function dailyMorningCron(): Promise<void> {
 
   await Promise.all(preferences.map(async (preference) => {
     if (!isWithinScheduledMinute(now, preference.timezone, preference.dailyMorningTime)) return
-    if (!(await hasMentorNotificationAccess(preference.userId))) return
     console.info('[scheduler] morning telegram matched', {
       userId: preference.userId,
       timezone: preference.timezone,
@@ -1065,7 +1064,6 @@ export async function dailyEveningCron(): Promise<void> {
 
   await Promise.all(preferences.map(async (preference) => {
     if (!isWithinScheduledMinute(now, preference.timezone, preference.dailyEveningTime)) return
-    if (!(await hasMentorNotificationAccess(preference.userId))) return
     console.info('[scheduler] evening telegram matched', {
       userId: preference.userId,
       timezone: preference.timezone,
@@ -1155,12 +1153,11 @@ export async function weeklySummaryCron(): Promise<void> {
 
     if (getWeekdayInTimezone(now, timezone) !== 'Sun') continue
     if (getMinutesInTimezone(now, timezone) !== 19 * 60) continue
+    if (!preference?.telegramEnabled || !preference.weeklySummaryEnabled) continue
+    if (!(await hasMentorNotificationAccess(candidate.id))) continue
 
     const generated = await runWeeklyAnalysis(candidate.id)
     if (!generated) continue
-
-    if (!preference?.telegramEnabled || !preference.weeklySummaryEnabled) continue
-    if (!(await hasMentorNotificationAccess(candidate.id))) continue
 
     const [streak, wheels, sessions] = [
       { current: generated.userReport.streakDays },
@@ -1204,7 +1201,6 @@ export async function aiInactiveCron(): Promise<void> {
   for (const mentor of mentors) {
     const preferences = mentor.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.aiRemindersEnabled) continue
-    if (!(await hasMentorNotificationAccess(mentor.userId))) continue
 
     await notificationService.emit(NotificationEvent.AI_INACTIVE, mentor.userId, {
       lastInteractionAt: mentor.lastInteractionAt.toISOString(),

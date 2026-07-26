@@ -1,20 +1,25 @@
 # AI Mentor
 
 ## Purpose
-User support, behavior-change guidance, accountability messaging, and Psychology of Action flows.
 
-## Knowledge Sources
-- Business truth: `docs/client/*`
-- Skills truth: `docs/dev-skills/*`
-- Architecture truth: `docs/architecture/*`
+Agent pack for mentoring, comeback flows, FOCUS materials, and ABSystem methodology.
 
-## Referenced Source-Of-Truth Files
-- `docs/agents/ai-strategist/customer-avatar-deep.md`
-- `docs/agents/ai-strategist/offer-methodology.md`
-- `docs/agents/ai-mentor/methodology-absystem.md`
-- `docs/agents/shared/STARWAY-DNA-LEXICON.md`
-## Global Dependencies
-- `docs/agents/shared/OPERATING-RULES.md`
+## Contained Documents
 
-## Claude Project Recommendation
-Use this agent when the task is coaching-style support and requires ABSystem behavior chain alignment without rewriting business source docs.
+- Comback flows: `docs/agents/ai-mentor/comeback-flows.md`
+- FOCUS course materials: `docs/agents/ai-mentor/focus-course-materials.md`
+- ABSystem methodology: `docs/agents/ai-mentor/methodology-absystem.md`
+- Claude architecture skill: `docs/agents/ai-mentor/SKILL__AI_AGENT__CLAUDE_ARCHITECTURE.md`
+- Manager bot user guide: `docs/agents/ai-mentor/SKILL__MANAGER_BOT__USER_GUIDE.md`
+
+## Canonical Documents
+
+- Canonical documents:
+  - `docs/agents/ai-mentor/focus-course-materials.md`
+  - `docs/agents/ai-mentor/methodology-absystem.md`
+
+## Related Folders
+
+- `docs/client/`
+- `docs/architecture/`
+- `docs/agents/shared/`

@@ -7,7 +7,7 @@ import { dirname, resolve } from 'node:path'
 
 const ROOT_DIR = findRepoRoot(process.env.INIT_CWD ?? process.cwd())
 
-const BACKEND_ENV_PATH = resolve(ROOT_DIR, 'backend/.env')
+const BACKEND_LOCAL_ENV_PATH = resolve(ROOT_DIR, 'backend/.env.local')
 
 const BACKEND_PORT = 3001
 
@@ -202,10 +202,10 @@ function updateEnvContent(
 }
 
 async function updateBackendEnv(publicUrl: string) {
-  const envContent = await readFile(
-    BACKEND_ENV_PATH,
-    'utf8',
-  )
+  const targetEnvPath = BACKEND_LOCAL_ENV_PATH
+  const envContent = existsSync(targetEnvPath)
+    ? await readFile(targetEnvPath, 'utf8')
+    : ''
 
   const updates = {
     PUBLIC_API_URL: publicUrl,
@@ -221,7 +221,7 @@ async function updateBackendEnv(publicUrl: string) {
   )
 
   if (nextContent !== envContent) {
-    await writeFile(BACKEND_ENV_PATH, nextContent)
+    await writeFile(targetEnvPath, nextContent)
   }
 
   return {

@@ -1,7 +1,5 @@
 // backend/src/modules/zoom/zoom.notifications.ts
-// Cron: sends 24h and 2h pre-session Telegram alerts to registered attendees
-
-import cron from 'node-cron';
+// Canonical scheduler handlers for Zoom reminders and maintenance.
 import { Prisma } from '@starway/db/prisma-client';
 import { prisma } from '../../db/client.js';
 import { bot, sendDedupedTelegramMessage } from '../../lib/telegram.js';
@@ -223,48 +221,39 @@ async function runNotificationCheck() {
   }
 }
 
-export function startZoomNotificationsCron(): void {
-  // Every Sunday 18:00 — keep pinned channel schedule post up-to-date.
-  cron.schedule('0 18 * * 0', () => {
-    syncChannelPost(bot).catch((err) =>
-      console.error('[zoom-notifications] weekly channel sync error', err),
-    );
-  });
+export async function syncZoomWeeklyChannelPostCron(): Promise<void> {
+  await syncChannelPost(bot)
+}
 
-  // Every 30 minutes — expire stale swap requests and notify requesters.
-  cron.schedule('*/30 * * * *', () => {
-    expireStaleSwapRequests()
-      .then(async ({ expired }) => {
-        if (expired.length === 0) return
-        const users = await prisma.user.findMany({
-          where: { id: { in: expired.map((item) => item.requesterId) } },
-          select: { id: true, telegramChatId: true },
-        })
-        const byId = new Map(users.map((user) => [user.id, user.telegramChatId]))
-        await Promise.all(
-          expired.map((item) => {
-            const chatId = byId.get(item.requesterId)
-            if (!chatId) return Promise.resolve()
-            return sendDedupedTelegramMessage(chatId, '⏱ Час обміну вийшов. Ніхто не відповів.').catch(() => undefined)
-          }),
-        )
-      })
-      .catch((err) => console.error('[zoom-notifications] swap expiry cron error', err))
+export async function expireZoomSwapRequestsCron(): Promise<void> {
+  const { expired } = await expireStaleSwapRequests()
+  if (expired.length === 0) return
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: expired.map((item) => item.requesterId) } },
+    select: { id: true, telegramChatId: true },
+  })
+  const byId = new Map(users.map((user) => [user.id, user.telegramChatId]))
+
+  await Promise.all(
+    expired.map((item) => {
+      const chatId = byId.get(item.requesterId)
+      if (!chatId) return Promise.resolve()
+      return sendDedupedTelegramMessage(chatId, '⏱ Час обміну вийшов. Ніхто не відповів.').catch(() => undefined)
+    }),
+  )
+}
+
+export async function generateZoomSessionsFromAvailabilityCron(): Promise<void> {
+  const experts = await prisma.expert.findMany({
+    select: { id: true, zoomAvailability: true },
   })
 
-  // Every Sunday at 00:00 — generate sessions for the next 4 weeks
-  cron.schedule('0 0 * * 0', () => {
-    prisma.expert.findMany({ select: { id: true, zoomAvailability: true } })
-      .then(experts => {
-        for (const expert of experts) {
-          const slots = expert.zoomAvailability;
-          if (!Array.isArray(slots) || slots.length === 0) continue;
-          generateSessionsFromAvailability(expert.id, 4).catch(err =>
-            console.error('[zoom-notifications] weekly generate error', expert.id, err),
-          );
-        }
-      })
-      .catch(err => console.error('[zoom-notifications] Sunday cron error', err));
-  });
-
+  await Promise.all(
+    experts.map(async (expert) => {
+      const slots = expert.zoomAvailability
+      if (!Array.isArray(slots) || slots.length === 0) return
+      await generateSessionsFromAvailability(expert.id, 4)
+    }),
+  )
 }

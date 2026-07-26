@@ -65,7 +65,7 @@ import { scheduleFollowups } from './abTest.scheduler.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import { buildEcosystemPaymentCheckoutSession } from '../../../modules/subscriptions/payments/business.js'
 import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus.access.js'
-import { sendAbTestBlock12Welcome } from '@/modules/subscriptions/payments/callback.notifications.js'
+import { resendFocusAccessTelegramMessage } from '@/modules/subscriptions/payments/callback.notifications.js'
 import { alertCoachAboutPaymentIssue } from '@/modules/subscriptions/payments/coachAlert.service.js'
 import { coachBot } from '../../../lib/telegram.js'
 import { trackEvent } from '@/modules/events/service.js'
@@ -799,7 +799,7 @@ export async function handleResendFocusBlock12(
 
   const { markAbTestPaymentSuccess } = await import('./abTest.markers.js')
   await markAbTestPaymentSuccess(targetUserId)
-  await sendAbTestBlock12Welcome(targetUserId)
+  await resendFocusAccessTelegramMessage(targetUserId)
   await prisma.productSubscription
     .updateMany({
       where: {

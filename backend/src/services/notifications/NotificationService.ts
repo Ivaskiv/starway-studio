@@ -49,17 +49,21 @@ import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 import { FOCUS_DOJIM_TIMER_IDS } from '../../modules/subscriptions/payments/business.types.js'
 import { bot } from '../../lib/telegram.js'
 import { readTelegramBotConfig } from '../../modules/telegram-mentor/runtime/botConfig.js'
+import { TelegramConversationRenderer } from '../../modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import { resolveAbTestFollowupCopy } from '@/products/ab-system/content/abTest.followups.js'
 import {
   AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
   type TelegramContentBlock,
 } from '@/products/ab-system/content/abTest.shared.js'
+import type { ConversationButton, ConversationResponse } from '../../modules/telegram-mentor/conversation/engine/types.js'
 
 type EventPayload = Record<string, unknown>
 type DojimSeriesScheduleResult = {
   jobsCount: number
 }
+
+const conversationRenderer = new TelegramConversationRenderer()
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -479,41 +483,112 @@ async function sendFocusDojimBlockMessage(input: {
   replyMarkup?: ReturnType<typeof buildTelegramReplyMarkup>
 }): Promise<void> {
   const { chatId, block, replyMarkup } = input
+  const buttons = mapReplyMarkupToConversationButtons(replyMarkup)
+  const response = buildFocusDojimConversationResponse(block, buttons)
+  if (!response) return
 
+  await conversationRenderer.renderOutbound({ chatId: String(chatId), transportBot: bot }, response)
+}
+
+function mapReplyMarkupToConversationButtons(
+  replyMarkup?: ReturnType<typeof buildTelegramReplyMarkup>,
+): ConversationButton[] {
+  const rows = replyMarkup?.inline_keyboard ?? []
+
+  return rows.flatMap((row) =>
+    row.flatMap((button): ConversationButton[] => {
+      if ('callback_data' in button && typeof button.callback_data === 'string') {
+        return [{ kind: 'callback', label: button.text, value: button.callback_data }]
+      }
+
+      if ('web_app' in button && button.web_app?.url) {
+        return [{ kind: 'web_app', label: button.text, value: button.web_app.url }]
+      }
+
+      if ('url' in button && typeof button.url === 'string') {
+        return [{ kind: 'url', label: button.text, value: button.url }]
+      }
+
+      return []
+    }),
+  )
+}
+
+function buildFocusDojimConversationResponse(
+  block: TelegramContentBlock,
+  buttons: ConversationButton[],
+): ConversationResponse | null {
   if (block.type === 'image') {
-    await bot.telegram.sendPhoto(chatId, block.assetKey, {
-      caption: block.caption ? renderFocusDojimBlock(block) ?? undefined : undefined,
-      parse_mode: 'HTML',
-      reply_markup: replyMarkup,
-    })
-    return
+    return {
+      text: null,
+      buttons: [],
+      cards: [],
+      media: [{
+        kind: 'photo',
+        assetKey: block.assetKey,
+        ...(block.caption ? { caption: renderFocusDojimBlock(block) ?? undefined } : {}),
+        parseMode: 'HTML',
+        buttons,
+      }],
+      nextActions: [],
+      telemetry: {},
+      analytics: {},
+    }
   }
 
   if (block.type === 'audio') {
-    await bot.telegram.sendVoice(chatId, block.assetKey, {
-      caption: block.caption ? renderFocusDojimBlock(block) ?? undefined : undefined,
-      parse_mode: 'HTML',
-      reply_markup: replyMarkup,
-    })
-    return
+    return {
+      text: null,
+      buttons: [],
+      cards: [],
+      media: [{
+        kind: 'voice',
+        assetKey: block.assetKey,
+        ...(block.caption ? { caption: renderFocusDojimBlock(block) ?? undefined } : {}),
+        parseMode: 'HTML',
+        buttons,
+      }],
+      nextActions: [],
+      telemetry: {},
+      analytics: {},
+    }
   }
 
   if (block.type === 'video') {
-    await bot.telegram.sendVideo(chatId, block.assetKey, {
-      caption: block.caption ? renderFocusDojimBlock(block) ?? undefined : undefined,
-      parse_mode: 'HTML',
-      reply_markup: replyMarkup,
-    })
-    return
+    return {
+      text: null,
+      buttons: [],
+      cards: [],
+      media: [{
+        kind: 'video',
+        assetKey: block.assetKey,
+        ...(block.caption ? { caption: renderFocusDojimBlock(block) ?? undefined } : {}),
+        parseMode: 'HTML',
+        buttons,
+      }],
+      nextActions: [],
+      telemetry: {},
+      analytics: {},
+    }
   }
 
   const text = renderFocusDojimBlock(block)
-  if (!text) return
+  if (!text) return null
 
-  await bot.telegram.sendMessage(chatId, text, {
-    parse_mode: 'HTML',
-    reply_markup: replyMarkup,
-  })
+  return {
+    text: null,
+    buttons: [],
+    cards: [{
+      kind: 'message',
+      text,
+      parseMode: 'HTML',
+      buttons,
+    }],
+    media: [],
+    nextActions: [],
+    telemetry: {},
+    analytics: {},
+  }
 }
 
 async function loadEligibleUsers(): Promise<Array<Pick<User, 'id' | 'firstName' | 'email' | 'telegramChatId' | 'telegramUserId'> & { telegramLinks: Array<{ chatId: string | null }> }>> {
@@ -792,7 +867,18 @@ export class NotificationService {
       const block = sequenceBlocks[index]
       const isLastBlock = index === sequenceBlocks.length - 1
 
-      await bot.telegram.sendChatAction(chatId, 'typing').catch(() => undefined)
+      await conversationRenderer.renderOutbound({
+        chatId: String(chatId),
+        transportBot: bot,
+      }, {
+        text: null,
+        buttons: [],
+        cards: [],
+        media: [],
+        nextActions: [{ type: 'chat_action', action: 'typing' }],
+        telemetry: {},
+        analytics: {},
+      })
       await sleep(index === 0 ? 2000 : 3000)
       await sendFocusDojimBlockMessage({
         chatId,

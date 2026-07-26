@@ -1,6 +1,6 @@
 // apps/web/src/features/zoom/ZoomCalendar.tsx
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useGetCalendarSessionsQuery,
   useCreateZoomSessionMutation,
@@ -24,6 +24,14 @@ import {
   formatUkrDate,
   formatPrice,
   getRemainingLabel,
+  getSessionBadgeClass,
+  getSessionMeta,
+  getNormalizedSessionType,
+  isBattleReviewSession,
+  isGroupPracticeSession,
+  isIndividualSession,
+  isIntensiveSession,
+  isPrivateSession,
 } from './zoom.utils';
 import type {
   CalendarView,
@@ -34,24 +42,6 @@ import type {
 } from './zoom.types';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-const TYPE_LABELS: Record<ZoomSessionType, string> = {
-  group_practice: 'Групова практика',
-  individual:     'Індивідуальна',
-  intensive:      'Інтенсив',
-  battle_review:  'Battle',
-  PRIVATE:        'PRIVATE слот',
-  GROUP:          'GROUP практика',
-};
-
-const TYPE_BADGE: Record<ZoomSessionType, string> = {
-  group_practice: 'bg-purple-100 text-purple-800',
-  battle_review:  'bg-amber-100 text-amber-800',
-  individual:     'bg-teal-100 text-teal-800',
-  intensive:      'bg-blue-100 text-blue-800',
-  PRIVATE:        'bg-blue-100 text-blue-800',
-  GROUP:          'bg-purple-100 text-purple-800',
-};
 
 const UK_DAY_SHORT = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
 
@@ -74,6 +64,14 @@ function endOf(view: CalendarView, date: Date): Date {
   }
   const days = getWeekDays(date);
   return new Date(days[6].setHours(23, 59, 59, 999));
+}
+
+function getNearestSession(sessions: ZoomCalendarSession[]): ZoomCalendarSession | null {
+  const now = Date.now();
+
+  return sessions
+    .filter((session) => new Date(session.scheduledAt).getTime() > now)
+    .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())[0] ?? null;
 }
 
 // ── SessionDetailCard ─────────────────────────────────────────────────────────
@@ -103,6 +101,11 @@ function SessionDetailCard({
   const maxSlots = (session.remainingSlots !== undefined && session.attendeesCount !== undefined)
     ? session.remainingSlots + session.attendeesCount
     : undefined;
+  const isBattleReview = isBattleReviewSession(session);
+  const isPrivate = isPrivateSession(session);
+  const isGroupPractice = isGroupPracticeSession(session);
+  const isIndividual = isIndividualSession(session);
+  const isIntensive = isIntensiveSession(session);
 
   const tooLateToUnbook = new Date(session.scheduledAt).getTime() - Date.now() < 24 * 60 * 60 * 1000;
 
@@ -110,8 +113,8 @@ function SessionDetailCard({
     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 mt-3">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${TYPE_BADGE[session.type]}`}>
-            {TYPE_LABELS[session.type]}
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${getSessionBadgeClass(session)}`}>
+            {getSessionMeta(session)}
           </span>
           <h3 className="text-[15px] font-semibold text-white mt-1.5 leading-snug">{session.topic}</h3>
           <p className="text-[12px] text-white/50 mt-0.5">{formatUkrDate(session.scheduledAt)}</p>
@@ -154,9 +157,9 @@ function SessionDetailCard({
       )}
 
       {/* Booking UI — user mode only */}
-      {mode === 'user' && !isPastDate(session.scheduledAt) && session.type !== 'battle_review' && (
+      {mode === 'user' && !isPastDate(session.scheduledAt) && !isBattleReview && (
         <div className="mb-3">
-          {(session.type === 'PRIVATE') && (
+          {isPrivate && (
             <div className="flex flex-col gap-2">
               {session.isMyBooking ? (
                 <>
@@ -186,7 +189,7 @@ function SessionDetailCard({
               )}
             </div>
           )}
-          {session.type === 'group_practice' && (
+          {isGroupPractice && (
             session.isMyBooking ? (
               <div className="flex items-center gap-2">
                 <span className="text-[12px] px-2 py-1 rounded-full bg-teal-500/10 text-teal-400">
@@ -211,7 +214,7 @@ function SessionDetailCard({
             )
           )}
 
-          {session.type === 'individual' && (
+          {isIndividual && (
             <div className="flex flex-col gap-2">
               {session.remainingSlots !== undefined && maxSlots !== undefined && (
                 <div className="flex items-center justify-between text-[12px] text-white/50">
@@ -253,7 +256,7 @@ function SessionDetailCard({
             </div>
           )}
 
-          {session.type === 'intensive' && !session.isMyBooking && (
+          {isIntensive && !session.isMyBooking && (
             <button
               onClick={() => bookSlot(session.id).catch(console.error)}
               disabled={booking}
@@ -262,7 +265,7 @@ function SessionDetailCard({
               {booking ? 'Реєстрація...' : '+ Зареєструватись'}
             </button>
           )}
-          {session.type === 'intensive' && session.isMyBooking && (
+          {isIntensive && session.isMyBooking && (
             <span className="text-[12px] px-2 py-1 rounded-full bg-blue-500/10 text-blue-400">
               Зареєстровано ✓
             </span>
@@ -432,6 +435,128 @@ function CreateSessionForm({
   );
 }
 
+function DaySessionsSheet({
+  selectedDate,
+  selectedSessions,
+  onClose,
+}: {
+  selectedDate: Date;
+  selectedSessions: ZoomCalendarSession[];
+  onClose: () => void;
+}) {
+  const [bookSlot, { isLoading: booking }] = useBookSlotMutation();
+  const [bookPrivateSlot, { isLoading: bookingPrivate }] = useBookPrivateSlotMutation();
+
+  const dateLabel = selectedDate.toLocaleDateString('uk-UA', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+
+  const handleBook = async (session: ZoomCalendarSession) => {
+    try {
+      if (isPrivateSession(session)) {
+        await bookPrivateSlot(session.id).unwrap();
+        return;
+      }
+
+      await bookSlot(session.id).unwrap();
+    } catch (error) {
+      console.error('[ZoomCalendar] day sheet booking failed', {
+        sessionId: session.id,
+        error,
+      });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-3 py-4 sm:items-center">
+      <button
+        type="button"
+        aria-label="Закрити список сесій"
+        onClick={onClose}
+        className="absolute inset-0"
+      />
+
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-[#0d1117] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/35">Сесії дня</p>
+            <h3 className="mt-1 text-base font-semibold text-white">{dateLabel}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm font-semibold text-white/70 transition-all hover:bg-white/[0.08] hover:text-white"
+          >
+            Закрити
+          </button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto px-4 py-4">
+          {selectedSessions.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
+              На цей день сесій немає
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {selectedSessions.map((session) => {
+                const sessionTime = new Date(session.scheduledAt).toLocaleTimeString('uk-UA', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+                const isPast = isPastDate(session.scheduledAt);
+                const normalizedSessionType = getNormalizedSessionType(session);
+                const isBookedOut = session.slotStatus === 'booked' || (session.remainingSlots ?? 1) <= 0;
+                const isBusy = normalizedSessionType === 'private' ? bookingPrivate : booking;
+
+                return (
+                  <div
+                    key={session.id}
+                    className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">{session.topic || 'ФОКУС · Zoom-практика'}</p>
+                        <p className="mt-1 text-xs text-white/55">
+                          {sessionTime} · {getSessionMeta(session)}
+                        </p>
+                      </div>
+
+                      {session.isMyBooking ? (
+                        <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                          Ви записані
+                        </span>
+                      ) : normalizedSessionType === 'battle_review' || isPast || session.status === 'CANCELLED' || session.status === 'COMPLETED' ? (
+                        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
+                          Недоступно
+                        </span>
+                      ) : isBookedOut && normalizedSessionType !== 'group_practice' && normalizedSessionType !== 'intensive' ? (
+                        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
+                          Зайнято
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleBook(session)}
+                          disabled={isBusy}
+                          className="cursor-pointer rounded-full border border-[rgba(var(--accent-rgb),0.28)] bg-[rgba(var(--accent-rgb),0.12)] px-4 py-2 text-xs font-semibold text-[rgb(var(--accent-rgb))] opacity-100 transition-all hover:bg-[rgba(var(--accent-rgb),0.18)] active:scale-[0.98] disabled:opacity-50"
+                        >
+                          {isBusy ? 'Записуємо...' : 'Записатись'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ZoomCalendar ──────────────────────────────────────────────────────────────
 
 export interface ZoomCalendarProps {
@@ -441,9 +566,12 @@ export interface ZoomCalendarProps {
 }
 
 export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarProps) {
-  const [view, setView] = useState<CalendarView>('month');
+  const [view, setView] = useState<CalendarView>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedSession, setSelectedSession] = useState<ZoomCalendarSession | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedSessions, setSelectedSessions] = useState<ZoomCalendarSession[]>([]);
+  const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
   const [createDate, setCreateDate] = useState<Date | null>(null);
   const [editingSession, setEditingSession] = useState<string | null>(null);
 
@@ -497,6 +625,15 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
   const handleDayClick = (day: Date | null) => {
     if (!day) return;
     const daySessions = sessionsOnDay(day);
+    if (mode === 'user') {
+      setSelectedDate(day);
+      setSelectedSessions(daySessions);
+      setIsDaySheetOpen(true);
+      setSelectedSession(null);
+      setCreateDate(null);
+      return;
+    }
+
     if (daySessions.length > 0) {
       setSelectedSession(daySessions[0]);
       setCreateDate(null);
@@ -507,6 +644,22 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
   };
 
   const todaySession = sessions.find(s => isSameDay(new Date(s.scheduledAt), new Date()));
+
+  useEffect(() => {
+    if (mode !== 'user' || selectedDate || sessions.length === 0) {
+      return;
+    }
+
+    const nextSession = getNearestSession(sessions);
+    if (!nextSession) {
+      return;
+    }
+
+    const nextSessionDate = new Date(nextSession.scheduledAt);
+    setSelectedDate(nextSessionDate);
+    setSelectedSessions([nextSession]);
+    setIsDaySheetOpen(true);
+  }, [mode, selectedDate, sessions]);
 
   const handleCreate = async (payload: CreateSessionPayload) => {
     await createSession(payload).unwrap();
@@ -554,7 +707,7 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1">
-          {(['month', 'week'] as CalendarView[]).map(v => (
+          {(['week', 'month'] as CalendarView[]).map(v => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -602,12 +755,14 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
             {monthGrid.map((day, i) => {
               const daySessions = sessionsOnDay(day);
               const today = isToday(day);
+              const hasSession = daySessions.length > 0;
               return (
                 <div
                   key={i}
                   onClick={() => handleDayClick(day)}
                   className={[
                     'min-h-[80px] bg-[#0d1117] p-1.5',
+                    hasSession ? 'bg-blue-500/10 text-white' : '',
                     day ? 'cursor-pointer hover:bg-white/[0.04] transition-colors' : 'opacity-0 pointer-events-none',
                     today ? 'ring-2 ring-inset ring-purple-500/50' : '',
                   ].join(' ')}
@@ -671,7 +826,7 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
                       <div
                         key={s.id}
                         onClick={e => { e.stopPropagation(); setSelectedSession(s); setCreateDate(null); }}
-                        className={['text-[10px] rounded px-1.5 py-1 cursor-pointer truncate', TYPE_BADGE[s.type]].join(' ')}
+                        className={['text-[10px] rounded px-1.5 py-1 cursor-pointer truncate', getSessionBadgeClass(s)].join(' ')}
                       >
                         {new Date(s.scheduledAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
                         {' '}
@@ -684,6 +839,18 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
             })}
           </div>
         </div>
+      )}
+
+      {mode === 'user' && isDaySheetOpen && selectedDate && (
+        <DaySessionsSheet
+          selectedDate={selectedDate}
+          selectedSessions={selectedSessions}
+          onClose={() => {
+            setIsDaySheetOpen(false);
+            setSelectedDate(null);
+            setSelectedSessions([]);
+          }}
+        />
       )}
 
       {/* Session detail */}
