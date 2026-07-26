@@ -1,7 +1,6 @@
 import { prisma } from '../../../db/client.js'
 
 export const FOCUS_PRODUCT_CODES = ['focus', 'FOCUS'] as const
-const FOCUS_PRODUCT_ID = '68c3e55a-4b70-4680-a26c-15fdd607fd59'
 export const EXCHANGE_PRICE = 200
 
 export type UserAccessState = {
@@ -26,7 +25,7 @@ export type ZoomExchangeAccessPolicy = {
 export async function getConfiguredFocusProduct() {
   return prisma.product.findFirst({
     where: {
-      code: { in: [...FOCUS_PRODUCT_CODES] },
+      code: { equals: 'focus', mode: 'insensitive' },
     },
     select: { id: true, code: true },
   })
@@ -37,88 +36,69 @@ export async function hasActiveFocusSubscription(userId: string): Promise<boolea
   return accessState.hasFocus
 }
 
+function noAccess(expiresAt: Date | null = null): UserAccessState {
+  return {
+    state: 'NO_ACCESS',
+    isActive: false,
+    hasFocus: false,
+    expiresAt,
+  }
+}
+
+function focusActive(expiresAt: Date | null): UserAccessState {
+  return {
+    state: 'FOCUS_ACTIVE',
+    isActive: true,
+    hasFocus: true,
+    expiresAt,
+  }
+}
+
+/**
+ * Canonical FOCUS entitlement resolver.
+ *
+ * ProductSubscription is the only source of truth for paid access.
+ * User.focusPaid, lifecycleState, funnelStage and the legacy Subscription table
+ * are projections only and must never grant or deny access.
+ */
 export async function getUserAccessState(userId: string): Promise<UserAccessState> {
   const now = new Date()
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { focusPaid: true },
-  })
-
-  if (user?.focusPaid) {
-    return {
-      state: 'FOCUS_ACTIVE',
-      isActive: true,
-      hasFocus: true,
-      expiresAt: null,
-    }
-  }
 
   const subscription = await prisma.productSubscription.findFirst({
     where: {
       userId,
-      productId: FOCUS_PRODUCT_ID,
+      product: {
+        code: { equals: 'focus', mode: 'insensitive' },
+      },
     },
     select: {
       status: true,
-      paidAt: true,
       expiresAt: true,
       trialEndsAt: true,
     },
     orderBy: { createdAt: 'desc' },
   })
 
-  if (!subscription) {
-    return {
-      state: 'NO_ACCESS',
-      isActive: false,
-      hasFocus: false,
-      expiresAt: null,
-    }
-  }
+  if (!subscription) return noAccess()
 
   const status = String(subscription.status ?? '').trim().toLowerCase()
-  const activeStatuses = new Set(['active', 'paid', 'trial'])
-  if (activeStatuses.has(status)) {
-    if (status === 'trial' && subscription.trialEndsAt) {
-      const isActive = subscription.trialEndsAt.getTime() > now.getTime()
-      return {
-        state: isActive ? 'FOCUS_ACTIVE' : 'NO_ACCESS',
-        isActive,
-        hasFocus: isActive,
-        expiresAt: subscription.trialEndsAt,
-      }
-    }
-    return {
-      state: 'FOCUS_ACTIVE',
-      isActive: true,
-      hasFocus: true,
-      expiresAt: subscription.expiresAt ?? null,
-    }
+
+  if (status === 'trial') {
+    if (!subscription.trialEndsAt) return noAccess()
+    return subscription.trialEndsAt.getTime() > now.getTime()
+      ? focusActive(subscription.trialEndsAt)
+      : noAccess(subscription.trialEndsAt)
   }
 
-  if (subscription.paidAt) {
-    if (subscription.expiresAt && subscription.expiresAt.getTime() <= now.getTime()) {
-      return {
-        state: 'NO_ACCESS',
-        isActive: false,
-        hasFocus: false,
-        expiresAt: subscription.expiresAt,
-      }
-    }
-    return {
-      state: 'FOCUS_ACTIVE',
-      isActive: true,
-      hasFocus: true,
-      expiresAt: subscription.expiresAt ?? null,
-    }
+  if (status !== 'active' && status !== 'paid') {
+    return noAccess(subscription.expiresAt ?? null)
   }
 
-  return {
-    state: 'NO_ACCESS',
-    isActive: false,
-    hasFocus: false,
-    expiresAt: subscription.expiresAt ?? null,
+  if (subscription.expiresAt && subscription.expiresAt.getTime() <= now.getTime()) {
+    return noAccess(subscription.expiresAt)
   }
+
+  return focusActive(subscription.expiresAt ?? null)
 }
 
 export async function getZoomExchangeAccessPolicy(userId: string): Promise<ZoomExchangeAccessPolicy> {
