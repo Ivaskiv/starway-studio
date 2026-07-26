@@ -6,16 +6,86 @@ import {
   type AbTestStageId,
 } from '../../../core/state-machine/abTestFoundation.js'
 import { prisma } from '../../../db/client.js'
+import { activateProductSubscription } from '../../../modules/subscriptions/payments/paymentActivation.service.js'
 import { resolveNotificationType } from '../../../services/notifications/domain/notificationPolicy.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { trackAbTestEvent } from './abTest.analytics.js'
 import { loadAbTestProgress, saveAbTestProgress } from './abTest.progress.js'
+
+function readAbTestPaymentSuccessAt(settings: unknown): Date | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    return null
+  }
+
+  const ui = (settings as Record<string, unknown>).ui
+  if (!ui || typeof ui !== 'object' || Array.isArray(ui)) {
+    return null
+  }
+
+  const abTest = (ui as Record<string, unknown>).abTest
+  if (!abTest || typeof abTest !== 'object' || Array.isArray(abTest)) {
+    return null
+  }
+
+  const rawPaidAt = (abTest as Record<string, unknown>).payment_success_at
+  if (typeof rawPaidAt !== 'string' || !rawPaidAt.trim()) {
+    return null
+  }
+
+  const paidAt = new Date(rawPaidAt)
+  return Number.isNaN(paidAt.getTime()) ? null : paidAt
+}
+
+function readFocusPlanIdFromOrderReference(
+  orderReference: string | null | undefined,
+): 'welcome_test' | '1month' | '3month' | null {
+  const match = String(orderReference ?? '').trim().match(
+    /^focus_(welcome_test|1month|3month)_[0-9a-f-]{36}_\d+$/i,
+  )
+
+  if (!match) return null
+
+  return match[1] as 'welcome_test' | '1month' | '3month'
+}
 
 async function finalizeAbTestPaymentSuccess(
   userId: string,
   tx?: Prisma.TransactionClient,
 ): Promise<void> {
   const applyWithClient = async (client: Prisma.TransactionClient) => {
+    const user = await client.user.findUnique({
+      where: { id: userId },
+      select: {
+        settings: true,
+      },
+    })
+    const paidAt = readAbTestPaymentSuccessAt(user?.settings) ?? new Date()
+    const expiresAt = new Date(paidAt.getTime())
+    expiresAt.setMonth(expiresAt.getMonth() + 1)
+    const latestFocusCheckout = await client.checkoutSession.findFirst({
+      where: {
+        userId,
+        orderReference: { startsWith: 'focus_' },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { orderReference: true },
+    })
+    const planId =
+      readFocusPlanIdFromOrderReference(latestFocusCheckout?.orderReference) ?? '1month'
+
+    await activateProductSubscription({
+      userId,
+      productCode: 'focus',
+      source: 'webhook_fallback',
+      amount: 1,
+      planMonths: planId === '3month' ? 3 : 1,
+      catalogPlanId: planId,
+      paidAtOverride: paidAt,
+      expiresAtOverride: expiresAt,
+      tx: client,
+      autoBookGroupSessions: false,
+      manualNote: 'legacy_ab_test_payment_success_sync',
+    })
     await client.user.update({
       where: { id: userId },
       data: { lifecycleState: 'FOCUS_PAID' },

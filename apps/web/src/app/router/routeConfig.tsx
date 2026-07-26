@@ -27,7 +27,7 @@ import {
   GoalsPage,
   JournalPage,
 } from '@/app/router/routePages'
-import { ZoomPageWrapper } from '@/features/zoom/routes/MiniAppZoomRoute'
+import CleanMiniAppZoomCalendar from '@/features/zoom/routes/CleanMiniAppZoomCalendar'
 import type { ReactElement } from 'react'
 import { Navigate } from 'react-router-dom'
 
@@ -210,7 +210,7 @@ export const DASHBOARD_ROUTES: RouteConfig[] = [
   },
   {
     path: '/dashboard/zoom',
-    element: <ZoomPageWrapper />,
+    element: <CleanMiniAppZoomCalendar />,
     ability: 'dashboard.view',
   },
   {

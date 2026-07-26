@@ -1,7 +1,10 @@
-import { useAppSelector } from '@/app/hooks'
-import { selectCurrentUser } from '@/features/auth/services/auth.slice'
+import { useAppDispatch, useAppSelector } from '@/app/hooks'
+import { selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
-import { useCreateProductPaymentMutation } from '@/features/subscription/services/billing.api'
+import {
+  useCreateProductPaymentMutation,
+  useReportFocusPaymentIssueMutation,
+} from '@/features/subscription/services/billing.api'
 import { openExternalPaymentUrl } from '@/features/subscription/utils/openExternalPaymentUrl'
 import {
   useGetWeekOverviewQuery,
@@ -10,14 +13,18 @@ import {
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import { getSessionDateLabel, getSessionMeta } from '@/features/zoom/zoom.utils'
 import { api } from '@/services/api'
-import { useState } from 'react'
-import { useDispatch } from 'react-redux'
+import { useEffect, useState } from 'react'
 
 function formatWeekDate(value: string): string {
   return new Date(value).toLocaleDateString('uk-UA', {
     day: 'numeric',
     month: 'long',
   })
+}
+
+function isCoachRole(role: string | null | undefined): boolean {
+  const normalizedRole = String(role ?? '').trim().toUpperCase()
+  return normalizedRole === 'EXPERT' || normalizedRole === 'ADMIN' || normalizedRole === 'SUPERADMIN'
 }
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -29,8 +36,10 @@ function Card({ children }: { children: React.ReactNode }) {
 }
 
 export default function CleanMiniAppZoomCalendar() {
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const user = useAppSelector(selectCurrentUser)
+  const role = useAppSelector(selectUserRole)
+  const isCoach = isCoachRole(role)
   const { zoomAccess, isLoading: isAccessLoading, isError: isAccessError } = useSystemState()
   const { data, isLoading: isScheduleLoading, isError: isScheduleError, refetch } =
     useGetWeekOverviewQuery(undefined, {
@@ -39,11 +48,32 @@ export default function CleanMiniAppZoomCalendar() {
     })
   const [registerAttendee, { isLoading: isRegistering }] = useRegisterAttendeeMutation()
   const [createProductPayment, { isLoading: isOpeningPayment }] = useCreateProductPaymentMutation()
+  const [reportFocusPaymentIssue, { isLoading: isReportingPaymentIssue }] =
+    useReportFocusPaymentIssueMutation()
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  const hasFocusAccess = zoomAccess?.hasFocus === true
+  const accessState =
+    isAccessLoading || zoomAccess === undefined
+      ? 'loading'
+      : zoomAccess?.state === 'FOCUS_ACTIVE' && zoomAccess?.hasFocus === true && zoomAccess?.isActive
+        ? 'active'
+        : 'inactive'
+  const hasFocusAccess = accessState === 'active'
   const isLoading = isAccessLoading || isScheduleLoading
+
+  useEffect(() => {
+    dispatch(api.util.invalidateTags(['Access', 'Products', 'Subscription', 'ZoomSession']))
+  }, [dispatch])
+
+  useEffect(() => {
+    if (!user || !import.meta.env.DEV || accessState === 'loading') return
+    console.info('[ZOOM_CALENDAR_ACCESS]', {
+      userId: user.id,
+      zoomAccess,
+      accessState,
+    })
+  }, [accessState, user, zoomAccess])
 
   const refreshAccess = async () => {
     setMessage(null)
@@ -78,6 +108,16 @@ export default function CleanMiniAppZoomCalendar() {
       openExternalPaymentUrl(checkoutUrl)
     } catch {
       setMessage('Не вдалося відкрити оплату. Натисни «Проблеми з оплатою».')
+    }
+  }
+
+  const handleReportPaymentIssue = async () => {
+    setMessage(null)
+    try {
+      await reportFocusPaymentIssue().unwrap()
+      setMessage('Проблему з оплатою передано в STARWAY OPS. Перевіряємо транзакцію.')
+    } catch {
+      setMessage('Не вдалося зафіксувати проблему з оплатою. Спробуй ще раз.')
     }
   }
 
@@ -154,17 +194,18 @@ export default function CleanMiniAppZoomCalendar() {
                   type="button"
                   onClick={() => void openPayment()}
                   disabled={isOpeningPayment}
-                  className="rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-3 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
+                  className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-600 disabled:text-gray-300"
                 >
                   {isOpeningPayment ? 'Відкриваємо…' : 'Оплатити ФОКУС'}
                 </button>
               </div>
               <button
                 type="button"
-                onClick={() => setMessage('Запит про оплату зафіксовано. Перевіряємо транзакцію.')}
+                onClick={() => void handleReportPaymentIssue()}
+                disabled={isReportingPaymentIssue}
                 className="mt-2 w-full rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100"
               >
-                Проблеми з оплатою
+                {isReportingPaymentIssue ? 'Фіксуємо проблему…' : 'Проблеми з оплатою'}
               </button>
             </Card>
           ) : null}
@@ -231,7 +272,7 @@ export default function CleanMiniAppZoomCalendar() {
             </div>
           ) : null}
 
-          {data && hasFocusAccess && data.audios.length > 0 ? (
+          {data && hasFocusAccess && isCoach && data.audios.length > 0 ? (
             <section className="pt-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">Аудіо</p>
               <div className="mt-3 space-y-2">

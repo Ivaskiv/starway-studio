@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import { prisma } from './db/client.js'
+import { getUserAccessState } from './modules/subscriptions/payments/focus.access.js'
 import { resolveTelegramDeliveryMode } from './modules/telegram-mentor/runtime/botConfig.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
@@ -269,6 +270,8 @@ export function createApp(): Express {
     ...corsOriginEnv,
   ].filter((origin): origin is string => Boolean(origin))
   const localNetworkOriginPattern = /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:5173$/
+  const devTunnelOriginPattern =
+    /^https:\/\/[a-z0-9-]+\.(?:lhr\.life|localhost\.run|ngrok-free\.dev|trycloudflare\.com)$/i
 
   const corsOptions = cors({
     origin: (origin, callback) => {
@@ -279,11 +282,13 @@ export function createApp(): Express {
 
       const isDevLocalOrigin =
         !isProduction && localNetworkOriginPattern.test(origin)
+      const isDevTunnelOrigin =
+        !isProduction && devTunnelOriginPattern.test(origin)
       const isKnownOrigin = allowedOrigins.some((allowed) =>
         origin.startsWith(allowed)
       )
 
-      if (isKnownOrigin || isDevLocalOrigin) {
+      if (isKnownOrigin || isDevLocalOrigin || isDevTunnelOrigin) {
         callback(null, true)
         return
       }
@@ -512,10 +517,16 @@ export function createApp(): Express {
 
       const user = await prisma.user.findFirst({
         where: { telegramUserId: String(telegramId) },
-        select: { id: true, focusPaid: true },
+        select: { id: true },
       })
 
-      return res.json({ userId: user?.id ?? null, hasFocus: user?.focusPaid === true })
+      if (!user?.id) {
+        return res.json({ userId: null, hasFocus: false })
+      }
+
+      const accessState = await getUserAccessState(user.id)
+
+      return res.json({ userId: user.id, hasFocus: accessState.hasFocus })
     } catch {
       return res.status(500).json({ error: 'Server error' })
     }

@@ -128,6 +128,16 @@ export const billingApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Subscription', 'Payment'],
     }),
+    reportFocusPaymentIssue: builder.mutation<
+      { ok: boolean; reported: boolean },
+      void
+    >({
+      query: () => ({
+        url: '/subscriptions/payments/wayforpay/report-issue',
+        method: 'POST',
+      }),
+      invalidatesTags: ['Subscription', 'Payment'],
+    }),
     activateGrant: builder.mutation<
       { success: boolean; productId: string; lifecycleState: string; roomSwitch: { roomId: string; state: string; selectedFlow: string; primaryCta: string } | null },
       { code: string }
@@ -147,4 +157,5 @@ export const {
   useCreatePaymentMutation,
   useCreateProductPaymentMutation,
   useGetSubscriptionQuery,
+  useReportFocusPaymentIssueMutation,
 } = billingApi

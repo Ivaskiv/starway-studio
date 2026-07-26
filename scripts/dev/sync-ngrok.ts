@@ -211,7 +211,7 @@ async function updateBackendEnv(publicUrl: string) {
     PUBLIC_API_URL: publicUrl,
     TELEGRAM_WEBHOOK_URL: publicUrl,
     TELEGRAM_DELIVERY_MODE: 'webhook',
-    TELEGRAM_WEBAPP_BASE_URL: '',
+    TELEGRAM_WEBAPP_BASE_URL: publicUrl,
     WAYFORPAY_CALLBACK_URL: `${publicUrl}${WAYFORPAY_CALLBACK_PATH}`,
   }
 

@@ -230,6 +230,17 @@ export async function processEcosystemPayment(
     expiresAt,
   })
 
+  if (productId === 'focus') {
+    await db.user.update({
+      where: { id: userId },
+      data: {
+        focusPaid: true,
+        funnelStage: 'PAID',
+        funnelUpdatedAt: now,
+      },
+    })
+  }
+
   await syncLifecycleForUser(userId, db)
   await invalidateFunnelStage(userId)
 

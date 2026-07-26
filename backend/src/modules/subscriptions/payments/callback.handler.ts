@@ -639,6 +639,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
           orderReference: data.order_reference,
           amount: Number(data.amount ?? 0),
           planMonths,
+          catalogPlanId: webhookResult.ecosystemPlanId,
         }).catch((activationError) => {
           console.error('[PAYMENT_LIFECYCLE] activation service failed', {
             userId,

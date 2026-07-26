@@ -28,7 +28,9 @@ import { invalidateFunnelStage } from '../../lib/funnel/getUserFunnelStage.js';
 import { getTelegramProductContext } from '@/content/telegram.product-context.js';
 import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.markers.js';
 import { resendFocusAccessTelegramMessage } from './payments/callback.notifications.js';
+import { alertCoachAboutPaymentIssue } from './payments/coachAlert.service.js';
 import { getConfiguredFocusProduct, hasActiveFocusSubscription } from './payments/focus.access.js';
+import { coachBot } from '../../lib/telegram.js';
 
 type AccessGrantLike = {
   id: string
@@ -568,6 +570,54 @@ export async function initiateSubscriptionPaymentHandler(req: AuthenticatedReque
     return res.status(400).json({ error: 'invalid_product' })
   } catch (err) {
     console.error('❌ initiateSubscriptionPaymentHandler error', err)
+    return res.status(500).json({ error: 'server_error' })
+  }
+}
+
+export async function reportFocusPaymentIssueHandler(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'unauthorized' })
+
+    const coachChatId = String(
+      process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? '',
+    ).trim()
+
+    if (!coachChatId) {
+      return res.status(503).json({ error: 'ops_chat_not_configured' })
+    }
+
+    const checkoutSession = await prisma.checkoutSession.findFirst({
+      where: {
+        userId,
+        productCode: { equals: 'focus', mode: 'insensitive' },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        token: true,
+        orderReference: true,
+        amount: true,
+      },
+    })
+
+    if (!checkoutSession?.token || !checkoutSession.orderReference) {
+      return res.status(404).json({ error: 'focus_checkout_not_found' })
+    }
+
+    await alertCoachAboutPaymentIssue({
+      bot: coachBot,
+      coachChatId,
+      userId,
+      checkoutToken: checkoutSession.token,
+      orderReference: checkoutSession.orderReference,
+      amount: checkoutSession.amount,
+      reason: '💳 Учасниця повідомила про проблему з оплатою',
+      scenario: 'E',
+    })
+
+    return res.json({ ok: true, reported: true })
+  } catch (err) {
+    console.error('❌ reportFocusPaymentIssueHandler error', err)
     return res.status(500).json({ error: 'server_error' })
   }
 }

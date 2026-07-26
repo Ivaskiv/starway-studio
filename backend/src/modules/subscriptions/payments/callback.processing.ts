@@ -5,6 +5,7 @@ import { prisma } from '../../../db/client.js'
 import { ensureUserExpertId } from '../../ai-mentor/helpers.js'
 import { initiateBattle } from '../../zoom/battle.service.js'
 import { confirmZoomSwapPaymentByOrderRef } from '../../zoom/service.js'
+import { resolveEcosystemProductCode } from './business.catalog.js'
 import {
   processEcosystemPayment,
   processPayment,
@@ -51,6 +52,43 @@ function readBattleEntryMeta(payload: unknown): {
     goalB: typeof typedMeta.goalB === 'string' ? typedMeta.goalB : null,
     scheduledAt,
   }
+}
+
+async function resolvePaymentLogExpertId(input: {
+  db: typeof prisma
+  userId: string
+  scope: ProcessPaymentWebhookResult['scope']
+  ecosystemProductId?: 'focus' | 'absystem_ai' | null
+  payRef: string
+}): Promise<string | null> {
+  const expertId = await ensureUserExpertId(input.userId).catch((err) => {
+    console.warn('⚠️ [PAYMENT:WEBHOOK] ensureUserExpertId failed', {
+      userId: input.userId,
+      payRef: input.payRef,
+      err,
+    })
+    return null
+  })
+
+  if (expertId) {
+    return expertId
+  }
+
+  if (input.scope === 'ecosystem' && input.ecosystemProductId) {
+    const product = await input.db.product.findFirst({
+      where: {
+        code: { in: resolveEcosystemProductCode(input.ecosystemProductId) },
+      },
+      select: { ownerId: true },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    if (product?.ownerId) {
+      return product.ownerId
+    }
+  }
+
+  return null
 }
 
 async function processZoomSwapWebhook(input: {
@@ -254,6 +292,7 @@ export async function processPaymentWebhook(
       scope: 'legacy',
       productId: null,
       planId: null,
+      ecosystemPlanId: undefined,
       payRef: String(data.order_reference ?? ''),
       amount: Number(data.amount),
       result: {
@@ -324,6 +363,7 @@ export async function processPaymentWebhook(
       scope: target.scope,
       productId: target.productId,
       planId: target.planId,
+      ecosystemPlanId: target.ecosystemPlanId,
       payRef,
       amount,
       result: {
@@ -361,15 +401,19 @@ export async function processPaymentWebhook(
       scope: target.scope,
       productId: target.productId,
       planId: target.planId,
+      ecosystemPlanId: target.ecosystemPlanId,
       payRef,
       amount,
       result: null,
     }
   }
 
-  const expertId = await ensureUserExpertId(resolvedUserId).catch((err) => {
-    console.warn('⚠️ [PAYMENT:WEBHOOK] ensureUserExpertId failed', { userId: resolvedUserId, payRef, err })
-    return null
+  const expertId = await resolvePaymentLogExpertId({
+    db,
+    userId: resolvedUserId,
+    scope: target.scope,
+    ecosystemProductId: target.ecosystemProductId,
+    payRef,
   })
 
   if (!expertId) {
@@ -379,6 +423,7 @@ export async function processPaymentWebhook(
       scope: target.scope,
       productId: target.productId,
       planId: target.planId,
+      ecosystemPlanId: target.ecosystemPlanId,
       payRef,
       amount,
       result: { status: 'failed', userId: resolvedUserId, reason: 'MISSING_EXPERT_ID' },
@@ -448,6 +493,7 @@ export async function processPaymentWebhook(
         scope: target.scope,
         productId: target.productId,
         planId: target.planId,
+        ecosystemPlanId: target.ecosystemPlanId,
         payRef,
         amount,
         result: null,
@@ -529,6 +575,7 @@ export async function processPaymentWebhook(
       scope: target.scope,
       productId: target.productId,
       planId: target.planId,
+      ecosystemPlanId: target.ecosystemPlanId,
       payRef,
       amount,
       result,

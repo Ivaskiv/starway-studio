@@ -7,6 +7,7 @@ import {
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business.checkout.js'
 import { prisma } from '@/db/client.js'
+import { getUserAccessState } from '@/modules/subscriptions/payments/focus.access.js'
 import { getUpcomingZoom } from '@/modules/zoom/service.js'
 import { getAbTestResultDefinition, type AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
@@ -145,18 +146,10 @@ function resolveDaysUntilExpiry(currentPeriodEnd: Date | null): number | null {
 }
 
 export async function buildFocusActionButtons(userId: string): Promise<StartMessagePayload['buttons']> {
-  const [activeSubscription, monthlyCheckout, quarterlyCheckout] = await Promise.all([
-    prisma.subscription.findFirst({
-      where: { userId, status: 'ACTIVE' },
-      orderBy: { currentPeriodEnd: 'desc' },
-      select: { currentPeriodEnd: true },
-    }),
-    buildEcosystemPaymentCheckoutSession('focus', '1month', userId, 'telegram'),
-    buildEcosystemPaymentCheckoutSession('focus', '3month', userId, 'telegram'),
-  ])
+  const accessState = await getUserAccessState(userId)
 
-  const hasActiveSubscription = Boolean(activeSubscription)
-  const daysUntilExpiry = resolveDaysUntilExpiry(activeSubscription?.currentPeriodEnd ?? null)
+  const hasActiveSubscription = accessState.isActive
+  const daysUntilExpiry = resolveDaysUntilExpiry(accessState.expiresAt)
   const shouldShowRenewalButtons = !hasActiveSubscription || (daysUntilExpiry !== null && daysUntilExpiry <= 7)
 
   const buttons: StartMessagePayload['buttons'] = [
@@ -166,6 +159,10 @@ export async function buildFocusActionButtons(userId: string): Promise<StartMess
   ]
 
   if (shouldShowRenewalButtons) {
+    const [monthlyCheckout, quarterlyCheckout] = await Promise.all([
+      buildEcosystemPaymentCheckoutSession('focus', '1month', userId, 'telegram'),
+      buildEcosystemPaymentCheckoutSession('focus', '3month', userId, 'telegram'),
+    ])
     const monthlyLabel = hasActiveSubscription
       ? '🔄 Продовжити 1 місяць — 780 грн'
       : '🟢 Приєднатися на 1 місяць — 780 грн'
@@ -181,7 +178,7 @@ export async function buildFocusActionButtons(userId: string): Promise<StartMess
 }
 
 export async function zoomSection(userId: string): Promise<StartMessagePayload> {
-  const [upcomingZoom, attendedPracticesCount, bookedPracticesCount, activeSubscription, user] = await Promise.all([
+  const [upcomingZoom, attendedPracticesCount, bookedPracticesCount, accessState, user] = await Promise.all([
     getUpcomingZoom(),
     prisma.zoomSessionAttendee.count({
       where: { userId, attended: true },
@@ -189,11 +186,7 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
     prisma.zoomSessionAttendee.count({
       where: { userId },
     }),
-    prisma.subscription.findFirst({
-      where: { userId, status: 'ACTIVE' },
-      orderBy: { currentPeriodEnd: 'desc' },
-      select: { currentPeriodEnd: true },
-    }),
+    getUserAccessState(userId),
     prisma.user.findUnique({
       where: { id: userId },
       select: { testResultType: true },
@@ -207,8 +200,8 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
     ? formatZoomDate(upcomingZoom.scheduledAt)
     : 'Щопонеділка • 19:00 (Europe/Kyiv)'
   const practiceValue = `${attendedPracticesCount} із ${bookedPracticesCount}`
-  const daysUntilExpiry = resolveDaysUntilExpiry(activeSubscription?.currentPeriodEnd ?? null)
-  const hasActiveSubscription = Boolean(activeSubscription)
+  const daysUntilExpiry = resolveDaysUntilExpiry(accessState.expiresAt)
+  const hasActiveSubscription = accessState.isActive
 
   const lines = [
     `🎯 Твій результат — <b>${resultTitle}</b>`,
@@ -232,8 +225,8 @@ export async function zoomSection(userId: string): Promise<StartMessagePayload> 
 
   if (!hasActiveSubscription) {
     lines.push('<b>Неактивна</b>')
-  } else if (activeSubscription?.currentPeriodEnd) {
-    lines.push(`<b>Активна до ${formatDate(activeSubscription.currentPeriodEnd)}</b>`)
+  } else if (accessState.expiresAt) {
+    lines.push(`<b>Активна до ${formatDate(accessState.expiresAt)}</b>`)
     if (daysUntilExpiry !== null && daysUntilExpiry <= 7) {
       lines.push(`Підписка закінчується через ${daysUntilExpiry} днів`)
     }

@@ -166,15 +166,19 @@ const rawBaseQuery = fetchBaseQuery({
     const accessToken = getAccessToken(state);
     const expertId = getExpertId(state);
     const skipAccessToken = headers.get('x-skip-access-token') === '1';
+    const miniAppAuthHeader = getTelegramMiniAppAuthHeader()
+    const isMiniAppRuntime =
+      typeof window !== 'undefined' && isTelegramMiniApp(window.location.pathname)
 
     if (skipAccessToken) {
       headers.delete('x-skip-access-token');
     }
 
-    if (accessToken && !skipAccessToken) {
+    if (miniAppAuthHeader && isMiniAppRuntime) {
+      headers.set('Authorization', miniAppAuthHeader)
+    } else if (accessToken && !skipAccessToken) {
       headers.set('Authorization', `Bearer ${accessToken}`);
     } else {
-      const miniAppAuthHeader = getTelegramMiniAppAuthHeader()
       if (miniAppAuthHeader) {
         headers.set('Authorization', miniAppAuthHeader)
       }

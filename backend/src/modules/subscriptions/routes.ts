@@ -10,6 +10,7 @@ import {
   getSubscriptionStatus,
   initiateSubscriptionPaymentHandler,
   listSubscriptions,
+  reportFocusPaymentIssueHandler,
   renderWayForPayCheckoutPageHandler,
   wayForPayReturnHandler,
   startSuperadminTrialTestHandler,
@@ -28,6 +29,7 @@ router.get('/status', authRequired, getSubscriptionStatus);
 router.get('/',       authRequired, listSubscriptions);
 router.post('/grants/activate', authRequired, activateSubscriptionGrantHandler);
 router.post('/payments/wayforpay/initiate', authRequired, initiateSubscriptionPaymentHandler);
+router.post('/payments/wayforpay/report-issue', authRequired, reportFocusPaymentIssueHandler);
 router.post('/test/superadmin/trial', authRequired, startSuperadminTrialTestHandler);
 router.post('/test/superadmin/payment', authRequired, activateSuperadminPaymentTestHandler);
 

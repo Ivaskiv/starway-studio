@@ -5,6 +5,22 @@ import { resolveEcosystemPaymentTarget, type EcosystemPaymentPlanId } from './bu
 import type { ResolvedWebhookTarget } from './callback.types.js'
 import { parseStankeyOrderReference } from './wayforpay.checkout.js'
 
+function parseFocusOrderReference(payRef: string): {
+  userId: string | null
+  planId: EcosystemPaymentPlanId | null
+} | null {
+  const match = String(payRef ?? '').trim().match(
+    /^focus_(welcome_test|1month|3month)_([0-9a-f-]{36})_\d+$/i,
+  )
+
+  if (!match) return null
+
+  return {
+    planId: match[1] as EcosystemPaymentPlanId,
+    userId: match[2],
+  }
+}
+
 export function resolveWebhookPaymentTarget(
   data: PaymentCallbackData
 ): ResolvedWebhookTarget | null {
@@ -26,9 +42,14 @@ export function resolveWebhookPaymentTarget(
   }
 
   if (payRef.startsWith('focus_')) {
+    const parsedFocusReference = parseFocusOrderReference(payRef)
     const focusUserId =
-      typeof data.clientAccountId === 'string' ? data.clientAccountId : null
-    const focusTarget = resolveEcosystemPaymentTarget(amount)
+      parsedFocusReference?.userId
+      ?? (typeof data.clientAccountId === 'string' ? data.clientAccountId : null)
+    const focusTarget =
+      parsedFocusReference?.planId
+        ? { productId: 'focus' as const, planId: parsedFocusReference.planId }
+        : resolveEcosystemPaymentTarget(amount)
     const focusPlanId: EcosystemPaymentPlanId =
       focusTarget?.productId === 'focus'
         ? focusTarget.planId

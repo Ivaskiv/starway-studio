@@ -1,5 +1,4 @@
 import { type NotificationJob, type NotificationType } from '@starway/db/prisma-client'
-
 import { notificationJobRepository } from '../repositories/NotificationJobRepository.js'
 
 export class NotificationJobService {

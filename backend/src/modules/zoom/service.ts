@@ -77,6 +77,18 @@ function endOfKyivWeek(now = new Date()): Date {
   return date
 }
 
+function startOfKyivDay(now = new Date()): Date {
+  const date = getKyivNow(now)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function endOfRollingKyivWindow(now = new Date(), days = 14): Date {
+  const date = startOfKyivDay(now)
+  date.setDate(date.getDate() + days)
+  return date
+}
+
 function extractZoomLinkFromRequests(requests: unknown): string {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return ''
   const meta = requests as Record<string, unknown>
@@ -161,8 +173,8 @@ export async function getCurrentWeekZoomOverview(args: {
     audioFileId: string
   }>
 }> {
-  const from = startOfKyivWeek(args.now)
-  const to = endOfKyivWeek(args.now)
+  const from = startOfKyivDay(args.now)
+  const to = endOfRollingKyivWindow(args.now)
   const sessions = await getCalendarSessions({
     from,
     to,
@@ -238,11 +250,11 @@ export async function getPublicCurrentWeekZoomOverview(now = new Date()): Promis
     audioFileId: string
   }>
 }> {
-  const from = startOfKyivWeek(now)
-  const to = endOfKyivWeek(now)
+  const from = startOfKyivDay(now)
+  const to = endOfRollingKyivWindow(now)
   const sessions = await prisma.zoomSession.findMany({
     where: {
-      scheduledAt: { gte: from, lte: to },
+      scheduledAt: { gte: from, lt: to },
       status: { not: ZoomStatus.CANCELLED },
       requests: {
         path: ['type'],
@@ -365,6 +377,96 @@ export async function registerAttendee(
     create: { userId, sessionId },
     update: {},
   });
+}
+
+export async function saveBookingQuestionForAttendee(
+  userId: string,
+  sessionId: string,
+  questionText: string,
+): Promise<{ id: string; createdAt: Date }> {
+  const normalizedQuestionText = questionText.trim()
+  if (!normalizedQuestionText) {
+    throw new Error('questionText required')
+  }
+
+  const attendee = await prisma.zoomSessionAttendee.findUnique({
+    where: {
+      sessionId_userId: {
+        sessionId,
+        userId,
+      },
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  if (!attendee) {
+    throw new Error('booking_not_found')
+  }
+
+  const event = await prisma.event.create({
+    data: {
+      userId,
+      type: 'ZOOM_BOOKING_QUESTION',
+      source: 'web',
+      payload: {
+        sessionId,
+        questionText: normalizedQuestionText,
+      },
+    },
+    select: {
+      id: true,
+      createdAt: true,
+    },
+  })
+
+  return event
+}
+
+export async function saveBookingPreparationForAttendee(
+  userId: string,
+  sessionId: string,
+  preparationAnswer: string,
+): Promise<{ id: string; createdAt: Date }> {
+  const normalizedPreparationAnswer = preparationAnswer.trim()
+  if (!normalizedPreparationAnswer) {
+    throw new Error('preparationAnswer required')
+  }
+
+  const attendee = await prisma.zoomSessionAttendee.findUnique({
+    where: {
+      sessionId_userId: {
+        sessionId,
+        userId,
+      },
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  if (!attendee) {
+    throw new Error('booking_not_found')
+  }
+
+  const event = await prisma.event.create({
+    data: {
+      userId,
+      type: 'ZOOM_BOOKING_PREPARATION',
+      source: 'web',
+      payload: {
+        sessionId,
+        preparationAnswer: normalizedPreparationAnswer,
+      },
+    },
+    select: {
+      id: true,
+      createdAt: true,
+    },
+  })
+
+  return event
 }
 
 export async function autoBookAllUpcomingGroupSessions(userId: string): Promise<void> {
@@ -585,19 +687,13 @@ export async function getAvailableSlotsForUser(userId: string): Promise<Array<{
   isBooked: boolean
 }>> {
   const now = new Date()
-  const day = now.getDay()
-  const diffToMonday = day === 0 ? -6 : 1 - day
-  const monday = new Date(now)
-  monday.setDate(now.getDate() + diffToMonday)
-  monday.setHours(0, 0, 0, 0)
-
-  const nextMonday = new Date(monday)
-  nextMonday.setDate(monday.getDate() + 7)
+  const startOfToday = startOfKyivDay(now)
+  const nextFourteenDays = endOfRollingKyivWindow(now)
 
   const sessions = await prisma.zoomSession.findMany({
     where: {
       status: ZoomStatus.SCHEDULED,
-      scheduledAt: { gte: now, lt: nextMonday },
+      scheduledAt: { gte: startOfToday, lt: nextFourteenDays },
       requests: { path: ['type'], equals: 'group_practice' },
     },
     include: {

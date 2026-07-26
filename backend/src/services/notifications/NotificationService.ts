@@ -2196,6 +2196,7 @@ export class NotificationService {
         const flowTimerId = (asString(payload?.flow_timer_id ?? payload?.flowTimerId) ?? 'RESULT_FOLLOWUP_24H') as AbTestFollowupTimerId
         const contentVersion = (asString(payload?.content_version ?? payload?.contentVersion) ?? 'legacy') as TestDriveContentVersion
         const customBody = asString(payload?.message_body ?? payload?.messageBody)
+        const customCtaText = asString(payload?.cta_text ?? payload?.ctaText)
         const followupName = firstName === 'Привіт' ? null : firstName
         const copy = resolveAbTestFollowupCopy(
           flowTimerId,
@@ -2208,6 +2209,7 @@ export class NotificationService {
           resultKey: asString(payload?.result_key ?? payload?.resultKey) as AbTestResultKey | null,
           contentVersion,
         })
+        const resolvedCtaText = customCtaText ?? content.ctaText ?? 'Відкрити'
         const isPlainBridge = flowTimerId === 'ZOOM_REMINDER_24H'
           || flowTimerId === 'ZOOM_REMINDER_2H'
           || flowTimerId === 'PLATFORM_INVITE_AFTER_ZOOM_1'
@@ -2246,12 +2248,14 @@ export class NotificationService {
               ? (copy.blocks?.find((block): block is Extract<TelegramContentBlock, { type: 'text' }> => block.type === 'text')?.text ?? `${firstName}, ${content.body}`)
               : `${firstName}, ${content.body}`,
           }),
-          ctaText: content.ctaText,
+          ctaText: resolvedCtaText,
           ctaActions: focusDojimActions
             ?? (isPlainBridge && bridgeUrl && content.ctaText
-            ? [{ text: content.ctaText, url: bridgeUrl, mode: 'url' }]
+            ? [{ text: resolvedCtaText, url: bridgeUrl, mode: 'url' }]
+            : bridgeUrl && (customCtaText ?? content.ctaText)
+            ? [{ text: resolvedCtaText, url: bridgeUrl, mode: 'url' }]
             : content.ctaUrl
-            ? [{ text: content.ctaText ?? 'Відкрити', url: content.ctaUrl, mode: 'url' }]
+            ? [{ text: resolvedCtaText, url: content.ctaUrl, mode: 'url' }]
             : undefined),
         }
       }

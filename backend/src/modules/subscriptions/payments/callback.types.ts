@@ -19,6 +19,7 @@ export type ProcessPaymentWebhookResult = {
   scope: WebhookPaymentScope
   productId: string | null
   planId: string | null
+  ecosystemPlanId?: EcosystemPaymentPlanId
   payRef: string
   amount: number
   result:

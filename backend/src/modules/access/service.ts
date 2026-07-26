@@ -705,6 +705,10 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
   const access      = await getUserAccess(userId, accessControl)
   const trialStatus = await getTrialStatus(userId)
   const zoomAccess = await getUserAccessState(userId)
+  console.log('[ZOOM_ACCESS_DEBUG]', {
+    userId,
+    zoomAccess,
+  })
   const now         = new Date()
   const isSuperAdmin = String(access.role).toUpperCase() === 'SUPERADMIN'
 

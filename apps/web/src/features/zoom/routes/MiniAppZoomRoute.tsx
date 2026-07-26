@@ -14,7 +14,7 @@ import ZoomCalendarPage from '@/features/zoom/pages/ZoomCalendarPage'
 import HomeTab from '@/features/zoom/tabs/HomeTab'
 
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
-import { useGetAudioListQuery } from '@/features/zoom/services/audio.api'
+import { useGetMySystemStateQuery } from '@/features/auth/services/accessApi'
 import { useGetWeekOverviewQuery, useRegisterAttendeeMutation, useSubmitBookingQuestionMutation } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import { getSessionDateLabel, getSessionMeta } from '@/features/zoom/zoom.utils'
@@ -24,6 +24,12 @@ import { useNavigate } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 type MiniAppZoomTabId = 'home' | 'calendar' | 'battle' | 'progress' | 'profile'
+type LimitReachedTier = 'SILVER' | 'GOLD' | 'PLATINUM'
+type LimitReachedUpsell = {
+  used: number
+  limit: number
+  tier: LimitReachedTier
+}
 
 const MINI_APP_ENTRY_INTENT = {
   BOOKING: 'booking',
@@ -81,6 +87,45 @@ function withTelegramAuthTimeout<T>(promise: Promise<T>): Promise<T> {
 function resolveMiniAppEntryIntent(search: string): string | null {
   const intent = new URLSearchParams(search).get('intent')?.trim()
   return intent || null
+}
+
+function isCoachRole(role: string | null | undefined): boolean {
+  return role === 'EXPERT' || role === 'SUPERADMIN'
+}
+
+function parseLimitReachedError(error: unknown): LimitReachedUpsell | null {
+  const rawError =
+    typeof error === 'object' && error && 'data' in error
+      ? (error as { data?: { error?: unknown } }).data?.error
+      : null
+
+  const payload =
+    typeof rawError === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(rawError) as Record<string, unknown>
+          } catch {
+            return null
+          }
+        })()
+      : rawError && typeof rawError === 'object'
+        ? rawError as Record<string, unknown>
+        : null
+
+  if (!payload || payload.code !== 'LIMIT_REACHED') return null
+
+  const used = Number(payload.used)
+  const limit = Number(payload.limit)
+  const tier = String(payload.tier ?? '').toUpperCase()
+
+  if (!Number.isFinite(used) || !Number.isFinite(limit)) return null
+  if (tier !== 'SILVER' && tier !== 'GOLD' && tier !== 'PLATINUM') return null
+
+  return {
+    used,
+    limit,
+    tier,
+  }
 }
 
 function MiniAppZoomMessage({
@@ -171,14 +216,24 @@ export function MiniAppZoomWeekPanel() {
     const params = new URLSearchParams(window.location.search)
     return params.get('payment') === 'success' || params.get('startapp') === 'billing-success'
   }, [])
-  const { zoomAccess } = useSystemState()
-  const [audioMonth, setAudioMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const {
+    data: systemState,
+    refetch: refetchAccess,
+    isLoading: isAccessLoading,
+    isFetching: isAccessFetching,
+  } = useGetMySystemStateQuery(undefined, {
+    skip: !user,
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMountOrArgChange: true,
+  })
   const [registerAttendee, { isLoading: isRegisteringAttendee }] = useRegisterAttendeeMutation()
   const [submitBookingQuestion, { isLoading: isSubmittingBookingQuestion }] = useSubmitBookingQuestionMutation()
   const [createProductPayment, { isLoading: isOpeningAccessPayment }] = useCreateProductPaymentMutation()
   const [registeringSessionId, setRegisteringSessionId] = useState<string | null>(null)
   const [bookingSuccessSessionId, setBookingSuccessSessionId] = useState<string | null>(null)
   const [bookingError, setBookingError] = useState<string | null>(null)
+  const [limitUpsell, setLimitUpsell] = useState<LimitReachedUpsell | null>(null)
   const [showQuestionInput, setShowQuestionInput] = useState(false)
   const [questionSessionId, setQuestionSessionId] = useState<string | null>(null)
   const [bookingQuestionText, setBookingQuestionText] = useState('')
@@ -190,14 +245,25 @@ export function MiniAppZoomWeekPanel() {
     skip: !user,
     refetchOnMountOrArgChange: true,
   })
-  const { data: audioArchive, isLoading: isAudioArchiveLoading } = useGetAudioListQuery(audioMonth, {
-    skip: !user,
-    refetchOnMountOrArgChange: true,
-  })
+  const sessions = data?.sessions
+  const visibleSessions = (sessions ?? []).filter(
+    (session) => new Date(session.scheduledAt) >= new Date(),
+  )
   const highlightedSessionRef = useRef<HTMLDivElement | null>(null)
   const highlightedSession =
-    data?.sessions.find((session) => !session.isMyBooking) ?? data?.sessions[0] ?? null
-  const hasFocusAccess = zoomAccess?.hasFocus === true
+    sessions?.find((session) => !session.isMyBooking) ?? sessions?.[0] ?? null
+  const zoomAccess = systemState?.zoomAccess
+  const accessState =
+    systemState === undefined && (isAccessLoading || isAccessFetching)
+      ? 'loading'
+      : zoomAccess?.hasFocus === true
+        ? 'active'
+        : 'inactive'
+
+  useEffect(() => {
+    dispatch(api.util.invalidateTags(['Access', 'Subscription']))
+    void refetchAccess()
+  }, [dispatch, refetchAccess])
 
   useEffect(() => {
     if (!paymentSuccessFlag) return
@@ -224,7 +290,7 @@ export function MiniAppZoomWeekPanel() {
   }, [highlightedSession, isBookingIntent])
 
   useEffect(() => {
-    if (!paymentSuccessFlag || !hasFocusAccess) {
+    if (!paymentSuccessFlag || accessState !== 'active') {
       return
     }
 
@@ -237,7 +303,7 @@ export function MiniAppZoomWeekPanel() {
       url.searchParams.delete('startapp')
       window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
     }
-  }, [hasFocusAccess, paymentSuccessFlag])
+  }, [accessState, paymentSuccessFlag])
 
   if (!user) {
     return null
@@ -245,9 +311,24 @@ export function MiniAppZoomWeekPanel() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 pt-4">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/70">
-          Завантажуємо Zoom-розклад поточного тижня...
+      <div className="flex animate-pulse flex-col gap-4 px-4 py-5">
+        <div className="h-6 w-40 rounded bg-white/10" />
+
+        <div className="flex flex-col gap-3 rounded-2xl bg-white/[0.03] p-4">
+          <div className="h-5 w-3/4 rounded bg-white/10" />
+          <div className="h-4 w-1/2 rounded bg-white/10" />
+          <div className="h-4 w-1/3 rounded bg-white/10" />
+          <div className="mt-2 h-10 w-32 rounded-full bg-white/10" />
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-2xl bg-white/[0.03] p-4">
+          <div className="h-5 w-1/3 rounded bg-white/10" />
+
+          <div className="mt-2 grid grid-cols-7 gap-2">
+            {Array.from({ length: 14 }).map((_, index) => (
+              <div key={index} className="h-10 rounded-lg bg-white/10" />
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -265,6 +346,7 @@ export function MiniAppZoomWeekPanel() {
 
   const handleOpenAccess = async () => {
     setBookingError(null)
+    setLimitUpsell(null)
 
     try {
       const response = await createProductPayment({
@@ -301,7 +383,7 @@ export function MiniAppZoomWeekPanel() {
   }
 
   const handleRegister = async (sessionId: string) => {
-    if (!hasFocusAccess) {
+    if (accessState === 'inactive') {
       await handleOpenAccess()
       return
     }
@@ -309,6 +391,7 @@ export function MiniAppZoomWeekPanel() {
     setRegisteringSessionId(sessionId)
     setBookingSuccessSessionId(null)
     setBookingError(null)
+    setLimitUpsell(null)
     setShowQuestionInput(false)
     setQuestionSessionId(null)
     setBookingQuestionText('')
@@ -321,6 +404,13 @@ export function MiniAppZoomWeekPanel() {
       setQuestionSessionId(sessionId)
       setShowQuestionInput(true)
     } catch (error) {
+      const limitReached = parseLimitReachedError(error)
+
+      if (limitReached) {
+        setLimitUpsell(limitReached)
+        return
+      }
+
       const normalizedError =
         typeof error === 'object' && error && 'data' in error
           ? (error as { data?: { error?: string } }).data?.error
@@ -339,6 +429,52 @@ export function MiniAppZoomWeekPanel() {
     } finally {
       setRegisteringSessionId(null)
     }
+  }
+
+  const handleLimitUpgrade = async () => {
+    if (!limitUpsell) return
+
+    const planCode = limitUpsell.tier === 'SILVER' ? '3month' : '1month_upgrade'
+
+    setBookingError(null)
+
+    try {
+      const response = await createProductPayment({
+        productId: 'focus',
+        planCode,
+        source: 'web',
+        targetPath: '/miniapp/zoom-calendar?payment=success',
+      }).unwrap()
+
+      if (response.status === 'already_active') {
+        dispatch(
+          api.util.invalidateTags([
+            'Access',
+            'Products',
+            'Subscription',
+            'ZoomSession',
+          ]),
+        )
+        setAccessOpenedMessageVisible(true)
+        setLimitUpsell(null)
+        return
+      }
+
+      const checkoutUrl = response.checkoutUrl ?? response.paymentUrl
+      if (!checkoutUrl) {
+        setBookingError('Не вдалося відкрити оплату. Спробуй ще раз.')
+        return
+      }
+
+      openExternalPaymentUrl(checkoutUrl)
+    } catch (error) {
+      console.error('[MiniAppZoomWeekPanel] open upgrade payment failed', error)
+      setBookingError('Не вдалося відкрити оплату. Спробуй ще раз.')
+    }
+  }
+
+  const handleSingleSessionPurchase = () => {
+    navigate('/miniapp/mentor?source=zoom-limit-upsell&offer=single-session')
   }
 
   const handleSubmitBookingQuestion = async () => {
@@ -382,7 +518,7 @@ export function MiniAppZoomWeekPanel() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Zoom-календар</p>
-            <h2 className="mt-1 text-xl font-semibold text-white">Поточний тиждень</h2>
+            <h2 className="mt-1 text-xl font-semibold text-white">Найближчі 14 днів</h2>
             <p className="mt-1 text-sm text-white/55">
               {new Date(data.week.from).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' })}
               {' '}—{' '}
@@ -391,31 +527,44 @@ export function MiniAppZoomWeekPanel() {
             </p>
           </div>
           <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] text-white/60">
-            {data.sessions.length} сесій
+            {visibleSessions.length} сесій
           </div>
         </div>
 
         <div className="mt-4 space-y-3">
-          {accessOpenedMessageVisible && hasFocusAccess ? (
+          {accessOpenedMessageVisible && accessState === 'active' ? (
             <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
               <p className="font-semibold">Доступ відкрито.</p>
               <p className="mt-1 text-emerald-100/90">Можеш записатись на Zoom.</p>
             </div>
           ) : null}
 
-          {!hasFocusAccess ? (
-            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-50">
-              <p className="font-semibold">Zoom-практика доступна після активації ФОКУС.</p>
-              <p className="mt-1 text-amber-100/85">Ти бачиш найближчу сесію, а запис відкриється після оплати.</p>
+          {accessState === 'loading' ? (
+            <div className="text-white/40 text-sm">
+              Перевіряємо доступ...
             </div>
           ) : null}
 
-          {data.sessions.length === 0 ? (
+          {accessState === 'inactive' ? (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-sm p-3 rounded-xl">
+              <p>Щоб записатися на Zoom — активуй ФОКУС</p>
+              <button
+                type="button"
+                onClick={() => void handleOpenAccess()}
+                disabled={isOpeningAccessPayment}
+                className="mt-3 rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] transition hover:opacity-95 disabled:opacity-60"
+              >
+                {isOpeningAccessPayment ? 'Відкриваємо оплату...' : 'Отримати доступ'}
+              </button>
+            </div>
+          ) : null}
+
+          {visibleSessions.length === 0 && !isLoading ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
-              На цей тиждень Zoom-сесій ще немає.
+              На цей тиждень сесій ще немає
             </div>
           ) : (
-            data.sessions.map((session: ZoomWeekOverview['sessions'][number]) => (
+            visibleSessions.map((session: ZoomWeekOverview['sessions'][number]) => (
               <div
                 key={session.id}
                 ref={session.id === highlightedSession?.id ? highlightedSessionRef : null}
@@ -453,7 +602,7 @@ export function MiniAppZoomWeekPanel() {
                     <button
                       type="button"
                       onClick={() => void handleRegister(session.id)}
-                      disabled={hasFocusAccess && isRegisteringAttendee && registeringSessionId === session.id}
+                      disabled={accessState === 'active' && isRegisteringAttendee && registeringSessionId === session.id}
                       className={[
                         'rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-60',
                         session.id === highlightedSession?.id && isBookingIntent
@@ -461,7 +610,7 @@ export function MiniAppZoomWeekPanel() {
                           : 'border border-[rgba(var(--accent-rgb),0.24)] bg-[rgba(var(--accent-rgb),0.1)] text-[rgb(var(--accent-rgb))]',
                       ].join(' ')}
                     >
-                      {!hasFocusAccess
+                      {accessState === 'inactive'
                         ? isOpeningAccessPayment
                           ? 'Відкриваємо оплату...'
                           : 'Отримати доступ'
@@ -480,21 +629,8 @@ export function MiniAppZoomWeekPanel() {
                     >
                       Відкрити Zoom
                     </a>
-                  ) : (
-                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40">
-                      Zoom-лінк ще не додано
-                    </span>
-                  )}
+                  ) : null}
 
-                  {session.audioFileId ? (
-                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200">
-                      Є аудіо запис
-                    </span>
-                  ) : (
-                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40">
-                      Аудіо запису немає
-                    </span>
-                  )}
                 </div>
 
                 {bookingSuccessSessionId === session.id ? (
@@ -574,30 +710,75 @@ export function MiniAppZoomWeekPanel() {
           )}
         </div>
 
-        <div className="mt-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">Аудіо</p>
-          {data.audios.length === 0 ? (
-            <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
-              Записів за цей тиждень поки немає.
-            </div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {data.audios.map((audio: ZoomWeekOverview['audios'][number]) => (
-                <div key={audio.sessionId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                  <p className="text-sm font-medium text-white">{audio.topic}</p>
-                  <p className="mt-1 text-xs text-white/55">
-                    {getSessionDateLabel(audio.scheduledAt)} · {audio.type} · {audio.status}
-                  </p>
-                  <p className="mt-2 break-all font-mono text-[11px] text-white/45">
-                    {audio.audioFileId}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
       </div>
+
+      {limitUpsell ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 px-4">
+          <div className="pointer-events-auto mx-auto w-full max-w-md rounded-[28px] border border-[rgba(var(--accent-rgb),0.22)] bg-[#101826]/95 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[rgb(var(--accent-rgb))]">
+                  Ліміт сесій
+                </p>
+                <p className="mt-2 text-lg font-semibold text-white">
+                  Ти використала {limitUpsell.used}/{limitUpsell.limit} сесій цього місяця
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLimitUpsell(null)}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/70 transition hover:bg-white/10 hover:text-white"
+              >
+                Закрити
+              </button>
+            </div>
+
+            {limitUpsell.tier === 'SILVER' ? (
+              <>
+                <p className="mt-3 text-sm text-white/72">Хочеш більше роботи з коучем?</p>
+                <div className="mt-4 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleLimitUpgrade()}
+                    disabled={isOpeningAccessPayment}
+                    className="w-full rounded-2xl bg-[rgb(var(--accent-rgb))] px-4 py-3 text-sm font-semibold text-[var(--bg-primary)] transition hover:opacity-95 disabled:opacity-60"
+                  >
+                    {isOpeningAccessPayment ? 'Відкриваємо оплату...' : 'Перейти на GOLD'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSingleSessionPurchase}
+                    className="w-full rounded-2xl border border-white/12 bg-white/6 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                  >
+                    Купити 1 сесію — 150€
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 text-sm text-white/72">Хочеш більше інтенсиву?</p>
+                <div className="mt-4 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleLimitUpgrade()}
+                    disabled={isOpeningAccessPayment}
+                    className="w-full rounded-2xl bg-[rgb(var(--accent-rgb))] px-4 py-3 text-sm font-semibold text-[var(--bg-primary)] transition hover:opacity-95 disabled:opacity-60"
+                  >
+                    {isOpeningAccessPayment ? 'Відкриваємо оплату...' : 'Перейти на PLATINUM'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSingleSessionPurchase}
+                    className="w-full rounded-2xl border border-white/12 bg-white/6 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                  >
+                    Купити 1 сесію
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -610,7 +791,7 @@ export function ZoomPageWrapper() {
     return null
   }
 
-  const isCoach = role === 'EXPERT' || role === 'SUPERADMIN'
+  const isCoach = isCoachRole(role)
 
   return isCoach ? <CoachZoomPanel expertId={user.id} /> : <UserZoomPanel userId={user.id} />
 }
@@ -846,7 +1027,7 @@ export function MiniAppZoomCalendar() {
     const resolveTelegramBootstrap = async () => {
       const startedAt = Date.now()
 
-      while (!isCancelled && Date.now() - startedAt < 300) {
+      while (!isCancelled && Date.now() - startedAt < 3_000) {
         const initData = readTelegramInitData()
 
         if (initData) {
@@ -872,9 +1053,13 @@ export function MiniAppZoomCalendar() {
   }, [initialTelegramInitData])
 
   useEffect(() => {
+    if (!isTelegramBootstrapReady) {
+      return
+    }
+
     const telegramWebApp = getTelegramWindow().Telegram?.WebApp
     const telegramUserId = telegramWebApp?.initDataUnsafe?.user?.id
-    const telegramInitData = telegramWebApp?.initData?.trim() ?? ''
+    const telegramInitData = readTelegramInitData()
     const allowDevFallback =
       import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     const isAwaitingRestore =
@@ -894,6 +1079,11 @@ export function MiniAppZoomCalendar() {
     }
 
     if (!telegramUserId) {
+      setIsMiniAppAuthBootstrapping(false)
+      return
+    }
+
+    if (!telegramInitData && !allowDevFallback) {
       setIsMiniAppAuthBootstrapping(false)
       return
     }
@@ -927,6 +1117,7 @@ export function MiniAppZoomCalendar() {
   }, [
     authRestoreStatus,
     authRetryKey,
+    isTelegramBootstrapReady,
     hasDeepLinkToken,
     isAuthenticated,
     loginWithSocial,

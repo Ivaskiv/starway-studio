@@ -266,13 +266,13 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
     skip: !isAuthenticated || authRestoreStatus !== 'ready',
     refetchOnFocus: false,
     refetchOnReconnect: false,
-    refetchOnMountOrArgChange: false,
+    refetchOnMountOrArgChange: true,
   })
   const systemStateQuery = useGetMySystemStateQuery(undefined, {
     skip: !isAuthenticated || authRestoreStatus !== 'ready',
     refetchOnFocus: false,
     refetchOnReconnect: false,
-    refetchOnMountOrArgChange: false,
+    refetchOnMountOrArgChange: true,
   })
 
   const isAccessReady = !isAuthenticated || accessQuery.isSuccess || accessQuery.isError

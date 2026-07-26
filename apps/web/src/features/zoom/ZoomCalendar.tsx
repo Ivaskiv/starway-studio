@@ -14,6 +14,11 @@ import {
   useGetAvailablePrivateSlotsQuery,
 } from './zoom.api';
 import {
+  useRegisterAttendeeMutation,
+  useSubmitBookingPreparationMutation,
+  useSubmitBookingQuestionMutation,
+} from './services/zoom.api';
+import {
   getMonthGrid,
   getWeekDays,
   isSameDay,
@@ -74,6 +79,192 @@ function getNearestSession(sessions: ZoomCalendarSession[]): ZoomCalendarSession
     .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())[0] ?? null;
 }
 
+function formatIcsDate(date: Date): string {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
+
+function buildZoomCalendarEvent(session: ZoomCalendarSession): string {
+  const startDate = new Date(session.scheduledAt);
+  const endDate = new Date(startDate.getTime() + (session.durationMinutes ?? 60) * 60 * 1000);
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'BEGIN:VEVENT',
+    'SUMMARY:ФОКУС Zoom-практика',
+    `DTSTART:${formatIcsDate(startDate)}`,
+    `DTEND:${formatIcsDate(endDate)}`,
+    'DESCRIPTION:Zoom-практика ФОКУС',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\n');
+}
+
+function BookingQuestionModal({
+  session,
+  questionText,
+  error,
+  isSubmitting,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  session: ZoomCalendarSession;
+  questionText: string;
+  error: string | null;
+  isSubmitting: boolean;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-3 py-4 sm:items-center">
+      <button
+        type="button"
+        aria-label="Закрити запис на Zoom"
+        onClick={onCancel}
+        className="absolute inset-0"
+      />
+
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-[#0d1117] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+        <div className="border-b border-white/10 px-4 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/35">Запис на Zoom</p>
+          <h3 className="mt-2 text-lg font-semibold text-white">{session.topic || 'ФОКУС · Zoom-практика'}</h3>
+        </div>
+
+        <div className="space-y-4 px-4 py-4">
+          <div>
+            <label htmlFor="zoom-booking-question" className="block text-sm font-medium text-white">
+              З яким питанням ти хочеш прийти на Zoom?
+            </label>
+            <textarea
+              id="zoom-booking-question"
+              value={questionText}
+              onChange={(event) => onChange(event.target.value)}
+              placeholder="наприклад: не можу почати заробляти / відкладаю / не розумію що робити"
+              rows={4}
+              className="mt-3 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-white/20"
+            />
+            {error ? (
+              <p className="mt-2 text-sm text-amber-300">{error}</p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isSubmitting}
+              className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/15 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Записуємо...' : 'Підтвердити запис'}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isSubmitting}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/[0.08] disabled:opacity-50"
+            >
+              Скасувати
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PRIMARY_BOOKING_BUTTON_CLASS = 'bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-xl shadow-md disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed';
+
+function BookedState({
+  session,
+  onAddToCalendar,
+}: {
+  session: ZoomCalendarSession;
+  onAddToCalendar: (session: ZoomCalendarSession) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 mt-2">
+      <div className="text-green-400 text-sm font-semibold">
+        Ти записана ✅
+      </div>
+
+      <button
+        className="bg-white/10 hover:bg-white/20 text-white text-sm px-3 py-2 rounded-lg"
+        onClick={() => onAddToCalendar(session)}
+        type="button"
+      >
+        Додати в календар
+      </button>
+    </div>
+  );
+}
+
+function BookingPreparationModal({
+  answer,
+  error,
+  isSubmitting,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  answer: string;
+  error: string | null;
+  isSubmitting: boolean;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-3 py-4 sm:items-center">
+      <button
+        type="button"
+        aria-label="Закрити підготовку до Zoom"
+        onClick={onCancel}
+        className="absolute inset-0"
+      />
+
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-[#0d1117] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+        <div className="border-b border-white/10 px-4 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/35">Підготовка до Zoom</p>
+          <h3 className="mt-2 text-lg font-semibold text-white">Що ти вже пробувала зробити?</h3>
+        </div>
+
+        <div className="space-y-4 px-4 py-4">
+          <textarea
+            value={answer}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="Коротко опиши, що вже пробувала"
+            rows={4}
+            className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-white/20"
+          />
+          {error ? (
+            <p className="text-sm text-amber-300">{error}</p>
+          ) : null}
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isSubmitting}
+              className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/15 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Зберігаємо...' : 'Підтвердити'}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isSubmitting}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/[0.08] disabled:opacity-50"
+            >
+              Скасувати
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── SessionDetailCard ─────────────────────────────────────────────────────────
 
 function SessionDetailCard({
@@ -83,6 +274,8 @@ function SessionDetailCard({
   onClose,
   onEdit,
   onCancel,
+  onRequestBooking,
+  onAddToCalendar,
 }: {
   session: ZoomCalendarSession;
   mode: ZoomCalendarMode;
@@ -90,6 +283,8 @@ function SessionDetailCard({
   onClose: () => void;
   onEdit?: (id: string) => void;
   onCancel?: (id: string) => void;
+  onRequestBooking?: (session: ZoomCalendarSession) => void;
+  onAddToCalendar: (session: ZoomCalendarSession) => void;
 }) {
   const linkActive = isZoomLinkActive(session.scheduledAt) && !!session.zoomLink;
   const [bookSlot, { isLoading: booking }] = useBookSlotMutation();
@@ -162,27 +357,12 @@ function SessionDetailCard({
           {isPrivate && (
             <div className="flex flex-col gap-2">
               {session.isMyBooking ? (
-                <>
-                  <button
-                    onClick={() => cancelPrivateBooking(session.id).catch(console.error)}
-                    disabled={cancelingPrivate}
-                    className="self-start px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[13px] font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50"
-                  >
-                    ❌ Скасувати запис
-                  </button>
-                  <button
-                    onClick={() => createSwapRequest({ sessionIdFrom: session.id }).catch(console.error)}
-                    disabled={creatingSwap}
-                    className="self-start px-4 py-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[13px] font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
-                  >
-                    💱 Запропонувати обмін
-                  </button>
-                </>
+                <BookedState session={session} onAddToCalendar={onAddToCalendar} />
               ) : (
                 <button
-                  onClick={() => bookPrivateSlot(session.id).catch(console.error)}
+                  onClick={() => onRequestBooking?.(session)}
                   disabled={bookingPrivate}
-                  className="self-start px-4 py-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[13px] font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                  className={`self-start text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
                 >
                   📅 Записатись
                 </button>
@@ -191,23 +371,12 @@ function SessionDetailCard({
           )}
           {isGroupPractice && (
             session.isMyBooking ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] px-2 py-1 rounded-full bg-teal-500/10 text-teal-400">
-                  У розкладі ✓
-                </span>
-                <button
-                  onClick={() => unbookSlot(session.id).catch(console.error)}
-                  disabled={unbooking}
-                  className="text-[12px] text-white/40 hover:text-white/70 transition-all disabled:opacity-50"
-                >
-                  Видалити
-                </button>
-              </div>
+              <BookedState session={session} onAddToCalendar={onAddToCalendar} />
             ) : (
               <button
-                onClick={() => bookSlot(session.id).catch(console.error)}
+                onClick={() => onRequestBooking?.(session)}
                 disabled={booking}
-                className="px-4 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-400 text-[13px] font-semibold hover:bg-purple-500/20 transition-all disabled:opacity-50"
+                className={`text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
               >
                 {booking ? 'Додаємо...' : '+ Додати в розклад'}
               </button>
@@ -227,28 +396,16 @@ function SessionDetailCard({
                 </div>
               )}
               {session.isMyBooking ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">
-                    Ваше бронювання ✓
-                  </span>
-                  <button
-                    onClick={() => !tooLateToUnbook && unbookSlot(session.id).catch(console.error)}
-                    disabled={unbooking || tooLateToUnbook}
-                    title={tooLateToUnbook ? 'Скасування закрито менш ніж за 24г до сесії' : undefined}
-                    className="text-[12px] text-white/40 hover:text-white/70 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Скасувати
-                  </button>
-                </div>
+                <BookedState session={session} onAddToCalendar={onAddToCalendar} />
               ) : session.slotStatus === 'booked' ? (
                 <span className="text-[12px] px-2 py-1 rounded-full bg-white/[0.05] text-white/30 self-start">
                   Зайнято
                 </span>
               ) : (
                 <button
-                  onClick={() => bookSlot(session.id).catch(console.error)}
+                  onClick={() => onRequestBooking?.(session)}
                   disabled={booking || (session.remainingSlots ?? 1) <= 0}
-                  className="self-start px-4 py-2 rounded-lg border border-teal-500/30 bg-teal-500/10 text-teal-400 text-[13px] font-semibold hover:bg-teal-500/20 transition-all disabled:opacity-50"
+                  className={`self-start text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
                 >
                   {booking ? 'Бронюємо...' : 'Забронювати слот'}
                 </button>
@@ -258,17 +415,15 @@ function SessionDetailCard({
 
           {isIntensive && !session.isMyBooking && (
             <button
-              onClick={() => bookSlot(session.id).catch(console.error)}
+              onClick={() => onRequestBooking?.(session)}
               disabled={booking}
-              className="px-4 py-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[13px] font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
+              className={`text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
             >
               {booking ? 'Реєстрація...' : '+ Зареєструватись'}
             </button>
           )}
           {isIntensive && session.isMyBooking && (
-            <span className="text-[12px] px-2 py-1 rounded-full bg-blue-500/10 text-blue-400">
-              Зареєстровано ✓
-            </span>
+            <BookedState session={session} onAddToCalendar={onAddToCalendar} />
           )}
         </div>
       )}
@@ -290,7 +445,9 @@ function SessionDetailCard({
             ▶ Zoom
           </a>
         ) : (
-          <span className="flex-1 text-center text-[12px] text-white/30 py-2">Посилання буде додано</span>
+          <span className="flex-1 text-center text-xs text-white/60 mt-1 py-2">
+            Після запису ти отримаєш доступ до Zoom
+          </span>
         )}
 
         {mode === 'coach' && session.canEdit && (
@@ -439,35 +596,24 @@ function DaySessionsSheet({
   selectedDate,
   selectedSessions,
   onClose,
+  onRequestBooking,
+  onAddToCalendar,
 }: {
   selectedDate: Date;
   selectedSessions: ZoomCalendarSession[];
   onClose: () => void;
+  onRequestBooking: (session: ZoomCalendarSession) => void;
+  onAddToCalendar: (session: ZoomCalendarSession) => void;
 }) {
-  const [bookSlot, { isLoading: booking }] = useBookSlotMutation();
-  const [bookPrivateSlot, { isLoading: bookingPrivate }] = useBookPrivateSlotMutation();
-
   const dateLabel = selectedDate.toLocaleDateString('uk-UA', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
   });
-
-  const handleBook = async (session: ZoomCalendarSession) => {
-    try {
-      if (isPrivateSession(session)) {
-        await bookPrivateSlot(session.id).unwrap();
-        return;
-      }
-
-      await bookSlot(session.id).unwrap();
-    } catch (error) {
-      console.error('[ZoomCalendar] day sheet booking failed', {
-        sessionId: session.id,
-        error,
-      });
-    }
-  };
+  const nearestSession = selectedSessions[0] ?? null;
+  const remainingSessions = nearestSession
+    ? selectedSessions.filter((session) => session.id !== nearestSession.id)
+    : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-3 py-4 sm:items-center">
@@ -500,7 +646,56 @@ function DaySessionsSheet({
             </div>
           ) : (
             <div className="space-y-3">
-              {selectedSessions.map((session) => {
+              {nearestSession ? (
+                <div className="rounded-2xl border border-[rgba(var(--accent-rgb),0.32)] bg-[rgba(var(--accent-rgb),0.12)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.24)]">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[rgb(var(--accent-rgb))]">
+                    Найближча Zoom-практика
+                  </p>
+                  {(() => {
+                    const session = nearestSession;
+                    const sessionTime = new Date(session.scheduledAt).toLocaleTimeString('uk-UA', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    });
+                    const isPast = isPastDate(session.scheduledAt);
+                    const normalizedSessionType = getNormalizedSessionType(session);
+                    const isBookedOut = session.slotStatus === 'booked' || (session.remainingSlots ?? 1) <= 0;
+
+                    return (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white">{session.topic || 'ФОКУС · Zoom-практика'}</p>
+                          <p className="mt-1 text-xs text-white/75">
+                            {sessionTime} · {getSessionMeta(session)}
+                          </p>
+                        </div>
+
+                        {session.isMyBooking ? (
+                          <BookedState session={session} onAddToCalendar={onAddToCalendar} />
+                        ) : normalizedSessionType === 'battle_review' || isPast || session.status === 'CANCELLED' || session.status === 'COMPLETED' ? (
+                          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
+                            Недоступно
+                          </span>
+                        ) : isBookedOut && normalizedSessionType !== 'group_practice' && normalizedSessionType !== 'intensive' ? (
+                          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
+                            Зайнято
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onRequestBooking(session)}
+                            className={`cursor-pointer text-xs opacity-100 active:scale-[0.98] ${PRIMARY_BOOKING_BUTTON_CLASS}`}
+                          >
+                            Записатись
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : null}
+
+              {remainingSessions.map((session) => {
                 const sessionTime = new Date(session.scheduledAt).toLocaleTimeString('uk-UA', {
                   hour: '2-digit',
                   minute: '2-digit',
@@ -508,7 +703,6 @@ function DaySessionsSheet({
                 const isPast = isPastDate(session.scheduledAt);
                 const normalizedSessionType = getNormalizedSessionType(session);
                 const isBookedOut = session.slotStatus === 'booked' || (session.remainingSlots ?? 1) <= 0;
-                const isBusy = normalizedSessionType === 'private' ? bookingPrivate : booking;
 
                 return (
                   <div
@@ -523,14 +717,12 @@ function DaySessionsSheet({
                         </p>
                       </div>
 
-                      {session.isMyBooking ? (
-                        <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                          Ви записані
-                        </span>
-                      ) : normalizedSessionType === 'battle_review' || isPast || session.status === 'CANCELLED' || session.status === 'COMPLETED' ? (
-                        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
-                          Недоступно
-                        </span>
+                        {session.isMyBooking ? (
+                          <BookedState session={session} onAddToCalendar={onAddToCalendar} />
+                        ) : normalizedSessionType === 'battle_review' || isPast || session.status === 'CANCELLED' || session.status === 'COMPLETED' ? (
+                          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
+                            Недоступно
+                          </span>
                       ) : isBookedOut && normalizedSessionType !== 'group_practice' && normalizedSessionType !== 'intensive' ? (
                         <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
                           Зайнято
@@ -538,11 +730,10 @@ function DaySessionsSheet({
                       ) : (
                         <button
                           type="button"
-                          onClick={() => void handleBook(session)}
-                          disabled={isBusy}
-                          className="cursor-pointer rounded-full border border-[rgba(var(--accent-rgb),0.28)] bg-[rgba(var(--accent-rgb),0.12)] px-4 py-2 text-xs font-semibold text-[rgb(var(--accent-rgb))] opacity-100 transition-all hover:bg-[rgba(var(--accent-rgb),0.18)] active:scale-[0.98] disabled:opacity-50"
+                          onClick={() => onRequestBooking(session)}
+                          className={`cursor-pointer text-xs opacity-100 active:scale-[0.98] ${PRIMARY_BOOKING_BUTTON_CLASS}`}
                         >
-                          {isBusy ? 'Записуємо...' : 'Записатись'}
+                          Записатись
                         </button>
                       )}
                     </div>
@@ -572,8 +763,20 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSessions, setSelectedSessions] = useState<ZoomCalendarSession[]>([]);
   const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
+  const [bookingQuestionSession, setBookingQuestionSession] = useState<ZoomCalendarSession | null>(null);
+  const [bookingQuestionText, setBookingQuestionText] = useState('');
+  const [bookingQuestionError, setBookingQuestionError] = useState<string | null>(null);
+  const [bookingConfirmation, setBookingConfirmation] = useState<{ sessionId: string; text: string } | null>(null);
+  const [bookingPreparationSessionId, setBookingPreparationSessionId] = useState<string | null>(null);
+  const [bookingPreparationAnswer, setBookingPreparationAnswer] = useState('');
+  const [bookingPreparationError, setBookingPreparationError] = useState<string | null>(null);
+  const [bookingPreparationSuccess, setBookingPreparationSuccess] = useState<string | null>(null);
   const [createDate, setCreateDate] = useState<Date | null>(null);
   const [editingSession, setEditingSession] = useState<string | null>(null);
+  const [registerAttendee, { isLoading: isRegisteringAttendee }] = useRegisterAttendeeMutation();
+  const [submitBookingPreparation, { isLoading: isSavingBookingPreparation }] = useSubmitBookingPreparationMutation();
+  const [submitBookingQuestion, { isLoading: isSavingBookingQuestion }] = useSubmitBookingQuestionMutation();
+  const [bookPrivateSlot, { isLoading: isBookingPrivateSlot }] = useBookPrivateSlotMutation();
 
   const from = startOf(view, currentDate).toISOString();
   const to   = endOf(view, currentDate).toISOString();
@@ -582,6 +785,9 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
     { from, to, role: mode, userId },
     { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
   );
+  const visibleSessions = sessions.filter(
+    (session) => new Date(session.scheduledAt) >= new Date(),
+  );
   useGetAvailablePrivateSlotsQuery(
     { expertId: expertId ?? userId, from, to },
     { skip: !(expertId ?? userId) },
@@ -589,6 +795,8 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
   const [createSession, { isLoading: creating }] = useCreateZoomSessionMutation();
   const [updateSession] = useUpdateZoomSessionMutation();
   const [cancelSession] = useCancelZoomSessionMutation();
+  const isSubmittingBookingQuestion = isRegisteringAttendee || isSavingBookingQuestion || isBookingPrivateSlot;
+  const isSubmittingBookingPreparation = isSavingBookingPreparation;
 
   const monthGrid = getMonthGrid(currentDate);
   const weekDays  = getWeekDays(currentDate);
@@ -646,11 +854,11 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
   const todaySession = sessions.find(s => isSameDay(new Date(s.scheduledAt), new Date()));
 
   useEffect(() => {
-    if (mode !== 'user' || selectedDate || sessions.length === 0) {
+    if (mode !== 'user' || selectedDate || visibleSessions.length === 0) {
       return;
     }
 
-    const nextSession = getNearestSession(sessions);
+    const nextSession = getNearestSession(visibleSessions);
     if (!nextSession) {
       return;
     }
@@ -659,7 +867,7 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
     setSelectedDate(nextSessionDate);
     setSelectedSessions([nextSession]);
     setIsDaySheetOpen(true);
-  }, [mode, selectedDate, sessions]);
+  }, [mode, selectedDate, visibleSessions]);
 
   const handleCreate = async (payload: CreateSessionPayload) => {
     await createSession(payload).unwrap();
@@ -669,6 +877,128 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
   const handleCancel = async (id: string) => {
     await cancelSession(id).unwrap();
     setSelectedSession(null);
+  };
+
+  const handleAddToCalendar = (session: ZoomCalendarSession) => {
+    const icsContent = buildZoomCalendarEvent(session);
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'focus-zoom-practice.ics';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const openBookingQuestion = (session: ZoomCalendarSession) => {
+    setBookingConfirmation(null);
+    setBookingPreparationSuccess(null);
+    setBookingQuestionError(null);
+    setBookingQuestionText('');
+    setBookingQuestionSession(session);
+  };
+
+  const closeBookingQuestion = () => {
+    if (isSubmittingBookingQuestion) {
+      return;
+    }
+
+    setBookingQuestionSession(null);
+    setBookingQuestionError(null);
+    setBookingQuestionText('');
+  };
+
+  const handleBookingConfirm = async () => {
+    if (!bookingQuestionSession) {
+      return;
+    }
+
+    const normalizedQuestionText = bookingQuestionText.trim();
+    if (!normalizedQuestionText) {
+      setBookingQuestionError('Напиши коротко, з чим хочеш прийти на Zoom.');
+      return;
+    }
+
+    try {
+      if (isPrivateSession(bookingQuestionSession)) {
+        await bookPrivateSlot(bookingQuestionSession.id).unwrap();
+        await submitBookingQuestion({
+          sessionId: bookingQuestionSession.id,
+          questionText: normalizedQuestionText,
+        }).unwrap();
+      } else {
+        await registerAttendee({
+          sessionId: bookingQuestionSession.id,
+          questionText: normalizedQuestionText,
+        } as never).unwrap();
+      }
+
+      setBookingConfirmation({
+        sessionId: bookingQuestionSession.id,
+        text: 'Ти записана на Zoom.\n\n👉 Я передам твоє питання коучу\n👉 і підготую для тебе розбір',
+      });
+      setBookingQuestionSession(null);
+      setBookingQuestionText('');
+      setBookingQuestionError(null);
+      setSelectedSession(null);
+      setIsDaySheetOpen(false);
+      setSelectedDate(null);
+      setSelectedSessions([]);
+    } catch (error) {
+      console.error('[ZoomCalendar] booking with question failed', {
+        sessionId: bookingQuestionSession.id,
+        error,
+      });
+      setBookingQuestionError('Не вдалося завершити запис. Спробуй ще раз.');
+    }
+  };
+
+  const openBookingPreparation = (sessionId: string) => {
+    setBookingPreparationSessionId(sessionId);
+    setBookingPreparationAnswer('');
+    setBookingPreparationError(null);
+    setBookingPreparationSuccess(null);
+  };
+
+  const closeBookingPreparation = () => {
+    if (isSubmittingBookingPreparation) {
+      return;
+    }
+
+    setBookingPreparationSessionId(null);
+    setBookingPreparationAnswer('');
+    setBookingPreparationError(null);
+  };
+
+  const handleBookingPreparationConfirm = async () => {
+    if (!bookingPreparationSessionId) {
+      return;
+    }
+
+    const normalizedPreparationAnswer = bookingPreparationAnswer.trim();
+    if (!normalizedPreparationAnswer) {
+      setBookingPreparationError('Напиши коротко, що ти вже пробувала.');
+      return;
+    }
+
+    try {
+      await submitBookingPreparation({
+        sessionId: bookingPreparationSessionId,
+        preparationAnswer: normalizedPreparationAnswer,
+      }).unwrap();
+      setBookingPreparationSuccess('Добре. Я врахую це перед Zoom.');
+      setBookingPreparationSessionId(null);
+      setBookingPreparationAnswer('');
+      setBookingPreparationError(null);
+    } catch (error) {
+      console.error('[ZoomCalendar] booking preparation failed', {
+        sessionId: bookingPreparationSessionId,
+        error,
+      });
+      setBookingPreparationError('Не вдалося зберегти відповідь. Спробуй ще раз.');
+    }
   };
 
   return (
@@ -845,6 +1175,8 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
         <DaySessionsSheet
           selectedDate={selectedDate}
           selectedSessions={selectedSessions}
+          onRequestBooking={openBookingQuestion}
+          onAddToCalendar={handleAddToCalendar}
           onClose={() => {
             setIsDaySheetOpen(false);
             setSelectedDate(null);
@@ -860,9 +1192,34 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
           mode={mode}
           userId={userId}
           onClose={() => setSelectedSession(null)}
+          onRequestBooking={openBookingQuestion}
+          onAddToCalendar={handleAddToCalendar}
           onEdit={id => { setEditingSession(id); setSelectedSession(null); }}
           onCancel={handleCancel}
         />
+      )}
+
+      {mode === 'user' && bookingConfirmation && (
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
+          <div className="whitespace-pre-line">{bookingConfirmation.text}</div>
+          <div className="mt-4">
+            <p>👉 Щоб отримати максимум з цієї зустрічі:</p>
+            <p className="mt-1">зроби 1 крок вже зараз</p>
+            <button
+              type="button"
+              onClick={() => openBookingPreparation(bookingConfirmation.sessionId)}
+              className="mt-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-300/15"
+            >
+              Зробити крок
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'user' && bookingPreparationSuccess && (
+        <div className="rounded-2xl border border-sky-400/20 bg-sky-400/10 p-4 text-sm text-sky-50">
+          {bookingPreparationSuccess}
+        </div>
       )}
 
       {/* Create form (coach + empty day click) */}
@@ -889,6 +1246,29 @@ export default function ZoomCalendar({ mode, userId, expertId }: ZoomCalendarPro
             Закрити
           </button>
         </div>
+      )}
+
+      {mode === 'user' && bookingQuestionSession && (
+        <BookingQuestionModal
+          session={bookingQuestionSession}
+          questionText={bookingQuestionText}
+          error={bookingQuestionError}
+          isSubmitting={isSubmittingBookingQuestion}
+          onChange={setBookingQuestionText}
+          onCancel={closeBookingQuestion}
+          onConfirm={() => void handleBookingConfirm()}
+        />
+      )}
+
+      {mode === 'user' && bookingPreparationSessionId && (
+        <BookingPreparationModal
+          answer={bookingPreparationAnswer}
+          error={bookingPreparationError}
+          isSubmitting={isSubmittingBookingPreparation}
+          onChange={setBookingPreparationAnswer}
+          onCancel={closeBookingPreparation}
+          onConfirm={() => void handleBookingPreparationConfirm()}
+        />
       )}
 
     </div>

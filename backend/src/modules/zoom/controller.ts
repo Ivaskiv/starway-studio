@@ -20,6 +20,8 @@ import {
   getUpcomingZoom,
   markAttended,
   registerAttendee,
+  saveBookingPreparationForAttendee,
+  saveBookingQuestionForAttendee,
   savePostSessionReport,
 } from './service.js';
 import { ZoomSessionWithAttendance } from './types.js';
@@ -134,7 +136,10 @@ export async function register(req: AuthenticatedRequest, res: Response, next: N
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { sessionId } = req.body;
+    const { sessionId, questionText } = req.body as {
+      sessionId?: string
+      questionText?: string
+    }
     if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
 
     const session = await getSessionById(sessionId)
@@ -154,6 +159,10 @@ export async function register(req: AuthenticatedRequest, res: Response, next: N
     }
 
     const attendee = await registerAttendee(userId, sessionId);
+    const normalizedQuestionText = String(questionText ?? '').trim()
+    if (normalizedQuestionText) {
+      await saveBookingQuestionForAttendee(userId, sessionId, normalizedQuestionText)
+    }
     await syncZoomRegistrationLifecycle(userId, sessionId)
     return res.status(201).json(attendee);
   } catch (err) {
@@ -182,37 +191,11 @@ export async function saveBookingQuestion(req: AuthenticatedRequest, res: Respon
       return res.status(400).json({ error: 'questionText required' })
     }
 
-    const attendee = await prisma.zoomSessionAttendee.findUnique({
-      where: {
-        sessionId_userId: {
-          sessionId: normalizedSessionId,
-          userId,
-        },
-      },
-      select: {
-        id: true,
-      },
-    })
-
-    if (!attendee) {
-      return res.status(404).json({ error: 'booking_not_found' })
-    }
-
-    const event = await prisma.event.create({
-      data: {
-        userId,
-        type: 'ZOOM_BOOKING_QUESTION',
-        source: 'web',
-        payload: {
-          sessionId: normalizedSessionId,
-          questionText: normalizedQuestionText,
-        },
-      },
-      select: {
-        id: true,
-        createdAt: true,
-      },
-    })
+    const event = await saveBookingQuestionForAttendee(
+      userId,
+      normalizedSessionId,
+      normalizedQuestionText,
+    )
 
     return res.status(201).json({
       ok: true,
@@ -220,6 +203,55 @@ export async function saveBookingQuestion(req: AuthenticatedRequest, res: Respon
       createdAt: event.createdAt,
     })
   } catch (err) {
+    if (err instanceof Error && err.message === 'booking_not_found') {
+      return res.status(404).json({ error: 'booking_not_found' })
+    }
+    if (err instanceof Error && err.message === 'questionText required') {
+      return res.status(400).json({ error: 'questionText required' })
+    }
+    next(err)
+  }
+}
+
+export async function saveBookingPreparation(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const { sessionId, preparationAnswer } = req.body as {
+      sessionId?: string
+      preparationAnswer?: string
+    }
+
+    const normalizedSessionId = String(sessionId ?? '').trim()
+    const normalizedPreparationAnswer = String(preparationAnswer ?? '').trim()
+
+    if (!normalizedSessionId) {
+      return res.status(400).json({ error: 'sessionId required' })
+    }
+
+    if (!normalizedPreparationAnswer) {
+      return res.status(400).json({ error: 'preparationAnswer required' })
+    }
+
+    const event = await saveBookingPreparationForAttendee(
+      userId,
+      normalizedSessionId,
+      normalizedPreparationAnswer,
+    )
+
+    return res.status(201).json({
+      ok: true,
+      id: event.id,
+      createdAt: event.createdAt,
+    })
+  } catch (err) {
+    if (err instanceof Error && err.message === 'booking_not_found') {
+      return res.status(404).json({ error: 'booking_not_found' })
+    }
+    if (err instanceof Error && err.message === 'preparationAnswer required') {
+      return res.status(400).json({ error: 'preparationAnswer required' })
+    }
     next(err)
   }
 }

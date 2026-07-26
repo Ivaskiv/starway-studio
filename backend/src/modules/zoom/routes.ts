@@ -9,6 +9,7 @@ import {
   getPublicCurrentWeekSessions,
   getUpcoming,
   register,
+  saveBookingPreparation,
   saveBookingQuestion,
   markAttendedHandler,
   postSessionReport,
@@ -52,6 +53,7 @@ router.get('/upcoming',                        authRequired, getUpcoming);
 router.get('/week',                            telegramWebAppAuth(), getCurrentWeekSessions);
 router.post('/register',                       authRequired, register);
 router.post('/booking-question',               authRequired, saveBookingQuestion);
+router.post('/booking-preparation',            authRequired, saveBookingPreparation);
 router.patch('/attendee/attended',             authRequired, markAttendedHandler);
 router.patch('/session/:sessionId/report',     authRequired, postSessionReport);
 router.get('/session/:sessionId/attendees',    authRequired, getAttendees);

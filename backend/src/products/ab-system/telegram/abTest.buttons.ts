@@ -7,7 +7,7 @@ function normalizeEnvBaseUrl(value: string | undefined): string {
 }
 
 function isTelegramSafeHttpsUrl(value: string): boolean {
-  if (isBackendPublicUrl(value)) return false
+  if (isBackendPublicUrl(value) && process.env.NODE_ENV === 'production') return false
 
   return (
     value.startsWith('https://') &&

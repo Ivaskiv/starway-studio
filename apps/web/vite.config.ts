@@ -61,6 +61,7 @@ export default defineConfig(({ mode }) => {
         'localhost',
         '.ngrok-free.dev',
         '.trycloudflare.com',
+        '.lhr.life',
       ],
       origin: tunnel?.toString() || undefined,
       headers: {
