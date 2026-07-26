@@ -31,6 +31,7 @@ import {
   FOCUS_ROUTE,
 } from '@/features/landings/focus/content/constants'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
+import CleanMiniAppZoomCalendar from '@/features/zoom/routes/CleanMiniAppZoomCalendar'
 import { MiniAppZoomCalendar, MiniAppZoomRoute } from '@/features/zoom/routes/MiniAppZoomRoute'
 import MainLayout from '@/layout/MainLayout'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
@@ -120,7 +121,7 @@ function PublicAppRouter() {
         {renderInfoRoutes()}
       </Route>
       <Route path="/miniapp" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
-      <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
+      <Route path="/miniapp/zoom-calendar" element={<CleanMiniAppZoomCalendar />} />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
       {renderTaskRedirectRoutes()}
       <Route path="/content" element={<Navigate to="/miniapp/library" replace />} />
@@ -167,7 +168,7 @@ function ProtectedAppRouter() {
     <Routes>
       <Route element={<MainLayout dashboard />}>
         <Route path="/zoom" element={<MiniAppZoomRoute />} />
-        <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
+        <Route path="/miniapp/zoom-calendar" element={<CleanMiniAppZoomCalendar />} />
         {protectedRoutes.map((route) => (
           <Route
             key={route.path}
