@@ -10,7 +10,7 @@ import { notificationService } from '../notifications/NotificationService.js'
 import { runWeeklyAnalysis } from '../../modules/ai-mentor/weekly-analysis/service.js'
 import { getCanonicalRevenueMetrics } from '../../modules/analytics/service.js'
 import { resolvePausedMentorContext } from '../notifications/mentorLifecycle.js'
-import { ensureNotificationPreferenceTableAvailability, getMinutesInTimezone, getStartOfUtcDay, getWeekdayInTimezone, hasMentorNotificationAccess, isWithinScheduledMinute } from './common.js'
+import { ensureNotificationPreferenceTableAvailability, getMinutesInTimezone, getStartOfUtcDay, getWeekdayInTimezone, hasActiveSchedulerProductEntitlement, hasMentorNotificationAccess, isWithinScheduledMinute } from './common.js'
 import { generateAiBriefingInsights } from './dailyBriefing.ai.js'
 import { parseZoomPostReport } from '../../modules/zoom/zoomPostReport.types.js'
 
@@ -1034,6 +1034,7 @@ export async function dailyMorningCron(): Promise<void> {
 
   await Promise.all(preferences.map(async (preference) => {
     if (!isWithinScheduledMinute(now, preference.timezone, preference.dailyMorningTime)) return
+    if (!(await hasActiveSchedulerProductEntitlement(preference.userId, ['stankey', 'absystem']))) return
     console.info('[scheduler] morning telegram matched', {
       userId: preference.userId,
       timezone: preference.timezone,
@@ -1064,6 +1065,7 @@ export async function dailyEveningCron(): Promise<void> {
 
   await Promise.all(preferences.map(async (preference) => {
     if (!isWithinScheduledMinute(now, preference.timezone, preference.dailyEveningTime)) return
+    if (!(await hasActiveSchedulerProductEntitlement(preference.userId, ['stankey', 'absystem']))) return
     console.info('[scheduler] evening telegram matched', {
       userId: preference.userId,
       timezone: preference.timezone,
@@ -1111,6 +1113,7 @@ export async function streakRiskCron(): Promise<void> {
     const preferences = candidate.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.streakRiskEnabled) continue
     if (!(await hasMentorNotificationAccess(candidate.userId))) continue
+    if (!(await hasActiveSchedulerProductEntitlement(candidate.userId, ['absystem']))) continue
     if (candidate.user.dailyEntries.length > 0) continue
 
     await notificationService.emit(NotificationEvent.STREAK_RISK, candidate.userId, {
@@ -1155,6 +1158,7 @@ export async function weeklySummaryCron(): Promise<void> {
     if (getMinutesInTimezone(now, timezone) !== 19 * 60) continue
     if (!preference?.telegramEnabled || !preference.weeklySummaryEnabled) continue
     if (!(await hasMentorNotificationAccess(candidate.id))) continue
+    if (!(await hasActiveSchedulerProductEntitlement(candidate.id, ['stankey', 'absystem']))) continue
 
     const generated = await runWeeklyAnalysis(candidate.id)
     if (!generated) continue
@@ -1241,6 +1245,7 @@ export async function streakBrokenCron(): Promise<void> {
     const preferences = candidate.user.notificationPreference
     if (!preferences?.telegramEnabled || !preferences.streakBrokenEnabled) continue
     if (!(await hasMentorNotificationAccess(candidate.userId))) continue
+    if (!(await hasActiveSchedulerProductEntitlement(candidate.userId, ['absystem']))) continue
     if (getMinutesInTimezone(new Date(), preferences.timezone) !== 8 * 60) continue
     await notificationService.emit(NotificationEvent.STREAK_BROKEN, candidate.userId)
   }

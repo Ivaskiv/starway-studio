@@ -1,4 +1,5 @@
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
+import { accessApi } from '@/features/auth/services/accessApi'
 import { selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import {
@@ -9,6 +10,7 @@ import { openExternalPaymentUrl } from '@/features/subscription/utils/openExtern
 import {
   useGetWeekOverviewQuery,
   useRegisterAttendeeMutation,
+  useSubmitBookingQuestionMutation,
 } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import { getSessionDateLabel, getSessionMeta } from '@/features/zoom/zoom.utils'
@@ -47,11 +49,20 @@ export default function CleanMiniAppZoomCalendar() {
       refetchOnMountOrArgChange: true,
     })
   const [registerAttendee, { isLoading: isRegistering }] = useRegisterAttendeeMutation()
+  const [submitBookingQuestion, { isLoading: isSubmittingBookingQuestion }] =
+    useSubmitBookingQuestionMutation()
   const [createProductPayment, { isLoading: isOpeningPayment }] = useCreateProductPaymentMutation()
   const [reportFocusPaymentIssue, { isLoading: isReportingPaymentIssue }] =
     useReportFocusPaymentIssueMutation()
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [bookingSuccessSessionId, setBookingSuccessSessionId] = useState<string | null>(null)
+  const [questionSessionId, setQuestionSessionId] = useState<string | null>(null)
+  const [bookingQuestionText, setBookingQuestionText] = useState('')
+  const [bookingQuestionError, setBookingQuestionError] = useState<string | null>(null)
+  const [questionSubmittedSessionId, setQuestionSubmittedSessionId] = useState<string | null>(null)
+  const [questionSkippedSessionId, setQuestionSkippedSessionId] = useState<string | null>(null)
+  const [showQuestionInput, setShowQuestionInput] = useState(false)
 
   const accessState =
     isAccessLoading || zoomAccess === undefined
@@ -77,10 +88,74 @@ export default function CleanMiniAppZoomCalendar() {
 
   const refreshAccess = async () => {
     setMessage(null)
+    const telegramUserId =
+      (window as {
+        Telegram?: {
+          WebApp?: {
+            initDataUnsafe?: {
+              user?: { id?: number }
+            }
+          }
+        }
+      }).Telegram?.WebApp?.initDataUnsafe?.user?.id ?? null
+    const endpoint = '/access/state'
+    const zoomAccessBeforeRefresh = zoomAccess
+    let responseBody: unknown = null
+    let httpStatus: number | null = null
+
+    try {
+      const accessResponse = await dispatch(
+        accessApi.endpoints.getMySystemState.initiate(undefined, {
+          forceRefetch: true,
+          subscribe: false,
+        }),
+      )
+
+      if ('data' in accessResponse) {
+        responseBody = accessResponse.data
+        httpStatus = 200
+      } else {
+        responseBody = accessResponse.error
+        httpStatus =
+          typeof accessResponse.error === 'object' &&
+          accessResponse.error &&
+          'status' in accessResponse.error
+            ? Number(accessResponse.error.status ?? 0) || null
+            : null
+      }
+    } catch (error) {
+      responseBody = error
+    }
+
     dispatch(
       api.util.invalidateTags(['Access', 'Products', 'Subscription', 'ZoomSession']),
     )
     await refetch()
+    let zoomAccessAfterRefetch: unknown = null
+
+    try {
+      const postRefreshResponse = await dispatch(
+        accessApi.endpoints.getMySystemState.initiate(undefined, {
+          forceRefetch: true,
+          subscribe: false,
+        }),
+      )
+
+      zoomAccessAfterRefetch =
+        'data' in postRefreshResponse ? postRefreshResponse.data?.zoomAccess ?? null : null
+    } catch (error) {
+      zoomAccessAfterRefetch = error
+    }
+
+    console.info('[ZOOM_ACCESS_REFRESH_FRONTEND]', {
+      telegramUserId,
+      authSessionUserId: user?.id ?? null,
+      endpoint,
+      httpStatus,
+      responseBody,
+      zoomAccessBeforeRefresh,
+      zoomAccessAfterRefetch,
+    })
     setMessage('Статус доступу оновлено.')
   }
 
@@ -106,8 +181,27 @@ export default function CleanMiniAppZoomCalendar() {
       }
 
       openExternalPaymentUrl(checkoutUrl)
-    } catch {
-      setMessage('Не вдалося відкрити оплату. Натисни «Проблеми з оплатою».')
+    } catch (err) {
+      const paymentError =
+        typeof err === 'object' && err
+          ? (err as {
+              status?: number | string
+              data?: { error?: string; message?: string } | string | null
+            })
+          : null
+      const errorMessage =
+        typeof paymentError?.data === 'object' && paymentError.data
+          ? paymentError.data.error ?? paymentError.data.message ?? null
+          : typeof paymentError?.data === 'string'
+            ? paymentError.data
+            : null
+
+      console.error('[FOCUS_PAYMENT_OPEN_ERROR]', {
+        status: paymentError?.status ?? null,
+        data: paymentError?.data ?? null,
+        error: err,
+      })
+      setMessage(errorMessage ?? 'Не вдалося відкрити оплату. Натисни «Проблеми з оплатою».')
     }
   }
 
@@ -125,15 +219,74 @@ export default function CleanMiniAppZoomCalendar() {
     if (!hasFocusAccess) return
     setActiveSessionId(sessionId)
     setMessage(null)
+    setBookingSuccessSessionId(null)
+    setQuestionSessionId(null)
+    setBookingQuestionText('')
+    setBookingQuestionError(null)
+    setQuestionSubmittedSessionId(null)
+    setQuestionSkippedSessionId(null)
+    setShowQuestionInput(false)
     try {
       await registerAttendee({ sessionId }).unwrap()
       await refetch()
-      setMessage('Ти записана на Zoom.')
-    } catch {
+      setBookingSuccessSessionId(sessionId)
+      setQuestionSessionId(sessionId)
+      setShowQuestionInput(true)
+      setMessage(null)
+    } catch (error) {
+      const normalizedError =
+        typeof error === 'object' && error && 'data' in error
+          ? (error as { data?: { error?: string } }).data?.error
+          : null
+
+      if (normalizedError === 'NO_ACTIVE_SUBSCRIPTION') {
+        setMessage('Доступ до Zoom відкривається з активним ФОКУСОМ.')
+        return
+      }
+
+      if (normalizedError === 'ALREADY_BOOKED') {
+        setBookingSuccessSessionId(sessionId)
+        setMessage('Ти записана на Zoom.')
+        return
+      }
+
       setMessage('Не вдалося записати. Онови доступ і спробуй ще раз.')
     } finally {
       setActiveSessionId(null)
     }
+  }
+
+  const handleSubmitBookingQuestion = async () => {
+    const sessionId = questionSessionId?.trim()
+    const questionText = bookingQuestionText.trim()
+
+    if (!sessionId) return
+    if (!questionText) {
+      setBookingQuestionError('Напиши питання або ситуацію, щоб надіслати.')
+      return
+    }
+
+    setBookingQuestionError(null)
+
+    try {
+      await submitBookingQuestion({ sessionId, questionText }).unwrap()
+      setQuestionSubmittedSessionId(sessionId)
+      setShowQuestionInput(false)
+      setBookingQuestionText('')
+      setMessage('Ти записана на Zoom.')
+    } catch {
+      setBookingQuestionError('Не вдалося надіслати питання. Спробуй ще раз.')
+    }
+  }
+
+  const handleSkipBookingQuestion = () => {
+    if (questionSessionId) {
+      setQuestionSkippedSessionId(questionSessionId)
+    }
+    setShowQuestionInput(false)
+    setBookingQuestionText('')
+    setBookingQuestionError(null)
+    setMessage('Ти записана на Zoom.')
   }
 
   if (!user) return null
@@ -262,6 +415,71 @@ export default function CleanMiniAppZoomCalendar() {
                       </span>
                     )}
                   </div>
+
+                  {(bookingSuccessSessionId === session.id || session.isMyBooking) ? (
+                    <div className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-50">
+                      <p className="font-semibold">Ти записана.</p>
+
+                      {showQuestionInput && questionSessionId === session.id ? (
+                        <div className="mt-3 rounded-2xl border border-emerald-300/15 bg-black/10 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100/75">
+                            Питання до Zoom
+                          </p>
+                          <textarea
+                            value={bookingQuestionText}
+                            onChange={(event) => setBookingQuestionText(event.target.value)}
+                            placeholder="Напиши питання або ситуацію..."
+                            rows={3}
+                            className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white outline-none transition focus:border-white/25"
+                          />
+                          {bookingQuestionError ? (
+                            <p className="mt-2 text-xs text-amber-100">{bookingQuestionError}</p>
+                          ) : null}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleSubmitBookingQuestion()}
+                              disabled={isSubmittingBookingQuestion}
+                              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50 disabled:opacity-60"
+                            >
+                              {isSubmittingBookingQuestion ? 'Надсилаємо…' : 'Надіслати'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSkipBookingQuestion}
+                              className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                            >
+                              Пропустити
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {!showQuestionInput && questionSubmittedSessionId === session.id ? (
+                        <div className="mt-3 rounded-2xl border border-emerald-300/15 bg-black/10 p-3 text-emerald-100/90">
+                          Питання збережено. Повернемось до нього на Zoom.
+                        </div>
+                      ) : null}
+
+                      {!showQuestionInput && questionSkippedSessionId === session.id ? (
+                        <div className="mt-3 rounded-2xl border border-white/10 bg-black/10 p-3">
+                          <p className="text-emerald-100/90">Можеш додати питання пізніше.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQuestionSessionId(session.id)
+                              setQuestionSkippedSessionId(null)
+                              setBookingQuestionError(null)
+                              setShowQuestionInput(true)
+                            }}
+                            className="mt-3 rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                          >
+                            Додати питання
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </Card>
               ))
             : null}

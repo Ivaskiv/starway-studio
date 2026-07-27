@@ -2,6 +2,7 @@
 // Інструкція: тут спільні утиліти, перевірки доступності та Telegram-хелпери для cron-задач.
 
 import { resolveTelegramWebappBaseUrl } from '@/config/webapp.js'
+import type { PlatformProductId } from '@starway/shared/platform.registry'
 import { prisma, withRetry } from '../../db/client.js'
 import { getUserAccess } from '../../modules/access/service.js'
 import { sendDedupedTelegramMessage } from '../../lib/telegram.js'
@@ -9,6 +10,12 @@ import { notificationService } from '../notifications/NotificationService.js'
 
 export type SchedulerNotifier = {
   schedule: (...args: Parameters<typeof notificationService.schedule>) => Promise<unknown>
+}
+
+const SCHEDULER_PRODUCT_CODE_MAP: Record<PlatformProductId, string[]> = {
+  focus: ['focus'],
+  stankey: ['stankey'],
+  absystem: ['absystem', 'absystem_ai'],
 }
 
 let notificationPreferenceTableAvailable: boolean | undefined
@@ -121,6 +128,51 @@ export async function hasMentorNotificationAccess(userId: string): Promise<boole
   ])
   if (user?.email?.startsWith('telegram-guest-')) return false
   return Boolean(access.abilities['mentor.daily'] === true || access.abilities['mentor.core'] === true)
+}
+
+export async function hasActiveSchedulerProductEntitlement(
+  userId: string,
+  productScope: PlatformProductId[],
+): Promise<boolean> {
+  const now = new Date()
+  const productCodes = [...new Set(productScope.flatMap((productId) => SCHEDULER_PRODUCT_CODE_MAP[productId] ?? []))]
+
+  if (productCodes.length === 0) return false
+
+  const subscriptions = await prisma.productSubscription.findMany({
+    where: {
+      userId,
+      product: {
+        code: {
+          in: productCodes,
+        },
+      },
+    },
+    select: {
+      status: true,
+      expiresAt: true,
+      trialEndsAt: true,
+      product: {
+        select: {
+          code: true,
+        },
+      },
+    },
+  }).catch(() => [])
+
+  return subscriptions.some((subscription) => {
+    const status = String(subscription.status ?? '').trim().toLowerCase()
+
+    if (status === 'trial') {
+      return Boolean(subscription.trialEndsAt && subscription.trialEndsAt.getTime() > now.getTime())
+    }
+
+    if (status !== 'active' && status !== 'paid') {
+      return false
+    }
+
+    return !subscription.expiresAt || subscription.expiresAt.getTime() > now.getTime()
+  })
 }
 
 export async function ensureNotificationPreferenceTableAvailability(): Promise<boolean> {
