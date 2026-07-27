@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type { Prisma } from '@starway/db/prisma-client'
@@ -12,13 +12,20 @@ import { getSettingsObject } from '@/services/scheduler/common.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
-const docsRoot = resolve(currentDirPath, '../../../../docs')
+const DOC_KEYS = {
+  operatingRules: 'agents/shared/OPERATING-RULES.md',
+  aiContentPrompt: 'agents/ai-content/dna-content-generator-offer.md',
+  aiAssistantPrompt: 'agents/ai-assistant-bot/README.md',
+  aiMentorMethodPrompt: 'agents/ai-mentor/methodology-absystem.md',
+  aiFocusPrompt: 'agents/ai-mentor/focus-course-materials.md',
+} as const
 
-const OPERATING_RULES = readDoc('agents/shared/OPERATING-RULES.md')
-const AI_CONTENT_PROMPT = readDoc('agents/ai-content/dna-content-generator-offer.md')
-const AI_ASSISTANT_PROMPT = readDoc('agents/ai-assistant-bot/README.md')
-const AI_MENTOR_METHOD_PROMPT = readDoc('agents/ai-mentor/methodology-absystem.md')
-const AI_FOCUS_PROMPT = readDoc('agents/ai-mentor/focus-course-materials.md')
+type DocKey = keyof typeof DOC_KEYS
+type LoadedDocs = Record<DocKey, string>
+
+let cachedDocsRoot: string | null = null
+let cachedDocs: LoadedDocs | null = null
+const REPO_ROOT_MARKER = 'pnpm-workspace.yaml'
 
 export const AI_OPERATOR_ACTIONS = {
   POST_DONE: 'aiop:post_done',
@@ -77,8 +84,123 @@ const DEFAULT_STYLE_HINTS = [
   'Роби акцент на дії, рішенні і русі зараз.',
 ] as const
 
-function readDoc(relativePath: string): string {
-  return readFileSync(resolve(docsRoot, relativePath), 'utf8')
+function listAncestorPaths(startPath: string): string[] {
+  const candidates: string[] = []
+  let cursor = startPath
+
+  for (let depth = 0; depth < 10; depth += 1) {
+    candidates.push(cursor)
+    const parent = dirname(cursor)
+    if (parent === cursor) break
+    cursor = parent
+  }
+
+  return candidates
+}
+
+function isRepoRoot(candidate: string): boolean {
+  return existsSync(join(candidate, REPO_ROOT_MARKER))
+}
+
+function listRepoRootCandidates(): string[] {
+  return listAncestorPaths(currentDirPath)
+}
+
+function resolveDocsRoot(): string {
+  if (cachedDocsRoot) {
+    return cachedDocsRoot
+  }
+
+  for (const candidate of listRepoRootCandidates()) {
+    if (!isRepoRoot(candidate)) {
+      continue
+    }
+
+    const docsDir = join(candidate, 'docs')
+    const markerPath = join(docsDir, DOC_KEYS.operatingRules)
+    if (existsSync(docsDir) && existsSync(markerPath)) {
+      cachedDocsRoot = docsDir
+      return docsDir
+    }
+  }
+
+  throw new Error('ai_operator_docs_root_not_found')
+}
+
+function logMissingDocument(documentKey: DocKey, resolvedPath: string, error: unknown): void {
+  console.warn('[ai-operator:document_unavailable]', {
+    feature: 'ai-operator',
+    document: DOC_KEYS[documentKey].split('/').at(-1) ?? DOC_KEYS[documentKey],
+    resolvedPath,
+    code: 'AI_DOCUMENT_NOT_FOUND',
+    error: error instanceof Error ? error.message : String(error),
+  })
+}
+
+function loadDocs(): LoadedDocs {
+  if (cachedDocs) {
+    return cachedDocs
+  }
+
+  let docsRoot: string
+  try {
+    docsRoot = resolveDocsRoot()
+  } catch (error) {
+    const resolvedPath = join(
+      currentDirPath,
+      'docs',
+      DOC_KEYS.operatingRules,
+    )
+    logMissingDocument('operatingRules', resolvedPath, error)
+    throw new Error('ai_operator_document_unavailable:operatingRules')
+  }
+
+  const docs = {} as LoadedDocs
+
+  for (const [documentKey, relativePath] of Object.entries(DOC_KEYS) as Array<[DocKey, string]>) {
+    const resolvedPath = resolve(docsRoot, relativePath)
+    try {
+      docs[documentKey] = readFileSync(resolvedPath, 'utf8')
+    } catch (error) {
+      logMissingDocument(documentKey, resolvedPath, error)
+      throw new Error(`ai_operator_document_unavailable:${documentKey}`)
+    }
+  }
+
+  cachedDocs = docs
+  return docs
+}
+
+function docs(): LoadedDocs {
+  return loadDocs()
+}
+
+function buildAiUnavailableStep(): OperatorStep {
+  return {
+    text: 'AI operator тимчасово недоступний. Перевір документи knowledge pack і спробуй ще раз.',
+    buttons: [],
+  }
+}
+
+async function withAiDocuments<T>(action: () => Promise<T>): Promise<T | OperatorStep> {
+  try {
+    return await action()
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('ai_operator_document_unavailable:')) {
+      return buildAiUnavailableStep()
+    }
+    throw error
+  }
+}
+
+export const __testOnly = {
+  resetAiOperatorDocsCache() {
+    cachedDocsRoot = null
+    cachedDocs = null
+  },
+  listRepoRootCandidates,
+  resolveDocsRoot,
+  docs,
 }
 
 function escapeHtml(value: string): string {
@@ -335,13 +457,14 @@ async function collectStartDayState(userId: string): Promise<StartDayState> {
 }
 
 async function generateContentPost(styleHints: string[]): Promise<string> {
+  const knowledgePack = docs()
   const response = await callProviderSafe(
     'claude',
     [
       'Ти виконуєш роль ai-content як операторський execution agent.',
       'Використовуй тільки knowledge pack нижче.',
-      OPERATING_RULES,
-      AI_CONTENT_PROMPT,
+      knowledgePack.operatingRules,
+      knowledgePack.aiContentPrompt,
     ].join('\n\n'),
     [
       'Завдання: згенеруй 1 Instagram-пост для FOCUS українською.',
@@ -369,15 +492,16 @@ async function generateContentPost(styleHints: string[]): Promise<string> {
 }
 
 async function generateOutreachMessage(): Promise<string> {
+  const knowledgePack = docs()
   const response = await callProviderSafe(
     'claude',
     [
       'Ти виконуєш роль ai-assistant для operator execution flow.',
       'Використовуй тільки knowledge pack нижче.',
-      OPERATING_RULES,
-      AI_ASSISTANT_PROMPT,
-      AI_MENTOR_METHOD_PROMPT,
-      AI_FOCUS_PROMPT,
+      knowledgePack.operatingRules,
+      knowledgePack.aiAssistantPrompt,
+      knowledgePack.aiMentorMethodPrompt,
+      knowledgePack.aiFocusPrompt,
     ].join('\n\n'),
     [
       'Завдання: згенеруй 1 коротке outreach-повідомлення, яке коуч надішле 5 людям.',
@@ -401,15 +525,16 @@ async function generateOutreachMessage(): Promise<string> {
 }
 
 async function generateDialogueAssistMessage(dialogueContext: string): Promise<string> {
+  const knowledgePack = docs()
   const response = await callProviderSafe(
     'claude',
     [
       'Ти виконуєш роль ai-assistant для operator execution flow.',
       'Використовуй тільки knowledge pack нижче.',
-      OPERATING_RULES,
-      AI_ASSISTANT_PROMPT,
-      AI_MENTOR_METHOD_PROMPT,
-      AI_FOCUS_PROMPT,
+      knowledgePack.operatingRules,
+      knowledgePack.aiAssistantPrompt,
+      knowledgePack.aiMentorMethodPrompt,
+      knowledgePack.aiFocusPrompt,
     ].join('\n\n'),
     [
       'Завдання: допоможи коучу дотиснути діалог після outreach.',
@@ -591,134 +716,142 @@ async function loadUserOperatorState(userId: string): Promise<{
 }
 
 export async function runCoachStartDay(userId: string): Promise<OperatorStep> {
-  const { settings, dailyExecution, styleMemory, state } = await loadUserOperatorState(userId)
+  const result = await withAiDocuments(async () => {
+    const { settings, dailyExecution, styleMemory, state } = await loadUserOperatorState(userId)
 
-  if (!dailyExecution.post_done) {
-    if (dailyExecution.editing_post) {
-      return buildEditPromptStep()
+    if (!dailyExecution.post_done) {
+      if (dailyExecution.editing_post) {
+        return buildEditPromptStep()
+      }
+
+      const postContent =
+        dailyExecution.final_post ??
+        dailyExecution.draft_post ??
+        dailyExecution.post_content ??
+        await generateContentPost(styleMemory.styleHints)
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        draft_post: postContent,
+        post_content: postContent,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildPostStep({ state, postContent })
     }
 
-    const postContent =
-      dailyExecution.final_post ??
-      dailyExecution.draft_post ??
-      dailyExecution.post_content ??
-      await generateContentPost(styleMemory.styleHints)
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      draft_post: postContent,
-      post_content: postContent,
+    if (dailyExecution.awaiting_dialogues) {
+      return buildDialoguePromptStep()
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildPostStep({ state, postContent })
-  }
 
-  if (dailyExecution.awaiting_dialogues) {
-    return buildDialoguePromptStep()
-  }
-
-  if (!dailyExecution.outreach_done) {
-    const outreachContent = dailyExecution.outreach_content ?? await generateOutreachMessage()
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      outreach_content: outreachContent,
+    if (!dailyExecution.outreach_done) {
+      const outreachContent = dailyExecution.outreach_content ?? await generateOutreachMessage()
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        outreach_content: outreachContent,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildOutreachStep(outreachContent)
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildOutreachStep(outreachContent)
-  }
 
-  return buildDoneStep(dailyExecution)
+    return buildDoneStep(dailyExecution)
+  })
+
+  return result
 }
 
 export async function runCoachOperatorAction(
   userId: string,
   action: AiOperatorAction,
 ): Promise<OperatorStep> {
-  const { settings, dailyExecution, styleMemory, state } = await loadUserOperatorState(userId)
+  const result = await withAiDocuments(async () => {
+    const { settings, dailyExecution, styleMemory, state } = await loadUserOperatorState(userId)
 
-  if (
-    action === AI_OPERATOR_ACTIONS.POST_EDIT ||
-    action === AI_OPERATOR_ACTIONS.POST_EDIT_AGAIN
-  ) {
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      editing_post: true,
-      awaiting_dialogues: false,
+    if (
+      action === AI_OPERATOR_ACTIONS.POST_EDIT ||
+      action === AI_OPERATOR_ACTIONS.POST_EDIT_AGAIN
+    ) {
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        editing_post: true,
+        awaiting_dialogues: false,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildEditPromptStep()
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildEditPromptStep()
-  }
 
-  if (action === AI_OPERATOR_ACTIONS.POST_REGEN) {
-    const postContent = await generateContentPost(styleMemory.styleHints)
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      editing_post: false,
-      draft_post: postContent,
-      final_post: undefined,
-      post_content: postContent,
-      post_done: false,
-      awaiting_dialogues: false,
+    if (action === AI_OPERATOR_ACTIONS.POST_REGEN) {
+      const postContent = await generateContentPost(styleMemory.styleHints)
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        editing_post: false,
+        draft_post: postContent,
+        final_post: undefined,
+        post_content: postContent,
+        post_done: false,
+        awaiting_dialogues: false,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildPostStep({ state, postContent })
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildPostStep({ state, postContent })
-  }
 
-  if (action === AI_OPERATOR_ACTIONS.POST_PUBLISH) {
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      post_done: true,
-      editing_post: false,
-      outreach_done: false,
-      awaiting_dialogues: false,
+    if (action === AI_OPERATOR_ACTIONS.POST_PUBLISH) {
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        post_done: true,
+        editing_post: false,
+        outreach_done: false,
+        awaiting_dialogues: false,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildPublishConfirmStep()
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildPublishConfirmStep()
-  }
 
-  if (
-    action === AI_OPERATOR_ACTIONS.POST_DONE ||
-    action === AI_OPERATOR_ACTIONS.POST_SKIP
-  ) {
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      post_done: true,
-      editing_post: false,
-      outreach_done: false,
-      awaiting_dialogues: false,
+    if (
+      action === AI_OPERATOR_ACTIONS.POST_DONE ||
+      action === AI_OPERATOR_ACTIONS.POST_SKIP
+    ) {
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        post_done: true,
+        editing_post: false,
+        outreach_done: false,
+        awaiting_dialogues: false,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildPublishConfirmStep()
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildPublishConfirmStep()
-  }
 
-  if (action === AI_OPERATOR_ACTIONS.OUTREACH_DONE) {
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      awaiting_dialogues: false,
+    if (action === AI_OPERATOR_ACTIONS.OUTREACH_DONE) {
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        awaiting_dialogues: false,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildOutreachFollowupStep()
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildOutreachFollowupStep()
-  }
 
-  if (action === AI_OPERATOR_ACTIONS.DIALOGUES_YES) {
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      awaiting_dialogues: true,
+    if (action === AI_OPERATOR_ACTIONS.DIALOGUES_YES) {
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        awaiting_dialogues: true,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildDialoguePromptStep()
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildDialoguePromptStep()
-  }
 
-  if (action === AI_OPERATOR_ACTIONS.DIALOGUES_NO) {
-    const nextState: DailyExecutionState = {
-      ...dailyExecution,
-      awaiting_dialogues: false,
-      dialogue_context: undefined,
+    if (action === AI_OPERATOR_ACTIONS.DIALOGUES_NO) {
+      const nextState: DailyExecutionState = {
+        ...dailyExecution,
+        awaiting_dialogues: false,
+        dialogue_context: undefined,
+      }
+      await saveDailyExecution(userId, settings, nextState)
+      return buildDialogueLoopStep()
     }
-    await saveDailyExecution(userId, settings, nextState)
-    return buildDialogueLoopStep()
-  }
 
-  return buildDoneStep(dailyExecution)
+    return buildDoneStep(dailyExecution)
+  })
+
+  return result
 }
 
 export async function isCoachPostEditingActive(userId: string): Promise<boolean> {
@@ -770,17 +903,21 @@ export async function submitCoachDialogues(
   userId: string,
   dialogueContext: string,
 ): Promise<OperatorStep> {
-  const { settings, dailyExecution, styleMemory } = await loadUserOperatorState(userId)
-  const sanitizedContext = dialogueContext.trim()
-  const assistMessage = await generateDialogueAssistMessage(sanitizedContext)
-  const nextState: DailyExecutionState = {
-    ...dailyExecution,
-    outreach_done: true,
-    awaiting_dialogues: false,
-    dialogue_context: sanitizedContext,
-  }
-  await saveDailyExecution(userId, settings, nextState, styleMemory)
-  return buildDialogueAssistStep(assistMessage)
+  const result = await withAiDocuments(async () => {
+    const { settings, dailyExecution, styleMemory } = await loadUserOperatorState(userId)
+    const sanitizedContext = dialogueContext.trim()
+    const assistMessage = await generateDialogueAssistMessage(sanitizedContext)
+    const nextState: DailyExecutionState = {
+      ...dailyExecution,
+      outreach_done: true,
+      awaiting_dialogues: false,
+      dialogue_context: sanitizedContext,
+    }
+    await saveDailyExecution(userId, settings, nextState, styleMemory)
+    return buildDialogueAssistStep(assistMessage)
+  })
+
+  return result
 }
 
 export async function sendCoachZoomSummary(

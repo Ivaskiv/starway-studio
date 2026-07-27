@@ -7,13 +7,11 @@ import {
   normalizeAbTestProgress,
 } from '../../../core/state-machine/abTestFoundation.js'
 import {
-  FOCUS_ALREADY_ACTIVE_MSG,
   FOCUS_PAYMENT_ISSUE_COACH_MSG,
   FOCUS_PAYMENT_ISSUE_NO_USER_MSG,
   FOCUS_PAYMENT_ISSUE_USER_MSG,
   FOCUS_RESEND_MISSING_USER_MSG,
   FOCUS_RESEND_NO_SUB_MSG,
-  FOCUS_RESEND_SUCCESS_MSG,
 } from '../content/abTest.focus.js'
 import {
   AB_TEST_FOCUS_PAYMENT_CTA_1M,
@@ -537,6 +535,14 @@ export async function renderFocusSubscriptionCard(
 // FOCUS PAYMENT
 // ============================================================================
 
+async function renderCurrentFocusStateMenu(
+  ctx: Context,
+  userId: string,
+): Promise<void> {
+  const { sendStateMenu } = await import('../../../modules/telegram-mentor/handlers/start.menu.js')
+  await sendStateMenu(ctx, userId)
+}
+
 export async function handleFocusPaymentAction(
   ctx: Context,
   payingUserId: string | null,
@@ -554,48 +560,7 @@ export async function handleFocusPaymentAction(
   if (resolvedUserId) {
     const hasActive = await hasActiveFocusSubscription(resolvedUserId)
     if (hasActive) {
-      const inviteUrl = String(
-        process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? ''
-      ).trim()
-      await ctx.telegram.sendMessage(
-        chatId,
-        FOCUS_ALREADY_ACTIVE_MSG(inviteUrl),
-        {
-          parse_mode: 'HTML',
-          reply_markup: {
-            inline_keyboard: [
-              ...(inviteUrl
-                ? [
-                    [
-                      {
-                        text: '🔗 Перейти в канал ФОКУС',
-                        url: inviteUrl,
-                      },
-                    ],
-                  ]
-                : []),
-              [
-                {
-                  text: '🔄 Відновити доступ',
-                  callback_data: 'resend_focus_block12',
-                },
-              ],
-              [
-                {
-                  text: '📋 Моя підписка',
-                  callback_data: 'ab_test:subscription',
-                },
-              ],
-              [
-                {
-                  text: '← Меню',
-                  callback_data: 'ab_test:menu',
-                },
-              ],
-            ],
-          },
-        }
-      )
+      await renderCurrentFocusStateMenu(ctx, resolvedUserId)
       return true
     }
   }
@@ -797,21 +762,10 @@ export async function handleResendFocusBlock12(
     return true
   }
 
-  const { markAbTestPaymentSuccess } = await import('./abTest.markers.js')
-  await markAbTestPaymentSuccess(targetUserId)
-  await resendFocusAccessTelegramMessage(targetUserId)
-  await prisma.productSubscription
-    .updateMany({
-      where: {
-        userId: targetUserId,
-        productId: '68c3e55a-4b70-4680-a26c-15fdd607fd59',
-      },
-      data: { focusWelcomedAt: new Date() },
-    })
-    .catch(() => undefined)
-  const chatId = ctx.chat?.id ?? ctx.from?.id
-  if (chatId) {
-    await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_SUCCESS_MSG)
+  if (hasCanonicalAccess) {
+    await renderCurrentFocusStateMenu(ctx, targetUserId)
+  } else {
+    await resendFocusAccessTelegramMessage(targetUserId)
   }
   await planAck(ctx, 'ctx.answerCbQuery', 'ab_test_resend_sent_ack').catch(
     () => undefined

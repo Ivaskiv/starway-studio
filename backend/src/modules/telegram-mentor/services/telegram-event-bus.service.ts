@@ -16,8 +16,6 @@ import { startLeadMagnet } from '../flows/leadMagnet.flow.js'
 import { dismissNudges } from './nudge.service.js'
 import { getSession } from '../session.js'
 import { trackEvent } from '../../events/service.js'
-import { getTelegramProductContext } from '@/content/telegram.product-context.js'
-import { openAppKeyboard } from '../keyboards.js'
 import { CANONICAL_CTA_REGISTRY, resolveCanonicalCtaId, resolveCanonicalMessageKeyByCtaId } from '../../../core/state-machine/ctaFoundation.js'
 import { buildRequestFingerprint } from '../../../core/state-machine/securityFoundation.js'
 import { claimRuntimeEventReplay, buildRuntimeTelemetry, withRuntimeAdvisoryLock } from '../../../core/runtime/runtimeIdempotency.js'
@@ -268,14 +266,13 @@ async function handleRoomAction(ctx: Context, userId: string | null, action: str
   }
 
   if (action === 'open_focus_portal') {
-    const focusContext = getTelegramProductContext('focus')
-    await planMessage(
-      ctx,
-      'ctx.reply',
-      'room_open_focus_portal',
-      focusContext.copy.welcome.join('\n'),
-      openAppKeyboard(focusContext.route.miniApp ?? '/miniapp', focusContext.cta.openRoom).reply_markup,
-    )
+    if (userId) {
+      const { sendStateMenu } = await import('../handlers/start.menu.js')
+      await sendStateMenu(ctx, userId)
+      return true
+    }
+
+    await handleStart(ctx)
     return true
   }
 

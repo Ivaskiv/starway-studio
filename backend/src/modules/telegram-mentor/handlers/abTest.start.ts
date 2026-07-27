@@ -9,13 +9,14 @@ import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession
 import { prisma } from '@/db/client.js'
 import { getUserAccessState } from '@/modules/subscriptions/payments/focus.access.js'
 import { getUpcomingZoom } from '@/modules/zoom/service.js'
-import { getAbTestResultDefinition, type AbTestResultKey } from '@/products/ab-system/content/abTest.results.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
 const MINI_APP_ENTRY_INTENT = {
   BOOKING: 'booking',
 } as const
+const JOIN_WINDOW_BEFORE_START_MS = 5 * 60 * 1000
+const JOIN_WINDOW_AFTER_START_MS = 2 * 60 * 60 * 1000
 
 export type StartMessagePayload = {
   text: string
@@ -26,9 +27,16 @@ export type StartMessagePayload = {
   >>
 }
 
+type FocusHomeState =
+  | 'NOT_BOOKED'
+  | 'BOOKED'
+  | 'JOIN_WINDOW'
+  | 'NO_SESSION'
+
 function withKeyboard(payload: StartMessagePayload) {
   return {
     text: payload.text,
+    parseMode: 'HTML' as const,
     reply_markup: {
       inline_keyboard: withDevTestPaymentButton(payload.buttons),
     },
@@ -39,6 +47,26 @@ function resolveZoomBookingWebAppUrl(): string {
   const configured = String(process.env.WEBAPP_URL ?? '').trim()
   const base = configured || resolveTelegramWebappBaseUrl()
   return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar?intent=${MINI_APP_ENTRY_INTENT.BOOKING}`
+}
+
+function resolveZoomCalendarWebAppUrl(): string {
+  const configured = String(process.env.WEBAPP_URL ?? '').trim()
+  const base = configured || resolveTelegramWebappBaseUrl()
+  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar`
+}
+
+function extractZoomLink(requests: unknown): string | null {
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object') {
+    return null
+  }
+
+  const zoomLink = (requests as Record<string, unknown>).zoomLink
+  return typeof zoomLink === 'string' && zoomLink.trim() ? zoomLink.trim() : null
+}
+
+function isJoinWindow(scheduledAt: Date, now = new Date()): boolean {
+  const diffMs = scheduledAt.getTime() - now.getTime()
+  return diffMs <= JOIN_WINDOW_BEFORE_START_MS && diffMs >= -JOIN_WINDOW_AFTER_START_MS
 }
 
 export function welcomeMessage(): ReturnType<typeof withKeyboard> {
@@ -111,7 +139,7 @@ export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
     text: 'Доступ до ФОКУС активний. Обери наступну дію в меню.',
     buttons: [
       [{ text: 'ABSystem AI', callback_data: 'focus:ai' }],
-      [{ text: '🎯 Мій результат', callback_data: 'ab_test:show_result' }],
+      [{ text: 'Переглянути результат', callback_data: 'ab_test:show_result' }],
     ],
   })
 }
@@ -126,121 +154,131 @@ export function magicLinkReadyMessage(link: string): ReturnType<typeof withKeybo
   })
 }
 
-function formatDate(value: Date): string {
-  return value.toLocaleDateString('uk-UA')
-}
-
-function formatZoomDate(value: Date): string {
-  return value.toLocaleString('uk-UA', {
-    timeZone: 'Europe/Kyiv',
-    day: 'numeric',
-    month: 'long',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function resolveDaysUntilExpiry(currentPeriodEnd: Date | null): number | null {
-  if (!currentPeriodEnd) return null
-  return Math.max(0, Math.ceil((currentPeriodEnd.getTime() - Date.now()) / 86400000))
-}
-
-export async function buildFocusActionButtons(userId: string): Promise<StartMessagePayload['buttons']> {
+export async function buildFocusActionButtons(
+  userId: string,
+  options?: { hasResult?: boolean },
+): Promise<StartMessagePayload['buttons']> {
+  void options
   const accessState = await getUserAccessState(userId)
-
   const hasActiveSubscription = accessState.isActive
-  const daysUntilExpiry = resolveDaysUntilExpiry(accessState.expiresAt)
-  const shouldShowRenewalButtons = !hasActiveSubscription || (daysUntilExpiry !== null && daysUntilExpiry <= 7)
-
-  const buttons: StartMessagePayload['buttons'] = [
-    hasActiveSubscription
-      ? [{ text: '📅 Наступний Zoom', callback_data: 'focus:next_zoom' }]
-      : [{ text: '📅 Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
-  ]
-
-  if (shouldShowRenewalButtons) {
+  if (!hasActiveSubscription) {
     const [monthlyCheckout, quarterlyCheckout] = await Promise.all([
       buildEcosystemPaymentCheckoutSession('focus', '1month', userId, 'telegram'),
       buildEcosystemPaymentCheckoutSession('focus', '3month', userId, 'telegram'),
     ])
-    const monthlyLabel = hasActiveSubscription
-      ? '🔄 Продовжити 1 місяць — 780 грн'
-      : '🟢 Приєднатися на 1 місяць — 780 грн'
-    const quarterlyLabel = hasActiveSubscription
-      ? '🔄 Продовжити 3 місяці — 1990 грн'
-      : '🟢 Приєднатися на 3 місяці — 1990 грн'
 
-    buttons.push([{ text: monthlyLabel, url: monthlyCheckout.checkoutUrl }])
-    buttons.push([{ text: quarterlyLabel, url: quarterlyCheckout.checkoutUrl }])
+    return [
+      [{ text: 'Продовжити підписку на 1 місяць', url: monthlyCheckout.checkoutUrl }],
+      [{ text: 'Продовжити підписку на 3 місяці', url: quarterlyCheckout.checkoutUrl }],
+    ]
   }
 
-  return buttons
+  const upcomingZoom = await getUpcomingZoom()
+  if (!upcomingZoom) {
+    return []
+  }
+
+  const attendee = await prisma.zoomSessionAttendee.findUnique({
+    where: {
+      sessionId_userId: {
+        sessionId: upcomingZoom.id,
+        userId,
+      },
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  const booked = Boolean(attendee)
+  const joinable = booked && isJoinWindow(upcomingZoom.scheduledAt)
+  const zoomLink = extractZoomLink(upcomingZoom.requests)
+
+  if (joinable) {
+    return [
+      [zoomLink
+        ? { text: 'Приєднатися', url: zoomLink }
+        : { text: 'Приєднатися', web_app: { url: resolveZoomCalendarWebAppUrl() } }],
+    ]
+  }
+
+  if (booked) {
+    return [
+      [{ text: 'Переглянути запис', web_app: { url: resolveZoomCalendarWebAppUrl() } }],
+    ]
+  }
+
+  return [
+    [{ text: 'Записатися', web_app: { url: resolveZoomBookingWebAppUrl() } }],
+  ]
+}
+
+async function resolveFocusHomeState(userId: string): Promise<FocusHomeState> {
+  const accessState = await getUserAccessState(userId)
+  if (!accessState.isActive) {
+    return 'NO_SESSION'
+  }
+
+  const upcomingZoom = await getUpcomingZoom()
+  if (!upcomingZoom) {
+    return 'NO_SESSION'
+  }
+
+  const attendee = await prisma.zoomSessionAttendee.findUnique({
+    where: {
+      sessionId_userId: {
+        sessionId: upcomingZoom.id,
+        userId,
+      },
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  if (!attendee) {
+    return 'NOT_BOOKED'
+  }
+
+  return isJoinWindow(upcomingZoom.scheduledAt) ? 'JOIN_WINDOW' : 'BOOKED'
 }
 
 export async function zoomSection(userId: string): Promise<StartMessagePayload> {
-  const [upcomingZoom, attendedPracticesCount, bookedPracticesCount, accessState, user] = await Promise.all([
-    getUpcomingZoom(),
-    prisma.zoomSessionAttendee.count({
-      where: { userId, attended: true },
-    }),
-    prisma.zoomSessionAttendee.count({
-      where: { userId },
-    }),
-    getUserAccessState(userId),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { testResultType: true },
-    }),
-  ])
-
-  const resultTitle = user?.testResultType
-    ? getAbTestResultDefinition(user.testResultType as AbTestResultKey).title
-    : 'Результат ще не визначено'
-  const nextZoomValue = upcomingZoom?.scheduledAt
-    ? formatZoomDate(upcomingZoom.scheduledAt)
-    : 'Щопонеділка • 19:00 (Europe/Kyiv)'
-  const practiceValue = `${attendedPracticesCount} із ${bookedPracticesCount}`
-  const daysUntilExpiry = resolveDaysUntilExpiry(accessState.expiresAt)
-  const hasActiveSubscription = accessState.isActive
-
-  const lines = [
-    `🎯 Твій результат — <b>${resultTitle}</b>`,
-    'Ти зараз у програмі ФОКУС.',
-  ]
-
-  if (!hasActiveSubscription) {
-    lines.push('Твій результат вже збережений, а наступний крок — регулярна практика.')
-  }
-
-  lines.push(
-    '',
-    '📅 Наступний Zoom',
-    `<b>${nextZoomValue}</b>`,
-    '',
-    '📊 Практики',
-    practiceValue,
-    '',
-    '💳 Підписка',
-  )
-
-  if (!hasActiveSubscription) {
-    lines.push('<b>Неактивна</b>')
-  } else if (accessState.expiresAt) {
-    lines.push(`<b>Активна до ${formatDate(accessState.expiresAt)}</b>`)
-    if (daysUntilExpiry !== null && daysUntilExpiry <= 7) {
-      lines.push(`Підписка закінчується через ${daysUntilExpiry} днів`)
-    }
-  } else {
-    lines.push('<b>Активна</b>')
-  }
-
+  const state = await resolveFocusHomeState(userId)
   const buttons = await buildFocusActionButtons(userId)
-  buttons.push([{ text: '🎯 Переглянути результат', callback_data: 'ab_test:show_result' }])
-  buttons.push([{ text: '📚 Меню ФОКУС', callback_data: 'focus:menu' }])
 
-  return {
-    text: lines.join('\n'),
-    buttons,
+  switch (state) {
+    case 'NOT_BOOKED':
+      return {
+        text: [
+          'Обери найближчу Zoom-практику ФОКУСУ.',
+          '',
+          'Під час запису напиши ситуацію, яку хочеш розібрати.',
+        ].join('\n'),
+        buttons: buttons.length > 0
+          ? [[{ text: 'Обрати Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }]]
+          : [],
+      }
+    case 'BOOKED':
+      return {
+        text: [
+          'Ти записана на Zoom-практику ФОКУСУ.',
+          '',
+          'Тут можна переглянути дату, час і питання для розбору.',
+        ].join('\n'),
+        buttons,
+      }
+    case 'JOIN_WINDOW':
+      return {
+        text: 'Zoom-практика ФОКУСУ починається зараз.',
+        buttons,
+      }
+    case 'NO_SESSION':
+    default:
+      return {
+        text: 'Наступну Zoom-практику ще не додано.',
+        buttons,
+      }
   }
 }
 
@@ -262,24 +300,24 @@ export function postZoom1Message(userId: string): ReturnType<typeof withKeyboard
   return withKeyboard({
     text: [
       `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_TITLE}`,
-      '',
+      
       absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT,
-      '',
+      
       '────────────────────────────────',
-      '',
+      
       '🌿 <b>Практика завершилась.</b>',
-      '',
+      
       'Щоб цей крок не загубився,',
       'зафіксуй для себе лише дві речі.',
-      '',
+      
       '<b>1. Який інсайт був найціннішим?</b>',
-      '',
+      
       '<b>2. Який один крок зробиш до наступної практики?</b>',
     ].join('\n'),
     buttons: [
-      [{ text: '💭 Залишити інсайт', callback_data: 'post_zoom:leave_insight' }],
-      [{ text: '🚀 Продовжити з ABSystem', callback_data: 'post_zoom:absystem_cta' }],
-      [{ text: '📅 Наступний Zoom', callback_data: 'focus:next_zoom' }],
+      [{ text: 'Залишити інсайт', callback_data: 'post_zoom:leave_insight' }],
+      [{ text: 'Продовжити з ABSystem', callback_data: 'post_zoom:absystem_cta' }],
+      [{ text: 'Календар', callback_data: 'focus:next_zoom' }],
     ],
   })
 }
@@ -288,20 +326,20 @@ export function postZoomAbsystemCtaMessage(userId: string): ReturnType<typeof wi
   return withKeyboard({
     text: [
       '🚀 <b>Найважче — не зробити один крок.</b>',
-      '',
+      
       'Найважче —',
       'перетворити його',
       'на власну систему.',
-      '',
+      
       'Саме для цього існує ABSystem.',
-      '',
+      
       'Він допомагає між Zoom-практиками:',
-      '',
+      
       '• тримати фокус;',
       '• фіксувати рішення;',
       '• бачити прогрес;',
       '• працювати регулярно.',
-      '',
+      
       '<b>Мета —',
       'досягати бажаних результатів',
       'завдяки системності,',
@@ -310,8 +348,8 @@ export function postZoomAbsystemCtaMessage(userId: string): ReturnType<typeof wi
       'і маленьким щоденним діям.</b>',
     ].join('\n'),
     buttons: [
-      [{ text: '🟢 Активувати ABSystem', url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
-      [{ text: '📊 Дізнатися більше', callback_data: 'focus:ai' }],
+      [{ text: 'Активувати ABSystem', url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
+      [{ text: 'Дізнатися більше', callback_data: 'focus:ai' }],
     ],
   })
 }
@@ -321,7 +359,7 @@ export function upsellMessage(userId: string): ReturnType<typeof withKeyboard> {
     text: `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD_TITLE}\n\n${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD}`,
     buttons: [
       [{ text: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD_CTA, url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
-      [{ text: 'Наступний Zoom', callback_data: 'focus:next_zoom' }],
+      [{ text: 'Календар', callback_data: 'focus:next_zoom' }],
     ],
   })
 }
