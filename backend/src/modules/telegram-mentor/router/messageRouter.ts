@@ -277,10 +277,14 @@ async function handleActiveQuestionScenario(ctx: Context, chatId: string, text: 
   return false
 }
 
-export async function routeTelegramTextMessage(ctx: Context, text: string): Promise<boolean> {
+export async function routeTelegramTextMessage(
+  ctx: Context,
+  text: string,
+  forcedRoute?: TelegramTextRoute,
+): Promise<boolean> {
   const chatId = String(ctx.chat?.id ?? '')
   const userId = (ctx.state as { userId?: string | null }).userId ?? null
-  const route = resolveTelegramTextRoute(text)
+  const route = forcedRoute ?? resolveTelegramTextRoute(text)
 
   if (userId && chatId && await handlePendingNameScenario(ctx, userId, chatId, text)) {
     return true

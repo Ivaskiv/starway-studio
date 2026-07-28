@@ -278,6 +278,7 @@ export async function resolveFocusShortcutCallback(
   const { handleStatus } = await import('../../../modules/telegram-mentor/handlers/status.js')
   const { handleAIMentor } = await import('../../../modules/telegram-mentor/handlers/aiMentor.js')
   const { sendStateMenu } = await import('../../../modules/telegram-mentor/handlers/start.menu.js')
+  const { handleStart } = await import('../../../modules/telegram-mentor/handlers/start.js')
   const { deactivateCallbackMarkup } = await import('./abTest.callback.js')
 
   if (action === 'open_focus_info') {
@@ -294,7 +295,7 @@ export async function resolveFocusShortcutCallback(
   if (action === 'focus:menu') {
     await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
-    await sendStateMenu(ctx, userId)
+    await handleStart(ctx as never)
     return true
   }
 
@@ -439,11 +440,11 @@ export async function renderFocusSubscriptionCard(
         inline_keyboard: [
           [
             {
-              text: 'Оплатити ФОКУС',
+              text: 'ОПЛАТИТИ ФОКУС',
               callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
             },
           ],
-          [{ text: '← Меню', callback_data: 'ab_test:menu' }],
+          [{ text: '← МЕНЮ', callback_data: 'ab_test:menu' }],
         ],
       },
       'HTML'
@@ -516,15 +517,15 @@ export async function renderFocusSubscriptionCard(
     {
       inline_keyboard: [
         ...(inviteUrl
-          ? [[{ text: '🔗 Посилання на канал', url: inviteUrl }]]
+          ? [[{ text: '🔗 ПОСИЛАННЯ НА КАНАЛ', url: inviteUrl }]]
           : []),
         [
           {
-            text: '🔄 Відновити доступ',
+            text: '🔄 ВІДНОВИТИ ДОСТУП',
             callback_data: 'resend_focus_block12',
           },
         ],
-        [{ text: '← Меню', callback_data: 'ab_test:menu' }],
+        [{ text: '← МЕНЮ', callback_data: 'ab_test:menu' }],
       ],
     },
     'HTML'
@@ -630,7 +631,7 @@ export async function handleFocusPaymentAction(
         'telegram'
       )
       testButtonRow = [
-        { text: '🧪 Тест 1 грн', url: testSession.checkoutUrl },
+        { text: '🧪 ТЕСТ 1 ГРН', url: testSession.checkoutUrl },
       ]
     } catch (error) {
       console.error('[TEST_PAYMENT] failed_to_build_checkout', error)
@@ -650,7 +651,7 @@ export async function handleFocusPaymentAction(
             ...testButtonRow.map((row) => [row]),
             [
               {
-                text: '⚠️ Проблема з оплатою',
+                text: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ',
                 callback_data: 'focus:payment_issue',
               },
             ],

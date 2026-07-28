@@ -17,27 +17,27 @@ import {
 export const MAIN_MENU = {
   items: [
     {
-      label: 'Пройти тест',
+      label: 'ПРОЙТИ ТЕСТ',
       callbackData: 'ab_test:intro',
       description: 'Запустити тест-воронку',
     },
     {
-      label: 'Дізнатись про ФОКУС',
+      label: 'ДІЗНАТИСЬ ПРО ФОКУС',
       callbackData: 'ab_test:focus_info',
       description: 'Показати опис ФОКУСУ',
     },
     {
-      label: 'Оплатити ФОКУС',
+      label: 'ОПЛАТИТИ ФОКУС',
       callbackData: 'open_focus_payment',
       description: 'Показати кнопки оплати',
     },
     {
-      label: 'Я вже оплатила',
+      label: 'Я ВЖЕ ОПЛАТИЛА',
       callbackData: 'check_payment_status',
       description: 'Перевірити статус і дати посилання',
     },
     {
-      label: 'Задати питання',
+      label: 'ЗАДАТИ ПИТАННЯ',
       callbackData: 'open_faq',
       description: 'FAQ або зв\'язок з адміном',
     },

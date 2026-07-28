@@ -22,6 +22,9 @@ type SummaryButton = TelegramProductRoom['buttons'][number][number]
 
 type SubscriptionLike = {
   productId: string | null
+  product: {
+    code: string
+  } | null
   status: string
   trialEndsAt: Date | null
   currentPeriodEnd: Date | null
@@ -158,6 +161,33 @@ function latestSubscriptionByFilter(
   return subscriptions.find(predicate) ?? null
 }
 
+function safeGetMediaTitle(mediaId: string | null | undefined): string | null {
+  if (!mediaId) return null
+  try {
+    return getMediaById(mediaId)?.title ?? null
+  } catch (error) {
+    console.warn('[TELEGRAM_PRODUCT_SUMMARY] stankey_catalog_unavailable', {
+      operation: 'getMediaById',
+      mediaId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
+function safeGetNextLessonTitle(mediaId: string | null | undefined): string | null {
+  try {
+    return getNextLesson(mediaId ?? null)?.title ?? null
+  } catch (error) {
+    console.warn('[TELEGRAM_PRODUCT_SUMMARY] stankey_catalog_unavailable', {
+      operation: 'getNextLesson',
+      mediaId: mediaId ?? null,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
 function hasSubscriptionOwnership(subscription: SubscriptionLike | null | undefined): boolean {
   return Boolean(subscription)
 }
@@ -187,65 +217,64 @@ function buildButtonRows(productKey: ProductKey, state: ProductState, urls: { op
     case 'STANKEY':
       if (state === 'active' || state === 'trial' || state === 'onboarding-started') {
         return [[
-          ...(urls.openUrl ? [{ text: nextLessonTitle ? `▶️ ${nextLessonTitle}` : '▶️ Продовжити практику', web_app: { url: urls.openUrl } }] : []),
-          ...(urls.progressUrl ? [{ text: '📊 Мій огляд', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.openUrl ? [{ text: nextLessonTitle ? `▶️ ${String(nextLessonTitle).toUpperCase()}` : '▶️ ПРОДОВЖИТИ ПРАКТИКУ', web_app: { url: urls.openUrl } }] : []),
+          ...(urls.progressUrl ? [{ text: '📊 МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
         ]]
       }
 
       if (state === 'paused') {
         return withDevTestPaymentButton([[
-          ...(urls.paymentUrl ? [{ text: '🚀 Відновити доступ', url: urls.paymentUrl }] : []),
-          ...(urls.progressUrl ? [{ text: '📊 Мій огляд', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.paymentUrl ? [{ text: '🚀 ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
+          ...(urls.progressUrl ? [{ text: '📊 МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
         ]])
       }
 
       return withDevTestPaymentButton([[
-        ...(urls.paymentUrl ? [{ text: '💳 Активувати', url: urls.paymentUrl }] : []),
+        ...(urls.paymentUrl ? [{ text: '💳 АКТИВУВАТИ', url: urls.paymentUrl }] : []),
       ]])
     case 'ABsystem':
       if (state === 'active' || state === 'trial' || state === 'onboarding-started') {
         return [[
-          ...(urls.openUrl ? [{ text: '💬 Відкрити ABsystem', web_app: { url: urls.openUrl } }] : []),
-          ...(urls.progressUrl ? [{ text: '📈 Моя статистика', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.openUrl ? [{ text: '💬 ВІДКРИТИ ABSYSTEM', web_app: { url: urls.openUrl } }] : []),
+          ...(urls.progressUrl ? [{ text: '📈 МОЯ СТАТИСТИКА', web_app: { url: urls.progressUrl } }] : []),
         ]]
       }
 
       if (state === 'paused') {
         return withDevTestPaymentButton([[
-          ...(urls.paymentUrl ? [{ text: '🔄 Відновити доступ', url: urls.paymentUrl }] : []),
-          ...(urls.progressUrl ? [{ text: '📈 Моя статистика', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.paymentUrl ? [{ text: '🔄 ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
+          ...(urls.progressUrl ? [{ text: '📈 МОЯ СТАТИСТИКА', web_app: { url: urls.progressUrl } }] : []),
         ]])
       }
 
       return withDevTestPaymentButton([[
-        ...(urls.paymentUrl ? [{ text: '💳 Активувати', url: urls.paymentUrl }] : []),
+        ...(urls.paymentUrl ? [{ text: '💳 АКТИВУВАТИ', url: urls.paymentUrl }] : []),
       ]])
     case 'FOCUS':
     default:
       if (state === 'active' || state === 'trial' || state === 'onboarding-started') {
         return [[
-          ...(urls.openUrl ? [{ text: '💬 Відкрити FOCUS', callback_data: 'open_focus_portal' }] : []),
-          ...(urls.progressUrl ? [{ text: '📈 Мій огляд', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.openUrl ? [{ text: '💬 ВІДКРИТИ FOCUS', callback_data: 'open_focus_portal' }] : []),
+          ...(urls.progressUrl ? [{ text: '📈 МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
         ]]
       }
 
       if (state === 'paused') {
         return withDevTestPaymentButton([[
-          ...(urls.paymentUrl ? [{ text: '🔄 Відновити доступ', url: urls.paymentUrl }] : []),
-          ...(urls.progressUrl ? [{ text: '📈 Мій огляд', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.paymentUrl ? [{ text: '🔄 ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
+          ...(urls.progressUrl ? [{ text: '📈 МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
         ]])
       }
 
       return withDevTestPaymentButton([[
-        ...(urls.paymentUrl ? [{ text: '💳 Активувати', url: urls.paymentUrl }] : []),
+        ...(urls.paymentUrl ? [{ text: '💳 АКТИВУВАТИ', url: urls.paymentUrl }] : []),
       ]])
   }
 }
 
 function buildStankeyLines(state: ProductState, progress: Awaited<ReturnType<typeof resolveStankeyProgressSnapshot>>, stageLabel: string | null): string[] {
-  const lessonTitle = progress.currentLesson ? getMediaById(progress.currentLesson)?.title ?? null : null
-  const nextLesson = getNextLesson(progress.currentLesson)
-  const nextLessonTitle = nextLesson?.title ?? lessonTitle ?? null
+  const lessonTitle = safeGetMediaTitle(progress.currentLesson)
+  const nextLessonTitle = safeGetNextLessonTitle(progress.currentLesson) ?? lessonTitle ?? null
 
   const lines: string[] = ['Практикум', statusIcon(state)]
 
@@ -327,7 +356,7 @@ function buildProductBlock(params: {
   }
 
   const nextLessonTitle = params.key === 'STANKEY'
-    ? getNextLesson(params.progress.currentLesson)?.title ?? null
+    ? safeGetNextLessonTitle(params.progress.currentLesson)
     : null
   const room = resolveTelegramProductRoom({
     productId: params.key === 'STANKEY'
@@ -427,6 +456,11 @@ export async function resolveTelegramProductSummary(userId: string): Promise<Pro
       orderBy: [{ createdAt: 'desc' }],
       select: {
         productId: true,
+        product: {
+          select: {
+            code: true,
+          },
+        },
         status: true,
         trialEndsAt: true,
         currentPeriodEnd: true,
@@ -448,8 +482,14 @@ export async function resolveTelegramProductSummary(userId: string): Promise<Pro
   ])
 
   const coreSubscription = latestSubscriptionByFilter(subscriptions, (item) => item.productId == null)
-  const stankeySubscription = latestSubscriptionByFilter(subscriptions, (item) => item.productId === stankeyManifest.productId)
-  const focusSubscription = latestSubscriptionByFilter(subscriptions, (item) => item.productId === focusManifest.slug)
+  const stankeySubscription = latestSubscriptionByFilter(
+    subscriptions,
+    (item) => item.product?.code?.toLowerCase() === stankeyManifest.productId.toLowerCase(),
+  )
+  const focusSubscription = latestSubscriptionByFilter(
+    subscriptions,
+    (item) => item.product?.code?.toLowerCase() === focusManifest.slug.toLowerCase(),
+  )
   const lifecycleSnapshot = resolveCentralLifecycleSnapshot({
     userLifecycle: lifecycle,
     accessSource: lifecycle.state === 'trial' ? 'trial' : lifecycle.state === 'paid' ? 'payment' : lifecycle.state === 'expired' ? 'restore' : 'unknown',

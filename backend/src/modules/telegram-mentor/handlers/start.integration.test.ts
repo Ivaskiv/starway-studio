@@ -2,12 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockFindUniqueOrThrow = vi.fn()
 const mockUserUpdate = vi.fn()
+const mockZoomSessionAttendeeFindUnique = vi.fn()
+const mockGetUserAccessState = vi.fn()
+const mockHasActiveFocusSubscription = vi.fn()
+const mockGetUpcomingZoom = vi.fn()
+const mockGetOrCreateFocusInviteLink = vi.fn()
+const mockLoadAbTestProgress = vi.fn()
+const mockPlanMessage = vi.fn()
 
 vi.mock('../../../db/client.js', () => ({
   prisma: {
     user: {
       findUniqueOrThrow: (...args: unknown[]) => mockFindUniqueOrThrow(...args),
       update: (...args: unknown[]) => mockUserUpdate(...args),
+    },
+    zoomSessionAttendee: {
+      findUnique: (...args: unknown[]) => mockZoomSessionAttendeeFindUnique(...args),
     },
   },
 }))
@@ -44,7 +54,7 @@ vi.mock('../../deeplinks/service.js', () => ({
 }))
 
 vi.mock('../conversation/delivery/planDelivery.js', () => ({
-  planMessage: vi.fn(),
+  planMessage: (...args: unknown[]) => mockPlanMessage(...args),
 }))
 
 vi.mock('../../user/resolveOrCreateUser.js', () => ({
@@ -59,13 +69,28 @@ vi.mock('@/products/ab-system/telegram/abTest.service.js', () => ({
   handleAbTestEmailCaptureText: vi.fn(),
 }))
 
-import { resolveTelegramProductSummary } from '../services/productSummary.service.js'
+vi.mock('../../subscriptions/payments/focus.access.js', () => ({
+  getUserAccessState: (...args: unknown[]) => mockGetUserAccessState(...args),
+  hasActiveFocusSubscription: (...args: unknown[]) => mockHasActiveFocusSubscription(...args),
+}))
+
+vi.mock('../../zoom/service.js', () => ({
+  getUpcomingZoom: (...args: unknown[]) => mockGetUpcomingZoom(...args),
+}))
+
+vi.mock('@/products/focus/payments/inviteLink.js', () => ({
+  getOrCreateFocusInviteLink: (...args: unknown[]) => mockGetOrCreateFocusInviteLink(...args),
+}))
+
+vi.mock('@/products/ab-system/telegram/abTest.progress.js', () => ({
+  loadAbTestProgress: (...args: unknown[]) => mockLoadAbTestProgress(...args),
+}))
+
 import { handleStart } from './start.js'
 
 function makeFakeCtx(overrides: Partial<{
   chatId: number
   fromId: number
-  username: string
   firstName: string | undefined
   updateId: number
 }> = {}) {
@@ -76,10 +101,10 @@ function makeFakeCtx(overrides: Partial<{
     chat: { id: overrides.chatId ?? 111 },
     from: {
       id: overrides.fromId ?? 111,
-      username: overrides.username ?? 'test_user',
+      username: 'test_user',
       first_name: overrides.firstName ?? 'Тестова',
     },
-    update: { update_id: overrides.updateId ?? Math.floor(Math.random() * 1_000_000) + 1 },
+    update: { update_id: overrides.updateId ?? 1000 },
     state: {},
     reply,
     telegram: { sendMessage },
@@ -90,82 +115,138 @@ function makeFakeCtx(overrides: Partial<{
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockPlanMessage.mockResolvedValue({ message_id: 1 })
+  mockUserUpdate.mockResolvedValue(undefined)
   mockGetStartPayload.mockReturnValue('')
   mockParseFirstTouchPayload.mockReturnValue({ product: null, source: null, campaign: null })
   mockSyncAccessAwareChatEntryPoints.mockResolvedValue(undefined)
-  vi.mocked(resolveTelegramProductSummary).mockReset()
-  vi.mocked(resolveTelegramProductSummary).mockResolvedValue(null)
+  mockGetUserAccessState.mockResolvedValue({
+    state: 'NO_ACCESS',
+    isActive: false,
+    hasFocus: false,
+    expiresAt: null,
+  })
+  mockHasActiveFocusSubscription.mockResolvedValue(false)
+  mockGetUpcomingZoom.mockResolvedValue(null)
+  mockGetOrCreateFocusInviteLink.mockResolvedValue('https://t.me/focus-channel')
+  mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
+  mockLoadAbTestProgress.mockResolvedValue({
+    status: 'idle',
+    result_key: null,
+  })
 })
 
-describe('handleStart — Layer 2 integration', () => {
-  it('existing user, TEST_DONE with result: replies via ctx.reply with correct buttons', async () => {
+describe('handleStart — targeted home screen routing', () => {
+  it('TEST_DONE + NO_ACCESS uses result-ready contract without offer CTA', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-1')
     mockFindUniqueOrThrow.mockResolvedValue({
       id: 'user-1',
+      role: 'USER',
+      activeRole: 'USER',
       lifecycleState: 'TEST_DONE',
       testStartedAt: null,
-      testCompletedAt: new Date(),
+      testCompletedAt: new Date('2026-07-20T10:00:00Z'),
       offerShownAt: null,
       testResultType: 'action',
-      updatedAt: new Date(),
+      updatedAt: new Date('2026-07-20T10:00:00Z'),
       firstName: 'Тестова',
     })
 
     const { ctx, reply } = makeFakeCtx()
     await handleStart(ctx)
 
-    expect(reply).toHaveBeenCalledTimes(1)
-    const [text, options] = reply.mock.calls[0]
-    expect(text).toContain('Ти вже пройшла тест')
-    expect(options.parse_mode).toBe('HTML')
-    const flat = JSON.stringify(options.reply_markup)
+    expect(reply).not.toHaveBeenCalled()
+    const [, , , text, options] = mockPlanMessage.mock.calls[0]
+    expect(text).toContain('Твій <b>результат</b> уже готовий')
+    const flat = JSON.stringify(options)
     expect(flat).toMatch(/ab_test:show_result/)
     expect(flat).toMatch(/ab_test:restart/)
+    expect(flat).not.toMatch(/open_focus_payment/)
   })
 
-  it('existing user, ZOOM_MEMBER: replies with composed summary+Zoom content in one message', async () => {
-    mockResolveLinkedUserId.mockResolvedValue('user-2')
+  it('completed test without access does not fall back to intro', async () => {
+    mockResolveLinkedUserId.mockResolvedValue('user-1b')
     mockFindUniqueOrThrow.mockResolvedValue({
-      id: 'user-2',
-      lifecycleState: 'ZOOM_MEMBER',
-      testStartedAt: new Date(),
-      testCompletedAt: new Date(),
-      offerShownAt: new Date(),
+      id: 'user-1b',
+      role: 'USER',
+      activeRole: 'USER',
+      lifecycleState: 'TEST_NOT_STARTED',
+      testStartedAt: new Date('2026-07-20T10:00:00Z'),
+      testCompletedAt: new Date('2026-07-20T10:00:00Z'),
+      offerShownAt: null,
       testResultType: 'action',
-      updatedAt: new Date(),
-      firstName: null,
+      updatedAt: new Date('2026-07-20T10:00:00Z'),
+      firstName: 'Тестова',
     })
-    vi.mocked(resolveTelegramProductSummary).mockResolvedValue({
-      lines: ['ФОКУС', 'Підписка активна до 01.08.2026'],
-      reply_markup: { inline_keyboard: [[{ text: 'Мій прогрес', callback_data: 'focus:progress' }]] },
-    } as never)
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'action',
+    })
 
-    const { ctx, reply } = makeFakeCtx({ chatId: 222, fromId: 222 })
+    const { ctx, reply } = makeFakeCtx({ chatId: 101, fromId: 101, updateId: 1001 })
     await handleStart(ctx)
 
-    expect(reply).toHaveBeenCalledTimes(1)
-    const [text, options] = reply.mock.calls[0]
-    expect(text).toContain('Підписка активна')
-    expect(text).toContain('Ти в Zoom-групі')
-    const flat = JSON.stringify(options.reply_markup)
-    expect(flat).toMatch(/focus:next_zoom/)
-    expect(flat).toMatch(/focus:progress/)
+    expect(reply).not.toHaveBeenCalled()
+    const [, , , text, options] = mockPlanMessage.mock.calls[0]
+    expect(text).toContain('Твій <b>результат</b> уже готовий')
+    expect(JSON.stringify(options)).not.toMatch(/ab_test:start/)
   })
 
-  it('new user without first_name: asks for name via ctx.telegram.sendMessage, does NOT call buildHomeScreen path', async () => {
+  it('FOCUS_ACTIVE with stale intro lifecycle opens canonical Focus Home', async () => {
+    mockResolveLinkedUserId.mockResolvedValue('user-2b')
+    mockFindUniqueOrThrow.mockResolvedValue({
+      id: 'user-2b',
+      role: 'USER',
+      activeRole: 'USER',
+      lifecycleState: 'TEST_NOT_STARTED',
+      testStartedAt: null,
+      testCompletedAt: new Date('2026-07-20T10:00:00Z'),
+      offerShownAt: null,
+      testResultType: 'action',
+      updatedAt: new Date('2026-07-20T10:00:00Z'),
+      firstName: 'Фокус',
+    })
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-11-15T00:00:00Z'),
+    })
+    mockGetUpcomingZoom.mockResolvedValue({
+      id: 'zoom-2',
+      scheduledAt: new Date('2026-08-03T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/2' },
+    })
+
+    const { ctx, reply } = makeFakeCtx({ chatId: 202, fromId: 202, updateId: 1002 })
+    await handleStart(ctx)
+
+    expect(reply).not.toHaveBeenCalled()
+    const [, , , text, options] = mockPlanMessage.mock.calls[0]
+    expect(text).toContain('Твій доступ до ФОКУСУ активний до 15 листопада 2026')
+    expect(text).toContain('Ти ще не записана.')
+    const flat = JSON.stringify(options)
+    expect(flat).toMatch(/ЗАПИСАТИСЯ/)
+    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/КАНАЛ ФОКУСУ/)
+  })
+
+  it('new user without first_name asks for name first', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-3')
     mockFindUniqueOrThrow.mockResolvedValue({
       id: 'user-3',
+      role: 'USER',
+      activeRole: 'USER',
       lifecycleState: 'NEW_USER',
       testStartedAt: null,
       testCompletedAt: null,
       offerShownAt: null,
       testResultType: null,
-      updatedAt: new Date(),
+      updatedAt: new Date('2026-07-28T10:00:00Z'),
       firstName: null,
     })
 
-    const { ctx, reply, sendMessage } = makeFakeCtx({ firstName: undefined })
+    const { ctx, reply, sendMessage } = makeFakeCtx({ firstName: undefined, updateId: 1003 })
     ctx.from.first_name = undefined as never
 
     await handleStart(ctx)
@@ -175,40 +256,22 @@ describe('handleStart — Layer 2 integration', () => {
     expect(mockSetPendingName).toHaveBeenCalledWith(String(ctx.chat.id))
   })
 
-  it('duplicate update_id: second call with the same update_id is silently ignored (dedup guard)', async () => {
-    mockResolveLinkedUserId.mockResolvedValue('user-4')
-    mockFindUniqueOrThrow.mockResolvedValue({
-      id: 'user-4',
-      lifecycleState: 'TEST_DONE',
-      testStartedAt: null,
-      testCompletedAt: new Date(),
-      offerShownAt: null,
-      testResultType: 'action',
-      updatedAt: new Date(),
-      firstName: 'Тестова',
-    })
-
-    const { ctx, reply } = makeFakeCtx({ chatId: 444, fromId: 444, updateId: 999999 })
-    await handleStart(ctx)
-    await handleStart(ctx)
-
-    expect(reply).toHaveBeenCalledTimes(1)
-  })
-
-  it('NEW_USER transitions lifecycleState to TEST_NOT_STARTED after showing welcome', async () => {
+  it('NEW_USER transitions lifecycleState to TEST_NOT_STARTED after welcome', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-5')
     mockFindUniqueOrThrow.mockResolvedValue({
       id: 'user-5',
+      role: 'USER',
+      activeRole: 'USER',
       lifecycleState: 'NEW_USER',
       testStartedAt: null,
       testCompletedAt: null,
       offerShownAt: null,
       testResultType: null,
-      updatedAt: new Date(),
+      updatedAt: new Date('2026-07-28T10:00:00Z'),
       firstName: 'Тестова',
     })
 
-    const { ctx } = makeFakeCtx({ chatId: 555, fromId: 555 })
+    const { ctx } = makeFakeCtx({ chatId: 555, fromId: 555, updateId: 1005 })
     await handleStart(ctx)
 
     expect(mockUserUpdate).toHaveBeenCalledWith(

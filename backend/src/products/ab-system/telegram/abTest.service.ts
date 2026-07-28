@@ -508,7 +508,7 @@ export async function renderAbTestIntro(
     formatAbTestTelegramCard('', absystemContent.START_BLOCK1.MSG1.split('\n')),
     {
       inline_keyboard: [
-        [{ text: 'Далі', callback_data: 'ab_test:entry' }],
+        [{ text: 'ДАЛІ', callback_data: 'ab_test:entry' }],
       ],
     },
     'HTML'

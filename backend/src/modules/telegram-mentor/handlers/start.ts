@@ -1,4 +1,4 @@
-import type { UserLifecycleState } from '@starway/db/prisma-client'
+import type { Role, UserLifecycleState } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 import { UserCreationSource } from '../../user/userCreation.service.js'
@@ -12,25 +12,34 @@ import {
   resolveLinkedUserIdFromContext,
   syncAccessAwareChatEntryPoints,
 } from './start.shared.js'
-import { resolveUserLifecycle } from '../../flow-control/service.js'
+import { hasActiveFocusSubscription } from '../../subscriptions/payments/focus.access.js'
 import {
   type StartMessagePayload,
   magicLinkReadyMessage,
   welcomeMessage,
 } from './abTest.start.js'
 import { buildHomeScreen } from './homeScreen.builder.js'
+import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
 import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTest.service.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
+import { getUserAccessState, type UserAccessState } from '../../subscriptions/payments/focus.access.js'
 
 export * from './start.shared.js'
 
 const processedStartUpdateIds = new Set<number>()
 const activeStartProcessing = new Set<string>()
+const recentStartPayloadByChat = new Map<
+  string,
+  { signature: string; sentAt: number }
+>()
+const START_PAYLOAD_DEDUP_WINDOW_MS = 15_000
 
 export type StartUserSnapshot = {
   id: string
+  role: Role
+  activeRole: Role
   lifecycleState: UserLifecycleState
   testStartedAt: Date | null
   testCompletedAt: Date | null
@@ -38,6 +47,66 @@ export type StartUserSnapshot = {
   testResultType: string | null
   updatedAt: Date
   firstName: string | null
+}
+
+const PAID_LIFECYCLE_STATES = new Set<UserLifecycleState>([
+  'FOCUS_PAID',
+  'ZOOM_MEMBER',
+  'POST_ZOOM_1',
+  'UPSELL',
+])
+
+const INTRO_LIFECYCLE_STATES = new Set<UserLifecycleState>([
+  'NEW_USER',
+  'TEST_NOT_STARTED',
+  'TEST_IN_PROGRESS',
+])
+
+export function resolveEffectiveStartLifecycleState(input: {
+  lifecycleState: UserLifecycleState
+  accessState: Pick<UserAccessState, 'state' | 'isActive' | 'hasFocus'> | null
+  testResultType: string | null
+  progress: {
+    status: string
+    result_key: string | null
+  } | null
+}): UserLifecycleState {
+  const hasCanonicalFocusAccess =
+    input.accessState?.state === 'FOCUS_ACTIVE' ||
+    input.accessState?.isActive === true ||
+    input.accessState?.hasFocus === true
+
+  if (hasCanonicalFocusAccess) {
+    return PAID_LIFECYCLE_STATES.has(input.lifecycleState)
+      ? input.lifecycleState
+      : 'FOCUS_PAID'
+  }
+
+  const hasCompletedResult =
+    Boolean(input.testResultType) ||
+    (input.progress?.status === 'completed' && Boolean(input.progress.result_key))
+
+  if (
+    hasCompletedResult &&
+    (
+      INTRO_LIFECYCLE_STATES.has(input.lifecycleState) ||
+      input.lifecycleState === 'OFFER_SHOWN'
+    )
+  ) {
+    return 'TEST_DONE'
+  }
+
+  if (
+    input.progress?.status === 'active' &&
+    (
+      INTRO_LIFECYCLE_STATES.has(input.lifecycleState) ||
+      input.lifecycleState === 'TEST_DONE'
+    )
+  ) {
+    return 'TEST_IN_PROGRESS'
+  }
+
+  return input.lifecycleState
 }
 
 export function getHoursSince(date: Date | null | undefined): number {
@@ -75,6 +144,8 @@ async function loadUserSnapshot(userId: string): Promise<StartUserSnapshot> {
     where: { id: userId },
     select: {
       id: true,
+      role: true,
+      activeRole: true,
       lifecycleState: true,
       testStartedAt: true,
       testCompletedAt: true,
@@ -85,28 +156,51 @@ async function loadUserSnapshot(userId: string): Promise<StartUserSnapshot> {
     },
   })
 
-  if (
-    !['FOCUS_PAID', 'ZOOM_MEMBER', 'POST_ZOOM_1', 'UPSELL'].includes(
-      snapshot.lifecycleState
-    )
-  ) {
-    const lifecycle = await resolveUserLifecycle(userId).catch(() => null)
-    if (lifecycle?.state === 'paid') {
-      await prisma.user
-        .update({
-          where: { id: userId },
-          data: { lifecycleState: 'FOCUS_PAID' },
-        })
-        .catch(() => undefined)
+  const [accessState, progress] = await Promise.all([
+    getUserAccessState(userId).catch(() => null),
+    loadAbTestProgress(userId).catch(() => null),
+  ])
 
-      return {
-        ...snapshot,
-        lifecycleState: 'FOCUS_PAID',
+  const effectiveLifecycleState = resolveEffectiveStartLifecycleState({
+    lifecycleState: snapshot.lifecycleState,
+    accessState,
+    testResultType: snapshot.testResultType,
+    progress: progress
+      ? {
+        status: progress.status,
+        result_key: progress.result_key ?? null,
       }
-    }
+      : null,
+  })
+
+  const isFocusActive = await hasActiveFocusSubscription(userId).catch(() => false)
+
+  if (isFocusActive && snapshot.lifecycleState !== 'FOCUS_PAID') {
+    await prisma.user
+      .update({
+        where: { id: userId },
+        data: { lifecycleState: 'FOCUS_PAID' },
+      })
+      .catch(() => undefined)
   }
 
-  return snapshot
+  console.info('[START_ROUTE_RESOLUTION]', {
+    userId,
+    role: snapshot.role,
+    activeRole: snapshot.activeRole,
+    lifecycleState: snapshot.lifecycleState,
+    effectiveLifecycleState,
+    hasFocusAccess: accessState?.hasFocus === true,
+    focusExpiresAt: accessState?.expiresAt ?? null,
+    abTestStatus: progress?.status ?? null,
+    abTestResultKey: progress?.result_key ?? null,
+    testResultType: snapshot.testResultType,
+  })
+
+  return {
+    ...snapshot,
+    lifecycleState: effectiveLifecycleState,
+  }
 }
 
 async function deliver(
@@ -123,6 +217,27 @@ async function deliver(
     console.warn('[START_DELIVER] no chatId — skipped')
     return
   }
+
+  const dedupKey = String(deliveryChatId)
+  const payloadSignature = JSON.stringify({
+    text: payload.text,
+    reply_markup: payload.reply_markup,
+    parseMode: payload.parseMode ?? null,
+  })
+  const now = Date.now()
+  const lastPayload = recentStartPayloadByChat.get(dedupKey)
+  if (
+    lastPayload &&
+    lastPayload.signature === payloadSignature &&
+    now - lastPayload.sentAt < START_PAYLOAD_DEDUP_WINDOW_MS
+  ) {
+    console.info('[START_DELIVER_SKIPPED_DUPLICATE]', {
+      deliveryChatId,
+      dedupWindowMs: START_PAYLOAD_DEDUP_WINDOW_MS,
+    })
+    return
+  }
+
   try {
     const sentMessage = await planMessage(
       ctx,
@@ -132,6 +247,20 @@ async function deliver(
       payload.reply_markup,
       payload.parseMode,
     )
+    recentStartPayloadByChat.set(dedupKey, {
+      signature: payloadSignature,
+      sentAt: now,
+    })
+    setTimeout(() => {
+      const current = recentStartPayloadByChat.get(dedupKey)
+      if (
+        current &&
+        current.signature === payloadSignature &&
+        current.sentAt === now
+      ) {
+        recentStartPayloadByChat.delete(dedupKey)
+      }
+    }, START_PAYLOAD_DEDUP_WINDOW_MS)
     console.info('[START_DELIVER_OK]', {
       deliveryChatId,
       messageId: sentMessage?.message_id ?? null,
@@ -325,6 +454,25 @@ export async function handleStart(ctx: StartContext) {
     const startPayload = getStartPayload(ctx)
     const firstTouch = parseFirstTouchPayload(startPayload)
     let resolvedUserId = await resolveLinkedUserIdFromContext(ctx)
+    const identityResolutionError = (
+      ctx.state as { userIdResolutionError?: 'linked_user_resolution_failed' | null }
+    ).userIdResolutionError
+
+    if (!resolvedUserId && identityResolutionError === 'linked_user_resolution_failed') {
+      console.warn('[START_IDENTITY_RESOLUTION_FAILED]', {
+        chatId,
+        telegramUserId,
+        startPayload,
+      })
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'telegram_identity_resolution_failed',
+        'Не вдалося знайти прив’язаний акаунт. Натисни /start і спробуй ще раз.',
+      )
+      startMessageSent = true
+      return
+    }
 
     if (!resolvedUserId) {
       const validDefaultAiExpertId = await resolveValidDefaultAiExpertId()
@@ -386,7 +534,14 @@ export async function handleStart(ctx: StartContext) {
     }
 
     const user = await loadUserSnapshot(resolvedUserId)
-    console.info('[START_SNAPSHOT]', { userId: user.id, lifecycleState: user.lifecycleState, chatId })
+    console.info('[START_SNAPSHOT]', {
+      userId: user.id,
+      telegramUserId,
+      role: user.role,
+      activeRole: user.activeRole,
+      lifecycleState: user.lifecycleState,
+      chatId,
+    })
 
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = user.id
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true

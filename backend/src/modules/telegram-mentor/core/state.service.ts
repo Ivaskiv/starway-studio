@@ -16,6 +16,7 @@ export type UserState =
 type LinkedUserState = {
   userId?: string | null
   userIdResolved?: boolean
+  userIdResolutionError?: 'linked_user_resolution_failed' | null
 }
 
 const linkedUserResolutionCache = new WeakMap<Context, Promise<string | null>>()
@@ -56,6 +57,10 @@ export async function resolveLinkedUserIdFromContext(ctx: Context): Promise<stri
       telegramUserId,
       telegramUserName,
     }).catch((error) => {
+      const state = ctx.state as LinkedUserState
+      state.userId = null
+      state.userIdResolved = true
+      state.userIdResolutionError = 'linked_user_resolution_failed'
       console.warn('[telegram/state] linked user resolution failed, fallback to anonymous context', {
         chatId,
         telegramUserId,
@@ -67,6 +72,7 @@ export async function resolveLinkedUserIdFromContext(ctx: Context): Promise<stri
     const state = ctx.state as LinkedUserState
     state.userId = resolvedUserId
     state.userIdResolved = true
+    state.userIdResolutionError = null
     return resolvedUserId
   })()
 

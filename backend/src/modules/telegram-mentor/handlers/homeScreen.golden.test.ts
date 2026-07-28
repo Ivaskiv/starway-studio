@@ -1,5 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mockZoomSessionAttendeeFindUnique = vi.fn()
+const mockGetUserAccessState = vi.fn()
+const mockGetUpcomingZoom = vi.fn()
+const mockGetOrCreateFocusInviteLink = vi.fn()
+
+vi.mock('@/db/client.js', () => ({
+  prisma: {
+    zoomSessionAttendee: {
+      findUnique: (...args: unknown[]) => mockZoomSessionAttendeeFindUnique(...args),
+    },
+  },
+}))
+
 import { buildHomeScreen } from './homeScreen.builder.js'
 import type { StartUserSnapshot } from './start.js'
 import type { StartContext } from './start.shared.js'
@@ -11,6 +24,33 @@ vi.mock('../services/productSummary.service.js', () => ({
 vi.mock('@/modules/subscriptions/payments/business.checkout.js', () => ({
   buildAbsystemAiUpgradeCheckoutUrl: vi.fn((userId: string) =>
     `https://example.com/checkout/${userId}?product=absystem_ai&plan=1month_upgrade`),
+  buildEcosystemPaymentCheckoutSession: vi.fn(async (_product: string, plan: string) => ({
+    checkoutUrl: `https://example.com/checkout/${plan}`,
+  })),
+}))
+
+vi.mock('@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js', () => ({
+  TelegramConversationRenderer: class {
+    async render() {
+      return true
+    }
+
+    async renderOutbound() {
+      return true
+    }
+  },
+}))
+
+vi.mock('@/modules/subscriptions/payments/focus.access.js', () => ({
+  getUserAccessState: (...args: unknown[]) => mockGetUserAccessState(...args),
+}))
+
+vi.mock('@/modules/zoom/service.js', () => ({
+  getUpcomingZoom: (...args: unknown[]) => mockGetUpcomingZoom(...args),
+}))
+
+vi.mock('@/products/focus/payments/inviteLink.js', () => ({
+  getOrCreateFocusInviteLink: (...args: unknown[]) => mockGetOrCreateFocusInviteLink(...args),
 }))
 
 import { resolveTelegramProductSummary } from '../services/productSummary.service.js'
@@ -18,6 +58,8 @@ import { resolveTelegramProductSummary } from '../services/productSummary.servic
 function makeSnapshot(overrides: Partial<StartUserSnapshot>): StartUserSnapshot {
   return {
     id: 'golden-user-id',
+    role: 'USER',
+    activeRole: 'USER',
     lifecycleState: 'NEW_USER',
     testStartedAt: null,
     testCompletedAt: null,
@@ -32,8 +74,18 @@ function makeSnapshot(overrides: Partial<StartUserSnapshot>): StartUserSnapshot 
 const fakeCtx = {} as StartContext
 
 beforeEach(() => {
+  vi.clearAllMocks()
   vi.mocked(resolveTelegramProductSummary).mockReset()
   vi.mocked(resolveTelegramProductSummary).mockResolvedValue(null)
+  mockGetUserAccessState.mockResolvedValue({
+    state: 'NO_ACCESS',
+    isActive: false,
+    hasFocus: false,
+    expiresAt: null,
+  })
+  mockGetUpcomingZoom.mockResolvedValue(null)
+  mockGetOrCreateFocusInviteLink.mockResolvedValue('https://t.me/focus-channel')
+  mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
 })
 
 describe('Golden Master — /start screens per lifecycleState', () => {
@@ -49,14 +101,14 @@ describe('Golden Master — /start screens per lifecycleState', () => {
 
   it('TEST_IN_PROGRESS (recent)', async () => {
     const screen = await buildHomeScreen(
-      makeSnapshot({ lifecycleState: 'TEST_IN_PROGRESS', updatedAt: new Date() }),
+      makeSnapshot({ lifecycleState: 'TEST_IN_PROGRESS', updatedAt: new Date('2026-07-28T10:00:00Z') }),
       fakeCtx,
     )
     expect(screen).toMatchSnapshot()
   })
 
   it('TEST_IN_PROGRESS (stale, >168h)', async () => {
-    const staleDate = new Date(Date.now() - 200 * 3_600_000)
+    const staleDate = new Date('2026-07-19T10:00:00Z')
     const screen = await buildHomeScreen(
       makeSnapshot({ lifecycleState: 'TEST_IN_PROGRESS', updatedAt: staleDate }),
       fakeCtx,
@@ -69,22 +121,44 @@ describe('Golden Master — /start screens per lifecycleState', () => {
     expect(screen).toMatchSnapshot()
   })
 
-  it('TEST_DONE with result', async () => {
+  it('TEST_DONE + NO_ACCESS', async () => {
     const screen = await buildHomeScreen(makeSnapshot({ lifecycleState: 'TEST_DONE', testResultType: 'action' }), fakeCtx)
     expect(screen).toMatchSnapshot()
   })
 
-  it('OFFER_SHOWN', async () => {
-    const screen = await buildHomeScreen(makeSnapshot({ lifecycleState: 'OFFER_SHOWN' }), fakeCtx)
+  it('OFFER_SHOWN + NO_ACCESS', async () => {
+    const screen = await buildHomeScreen(makeSnapshot({ lifecycleState: 'OFFER_SHOWN', testResultType: 'action' }), fakeCtx)
     expect(screen).toMatchSnapshot()
   })
 
   it('FOCUS_PAID — fallback (summary unresolved)', async () => {
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-11-15T00:00:00Z'),
+    })
+    mockGetUpcomingZoom.mockResolvedValue({
+      id: 'zoom-focus-fallback',
+      scheduledAt: new Date('2026-08-03T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/fallback' },
+    })
     const screen = await buildHomeScreen(makeSnapshot({ lifecycleState: 'FOCUS_PAID' }), fakeCtx)
     expect(screen).toMatchSnapshot()
   })
 
   it('FOCUS_PAID — with resolved summary', async () => {
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-11-15T00:00:00Z'),
+    })
+    mockGetUpcomingZoom.mockResolvedValue({
+      id: 'zoom-focus-summary',
+      scheduledAt: new Date('2026-08-03T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/summary' },
+    })
     vi.mocked(resolveTelegramProductSummary).mockResolvedValue({
       lines: ['ФОКУС', 'Підписка активна до 01.08.2026'],
       reply_markup: { inline_keyboard: [[{ text: 'Мій прогрес', callback_data: 'focus:progress' }]] },
@@ -94,11 +168,35 @@ describe('Golden Master — /start screens per lifecycleState', () => {
   })
 
   it('ZOOM_MEMBER — fallback (summary unresolved)', async () => {
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-11-15T00:00:00Z'),
+    })
+    mockGetUpcomingZoom.mockResolvedValue({
+      id: 'zoom-member-fallback',
+      scheduledAt: new Date('2026-08-03T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/member-fallback' },
+    })
+    mockZoomSessionAttendeeFindUnique.mockResolvedValue({ id: 'attendee-fallback' })
     const screen = await buildHomeScreen(makeSnapshot({ lifecycleState: 'ZOOM_MEMBER' }), fakeCtx)
     expect(screen).toMatchSnapshot()
   })
 
   it('ZOOM_MEMBER — with resolved summary (composed with Zoom section)', async () => {
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-11-15T00:00:00Z'),
+    })
+    mockGetUpcomingZoom.mockResolvedValue({
+      id: 'zoom-member-summary',
+      scheduledAt: new Date('2026-08-03T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/member-summary' },
+    })
+    mockZoomSessionAttendeeFindUnique.mockResolvedValue({ id: 'attendee-summary' })
     vi.mocked(resolveTelegramProductSummary).mockResolvedValue({
       lines: ['ФОКУС', 'Підписка активна до 01.08.2026'],
       reply_markup: { inline_keyboard: [[{ text: 'Мій прогрес', callback_data: 'focus:progress' }]] },

@@ -70,7 +70,7 @@ export async function handleAbTestStart(
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
-        [{ text: 'Продовжити', callback_data: 'ab_test:q1' }],
+        [{ text: 'ПРОДОВЖИТИ', callback_data: 'ab_test:q1' }],
       ],
     },
   })
@@ -152,7 +152,7 @@ export async function handleMenu(
       title: '',
       body: [abTestMenuContent.body],
       buttons: [
-        [{ text: 'Пройти тест', callback_data: AB_TEST_ACTIONS.ENTRY }],
+        [{ text: 'ПРОЙТИ ТЕСТ', callback_data: AB_TEST_ACTIONS.ENTRY }],
         [
           {
             text: absystemButtons.restoreProgress,
@@ -161,19 +161,19 @@ export async function handleMenu(
         ],
         [
           {
-            text: 'Дізнатись про ФОКУС',
+            text: 'ДІЗНАТИСЬ ПРО ФОКУС',
             callback_data: AB_TEST_ACTIONS.FOCUS_INFO,
           },
         ],
         [
           {
-            text: 'Оплатити ФОКУС',
+            text: 'ОПЛАТИТИ ФОКУС',
             callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
           },
         ],
         [
           {
-            text: 'Я вже оплатив / оплатила',
+            text: 'Я ВЖЕ ОПЛАТИВ / ОПЛАТИЛА',
             callback_data: AB_TEST_ACTIONS.FOCUS_ALREADY_PAID,
           },
         ],
@@ -361,7 +361,7 @@ export async function handleFocusInfo(
         inline_keyboard: [
           [
             {
-              text: 'Оплатити ФОКУС',
+              text: 'ОПЛАТИТИ ФОКУС',
               callback_data: AB_TEST_ACTIONS.FOCUS_PAY,
             },
           ],

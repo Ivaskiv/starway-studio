@@ -133,7 +133,7 @@ function buildFocusInfoResponse(): ConversationResponse {
     text: renderTelegramContentMessage('', [...BLOCK10_FOCUS.blocks]).trim(),
     buttons: [
       {
-        label: 'Оплатити ФОКУС',
+        label: 'ОПЛАТИТИ ФОКУС',
         kind: 'callback',
         value: AB_TEST_ACTIONS.FOCUS_PAY,
       },
@@ -220,10 +220,10 @@ async function buildFocusPaymentResponse(context: TelegramConversationScenarioCo
     return createConversationResponse({
       text: FOCUS_ALREADY_ACTIVE_MSG(inviteUrl),
       buttons: [
-        ...(inviteUrl ? [{ kind: 'url' as const, label: '🔗 Перейти в канал ФОКУС', value: inviteUrl }] : []),
-        { kind: 'callback', label: '🔄 Відновити доступ', value: 'resend_focus_block12' },
-        { kind: 'callback', label: '📋 Моя підписка', value: 'ab_test:subscription' },
-        { kind: 'callback', label: '← Меню', value: 'ab_test:menu' },
+        ...(inviteUrl ? [{ kind: 'url' as const, label: '🔗 ПЕРЕЙТИ В КАНАЛ ФОКУС', value: inviteUrl }] : []),
+        { kind: 'callback', label: '🔄 ВІДНОВИТИ ДОСТУП', value: 'resend_focus_block12' },
+        { kind: 'callback', label: '📋 МОЯ ПІДПИСКА', value: 'ab_test:subscription' },
+        { kind: 'callback', label: '← МЕНЮ', value: 'ab_test:menu' },
       ],
       cards: [],
       media: [],
@@ -257,7 +257,7 @@ async function buildFocusPaymentResponse(context: TelegramConversationScenarioCo
 
   const testButtons = isTestPaymentEnabled()
     ? await buildEcosystemPaymentCheckoutSession('focus', '1month', resolvedUserId, 'telegram')
-        .then((session) => [{ kind: 'url' as const, label: '🧪 Тест 1 грн', value: session.checkoutUrl }])
+        .then((session) => [{ kind: 'url' as const, label: '🧪 ТЕСТ 1 ГРН', value: session.checkoutUrl }])
         .catch(() => [])
     : []
 
@@ -283,7 +283,7 @@ async function buildFocusPaymentResponse(context: TelegramConversationScenarioCo
       { kind: 'url', label: BLOCK10_FOCUS.cta_1m, value: session1m.checkoutUrl },
       { kind: 'url', label: BLOCK10_FOCUS.cta_3m, value: session3m.checkoutUrl },
       ...testButtons,
-      { kind: 'callback', label: '⚠️ Проблема з оплатою', value: 'focus:payment_issue' },
+      { kind: 'callback', label: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ', value: 'focus:payment_issue' },
     ],
     telemetry: { scenario: 'focus_payment' },
     analytics: { intent: 'focus_payment' },
@@ -345,8 +345,8 @@ async function buildSubscriptionStatusResponse(context: TelegramConversationScen
     return createConversationResponse({
       text: ['<b>Підписка ФОКУС</b>', '', 'Статус: <code>не знайдено</code>', 'Ще немає оформленої підписки.'].join('\n'),
       buttons: [
-        { kind: 'callback', label: 'Оплатити ФОКУС', value: AB_TEST_ACTIONS.FOCUS_PAY },
-        { kind: 'callback', label: '← Меню', value: 'ab_test:menu' },
+        { kind: 'callback', label: 'ОПЛАТИТИ ФОКУС', value: AB_TEST_ACTIONS.FOCUS_PAY },
+        { kind: 'callback', label: '← МЕНЮ', value: 'ab_test:menu' },
       ],
       telemetry: { scenario: 'subscription_status', state: 'missing' },
       analytics: { intent: 'subscription_status' },
@@ -401,9 +401,9 @@ async function buildSubscriptionStatusResponse(context: TelegramConversationScen
   return createConversationResponse({
     text: lines.join('\n'),
     buttons: [
-      ...(inviteUrl ? [{ kind: 'url' as const, label: '🔗 Посилання на канал', value: inviteUrl }] : []),
-      { kind: 'callback', label: '🔄 Відновити доступ', value: 'resend_focus_block12' },
-      { kind: 'callback', label: '← Меню', value: 'ab_test:menu' },
+      ...(inviteUrl ? [{ kind: 'url' as const, label: '🔗 ПОСИЛАННЯ НА КАНАЛ', value: inviteUrl }] : []),
+      { kind: 'callback', label: '🔄 ВІДНОВИТИ ДОСТУП', value: 'resend_focus_block12' },
+      { kind: 'callback', label: '← МЕНЮ', value: 'ab_test:menu' },
     ],
     telemetry: { scenario: 'subscription_status', state: 'native' },
     analytics: { intent: 'subscription_status' },
@@ -467,7 +467,7 @@ async function buildAlreadyPaidResponse(context: TelegramConversationScenarioCon
   return createConversationResponse({
     text: FOCUS_RESEND_SUCCESS_MSG,
     buttons: inviteUrl
-      ? [{ kind: 'url', label: 'Перейти в канал ФОКУС', value: inviteUrl }]
+      ? [{ kind: 'url', label: 'ПЕРЕЙТИ В КАНАЛ ФОКУС', value: inviteUrl }]
       : [],
     telemetry: { scenario: 'already_paid', state: 'resent' },
     analytics: { intent: 'already_paid' },

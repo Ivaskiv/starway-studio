@@ -2,6 +2,7 @@
 
 exports[`Golden Master — /start screens per lifecycleState > EXPIRED 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
@@ -12,7 +13,7 @@ exports[`Golden Master — /start screens per lifecycleState > EXPIRED 1`] = `
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 Твій доступ завершено. Всі твої цілі, карта балансу і звіти збережені. Коли будеш готова повернутись — вони тебе чекають.",
 }
@@ -20,60 +21,92 @@ exports[`Golden Master — /start screens per lifecycleState > EXPIRED 1`] = `
 
 exports[`Golden Master — /start screens per lifecycleState > FOCUS_PAID — fallback (summary unresolved) 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
-          "callback_data": "focus:calendar",
-          "text": "Календар Zoom-практик",
+          "text": "ЗАПИСАТИСЯ",
+          "web_app": {
+            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking",
+          },
         },
       ],
       [
         {
-          "callback_data": "focus:ai",
-          "text": "ABSystem AI",
+          "callback_data": "ab_test:show_result",
+          "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
+        },
+      ],
+      [
+        {
+          "text": "КАНАЛ ФОКУСУ",
+          "url": "https://t.me/focus-channel",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
-Доступ до ФОКУС активний. Обери наступну дію в меню.",
+Твій доступ до ФОКУСУ активний до 15 листопада 2026 р.
+
+Найближча Zoom-практика — 3 серпня о 19:00.
+
+Ти ще не записана.",
 }
 `;
 
 exports[`Golden Master — /start screens per lifecycleState > FOCUS_PAID — with resolved summary 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
-          "callback_data": "focus:progress",
-          "text": "Мій прогрес",
+          "text": "ЗАПИСАТИСЯ",
+          "web_app": {
+            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking",
+          },
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:show_result",
+          "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
+        },
+      ],
+      [
+        {
+          "text": "КАНАЛ ФОКУСУ",
+          "url": "https://t.me/focus-channel",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
-ФОКУС
-Підписка активна до 01.08.2026",
+Твій доступ до ФОКУСУ активний до 15 листопада 2026 р.
+
+Найближча Zoom-практика — 3 серпня о 19:00.
+
+Ти ще не записана.",
 }
 `;
 
 exports[`Golden Master — /start screens per lifecycleState > NEW_USER 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
           "callback_data": "ab_test:start",
-          "text": "Почати тест",
+          "text": "ПОЧАТИ ТЕСТ",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 Привіт.
 
@@ -87,12 +120,13 @@ exports[`Golden Master — /start screens per lifecycleState > NEW_USER 1`] = `
 
 exports[`Golden Master — /start screens per lifecycleState > NEW_USER without firstName — no header line 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
           "callback_data": "ab_test:start",
-          "text": "Почати тест",
+          "text": "ПОЧАТИ ТЕСТ",
         },
       ],
     ],
@@ -107,31 +141,32 @@ exports[`Golden Master — /start screens per lifecycleState > NEW_USER without 
 }
 `;
 
-exports[`Golden Master — /start screens per lifecycleState > OFFER_SHOWN 1`] = `
+exports[`Golden Master — /start screens per lifecycleState > OFFER_SHOWN + NO_ACCESS 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
           "callback_data": "open_focus_payment",
-          "text": "Хочу у ФОКУС →",
+          "text": "ХОЧУ У ФОКУС →",
         },
       ],
       [
         {
           "callback_data": "ab_test:restart",
-          "text": "Пройти тест заново",
+          "text": "ПРОЙТИ ТЕСТ ЗАНОВО",
         },
       ],
       [
         {
           "callback_data": "ab_test:show_result",
-          "text": "Мій результат",
+          "text": "МІЙ РЕЗУЛЬТАТ",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 У тебе вже є <b>результат</b> тесту.
 
@@ -141,81 +176,95 @@ exports[`Golden Master — /start screens per lifecycleState > OFFER_SHOWN 1`] =
 
 exports[`Golden Master — /start screens per lifecycleState > POST_ZOOM_1 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
-          "text": "Перейти в ABSystem AI",
-          "url": "https://example.com/checkout/golden-user-id?product=absystem_ai&plan=1month_upgrade",
+          "callback_data": "post_zoom:leave_insight",
+          "text": "ЗАЛИШИТИ ІНСАЙТ",
+        },
+      ],
+      [
+        {
+          "callback_data": "post_zoom:absystem_cta",
+          "text": "ПРОДОВЖИТИ З ABSYSTEM",
         },
       ],
       [
         {
           "callback_data": "focus:next_zoom",
-          "text": "Наступний Zoom",
+          "text": "КАЛЕНДАР",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 🚀 ABSystem AI після Zoom
-
-На Zoom ти вже побачила свою точку зупинки. Але між практиками — 7 днів. Саме там рух часто зникає. ABSystem AI — це те, що тримає твій фокус щодня між Zoom.",
+На Zoom ти вже побачила свою точку зупинки. Але між практиками — 7 днів. Саме там рух часто зникає. ABSystem AI — це те, що тримає твій фокус щодня між Zoom.
+────────────────────────────────
+🌿 <b>Практика завершилась.</b>
+Щоб цей крок не загубився,
+зафіксуй для себе лише дві речі.
+<b>1. Який інсайт був найціннішим?</b>
+<b>2. Який один крок зробиш до наступної практики?</b>",
 }
 `;
 
-exports[`Golden Master — /start screens per lifecycleState > TEST_DONE with result 1`] = `
+exports[`Golden Master — /start screens per lifecycleState > TEST_DONE + NO_ACCESS 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
           "callback_data": "ab_test:show_result",
-          "text": "Мій результат",
+          "text": "МІЙ РЕЗУЛЬТАТ",
         },
       ],
       [
         {
           "callback_data": "ab_test:restart",
-          "text": "🔄 Пройти заново",
+          "text": "🔄 ПРОЙТИ ЗАНОВО",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
-Ти вже пройшла тест.
+Твій <b>результат</b> уже готовий.
 
-Подивитись результат або пройти заново?",
+Можеш переглянути його ще раз або пройти тест заново.",
 }
 `;
 
 exports[`Golden Master — /start screens per lifecycleState > TEST_DONE without result (edge case) 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
           "callback_data": "ab_test:show_result",
-          "text": "Показати результат",
+          "text": "ПОКАЗАТИ РЕЗУЛЬТАТ",
         },
       ],
       [
         {
           "callback_data": "ab_test:restart",
-          "text": "Почати тест заново",
+          "text": "ПОЧАТИ ТЕСТ ЗАНОВО",
         },
       ],
       [
         {
           "callback_data": "open_focus_payment",
-          "text": "Хочу у ФОКУС →",
+          "text": "ХОЧУ У ФОКУС →",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 Твій <b>результат</b> готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.",
 }
@@ -223,23 +272,24 @@ exports[`Golden Master — /start screens per lifecycleState > TEST_DONE without
 
 exports[`Golden Master — /start screens per lifecycleState > TEST_IN_PROGRESS (recent) 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
           "callback_data": "ab_test:resume",
-          "text": "Продовжити тест",
+          "text": "ПРОДОВЖИТИ ТЕСТ",
         },
       ],
       [
         {
           "callback_data": "ab_test:restart",
-          "text": "🔄 Пройти заново",
+          "text": "🔄 ПРОЙТИ ЗАНОВО",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 Ти вже почала тест. Продовжимо з того місця, де зупинилась?",
 }
@@ -247,21 +297,22 @@ exports[`Golden Master — /start screens per lifecycleState > TEST_IN_PROGRESS 
 
 exports[`Golden Master — /start screens per lifecycleState > TEST_IN_PROGRESS (stale, >168h) 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
           "callback_data": "ab_test:resume",
-          "text": "Продовжити",
+          "text": "ПРОДОВЖИТИ",
         },
         {
           "callback_data": "ab_test:restart",
-          "text": "Почати заново",
+          "text": "ПОЧАТИ ЗАНОВО",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 Ти вже починала тест, але пройшло більше тижня.
 
@@ -271,17 +322,18 @@ exports[`Golden Master — /start screens per lifecycleState > TEST_IN_PROGRESS 
 
 exports[`Golden Master — /start screens per lifecycleState > TEST_NOT_STARTED 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
           "callback_data": "ab_test:start",
-          "text": "Почати тест",
+          "text": "ПОЧАТИ ТЕСТ",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 Ти вже тут.
 
@@ -291,23 +343,24 @@ exports[`Golden Master — /start screens per lifecycleState > TEST_NOT_STARTED 
 
 exports[`Golden Master — /start screens per lifecycleState > UPSELL 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
-          "text": "Перейти в ABSystem AI",
+          "text": "ПЕРЕЙТИ В ABSYSTEM AI",
           "url": "https://example.com/checkout/golden-user-id?product=absystem_ai&plan=1month_upgrade",
         },
       ],
       [
         {
           "callback_data": "focus:next_zoom",
-          "text": "Наступний Zoom",
+          "text": "КАЛЕНДАР",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
 🚀 ABSystem AI наступний крок
 
@@ -317,73 +370,74 @@ exports[`Golden Master — /start screens per lifecycleState > UPSELL 1`] = `
 
 exports[`Golden Master — /start screens per lifecycleState > ZOOM_MEMBER — fallback (summary unresolved) 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
-          "text": "📅 Записатись на Zoom",
+          "text": "ЗАПИСАТИСЯ",
           "web_app": {
-            "url": "https://starway-frontend.vercel.app/miniapp/zoom-calendar",
+            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking",
           },
         },
       ],
       [
         {
-          "callback_data": "focus:next_zoom",
-          "text": "Наступний Zoom",
+          "callback_data": "ab_test:show_result",
+          "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
         },
       ],
       [
         {
-          "callback_data": "focus:menu",
-          "text": "Меню ФОКУС",
+          "text": "КАНАЛ ФОКУСУ",
+          "url": "https://t.me/focus-channel",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
-Ти в Zoom-групі. Ось меню та найближча Zoom-зустріч.",
+Твій доступ до ФОКУСУ активний до 15 листопада 2026 р.
+
+Найближча Zoom-практика — 3 серпня о 19:00.
+
+Ти вже записана.",
 }
 `;
 
 exports[`Golden Master — /start screens per lifecycleState > ZOOM_MEMBER — with resolved summary (composed with Zoom section) 1`] = `
 {
+  "parseMode": "HTML",
   "reply_markup": {
     "inline_keyboard": [
       [
         {
-          "callback_data": "focus:progress",
-          "text": "Мій прогрес",
-        },
-      ],
-      [
-        {
-          "text": "📅 Записатись на Zoom",
+          "text": "ЗАПИСАТИСЯ",
           "web_app": {
-            "url": "https://starway-frontend.vercel.app/miniapp/zoom-calendar",
+            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking",
           },
         },
       ],
       [
         {
-          "callback_data": "focus:next_zoom",
-          "text": "Наступний Zoom",
+          "callback_data": "ab_test:show_result",
+          "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
         },
       ],
       [
         {
-          "callback_data": "focus:menu",
-          "text": "Меню ФОКУС",
+          "text": "КАНАЛ ФОКУСУ",
+          "url": "https://t.me/focus-channel",
         },
       ],
     ],
   },
-  "text": "👋 Тестова
+  "text": "Тестова
 
-ФОКУС
-Підписка активна до 01.08.2026
+Твій доступ до ФОКУСУ активний до 15 листопада 2026 р.
 
-Ти в Zoom-групі. Ось меню та найближча Zoom-зустріч.",
+Найближча Zoom-практика — 3 серпня о 19:00.
+
+Ти вже записана.",
 }
 `;

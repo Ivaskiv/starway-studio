@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   sendStateMenuMock,
+  handleStartMock,
+  handleAIMentorMock,
   resendFocusAccessTelegramMessageMock,
   hasActiveFocusSubscriptionMock,
   buildCheckoutSessionMock,
@@ -9,6 +11,8 @@ const {
   planAckMock,
 } = vi.hoisted(() => ({
   sendStateMenuMock: vi.fn(),
+  handleStartMock: vi.fn(),
+  handleAIMentorMock: vi.fn(),
   resendFocusAccessTelegramMessageMock: vi.fn(),
   hasActiveFocusSubscriptionMock: vi.fn(),
   buildCheckoutSessionMock: vi.fn(),
@@ -151,8 +155,20 @@ vi.mock('../../../modules/telegram-mentor/handlers/start.menu.js', () => ({
   sendStateMenu: sendStateMenuMock,
 }))
 
+vi.mock('../../../modules/telegram-mentor/handlers/start.js', () => ({
+  handleStart: handleStartMock,
+}))
+
+vi.mock('../../../modules/telegram-mentor/handlers/aiMentor.js', () => ({
+  handleAIMentor: handleAIMentorMock,
+}))
+
+vi.mock('../../../modules/telegram-mentor/handlers/status.js', () => ({
+  handleStatus: vi.fn(),
+}))
+
 import { prisma } from '../../../db/client.js'
-import { handleFocusPaymentAction, handleResendFocusBlock12 } from './abTest.flows.js'
+import { handleFocusPaymentAction, handleResendFocusBlock12, resolveFocusShortcutCallback } from './abTest.flows.js'
 
 function createCtx() {
   return {
@@ -171,6 +187,8 @@ describe('legacy focus callbacks for active users', () => {
     hasActiveFocusSubscriptionMock.mockResolvedValue(true)
     resendFocusAccessTelegramMessageMock.mockResolvedValue(true)
     sendStateMenuMock.mockResolvedValue(undefined)
+    handleStartMock.mockResolvedValue(undefined)
+    handleAIMentorMock.mockResolvedValue(undefined)
     buildCheckoutSessionMock.mockResolvedValue({ checkoutUrl: 'https://checkout.example' })
     resolveContextUserIdMock.mockResolvedValue('user-1')
     vi.mocked(prisma.paymentLog.findFirst).mockResolvedValue({ id: 'pay-1' } as never)
@@ -197,5 +215,29 @@ describe('legacy focus callbacks for active users', () => {
     expect(sendStateMenuMock).toHaveBeenCalledWith(ctx, 'user-1')
     expect(resendFocusAccessTelegramMessageMock).not.toHaveBeenCalled()
     expect(planAckMock).toHaveBeenCalled()
+  })
+
+  it('routes focus:menu to canonical /start owner for active users', async () => {
+    const ctx = createCtx()
+
+    const handled = await resolveFocusShortcutCallback(ctx as never, 'focus:menu', 'focus-user')
+
+    expect(handled).toBe(true)
+    expect(handleStartMock).toHaveBeenCalledTimes(1)
+    expect(handleStartMock).toHaveBeenCalledWith(ctx)
+    expect(sendStateMenuMock).not.toHaveBeenCalled()
+    expect(handleAIMentorMock).not.toHaveBeenCalled()
+    expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes focus:menu to canonical /start owner for completed users without access', async () => {
+    const ctx = createCtx()
+
+    const handled = await resolveFocusShortcutCallback(ctx as never, 'focus:menu', 'completed-user')
+
+    expect(handled).toBe(true)
+    expect(handleStartMock).toHaveBeenCalledTimes(1)
+    expect(sendStateMenuMock).not.toHaveBeenCalled()
+    expect(handleAIMentorMock).not.toHaveBeenCalled()
   })
 })

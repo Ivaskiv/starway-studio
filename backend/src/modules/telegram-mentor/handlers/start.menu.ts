@@ -216,7 +216,7 @@ async function sendStartScenarioMenu(
   if (scenario === 'FOCUS_PARTICIPANT') {
     const inviteLink = await getOrCreateFocusInviteLink(userId).catch(() => null)
     if (inviteLink) {
-      buttons.push([{ text: 'Перейти в канал ФОКУС', url: inviteLink }])
+      buttons.push([{ text: 'ПЕРЕЙТИ В КАНАЛ ФОКУС', url: inviteLink }])
     }
   }
   if (referralButton) {

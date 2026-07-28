@@ -34,10 +34,10 @@ export const absystemContent = {
       '',
       'Натисни "Пройти тест", щоб почати.',
     ].join('\n'),
-    CTA1: 'Почати тест',
-    CTA_CHAT: '💬 Продовжити тут',
-    CTA_MINIAPP: '📱 Відкрити в MiniApp',
-    CTA_BROWSER: '🌐 В браузері',
+    CTA1: 'ПОЧАТИ ТЕСТ',
+    CTA_CHAT: '💬 ПРОДОВЖИТИ ТУТ',
+    CTA_MINIAPP: '📱 ВІДКРИТИ В MINIAPP',
+    CTA_BROWSER: '🌐 ВІДКРИТИ В БРАУЗЕРІ',
   },
   RESUME_FLOW: {
     IN_PROGRESS: (n: number) =>
@@ -45,10 +45,10 @@ export const absystemContent = {
     STALE_PROGRESS: (n: number, days: number) =>
       `Ти відповіла на ${n} з 8 питань ${days} днів тому.\nТвої відчуття могли змінитися. Продовжити чи пройти заново?`,
     COMPLETED: (resultType: string) =>
-      `Ти вже пройшла тест.\n*Результат:* *${resultType}*\n\nМожеш переглянути результат або пройти заново.`,
-    CTA_CONTINUE: '▶️ Продовжити',
-    CTA_RESTART: '🔄 Пройти заново',
-    CTA_SHOW_RESULT: '📊 Показати результат',
+      `Твій результат уже готовий.\nРезультат: ${resultType}\n\nМожеш переглянути його ще раз або пройти тест заново.`,
+    CTA_CONTINUE: '▶️ ПРОДОВЖИТИ',
+    CTA_RESTART: '🔄 ПРОЙТИ ЗАНОВО',
+    CTA_SHOW_RESULT: '📊 ПОКАЗАТИ РЕЗУЛЬТАТ',
     EDIT_OPENING: 'Відкриваю питання',
   },
   RESULT_TYPE_LABELS: {
@@ -370,7 +370,7 @@ export const absystemContent = {
     FOCUS_TO_AI_SOFT_CTA: 'Перейти в ABSystem AI',
     FOCUS_TO_AI_HARD_TITLE: '🚀 ABSystem AI наступний крок',
     FOCUS_TO_AI_HARD: 'Ти вже 4 тижні у ФОКУСІ. ABSystem AI — наступний рівень: щоденна підтримка між практиками. Доплата — 1120 грн (твій ФОКУС зараховується).',
-    FOCUS_TO_AI_HARD_CTA: 'Перейти в ABSystem AI',
+    FOCUS_TO_AI_HARD_CTA: 'ПЕРЕЙТИ В ABSYSTEM AI',
     TO_STATE_COURSE_TITLE: '📚 Програма стану',
     TO_STATE_COURSE: 'Ти вже кілька разів фіксувала, що дія зривається не через відсутність рішення — а через стан. Для цього є окрема програма.\n990 грн для учасника ФОКУСУ/платформи.',
     TO_STATE_COURSE_CTA: 'Подивитись програму',

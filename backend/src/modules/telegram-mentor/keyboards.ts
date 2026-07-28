@@ -14,9 +14,11 @@ const isDevRuntime = process.env.NODE_ENV !== 'production'
 const isTestPaymentEnabled = isDevRuntime && process.env.TEST_PAYMENT_ENABLED?.trim() === 'true'
 const DEV_TEST_PAYMENT_URL = 'https://secure.wayforpay.com/button/bcd1a02457187'
 const DEV_TEST_PAYMENT_BUTTON = {
-  text: '🧪 Тест 1 грн',
+  text: '🧪 ТЕСТ 1 ГРН',
   url: DEV_TEST_PAYMENT_URL,
 } as const
+const LEGACY_TELEGRAM_MINIAPP_PATH = '/miniapp'
+const CANONICAL_TELEGRAM_MINIAPP_PATH = '/miniapp/zoom-calendar'
 
 function getAppBaseUrl(): string {
   return resolveTelegramWebappBaseUrl()
@@ -59,7 +61,16 @@ export function getTelegramAppUrl(path = '/miniapp'): string | null {
   }
 
   const url = new URL(path, appBaseUrl)
-  if (path.startsWith('/miniapp')) {
+  if (
+    url.pathname === LEGACY_TELEGRAM_MINIAPP_PATH
+    && (!url.search || url.searchParams.get('startapp') === 'ai')
+  ) {
+    url.pathname = CANONICAL_TELEGRAM_MINIAPP_PATH
+    if (url.searchParams.get('startapp') === 'ai') {
+      url.searchParams.delete('startapp')
+    }
+  }
+  if (url.pathname.startsWith('/miniapp')) {
     url.searchParams.set('v', miniAppVersion)
   }
   return url.toString()

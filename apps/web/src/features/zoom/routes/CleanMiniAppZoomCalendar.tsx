@@ -111,6 +111,43 @@ export function shouldPrimeDirectBooking(input: {
   )
 }
 
+export function resolveDirectZoomBookingState(input: {
+  isDirectBooking: boolean
+  accessState: 'loading' | 'active' | 'inactive'
+  isScheduleLoading: boolean
+  hasDirectSession: boolean
+}) {
+  if (!input.isDirectBooking) {
+    return 'calendar' as const
+  }
+
+  if (input.accessState === 'loading') {
+    return 'checking_access' as const
+  }
+
+  if (input.accessState === 'inactive') {
+    return 'locked' as const
+  }
+
+  if (input.isScheduleLoading) {
+    return 'loading_session' as const
+  }
+
+  if (input.hasDirectSession) {
+    return 'session' as const
+  }
+
+  return 'calendar' as const
+}
+
+function pluralizeSessions(count: number): string {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) return 'сесія'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'сесії'
+  return 'сесій'
+}
+
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
@@ -147,6 +184,7 @@ export default function CleanMiniAppZoomCalendar() {
   const [questionSkippedSessionId, setQuestionSkippedSessionId] = useState<string | null>(null)
   const [showQuestionInput, setShowQuestionInput] = useState(false)
   const [primedDirectSessionId, setPrimedDirectSessionId] = useState<string | null>(null)
+  const [directBookingExpired, setDirectBookingExpired] = useState(false)
   const directBookingParams =
     typeof window !== 'undefined'
       ? readDirectZoomBookingParams(window.location.search)
@@ -159,19 +197,24 @@ export default function CleanMiniAppZoomCalendar() {
     zoomAccess,
   })
   const hasFocusAccess = accessState === 'active'
-  const isLoading = accessState === 'loading' || isScheduleLoading
-  const isDirectBooking = isDirectZoomBookingRequest(directBookingParams)
+  const isDirectBooking = isDirectZoomBookingRequest(directBookingParams) && !directBookingExpired
   const directSessionId = directBookingParams.sessionId
   const directSession =
     isDirectBooking && data
       ? data.sessions.find((session) => session.id === directSessionId) ?? null
       : null
-  const shouldShowDirectFallbackCard = isDirectBooking && Boolean(directSessionId) && !directSession
-  const shouldShowDirectSessionOnly = isDirectBooking && Boolean(directSession)
-  const visibleSessions = isDirectBooking
-    ? (shouldShowDirectSessionOnly && directSession ? [directSession] : [])
+  const directBookingState = resolveDirectZoomBookingState({
+    isDirectBooking,
+    accessState,
+    isScheduleLoading,
+    hasDirectSession: Boolean(directSession),
+  })
+  const isCalendarLoading = !isDirectBooking && (accessState === 'loading' || isScheduleLoading)
+  const shouldShowDirectSessionOnly = directBookingState === 'session' && Boolean(directSession)
+  const visibleSessions = shouldShowDirectSessionOnly && directSession
+    ? [directSession]
     : (data?.sessions ?? [])
-  const sessionsCount = shouldShowDirectFallbackCard ? 1 : visibleSessions.length
+  const sessionsCount = visibleSessions.length
 
   useEffect(() => {
     dispatch(api.util.invalidateTags(['Access', 'Products', 'Subscription', 'ZoomSession']))
@@ -401,6 +444,13 @@ export default function CleanMiniAppZoomCalendar() {
             return
           }
 
+          if (normalizedError === 'session_not_found') {
+            setDirectBookingExpired(true)
+            setBookingQuestionError(null)
+            setMessage('Це посилання застаріло. Ось актуальні Zoom-сесії.')
+            return
+          }
+
           if (normalizedError !== 'ALREADY_BOOKED') {
             setBookingQuestionError('Не вдалося записати. Онови доступ і спробуй ще раз.')
             return
@@ -453,17 +503,23 @@ export default function CleanMiniAppZoomCalendar() {
           </div>
           {data ? (
             <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-white/60">
-              {sessionsCount} сесій
+              {sessionsCount} {pluralizeSessions(sessionsCount)}
             </span>
           ) : null}
         </div>
 
         <div className="mt-4 space-y-3">
-          {isLoading && !isDirectBooking ? <Card>Перевіряємо доступ і завантажуємо розклад…</Card> : null}
+          {isCalendarLoading ? <Card>Перевіряємо доступ і завантажуємо розклад…</Card> : null}
 
-          {isLoading && isDirectBooking ? <Card>Перевіряємо доступ до обраної Zoom-сесії…</Card> : null}
+          {directBookingState === 'checking_access' ? (
+            <Card>Перевіряємо доступ до обраної Zoom-сесії…</Card>
+          ) : null}
 
-          {!isLoading && (isAccessError || isScheduleError || !data) ? (
+          {directBookingState === 'loading_session' ? (
+            <Card>Завантажуємо обрану Zoom-сесію…</Card>
+          ) : null}
+
+          {!isCalendarLoading && directBookingState !== 'locked' && (isAccessError || isScheduleError || !data) ? (
             <Card>
               <p className="font-semibold">Не вдалося завантажити календар.</p>
               <button
@@ -476,49 +532,7 @@ export default function CleanMiniAppZoomCalendar() {
             </Card>
           ) : null}
 
-          {!isLoading && data && shouldShowDirectFallbackCard ? (
-            <Card>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
-                    Обрана Zoom-сесія
-                  </p>
-                  <p className="font-semibold">Zoom-практика</p>
-                  <p className="mt-1 text-xs text-white/55">
-                    Відкрили запис напряму з Telegram. Після надсилання питання підтвердимо запис.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-3 rounded-2xl border border-emerald-300/15 bg-black/10 p-3">
-                <p className="font-semibold text-emerald-50">З яким питанням ти приходиш?</p>
-                <textarea
-                  value={bookingQuestionText}
-                  onChange={(event) => setBookingQuestionText(event.target.value)}
-                  placeholder="Напиши питання або ситуацію..."
-                  rows={3}
-                  className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white outline-none transition focus:border-white/25"
-                />
-                {bookingQuestionError ? (
-                  <p className="mt-2 text-xs text-amber-100">{bookingQuestionError}</p>
-                ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleSubmitBookingQuestion()}
-                    disabled={isSubmittingBookingQuestion || activeSessionId === directSessionId}
-                    className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50 disabled:opacity-60"
-                  >
-                    {isSubmittingBookingQuestion || activeSessionId === directSessionId
-                      ? 'Надсилаємо…'
-                      : 'Надіслати'}
-                  </button>
-                </div>
-              </div>
-            </Card>
-          ) : null}
-
-          {!isLoading && data && accessState === 'inactive' && !isDirectBooking ? (
+          {accessState === 'inactive' ? (
             <Card>
               <p className="font-semibold">Доступ до Zoom ще не підтверджено.</p>
               <p className="mt-1 text-sm text-white/65">
@@ -552,7 +566,7 @@ export default function CleanMiniAppZoomCalendar() {
             </Card>
           ) : null}
 
-          {!isLoading && data && hasFocusAccess && sessionsCount === 0 ? (
+          {!isCalendarLoading && data && hasFocusAccess && sessionsCount === 0 ? (
             <Card>
               <p className="font-semibold">Доступ активний.</p>
               <p className="mt-1 text-sm text-white/65">
@@ -561,7 +575,7 @@ export default function CleanMiniAppZoomCalendar() {
             </Card>
           ) : null}
 
-          {!isLoading && data && (hasFocusAccess || shouldShowDirectSessionOnly)
+          {!isCalendarLoading && data && (hasFocusAccess || shouldShowDirectSessionOnly)
             ? visibleSessions.map((session: ZoomWeekOverview['sessions'][number]) => {
                 const isDirectTargetSession = isDirectBooking && directSessionId === session.id
                 const isQuestionVisible = showQuestionInput && questionSessionId === session.id

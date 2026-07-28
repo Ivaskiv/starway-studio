@@ -192,10 +192,10 @@ async function sendFocusAccessConfirmation(input: {
           [
             process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
               ? {
-                  text: 'Відкрити календар',
+                  text: 'ВІДКРИТИ КАЛЕНДАР',
                   web_app: { url: input.zoomUrl },
                 }
-              : { text: 'Відкрити календар', url: input.zoomUrl },
+              : { text: 'ВІДКРИТИ КАЛЕНДАР', url: input.zoomUrl },
           ],
         ],
       },
@@ -222,14 +222,122 @@ async function sendUpcomingScheduleSummary(input: {
         [
           process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
             ? {
-                text: 'Переглянути календар',
+                text: 'ПЕРЕГЛЯНУТИ КАЛЕНДАР',
                 web_app: { url: input.zoomUrl },
               }
-            : { text: 'Переглянути календар', url: input.zoomUrl },
+            : { text: 'ПЕРЕГЛЯНУТИ КАЛЕНДАР', url: input.zoomUrl },
         ],
       ],
     },
   })
+}
+
+type FocusPaymentOnboardingInput = {
+  userId: string
+  paidUser: {
+    id: string
+    firstName: string | null
+    telegramChatId: string | null
+    telegramLinks: Array<{ chatId: string | null }>
+  } | null
+  focusSubscription: {
+    id: string
+    focusWelcomedAt: Date | null
+    expiresAt: Date | null
+  } | null
+  canonicalSubscription: {
+    currentPeriodEnd: Date | null
+  } | null
+  planLabel: string
+  upcomingLines: string
+}
+
+function resolvePaidTelegramChatId(input: {
+  userId: string
+  paidUser: FocusPaymentOnboardingInput['paidUser']
+  operation: string
+}): string | null {
+  const paidChatId =
+    input.paidUser?.telegramChatId ??
+    input.paidUser?.telegramLinks[0]?.chatId ??
+    null
+
+  if (!paidChatId) {
+    console.warn('[PAYMENT_LIFECYCLE] telegram_notification_skipped', {
+      userId: input.userId,
+      operation: input.operation,
+      reason: 'missing_chat_id',
+      hasPaidUser: Boolean(input.paidUser),
+      telegramChatId: input.paidUser?.telegramChatId ?? null,
+      telegramLinksCount: input.paidUser?.telegramLinks.length ?? 0,
+    })
+    return null
+  }
+
+  return paidChatId
+}
+
+export async function sendFocusPaymentOnboardingIfNeeded(
+  input: FocusPaymentOnboardingInput
+): Promise<boolean> {
+  const paidChatId = resolvePaidTelegramChatId({
+    userId: input.userId,
+    paidUser: input.paidUser,
+    operation: 'focus_payment_onboarding',
+  })
+  if (!paidChatId || !input.paidUser) {
+    return false
+  }
+
+  if (input.focusSubscription?.focusWelcomedAt) {
+    console.info('[PAYMENT_LIFECYCLE] focus onboarding skipped', {
+      userId: input.userId,
+      reason: 'already_sent',
+      sentAt: input.focusSubscription.focusWelcomedAt.toISOString(),
+    })
+    return false
+  }
+
+  const zoomUrl = resolveZoomCalendarUrl()
+  const accessUntilDate =
+    input.canonicalSubscription?.currentPeriodEnd ??
+    input.focusSubscription?.expiresAt ??
+    null
+  const accessUntilLine = accessUntilDate
+    ? `Доступ активний до ${accessUntilDate.toLocaleDateString('uk-UA')}`
+    : 'Доступ уже активний'
+
+  const confirmationSent = await sendFocusAccessConfirmation({
+    chatId: paidChatId,
+    firstName: input.paidUser.firstName,
+    planLabel: input.planLabel,
+    accessUntilLine,
+    zoomUrl,
+  })
+
+  if (confirmationSent && input.upcomingLines.trim()) {
+    await sendUpcomingScheduleSummary({
+      chatId: paidChatId,
+      lines: input.upcomingLines,
+      zoomUrl,
+    })
+  }
+
+  if (confirmationSent && input.focusSubscription?.id) {
+    await prisma.productSubscription
+      .update({
+        where: { id: input.focusSubscription.id },
+        data: { focusWelcomedAt: new Date() },
+      })
+      .catch((err) =>
+        console.error('[PAYMENT_LIFECYCLE] failed to mark focus onboarding sent', {
+          userId: input.userId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      )
+  }
+
+  return confirmationSent
 }
 
 function extractUserIdFromOrderRef(orderReference: string): string | null {
@@ -919,7 +1027,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
                   inline_keyboard: [
                     [
                       {
-                        text: 'Панель керування',
+                        text: 'ПАНЕЛЬ КЕРУВАННЯ',
                         url: `${process.env.PUBLIC_FRONTEND_URL!.replace(/\/$/, '')}/app/dashboard`,
                       },
                     ],
@@ -937,53 +1045,39 @@ export async function wayForPayCallback(req: Request, res: Response) {
         })
 
         const upcoming = await getUpcomingGroupSessions(8)
-        const paidChatId =
-          paidUser?.telegramChatId ?? paidUser?.telegramLinks[0]?.chatId ?? null
-        if (paidChatId && paidUser) {
-          const zoomUrl = resolveZoomCalendarUrl()
-          const accessUntilDate =
-            canonicalSubscription?.currentPeriodEnd ??
-            focusSubscription?.expiresAt ??
-            null
-          const accessUntilLine = accessUntilDate
-            ? `Доступ активний до ${accessUntilDate.toLocaleDateString('uk-UA')}`
-            : 'Доступ уже активний'
-          const lines = upcoming
-            .map((session) => {
-              const dt = new Date(session.scheduledAt)
-              return `${dt.toLocaleString('uk-UA', {
-                weekday: 'short',
-                day: '2-digit',
-                month: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-              })} — ${session.topic}`
-            })
-            .join('\n')
-          await sendFocusAccessConfirmation({
-            chatId: paidChatId,
-            firstName: paidUser.firstName,
-            planLabel,
-            accessUntilLine,
-            zoomUrl,
+        const lines = upcoming
+          .map((session) => {
+            const dt = new Date(session.scheduledAt)
+            return `${dt.toLocaleString('uk-UA', {
+              weekday: 'short',
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            })} — ${session.topic}`
           })
+          .join('\n')
+        const onboardingSent = await sendFocusPaymentOnboardingIfNeeded({
+          userId,
+          paidUser,
+          focusSubscription,
+          canonicalSubscription,
+          planLabel,
+          upcomingLines: lines,
+        })
 
-          if (upcoming.length > 0) {
-            await sendUpcomingScheduleSummary({
-              chatId: paidChatId,
-              lines,
-              zoomUrl,
-            })
-          }
-
+        if (onboardingSent && paidUser) {
           for (const session of upcoming) {
             await scheduleReminders(paidUser.id, session)
           }
         }
 
         if (!focusSubscription?.focusWelcomedAt) {
-          const paidChatId =
-            paidUser?.telegramChatId ?? paidUser?.telegramLinks[0]?.chatId ?? null
+          const paidChatId = resolvePaidTelegramChatId({
+            userId,
+            paidUser,
+            operation: 'focus_block12_send',
+          })
           const channelLink = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
           if (paidChatId) {
             await conversationRenderer.renderOutbound({

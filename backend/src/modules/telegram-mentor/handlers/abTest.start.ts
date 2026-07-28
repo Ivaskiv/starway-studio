@@ -9,6 +9,7 @@ import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession
 import { prisma } from '@/db/client.js'
 import { getUserAccessState } from '@/modules/subscriptions/payments/focus.access.js'
 import { getUpcomingZoom } from '@/modules/zoom/service.js'
+import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
 import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
@@ -69,6 +70,35 @@ function isJoinWindow(scheduledAt: Date, now = new Date()): boolean {
   return diffMs <= JOIN_WINDOW_BEFORE_START_MS && diffMs >= -JOIN_WINDOW_AFTER_START_MS
 }
 
+function formatFocusExpiry(expiresAt: Date | null): string {
+  if (!expiresAt) {
+    return 'без кінцевої дати'
+  }
+
+  return new Intl.DateTimeFormat('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Europe/Kyiv',
+  }).format(expiresAt).replace(/\.$/, '')
+}
+
+function formatZoomDateTime(scheduledAt: Date): string {
+  const datePart = new Intl.DateTimeFormat('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'Europe/Kyiv',
+  }).format(scheduledAt)
+  const timePart = new Intl.DateTimeFormat('uk-UA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/Kyiv',
+  }).format(scheduledAt)
+
+  return `${datePart} о ${timePart}`
+}
+
 export function welcomeMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: absystemContent.START_BLOCK1.MSG1,
@@ -91,7 +121,7 @@ export function testInProgressMessage(input: { r3: boolean; hasExistingResult?: 
   ]
 
   if (input.hasExistingResult) {
-    baseButtons.push([{ text: 'Мій попередній результат', callback_data: 'ab_test:show_result' }])
+    baseButtons.push([{ text: 'МІЙ ПОПЕРЕДНІЙ РЕЗУЛЬТАТ', callback_data: 'ab_test:show_result' }])
   }
 
   return withKeyboard({
@@ -106,18 +136,18 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Твій <b>результат</b> готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.',
     buttons: [
-      [{ text: 'Показати результат', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
-      [{ text: 'Почати тест заново', callback_data: AB_TEST_ACTIONS.RESTART }],
+      [{ text: 'ПОКАЗАТИ РЕЗУЛЬТАТ', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: 'ПОЧАТИ ТЕСТ ЗАНОВО', callback_data: AB_TEST_ACTIONS.RESTART }],
       [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
     ],
   })
 }
 
-export function testDoneWithResultMessage(): ReturnType<typeof withKeyboard> {
+export function resultReadyMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Ти вже пройшла тест.\n\nПодивитись результат або пройти заново?',
+    text: 'Твій <b>результат</b> уже готовий.\n\nМожеш переглянути його ще раз або пройти тест заново.',
     buttons: [
-      [{ text: 'Мій результат', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: 'МІЙ РЕЗУЛЬТАТ', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
       [{ text: absystemContent.RESUME_FLOW.CTA_RESTART, callback_data: AB_TEST_ACTIONS.RESTART }],
     ],
   })
@@ -128,8 +158,8 @@ export function offerShownMessage(): ReturnType<typeof withKeyboard> {
     text: 'У тебе вже є <b>результат</b> тесту.\n\nХочеш відкрити його ще раз або пройти тест заново?',
     buttons: [
       [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
-      [{ text: 'Пройти тест заново', callback_data: AB_TEST_ACTIONS.RESTART }],
-      [{ text: 'Мій результат', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: 'ПРОЙТИ ТЕСТ ЗАНОВО', callback_data: AB_TEST_ACTIONS.RESTART }],
+      [{ text: 'МІЙ РЕЗУЛЬТАТ', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
     ],
   })
 }
@@ -138,8 +168,8 @@ export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Доступ до ФОКУС активний. Обери наступну дію в меню.',
     buttons: [
-      [{ text: 'ABSystem AI', callback_data: 'focus:ai' }],
-      [{ text: 'Переглянути результат', callback_data: 'ab_test:show_result' }],
+      [{ text: 'ABSYSTEM AI', callback_data: 'focus:ai' }],
+      [{ text: 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: 'ab_test:show_result' }],
     ],
   })
 }
@@ -168,8 +198,8 @@ export async function buildFocusActionButtons(
     ])
 
     return [
-      [{ text: 'Продовжити підписку на 1 місяць', url: monthlyCheckout.checkoutUrl }],
-      [{ text: 'Продовжити підписку на 3 місяці', url: quarterlyCheckout.checkoutUrl }],
+      [{ text: 'ПРОДОВЖИТИ ПІДПИСКУ НА 1 МІСЯЦЬ', url: monthlyCheckout.checkoutUrl }],
+      [{ text: 'ПРОДОВЖИТИ ПІДПИСКУ НА 3 МІСЯЦІ', url: quarterlyCheckout.checkoutUrl }],
     ]
   }
 
@@ -197,19 +227,19 @@ export async function buildFocusActionButtons(
   if (joinable) {
     return [
       [zoomLink
-        ? { text: 'Приєднатися', url: zoomLink }
-        : { text: 'Приєднатися', web_app: { url: resolveZoomCalendarWebAppUrl() } }],
+        ? { text: 'ПРИЄДНАТИСЯ', url: zoomLink }
+        : { text: 'ПРИЄДНАТИСЯ', web_app: { url: resolveZoomCalendarWebAppUrl() } }],
     ]
   }
 
   if (booked) {
     return [
-      [{ text: 'Переглянути запис', web_app: { url: resolveZoomCalendarWebAppUrl() } }],
+      [{ text: 'ПЕРЕГЛЯНУТИ ЗАПИС', web_app: { url: resolveZoomCalendarWebAppUrl() } }],
     ]
   }
 
   return [
-    [{ text: 'Записатися', web_app: { url: resolveZoomBookingWebAppUrl() } }],
+    [{ text: 'ЗАПИСАТИСЯ', web_app: { url: resolveZoomBookingWebAppUrl() } }],
   ]
 }
 
@@ -243,55 +273,52 @@ async function resolveFocusHomeState(userId: string): Promise<FocusHomeState> {
   return isJoinWindow(upcomingZoom.scheduledAt) ? 'JOIN_WINDOW' : 'BOOKED'
 }
 
-export async function zoomSection(userId: string): Promise<StartMessagePayload> {
-  const state = await resolveFocusHomeState(userId)
-  const buttons = await buildFocusActionButtons(userId)
+async function buildFocusHomeMessage(userId: string): Promise<StartMessagePayload> {
+  const [accessState, state, upcomingZoom, channelUrl] = await Promise.all([
+    getUserAccessState(userId),
+    resolveFocusHomeState(userId),
+    getUpcomingZoom(),
+    getOrCreateFocusInviteLink(userId),
+  ])
 
-  switch (state) {
-    case 'NOT_BOOKED':
-      return {
-        text: [
-          'Обери найближчу Zoom-практику ФОКУСУ.',
-          '',
-          'Під час запису напиши ситуацію, яку хочеш розібрати.',
-        ].join('\n'),
-        buttons: buttons.length > 0
-          ? [[{ text: 'Обрати Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }]]
-          : [],
-      }
-    case 'BOOKED':
-      return {
-        text: [
-          'Ти записана на Zoom-практику ФОКУСУ.',
-          '',
-          'Тут можна переглянути дату, час і питання для розбору.',
-        ].join('\n'),
-        buttons,
-      }
-    case 'JOIN_WINDOW':
-      return {
-        text: 'Zoom-практика ФОКУСУ починається зараз.',
-        buttons,
-      }
-    case 'NO_SESSION':
-    default:
-      return {
-        text: 'Наступну Zoom-практику ще не додано.',
-        buttons,
-      }
+  const zoomLine = upcomingZoom
+    ? `Найближча Zoom-практика — ${formatZoomDateTime(upcomingZoom.scheduledAt)}.`
+    : 'Найближчу Zoom-практику ще не додано.'
+
+  const bookingStatus = state === 'BOOKED' || state === 'JOIN_WINDOW'
+    ? 'Ти вже записана.'
+    : 'Ти ще не записана.'
+
+  return {
+    text: [
+      `Твій доступ до ФОКУСУ активний до ${formatFocusExpiry(accessState.expiresAt)}.`,
+      '',
+      zoomLine,
+      '',
+      bookingStatus,
+    ].join('\n'),
+    buttons: [
+      [{ text: 'ЗАПИСАТИСЯ', web_app: { url: resolveZoomBookingWebAppUrl() } }],
+      [{ text: 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: 'КАНАЛ ФОКУСУ', url: channelUrl }],
+    ],
   }
 }
 
+export async function zoomSection(userId: string): Promise<StartMessagePayload> {
+  return buildFocusHomeMessage(userId)
+}
+
 export async function zoomMemberMessage(userId: string): Promise<ReturnType<typeof withKeyboard>> {
-  return withKeyboard(await zoomSection(userId))
+  return withKeyboard(await buildFocusHomeMessage(userId))
 }
 
 export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Переходимо в AI Mentor режим. Обери, з чого почнемо.',
     buttons: [
-      [{ text: 'AI Mentor меню', callback_data: 'ai_mentor:menu' }],
-      [{ text: 'Мій план дій', callback_data: 'ai_mentor:plan' }],
+      [{ text: 'AI MENTOR МЕНЮ', callback_data: 'ai_mentor:menu' }],
+      [{ text: 'МІЙ ПЛАН ДІЙ', callback_data: 'ai_mentor:plan' }],
     ],
   })
 }
@@ -315,9 +342,9 @@ export function postZoom1Message(userId: string): ReturnType<typeof withKeyboard
       '<b>2. Який один крок зробиш до наступної практики?</b>',
     ].join('\n'),
     buttons: [
-      [{ text: 'Залишити інсайт', callback_data: 'post_zoom:leave_insight' }],
-      [{ text: 'Продовжити з ABSystem', callback_data: 'post_zoom:absystem_cta' }],
-      [{ text: 'Календар', callback_data: 'focus:next_zoom' }],
+      [{ text: 'ЗАЛИШИТИ ІНСАЙТ', callback_data: 'post_zoom:leave_insight' }],
+      [{ text: 'ПРОДОВЖИТИ З ABSYSTEM', callback_data: 'post_zoom:absystem_cta' }],
+      [{ text: 'КАЛЕНДАР', callback_data: 'focus:next_zoom' }],
     ],
   })
 }
@@ -348,8 +375,8 @@ export function postZoomAbsystemCtaMessage(userId: string): ReturnType<typeof wi
       'і маленьким щоденним діям.</b>',
     ].join('\n'),
     buttons: [
-      [{ text: 'Активувати ABSystem', url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
-      [{ text: 'Дізнатися більше', callback_data: 'focus:ai' }],
+      [{ text: 'АКТИВУВАТИ ABSYSTEM', url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
+      [{ text: 'ДІЗНАТИСЯ БІЛЬШЕ', callback_data: 'focus:ai' }],
     ],
   })
 }
@@ -359,7 +386,7 @@ export function upsellMessage(userId: string): ReturnType<typeof withKeyboard> {
     text: `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD_TITLE}\n\n${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD}`,
     buttons: [
       [{ text: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD_CTA, url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
-      [{ text: 'Календар', callback_data: 'focus:next_zoom' }],
+      [{ text: 'КАЛЕНДАР', callback_data: 'focus:next_zoom' }],
     ],
   })
 }

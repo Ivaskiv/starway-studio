@@ -64,7 +64,16 @@ function focusActive(expiresAt: Date | null): UserAccessState {
 export async function getUserAccessState(userId: string): Promise<UserAccessState> {
   const now = new Date()
 
-  const subscription = await prisma.productSubscription.findFirst({
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      telegramUserId: true,
+      telegramChatId: true,
+    },
+  })
+
+  const subscriptionRows = await prisma.productSubscription.findMany({
     where: {
       userId,
       product: {
@@ -73,32 +82,60 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
     },
     select: {
       status: true,
+      paidAt: true,
       expiresAt: true,
       trialEndsAt: true,
+      product: {
+        select: {
+          code: true,
+        },
+      },
     },
     orderBy: { createdAt: 'desc' },
   })
 
-  if (!subscription) return noAccess()
+  const subscription = subscriptionRows[0] ?? null
+
+  const logResult = (result: UserAccessState) => {
+    console.info('[ZOOM_ACCESS_REFRESH_BACKEND]', {
+      telegramUserId: user?.telegramUserId ?? null,
+      telegramChatId: user?.telegramChatId ?? null,
+      resolvedUserId: userId,
+      productSubscriptions: subscriptionRows.map((row) => ({
+        productCode: row.product.code,
+        status: row.status,
+        paidAt: row.paidAt,
+        expiresAt: row.expiresAt,
+        trialEndsAt: row.trialEndsAt,
+      })),
+      calculatedHasFocus: result.hasFocus,
+      responseBody: result,
+    })
+    return result
+  }
+
+  if (!subscription) return logResult(noAccess())
 
   const status = String(subscription.status ?? '').trim().toLowerCase()
 
   if (status === 'trial') {
-    if (!subscription.trialEndsAt) return noAccess()
-    return subscription.trialEndsAt.getTime() > now.getTime()
-      ? focusActive(subscription.trialEndsAt)
-      : noAccess(subscription.trialEndsAt)
+    if (!subscription.trialEndsAt) return logResult(noAccess())
+    return logResult(
+      subscription.trialEndsAt.getTime() > now.getTime()
+        ? focusActive(subscription.trialEndsAt)
+        : noAccess(subscription.trialEndsAt),
+    )
   }
 
   if (status !== 'active' && status !== 'paid') {
-    return noAccess(subscription.expiresAt ?? null)
+    return logResult(noAccess(subscription.expiresAt ?? null))
   }
 
   if (subscription.expiresAt && subscription.expiresAt.getTime() <= now.getTime()) {
-    return noAccess(subscription.expiresAt)
+    return logResult(noAccess(subscription.expiresAt))
   }
 
-  return focusActive(subscription.expiresAt ?? null)
+  return logResult(focusActive(subscription.expiresAt ?? null))
 }
 
 export async function getZoomExchangeAccessPolicy(userId: string): Promise<ZoomExchangeAccessPolicy> {

@@ -262,111 +262,118 @@ function patchContext(ctx: OrchestratedContext): void {
     }) as Context['answerCbQuery']
   }
 
+  const patchedTelegram = Object.create(ctx.telegram) as typeof ctx.telegram
+
+  patchedTelegram.sendMessage = (async (...args: Parameters<typeof ctx.telegram.sendMessage>) => {
+    if (ctx.state.__conversation_transport_bypass__) {
+      return originalTelegramSendMessage(...args)
+    }
+
+    const text = typeof args[1] === 'string' ? args[1] : ''
+    return enqueue(ctx, {
+      source: 'telegram_flow',
+      transition: 'telegram_send_message',
+      flowState: resolveFlowState(ctx),
+      key: buildDeliveryKey(ctx, 'telegram_send_message', text),
+      execute: () => originalTelegramSendMessage(...args),
+    })
+  }) as typeof ctx.telegram.sendMessage
+
+  patchedTelegram.sendPhoto = (async (...args: Parameters<typeof ctx.telegram.sendPhoto>) => {
+    if (ctx.state.__conversation_transport_bypass__) {
+      return originalTelegramSendPhoto(...args)
+    }
+
+    return enqueue(ctx, {
+      source: 'telegram_flow',
+      transition: 'telegram_send_photo',
+      flowState: resolveFlowState(ctx),
+      key: buildDeliveryKey(ctx, 'telegram_send_photo', String(args[1] ?? '')),
+      execute: () => originalTelegramSendPhoto(...args),
+    })
+  }) as typeof ctx.telegram.sendPhoto
+
+  patchedTelegram.sendVoice = (async (...args: Parameters<typeof ctx.telegram.sendVoice>) => {
+    if (ctx.state.__conversation_transport_bypass__) {
+      return originalTelegramSendVoice(...args)
+    }
+
+    return enqueue(ctx, {
+      source: 'telegram_flow',
+      transition: 'telegram_send_voice',
+      flowState: resolveFlowState(ctx),
+      key: buildDeliveryKey(ctx, 'telegram_send_voice', String(args[1] ?? '')),
+      execute: () => originalTelegramSendVoice(...args),
+    })
+  }) as typeof ctx.telegram.sendVoice
+
+  patchedTelegram.sendVideo = (async (...args: Parameters<typeof ctx.telegram.sendVideo>) => {
+    if (ctx.state.__conversation_transport_bypass__) {
+      return originalTelegramSendVideo(...args)
+    }
+
+    return enqueue(ctx, {
+      source: 'telegram_flow',
+      transition: 'telegram_send_video',
+      flowState: resolveFlowState(ctx),
+      key: buildDeliveryKey(ctx, 'telegram_send_video', String(args[1] ?? '')),
+      execute: () => originalTelegramSendVideo(...args),
+    })
+  }) as typeof ctx.telegram.sendVideo
+
+  patchedTelegram.sendDocument = (async (...args: Parameters<typeof ctx.telegram.sendDocument>) => {
+    if (ctx.state.__conversation_transport_bypass__) {
+      return originalTelegramSendDocument(...args)
+    }
+
+    return enqueue(ctx, {
+      source: 'telegram_flow',
+      transition: 'telegram_send_document',
+      flowState: resolveFlowState(ctx),
+      key: buildDeliveryKey(ctx, 'telegram_send_document', String(args[1] ?? '')),
+      execute: () => originalTelegramSendDocument(...args),
+    })
+  }) as typeof ctx.telegram.sendDocument
+
+  patchedTelegram.sendChatAction = (async (...args: Parameters<typeof ctx.telegram.sendChatAction>) => {
+    if (ctx.state.__conversation_transport_bypass__) {
+      return originalTelegramSendChatAction(...args)
+    }
+
+    return enqueue(ctx, {
+      source: 'telegram_flow',
+      transition: 'telegram_send_chat_action',
+      flowState: resolveFlowState(ctx),
+      key: buildDeliveryKey(ctx, 'telegram_send_chat_action', String(args[1] ?? '')),
+      execute: () => originalTelegramSendChatAction(...args),
+    })
+  }) as typeof ctx.telegram.sendChatAction
+
+  patchedTelegram.answerCbQuery = (async (...args: Parameters<typeof ctx.telegram.answerCbQuery>) => {
+    if (ctx.state.__conversation_transport_bypass__) {
+      return originalTelegramAnswerCbQuery(...args)
+    }
+
+    if (ctx.state.__callback_ack_sent__) {
+      return true
+    }
+
+    const text = typeof args[1] === 'string' ? args[1] : ''
+    return enqueue(ctx, {
+      source: 'telegram_flow',
+      transition: 'telegram_answer_callback_query',
+      flowState: resolveFlowState(ctx),
+      key: buildDeliveryKey(ctx, 'telegram_answer_callback_query', text),
+      execute: async () => {
+        const result = await originalTelegramAnswerCbQuery(...args)
+        ctx.state.__callback_ack_sent__ = true
+        return result
+      },
+    })
+  }) as typeof ctx.telegram.answerCbQuery
+
   Object.defineProperty(ctx, 'telegram', {
-    value: {
-      ...ctx.telegram,
-      sendMessage: (async (...args: Parameters<typeof ctx.telegram.sendMessage>) => {
-        if (ctx.state.__conversation_transport_bypass__) {
-          return originalTelegramSendMessage(...args)
-        }
-
-        const text = typeof args[1] === 'string' ? args[1] : ''
-        return enqueue(ctx, {
-          source: 'telegram_flow',
-          transition: 'telegram_send_message',
-          flowState: resolveFlowState(ctx),
-          key: buildDeliveryKey(ctx, 'telegram_send_message', text),
-          execute: () => originalTelegramSendMessage(...args),
-        })
-      }) as typeof ctx.telegram.sendMessage,
-      sendPhoto: (async (...args: Parameters<typeof ctx.telegram.sendPhoto>) => {
-        if (ctx.state.__conversation_transport_bypass__) {
-          return originalTelegramSendPhoto(...args)
-        }
-
-        return enqueue(ctx, {
-          source: 'telegram_flow',
-          transition: 'telegram_send_photo',
-          flowState: resolveFlowState(ctx),
-          key: buildDeliveryKey(ctx, 'telegram_send_photo', String(args[1] ?? '')),
-          execute: () => originalTelegramSendPhoto(...args),
-        })
-      }) as typeof ctx.telegram.sendPhoto,
-      sendVoice: (async (...args: Parameters<typeof ctx.telegram.sendVoice>) => {
-        if (ctx.state.__conversation_transport_bypass__) {
-          return originalTelegramSendVoice(...args)
-        }
-
-        return enqueue(ctx, {
-          source: 'telegram_flow',
-          transition: 'telegram_send_voice',
-          flowState: resolveFlowState(ctx),
-          key: buildDeliveryKey(ctx, 'telegram_send_voice', String(args[1] ?? '')),
-          execute: () => originalTelegramSendVoice(...args),
-        })
-      }) as typeof ctx.telegram.sendVoice,
-      sendVideo: (async (...args: Parameters<typeof ctx.telegram.sendVideo>) => {
-        if (ctx.state.__conversation_transport_bypass__) {
-          return originalTelegramSendVideo(...args)
-        }
-
-        return enqueue(ctx, {
-          source: 'telegram_flow',
-          transition: 'telegram_send_video',
-          flowState: resolveFlowState(ctx),
-          key: buildDeliveryKey(ctx, 'telegram_send_video', String(args[1] ?? '')),
-          execute: () => originalTelegramSendVideo(...args),
-        })
-      }) as typeof ctx.telegram.sendVideo,
-      sendDocument: (async (...args: Parameters<typeof ctx.telegram.sendDocument>) => {
-        if (ctx.state.__conversation_transport_bypass__) {
-          return originalTelegramSendDocument(...args)
-        }
-
-        return enqueue(ctx, {
-          source: 'telegram_flow',
-          transition: 'telegram_send_document',
-          flowState: resolveFlowState(ctx),
-          key: buildDeliveryKey(ctx, 'telegram_send_document', String(args[1] ?? '')),
-          execute: () => originalTelegramSendDocument(...args),
-        })
-      }) as typeof ctx.telegram.sendDocument,
-      sendChatAction: (async (...args: Parameters<typeof ctx.telegram.sendChatAction>) => {
-        if (ctx.state.__conversation_transport_bypass__) {
-          return originalTelegramSendChatAction(...args)
-        }
-
-        return enqueue(ctx, {
-          source: 'telegram_flow',
-          transition: 'telegram_send_chat_action',
-          flowState: resolveFlowState(ctx),
-          key: buildDeliveryKey(ctx, 'telegram_send_chat_action', String(args[1] ?? '')),
-          execute: () => originalTelegramSendChatAction(...args),
-        })
-      }) as typeof ctx.telegram.sendChatAction,
-      answerCbQuery: (async (...args: Parameters<typeof ctx.telegram.answerCbQuery>) => {
-        if (ctx.state.__conversation_transport_bypass__) {
-          return originalTelegramAnswerCbQuery(...args)
-        }
-
-        if (ctx.state.__callback_ack_sent__) {
-          return true
-        }
-
-        const text = typeof args[1] === 'string' ? args[1] : ''
-        return enqueue(ctx, {
-          source: 'telegram_flow',
-          transition: 'telegram_answer_callback_query',
-          flowState: resolveFlowState(ctx),
-          key: buildDeliveryKey(ctx, 'telegram_answer_callback_query', text),
-          execute: async () => {
-            const result = await originalTelegramAnswerCbQuery(...args)
-            ctx.state.__callback_ack_sent__ = true
-            return result
-          },
-        })
-      }) as typeof ctx.telegram.answerCbQuery,
-    },
+    value: patchedTelegram,
     configurable: true,
   })
 }

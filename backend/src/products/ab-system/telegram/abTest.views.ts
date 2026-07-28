@@ -925,16 +925,16 @@ export async function sendResultSnapshot(
     : 'Zoom-практики: ще не записувалась'
 
   const text = [
-    `🎯 Твій результат: ${resultDef.title}`,
+    `Твій <b>результат</b>: <b>${resultDef.title}</b>`,
     '',
     shortMessage[0]?.type === 'text' ? shortMessage[0].text : resultDef.msg1,
     '',
-    `📅 ${zoomLine}`,
-    `💳 ${subscriptionLine}`,
+    zoomLine,
+    subscriptionLine,
   ].join('\n')
 
   const buttons = await buildFocusActionButtons(input.userId)
-  buttons.push([{ text: '📚 Меню ФОКУС', callback_data: 'focus:menu' }])
+  buttons.push([{ text: 'МЕНЮ ФОКУС', callback_data: 'focus:menu' }])
 
   await ctx.telegram.sendMessage(input.chatId, text, {
     parse_mode: 'HTML',
@@ -1366,19 +1366,19 @@ export async function renderAbTestEmailGate(
             ? [
                 [
                   {
-                    text: 'Так, це мій email',
+                    text: 'ТАК, ЦЕ МІЙ EMAIL',
                     callback_data: 'confirm_profile_email_for_result',
                   },
                 ],
                 [
                   {
-                    text: 'Змінити email',
+                    text: 'ЗМІНИТИ EMAIL',
                     callback_data: 'change_email_for_result',
                   },
                 ],
               ]
             : []),
-          [{ text: 'Пропустити', callback_data: 'skip_email_before_result' }],
+          [{ text: 'ПРОПУСТИТИ', callback_data: 'skip_email_before_result' }],
         ],
       },
     }

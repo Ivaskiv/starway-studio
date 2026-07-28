@@ -7,6 +7,7 @@ import {
 import { telegramContentRegistry } from '../../content/contentRegistry.js'
 import {
   appendTelegramConversationTurn,
+  resolveTelegramSupportUrl,
   type TelegramIntelligenceMessageType,
 } from '../../services/intelligence.service.js'
 import { getTelegramAiRequestContext } from '../../services/requestContext.service.js'
@@ -37,8 +38,10 @@ type DecisionTelemetry = {
   confidence?: number
 }
 
-function buildSoftBridgeReply(): string {
-  return telegramContentRegistry.replies.softBridge
+const DEMO_BOOKING_URL = resolveTelegramSupportUrl()
+
+function buildScopeFallbackReply(): string {
+  return telegramContentRegistry.replies.scopeFallback
 }
 
 function buildPersonalSituationReply(): string {
@@ -101,6 +104,19 @@ export async function resolveIntelligenceConversationResponse(
   },
 ): Promise<ConversationResponse> {
   const requestContext = input.requestContext
+
+  if (input.messageType === 'UNKNOWN') {
+    return createConversationResponse({
+      text: buildScopeFallbackReply(),
+      telemetry: {
+        scenario: 'scope_fallback',
+        fallbackActivated: true,
+      },
+      analytics: {
+        intent: 'unknown',
+      },
+    })
+  }
 
   if (input.messageType === 'MEMORY_REQUEST') {
     const lastAssistantMessage = [...requestContext.recentConversation]
@@ -230,7 +246,7 @@ export async function resolveIntelligenceConversationResponse(
         {
           label: telegramContentRegistry.buttons.bookDemo,
           kind: 'url',
-          value: 'https://t.me/nadya_couch',
+          value: DEMO_BOOKING_URL,
         },
       ],
       telemetry: {
@@ -244,7 +260,7 @@ export async function resolveIntelligenceConversationResponse(
   }
 
   return createConversationResponse({
-    text: buildSoftBridgeReply(),
+    text: buildScopeFallbackReply(),
     telemetry: {
       scenario: 'assistant_unavailable',
       fallbackActivated: true,

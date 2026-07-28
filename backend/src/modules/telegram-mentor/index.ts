@@ -54,6 +54,7 @@ import { renderTelegram } from './renderers/decisionTelegram.js'
 import { recordTelegramCtaInteraction } from './services/ctaInteraction.service.js'
 import { dispatchTelegramCallbackEvent } from './services/telegram-event-bus.service.js'
 import { getSession } from './session.js'
+import type { TelegramTextRoute } from './router/messageRouter.js'
 import { routeTelegramTextMessage } from './router/messageRouter.js'
 
 let mentorBotRegistered = false
@@ -63,13 +64,75 @@ interface MentorBotRegistrationOptions {
   product?: string
 }
 
-const ASSISTANT_CALLBACK_MESSAGES: Record<string, string> = {
-  continue: 'Continue where we stopped. Use what you already know about me and tell me what matters most now.',
-  plan_today: 'Help me plan today based on my current context, progress, and subscription.',
-  prepare_zoom: 'Prepare me for my next Zoom practice using my current state and recent progress.',
-  review_progress: 'Review my progress and tell me what I should focus on next.',
-  talk: 'I want to talk to my AI assistant.',
-  unsure: 'I do not know what to do next. Recommend one clear next action based on what you know about me.',
+const ASSISTANT_CALLBACK_MESSAGES: Record<
+  string,
+  { text: string; route: TelegramTextRoute }
+> = {
+  continue: {
+    text: 'ПРОДОВЖИТИ З ТОГО МІСЦЯ, ДЕ МИ ЗУПИНИЛИСЬ',
+    route: {
+      intent: 'memory_request',
+      scenario: 'intelligence',
+      intelligenceMessageType: 'MEMORY_REQUEST',
+    },
+  },
+  plan_today: {
+    text: 'ДОПОМОЖИ СПЛАНУВАТИ СЬОГОДНІ',
+    route: {
+      intent: 'question',
+      scenario: 'intelligence',
+      intelligenceMessageType: 'QUESTION',
+    },
+  },
+  prepare_zoom: {
+    text: 'ПІДГОТУЙ МЕНЕ ДО НАСТУПНОГО ZOOM',
+    route: {
+      intent: 'question',
+      scenario: 'intelligence',
+      intelligenceMessageType: 'QUESTION',
+    },
+  },
+  review_progress: {
+    text: 'ПЕРЕГЛЯНЬ МІЙ ПРОГРЕС',
+    route: {
+      intent: 'memory_request',
+      scenario: 'intelligence',
+      intelligenceMessageType: 'MEMORY_REQUEST',
+    },
+  },
+  talk: {
+    text: 'ПОГОВОРИТИ З AI АСИСТЕНТОМ',
+    route: {
+      intent: 'question',
+      scenario: 'intelligence',
+      intelligenceMessageType: 'QUESTION',
+    },
+  },
+  unsure: {
+    text: 'Я НЕ ЗНАЮ, ЩО РОБИТИ ДАЛІ',
+    route: {
+      intent: 'personal_situation',
+      scenario: 'intelligence',
+      intelligenceMessageType: 'PERSONAL_SITUATION',
+    },
+  },
+}
+
+const USER_CALLBACK_PREFIX = 'user:'
+const LEGACY_USER_CALLBACK_PREFIX = 'assistant:'
+const LEGACY_USER_CALLBACK_MESSAGE = 'Дія застаріла. Відкрийте меню ще раз'
+
+function resolveUserCallbackPreset(action: string): { text: string; route: TelegramTextRoute } | null {
+  if (action.startsWith(USER_CALLBACK_PREFIX)) {
+    const key = action.slice(USER_CALLBACK_PREFIX.length)
+    return ASSISTANT_CALLBACK_MESSAGES[key] ?? null
+  }
+
+  if (action.startsWith(LEGACY_USER_CALLBACK_PREFIX)) {
+    return null
+  }
+
+  return null
 }
 
 function hasStructuredFields(text: string): boolean {
@@ -524,7 +587,7 @@ export async function registerMentorBot(
             ? {
                 reply_markup: {
                   inline_keyboard: [
-                    [{ text: 'Панель керування', url: panelUrl }],
+                    [{ text: 'ПАНЕЛЬ КЕРУВАННЯ', url: panelUrl }],
                   ],
                 },
               }
@@ -574,7 +637,7 @@ export async function registerMentorBot(
           ? {
               reply_markup: {
                 inline_keyboard: [
-                  [{ text: 'Панель керування', url: panelUrl }],
+                  [{ text: 'ПАНЕЛЬ КЕРУВАННЯ', url: panelUrl }],
                 ],
               },
             }
@@ -761,28 +824,31 @@ export async function registerMentorBot(
       userId: (ctx.state as { userId?: string | null }).userId ?? null,
     })
     try {
-      if (action.startsWith('assistant:')) {
-        const key = action.slice('assistant:'.length)
-        const syntheticMessage = ASSISTANT_CALLBACK_MESSAGES[key]
-
-        if (!syntheticMessage) {
-          await planAck(
-            ctx,
-            'ctx.answerCbQuery',
-            'assistant_callback_unknown',
-            'Дія більше недоступна',
-          ).catch(() => undefined)
-          return
-        }
+      if (action.startsWith(USER_CALLBACK_PREFIX)) {
+        const callbackPreset = resolveUserCallbackPreset(action)
 
         await planAck(
           ctx,
           'ctx.answerCbQuery',
-          'assistant_callback_ack',
+          'user_callback_ack',
           'Продовжуємо',
         ).catch(() => undefined)
 
-        const handled = await routeTelegramTextMessage(ctx, syntheticMessage)
+        if (!callbackPreset) {
+          await planMessage(
+            ctx,
+            'ctx.reply',
+            'user_callback_unknown',
+            LEGACY_USER_CALLBACK_MESSAGE,
+          ).catch(() => undefined)
+          return
+        }
+
+        const handled = await routeTelegramTextMessage(
+          ctx,
+          callbackPreset.text,
+          callbackPreset.route,
+        )
 
         if (!handled) {
           await planMessage(
@@ -793,6 +859,16 @@ export async function registerMentorBot(
           ).catch(() => undefined)
         }
 
+        return
+      }
+
+      if (action.startsWith(LEGACY_USER_CALLBACK_PREFIX)) {
+        await planAck(
+          ctx,
+          'ctx.answerCbQuery',
+          'assistant_callback_legacy',
+          LEGACY_USER_CALLBACK_MESSAGE,
+        ).catch(() => undefined)
         return
       }
 
@@ -1110,12 +1186,21 @@ export async function registerMentorBot(
   bot.catch((err, ctx) => {
     void (async () => {
       logger.error('[telegram-thin-client:catch]', err)
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      const isCallbackUpdate =
+        'callbackQuery' in ctx &&
+        Boolean(ctx.callbackQuery)
+      const isTimeoutError = errorMessage.includes('Promise timed out after')
+
+      if (isCallbackUpdate || isTimeoutError) {
+        return
+      }
       const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
       await planMessage(
         ctx,
         'ctx.reply',
         'telegram_global_catch',
-        'Спробуй ще раз за хвилину.',
+        'Не вдалося виконати дію. Напиши ще раз.',
         replyMarkup
       ).catch(() => undefined)
     })()

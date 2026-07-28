@@ -1,15 +1,8 @@
-import {
-  FOCUS_CHANNEL_URL,
-  FOCUS_WELCOME,
-  abTestFocusContent,
-  buildFocusWelcomeMessage,
-} from '@/products/ab-system/content/abTest.focus.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
-import { createOnceInviteLink } from '@/products/focus/payments/inviteLink.js'
+import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import type { ConversationButton, ConversationResponse } from '@/modules/telegram-mentor/conversation/engine/types.js'
 import { resolveTelegramWebappBaseUrl } from '@/config/webapp.js'
-import { bot } from '@/lib/telegram.js'
 import { hasActiveFocusSubscription } from './focus.access.js'
 import { prisma } from '../../../db/client.js'
 import { FOCUS_PRODUCT_CODES } from './focus.access.js'
@@ -46,9 +39,113 @@ function buildMessageResponse(
 }
 
 function resolveZoomBookingWebAppUrl(): string {
-  const configured = String(process.env.WEBAPP_URL ?? '').trim()
-  const base = configured || resolveTelegramWebappBaseUrl()
-  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar?intent=booking`
+  const base = resolveTelegramWebappBaseUrl()
+  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar`
+}
+
+function buildFocusChannelStepText(): string {
+  return [
+    'Доступ до ФОКУСУ активовано.',
+    '',
+    'Перейди в закритий канал. Там будуть анонси практик,',
+    'матеріали та важливі повідомлення.',
+  ].join('\n')
+}
+
+function buildFocusZoomStepText(): string {
+  return [
+    'Тепер обери найближчу Zoom-практику.',
+    '',
+    'Під час запису напиши ситуацію, яку хочеш розібрати.',
+  ].join('\n')
+}
+
+function buildFocusChannelStepResponse(inviteUrl: string): ConversationResponse {
+  return buildMessageResponse(
+    buildFocusChannelStepText(),
+    [{ kind: 'url', label: 'ПЕРЕЙТИ В КАНАЛ', value: inviteUrl }],
+    'HTML',
+  )
+}
+
+function buildFocusZoomStepResponse(): ConversationResponse {
+  return buildMessageResponse(
+    buildFocusZoomStepText(),
+    [{ kind: 'web_app', label: 'ОБРАТИ ZOOM', value: resolveZoomBookingWebAppUrl() }],
+    'HTML',
+  )
+}
+
+async function sendFocusAccessStateMessage(
+  userId: string,
+  options?: { markWelcomed?: boolean },
+): Promise<boolean> {
+  const subscription = await prisma.productSubscription.findFirst({
+    where: {
+      userId,
+      product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      focusWelcomedAt: true,
+      focusChannelInviteLink: true,
+      channelJoinedAt: true,
+    },
+  })
+  if (!subscription) {
+    return false
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+    },
+  })
+  if (!user) {
+    return false
+  }
+
+  const chatId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null
+  if (!chatId) {
+    return false
+  }
+
+  const inviteUrl =
+    subscription.focusChannelInviteLink ?? (await getOrCreateFocusInviteLink(userId))
+  const response = subscription.channelJoinedAt
+    ? buildFocusZoomStepResponse()
+    : buildFocusChannelStepResponse(inviteUrl)
+  const sent = await sendOutboundConversation(chatId, response)
+
+  if (
+    sent
+    && options?.markWelcomed
+    && subscription.id
+    && !subscription.focusWelcomedAt
+  ) {
+    await prisma.productSubscription.update({
+      where: { id: subscription.id },
+      data: {
+        focusWelcomedAt: new Date(),
+        focusChannelInviteLink: inviteUrl,
+      },
+    }).catch((err) =>
+      console.error(
+        '[Focus] Failed to update subscription after onboarding send',
+        err,
+      ),
+    )
+  }
+
+  return sent
 }
 
 export async function sendFocusPaymentSuccessTelegramMessage(userId: string) {
@@ -67,127 +164,11 @@ export async function sendFocusPaymentSuccessTelegramMessage(userId: string) {
     return false
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      firstName: true,
-      telegramChatId: true,
-      telegramLinks: {
-        where: { isActive: true, chatId: { not: null } },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: { chatId: true },
-      },
-    },
-  })
-
-  const chatId = user?.telegramChatId ?? user?.telegramLinks[0]?.chatId ?? null
-  if (!chatId) {
-    console.warn(
-      `[Focus] No telegramChatId for userId=${userId} — welcome message not sent`
-    )
-    return false
-  }
-
-  const inviteUrl = await createOnceInviteLink(chatId)
-  const billing = absystemContent.BILLING.FOCUS_PAID
-  const text = buildFocusWelcomeMessage(user?.firstName, inviteUrl)
-
-  const sent = await sendOutboundConversation(chatId, buildMessageResponse(text, [
-    { kind: 'url', label: billing.cta, value: inviteUrl },
-  ], 'HTML'))
-
-  if (sent && subscription?.id) {
-    await prisma.productSubscription
-      .update({
-        where: { id: subscription.id },
-        data: {
-          focusWelcomedAt: new Date(),
-          focusChannelInviteLink: inviteUrl,
-        },
-      })
-      .catch((err) =>
-        console.error(
-          '[Focus] Failed to update subscription after welcome',
-          err
-        )
-      )
-  }
-
-  return sent
+  return sendFocusAccessStateMessage(userId, { markWelcomed: true })
 }
 
 export async function sendAbTestBlock12Welcome(userId: string): Promise<boolean> {
-  console.log('[BLOCK12_DIAG]', { userId, step: 'enter' })
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      firstName: true,
-      telegramChatId: true,
-      telegramLinks: {
-        where: { isActive: true, chatId: { not: null } },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: { chatId: true },
-      },
-    },
-  })
-
-  const chatId = user?.telegramChatId ?? user?.telegramLinks[0]?.chatId ?? null
-  console.log('[BLOCK12_DIAG]', {
-    userId,
-    chatId,
-    hasTelegramChatId: Boolean(user?.telegramChatId),
-    telegramLinksCount: user?.telegramLinks.length ?? 0,
-    step: 'chatId_resolved',
-  })
-
-  if (!chatId) {
-    console.warn(
-      `[Focus] No telegramChatId for userId=${userId} — Block 12 not sent`
-    )
-    return false
-  }
-
-  const subscription = await prisma.productSubscription.findFirst({
-    where: {
-      userId,
-      product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
-    },
-    select: { focusChannelInviteLink: true },
-  })
-
-  const inviteUrl =
-    subscription?.focusChannelInviteLink ?? (await createOnceInviteLink(chatId))
-
-  console.log('[BLOCK12_DIAG]', {
-    userId,
-    chatId,
-    inviteUrl: inviteUrl.slice(0, 40),
-    step: 'before_send',
-  })
-
-  const block12Url = inviteUrl || FOCUS_CHANNEL_URL
-  const sentMessage = await bot.telegram.sendMessage(
-    chatId,
-    buildFocusWelcomeMessage(user?.firstName, block12Url),
-    {
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: FOCUS_WELCOME.msg1.cta, url: block12Url }],
-          [{ text: 'Записатись на Zoom', web_app: { url: resolveZoomBookingWebAppUrl() } }],
-        ],
-      },
-    },
-  ).catch((error) => {
-    console.error('[Focus] Block 12 direct send failed', error)
-    return null
-  })
-  const sent = Boolean(sentMessage)
-  console.log('[BLOCK12_DIAG]', { userId, chatId, step: 'after_send' })
-  return sent
+  return sendFocusAccessStateMessage(userId, { markWelcomed: true })
 }
 
 function normalizeTelegramId(value: string | number | null | undefined): string {
@@ -222,17 +203,7 @@ export async function sendAbTestBlock12PostJoin(userId: string): Promise<boolean
   const chatId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null
   if (!chatId) return false
 
-  const sent = await sendOutboundConversation(
-    chatId,
-    buildMessageResponse(
-      abTestFocusContent.afterJoin.body,
-      [
-        { kind: 'web_app', label: 'Записатись на Zoom', value: resolveZoomBookingWebAppUrl() },
-        { kind: 'url', label: 'Відкрити канал', value: FOCUS_CHANNEL_URL },
-      ],
-      'HTML',
-    ),
-  )
+  const sent = await sendOutboundConversation(chatId, buildFocusZoomStepResponse())
   if (!sent) return false
 
   await prisma.productSubscription.update({
@@ -244,53 +215,7 @@ export async function sendAbTestBlock12PostJoin(userId: string): Promise<boolean
 }
 
 export async function resendFocusAccessTelegramMessage(userId: string): Promise<boolean> {
-  const subscription = await prisma.productSubscription.findFirst({
-    where: {
-      userId,
-      product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
-    },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      channelJoinedAt: true,
-    },
-  })
-
-  if (!subscription) {
-    return false
-  }
-
-  if (subscription.channelJoinedAt) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        telegramChatId: true,
-        telegramLinks: {
-          where: { isActive: true, chatId: { not: null } },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { chatId: true },
-        },
-      },
-    })
-    if (!user) return false
-
-    const chatId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null
-    if (!chatId) return false
-
-    return sendOutboundConversation(
-      chatId,
-      buildMessageResponse(
-        abTestFocusContent.afterJoin.body,
-        [
-          { kind: 'web_app', label: 'Записатись на Zoom', value: resolveZoomBookingWebAppUrl() },
-          { kind: 'url', label: 'Відкрити канал', value: FOCUS_CHANNEL_URL },
-        ],
-        'HTML',
-      ),
-    )
-  }
-
-  return sendAbTestBlock12Welcome(userId)
+  return sendFocusAccessStateMessage(userId, { markWelcomed: false })
 }
 
 export async function handleFocusChannelJoinByTelegramUserId(
@@ -343,7 +268,6 @@ export async function sendAbsystemPaymentSuccessTelegramMessage(userId: string) 
     return false
   }
 
-  const billing = absystemContent.BILLING.PLATFORM_PAID
   const platformUrl = (
     process.env.FRONTEND_URL?.trim() ||
     process.env.PUBLIC_FRONTEND_URL?.trim() ||
@@ -351,6 +275,7 @@ export async function sendAbsystemPaymentSuccessTelegramMessage(userId: string) 
     'http://localhost:5173'
   ).replace(/\/$/, '')
 
+  const billing = absystemContent.BILLING.PLATFORM_PAID
   const text = [billing.text].join('\n')
 
   return sendOutboundConversation(chatId, buildMessageResponse(text, [

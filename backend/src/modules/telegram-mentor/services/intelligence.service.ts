@@ -1,6 +1,7 @@
 import type { AIMessageRole, Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../../db/client.js'
+import { readTelegramBotConfig } from '../runtime/botConfig.js'
 import {
   quickDetectIntent as detectStrictIntent,
   resolveNextStep as resolveStrictNextStep,
@@ -39,16 +40,18 @@ export type TelegramConversationHistoryMessage = {
   createdAt: string
 }
 
+const FALLBACK_TELEGRAM_SUPPORT_URL =
+  readTelegramBotConfig().botLink || 'https://t.me/Test_ABsystem_bot'
 const CONTACT_NADYA_URL = resolveTelegramSupportUrl()
 
-function resolveTelegramSupportUrl(): string {
+export function resolveTelegramSupportUrl(): string {
   const candidates = [
     process.env.NADYA_TELEGRAM_URL,
     process.env.NADYA_TELEGRAM,
     process.env.NADYA_TELEGRAM_HANDLE
       ? `https://t.me/${process.env.NADYA_TELEGRAM_HANDLE.replace(/^@/, '')}`
       : '',
-    'https://t.me/nadya_couch',
+    FALLBACK_TELEGRAM_SUPPORT_URL,
   ]
 
   for (const candidate of candidates) {
@@ -63,7 +66,7 @@ function resolveTelegramSupportUrl(): string {
     return `https://t.me/${value}`
   }
 
-  return 'https://t.me/nadya_couch'
+  return FALLBACK_TELEGRAM_SUPPORT_URL
 }
 
 function buildReplyMarkup(

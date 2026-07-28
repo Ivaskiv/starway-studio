@@ -298,4 +298,38 @@ describe('routeTelegramTextMessage', () => {
       undefined,
     )
   })
+
+  it('does not launch the AI gateway for unknown text and returns a neutral scope fallback', async () => {
+    mocks.detectTelegramIntelligenceMessageType.mockReturnValue('UNKNOWN')
+    const ctx = createContext('Підкажи щось')
+
+    const handled = await routeTelegramTextMessage(ctx, 'Підкажи щось')
+
+    expect(handled).toBe(true)
+    expect(mocks.gatewayExecute).not.toHaveBeenCalled()
+    expect(mocks.planMessage).toHaveBeenCalledWith(
+      ctx,
+      'ctx.reply',
+      'conversation_engine_response',
+      'Я допомагаю з ФОКУСОМ, Zoom-практиками, прогресом і функціями ABSystem. Обери потрібний розділ у меню або напиши конкретне питання про платформу.',
+      undefined,
+    )
+  })
+
+  it('uses the same neutral scope fallback when the AI gateway fails', async () => {
+    mocks.gatewayExecute.mockRejectedValueOnce(new Error('gateway down'))
+    const ctx = createContext('Допомога')
+
+    const handled = await routeTelegramTextMessage(ctx, 'Допомога')
+
+    expect(handled).toBe(true)
+    expect(mocks.gatewayExecute).toHaveBeenCalledTimes(1)
+    expect(mocks.planMessage).toHaveBeenCalledWith(
+      ctx,
+      'ctx.reply',
+      'conversation_engine_response',
+      'Я допомагаю з ФОКУСОМ, Zoom-практиками, прогресом і функціями ABSystem. Обери потрібний розділ у меню або напиши конкретне питання про платформу.',
+      undefined,
+    )
+  })
 })
