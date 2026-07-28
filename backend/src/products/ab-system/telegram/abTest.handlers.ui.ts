@@ -61,19 +61,9 @@ export async function handleAbTestStart(
   userId: string
 ): Promise<boolean> {
   await ctx.answerCbQuery().catch(() => null)
-  const startChatId = ctx.chat?.id
-  if (!startChatId) {
+  if (!ctx.chat?.id) {
     return true
   }
-
-  await ctx.telegram.sendMessage(startChatId, absystemContent.START_BLOCK1.MSG1, {
-    parse_mode: 'HTML',
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: 'ПРОДОВЖИТИ', callback_data: 'ab_test:q1' }],
-      ],
-    },
-  })
 
   logAbTestStartDebug('callback:start_pressed', {
     action: 'ab_test:start',
@@ -103,6 +93,7 @@ export async function handleAbTestStart(
   await testOrchestrator
     .recordTestStart(userId, new Date(nowIso))
     .catch(() => undefined)
+  await sendActionMessage(ctx, userId, warmedProgress, 0, 'reply')
 
   logCallbackHandled({
     action: 'ab_test:start',
