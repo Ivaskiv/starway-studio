@@ -250,6 +250,7 @@ export async function handleAbTestCallback(
 
   let userId = (ctx.state as { userId?: string | null }).userId ?? null
   if (!userId && (
+    action === 'ab_test:show_result' ||
     action === 'skip_email_before_result' ||
     action.startsWith('show_inside_') ||
     action === 'open_focus_payment' ||
@@ -261,13 +262,21 @@ export async function handleAbTestCallback(
     }
   }
   if (!userId) {
+    if (action === 'ab_test:show_result') {
+      await ctx.answerCbQuery('Не вдалося відкрити результат. Спробуй ще раз.').catch(() => null)
+      console.error('[AB_TEST_CALLBACK_MISSING_USER_ID]', {
+        action,
+        chatId: String(ctx.chat?.id ?? ''),
+        fromId: String(ctx.from?.id ?? ''),
+      })
+    }
     logCallbackHandled({
       action,
-      handled: true,
+      handled: action === 'ab_test:show_result',
       reason: 'missing_user_id',
     })
     logAbTestStartDebug('callback:missing_user_id', { action })
-    return true
+    return action === 'ab_test:show_result'
   }
 
   // ========== FOCUS SHORTCUTS ==========
