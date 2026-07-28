@@ -15,6 +15,7 @@ import { cacheGet, cacheSet } from '../../lib/cache/index.js'
 import { invalidateUserCache } from '../../lib/db/userCache.js'
 import { UserAutoCreationDisabledError, UserCreationSource } from '../user/userCreation.service.js'
 import { resolveOrCreateUser } from '../user/resolveOrCreateUser.js'
+import { findLinkedUserId } from '../telegram-mentor/services/linking.service.js'
 
 // ── Константи JWT ─────────────────────
 const ACCESS_SECRET = getEnv('JWT_ACCESS_SECRET')
@@ -1205,6 +1206,22 @@ export async function telegramMiniAppLoginUser(
   }
 
   const telegramUser = verifyTelegramInitData(normalizedInitData)
+
+  const linkedUserId = await findLinkedUserId({
+    chatId: telegramUser.id,
+    telegramUserId: telegramUser.id,
+    telegramUserName: telegramUser.username ?? null,
+  })
+
+  if (linkedUserId) {
+    const session = await createSessionForUserId(linkedUserId)
+
+    return {
+      ...session,
+      needsCompletion: !session.user.email || !hasProfileName(session.user),
+      isNewUser: false,
+    }
+  }
 
   return socialLoginUser({
     provider: 'telegram',

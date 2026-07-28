@@ -22,9 +22,9 @@ import { aiSellerFocusCheck24hCron, aiSellerFocusDojimBeforeZoom2Cron, aiSellerL
 import { scheduleBillingExpiryCheck, scheduleBillingExpiryWarning, scheduleInactivityComeback } from './billing.jobs.js'
 import { aiInactiveCron, coachDailyBriefingCron, coachMonthlyStrategicPlannerCron, coachWeeklyPlannerSaturdayCron, coachWeeklyPlannerTuesdayCron, dailyEveningCron, dailyMorningCron, streakBrokenCron, streakRiskCron, weeklyContentReminderCron, weeklySummaryCron } from './daily.jobs.js'
 import { cloudinaryZoomAudioIngestCron } from '../../modules/zoom/cloudinary-audio-ingest.service.js'
+import { buildZoomCalendarUrl } from '../../modules/zoom/urls.js'
 import { mentorReadinessCheckCron, personalProgramCheckCron, referralCheckCron, scheduleWinbackNotification } from './lifecycle.jobs.js'
 import { expireMicroTasksCron, markMissedDaysCron, microTaskReminderCron, nudgeCron, subscriptionExpiredCron, subscriptionExpiringCron, webMapBehindGoalsCron, webMapMonthEndAnalysisCron, webMapMonthStartReminderCron } from './operations.jobs.js'
-import { resolveTelegramWebappBaseUrl } from '../../config/webapp.js'
 
 export { aiSellerFocusCheck24hCron, aiSellerFocusDojimBeforeZoom2Cron, aiSellerLeadFollowup3dCron, aiSellerLeadFollowup7dCron, aiSellerReactivationCron, aiSellerRetentionCron } from './ai-seller.jobs.js'
 export { scheduleBillingExpiryCheck, scheduleBillingExpiryWarning, scheduleInactivityComeback } from './billing.jobs.js'
@@ -287,11 +287,6 @@ function formatZoomReminderDate(date: Date): string {
   })
 
   return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${day} ${month} · ${time}`
-}
-
-function buildZoomCalendarUrl(intent?: string): string {
-  const base = resolveTelegramWebappBaseUrl().replace(/\/$/, '')
-  return intent ? `${base}/miniapp/zoom-calendar?intent=${intent}` : `${base}/miniapp/zoom-calendar`
 }
 
 function resolveZoomSessionEndAt(scheduledAt: Date, requests: unknown): Date {
@@ -591,7 +586,7 @@ async function sendZoomReminder(
   if (alreadySent) return
 
   const dateLabel = formatZoomReminderDate(params.scheduledAt)
-  const calendarUrl = buildZoomCalendarUrl('booking')
+  const calendarUrl = buildZoomCalendarUrl({ intent: 'booking' })
   const fallbackCalendarUrl = buildZoomCalendarUrl()
   const isTwoHourReminder = params.reminderType === 'ZOOM_REMINDER_2H'
   const title = isTwoHourReminder
@@ -743,7 +738,7 @@ export async function scanZoomNoShowRecovery(
       ? options.lookbackHours
       : 8
   const recentEndedStart = new Date(now.getTime() - lookbackHours * 60 * 60 * 1000)
-  const bookingUrl = buildZoomCalendarUrl('booking')
+  const bookingUrl = buildZoomCalendarUrl({ intent: 'booking' })
 
   const attendees = await prisma.zoomSessionAttendee.findMany({
     where: {
