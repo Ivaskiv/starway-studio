@@ -1439,26 +1439,7 @@ export async function renderCurrentView(
     } satisfies Prisma.JsonObject,
   })
 
-  const chatId = ctx.chat?.id ?? ctx.from?.id
-  if (!chatId) {
-    return
-  }
-
-  await ctx.telegram.sendMessage(
-    chatId,
-    `<b>Питання ${activeIndex + 1} з ${questionOrder.length}</b>\n\n<b>${escapeHtml(question.prompt)}</b>\n\n${escapeHtml(formatMobileAnswerListForMessage(question.answers))}`,
-    {
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          question.answers.map((answer) => ({
-            text: formatMobileAnswerButtonText(answer.text),
-            callback_data: `ab_test_answer:${question.question_id}:${answer.id}:${next.revision}`,
-          })),
-        ],
-      },
-    }
-  )
+  await sendQuestionDirect(ctx, question.question_id, next.revision)
 }
 
 // ============================================================================

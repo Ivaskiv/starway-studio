@@ -19,7 +19,6 @@ import {
 import {
   renderCurrentView,
   formatAbTestTelegramCard,
-  sendActionMessage,
   sendQuestionDirect,
   splitTelegramContentBlocks,
   sendTelegramContentChunk,
@@ -230,8 +229,11 @@ export async function handleEdit(
     last_event_at: new Date().toISOString(),
   })
   await saveAbTestProgress(userId, next)
-  const targetIndex = resolveAbTestQuestionOrder().indexOf(questionId as AbTestQuestionId)
-  await sendActionMessage(ctx, userId, next, targetIndex, 'edit')
+  await sendQuestionDirect(
+    ctx,
+    next.current_question_id ?? questionId,
+    next.revision
+  )
   await planAck(
     ctx,
     'ctx.answerCbQuery',
@@ -410,31 +412,15 @@ export async function handleQ1Direct(
   userId: string
 ): Promise<boolean> {
   await ctx.answerCbQuery().catch(() => null)
-  const q1ChatId = ctx.chat?.id
-  if (!q1ChatId) {
-    return true
-  }
-
   const progress = await loadAbTestProgress(userId)
-  const revision = Number(progress.revision ?? 1)
-  const { getAbTestQuestion } = await import('../content/abTest.questions.js')
-  
-  const q1Question = getAbTestQuestion('q1')
-  
-  await ctx.telegram.sendMessage(
-    q1ChatId,
-    `<b>Питання 1 з 8</b>\n\n<b>${escapeHtml(q1Question.prompt)}</b>\n\n${escapeHtml(formatMobileAnswerListForMessage(q1Question.answers))}`,
-    {
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          q1Question.answers.map((answer) => ({
-            text: formatMobileAnswerButtonText(answer.text),
-            callback_data: `ab_test_answer:q1:${answer.id}:${revision}`,
-          })),
-        ],
-      },
-    }
+  const questionId =
+    progress.current_question_id
+    ?? resolveAbTestQuestionOrder()[progress.answers.length]
+    ?? 'q1'
+  await sendQuestionDirect(
+    ctx,
+    questionId,
+    Number(progress.revision ?? 1)
   )
   return true
 }

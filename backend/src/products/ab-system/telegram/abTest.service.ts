@@ -215,7 +215,7 @@ export async function resumeAbTestFlow(
   const progress = await loadAbTestProgress(userId)
   const validation = validateAbTestProgress(progress)
   if (!validation.resumable) {
-    await renderAbTestIntro(ctx, userId, 'ab_test:auto_reentry')
+    await startAbTestFlow(ctx, userId, 'ab_test:auto_reentry')
     return
   }
   await renderCurrentView(ctx, userId, progress)
@@ -336,7 +336,8 @@ export async function handleAbTestCallback(
 
   // ========== Q1 DIRECT ==========
   if (action === 'ab_test:q1') {
-    return handleQ1Direct(ctx, userId)
+    await startAbTestFlow(ctx, userId, action)
+    return true
   }
 
   // ========== PARSE CALLBACK ==========
@@ -450,11 +451,15 @@ export async function handleAbTestCallback(
   }
 
   if (parsed.kind === 'entry') {
-    await renderAbTestEntry(ctx, userId, action)
+    logFlowStart('legacy_entry_redirected_to_start', {
+      userId,
+      action,
+    })
+    await startAbTestFlow(ctx, userId, action)
     logCallbackHandled({
       action,
       handled: true,
-      reason: 'entry_flow_rendered',
+      reason: 'legacy_entry_redirect_to_start',
       userId,
     })
     return true
@@ -494,31 +499,13 @@ export async function renderAbTestIntro(
   userId: string,
   payload?: string | null
 ): Promise<void> {
-  logAbTestStartDebug('entry:render_intro', {
+  logAbTestStartDebug('entry:legacy_intro_redirect', {
     userId,
     payload: payload ?? null,
     chatId: String(ctx.chat?.id ?? ''),
-    buttonCallbackData: 'ab_test:entry',
-    buttonText: 'Далі',
+    redirectTo: 'startAbTestFlow',
   })
-  await planMessage(
-    ctx,
-    'ctx.reply',
-    'ab_test_entry_intro',
-    formatAbTestTelegramCard('', absystemContent.START_BLOCK1.MSG1.split('\n')),
-    {
-      inline_keyboard: [
-        [{ text: 'ДАЛІ', callback_data: 'ab_test:entry' }],
-      ],
-    },
-    'HTML'
-  )
-  logMessageSent('start_block1_intro_with_next_sent', {
-    userId,
-    chatId: String(ctx.chat?.id ?? ''),
-    cta: 'Далі',
-    callback_data: 'ab_test:entry',
-  })
+  await startAbTestFlow(ctx, userId, payload ?? 'legacy_intro_redirect')
 }
 
 // ============================================================================
@@ -530,40 +517,13 @@ export async function renderAbTestEntry(
   userId: string,
   payload?: string | null
 ): Promise<void> {
-  logAbTestStartDebug('entry:render_step2', {
+  logAbTestStartDebug('entry:legacy_entry_redirect', {
     userId,
     payload: payload ?? null,
     chatId: String(ctx.chat?.id ?? ''),
-    buttonCallbackData: 'ab_test:start',
-    buttonText: absystemContent.START_BLOCK1.CTA1,
+    redirectTo: 'startAbTestFlow',
   })
-
-  void payload
-  void userId
-
-  await planMessage(
-    ctx,
-    'ctx.reply',
-    'ab_test_entry_msg2',
-    formatAbTestTelegramCard('', absystemContent.START_BLOCK1.MSG2.split('\n')),
-    {
-      inline_keyboard: [
-        [
-          {
-            text: absystemContent.START_BLOCK1.CTA1,
-            callback_data: 'ab_test:start',
-          },
-        ],
-      ],
-    },
-    'HTML'
-  )
-  logMessageSent('start_block1_msg2_with_cta_sent', {
-    userId,
-    chatId: String(ctx.chat?.id ?? ''),
-    cta: absystemContent.START_BLOCK1.CTA1,
-    callback_data: 'ab_test:start',
-  })
+  await startAbTestFlow(ctx, userId, payload ?? 'legacy_entry_redirect')
 }
 
 // ============================================================================
