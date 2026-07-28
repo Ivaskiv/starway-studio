@@ -35,8 +35,16 @@ function joinPath(base: string, path: string): string {
 
 export function resolveTelegramWebappBaseUrl(): string {
   const explicitWebappBase = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
-  if (explicitWebappBase) {
+  if (explicitWebappBase && !isBackendPublicUrl(explicitWebappBase)) {
     return normalizeBaseUrl(explicitWebappBase)
+  }
+
+  if (explicitWebappBase) {
+    console.warn('[WebApp] ignoring TELEGRAM_WEBAPP_BASE_URL because it resolves to backend/public API origin', {
+      configuredOrigin: originOf(explicitWebappBase),
+      publicApiOrigin: originOf(process.env.PUBLIC_API_URL),
+      webhookOrigin: originOf(process.env.TELEGRAM_WEBHOOK_URL),
+    })
   }
 
   const candidates = [

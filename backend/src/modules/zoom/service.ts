@@ -13,6 +13,7 @@ import { buildShortWayForPayCheckoutUrl } from '../subscriptions/payments/wayfor
 import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js';
 import { parseZoomPostReport } from './zoomPostReport.types.js';
 import { getBotLink } from '../../lib/telegram.js';
+import { buildZoomCalendarUrl } from './urls.js';
 
 function isGroupPracticeRequest(requests: unknown): boolean {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return false;
@@ -56,6 +57,19 @@ let channelPostSyncInFlight: Promise<void> | null = null
 let lastChannelPostSyncSignature = ''
 let lastChannelPostSyncAt = 0
 let lastChannelPostContentHash = ''
+
+function resolveZoomCalendarUrl(params?: { intent?: string | null; sessionId?: string | null }): string {
+  return buildZoomCalendarUrl(params)
+}
+
+function canUseTelegramWebAppButton(url: string | null | undefined): boolean {
+  return Boolean(
+    url &&
+    url.startsWith('https://') &&
+    !url.includes('localhost') &&
+    !url.includes('127.0.0.1')
+  )
+}
 
 function getKyivNow(now = new Date()): Date {
   return new Date(now.toLocaleString('en-US', { timeZone: KYIV_TIME_ZONE }))
@@ -1768,10 +1782,7 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
   const text = await formatChannelPost();
   console.log('[syncChannelPost] text length:', text.length);
   const contentHash = getChannelPostContentHash(text);
-  const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? '';
-  const zoomUrl = webAppBaseUrl
-    ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar?intent=booking`
-    : null;
+  const zoomUrl = resolveZoomCalendarUrl({ intent: 'booking' });
   const mainBotUrl = getBotLink() || 'https://t.me/Test_ABsystem_bot';
   const syncSignature = JSON.stringify({ channelId, text, zoomUrl });
   const now = Date.now();
@@ -1902,11 +1913,7 @@ export async function notifySubscribersNewSession(
   telegramBot: Telegraf,
   session: ZoomSession,
 ): Promise<void> {
-  const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? '';
-  const publicFrontend = process.env.PUBLIC_FRONTEND_URL?.trim() ?? '';
-  const zoomUrl = webAppBaseUrl
-    ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar`
-    : `${publicFrontend.replace(/\/$/, '')}/miniapp/zoom-calendar`;
+  const zoomUrl = resolveZoomCalendarUrl();
   const inviteUrl = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? '';
 
   const paidUsers = await prisma.user.findMany({
@@ -1956,7 +1963,7 @@ export async function notifySubscribersNewSession(
       + `${session.topic}\n\n`
       + 'Посилання на підключення надійде за 2 год до початку.';
 
-    const calendarButton = webAppBaseUrl
+    const calendarButton = canUseTelegramWebAppButton(zoomUrl)
       ? { text: 'Переглянути календар', web_app: { url: zoomUrl } }
       : { text: 'Переглянути календар', url: zoomUrl };
     const secondRow = inviteUrl ? [{ text: 'УВІЙТИ У ФОКУС', url: inviteUrl }] : [];
@@ -2115,8 +2122,7 @@ export async function notifyAffectedUsers(
       `${greeting}запит на обмін відхилено.\n\nРозклад залишається без змін.`,
   }
 
-  const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? ''
-  const zoomUrl = webAppBaseUrl ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar` : null
+  const zoomUrl = resolveZoomCalendarUrl()
   const calendarButton = zoomUrl
     ? { text: 'Переглянути календар', web_app: { url: zoomUrl } }
     : null
@@ -2159,10 +2165,8 @@ export async function processScheduleNotification(
   payload: ScheduleEventPayload,
 ): Promise<void> {
   const { eventType, affectedUserIds, sessionTitle, coachMetadata } = payload
-  const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? ''
-  const publicFrontend = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-  const baseUrl = webAppBaseUrl || publicFrontend
-  const zoomUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar` : null
+  const zoomUrl = resolveZoomCalendarUrl()
+  const baseUrl = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
   const bookingUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/zoom/booking` : null
 
   if (affectedUserIds.length > 0 && eventType !== 'SWAP') {
@@ -2191,12 +2195,12 @@ export async function processScheduleNotification(
       let buttons: Array<Array<{ text: string; [key: string]: unknown }>> = []
 
       const zoomBtn = zoomUrl
-        ? (webAppBaseUrl
+        ? (canUseTelegramWebAppButton(zoomUrl)
           ? { text: 'Відкрити календар зустрічей', web_app: { url: zoomUrl } }
           : { text: 'Відкрити календар зустрічей', url: zoomUrl })
         : null
       const bookBtn = bookingUrl
-        ? (webAppBaseUrl
+        ? (canUseTelegramWebAppButton(bookingUrl)
           ? { text: 'Забронювати новий слот', web_app: { url: bookingUrl } }
           : { text: 'Забронювати новий слот', url: bookingUrl })
         : null
@@ -2261,7 +2265,7 @@ export async function processScheduleNotification(
       const safeName = getSafeName(user?.firstName)
       const greeting = safeName ? `${safeName}, ` : ''
       const zoomBtn = zoomUrl
-        ? (webAppBaseUrl
+        ? (canUseTelegramWebAppButton(zoomUrl)
           ? { text: 'Переглянути оновлений розклад', web_app: { url: zoomUrl } }
           : { text: 'Переглянути оновлений розклад', url: zoomUrl })
         : null
@@ -2430,12 +2434,8 @@ export async function notifyMonthSchedule(
 
   if (upcomingGroupSessions.length === 0) return
 
-  const webAppBaseUrl = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? ''
-  const publicFrontend = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
   const focusInviteUrl = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
-  const zoomUrl = webAppBaseUrl
-    ? `${webAppBaseUrl.replace(/\/$/, '')}/miniapp/zoom-calendar`
-    : `${publicFrontend.replace(/\/$/, '')}/miniapp/zoom-calendar`
+  const zoomUrl = resolveZoomCalendarUrl()
 
   const scheduleLines = upcomingGroupSessions.map((session) => {
     const dt = new Date(session.scheduledAt)
@@ -2523,7 +2523,7 @@ export async function notifyMonthSchedule(
     + `${scheduleLines}\n\n`
     + 'Посилання на підключення надходить автоматично за 2 год до початку кожної практики.'
 
-  const calBtn = webAppBaseUrl
+  const calBtn = canUseTelegramWebAppButton(zoomUrl)
     ? { text: 'Переглянути календар', web_app: { url: zoomUrl } }
     : { text: 'Переглянути календар', url: zoomUrl }
 

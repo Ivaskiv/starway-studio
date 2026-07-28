@@ -11,6 +11,8 @@ import {
 import {
   handlePendingTelegramIdentityText,
 } from '../handlers/start.js'
+import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
+import { renderCurrentView } from '@/products/ab-system/telegram/abTest.views.js'
 import {
   hasPendingName,
 } from '../services/pendingIdentity.service.js'
@@ -62,6 +64,11 @@ const conversationRenderer = new TelegramConversationRenderer()
 
 function normalizeText(text: string): string {
   return text.toLowerCase().trim().replace(/\s+/g, ' ')
+}
+
+function isLikelyMistypedStartCommand(text: string): boolean {
+  const normalized = normalizeText(text).replace(/^[#!/]+/, '')
+  return normalized === 'start' || normalized === 'старт'
 }
 
 function isFocusInfoText(normalizedText: string): boolean {
@@ -252,7 +259,12 @@ async function handlePendingNameScenario(ctx: Context, userId: string, chatId: s
   return conversationRenderer.render(ctx, response)
 }
 
-async function handleActiveQuestionScenario(ctx: Context, chatId: string, text: string): Promise<boolean> {
+async function handleActiveQuestionScenario(
+  ctx: Context,
+  chatId: string,
+  text: string,
+  userId: string | null,
+): Promise<boolean> {
   const session = await getSession(chatId)
   const parsed = session ? parseQuestionState(session.state) : null
 
@@ -272,6 +284,14 @@ async function handleActiveQuestionScenario(ctx: Context, chatId: string, text: 
       analytics: { intent: 'evening_answer' },
     })
     return conversationRenderer.render(ctx, response)
+  }
+
+  if (userId) {
+    const abTestProgress = await loadAbTestProgress(userId).catch(() => null)
+    if (abTestProgress?.status === 'active' && abTestProgress.current_question_id) {
+      await renderCurrentView(ctx, userId, abTestProgress)
+      return true
+    }
   }
 
   return false
@@ -310,8 +330,16 @@ export async function routeTelegramTextMessage(
     && route.intent !== 'open_faq'
     && route.intent !== 'payment_issue'
     && chatId
-    && await handleActiveQuestionScenario(ctx, chatId, text)
+    && await handleActiveQuestionScenario(ctx, chatId, text, userId)
   ) {
+    return true
+  }
+
+  if (chatId && isLikelyMistypedStartCommand(text)) {
+    await ctx.telegram.sendMessage(
+      chatId,
+      'Можливо, ти мала на увазі команду /start? Натисни її внизу, щоб продовжити.',
+    )
     return true
   }
 

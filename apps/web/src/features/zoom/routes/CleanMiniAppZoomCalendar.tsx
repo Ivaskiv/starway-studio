@@ -156,6 +156,42 @@ function Card({ children }: { children: React.ReactNode }) {
   )
 }
 
+function SkeletonLine({ className }: { className: string }) {
+  return <div className={`animate-pulse rounded-full bg-white/10 ${className}`} />
+}
+
+function ZoomCalendarSkeleton() {
+  return (
+    <div className="space-y-3">
+      <Card>
+        <div className="space-y-3">
+          <SkeletonLine className="h-4 w-36" />
+          <SkeletonLine className="h-8 w-56" />
+          <SkeletonLine className="h-4 w-48" />
+        </div>
+      </Card>
+      <Card>
+        <div className="space-y-3">
+          <SkeletonLine className="h-5 w-44" />
+          <SkeletonLine className="h-4 w-full" />
+          <SkeletonLine className="h-4 w-5/6" />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <SkeletonLine className="h-12 w-full rounded-xl" />
+            <SkeletonLine className="h-12 w-full rounded-xl" />
+          </div>
+        </div>
+      </Card>
+      <Card>
+        <div className="space-y-3">
+          <SkeletonLine className="h-5 w-52" />
+          <SkeletonLine className="h-4 w-40" />
+          <SkeletonLine className="h-10 w-32 rounded-xl" />
+        </div>
+      </Card>
+    </div>
+  )
+}
+
 export default function CleanMiniAppZoomCalendar() {
   const dispatch = useAppDispatch()
   const user = useAppSelector(selectCurrentUser)
@@ -210,6 +246,10 @@ export default function CleanMiniAppZoomCalendar() {
     hasDirectSession: Boolean(directSession),
   })
   const isCalendarLoading = !isDirectBooking && (accessState === 'loading' || isScheduleLoading)
+  const shouldShowCalendarSkeleton =
+    isCalendarLoading
+    || directBookingState === 'checking_access'
+    || directBookingState === 'loading_session'
   const shouldShowDirectSessionOnly = directBookingState === 'session' && Boolean(directSession)
   const visibleSessions = shouldShowDirectSessionOnly && directSession
     ? [directSession]
@@ -509,17 +549,9 @@ export default function CleanMiniAppZoomCalendar() {
         </div>
 
         <div className="mt-4 space-y-3">
-          {isCalendarLoading ? <Card>Перевіряємо доступ і завантажуємо розклад…</Card> : null}
+          {shouldShowCalendarSkeleton ? <ZoomCalendarSkeleton /> : null}
 
-          {directBookingState === 'checking_access' ? (
-            <Card>Перевіряємо доступ до обраної Zoom-сесії…</Card>
-          ) : null}
-
-          {directBookingState === 'loading_session' ? (
-            <Card>Завантажуємо обрану Zoom-сесію…</Card>
-          ) : null}
-
-          {!isCalendarLoading && directBookingState !== 'locked' && (isAccessError || isScheduleError || !data) ? (
+          {!shouldShowCalendarSkeleton && directBookingState !== 'locked' && (isAccessError || isScheduleError || !data) ? (
             <Card>
               <p className="font-semibold">Не вдалося завантажити календар.</p>
               <button
@@ -566,7 +598,7 @@ export default function CleanMiniAppZoomCalendar() {
             </Card>
           ) : null}
 
-          {!isCalendarLoading && data && hasFocusAccess && sessionsCount === 0 ? (
+          {!shouldShowCalendarSkeleton && data && hasFocusAccess && sessionsCount === 0 ? (
             <Card>
               <p className="font-semibold">Доступ активний.</p>
               <p className="mt-1 text-sm text-white/65">
@@ -575,7 +607,7 @@ export default function CleanMiniAppZoomCalendar() {
             </Card>
           ) : null}
 
-          {!isCalendarLoading && data && (hasFocusAccess || shouldShowDirectSessionOnly)
+          {!shouldShowCalendarSkeleton && data && (hasFocusAccess || shouldShowDirectSessionOnly)
             ? visibleSessions.map((session: ZoomWeekOverview['sessions'][number]) => {
                 const isDirectTargetSession = isDirectBooking && directSessionId === session.id
                 const isQuestionVisible = showQuestionInput && questionSessionId === session.id

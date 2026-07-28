@@ -5,7 +5,10 @@ import { coachBotContent } from '../../content/coachBot.content.js'
 import { prisma } from '../../../db/client.js'
 import { analyticsHandler } from './analytics.handler.js'
 import { activateProductSubscription } from '../../../modules/subscriptions/payments/paymentActivation.service.js'
-import { sendAbTestBlock12Welcome } from '../../../modules/subscriptions/payments/callback.notifications.js'
+import {
+  notifyUserFocusPaymentIssueDenied,
+  sendAbTestBlock12Welcome,
+} from '../../../modules/subscriptions/payments/callback.notifications.js'
 import {
   handleCoachAudioCommand,
   handleCoachNotifyCommand,
@@ -468,6 +471,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     }
     const userId = checkoutTarget.userId
     await ctx.answerCbQuery(coachBotContent.paymentAdmin.denied).catch(() => undefined)
+    await notifyUserFocusPaymentIssueDenied(userId).catch(() => undefined)
     await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: ${userId}`)
   }))
 }

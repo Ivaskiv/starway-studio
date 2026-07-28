@@ -46,6 +46,7 @@ vi.mock('@/config/webapp.js', () => ({
 }))
 
 import {
+  notifyUserFocusPaymentIssueDenied,
   sendAbTestBlock12PostJoin,
   resendFocusAccessTelegramMessage,
   sendAbTestBlock12Welcome,
@@ -132,5 +133,31 @@ describe('callback.notifications — canonical Focus URL', () => {
     expect(resent).toBe(true)
     expect(mockRenderOutbound).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(mockRenderOutbound.mock.calls[0][1])).toContain('ПЕРЕЙТИ В КАНАЛ')
+  })
+
+  it('notifies the user when OPS denied the payment issue', async () => {
+    mockUserFindUnique.mockResolvedValueOnce({
+      telegramChatId: 'chat-ops',
+      telegramLinks: [],
+    })
+
+    const sent = await notifyUserFocusPaymentIssueDenied('user-ops')
+
+    expect(sent).toBe(true)
+    expect(mockRenderOutbound).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(mockRenderOutbound.mock.calls[0][1])).toContain('оплата поки не пройшла')
+    expect(JSON.stringify(mockRenderOutbound.mock.calls[0][1])).toContain('"kind":"callback","label":"Спробувати ще раз","value":"open_focus_payment"')
+  })
+
+  it('does nothing when payment denial cannot resolve a chat id', async () => {
+    mockUserFindUnique.mockResolvedValueOnce({
+      telegramChatId: null,
+      telegramLinks: [],
+    })
+
+    const sent = await notifyUserFocusPaymentIssueDenied('user-no-chat')
+
+    expect(sent).toBe(false)
+    expect(mockRenderOutbound).not.toHaveBeenCalled()
   })
 })

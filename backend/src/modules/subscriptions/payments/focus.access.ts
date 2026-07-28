@@ -63,6 +63,12 @@ function focusActive(expiresAt: Date | null): UserAccessState {
  */
 export async function getUserAccessState(userId: string): Promise<UserAccessState> {
   const now = new Date()
+  const focusProductFilter = {
+    userId,
+    product: {
+      code: { equals: 'focus', mode: 'insensitive' as const },
+    },
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -73,12 +79,19 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
     },
   })
 
-  const subscriptionRows = await prisma.productSubscription.findMany({
+  const activeSubscription = await prisma.productSubscription.findFirst({
     where: {
-      userId,
-      product: {
-        code: { equals: 'focus', mode: 'insensitive' },
-      },
+      ...focusProductFilter,
+      OR: [
+        {
+          status: { in: ['active', 'paid'] },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        {
+          status: 'trial',
+          trialEndsAt: { gt: now },
+        },
+      ],
     },
     select: {
       status: true,
@@ -94,7 +107,39 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
     orderBy: { createdAt: 'desc' },
   })
 
-  const subscription = subscriptionRows[0] ?? null
+  const subscription =
+    activeSubscription ??
+    (await prisma.productSubscription.findFirst({
+      where: focusProductFilter,
+      select: {
+        status: true,
+        paidAt: true,
+        expiresAt: true,
+        trialEndsAt: true,
+        product: {
+          select: {
+            code: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    }))
+
+  const subscriptionRows = await prisma.productSubscription.findMany({
+    where: focusProductFilter,
+    select: {
+      status: true,
+      paidAt: true,
+      expiresAt: true,
+      trialEndsAt: true,
+      product: {
+        select: {
+          code: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
 
   const logResult = (result: UserAccessState) => {
     console.info('[ZOOM_ACCESS_REFRESH_BACKEND]', {

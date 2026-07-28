@@ -163,15 +163,21 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(JSON.stringify(screen.reply_markup)).toMatch(/КАНАЛ ФОКУСУ/)
   })
 
-  it('POST_ZOOM_1: shows soft upgrade content, not the generic AI Mentor menu', async () => {
+  it('POST_ZOOM_1: stays Focus-only and does not mix in ABSystem copy', async () => {
     const snapshot = makeSnapshot({ lifecycleState: 'POST_ZOOM_1' })
     const screen = await buildHomeScreen(snapshot, fakeCtx)
 
     expect(screen.text).not.toContain('Переходимо в AI Mentor режим')
-    expect(JSON.stringify(screen.reply_markup)).toMatch(/focus:next_zoom/)
+    expect(screen.text).toContain('Практика завершилась')
+    expect(screen.text).toContain('ФОКУС')
+    expect(screen.text).not.toContain('ABSystem')
+    const flat = JSON.stringify(screen.reply_markup)
+    expect(flat).toMatch(/focus:next_zoom/)
+    expect(flat).toMatch(/focus:menu/)
+    expect(flat).not.toMatch(/post_zoom:absystem_cta/)
   })
 
-  it('UPSELL: shows hard upgrade content, distinct from POST_ZOOM_1', async () => {
+  it('UPSELL: keeps Focus-only CTA instead of mixed ABSystem upgrade copy', async () => {
     const zoomSnapshot = makeSnapshot({ lifecycleState: 'POST_ZOOM_1' })
     const upsellSnapshot = makeSnapshot({ lifecycleState: 'UPSELL' })
 
@@ -179,14 +185,19 @@ describe('buildHomeScreen — /start funnel regression', () => {
     const upsellScreen = await buildHomeScreen(upsellSnapshot, fakeCtx)
 
     expect(upsellScreen.text).not.toEqual(zoomScreen.text)
+    expect(upsellScreen.text).toContain('ФОКУС')
+    expect(upsellScreen.text).not.toContain('ABSystem')
+    expect(JSON.stringify(upsellScreen.reply_markup)).toMatch(/focus:next_zoom/)
   })
 
-  it('EXPIRED: shows winback message with restore CTA, distinct from POST_ZOOM_1/UPSELL', async () => {
+  it('EXPIRED: shows Focus renewal copy and restore CTA, distinct from POST_ZOOM_1/UPSELL', async () => {
     const snapshot = makeSnapshot({ lifecycleState: 'EXPIRED' })
     const screen = await buildHomeScreen(snapshot, fakeCtx)
 
-    expect(screen.text).toContain('доступ')
-    expect(JSON.stringify(screen.reply_markup)).toMatch(/open_focus_payment/)
+    expect(screen.text).toContain('Твій доступ до ФОКУСУ завершився')
+    const flat = JSON.stringify(screen.reply_markup)
+    expect(flat).toMatch(/open_focus_payment/)
+    expect(flat).toMatch(/ПРОДОВЖИТИ ПІДПИСКУ/)
   })
 
   it('every known lifecycleState produces non-empty text and at least one button', async () => {

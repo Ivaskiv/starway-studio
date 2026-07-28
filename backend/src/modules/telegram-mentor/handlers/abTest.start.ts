@@ -9,9 +9,9 @@ import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession
 import { prisma } from '@/db/client.js'
 import { getUserAccessState } from '@/modules/subscriptions/payments/focus.access.js'
 import { getUpcomingZoom } from '@/modules/zoom/service.js'
+import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
-import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
 const MINI_APP_ENTRY_INTENT = {
   BOOKING: 'booking',
@@ -45,15 +45,11 @@ function withKeyboard(payload: StartMessagePayload) {
 }
 
 function resolveZoomBookingWebAppUrl(): string {
-  const configured = String(process.env.WEBAPP_URL ?? '').trim()
-  const base = configured || resolveTelegramWebappBaseUrl()
-  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar?intent=${MINI_APP_ENTRY_INTENT.BOOKING}`
+  return buildZoomCalendarUrl({ intent: MINI_APP_ENTRY_INTENT.BOOKING })
 }
 
 function resolveZoomCalendarWebAppUrl(): string {
-  const configured = String(process.env.WEBAPP_URL ?? '').trim()
-  const base = configured || resolveTelegramWebappBaseUrl()
-  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar`
+  return buildZoomCalendarUrl()
 }
 
 function extractZoomLink(requests: unknown): string | null {
@@ -168,7 +164,7 @@ export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Доступ до ФОКУС активний. Обери наступну дію в меню.',
     buttons: [
-      [{ text: 'ABSYSTEM AI', callback_data: 'focus:ai' }],
+      [{ text: 'КАЛЕНДАР ZOOM-ПРАКТИК', callback_data: 'focus:next_zoom' }],
       [{ text: 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: 'ab_test:show_result' }],
     ],
   })
@@ -324,27 +320,25 @@ export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {
 }
 
 export function postZoom1Message(userId: string): ReturnType<typeof withKeyboard> {
+  void userId
   return withKeyboard({
     text: [
-      `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT_TITLE}`,
-      
-      absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_SOFT,
-      
-      '────────────────────────────────',
-      
       '🌿 <b>Практика завершилась.</b>',
-      
+
       'Щоб цей крок не загубився,',
       'зафіксуй для себе лише дві речі.',
-      
+
       '<b>1. Який інсайт був найціннішим?</b>',
-      
+
       '<b>2. Який один крок зробиш до наступної практики?</b>',
+
+      '',
+      'Після цього повернись у ФОКУС і обери наступну Zoom-практику.',
     ].join('\n'),
     buttons: [
       [{ text: 'ЗАЛИШИТИ ІНСАЙТ', callback_data: 'post_zoom:leave_insight' }],
-      [{ text: 'ПРОДОВЖИТИ З ABSYSTEM', callback_data: 'post_zoom:absystem_cta' }],
       [{ text: 'КАЛЕНДАР', callback_data: 'focus:next_zoom' }],
+      [{ text: 'МЕНЮ ФОКУС', callback_data: 'focus:menu' }],
     ],
   })
 }
@@ -382,20 +376,31 @@ export function postZoomAbsystemCtaMessage(userId: string): ReturnType<typeof wi
 }
 
 export function upsellMessage(userId: string): ReturnType<typeof withKeyboard> {
+  void userId
   return withKeyboard({
-    text: `${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD_TITLE}\n\n${absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD}`,
+    text: [
+      '<b>ФОКУС працює тоді, коли ти тримаєш ритм.</b>',
+      '',
+      'Не відкладай наступний крок:',
+      'повернись у календар, обери найближчу практику і заходь з конкретною ситуацією.',
+    ].join('\n'),
     buttons: [
-      [{ text: absystemContent.UPGRADE_FLOWS.FOCUS_TO_AI_HARD_CTA, url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
       [{ text: 'КАЛЕНДАР', callback_data: 'focus:next_zoom' }],
+      [{ text: 'МЕНЮ ФОКУС', callback_data: 'focus:menu' }],
     ],
   })
 }
 
 export function expiredMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: absystemContent.BILLING.SUB_EXPIRED.text,
+    text: [
+      'Твій доступ до ФОКУСУ завершився.',
+      '',
+      'Щоб повернутись у Zoom-практики й продовжити ритм,',
+      'обери зручний формат продовження підписки нижче.',
+    ].join('\n'),
     buttons: [
-      [{ text: absystemContent.BILLING.SUB_EXPIRED.cta, callback_data: 'open_focus_payment' }],
+      [{ text: 'ПРОДОВЖИТИ ПІДПИСКУ', callback_data: 'open_focus_payment' }],
     ],
   })
 }

@@ -132,6 +132,10 @@ export function withDevTestPaymentButton<T extends InlineKeyboardButton>(
   ]
 }
 
+export function getDevTestPaymentButton(): typeof DEV_TEST_PAYMENT_BUTTON | null {
+  return isTestPaymentEnabled ? DEV_TEST_PAYMENT_BUTTON : null
+}
+
 export const supportMenuKeyboard: InlineKeyboard = Markup.inlineKeyboard([
   [Markup.button.callback(telegramCopy.buttons.privacy, 'open_privacy')],
   [Markup.button.callback(telegramCopy.buttons.back, 'return_main_menu')],

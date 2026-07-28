@@ -2,7 +2,7 @@ import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import type { ConversationButton, ConversationResponse } from '@/modules/telegram-mentor/conversation/engine/types.js'
-import { resolveTelegramWebappBaseUrl } from '@/config/webapp.js'
+import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 import { hasActiveFocusSubscription } from './focus.access.js'
 import { prisma } from '../../../db/client.js'
 import { FOCUS_PRODUCT_CODES } from './focus.access.js'
@@ -39,8 +39,7 @@ function buildMessageResponse(
 }
 
 function resolveZoomBookingWebAppUrl(): string {
-  const base = resolveTelegramWebappBaseUrl()
-  return `${base.replace(/\/$/, '')}/miniapp/zoom-calendar`
+  return buildZoomCalendarUrl()
 }
 
 function buildFocusChannelStepText(): string {
@@ -308,5 +307,30 @@ export async function sendPaymentFailedTelegramMessage(
   const billing = absystemContent.BILLING.PAYMENT_FAILED
   return sendOutboundConversation(chatId, buildMessageResponse(billing.text, [
     { kind: 'url', label: billing.cta, value: paymentUrl },
+  ]))
+}
+
+export async function notifyUserFocusPaymentIssueDenied(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+    },
+  })
+
+  const chatId = user?.telegramChatId ?? user?.telegramLinks[0]?.chatId ?? null
+  if (!chatId) {
+    return false
+  }
+
+  const billing = absystemContent.BILLING.PAYMENT_FAILED
+  return sendOutboundConversation(chatId, buildMessageResponse(billing.text, [
+    { kind: 'callback', label: billing.cta, value: 'open_focus_payment' },
   ]))
 }

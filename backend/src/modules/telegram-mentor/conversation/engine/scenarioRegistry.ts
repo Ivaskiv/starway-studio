@@ -39,6 +39,7 @@ import { resolveBehavioralContinuity, type BehavioralContinuityResolution } from
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { createOnceInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.markers.js'
+import { getDevTestPaymentButton } from '../../keyboards.js'
 import type { IAgentGateway } from '../../../ai/agentGateway.js'
 import type { TelegramTextRoute } from '../../router/messageRouter.js'
 import { buildIntelligenceConversationResponse } from './intelligenceScenario.js'
@@ -255,11 +256,9 @@ async function buildFocusPaymentResponse(context: TelegramConversationScenarioCo
       ]).trim()
     : renderTelegramContentMessage('', [...BLOCK10_FOCUS.blocks]).trim()
 
-  const testButtons = isTestPaymentEnabled()
-    ? await buildEcosystemPaymentCheckoutSession('focus', '1month', resolvedUserId, 'telegram')
-        .then((session) => [{ kind: 'url' as const, label: '🧪 ТЕСТ 1 ГРН', value: session.checkoutUrl }])
-        .catch(() => [])
-    : []
+  const testPaymentButton = isTestPaymentEnabled()
+    ? getDevTestPaymentButton()
+    : null
 
   if (progressForCheckout) {
     await scheduleFollowups(resolvedUserId, progressForCheckout, 'S4_FOCUS_INVITE').catch(() => undefined)
@@ -282,7 +281,9 @@ async function buildFocusPaymentResponse(context: TelegramConversationScenarioCo
     buttons: [
       { kind: 'url', label: BLOCK10_FOCUS.cta_1m, value: session1m.checkoutUrl },
       { kind: 'url', label: BLOCK10_FOCUS.cta_3m, value: session3m.checkoutUrl },
-      ...testButtons,
+      ...(testPaymentButton
+        ? [{ kind: 'url' as const, label: testPaymentButton.text, value: testPaymentButton.url }]
+        : []),
       { kind: 'callback', label: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ', value: 'focus:payment_issue' },
     ],
     telemetry: { scenario: 'focus_payment' },

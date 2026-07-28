@@ -23,6 +23,10 @@ vi.mock('@/modules/zoom/service.js', () => ({
   getUpcomingZoom: vi.fn(),
 }))
 
+vi.mock('@/products/focus/payments/inviteLink.js', () => ({
+  getOrCreateFocusInviteLink: vi.fn(async () => 'https://t.me/focus-channel'),
+}))
+
 vi.mock('../../../config/webapp.js', () => ({
   resolveTelegramWebappBaseUrl: vi.fn(() => 'https://miniapp.example'),
 }))
@@ -55,7 +59,7 @@ describe('Focus home CTA matrix', () => {
     const buttons = await buildFocusActionButtons('user-1')
 
     expect(buttons).toEqual([
-      [{ text: 'Записатися', web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking' } }],
+      [{ text: 'ЗАПИСАТИСЯ', web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking' } }],
     ])
   })
 
@@ -71,7 +75,7 @@ describe('Focus home CTA matrix', () => {
     const buttons = await buildFocusActionButtons('user-2')
 
     expect(buttons[0]?.[0]).toMatchObject({
-      text: 'Переглянути запис',
+      text: 'ПЕРЕГЛЯНУТИ ЗАПИС',
       web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar' },
     })
   })
@@ -88,7 +92,7 @@ describe('Focus home CTA matrix', () => {
     const buttons = await buildFocusActionButtons('user-3')
 
     expect(buttons).toEqual([
-      [{ text: 'Приєднатися', url: 'https://zoom.example/join' }],
+      [{ text: 'ПРИЄДНАТИСЯ', url: 'https://zoom.example/join' }],
     ])
   })
 
@@ -110,8 +114,8 @@ describe('Focus home CTA matrix', () => {
 
     const buttons = await buildFocusActionButtons('user-5')
 
-    expect(buttons[0]?.[0]?.text).toBe('Продовжити підписку на 1 місяць')
-    expect(buttons[1]?.[0]?.text).toBe('Продовжити підписку на 3 місяці')
+    expect(buttons[0]?.[0]?.text).toBe('ПРОДОВЖИТИ ПІДПИСКУ НА 1 МІСЯЦЬ')
+    expect(buttons[1]?.[0]?.text).toBe('ПРОДОВЖИТИ ПІДПИСКУ НА 3 МІСЯЦІ')
   })
 
   it('focus copy uses only Focus language and state-specific CTA without emoji', async () => {
@@ -125,12 +129,13 @@ describe('Focus home CTA matrix', () => {
     const payload = await zoomSection('user-6')
     const buttonTexts = payload.buttons.flat().map((button) => button.text)
 
-    expect(payload.text).toContain('Zoom-практику ФОКУСУ')
+    expect(payload.text).toContain('Твій доступ до ФОКУСУ активний до')
+    expect(payload.text).toContain('Найближча Zoom-практика')
     expect(payload.text).not.toContain('Starway')
     expect(payload.text).not.toContain('ABSystem')
     expect(payload.text).not.toContain('Практикум')
     expect(payload.text).not.toContain('робочому просторі')
-    expect(buttonTexts).toEqual(['Обрати Zoom'])
+    expect(buttonTexts).toEqual(['ЗАПИСАТИСЯ', 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', 'КАНАЛ ФОКУСУ'])
     expect(buttonTexts.join(' ')).not.toContain('кімнату')
     expect(buttonTexts.every((text) => !/[\p{Extended_Pictographic}]/u.test(text))).toBe(true)
   })
@@ -146,11 +151,13 @@ describe('Focus home CTA matrix', () => {
 
     const payload = await zoomSection('user-booked')
 
-    expect(payload.text).toContain('Ти записана на Zoom-практику ФОКУСУ.')
+    expect(payload.text).toContain('Ти вже записана.')
     expect(payload.text).not.toContain('Starway')
     expect(payload.text).not.toContain('ABSystem')
     expect(payload.buttons).toEqual([
-      [{ text: 'Переглянути запис', web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar' } }],
+      [{ text: 'ЗАПИСАТИСЯ', web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking' } }],
+      [{ text: 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: expect.any(String) }],
+      [{ text: 'КАНАЛ ФОКУСУ', url: 'https://t.me/focus-channel' }],
     ])
   })
 
@@ -165,10 +172,9 @@ describe('Focus home CTA matrix', () => {
 
     const payload = await zoomSection('user-live')
 
-    expect(payload.text).toBe('Zoom-практика ФОКУСУ починається зараз.')
-    expect(payload.buttons).toEqual([
-      [{ text: 'Приєднатися', url: 'https://zoom.example/live' }],
-    ])
+    expect(payload.text).toContain('Ти вже записана.')
+    expect(payload.text).toContain('Найближча Zoom-практика')
+    expect(payload.buttons).toHaveLength(3)
   })
 
   it('NO_SESSION state copy has no fake CTA', async () => {
@@ -176,13 +182,28 @@ describe('Focus home CTA matrix', () => {
 
     const payload = await zoomSection('user-no-session')
 
-    expect(payload.text).toBe('Наступну Zoom-практику ще не додано.')
-    expect(payload.buttons).toEqual([])
+    expect(payload.text).toContain('Найближчу Zoom-практику ще не додано.')
+    expect(payload.buttons).toHaveLength(3)
   })
 
   it('focus ai remains an explicit separate ABSystem upsell action', () => {
     const payload = postZoomAbsystemCtaMessage('user-7')
 
     expect(JSON.stringify(payload.reply_markup)).toContain('focus:ai')
+  })
+
+  it('POST_ZOOM_1 copy stays Focus-only and does not include ABSystem CTA', async () => {
+    const { postZoom1Message } = await import('./abTest.start.js')
+
+    const payload = postZoom1Message('user-8')
+    const flat = JSON.stringify(payload.reply_markup)
+
+    expect(payload.text).toContain('Практика завершилась')
+    expect(payload.text).toContain('ФОКУС')
+    expect(payload.text).not.toContain('ABSystem')
+    expect(flat).toMatch(/post_zoom:leave_insight/)
+    expect(flat).toMatch(/focus:next_zoom/)
+    expect(flat).toMatch(/focus:menu/)
+    expect(flat).not.toMatch(/post_zoom:absystem_cta/)
   })
 })

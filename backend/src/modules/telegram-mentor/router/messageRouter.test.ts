@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   resolveTelegramIntelligence: vi.fn(),
   getTelegramAiRequestContext: vi.fn(),
   appendTelegramConversationTurn: vi.fn(),
+  loadAbTestProgress: vi.fn(),
+  renderCurrentView: vi.fn(),
 }))
 
 vi.mock('../../../db/client.js', () => ({
@@ -91,10 +93,19 @@ vi.mock('../../../services/claude-intelligence.service.js', () => ({
 vi.mock('../services/intelligence.service.js', () => ({
   resolveTelegramIntelligence: mocks.resolveTelegramIntelligence,
   appendTelegramConversationTurn: mocks.appendTelegramConversationTurn,
+  resolveTelegramSupportUrl: vi.fn(() => 'https://support.example/demo'),
 }))
 
 vi.mock('../services/requestContext.service.js', () => ({
   getTelegramAiRequestContext: mocks.getTelegramAiRequestContext,
+}))
+
+vi.mock('@/products/ab-system/telegram/abTest.progress.js', () => ({
+  loadAbTestProgress: mocks.loadAbTestProgress,
+}))
+
+vi.mock('@/products/ab-system/telegram/abTest.views.js', () => ({
+  renderCurrentView: mocks.renderCurrentView,
 }))
 
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
@@ -165,6 +176,8 @@ describe('routeTelegramTextMessage', () => {
       replyMarkup: undefined,
     })
     mocks.appendTelegramConversationTurn.mockResolvedValue(undefined)
+    mocks.loadAbTestProgress.mockResolvedValue(null)
+    mocks.renderCurrentView.mockResolvedValue(undefined)
     mocks.getTelegramAiRequestContext.mockResolvedValue({
       chatId: '12345',
       userId: 'user-1',
@@ -331,5 +344,41 @@ describe('routeTelegramTextMessage', () => {
       'Я допомагаю з ФОКУСОМ, Zoom-практиками, прогресом і функціями ABSystem. Обери потрібний розділ у меню або напиши конкретне питання про платформу.',
       undefined,
     )
+  })
+
+  it('re-renders the current AB-test question when free text arrives mid-test', async () => {
+    mocks.detectTelegramIntelligenceMessageType.mockReturnValue('UNKNOWN')
+    mocks.loadAbTestProgress.mockResolvedValue({
+      status: 'active',
+      current_question_id: 'q2',
+    })
+    const ctx = createContext('щось не те', 'user-7')
+
+    const handled = await routeTelegramTextMessage(ctx, 'щось не те')
+
+    expect(handled).toBe(true)
+    expect(mocks.renderCurrentView).toHaveBeenCalledWith(
+      ctx,
+      'user-7',
+      expect.objectContaining({
+        status: 'active',
+        current_question_id: 'q2',
+      }),
+    )
+    expect(mocks.gatewayExecute).not.toHaveBeenCalled()
+    expect(mocks.planMessage).not.toHaveBeenCalled()
+  })
+
+  it('suggests /start when the message looks like a mistyped start command', async () => {
+    const ctx = createContext('#Start', null)
+
+    const handled = await routeTelegramTextMessage(ctx, '#Start')
+
+    expect(handled).toBe(true)
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
+      '12345',
+      'Можливо, ти мала на увазі команду /start? Натисни її внизу, щоб продовжити.',
+    )
+    expect(mocks.gatewayExecute).not.toHaveBeenCalled()
   })
 })

@@ -79,8 +79,9 @@ import {
   updateSession,
 } from '../../../modules/telegram-mentor/session.js'
 import {
-  postZoomAbsystemCtaMessage,
+  zoomSection,
 } from '../../../modules/telegram-mentor/handlers/abTest.start.js'
+import { getDevTestPaymentButton } from '../../../modules/telegram-mentor/keyboards.js'
 
 // ============================================================================
 // EMAIL CAPTURE
@@ -107,10 +108,10 @@ export async function handleAbTestEmailCaptureText(
         ].join('\n')
       )
 
-      const payload = postZoomAbsystemCtaMessage(userId)
+      const payload = await zoomSection(userId)
       await ctx.telegram.sendMessage(currentChatId, payload.text, {
         parse_mode: 'HTML',
-        reply_markup: payload.reply_markup,
+        reply_markup: { inline_keyboard: payload.buttons },
       })
       return true
     }
@@ -334,10 +335,10 @@ export async function resolveFocusShortcutCallback(
       return true
     }
 
-    const payload = postZoomAbsystemCtaMessage(userId)
+    const payload = await zoomSection(userId)
     await ctx.telegram.sendMessage(chatId, payload.text, {
       parse_mode: 'HTML',
-      reply_markup: payload.reply_markup,
+      reply_markup: { inline_keyboard: payload.buttons },
     })
     return true
   }
@@ -624,22 +625,9 @@ export async function handleFocusPaymentAction(
       ]
     }
   }
-  let testButtonRow: Array<{ text: string; url: string }> = []
-  if (resolvedUserId && isTestPaymentEnabled()) {
-    try {
-      const testSession = await buildEcosystemPaymentCheckoutSession(
-        'focus',
-        '1month',
-        resolvedUserId,
-        'telegram'
-      )
-      testButtonRow = [
-        { text: '🧪 ТЕСТ 1 ГРН', url: testSession.checkoutUrl },
-      ]
-    } catch (error) {
-      console.error('[TEST_PAYMENT] failed_to_build_checkout', error)
-    }
-  }
+  const testPaymentButton = isTestPaymentEnabled()
+    ? getDevTestPaymentButton()
+    : null
   try {
     await sendTelegramContentChunk(
       ctx,
@@ -651,7 +639,7 @@ export async function handleFocusPaymentAction(
           inline_keyboard: [
             [{ text: cta1m, url: url1m }],
             [{ text: cta3m, url: url3m }],
-            ...testButtonRow.map((row) => [row]),
+            ...(testPaymentButton ? [[testPaymentButton]] : []),
             [
               {
                 text: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ',
