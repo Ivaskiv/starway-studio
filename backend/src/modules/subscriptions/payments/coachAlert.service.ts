@@ -3,6 +3,45 @@ import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversa
 import { prisma } from '../../../db/client.js'
 import { coachBotContent } from '../../../bot/content/coachBot.content.js'
 
+const INACTIVE_CHECKOUT_STATUSES = ['COMPLETED', 'INVALIDATED'] as const
+
+export async function findRelevantFocusCheckoutSession(userId: string): Promise<{
+  token: string | null
+  orderReference: string | null
+  amount: number
+} | null> {
+  const unresolved = await prisma.checkoutSession.findFirst({
+    where: {
+      userId,
+      productCode: { equals: 'focus', mode: 'insensitive' },
+      status: { notIn: [...INACTIVE_CHECKOUT_STATUSES] },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      token: true,
+      orderReference: true,
+      amount: true,
+    },
+  })
+
+  if (unresolved) {
+    return unresolved
+  }
+
+  return prisma.checkoutSession.findFirst({
+    where: {
+      userId,
+      productCode: { equals: 'focus', mode: 'insensitive' },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      token: true,
+      orderReference: true,
+      amount: true,
+    },
+  })
+}
+
 interface AlertParams {
   bot: Telegraf<Context>
   coachChatId: string

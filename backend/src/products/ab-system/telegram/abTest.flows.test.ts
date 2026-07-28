@@ -10,6 +10,7 @@ const {
   resolveContextUserIdMock,
   planAckMock,
   alertCoachAboutPaymentIssueMock,
+  findRelevantFocusCheckoutSessionMock,
 } = vi.hoisted(() => ({
   sendStateMenuMock: vi.fn(),
   handleStartMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
   resolveContextUserIdMock: vi.fn(),
   planAckMock: vi.fn(async () => undefined),
   alertCoachAboutPaymentIssueMock: vi.fn(),
+  findRelevantFocusCheckoutSessionMock: vi.fn(),
 }))
 
 vi.mock('../../../db/client.js', () => ({
@@ -125,6 +127,7 @@ vi.mock('@/modules/subscriptions/payments/callback.notifications.js', () => ({
 
 vi.mock('@/modules/subscriptions/payments/coachAlert.service.js', () => ({
   alertCoachAboutPaymentIssue: alertCoachAboutPaymentIssueMock,
+  findRelevantFocusCheckoutSession: findRelevantFocusCheckoutSessionMock,
 }))
 
 vi.mock('../../../lib/telegram.js', () => ({
@@ -195,6 +198,11 @@ describe('legacy focus callbacks for active users', () => {
     buildCheckoutSessionMock.mockResolvedValue({ checkoutUrl: 'https://checkout.example' })
     resolveContextUserIdMock.mockResolvedValue('user-1')
     alertCoachAboutPaymentIssueMock.mockResolvedValue(undefined)
+    findRelevantFocusCheckoutSessionMock.mockResolvedValue({
+      token: 'checkout-token',
+      orderReference: 'focus_order',
+      amount: 1000,
+    })
     vi.mocked(prisma.paymentLog.findFirst).mockResolvedValue({ id: 'pay-1' } as never)
     vi.mocked(prisma.productSubscription.findFirst).mockResolvedValue({ id: 'sub-1' } as never)
   })
@@ -264,8 +272,8 @@ describe('legacy focus callbacks for active users', () => {
   it('sends ops alert for payment issue even when no checkout exists yet', async () => {
     const ctx = createCtx()
     process.env.STARWAY_OPS_CHAT_ID = 'ops-chat'
-    vi.mocked(prisma.checkoutSession.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.productSubscription.updateMany).mockResolvedValue({ count: 0 } as never)
+    findRelevantFocusCheckoutSessionMock.mockResolvedValue(null)
 
     const handled = await handleFocusPaymentIssue(ctx as never, 'user-1')
 

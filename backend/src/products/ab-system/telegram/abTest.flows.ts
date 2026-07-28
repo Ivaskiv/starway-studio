@@ -65,6 +65,7 @@ import { buildEcosystemPaymentCheckoutSession } from '../../../modules/subscript
 import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus.access.js'
 import { resendFocusAccessTelegramMessage } from '@/modules/subscriptions/payments/callback.notifications.js'
 import { alertCoachAboutPaymentIssue } from '@/modules/subscriptions/payments/coachAlert.service.js'
+import { findRelevantFocusCheckoutSession } from '@/modules/subscriptions/payments/coachAlert.service.js'
 import { coachBot } from '../../../lib/telegram.js'
 import { trackEvent } from '@/modules/events/service.js'
 import {
@@ -804,16 +805,7 @@ export async function handleFocusPaymentIssue(
     )
   }
 
-  const lastCheckout = await prisma.checkoutSession.findFirst({
-    where: { userId: issueUserId },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      token: true,
-      orderReference: true,
-      amount: true,
-    },
-  })
+  const lastCheckout = await findRelevantFocusCheckoutSession(issueUserId)
 
   await prisma.productSubscription
     .updateMany({

@@ -29,6 +29,7 @@ import { getTelegramProductContext } from '@/content/telegram.product-context.js
 import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.markers.js';
 import { resendFocusAccessTelegramMessage } from './payments/callback.notifications.js';
 import { alertCoachAboutPaymentIssue } from './payments/coachAlert.service.js';
+import { findRelevantFocusCheckoutSession } from './payments/coachAlert.service.js';
 import { getConfiguredFocusProduct, hasActiveFocusSubscription } from './payments/focus.access.js';
 import { coachBot } from '../../lib/telegram.js';
 
@@ -588,18 +589,7 @@ export async function reportFocusPaymentIssueHandler(req: AuthenticatedRequest, 
       return res.status(503).json({ error: 'ops_chat_not_configured' })
     }
 
-    const checkoutSession = await prisma.checkoutSession.findFirst({
-      where: {
-        userId,
-        productCode: { equals: 'focus', mode: 'insensitive' },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        token: true,
-        orderReference: true,
-        amount: true,
-      },
-    })
+    const checkoutSession = await findRelevantFocusCheckoutSession(userId)
 
     if (!checkoutSession?.token || !checkoutSession.orderReference) {
       return res.status(404).json({ error: 'focus_checkout_not_found' })
