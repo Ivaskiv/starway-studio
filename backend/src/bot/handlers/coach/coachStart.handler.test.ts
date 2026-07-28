@@ -10,6 +10,7 @@ vi.mock('../../../db/client.js', () => ({
     },
     checkoutSession: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
   },
 }))
@@ -59,6 +60,8 @@ vi.mock('../../../modules/ai-operator/operator.service.js', () => ({
 }))
 
 import { prisma } from '../../../db/client.js'
+import { activateProductSubscription } from '../../../modules/subscriptions/payments/paymentActivation.service.js'
+import { sendAbTestBlock12Welcome } from '../../../modules/subscriptions/payments/callback.notifications.js'
 
 type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
 
@@ -85,6 +88,10 @@ describe('registerCoachBotHandlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ role: 'EXPERT', id: 'coach-user-id' } as never)
+    vi.mocked(prisma.checkoutSession.findUnique).mockResolvedValue(null as never)
+    vi.mocked(prisma.checkoutSession.findFirst).mockResolvedValue(null as never)
+    vi.mocked(activateProductSubscription).mockResolvedValue({ success: true } as never)
+    vi.mocked(sendAbTestBlock12Welcome).mockResolvedValue(undefined as never)
   })
 
   it('renders the coach-only main menu on /start with six short items', async () => {
@@ -117,5 +124,98 @@ describe('registerCoachBotHandlers', () => {
     const actionMatchers = telegramBot.action.mock.calls.map(([matcher]) => String(matcher))
     expect(actionMatchers.some((matcher) => matcher.includes('coach:'))).toBe(true)
     expect(actionMatchers.some((matcher) => matcher.includes('user:'))).toBe(false)
+  })
+
+  it('grants focus from the current token-based OPS callback', async () => {
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    vi.mocked(prisma.checkoutSession.findUnique).mockResolvedValue({
+      userId: 'user-1',
+      orderReference: 'focus_order_1',
+    } as never)
+
+    const [, grantHandler] = telegramBot.action.mock.calls.find(
+      ([matcher]) => String(matcher) === '/^admin:grant_focus:/'
+    ) as [unknown, RegisteredHandler]
+
+    const ctx = {
+      ...createCoachCtx(),
+      callbackQuery: { data: 'admin:grant_focus:checkout-token-1' },
+    }
+
+    await grantHandler(ctx)
+
+    expect(prisma.checkoutSession.findUnique).toHaveBeenCalledWith({
+      where: { token: 'checkout-token-1' },
+      select: {
+        userId: true,
+        orderReference: true,
+      },
+    })
+    expect(activateProductSubscription).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      orderReference: 'focus_order_1',
+      source: 'coach_manual',
+    }))
+    expect(sendAbTestBlock12Welcome).toHaveBeenCalledWith('user-1')
+  })
+
+  it('grants focus from the legacy userId/orderReference OPS callback', async () => {
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    vi.mocked(prisma.checkoutSession.findFirst).mockResolvedValue({
+      userId: 'legacy-user',
+      orderReference: 'focus_legacy_order',
+    } as never)
+
+    const [, grantHandler] = telegramBot.action.mock.calls.find(
+      ([matcher]) => String(matcher) === '/^admin:grant_focus:/'
+    ) as [unknown, RegisteredHandler]
+
+    const ctx = {
+      ...createCoachCtx(),
+      callbackQuery: { data: 'admin:grant_focus:legacy-user:focus_legacy_order' },
+    }
+
+    await grantHandler(ctx)
+
+    expect(prisma.checkoutSession.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'legacy-user',
+        orderReference: 'focus_legacy_order',
+      },
+      select: {
+        userId: true,
+        orderReference: true,
+      },
+    })
+    expect(activateProductSubscription).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'legacy-user',
+      orderReference: 'focus_legacy_order',
+      source: 'coach_manual',
+    }))
+  })
+
+  it('denies focus from the legacy userId-only OPS callback', async () => {
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const [, denyHandler] = telegramBot.action.mock.calls.find(
+      ([matcher]) => String(matcher) === '/^admin:deny_focus:/'
+    ) as [unknown, RegisteredHandler]
+
+    const ctx = {
+      ...createCoachCtx(),
+      callbackQuery: { data: 'admin:deny_focus:legacy-user:focus_legacy_order' },
+    }
+
+    await denyHandler(ctx)
+
+    expect(ctx.answerCbQuery).toHaveBeenCalledWith(coachBotContent.paymentAdmin.denied)
+    expect(ctx.reply).toHaveBeenCalledWith(
+      `${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: legacy-user`
+    )
   })
 })

@@ -104,6 +104,45 @@ function isStarwayOpsChat(ctx: Context): boolean {
   return Boolean(chatId && opsChatId && chatId === opsChatId)
 }
 
+async function resolvePaymentAdminTarget(rawCallbackData: string): Promise<{
+  userId: string
+  orderReference: string | null
+} | null> {
+  const parts = rawCallbackData.split(':')
+  const firstPayloadPart = parts[2] ?? ''
+  const secondPayloadPart = parts[3] ?? ''
+
+  if (!firstPayloadPart || firstPayloadPart === 'missing_checkout_token') {
+    return null
+  }
+
+  if (secondPayloadPart) {
+    const legacyCheckout = await prisma.checkoutSession.findFirst({
+      where: {
+        userId: firstPayloadPart,
+        orderReference: secondPayloadPart,
+      },
+      select: {
+        userId: true,
+        orderReference: true,
+      },
+    })
+
+    return legacyCheckout ?? {
+      userId: firstPayloadPart,
+      orderReference: secondPayloadPart,
+    }
+  }
+
+  return prisma.checkoutSession.findUnique({
+    where: { token: firstPayloadPart },
+    select: {
+      userId: true,
+      orderReference: true,
+    },
+  })
+}
+
 async function showCoachMenu(ctx: Context): Promise<void> {
   const text = `${coachBotContent.start.title}\n\n${coachBotContent.start.subtitle}`
   await ctx.reply(text, {
@@ -392,26 +431,13 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
     }
     const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const parts = raw.split(':')
-    const checkoutToken = parts[2] ?? ''
-    if (!checkoutToken) {
+    const checkoutTarget = await resolvePaymentAdminTarget(raw)
+    if (!checkoutTarget?.userId || !checkoutTarget.orderReference) {
       await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
       return
     }
-    const checkoutSession = await prisma.checkoutSession.findUnique({
-      where: { token: checkoutToken },
-      select: {
-        userId: true,
-        orderReference: true,
-        amount: true,
-      },
-    })
-    if (!checkoutSession) {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.checkoutNotFound).catch(() => undefined)
-      return
-    }
-    const userId = checkoutSession.userId
-    const orderReference = checkoutSession.orderReference
+    const userId = checkoutTarget.userId
+    const orderReference = checkoutTarget.orderReference
     const result = await activateProductSubscription({
       userId,
       productCode: 'focus',
@@ -435,25 +461,12 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
     }
     const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const parts = raw.split(':')
-    const checkoutToken = parts[2] ?? ''
-    if (!checkoutToken) {
+    const checkoutTarget = await resolvePaymentAdminTarget(raw)
+    if (!checkoutTarget?.userId) {
       await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
       return
     }
-    const checkoutSession = await prisma.checkoutSession.findUnique({
-      where: { token: checkoutToken },
-      select: {
-        userId: true,
-        orderReference: true,
-        amount: true,
-      },
-    })
-    if (!checkoutSession) {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.checkoutNotFound).catch(() => undefined)
-      return
-    }
-    const userId = checkoutSession.userId
+    const userId = checkoutTarget.userId
     await ctx.answerCbQuery(coachBotContent.paymentAdmin.denied).catch(() => undefined)
     await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: ${userId}`)
   }))
