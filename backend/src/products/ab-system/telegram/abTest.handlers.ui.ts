@@ -20,6 +20,7 @@ import {
   renderCurrentView,
   formatAbTestTelegramCard,
   sendActionMessage,
+  sendQuestionDirect,
   splitTelegramContentBlocks,
   sendTelegramContentChunk,
 } from './abTest.views.js'
@@ -93,7 +94,11 @@ export async function handleAbTestStart(
   await testOrchestrator
     .recordTestStart(userId, new Date(nowIso))
     .catch(() => undefined)
-  await sendActionMessage(ctx, userId, warmedProgress, 0, 'reply')
+  await sendQuestionDirect(
+    ctx,
+    warmedProgress.current_question_id ?? 'q1',
+    warmedProgress.revision
+  )
 
   logCallbackHandled({
     action: 'ab_test:start',

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const loadAbTestProgressMock = vi.fn()
 const saveAbTestProgressMock = vi.fn()
 const buildAbTestProgressPatchMock = vi.fn()
-const sendActionMessageMock = vi.fn()
+const sendQuestionDirectMock = vi.fn()
 const recordTestStartMock = vi.fn()
 const logAbTestStartDebugMock = vi.fn()
 const logCallbackHandledMock = vi.fn()
@@ -24,7 +24,7 @@ vi.mock('../../../core/state-machine/abTestFoundation.js', () => ({
 vi.mock('./abTest.views.js', () => ({
   renderCurrentView: vi.fn(),
   formatAbTestTelegramCard: vi.fn(),
-  sendActionMessage: sendActionMessageMock,
+  sendQuestionDirect: sendQuestionDirectMock,
   splitTelegramContentBlocks: vi.fn(),
   sendTelegramContentChunk: vi.fn(),
 }))
@@ -45,14 +45,14 @@ describe('handleAbTestStart', () => {
     vi.clearAllMocks()
   })
 
-  it('warms q1 progress and renders the first question without sending intro again', async () => {
+  it('warms q1 progress and renders the canonical first question without sending intro again', async () => {
     const currentProgress = { revision: 3 }
     const warmedProgress = { revision: 4, current_question_id: 'q1' }
     loadAbTestProgressMock.mockResolvedValue(currentProgress)
     buildAbTestProgressPatchMock.mockReturnValue(warmedProgress)
     saveAbTestProgressMock.mockResolvedValue(undefined)
     recordTestStartMock.mockResolvedValue(undefined)
-    sendActionMessageMock.mockResolvedValue(undefined)
+    sendQuestionDirectMock.mockResolvedValue(undefined)
 
     const { handleAbTestStart } = await import('./abTest.handlers.ui.js')
 
@@ -70,7 +70,6 @@ describe('handleAbTestStart', () => {
     expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
     expect(loadAbTestProgressMock).toHaveBeenCalledWith('user-1')
     expect(saveAbTestProgressMock).toHaveBeenCalledWith('user-1', warmedProgress)
-    expect(sendActionMessageMock).toHaveBeenCalledWith(ctx, 'user-1', warmedProgress, 0, 'reply')
-    expect(ctx.telegram.sendMessage).not.toHaveBeenCalled()
+    expect(sendQuestionDirectMock).toHaveBeenCalledWith(ctx, 'q1', 4)
   })
 })
