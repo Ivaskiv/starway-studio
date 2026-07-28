@@ -158,6 +158,9 @@ model User {
   mentorSession          AiMentorSession?
   productAccesses        ProductAccess[]
   productSubscriptions   ProductSubscription[]
+  bonusSubscriptionRequests BonusSubscriptionRequest[] @relation("BonusSubscriptionRequestUser")
+  approvedBonusSubscriptionRequests BonusSubscriptionRequest[] @relation("BonusSubscriptionRequestApprovedBy")
+  rejectedBonusSubscriptionRequests BonusSubscriptionRequest[] @relation("BonusSubscriptionRequestRejectedBy")
   checkoutSessions       CheckoutSession[]
   trialMirrors           TrialMirror[]
   aiWorkspace            UserAiWorkspace?
@@ -531,6 +534,32 @@ model ProductSubscription {
   @@index([status, expiresAt])
   @@index([channelJoinedAt])
   @@map("product_subscriptions")
+}
+
+model BonusSubscriptionRequest {
+  id              String                         @id @default(cuid())
+  userId          String
+  type            BonusSubscriptionRequestType
+  campaign        String
+  status          BonusSubscriptionRequestStatus @default(PENDING)
+  dedupKey        String
+  requestedAt     DateTime                       @default(now())
+  approvedAt      DateTime?
+  approvedById    String?
+  rejectedAt      DateTime?
+  rejectedById    String?
+  rejectionReason String?
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+  user            User                           @relation("BonusSubscriptionRequestUser", fields: [userId], references: [id], onDelete: Restrict)
+  approvedBy      User?                          @relation("BonusSubscriptionRequestApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy      User?                          @relation("BonusSubscriptionRequestRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, type, campaign])
+  @@index([userId])
+  @@index([campaign, status])
+  @@index([dedupKey])
+  @@map("bonus_subscription_requests")
 }
 
 model ProductAccess {
@@ -1975,6 +2004,16 @@ enum MicroTaskReason {
   GROWTH      @map("growth")
   WHEEL_GAP   @map("wheel_gap")
   STAGNATION  @map("stagnation")
+}
+
+enum BonusSubscriptionRequestType {
+  BONUS_SUBSCRIPTION
+}
+
+enum BonusSubscriptionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum DailyState {

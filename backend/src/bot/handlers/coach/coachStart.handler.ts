@@ -12,7 +12,6 @@ import {
   handleCoachUsersCommand,
   validateCoachContentCatalog,
 } from '../coachContent.handler.js'
-import { handleCoachContentCommand } from '../../flows/contentPlanner.flow.js'
 import {
   hoursMenuHandler,
   nextWeekDoneHandler,
@@ -111,15 +110,16 @@ async function showCoachMenu(ctx: Context): Promise<void> {
     reply_markup: {
       keyboard: [
         [
-          Markup.button.text(coachBotContent.menu.newZoom),
-          Markup.button.text(coachBotContent.menu.audio),
+          Markup.button.text(coachBotContent.menu.calendar),
+          Markup.button.text(coachBotContent.menu.conduct),
         ],
         [
-          Markup.button.text(coachBotContent.menu.dna),
-          Markup.button.text(coachBotContent.menu.content),
+          Markup.button.text(coachBotContent.menu.members),
+          Markup.button.text(coachBotContent.menu.analytics),
         ],
         [
-          Markup.button.text(coachBotContent.menu.system),
+          Markup.button.text(coachBotContent.menu.library),
+          Markup.button.text(coachBotContent.menu.settings),
         ],
       ],
       resize_keyboard: true,
@@ -362,23 +362,27 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
         : {}),
     }).catch(() => undefined)
   }))
-  telegramBot.hears(coachBotContent.menu.audio, withCoachRuntimeProtection('menu:audio', async (ctx) => {
+  telegramBot.hears(coachBotContent.menu.library, withCoachRuntimeProtection('menu:audio', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await handleCoachAudioCommand(ctx, '')
   }))
-  telegramBot.hears(coachBotContent.menu.newZoom, withCoachRuntimeProtection('menu:newZoom', async (ctx) => {
+  telegramBot.hears(coachBotContent.menu.conduct, withCoachRuntimeProtection('menu:newZoom', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await showCoachNewZoomPrompt(ctx)
   }))
-  telegramBot.hears(coachBotContent.menu.content, withCoachRuntimeProtection('menu:content', async (ctx) => {
+  telegramBot.hears(coachBotContent.menu.members, withCoachRuntimeProtection('menu:members', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
-    await handleCoachContentCommand(ctx, 'WEEKLY_PLAN')
+    await handleCoachUsersCommand(ctx, '')
   }))
-  telegramBot.hears(coachBotContent.menu.dna, withCoachRuntimeProtection('menu:analytics', async (ctx) => {
+  telegramBot.hears(coachBotContent.menu.analytics, withCoachRuntimeProtection('menu:analytics', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await analyticsHandler(ctx)
   }))
-  telegramBot.hears(coachBotContent.menu.system, withCoachRuntimeProtection('menu:system', async (ctx) => {
+  telegramBot.hears(coachBotContent.menu.calendar, withCoachRuntimeProtection('menu:calendar', async (ctx) => {
+    if (!await checkCoachAccess(ctx)) return
+    await scheduleMenuHandler(ctx)
+  }))
+  telegramBot.hears(coachBotContent.menu.settings, withCoachRuntimeProtection('menu:system', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await showCoachSystemMenu(ctx)
   }))

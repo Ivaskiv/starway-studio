@@ -1,5 +1,6 @@
 import { prisma } from '../../db/client.js'
 import { resolveUserLifecycle } from '../../modules/flow-control/service.js'
+import { hasActiveFocusSubscription } from '../../modules/subscriptions/payments/focus.access.js'
 
 export type CanonicalLifecycleState =
   | 'anonymous'
@@ -163,6 +164,7 @@ export async function resolveCanonicalLifecycle(userId: string | null): Promise<
       },
     }),
   ])
+  const isFocusActive = await hasActiveFocusSubscription(userId).catch(() => false)
 
   const latestSubscription = details?.subscriptions[0] ?? null
   const latestFunnelLead = details?.funnelLeads[0] ?? null
@@ -210,6 +212,10 @@ export async function resolveCanonicalLifecycle(userId: string | null): Promise<
     default:
       state = 'anonymous'
       break
+  }
+
+  if (isFocusActive) {
+    state = 'paid_active'
   }
 
   const hasPaidAccess = state === 'paid_active' || state === 'paused'

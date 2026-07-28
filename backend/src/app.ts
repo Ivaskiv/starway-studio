@@ -214,7 +214,7 @@ type TelegramWebhookTarget = {
   handleUpdate: (update: unknown) => Promise<unknown>
 }
 
-function resolveTelegramWebhookTarget(
+export function resolveTelegramWebhookTarget(
   incomingSecret: string,
 ): TelegramWebhookTarget | null {
   const targets: TelegramWebhookTarget[] = [
@@ -236,9 +236,7 @@ function resolveTelegramWebhookTarget(
   ]
 
   const normalizedSecret = incomingSecret.trim()
-  if (!normalizedSecret) {
-    return targets[0] ?? null
-  }
+  if (!normalizedSecret) return null
 
   return targets.find((target) => target.secret && target.secret === normalizedSecret) ?? null
 }
@@ -364,30 +362,19 @@ export function createApp(): Express {
       req.get('x-telegram-bot-api-secret-token')?.trim() || ''
     const webhookTarget = resolveTelegramWebhookTarget(incomingSecret)
 
-    if (incomingSecret && !webhookTarget) {
+    if (!webhookTarget) {
       return res
         .status(401)
-        .json({ ok: false, message: 'invalid telegram webhook secret' })
-    }
-
-    if (!incomingSecret && TELEGRAM_WEBHOOK_SECRET) {
-      return res
-        .status(401)
-        .json({ ok: false, message: 'missing telegram webhook secret' })
+        .json({ ok: false, message: incomingSecret ? 'invalid telegram webhook secret' : 'missing telegram webhook secret' })
     }
 
     // ACK immediately to avoid webhook caller timeout/retries;
     // update processing runs in background.
     res.status(200).send('OK')
     setImmediate(() => {
-      const target = webhookTarget ?? resolveTelegramWebhookTarget('')
-      if (!target) {
-        console.error('❌ [TELEGRAM WEBHOOK ERROR] no target bot resolved')
-        return
-      }
-      void target.handleUpdate(req.body).catch((error) => {
+      void webhookTarget.handleUpdate(req.body).catch((error) => {
         console.error('❌ [TELEGRAM WEBHOOK ERROR]', {
-          botId: target.id,
+          botId: webhookTarget.id,
           error,
         })
       })
