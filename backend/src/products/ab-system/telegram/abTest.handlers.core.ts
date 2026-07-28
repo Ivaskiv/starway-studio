@@ -60,7 +60,57 @@ export async function handleAbTestAnswer(
   userId: string,
   parsed: { kind: 'answer'; questionId: string; answerId: string; revision: number | null }
 ): Promise<boolean> {
+  const updateId =
+    typeof (ctx.update as { update_id?: unknown } | undefined)?.update_id === 'number'
+      ? (ctx.update as { update_id: number }).update_id
+      : null
+  const callbackQueryId =
+    typeof (ctx.callbackQuery as { id?: unknown } | undefined)?.id === 'string'
+      ? (ctx.callbackQuery as { id: string }).id
+      : null
+  const callbackData =
+    typeof (ctx.callbackQuery as { data?: unknown } | undefined)?.data === 'string'
+      ? (ctx.callbackQuery as { data: string }).data
+      : null
+  const traceId = `abtest-answer:${updateId ?? 'na'}:${callbackQueryId ?? 'na'}`
+  const telegramUserId = String(ctx.from?.id ?? '') || null
+  const traceChatId = String(ctx.chat?.id ?? ctx.from?.id ?? '') || null
+  const ctxStateUserId =
+    typeof (ctx.state as { userId?: unknown } | undefined)?.userId === 'string'
+      ? (ctx.state as { userId: string }).userId
+      : null
+  const instanceId =
+    process.env.RENDER_INSTANCE_ID?.trim()
+    || process.env.INSTANCE_ID?.trim()
+    || process.env.HOSTNAME?.trim()
+    || null
+  console.info('[ABTEST_ANSWER_ENTER]', {
+    traceId,
+    updateId,
+    callbackQueryId,
+    callbackData,
+    telegramUserId,
+    chatId: traceChatId,
+    ctxStateUserId,
+    resolvedUserId: userId,
+    processPid: process.pid,
+    instanceId,
+    questionIdFromCallback: parsed.questionId,
+    answerIdFromCallback: parsed.answerId,
+    revisionFromCallback: parsed.revision,
+  })
   const progress = await loadAbTestProgress(userId)
+  console.info('[ABTEST_PROGRESS_BEFORE]', {
+    traceId,
+    userId,
+    status: progress.status,
+    stage: progress.stage,
+    revision: progress.revision,
+    currentQuestionId: progress.current_question_id,
+    answersLength: progress.answers.length,
+    answerQuestionIds: progress.answers.map((item) => item.question_id),
+    settingsUpdatedAt: null,
+  })
   const questionOrder = resolveAbTestQuestionOrder()
   const expectedQuestionId = questionOrder[progress.answers.length] ?? null
 
@@ -175,7 +225,27 @@ export async function handleAbTestAnswer(
     last_event_at: answeredAt.toISOString(),
   })
 
-  await saveAbTestProgress(userId, next)
+  console.info('[ABTEST_PROGRESS_WRITE_1]', {
+    traceId,
+    userId,
+    expectedQuestionId,
+    nextQuestionId,
+    oldRevision: progress.revision,
+    newRevision: next.revision,
+    oldAnswersLength: progress.answers.length,
+    newAnswersLength: next.answers.length,
+  })
+  await saveAbTestProgress(userId, next, { traceId })
+  const progressAfterWrite1 = await loadAbTestProgress(userId)
+  console.info('[ABTEST_PROGRESS_AFTER_WRITE_1]', {
+    traceId,
+    userId,
+    status: progressAfterWrite1.status,
+    stage: progressAfterWrite1.stage,
+    revision: progressAfterWrite1.revision,
+    currentQuestionId: progressAfterWrite1.current_question_id,
+    answersLength: progressAfterWrite1.answers.length,
+  })
   
   // Update button UI
   const callbackMessage = ctx.callbackQuery?.message
@@ -241,8 +311,13 @@ export async function handleAbTestAnswer(
       email_stage: 'pending',
       last_event_at: new Date().toISOString(),
     })
-    await saveAbTestProgress(userId, pendingEmailProgress)
+    await saveAbTestProgress(userId, pendingEmailProgress, { traceId })
     await renderAbTestEmailGate(ctx, userId, pendingEmailProgress)
+    console.info('[ABTEST_ANSWER_EXIT]', {
+      traceId,
+      handled: true,
+      outboundCount: 1,
+    })
     return true
   }
 
@@ -258,18 +333,61 @@ export async function handleAbTestAnswer(
     return true
   }
 
+  console.info('[ABTEST_FOLLOWUP_INPUT]', {
+    traceId,
+    userId,
+    currentQuestionId: next.current_question_id,
+    revision: next.revision,
+    answersLength: next.answers.length,
+  })
   const scheduled = await scheduleFollowups(userId, next, next.stage)
-  const finalProgress = await saveAbTestProgress(userId, scheduled)
+  console.info('[ABTEST_PROGRESS_WRITE_2]', {
+    traceId,
+    userId,
+    incomingCurrentQuestionId: scheduled.current_question_id,
+    incomingRevision: scheduled.revision,
+    incomingAnswersLength: scheduled.answers.length,
+  })
+  const finalProgress = await saveAbTestProgress(userId, scheduled, { traceId })
+  const progressAfterWrite2 = await loadAbTestProgress(userId)
+  console.info('[ABTEST_PROGRESS_AFTER_WRITE_2]', {
+    traceId,
+    userId,
+    status: progressAfterWrite2.status,
+    stage: progressAfterWrite2.stage,
+    revision: progressAfterWrite2.revision,
+    currentQuestionId: progressAfterWrite2.current_question_id,
+    answersLength: progressAfterWrite2.answers.length,
+  })
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) {
+    console.info('[ABTEST_ANSWER_EXIT]', {
+      traceId,
+      handled: true,
+      outboundCount: 0,
+    })
     return true
   }
   const { sendQuestionDirect } = await import('./abTest.views.js')
+  console.info('[ABTEST_RENDER_NEXT]', {
+    traceId,
+    userId,
+    selectedQuestionId: nextQuestion.question_id,
+    selectedQuestionNumber: nextQuestionIndex + 1,
+    finalCurrentQuestionId: finalProgress.current_question_id,
+    finalRevision: finalProgress.revision,
+    finalAnswersLength: finalProgress.answers.length,
+  })
   await sendQuestionDirect(
     ctx,
     nextQuestion.question_id,
     finalProgress.revision
   )
+  console.info('[ABTEST_ANSWER_EXIT]', {
+    traceId,
+    handled: true,
+    outboundCount: 1,
+  })
   return true
 }
 

@@ -13,6 +13,9 @@ import {
 
 export type UiSettingsObject = Record<string, unknown>
 export type SettingsObject = Record<string, unknown>
+export type AbTestTraceContext = {
+  traceId?: string | null
+}
 
 function normalizeEmail(value: string | null | undefined): string | null {
   const normalized = String(value ?? '').trim().toLowerCase()
@@ -197,16 +200,37 @@ export async function loadAbTestProgress(userId: string): Promise<AbTestProgress
 
 export async function saveAbTestProgress(
   userId: string,
-  progress: AbTestProgress
+  progress: AbTestProgress,
+  traceContext?: AbTestTraceContext
 ): Promise<AbTestProgress> {
+  console.info('[ABTEST_SAVE_ENTER]', {
+    traceId: traceContext?.traceId ?? null,
+    userId,
+    incomingStatus: progress.status,
+    incomingStage: progress.stage,
+    incomingRevision: progress.revision,
+    incomingCurrentQuestionId: progress.current_question_id,
+    incomingAnswersLength: progress.answers.length,
+  })
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { settings: true },
+    select: { settings: true, updatedAt: true },
   })
-  const uiSettings = await loadUserUiSettings(userId)
   const settings = getSettingsObject(user?.settings)
+  const uiSettings = getUiSettings(settings.ui)
+  const storedProgress = getAbTestProgressFromUiSettings(uiSettings)
+  console.info('[ABTEST_SAVE_DB_BEFORE]', {
+    traceId: traceContext?.traceId ?? null,
+    userId,
+    storedStatus: storedProgress.status,
+    storedStage: storedProgress.stage,
+    storedRevision: storedProgress.revision,
+    storedCurrentQuestionId: storedProgress.current_question_id,
+    storedAnswersLength: storedProgress.answers.length,
+    settingsUpdatedAt: user?.updatedAt?.toISOString?.() ?? null,
+  })
   const nextUiSettings = mergeUiSettings(uiSettings, progress)
-  await prisma.user.update({
+  const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: {
       settings: {
@@ -214,6 +238,19 @@ export async function saveAbTestProgress(
         ui: nextUiSettings,
       } as Prisma.InputJsonValue,
     },
+    select: {
+      updatedAt: true,
+    },
+  })
+  console.info('[ABTEST_SAVE_DB_AFTER]', {
+    traceId: traceContext?.traceId ?? null,
+    userId,
+    writtenStatus: progress.status,
+    writtenStage: progress.stage,
+    writtenRevision: progress.revision,
+    writtenCurrentQuestionId: progress.current_question_id,
+    writtenAnswersLength: progress.answers.length,
+    settingsUpdatedAt: updatedUser.updatedAt.toISOString(),
   })
   return progress
 }
