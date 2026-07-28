@@ -30,9 +30,12 @@ export function readWayForPayCredentials() {
     process.env.TELEGRAM_PUBLIC_FRONTEND_URL?.trim() ||
       process.env.PUBLIC_FRONTEND_URL?.trim() ||
       process.env.FRONTEND_URL?.trim() ||
+      process.env.WAYFORPAY_CALLBACK_URL?.trim() ||
       process.env.PUBLIC_API_URL?.trim() ||
+      process.env.INTERNAL_API_URL?.trim() ||
       process.env.APP_URL?.trim() ||
       process.env.TELEGRAM_WEBHOOK_URL?.trim() ||
+      process.env.RENDER_EXTERNAL_URL?.trim() ||
       ''
   )
 
