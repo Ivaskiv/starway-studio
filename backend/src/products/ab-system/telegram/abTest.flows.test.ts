@@ -240,4 +240,20 @@ describe('legacy focus callbacks for active users', () => {
     expect(sendStateMenuMock).not.toHaveBeenCalled()
     expect(handleAIMentorMock).not.toHaveBeenCalled()
   })
+
+  it('answers with a controlled error when focus payment checkout has no resolved user', async () => {
+    const ctx = createCtx()
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    hasActiveFocusSubscriptionMock.mockResolvedValue(false)
+    resolveContextUserIdMock.mockResolvedValue(null)
+
+    const handled = await handleFocusPaymentAction(ctx as never, null, 42)
+
+    expect(handled).toBe(true)
+    expect(ctx.answerCbQuery).toHaveBeenCalledWith('Не вдалося відкрити ФОКУС. Спробуй ще раз.')
+    expect(consoleErrorSpy).toHaveBeenCalledWith('[FOCUS_PAY] missing_user_id_for_checkout')
+    expect(buildCheckoutSessionMock).not.toHaveBeenCalled()
+
+    consoleErrorSpy.mockRestore()
+  })
 })

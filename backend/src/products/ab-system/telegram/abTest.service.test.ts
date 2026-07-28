@@ -198,3 +198,40 @@ describe('handleAbTestCallback show_result user recovery', () => {
     consoleErrorSpy.mockRestore()
   })
 })
+
+describe('handleAbTestCallback focus payment user recovery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    parseAbTestCallbackMock.mockReturnValue(null)
+    loadAbTestProgressMock.mockResolvedValue({
+      stage: 'S1_TEST_STARTED',
+      status: 'idle',
+      answers: [],
+    })
+    resolveFocusShortcutCallbackMock.mockResolvedValue(false)
+  })
+
+  it('answers with a controlled error when focus payment user identity is missing', async () => {
+    const ctx = createCtx(null)
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    resolveContextUserIdMock.mockResolvedValue(null)
+
+    const handled = await handleAbTestCallback(ctx as never, 'open_focus_payment')
+
+    expect(handled).toBe(true)
+    expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
+    expect(ctx.answerCbQuery).toHaveBeenCalledWith('Не вдалося відкрити ФОКУС. Спробуй ще раз.')
+    expect(consoleErrorSpy).toHaveBeenCalledWith('[AB_TEST_CALLBACK_MISSING_USER_ID]', {
+      action: 'open_focus_payment',
+      chatId: '42',
+      fromId: '99',
+    })
+    expect(logCallbackHandledMock).toHaveBeenCalledWith({
+      action: 'open_focus_payment',
+      handled: true,
+      reason: 'missing_user_id',
+    })
+
+    consoleErrorSpy.mockRestore()
+  })
+})

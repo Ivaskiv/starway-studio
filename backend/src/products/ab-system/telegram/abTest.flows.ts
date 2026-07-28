@@ -568,6 +568,7 @@ export async function handleFocusPaymentAction(
 
   if (!resolvedUserId) {
     console.error('[FOCUS_PAY] missing_user_id_for_checkout')
+    await ctx.answerCbQuery('Не вдалося відкрити ФОКУС. Спробуй ще раз.').catch(() => null)
     return true
   }
 
@@ -582,6 +583,7 @@ export async function handleFocusPaymentAction(
     url3m = session3m.checkoutUrl
   } catch (error) {
     console.error('[FOCUS_PAY] dynamic_checkout_failed', error)
+    await ctx.answerCbQuery('Не вдалося відкрити ФОКУС. Спробуй ще раз.').catch(() => null)
     return true
   }
   const text =

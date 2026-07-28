@@ -262,8 +262,16 @@ export async function handleAbTestCallback(
     }
   }
   if (!userId) {
-    if (action === 'ab_test:show_result') {
-      await ctx.answerCbQuery('Не вдалося відкрити результат. Спробуй ще раз.').catch(() => null)
+    if (
+      action === 'ab_test:show_result' ||
+      action === 'open_focus_payment' ||
+      action.startsWith('open_focus_payment:')
+    ) {
+      const errorText =
+        action === 'ab_test:show_result'
+          ? 'Не вдалося відкрити результат. Спробуй ще раз.'
+          : 'Не вдалося відкрити ФОКУС. Спробуй ще раз.'
+      await ctx.answerCbQuery(errorText).catch(() => null)
       console.error('[AB_TEST_CALLBACK_MISSING_USER_ID]', {
         action,
         chatId: String(ctx.chat?.id ?? ''),
@@ -272,11 +280,18 @@ export async function handleAbTestCallback(
     }
     logCallbackHandled({
       action,
-      handled: action === 'ab_test:show_result',
+      handled:
+        action === 'ab_test:show_result' ||
+        action === 'open_focus_payment' ||
+        action.startsWith('open_focus_payment:'),
       reason: 'missing_user_id',
     })
     logAbTestStartDebug('callback:missing_user_id', { action })
-    return action === 'ab_test:show_result'
+    return (
+      action === 'ab_test:show_result' ||
+      action === 'open_focus_payment' ||
+      action.startsWith('open_focus_payment:')
+    )
   }
 
   // ========== FOCUS SHORTCUTS ==========
