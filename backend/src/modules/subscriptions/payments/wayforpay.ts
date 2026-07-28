@@ -6,15 +6,44 @@ import crypto from 'crypto';
 import type { PaymentData } from '../types.js';
 import { getWayForPayCallbackUrl } from './callbackUrl.js';
 
+function extractMerchantDomainFromUrl(raw: string | null | undefined): string {
+  const value = String(raw ?? '').trim()
+  if (!value) return ''
+
+  try {
+    return new URL(value).hostname.trim()
+  } catch {
+    return value
+      .replace(/^[a-z]+:\/\//i, '')
+      .replace(/\/.*$/, '')
+      .replace(/:\d+$/, '')
+      .trim()
+  }
+}
+
 export function readWayForPayCredentials() {
+  const merchantDomainFromEnv =
+    process.env.WAYFORPAY_MERCHANT_DOMAIN?.trim() ||
+    process.env.WAYFORPAY_DOMAIN?.trim() ||
+    ''
+  const merchantDomainFallback = extractMerchantDomainFromUrl(
+    process.env.TELEGRAM_PUBLIC_FRONTEND_URL?.trim() ||
+      process.env.PUBLIC_FRONTEND_URL?.trim() ||
+      process.env.FRONTEND_URL?.trim() ||
+      process.env.PUBLIC_API_URL?.trim() ||
+      process.env.APP_URL?.trim() ||
+      process.env.TELEGRAM_WEBHOOK_URL?.trim() ||
+      ''
+  )
+
   return {
     merchantAccount:
       process.env.WAYFORPAY_MERCHANT?.trim() ||
       process.env.WAYFORPAY_MERCHANT_ACCOUNT?.trim() ||
       '',
     merchantDomain:
-      process.env.WAYFORPAY_MERCHANT_DOMAIN?.trim() ||
-      process.env.WAYFORPAY_DOMAIN?.trim() ||
+      merchantDomainFromEnv ||
+      merchantDomainFallback ||
       '',
     merchantSecret:
       process.env.WAYFORPAY_SECRET?.trim() ||
