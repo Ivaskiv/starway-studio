@@ -6,11 +6,20 @@ import crypto from 'crypto';
 import type { PaymentData } from '../types.js';
 import { getWayForPayCallbackUrl } from './callbackUrl.js';
 
-function readWayForPayCredentials() {
+export function readWayForPayCredentials() {
   return {
-    merchantAccount: process.env.WAYFORPAY_MERCHANT ?? '',
-    merchantDomain: process.env.WAYFORPAY_MERCHANT_DOMAIN ?? '',
-    merchantSecret: process.env.WAYFORPAY_SECRET ?? '',
+    merchantAccount:
+      process.env.WAYFORPAY_MERCHANT?.trim() ||
+      process.env.WAYFORPAY_MERCHANT_ACCOUNT?.trim() ||
+      '',
+    merchantDomain:
+      process.env.WAYFORPAY_MERCHANT_DOMAIN?.trim() ||
+      process.env.WAYFORPAY_DOMAIN?.trim() ||
+      '',
+    merchantSecret:
+      process.env.WAYFORPAY_SECRET?.trim() ||
+      process.env.WAYFORPAY_MERCHANT_SECRET?.trim() ||
+      '',
   }
 }
 

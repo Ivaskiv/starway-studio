@@ -15,7 +15,7 @@ import {
   createWayForPayCheckout,
   getCheckoutSession,
 } from './payments/wayforpay.checkout.js';
-import { generatePaymentSignature } from './payments/wayforpay.js';
+import { generatePaymentSignature, readWayForPayCredentials } from './payments/wayforpay.js';
 import {
   markWelcomeTestPaymentPending,
 } from '../../products/absystem/config/welcomeTest.payment.js';
@@ -459,14 +459,15 @@ export async function initiateSubscriptionPaymentHandler(req: AuthenticatedReque
       const plan = resolveEcosystemPaymentPlan('focus', planId)
       if (!plan) return res.status(400).json({ error: 'invalid_plan' })
 
+      const credentials = readWayForPayCredentials()
       console.log('[PAYMENT_INIT] focus payment requested', {
         userId,
         planId,
         amount: plan.amount,
         currency: 'UAH',
-        hasMerchantAccount: Boolean(process.env.WAYFORPAY_MERCHANT),
-        hasMerchantDomain: Boolean(process.env.WAYFORPAY_MERCHANT_DOMAIN),
-        hasSecret: Boolean(process.env.WAYFORPAY_SECRET),
+        hasMerchantAccount: Boolean(credentials.merchantAccount),
+        hasMerchantDomain: Boolean(credentials.merchantDomain),
+        hasSecret: Boolean(credentials.merchantSecret),
         hasCallbackUrl: Boolean(process.env.WAYFORPAY_CALLBACK_URL),
       })
 

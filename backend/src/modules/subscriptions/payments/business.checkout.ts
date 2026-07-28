@@ -1,5 +1,5 @@
 import type { EcosystemPaymentPlanId, EcosystemPaymentProduct, EcosystemPaymentCheckoutSession } from './business.types.js'
-import { buildPaymentRequest } from './wayforpay.js'
+import { buildPaymentRequest, readWayForPayCredentials } from './wayforpay.js'
 import { buildShortWayForPayCheckoutUrl, buildShortWayForPayCheckoutUrlSync } from './wayforpay.checkout.js'
 import { resolveEcosystemPaymentPlan } from './business.catalog.js'
 
@@ -145,9 +145,7 @@ export async function buildEcosystemPaymentCheckoutSession(
     throw new Error('invalid_ecosystem_plan')
   }
 
-  const merchantAccount = process.env.WAYFORPAY_MERCHANT?.trim() || ''
-  const merchantDomain = process.env.WAYFORPAY_MERCHANT_DOMAIN?.trim() || ''
-  const merchantSecret = process.env.WAYFORPAY_SECRET?.trim() || ''
+  const { merchantAccount, merchantDomain, merchantSecret } = readWayForPayCredentials()
 
   if (!merchantAccount || !merchantDomain || !merchantSecret) {
     console.error('[WAYFORPAY_CHECKOUT] ❌ Missing WayForPay credentials', {
