@@ -842,22 +842,20 @@ export async function handleFocusPaymentIssue(
   }
 
   try {
-    if (lastCheckout?.token) {
-      await alertCoachAboutPaymentIssue({
-        bot: coachBot,
-        coachChatId,
+    await alertCoachAboutPaymentIssue({
+      bot: coachBot,
+      coachChatId,
+      userId: issueUserId,
+      checkoutToken: lastCheckout?.token ?? null,
+      orderReference,
+      amount: lastCheckout?.amount ?? 0,
+      reason: FOCUS_PAYMENT_ISSUE_COACH_MSG({
         userId: issueUserId,
-        checkoutToken: lastCheckout.token,
         orderReference,
         amount: lastCheckout?.amount ?? 0,
-        reason: FOCUS_PAYMENT_ISSUE_COACH_MSG({
-          userId: issueUserId,
-          orderReference,
-          amount: lastCheckout?.amount ?? 0,
-        }),
-        scenario: 'E',
-      })
-    }
+      }),
+      scenario: 'E',
+    })
   } catch (error) {
     console.error('[PAYMENT_ISSUE] coach alert failed', {
       userId: issueUserId,

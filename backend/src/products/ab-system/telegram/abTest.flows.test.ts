@@ -9,6 +9,7 @@ const {
   buildCheckoutSessionMock,
   resolveContextUserIdMock,
   planAckMock,
+  alertCoachAboutPaymentIssueMock,
 } = vi.hoisted(() => ({
   sendStateMenuMock: vi.fn(),
   handleStartMock: vi.fn(),
@@ -18,12 +19,14 @@ const {
   buildCheckoutSessionMock: vi.fn(),
   resolveContextUserIdMock: vi.fn(),
   planAckMock: vi.fn(async () => undefined),
+  alertCoachAboutPaymentIssueMock: vi.fn(),
 }))
 
 vi.mock('../../../db/client.js', () => ({
   prisma: {
+    checkoutSession: { findFirst: vi.fn() },
     paymentLog: { findFirst: vi.fn() },
-    productSubscription: { findFirst: vi.fn() },
+    productSubscription: { findFirst: vi.fn(), updateMany: vi.fn() },
   },
 }))
 
@@ -33,7 +36,7 @@ vi.mock('../../../core/state-machine/abTestFoundation.js', () => ({
 }))
 
 vi.mock('../content/abTest.focus.js', () => ({
-  FOCUS_PAYMENT_ISSUE_COACH_MSG: '',
+  FOCUS_PAYMENT_ISSUE_COACH_MSG: vi.fn(() => ''),
   FOCUS_PAYMENT_ISSUE_NO_USER_MSG: '',
   FOCUS_PAYMENT_ISSUE_USER_MSG: '',
   FOCUS_RESEND_MISSING_USER_MSG: 'missing',
@@ -121,7 +124,7 @@ vi.mock('@/modules/subscriptions/payments/callback.notifications.js', () => ({
 }))
 
 vi.mock('@/modules/subscriptions/payments/coachAlert.service.js', () => ({
-  alertCoachAboutPaymentIssue: vi.fn(),
+  alertCoachAboutPaymentIssue: alertCoachAboutPaymentIssueMock,
 }))
 
 vi.mock('../../../lib/telegram.js', () => ({
@@ -168,7 +171,7 @@ vi.mock('../../../modules/telegram-mentor/handlers/status.js', () => ({
 }))
 
 import { prisma } from '../../../db/client.js'
-import { handleFocusPaymentAction, handleResendFocusBlock12, resolveFocusShortcutCallback } from './abTest.flows.js'
+import { handleFocusPaymentAction, handleFocusPaymentIssue, handleResendFocusBlock12, resolveFocusShortcutCallback } from './abTest.flows.js'
 
 function createCtx() {
   return {
@@ -191,6 +194,7 @@ describe('legacy focus callbacks for active users', () => {
     handleAIMentorMock.mockResolvedValue(undefined)
     buildCheckoutSessionMock.mockResolvedValue({ checkoutUrl: 'https://checkout.example' })
     resolveContextUserIdMock.mockResolvedValue('user-1')
+    alertCoachAboutPaymentIssueMock.mockResolvedValue(undefined)
     vi.mocked(prisma.paymentLog.findFirst).mockResolvedValue({ id: 'pay-1' } as never)
     vi.mocked(prisma.productSubscription.findFirst).mockResolvedValue({ id: 'sub-1' } as never)
   })
@@ -255,5 +259,27 @@ describe('legacy focus callbacks for active users', () => {
     expect(buildCheckoutSessionMock).not.toHaveBeenCalled()
 
     consoleErrorSpy.mockRestore()
+  })
+
+  it('sends ops alert for payment issue even when no checkout exists yet', async () => {
+    const ctx = createCtx()
+    process.env.STARWAY_OPS_CHAT_ID = 'ops-chat'
+    vi.mocked(prisma.checkoutSession.findFirst).mockResolvedValue(null as never)
+    vi.mocked(prisma.productSubscription.updateMany).mockResolvedValue({ count: 0 } as never)
+
+    const handled = await handleFocusPaymentIssue(ctx as never, 'user-1')
+
+    expect(handled).toBe(true)
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledTimes(1)
+    expect(alertCoachAboutPaymentIssueMock).toHaveBeenCalledWith({
+      bot: expect.any(Object),
+      coachChatId: 'ops-chat',
+      userId: 'user-1',
+      checkoutToken: null,
+      orderReference: 'unknown',
+      amount: 0,
+      reason: '',
+      scenario: 'E',
+    })
   })
 })

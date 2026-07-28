@@ -7,7 +7,7 @@ interface AlertParams {
   bot: Telegraf<Context>
   coachChatId: string
   userId: string
-  checkoutToken: string
+  checkoutToken?: string | null
   orderReference: string
   amount: number
   reason: string
@@ -23,10 +23,12 @@ const SCENARIO_LABELS: Record<AlertParams['scenario'], string> = {
 const renderer = new TelegramConversationRenderer()
 
 export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<void> {
-  await prisma.checkoutSession.update({
-    where: { token: params.checkoutToken },
-    data: { paymentIssueReportedAt: new Date() },
-  }).catch(() => undefined)
+  if (params.checkoutToken) {
+    await prisma.checkoutSession.update({
+      where: { token: params.checkoutToken },
+      data: { paymentIssueReportedAt: new Date() },
+    }).catch(() => undefined)
+  }
 
   const text = [
     SCENARIO_LABELS[params.scenario],
@@ -54,12 +56,12 @@ export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<
         {
           kind: 'callback',
           label: coachBotContent.paymentAdmin.paymentExists,
-          value: `admin:grant_focus:${params.checkoutToken}`,
+          value: `admin:grant_focus:${params.checkoutToken ?? 'missing_checkout_token'}`,
         },
         {
           kind: 'callback',
           label: coachBotContent.paymentAdmin.paymentMissing,
-          value: `admin:deny_focus:${params.checkoutToken}`,
+          value: `admin:deny_focus:${params.checkoutToken ?? 'missing_checkout_token'}`,
         },
       ],
     }],
