@@ -38,7 +38,7 @@ type AuthUserWithExpert = User & {
 
 type ApiMode = 'auto' | 'local' | 'remote';
 
-const DEFAULT_REMOTE_API_URL = 'https://starway-backend.vercel.app/api';
+const DEFAULT_REMOTE_API_URL = 'https://starway-api.onrender.com/api';
 
 const getApiMode = (): ApiMode => {
   const rawMode = import.meta.env.VITE_API_MODE?.trim().toLowerCase();
