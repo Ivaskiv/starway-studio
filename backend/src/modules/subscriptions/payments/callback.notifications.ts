@@ -7,13 +7,22 @@ import { hasActiveFocusSubscription } from './focus.access.js'
 import { prisma } from '../../../db/client.js'
 import { FOCUS_PRODUCT_CODES } from './focus.access.js'
 
-const renderer = new TelegramConversationRenderer()
+let rendererInstance: TelegramConversationRenderer | null = null
+
+function getRenderer(): TelegramConversationRenderer {
+  if (rendererInstance) {
+    return rendererInstance
+  }
+
+  rendererInstance = new TelegramConversationRenderer()
+  return rendererInstance
+}
 
 async function sendOutboundConversation(
   chatId: string,
   response: ConversationResponse,
 ): Promise<boolean> {
-  return renderer.renderOutbound({ chatId }, response)
+  return getRenderer().renderOutbound({ chatId }, response)
 }
 
 function buildMessageResponse(

@@ -46,6 +46,9 @@ describe('TelegramConversationRenderer outbound', () => {
       '123',
       'Привіт',
       {
+        link_preview_options: {
+          is_disabled: true,
+        },
         reply_markup: {
           inline_keyboard: [[{ text: 'Open', url: 'https://example.com' }]],
         },
@@ -113,6 +116,9 @@ describe('TelegramDeliveryAdapter', () => {
       '777',
       '<b>Заголовок</b>\n\nТіло',
       {
+        link_preview_options: {
+          is_disabled: true,
+        },
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [[{ text: 'Відкрити', url: 'https://example.com/app' }]],

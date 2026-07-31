@@ -100,14 +100,23 @@ function buildConversationResponse(message: DeliveryMessage): ConversationRespon
   }
 }
 
-const renderer = new TelegramConversationRenderer()
+let rendererInstance: TelegramConversationRenderer | null = null
+
+function getRenderer(): TelegramConversationRenderer {
+  if (rendererInstance) {
+    return rendererInstance
+  }
+
+  rendererInstance = new TelegramConversationRenderer()
+  return rendererInstance
+}
 
 export class TelegramDeliveryAdapter {
   async send(user: DeliveryUser, message: DeliveryMessage): Promise<boolean> {
     const chatId = resolveChatId(user)
     if (!chatId) return false
 
-    return renderer.renderOutbound(
+    return getRenderer().renderOutbound(
       { chatId },
       buildConversationResponse(message),
     )

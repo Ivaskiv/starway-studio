@@ -63,7 +63,16 @@ type DojimSeriesScheduleResult = {
   jobsCount: number
 }
 
-const conversationRenderer = new TelegramConversationRenderer()
+let conversationRendererInstance: TelegramConversationRenderer | null = null
+
+function getConversationRenderer(): TelegramConversationRenderer {
+  if (conversationRendererInstance) {
+    return conversationRendererInstance
+  }
+
+  conversationRendererInstance = new TelegramConversationRenderer()
+  return conversationRendererInstance
+}
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -487,7 +496,7 @@ async function sendFocusDojimBlockMessage(input: {
   const response = buildFocusDojimConversationResponse(block, buttons)
   if (!response) return
 
-  await conversationRenderer.renderOutbound({ chatId: String(chatId), transportBot: bot }, response)
+  await getConversationRenderer().renderOutbound({ chatId: String(chatId), transportBot: bot }, response)
 }
 
 function mapReplyMarkupToConversationButtons(
@@ -867,7 +876,7 @@ export class NotificationService {
       const block = sequenceBlocks[index]
       const isLastBlock = index === sequenceBlocks.length - 1
 
-      await conversationRenderer.renderOutbound({
+      await getConversationRenderer().renderOutbound({
         chatId: String(chatId),
         transportBot: bot,
       }, {
