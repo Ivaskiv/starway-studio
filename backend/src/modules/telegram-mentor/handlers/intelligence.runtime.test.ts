@@ -60,6 +60,7 @@ vi.mock('../services/intelligence.service.js', () => ({
     const normalized = text.trim().toLowerCase()
     return normalized === 'привіт' ? 'SMALL_TALK' : 'UNKNOWN'
   }),
+  resolveTelegramSupportUrl: vi.fn(() => 'https://t.me/test_support'),
 }))
 const loggerEvents: Array<{ level: 'debug' | 'info' | 'warn' | 'error'; message: string; context?: Record<string, unknown> }> = []
 

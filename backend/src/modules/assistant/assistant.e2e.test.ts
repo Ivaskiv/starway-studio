@@ -161,6 +161,7 @@ vi.mock('../telegram-mentor/services/intelligence.service.js', () => ({
   getTelegramConversationHistory: vi.fn(async (userId: string) => {
     return contextStore.get(userId)?.recentConversation ?? []
   }),
+  resolveTelegramSupportUrl: vi.fn(() => 'https://t.me/test_support'),
 }))
 
 vi.mock('../events/service.js', () => ({
