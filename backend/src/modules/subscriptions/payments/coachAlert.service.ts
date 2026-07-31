@@ -1,7 +1,7 @@
 import type { Context, Telegraf } from 'telegraf'
-import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import { prisma } from '../../../db/client.js'
 import { coachBotContent } from '../../../bot/content/coachBot.content.js'
+import { sendOpsTelegramMessage } from '../../../lib/telegram.js'
 
 const INACTIVE_CHECKOUT_STATUSES = ['COMPLETED', 'INVALIDATED'] as const
 
@@ -59,9 +59,10 @@ const SCENARIO_LABELS: Record<AlertParams['scenario'], string> = {
   E: '🆘 Юзер повідомив про проблему',
 }
 
-const renderer = new TelegramConversationRenderer()
-
 export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<void> {
+  void params.bot
+  void params.coachChatId
+
   if (params.checkoutToken) {
     await prisma.checkoutSession.update({
       where: { token: params.checkoutToken },
@@ -81,32 +82,26 @@ export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<
     coachBotContent.paymentAdmin.reviewPrompt,
   ].join('\n')
 
-  await renderer.renderOutbound({
-    chatId: params.coachChatId,
-    transportBot: params.bot,
-  }, {
-    text: null,
-    buttons: [],
-    cards: [{
-      kind: 'message',
-      text,
-      parseMode: 'HTML',
-      buttons: [
-        {
-          kind: 'callback',
-          label: coachBotContent.paymentAdmin.paymentExists,
-          value: `admin:grant_focus:${params.checkoutToken ?? 'missing_checkout_token'}`,
-        },
-        {
-          kind: 'callback',
-          label: coachBotContent.paymentAdmin.paymentMissing,
-          value: `admin:deny_focus:${params.checkoutToken ?? 'missing_checkout_token'}`,
-        },
-      ],
-    }],
-    media: [],
-    nextActions: [],
-    telemetry: {},
-    analytics: {},
-  })
+  await sendOpsTelegramMessage(
+    text,
+    {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [[
+          {
+            text: coachBotContent.paymentAdmin.paymentExists,
+            callback_data: `admin:grant_focus:${params.checkoutToken ?? 'missing_checkout_token'}`,
+          },
+          {
+            text: coachBotContent.paymentAdmin.paymentMissing,
+            callback_data: `admin:deny_focus:${params.checkoutToken ?? 'missing_checkout_token'}`,
+          },
+        ]],
+      },
+    },
+    {
+      messageType: 'focus_payment_issue',
+      source: 'alertCoachAboutPaymentIssue',
+    },
+  )
 }

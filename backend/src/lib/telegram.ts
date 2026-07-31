@@ -71,6 +71,23 @@ export function normalizeTelegramWebhookUrl(
   }
 }
 
+export function normalizeTelegramChatIdForBotApi(chatId: string): string {
+  const trimmed = String(chatId ?? '').trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  if (trimmed.startsWith('-')) {
+    return trimmed
+  }
+
+  if (/^\d{10,}$/.test(trimmed)) {
+    return `-100${trimmed}`
+  }
+
+  return trimmed
+}
+
 export type TelegramWebhookBotId = 'main' | 'coach' | 'test'
 
 type TelegramWebhookSecretInput = {
@@ -353,10 +370,11 @@ export async function sendOpsTelegramMessage(
     source?: string
   },
 ): Promise<boolean> {
-  const chatId =
+  const rawChatId =
     process.env.STARWAY_OPS_CHAT_ID?.trim() ||
     process.env.OPS_TELEGRAM_CHAT_ID?.trim() ||
     ''
+  const chatId = normalizeTelegramChatIdForBotApi(rawChatId)
   if (!chatId) {
     console.warn('[telegram:ops] STARWAY_OPS_CHAT_ID / OPS_TELEGRAM_CHAT_ID is not configured')
     return false
