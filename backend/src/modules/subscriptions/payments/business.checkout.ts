@@ -1,4 +1,5 @@
 import type { EcosystemPaymentPlanId, EcosystemPaymentProduct, EcosystemPaymentCheckoutSession } from './business.types.js'
+import { prisma } from '../../../db/client.js'
 import { buildPaymentRequest, readWayForPayCredentials } from './wayforpay.js'
 import { buildShortWayForPayCheckoutUrl, buildShortWayForPayCheckoutUrlSync } from './wayforpay.checkout.js'
 import { resolveEcosystemPaymentPlan } from './business.catalog.js'
@@ -33,6 +34,7 @@ function resolveDevelopmentPaymentAmount(
 
   const shouldOverride =
     (productId === 'focus' && (planId === '1month' || planId === '3month')) ||
+    (productId === 'trial_zoom' && planId === 'single') ||
     (productId === 'absystem_ai' &&
       (planId === '1month' || planId === '6month' || planId === '1year'))
 
@@ -45,6 +47,40 @@ function resolveDevelopmentPaymentAmount(
   console.log('Sandbox amount: 1 UAH')
 
   return 1
+}
+
+function resolveProductLabel(productId: EcosystemPaymentProduct): string {
+  if (productId === 'focus') return 'FOCUS'
+  if (productId === 'trial_zoom') return 'Пробний Zoom'
+  return 'ABSystem AI'
+}
+
+async function assertTrialZoomPurchaseAvailable(userId: string): Promise<void> {
+  const [existingSubscription, existingPayment] = await Promise.all([
+    prisma.productSubscription.findFirst({
+      where: {
+        userId,
+        product: {
+          code: { equals: 'trial_zoom', mode: 'insensitive' },
+        },
+      },
+      select: { id: true },
+    }),
+    prisma.paymentLog.findFirst({
+      where: {
+        userId,
+        OR: [
+          { orderReference: { startsWith: 'trial_zoom_single_' } },
+          { metadata: { path: ['productId'], equals: 'trial_zoom' } },
+        ],
+      },
+      select: { id: true },
+    }),
+  ])
+
+  if (existingSubscription || existingPayment) {
+    throw new Error('TRIAL_ZOOM_ALREADY_USED')
+  }
 }
 
 function getBackendBaseUrl() {
@@ -115,7 +151,7 @@ export function buildEcosystemPaymentCheckoutUrl(
     amount: checkoutAmount,
     currency: 'UAH',
     payRef,
-    product_name: [productId === 'focus' ? 'FOCUS' : 'ABSystem AI'],
+    product_name: [resolveProductLabel(productId)],
     product_count: [1],
     product_price: [checkoutAmount],
   })
@@ -145,6 +181,10 @@ export async function buildEcosystemPaymentCheckoutSession(
     throw new Error('invalid_ecosystem_plan')
   }
 
+  if (productId === 'trial_zoom') {
+    await assertTrialZoomPurchaseAvailable(userId)
+  }
+
   const { merchantAccount, merchantDomain, merchantSecret } = readWayForPayCredentials()
 
   if (!merchantAccount || !merchantDomain || !merchantSecret) {
@@ -168,7 +208,7 @@ export async function buildEcosystemPaymentCheckoutSession(
     amount: checkoutAmount,
     currency: 'UAH',
     payRef,
-    product_name: [productId === 'focus' ? 'FOCUS' : 'ABSystem AI'],
+    product_name: [resolveProductLabel(productId)],
     product_count: [1],
     product_price: [checkoutAmount],
   })

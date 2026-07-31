@@ -10,7 +10,7 @@ export const STANKEY_SUBSCRIPTION_DURATIONS = Object.fromEntries(
   stankeyManifest.pricing.plans.map((plan) => [plan.id, plan.durationDays])
 ) as Record<string, number | null>
 
-export type EcosystemPaymentProduct = 'focus' | 'absystem_ai'
+export type EcosystemPaymentProduct = 'focus' | 'absystem_ai' | 'trial_zoom'
 export type EcosystemPaymentPlanId =
   | 'welcome_test'
   | '1month'
@@ -18,12 +18,13 @@ export type EcosystemPaymentPlanId =
   | '3month'
   | '6month'
   | '1year'
+  | 'single'
 
 export type EcosystemPlanDefinition = {
   amount: number
   durationDays: number
   dbProductCodes: readonly string[]
-  lifecycleState: 'focus_active' | 'platform_active'
+  lifecycleState: 'focus_active' | 'platform_active' | 'trial_zoom'
 }
 
 export const LIFECYCLE_STATE_ORDER = new Map<string, number>([

@@ -204,7 +204,13 @@ function resolveSessionMetadata(payload: Record<string, unknown>) {
   const amount = Number(payload.amount ?? 0)
   const currency = String(payload.currency ?? 'UAH').trim() || 'UAH'
   const productName = Array.isArray(payload.productName) ? String(payload.productName[0] ?? '') : ''
-  const productCode = productName.toLowerCase().includes('focus') ? 'focus' : 'absystem_ai'
+  const normalizedProductName = productName.toLowerCase()
+  const productCode =
+    normalizedProductName.includes('пробний zoom') || orderReference.startsWith('trial_zoom_')
+      ? 'trial_zoom'
+      : normalizedProductName.includes('focus')
+        ? 'focus'
+        : 'absystem_ai'
   const orderUserMatch = orderReference.match(/^[a-z0-9_-]+_[a-z0-9_-]+_([a-z0-9-]+)_\d+/i)
   const userId = String(payload.clientAccountId ?? orderUserMatch?.[1] ?? '').trim()
   return {

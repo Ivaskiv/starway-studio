@@ -28,6 +28,14 @@ const ECOSYSTEM_PAYMENT_CATALOG: Record<
       lifecycleState: 'focus_active',
     },
   },
+  trial_zoom: {
+    single: {
+      amount: 1,
+      durationDays: 7,
+      dbProductCodes: ['trial_zoom'],
+      lifecycleState: 'trial_zoom',
+    },
+  },
   absystem_ai: {
     '1month': {
       amount: 1900,
@@ -90,5 +98,7 @@ export function resolveEcosystemPaymentTarget(amount: number): {
 export function resolveEcosystemProductCode(
   productId: EcosystemPaymentProduct
 ): string[] {
-  return productId === 'focus' ? ['focus'] : ['absystem_ai', 'absystem']
+  if (productId === 'focus') return ['focus']
+  if (productId === 'trial_zoom') return ['trial_zoom']
+  return ['absystem_ai', 'absystem']
 }
