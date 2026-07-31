@@ -780,7 +780,7 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
   return {
     accessControl,
     zoomAccess: {
-      state: zoomAccess.hasFocus ? 'FOCUS_ACTIVE' : 'NO_ACCESS',
+      state: zoomAccess.state,
       isActive: zoomAccess.isActive,
       hasFocus: zoomAccess.hasFocus,
       expiresAt: zoomAccess.expiresAt,

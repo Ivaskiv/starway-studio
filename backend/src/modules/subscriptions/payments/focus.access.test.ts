@@ -59,7 +59,7 @@ describe('getUserAccessState', () => {
       hasFocus: true,
       expiresAt: new Date('2026-08-20T00:00:00.000Z'),
     })
-    expect(mockProductSubscriptionFindFirst).toHaveBeenCalledTimes(1)
+    expect(mockProductSubscriptionFindFirst).toHaveBeenCalledTimes(2)
   })
 
   it('falls back to the latest subscription when no active row exists', async () => {
@@ -115,6 +115,36 @@ describe('getUserAccessState', () => {
       isActive: true,
       hasFocus: true,
       expiresAt: new Date('2026-08-05T00:00:00.000Z'),
+    })
+  })
+
+  it('treats an active trial_zoom entitlement as limited premium Zoom access without full focus', async () => {
+    mockProductSubscriptionFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        status: 'trial',
+        paidAt: new Date('2026-07-31T12:00:00.000Z'),
+        expiresAt: null,
+        trialEndsAt: new Date('2026-08-03T20:59:59.999Z'),
+        product: { code: 'trial_zoom' },
+      })
+    mockProductSubscriptionFindMany.mockResolvedValue([
+      {
+        status: 'trial',
+        paidAt: new Date('2026-07-31T12:00:00.000Z'),
+        expiresAt: null,
+        trialEndsAt: new Date('2026-08-03T20:59:59.999Z'),
+        product: { code: 'trial_zoom' },
+      },
+    ])
+
+    const result = await getUserAccessState('user-1')
+
+    expect(result).toEqual({
+      state: 'PREMIUM',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: new Date('2026-08-03T20:59:59.999Z'),
     })
   })
 })
