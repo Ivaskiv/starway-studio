@@ -21,6 +21,22 @@ function parseFocusOrderReference(payRef: string): {
   }
 }
 
+function parseTrialZoomOrderReference(payRef: string): {
+  userId: string | null
+  planId: EcosystemPaymentPlanId | null
+} | null {
+  const match = String(payRef ?? '').trim().match(
+    /^trial_zoom_(single)_([0-9a-f-]{36})_\d+$/i,
+  )
+
+  if (!match) return null
+
+  return {
+    planId: match[1] as EcosystemPaymentPlanId,
+    userId: match[2],
+  }
+}
+
 export function resolveWebhookPaymentTarget(
   data: PaymentCallbackData
 ): ResolvedWebhookTarget | null {
@@ -69,6 +85,26 @@ export function resolveWebhookPaymentTarget(
       payRef,
       ecosystemProductId: 'focus',
       ecosystemPlanId: focusPlanId,
+    }
+  }
+
+  if (payRef.startsWith('trial_zoom_')) {
+    const parsedTrialReference = parseTrialZoomOrderReference(payRef)
+    const trialUserId =
+      parsedTrialReference?.userId
+      ?? (typeof data.clientAccountId === 'string' ? data.clientAccountId : null)
+    const trialPlanId: EcosystemPaymentPlanId =
+      parsedTrialReference?.planId ?? 'single'
+
+    return {
+      scope: 'ecosystem',
+      userId: trialUserId,
+      productId: 'trial_zoom',
+      planId: trialPlanId,
+      amount,
+      payRef,
+      ecosystemProductId: 'trial_zoom',
+      ecosystemPlanId: trialPlanId,
     }
   }
 

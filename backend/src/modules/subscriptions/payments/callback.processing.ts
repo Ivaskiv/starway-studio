@@ -12,6 +12,27 @@ import {
 } from './business.js'
 import { resolveWebhookPaymentTarget } from './callback.targets.js'
 import type { ProcessPaymentWebhookResult } from './callback.types.js'
+import type { EcosystemPaymentProduct } from './business.types.js'
+
+type CheckoutVerificationResult =
+  | {
+      ok: true
+      session: {
+        amount: number
+        currency: string
+        userId: string
+        productCode: string
+      }
+    }
+  | {
+      ok: false
+      reason:
+        | 'CHECKOUT_SESSION_NOT_FOUND'
+        | 'CHECKOUT_USER_MISMATCH'
+        | 'CHECKOUT_AMOUNT_MISMATCH'
+        | 'CHECKOUT_CURRENCY_MISMATCH'
+        | 'CHECKOUT_PRODUCT_MISMATCH'
+    }
 
 function extractUuidUserIdFromPayRef(payRef: string): string | null {
   const parts = String(payRef ?? '').trim().split('_')
@@ -58,7 +79,7 @@ async function resolvePaymentLogExpertId(input: {
   db: typeof prisma
   userId: string
   scope: ProcessPaymentWebhookResult['scope']
-  ecosystemProductId?: 'focus' | 'absystem_ai' | null
+  ecosystemProductId?: EcosystemPaymentProduct | null
   payRef: string
 }): Promise<string | null> {
   const expertId = await ensureUserExpertId(input.userId).catch((err) => {
@@ -281,6 +302,60 @@ export async function isProcessedPayment(
   return Boolean(existing && existing.status === 'SUCCESS' && existing.processedAt)
 }
 
+async function verifyCheckoutSessionContract(input: {
+  db: typeof prisma
+  payRef: string
+  amount: number
+  currency: string
+  userId: string
+  productId: string | null
+}): Promise<CheckoutVerificationResult> {
+  const checkoutSession = await input.db.checkoutSession.findFirst({
+    where: { orderReference: input.payRef },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      amount: true,
+      currency: true,
+      userId: true,
+      productCode: true,
+    },
+  }).catch(() => null)
+
+  if (!checkoutSession) {
+    return { ok: false, reason: 'CHECKOUT_SESSION_NOT_FOUND' }
+  }
+
+  if (checkoutSession.userId !== input.userId) {
+    return { ok: false, reason: 'CHECKOUT_USER_MISMATCH' }
+  }
+
+  if (Number(checkoutSession.amount) !== Number(input.amount)) {
+    return { ok: false, reason: 'CHECKOUT_AMOUNT_MISMATCH' }
+  }
+
+  if (String(checkoutSession.currency ?? '').trim().toUpperCase() !== String(input.currency).trim().toUpperCase()) {
+    return { ok: false, reason: 'CHECKOUT_CURRENCY_MISMATCH' }
+  }
+
+  if (
+    input.productId &&
+    String(checkoutSession.productCode ?? '').trim().toLowerCase() !==
+      String(input.productId).trim().toLowerCase()
+  ) {
+    return { ok: false, reason: 'CHECKOUT_PRODUCT_MISMATCH' }
+  }
+
+  return {
+    ok: true,
+    session: {
+      amount: Number(checkoutSession.amount),
+      currency: String(checkoutSession.currency),
+      userId: String(checkoutSession.userId),
+      productCode: String(checkoutSession.productCode),
+    },
+  }
+}
+
 export async function processPaymentWebhook(
   data: PaymentCallbackData,
   db: typeof prisma = prisma
@@ -382,6 +457,40 @@ export async function processPaymentWebhook(
       userId: resolvedUserId,
       db,
     })
+  }
+
+  const checkoutVerification = await verifyCheckoutSessionContract({
+    db,
+    payRef,
+    amount,
+    currency: data.currency ?? 'UAH',
+    userId: resolvedUserId,
+    productId: target.productId,
+  })
+
+  if (!checkoutVerification.ok) {
+    console.warn('[PAYMENT_LIFECYCLE] checkout_verification_failed', {
+      orderReference: payRef,
+      userId: resolvedUserId,
+      productId: target.productId,
+      reason: checkoutVerification.reason,
+      callbackAmount: amount,
+      callbackCurrency: data.currency ?? 'UAH',
+    })
+    return {
+      duplicate: false,
+      scope: target.scope,
+      productId: target.productId,
+      planId: target.planId,
+      ecosystemPlanId: target.ecosystemPlanId,
+      payRef,
+      amount,
+      result: {
+        status: 'failed',
+        userId: resolvedUserId,
+        reason: checkoutVerification.reason,
+      },
+    }
   }
 
   const existingPaymentLog = await db.paymentLog

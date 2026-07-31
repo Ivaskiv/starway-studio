@@ -81,7 +81,7 @@ vi.mock('./crypto.js', () => ({
 
 vi.mock('./wayforpay.checkout.js', () => ({
   markCheckoutSessionCompleted: vi.fn(),
-  markCheckoutSessionProcessing: vi.fn(),
+  markCheckoutSessionProcessing: vi.fn(async () => undefined),
 }))
 
 vi.mock('../../../core/runtime/runtimeIdempotency.js', () => ({
@@ -108,6 +108,9 @@ vi.mock('../../../services/notifications/NotificationEvent.js', () => ({
 }))
 
 import { sendFocusPaymentOnboardingIfNeeded } from './callback.handler.js'
+import { wayForPayCallback } from './callback.handler.js'
+import { processPaymentWebhook } from './callback.processing.js'
+import { verifySignature } from './crypto.js'
 
 describe('callback.handler — Focus onboarding idempotency', () => {
   const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -118,6 +121,16 @@ describe('callback.handler — Focus onboarding idempotency', () => {
     mockSendMessage.mockResolvedValue({ message_id: 1 })
     process.env.PUBLIC_FRONTEND_URL = 'https://app.starway.test'
   })
+
+  function createRes() {
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      send: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
+    }
+
+    return res as any
+  }
 
   it('duplicate callback does not resend onboarding when focusWelcomedAt already exists', async () => {
     const sent = await sendFocusPaymentOnboardingIfNeeded({
@@ -179,5 +192,54 @@ describe('callback.handler — Focus onboarding idempotency', () => {
         telegramLinksCount: 1,
       }),
     )
+  })
+
+  it('rejects invalid WayForPay signature before payment processing', async () => {
+    vi.mocked(verifySignature).mockReturnValue(false)
+    const req = {
+      body: {
+        order_reference: 'trial_zoom_single_11111111-1111-4111-8111-111111111111_123',
+        amount: 1,
+        currency: 'UAH',
+        transaction_status: 'Approved',
+        merchant_signature: 'bad-signature',
+      },
+      method: 'POST',
+      path: '/api/subscriptions/payments/wayforpay/callback',
+      ip: '127.0.0.1',
+      headers: {},
+    } as any
+    const res = createRes()
+
+    await wayForPayCallback(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.send).toHaveBeenCalledWith('FAIL')
+    expect(vi.mocked(processPaymentWebhook)).not.toHaveBeenCalled()
+  })
+
+  it('does not mark payment as paid for non-approved trial callback', async () => {
+    vi.mocked(verifySignature).mockReturnValue(true)
+    const req = {
+      body: {
+        order_reference: 'trial_zoom_single_11111111-1111-4111-8111-111111111111_123',
+        amount: 1,
+        currency: 'UAH',
+        transaction_status: 'Declined',
+        clientAccountId: '11111111-1111-4111-8111-111111111111',
+        merchant_signature: '0123456789abcdef0123456789abcdef',
+      },
+      method: 'POST',
+      path: '/api/subscriptions/payments/wayforpay/callback',
+      ip: '127.0.0.1',
+      headers: {},
+    } as any
+    const res = createRes()
+
+    await wayForPayCallback(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(res.send).toHaveBeenCalledWith('OK')
+    expect(vi.mocked(processPaymentWebhook)).not.toHaveBeenCalled()
   })
 })

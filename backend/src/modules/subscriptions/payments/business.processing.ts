@@ -80,6 +80,62 @@ async function upsertLegacySubscription(
   })
 }
 
+export const KYIV_TIME_ZONE = 'Europe/Kyiv'
+
+function getKyivDateParts(date: Date): { year: number; month: number; day: number; weekday: number } {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: KYIV_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  })
+
+  const parts = formatter.formatToParts(date)
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  const weekdayMap: Record<string, number> = {
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+    Sun: 0,
+  }
+
+  return {
+    year: Number(lookup.year),
+    month: Number(lookup.month),
+    day: Number(lookup.day),
+    weekday: weekdayMap[lookup.weekday] ?? 0,
+  }
+}
+
+function buildUtcDateFromKyivParts(parts: { year: number; month: number; day: number }, hour = 0, minute = 0, second = 0, millisecond = 0) {
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, hour, minute, second, millisecond))
+}
+
+export function resolveStrictNextKyivMonday(date: Date): Date {
+  const parts = getKyivDateParts(date)
+  const daysUntilNextMonday = parts.weekday === 1 ? 7 : ((8 - parts.weekday) % 7 || 7)
+  const baseUtc = buildUtcDateFromKyivParts(parts)
+  baseUtc.setUTCDate(baseUtc.getUTCDate() + daysUntilNextMonday)
+  return baseUtc
+}
+
+export function resolveTrialZoomExpiryDate(createdAt: Date): Date {
+  const nextMonday = resolveStrictNextKyivMonday(createdAt)
+  return new Date(Date.UTC(
+    nextMonday.getUTCFullYear(),
+    nextMonday.getUTCMonth(),
+    nextMonday.getUTCDate(),
+    20,
+    59,
+    59,
+    999,
+  ))
+}
+
 export async function processEcosystemPayment(
   productId: EcosystemPaymentProduct,
   planId: EcosystemPaymentPlanId,
@@ -104,6 +160,7 @@ export async function processEcosystemPayment(
       currentState: true,
       currentStep: true,
       funnelStage: true,
+      createdAt: true,
     },
   })
 
@@ -193,6 +250,10 @@ export async function processEcosystemPayment(
   )
   const amount = input.amount ?? plan.amount
   const planCode = `${productId}:${planId}`
+  const isTrialZoom = productId === 'trial_zoom'
+  const trialZoomExpiresAt = isTrialZoom
+    ? resolveTrialZoomExpiryDate(user.createdAt ?? now)
+    : null
 
   await db.productSubscription.upsert({
     where: {
@@ -202,16 +263,18 @@ export async function processEcosystemPayment(
       },
     },
     update: {
-      status: 'active',
-      expiresAt,
+      status: isTrialZoom ? 'trial' : 'active',
+      expiresAt: isTrialZoom ? null : expiresAt,
+      trialEndsAt: isTrialZoom ? trialZoomExpiresAt : null,
       paidAt: now,
       amount,
     },
     create: {
       userId,
       productId: product.id,
-      status: 'active',
-      expiresAt,
+      status: isTrialZoom ? 'trial' : 'active',
+      expiresAt: isTrialZoom ? null : expiresAt,
+      trialEndsAt: isTrialZoom ? trialZoomExpiresAt : null,
       paidAt: now,
       amount,
     },
@@ -227,7 +290,7 @@ export async function processEcosystemPayment(
     userId,
     productId: product.id,
     planCode,
-    expiresAt,
+    expiresAt: trialZoomExpiresAt ?? expiresAt,
   })
 
   if (productId === 'focus') {

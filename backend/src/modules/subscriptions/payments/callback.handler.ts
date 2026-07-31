@@ -486,15 +486,6 @@ export async function wayForPayCallback(req: Request, res: Response) {
       currency: data.currency,
     })
 
-    if (
-      typeof data.order_reference === 'string' &&
-      data.order_reference.trim()
-    ) {
-      await markCheckoutSessionProcessing(data.order_reference.trim()).catch(
-        () => undefined
-      )
-    }
-
     const requestFingerprint = buildRequestFingerprint({
       method: req.method,
       path: req.path,
@@ -647,6 +638,15 @@ export async function wayForPayCallback(req: Request, res: Response) {
       }
 
       return res.status(200).send('OK')
+    }
+
+    if (
+      typeof data.order_reference === 'string' &&
+      data.order_reference.trim()
+    ) {
+      await markCheckoutSessionProcessing(data.order_reference.trim()).catch(
+        () => undefined
+      )
     }
 
     const result = await withRuntimeAdvisoryLock(
