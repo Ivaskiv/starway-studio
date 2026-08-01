@@ -239,8 +239,10 @@ export async function buildFocusActionButtons(
   ]
 }
 
-async function resolveFocusHomeState(userId: string): Promise<FocusHomeState> {
-  const accessState = await getUserAccessState(userId)
+async function resolveFocusHomeState(
+  userId: string,
+  accessState: Awaited<ReturnType<typeof getUserAccessState>>,
+): Promise<FocusHomeState> {
   if (!accessState.isActive) {
     return 'NO_SESSION'
   }
@@ -270,9 +272,9 @@ async function resolveFocusHomeState(userId: string): Promise<FocusHomeState> {
 }
 
 async function buildFocusHomeMessage(userId: string): Promise<StartMessagePayload> {
-  const [accessState, state, upcomingZoom, channelUrl] = await Promise.all([
-    getUserAccessState(userId),
-    resolveFocusHomeState(userId),
+  const accessState = await getUserAccessState(userId)
+  const [state, upcomingZoom, channelUrl] = await Promise.all([
+    resolveFocusHomeState(userId, accessState),
     getUpcomingZoom(),
     getOrCreateFocusInviteLink(userId),
   ])
