@@ -125,10 +125,20 @@ async function startTelegramBot() {
               || TELEGRAM_WEBHOOK_URL
             )
           : ''
+      // Deprecated: keep reading TEST_BOT_WEBHOOK_URL for staging/CI compatibility,
+      // but local polling runtime must ignore it for the test bot.
+      const configuredTestWebhookUrl = normalizeTelegramWebhookUrl(
+        process.env.TEST_BOT_WEBHOOK_URL?.trim() || '',
+      )
       const testWebhookUrl =
         telegramDeliveryMode === 'webhook'
-          ? normalizeTelegramWebhookUrl(process.env.TEST_BOT_WEBHOOK_URL?.trim() || '')
+          ? configuredTestWebhookUrl
           : ''
+      if (telegramDeliveryMode !== 'webhook' && configuredTestWebhookUrl) {
+        console.warn(
+          '[Telegram] Ignoring TEST_BOT_WEBHOOK_URL because local runtime uses polling mode',
+        )
+      }
       const mainWebhookSecret = resolveTelegramWebhookSecret({
         botId: 'main',
         token: telegramBotConfig.token,
@@ -248,6 +258,7 @@ async function startTelegramBot() {
         (async () => {
           if (!testBotToken) return
           await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined, {
+            botId: 'test',
             webhookSecret: testWebhookSecret || undefined,
           })
           testTelegramRunningMode = testWebhookUrl ? 'webhook' : 'polling'

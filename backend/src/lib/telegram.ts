@@ -3,7 +3,11 @@
 
 import crypto from 'crypto'
 import { Telegraf } from 'telegraf'
-import { readCoachBotToken, requireTelegramBotConfig } from '../modules/telegram-mentor/runtime/botConfig.js'
+import {
+  readCoachBotToken,
+  requireTelegramBotConfig,
+  resolveTelegramDeliveryMode,
+} from '../modules/telegram-mentor/runtime/botConfig.js'
 
 let telegramBotInstance: Telegraf | null = null
 let contentBotInstance: Telegraf | null = null
@@ -300,6 +304,7 @@ export async function launchBot(
   name: string,
   webhookUrl?: string,
   options?: {
+    botId?: TelegramWebhookBotId
     webhookSecret?: string
   },
 ): Promise<void> {
@@ -308,14 +313,24 @@ export async function launchBot(
       firstName: name,
       username: name.toLowerCase().replace(/\s+/g, '_'),
     })
+    const deliveryMode = resolveTelegramDeliveryMode()
+    const isTestBot = options?.botId === 'test'
     const normalizedWebhookUrl = String(webhookUrl ?? '').trim()
-    if (normalizedWebhookUrl) {
+    const shouldUseWebhook =
+      normalizedWebhookUrl
+      && (!isTestBot || deliveryMode === 'webhook')
+
+    if (shouldUseWebhook) {
       const webhookSecret = String(options?.webhookSecret ?? '').trim()
       await targetBot.telegram.setWebhook(normalizedWebhookUrl, {
         ...(webhookSecret ? { secret_token: webhookSecret } : {}),
       })
       console.log(`✓ ${name} started [webhook]`)
       return
+    }
+
+    if (isTestBot && normalizedWebhookUrl && deliveryMode !== 'webhook') {
+      console.warn('[Telegram] Ignoring deprecated TEST_BOT_WEBHOOK_URL because test bot uses polling mode')
     }
 
     // Polling mode requires webhook to be cleared, otherwise Telegram keeps
