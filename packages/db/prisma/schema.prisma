@@ -85,6 +85,9 @@ model User {
   telegramEnabled        Boolean                       @default(true)
   testResultType         String?
   focusPaid              Boolean                       @default(false)
+  absystemAiActive       Boolean                       @default(false)
+  absystemTrialExpiresAt DateTime?
+  absystemGrantSource    AbsystemGrantSource?
   onboardingDone         Boolean                       @default(false)
   lifecycleState         UserLifecycleState            @default(NEW_USER)
   firstTouchProduct      String?
@@ -1938,6 +1941,13 @@ enum SubscriptionStatus {
   PAST_DUE
   CANCELED
   EXPIRED
+}
+
+enum AbsystemGrantSource {
+  post_zoom
+  timeout
+  direct_purchase
+  manual
 }
 
 enum UserFunnelStage {
