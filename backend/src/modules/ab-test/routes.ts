@@ -10,6 +10,7 @@ import {
   resolveCanonicalTestResult,
   type CanonicalTestResult,
 } from '../../core/state-machine/testFoundation.js'
+import { testOrchestrator } from '../../core/orchestrator/testOrchestrator.js'
 import { prisma } from '../../db/client.js'
 import {
   AB_TEST_QUESTION_ORDER,
@@ -96,14 +97,14 @@ function isCanonicalTestResultType(
   )
 }
 
-async function persistTestOutcome(
+export async function persistTestOutcome(
   userId: string,
   result: CanonicalTestResult
 ): Promise<void> {
+  await testOrchestrator.onTestCompleted(userId, result.type)
   await prisma.user.update({
     where: { id: userId },
     data: {
-      testResultType: result.type,
       currentStep: 'START_FLOW',
     },
   })
