@@ -31,7 +31,7 @@ import {
   FOCUS_ROUTE,
 } from '@/features/landings/focus/content/constants'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
-import CleanMiniAppZoomCalendar from '@/features/zoom/routes/CleanMiniAppZoomCalendar'
+import { MiniAppZoomCalendar } from '@/features/zoom/routes/MiniAppZoomRoute'
 import MainLayout from '@/layout/MainLayout'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
@@ -120,7 +120,7 @@ function PublicAppRouter() {
         {renderInfoRoutes()}
       </Route>
       <Route path="/miniapp" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
-      <Route path="/miniapp/zoom-calendar" element={<CleanMiniAppZoomCalendar />} />
+      <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
       {renderTaskRedirectRoutes()}
       <Route path="/content" element={<Navigate to="/miniapp/library" replace />} />
@@ -155,7 +155,7 @@ function GuestAppRouter() {
       <Route path="/miniapp" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
       <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
       <Route path="/zoom-calendar" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
-      <Route path="/miniapp/zoom-calendar" element={<CleanMiniAppZoomCalendar />} />
+      <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
       {/* <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} /> */}
     </Routes>
@@ -170,7 +170,7 @@ function ProtectedAppRouter() {
       <Route element={<MainLayout dashboard />}>
         <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
         <Route path="/zoom-calendar" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
-        <Route path="/miniapp/zoom-calendar" element={<CleanMiniAppZoomCalendar />} />
+        <Route path="/miniapp/zoom-calendar" element={<MiniAppZoomCalendar />} />
         {protectedRoutes.map((route) => (
           <Route
             key={route.path}

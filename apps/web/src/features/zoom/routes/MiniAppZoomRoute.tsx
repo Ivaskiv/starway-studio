@@ -16,6 +16,7 @@ import HomeTab from '@/features/zoom/tabs/HomeTab'
 import ZoomCalendar from '@/features/zoom/ZoomCalendar'
 import { useGetMySystemStateQuery } from '@/features/auth/services/accessApi'
 import { useGetWeekOverviewQuery, useRegisterAttendeeMutation, useSubmitBookingQuestionMutation } from '@/features/zoom/services/zoom.api'
+import CleanMiniAppZoomCalendar from '@/features/zoom/routes/CleanMiniAppZoomCalendar'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import { getSessionDateLabel, getSessionMeta } from '@/features/zoom/zoom.utils'
 import { BarChart3, CalendarDays, CircleUserRound, Crosshair, Home } from 'lucide-react'
@@ -1198,7 +1199,7 @@ export function MiniAppZoomCalendar() {
   return (
     <div className="flex min-h-screen flex-col bg-[#0F1419]">
       <div className="flex-1 overflow-y-auto">
-        <MiniAppZoomRoute />
+        <CleanMiniAppZoomCalendar />
       </div>
     </div>
   )

@@ -12,6 +12,7 @@ import { notificationService } from '../../services/notifications/NotificationSe
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js';
 import { sendDedupedTelegramMessage } from '../../lib/telegram.js';
 import {
+  assertCanBookGroupPracticeSession,
   createZoomSession,
   getCurrentWeekZoomOverview,
   getPublicCurrentWeekZoomOverview,
@@ -25,7 +26,7 @@ import {
   savePostSessionReport,
 } from './service.js';
 import { ZoomSessionWithAttendance } from './types.js';
-import { EXCHANGE_PRICE, getUserAccessState, getZoomExchangeAccessPolicy } from '../subscriptions/payments/focus.access.js';
+import { EXCHANGE_PRICE, getZoomExchangeAccessPolicy } from '../subscriptions/payments/focus.access.js';
 
 // Отримуємо expertId з бази по userId (найнадійніше)
 const getCurrentExpertId = async (userId: string | undefined): Promise<string> => {
@@ -152,9 +153,22 @@ export async function register(req: AuthenticatedRequest, res: Response, next: N
     const sessionType = typeof sessionMeta.type === 'string' ? sessionMeta.type : session.type
 
     if (sessionType === 'group_practice') {
-      const accessState = await getUserAccessState(userId)
-      if (!accessState.hasFocus) {
-        return res.status(403).json({ error: 'NO_ACTIVE_SUBSCRIPTION' })
+      try {
+        await assertCanBookGroupPracticeSession({ userId, sessionId })
+      } catch (error) {
+        if (error instanceof Error && error.message === 'NO_ACTIVE_SUBSCRIPTION') {
+          return res.status(403).json({ error: 'NO_ACTIVE_SUBSCRIPTION' })
+        }
+        if (error instanceof Error && error.message === 'slot_full') {
+          return res.status(409).json({ error: 'slot_full' })
+        }
+        if (error instanceof Error && error.message === 'session_unavailable') {
+          return res.status(409).json({ error: 'session_unavailable' })
+        }
+        if (error instanceof Error && error.message === 'session_not_found') {
+          return res.status(404).json({ error: 'session_not_found' })
+        }
+        throw error
       }
     }
 
@@ -500,7 +514,7 @@ export async function getCurrentWeekSessions(req: AuthenticatedRequest, res: Res
     const overview = await getCurrentWeekZoomOverview({
       userId: user.id,
       role,
-      expertId: user.expertId ?? user.id,
+      expertId: user.expertId ?? undefined,
     })
 
     return res.status(200).json(overview)

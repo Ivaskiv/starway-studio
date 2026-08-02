@@ -31,7 +31,7 @@ function isCoachRole(role: string | null | undefined): boolean {
 }
 
 type ZoomAccessSnapshot = {
-  state: 'NO_ACCESS' | 'FOCUS_ACTIVE' | 'PREMIUM'
+  state: 'NO_ACCESS' | 'FOCUS_ACTIVE' | 'FREE_WEEK1' | 'PREMIUM'
   isActive: boolean
   hasFocus: boolean
 } | undefined
@@ -40,6 +40,14 @@ type DirectZoomBookingParams = {
   action: string | null
   sessionId: string | null
 }
+
+type ZoomHubPrimaryAction =
+  | 'open_access'
+  | 'book'
+  | 'prepare'
+  | 'join'
+  | 'browse'
+  | 'none'
 
 export function resolveZoomAccessState(input: {
   authRestoreStatus: AuthRestoreStatus
@@ -57,10 +65,17 @@ export function resolveZoomAccessState(input: {
   }
 
   if (
-    input.zoomAccess.state === 'FOCUS_ACTIVE' &&
-    input.zoomAccess.hasFocus === true &&
-    input.zoomAccess.isActive
+    (
+      input.zoomAccess.state === 'FOCUS_ACTIVE' &&
+      input.zoomAccess.hasFocus === true &&
+      input.zoomAccess.isActive
+    ) ||
+    input.zoomAccess.state === 'FREE_WEEK1'
   ) {
+    return 'active' as const
+  }
+
+  if (input.zoomAccess.state === 'PREMIUM') {
     return 'active' as const
   }
 
@@ -73,9 +88,13 @@ export function hasConfirmedFocusAccess(
   } | null | undefined,
 ) {
   return Boolean(
-    state?.zoomAccess?.state === 'FOCUS_ACTIVE' &&
-    state.zoomAccess.hasFocus === true &&
-    state.zoomAccess.isActive,
+    (
+      state?.zoomAccess?.state === 'FOCUS_ACTIVE' &&
+      state.zoomAccess.hasFocus === true &&
+      state.zoomAccess.isActive
+    ) ||
+    state?.zoomAccess?.state === 'FREE_WEEK1' ||
+    state?.zoomAccess?.state === 'PREMIUM',
   )
 }
 
@@ -138,6 +157,90 @@ export function resolveDirectZoomBookingState(input: {
   }
 
   return 'calendar' as const
+}
+
+export function pickNextZoomSession(sessions: ZoomWeekOverview['sessions'], now = new Date()) {
+  const actionableStatuses = new Set(['SCHEDULED', 'ACTIVE'])
+  const sortedSessions = [...sessions].sort(
+    (left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime(),
+  )
+
+  const currentOrUpcoming = sortedSessions.find((session) => {
+    if (!actionableStatuses.has(session.status)) {
+      return false
+    }
+
+    if (session.status === 'ACTIVE') {
+      return true
+    }
+
+    return new Date(session.scheduledAt).getTime() >= now.getTime()
+  })
+
+  if (currentOrUpcoming) {
+    return currentOrUpcoming
+  }
+
+  return sortedSessions.find((session) => session.status !== 'CANCELLED') ?? null
+}
+
+export function resolveZoomHubPrimaryAction(input: {
+  accessState: 'loading' | 'active' | 'inactive'
+  session: ZoomWeekOverview['sessions'][number] | null
+}) {
+  if (input.accessState === 'inactive') {
+    return {
+      action: 'open_access' as ZoomHubPrimaryAction,
+      label: 'Отримати доступ',
+      description: 'Оплати ФОКУС або онови статус, щоб записатися на Zoom.',
+    }
+  }
+
+  if (!input.session) {
+    return {
+      action: 'none' as ZoomHubPrimaryAction,
+      label: 'Zoom ще не відкрито',
+      description: 'Щойно коуч додасть практику, вона з’явиться нижче в календарі.',
+    }
+  }
+
+  if (input.session.status === 'ACTIVE' && input.session.zoomLink) {
+    return {
+      action: 'join' as ZoomHubPrimaryAction,
+      label: 'Приєднатися',
+      description: 'Практика вже триває. Відкрий Zoom за активним посиланням.',
+    }
+  }
+
+  if (input.session.status === 'COMPLETED') {
+    return {
+      action: 'browse' as ZoomHubPrimaryAction,
+      label: 'Обрати наступну практику',
+      description: 'Ця практика вже завершилась. Обери наступну доступну сесію.',
+    }
+  }
+
+  if (input.session.status === 'CANCELLED') {
+    return {
+      action: 'browse' as ZoomHubPrimaryAction,
+      label: 'Обрати іншу практику',
+      description: 'Цю сесію скасовано. Нижче показані актуальні доступні Zoom.',
+    }
+  }
+
+  if (input.session.isMyBooking) {
+    return {
+      action: 'prepare' as ZoomHubPrimaryAction,
+      label: 'Підготуватися',
+      description: 'Ти вже записана. Зафіксуй питання або відкрий свою сесію нижче.',
+    }
+  }
+
+  return {
+    action: 'book' as ZoomHubPrimaryAction,
+    label: 'Записатися',
+    description: 'Обери цю практику як наступний конкретний крок.',
+  }
 }
 
 function pluralizeSessions(count: number): string {
@@ -232,7 +335,7 @@ export default function CleanMiniAppZoomCalendar() {
     isAccessLoading,
     zoomAccess,
   })
-  const hasFocusAccess = accessState === 'active'
+  const hasZoomHubAccess = accessState === 'active'
   const isDirectBooking = isDirectZoomBookingRequest(directBookingParams) && !directBookingExpired
   const directSessionId = directBookingParams.sessionId
   const directSession =
@@ -255,6 +358,11 @@ export default function CleanMiniAppZoomCalendar() {
     ? [directSession]
     : (data?.sessions ?? [])
   const sessionsCount = visibleSessions.length
+  const nextSession = data ? pickNextZoomSession(data.sessions) : null
+  const primaryAction = resolveZoomHubPrimaryAction({
+    accessState,
+    session: nextSession,
+  })
 
   useEffect(() => {
     dispatch(api.util.invalidateTags(['Access', 'Products', 'Subscription', 'ZoomSession']))
@@ -524,7 +632,47 @@ export default function CleanMiniAppZoomCalendar() {
     setMessage('Ти записана.')
   }
 
-  if (!user) return null
+  const handleNextZoomAction = async () => {
+    if (primaryAction.action === 'open_access') {
+      await openPayment()
+      return
+    }
+
+    if (!nextSession) {
+      return
+    }
+
+    if (primaryAction.action === 'book') {
+      await register(nextSession.id)
+      return
+    }
+
+    if (primaryAction.action === 'prepare') {
+      openBookingQuestionForm(nextSession.id)
+      return
+    }
+
+    if (primaryAction.action === 'join' && nextSession.zoomLink) {
+      window.open(nextSession.zoomLink, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    if (primaryAction.action === 'browse') {
+      const sessionCard = document.querySelector<HTMLElement>(`[data-session-card="${nextSession.id}"]`)
+      sessionCard?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
+
+  if (!user) {
+    return (
+      <main className="mx-auto w-full max-w-3xl px-4 py-4 pb-24 text-white">
+        <Card>
+          <p className="font-semibold">Готуємо Zoom-календар.</p>
+          <p className="mt-1 text-sm text-white/65">Відновлюємо доступ без повторного входу.</p>
+        </Card>
+      </main>
+    )
+  }
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-4 pb-24 text-white">
@@ -532,9 +680,9 @@ export default function CleanMiniAppZoomCalendar() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
-              Zoom-календар
+              Zoom Hub
             </p>
-            <h1 className="mt-1 text-xl font-semibold">Поточний тиждень</h1>
+            <h1 className="mt-1 text-xl font-semibold">ФОКУС · Zoom</h1>
             {data ? (
               <p className="mt-1 text-sm text-white/55">
                 {formatWeekDate(data.week.from)} — {formatWeekDate(data.week.to)} · {data.week.timezone}
@@ -550,6 +698,41 @@ export default function CleanMiniAppZoomCalendar() {
 
         <div className="mt-4 space-y-3">
           {shouldShowCalendarSkeleton ? <ZoomCalendarSkeleton /> : null}
+
+          {!shouldShowCalendarSkeleton ? (
+            <Card>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
+                Наступна Zoom-практика
+              </p>
+              {nextSession ? (
+                <>
+                  <p className="mt-2 text-lg font-semibold">{nextSession.topic}</p>
+                  <p className="mt-1 text-sm text-white/65">
+                    {getSessionDateLabel(nextSession.scheduledAt)} · {getSessionMeta(nextSession)}
+                  </p>
+                  <p className="mt-3 text-sm text-white/70">{primaryAction.description}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleNextZoomAction()}
+                      disabled={primaryAction.action === 'none'}
+                      className="min-h-11 rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-3 text-sm font-semibold text-[var(--bg-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {primaryAction.label}
+                    </button>
+                    <span className="min-h-11 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/60">
+                      {nextSession.isMyBooking ? 'Ти записана' : 'Запис ще не створено'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 text-lg font-semibold">На цей тиждень ще немає практики</p>
+                  <p className="mt-3 text-sm text-white/70">{primaryAction.description}</p>
+                </>
+              )}
+            </Card>
+          ) : null}
 
           {!shouldShowCalendarSkeleton && directBookingState !== 'locked' && (isAccessError || isScheduleError || !data) ? (
             <Card>
@@ -598,7 +781,7 @@ export default function CleanMiniAppZoomCalendar() {
             </Card>
           ) : null}
 
-          {!shouldShowCalendarSkeleton && data && hasFocusAccess && sessionsCount === 0 ? (
+          {!shouldShowCalendarSkeleton && data && hasZoomHubAccess && sessionsCount === 0 ? (
             <Card>
               <p className="font-semibold">Доступ активний.</p>
               <p className="mt-1 text-sm text-white/65">
@@ -607,7 +790,7 @@ export default function CleanMiniAppZoomCalendar() {
             </Card>
           ) : null}
 
-          {!shouldShowCalendarSkeleton && data && (hasFocusAccess || shouldShowDirectSessionOnly)
+          {!shouldShowCalendarSkeleton && data && (hasZoomHubAccess || shouldShowDirectSessionOnly)
             ? visibleSessions.map((session: ZoomWeekOverview['sessions'][number]) => {
                 const isDirectTargetSession = isDirectBooking && directSessionId === session.id
                 const isQuestionVisible = showQuestionInput && questionSessionId === session.id
@@ -618,7 +801,7 @@ export default function CleanMiniAppZoomCalendar() {
 
                 return (
                   <Card key={session.id}>
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3" data-session-card={session.id}>
                       <div>
                         {isDirectTargetSession ? (
                           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
@@ -741,7 +924,7 @@ export default function CleanMiniAppZoomCalendar() {
             </div>
           ) : null}
 
-          {data && hasFocusAccess && isCoach && data.audios.length > 0 ? (
+          {data && hasZoomHubAccess && isCoach && data.audios.length > 0 ? (
             <section className="pt-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">Аудіо</p>
               <div className="mt-3 space-y-2">

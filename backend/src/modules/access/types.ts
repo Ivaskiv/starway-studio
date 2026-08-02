@@ -125,7 +125,7 @@ export type ModuleLockReason = 'TRIAL_EXPIRED' | 'NO_SUBSCRIPTION' | null;
 export interface UserSystemState {
   accessControl: AccessControlState;
   zoomAccess: {
-    state: 'NO_ACCESS' | 'FOCUS_ACTIVE' | 'PREMIUM';
+    state: 'NO_ACCESS' | 'FOCUS_ACTIVE' | 'FREE_WEEK1' | 'PREMIUM';
     isActive: boolean;
     hasFocus: boolean;
     expiresAt: Date | null;

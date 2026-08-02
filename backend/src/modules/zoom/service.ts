@@ -8,7 +8,8 @@ import type { Telegraf } from 'telegraf';
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js';
 import { abTestZoomContent } from '@/products/ab-system/content/abTest.zoom.js';
 import { FOCUS_PRODUCT_CODE } from '@/products/focus/config/focus.constants.js';
-import { FOCUS_PRODUCT_CODES } from '../subscriptions/payments/focus.access.js';
+import { FOCUS_PRODUCT_CODES, getUserAccessState } from '../subscriptions/payments/focus.access.js';
+import { activateAbsystemTrialAfterFirstZoom } from '../access/service.js';
 import { buildShortWayForPayCheckoutUrl } from '../subscriptions/payments/wayforpay.checkout.js';
 import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js';
 import { parseZoomPostReport } from './zoomPostReport.types.js';
@@ -103,6 +104,15 @@ function endOfRollingKyivWindow(now = new Date(), days = 14): Date {
   return date
 }
 
+function getKyivDateKey(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: KYIV_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
 function extractZoomLinkFromRequests(requests: unknown): string {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return ''
   const meta = requests as Record<string, unknown>
@@ -113,6 +123,30 @@ function resolveRequestedSessionType(requests: unknown): string | null {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return null
   const rawType = (requests as Record<string, unknown>).type
   return typeof rawType === 'string' ? rawType.trim().toLowerCase() : null
+}
+
+type TrialZoomSessionCandidate = {
+  id: string
+  scheduledAt: Date
+  requests?: unknown
+  type?: ZoomSessionType
+}
+
+export function selectTrialZoomEligibleSession<T extends TrialZoomSessionCandidate>(
+  sessions: T[],
+  trialEndsAt: Date | null,
+): T | null {
+  if (!trialEndsAt) return null
+
+  const targetDateKey = getKyivDateKey(trialEndsAt)
+  const matchingSessions = sessions
+    .filter((session) => {
+      const sessionType = resolveRequestedSessionType(session.requests) ?? String(session.type ?? '').trim().toLowerCase()
+      return sessionType === 'group_practice' && getKyivDateKey(session.scheduledAt) === targetDateKey
+    })
+    .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())
+
+  return matchingSessions[0] ?? null
 }
 
 async function countWeeklyPrivateSessions(expertId: string, anchorDate: Date): Promise<number> {
@@ -393,6 +427,78 @@ export async function registerAttendee(
   });
 }
 
+export async function assertCanBookGroupPracticeSession(args: {
+  userId: string
+  sessionId: string
+}): Promise<void> {
+  const { userId, sessionId } = args
+  const session = await prisma.zoomSession.findUnique({
+    where: { id: sessionId },
+    include: { _count: { select: { attendees: true } } },
+  })
+
+  if (!session) throw new Error('session_not_found')
+  if (session.status !== ZoomStatus.SCHEDULED) throw new Error('session_unavailable')
+
+  const accessState = await getUserAccessState(userId)
+  const hasGroupPracticeAccess =
+    accessState.hasFocus || accessState.state === 'PREMIUM' || accessState.state === 'FREE_WEEK1'
+
+  if (!hasGroupPracticeAccess) {
+    throw new Error('NO_ACTIVE_SUBSCRIPTION')
+  }
+
+  if (accessState.state === 'PREMIUM') {
+    const dayStart = new Date(session.scheduledAt)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(session.scheduledAt)
+    dayEnd.setHours(23, 59, 59, 999)
+    const sameDayGroupSessions = await prisma.zoomSession.findMany({
+      where: {
+        expertId: session.expertId,
+        status: { not: ZoomStatus.CANCELLED },
+        scheduledAt: {
+          gte: dayStart,
+          lte: dayEnd,
+        },
+        OR: [
+          { requests: { path: ['type'], equals: 'group_practice' } },
+          { type: ZoomSessionType.GROUP },
+        ],
+      },
+      orderBy: { scheduledAt: 'asc' },
+    })
+    const eligibleSession = selectTrialZoomEligibleSession(
+      sameDayGroupSessions,
+      accessState.expiresAt,
+    )
+
+    if (!eligibleSession || eligibleSession.id !== session.id) {
+      throw new Error('NO_ACTIVE_SUBSCRIPTION')
+    }
+  }
+
+  const existingAttendee = await prisma.zoomSessionAttendee.findUnique({
+    where: {
+      sessionId_userId: {
+        sessionId,
+        userId,
+      },
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  if (existingAttendee) {
+    return
+  }
+
+  if (session._count.attendees >= session.capacity) {
+    throw new Error('slot_full')
+  }
+}
+
 export async function saveBookingQuestionForAttendee(
   userId: string,
   sessionId: string,
@@ -504,10 +610,33 @@ export async function autoBookAllUpcomingGroupSessions(userId: string): Promise<
 
 export async function markAttended(
   attendeeId: string,
+  attendedAt = new Date(),
 ): Promise<ZoomSessionAttendee> {
-  return prisma.zoomSessionAttendee.update({
-    where: { id: attendeeId },
-    data: { attended: true },
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.zoomSessionAttendee.findUnique({
+      where: { id: attendeeId },
+    })
+
+    if (!current) {
+      throw new Error('ATTENDEE_NOT_FOUND')
+    }
+
+    if (current.attended) {
+      return current
+    }
+
+    const attendee = await tx.zoomSessionAttendee.update({
+      where: { id: attendeeId },
+      data: { attended: true },
+    })
+
+    await activateAbsystemTrialAfterFirstZoom({
+      userId: attendee.userId,
+      attendedAt,
+      tx,
+    })
+
+    return attendee
   });
 }
 
@@ -548,16 +677,66 @@ export async function getCalendarSessions(args: {
   }
 
   if (!expertId) {
-    // Fallback: only sessions the user is attending
-    const rows = await prisma.zoomSessionAttendee.findMany({
-      where: { userId, session: { scheduledAt: { gte: from, lte: to } } },
-      include: { session: { include: { _count: { select: { attendees: true } } } } },
-      orderBy: { session: { scheduledAt: 'asc' } },
-    });
-    return rows.map(r => ({ ...r.session, isMyBooking: true }));
+    const sessions = await prisma.zoomSession.findMany({
+      where: {
+        scheduledAt: { gte: from, lte: to },
+        status: { not: ZoomStatus.CANCELLED },
+        OR: [
+          { requests: { path: ['type'], equals: 'group_practice' } },
+          { type: ZoomSessionType.GROUP },
+        ],
+      },
+      include: { _count: { select: { attendees: true } } },
+      orderBy: { scheduledAt: 'asc' },
+    })
+
+    const bookedIds = new Set(
+      (await prisma.zoomSessionAttendee.findMany({
+        where: { userId, sessionId: { in: sessions.map((session) => session.id) } },
+        select: { sessionId: true },
+      })).map((attendee) => attendee.sessionId),
+    )
+
+    return sessions.map((session) => ({ ...session, isMyBooking: bookedIds.has(session.id) }))
   }
 
-  const userIsSubscriber = await isActiveFocusSubscriber(userId)
+  const zoomAccess = await getUserAccessState(userId)
+  const userIsSubscriber = zoomAccess.state === 'FOCUS_ACTIVE'
+
+  if (zoomAccess.state === 'PREMIUM') {
+    const sessions = await prisma.zoomSession.findMany({
+      where: {
+        expertId,
+        scheduledAt: { gte: from, lte: to },
+        status: { not: ZoomStatus.CANCELLED },
+        OR: [
+          { requests: { path: ['type'], equals: 'group_practice' } },
+          { type: ZoomSessionType.GROUP },
+        ],
+      },
+      include: { _count: { select: { attendees: true } } },
+      orderBy: { scheduledAt: 'asc' },
+    })
+
+    const eligibleSession = selectTrialZoomEligibleSession(sessions, zoomAccess.expiresAt)
+    if (!eligibleSession) {
+      return []
+    }
+
+    const attendee = await prisma.zoomSessionAttendee.findUnique({
+      where: {
+        sessionId_userId: {
+          sessionId: eligibleSession.id,
+          userId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    return [{ ...eligibleSession, isMyBooking: Boolean(attendee) }]
+  }
 
   if (!userIsSubscriber) {
     const sessions = await prisma.zoomSession.findMany({

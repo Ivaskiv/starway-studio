@@ -1,5 +1,6 @@
 // backend/src/modules/access/access.service.ts
 import { prisma } from '../../db/client.js'
+import type { Prisma } from '@starway/db/prisma-client'
 import { getAllAbilities } from '../../modules/auth/abilities.js'
 import { getTrialStatus } from '../trial/service.js'
 import { ensureOwnerExpertIdForUser } from '../experts/ownership.service.js'
@@ -136,6 +137,101 @@ function buildProductAccessItems(assignments: ProductAccessAssignment[]): Access
   }
 
   return items
+}
+
+export type AbsystemTrialActivationResult =
+  | 'ACTIVATED'
+  | 'ALREADY_ACTIVE'
+  | 'PAID_ACCESS_EXISTS'
+  | 'NO_CHANGE'
+  | 'USER_NOT_FOUND'
+
+function addAbsystemTrialDays(attendedAt: Date) {
+  return new Date(attendedAt.getTime() + 30 * 24 * 60 * 60 * 1000)
+}
+
+export async function activateAbsystemTrialAfterFirstZoom(params: {
+  userId: string
+  attendedAt: Date
+  tx?: Prisma.TransactionClient
+}): Promise<{
+  status: AbsystemTrialActivationResult
+  startsAt: Date
+  expiresAt: Date
+}> {
+  const { userId, attendedAt, tx } = params
+  const db = tx ?? prisma
+  const expiresAt = addAbsystemTrialDays(attendedAt)
+  const now = new Date()
+
+  const [user, activePaidSubscription] = await Promise.all([
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        absystemAiActive: true,
+        absystemTrialExpiresAt: true,
+        absystemGrantSource: true,
+      },
+    }),
+    db.productSubscription.findFirst({
+      where: {
+        userId,
+        product: {
+          code: { in: ['absystem_ai', 'absystem'] },
+        },
+        status: { in: ['active', 'paid'] },
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: now } },
+        ],
+      },
+      select: {
+        id: true,
+        expiresAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
+
+  if (!user) {
+    return {
+      status: 'USER_NOT_FOUND',
+      startsAt: attendedAt,
+      expiresAt,
+    }
+  }
+
+  if (activePaidSubscription || user.absystemAiActive) {
+    return {
+      status: 'PAID_ACCESS_EXISTS',
+      startsAt: attendedAt,
+      expiresAt,
+    }
+  }
+
+  if (user.absystemTrialExpiresAt) {
+    return {
+      status: user.absystemTrialExpiresAt > now ? 'ALREADY_ACTIVE' : 'NO_CHANGE',
+      startsAt: attendedAt,
+      expiresAt: user.absystemTrialExpiresAt,
+    }
+  }
+
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      absystemAiActive: false,
+      absystemTrialExpiresAt: expiresAt,
+      absystemGrantSource: 'post_zoom',
+    },
+  })
+
+  return {
+    status: 'ACTIVATED',
+    startsAt: attendedAt,
+    expiresAt,
+  }
 }
 
 

@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockUserFindUnique = vi.fn()
 const mockProductSubscriptionFindFirst = vi.fn()
 const mockProductSubscriptionFindMany = vi.fn()
+const mockZoomSessionAttendeeFindFirst = vi.fn()
 
 vi.mock('../../../db/client.js', () => ({
   prisma: {
@@ -13,6 +14,9 @@ vi.mock('../../../db/client.js', () => ({
       findFirst: (...args: unknown[]) => mockProductSubscriptionFindFirst(...args),
       findMany: (...args: unknown[]) => mockProductSubscriptionFindMany(...args),
     },
+    zoomSessionAttendee: {
+      findFirst: (...args: unknown[]) => mockZoomSessionAttendeeFindFirst(...args),
+    },
   },
 }))
 
@@ -20,13 +24,22 @@ import { getUserAccessState } from './focus.access.js'
 
 describe('getUserAccessState', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-02T12:00:00.000Z'))
     vi.clearAllMocks()
     mockUserFindUnique.mockResolvedValue({
       id: 'user-1',
       telegramUserId: '100',
       telegramChatId: '100',
+      testCompletedAt: null,
+      deletedAt: null,
     })
     mockProductSubscriptionFindMany.mockResolvedValue([])
+    mockZoomSessionAttendeeFindFirst.mockResolvedValue(null)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('prefers an older active subscription over a newer cancelled one', async () => {
@@ -88,6 +101,51 @@ describe('getUserAccessState', () => {
     mockProductSubscriptionFindFirst
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
+
+    const result = await getUserAccessState('user-1')
+
+    expect(result).toEqual({
+      state: 'NO_ACCESS',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: null,
+    })
+  })
+
+  it('grants FREE_WEEK1 to a completed-test user without paid access or attended zoom', async () => {
+    mockUserFindUnique.mockResolvedValue({
+      id: 'user-1',
+      telegramUserId: '100',
+      telegramChatId: '100',
+      testCompletedAt: new Date('2026-08-01T10:00:00.000Z'),
+      deletedAt: null,
+    })
+    mockProductSubscriptionFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+
+    const result = await getUserAccessState('user-1')
+
+    expect(result).toEqual({
+      state: 'FREE_WEEK1',
+      isActive: true,
+      hasFocus: false,
+      expiresAt: new Date('2026-08-08T10:00:00.000Z'),
+    })
+  })
+
+  it('does not grant FREE_WEEK1 after the first attended zoom', async () => {
+    mockUserFindUnique.mockResolvedValue({
+      id: 'user-1',
+      telegramUserId: '100',
+      telegramChatId: '100',
+      testCompletedAt: new Date('2026-08-01T10:00:00.000Z'),
+      deletedAt: null,
+    })
+    mockProductSubscriptionFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+    mockZoomSessionAttendeeFindFirst.mockResolvedValue({ id: 'att-1' })
 
     const result = await getUserAccessState('user-1')
 

@@ -4,7 +4,7 @@ export const FOCUS_PRODUCT_CODES = ['focus', 'FOCUS'] as const
 export const EXCHANGE_PRICE = 200
 
 export type UserAccessState = {
-  state: 'FOCUS_ACTIVE' | 'PREMIUM' | 'NO_ACCESS'
+  state: 'FOCUS_ACTIVE' | 'FREE_WEEK1' | 'PREMIUM' | 'NO_ACCESS'
   isActive: boolean
   hasFocus: boolean
   expiresAt: Date | null
@@ -50,6 +50,15 @@ function focusActive(expiresAt: Date | null): UserAccessState {
     state: 'FOCUS_ACTIVE',
     isActive: true,
     hasFocus: true,
+    expiresAt,
+  }
+}
+
+function freeWeekOneActive(expiresAt: Date): UserAccessState {
+  return {
+    state: 'FREE_WEEK1',
+    isActive: true,
+    hasFocus: false,
     expiresAt,
   }
 }
@@ -106,8 +115,39 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
       id: true,
       telegramUserId: true,
       telegramChatId: true,
+      testCompletedAt: true,
+      deletedAt: true,
     },
   })
+
+  async function resolveFreeWeekOneAccess(): Promise<UserAccessState | null> {
+    if (!user?.testCompletedAt || user.deletedAt) {
+      return null
+    }
+
+    const firstWeekEndsAt = new Date(user.testCompletedAt)
+    firstWeekEndsAt.setUTCDate(firstWeekEndsAt.getUTCDate() + 7)
+
+    if (firstWeekEndsAt.getTime() <= now.getTime()) {
+      return null
+    }
+
+    const attendedZoom = await prisma.zoomSessionAttendee.findFirst({
+      where: {
+        userId,
+        attended: true,
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    if (attendedZoom) {
+      return null
+    }
+
+    return freeWeekOneActive(firstWeekEndsAt)
+  }
 
   const activeSubscription = await prisma.productSubscription.findFirst({
     where: {
@@ -210,7 +250,10 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
     return result
   }
 
-  if (!subscription) return logResult(noAccess())
+  if (!subscription) {
+    const freeWeekOneAccess = await resolveFreeWeekOneAccess()
+    return freeWeekOneAccess ? logResult(freeWeekOneAccess) : logResult(noAccess())
+  }
 
   const status = String(subscription.status ?? '').trim().toLowerCase()
   const productCode = String(subscription.product.code ?? '').trim().toLowerCase()
@@ -232,11 +275,17 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
   }
 
   if (status !== 'active' && status !== 'paid') {
-    return logResult(noAccess(subscription.expiresAt ?? null))
+    const freeWeekOneAccess = await resolveFreeWeekOneAccess()
+    return freeWeekOneAccess
+      ? logResult(freeWeekOneAccess)
+      : logResult(noAccess(subscription.expiresAt ?? null))
   }
 
   if (subscription.expiresAt && subscription.expiresAt.getTime() <= now.getTime()) {
-    return logResult(noAccess(subscription.expiresAt))
+    const freeWeekOneAccess = await resolveFreeWeekOneAccess()
+    return freeWeekOneAccess
+      ? logResult(freeWeekOneAccess)
+      : logResult(noAccess(subscription.expiresAt))
   }
 
   return logResult(focusActive(subscription.expiresAt ?? null))
