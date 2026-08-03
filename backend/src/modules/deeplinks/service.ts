@@ -3,6 +3,7 @@ import type { DeepLinkToken, Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { trackEvent } from '../events/service.js'
 import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
+import { resolveTelegramWebappBaseUrl } from '../../config/webapp.js'
 import type {
   DeepLinkAction,
   DeepLinkSource,
@@ -16,6 +17,8 @@ const DEFAULT_TTL_SECONDS = 15 * 60
 const TELEGRAM_START_PREFIX = 'dl_'
 let hasWarnedAboutMissingDeepLinkTable = false
 
+export const COACH_AGENTS_RETURN_TARGET = '/app/dashboard/admin/studio?tab=agents&item=agents.overview'
+
 interface DeepLinkTokenDelegateLike {
   create(args: Prisma.DeepLinkTokenCreateArgs): Promise<DeepLinkToken>
   findUnique(args: Prisma.DeepLinkTokenFindUniqueArgs): Promise<DeepLinkToken | null>
@@ -27,7 +30,7 @@ const deepLinkTokenDelegate = (
 ).deepLinkToken
 
 function getFrontendBaseUrl(): string {
-  return process.env.FRONTEND_URL ?? 'http://localhost:5173'
+  return resolveTelegramWebappBaseUrl()
 }
 
 function getBotUsername(): string {
@@ -112,6 +115,18 @@ export function buildMagicLoginWebLink(token: string): string {
   const url = new URL('/auth/magic', getFrontendBaseUrl())
   url.searchParams.set('token', token)
   return url.toString()
+}
+
+export async function generateCoachAgentsWebDeepLink(userId: string): Promise<string> {
+  const deepLink = await generateDeepLink({
+    userId,
+    action: 'open_web',
+    source: 'telegram',
+    target: 'web',
+    path: COACH_AGENTS_RETURN_TARGET,
+  })
+
+  return buildWebDeepLink(deepLink.token, deepLink.path)
 }
 
 export async function generateDeepLink(input: GenerateDeepLinkInput): Promise<ResolvedDeepLink> {

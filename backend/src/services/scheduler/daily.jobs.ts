@@ -13,6 +13,7 @@ import { resolvePausedMentorContext } from '../notifications/mentorLifecycle.js'
 import { ensureNotificationPreferenceTableAvailability, getMinutesInTimezone, getStartOfUtcDay, getWeekdayInTimezone, hasActiveSchedulerProductEntitlement, hasMentorNotificationAccess, isWithinScheduledMinute } from './common.js'
 import { generateAiBriefingInsights } from './dailyBriefing.ai.js'
 import { parseZoomPostReport } from '../../modules/zoom/zoomPostReport.types.js'
+import { generateCoachAgentsWebDeepLink } from '../../modules/deeplinks/service.js'
 
 function startOfWeekMonday(date = new Date()): Date {
   const next = new Date(date)
@@ -63,6 +64,59 @@ function escapeHtml(value: string): string {
 function getCoachChatId(): string | null {
   const chatId = process.env.STARWAY_OPS_CHAT_ID?.trim() || process.env.OPS_TELEGRAM_CHAT_ID?.trim() || ''
   return chatId || null
+}
+
+function readCoachTelegramAccessId(): string {
+  return String(
+    process.env.COACH_TELEGRAM_ID
+    ?? process.env.TEST_COACH_MENTOR_TELEGRAM_ID
+    ?? '',
+  ).trim()
+}
+
+async function resolveScheduledCoachUserId(): Promise<string | null> {
+  const telegramUserId = readCoachTelegramAccessId()
+
+  if (telegramUserId) {
+    const coach = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { telegramUserId },
+          { telegramChatId: telegramUserId },
+        ],
+      },
+      select: { id: true },
+    })
+
+    if (coach?.id) {
+      return coach.id
+    }
+  }
+
+  const fallbackCoach = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { role: 'SUPERADMIN' },
+        { role: 'EXPERT' },
+      ],
+    },
+    orderBy: [
+      { role: 'desc' },
+      { createdAt: 'asc' },
+    ],
+    select: { id: true },
+  })
+
+  return fallbackCoach?.id ?? null
+}
+
+async function resolveCoachAgentsUrl(): Promise<string> {
+  const coachUserId = await resolveScheduledCoachUserId()
+  if (!coachUserId) {
+    throw new Error('COACH_USER_NOT_RESOLVED_FOR_SCHEDULED_AGENTS_LINK')
+  }
+
+  return generateCoachAgentsWebDeepLink(coachUserId)
 }
 
 function getKyivNow(now = new Date()): Date {
@@ -960,6 +1014,7 @@ async function sendCoachPanelReport(
 export async function coachDailyBriefingCron(): Promise<void> {
   const snapshot = await loadDailyCoachBriefingData()
   const text = await buildCoachDailyBriefingText(snapshot)
+  const agentsUrl = await resolveCoachAgentsUrl()
   await sendCoachPanelReport(text, [
     [
       { text: 'Контент', callback_data: 'coach-content:planner' },
@@ -969,6 +1024,9 @@ export async function coachDailyBriefingCron(): Promise<void> {
     [
       { text: 'Аналітика', callback_data: 'coach:analytics' },
       { text: 'Планер', callback_data: 'content_os:start_planning' },
+    ],
+    [
+      { text: 'Агенти', url: agentsUrl },
     ],
   ])
 }
@@ -1006,6 +1064,7 @@ export async function coachMonthlyStrategicPlannerCron(): Promise<void> {
   if (!isLastSaturdayOfMonth()) return
   const snapshot = await loadMonthlyStrategicSnapshot()
   const text = buildCoachMonthlyStrategicText(snapshot)
+  const agentsUrl = await resolveCoachAgentsUrl()
   await sendCoachPanelReport(text, [
     [
       { text: 'Створити план місяця', callback_data: 'coach-content:monthly' },
@@ -1013,6 +1072,9 @@ export async function coachMonthlyStrategicPlannerCron(): Promise<void> {
     [
       { text: 'Запустити планер', callback_data: 'coach-content:planner' },
       { text: 'Переглянути аналітику', callback_data: 'coach:analytics' },
+    ],
+    [
+      { text: 'Агенти', url: agentsUrl },
     ],
   ])
 }
