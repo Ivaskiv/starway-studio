@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import { prisma } from './db/client.js'
+import { resolvePublicDeliverablesPath } from './lib/publicDeliverables.js'
 import { getUserAccessState } from './modules/subscriptions/payments/focus.access.js'
 import { resolveTelegramDeliveryMode } from './modules/telegram-mentor/runtime/botConfig.js'
 
@@ -22,7 +23,7 @@ const backendEnvPath = resolve(currentDirPath, '../.env')
 const backendLocalEnvPath = resolve(currentDirPath, '../.env.local')
 const rootEnvPath = resolve(currentDirPath, '../../.env')
 const rootLocalEnvPath = resolve(currentDirPath, '../../.env.local')
-const publicDeliverablesPath = resolve(currentDirPath, '../../public/deliverables')
+const publicDeliverablesPath = resolvePublicDeliverablesPath(currentDirPath)
 
 {
   const protectedKeys = new Set(Object.keys(process.env))

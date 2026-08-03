@@ -1,5 +1,6 @@
 import { existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
+import express from 'express'
 import { describe, expect, it } from 'vitest'
 
 describe('abTest shared testimonial contract', () => {
@@ -87,4 +88,83 @@ describe('abTest shared testimonial contract', () => {
     expect(shared.AB_TEST_SCREENSHOT_URLS.decision_review).not.toContain('1aYFw1CKM7qFiTECP7x5R4MwPRHPcewpO')
     expect(shared.AB_TEST_SCREENSHOT_URLS.action_review_1).not.toContain('1a6ItYLMKfeDCerSkWqO38PQZCgT4SPA2')
   })
+
+  it('serves review screenshots from the backend static root and keeps step 8 image blocks canonical', async () => {
+    process.env.PUBLIC_API_URL = 'https://api.starway.test'
+
+    const [{ resolvePublicDeliverablesPath }, shared, results] =
+      await Promise.all([
+        import('../../../lib/publicDeliverables.js'),
+        import('./abTest.shared.js'),
+        import('./abTest.results.js'),
+      ])
+
+    const staticRoot = resolvePublicDeliverablesPath(resolve(process.cwd(), 'backend/dist/src'))
+    expect(staticRoot).toBe(resolve(process.cwd(), 'public/deliverables'))
+
+    const expectedAssets = [
+      'focus-review-state.png',
+      'focus-review-goal.png',
+      'focus-review-choice.png',
+      'focus-review-decision.png',
+      'focus-review-action.png',
+    ] as const
+
+    for (const fileName of expectedAssets) {
+      const assetPath = resolve(staticRoot, fileName)
+      expect(existsSync(assetPath)).toBe(true)
+      expect(statSync(assetPath).size).toBeGreaterThan(0)
+    }
+
+    const reviewBlocks = results.getAbTestResultDefinition('state').blocks?.review ?? []
+    expect(reviewBlocks).toHaveLength(3)
+    expect(reviewBlocks[2]).toEqual({
+      type: 'image',
+      assetKey: shared.AB_TEST_SCREENSHOT_URLS.state_review,
+    })
+    expect(shared.AB_TEST_SCREENSHOT_URLS.state_review).toBe(
+      'https://api.starway.test/deliverables/focus-review-state.png'
+    )
+    expect(shared.AB_TEST_SCREENSHOT_URLS.state_review).not.toContain('drive.google.com')
+
+    const app = express()
+    app.use(
+      '/deliverables',
+      express.static(staticRoot, {
+        fallthrough: false,
+        index: false,
+        redirect: false,
+      })
+    )
+
+    const server = await new Promise<import('node:http').Server>((resolveServer) => {
+      const listeningServer = app.listen(0, () => resolveServer(listeningServer))
+    })
+
+    try {
+      const address = server.address()
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP server address')
+      }
+
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/deliverables/focus-review-state.png`
+      )
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toContain('image/png')
+      expect(Number(response.headers.get('content-length') ?? '0')).toBeGreaterThan(0)
+      expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0)
+    } finally {
+      await new Promise<void>((resolveClose, rejectClose) => {
+        server.close((error) => {
+          if (error) {
+            rejectClose(error)
+            return
+          }
+          resolveClose()
+        })
+      })
+    }
+  }, 15000)
 })

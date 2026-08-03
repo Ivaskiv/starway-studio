@@ -109,10 +109,12 @@ vi.mock('@/modules/zoom/urls.js', () => ({
 import {
   AB_TEST_BOOK_ZOOM_CTA_TEXT,
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
+  AB_TEST_SCREENSHOT_URLS,
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
 } from '../content/abTest.shared.js'
 import {
   dispatchAbTestResultSequence,
+  dispatchAbTestPracticeSequence,
   sendResultSnapshot,
 } from './abTest.views.js'
 
@@ -240,5 +242,50 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(mockSaveAbTestProgress).not.toHaveBeenCalled()
     expect(mockSendOpsTelegramMessage).not.toHaveBeenCalled()
     expect(mockCoachSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('sends the step 8 screenshot via sendPhoto exactly once without inlining stale urls into text messages', async () => {
+    const ctx = createCtx()
+
+    const promise = dispatchAbTestPracticeSequence(ctx as never, {
+      chatId: '42',
+      resultKey: 'state',
+      firstName: 'Vira',
+    })
+
+    await vi.runAllTimersAsync()
+    await promise
+
+    expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledWith(
+      '42',
+      AB_TEST_SCREENSHOT_URLS.state_review,
+      expect.objectContaining({
+        parse_mode: 'HTML',
+      }),
+    )
+
+    const sentMessages = JSON.stringify(vi.mocked(ctx.telegram.sendMessage).mock.calls)
+    expect(sentMessages).not.toContain(AB_TEST_SCREENSHOT_URLS.state_review)
+    expect(sentMessages).not.toContain('drive.google.com')
+  })
+
+  it('propagates sendPhoto failures instead of marking the review step as delivered', async () => {
+    const ctx = createCtx()
+    vi.mocked(ctx.telegram.sendPhoto).mockRejectedValueOnce(
+      new Error('telegram photo failed'),
+    )
+
+    const promise = dispatchAbTestPracticeSequence(ctx as never, {
+      chatId: '42',
+      resultKey: 'state',
+      firstName: 'Vira',
+    })
+    const expectation = expect(promise).rejects.toThrow('telegram photo failed')
+
+    await vi.runAllTimersAsync()
+
+    await expectation
+    expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledTimes(1)
   })
 })
