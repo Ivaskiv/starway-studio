@@ -3,11 +3,15 @@ import { Markup } from 'telegraf'
 
 import { coachBotContent } from '../../content/coachBot.content.js'
 import { prisma } from '../../../db/client.js'
+import { toMutableReplyKeyboard } from '../../../utils/keyboard.js'
 import { analyticsHandler } from './analytics.handler.js'
 import { activateProductSubscription } from '../../../modules/subscriptions/payments/paymentActivation.service.js'
+import { processEcosystemPayment } from '../../../modules/subscriptions/payments/business.processing.js'
 import {
   notifyUserFocusPaymentIssueDenied,
   sendAbTestBlock12Welcome,
+  sendFocusPaymentSuccessTelegramMessageByOrder,
+  sendTrialZoomPaymentSuccessTelegramMessage,
 } from '../../../modules/subscriptions/payments/callback.notifications.js'
 import {
   handleCoachAudioCommand,
@@ -35,8 +39,24 @@ import {
   submitCoachDialogues,
   submitCoachEditedPost,
 } from '../../../modules/ai-operator/operator.service.js'
+import { buildWebDeepLink, generateDeepLink } from '../../../modules/deeplinks/service.js'
 
 const COACH_CALENDAR_ROUTE = '/miniapp/zoom-calendar'
+const COACH_AGENTS_ROUTE = '/app/dashboard/admin/studio?tab=agents&item=agents.overview'
+const COACH_MENU_CONDUCT_PATTERN = /^(?:🎙️?\s*)?(?:Новий\s+Zoom|Провести)$/iu
+const COACH_MENU_LIBRARY_PATTERN = /^(?:📚\s*)?(?:Бібліотека(?:\s+Zoom)?)$/iu
+const COACH_MENU_ANALYTICS_PATTERN = /^(?:📊\s*)?Аналітика$/iu
+const COACH_MENU_AGENTS_PATTERN = /^(?:🤖\s*)?Агенти$/iu
+const COACH_MENU_SETTINGS_PATTERN = /^(?:⚙️\s*)?(?:Система|Налаштування)$/iu
+const COACH_MENU_CALENDAR_PATTERN = /^(?:📅\s*)?Календар$/iu
+
+function readCoachTelegramAccessId(): string {
+  return String(
+    process.env.COACH_TELEGRAM_ID
+    ?? process.env.TEST_COACH_MENTOR_TELEGRAM_ID
+    ?? '',
+  ).trim()
+}
 
 function resolveCoachCalendarWebAppUrl(): string {
   const base = resolveTelegramWebappBaseUrl()
@@ -53,6 +73,23 @@ function resolveCoachCalendarWebAppUrl(): string {
     route: COACH_CALENDAR_ROUTE,
   })
   return finalUrl
+}
+
+async function resolveCoachAgentsUrl(ctx: Context): Promise<string> {
+  const coachUserId = await resolveCoachUserId(ctx)
+  if (!coachUserId) {
+    throw new Error('COACH_USER_NOT_RESOLVED_FOR_AGENTS_LINK')
+  }
+
+  const deepLink = await generateDeepLink({
+    userId: coachUserId,
+    action: 'open_web',
+    source: 'telegram',
+    target: 'web',
+    path: COACH_AGENTS_ROUTE,
+  })
+
+  return buildWebDeepLink(deepLink.token, deepLink.path)
 }
 
 function getCommandPayload(ctx: Context): string {
@@ -110,6 +147,9 @@ function isStarwayOpsChat(ctx: Context): boolean {
 async function resolvePaymentAdminTarget(rawCallbackData: string): Promise<{
   userId: string
   orderReference: string | null
+  productCode: string | null
+  amount: number
+  currency: string
 } | null> {
   const parts = rawCallbackData.split(':')
   const firstPayloadPart = parts[2] ?? ''
@@ -128,12 +168,18 @@ async function resolvePaymentAdminTarget(rawCallbackData: string): Promise<{
       select: {
         userId: true,
         orderReference: true,
+        productCode: true,
+        amount: true,
+        currency: true,
       },
     })
 
     return legacyCheckout ?? {
       userId: firstPayloadPart,
       orderReference: secondPayloadPart,
+      productCode: null,
+      amount: 0,
+      currency: 'UAH',
     }
   }
 
@@ -142,32 +188,112 @@ async function resolvePaymentAdminTarget(rawCallbackData: string): Promise<{
     select: {
       userId: true,
       orderReference: true,
+      productCode: true,
+      amount: true,
+      currency: true,
     },
   })
 }
 
+async function activateTrialZoomFromValidatedPayment(input: {
+  userId: string
+  orderReference: string
+  amount: number
+  currency: string
+}): Promise<{ success: boolean; alreadyActive: boolean; message: string }> {
+  const payment = await prisma.paymentLog.findUnique({
+    where: { orderReference: input.orderReference },
+    select: { id: true, status: true },
+  })
+
+  if (!payment || payment.status !== 'SUCCESS') {
+    return {
+      success: false,
+      alreadyActive: false,
+      message: 'PAYMENT_EVIDENCE_NOT_VALIDATED',
+    }
+  }
+
+  const existingTrial = await prisma.productSubscription.findFirst({
+    where: {
+      userId: input.userId,
+      status: 'trial',
+      trialEndsAt: { gt: new Date() },
+      product: {
+        is: {
+          code: { equals: 'trial_zoom', mode: 'insensitive' },
+        },
+      },
+    },
+    select: { id: true },
+  })
+
+  if (existingTrial) {
+    return {
+      success: true,
+      alreadyActive: true,
+      message: 'TRIAL_ALREADY_ACTIVE',
+    }
+  }
+
+  const result = await processEcosystemPayment(
+    'trial_zoom',
+    'single',
+    input.userId,
+    {
+      amount: input.amount,
+      currency: input.currency,
+      payRef: input.orderReference,
+      orderReference: input.orderReference,
+    },
+  )
+
+  if (result.status !== 'approved') {
+    return {
+      success: false,
+      alreadyActive: false,
+      message: result.reason ?? 'TRIAL_ZOOM_ACTIVATION_FAILED',
+    }
+  }
+
+  await sendTrialZoomPaymentSuccessTelegramMessage({
+    userId: input.userId,
+    orderReference: input.orderReference,
+  }).catch(() => undefined)
+
+  return {
+    success: true,
+    alreadyActive: false,
+    message: 'TRIAL_ZOOM_ACTIVATED',
+  }
+}
+
 async function showCoachMenu(ctx: Context): Promise<void> {
   const text = `${coachBotContent.start.title}\n\n${coachBotContent.start.subtitle}`
-  await ctx.reply(text, {
-    reply_markup: {
+  await ctx.reply(text, buildCoachMainMenuReplyMarkup())
+}
+
+function buildCoachMainMenuReplyMarkup() {
+  return {
+    reply_markup: toMutableReplyKeyboard({
       keyboard: [
         [
-          Markup.button.text(coachBotContent.menu.calendar),
-          Markup.button.text(coachBotContent.menu.conduct),
+          coachBotContent.menu.conduct,
+          coachBotContent.menu.library,
         ],
         [
-          Markup.button.text(coachBotContent.menu.members),
-          Markup.button.text(coachBotContent.menu.analytics),
+          coachBotContent.menu.analytics,
+          coachBotContent.menu.content,
         ],
         [
-          Markup.button.text(coachBotContent.menu.library),
-          Markup.button.text(coachBotContent.menu.settings),
+          coachBotContent.menu.settings,
+          coachBotContent.menu.agents,
         ],
       ],
       resize_keyboard: true,
       is_persistent: true,
-    },
-  })
+    }),
+  }
 }
 
 async function showCoachSystemMenu(ctx: Context): Promise<void> {
@@ -186,23 +312,41 @@ async function showCoachSystemMenu(ctx: Context): Promise<void> {
 
   await ctx.reply(
     `${coachBotContent.system.title}\n\n${coachBotContent.system.subtitle}`,
-    Markup.inlineKeyboard([
-      [Markup.button.webApp(coachBotContent.menu.schedule, finalUrl)],
-      [Markup.button.callback(coachBotContent.menu.members, 'coach:participants')],
-      [Markup.button.callback(coachBotContent.menu.notifications, 'coach:notifications')],
-      [Markup.button.callback(coachBotContent.menu.payments, 'coach-content:payments')],
-      [Markup.button.callback('📈 Повна аналітика', 'coach:analytics')],
-    ]),
+    {
+      ...buildCoachMainMenuReplyMarkup(),
+      ...Markup.inlineKeyboard([
+        [Markup.button.webApp(coachBotContent.menu.schedule, finalUrl)],
+        [Markup.button.callback(coachBotContent.menu.members, 'coach:participants')],
+        [Markup.button.callback(coachBotContent.menu.notifications, 'coach:notifications')],
+        [Markup.button.callback(coachBotContent.menu.payments, 'coach-content:payments')],
+        [Markup.button.callback('📈 Повна аналітика', 'coach:analytics')],
+      ]),
+    },
+  )
+}
+
+async function showCoachAgentsMenu(ctx: Context): Promise<void> {
+  const agentsUrl = await resolveCoachAgentsUrl(ctx)
+
+  await ctx.reply(
+    `${coachBotContent.system.agentsTitle}\n\n${coachBotContent.system.agentsSubtitle}`,
+    {
+      ...buildCoachMainMenuReplyMarkup(),
+      ...Markup.inlineKeyboard([
+        [Markup.button.url(coachBotContent.system.agentsCta, agentsUrl)],
+      ]),
+    },
   )
 }
 
 async function showCoachNewZoomPrompt(ctx: Context): Promise<void> {
-  await ctx.reply(coachBotContent.audio.uploadPrompt)
+  await ctx.reply(coachBotContent.audio.uploadPrompt, buildCoachMainMenuReplyMarkup())
 }
 
 async function checkCoachRole(ctx: Context): Promise<boolean> {
   const tgId = ctx.from?.id?.toString()
   if (!tgId) return false
+  if (readCoachTelegramAccessId() === tgId) return true
 
   const user = await prisma.user.findFirst({
     where: {
@@ -221,6 +365,8 @@ async function resolveCoachUserId(ctx: Context): Promise<string | null> {
   const tgId = ctx.from?.id?.toString()
   if (!tgId) return null
 
+  const privilegedTelegramId = readCoachTelegramAccessId()
+
   const user = await prisma.user.findFirst({
     where: {
       OR: [
@@ -230,6 +376,23 @@ async function resolveCoachUserId(ctx: Context): Promise<string | null> {
     },
     select: { id: true },
   })
+
+  if (!user && privilegedTelegramId === tgId) {
+    const fallbackCoach = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { role: 'SUPERADMIN' },
+          { role: 'EXPERT' },
+        ],
+      },
+      orderBy: [
+        { role: 'desc' },
+        { createdAt: 'asc' },
+      ],
+      select: { id: true },
+    })
+    return fallbackCoach?.id ?? null
+  }
 
   return user?.id ?? null
 }
@@ -404,11 +567,11 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
         : {}),
     }).catch(() => undefined)
   }))
-  telegramBot.hears(coachBotContent.menu.library, withCoachRuntimeProtection('menu:audio', async (ctx) => {
+  telegramBot.hears(COACH_MENU_LIBRARY_PATTERN, withCoachRuntimeProtection('menu:audio', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await handleCoachAudioCommand(ctx, '')
   }))
-  telegramBot.hears(coachBotContent.menu.conduct, withCoachRuntimeProtection('menu:newZoom', async (ctx) => {
+  telegramBot.hears(COACH_MENU_CONDUCT_PATTERN, withCoachRuntimeProtection('menu:newZoom', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await showCoachNewZoomPrompt(ctx)
   }))
@@ -416,15 +579,19 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     if (!await checkCoachAccess(ctx)) return
     await handleCoachUsersCommand(ctx, '')
   }))
-  telegramBot.hears(coachBotContent.menu.analytics, withCoachRuntimeProtection('menu:analytics', async (ctx) => {
+  telegramBot.hears(COACH_MENU_ANALYTICS_PATTERN, withCoachRuntimeProtection('menu:analytics', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await analyticsHandler(ctx)
   }))
-  telegramBot.hears(coachBotContent.menu.calendar, withCoachRuntimeProtection('menu:calendar', async (ctx) => {
+  telegramBot.hears(COACH_MENU_AGENTS_PATTERN, withCoachRuntimeProtection('menu:agents', async (ctx) => {
+    if (!await checkCoachAccess(ctx)) return
+    await showCoachAgentsMenu(ctx)
+  }))
+  telegramBot.hears(COACH_MENU_CALENDAR_PATTERN, withCoachRuntimeProtection('menu:calendar', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await scheduleMenuHandler(ctx)
   }))
-  telegramBot.hears(coachBotContent.menu.settings, withCoachRuntimeProtection('menu:system', async (ctx) => {
+  telegramBot.hears(COACH_MENU_SETTINGS_PATTERN, withCoachRuntimeProtection('menu:system', async (ctx) => {
     if (!await checkCoachAccess(ctx)) return
     await showCoachSystemMenu(ctx)
   }))
@@ -450,13 +617,56 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       manualNote: 'coach confirmed via telegram',
     })
     if (result.success) {
-      await sendAbTestBlock12Welcome(userId).catch(() => undefined)
+      await sendFocusPaymentSuccessTelegramMessageByOrder({
+        userId,
+        orderReference: checkoutTarget.orderReference,
+      }).catch(() => undefined)
       await ctx.answerCbQuery(coachBotContent.paymentAdmin.accessGranted).catch(() => undefined)
       await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessGranted}\nuserId: ${userId}`)
       return
     }
     await ctx.answerCbQuery(coachBotContent.paymentAdmin.error).catch(() => undefined)
     await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessFailed}\nПричина: ${result.message}\nuserId: ${userId}`)
+  }))
+  telegramBot.action(/^admin:grant_trial_zoom:/, withCoachRuntimeProtection('action:admin:grant_trial_zoom', async (ctx) => {
+    const hasAccess = await checkCoachAccess(ctx)
+    if (!hasAccess && !isStarwayOpsChat(ctx)) {
+      return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
+    }
+    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+    const checkoutTarget = await resolvePaymentAdminTarget(raw.replace('admin:grant_trial_zoom:', 'admin:grant_focus:'))
+    if (!checkoutTarget?.userId || !checkoutTarget.orderReference) {
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
+      return
+    }
+
+    const result = await activateTrialZoomFromValidatedPayment({
+      userId: checkoutTarget.userId,
+      orderReference: checkoutTarget.orderReference,
+      amount: checkoutTarget.amount,
+      currency: checkoutTarget.currency,
+    })
+
+    if (result.success) {
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.trialAccessGranted).catch(() => undefined)
+      await ctx.reply(
+        `${coachBotContent.paymentAdmin.manualTrialAccessGranted}\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference}`,
+      )
+      return
+    }
+
+    if (result.message === 'PAYMENT_EVIDENCE_NOT_VALIDATED') {
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.askPaymentDetails).catch(() => undefined)
+      await ctx.reply(
+        `Підтверджена оплата для пробного Zoom не знайдена.\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference}`,
+      )
+      return
+    }
+
+    await ctx.answerCbQuery(coachBotContent.paymentAdmin.error).catch(() => undefined)
+    await ctx.reply(
+      `${coachBotContent.paymentAdmin.manualTrialAccessFailed}\nПричина: ${result.message}\nuserId: ${checkoutTarget.userId}`,
+    )
   }))
   telegramBot.action(/^admin:deny_focus:/, withCoachRuntimeProtection('action:admin:deny_focus', async (ctx) => {
     const hasAccess = await checkCoachAccess(ctx)
@@ -473,5 +683,21 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     await ctx.answerCbQuery(coachBotContent.paymentAdmin.denied).catch(() => undefined)
     await notifyUserFocusPaymentIssueDenied(userId).catch(() => undefined)
     await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: ${userId}`)
+  }))
+  telegramBot.action(/^admin:ask_payment_details:/, withCoachRuntimeProtection('action:admin:ask_payment_details', async (ctx) => {
+    const hasAccess = await checkCoachAccess(ctx)
+    if (!hasAccess && !isStarwayOpsChat(ctx)) {
+      return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
+    }
+    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+    const checkoutTarget = await resolvePaymentAdminTarget(raw.replace('admin:ask_payment_details:', 'admin:grant_focus:'))
+    if (!checkoutTarget?.userId) {
+      await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
+      return
+    }
+    await ctx.answerCbQuery(coachBotContent.paymentAdmin.askPaymentDetails).catch(() => undefined)
+    await ctx.reply(
+      `Запитай у користувача чек або деталі транзакції.\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference ?? 'unknown'}`,
+    )
   }))
 }

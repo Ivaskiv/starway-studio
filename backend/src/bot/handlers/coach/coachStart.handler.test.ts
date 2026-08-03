@@ -12,6 +12,12 @@ vi.mock('../../../db/client.js', () => ({
       findUnique: vi.fn(),
       findFirst: vi.fn(),
     },
+    paymentLog: {
+      findUnique: vi.fn(),
+    },
+    productSubscription: {
+      findFirst: vi.fn(),
+    },
   },
 }))
 
@@ -19,8 +25,15 @@ vi.mock('../../../modules/subscriptions/payments/paymentActivation.service.js', 
   activateProductSubscription: vi.fn(),
 }))
 
+vi.mock('../../../modules/subscriptions/payments/business.processing.js', () => ({
+  processEcosystemPayment: vi.fn(),
+}))
+
 vi.mock('../../../modules/subscriptions/payments/callback.notifications.js', () => ({
   sendAbTestBlock12Welcome: vi.fn(),
+  sendFocusPaymentSuccessTelegramMessageByOrder: vi.fn(),
+  notifyUserFocusPaymentIssueDenied: vi.fn(),
+  sendTrialZoomPaymentSuccessTelegramMessage: vi.fn(),
 }))
 
 vi.mock('../coachContent.handler.js', () => ({
@@ -49,6 +62,18 @@ vi.mock('../../../config/webapp.js', () => ({
   resolveTelegramWebappBaseUrl: vi.fn(() => 'https://miniapp.example'),
 }))
 
+vi.mock('../../../modules/deeplinks/service.js', () => ({
+  generateDeepLink: vi.fn(async () => ({
+    token: 'coach-agents-token',
+    path: '/app/dashboard/admin/studio?tab=agents&item=agents.overview',
+  })),
+  buildWebDeepLink: vi.fn((token: string, path?: string | null) => {
+    const url = new URL(path ?? '/onboarding/continue', 'https://miniapp.example')
+    url.searchParams.set('dl', token)
+    return url.toString()
+  }),
+}))
+
 vi.mock('../../../modules/ai-operator/operator.service.js', () => ({
   AI_OPERATOR_ACTIONS: {},
   isCoachDialogueAwaiting: vi.fn(async () => false),
@@ -60,8 +85,15 @@ vi.mock('../../../modules/ai-operator/operator.service.js', () => ({
 }))
 
 import { prisma } from '../../../db/client.js'
+import { processEcosystemPayment } from '../../../modules/subscriptions/payments/business.processing.js'
 import { activateProductSubscription } from '../../../modules/subscriptions/payments/paymentActivation.service.js'
-import { sendAbTestBlock12Welcome } from '../../../modules/subscriptions/payments/callback.notifications.js'
+import {
+  notifyUserFocusPaymentIssueDenied,
+  sendAbTestBlock12Welcome,
+  sendFocusPaymentSuccessTelegramMessageByOrder,
+  sendTrialZoomPaymentSuccessTelegramMessage,
+} from '../../../modules/subscriptions/payments/callback.notifications.js'
+import { generateDeepLink } from '../../../modules/deeplinks/service.js'
 
 type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
 
@@ -87,14 +119,22 @@ function createCoachCtx() {
 describe('registerCoachBotHandlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.COACH_TELEGRAM_ID
+    delete process.env.TEST_COACH_MENTOR_TELEGRAM_ID
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ role: 'EXPERT', id: 'coach-user-id' } as never)
     vi.mocked(prisma.checkoutSession.findUnique).mockResolvedValue(null as never)
     vi.mocked(prisma.checkoutSession.findFirst).mockResolvedValue(null as never)
+    vi.mocked(prisma.paymentLog.findUnique).mockResolvedValue(null as never)
+    vi.mocked(prisma.productSubscription.findFirst).mockResolvedValue(null as never)
     vi.mocked(activateProductSubscription).mockResolvedValue({ success: true } as never)
+    vi.mocked(processEcosystemPayment).mockResolvedValue({ status: 'approved' } as never)
     vi.mocked(sendAbTestBlock12Welcome).mockResolvedValue(undefined as never)
+    vi.mocked(sendFocusPaymentSuccessTelegramMessageByOrder).mockResolvedValue(true as never)
+    vi.mocked(notifyUserFocusPaymentIssueDenied).mockResolvedValue(true as never)
+    vi.mocked(sendTrialZoomPaymentSuccessTelegramMessage).mockResolvedValue(true as never)
   })
 
-  it('renders the coach-only main menu on /start with six short items', async () => {
+  it('renders the coach-only main menu on /start with agents entry in the main keyboard', async () => {
     const telegramBot = createTelegramBotMock()
     registerCoachBotHandlers(telegramBot as never)
 
@@ -106,15 +146,64 @@ describe('registerCoachBotHandlers', () => {
     expect(ctx.reply).toHaveBeenCalledTimes(1)
     const [, payload] = ctx.reply.mock.calls[0]
     expect(payload.reply_markup.keyboard).toEqual([
-      [expect.objectContaining({ text: coachBotContent.menu.calendar }), expect.objectContaining({ text: coachBotContent.menu.conduct })],
-      [expect.objectContaining({ text: coachBotContent.menu.members }), expect.objectContaining({ text: coachBotContent.menu.analytics })],
-      [expect.objectContaining({ text: coachBotContent.menu.library }), expect.objectContaining({ text: coachBotContent.menu.settings })],
+      [coachBotContent.menu.conduct, coachBotContent.menu.library],
+      [coachBotContent.menu.analytics, coachBotContent.menu.content],
+      [coachBotContent.menu.settings, coachBotContent.menu.agents],
     ])
 
     const flat = JSON.stringify(payload.reply_markup.keyboard)
     expect(flat).not.toContain('Продовжити')
     expect(flat).not.toContain('План дня')
     expect(flat).not.toContain('ФОКУС')
+  })
+
+  it('opens agents menu with authenticated deeplink to admin studio agents tab', async () => {
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const hearsCall = telegramBot.hears.mock.calls.find(([matcher]) =>
+      matcher instanceof RegExp && matcher.test(coachBotContent.menu.agents),
+    )
+    const handler = hearsCall?.[1] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await handler(ctx)
+
+    expect(generateDeepLink).toHaveBeenCalledWith({
+      userId: 'coach-user-id',
+      action: 'open_web',
+      source: 'telegram',
+      target: 'web',
+      path: '/app/dashboard/admin/studio?tab=agents&item=agents.overview',
+    })
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      `${coachBotContent.system.agentsTitle}\n\n${coachBotContent.system.agentsSubtitle}`,
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [[expect.objectContaining({
+            text: coachBotContent.system.agentsCta,
+            url: 'https://miniapp.example/app/dashboard/admin/studio?tab=agents&item=agents.overview&dl=coach-agents-token',
+          })]],
+        }),
+      }),
+    )
+  })
+
+  it('allows configured coach telegram id even when DB role lookup is absent', async () => {
+    process.env.COACH_TELEGRAM_ID = '99'
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never)
+
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const startHandler = telegramBot.start.mock.calls[0]?.[0] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await startHandler(ctx)
+
+    expect(ctx.reply).toHaveBeenCalledTimes(1)
+    expect(ctx.reply.mock.calls[0]?.[0]).toContain(coachBotContent.start.title)
   })
 
   it('keeps coach callback namespace separate from user callbacks', () => {
@@ -146,19 +235,22 @@ describe('registerCoachBotHandlers', () => {
 
     await grantHandler(ctx)
 
-    expect(prisma.checkoutSession.findUnique).toHaveBeenCalledWith({
+    expect(prisma.checkoutSession.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { token: 'checkout-token-1' },
-      select: {
+      select: expect.objectContaining({
         userId: true,
         orderReference: true,
-      },
-    })
+      }),
+    }))
     expect(activateProductSubscription).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       orderReference: 'focus_order_1',
       source: 'coach_manual',
     }))
-    expect(sendAbTestBlock12Welcome).toHaveBeenCalledWith('user-1')
+    expect(sendFocusPaymentSuccessTelegramMessageByOrder).toHaveBeenCalledWith({
+      userId: 'user-1',
+      orderReference: 'focus_order_1',
+    })
   })
 
   it('grants focus from the legacy userId/orderReference OPS callback', async () => {
@@ -181,16 +273,16 @@ describe('registerCoachBotHandlers', () => {
 
     await grantHandler(ctx)
 
-    expect(prisma.checkoutSession.findFirst).toHaveBeenCalledWith({
+    expect(prisma.checkoutSession.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         userId: 'legacy-user',
         orderReference: 'focus_legacy_order',
       },
-      select: {
+      select: expect.objectContaining({
         userId: true,
         orderReference: true,
-      },
-    })
+      }),
+    }))
     expect(activateProductSubscription).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'legacy-user',
       orderReference: 'focus_legacy_order',
@@ -217,5 +309,49 @@ describe('registerCoachBotHandlers', () => {
     expect(ctx.reply).toHaveBeenCalledWith(
       `${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: legacy-user`
     )
+  })
+
+  it('activates only trial zoom from the trial-specific OPS callback', async () => {
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    vi.mocked(prisma.checkoutSession.findUnique).mockResolvedValue({
+      userId: 'user-1',
+      orderReference: 'trial_zoom_order_1',
+      productCode: 'trial_zoom',
+      amount: 1,
+      currency: 'UAH',
+    } as never)
+    vi.mocked(prisma.paymentLog.findUnique).mockResolvedValue({
+      id: 'pay-1',
+      status: 'SUCCESS',
+    } as never)
+
+    const [, grantHandler] = telegramBot.action.mock.calls.find(
+      ([matcher]) => String(matcher) === '/^admin:grant_trial_zoom:/'
+    ) as [unknown, RegisteredHandler]
+
+    const ctx = {
+      ...createCoachCtx(),
+      callbackQuery: { data: 'admin:grant_trial_zoom:checkout-token-1' },
+    }
+
+    await grantHandler(ctx)
+
+    expect(processEcosystemPayment).toHaveBeenCalledWith(
+      'trial_zoom',
+      'single',
+      'user-1',
+      expect.objectContaining({
+        amount: 1,
+        currency: 'UAH',
+        orderReference: 'trial_zoom_order_1',
+      }),
+    )
+    expect(activateProductSubscription).not.toHaveBeenCalled()
+    expect(sendTrialZoomPaymentSuccessTelegramMessage).toHaveBeenCalledWith({
+      userId: 'user-1',
+      orderReference: 'trial_zoom_order_1',
+    })
   })
 })

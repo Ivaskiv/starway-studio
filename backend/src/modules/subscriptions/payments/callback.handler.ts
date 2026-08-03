@@ -34,6 +34,7 @@ import {
 import {
   sendAbsystemPaymentSuccessTelegramMessage,
   sendPaymentFailedTelegramMessage,
+  sendTrialZoomPaymentSuccessTelegramMessage,
 } from './callback.notifications.js'
 import { alertCoachAboutPaymentIssue } from './coachAlert.service.js'
 import { activateProductSubscription } from './paymentActivation.service.js'
@@ -1164,6 +1165,27 @@ export async function wayForPayCallback(req: Request, res: Response) {
         console.log('[PAYMENT_LIFECYCLE] Telegram delivery completed', {
           userId,
           flow: 'absystem_success',
+          sent: Boolean(sent),
+        })
+      } else if (
+        webhookResult.scope === 'ecosystem' &&
+        webhookResult.productId === 'trial_zoom'
+      ) {
+        const sent = await sendTrialZoomPaymentSuccessTelegramMessage({
+          userId,
+          orderReference: data.order_reference,
+        }).catch((err: unknown) => {
+          console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+            operation: 'trial_zoom_payment_confirmation',
+            userId,
+            orderReference: data.order_reference,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          return false
+        })
+        console.log('[PAYMENT_LIFECYCLE] Telegram delivery completed', {
+          userId,
+          flow: 'trial_zoom_success',
           sent: Boolean(sent),
         })
       }

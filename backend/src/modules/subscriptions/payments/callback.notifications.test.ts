@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockProductSubscriptionFindFirst = vi.fn()
 const mockProductSubscriptionUpdate = vi.fn()
+const mockCheckoutSessionFindFirst = vi.fn()
+const mockCheckoutSessionUpdate = vi.fn()
 const mockUserFindUnique = vi.fn()
 const mockUserFindFirst = vi.fn()
 const mockRenderOutbound = vi.fn()
@@ -13,6 +15,10 @@ vi.mock('../../../db/client.js', () => ({
     productSubscription: {
       findFirst: (...args: unknown[]) => mockProductSubscriptionFindFirst(...args),
       update: (...args: unknown[]) => mockProductSubscriptionUpdate(...args),
+    },
+    checkoutSession: {
+      findFirst: (...args: unknown[]) => mockCheckoutSessionFindFirst(...args),
+      update: (...args: unknown[]) => mockCheckoutSessionUpdate(...args),
     },
     user: {
       findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
@@ -50,6 +56,8 @@ import {
   sendAbTestBlock12PostJoin,
   resendFocusAccessTelegramMessage,
   sendAbTestBlock12Welcome,
+  sendFocusPaymentSuccessTelegramMessageByOrder,
+  sendTrialZoomPaymentSuccessTelegramMessage,
 } from './callback.notifications.js'
 
 describe('callback.notifications — canonical Focus URL', () => {
@@ -57,11 +65,12 @@ describe('callback.notifications — canonical Focus URL', () => {
     vi.clearAllMocks()
     mockGetOrCreateFocusInviteLink.mockResolvedValue('https://t.me/+focus-canonical')
     mockProductSubscriptionUpdate.mockResolvedValue(undefined)
+    mockCheckoutSessionUpdate.mockResolvedValue(undefined)
     mockRenderOutbound.mockResolvedValue(true)
     mockSendMessage.mockResolvedValue({ message_id: 1 })
   })
 
-  it('renders active onboarding as a single channel CTA without raw URL text', async () => {
+  it('renders active onboarding with zoom, optional channel, and focus menu actions without raw URL text', async () => {
     mockProductSubscriptionFindFirst
       .mockResolvedValueOnce({
         id: 'sub-1',
@@ -90,12 +99,15 @@ describe('callback.notifications — canonical Focus URL', () => {
     expect(serialized).not.toContain('Меню')
     expect(serialized).not.toContain('Оплатити')
     expect(messageText).not.toContain('https://t.me/+focus-canonical')
-    expect(serialized).not.toContain('Записатись на Zoom')
+    expect(serialized).toContain('"label":"📅 ЗАПИСАТИСЯ НА ZOOM"')
+    expect(serialized).toContain('"value":"focus:next_zoom"')
+    expect(serialized).toContain('"label":"ПЕРЕЙТИ В КАНАЛ"')
+    expect(serialized).toContain('"label":"МЕНЮ ФОКУС"')
+    expect(serialized).toContain('"value":"ab_test:menu"')
     expect(serialized).not.toContain('🔗')
-    expect(serialized).toContain('"buttons":[{"kind":"url","label":"ПЕРЕЙТИ В КАНАЛ","value":"https://t.me/+focus-canonical"}]')
   })
 
-  it('renders post-join state as a single zoom CTA', async () => {
+  it('renders post-join state as zoom plus focus menu actions', async () => {
     mockProductSubscriptionFindFirst.mockResolvedValueOnce({ id: 'sub-1' })
     mockUserFindUnique.mockResolvedValueOnce({
       telegramChatId: 'chat-1',
@@ -109,11 +121,11 @@ describe('callback.notifications — canonical Focus URL', () => {
 
     const [, response] = mockRenderOutbound.mock.calls[0]
     const serialized = JSON.stringify(response)
-    expect(serialized).toContain('ОБРАТИ ZOOM')
+    expect(serialized).toContain('📅 ЗАПИСАТИСЯ НА ZOOM')
+    expect(serialized).toContain('"value":"focus:next_zoom"')
     expect(serialized).not.toContain('ПЕРЕЙТИ В КАНАЛ')
-    expect(serialized).not.toContain('Меню')
-    expect(serialized).not.toContain('/miniapp/zoom-calendar?intent=booking')
-    expect(serialized).toContain('/miniapp/zoom-calendar')
+    expect(serialized).toContain('"label":"МЕНЮ ФОКУС"')
+    expect(serialized).toContain('"value":"ab_test:menu"')
   })
 
   it('old resend action returns the current active state instead of skipping', async () => {
@@ -159,5 +171,107 @@ describe('callback.notifications — canonical Focus URL', () => {
 
     expect(sent).toBe(false)
     expect(mockRenderOutbound).not.toHaveBeenCalled()
+  })
+
+  it('sends the canonical trial zoom success message with the zoom button', async () => {
+    mockCheckoutSessionFindFirst.mockResolvedValueOnce({
+      id: 'checkout-trial',
+      payload: {},
+      orderReference: 'trial_zoom_order_1',
+      productCode: 'trial_zoom',
+    })
+    mockUserFindUnique.mockResolvedValueOnce({
+      telegramChatId: 'chat-trial',
+      telegramLinks: [],
+    })
+
+    const sent = await sendTrialZoomPaymentSuccessTelegramMessage({
+      userId: 'user-trial',
+      orderReference: 'trial_zoom_order_1',
+    })
+
+    expect(sent).toBe(true)
+    expect(mockRenderOutbound).toHaveBeenCalledTimes(1)
+    const serialized = JSON.stringify(mockRenderOutbound.mock.calls[0][1])
+    expect(serialized).toContain('Тобі доступний один пробний Zoom за 1 грн.')
+    expect(serialized).toContain('Обери найближчу Zoom-практику та запишись.')
+    expect(serialized).toContain('"label":"📅 ОБРАТИ ZOOM"')
+    expect(serialized).toContain('"value":"focus:next_zoom"')
+    expect(serialized).toContain('"label":"🏠 ГОЛОВНЕ МЕНЮ"')
+    expect(serialized).toContain('"value":"return_main_menu"')
+    expect(serialized).not.toContain('Доступ до ФОКУСУ активовано')
+    expect(serialized).not.toContain('Перейди в закритий канал')
+    expect(serialized).not.toContain('ПЕРЕЙТИ В КАНАЛ')
+  })
+
+  it('renders focus payment success with zoom, channel, and focus menu actions', async () => {
+    mockCheckoutSessionFindFirst.mockResolvedValueOnce({
+      id: 'checkout-focus',
+      payload: {},
+      orderReference: 'focus_order_1',
+      productCode: 'focus',
+    })
+    mockProductSubscriptionFindFirst.mockResolvedValueOnce({
+      focusChannelInviteLink: 'https://t.me/+focus-canonical',
+      channelJoinedAt: null,
+    })
+    mockUserFindUnique.mockResolvedValueOnce({
+      telegramChatId: 'chat-focus',
+      telegramLinks: [],
+    })
+
+    const sent = await sendFocusPaymentSuccessTelegramMessageByOrder({
+      userId: 'user-focus',
+      orderReference: 'focus_order_1',
+    })
+
+    expect(sent).toBe(true)
+    const serialized = JSON.stringify(mockRenderOutbound.mock.calls[0][1])
+    expect(serialized).toContain('Доступ до ФОКУСУ активовано.')
+    expect(serialized).toContain('"label":"📅 ЗАПИСАТИСЯ НА ZOOM"')
+    expect(serialized).toContain('"value":"focus:next_zoom"')
+    expect(serialized).toContain('"label":"ПЕРЕЙТИ В КАНАЛ"')
+    expect(serialized).toContain('https://t.me/+focus-canonical')
+    expect(serialized).toContain('"label":"МЕНЮ ФОКУС"')
+    expect(serialized).toContain('"value":"ab_test:menu"')
+  })
+
+  it('dedupes repeated success sends for the same trial orderReference', async () => {
+    mockCheckoutSessionFindFirst
+      .mockResolvedValueOnce({
+        id: 'checkout-trial',
+        payload: {},
+        orderReference: 'trial_zoom_order_1',
+        productCode: 'trial_zoom',
+      })
+      .mockResolvedValueOnce({
+        id: 'checkout-trial',
+        payload: {
+          telegramPaymentSuccess: {
+            deliveredAt: '2026-08-03T18:36:00.000Z',
+            productCode: 'trial_zoom',
+          },
+        },
+        orderReference: 'trial_zoom_order_1',
+        productCode: 'trial_zoom',
+      })
+    mockUserFindUnique.mockResolvedValue({
+      telegramChatId: 'chat-trial',
+      telegramLinks: [],
+    })
+
+    const first = await sendTrialZoomPaymentSuccessTelegramMessage({
+      userId: 'user-trial',
+      orderReference: 'trial_zoom_order_1',
+    })
+    const second = await sendTrialZoomPaymentSuccessTelegramMessage({
+      userId: 'user-trial',
+      orderReference: 'trial_zoom_order_1',
+    })
+
+    expect(first).toBe(true)
+    expect(second).toBe(false)
+    expect(mockRenderOutbound).toHaveBeenCalledTimes(1)
+    expect(mockCheckoutSessionUpdate).toHaveBeenCalledTimes(1)
   })
 })

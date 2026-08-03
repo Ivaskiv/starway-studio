@@ -2,12 +2,21 @@ import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import type { ConversationButton, ConversationResponse } from '@/modules/telegram-mentor/conversation/engine/types.js'
-import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 import { hasActiveFocusSubscription } from './focus.access.js'
 import { prisma } from '../../../db/client.js'
 import { FOCUS_PRODUCT_CODES } from './focus.access.js'
+import {
+  AB_TEST_BOOK_ZOOM_CTA_TEXT,
+  AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT,
+  AB_TEST_FOCUS_MENU_BUTTON_TEXT,
+  AB_TEST_JOIN_CHANNEL_BUTTON_TEXT,
+} from '@/products/ab-system/content/abTest.shared.js'
 
 let rendererInstance: TelegramConversationRenderer | null = null
+const PAYMENT_SUCCESS_DELIVERY_MARKER_KEY = 'telegramPaymentSuccess'
+const FOCUS_ZOOM_CALLBACK = 'focus:next_zoom'
+const MAIN_MENU_CALLBACK = 'return_main_menu'
+const FOCUS_MENU_CALLBACK = 'ab_test:menu'
 
 function getRenderer(): TelegramConversationRenderer {
   if (rendererInstance) {
@@ -47,10 +56,6 @@ function buildMessageResponse(
   }
 }
 
-function resolveZoomBookingWebAppUrl(): string {
-  return buildZoomCalendarUrl()
-}
-
 function buildFocusChannelStepText(): string {
   return [
     'Доступ до ФОКУСУ активовано.',
@@ -69,19 +74,207 @@ function buildFocusZoomStepText(): string {
 }
 
 function buildFocusChannelStepResponse(inviteUrl: string): ConversationResponse {
+  const buttons: ConversationButton[] = [
+    { kind: 'callback', label: AB_TEST_BOOK_ZOOM_CTA_TEXT, value: FOCUS_ZOOM_CALLBACK },
+    { kind: 'url', label: AB_TEST_JOIN_CHANNEL_BUTTON_TEXT, value: inviteUrl },
+    { kind: 'callback', label: AB_TEST_FOCUS_MENU_BUTTON_TEXT, value: FOCUS_MENU_CALLBACK },
+  ]
   return buildMessageResponse(
     buildFocusChannelStepText(),
-    [{ kind: 'url', label: 'ПЕРЕЙТИ В КАНАЛ', value: inviteUrl }],
+    buttons,
     'HTML',
   )
 }
 
-function buildFocusZoomStepResponse(): ConversationResponse {
+function buildFocusZoomStepResponse(inviteUrl?: string | null): ConversationResponse {
+  const buttons: ConversationButton[] = [
+    { kind: 'callback', label: AB_TEST_BOOK_ZOOM_CTA_TEXT, value: FOCUS_ZOOM_CALLBACK },
+  ]
+
+  if (inviteUrl) {
+    buttons.push({ kind: 'url', label: AB_TEST_JOIN_CHANNEL_BUTTON_TEXT, value: inviteUrl })
+  }
+
+  buttons.push({ kind: 'callback', label: AB_TEST_FOCUS_MENU_BUTTON_TEXT, value: FOCUS_MENU_CALLBACK })
+
   return buildMessageResponse(
     buildFocusZoomStepText(),
-    [{ kind: 'web_app', label: 'ОБРАТИ ZOOM', value: resolveZoomBookingWebAppUrl() }],
+    buttons,
     'HTML',
   )
+}
+
+function buildTrialZoomSuccessResponse(): ConversationResponse {
+  return buildMessageResponse(
+    [
+      '✅ Оплату підтверджено',
+      '',
+      'Тобі доступний один пробний Zoom за 1 грн.',
+      '',
+      'Обери найближчу Zoom-практику та запишись.',
+    ].join('\n'),
+    [
+      { kind: 'callback', label: AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT, value: FOCUS_ZOOM_CALLBACK },
+      { kind: 'callback', label: '🏠 ГОЛОВНЕ МЕНЮ', value: MAIN_MENU_CALLBACK },
+    ],
+    'HTML',
+  )
+}
+
+type PaymentSuccessProductCode = 'focus' | 'trial_zoom'
+
+type SuccessDeliveryMarker = {
+  deliveredAt?: string
+  productCode?: string
+}
+
+function normalizeJsonObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
+}
+
+function readSuccessDeliveryMarker(payload: unknown): SuccessDeliveryMarker | null {
+  const marker = normalizeJsonObject(payload)[PAYMENT_SUCCESS_DELIVERY_MARKER_KEY]
+  if (!marker || typeof marker !== 'object' || Array.isArray(marker)) {
+    return null
+  }
+
+  return marker as SuccessDeliveryMarker
+}
+
+function writeSuccessDeliveryMarker(payload: unknown, productCode: PaymentSuccessProductCode) {
+  const basePayload = normalizeJsonObject(payload)
+  return {
+    ...basePayload,
+    [PAYMENT_SUCCESS_DELIVERY_MARKER_KEY]: {
+      deliveredAt: new Date().toISOString(),
+      productCode,
+    },
+  }
+}
+
+async function resolvePaymentSuccessCheckout(input: {
+  userId: string
+  orderReference?: string | null
+  productCode: PaymentSuccessProductCode
+}) {
+  if (input.orderReference) {
+    return prisma.checkoutSession.findFirst({
+      where: {
+        userId: input.userId,
+        orderReference: input.orderReference,
+      },
+      select: {
+        id: true,
+        payload: true,
+        orderReference: true,
+        productCode: true,
+      },
+    })
+  }
+
+  return prisma.checkoutSession.findFirst({
+    where: {
+      userId: input.userId,
+      productCode: input.productCode,
+      status: 'COMPLETED',
+    },
+    orderBy: { completedAt: 'desc' },
+    select: {
+      id: true,
+      payload: true,
+      orderReference: true,
+      productCode: true,
+    },
+  })
+}
+
+async function markPaymentSuccessDelivered(checkoutId: string, payload: unknown, productCode: PaymentSuccessProductCode) {
+  await prisma.checkoutSession.update({
+    where: { id: checkoutId },
+    data: {
+      payload: writeSuccessDeliveryMarker(payload, productCode),
+    },
+  })
+}
+
+async function resolveTelegramChatId(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      telegramChatId: true,
+      telegramLinks: {
+        where: { isActive: true, chatId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { chatId: true },
+      },
+    },
+  })
+
+  return user?.telegramChatId ?? user?.telegramLinks[0]?.chatId ?? null
+}
+
+async function sendCanonicalPaymentSuccessMessage(input: {
+  userId: string
+  productCode: PaymentSuccessProductCode
+  orderReference?: string | null
+  force?: boolean
+}): Promise<boolean> {
+  const checkout = await resolvePaymentSuccessCheckout(input)
+  if (!checkout) {
+    return false
+  }
+
+  if (!input.force && readSuccessDeliveryMarker(checkout.payload)?.deliveredAt) {
+    return false
+  }
+
+  const chatId = await resolveTelegramChatId(input.userId)
+  if (!chatId) {
+    return false
+  }
+
+  let sent = false
+
+  if (input.productCode === 'trial_zoom') {
+    sent = await sendOutboundConversation(chatId, buildTrialZoomSuccessResponse())
+  } else {
+    const subscription = await prisma.productSubscription.findFirst({
+      where: {
+        userId: input.userId,
+        product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        focusChannelInviteLink: true,
+        channelJoinedAt: true,
+      },
+    })
+
+    if (!subscription) {
+      return false
+    }
+
+    const inviteUrl =
+      subscription.focusChannelInviteLink ?? (await getOrCreateFocusInviteLink(input.userId))
+
+    const response = subscription.channelJoinedAt
+      ? buildFocusZoomStepResponse(inviteUrl)
+      : buildFocusChannelStepResponse(inviteUrl)
+
+    sent = await sendOutboundConversation(chatId, response)
+  }
+
+  if (!sent) {
+    return false
+  }
+
+  await markPaymentSuccessDelivered(checkout.id, checkout.payload, input.productCode)
+  return true
 }
 
 async function sendFocusAccessStateMessage(
@@ -157,26 +350,41 @@ async function sendFocusAccessStateMessage(
 }
 
 export async function sendFocusPaymentSuccessTelegramMessage(userId: string) {
-  const subscription = await prisma.productSubscription.findFirst({
-    where: {
-      userId,
-      product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
-    },
-    select: { id: true, focusWelcomedAt: true, focusChannelInviteLink: true },
-  })
-
-  if (subscription?.focusWelcomedAt) {
-    console.info(
-      `[Focus] Welcome message already sent for userId=${userId}, skipping`
-    )
-    return false
-  }
-
-  return sendFocusAccessStateMessage(userId, { markWelcomed: true })
+  return sendCanonicalPaymentSuccessMessage({ userId, productCode: 'focus' })
 }
 
 export async function sendAbTestBlock12Welcome(userId: string): Promise<boolean> {
   return sendFocusAccessStateMessage(userId, { markWelcomed: true })
+}
+
+export async function sendFocusPaymentSuccessTelegramMessageByOrder(input: {
+  userId: string
+  orderReference?: string | null
+  force?: boolean
+}): Promise<boolean> {
+  return sendCanonicalPaymentSuccessMessage({
+    userId: input.userId,
+    orderReference: input.orderReference,
+    productCode: 'focus',
+    force: input.force,
+  })
+}
+
+export async function sendTrialZoomPaymentSuccessTelegramMessage(input: string | {
+  userId: string
+  orderReference?: string | null
+  force?: boolean
+}): Promise<boolean> {
+  const userId = typeof input === 'string' ? input : input.userId
+  const orderReference = typeof input === 'string' ? undefined : input.orderReference
+  const force = typeof input === 'string' ? undefined : input.force
+
+  return sendCanonicalPaymentSuccessMessage({
+    userId,
+    orderReference,
+    productCode: 'trial_zoom',
+    force,
+  })
 }
 
 function normalizeTelegramId(value: string | number | null | undefined): string {
