@@ -37,7 +37,7 @@ import {
   AB_TEST_FOCUS_CTA_TEXT,
   AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
-  AB_TEST_REVIEW_HEADERS,
+  AB_TEST_REVIEW_HEADER_VALUES,
   AB_TEST_SCREENSHOT_URLS,
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
   AB_TEST_VOICE_CAPTION_PROMPT,
@@ -137,8 +137,8 @@ function isScreenshotLine(normalized: string): boolean {
 }
 
 function isReviewHeaderLine(normalized: string): boolean {
-  return AB_TEST_REVIEW_HEADERS.includes(
-    normalized as (typeof AB_TEST_REVIEW_HEADERS)[number]
+  return AB_TEST_REVIEW_HEADER_VALUES.includes(
+    normalized as (typeof AB_TEST_REVIEW_HEADER_VALUES)[number]
   )
 }
 

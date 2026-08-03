@@ -118,24 +118,20 @@ export const abTestMenuContent = {
   },
 } as const
 
-export const AB_TEST_NEONILA_REVIEW_HEADER =
-  'Хочу показати тобі повідомлення від Неоніли.\nКоли вона прийшла у ФОКУС, її стан був дуже схожий на той, який зараз показав твій тест.'
-export const AB_TEST_NATALIIA_REVIEW_HEADER =
-  'Коли Неоніла прийшла у ФОКУС, їй теж було непросто зрозуміти, куди рухатися далі.\nОсь що вона написала після Zoom-розбору.'
-export const AB_TEST_VALENTYNA_REVIEW_HEADER =
-  'Коли Валентина прийшла у ФОКУС, їй теж було важко зробити вибір.\nОсь що вона написала після Zoom-розбору.'
-export const AB_TEST_YELYZAVETA_REVIEW_HEADER =
-  'Мені дуже відгукнувся цей відгук Єлизавети.'
-export const AB_TEST_KSENIIA_REVIEW_HEADER =
-  'Ксенія теж прийшла з відчуттям, що багато робить, але результат не змінюється.\nОсь що вона написала після Zoom-розбору.'
+export const AB_TEST_REVIEW_HEADERS = {
+  state:
+    'Хочу показати тобі повідомлення від Неоніли.\nКоли вона прийшла у ФОКУС, її стан був дуже схожий на той, який зараз показав твій тест.',
+  goal:
+    'Коли Неоніла прийшла у ФОКУС, їй теж було непросто зрозуміти, куди рухатися далі.\nОсь що вона написала після Zoom-розбору.',
+  choice:
+    'Коли Валентина прийшла у ФОКУС, їй теж було важко зробити вибір.\nОсь що вона написала після Zoom-розбору.',
+  decision:
+    'Мені дуже відгукнувся цей відгук Єлизавети.',
+  action:
+    'Ксенія теж прийшла з відчуттям, що багато робить, але результат не змінюється.\nОсь що вона написала після Zoom-розбору.',
+} as const
 
-export const AB_TEST_REVIEW_HEADERS = [
-  AB_TEST_NEONILA_REVIEW_HEADER,
-  AB_TEST_NATALIIA_REVIEW_HEADER,
-  AB_TEST_VALENTYNA_REVIEW_HEADER,
-  AB_TEST_YELYZAVETA_REVIEW_HEADER,
-  AB_TEST_KSENIIA_REVIEW_HEADER,
-] as const
+export const AB_TEST_REVIEW_HEADER_VALUES = Object.values(AB_TEST_REVIEW_HEADERS)
 
 export const AB_TEST_NEONILA_REVIEW_QUOTE =
   '"Зранку стала як побита. А потім згадала як Надя казала — що це я обираю як пройде мій день. Поміняла пластинку в голові і всьо заграло новими барвами."'
@@ -341,7 +337,7 @@ export const AB_TEST_FOCUS_PRACTICE_INCLUDED_LINES = [
 ] as const
 
 export const AB_TEST_FOCUS_PRACTICE_REVIEW_LINES = [
-  AB_TEST_NEONILA_REVIEW_HEADER,
+  AB_TEST_REVIEW_HEADERS.state,
   AB_TEST_NEONILA_REVIEW_QUOTE,
 ] as const
 
@@ -413,7 +409,7 @@ export const AB_TEST_BOLD_LINES = new Set<string>([
   'Більше дій — не вихід.',
   'Коли рішення не прийняте всередині, дія стає важкою.',
   'Якщо ти відчуваєш, що відкладаєш важливе через нечіткість у цілі, заходь у ФОКУС.',
-  ...AB_TEST_REVIEW_HEADERS,
+  ...AB_TEST_REVIEW_HEADER_VALUES,
 ])
 
 export const AB_TEST_ACTION_REVIEW_1_EXTRA_LINES = [
@@ -422,7 +418,7 @@ export const AB_TEST_ACTION_REVIEW_1_EXTRA_LINES = [
 ] as const
 
 export const AB_TEST_ACTION_AUDIO_REVIEW_TEXT =
-  `**${AB_TEST_KSENIIA_REVIEW_HEADER}**\n\n> ${AB_TEST_KSENIIA_REVIEW_QUOTE_1}\n\n${AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER}\n\nПочати можна з одного місяця участі.\n\nЗа цей час ти проходиш **4 живі практики** і можеш розібрати **кілька своїх ситуацій** через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n${AB_TEST_ACTION_REVIEW_1_EXTRA_LINES.join('\n')}`
+  `**${AB_TEST_REVIEW_HEADERS.action}**\n\n> ${AB_TEST_KSENIIA_REVIEW_QUOTE_1}\n\n${AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER}\n\nПочати можна з одного місяця участі.\n\nЗа цей час ти проходиш **4 живі практики** і можеш розібрати **кілька своїх ситуацій** через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n${AB_TEST_ACTION_REVIEW_1_EXTRA_LINES.join('\n')}`
 
 export function buildAbTestReviewText(header: string, quote: string): string {
   return `${AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER}\n\n**${header}**\n\n> ${quote}`

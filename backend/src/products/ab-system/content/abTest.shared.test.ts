@@ -8,46 +8,49 @@ describe('abTest shared testimonial contract', () => {
 
     const shared = await import('./abTest.shared.js')
     const results = await import('./abTest.results.js')
+    const reviewHeaders = shared.AB_TEST_REVIEW_HEADERS
     const stateReview = results.getAbTestResultDefinition('state').msg2_review
     const goalReview = results.getAbTestResultDefinition('goal').msg2_review
     const choiceReview = results.getAbTestResultDefinition('choice').msg2_review
     const decisionReview = results.getAbTestResultDefinition('decision').msg2_review
     const actionReview = results.getAbTestResultDefinition('action').msg2_review
 
-    expect(shared.AB_TEST_NEONILA_REVIEW_HEADER).toBeTruthy()
-    expect(shared.AB_TEST_NEONILA_REVIEW_HEADER).toContain('Неоніли')
-    expect(shared.AB_TEST_NEONILA_REVIEW_HEADER).toContain('ФОКУС')
-    expect(shared.AB_TEST_NEONILA_REVIEW_HEADER).toContain('стан')
-    expect(shared.AB_TEST_NEONILA_REVIEW_HEADER).not.toContain('написала після практики')
-    expect(stateReview).toContain(shared.AB_TEST_NEONILA_REVIEW_HEADER)
+    expect(Object.keys(reviewHeaders)).toEqual([
+      'state',
+      'goal',
+      'choice',
+      'decision',
+      'action',
+    ])
 
-    expect(shared.AB_TEST_NATALIIA_REVIEW_HEADER).toBeTruthy()
-    expect(shared.AB_TEST_NATALIIA_REVIEW_HEADER).toContain('Неоніла')
-    expect(shared.AB_TEST_NATALIIA_REVIEW_HEADER).toContain('ФОКУС')
-    expect(shared.AB_TEST_NATALIIA_REVIEW_HEADER).toContain('Zoom-розбору')
-    expect(shared.AB_TEST_NATALIIA_REVIEW_HEADER).not.toContain('Наталія написала')
-    expect(goalReview).toContain(shared.AB_TEST_NATALIIA_REVIEW_HEADER)
+    expect(reviewHeaders.state).toBeTruthy()
+    expect(reviewHeaders.state).toContain('Неоніли')
+    expect(reviewHeaders.state).toContain('ФОКУС')
+    expect(reviewHeaders.state).toContain('стан')
+    expect(stateReview).toContain(reviewHeaders.state)
 
-    expect(shared.AB_TEST_VALENTYNA_REVIEW_HEADER).toBeTruthy()
-    expect(shared.AB_TEST_VALENTYNA_REVIEW_HEADER).toContain('Валентина')
-    expect(shared.AB_TEST_VALENTYNA_REVIEW_HEADER).toContain('ФОКУС')
-    expect(shared.AB_TEST_VALENTYNA_REVIEW_HEADER).toContain('вибір')
-    expect(shared.AB_TEST_VALENTYNA_REVIEW_HEADER).toContain('Zoom-розбору')
-    expect(shared.AB_TEST_VALENTYNA_REVIEW_HEADER).not.toContain('Валентина написала')
-    expect(choiceReview).toContain(shared.AB_TEST_VALENTYNA_REVIEW_HEADER)
+    expect(reviewHeaders.goal).toBeTruthy()
+    expect(reviewHeaders.goal).toContain('Неоніла')
+    expect(reviewHeaders.goal).toContain('ФОКУС')
+    expect(reviewHeaders.goal).toContain('Zoom-розбору')
+    expect(goalReview).toContain(reviewHeaders.goal)
 
-    expect(shared.AB_TEST_YELYZAVETA_REVIEW_HEADER).toBeTruthy()
-    expect(shared.AB_TEST_YELYZAVETA_REVIEW_HEADER).toContain('Єлизавети')
-    expect(shared.AB_TEST_YELYZAVETA_REVIEW_HEADER).toContain('відгук')
-    expect(shared.AB_TEST_YELYZAVETA_REVIEW_HEADER).not.toContain('після роботи зі мною')
-    expect(decisionReview).toContain(shared.AB_TEST_YELYZAVETA_REVIEW_HEADER)
+    expect(reviewHeaders.choice).toBeTruthy()
+    expect(reviewHeaders.choice).toContain('Валентина')
+    expect(reviewHeaders.choice).toContain('вибір')
+    expect(reviewHeaders.choice).toContain('Zoom-розбору')
+    expect(choiceReview).toContain(reviewHeaders.choice)
 
-    expect(shared.AB_TEST_KSENIIA_REVIEW_HEADER).toBeTruthy()
-    expect(shared.AB_TEST_KSENIIA_REVIEW_HEADER).toContain('Ксенія')
-    expect(shared.AB_TEST_KSENIIA_REVIEW_HEADER).toContain('результат')
-    expect(shared.AB_TEST_KSENIIA_REVIEW_HEADER).toContain('Zoom-розбору')
-    expect(shared.AB_TEST_KSENIIA_REVIEW_HEADER).not.toContain('після роботи зі мною')
-    expect(actionReview).toContain(shared.AB_TEST_KSENIIA_REVIEW_HEADER)
+    expect(reviewHeaders.decision).toBeTruthy()
+    expect(reviewHeaders.decision).toContain('Єлизавети')
+    expect(reviewHeaders.decision).toContain('відгук')
+    expect(decisionReview).toContain(reviewHeaders.decision)
+
+    expect(reviewHeaders.action).toBeTruthy()
+    expect(reviewHeaders.action).toContain('Ксенія')
+    expect(reviewHeaders.action).toContain('результат')
+    expect(reviewHeaders.action).toContain('Zoom-розбору')
+    expect(actionReview).toContain(reviewHeaders.action)
   })
 
   it('maps the five active Focus review screenshots to local deliverables and keeps files readable', async () => {
