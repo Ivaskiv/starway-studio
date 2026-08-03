@@ -31,6 +31,7 @@ import {
 } from '../content/abTest.results.js'
 import {
   AB_TEST_AUDIO_URL,
+  AB_TEST_BOOK_ZOOM_CTA_TEXT,
   AB_TEST_BOLD_LINES,
   AB_TEST_FINAL_CTA_PROMPT,
   AB_TEST_FOCUS_CTA_TEXT,
@@ -53,7 +54,7 @@ import {
   resolveBrowserTestUrlOrNull,
 } from './abTest.buttons.js'
 import { scheduleFollowups } from './abTest.scheduler.js'
-import { buildFocusActionButtons } from '@/modules/telegram-mentor/handlers/abTest.start.js'
+import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 import {
   buildAbTestEmailGateMessage,
   getAbTestProfileEmail,
@@ -82,6 +83,26 @@ const UI_COPY = {
   miniApp: absystemButtons.openMiniApp,
   browser: absystemButtons.openInBrowser,
 } as const
+const RESULT_ZOOM_BOOKING_INTENT = 'booking'
+
+function buildResultPreviewKeyboard(
+  resultKey: AbTestResultKey,
+): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
+          callback_data: `show_inside_${resultKey.toUpperCase()}`,
+        },
+        {
+          text: AB_TEST_BOOK_ZOOM_CTA_TEXT,
+          web_app: { url: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }) },
+        },
+      ],
+    ],
+  }
+}
 
 function shouldBoldAbTestLine(normalized: string): boolean {
   return AB_TEST_BOLD_LINES.has(normalized)
@@ -818,16 +839,7 @@ export async function dispatchAbTestResultSequence(
     resultDef.blocks?.pricing ?? [],
     input.firstName
   )
-  const previewKeyboard: InlineKeyboardMarkup = {
-    inline_keyboard: [
-      [
-        {
-          text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
-          callback_data: `show_inside_${input.resultKey.toUpperCase()}`,
-        },
-      ],
-    ],
-  }
+  const previewKeyboard = buildResultPreviewKeyboard(input.resultKey)
   console.info('[RESULT_FLOW]', {
     step: 'result_sequence_started',
     userId: input.userId ?? null,
@@ -933,13 +945,10 @@ export async function sendResultSnapshot(
     subscriptionLine,
   ].join('\n')
 
-  const buttons = await buildFocusActionButtons(input.userId)
-  buttons.push([{ text: 'МЕНЮ ФОКУС', callback_data: 'focus:menu' }])
-
   await ctx.telegram.sendMessage(input.chatId, text, {
     parse_mode: 'HTML',
     reply_markup: {
-      inline_keyboard: buttons,
+      inline_keyboard: buildResultPreviewKeyboard(input.resultKey).inline_keyboard,
     },
   }).catch((error) => {
     console.error('[sendResultSnapshot] failed', {

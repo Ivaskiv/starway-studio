@@ -213,7 +213,8 @@ export const AB_TEST_RESULT_AUDIO_INTRO_TEXT =
 export const AB_TEST_RESULT_AUDIO_PROMPT_TEXT =
   AB_TEST_VOICE_CAPTION_PROMPT
 
-export const AB_TEST_SHOW_INSIDE_CTA_TEXT = 'ПОКАЗАТИ ПРАКТИКУ'
+export const AB_TEST_SHOW_INSIDE_CTA_TEXT = '👁 ЗАГЛЯНУТИ'
+export const AB_TEST_BOOK_ZOOM_CTA_TEXT = '📅 ЗАПИСАТИСЯ НА ZOOM'
 export const AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT =
   'Показати\nяк проходить\nпрактика'
 
