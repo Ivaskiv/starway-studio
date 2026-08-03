@@ -617,12 +617,27 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       manualNote: 'coach confirmed via telegram',
     })
     if (result.success) {
-      await sendFocusPaymentSuccessTelegramMessageByOrder({
-        userId,
-        orderReference: checkoutTarget.orderReference,
-      }).catch(() => undefined)
       await ctx.answerCbQuery(coachBotContent.paymentAdmin.accessGranted).catch(() => undefined)
-      await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessGranted}\nuserId: ${userId}`)
+      const alreadyActive = result.message === 'already_active'
+
+      if (!alreadyActive) {
+        await sendFocusPaymentSuccessTelegramMessageByOrder({
+          userId,
+          orderReference: checkoutTarget.orderReference,
+        }).catch((error: unknown) => {
+          console.error('[coach-start:admin:grant_focus] success sender failed', {
+            userId,
+            orderReference: checkoutTarget.orderReference,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
+      }
+
+      await ctx.reply(
+        alreadyActive
+          ? `Доступ до ФОКУСУ вже був активний.\nuserId: ${userId}`
+          : `${coachBotContent.paymentAdmin.manualAccessGranted}\nuserId: ${userId}`,
+      )
       return
     }
     await ctx.answerCbQuery(coachBotContent.paymentAdmin.error).catch(() => undefined)

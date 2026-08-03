@@ -251,6 +251,38 @@ describe('registerCoachBotHandlers', () => {
       userId: 'user-1',
       orderReference: 'focus_order_1',
     })
+    expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not resend focus success message when access is already active', async () => {
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    vi.mocked(prisma.checkoutSession.findUnique).mockResolvedValue({
+      userId: 'user-1',
+      orderReference: 'focus_order_1',
+    } as never)
+    vi.mocked(activateProductSubscription).mockResolvedValue({
+      success: true,
+      message: 'already_active',
+    } as never)
+
+    const [, grantHandler] = telegramBot.action.mock.calls.find(
+      ([matcher]) => String(matcher) === '/^admin:grant_focus:/'
+    ) as [unknown, RegisteredHandler]
+
+    const ctx = {
+      ...createCoachCtx(),
+      callbackQuery: { data: 'admin:grant_focus:checkout-token-1' },
+    }
+
+    await grantHandler(ctx)
+
+    expect(sendFocusPaymentSuccessTelegramMessageByOrder).not.toHaveBeenCalled()
+    expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
+    expect(ctx.reply).toHaveBeenCalledWith(
+      'Доступ до ФОКУСУ вже був активний.\nuserId: user-1'
+    )
   })
 
   it('grants focus from the legacy userId/orderReference OPS callback', async () => {
