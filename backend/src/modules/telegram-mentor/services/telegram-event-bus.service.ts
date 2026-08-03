@@ -7,7 +7,7 @@ import { renderTelegram } from '../renderers/decisionTelegram.js'
 import { handleBillingCheckout, handleBillingPaywall } from '../handlers/billing.js'
 import { handleMorning, resumeQuestionSession } from '../handlers/morning.js'
 import { handleEvening } from '../handlers/evening.js'
-import { handlePrivacy } from '../handlers/privacy.js'
+import { handlePrivacy, handlePrivacyBack } from '../handlers/privacy.js'
 import { handleStatus } from '../handlers/status.js'
 import { handleTasks, handleTaskDone } from '../handlers/tasks.js'
 import { handleLidmagnet } from '../handlers/lidmagnet.js'
@@ -142,6 +142,7 @@ const CALLBACK_KIND_BY_ACTION: Record<string, { kind: TelegramCallbackKind; tran
   continue_task: { kind: 'reminder', transition: 'task_opened' },
   open_tasks: { kind: 'reminder', transition: 'task_opened' },
   open_privacy: { kind: 'lifecycle', transition: 'privacy_opened' },
+  'privacy:back': { kind: 'navigation', transition: 'main_menu_opened' },
   task_done: { kind: 'reminder', transition: 'task_completed' },
   task_skip: { kind: 'reminder', transition: 'task_skipped' },
   restart_flow: { kind: 'room', transition: 'room_restarted' },
@@ -781,6 +782,12 @@ export async function dispatchTelegramCallbackEvent(ctx: Context, action: string
       if (action === 'open_privacy') {
         await handlePrivacy(ctx)
         await planAck(ctx, 'ctx.answerCbQuery', 'callback_open_privacy', 'Відкриваю політику').catch(() => undefined)
+        return duplicateFence
+      }
+
+      if (action === 'privacy:back') {
+        await planAck(ctx, 'ctx.answerCbQuery', 'callback_privacy_back').catch(() => undefined)
+        await handlePrivacyBack(ctx)
         return duplicateFence
       }
 

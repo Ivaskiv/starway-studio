@@ -1,11 +1,78 @@
 import type { Context } from 'telegraf'
-import { supportMenuKeyboard } from '../keyboards.js'
-import { sendEntryOffer, sendStateMenu, resolveLinkedUserIdFromContext } from './start.js'
+import { Markup } from 'telegraf'
+import { stankeyContent } from '@/products/stankey/config/stankey.content.js'
+import { prisma } from '../../../db/client.js'
+import { getUserAccessState } from '../../subscriptions/payments/focus.access.js'
+import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
+import { welcomeMessage } from './abTest.start.js'
+import { buildHomeScreen } from './homeScreen.builder.js'
+import {
+  resolveEffectiveStartLifecycleState,
+  resolveLinkedUserIdFromContext,
+  type StartUserSnapshot,
+} from './start.js'
 import { requireTelegramBotConfig } from '../runtime/botConfig.js'
 import { planMessage } from '../conversation/delivery/planDelivery.js'
 
+const PRIVACY_BACK_ACTION = 'privacy:back'
+const PRIVACY_TITLE = '<b>Політика конфіденційності чат-бота</b>'
+
 function getBotName(): string {
   return requireTelegramBotConfig('privacy handler').username
+}
+
+function buildPrivacyKeyboard() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback(stankeyContent.telegram.buttons.back, PRIVACY_BACK_ACTION)],
+  ]).reply_markup
+}
+
+function isPrivacyScreenText(text: string | undefined): boolean {
+  return String(text ?? '').includes(PRIVACY_TITLE)
+}
+
+async function buildPreviousMenuPayload(ctx: Context, userId: string | null) {
+  if (!userId) {
+    return welcomeMessage()
+  }
+
+  const snapshot = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: {
+      id: true,
+      role: true,
+      activeRole: true,
+      lifecycleState: true,
+      testStartedAt: true,
+      testCompletedAt: true,
+      offerShownAt: true,
+      testResultType: true,
+      updatedAt: true,
+      firstName: true,
+    },
+  })
+
+  const [accessState, progress] = await Promise.all([
+    getUserAccessState(userId).catch(() => null),
+    loadAbTestProgress(userId).catch(() => null),
+  ])
+
+  const effectiveSnapshot: StartUserSnapshot = {
+    ...snapshot,
+    lifecycleState: resolveEffectiveStartLifecycleState({
+      lifecycleState: snapshot.lifecycleState,
+      accessState,
+      testResultType: snapshot.testResultType,
+      progress: progress
+        ? {
+            status: progress.status,
+            result_key: progress.result_key ?? null,
+          }
+        : null,
+    }),
+  }
+
+  return buildHomeScreen(effectiveSnapshot, ctx)
 }
 
 export async function handlePrivacy(ctx: Context) {
@@ -13,7 +80,7 @@ export async function handlePrivacy(ctx: Context) {
     const botName = getBotName()
 
     const text = [
-      '<b>Політика конфіденційності чат-бота</b>',
+      PRIVACY_TITLE,
       '',
       '<b>1. Вступ</b>',
       `Ця Політика конфіденційності описує, як ми, власники бота "${botName}", використовуємо та захищаємо ваші дані. Ці дані можуть бути надані вами або отримані нами під час взаємодії з ботом "${botName}". У цій Політиці конфіденційності "ми", "нас" і "наш" стосуються власників бота, а "ви" — користувача.`,
@@ -43,15 +110,61 @@ export async function handlePrivacy(ctx: Context) {
       '- Щоб перевірити актуальну версію, надішліть команду <i>/privacy</i>.',
     ].join('\n')
 
-    await planMessage(ctx, 'ctx.reply', 'privacy_policy', text, supportMenuKeyboard.reply_markup, 'HTML')
+    await planMessage(ctx, 'ctx.reply', 'privacy_policy', text, buildPrivacyKeyboard(), 'HTML')
   } catch (error) {
     console.error('[TelegramMentor] privacy error:', error)
-    const userId = await resolveLinkedUserIdFromContext(ctx)
-    if (userId) {
-      await sendStateMenu(ctx, userId)
-      return
-    }
-
-    await sendEntryOffer(ctx)
+    const payload = await buildPreviousMenuPayload(
+      ctx,
+      await resolveLinkedUserIdFromContext(ctx),
+    ).catch(() => welcomeMessage())
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'privacy_policy_fallback_menu',
+      payload.text,
+      payload.reply_markup,
+      payload.parseMode,
+    )
   }
+}
+
+export async function handlePrivacyBack(ctx: Context): Promise<void> {
+  const callbackMessage =
+    ctx.callbackQuery && 'message' in ctx.callbackQuery
+      ? ctx.callbackQuery.message
+      : undefined
+  const callbackText =
+    callbackMessage
+      ? 'text' in callbackMessage
+        ? callbackMessage.text
+        : undefined
+      : undefined
+
+  if (!isPrivacyScreenText(callbackText)) {
+    return
+  }
+
+  const payload = await buildPreviousMenuPayload(
+    ctx,
+    await resolveLinkedUserIdFromContext(ctx),
+  )
+
+  try {
+    await ctx.editMessageText?.(payload.text, {
+      parse_mode: payload.parseMode ?? 'HTML',
+      reply_markup: payload.reply_markup,
+    })
+    return
+  } catch (error) {
+    console.warn('[TelegramMentor] privacy back edit failed:', error)
+  }
+
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'privacy_back_restore_menu',
+    payload.text,
+    payload.reply_markup,
+    payload.parseMode,
+  )
 }
