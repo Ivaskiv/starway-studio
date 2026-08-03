@@ -19,6 +19,14 @@ export type TelegramBotNames = {
 }
 
 export type TelegramDeliveryMode = 'polling' | 'webhook'
+export type LocalTelegramConsumerDisableReason =
+  | 'missing_test_token'
+  | 'same_as_production_token'
+
+export type LocalTelegramConsumerState = {
+  enabled: boolean
+  reason: LocalTelegramConsumerDisableReason | null
+}
 
 // Expected bot identities per environment — used for runtime guard in index.ts
 export const EXPECTED_BOT_PRODUCTION = 'Test_ABsystem_bot'
@@ -34,6 +42,50 @@ function uniqueTokens(tokens: string[]): string[] {
 
 export function isProductionRuntime(): boolean {
   return process.env.NODE_ENV === 'production'
+}
+
+export function resolveLocalTelegramConsumerState(): LocalTelegramConsumerState {
+  if (isProductionRuntime()) {
+    return {
+      enabled: true,
+      reason: null,
+    }
+  }
+
+  const testToken = normalizeEnv(process.env.TEST_TELEGRAM_BOT_TOKEN)
+  const productionToken = normalizeEnv(process.env.TELEGRAM_BOT_TOKEN)
+
+  if (!testToken) {
+    return {
+      enabled: false,
+      reason: 'missing_test_token',
+    }
+  }
+
+  if (productionToken && testToken === productionToken) {
+    return {
+      enabled: false,
+      reason: 'same_as_production_token',
+    }
+  }
+
+  return {
+    enabled: true,
+    reason: null,
+  }
+}
+
+export function describeLocalTelegramConsumerDisableReason(
+  reason: LocalTelegramConsumerDisableReason | null,
+): string {
+  switch (reason) {
+    case 'missing_test_token':
+      return 'TEST_TELEGRAM_BOT_TOKEN is missing'
+    case 'same_as_production_token':
+      return 'TEST_TELEGRAM_BOT_TOKEN matches TELEGRAM_BOT_TOKEN'
+    default:
+      return 'local telegram consumer enabled'
+  }
 }
 
 export function readTelegramBotConfig(): TelegramBotConfig {

@@ -15,14 +15,16 @@ import {
 } from '../lib/telegram.js'
 import { registerDailyTelegramCommands } from '../modules/daily-cycle/telegram.js'
 import {
+  describeLocalTelegramConsumerDisableReason,
   EXPECTED_BOT_LOCAL,
   EXPECTED_BOT_PRODUCTION,
   isProductionRuntime,
   readCoachBotToken,
+  readTelegramBotConfig,
   readTelegramBotNames,
+  resolveLocalTelegramConsumerState,
   resolveTelegramDeliveryMode,
 } from '../modules/telegram-mentor/runtime/botConfig.js'
-import { resolveRuntimeBotRegistry } from '../platform/index.js'
 import { registerCoachBotHandlers } from '../bot/handlers/coach/coachStart.handler.js'
 import { registerCoachContentHandlers } from '../bot/handlers/coachContent.handler.js'
 import { registerStankeyBot } from '../products/stankey/index.js'
@@ -46,12 +48,20 @@ const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
 const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
 const telegramDeliveryMode = resolveTelegramDeliveryMode()
 const telegramBotNames = readTelegramBotNames()
-const botRegistry = resolveRuntimeBotRegistry('interactive runtime startup')
-const telegramBotConfig = botRegistry.main
+const localTelegramConsumerState = resolveLocalTelegramConsumerState()
+const telegramBotConfig = readTelegramBotConfig()
+const telegramConsumerEnabled =
+  isProductionRuntime() || localTelegramConsumerState.enabled
 
 {
   const expectedUsername = isProductionRuntime() ? EXPECTED_BOT_PRODUCTION : EXPECTED_BOT_LOCAL
-  if (!telegramBotConfig.token) {
+  if (!telegramConsumerEnabled) {
+    console.warn(
+      `[Telegram] interactive local consumer disabled: ${describeLocalTelegramConsumerDisableReason(
+        localTelegramConsumerState.reason,
+      )}`,
+    )
+  } else if (!telegramBotConfig.token) {
     const envVar = isProductionRuntime() ? 'TELEGRAM_BOT_TOKEN' : 'TEST_TELEGRAM_BOT_TOKEN'
     throw new Error(`[TELEGRAM_RUNTIME_CHECK] FATAL: ${envVar} is not set for @${expectedUsername}`)
   }
@@ -85,6 +95,15 @@ async function startTelegramBot() {
   telegramStartupPromise = (async () => {
     if (!START_TELEGRAM_BOT) {
       console.log('🤖 [runtime] interactive telegram disabled (START_TELEGRAM_BOT=false)')
+      return
+    }
+
+    if (!telegramConsumerEnabled) {
+      console.warn(
+        `[Telegram] interactive startup skipped: ${describeLocalTelegramConsumerDisableReason(
+          localTelegramConsumerState.reason,
+        )}`,
+      )
       return
     }
 

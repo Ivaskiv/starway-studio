@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  describeLocalTelegramConsumerDisableReason,
   readTelegramBotConfig,
   requireTelegramBotConfig,
+  resolveLocalTelegramConsumerState,
   resolveTelegramDeliveryMode,
 } from './botConfig.js'
 
 const originalTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
 const originalTelegramBotUsername = process.env.TELEGRAM_BOT_USERNAME
-const originalTelegramLocalBotToken = process.env.TELEGRAM_LOCAL_BOT_TOKEN
-const originalTelegramLocalBotUsername = process.env.TELEGRAM_LOCAL_BOT_USERNAME
+const originalTestTelegramBotToken = process.env.TEST_TELEGRAM_BOT_TOKEN
+const originalTestTelegramBotUsername = process.env.TEST_TELEGRAM_BOT_USERNAME
 const originalNodeEnv = process.env.NODE_ENV
 const originalTelegramWebhookUrl = process.env.TELEGRAM_WEBHOOK_URL
 const originalTelegramDeliveryMode = process.env.TELEGRAM_DELIVERY_MODE
@@ -21,11 +23,11 @@ afterEach(() => {
   if (originalTelegramBotUsername === undefined) delete process.env.TELEGRAM_BOT_USERNAME
   else process.env.TELEGRAM_BOT_USERNAME = originalTelegramBotUsername
 
-  if (originalTelegramLocalBotToken === undefined) delete process.env.TELEGRAM_LOCAL_BOT_TOKEN
-  else process.env.TELEGRAM_LOCAL_BOT_TOKEN = originalTelegramLocalBotToken
+  if (originalTestTelegramBotToken === undefined) delete process.env.TEST_TELEGRAM_BOT_TOKEN
+  else process.env.TEST_TELEGRAM_BOT_TOKEN = originalTestTelegramBotToken
 
-  if (originalTelegramLocalBotUsername === undefined) delete process.env.TELEGRAM_LOCAL_BOT_USERNAME
-  else process.env.TELEGRAM_LOCAL_BOT_USERNAME = originalTelegramLocalBotUsername
+  if (originalTestTelegramBotUsername === undefined) delete process.env.TEST_TELEGRAM_BOT_USERNAME
+  else process.env.TEST_TELEGRAM_BOT_USERNAME = originalTestTelegramBotUsername
 
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV
   else process.env.NODE_ENV = originalNodeEnv
@@ -39,8 +41,9 @@ afterEach(() => {
 
 describe('telegram bot config', () => {
   it('allows missing username while keeping the token required', () => {
-    process.env.TELEGRAM_BOT_TOKEN = 'token'
-    delete process.env.TELEGRAM_BOT_USERNAME
+    process.env.NODE_ENV = 'test'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'token'
+    delete process.env.TEST_TELEGRAM_BOT_USERNAME
 
     expect(readTelegramBotConfig()).toEqual({
       token: 'token',
@@ -55,25 +58,69 @@ describe('telegram bot config', () => {
   })
 
   it('still requires the telegram token', () => {
-    delete process.env.TELEGRAM_BOT_TOKEN
-    delete process.env.TELEGRAM_BOT_USERNAME
+    process.env.NODE_ENV = 'test'
+    delete process.env.TEST_TELEGRAM_BOT_TOKEN
+    delete process.env.TEST_TELEGRAM_BOT_USERNAME
 
     expect(() => requireTelegramBotConfig('test')).toThrow(
-      '[Telegram] Missing required env var during test: TELEGRAM_BOT_TOKEN',
+      '[Telegram] Missing required env var during test: TEST_TELEGRAM_BOT_TOKEN',
     )
   })
 
-  it('prefers the local bot token in development', () => {
+  it('reads the dedicated test bot token in development', () => {
     process.env.NODE_ENV = 'development'
     process.env.TELEGRAM_BOT_TOKEN = 'prod-token'
     process.env.TELEGRAM_BOT_USERNAME = 'prod_bot'
-    process.env.TELEGRAM_LOCAL_BOT_TOKEN = 'local-token'
-    process.env.TELEGRAM_LOCAL_BOT_USERNAME = 'local_bot'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'local-token'
+    process.env.TEST_TELEGRAM_BOT_USERNAME = 'local_bot'
 
     expect(readTelegramBotConfig()).toEqual({
       token: 'local-token',
       username: 'local_bot',
       botLink: 'https://t.me/local_bot',
+    })
+    expect(resolveLocalTelegramConsumerState()).toEqual({
+      enabled: true,
+      reason: null,
+    })
+  })
+
+  it('disables the local telegram consumer when the test token is missing', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-token'
+    delete process.env.TEST_TELEGRAM_BOT_TOKEN
+
+    expect(resolveLocalTelegramConsumerState()).toEqual({
+      enabled: false,
+      reason: 'missing_test_token',
+    })
+    expect(
+      describeLocalTelegramConsumerDisableReason('missing_test_token'),
+    ).toBe('TEST_TELEGRAM_BOT_TOKEN is missing')
+  })
+
+  it('disables the local telegram consumer when test and production tokens match', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TELEGRAM_BOT_TOKEN = 'shared-token'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'shared-token'
+
+    expect(resolveLocalTelegramConsumerState()).toEqual({
+      enabled: false,
+      reason: 'same_as_production_token',
+    })
+    expect(
+      describeLocalTelegramConsumerDisableReason('same_as_production_token'),
+    ).toBe('TEST_TELEGRAM_BOT_TOKEN matches TELEGRAM_BOT_TOKEN')
+  })
+
+  it('keeps production runtime enabled without local token checks', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-token'
+    delete process.env.TEST_TELEGRAM_BOT_TOKEN
+
+    expect(resolveLocalTelegramConsumerState()).toEqual({
+      enabled: true,
+      reason: null,
     })
   })
 
@@ -82,7 +129,7 @@ describe('telegram bot config', () => {
     process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com'
     delete process.env.TELEGRAM_DELIVERY_MODE
 
-    expect(resolveTelegramDeliveryMode()).toBe('webhook')
+    expect(resolveTelegramDeliveryMode()).toBe('polling')
   })
 
   it('keeps explicit polling override even when webhook url exists', () => {
