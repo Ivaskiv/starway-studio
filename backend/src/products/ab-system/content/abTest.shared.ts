@@ -118,11 +118,16 @@ export const abTestMenuContent = {
   },
 } as const
 
-export const AB_TEST_NEONILA_REVIEW_HEADER = 'Неоніла написала після практики:'
-export const AB_TEST_NATALIIA_REVIEW_HEADER = 'Наталія написала після практики:'
-export const AB_TEST_VALENTYNA_REVIEW_HEADER = 'Валентина написала після практики:'
-export const AB_TEST_YELYZAVETA_REVIEW_HEADER = 'Єлизавета написала після роботи зі мною:'
-export const AB_TEST_KSENIIA_REVIEW_HEADER = 'Ксенія написала після роботи зі мною:'
+export const AB_TEST_NEONILA_REVIEW_HEADER =
+  'Хочу показати тобі повідомлення від Неоніли.\nКоли вона прийшла у ФОКУС, її стан був дуже схожий на той, який зараз показав твій тест.'
+export const AB_TEST_NATALIIA_REVIEW_HEADER =
+  'Коли Неоніла прийшла у ФОКУС, їй теж було непросто зрозуміти, куди рухатися далі.\nОсь що вона написала після Zoom-розбору.'
+export const AB_TEST_VALENTYNA_REVIEW_HEADER =
+  'Коли Валентина прийшла у ФОКУС, їй теж було важко зробити вибір.\nОсь що вона написала після Zoom-розбору.'
+export const AB_TEST_YELYZAVETA_REVIEW_HEADER =
+  'Мені дуже відгукнувся цей відгук Єлизавети.'
+export const AB_TEST_KSENIIA_REVIEW_HEADER =
+  'Ксенія теж прийшла з відчуттям, що багато робить, але результат не змінюється.\nОсь що вона написала після Zoom-розбору.'
 
 export const AB_TEST_REVIEW_HEADERS = [
   AB_TEST_NEONILA_REVIEW_HEADER,
@@ -158,6 +163,17 @@ export const AB_TEST_DOJIM_7D_REVIEW_QUOTE =
 
 function buildGoogleDriveDownloadUrl(fileId: string): string {
   return `https://drive.google.com/uc?export=download&id=${fileId}`
+}
+
+function buildPublicDeliverableUrl(relativePath: string): string {
+  const base = (
+    process.env.PUBLIC_API_URL?.trim()
+    || process.env.APP_URL?.trim()
+    || process.env.TELEGRAM_WEBHOOK_URL?.trim()
+  )?.replace(/\/$/, '')
+  const normalizedPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`
+
+  return base ? `${base}${normalizedPath}` : normalizedPath
 }
 
 export const AB_TEST_AUDIO_FILE_ID = '12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17'
@@ -428,25 +444,18 @@ export type AbTestScreenshotKey =
   | 'test_drive_response_review'
   | 'dojim_7d_review'
 
-const AB_TEST_SCREENSHOT_FILE_IDS: Record<AbTestScreenshotKey, string> = {
-  state_review: '14tPpJxqTUOtQC12kwQsJKeXrcnarQsXK',
-  goal_review: '1Pzdk83hFCUTWcDoXtRPOCRqtyp8mgJpu',
-  choice_review: '1vt4AWMTZiI20NN28cLYnV77ffVLC_5IY',
-  decision_review: '1aYFw1CKM7qFiTECP7x5R4MwPRHPcewpO',
-  action_review_1: '1a6ItYLMKfeDCerSkWqO38PQZCgT4SPA2',
-  action_review_2: '1DGvNsLvarDlI0X7QIl5WFHAhjDV6A6lc',
-  test_drive_result_review: '1hyKSzIAcm9XdsNw7Pg6kureCPghJSQ3g',
-  test_drive_inside_review: '1IWssR6WrKec89o81GGeBLsFS7feQAqfr',
-  test_drive_response_review: '1lnNlDxxtQOYU2QlS3tdDpUYrqj5k1Cap',
-  dojim_7d_review: '1ONOpTDz93r2RQG3-mtX-iWHlBvpdx7Vk',
+export const AB_TEST_SCREENSHOT_URLS: Record<AbTestScreenshotKey, string> = {
+  state_review: buildPublicDeliverableUrl('/deliverables/focus-review-state.png'),
+  goal_review: buildPublicDeliverableUrl('/deliverables/focus-review-goal.png'),
+  choice_review: buildPublicDeliverableUrl('/deliverables/focus-review-choice.png'),
+  decision_review: buildPublicDeliverableUrl('/deliverables/focus-review-decision.png'),
+  action_review_1: buildPublicDeliverableUrl('/deliverables/focus-review-action.png'),
+  action_review_2: buildGoogleDriveDownloadUrl('1DGvNsLvarDlI0X7QIl5WFHAhjDV6A6lc'),
+  test_drive_result_review: buildGoogleDriveDownloadUrl('1hyKSzIAcm9XdsNw7Pg6kureCPghJSQ3g'),
+  test_drive_inside_review: buildGoogleDriveDownloadUrl('1IWssR6WrKec89o81GGeBLsFS7feQAqfr'),
+  test_drive_response_review: buildGoogleDriveDownloadUrl('1lnNlDxxtQOYU2QlS3tdDpUYrqj5k1Cap'),
+  dojim_7d_review: buildGoogleDriveDownloadUrl('1ONOpTDz93r2RQG3-mtX-iWHlBvpdx7Vk'),
 }
-
-export const AB_TEST_SCREENSHOT_URLS: Record<AbTestScreenshotKey, string> = Object.fromEntries(
-  Object.entries(AB_TEST_SCREENSHOT_FILE_IDS).map(([key, fileId]) => [
-    key,
-    buildGoogleDriveDownloadUrl(fileId),
-  ])
-) as Record<AbTestScreenshotKey, string>
 
 export function buildAbTestScreenshotMarker(key: AbTestScreenshotKey): string {
   return `📸 [СКРІН — ${key}]`
