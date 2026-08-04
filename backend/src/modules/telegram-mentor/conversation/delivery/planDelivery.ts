@@ -459,14 +459,15 @@ export const planMessage = async (
   markup?: any,
   parseMode?: string
 ): Promise<any> => {
+  const resolvedParseMode = parseMode ?? 'HTML'
   if (method === 'ctx.reply') {
     return ctx.reply(text, {
-      parse_mode: parseMode as any,
+      parse_mode: resolvedParseMode as any,
       reply_markup: markup,
     })
   } else if (method === 'ctx.editMessageText') {
     return ctx.editMessageText?.(text, {
-      parse_mode: parseMode as any,
+      parse_mode: resolvedParseMode as any,
       reply_markup: markup,
     })
   }

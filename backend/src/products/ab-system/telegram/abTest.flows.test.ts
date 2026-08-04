@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   sendStateMenuMock,
-  handleStartMock,
   handleAIMentorMock,
   resendFocusAccessTelegramMessageMock,
   hasActiveFocusSubscriptionMock,
@@ -17,9 +16,13 @@ const {
   loadAbTestProgressMock,
   saveAbTestProgressMock,
   zoomSectionMock,
+  buildAbTestProgressPatchMock,
+  normalizeAbTestProgressMock,
+  sendOpsTelegramMessageMock,
+  coachSendPhotoMock,
+  coachSendDocumentMock,
 } = vi.hoisted(() => ({
   sendStateMenuMock: vi.fn(),
-  handleStartMock: vi.fn(),
   handleAIMentorMock: vi.fn(),
   resendFocusAccessTelegramMessageMock: vi.fn(),
   hasActiveFocusSubscriptionMock: vi.fn(),
@@ -34,6 +37,11 @@ const {
   loadAbTestProgressMock: vi.fn(),
   saveAbTestProgressMock: vi.fn(),
   zoomSectionMock: vi.fn(),
+  buildAbTestProgressPatchMock: vi.fn(),
+  normalizeAbTestProgressMock: vi.fn(),
+  sendOpsTelegramMessageMock: vi.fn(),
+  coachSendPhotoMock: vi.fn(),
+  coachSendDocumentMock: vi.fn(),
 }))
 
 vi.mock('../../../db/client.js', () => ({
@@ -45,8 +53,8 @@ vi.mock('../../../db/client.js', () => ({
 }))
 
 vi.mock('../../../core/state-machine/abTestFoundation.js', () => ({
-  buildAbTestProgressPatch: vi.fn(),
-  normalizeAbTestProgress: vi.fn(),
+  buildAbTestProgressPatch: buildAbTestProgressPatchMock,
+  normalizeAbTestProgress: normalizeAbTestProgressMock,
 }))
 
 vi.mock('../content/abTest.focus.js', () => ({
@@ -147,7 +155,14 @@ vi.mock('@/modules/subscriptions/payments/coachAlert.service.js', () => ({
 }))
 
 vi.mock('../../../lib/telegram.js', () => ({
-  coachBot: { telegram: { sendMessage: vi.fn() } },
+  coachBot: {
+    telegram: {
+      sendMessage: vi.fn(),
+      sendPhoto: coachSendPhotoMock,
+      sendDocument: coachSendDocumentMock,
+    },
+  },
+  sendOpsTelegramMessage: sendOpsTelegramMessageMock,
 }))
 
 vi.mock('@/modules/events/service.js', () => ({
@@ -177,10 +192,6 @@ vi.mock('../../../modules/telegram-mentor/handlers/start.menu.js', () => ({
   sendStateMenu: sendStateMenuMock,
 }))
 
-vi.mock('../../../modules/telegram-mentor/handlers/start.js', () => ({
-  handleStart: handleStartMock,
-}))
-
 vi.mock('../../../modules/telegram-mentor/handlers/aiMentor.js', () => ({
   handleAIMentor: handleAIMentorMock,
 }))
@@ -190,8 +201,16 @@ vi.mock('../../../modules/telegram-mentor/handlers/status.js', () => ({
 }))
 
 import { prisma } from '../../../db/client.js'
-import { clearSession, getSession } from '../../../modules/telegram-mentor/session.js'
-import { handleAbTestEmailCaptureText, handleFocusPaymentAction, handleFocusPaymentIssue, handleResendFocusBlock12, resolveFocusShortcutCallback } from './abTest.flows.js'
+import { clearSession, getSession, updateSession } from '../../../modules/telegram-mentor/session.js'
+import {
+  handleAbTestEmailCaptureText,
+  handleFocusPaymentAction,
+  handleFocusPaymentIssue,
+  handlePendingFocusPaymentEvidenceAttachment,
+  handlePendingFocusPaymentEvidenceText,
+  handleResendFocusBlock12,
+  resolveFocusShortcutCallback,
+} from './abTest.flows.js'
 
 function createCtx() {
   return {
@@ -199,6 +218,7 @@ function createCtx() {
     from: { id: 99 },
     telegram: {
       sendMessage: vi.fn(async () => undefined),
+      getFileLink: vi.fn(async () => new URL('https://files.example/check.jpg')),
     },
     answerCbQuery: vi.fn(async () => undefined),
   }
@@ -210,7 +230,6 @@ describe('legacy focus callbacks for active users', () => {
     hasActiveFocusSubscriptionMock.mockResolvedValue(true)
     resendFocusAccessTelegramMessageMock.mockResolvedValue(true)
     sendStateMenuMock.mockResolvedValue(undefined)
-    handleStartMock.mockResolvedValue(undefined)
     handleAIMentorMock.mockResolvedValue(undefined)
     buildCheckoutSessionMock.mockResolvedValue({ checkoutUrl: 'https://checkout.example' })
     resolveContextUserIdMock.mockResolvedValue('user-1')
@@ -222,6 +241,13 @@ describe('legacy focus callbacks for active users', () => {
     })
     loadAbTestProgressMock.mockResolvedValue(null)
     saveAbTestProgressMock.mockResolvedValue(undefined)
+    buildAbTestProgressPatchMock.mockImplementation((current, patch) => ({ ...(current ?? {}), ...(patch ?? {}) }))
+    normalizeAbTestProgressMock.mockImplementation((value) => value ?? { focus_opened_at: null })
+    sendOpsTelegramMessageMock.mockResolvedValue(true)
+    coachSendPhotoMock.mockResolvedValue(undefined)
+    coachSendDocumentMock.mockResolvedValue(undefined)
+    vi.mocked(updateSession).mockResolvedValue(undefined as never)
+    vi.mocked(clearSession).mockResolvedValue(undefined as never)
     zoomSectionMock.mockResolvedValue({
       text: 'ФОКУС ДІМ',
       buttons: [[{ text: 'КАЛЕНДАР ФОКУСУ', callback_data: 'focus:next_zoom' }]],
@@ -252,30 +278,6 @@ describe('legacy focus callbacks for active users', () => {
     expect(planAckMock).toHaveBeenCalled()
   })
 
-  it('routes focus:menu to canonical /start owner for active users', async () => {
-    const ctx = createCtx()
-
-    const handled = await resolveFocusShortcutCallback(ctx as never, 'focus:menu', 'focus-user')
-
-    expect(handled).toBe(true)
-    expect(handleStartMock).toHaveBeenCalledTimes(1)
-    expect(handleStartMock).toHaveBeenCalledWith(ctx)
-    expect(sendStateMenuMock).not.toHaveBeenCalled()
-    expect(handleAIMentorMock).not.toHaveBeenCalled()
-    expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
-  })
-
-  it('routes focus:menu to canonical /start owner for completed users without access', async () => {
-    const ctx = createCtx()
-
-    const handled = await resolveFocusShortcutCallback(ctx as never, 'focus:menu', 'completed-user')
-
-    expect(handled).toBe(true)
-    expect(handleStartMock).toHaveBeenCalledTimes(1)
-    expect(sendStateMenuMock).not.toHaveBeenCalled()
-    expect(handleAIMentorMock).not.toHaveBeenCalled()
-  })
-
   it('answers with a controlled error when focus payment checkout has no resolved user', async () => {
     const ctx = createCtx()
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -292,7 +294,35 @@ describe('legacy focus callbacks for active users', () => {
     consoleErrorSpy.mockRestore()
   })
 
-  it('renders the 1 UAH test payment button under the 1 and 3 month CTAs when enabled', async () => {
+  it('shows the permanent trial Zoom button for a completed user without Focus access and does not mark them paid', async () => {
+    const ctx = createCtx()
+    hasActiveFocusSubscriptionMock.mockResolvedValue(false)
+
+    const handled = await handleFocusPaymentAction(ctx as never, 'user-1', 42)
+
+    expect(handled).toBe(true)
+    expect(sendTelegramContentChunkMock).toHaveBeenCalledWith(
+      ctx,
+      42,
+      '',
+      expect.any(Array),
+      expect.objectContaining({
+        inlineKeyboard: {
+          inline_keyboard: [
+            [{ text: '1m', url: 'https://checkout.example' }],
+            [{ text: '3m', url: 'https://checkout.example' }],
+            [{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: 'https://checkout.example' }],
+            [{ text: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
+          ],
+        },
+      }),
+    )
+    expect(vi.mocked(prisma.productSubscription.updateMany)).not.toHaveBeenCalled()
+    expect(resendFocusAccessTelegramMessageMock).not.toHaveBeenCalled()
+    expect(sendStateMenuMock).not.toHaveBeenCalled()
+  })
+
+  it('renders the 1 UAH test payment button under the paid CTAs when enabled', async () => {
     const ctx = createCtx()
     hasActiveFocusSubscriptionMock.mockResolvedValue(false)
     isTestPaymentEnabledMock.mockReturnValue(true)
@@ -314,7 +344,37 @@ describe('legacy focus callbacks for active users', () => {
           inline_keyboard: [
             [{ text: '1m', url: 'https://checkout.example' }],
             [{ text: '3m', url: 'https://checkout.example' }],
+            [{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: 'https://checkout.example' }],
             [{ text: '🧪 ТЕСТ 1 ГРН', url: 'https://secure.wayforpay.com/button/bcd1a02457187' }],
+            [{ text: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
+          ],
+        },
+      }),
+    )
+  })
+
+  it('omits the trial Zoom CTA after the user has already used it', async () => {
+    const ctx = createCtx()
+    hasActiveFocusSubscriptionMock.mockResolvedValue(false)
+    isTestPaymentEnabledMock.mockReturnValue(false)
+    buildCheckoutSessionMock
+      .mockResolvedValueOnce({ checkoutUrl: 'https://checkout.example' })
+      .mockResolvedValueOnce({ checkoutUrl: 'https://checkout.example' })
+      .mockRejectedValueOnce(new Error('TRIAL_ZOOM_ALREADY_USED'))
+
+    const handled = await handleFocusPaymentAction(ctx as never, 'user-1', 42)
+
+    expect(handled).toBe(true)
+    expect(sendTelegramContentChunkMock).toHaveBeenCalledWith(
+      ctx,
+      42,
+      '',
+      expect.any(Array),
+      expect.objectContaining({
+        inlineKeyboard: {
+          inline_keyboard: [
+            [{ text: '1m', url: 'https://checkout.example' }],
+            [{ text: '3m', url: 'https://checkout.example' }],
             [{ text: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
           ],
         },
@@ -332,6 +392,15 @@ describe('legacy focus callbacks for active users', () => {
 
     expect(handled).toBe(true)
     expect(ctx.telegram.sendMessage).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(updateSession)).toHaveBeenCalledWith(
+      'user-1',
+      '42',
+      'chat',
+      expect.objectContaining({
+        paymentIssueAwaitingEvidence: true,
+      }),
+      0,
+    )
     expect(alertCoachAboutPaymentIssueMock).toHaveBeenCalledWith({
       bot: expect.any(Object),
       coachChatId: 'ops-chat',
@@ -365,5 +434,69 @@ describe('legacy focus callbacks for active users', () => {
         reply_markup: { inline_keyboard: [[{ text: 'КАЛЕНДАР ФОКУСУ', callback_data: 'focus:next_zoom' }]] },
       },
     )
+  })
+
+  it('forwards text payment evidence to OPS and clears pending state', async () => {
+    const ctx = createCtx()
+    vi.mocked(getSession).mockResolvedValue({
+      userId: 'user-1',
+      data: { paymentIssueAwaitingEvidence: true },
+    } as never)
+
+    const handled = await handlePendingFocusPaymentEvidenceText(
+      ctx as never,
+      'user-1',
+      'Є чек, дата 28.07, 15 євро, картка 1234',
+    )
+
+    expect(handled).toBe(true)
+    expect(sendOpsTelegramMessageMock).toHaveBeenCalledWith(
+      expect.stringContaining('Є чек, дата 28.07, 15 євро, картка 1234'),
+      undefined,
+      expect.objectContaining({
+        messageType: 'focus_payment_evidence',
+      }),
+    )
+    expect(vi.mocked(clearSession)).toHaveBeenCalledWith('user-1', '42')
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
+      '42',
+      expect.stringContaining('Чек і деталі платежу передано'),
+    )
+  })
+
+  it('forwards photo payment evidence to OPS and clears pending state', async () => {
+    const ctx = {
+      ...createCtx(),
+      message: {
+        photo: [{ file_id: 'small' }, { file_id: 'large' }],
+        caption: 'Ось чек',
+      },
+    }
+    process.env.STARWAY_OPS_CHAT_ID = '3829747010'
+    vi.mocked(getSession).mockResolvedValue({
+      userId: 'user-1',
+      data: { paymentIssueAwaitingEvidence: true },
+    } as never)
+
+    const handled = await handlePendingFocusPaymentEvidenceAttachment(
+      ctx as never,
+      'user-1',
+    )
+
+    expect(handled).toBe(true)
+    expect(sendOpsTelegramMessageMock).toHaveBeenCalledWith(
+      expect.stringContaining('Тип: photo'),
+      undefined,
+      expect.objectContaining({
+        messageType: 'focus_payment_evidence',
+      }),
+    )
+    expect(ctx.telegram.getFileLink).toHaveBeenCalledWith('large')
+    expect(coachSendPhotoMock).toHaveBeenCalledWith(
+      '-1003829747010',
+      'https://files.example/check.jpg',
+      { caption: 'Ось чек' },
+    )
+    expect(vi.mocked(clearSession)).toHaveBeenCalledWith('user-1', '42')
   })
 })

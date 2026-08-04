@@ -4,9 +4,20 @@ import type {
   EcosystemPlanDefinition,
 } from './business.types.js'
 
+// TODO: узгодити фінальну ціну з Вірою.
+const STARWAY_COMPLETE_SUBSCRIPTION_PRICE_UAH = 1120
+
+const absystemAiUpgradePlan: EcosystemPlanDefinition = {
+  amount: STARWAY_COMPLETE_SUBSCRIPTION_PRICE_UAH,
+  durationDays: 30,
+  dbProductCodes: ['absystem_ai', 'absystem'],
+  lifecycleState: 'platform_active',
+}
+
 const ECOSYSTEM_PAYMENT_CATALOG: Record<
   EcosystemPaymentProduct,
-  Partial<Record<EcosystemPaymentPlanId, EcosystemPlanDefinition>>
+  Partial<Record<EcosystemPaymentPlanId, EcosystemPlanDefinition>> &
+    Partial<Record<'STARWAY_COMPLETE_SUBSCRIPTION', EcosystemPlanDefinition>>
 > = {
   focus: {
     'welcome_test': {
@@ -43,12 +54,8 @@ const ECOSYSTEM_PAYMENT_CATALOG: Record<
       dbProductCodes: ['absystem_ai', 'absystem'],
       lifecycleState: 'platform_active',
     },
-    '1month_upgrade': {
-      amount: 1120,
-      durationDays: 30,
-      dbProductCodes: ['absystem_ai', 'absystem'],
-      lifecycleState: 'platform_active',
-    },
+    '1month_upgrade': absystemAiUpgradePlan,
+    STARWAY_COMPLETE_SUBSCRIPTION: absystemAiUpgradePlan,
     '6month': {
       amount: 9900,
       durationDays: 180,

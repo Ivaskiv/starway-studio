@@ -72,4 +72,33 @@ describe('handleAbTestStart', () => {
     expect(saveAbTestProgressMock).toHaveBeenCalledWith('user-1', warmedProgress)
     expect(sendQuestionDirectMock).toHaveBeenCalledWith(ctx, 'q1', 4)
   })
+
+  it('does not resend q1 when the start callback is delivered again after the test is already active', async () => {
+    loadAbTestProgressMock.mockResolvedValue({
+      revision: 4,
+      status: 'active',
+      stage: 'S2_TEST_QUESTIONS',
+      current_question_id: 'q1',
+      answers: [],
+    })
+
+    const { handleAbTestStart } = await import('./abTest.handlers.ui.js')
+
+    const ctx = {
+      chat: { id: 12345 },
+      telegram: {
+        sendMessage: vi.fn(),
+      },
+      answerCbQuery: vi.fn().mockResolvedValue(undefined),
+    } as any
+
+    const result = await handleAbTestStart(ctx, 'user-1')
+
+    expect(result).toBe(true)
+    expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
+    expect(saveAbTestProgressMock).not.toHaveBeenCalled()
+    expect(recordTestStartMock).not.toHaveBeenCalled()
+    expect(sendQuestionDirectMock).not.toHaveBeenCalled()
+    expect(buildAbTestProgressPatchMock).not.toHaveBeenCalled()
+  })
 })

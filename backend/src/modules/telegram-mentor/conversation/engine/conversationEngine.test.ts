@@ -24,6 +24,7 @@ vi.mock('../../../services/claude-intelligence.service.js', () => ({
 vi.mock('../../services/intelligence.service.js', () => ({
   resolveTelegramIntelligence: mocks.resolveTelegramIntelligence,
   appendTelegramConversationTurn: mocks.appendTelegramConversationTurn,
+  resolveTelegramSupportUrl: vi.fn(() => 'https://t.me/test_support'),
 }))
 
 vi.mock('../../services/requestContext.service.js', () => ({
@@ -238,7 +239,7 @@ describe('TelegramConversationEngine', () => {
     expect(response.text).toContain('ФОКУС')
     expect(response.buttons).toEqual([
       {
-        label: 'Оплатити ФОКУС',
+        label: 'ОПЛАТИТИ ФОКУС',
         kind: 'callback',
         value: 'open_focus_payment',
       },

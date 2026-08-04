@@ -10,7 +10,7 @@ import {
   expireStaleSwapRequests,
   syncChannelPost,
 } from './service.js';
-import { generateSessionsFromAvailability } from './zoom.availability.service.js';
+import { generateSessionsFromAvailability, seedDefaultAvailability } from './zoom.availability.service.js';
 
 type SessionRequestsMeta = {
   type?: string;
@@ -267,6 +267,27 @@ export async function scanZoomAvailabilityAutoGenerate(): Promise<{
 
   for (const expert of experts) {
     const slots = Array.isArray(expert.zoomAvailability) ? expert.zoomAvailability : [];
+    if (slots.length === 0) {
+      try {
+        const seeded = await seedDefaultAvailability(expert.id)
+        expertsScanned += 1
+        created += seeded.created
+        skipped += seeded.skipped
+        console.info('[zoom.schedule.auto_generate.seeded_default]', {
+          expertId: expert.id,
+          created: seeded.created,
+          skipped: seeded.skipped,
+        })
+      } catch (error) {
+        failures += 1
+        console.error('[zoom.schedule.auto_generate.seed_failed]', {
+          expertId: expert.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+      continue
+    }
+
     const hasActiveAvailability = slots.some((slot) => (
       slot
       && typeof slot === 'object'

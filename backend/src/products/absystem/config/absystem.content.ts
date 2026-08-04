@@ -58,6 +58,109 @@ export const absystemContent = {
     DECISION: 'РІШЕННЯ',
     ACTION: 'ДІЯ',
   } as const,
+  TELEGRAM_COPY: {
+    TEST_IN_PROGRESS_RECENT: [
+      '<b>Тест уже відкритий.</b>',
+      '',
+      '<blockquote>Зараз важливо не збирати нову версію відповіді, а <b>продовжити</b> з того місця, де твій рух уже почав складатися.</blockquote>',
+      '',
+      '<b>Наступний крок:</b> продовж тест з останнього питання.',
+    ].join('\n'),
+    FOCUS_HOME: {
+      NOT_BOOKED: (expiresAt: string, nextZoomAt: string) => [
+        `Твій доступ до ФОКУСУ активний до <b>${expiresAt}</b>.`,
+        `Найближча Zoom-практика — <b>${nextZoomAt}</b>.`,
+        'Ти ще не записана.',
+        '',
+        '<blockquote>Тема вже є. Її не треба далі носити в голові — її треба занести в живу практику.</blockquote>',
+        '',
+        '<b>Наступний крок:</b> запишись на найближчу Zoom-практику.',
+      ].join('\n'),
+      BOOKED: (expiresAt: string, nextZoomAt: string) => [
+        `Твій доступ до ФОКУСУ активний до <b>${expiresAt}</b>.`,
+        `Найближча Zoom-практика — <b>${nextZoomAt}</b>.`,
+        'Ти вже записана.',
+        '',
+        '<blockquote>Рух уже зафіксований у практиці. Тепер важливо зайти туди з однією конкретною темою.</blockquote>',
+        '',
+        '<b>Наступний крок:</b> відкрий запис і підготуй одну ситуацію для Zoom.',
+      ].join('\n'),
+      JOIN_WINDOW: (expiresAt: string, nextZoomAt: string) => [
+        `Твій доступ до ФОКУСУ активний до <b>${expiresAt}</b>.`,
+        `Найближча Zoom-практика — <b>${nextZoomAt}</b>.`,
+        'Ти вже записана.',
+        '',
+        '<blockquote>Практика вже поруч. Зараз не час розпорошуватись — достатньо втримати один фокус.</blockquote>',
+        '',
+        '<b>Наступний крок:</b> приєднайся до Zoom і зайди з однією конкретною темою.',
+      ].join('\n'),
+      NO_SESSION: (expiresAt: string) => [
+        `Твій доступ до ФОКУСУ активний до <b>${expiresAt}</b>.`,
+        'Найближчу Zoom-практику ще не додано.',
+        '',
+        '<blockquote>Ритм уже збережений. Коли з’явиться нова практика, важливо буде просто <b>продовжити</b> з тієї точки, де ти зараз.</blockquote>',
+        '',
+        '<b>Наступний крок:</b> відкрий свій результат і визнач одну тему для наступної практики.',
+      ].join('\n'),
+    },
+    RESULT_SNAPSHOT: {
+      STATE: {
+        title: '<b>Твій результат: СТАН</b>',
+        quote: '<blockquote>Зараз у дію заходить втома, перевантаження і тривога. Тут спершу потрібна опора, а вже потім рух.</blockquote>',
+      },
+      GOAL: {
+        title: '<b>Твій результат: ЦІЛЬ</b>',
+        quote: '<blockquote>Рух зупиняється не через брак бажання, а через нечітку власну ціль. Коли свій вектор перекритий чужим шумом, дія не тримається.</blockquote>',
+      },
+      CHOICE: {
+        title: '<b>Твій результат: ВИБІР</b>',
+        quote: '<blockquote>Варіантів багато, але вузол не в них. Вузол у страху втрати, який не дає обрати один напрям.</blockquote>',
+      },
+      DECISION: {
+        title: '<b>Твій результат: РІШЕННЯ</b>',
+        quote: '<blockquote>Ти вже все зрозуміла. Але між розумінням і рішенням ще немає внутрішньої фіксації, яка переводить його в дію.</blockquote>',
+      },
+      ACTION: {
+        title: '<b>Твій результат: ДІЯ</b>',
+        quote: '<blockquote>Ціль і рішення вже поруч. Зараз важливо не додавати ще більше кроків, а повернути одну дію в стабільний ритм.</blockquote>',
+      },
+      subscriptionActiveLabel: (date: string) => `Підписка активна до ${date}`,
+      subscriptionInactiveLabel: 'Підписка неактивна',
+      zoomAttendedLabel: (attended: number, total: number) => `Zoom-практики: ${attended} відвідано з ${total} записаних`,
+      zoomNotBookedLabel: 'Zoom-практики: ще не записувалась',
+      nextStepZoom: (nextZoomAt: string) => `<b>Наступний крок:</b> запишись на Zoom-практику <b>${nextZoomAt}</b> — це і є фіксація руху.`,
+      nextStepZoomGeneric: '<b>Наступний крок:</b> запишись на найближчу Zoom-практику — це і є фіксація руху.',
+      nextStepBooked: '<b>Наступний крок:</b> відкрий запис на Zoom і підготуй одну конкретну тему для практики.',
+      nextStepNoAccess: '<b>Наступний крок:</b> обери формат продовження ФОКУСУ нижче, щоб повернутись у практики.',
+    },
+    POST_ZOOM_1: [
+      '🌿 <b>Практика завершилась.</b>',
+      '',
+      '<blockquote>Головне після Zoom — не розсипати побачене на нові думки. Тримай один висновок і один крок.</blockquote>',
+      '',
+      'Зафіксуй для себе дві речі:',
+      '<b>1. Який інсайт був найціннішим?</b>',
+      '<b>2. Який один крок зробиш до наступної практики?</b>',
+      '',
+      '<b>Наступний крок:</b> залиш інсайт одним повідомленням.',
+    ].join('\n'),
+    UPSELL: [
+      '<b>ФОКУС працює тоді, коли ти тримаєш ритм.</b>',
+      '',
+      '<blockquote>Рух не тримається сам по собі. Його тримає конкретна практика, до якої ти повертаєшся вчасно.</blockquote>',
+      '',
+      'Зараз важливо не додавати нове, а <b>продовжити</b> той ритм, який уже почався.',
+      '',
+      '<b>Наступний крок:</b> відкрий календар і обери найближчу Zoom-практику.',
+    ].join('\n'),
+    EXPIRED: [
+      'Твій доступ до ФОКУСУ завершився.',
+      '',
+      '<blockquote>Пам’ятаємо, де ти зупинилась. Дані, ритм і прогрес — на місці.</blockquote>',
+      '',
+      '<b>Наступний крок:</b> обери формат відновлення нижче, щоб <b>продовжити</b> Zoom-практики.',
+    ].join('\n'),
+  },
   START_FLOWS: {
     FIRST_TIME_USER: {
       text: AB_TEST_START_INTRO,
@@ -371,6 +474,9 @@ export const absystemContent = {
     FOCUS_TO_AI_HARD_TITLE: '🚀 ABSystem AI наступний крок',
     FOCUS_TO_AI_HARD: 'Ти вже 4 тижні у ФОКУСІ. ABSystem AI — наступний рівень: щоденна підтримка між практиками. Доплата — 1120 грн (твій ФОКУС зараховується).',
     FOCUS_TO_AI_HARD_CTA: 'ПЕРЕЙТИ В ABSYSTEM AI',
+    STARWAY_COMPLETE_TITLE: '⭐ STARWAY COMPLETE',
+    STARWAY_COMPLETE: 'Ти вже пройшла trial і бачиш, як виглядає рух у системі. STARWAY COMPLETE допомагає не зупинитись на ознайомленні, а перевести цей темп у стабільну практику.',
+    STARWAY_COMPLETE_CTA: 'Перейти в STARWAY COMPLETE',
     TO_STATE_COURSE_TITLE: '📚 Програма стану',
     TO_STATE_COURSE: 'Ти вже кілька разів фіксувала, що дія зривається не через відсутність рішення — а через стан. Для цього є окрема програма.\n990 грн для учасника ФОКУСУ/платформи.',
     TO_STATE_COURSE_CTA: 'Подивитись програму',
@@ -405,6 +511,10 @@ export const absystemContent = {
       text: 'Твій доступ активний ще 3 дні. Якщо хочеш продовжити рух — поновлення займе хвилину.',
       cta: 'Продовжити доступ',
     },
+    TRIAL_DAY_25: {
+      text: 'Твій trial добігає кінця. Щоб не втратити темп і збережений прогрес, варто вже зараз перейти в повний доступ.',
+      cta: 'Перейти в STARWAY COMPLETE',
+    },
     SUB_EXPIRED: {
       text: 'Твій доступ завершено. Всі твої цілі, карта балансу і звіти збережені. Коли будеш готова повернутись — вони тебе чекають.',
       cta: 'Відновити доступ',
@@ -413,6 +523,89 @@ export const absystemContent = {
       text: 'З поверненням. Відновити доступ і продовжити звідти де зупинилась — один крок.',
       cta: 'Оплатити',
     },
+  },
+  TRIAL_LIFECYCLE: {
+    regularDay8: (input: {
+      weeklyReportSummary: string | null
+      daysRemaining: number
+    }) => ({
+      title: 'Твій тижневий результат готовий',
+      quote: input.weeklyReportSummary?.trim() || null,
+      lines: input.weeklyReportSummary?.trim()
+        ? [
+            `ABSystem працюватиме ще ${input.daysRemaining} днів.`,
+          ]
+        : [
+            'Тижневий звіт уже збирається з твоїх відповідей і дій.',
+            `ABSystem працюватиме ще ${input.daysRemaining} днів.`,
+          ],
+      nextStep: 'Наступний крок: продовж щоденні відповіді і закріпи ритм у ABSystem цього тижня.',
+      cta: 'Продовжити ABSystem',
+    }),
+    legacyGiftDay8: (input: {
+      weeklyReportSummary: string | null
+      daysRemaining: number
+      focusExpiresAt: string
+    }) => ({
+      title: 'Твій тижневий результат готовий',
+      quote: input.weeklyReportSummary?.trim() || null,
+      lines: input.weeklyReportSummary?.trim()
+        ? [
+            `Твій подарунковий ФОКУС активний до ${input.focusExpiresAt}.`,
+            `ABSystem працюватиме ще ${input.daysRemaining} днів.`,
+          ]
+        : [
+            'Тижневий звіт ще формується з твоїх відповідей і дій.',
+            `Твій подарунковий ФОКУС активний до ${input.focusExpiresAt}.`,
+            `ABSystem працюватиме ще ${input.daysRemaining} днів.`,
+          ],
+      nextStep: 'Наступний крок: продовжуй ранкові та вечірні відповіді цього тижня.',
+      cta: null,
+    }),
+    regularPreExpiry: (input: {
+      daysRemaining: number
+    }) => ({
+      title: `До завершення ABSystem залишилося ${input.daysRemaining} днів`,
+      quote: null,
+      lines: [
+        'Щоб не втратити щоденний трекінг, аналітику і накопичений ритм, продовжи доступ окремо.',
+      ],
+      nextStep: 'Наступний крок: відкрий продовження ABSystem і зафіксуй доступ без паузи.',
+      cta: 'Продовжити ABSystem',
+    }),
+    legacyGiftPreExpiry: (input: {
+      daysRemaining: number
+      focusExpiresAt: string
+    }) => ({
+      title: `До завершення ABSystem залишилося ${input.daysRemaining} днів`,
+      quote: null,
+      lines: [
+        `Твій ФОКУС залишається активним до ${input.focusExpiresAt}.`,
+        'Для продовження щоденного трекінгу та аналітики можна окремо активувати ABSystem.',
+      ],
+      nextStep: 'Наступний крок: якщо хочеш зберегти щоденний ритм без паузи, продовжи ABSystem окремо.',
+      cta: 'Продовжити ABSystem',
+    }),
+    trialExpired: (input: {
+      focusExpiresAt: string | null
+      legacyGift: boolean
+    }) => ({
+      title: input.legacyGift
+        ? 'Подарунковий період ABSystem завершився'
+        : 'Період ABSystem завершився',
+      quote: null,
+      lines: input.legacyGift && input.focusExpiresAt
+        ? [
+            'Твої попередні дані та звіти збережені.',
+            `ФОКУС і групові Zoom залишаються доступними до ${input.focusExpiresAt}.`,
+          ]
+        : [
+            'Твої попередні дані та звіти збережені.',
+            'Щоб повернути щоденний трекінг і аналітику, продовжи ABSystem окремо.',
+          ],
+      nextStep: 'Наступний крок: якщо хочеш повернути щоденний трекінг і аналітику, продовжи ABSystem.',
+      cta: 'Продовжити ABSystem',
+    }),
   },
   behavioral: {
     title: 'ABSystem',

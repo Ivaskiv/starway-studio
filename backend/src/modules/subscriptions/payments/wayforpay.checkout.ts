@@ -318,6 +318,28 @@ export async function getCheckoutSession(token: string) {
   return Buffer.from(JSON.stringify(session.payload), 'utf8').toString('base64url')
 }
 
+export async function refreshCheckoutSessionPayload(
+  token: string,
+  payload: Record<string, unknown>,
+) {
+  const meta = resolveSessionMetadata(payload)
+  if (!meta.userId || !meta.orderReference || !Number.isFinite(meta.amount) || meta.amount <= 0) {
+    throw new Error('CHECKOUT_SESSION_INVALID_PAYLOAD')
+  }
+
+  await prisma.checkoutSession.update({
+    where: { token },
+    data: {
+      payload: payload as Prisma.InputJsonValue,
+      orderReference: meta.orderReference,
+      amount: meta.amount,
+      currency: meta.currency,
+      productCode: meta.productCode,
+      userId: meta.userId,
+    },
+  })
+}
+
 export async function deleteCheckoutSession(token: string) {
   await prisma.checkoutSession.update({
     where: { token },

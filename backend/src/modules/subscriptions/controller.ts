@@ -14,6 +14,7 @@ import {
 import {
   createWayForPayCheckout,
   getCheckoutSession,
+  refreshCheckoutSessionPayload,
 } from './payments/wayforpay.checkout.js';
 import { generatePaymentSignature, readWayForPayCredentials } from './payments/wayforpay.js';
 import {
@@ -699,6 +700,15 @@ export async function renderWayForPayCheckoutPageHandler(req: Request, res: Resp
   // FIX 2026-05-25 PAY_RETRY2: regenerate order reference/signature so repeated pay attempts stay valid.
   const replaySafePayload = refreshCheckoutPayloadForRetry(payload)
   if (String(replaySafePayload.orderReference ?? '') !== String(payload.orderReference ?? '')) {
+    if (token) {
+      await refreshCheckoutSessionPayload(token, replaySafePayload).catch((error) => {
+        console.error('[CHECKOUT_TRACE] retry_payload_persist_failed', {
+          token,
+          orderReference: replaySafePayload.orderReference,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
     console.warn('[PAYMENT_RETRY]', {
       oldRef: String(payload.orderReference ?? ''),
       newRef: String(replaySafePayload.orderReference ?? ''),

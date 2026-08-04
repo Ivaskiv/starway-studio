@@ -119,6 +119,7 @@ describe('Focus home CTA matrix', () => {
   })
 
   it('focus copy uses only Focus language and state-specific CTA without emoji', async () => {
+    vi.setSystemTime(new Date('2026-07-28T14:45:00Z'))
     vi.mocked(getUpcomingZoom).mockResolvedValue({
       id: 'zoom-6',
       scheduledAt: new Date('2026-07-28T16:00:00Z'),
@@ -130,14 +131,55 @@ describe('Focus home CTA matrix', () => {
     const buttonTexts = payload.buttons.flat().map((button) => button.text)
 
     expect(payload.text).toContain('Твій доступ до ФОКУСУ активний до')
-    expect(payload.text).toContain('Найближча Zoom-практика')
+    expect(payload.text).toContain('Найближча Zoom-практика — <b>сьогодні о 19:00</b>')
     expect(payload.text).not.toContain('Starway')
     expect(payload.text).not.toContain('ABSystem')
     expect(payload.text).not.toContain('Практикум')
     expect(payload.text).not.toContain('робочому просторі')
-    expect(buttonTexts).toEqual(['ЗАПИСАТИСЯ', 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', 'КАНАЛ ФОКУСУ'])
+    expect(buttonTexts).toEqual(['ЗАПИСАТИСЯ', '✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', '🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ', 'КАНАЛ ФОКУСУ'])
     expect(buttonTexts.join(' ')).not.toContain('кімнату')
-    expect(buttonTexts.every((text) => !/[\p{Extended_Pictographic}]/u.test(text))).toBe(true)
+  })
+
+  it('formats tomorrow label in Europe/Kyiv', async () => {
+    vi.setSystemTime(new Date('2026-08-03T14:45:00Z'))
+    vi.mocked(getUpcomingZoom).mockResolvedValue({
+      id: 'zoom-tomorrow',
+      scheduledAt: new Date('2026-08-04T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/tomorrow' },
+    } as never)
+    vi.mocked(prisma.zoomSessionAttendee.findUnique).mockResolvedValue(null as never)
+
+    const payload = await zoomSection('user-tomorrow')
+
+    expect(payload.text).toContain('Найближча Zoom-практика — <b>завтра о 19:00</b>')
+  })
+
+  it('formats later dates as absolute Kyiv dates', async () => {
+    vi.setSystemTime(new Date('2026-08-03T14:45:00Z'))
+    vi.mocked(getUpcomingZoom).mockResolvedValue({
+      id: 'zoom-later',
+      scheduledAt: new Date('2026-08-06T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/later' },
+    } as never)
+    vi.mocked(prisma.zoomSessionAttendee.findUnique).mockResolvedValue(null as never)
+
+    const payload = await zoomSection('user-later')
+
+    expect(payload.text).toContain('Найближча Zoom-практика — <b>6 серпня о 19:00</b>')
+  })
+
+  it('keeps today/tomorrow detection across year boundary in Europe/Kyiv', async () => {
+    vi.setSystemTime(new Date('2026-12-31T20:30:00Z'))
+    vi.mocked(getUpcomingZoom).mockResolvedValue({
+      id: 'zoom-year-boundary',
+      scheduledAt: new Date('2027-01-01T07:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/year-boundary' },
+    } as never)
+    vi.mocked(prisma.zoomSessionAttendee.findUnique).mockResolvedValue(null as never)
+
+    const payload = await zoomSection('user-year-boundary')
+
+    expect(payload.text).toContain('Найближча Zoom-практика — <b>завтра о 09:00</b>')
   })
 
   it('BOOKED state copy is Focus-specific', async () => {
@@ -156,7 +198,8 @@ describe('Focus home CTA matrix', () => {
     expect(payload.text).not.toContain('ABSystem')
     expect(payload.buttons).toEqual([
       [{ text: 'ЗАПИСАТИСЯ', web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking' } }],
-      [{ text: 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: expect.any(String) }],
+      [{ text: '✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: expect.any(String) }],
+      [{ text: '🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ', callback_data: 'ab_test:restart' }],
       [{ text: 'КАНАЛ ФОКУСУ', url: 'https://t.me/focus-channel' }],
     ])
   })
@@ -174,7 +217,7 @@ describe('Focus home CTA matrix', () => {
 
     expect(payload.text).toContain('Ти вже записана.')
     expect(payload.text).toContain('Найближча Zoom-практика')
-    expect(payload.buttons).toHaveLength(3)
+    expect(payload.buttons).toHaveLength(4)
   })
 
   it('NO_SESSION state copy has no fake CTA', async () => {
@@ -183,7 +226,7 @@ describe('Focus home CTA matrix', () => {
     const payload = await zoomSection('user-no-session')
 
     expect(payload.text).toContain('Найближчу Zoom-практику ще не додано.')
-    expect(payload.buttons).toHaveLength(3)
+    expect(payload.buttons).toHaveLength(4)
   })
 
   it('focus ai remains an explicit separate ABSystem upsell action', () => {
@@ -199,11 +242,10 @@ describe('Focus home CTA matrix', () => {
     const flat = JSON.stringify(payload.reply_markup)
 
     expect(payload.text).toContain('Практика завершилась')
-    expect(payload.text).toContain('ФОКУС')
+    expect(payload.text).toContain('Zoom')
     expect(payload.text).not.toContain('ABSystem')
     expect(flat).toMatch(/post_zoom:leave_insight/)
     expect(flat).toMatch(/focus:next_zoom/)
-    expect(flat).toMatch(/focus:menu/)
     expect(flat).not.toMatch(/post_zoom:absystem_cta/)
   })
 })

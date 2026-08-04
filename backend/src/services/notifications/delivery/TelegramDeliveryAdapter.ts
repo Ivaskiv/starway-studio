@@ -1,13 +1,13 @@
-import { TelegramConversationRenderer } from '../../../modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
-import type { ConversationButton, ConversationResponse } from '../../../modules/telegram-mentor/conversation/engine/types.js'
+import type { ConversationButton } from '../../../modules/telegram-mentor/conversation/engine/types.js'
+import { bot } from '../../../lib/telegram.js'
+import {
+  bold,
+  escapeTelegramHtml,
+  formatTelegramMessage,
+  sendTelegramMessage,
+  type TelegramMessage,
+} from '../../../lib/telegram/messageFormatter.js'
 import type { DeliveryMessage, DeliveryUser } from './types.js'
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-}
 
 function isSafeTelegramWebAppUrl(value: string): boolean {
   try {
@@ -71,44 +71,38 @@ function buildButtons(message: DeliveryMessage): ConversationButton[] {
     : []
 }
 
-function buildText(message: DeliveryMessage) {
-  if (message.telegramHtml) {
-    return message.telegramHtml
+function mapButtonsToReplyMarkup(buttons: ConversationButton[]) {
+  if (!buttons.length) {
+    return undefined
   }
 
-  return [`<b>${escapeHtml(message.title)}</b>`, '', escapeHtml(message.body)].join('\n')
+  return {
+    inline_keyboard: buttons.map((button) => [
+      button.kind === 'callback'
+        ? { text: button.label, callback_data: button.value }
+        : button.kind === 'web_app'
+          ? { text: button.label, web_app: { url: button.value } }
+          : { text: button.label, url: button.value },
+    ]),
+  }
+}
+
+function buildText(message: DeliveryMessage): TelegramMessage {
+  if (message.telegramHtml) {
+    return {
+      text: message.telegramHtml,
+      parseMode: 'HTML',
+    }
+  }
+
+  return formatTelegramMessage({
+    blocks: [bold(message.title), escapeTelegramHtml(message.body)],
+    preformatted: true,
+  })
 }
 
 function resolveChatId(user: DeliveryUser) {
   return user.telegramLinks[0]?.chatId ?? user.telegramChatId ?? user.telegramUserId ?? null
-}
-
-function buildConversationResponse(message: DeliveryMessage): ConversationResponse {
-  return {
-    text: null,
-    buttons: [],
-    cards: [{
-      kind: 'message',
-      text: buildText(message),
-      buttons: buildButtons(message),
-      parseMode: 'HTML',
-    }],
-    media: [],
-    nextActions: [],
-    telemetry: {},
-    analytics: {},
-  }
-}
-
-let rendererInstance: TelegramConversationRenderer | null = null
-
-function getRenderer(): TelegramConversationRenderer {
-  if (rendererInstance) {
-    return rendererInstance
-  }
-
-  rendererInstance = new TelegramConversationRenderer()
-  return rendererInstance
 }
 
 export class TelegramDeliveryAdapter {
@@ -116,10 +110,20 @@ export class TelegramDeliveryAdapter {
     const chatId = resolveChatId(user)
     if (!chatId) return false
 
-    return getRenderer().renderOutbound(
-      { chatId },
-      buildConversationResponse(message),
-    )
+    try {
+      await sendTelegramMessage(
+        bot,
+        chatId,
+        buildText(message),
+        {
+          replyMarkup: mapButtonsToReplyMarkup(buildButtons(message)),
+          disableWebPagePreview: true,
+        },
+      )
+      return true
+    } catch {
+      return false
+    }
   }
 }
 

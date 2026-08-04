@@ -787,49 +787,59 @@ export async function getUserPreviousZoomSessionRecap(
   userId: string,
   now = new Date(),
 ): Promise<PreviousZoomSessionRecap | null> {
-  const attendee = await prisma.zoomSessionAttendee.findFirst({
+  const session = await prisma.zoomSession.findFirst({
     where: {
-      userId,
-      session: {
-        status: ZoomStatus.COMPLETED,
-        scheduledAt: { lte: now },
-      },
+      status: ZoomStatus.COMPLETED,
+      scheduledAt: { lte: now },
+      OR: [
+        { requests: { path: ['type'], equals: 'group_practice' } },
+        { type: ZoomSessionType.GROUP },
+      ],
     },
     include: {
-      session: {
-        include: {
-          _count: {
-            select: {
-              attendees: true,
-            },
-          },
+      _count: {
+        select: {
+          attendees: true,
         },
+      },
+      attendees: {
+        where: {
+          userId,
+        },
+        select: {
+          attended: true,
+        },
+        take: 1,
       },
     },
     orderBy: {
-      session: {
-        scheduledAt: 'desc',
-      },
+      scheduledAt: 'desc',
     },
   })
 
-  if (!attendee) {
+  if (!session) {
     return null
   }
 
-  const report = parseZoomPostReport(attendee.session.postSessionReport)
-  const title = attendee.session.topic.trim()
+  const report = parseZoomPostReport(session.postSessionReport)
+  const explicitTitle = session.topic.trim()
+  const fallbackTitle = `Zoom-практика за ${session.scheduledAt.toLocaleDateString('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: KYIV_TIME_ZONE,
+  })}`
+  const attendee = session.attendees[0] ?? null
 
   return {
-    id: attendee.session.id,
-    title: title || null,
-    startsAt: attendee.session.scheduledAt.toISOString(),
+    id: session.id,
+    title: explicitTitle || fallbackTitle,
+    startsAt: session.scheduledAt.toISOString(),
     endsAt: null,
     summary: report?.summary?.trim() || null,
     recordingUrl: report?.audioUrl?.trim() || null,
     materialsUrl: null,
-    attendanceStatus: attendee.attended ? 'ATTENDED' : 'BOOKED',
-    attendanceCount: attendee.session._count.attendees,
+    attendanceStatus: attendee ? (attendee.attended ? 'ATTENDED' : 'BOOKED') : null,
+    attendanceCount: session._count.attendees,
     nextStep: report?.actionItems?.[0]?.trim() || report?.nextFocus?.trim() || null,
   }
 }

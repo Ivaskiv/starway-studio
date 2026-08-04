@@ -7,6 +7,10 @@ import {
   handleAbTestCallback,
   markAbTestPaymentSuccess,
 } from '@/products/ab-system/telegram/abTest.service.js'
+import {
+  handlePendingFocusPaymentEvidenceAttachment,
+  handlePendingFocusPaymentEvidenceText,
+} from '@/products/ab-system/telegram/abTest.flows.js'
 import { resolveModelStrategyTier } from '@starway/ai/providers/routing'
 import {
   resolveDecision,
@@ -378,6 +382,10 @@ async function handleTextMessage(ctx: Context) {
       'telegram',
       typeof userState === 'string' ? userState : null
     )
+  }
+
+  if (await handlePendingFocusPaymentEvidenceText(ctx, userId, text)) {
+    return
   }
 
   if (await routeTelegramTextMessage(ctx, text)) {
@@ -806,6 +814,37 @@ export async function registerMentorBot(
         'ctx.reply',
         'telegram_voice_error',
         'Не вдалося обробити голосове повідомлення.',
+        replyMarkup
+      )
+    }
+  })
+  bot.on(['photo', 'document'], async (ctx) => {
+    try {
+      const userId =
+        (ctx.state as { userId?: string | null }).userId ??
+        (await resolveLinkedUserIdFromContext(ctx).catch(() => null))
+
+      const handled = await handlePendingFocusPaymentEvidenceAttachment(ctx, userId)
+      if (handled) {
+        return
+      }
+
+      const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'telegram_attachment_not_expected',
+        'Зараз я не очікую на файл. Якщо це чек за оплату, спочатку натисни «ПРОБЛЕМА З ОПЛАТОЮ».',
+        replyMarkup
+      )
+    } catch (error) {
+      logger.error('[telegram-thin-client:attachment]', error)
+      const replyMarkup = await getAccessAwareAppReplyMarkupForContext(ctx)
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'telegram_attachment_error',
+        'Не вдалося обробити файл. Спробуй надіслати чек ще раз або напиши дані платежу текстом.',
         replyMarkup
       )
     }

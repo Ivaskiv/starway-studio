@@ -339,6 +339,22 @@ You must never introduce:
 
 ---
 
+## 10A. UI Readability Rules
+
+For any frontend, visual, styling, layout, or formatting task, you must preserve readable contrast as a mandatory contract.
+
+You must treat the following as required:
+
+- dark background surfaces must use light readable text;
+- light background surfaces must use dark readable text;
+- buttons must not ship with low-contrast label/background combinations;
+- primary and secondary CTA labels must remain readable in their actual rendered state, not only in design tokens;
+- “looks branded” is never a valid reason to keep unreadable text.
+
+If a task affects buttons, cards, banners, modals, tabs, chips, or other emphasized surfaces, you must explicitly verify that text/background contrast remains readable in the final rendered variant.
+
+---
+
 ## 11. Risk Classification
 
 You must classify every task as one of:

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockExpertFindMany = vi.fn()
 const mockGenerateSessionsFromAvailability = vi.fn()
+const mockSeedDefaultAvailability = vi.fn()
 
 vi.mock('../../db/client.js', () => ({
   prisma: {
@@ -13,6 +14,7 @@ vi.mock('../../db/client.js', () => ({
 
 vi.mock('./zoom.availability.service.js', () => ({
   generateSessionsFromAvailability: (...args: unknown[]) => mockGenerateSessionsFromAvailability(...args),
+  seedDefaultAvailability: (...args: unknown[]) => mockSeedDefaultAvailability(...args),
 }))
 
 vi.mock('../../lib/telegram.js', () => ({
@@ -67,16 +69,23 @@ describe('scanZoomAvailabilityAutoGenerate', () => {
 
       return { created: 4, skipped: 0 }
     })
+    mockSeedDefaultAvailability.mockResolvedValue({
+      seeded: true,
+      created: 4,
+      skipped: 0,
+    })
 
     const result = await scanZoomAvailabilityAutoGenerate()
 
     expect(mockGenerateSessionsFromAvailability).toHaveBeenCalledTimes(2)
+    expect(mockSeedDefaultAvailability).toHaveBeenCalledTimes(1)
+    expect(mockSeedDefaultAvailability).toHaveBeenCalledWith('expert-empty')
     expect(mockGenerateSessionsFromAvailability).toHaveBeenCalledWith('expert-active', 4)
     expect(mockGenerateSessionsFromAvailability).toHaveBeenCalledWith('expert-failing', 4)
     expect(result).toEqual({
-      expertsScanned: 1,
-      expertsSkipped: 2,
-      created: 4,
+      expertsScanned: 2,
+      expertsSkipped: 1,
+      created: 8,
       skipped: 0,
       failures: 1,
     })

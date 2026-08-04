@@ -234,9 +234,19 @@ export async function generateSessionsFromAvailability(
   return { created, skipped };
 }
 
-export async function seedDefaultAvailability(expertId: string): Promise<void> {
+export async function seedDefaultAvailability(expertId: string): Promise<{
+  seeded: boolean
+  created: number
+  skipped: number
+}> {
   const slots = await getAvailability(expertId);
-  if (slots.length > 0) return;
+  if (slots.length > 0) {
+    return {
+      seeded: false,
+      created: 0,
+      skipped: 0,
+    }
+  }
 
   await saveAvailability(expertId, [
     {
@@ -254,5 +264,11 @@ export async function seedDefaultAvailability(expertId: string): Promise<void> {
     },
   ]);
 
-  await generateSessionsFromAvailability(expertId, 4);
+  const result = await generateSessionsFromAvailability(expertId, 4);
+
+  return {
+    seeded: true,
+    created: result.created,
+    skipped: result.skipped,
+  }
 }

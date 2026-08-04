@@ -16,10 +16,9 @@ import {
 import { registerDailyTelegramCommands } from '../modules/daily-cycle/telegram.js'
 import {
   describeLocalTelegramConsumerDisableReason,
-  EXPECTED_BOT_LOCAL,
-  EXPECTED_BOT_PRODUCTION,
   isProductionRuntime,
   readCoachBotToken,
+  readExpectedTelegramBotUsername,
   readTelegramBotConfig,
   readTelegramBotNames,
   resolveLocalTelegramConsumerState,
@@ -54,7 +53,7 @@ const telegramConsumerEnabled =
   isProductionRuntime() || localTelegramConsumerState.enabled
 
 {
-  const expectedUsername = isProductionRuntime() ? EXPECTED_BOT_PRODUCTION : EXPECTED_BOT_LOCAL
+  const expectedUsername = readExpectedTelegramBotUsername()
   if (!telegramConsumerEnabled) {
     console.warn(
       `[Telegram] interactive local consumer disabled: ${describeLocalTelegramConsumerDisableReason(
@@ -175,8 +174,8 @@ async function startTelegramBot() {
 
           try {
             const me = await bot.telegram.getMe()
-            const expectedUsername = isProductionRuntime() ? EXPECTED_BOT_PRODUCTION : EXPECTED_BOT_LOCAL
-            if (me.username !== expectedUsername) {
+            const expectedUsername = readExpectedTelegramBotUsername()
+            if (expectedUsername && me.username !== expectedUsername) {
               throw new Error(
                 `[TELEGRAM_BOT_MISMATCH] Expected @${expectedUsername} but got @${me.username}.`,
               )

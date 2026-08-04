@@ -57,6 +57,7 @@ vi.mock('../business.js', () => ({
 vi.mock('./callback.notifications.js', () => ({
   sendAbsystemPaymentSuccessTelegramMessage: vi.fn(),
   sendPaymentFailedTelegramMessage: vi.fn(),
+  sendTrialZoomPaymentSuccessTelegramMessage: vi.fn(),
 }))
 
 vi.mock('./coachAlert.service.js', () => ({

@@ -48,6 +48,11 @@ import {
 import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
 import { FOCUS_DOJIM_TIMER_IDS } from '../../modules/subscriptions/payments/business.types.js'
 import { bot } from '../../lib/telegram.js'
+import {
+  blockquote,
+  bold,
+  escapeTelegramHtml,
+} from '../../lib/telegram/messageFormatter.js'
 import { readTelegramBotConfig } from '../../modules/telegram-mentor/runtime/botConfig.js'
 import { TelegramConversationRenderer } from '../../modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import { resolveAbTestFollowupCopy } from '@/products/ab-system/content/abTest.followups.js'
@@ -244,13 +249,6 @@ function buildWeeklySummaryPayload(payload?: EventPayload): WeeklySummaryPayload
   }
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-}
-
 function buildTelegramCard(input: {
   title: string
   intro?: string
@@ -265,25 +263,25 @@ function buildTelegramCard(input: {
     }
 
     if ((normalized.startsWith('"') && normalized.endsWith('"')) || normalized.startsWith('📸 [СКРІН')) {
-      return `<blockquote>${escapeHtml(normalized.replace(/^"|"$/g, ''))}</blockquote>`
+      return blockquote(normalized.replace(/^"|"$/g, ''))
     }
 
     if (normalized.startsWith('[ЦИТАТА]')) {
-      return `<blockquote>${escapeHtml(normalized.slice('[ЦИТАТА]'.length).trim())}</blockquote>`
+      return blockquote(normalized.slice('[ЦИТАТА]'.length).trim())
     }
 
     if (normalized.startsWith('ЦИТАТА:')) {
-      return `<blockquote>${escapeHtml(normalized.slice('ЦИТАТА:'.length).trim())}</blockquote>`
+      return blockquote(normalized.slice('ЦИТАТА:'.length).trim())
     }
 
     if (normalized.startsWith('QUOTE:')) {
-      return `<blockquote>${escapeHtml(normalized.slice('QUOTE:'.length).trim())}</blockquote>`
+      return blockquote(normalized.slice('QUOTE:'.length).trim())
     }
 
     return null
   }
 
-  const lines: string[] = [`<b>${escapeHtml(input.title)}</b>`]
+  const lines: string[] = [bold(input.title)]
 
   if (input.intro) {
     const introLines = input.intro.split('\n').map((line) => {
@@ -298,24 +296,24 @@ function buildTelegramCard(input: {
       }
 
       if (normalized.startsWith('· ')) {
-        return `• ${escapeHtml(normalized.slice(2))}`
+        return `• ${escapeTelegramHtml(normalized.slice(2))}`
       }
 
-      return escapeHtml(line)
+      return escapeTelegramHtml(line)
     })
     lines.push('', ...introLines)
   }
 
   if (input.facts?.length) {
-    lines.push('', ...input.facts.map((fact) => `• ${escapeHtml(fact)}`))
+    lines.push('', ...input.facts.map((fact) => `• ${escapeTelegramHtml(fact)}`))
   }
 
   if (input.note) {
-    lines.push('', toQuotedLine(input.note) ?? `<blockquote>${escapeHtml(input.note)}</blockquote>`)
+    lines.push('', toQuotedLine(input.note) ?? blockquote(input.note))
   }
 
   if (input.closing) {
-    lines.push('', escapeHtml(input.closing))
+    lines.push('', escapeTelegramHtml(input.closing))
   }
 
   return lines.join('\n')
@@ -423,10 +421,10 @@ function renderFocusDojimBlock(block: TelegramContentBlock): string | null {
       .split(/(\*\*[\s\S]+?\*\*)/g)
       .map((part) => {
         if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-          return `<b>${escapeHtml(part.slice(2, -2))}</b>`
+          return bold(part.slice(2, -2))
         }
 
-        return escapeHtml(part)
+        return escapeTelegramHtml(part)
       })
       .join('')
 
@@ -434,15 +432,15 @@ function renderFocusDojimBlock(block: TelegramContentBlock): string | null {
     case 'text':
       return renderInlineBold(block.text)
     case 'quote':
-      return `<blockquote>${escapeHtml(block.text.replace(/^"|"$/g, '').replace(/^«|»$/g, '').trim())}</blockquote>`
+      return blockquote(block.text.replace(/^"|"$/g, '').replace(/^«|»$/g, '').trim())
     case 'pricing':
       return renderInlineBold(`**${block.text}**`)
     case 'cta':
-      return `<b>${escapeHtml(block.text)}</b>`
+      return bold(block.text)
     case 'image':
     case 'video':
     case 'audio':
-      return block.caption ? escapeHtml(block.caption) : null
+      return block.caption ? escapeTelegramHtml(block.caption) : null
     default:
       return null
   }
@@ -1707,6 +1705,38 @@ export class NotificationService {
     return sent
   }
 
+  async sendLifecycleTelegramNotification(input: {
+    event: NotificationEvent
+    userId: string
+    templateKey: string
+    payload?: EventPayload
+    duplicateWindowStart?: Date
+  }): Promise<boolean> {
+    const user = await loadDeliveryUser(input.userId)
+    if (!user) return false
+
+    const message = await this.buildMessage(input.event, user, input.payload)
+
+    return this.sendDirectTelegramNotification({
+      userId: input.userId,
+      type: resolveNotificationType(input.event),
+      title: message.title,
+      body: message.body,
+      telegramHtml: message.telegramHtml,
+      templateKey: input.templateKey,
+      ctaText: message.ctaText,
+      ctaUrl: message.ctaUrl,
+      ctaMode: message.ctaMode,
+      ctaActions: message.ctaActions,
+      data: {
+        ...(input.payload ?? {}),
+        sourceEvent: input.event,
+      },
+      duplicateWindowStart: input.duplicateWindowStart,
+      isEnabled: (preferences) => this.isEventEnabledByPreferences(input.event, preferences),
+    })
+  }
+
   async sendSessionHandoffNotification(input: {
     userId: string
     session: 'morning' | 'evening'
@@ -2111,6 +2141,38 @@ export class NotificationService {
       case NotificationEvent.SUBSCRIPTION_EXPIRING:
       {
         const renewalUrl = asString(payload?.renewal_url ?? payload?.renewalUrl ?? payload?.payment_url ?? payload?.paymentUrl) ?? null
+        const trialLifecycleMode = asString(payload?.trial_lifecycle_mode ?? payload?.trialLifecycleMode)
+        if (trialLifecycleMode === 'legacy_gift_pre_expiry' || trialLifecycleMode === 'regular_pre_expiry') {
+          const focusExpiresAt = asString(payload?.focus_expires_at ?? payload?.focusExpiresAt)
+          const daysRemaining = Number(payload?.days_remaining ?? payload?.daysRemaining ?? 0)
+          const copy = trialLifecycleMode === 'legacy_gift_pre_expiry'
+            ? absystemContent.TRIAL_LIFECYCLE.legacyGiftPreExpiry({
+                daysRemaining,
+                focusExpiresAt: focusExpiresAt ?? '',
+              })
+            : absystemContent.TRIAL_LIFECYCLE.regularPreExpiry({
+                daysRemaining,
+              })
+
+          const introLines = [
+            ...(copy.quote ? [`ЦИТАТА: ${copy.quote}`] : []),
+            ...copy.lines,
+          ].join('\n')
+
+          return {
+            title: copy.title,
+            body: [...copy.lines, copy.nextStep].filter(Boolean).join('\n'),
+            telegramHtml: buildTelegramCard({
+              title: copy.title,
+              intro: introLines,
+              note: copy.nextStep,
+            }),
+            ctaText: copy.cta ?? undefined,
+            ctaActions: renewalUrl && copy.cta
+              ? [{ text: copy.cta, url: renewalUrl, mode: 'url' }]
+              : undefined,
+          }
+        }
         const content = buildNotificationContent(NotificationEvent.SUBSCRIPTION_EXPIRING, {
           userName: firstName,
           renewalUrl,
@@ -2132,6 +2194,34 @@ export class NotificationService {
       case NotificationEvent.SUBSCRIPTION_EXPIRED:
       {
         const renewalUrl = asString(payload?.renewal_url ?? payload?.renewalUrl ?? payload?.payment_url ?? payload?.paymentUrl) ?? null
+        const trialLifecycleMode = asString(payload?.trial_lifecycle_mode ?? payload?.trialLifecycleMode)
+        if (trialLifecycleMode === 'trial_expired') {
+          const focusExpiresAt = asString(payload?.focus_expires_at ?? payload?.focusExpiresAt)
+          const legacyGift = Boolean(payload?.legacy_gift ?? payload?.legacyGift)
+          const copy = absystemContent.TRIAL_LIFECYCLE.trialExpired({
+            focusExpiresAt,
+            legacyGift,
+          })
+
+          const introLines = [
+            ...(copy.quote ? [`ЦИТАТА: ${copy.quote}`] : []),
+            ...copy.lines,
+          ].join('\n')
+
+          return {
+            title: copy.title,
+            body: [...copy.lines, copy.nextStep].filter(Boolean).join('\n'),
+            telegramHtml: buildTelegramCard({
+              title: copy.title,
+              intro: introLines,
+              note: copy.nextStep,
+            }),
+            ctaText: copy.cta ?? undefined,
+            ctaActions: renewalUrl && copy.cta
+              ? [{ text: copy.cta, url: renewalUrl, mode: 'url' }]
+              : undefined,
+          }
+        }
         const content = buildNotificationContent(NotificationEvent.SUBSCRIPTION_EXPIRED, {
           userName: firstName,
           renewalUrl,
@@ -2153,6 +2243,42 @@ export class NotificationService {
       }
       case NotificationEvent.POST_TRIAL_REPORTS:
       {
+        const trialLifecycleMode = asString(payload?.trial_lifecycle_mode ?? payload?.trialLifecycleMode)
+        if (trialLifecycleMode === 'legacy_gift_day8' || trialLifecycleMode === 'regular_day8') {
+          const weeklyReportSummary = asString(payload?.weekly_report_summary ?? payload?.weeklyReportSummary)
+          const daysRemaining = Number(payload?.days_remaining ?? payload?.daysRemaining ?? 0)
+          const focusExpiresAt = asString(payload?.focus_expires_at ?? payload?.focusExpiresAt)
+          const renewalUrl = asString(payload?.renewal_url ?? payload?.renewalUrl ?? payload?.payment_url ?? payload?.paymentUrl) ?? null
+          const copy = trialLifecycleMode === 'legacy_gift_day8'
+            ? absystemContent.TRIAL_LIFECYCLE.legacyGiftDay8({
+                weeklyReportSummary,
+                daysRemaining,
+                focusExpiresAt: focusExpiresAt ?? '',
+              })
+            : absystemContent.TRIAL_LIFECYCLE.regularDay8({
+                weeklyReportSummary,
+                daysRemaining,
+              })
+
+          const introLines = [
+            ...(copy.quote ? [`ЦИТАТА: ${copy.quote}`] : []),
+            ...copy.lines,
+          ].join('\n')
+
+          return {
+            title: copy.title,
+            body: [...copy.lines, copy.nextStep].filter(Boolean).join('\n'),
+            telegramHtml: buildTelegramCard({
+              title: copy.title,
+              intro: introLines,
+              note: copy.nextStep,
+            }),
+            ctaText: copy.cta ?? undefined,
+            ctaActions: renewalUrl && copy.cta
+              ? [{ text: copy.cta, url: renewalUrl, mode: 'url' }]
+              : undefined,
+          }
+        }
         const reportsWebUrl = await buildWebFlowUrl({
           userId: user.id,
           path: '/dashboard/ai-mentor?section=reports',

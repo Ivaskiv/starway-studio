@@ -17,7 +17,7 @@ export function useMasterPanelFunnels({
   funnels,
   selectedFunnelId,
 }: {
-  activeTab: 'prompts' | 'notifications' | 'funnels'
+  activeTab: 'prompts' | 'notifications' | 'funnels' | 'agents'
   funnels: FunnelEntity[]
   selectedFunnelId: string | null
 }) {

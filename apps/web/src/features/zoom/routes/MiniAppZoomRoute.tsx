@@ -553,7 +553,7 @@ export function MiniAppZoomWeekPanel() {
                 type="button"
                 onClick={() => void handleOpenAccess()}
                 disabled={isOpeningAccessPayment}
-                className="mt-3 rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] transition hover:opacity-95 disabled:opacity-60"
+                className="mt-3 rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-2 text-sm font-semibold text-[var(--on-accent)] transition hover:opacity-95 disabled:opacity-60"
               >
                 {isOpeningAccessPayment ? 'Відкриваємо оплату...' : 'Отримати доступ'}
               </button>

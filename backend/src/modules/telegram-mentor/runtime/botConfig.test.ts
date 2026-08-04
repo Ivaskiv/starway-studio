@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   describeLocalTelegramConsumerDisableReason,
+  readExpectedTelegramBotUsername,
   readTelegramBotConfig,
   requireTelegramBotConfig,
   resolveLocalTelegramConsumerState,
@@ -83,6 +84,15 @@ describe('telegram bot config', () => {
       enabled: true,
       reason: null,
     })
+    expect(readExpectedTelegramBotUsername()).toBe('local_bot')
+  })
+
+  it('uses the configured production username as the expected bot identity', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-token'
+    process.env.TELEGRAM_BOT_USERNAME = 'prod_bot'
+
+    expect(readExpectedTelegramBotUsername()).toBe('prod_bot')
   })
 
   it('disables the local telegram consumer when the test token is missing', () => {

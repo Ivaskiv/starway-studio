@@ -25,6 +25,9 @@ type AccessUserSnapshot = {
   currentStep: string | null
   trialStartsAt: Date | null
   trialEndsAt: Date | null
+  absystemAiActive: boolean
+  absystemTrialExpiresAt: Date | null
+  absystemGrantSource: 'post_zoom' | 'timeout' | 'direct_purchase' | 'manual' | null
   telegramEnabled: boolean
   telegramUserId: string | null
   telegramChatId: string | null
@@ -139,6 +142,19 @@ function buildProductAccessItems(assignments: ProductAccessAssignment[]): Access
   return items
 }
 
+function hasActiveAbsystemAiEntitlement(
+  user: Pick<
+    AccessUserSnapshot,
+    'absystemAiActive' | 'absystemTrialExpiresAt'
+  >,
+  now: Date,
+) {
+  return user.absystemAiActive || (
+    !!user.absystemTrialExpiresAt &&
+    user.absystemTrialExpiresAt > now
+  )
+}
+
 export type AbsystemTrialActivationResult =
   | 'ACTIVATED'
   | 'ALREADY_ACTIVE'
@@ -146,8 +162,50 @@ export type AbsystemTrialActivationResult =
   | 'NO_CHANGE'
   | 'USER_NOT_FOUND'
 
+export const LEGACY_FOCUS_GIFT_MANUAL_NOTE = 'Legacy Gift Focus until 20.07.2027'
+
 function addAbsystemTrialDays(attendedAt: Date) {
   return new Date(attendedAt.getTime() + 30 * 24 * 60 * 60 * 1000)
+}
+
+export async function resolveLegacyGiftFocus(params: {
+  userId: string
+  now?: Date
+  tx?: Prisma.TransactionClient
+}): Promise<{
+  isLegacyGift: boolean
+  focusExpiresAt: Date | null
+}> {
+  const { userId, tx } = params
+  const now = params.now ?? new Date()
+  const db = tx ?? prisma
+
+  const focusSubscription = await db.productSubscription.findFirst({
+    where: {
+      userId,
+      product: {
+        code: { equals: 'focus', mode: 'insensitive' },
+      },
+      status: { in: ['active', 'paid', 'trial'] },
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gte: now } },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      expiresAt: true,
+      manuallyGrantedBy: true,
+      manualGrantNote: true,
+    },
+  })
+
+  return {
+    isLegacyGift: focusSubscription?.manuallyGrantedBy === 'admin_manual'
+      && focusSubscription?.manualGrantNote === LEGACY_FOCUS_GIFT_MANUAL_NOTE
+      && !!focusSubscription.expiresAt,
+    focusExpiresAt: focusSubscription?.expiresAt ?? null,
+  }
 }
 
 export async function activateAbsystemTrialAfterFirstZoom(params: {
@@ -234,7 +292,6 @@ export async function activateAbsystemTrialAfterFirstZoom(params: {
   }
 }
 
-
 async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot | null> {
   const baseSelect = {
     id: true,
@@ -243,6 +300,9 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
         currentStep: true,
     trialStartsAt: true,
     trialEndsAt: true,
+    absystemAiActive: true,
+    absystemTrialExpiresAt: true,
+    absystemGrantSource: true,
     telegramEnabled: true,
     telegramUserId: true,
     telegramChatId: true,
@@ -335,6 +395,9 @@ async function getAccessUserSnapshot(userId: string): Promise<AccessUserSnapshot
     currentStep: user.currentStep ?? null,
     trialStartsAt: user.trialStartsAt ?? null,
     trialEndsAt: user.trialEndsAt ?? null,
+    absystemAiActive: user.absystemAiActive ?? false,
+    absystemTrialExpiresAt: user.absystemTrialExpiresAt ?? null,
+    absystemGrantSource: user.absystemGrantSource ?? null,
     telegramEnabled: user.notificationPreference?.telegramEnabled ?? user.telegramEnabled ?? true,
     telegramUserId: user.telegramUserId ?? null,
     telegramChatId: user.telegramChatId ?? null,
@@ -431,8 +494,14 @@ export async function getAccessControlState(userId: string): Promise<AccessContr
     subscription?.status === 'TRIAL' &&
     !!subscription.trialEndsAt &&
     subscription.trialEndsAt > now
+  const hasAbsystemAiEntitlement = hasActiveAbsystemAiEntitlement(user, now)
   const isUserTrialActive = trial.isActive
-  const hasSubscription = isSuperAdmin || isPaidActive || isSubscriptionTrialActive || isUserTrialActive
+  const hasSubscription =
+    isSuperAdmin ||
+    isPaidActive ||
+    isSubscriptionTrialActive ||
+    isUserTrialActive ||
+    hasAbsystemAiEntitlement
   const hasLeadMagnet = Boolean(
     leadEnrollment?.completedAt ||
     ((leadEnrollment?.progress as { completed?: unknown } | null | undefined)?.completed === true),
@@ -801,9 +870,16 @@ export async function getUserSystemState(userId: string): Promise<UserSystemStat
   const access      = await getUserAccess(userId, accessControl)
   const trialStatus = await getTrialStatus(userId)
   const zoomAccess = await getUserAccessState(userId)
+  const user = await getAccessUserSnapshot(userId)
+  if (!user) {
+    throw new Error('User not found')
+  }
+  const hasAbsystemAiEntitlement = hasActiveAbsystemAiEntitlement(user, new Date())
   console.log('[ZOOM_ACCESS_DEBUG]', {
     userId,
     zoomAccess,
+    hasAbsystemAiEntitlement,
+    absystemGrantSource: user.absystemGrantSource,
   })
   const now         = new Date()
   const isSuperAdmin = String(access.role).toUpperCase() === 'SUPERADMIN'

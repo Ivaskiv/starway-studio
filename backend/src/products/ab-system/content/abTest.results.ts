@@ -1,5 +1,6 @@
 //backend/src/products/ab-system/content/abTest.results.ts
 import type { TelegramButton } from '@/core/flow-builder/flowTemplates.js'
+import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import type { AbTestFollowupTimerId } from './abTest.followups.js'
 import type { AbTestAnswerKey } from './abTest.questions.js'
 import {
@@ -255,7 +256,7 @@ function buildDojimProofText(proofQuote: string): string {
 const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
   state: {
     message_key: 'TEST_RESULT_STATE',
-    msg1: '{firstName}, ось твій результат. Ти тримаєшся з останніх сил. Зараз навіть прості речі забирають більше сил ніж повинні. Тривога, втома, нічого не хочеться — але все одно намагаєшся.',
+    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.STATE.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.STATE.quote}`,
     msg1_story:
       'Я сама так жила. І знаю що скільки не намагайся з цього стану — воно не змінюється. Не тому що ти недостатньо стараєшся. А тому що неможливо кудись йти коли немає сил навіть почати.',
 
@@ -317,7 +318,7 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   goal: {
     message_key: 'TEST_RESULT_GOAL',
-    msg1: '{firstName}, ось твій результат. Ти хочеш змін — але куди саме іти, не відчуваєш. Це не відсутність бажань. Це момент коли власний голос перекрили чужі очікування або старі цілі що вже не твої.',
+    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.GOAL.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.GOAL.quote}`,
     msg1_story:
       'Насправді ти знаєш чого хочеш. Просто ще не дозволила собі це почути. Я теж так жила — поки не навчилась чути себе а не чужі голоси навколо.',
 
@@ -379,7 +380,7 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   choice: {
     message_key: 'TEST_RESULT_CHOICE',
-    msg1: '{firstName}, ось твій результат. Варіанти є. Ти думаєш, порівнюєш, зважуєш — і все одно не обираєш. Справа не у варіантах. Справа у страху що стоїть за ними.',
+    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.CHOICE.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.CHOICE.quote}`,
     msg1_story:
       'Я теж довго кружляла в одних і тих самих варіантах. Поки не знайшла де насправді затик. Як тільки побачила що саме лякає — вибір стався сам.',
 
@@ -441,7 +442,7 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   decision: {
     message_key: 'TEST_RESULT_DECISION',
-    msg1: '{firstName}, ось твій результат. Ти вже вирішила. Давно. Але щоразу в останній момент щось зупиняє. Це не слабкість і не відсутність волі.',
+    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.DECISION.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.DECISION.quote}`,
     msg1_story:
       '«Я все розумію але не роблю» — це була я. Роками. Рішення без внутрішнього «так» не тримається — воно зупиняється перед першим кроком. І знаю як це проходить.',
 
@@ -503,7 +504,7 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   action: {
     message_key: 'TEST_RESULT_ACTION',
-    msg1: '{firstName}, ось твій результат. Ти робиш. Багато і постійно. Але відчуття що крутишся на місці — не минає. Більше дій — не вихід.',
+    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.ACTION.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.ACTION.quote}`,
     msg1_story:
       'Одна точна дія дає більше ніж десять хаотичних. Я сама так кружляла — поки не зрозуміла де справжня точка входу.',
 
@@ -590,14 +591,21 @@ function buildAbTestResultBlocks(
   resultKey: AbTestResultKey,
   result: AbTestResultDefinition
 ): NonNullable<AbTestResultDefinition['blocks']> {
+  const snapshotCopyByKey = {
+    state: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.STATE,
+    goal: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.GOAL,
+    choice: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.CHOICE,
+    decision: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.DECISION,
+    action: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.ACTION,
+  } as const
+  const snapshotCopy = snapshotCopyByKey[resultKey]
   const reviewHeader = extractReviewHeader(result.msg2_review)
   const reviewQuote = extractReviewQuote(result.msg2_review)
   const screenshotKey = resultKeyToScreenshotKey(resultKey)
 
   return {
     intro: [
-      telegramBlock.text(result.msg1),
-      telegramBlock.text(result.msg1_story),
+      telegramBlock.text(`${snapshotCopy.title}\n${snapshotCopy.quote}`),
       telegramBlock.text(AB_TEST_RESULT_BRIDGE_TEXT),
       telegramBlock.text(AB_TEST_RESULT_NADYA_INTRO_TEXT),
       telegramBlock.audio(AB_TEST_AUDIO_URL),

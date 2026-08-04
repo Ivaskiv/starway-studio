@@ -4,10 +4,11 @@ export const AB_TEST_START_BUTTON_TEXT = 'ПОЧАТИ ТЕСТ'
 export const AB_TEST_CONTINUE_BUTTON_TEXT = 'ПРОДОВЖИТИ ТЕСТ'
 export const AB_TEST_CONTINUE_SHORT_BUTTON_TEXT = 'ПРОДОВЖИТИ'
 export const AB_TEST_SHOW_RESULT_BUTTON_TEXT = 'ПОКАЗАТИ РЕЗУЛЬТАТ'
-export const AB_TEST_MY_RESULT_BUTTON_TEXT = 'МІЙ РЕЗУЛЬТАТ'
+export const AB_TEST_MY_RESULT_BUTTON_TEXT = '✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ'
 export const AB_TEST_RESTART_BUTTON_TEXT = 'ПОЧАТИ ТЕСТ ЗАНОВО'
-export const AB_TEST_RETAKE_BUTTON_TEXT = 'ПРОЙТИ ТЕСТ ЗАНОВО'
+export const AB_TEST_RETAKE_BUTTON_TEXT = '🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ'
 export const AB_TEST_OPEN_FOCUS_BUTTON_TEXT = 'ХОЧУ У ФОКУС'
+export const AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT = '📅 ОБРАТИ ZOOM'
 export const AB_TEST_PAY_1M_BUTTON_TEXT = 'ОПЛАТИТИ 1 МІСЯЦЬ'
 export const AB_TEST_PAY_3M_BUTTON_TEXT = 'ОПЛАТИТИ 3 МІСЯЦІ'
 export const AB_TEST_JOIN_CHANNEL_BUTTON_TEXT = 'ПЕРЕЙТИ В КАНАЛ'
@@ -297,7 +298,7 @@ export const AB_TEST_FOCUS_BENEFITS_TEXT =
 export const AB_TEST_FOCUS_INCLUDED_TEXT =
   `**${AB_TEST_FOCUS_INCLUDED_HEADER}**\n\n${AB_TEST_FOCUS_INCLUDED_LINES.join('\n')}`
 export const AB_TEST_FOCUS_PRICING_TEXT =
-  `Почати можна з одного місяця участі.\n\nЗа цей час ти проходиш **4 живі практики** і можеш розібрати **кілька своїх ситуацій** через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n✅ **100% повернення грошей за 7 днів** — якщо результату немає\n\n${AB_TEST_FOCUS_CTA_MARKER}`
+  `**${AB_TEST_FOCUS_PRICE_1M}**\n4 живі Zoom-практики, підтримка між зустрічами та розбір твоїх ситуацій через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n**7 днів гарантії повернення коштів**, якщо формат тобі не підійде.\n\n**Обери, що хочеш зробити далі:**`
 export const AB_TEST_FOCUS_PROOF_PRICING_TEXT =
   `Почати можна з **одного місяця**. Це **15 євро** — менше ніж одна консультація.\n\n**${AB_TEST_FOCUS_TITLE}**\n${AB_TEST_FOCUS_PRICE_SUMMARY}\n\n${AB_TEST_FOCUS_PAY_CTA_MARKER}`
 export const AB_TEST_FOCUS_TEST_DRIVE_PITCH_BLOCKS = [

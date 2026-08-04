@@ -278,11 +278,15 @@ export function validateAbTestProgress(progress: AbTestProgress): AbTestProgress
   const reasons: string[] = []
   const totalQuestions = AB_TEST_QUESTION_ORDER.length
   const answersCount = progress.answers.length
+  const hasOpenedQuestion =
+    progress.stage === 'S2_TEST_QUESTIONS' &&
+    Boolean(progress.current_question_id) &&
+    answersCount === 0
 
-  if (progress.status === 'active' && answersCount === 0) {
+  if (progress.status === 'active' && answersCount === 0 && !hasOpenedQuestion) {
     reasons.push('active_without_answers')
   }
-  if (progress.stage === 'S2_TEST_QUESTIONS' && answersCount === 0) {
+  if (progress.stage === 'S2_TEST_QUESTIONS' && answersCount === 0 && !hasOpenedQuestion) {
     reasons.push('question_stage_without_answers')
   }
   if (progress.status === 'completed' && !progress.result_key) {
@@ -296,7 +300,7 @@ export function validateAbTestProgress(progress: AbTestProgress): AbTestProgress
   const resumable =
     valid &&
     progress.status === 'active' &&
-    answersCount > 0 &&
+    (answersCount > 0 || hasOpenedQuestion) &&
     progress.stage === 'S2_TEST_QUESTIONS'
 
   return { valid, resumable, reasons }

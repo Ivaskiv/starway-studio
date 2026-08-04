@@ -9,6 +9,8 @@ import { buildNotificationContent } from '../../lib/notifications/templates.js'
 import { processScheduledNudges } from '../../modules/telegram-mentor/services/nudge.service.js'
 import { runWeeklyAnalysis } from '../../modules/ai-mentor/weekly-analysis/service.js'
 import { runMonthlyAnalysis } from '../../modules/web-map/web-map.service.js'
+import { buildEcosystemPaymentCheckoutUrl } from '../../modules/subscriptions/payments/business.js'
+import { resolveLegacyGiftFocus } from '../../modules/access/service.js'
 import { syncLifecycleForUser } from '../../modules/flow-control/service.js'
 import { resolveDisplayName } from '../../modules/users/runtime/resolveUserLifecycle.js'
 import { NotificationEvent } from '../notifications/NotificationEvent.js'
@@ -16,6 +18,248 @@ import { resolvePausedMentorContext } from '../notifications/mentorLifecycle.js'
 import { notificationService } from '../notifications/NotificationService.js'
 import { notificationRecordService } from '../notifications/services/NotificationRecordService.js'
 import { ensureNotificationPreferenceTableAvailability, getEndOfUtcDay, getMinutesInTimezone, getStartOfUtcDay, hasMentorNotificationAccess, isWithinScheduledMinute } from './common.js'
+
+const ABSYSTEM_TRIAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000
+function ceilDaysUntil(target: Date, now: Date) {
+  return Math.ceil((target.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+}
+
+function resolveAbsystemTrialStartsAt(expiresAt: Date) {
+  return new Date(expiresAt.getTime() - ABSYSTEM_TRIAL_DURATION_MS)
+}
+
+function hasPaidAbsystemSubscription(
+  subscriptions: Array<{
+    status: string
+    expiresAt: Date | null
+    product: { code: string }
+  }>,
+  now: Date,
+) {
+  return subscriptions.some((subscription) => {
+    const code = String(subscription.product.code ?? '').trim().toLowerCase()
+    const status = String(subscription.status ?? '').trim().toLowerCase()
+    if (!['absystem', 'absystem_ai'].includes(code)) return false
+    if (!['active', 'paid'].includes(status)) return false
+    return !subscription.expiresAt || subscription.expiresAt > now
+  })
+}
+
+async function processAbsystemTrialLifecycleNotifications(now: Date, scheduledUserIds: string[]) {
+  if (scheduledUserIds.length === 0) return
+
+  const users = await prisma.user.findMany({
+    where: {
+      id: { in: scheduledUserIds },
+      deletedAt: null,
+      absystemTrialExpiresAt: { not: null },
+      absystemGrantSource: 'post_zoom',
+      NOT: { email: { startsWith: 'telegram-guest-' } },
+    },
+    select: {
+      id: true,
+      absystemTrialExpiresAt: true,
+      notificationPreference: {
+        select: {
+          telegramEnabled: true,
+          weeklySummaryEnabled: true,
+          subscriptionEnabled: true,
+        },
+      },
+      weeklyReports: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          summaryText: true,
+        },
+      },
+      productSubscriptions: {
+        where: {
+          product: {
+            code: { in: ['focus', 'absystem', 'absystem_ai'] },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          status: true,
+          expiresAt: true,
+          manuallyGrantedBy: true,
+          manualGrantNote: true,
+          product: {
+            select: {
+              code: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  for (const user of users) {
+    const trialExpiresAt = user.absystemTrialExpiresAt
+    if (!trialExpiresAt) continue
+
+    const trialStartsAt = resolveAbsystemTrialStartsAt(trialExpiresAt)
+    const day8Start = new Date(trialStartsAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const day8End = new Date(day8Start.getTime() + 24 * 60 * 60 * 1000)
+    const daysRemaining = ceilDaysUntil(trialExpiresAt, now)
+    const paidAbsystem = hasPaidAbsystemSubscription(user.productSubscriptions, now)
+    const { isLegacyGift: legacyGift, focusExpiresAt: legacyGiftFocusExpiresAt } = await resolveLegacyGiftFocus({
+      userId: user.id,
+      now,
+    })
+    const focusExpiresAt = legacyGiftFocusExpiresAt?.toISOString() ?? null
+    const summaryText = user.weeklyReports[0]?.summaryText?.trim() || null
+
+    if (
+      user.notificationPreference?.telegramEnabled
+      && user.notificationPreference.weeklySummaryEnabled
+      && !paidAbsystem
+      && trialExpiresAt > now
+      && now >= day8Start
+      && now < day8End
+      && await hasMentorNotificationAccess(user.id)
+    ) {
+      const renewalUrl = legacyGift
+        ? null
+        : await buildEcosystemPaymentCheckoutUrl('absystem_ai', '1month_upgrade', user.id)
+
+      await notificationService.sendLifecycleTelegramNotification({
+        event: NotificationEvent.POST_TRIAL_REPORTS,
+        userId: user.id,
+        templateKey: `AB_TRIAL_DAY8:${user.id}:${trialExpiresAt.toISOString()}`,
+        duplicateWindowStart: trialStartsAt,
+        payload: {
+          trial_lifecycle_mode: legacyGift ? 'legacy_gift_day8' : 'regular_day8',
+          weekly_report_summary: summaryText,
+          days_remaining: daysRemaining,
+          focus_expires_at: focusExpiresAt,
+          renewal_url: renewalUrl,
+          legacy_gift: legacyGift,
+        },
+      }).catch((error) => {
+        console.error('[scheduler] failed to send absystem day8 notification', {
+          userId: user.id,
+          event: 'AB_TRIAL_DAY8',
+          error: error instanceof Error ? error.message : 'unknown_error',
+        })
+      })
+    }
+
+    if (
+      legacyGift
+      && user.notificationPreference?.telegramEnabled
+      && user.notificationPreference.subscriptionEnabled
+      && !paidAbsystem
+      && trialExpiresAt > now
+      && daysRemaining <= 5
+      && daysRemaining > 0
+    ) {
+      const renewalUrl = await buildEcosystemPaymentCheckoutUrl('absystem_ai', '1month_upgrade', user.id)
+
+      await notificationService.sendLifecycleTelegramNotification({
+        event: NotificationEvent.SUBSCRIPTION_EXPIRING,
+        userId: user.id,
+        templateKey: `AB_TRIAL_LEGACY_EXPIRING_5D:${user.id}:${trialExpiresAt.toISOString()}`,
+        duplicateWindowStart: trialStartsAt,
+        payload: {
+          trial_lifecycle_mode: 'legacy_gift_pre_expiry',
+          days_remaining: daysRemaining,
+          focus_expires_at: focusExpiresAt,
+          renewal_url: renewalUrl,
+          legacy_gift: true,
+        },
+      }).catch((error) => {
+        console.error('[scheduler] failed to send absystem pre-expiry notification', {
+          userId: user.id,
+          event: 'AB_TRIAL_EXPIRING_5D',
+          error: error instanceof Error ? error.message : 'unknown_error',
+        })
+      })
+    }
+  }
+}
+
+async function processExpiredAbsystemTrials(now: Date) {
+  const users = await prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      absystemTrialExpiresAt: { not: null, lte: now },
+      absystemGrantSource: 'post_zoom',
+      NOT: { email: { startsWith: 'telegram-guest-' } },
+    },
+    select: {
+      id: true,
+      absystemTrialExpiresAt: true,
+      notificationPreference: {
+        select: {
+          telegramEnabled: true,
+          subscriptionEnabled: true,
+          timezone: true,
+        },
+      },
+      productSubscriptions: {
+        where: {
+          product: {
+            code: { in: ['focus', 'absystem', 'absystem_ai'] },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          status: true,
+          expiresAt: true,
+          manuallyGrantedBy: true,
+          manualGrantNote: true,
+          product: {
+            select: {
+              code: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  for (const user of users) {
+    const preference = user.notificationPreference
+    const timezone = preference?.timezone ?? process.env.TZ ?? 'Europe/Kyiv'
+    if (!isWithinScheduledMinute(now, timezone, 8 * 60, 1)) continue
+
+    const trialExpiresAt = user.absystemTrialExpiresAt
+    if (!trialExpiresAt) continue
+
+    const paidAbsystem = hasPaidAbsystemSubscription(user.productSubscriptions, now)
+    if (paidAbsystem) continue
+
+    const { isLegacyGift: legacyGift, focusExpiresAt: legacyGiftFocusExpiresAt } = await resolveLegacyGiftFocus({
+      userId: user.id,
+      now,
+    })
+    const focusExpiresAt = legacyGiftFocusExpiresAt?.toISOString() ?? null
+    const renewalUrl = await buildEcosystemPaymentCheckoutUrl('absystem_ai', '1month_upgrade', user.id)
+
+    if (!preference?.telegramEnabled || !preference.subscriptionEnabled) continue
+
+    await notificationService.sendLifecycleTelegramNotification({
+      event: NotificationEvent.SUBSCRIPTION_EXPIRED,
+      userId: user.id,
+      templateKey: `AB_TRIAL_EXPIRED:${user.id}:${trialExpiresAt.toISOString()}`,
+      duplicateWindowStart: trialExpiresAt,
+      payload: {
+        trial_lifecycle_mode: 'trial_expired',
+        focus_expires_at: focusExpiresAt,
+        renewal_url: renewalUrl,
+        legacy_gift: legacyGift,
+      },
+    }).catch((error) => {
+      console.error('[scheduler] failed to send absystem expiry notification', {
+        userId: user.id,
+        event: 'AB_TRIAL_EXPIRED',
+        error: error instanceof Error ? error.message : 'unknown_error',
+      })
+    })
+  }
+}
 
 export async function markMissedDaysCron(): Promise<void> {
   const todayStart = getStartOfUtcDay()
@@ -194,6 +438,8 @@ export async function subscriptionExpiringCron(): Promise<void> {
       daysLeft,
     })
   }
+
+  await processAbsystemTrialLifecycleNotifications(now, scheduledUserIds)
 }
 
 export async function subscriptionExpiredCron(): Promise<void> {
@@ -251,6 +497,8 @@ export async function subscriptionExpiredCron(): Promise<void> {
       sessions: generated?.metrics.sessions ?? 0,
     })
   }
+
+  await processExpiredAbsystemTrials(now)
 }
 
 export async function microTaskReminderCron(): Promise<void> {

@@ -42,6 +42,14 @@ const REQUIRED_PLANNER_SECTIONS = ['planner', 'buttons', 'note', 'mode', 'topics
 
 let coachContentCatalogValidated = false
 
+function readCoachTelegramAccessId(): string {
+  return String(
+    process.env.COACH_TELEGRAM_ID
+    ?? process.env.TEST_COACH_MENTOR_TELEGRAM_ID
+    ?? '',
+  ).trim()
+}
+
 function maskTelegramToken(token: string | null | undefined): string | null {
   const normalized = String(token ?? '').trim()
   if (!normalized) return null
@@ -504,6 +512,7 @@ async function resolveCoachAccess(ctx: Context): Promise<CoachAccess | null> {
   const telegramUserId = ctx.from?.id ? String(ctx.from.id) : ''
   if (!telegramUserId) return null
 
+  const privilegedTelegramId = readCoachTelegramAccessId()
   const coach = await prisma.user.findFirst({
     where: {
       OR: [
@@ -513,6 +522,30 @@ async function resolveCoachAccess(ctx: Context): Promise<CoachAccess | null> {
     },
     select: { id: true, role: true, expertId: true },
   })
+
+  if (!coach && privilegedTelegramId === telegramUserId) {
+    const fallbackCoach = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { role: 'SUPERADMIN' },
+          { role: 'EXPERT' },
+        ],
+      },
+      orderBy: [
+        { role: 'desc' },
+        { createdAt: 'asc' },
+      ],
+      select: { id: true, role: true, expertId: true },
+    })
+
+    if (!fallbackCoach) return null
+    if (fallbackCoach.role !== 'EXPERT' && fallbackCoach.role !== 'SUPERADMIN') return null
+    return {
+      id: fallbackCoach.id,
+      role: fallbackCoach.role,
+      expertId: fallbackCoach.expertId ?? null,
+    }
+  }
 
   if (!coach) return null
   if (coach.role !== 'EXPERT' && coach.role !== 'SUPERADMIN') return null
@@ -1048,6 +1081,10 @@ async function handleCoachPanelAction(ctx: Context, action: string): Promise<boo
 
 export function registerCoachContentHandlers(telegramBot: Telegraf): void {
   validateCoachContentCatalog()
+
+  telegramBot.hears(/^(?:🎬\s*)?Контент$/iu, coachOnly, withCoachRuntimeProtection('menu:content', async (ctx) => {
+    await handleCoachContentCommand(ctx, 'WEEKLY_PLAN')
+  }))
 
   telegramBot.hears(/^\/planner(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:planner', async (ctx) => {
     const payload = getCommandPayload(ctx)

@@ -2,7 +2,7 @@
 export { default as zoomRouter } from './routes.js';
 export {
   expireZoomSwapRequestsCron,
-  generateZoomSessionsFromAvailabilityCron,
+  scanZoomAvailabilityAutoGenerate,
   syncZoomWeeklyChannelPostCron,
 } from './zoom.notifications.js';
 export { cancelStaleBattlesCron } from './battle.cron.js';

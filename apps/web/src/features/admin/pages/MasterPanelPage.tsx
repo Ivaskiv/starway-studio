@@ -27,6 +27,7 @@ import {
 import MasterPanelPromptTab from '@/features/admin/components/master-panel/MasterPanelPromptTab'
 import MasterPanelNotificationTab from '@/features/admin/components/master-panel/MasterPanelNotificationTab'
 import MasterPanelFunnelTab from '@/features/admin/components/master-panel/MasterPanelFunnelTab'
+import { AgentControlCenterTab } from '@/features/admin/components/agents/AgentControlCenterTab'
 import MasterPanelRightPanel, {
   type MasterPanelRightPanelCheck,
   type MasterPanelRightPanelDependency,
@@ -57,14 +58,19 @@ import {
   type MasterTab,
   type NotificationAnalysisRecord,
 } from '@/features/admin/components/master-panel/page/masterPanelPage.utils'
-import { DEFAULT_FUNNEL_SCREEN_TEMPLATES, RIGHT_PANEL } from '@/features/admin/components/master-panel/page/masterPanelPage.constants'
+import { RIGHT_PANEL } from '@/features/admin/components/master-panel/page/masterPanelPage.constants'
 import { useMasterPanelFunnels } from '@/features/admin/components/master-panel/page/useMasterPanelFunnels'
 import {
   buildCompatibilityPayload,
   buildMasterPanelRightPanelModel,
 } from '@/features/admin/components/master-panel/page/masterPanelRightPanel.model'
 
-const TABS: Array<{ id: MasterTab; label: string }> = [{ id: 'prompts', label: 'Промпти' }, { id: 'notifications', label: 'Сигнали' }, { id: 'funnels', label: 'Воронки' }]
+const TABS: Array<{ id: MasterTab; label: string }> = [
+  { id: 'prompts', label: 'Промпти' },
+  { id: 'notifications', label: 'Сигнали' },
+  { id: 'funnels', label: 'Воронки' },
+  { id: 'agents', label: 'Агенти' },
+]
 
 function getDefaultItemForTab(tab: MasterTab) {
   return getDefaultMasterPanelItem(tab)
@@ -295,35 +301,39 @@ export default function MasterPanelPage() {
     }
   }
 
-  const rightPanelModel = buildMasterPanelRightPanelModel({
-    activeTab,
-    activePromptItem,
-    activeNotificationItem,
-    compatibilityCheck,
-    compatibilityCheckState,
-    runningCompatibilityCheck,
-    canEditPrompts,
-    canEditNotifications,
-    canEditFunnels,
-    promptConnections,
-    notificationAnalysis,
-    funnelAnalysis,
-    selectedNotification,
-    selectedFunnelScreen,
-    selectedFunnelDraft,
-    selectedFunnelId,
-    sharedRightPanelItems,
-  })
+  const rightPanelModel = activeTab === 'agents'
+    ? null
+    : buildMasterPanelRightPanelModel({
+        activeTab,
+        activePromptItem,
+        activeNotificationItem,
+        compatibilityCheck,
+        compatibilityCheckState,
+        runningCompatibilityCheck,
+        canEditPrompts,
+        canEditNotifications,
+        canEditFunnels,
+        promptConnections,
+        notificationAnalysis,
+        funnelAnalysis,
+        selectedNotification,
+        selectedFunnelScreen,
+        selectedFunnelDraft,
+        selectedFunnelId,
+        sharedRightPanelItems,
+      })
 
   const rightPanelChecks: MasterPanelRightPanelCheck[] =
     activeTab === 'prompts' && !compatibilityCheck?.checks.length
       ? [...buildPromptPanelChecks(promptConnections)]
-      : rightPanelModel.checks
+      : rightPanelModel?.checks ?? []
 
-  const rightPanelTopAction = {
-    ...rightPanelModel.topAction,
-    onClick: () => void handleRunCompatibilityCheck(),
-  }
+  const rightPanelTopAction = rightPanelModel
+    ? {
+        ...rightPanelModel.topAction,
+        onClick: () => void handleRunCompatibilityCheck(),
+      }
+    : null
 
   const rightPanelLinkedAction =
     activeTab === 'notifications' && selectedNotification?.linkedPromptId
@@ -378,16 +388,15 @@ export default function MasterPanelPage() {
         )
       : null
 
-  const rightPanelFooterAction = {
-    ...rightPanelModel.footerAction,
-    onClick: () => void handleRunCompatibilityCheck(),
-  }
-
   const sidebarSections = useMemo(() => {
     if (activeTab === 'funnels') {
       return dynamicFunnelSidebarSections.length
         ? dynamicFunnelSidebarSections
         : MASTER_PANEL_SECTIONS.filter((section) => section.id === 'funnels')
+    }
+
+    if (activeTab === 'agents') {
+      return MASTER_PANEL_SECTIONS.filter((section) => section.id === 'agents')
     }
 
     return MASTER_PANEL_SECTIONS
@@ -420,7 +429,7 @@ export default function MasterPanelPage() {
 
   return (
     <div className="px-4 py-4 lg:px-6">
-      <div className="grid items-start gap-5 xl:grid-cols-[320px_minmax(0,1fr)_340px]">
+      <div className={`grid items-start gap-5 ${activeTab === 'agents' ? 'xl:grid-cols-[320px_minmax(0,1fr)]' : 'xl:grid-cols-[320px_minmax(0,1fr)_340px]'}`}>
         <MasterPanelSidebar
           activeTab={activeTab}
           tabs={TABS.map((tab) => ({ id: tab.id, label: tab.label }))}
@@ -473,24 +482,32 @@ export default function MasterPanelPage() {
               onAddScreen={addFunnelScreen}
             />
           ) : null}
+          {activeTab === 'agents' ? (
+            <AgentControlCenterTab canEdit={canEditPrompts} />
+          ) : null}
         </section>
 
-        <MasterPanelRightPanel
-          context={rightPanelModel.context}
-          title={rightPanelModel.title}
-          summary={rightPanelModel.summary}
-          hintDescription={rightPanelModel.hintDescription}
-          hintInstruction={rightPanelModel.hintInstruction}
-          supplementalContent={rightPanelSupplementalContent}
-          topAction={rightPanelTopAction}
-          linkedAction={rightPanelLinkedAction}
-          dependencies={rightPanelModel.dependencies}
-          warnings={rightPanelModel.warnings}
-          checks={rightPanelChecks}
-          checksState={rightPanelModel.checksState}
-          recommendation={rightPanelModel.recommendation}
-          footerAction={rightPanelFooterAction}
-        />
+        {rightPanelModel ? (
+          <MasterPanelRightPanel
+            context={rightPanelModel.context}
+            title={rightPanelModel.title}
+            summary={rightPanelModel.summary}
+            hintDescription={rightPanelModel.hintDescription}
+            hintInstruction={rightPanelModel.hintInstruction}
+            supplementalContent={rightPanelSupplementalContent}
+            topAction={rightPanelTopAction ?? undefined}
+            linkedAction={rightPanelLinkedAction}
+            dependencies={rightPanelModel.dependencies}
+            warnings={rightPanelModel.warnings}
+            checks={rightPanelChecks}
+            checksState={rightPanelModel.checksState}
+            recommendation={rightPanelModel.recommendation}
+            footerAction={{
+              ...rightPanelModel.footerAction,
+              onClick: () => void handleRunCompatibilityCheck(),
+            }}
+          />
+        ) : null}
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-export type MasterPanelTab = 'prompts' | 'notifications' | 'funnels'
+export type MasterPanelTab = 'prompts' | 'notifications' | 'funnels' | 'agents'
 export type MasterPanelItemKind = 'prompt' | 'notification' | 'funnel'
 
 export interface MasterPanelSidebarItem {
@@ -199,6 +199,20 @@ export const MASTER_PANEL_SECTIONS: MasterPanelSidebarSection[] = [
         hint: 'Сценарії для reels',
         promptName: 'reels_script',
         aliases: ['reels script', 'reels', 'script'],
+      },
+    ],
+  },
+  {
+    id: 'agents',
+    label: 'Агенти',
+    items: [
+      {
+        id: 'agents.overview',
+        tab: 'agents',
+        kind: 'prompt',
+        label: 'Карта агентів',
+        tag: 'AI',
+        hint: 'Блок-схема, prompt review і AI-аналіз для всіх агентів',
       },
     ],
   },

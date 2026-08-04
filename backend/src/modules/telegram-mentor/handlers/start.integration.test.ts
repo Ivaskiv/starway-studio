@@ -87,6 +87,7 @@ vi.mock('@/products/ab-system/telegram/abTest.progress.js', () => ({
 }))
 
 import { handleStart } from './start.js'
+import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 
 function makeFakeCtx(overrides: Partial<{
   chatId: number
@@ -159,6 +160,8 @@ describe('handleStart — targeted home screen routing', () => {
     const [, , , text, options] = mockPlanMessage.mock.calls[0]
     expect(text).toContain('Твій <b>результат</b> уже готовий')
     const flat = JSON.stringify(options)
+    expect(flat).toMatch(/✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
     expect(flat).toMatch(/ab_test:show_result/)
     expect(flat).toMatch(/ab_test:restart/)
     expect(flat).not.toMatch(/open_focus_payment/)
@@ -223,11 +226,12 @@ describe('handleStart — targeted home screen routing', () => {
 
     expect(reply).not.toHaveBeenCalled()
     const [, , , text, options] = mockPlanMessage.mock.calls[0]
-    expect(text).toContain('Твій доступ до ФОКУСУ активний до 15 листопада 2026')
+    expect(text).toContain('Твій доступ до ФОКУСУ активний до <b>15 листопада 2026')
     expect(text).toContain('Ти ще не записана.')
     const flat = JSON.stringify(options)
     expect(flat).toMatch(/ЗАПИСАТИСЯ/)
-    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
     expect(flat).toMatch(/КАНАЛ ФОКУСУ/)
   })
 
@@ -280,5 +284,34 @@ describe('handleStart — targeted home screen routing', () => {
         data: expect.objectContaining({ lifecycleState: 'TEST_NOT_STARTED' }),
       }),
     )
+  })
+
+  it('creates a new Telegram user only once and ignores the duplicate /start delivery for the same update', async () => {
+    mockResolveLinkedUserId.mockResolvedValue(null)
+    vi.mocked(resolveOrCreateUser).mockResolvedValue({
+      created: true,
+      user: { id: 'user-new-1' },
+    } as never)
+    mockFindUniqueOrThrow.mockResolvedValue({
+      id: 'user-new-1',
+      role: 'USER',
+      activeRole: 'USER',
+      lifecycleState: 'NEW_USER',
+      testStartedAt: null,
+      testCompletedAt: null,
+      offerShownAt: null,
+      testResultType: null,
+      updatedAt: new Date('2026-07-31T10:00:00Z'),
+      firstName: 'Нова',
+    })
+
+    const { ctx } = makeFakeCtx({ chatId: 777, fromId: 777, updateId: 1777 })
+
+    await handleStart(ctx)
+    await handleStart(ctx)
+
+    expect(resolveOrCreateUser).toHaveBeenCalledTimes(1)
+    expect(mockFindUniqueOrThrow).toHaveBeenCalledTimes(1)
+    expect(mockPlanMessage).toHaveBeenCalledTimes(1)
   })
 })

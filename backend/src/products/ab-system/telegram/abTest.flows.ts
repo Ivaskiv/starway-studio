@@ -66,7 +66,7 @@ import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/foc
 import { resendFocusAccessTelegramMessage } from '@/modules/subscriptions/payments/callback.notifications.js'
 import { alertCoachAboutPaymentIssue } from '@/modules/subscriptions/payments/coachAlert.service.js'
 import { findRelevantFocusCheckoutSession } from '@/modules/subscriptions/payments/coachAlert.service.js'
-import { coachBot } from '../../../lib/telegram.js'
+import { coachBot, sendOpsTelegramMessage } from '../../../lib/telegram.js'
 import { trackEvent } from '@/modules/events/service.js'
 import {
   planMessage,
@@ -82,6 +82,49 @@ import {
   zoomSection,
 } from '../../../modules/telegram-mentor/handlers/abTest.start.js'
 import { getDevTestPaymentButton } from '../../../modules/telegram-mentor/keyboards.js'
+
+const FOCUS_PAYMENT_EVIDENCE_ACK_MSG =
+  'Дякую. Чек і деталі платежу передано в STARWAY OPS.\n\nПовернемося з відповіддю після перевірки транзакції.'
+
+function resolveOpsChatId(): string {
+  const raw = String(
+    process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? ''
+  ).trim()
+  if (!raw) return ''
+  if (raw.startsWith('-')) return raw
+  if (/^\d{10,}$/.test(raw)) return `-100${raw}`
+  return raw
+}
+
+function buildFocusPaymentEvidenceIntro(params: {
+  userId: string
+  telegramId: string
+  orderReference: string
+  amount: number
+  evidenceType: 'text' | 'photo' | 'document'
+  text?: string
+}): string {
+  return [
+    'ЧЕК ВІД КОРИСТУВАЧА',
+    `User ID: ${params.userId}`,
+    `Telegram ID: ${params.telegramId || 'невідомо'}`,
+    `Order: ${params.orderReference}`,
+    `Сума: ${params.amount} грн`,
+    `Тип: ${params.evidenceType}`,
+    params.text ? `Коментар: ${params.text}` : null,
+  ].filter(Boolean).join('\n')
+}
+
+async function hasPendingFocusPaymentEvidence(
+  userId: string,
+  chatId: string,
+): Promise<boolean> {
+  const session = await getSession(chatId)
+  return Boolean(
+    session?.userId === userId &&
+    session.data?.paymentIssueAwaitingEvidence === true,
+  )
+}
 
 // ============================================================================
 // EMAIL CAPTURE
@@ -280,7 +323,6 @@ export async function resolveFocusShortcutCallback(
   const { handleStatus } = await import('../../../modules/telegram-mentor/handlers/status.js')
   const { handleAIMentor } = await import('../../../modules/telegram-mentor/handlers/aiMentor.js')
   const { sendStateMenu } = await import('../../../modules/telegram-mentor/handlers/start.menu.js')
-  const { handleStart } = await import('../../../modules/telegram-mentor/handlers/start.js')
   const { deactivateCallbackMarkup } = await import('./abTest.callback.js')
 
   if (action === 'open_focus_info') {
@@ -291,13 +333,6 @@ export async function resolveFocusShortcutCallback(
     await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
     await handleStatus(ctx)
-    return true
-  }
-
-  if (action === 'focus:menu') {
-    await deactivateCallbackMarkup(ctx)
-    await ctx.answerCbQuery().catch(() => null)
-    await handleStart(ctx as never)
     return true
   }
 
@@ -576,13 +611,23 @@ export async function handleFocusPaymentAction(
 
   let url1m: string
   let url3m: string
+  let trialZoomUrl: string | null = null
   try {
-    const [session1m, session3m] = await Promise.all([
+    const [session1m, session3m, trialZoomSession] = await Promise.all([
       buildEcosystemPaymentCheckoutSession('focus', '1month', resolvedUserId, 'telegram'),
       buildEcosystemPaymentCheckoutSession('focus', '3month', resolvedUserId, 'telegram'),
+      buildEcosystemPaymentCheckoutSession('trial_zoom', 'single', resolvedUserId, 'telegram')
+        .catch((error) => {
+          if (error instanceof Error && error.message === 'TRIAL_ZOOM_ALREADY_USED') {
+            console.info('[FOCUS_PAY] trial_zoom_already_used', { userId: resolvedUserId })
+            return null
+          }
+          throw error
+        }),
     ])
     url1m = session1m.checkoutUrl
     url3m = session3m.checkoutUrl
+    trialZoomUrl = trialZoomSession?.checkoutUrl ?? null
   } catch (error) {
     console.error('[FOCUS_PAY] dynamic_checkout_failed', error)
     await ctx.answerCbQuery('Не вдалося відкрити ФОКУС. Спробуй ще раз.').catch(() => null)
@@ -628,6 +673,28 @@ export async function handleFocusPaymentAction(
   const testPaymentButton = isTestPaymentEnabled()
     ? getDevTestPaymentButton()
     : null
+  const paymentInlineKeyboard = [
+    [{ text: cta1m, url: url1m }],
+    [{ text: cta3m, url: url3m }],
+    ...(trialZoomUrl
+      ? [[{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: trialZoomUrl }]]
+      : []),
+    ...(testPaymentButton ? [[testPaymentButton]] : []),
+    [
+      {
+        text: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ',
+        callback_data: 'focus:payment_issue',
+      },
+    ],
+  ]
+  console.info('[FOCUS_PAY_RENDER_TRACE]', {
+    userId: resolvedUserId,
+    chatId: String(chatId),
+    trialZoomUrl,
+    hasTrialZoomRow: Boolean(trialZoomUrl),
+    hasTestPaymentButton: Boolean(testPaymentButton),
+    inlineKeyboard: paymentInlineKeyboard,
+  })
   try {
     await sendTelegramContentChunk(
       ctx,
@@ -636,17 +703,7 @@ export async function handleFocusPaymentAction(
       paymentBlocksToSend,
       {
         inlineKeyboard: {
-          inline_keyboard: [
-            [{ text: cta1m, url: url1m }],
-            [{ text: cta3m, url: url3m }],
-            ...(testPaymentButton ? [[testPaymentButton]] : []),
-            [
-              {
-                text: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ',
-                callback_data: 'focus:payment_issue',
-              },
-            ],
-          ],
+          inline_keyboard: paymentInlineKeyboard,
         },
         parseMode: 'HTML',
         separateBlocks: true,
@@ -671,17 +728,18 @@ export async function handleFocusPaymentAction(
   }
   if (resolvedUserId) {
     loadAbTestProgress(resolvedUserId)
-      .then((progressAfterFocusClick) =>
-        saveAbTestProgress(
+      .then((progressAfterFocusClick) => {
+        const progressSnapshot = normalizeAbTestProgress(progressAfterFocusClick)
+        return saveAbTestProgress(
           resolvedUserId,
-          buildAbTestProgressPatch(progressAfterFocusClick, {
+          buildAbTestProgressPatch(progressSnapshot, {
             focus_opened_at:
-              progressAfterFocusClick.focus_opened_at ??
+              progressSnapshot.focus_opened_at ??
               new Date().toISOString(),
             last_event_at: new Date().toISOString(),
           })
         )
-      )
+      })
       .catch((error: Error) =>
         console.error('[FOCUS_PAYMENT] save progress failed', error)
       )
@@ -791,6 +849,16 @@ export async function handleFocusPaymentIssue(
       FOCUS_PAYMENT_ISSUE_USER_MSG,
       { parse_mode: 'HTML' }
     )
+    await updateSession(
+      issueUserId,
+      String(chatId),
+      'chat',
+      {
+        paymentIssueAwaitingEvidence: true,
+        paymentIssueRequestedAt: new Date().toISOString(),
+      },
+      0,
+    ).catch(() => undefined)
   }
 
   const lastCheckout = await findRelevantFocusCheckoutSession(issueUserId)
@@ -845,5 +913,112 @@ export async function handleFocusPaymentIssue(
     })
   }
 
+  return true
+}
+
+export async function handlePendingFocusPaymentEvidenceText(
+  ctx: Context,
+  userId: string | null,
+  text: string,
+): Promise<boolean> {
+  const chatId = String(ctx.chat?.id ?? '').trim()
+  const resolvedUserId = String(userId ?? '').trim()
+  const trimmedText = text.trim()
+  if (!chatId || !resolvedUserId || !trimmedText) {
+    return false
+  }
+
+  if (!(await hasPendingFocusPaymentEvidence(resolvedUserId, chatId))) {
+    return false
+  }
+
+  const lastCheckout = await findRelevantFocusCheckoutSession(resolvedUserId)
+  const telegramId = String(ctx.from?.id ?? '').trim()
+  await sendOpsTelegramMessage(
+    buildFocusPaymentEvidenceIntro({
+      userId: resolvedUserId,
+      telegramId,
+      orderReference: lastCheckout?.orderReference ?? 'unknown',
+      amount: lastCheckout?.amount ?? 0,
+      evidenceType: 'text',
+      text: trimmedText,
+    }),
+    undefined,
+    {
+      messageType: 'focus_payment_evidence',
+      source: 'handlePendingFocusPaymentEvidenceText',
+    },
+  ).catch(() => false)
+
+  await clearSession(resolvedUserId, chatId)
+  await ctx.telegram.sendMessage(chatId, FOCUS_PAYMENT_EVIDENCE_ACK_MSG)
+  return true
+}
+
+export async function handlePendingFocusPaymentEvidenceAttachment(
+  ctx: Context,
+  userId: string | null,
+): Promise<boolean> {
+  const chatId = String(ctx.chat?.id ?? '').trim()
+  const resolvedUserId = String(userId ?? '').trim()
+  if (!chatId || !resolvedUserId || !('message' in ctx) || !ctx.message) {
+    return false
+  }
+
+  if (!(await hasPendingFocusPaymentEvidence(resolvedUserId, chatId))) {
+    return false
+  }
+
+  const message = ctx.message as {
+    caption?: string
+    photo?: Array<{ file_id: string }>
+    document?: { file_id: string; file_name?: string | null }
+  }
+  const photo = Array.isArray(message.photo) ? message.photo.at(-1) ?? null : null
+  const document = message.document ?? null
+  const fileId = photo?.file_id ?? document?.file_id ?? null
+  if (!fileId) {
+    return false
+  }
+
+  const opsChatId = resolveOpsChatId()
+  if (!opsChatId) {
+    return false
+  }
+
+  const lastCheckout = await findRelevantFocusCheckoutSession(resolvedUserId)
+  const telegramId = String(ctx.from?.id ?? '').trim()
+  const caption = String(message.caption ?? '').trim()
+  const evidenceType = photo ? 'photo' : 'document'
+
+  await sendOpsTelegramMessage(
+    buildFocusPaymentEvidenceIntro({
+      userId: resolvedUserId,
+      telegramId,
+      orderReference: lastCheckout?.orderReference ?? 'unknown',
+      amount: lastCheckout?.amount ?? 0,
+      evidenceType,
+      text: caption || undefined,
+    }),
+    undefined,
+    {
+      messageType: 'focus_payment_evidence',
+      source: 'handlePendingFocusPaymentEvidenceAttachment',
+    },
+  ).catch(() => false)
+
+  const fileUrl = await ctx.telegram.getFileLink(fileId)
+  if (photo) {
+    await coachBot.telegram.sendPhoto(opsChatId, fileUrl.toString(), {
+      caption: caption || `Чек від userId ${resolvedUserId}`,
+    })
+  } else {
+    await coachBot.telegram.sendDocument(opsChatId, fileUrl.toString(), {
+      caption: caption || `Чек від userId ${resolvedUserId}`,
+    })
+  }
+
+  await clearSession(resolvedUserId, chatId)
+  await ctx.telegram.sendMessage(chatId, FOCUS_PAYMENT_EVIDENCE_ACK_MSG)
   return true
 }

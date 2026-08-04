@@ -54,6 +54,23 @@ export const RIGHT_PANEL: Record<MasterTab, Array<{ title: string; body: string;
       tone: 'success',
     },
   ],
+  agents: [
+    {
+      title: 'Єдиний реєстр',
+      body: 'Системні агенти мають залишатися синхронними з canonical registry і реальними prompt IDs.',
+      tone: 'info',
+    },
+    {
+      title: 'Prompt changes',
+      body: 'Зміни prompt-ів агентів мають проходити AI-перевірку до збереження, бо вони впливають на prod behavior.',
+      tone: 'warning',
+    },
+    {
+      title: 'Dataflow',
+      body: 'Схема показує операційні залежності між агентами, щоб не редагувати prompt ізольовано від апстріму.',
+      tone: 'success',
+    },
+  ],
 }
 
 export const DEFAULT_FUNNEL_SCREEN_TEMPLATES = [

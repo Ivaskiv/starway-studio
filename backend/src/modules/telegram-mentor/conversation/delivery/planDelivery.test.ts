@@ -45,6 +45,10 @@ describe('planDelivery', () => {
     await planMessage(ctx, 'ctx.reply', 'start_home_screen', 'Welcome back')
 
     expect(replySpy).toHaveBeenCalledTimes(1)
+    expect(replySpy).toHaveBeenCalledWith('Welcome back', {
+      parse_mode: 'HTML',
+      reply_markup: undefined,
+    })
   })
 
   it('allows a later reply in the same update after another transport action', async () => {

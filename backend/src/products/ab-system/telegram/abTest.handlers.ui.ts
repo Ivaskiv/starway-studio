@@ -72,6 +72,23 @@ export async function handleAbTestStart(
   })
 
   const currentProgress = await loadAbTestProgress(userId)
+  if (currentProgress.status === 'active' && currentProgress.current_question_id) {
+    logCallbackHandled({
+      action: 'ab_test:start',
+      handled: true,
+      reason: 'active_question_already_open',
+      userId,
+    })
+    logAbTestStartDebug('callback:start_skipped_active_question', {
+      action: 'ab_test:start',
+      userId,
+      currentQuestionId: currentProgress.current_question_id,
+      answersCount: currentProgress.answers.length,
+      revision: currentProgress.revision,
+    })
+    return true
+  }
+
   const nowIso = new Date().toISOString()
   const warmedProgress = buildAbTestProgressPatch(currentProgress, {
     status: 'active',

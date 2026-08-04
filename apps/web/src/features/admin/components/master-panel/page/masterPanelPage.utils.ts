@@ -13,7 +13,7 @@ import { DEFAULT_FUNNEL_SCREEN_TEMPLATES } from './masterPanelPage.constants'
 export type MasterTab = MasterPanelTab
 
 export function isMasterTab(value: string | null): value is MasterTab {
-  return value === 'prompts' || value === 'notifications' || value === 'funnels'
+  return value === 'prompts' || value === 'notifications' || value === 'funnels' || value === 'agents'
 }
 
 export function normalizeLookup(value: string) {

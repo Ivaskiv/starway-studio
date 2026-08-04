@@ -2,7 +2,9 @@ import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import {
   AB_TEST_CONTINUE_BUTTON_TEXT,
   AB_TEST_FOCUS_CTA_TEXT,
+  AB_TEST_MY_RESULT_BUTTON_TEXT,
   AB_TEST_OPEN_PLATFORM_BUTTON_TEXT,
+  AB_TEST_RETAKE_BUTTON_TEXT,
 } from '@/products/ab-system/content/abTest.shared.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business.checkout.js'
@@ -12,6 +14,10 @@ import { getUpcomingZoom } from '@/modules/zoom/service.js'
 import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
+import {
+  bold,
+  joinBlocks,
+} from '../../../lib/telegram/messageFormatter.js'
 
 const MINI_APP_ENTRY_INTENT = {
   BOOKING: 'booking',
@@ -80,17 +86,38 @@ function formatFocusExpiry(expiresAt: Date | null): string {
 }
 
 function formatZoomDateTime(scheduledAt: Date): string {
-  const datePart = new Intl.DateTimeFormat('uk-UA', {
+  const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
     day: 'numeric',
     month: 'long',
     timeZone: 'Europe/Kyiv',
-  }).format(scheduledAt)
-  const timePart = new Intl.DateTimeFormat('uk-UA', {
+  })
+  const timeFormatter = new Intl.DateTimeFormat('uk-UA', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
     timeZone: 'Europe/Kyiv',
-  }).format(scheduledAt)
+  })
+  const calendarKeyFormatter = new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: 'Europe/Kyiv',
+  })
+
+  const scheduledDayKey = calendarKeyFormatter.format(scheduledAt)
+  const now = new Date()
+  const todayKey = calendarKeyFormatter.format(now)
+  const tomorrow = new Date(now)
+  tomorrow.setDate(now.getDate() + 1)
+  const tomorrowKey = calendarKeyFormatter.format(tomorrow)
+
+  const datePart =
+    scheduledDayKey === todayKey
+      ? 'сьогодні'
+      : scheduledDayKey === tomorrowKey
+        ? 'завтра'
+        : dateFormatter.format(scheduledAt)
+  const timePart = timeFormatter.format(scheduledAt)
 
   return `${datePart} о ${timePart}`
 }
@@ -122,7 +149,7 @@ export function testInProgressMessage(input: { r3: boolean; hasExistingResult?: 
 
   return withKeyboard({
     text: input.r3
-      ? 'Ти зупинилась посеред тесту. Повернемось і закінчимо зараз, щоб не втрачати фокус.'
+      ? absystemContent.TELEGRAM_COPY.TEST_IN_PROGRESS_RECENT
       : 'Ти вже почала тест. Продовжимо з того місця, де зупинилась?',
     buttons: baseButtons,
   })
@@ -130,10 +157,10 @@ export function testInProgressMessage(input: { r3: boolean; hasExistingResult?: 
 
 export function testDoneMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Твій <b>результат</b> готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.',
+    text: `Твій ${bold('результат')} готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.`,
     buttons: [
-      [{ text: 'ПОКАЗАТИ РЕЗУЛЬТАТ', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
-      [{ text: 'ПОЧАТИ ТЕСТ ЗАНОВО', callback_data: AB_TEST_ACTIONS.RESTART }],
+      [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
       [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
     ],
   })
@@ -141,21 +168,27 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
 
 export function resultReadyMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'Твій <b>результат</b> уже готовий.\n\nМожеш переглянути його ще раз або пройти тест заново.',
+    text: joinBlocks([
+      `Твій ${bold('результат')} уже готовий.`,
+      'Можеш переглянути його ще раз або пройти тест заново.',
+    ]),
     buttons: [
-      [{ text: 'МІЙ РЕЗУЛЬТАТ', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
-      [{ text: absystemContent.RESUME_FLOW.CTA_RESTART, callback_data: AB_TEST_ACTIONS.RESTART }],
+      [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
     ],
   })
 }
 
 export function offerShownMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: 'У тебе вже є <b>результат</b> тесту.\n\nХочеш відкрити його ще раз або пройти тест заново?',
+    text: joinBlocks([
+      `У тебе вже є ${bold('результат')} тесту.`,
+      'Хочеш відкрити його ще раз або пройти тест заново?',
+    ]),
     buttons: [
       [{ text: AB_TEST_FOCUS_CTA_TEXT, callback_data: 'open_focus_payment' }],
-      [{ text: 'ПРОЙТИ ТЕСТ ЗАНОВО', callback_data: AB_TEST_ACTIONS.RESTART }],
-      [{ text: 'МІЙ РЕЗУЛЬТАТ', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
+      [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
     ],
   })
 }
@@ -165,7 +198,8 @@ export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
     text: 'Доступ до ФОКУС активний. Обери наступну дію в меню.',
     buttons: [
       [{ text: 'КАЛЕНДАР ZOOM-ПРАКТИК', callback_data: 'focus:next_zoom' }],
-      [{ text: 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: 'ab_test:show_result' }],
+      [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
     ],
   })
 }
@@ -279,25 +313,26 @@ async function buildFocusHomeMessage(userId: string): Promise<StartMessagePayloa
     getOrCreateFocusInviteLink(userId),
   ])
 
-  const zoomLine = upcomingZoom
-    ? `Найближча Zoom-практика — ${formatZoomDateTime(upcomingZoom.scheduledAt)}.`
-    : 'Найближчу Zoom-практику ще не додано.'
+  const expiryLabel = formatFocusExpiry(accessState.expiresAt)
+  const nextZoomLabel = upcomingZoom
+    ? formatZoomDateTime(upcomingZoom.scheduledAt)
+    : null
 
-  const bookingStatus = state === 'BOOKED' || state === 'JOIN_WINDOW'
-    ? 'Ти вже записана.'
-    : 'Ти ще не записана.'
+  const text =
+    state === 'JOIN_WINDOW' && nextZoomLabel
+      ? absystemContent.TELEGRAM_COPY.FOCUS_HOME.JOIN_WINDOW(expiryLabel, nextZoomLabel)
+      : state === 'BOOKED' && nextZoomLabel
+        ? absystemContent.TELEGRAM_COPY.FOCUS_HOME.BOOKED(expiryLabel, nextZoomLabel)
+        : state === 'NOT_BOOKED' && nextZoomLabel
+          ? absystemContent.TELEGRAM_COPY.FOCUS_HOME.NOT_BOOKED(expiryLabel, nextZoomLabel)
+          : absystemContent.TELEGRAM_COPY.FOCUS_HOME.NO_SESSION(expiryLabel)
 
   return {
-    text: [
-      `Твій доступ до ФОКУСУ активний до ${formatFocusExpiry(accessState.expiresAt)}.`,
-      '',
-      zoomLine,
-      '',
-      bookingStatus,
-    ].join('\n'),
+    text,
     buttons: [
       [{ text: 'ЗАПИСАТИСЯ', web_app: { url: resolveZoomBookingWebAppUrl() } }],
-      [{ text: 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
+      [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
       [{ text: 'КАНАЛ ФОКУСУ', url: channelUrl }],
     ],
   }
@@ -324,52 +359,36 @@ export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {
 export function postZoom1Message(userId: string): ReturnType<typeof withKeyboard> {
   void userId
   return withKeyboard({
-    text: [
-      '🌿 <b>Практика завершилась.</b>',
-
-      'Щоб цей крок не загубився,',
-      'зафіксуй для себе лише дві речі.',
-
-      '<b>1. Який інсайт був найціннішим?</b>',
-
-      '<b>2. Який один крок зробиш до наступної практики?</b>',
-
-      '',
-      'Після цього повернись у ФОКУС і обери наступну Zoom-практику.',
-    ].join('\n'),
+    text: absystemContent.TELEGRAM_COPY.POST_ZOOM_1,
     buttons: [
       [{ text: 'ЗАЛИШИТИ ІНСАЙТ', callback_data: 'post_zoom:leave_insight' }],
       [{ text: 'КАЛЕНДАР', callback_data: 'focus:next_zoom' }],
-      [{ text: 'МЕНЮ ФОКУС', callback_data: 'focus:menu' }],
     ],
   })
 }
 
 export function postZoomAbsystemCtaMessage(userId: string): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: [
-      '🚀 <b>Найважче — не зробити один крок.</b>',
-      
+    text: joinBlocks([
+      bold('🚀 Найважче — не зробити один крок.'),
       'Найважче —',
       'перетворити його',
       'на власну систему.',
-      
       'Саме для цього існує ABSystem.',
-      
       'Він допомагає між Zoom-практиками:',
-      
       '• тримати фокус;',
       '• фіксувати рішення;',
       '• бачити прогрес;',
       '• працювати регулярно.',
-      
-      '<b>Мета —',
-      'досягати бажаних результатів',
-      'завдяки системності,',
-      'власному фокусу,',
-      'своїм сильним сторонам',
-      'і маленьким щоденним діям.</b>',
-    ].join('\n'),
+      bold([
+        'Мета —',
+        'досягати бажаних результатів',
+        'завдяки системності,',
+        'власному фокусу,',
+        'своїм сильним сторонам',
+        'і маленьким щоденним діям.',
+      ].join('\n')),
+    ]),
     buttons: [
       [{ text: 'АКТИВУВАТИ ABSYSTEM', url: buildAbsystemAiUpgradeCheckoutUrl(userId) }],
       [{ text: 'ДІЗНАТИСЯ БІЛЬШЕ', callback_data: 'focus:ai' }],
@@ -380,27 +399,16 @@ export function postZoomAbsystemCtaMessage(userId: string): ReturnType<typeof wi
 export function upsellMessage(userId: string): ReturnType<typeof withKeyboard> {
   void userId
   return withKeyboard({
-    text: [
-      '<b>ФОКУС працює тоді, коли ти тримаєш ритм.</b>',
-      '',
-      'Не відкладай наступний крок:',
-      'повернись у календар, обери найближчу практику і заходь з конкретною ситуацією.',
-    ].join('\n'),
+    text: absystemContent.TELEGRAM_COPY.UPSELL,
     buttons: [
       [{ text: 'КАЛЕНДАР', callback_data: 'focus:next_zoom' }],
-      [{ text: 'МЕНЮ ФОКУС', callback_data: 'focus:menu' }],
     ],
   })
 }
 
 export function expiredMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
-    text: [
-      'Твій доступ до ФОКУСУ завершився.',
-      '',
-      'Щоб повернутись у Zoom-практики й продовжити ритм,',
-      'обери зручний формат продовження підписки нижче.',
-    ].join('\n'),
+    text: absystemContent.TELEGRAM_COPY.EXPIRED,
     buttons: [
       [{ text: 'ПРОДОВЖИТИ ПІДПИСКУ', callback_data: 'open_focus_payment' }],
     ],

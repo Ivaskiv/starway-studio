@@ -4,6 +4,7 @@ const mockZoomSessionAttendeeUpsert = vi.fn()
 const mockZoomSessionAttendeeFindUnique = vi.fn()
 const mockZoomSessionAttendeeFindMany = vi.fn()
 const mockZoomSessionAttendeeFindFirst = vi.fn()
+const mockZoomSessionFindFirst = vi.fn()
 const mockZoomSessionFindUnique = vi.fn()
 const mockZoomSessionFindMany = vi.fn()
 const mockEventCreate = vi.fn()
@@ -13,6 +14,7 @@ const mockGetCachedLatestWeeklyReport = vi.fn()
 vi.mock('../../db/client.js', () => ({
   prisma: {
     zoomSession: {
+      findFirst: (...args: unknown[]) => mockZoomSessionFindFirst(...args),
       findUnique: (...args: unknown[]) => mockZoomSessionFindUnique(...args),
       findMany: (...args: unknown[]) => mockZoomSessionFindMany(...args),
     },
@@ -463,52 +465,55 @@ describe('zoom booking service', () => {
     })
   })
 
-  it('selects the latest completed attendee session as previous Zoom recap', async () => {
+  it('returns the latest completed group session recap from canonical session report without requiring attendee row', async () => {
     const now = new Date('2026-08-04T09:00:00.000Z')
 
-    mockZoomSessionAttendeeFindFirst.mockResolvedValue({
-      id: 'att-1',
-      attended: true,
-      session: {
-        id: 'session-completed',
-        topic: 'Рух без перевантаження',
-        scheduledAt: new Date('2026-08-03T15:00:00.000Z'),
-        postSessionReport: {
-          summary: 'Повернули один конкретний фокус і прибрали зайві задачі.',
-          actionItems: ['Зафіксувати один конкретний крок.'],
-          audioUrl: 'https://cdn.example.com/audio/session-completed.mp3',
-        },
-        _count: {
-          attendees: 7,
-        },
+    mockZoomSessionFindFirst.mockResolvedValue({
+      id: 'session-completed',
+      topic: 'Рух без перевантаження',
+      scheduledAt: new Date('2026-08-03T15:00:00.000Z'),
+      type: 'GROUP',
+      requests: { type: 'group_practice' },
+      postSessionReport: {
+        summary: 'Повернули один конкретний фокус і прибрали зайві задачі.',
+        actionItems: ['Зафіксувати один конкретний крок.'],
+        audioUrl: 'https://cdn.example.com/audio/session-completed.mp3',
       },
+      _count: {
+        attendees: 7,
+      },
+      attendees: [],
     })
 
     const recap = await getUserPreviousZoomSessionRecap('user-1', now)
 
-    expect(mockZoomSessionAttendeeFindFirst).toHaveBeenCalledWith({
+    expect(mockZoomSessionFindFirst).toHaveBeenCalledWith({
       where: {
-        userId: 'user-1',
-        session: {
-          status: 'COMPLETED',
-          scheduledAt: { lte: now },
-        },
+        status: 'COMPLETED',
+        scheduledAt: { lte: now },
+        OR: [
+          { requests: { path: ['type'], equals: 'group_practice' } },
+          { type: 'GROUP' },
+        ],
       },
       include: {
-        session: {
-          include: {
-            _count: {
-              select: {
-                attendees: true,
-              },
-            },
+        _count: {
+          select: {
+            attendees: true,
           },
+        },
+        attendees: {
+          where: {
+            userId: 'user-1',
+          },
+          select: {
+            attended: true,
+          },
+          take: 1,
         },
       },
       orderBy: {
-        session: {
-          scheduledAt: 'desc',
-        },
+        scheduledAt: 'desc',
       },
     })
     expect(recap).toEqual({
@@ -519,7 +524,7 @@ describe('zoom booking service', () => {
       summary: 'Повернули один конкретний фокус і прибрали зайві задачі.',
       recordingUrl: 'https://cdn.example.com/audio/session-completed.mp3',
       materialsUrl: null,
-      attendanceStatus: 'ATTENDED',
+      attendanceStatus: null,
       attendanceCount: 7,
       nextStep: 'Зафіксувати один конкретний крок.',
     })

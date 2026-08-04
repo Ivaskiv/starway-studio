@@ -1,10 +1,17 @@
 //backend/src/products/ab-system/telegram/abTest.views.ts
 import { hasTelegramCtaInteraction } from '@/modules/telegram-mentor/services/ctaInteraction.service.js'
-import { absystemButtons } from '@/products/absystem/config/absystem.content.js'
+import { absystemButtons, absystemContent } from '@/products/absystem/config/absystem.content.js'
 import type { Prisma } from '@starway/db/prisma-client'
 import type { Context } from 'telegraf'
 import type { InlineKeyboardMarkup } from 'telegraf/types'
 import { coachBot, sendOpsTelegramMessage } from '../../../lib/telegram.js'
+import {
+  blockquote,
+  bold,
+  escapeTelegramHtml,
+  joinBlocks,
+  sendTelegramMessage,
+} from '../../../lib/telegram/messageFormatter.js'
 // import { buildBehavioralSnapshot } from '../../../core/behavioral/behavioralSnapshot.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import {
@@ -33,8 +40,8 @@ import {
   AB_TEST_AUDIO_URL,
   AB_TEST_BOOK_ZOOM_CTA_TEXT,
   AB_TEST_BOLD_LINES,
-  AB_TEST_FINAL_CTA_PROMPT,
-  AB_TEST_FOCUS_CTA_TEXT,
+  AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT,
+  AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
   AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
   AB_TEST_REVIEW_HEADER_VALUES,
@@ -54,7 +61,9 @@ import {
   resolveBrowserTestUrlOrNull,
 } from './abTest.buttons.js'
 import { scheduleFollowups } from './abTest.scheduler.js'
+import { getUpcomingZoom } from '@/modules/zoom/service.js'
 import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
+import { getUserAccessState } from '@/modules/subscriptions/payments/focus.access.js'
 import {
   buildAbTestEmailGateMessage,
   getAbTestProfileEmail,
@@ -97,7 +106,9 @@ function buildResultPreviewKeyboard(
         },
         {
           text: AB_TEST_BOOK_ZOOM_CTA_TEXT,
-          web_app: { url: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }) },
+          web_app: {
+            url: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }),
+          },
         },
       ],
     ],
@@ -114,10 +125,10 @@ function renderInlineBoldMarkdown(value: string): string {
   return parts
     .map((part) => {
       if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-        return `<b>${escapeHtml(part.slice(2, -2))}</b>`
+        return bold(part.slice(2, -2))
       }
 
-      return escapeHtml(part)
+      return escapeTelegramHtml(part)
     })
     .join('')
 }
@@ -446,7 +457,7 @@ export function formatAbTestTelegramLine(line: string): string {
       .replace(/^ЦИТАТА:\s*/i, '')
       .replace(/^QUOTE:\s*/i, '')
       .trim()
-    return `<blockquote>${renderInlineBoldMarkdown(clean)}</blockquote>`
+    return blockquote(clean)
   }
 
   if (normalized.startsWith('· ')) {
@@ -454,7 +465,7 @@ export function formatAbTestTelegramLine(line: string): string {
   }
 
   if (normalized === AB_TEST_VOICE_NOTE_HEADER) {
-    return `<b>${escapeHtml(normalized)}</b>`
+    return bold(normalized)
   }
 
   if (normalized === AB_TEST_VOICE_NOTE_LINK_TEXT) {
@@ -462,11 +473,11 @@ export function formatAbTestTelegramLine(line: string): string {
   }
 
   if (/^\*[^*].*[^*]\*$/.test(normalized)) {
-    return `<b>${escapeHtml(normalized.slice(1, -1))}</b>`
+    return bold(normalized.slice(1, -1))
   }
 
   if (shouldBoldAbTestLine(normalized)) {
-    return `<b>${renderInlineBoldMarkdown(normalized)}</b>`
+    return bold(normalized)
   }
 
   return renderInlineBoldMarkdown(normalized)
@@ -477,7 +488,7 @@ export function formatAbTestTelegramCard(
   lines: string[]
 ): string {
   const body = renderTelegramContentBlocks(splitTelegramContentBlocks(lines))
-  return title ? `<b>${escapeHtml(title)}</b>\n\n${body}` : body
+  return joinBlocks([title ? bold(title) : '', body])
 }
 
 export function renderTelegramContentMessage(
@@ -485,7 +496,7 @@ export function renderTelegramContentMessage(
   blocks: TelegramContentBlock[]
 ): string {
   const body = renderTelegramContentBlocks(blocks)
-  return title ? `<b>${escapeHtml(title)}</b>\n\n${body}` : body
+  return joinBlocks([title ? bold(title) : '', body])
 }
 
 export function resolveTelegramContentPhotoUrl(
@@ -615,10 +626,17 @@ export async function sendTelegramContentChunk(
     return
   }
 
-  await ctx.telegram.sendMessage(chatId, renderedMessage, {
-    parse_mode: options?.parseMode ?? 'HTML',
-    reply_markup: options?.inlineKeyboard,
-  })
+  await sendTelegramMessage(
+    ctx,
+    chatId,
+    {
+      text: renderedMessage,
+      parseMode: 'HTML',
+    },
+    {
+      replyMarkup: options?.inlineKeyboard,
+    },
+  )
 }
 
 function renderTelegramContentBlocks(blocks: TelegramContentBlock[]): string {
@@ -627,7 +645,7 @@ function renderTelegramContentBlocks(blocks: TelegramContentBlock[]): string {
 
 function renderTelegramContentBlock(block: TelegramContentBlock): string {
   if (block.type === 'quote') {
-    return `<blockquote>${renderInlineBoldMarkdown(block.text.replace(/^"|"$/g, '').replace(/^«|»$/g, '').trim())}</blockquote>`
+    return blockquote(block.text.replace(/^"|"$/g, '').replace(/^«|»$/g, '').trim())
   }
 
   if (
@@ -639,7 +657,7 @@ function renderTelegramContentBlock(block: TelegramContentBlock): string {
   }
 
   if (block.type === 'pricing' || block.type === 'cta') {
-    return `<b>${renderInlineBoldMarkdown(block.text)}</b>`
+    return bold(block.text)
   }
 
   return renderInlineBoldMarkdown(block.text)
@@ -694,7 +712,7 @@ export async function sendActionMessage(
       ?.answer_id ?? null
   const browserUrl = resolveBrowserTestUrlOrNull()
   const miniAppButton = buildWebAppButton(UI_COPY.miniApp, '/ab-test')
-  const text = `<b>${escapeHtml(question.prompt)}</b>`
+  const text = bold(question.prompt)
 
   const answerRow = question.answers.map((answer) => ({
     text:
@@ -852,7 +870,7 @@ export async function dispatchAbTestResultSequence(
   await sendTelegramContentChunk(
     ctx,
     input.chatId,
-    resultDef.title,
+    '',
     introBlocks,
     {
       parseMode: 'HTML',
@@ -870,12 +888,16 @@ export async function dispatchAbTestResultSequence(
   await sendTypingBeforeBlocks(ctx, input.chatId, [
     telegramBlock.text(AB_TEST_PRACTICE_PREVIEW_PROMPT),
   ])
-  const practicePreviewMessage = await ctx.telegram.sendMessage(
+  const practicePreviewMessage = await sendTelegramMessage(
+    ctx,
     input.chatId,
-    AB_TEST_PRACTICE_PREVIEW_PROMPT,
     {
-      reply_markup: previewKeyboard,
-    }
+      text: AB_TEST_PRACTICE_PREVIEW_PROMPT,
+      parseMode: 'HTML',
+    },
+    {
+      replyMarkup: previewKeyboard,
+    },
   )
   console.info('[PRACTICE_BUTTON_RENDERED]', {
     userId: input.userId ?? null,
@@ -884,6 +906,8 @@ export async function dispatchAbTestResultSequence(
     callbackData: `show_inside_${input.resultKey.toUpperCase()}`,
     deliverySource: input.deliverySource,
     messageId:
+      typeof practicePreviewMessage === 'object' &&
+      practicePreviewMessage !== null &&
       'message_id' in practicePreviewMessage
         ? practicePreviewMessage.message_id
         : null,
@@ -909,48 +933,90 @@ export async function sendResultSnapshot(
   }
 ): Promise<void> {
   const resultDef = getAbTestResultDefinition(input.resultKey)
-  const shortMessage = interpolateFirstNameInBlocks(
-    [telegramBlock.text(resultDef.msg1)],
-    input.firstName
-  )
+  const snapshotCopyByKey = {
+    state: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.STATE,
+    goal: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.GOAL,
+    choice: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.CHOICE,
+    decision: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.DECISION,
+    action: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.ACTION,
+  } as const
+  const snapshotCopy = snapshotCopyByKey[input.resultKey]
 
-  const [attendedCount, totalBookedCount, activeSubscription] = await Promise.all([
+  const [attendedCount, totalBookedCount, accessState, upcomingZoom] = await Promise.all([
     prisma.zoomSessionAttendee.count({
       where: { userId: input.userId, attended: true },
     }),
     prisma.zoomSessionAttendee.count({
       where: { userId: input.userId },
     }),
-    prisma.subscription.findFirst({
-      where: { userId: input.userId, status: 'ACTIVE' },
-      orderBy: { currentPeriodEnd: 'desc' },
-      select: { currentPeriodEnd: true },
-    }),
+    getUserAccessState(input.userId),
+    getUpcomingZoom(),
   ])
 
-  const subscriptionLine = activeSubscription?.currentPeriodEnd
-    ? `Підписка активна до ${activeSubscription.currentPeriodEnd.toLocaleDateString('uk-UA')}`
-    : 'Підписка неактивна'
+  const upcomingAttendee = upcomingZoom
+    ? await prisma.zoomSessionAttendee.findUnique({
+        where: {
+          sessionId_userId: {
+            sessionId: upcomingZoom.id,
+            userId: input.userId,
+          },
+        },
+        select: { id: true },
+      })
+    : null
+
+  const subscriptionLine = accessState.isActive
+    ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.subscriptionActiveLabel(
+        `<b>${accessState.expiresAt?.toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' }) ?? 'без кінцевої дати'}</b>`,
+      )
+    : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.subscriptionInactiveLabel
 
   const zoomLine = totalBookedCount > 0
-    ? `Zoom-практики: ${attendedCount} відвідано з ${totalBookedCount} записаних`
-    : 'Zoom-практики: ще не записувалась'
+    ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.zoomAttendedLabel(
+        attendedCount,
+        totalBookedCount,
+      )
+    : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.zoomNotBookedLabel
+
+  const nextStep =
+    !accessState.isActive
+      ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepNoAccess
+      : upcomingZoom && !upcomingAttendee
+        ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepZoom(
+            upcomingZoom.scheduledAt.toLocaleDateString('uk-UA', {
+              day: 'numeric',
+              month: 'long',
+              timeZone: 'Europe/Kyiv',
+            }),
+          )
+        : upcomingAttendee
+          ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepBooked
+          : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepZoomGeneric
 
   const text = [
-    `Твій <b>результат</b>: <b>${resultDef.title}</b>`,
+    snapshotCopy.title,
     '',
-    shortMessage[0]?.type === 'text' ? shortMessage[0].text : resultDef.msg1,
+    snapshotCopy.quote,
     '',
     zoomLine,
     subscriptionLine,
+    '',
+    nextStep,
   ].join('\n')
 
-  await ctx.telegram.sendMessage(input.chatId, text, {
-    parse_mode: 'HTML',
-    reply_markup: {
-      inline_keyboard: buildResultPreviewKeyboard(input.resultKey).inline_keyboard,
+  await sendTelegramMessage(
+    ctx,
+    input.chatId,
+    {
+      text,
+      parseMode: 'HTML',
     },
-  }).catch((error) => {
+    {
+      replyMarkup: {
+        inline_keyboard: buildResultPreviewKeyboard(input.resultKey).inline_keyboard,
+      },
+    },
+  ).catch((error) => {
     console.error('[sendResultSnapshot] failed', {
       userId: input.userId,
       resultKey: input.resultKey,
@@ -1034,46 +1100,31 @@ export async function dispatchAbTestPracticeSequence(
   await sendTelegramContentChunk(
     ctx,
     input.chatId,
-    'Формат і участь',
+    'Формат участі',
     pricingBlocks,
     {
-      parseMode: 'HTML',
-      separateBlocks: true,
-      pauseMsBetweenBlocks: buildPracticeBlockPausePlan(pricingBlocks),
-    }
-  )
-
-  await pauseBetweenPracticeSections()
-  await sendTypingBeforeBlocks(ctx, input.chatId, [telegramBlock.text(AB_TEST_FINAL_CTA_PROMPT)])
-  const paymentButtonMessage = await ctx.telegram.sendMessage(
-    input.chatId,
-    AB_TEST_FINAL_CTA_PROMPT,
-    {
-      reply_markup: {
+      inlineKeyboard: {
         inline_keyboard: [
           [
             {
-              text: AB_TEST_FOCUS_CTA_TEXT,
+              text: AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
               callback_data: 'open_focus_payment',
+            },
+            {
+              text: AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT,
+              web_app: { url: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }) },
             },
           ],
         ],
       },
+      parseMode: 'HTML',
     }
   )
   console.info('[FOCUS_OFFER_SENT]', {
     chatId: String(input.chatId),
     resultKey: input.resultKey,
     callbackData: 'open_focus_payment',
-  })
-  console.info('[PAYMENT_BUTTON_RENDERED]', {
-    userId: null,
-    segment: input.resultKey,
-    messageId:
-      'message_id' in paymentButtonMessage
-        ? paymentButtonMessage.message_id
-        : null,
-    callback: 'open_focus_payment',
+    zoomWebAppUrl: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }),
   })
 }
 
@@ -1364,12 +1415,15 @@ export async function renderAbTestEmailGate(
     return
   }
 
-  await ctx.telegram.sendMessage(
+  await sendTelegramMessage(
+    ctx,
     chatId,
-    buildAbTestEmailGateMessage(profileEmail),
     {
-      parse_mode: 'HTML',
-      reply_markup: {
+      text: buildAbTestEmailGateMessage(profileEmail),
+      parseMode: 'HTML',
+    },
+    {
+      replyMarkup: {
         inline_keyboard: [
           ...(profileEmail
             ? [
@@ -1390,7 +1444,7 @@ export async function renderAbTestEmailGate(
           [{ text: 'ПРОПУСТИТИ', callback_data: 'skip_email_before_result' }],
         ],
       },
-    }
+    },
   )
   await setPendingTelegramIdentity({
     chatId: String(chatId),
@@ -1470,12 +1524,19 @@ export async function sendQuestionDirect(
   const questionOrder = resolveAbTestQuestionOrder()
   const questionNumber = questionOrder.indexOf(question.question_id) + 1
   
-  await ctx.telegram.sendMessage(
+  await sendTelegramMessage(
+    ctx,
     chatId,
-    `<b>Питання ${questionNumber} з ${questionOrder.length}</b>\n\n<b>${escapeHtml(question.prompt)}</b>\n\n${escapeHtml(formatMobileAnswerListForMessage(question.answers))}`,
     {
-      parse_mode: 'HTML',
-      reply_markup: {
+      text: joinBlocks([
+        bold(`Питання ${questionNumber} з ${questionOrder.length}`),
+        bold(question.prompt),
+        escapeTelegramHtml(formatMobileAnswerListForMessage(question.answers)),
+      ]),
+      parseMode: 'HTML',
+    },
+    {
+      replyMarkup: {
         inline_keyboard: [
           question.answers.map((answer) => ({
             text: formatMobileAnswerButtonText(answer.text),
@@ -1483,15 +1544,6 @@ export async function sendQuestionDirect(
           })),
         ],
       },
-    }
+    },
   )
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
 }

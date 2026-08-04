@@ -4,6 +4,7 @@ const mockSendOpsTelegramMessage = vi.fn()
 const mockCoachSendMessage = vi.fn()
 const mockSaveAbTestProgress = vi.fn()
 const mockHasTelegramCtaInteraction = vi.fn()
+const mockGetUserAccessState = vi.fn()
 const mockSendTelegramMessage = vi.fn(
   async (
     ctx: { telegram: { sendMessage: (chatId: string | number, text: string, options: Record<string, unknown>) => Promise<unknown> } },
@@ -102,6 +103,10 @@ vi.mock('@/modules/zoom/service.js', () => ({
   getUpcomingZoom: vi.fn(),
 }))
 
+vi.mock('@/modules/subscriptions/payments/focus.access.js', () => ({
+  getUserAccessState: (...args: unknown[]) => mockGetUserAccessState(...args),
+}))
+
 vi.mock('@/modules/zoom/urls.js', () => ({
   buildZoomCalendarUrl: vi.fn(() => 'https://miniapp.example/miniapp/zoom-calendar?intent=booking'),
 }))
@@ -115,6 +120,8 @@ import {
 import {
   dispatchAbTestResultSequence,
   dispatchAbTestPracticeSequence,
+  renderAbTestEmailGate,
+  sendQuestionDirect,
   sendResultSnapshot,
 } from './abTest.views.js'
 
@@ -136,6 +143,12 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     vi.useFakeTimers()
     vi.clearAllMocks()
     mockHasTelegramCtaInteraction.mockResolvedValue(false)
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'NO_ACCESS',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: null,
+    })
   })
 
   afterEach(() => {
@@ -176,6 +189,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
       '42',
       AB_TEST_PRACTICE_PREVIEW_PROMPT,
       {
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [
@@ -202,6 +216,38 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(mockSaveAbTestProgress).not.toHaveBeenCalled()
     expect(mockSendOpsTelegramMessage).not.toHaveBeenCalled()
     expect(mockCoachSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('routes the email gate through the central telegram formatter', async () => {
+    const ctx = createCtx()
+
+    await renderAbTestEmailGate(ctx as never, 'user-1', {
+      status: 'completed',
+      result_key: 'decision',
+      email_stage: 'pending',
+    } as never)
+
+    const lastCall = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)
+    expect(lastCall?.[2]).toMatchObject({
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: expect.any(Array),
+      },
+    })
+  })
+
+  it('routes question messages through the central telegram formatter', async () => {
+    const ctx = createCtx()
+
+    await sendQuestionDirect(ctx as never, 'q1', 7)
+
+    const lastCall = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)
+    expect(lastCall?.[2]).toMatchObject({
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: expect.any(Array),
+      },
+    })
   })
 
   it('reuses the same canonical keyboard for result replay without triggering booking side effects', async () => {
@@ -242,6 +288,41 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(mockSaveAbTestProgress).not.toHaveBeenCalled()
     expect(mockSendOpsTelegramMessage).not.toHaveBeenCalled()
     expect(mockCoachSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('uses canonical focus access for the result snapshot instead of legacy subscription state', async () => {
+    const ctx = createCtx()
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-08-09T00:00:00.000Z'),
+    })
+
+    await sendResultSnapshot(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey: 'decision',
+      firstName: 'Vira',
+    })
+
+    const snapshotText = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[1]
+    expect(snapshotText).toContain('Підписка активна до <b>09.08.2026</b>')
+    expect(snapshotText).not.toContain('Підписка неактивна')
+  })
+
+  it('shows inactive access in the result snapshot when canonical focus access is absent', async () => {
+    const ctx = createCtx()
+
+    await sendResultSnapshot(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey: 'decision',
+      firstName: 'Vira',
+    })
+
+    const snapshotText = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[1]
+    expect(snapshotText).toContain('Підписка неактивна')
   })
 
   it('sends the step 8 screenshot via sendPhoto exactly once without inlining stale urls into text messages', async () => {

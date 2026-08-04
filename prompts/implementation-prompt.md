@@ -292,6 +292,22 @@ If the approved task requires business behavior change, that change must already
 
 ---
 
+## 12A. Visual Readability Rules
+
+If implementation touches frontend styling, layout, component variants, formatting, or CTA rendering, readable contrast is mandatory.
+
+You must ensure:
+
+- dark backgrounds use light readable text;
+- light backgrounds use dark readable text;
+- button text is readable in every rendered state, including active, disabled, booked, selected, and loading variants;
+- contrast problems are treated as real defects, not cosmetic polish;
+- no UI change is considered complete if a dark button or dark surface still ships with dark or low-contrast text.
+
+When the task affects action buttons or status chips, you must verify the final state that the user actually sees, not only the default variant.
+
+---
+
 ## 13. Architecture Compliance Rules
 
 You must preserve:
