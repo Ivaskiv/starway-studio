@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react'
 
 const KYIV_TIMEZONE = 'Europe/Kyiv'
 const FALLBACK_ZOOM_SESSION_TITLE = 'Групова Zoom-практика'
+const DEFAULT_ZOOM_SESSION_DURATION_MINUTES = 60
 
 function formatWeekDate(value: string): string {
   return new Date(value).toLocaleDateString('uk-UA', {
@@ -34,6 +35,15 @@ function formatWeekDate(value: string): string {
     month: 'long',
     timeZone: KYIV_TIMEZONE,
   })
+}
+
+function getKyivDateKey(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: KYIV_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
 }
 
 function isCoachRole(role: string | null | undefined): boolean {
@@ -55,10 +65,20 @@ type DirectZoomBookingParams = {
 type ZoomHubPrimaryAction =
   | 'open_access'
   | 'book'
-  | 'prepare'
   | 'join'
   | 'browse'
   | 'none'
+
+type ZoomHubPrimaryActionState = {
+  action: ZoomHubPrimaryAction
+  label: string
+  description: string
+}
+
+export const MINIAPP_ACCENT_BUTTON_CLASSNAME =
+  'rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-2 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-60'
+
+const ZOOM_BOUNDARY_REFRESH_BUFFER_MS = 1000
 
 export function resolveZoomAccessState(input: {
   authRestoreStatus: AuthRestoreStatus
@@ -171,22 +191,11 @@ export function resolveDirectZoomBookingState(input: {
 }
 
 export function pickNextZoomSession(sessions: ZoomWeekOverview['sessions'], now = new Date()) {
-  const actionableStatuses = new Set(['SCHEDULED', 'ACTIVE'])
   const sortedSessions = [...sessions].sort(
     (left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime(),
   )
 
-  const currentOrUpcoming = sortedSessions.find((session) => {
-    if (!actionableStatuses.has(session.status)) {
-      return false
-    }
-
-    if (session.status === 'ACTIVE') {
-      return true
-    }
-
-    return new Date(session.scheduledAt).getTime() >= now.getTime()
-  })
+  const currentOrUpcoming = sortedSessions.find((session) => isSessionStillRelevant(session, now))
 
   if (currentOrUpcoming) {
     return currentOrUpcoming
@@ -255,6 +264,89 @@ function createUtcDateForTimeZone(input: {
   )
   const offset = getTimeZoneOffsetMs(new Date(utcGuess), input.timeZone)
   return new Date(utcGuess - offset)
+}
+
+function addKyivDays(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const base = createUtcDateForTimeZone({
+    year,
+    month,
+    day,
+    hour: 12,
+    minute: 0,
+    second: 0,
+    millisecond: 0,
+    timeZone: KYIV_TIMEZONE,
+  })
+  const shifted = new Date(base.getTime() + days * 86400000)
+  return getKyivDateKey(shifted)
+}
+
+function getSessionDurationMinutes(session: { durationMinutes?: unknown }) {
+  return typeof session.durationMinutes === 'number' && session.durationMinutes > 0
+    ? session.durationMinutes
+    : DEFAULT_ZOOM_SESSION_DURATION_MINUTES
+}
+
+function resolveSessionEndAt(session: {
+  scheduledAt: string
+  endsAt?: unknown
+  durationMinutes?: unknown
+}) {
+  if (typeof session.endsAt === 'string') {
+    const explicitEnd = new Date(session.endsAt)
+    if (Number.isFinite(explicitEnd.getTime())) {
+      return explicitEnd
+    }
+  }
+
+  return new Date(
+    new Date(session.scheduledAt).getTime() + getSessionDurationMinutes(session) * 60 * 1000,
+  )
+}
+
+function isSessionStillRelevant(
+  session: {
+    scheduledAt: string
+    status: string
+    endsAt?: unknown
+    durationMinutes?: unknown
+  },
+  now: Date,
+) {
+  if (session.status === 'CANCELLED' || session.status === 'COMPLETED') {
+    return false
+  }
+
+  const startsAt = new Date(session.scheduledAt)
+  if (!Number.isFinite(startsAt.getTime())) {
+    return false
+  }
+
+  const endsAt = resolveSessionEndAt(session)
+  return endsAt.getTime() > now.getTime()
+}
+
+export function resolveNearestSessionDateLabel(scheduledAt: string, now = new Date()) {
+  const sessionDate = new Date(scheduledAt)
+  const sessionDateKey = getKyivDateKey(sessionDate)
+  const todayKey = getKyivDateKey(now)
+  const tomorrowKey = addKyivDays(todayKey, 1)
+  const timeLabel = sessionDate.toLocaleTimeString('uk-UA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: KYIV_TIMEZONE,
+  })
+
+  if (sessionDateKey === todayKey) {
+    return `Сьогодні · ${timeLabel}`
+  }
+
+  if (sessionDateKey === tomorrowKey) {
+    return `Завтра · ${timeLabel}`
+  }
+
+  return `${formatWeekDate(scheduledAt)} · ${timeLabel}`
 }
 
 type KyivWeekRange = {
@@ -330,11 +422,12 @@ export function resolveNearestZoomSession(input: {
   mySessions: ZoomSessionWithAttendance[]
   now?: Date
 }) {
+  const now = input.now ?? new Date()
   const bookedSessionIds = new Set(
     input.mySessions.filter((session) => session.isRegistered).map((session) => session.id),
   )
 
-  if (input.upcomingSession) {
+  if (input.upcomingSession && isSessionStillRelevant(input.upcomingSession, now)) {
     const currentWeekMatch = input.currentWeekSessions.find(
       (session) => session.id === input.upcomingSession?.id,
     )
@@ -351,7 +444,96 @@ export function resolveNearestZoomSession(input: {
     })
   }
 
-  return pickNextZoomSession(input.currentWeekSessions, input.now)
+  return pickNextZoomSession(input.currentWeekSessions, now)
+}
+
+function mergeBookedState(
+  session: ZoomWeekOverview['sessions'][number],
+  bookedSessionIds: Set<string>,
+) {
+  return {
+    ...session,
+    isMyBooking: session.isMyBooking || bookedSessionIds.has(session.id),
+  }
+}
+
+export function resolveUpcomingZoomSessions(input: {
+  currentWeekSessions: ZoomWeekOverview['sessions']
+  upcomingSession: ZoomSessionDTO | null | undefined
+  mySessions: ZoomSessionWithAttendance[]
+  now?: Date
+}) {
+  const now = input.now ?? new Date()
+  const bookedSessionIds = new Set(
+    input.mySessions.filter((session) => session.isRegistered).map((session) => session.id),
+  )
+  const mergedSessions = new Map<string, ZoomWeekOverview['sessions'][number]>()
+
+  for (const session of input.currentWeekSessions) {
+    mergedSessions.set(session.id, mergeBookedState(session, bookedSessionIds))
+  }
+
+  if (input.upcomingSession) {
+    const existingSession = mergedSessions.get(input.upcomingSession.id)
+    mergedSessions.set(
+      input.upcomingSession.id,
+      existingSession
+        ? mergeBookedState(existingSession, bookedSessionIds)
+        : normalizeZoomHubSession(input.upcomingSession, {
+            isMyBooking: bookedSessionIds.has(input.upcomingSession.id),
+          }),
+    )
+  }
+
+  const upcomingSessions = [...mergedSessions.values()]
+    .filter((session) => isSessionStillRelevant(session, now))
+    .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())
+
+  return {
+    upcomingSessions,
+    nextSession: upcomingSessions[0] ?? null,
+    visibleSessionCount: upcomingSessions.length,
+  }
+}
+
+export function resolveNextZoomBoundaryAt(
+  sessions: Array<{
+    scheduledAt: string
+    status: string
+    endsAt?: unknown
+    durationMinutes?: unknown
+  }>,
+  now = new Date(),
+) {
+  const candidateBoundaries = sessions.flatMap((session) => {
+    if (session.status === 'CANCELLED' || session.status === 'COMPLETED') {
+      return []
+    }
+
+    const startsAt = new Date(session.scheduledAt)
+    if (!Number.isFinite(startsAt.getTime())) {
+      return []
+    }
+
+    const endsAt = resolveSessionEndAt(session)
+    const boundaries = []
+
+    if (startsAt.getTime() > now.getTime()) {
+      boundaries.push(startsAt)
+    }
+
+    if (endsAt.getTime() > now.getTime()) {
+      boundaries.push(endsAt)
+    }
+
+    return boundaries
+  })
+
+  if (candidateBoundaries.length === 0) {
+    return null
+  }
+
+  return candidateBoundaries.sort((left, right) => left.getTime() - right.getTime())[0] ?? null
 }
 
 export function shouldRenderPaymentGate(accessState: 'loading' | 'active' | 'inactive') {
@@ -371,30 +553,24 @@ export function resolveZoomSessionTitle(topic: string | null | undefined) {
 export function getVisibleWeekSessions(
   currentWeekSessions: ZoomWeekOverview['sessions'],
   nextSession: ZoomWeekOverview['sessions'][number] | null,
+  now = new Date(),
 ) {
-  if (!nextSession) {
-    return currentWeekSessions
-  }
-
-  return currentWeekSessions.filter((session) => session.id !== nextSession.id)
+  return currentWeekSessions.filter((session) =>
+    isSessionStillRelevant(session, now) && session.id !== nextSession?.id,
+  )
 }
 
 export function resolveWeekEmptyMessage(input: {
   hasZoomHubAccess: boolean
   shouldShowDirectSessionOnly: boolean
-  currentWeekSessions: ZoomWeekOverview['sessions']
-  visibleWeekSessions: ZoomWeekOverview['sessions']
+  nextSession: ZoomWeekOverview['sessions'][number] | null
 }) {
   if (!input.hasZoomHubAccess || input.shouldShowDirectSessionOnly) {
     return null
   }
 
-  if (input.currentWeekSessions.length === 0) {
-    return 'На поточному тижні практик немає.'
-  }
-
-  if (input.visibleWeekSessions.length === 0) {
-    return 'На цьому тижні інших практик немає.'
+  if (!input.nextSession) {
+    return 'На цей момент доступних Zoom-практик немає.'
   }
 
   return null
@@ -403,7 +579,8 @@ export function resolveWeekEmptyMessage(input: {
 export function resolveZoomHubPrimaryAction(input: {
   accessState: 'loading' | 'active' | 'inactive'
   session: ZoomWeekOverview['sessions'][number] | null
-}) {
+  now?: Date
+}): ZoomHubPrimaryActionState {
   if (input.accessState === 'inactive') {
     return {
       action: 'open_access' as ZoomHubPrimaryAction,
@@ -420,43 +597,63 @@ export function resolveZoomHubPrimaryAction(input: {
     }
   }
 
-  if (input.session.status === 'ACTIVE' && input.session.zoomLink) {
+  const now = input.now ?? new Date()
+  const sessionIsActive = isSessionStillRelevant(input.session, now)
+    && new Date(input.session.scheduledAt).getTime() <= now.getTime()
+
+  if (sessionIsActive && input.session.zoomLink) {
     return {
       action: 'join' as ZoomHubPrimaryAction,
-      label: 'Приєднатися',
+      label: 'ПРИЄДНАТИСЯ',
       description: 'Практика вже триває. Відкрий Zoom за активним посиланням.',
     }
   }
 
   if (input.session.status === 'COMPLETED') {
     return {
-      action: 'browse' as ZoomHubPrimaryAction,
-      label: 'Обрати наступну практику',
+      action: 'none' as ZoomHubPrimaryAction,
+      label: 'Zoom завершено',
       description: 'Ця практика вже завершилась. Обери наступну доступну сесію.',
     }
   }
 
   if (input.session.status === 'CANCELLED') {
     return {
-      action: 'browse' as ZoomHubPrimaryAction,
-      label: 'Обрати іншу практику',
+      action: 'none' as ZoomHubPrimaryAction,
+      label: 'Сесію скасовано',
       description: 'Цю сесію скасовано. Нижче показані актуальні доступні Zoom.',
     }
   }
 
   if (input.session.isMyBooking) {
     return {
-      action: 'prepare' as ZoomHubPrimaryAction,
-      label: 'Підготуватися',
+      action: 'none' as ZoomHubPrimaryAction,
+      label: 'ТИ ЗАПИСАНА',
       description: 'Ти вже записана. Зафіксуй питання або відкрий свою сесію нижче.',
     }
   }
 
   return {
     action: 'book' as ZoomHubPrimaryAction,
-    label: 'Записатися',
+    label: 'ЗАПИСАТИСЯ',
     description: 'Обери цю практику як наступний конкретний крок.',
   }
+}
+
+export function resolveZoomHubPrimaryActionClassName(action: ZoomHubPrimaryAction) {
+  if (action === 'join') {
+    return 'min-h-11 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white'
+  }
+
+  if (action === 'book') {
+    return 'min-h-11 rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-3 text-sm font-semibold text-[var(--on-accent)]'
+  }
+
+  if (action === 'open_access') {
+    return 'min-h-11 rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-3 text-sm font-semibold text-[var(--on-accent)]'
+  }
+
+  return 'min-h-11 rounded-xl bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-100'
 }
 
 function pluralizeSessions(count: number): string {
@@ -586,6 +783,7 @@ export default function CleanMiniAppZoomCalendar() {
       zoomLink: session.zoomLink ?? '',
     }),
   )
+  const now = new Date()
   const accessState = resolveZoomAccessState({
     authRestoreStatus,
     canRunProtectedQueries,
@@ -595,14 +793,16 @@ export default function CleanMiniAppZoomCalendar() {
   const hasZoomHubAccess = accessState === 'active'
   const isDirectBooking = isDirectZoomBookingRequest(directBookingParams) && !directBookingExpired
   const directSessionId = directBookingParams.sessionId
-  const nextSession = resolveNearestZoomSession({
+  const canonicalSessions = resolveUpcomingZoomSessions({
     currentWeekSessions,
     upcomingSession,
     mySessions,
+    now,
   })
+  const nextSession = canonicalSessions.nextSession
   const directSession =
     isDirectBooking
-      ? currentWeekSessions.find((session) => session.id === directSessionId)
+      ? canonicalSessions.upcomingSessions.find((session) => session.id === directSessionId)
         ?? (nextSession?.id === directSessionId ? nextSession : null)
       : null
   const isScheduleLoading = isCurrentWeekLoading || isUpcomingLoading || isMySessionsLoading
@@ -619,28 +819,93 @@ export default function CleanMiniAppZoomCalendar() {
     || directBookingState === 'checking_access'
     || directBookingState === 'loading_session'
   const shouldShowDirectSessionOnly = directBookingState === 'session' && Boolean(directSession)
-  const visibleWeekSessions = getVisibleWeekSessions(currentWeekSessions, nextSession)
+  const visibleWeekSessions = getVisibleWeekSessions(currentWeekSessions, nextSession, now)
   const visibleSessions = shouldShowDirectSessionOnly && directSession
     ? [directSession]
     : visibleWeekSessions
-  const sessionsCount = visibleSessions.length
+  const sessionsCount = shouldShowDirectSessionOnly
+    ? 1
+    : canonicalSessions.visibleSessionCount
   const primaryAction = resolveZoomHubPrimaryAction({
     accessState,
     session: nextSession,
+    now,
   })
-  const allKnownSessions = nextSession && !currentWeekSessions.some((session) => session.id === nextSession.id)
-    ? [...currentWeekSessions, nextSession]
-    : currentWeekSessions
   const weekEmptyMessage = resolveWeekEmptyMessage({
     hasZoomHubAccess,
     shouldShowDirectSessionOnly,
-    currentWeekSessions,
-    visibleWeekSessions,
+    nextSession,
   })
+  const nextBoundaryAt = resolveNextZoomBoundaryAt(canonicalSessions.upcomingSessions, now)
 
   useEffect(() => {
     dispatch(api.util.invalidateTags(['Access', 'Products', 'Subscription', 'ZoomSession']))
   }, [dispatch])
+
+  useEffect(() => {
+    if (!user || authRestoreStatus !== 'ready' || !canRunProtectedQueries) {
+      return
+    }
+
+    const refetchZoomState = () => {
+      dispatch(api.util.invalidateTags(['ZoomSession']))
+      void Promise.all([refetchCurrentWeek(), refetchUpcoming(), refetchMySessions()])
+    }
+
+    const handleWindowFocus = () => {
+      refetchZoomState()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refetchZoomState()
+      }
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [
+    authRestoreStatus,
+    canRunProtectedQueries,
+    dispatch,
+    refetchCurrentWeek,
+    refetchMySessions,
+    refetchUpcoming,
+    user,
+  ])
+
+  useEffect(() => {
+    if (!nextBoundaryAt || !user || authRestoreStatus !== 'ready' || !canRunProtectedQueries) {
+      return
+    }
+
+    const timeoutMs = Math.max(
+      0,
+      nextBoundaryAt.getTime() - Date.now() + ZOOM_BOUNDARY_REFRESH_BUFFER_MS,
+    )
+    const timerId = window.setTimeout(() => {
+      dispatch(api.util.invalidateTags(['ZoomSession']))
+      void Promise.all([refetchCurrentWeek(), refetchUpcoming(), refetchMySessions()])
+    }, timeoutMs)
+
+    return () => {
+      window.clearTimeout(timerId)
+    }
+  }, [
+    authRestoreStatus,
+    canRunProtectedQueries,
+    dispatch,
+    nextBoundaryAt,
+    refetchCurrentWeek,
+    refetchMySessions,
+    refetchUpcoming,
+    user,
+  ])
 
   useEffect(() => {
     if (!user || !import.meta.env.DEV || accessState === 'loading') return
@@ -838,7 +1103,7 @@ export default function CleanMiniAppZoomCalendar() {
   const handleSubmitBookingQuestion = async () => {
     const sessionId = questionSessionId?.trim()
     const questionText = bookingQuestionText.trim()
-    const selectedSession = allKnownSessions.find((session) => session.id === sessionId) ?? null
+    const selectedSession = canonicalSessions.upcomingSessions.find((session) => session.id === sessionId) ?? null
     const shouldCreateBooking = !selectedSession?.isMyBooking && questionSubmittedSessionId !== sessionId
 
     if (!sessionId) return
@@ -921,11 +1186,6 @@ export default function CleanMiniAppZoomCalendar() {
       return
     }
 
-    if (primaryAction.action === 'prepare') {
-      openBookingQuestionForm(nextSession.id)
-      return
-    }
-
     if (primaryAction.action === 'join' && nextSession.zoomLink) {
       window.open(nextSession.zoomLink, '_blank', 'noopener,noreferrer')
       return
@@ -957,13 +1217,13 @@ export default function CleanMiniAppZoomCalendar() {
               Zoom Hub
             </p>
             <h1 className="mt-1 text-xl font-semibold">ФОКУС · Zoom</h1>
-            {hasZoomHubAccess || currentWeekSessions.length > 0 || nextSession ? (
+            {hasZoomHubAccess || sessionsCount > 0 ? (
               <p className="mt-1 text-sm text-white/55">
                 {formatWeekDate(weekRange.from)} — {formatWeekDate(weekRange.to)} · {weekRange.timezone}
               </p>
             ) : null}
           </div>
-          {hasZoomHubAccess || currentWeekSessions.length > 0 || nextSession ? (
+          {hasZoomHubAccess || sessionsCount > 0 ? (
             <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-white/60">
               {sessionsCount} {pluralizeSessions(sessionsCount)}
             </span>
@@ -982,7 +1242,7 @@ export default function CleanMiniAppZoomCalendar() {
                 <>
                   <p className="mt-2 text-lg font-semibold">{resolveZoomSessionTitle(nextSession.topic)}</p>
                   <p className="mt-1 text-sm text-white/65">
-                    {getSessionDateLabel(nextSession.scheduledAt)} · {getSessionMeta(nextSession)}
+                    {resolveNearestSessionDateLabel(nextSession.scheduledAt)} · {getSessionMeta(nextSession)}
                   </p>
                   <p className="mt-3 text-sm text-white/70">{primaryAction.description}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -990,7 +1250,7 @@ export default function CleanMiniAppZoomCalendar() {
                       type="button"
                       onClick={() => void handleNextZoomAction()}
                       disabled={primaryAction.action === 'none'}
-                      className="min-h-11 rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-3 text-sm font-semibold text-[var(--bg-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className={resolveZoomHubPrimaryActionClassName(primaryAction.action)}
                     >
                       {primaryAction.label}
                     </button>
@@ -998,11 +1258,7 @@ export default function CleanMiniAppZoomCalendar() {
                       <span className="min-h-11 rounded-xl bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200">
                         Записано
                       </span>
-                    ) : (
-                      <span className="min-h-11 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/60">
-                        Запис ще не створено
-                      </span>
-                    )}
+                    ) : null}
                   </div>
                   {nextSession.isMyBooking ? (
                     <p className="mt-3 text-sm text-emerald-100/90">Твій запис підтверджено.</p>
@@ -1105,7 +1361,7 @@ export default function CleanMiniAppZoomCalendar() {
                           type="button"
                           onClick={() => void register(session.id)}
                           disabled={activeSessionId === session.id}
-                          className="rounded-xl bg-[rgb(var(--accent-rgb))] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
+                          className={MINIAPP_ACCENT_BUTTON_CLASSNAME}
                         >
                           {activeSessionId === session.id ? 'Відкриваємо…' : 'Записатись'}
                         </button>
