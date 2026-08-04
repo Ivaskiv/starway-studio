@@ -244,16 +244,72 @@ export async function expireZoomSwapRequestsCron(): Promise<void> {
   )
 }
 
-export async function generateZoomSessionsFromAvailabilityCron(): Promise<void> {
+export async function scanZoomAvailabilityAutoGenerate(): Promise<{
+  expertsScanned: number
+  expertsSkipped: number
+  created: number
+  skipped: number
+  failures: number
+}> {
   const experts = await prisma.expert.findMany({
+    where: {
+      isActive: true,
+      deletedAt: null,
+    },
     select: { id: true, zoomAvailability: true },
-  })
+  });
 
-  await Promise.all(
-    experts.map(async (expert) => {
-      const slots = expert.zoomAvailability
-      if (!Array.isArray(slots) || slots.length === 0) return
-      await generateSessionsFromAvailability(expert.id, 4)
-    }),
-  )
+  let expertsScanned = 0;
+  let expertsSkipped = 0;
+  let created = 0;
+  let skipped = 0;
+  let failures = 0;
+
+  for (const expert of experts) {
+    const slots = Array.isArray(expert.zoomAvailability) ? expert.zoomAvailability : [];
+    const hasActiveAvailability = slots.some((slot) => (
+      slot
+      && typeof slot === 'object'
+      && !Array.isArray(slot)
+      && (slot as { active?: boolean }).active === true
+    ));
+
+    if (!hasActiveAvailability) {
+      expertsSkipped += 1;
+      continue;
+    }
+
+    try {
+      const result = await generateSessionsFromAvailability(expert.id, 4);
+      expertsScanned += 1;
+      created += result.created;
+      skipped += result.skipped;
+      console.info('[zoom.schedule.auto_generate.expert]', {
+        expertId: expert.id,
+        created: result.created,
+        skipped: result.skipped,
+      });
+    } catch (error) {
+      failures += 1;
+      console.error('[zoom.schedule.auto_generate.expert_failed]', {
+        expertId: expert.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const result = {
+    expertsScanned,
+    expertsSkipped,
+    created,
+    skipped,
+    failures,
+  };
+
+  console.info('[zoom.schedule.auto_generate.scan_completed]', result);
+  return result;
+}
+
+export async function generateZoomSessionsFromAvailabilityCron(): Promise<void> {
+  await scanZoomAvailabilityAutoGenerate();
 }

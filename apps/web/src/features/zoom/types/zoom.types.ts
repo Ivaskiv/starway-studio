@@ -50,6 +50,38 @@ export interface ZoomSessionWithAttendance extends ZoomSessionDTO {
   attendeeId?:  string;
 }
 
+export interface ZoomPreviousSessionRecap {
+  id: string;
+  title: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  summary: string | null;
+  recordingUrl: string | null;
+  materialsUrl: string | null;
+  attendanceStatus: string | null;
+  attendanceCount?: number;
+  nextStep?: string | null;
+}
+
+export interface ZoomWeeklyReportSummary {
+  id: string;
+  weekStart: string;
+  weekEnd: string;
+  generatedAt: string;
+  summary: string | null;
+  progress: string | null;
+  achievement: string | null;
+  blocker: string | null;
+  nextStep: string | null;
+  detailsAvailable: boolean;
+}
+
+export interface ZoomMySessionsResponse {
+  sessions: ZoomSessionWithAttendance[];
+  previousSessionRecap: ZoomPreviousSessionRecap | null;
+  latestWeeklyReport: ZoomWeeklyReportSummary | null;
+}
+
 export interface ZoomWeekAudio {
   sessionId: string;
   scheduledAt: string;
@@ -68,6 +100,9 @@ export interface ZoomWeekOverview {
   sessions: Array<ZoomSessionDTO & {
     type: ZoomSessionType;
     attendeesCount: number;
+    questionPreviews?: string[];
+    questionsCount?: number;
+    remainingQuestionsCount?: number;
     isMyBooking: boolean;
     audioFileId: string | null;
     hasAudio: boolean;

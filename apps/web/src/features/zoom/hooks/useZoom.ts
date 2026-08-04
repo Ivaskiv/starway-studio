@@ -20,7 +20,7 @@ export function useZoom() {
 
   // Fallback до моків
   const allSessions: ZoomSessionWithAttendance[] = useMemo(
-    () => (isError || !data?.length ? MOCK_SESSIONS : data),
+    () => (isError || !data?.sessions.length ? MOCK_SESSIONS : data.sessions),
     [data, isError],
   );
 
@@ -56,5 +56,5 @@ export function useZoom() {
     };
   };
 
-  return { allSessions, upcoming, history, register, registering, isLoading, isMock: isError || !data?.length, formatDate };
+  return { allSessions, upcoming, history, register, registering, isLoading, isMock: isError || !data?.sessions.length, formatDate };
 }

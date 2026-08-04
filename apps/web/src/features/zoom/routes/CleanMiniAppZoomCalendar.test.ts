@@ -14,11 +14,16 @@ let resolveNearestZoomSession: typeof import('./CleanMiniAppZoomCalendar').resol
 let resolveNearestSessionDateLabel: typeof import('./CleanMiniAppZoomCalendar').resolveNearestSessionDateLabel
 let shouldRenderPaymentGate: typeof import('./CleanMiniAppZoomCalendar').shouldRenderPaymentGate
 let getVisibleWeekSessions: typeof import('./CleanMiniAppZoomCalendar').getVisibleWeekSessions
-let resolveWeekEmptyMessage: typeof import('./CleanMiniAppZoomCalendar').resolveWeekEmptyMessage
+let resolveZoomHubEmptyState: typeof import('./CleanMiniAppZoomCalendar').resolveZoomHubEmptyState
 let resolveZoomSessionTitle: typeof import('./CleanMiniAppZoomCalendar').resolveZoomSessionTitle
 let MINIAPP_ACCENT_BUTTON_CLASSNAME: typeof import('./CleanMiniAppZoomCalendar').MINIAPP_ACCENT_BUTTON_CLASSNAME
 let resolveUpcomingZoomSessions: typeof import('./CleanMiniAppZoomCalendar').resolveUpcomingZoomSessions
 let resolveNextZoomBoundaryAt: typeof import('./CleanMiniAppZoomCalendar').resolveNextZoomBoundaryAt
+let resolvePreviousZoomRecapTitle: typeof import('./CleanMiniAppZoomCalendar').resolvePreviousZoomRecapTitle
+let resolvePreviousZoomRecapDateLabel: typeof import('./CleanMiniAppZoomCalendar').resolvePreviousZoomRecapDateLabel
+let resolvePreviousZoomRecapPreview: typeof import('./CleanMiniAppZoomCalendar').resolvePreviousZoomRecapPreview
+let resolveWeeklyReportPeriodLabel: typeof import('./CleanMiniAppZoomCalendar').resolveWeeklyReportPeriodLabel
+let resolveWeeklyReportSummaryPreview: typeof import('./CleanMiniAppZoomCalendar').resolveWeeklyReportSummaryPreview
 
 const LEGACY_PREPARE_LABELS = [
   ['П', 'і', 'д', 'г', 'о', 'т', 'у', 'в', 'а', 'т', 'и', 'с', 'я'].join(''),
@@ -46,11 +51,16 @@ beforeAll(async () => {
     resolveNearestSessionDateLabel,
     shouldRenderPaymentGate,
     getVisibleWeekSessions,
-    resolveWeekEmptyMessage,
+    resolveZoomHubEmptyState,
     resolveZoomSessionTitle,
     MINIAPP_ACCENT_BUTTON_CLASSNAME,
     resolveUpcomingZoomSessions,
     resolveNextZoomBoundaryAt,
+    resolvePreviousZoomRecapTitle,
+    resolvePreviousZoomRecapDateLabel,
+    resolvePreviousZoomRecapPreview,
+    resolveWeeklyReportPeriodLabel,
+    resolveWeeklyReportSummaryPreview,
   } = await import('./CleanMiniAppZoomCalendar'))
 })
 
@@ -292,6 +302,104 @@ describe('zoom hub next session', () => {
     expect(resolved.nextSession?.id).toBe('next-monday')
   })
 
+  it('formats the previous practice title from persisted topic or falls back to the date', () => {
+    expect(
+      resolvePreviousZoomRecapTitle({
+        id: 'recap-1',
+        title: 'Повернення до ритму',
+        startsAt: '2026-08-03T15:00:00.000Z',
+        endsAt: null,
+        summary: null,
+        recordingUrl: null,
+        materialsUrl: null,
+        attendanceStatus: 'ATTENDED',
+        attendanceCount: 7,
+        nextStep: 'Зафіксувати один конкретний крок.',
+      }),
+    ).toBe('Повернення до ритму')
+
+    expect(
+      resolvePreviousZoomRecapTitle({
+        id: 'recap-2',
+        title: '   ',
+        startsAt: '2026-08-03T15:00:00.000Z',
+        endsAt: null,
+        summary: null,
+        recordingUrl: null,
+        materialsUrl: null,
+        attendanceStatus: 'BOOKED',
+        attendanceCount: 0,
+        nextStep: null,
+      }),
+    ).toBe('Zoom-практика за 3 серпня')
+  })
+
+  it('shows only confirmed recap content and uses the pending materials fallback', () => {
+    expect(resolvePreviousZoomRecapDateLabel('2026-08-03T15:00:00.000Z')).toBe('3 серпня · 18:00')
+
+    expect(
+      resolvePreviousZoomRecapPreview({
+        id: 'recap-1',
+        title: 'Повернення до ритму',
+        startsAt: '2026-08-03T15:00:00.000Z',
+        endsAt: null,
+        summary: 'Один короткий підсумок.',
+        recordingUrl: null,
+        materialsUrl: null,
+        attendanceStatus: 'ATTENDED',
+        attendanceCount: 7,
+        nextStep: 'Зафіксувати один конкретний крок.',
+      }),
+    ).toBe('Один короткий підсумок.')
+
+    expect(
+      resolvePreviousZoomRecapPreview({
+        id: 'recap-2',
+        title: 'Повернення до ритму',
+        startsAt: '2026-08-03T15:00:00.000Z',
+        endsAt: null,
+        summary: null,
+        recordingUrl: null,
+        materialsUrl: null,
+        attendanceStatus: 'ATTENDED',
+        attendanceCount: 0,
+        nextStep: null,
+      }),
+    ).toBe('Матеріали цієї практики ще готуються.')
+  })
+
+  it('formats the weekly report period and keeps the summary compact', () => {
+    expect(
+      resolveWeeklyReportPeriodLabel({
+        id: 'report-1',
+        weekStart: '2026-07-27T00:00:00.000Z',
+        weekEnd: '2026-08-03T23:59:59.000Z',
+        generatedAt: '2026-08-04T06:30:00.000Z',
+        summary: 'Тиждень показав, де ти тримаєш ритм, а де розпорошуєшся.',
+        progress: 'Виконано 3/5 задач',
+        achievement: null,
+        blocker: null,
+        nextStep: 'Тримати один ясний крок на день.',
+        detailsAvailable: true,
+      }),
+    ).toBe('27 липня — 4 серпня')
+
+    expect(
+      resolveWeeklyReportSummaryPreview({
+        id: 'report-2',
+        weekStart: '2026-07-27T00:00:00.000Z',
+        weekEnd: '2026-08-03T23:59:59.000Z',
+        generatedAt: '2026-08-04T06:30:00.000Z',
+        summary: 'Один короткий підсумок.',
+        progress: null,
+        achievement: null,
+        blocker: null,
+        nextStep: null,
+        detailsAvailable: true,
+      }),
+    ).toBe('Один короткий підсумок.')
+  })
+
   it('hides ended sessions and returns an honest empty state when nothing upcoming remains', () => {
     const resolved = resolveUpcomingZoomSessions({
       currentWeekSessions: [
@@ -322,12 +430,18 @@ describe('zoom hub next session', () => {
     expect(resolved.visibleSessionCount).toBe(0)
     expect(resolved.nextSession).toBeNull()
     expect(
-      resolveWeekEmptyMessage({
+      resolveZoomHubEmptyState({
         hasZoomHubAccess: true,
         shouldShowDirectSessionOnly: false,
         nextSession: resolved.nextSession,
+        previousSessionRecap: null,
+        latestWeeklyReport: null,
       }),
-    ).toBe('На цей момент доступних Zoom-практик немає.')
+    ).toEqual({
+      title: 'Наступний Zoom уже готується',
+      description: 'Розклад оновлюється автоматично. Щойно наступна практика буде доступна, ми повідомимо тебе в боті.',
+      accessNote: 'Твій доступ активний.',
+    })
   })
 
   it('returns an exact Monday-Sunday Kyiv range instead of a rolling 15-day window', () => {
@@ -605,7 +719,7 @@ describe('zoom hub next session', () => {
       }),
     ).toMatchObject({
       action: 'book',
-      label: 'ЗАПИСАТИСЯ',
+      label: 'ЗАПИСАТИСЬ НА СЕРЕДА',
     })
   })
 
@@ -837,7 +951,7 @@ describe('zoom hub next session', () => {
 
   it('does not show empty copy while a next session exists', () => {
     expect(
-      resolveWeekEmptyMessage({
+      resolveZoomHubEmptyState({
         hasZoomHubAccess: true,
         shouldShowDirectSessionOnly: false,
         nextSession: {
@@ -857,18 +971,26 @@ describe('zoom hub next session', () => {
           hasAudio: false,
           zoomLink: '',
         },
+        previousSessionRecap: null,
+        latestWeeklyReport: null,
       }),
     ).toBeNull()
   })
 
   it('shows the canonical empty copy when no upcoming session exists', () => {
     expect(
-      resolveWeekEmptyMessage({
+      resolveZoomHubEmptyState({
         hasZoomHubAccess: true,
         shouldShowDirectSessionOnly: false,
         nextSession: null,
+        previousSessionRecap: null,
+        latestWeeklyReport: null,
       }),
-    ).toBe('На цей момент доступних Zoom-практик немає.')
+    ).toEqual({
+      title: 'Наступний Zoom уже готується',
+      description: 'Розклад оновлюється автоматично. Щойно наступна практика буде доступна, ми повідомимо тебе в боті.',
+      accessNote: 'Твій доступ активний.',
+    })
   })
 
   it('returns the next boundary once for automatic refetch after session rollover', () => {

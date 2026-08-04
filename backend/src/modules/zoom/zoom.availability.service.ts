@@ -6,6 +6,7 @@ import { prisma } from '../../db/client.js';
 import { createFullSession } from './service.js';
 
 export type ZoomSessionType = 'group_practice' | 'individual' | 'intensive' | 'battle_review';
+const DEFAULT_ZOOM_TIMEZONE = 'Europe/Kyiv';
 
 export interface AvailabilitySlot {
   id: string;
@@ -23,6 +24,68 @@ export interface AvailabilitySlot {
 
 function toAvailabilityJson(slots: AvailabilitySlot[]): Prisma.InputJsonValue {
   return slots as unknown as Prisma.InputJsonValue;
+}
+
+function getTimeZoneDateParts(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? '0');
+
+  return {
+    year: pick('year'),
+    month: pick('month'),
+    day: pick('day'),
+    hour: pick('hour'),
+    minute: pick('minute'),
+    second: pick('second'),
+  };
+}
+
+function getTimeZoneOffsetMs(date: Date, timeZone: string) {
+  const parts = getTimeZoneDateParts(date, timeZone);
+  const utcTimestamp = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+
+  return utcTimestamp - date.getTime();
+}
+
+function createUtcDateForTimeZone(input: {
+  year: number
+  month: number
+  day: number
+  hour?: number
+  minute?: number
+  second?: number
+  millisecond?: number
+  timeZone: string
+}) {
+  const utcGuess = Date.UTC(
+    input.year,
+    input.month - 1,
+    input.day,
+    input.hour ?? 0,
+    input.minute ?? 0,
+    input.second ?? 0,
+    input.millisecond ?? 0,
+  );
+  const offset = getTimeZoneOffsetMs(new Date(utcGuess), input.timeZone);
+  return new Date(utcGuess - offset);
 }
 
 export async function getAvailability(expertId: string): Promise<AvailabilitySlot[]> {
@@ -46,48 +109,59 @@ export async function saveAvailability(
   });
 }
 
-// Compute next `weeksAhead` dates for a given dayOfWeek/hour/minute.
-// Timezone is always treated as Europe/Kyiv = UTC+3 (hard-coded offset).
+// Compute next `weeksAhead` dates for a recurring slot in the slot timezone.
 function nextOccurrences(
   dayOfWeek: number,
   hour: number,
   minute: number,
   weeksAhead: number,
+  timeZone = DEFAULT_ZOOM_TIMEZONE,
+  now = new Date(),
 ): Date[] {
-  // Kyiv = UTC+3: convert local hour to UTC
-  let utcHour = hour - 3;
-  let dayAdj = 0;
-  if (utcHour < 0) {
-    utcHour += 24;
-    dayAdj = -1; // slot crosses midnight when converted to UTC
-  }
+  const localNow = getTimeZoneDateParts(now, timeZone);
+  const localReferenceDate = createUtcDateForTimeZone({
+    year: localNow.year,
+    month: localNow.month,
+    day: localNow.day,
+    hour: 12,
+    minute: 0,
+    second: 0,
+    millisecond: 0,
+    timeZone,
+  });
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'short',
+  }).format(localReferenceDate);
+  const weekdayIndex = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday);
+  let daysUntilFirst = (dayOfWeek - Math.max(weekdayIndex, 0) + 7) % 7;
 
-  const now = new Date();
-  const todayUtcDay = now.getUTCDay(); // 0=Sun … 6=Sat
-
-  // Days until next occurrence of dayOfWeek (in UTC; dayAdj shifts which UTC day the slot falls on)
-  const targetUtcDay = ((dayOfWeek + dayAdj) % 7 + 7) % 7;
-  let daysUntilFirst = (targetUtcDay - todayUtcDay + 7) % 7;
-
-  // Build first candidate
-  const first = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + daysUntilFirst,
-    utcHour,
+  const first = createUtcDateForTimeZone({
+    year: localNow.year,
+    month: localNow.month,
+    day: localNow.day + daysUntilFirst,
+    hour,
     minute,
-    0, 0,
-  ));
+    second: 0,
+    millisecond: 0,
+    timeZone,
+  });
 
-  // If it's already passed, advance one week
   if (first <= now) {
-    first.setUTCDate(first.getUTCDate() + 7);
+    daysUntilFirst += 7;
   }
 
   return Array.from({ length: weeksAhead }, (_, w) => {
-    const d = new Date(first);
-    d.setUTCDate(first.getUTCDate() + w * 7);
-    return d;
+    return createUtcDateForTimeZone({
+      year: localNow.year,
+      month: localNow.month,
+      day: localNow.day + daysUntilFirst + w * 7,
+      hour,
+      minute,
+      second: 0,
+      millisecond: 0,
+      timeZone,
+    });
   });
 }
 
@@ -103,6 +177,7 @@ function defaultTopicByType(type: ZoomSessionType): string {
 export async function generateSessionsFromAvailability(
   expertId: string,
   weeksAhead = 4,
+  now = new Date(),
 ): Promise<{ created: number; skipped: number }> {
   const slots = await getAvailability(expertId);
   let created = 0;
@@ -111,7 +186,14 @@ export async function generateSessionsFromAvailability(
   for (const slot of slots) {
     if (!slot.active) continue;
 
-    const dates = nextOccurrences(slot.dayOfWeek, slot.hour, slot.minute, weeksAhead);
+    const dates = nextOccurrences(
+      slot.dayOfWeek,
+      slot.hour,
+      slot.minute,
+      weeksAhead,
+      slot.timezone || DEFAULT_ZOOM_TIMEZONE,
+      now,
+    );
 
     for (const date of dates) {
       const windowStart = new Date(date.getTime() - 5 * 60 * 1000);

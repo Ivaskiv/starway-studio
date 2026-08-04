@@ -38,6 +38,9 @@ export interface ZoomCalendarSession {
   zoomLink: string;
   audioFileId?: string | null;
   attendeesCount?: number;
+  questionPreviews?: string[];
+  questionsCount?: number;
+  remainingQuestionsCount?: number;
   notifiedAt24h?: string | null;
   notifiedAt2h?: string | null;
   goalText?: string | null;

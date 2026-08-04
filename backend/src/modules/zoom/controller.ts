@@ -16,9 +16,11 @@ import {
   createZoomSession,
   getCurrentWeekZoomOverview,
   getPublicCurrentWeekZoomOverview,
+  getUserLatestWeeklyReportSummary,
   getSessionById,
   getSessionAttendees,
   getUpcomingZoom,
+  getUserPreviousZoomSessionRecap,
   markAttended,
   registerAttendee,
   saveBookingPreparationForAttendee,
@@ -499,7 +501,14 @@ export async function getMySessions(req: AuthenticatedRequest, res: Response, ne
       attendeeId:         a.id,
     }));
 
-    return res.status(200).json(result);
+    const previousSessionRecap = await getUserPreviousZoomSessionRecap(userId)
+    const latestWeeklyReport = await getUserLatestWeeklyReportSummary(userId)
+
+    return res.status(200).json({
+      sessions: result,
+      previousSessionRecap,
+      latestWeeklyReport,
+    });
   } catch (err) {
     next(err);
   }

@@ -5,6 +5,7 @@ import { api } from '@/services/api'
 import type {
   RegisterAttendeeDto,
   ZoomAttendeeDTO,
+  ZoomMySessionsResponse,
   ZoomSessionDTO,
   ZoomSessionWithAttendance,
   ZoomWeekOverview,
@@ -68,7 +69,7 @@ export const zoomApi = api.injectEndpoints({
       providesTags: ['ZoomSession'],
     }),
 
-    getMySessions: build.query<ZoomSessionWithAttendance[], void>({
+    getMySessions: build.query<ZoomMySessionsResponse, void>({
       query:        () => '/zoom/my',
       providesTags: ['ZoomSession'],
     }),

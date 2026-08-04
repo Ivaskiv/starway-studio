@@ -17,11 +17,15 @@ import {
 import { useGetCalendarSessionsQuery } from '@/features/zoom/zoom.api'
 import type { ZoomCalendarSession } from '@/features/zoom/zoom.types'
 import type {
+  ZoomMySessionsResponse,
+  ZoomPreviousSessionRecap,
   ZoomSessionDTO,
   ZoomSessionWithAttendance,
   ZoomWeekOverview,
+  ZoomWeeklyReportSummary,
 } from '@/features/zoom/types/zoom.types'
 import { getSessionDateLabel, getSessionMeta } from '@/features/zoom/zoom.utils'
+import { ROUTES } from '@/config/routes'
 import { api } from '@/services/api'
 import { useEffect, useState } from 'react'
 
@@ -73,6 +77,12 @@ type ZoomHubPrimaryActionState = {
   action: ZoomHubPrimaryAction
   label: string
   description: string
+}
+
+type ZoomHubEmptyState = {
+  title: string
+  description: string
+  accessNote: string
 }
 
 export const MINIAPP_ACCENT_BUTTON_CLASSNAME =
@@ -408,6 +418,9 @@ function normalizeZoomHubSession(
     updatedAt: 'updatedAt' in session ? session.updatedAt : session.scheduledAt,
     type: 'GROUP',
     attendeesCount: 0,
+    questionPreviews: [],
+    questionsCount: 0,
+    remainingQuestionsCount: 0,
     isMyBooking: false,
     audioFileId: null,
     hasAudio: false,
@@ -550,6 +563,95 @@ export function resolveZoomSessionTitle(topic: string | null | undefined) {
   return normalizedTopic
 }
 
+const PREVIOUS_ZOOM_MATERIALS_PENDING_COPY = 'Матеріали цієї практики ще готуються.'
+
+export function resolvePreviousZoomRecapTitle(recap: ZoomPreviousSessionRecap) {
+  const explicitTitle = recap.title?.trim()
+  if (explicitTitle) {
+    return explicitTitle
+  }
+
+  return `Zoom-практика за ${formatWeekDate(recap.startsAt)}`
+}
+
+export function resolvePreviousZoomRecapDateLabel(startsAt: string) {
+  const date = new Date(startsAt)
+  const timeLabel = date.toLocaleTimeString('uk-UA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: KYIV_TIMEZONE,
+  })
+
+  return `${formatWeekDate(startsAt)} · ${timeLabel}`
+}
+
+export function resolvePreviousZoomRecapPreview(recap: ZoomPreviousSessionRecap) {
+  const summary = recap.summary?.trim()
+  if (summary) {
+    return summary.length > 180 ? `${summary.slice(0, 177).trimEnd()}...` : summary
+  }
+
+  if (!recap.recordingUrl && !recap.materialsUrl) {
+    return PREVIOUS_ZOOM_MATERIALS_PENDING_COPY
+  }
+
+  return null
+}
+
+export function resolvePreviousZoomRecapAttendanceLabel(attendanceCount: number) {
+  if (!Number.isFinite(attendanceCount) || attendanceCount <= 0) {
+    return null
+  }
+
+  return `${attendanceCount} ${pluralizeParticipants(attendanceCount)}`
+}
+
+export function resolvePreviousZoomRecapNextStep(recap: ZoomPreviousSessionRecap) {
+  const nextStep = recap.nextStep?.trim()
+  return nextStep || null
+}
+
+export function resolveWeeklyReportPeriodLabel(report: ZoomWeeklyReportSummary) {
+  return `${formatWeekDate(report.weekStart)} — ${formatWeekDate(report.weekEnd)}`
+}
+
+export function resolveWeeklyReportSummaryPreview(report: ZoomWeeklyReportSummary) {
+  const summary = report.summary?.trim()
+  if (!summary) {
+    return null
+  }
+
+  return summary.length > 220 ? `${summary.slice(0, 217).trimEnd()}...` : summary
+}
+
+function pluralizeParticipants(count: number): string {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) return 'учасник'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'учасники'
+  return 'учасників'
+}
+
+function formatUppercaseWeekday(scheduledAt: string) {
+  return new Date(scheduledAt)
+    .toLocaleDateString('uk-UA', {
+      weekday: 'long',
+      timeZone: KYIV_TIMEZONE,
+    })
+    .toUpperCase()
+}
+
+export function resolveNextSessionQuestionSummary(session: ZoomWeekOverview['sessions'][number]) {
+  if ((session.questionsCount ?? 0) <= 0 || (session.questionPreviews?.length ?? 0) === 0) {
+    return null
+  }
+
+  return {
+    primary: (session.questionPreviews ?? []).slice(0, 2),
+    remaining: session.remainingQuestionsCount ?? 0,
+  }
+}
+
 export function getVisibleWeekSessions(
   currentWeekSessions: ZoomWeekOverview['sessions'],
   nextSession: ZoomWeekOverview['sessions'][number] | null,
@@ -560,17 +662,23 @@ export function getVisibleWeekSessions(
   )
 }
 
-export function resolveWeekEmptyMessage(input: {
+export function resolveZoomHubEmptyState(input: {
   hasZoomHubAccess: boolean
   shouldShowDirectSessionOnly: boolean
   nextSession: ZoomWeekOverview['sessions'][number] | null
-}) {
+  previousSessionRecap: ZoomPreviousSessionRecap | null
+  latestWeeklyReport: ZoomWeeklyReportSummary | null
+}): ZoomHubEmptyState | null {
   if (!input.hasZoomHubAccess || input.shouldShowDirectSessionOnly) {
     return null
   }
 
-  if (!input.nextSession) {
-    return 'На цей момент доступних Zoom-практик немає.'
+  if (!input.nextSession && !input.previousSessionRecap && !input.latestWeeklyReport) {
+    return {
+      title: 'Наступний Zoom уже готується',
+      description: 'Розклад оновлюється автоматично. Щойно наступна практика буде доступна, ми повідомимо тебе в боті.',
+      accessNote: 'Твій доступ активний.',
+    }
   }
 
   return null
@@ -593,7 +701,7 @@ export function resolveZoomHubPrimaryAction(input: {
     return {
       action: 'none' as ZoomHubPrimaryAction,
       label: 'Zoom ще не відкрито',
-      description: 'Щойно коуч додасть практику, вона з’явиться нижче в календарі.',
+      description: 'Розклад оновлюється автоматично.',
     }
   }
 
@@ -635,7 +743,7 @@ export function resolveZoomHubPrimaryAction(input: {
 
   return {
     action: 'book' as ZoomHubPrimaryAction,
-    label: 'ЗАПИСАТИСЯ',
+    label: `ЗАПИСАТИСЬ НА ${formatUppercaseWeekday(input.session.scheduledAt)}`,
     description: 'Обери цю практику як наступний конкретний крок.',
   }
 }
@@ -654,14 +762,6 @@ export function resolveZoomHubPrimaryActionClassName(action: ZoomHubPrimaryActio
   }
 
   return 'min-h-11 rounded-xl bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-100'
-}
-
-function pluralizeSessions(count: number): string {
-  const mod10 = count % 10
-  const mod100 = count % 100
-  if (mod10 === 1 && mod100 !== 11) return 'сесія'
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'сесії'
-  return 'сесій'
 }
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -743,7 +843,7 @@ export default function CleanMiniAppZoomCalendar() {
     refetchOnMountOrArgChange: true,
   })
   const {
-    data: mySessions = [],
+    data: mySessionsResponse,
     isLoading: isMySessionsLoading,
     isError: isMySessionsError,
     refetch: refetchMySessions,
@@ -751,6 +851,9 @@ export default function CleanMiniAppZoomCalendar() {
       skip: !user || authRestoreStatus !== 'ready' || !canRunProtectedQueries,
       refetchOnMountOrArgChange: true,
     })
+  const mySessions = mySessionsResponse?.sessions ?? []
+  const previousSessionRecap = mySessionsResponse?.previousSessionRecap ?? null
+  const latestWeeklyReport = mySessionsResponse?.latestWeeklyReport ?? null
   const [registerAttendee, { isLoading: isRegistering }] = useRegisterAttendeeMutation()
   const [submitBookingQuestion, { isLoading: isSubmittingBookingQuestion }] =
     useSubmitBookingQuestionMutation()
@@ -777,6 +880,9 @@ export default function CleanMiniAppZoomCalendar() {
     normalizeZoomHubSession(session, {
       type: session.type as ZoomWeekOverview['sessions'][number]['type'],
       attendeesCount: session.attendeesCount ?? 0,
+      questionPreviews: session.questionPreviews ?? [],
+      questionsCount: session.questionsCount ?? 0,
+      remainingQuestionsCount: session.remainingQuestionsCount ?? 0,
       isMyBooking: session.isMyBooking ?? false,
       audioFileId: session.audioFileId ?? null,
       hasAudio: Boolean(session.audioFileId),
@@ -831,10 +937,12 @@ export default function CleanMiniAppZoomCalendar() {
     session: nextSession,
     now,
   })
-  const weekEmptyMessage = resolveWeekEmptyMessage({
+  const emptyState = resolveZoomHubEmptyState({
     hasZoomHubAccess,
     shouldShowDirectSessionOnly,
     nextSession,
+    previousSessionRecap,
+    latestWeeklyReport,
   })
   const nextBoundaryAt = resolveNextZoomBoundaryAt(canonicalSessions.upcomingSessions, now)
 
@@ -1217,59 +1325,168 @@ export default function CleanMiniAppZoomCalendar() {
               Zoom Hub
             </p>
             <h1 className="mt-1 text-xl font-semibold">ФОКУС · Zoom</h1>
-            {hasZoomHubAccess || sessionsCount > 0 ? (
+            {sessionsCount > 0 ? (
               <p className="mt-1 text-sm text-white/55">
                 {formatWeekDate(weekRange.from)} — {formatWeekDate(weekRange.to)} · {weekRange.timezone}
               </p>
             ) : null}
           </div>
-          {hasZoomHubAccess || sessionsCount > 0 ? (
-            <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-white/60">
-              {sessionsCount} {pluralizeSessions(sessionsCount)}
-            </span>
-          ) : null}
         </div>
 
         <div className="mt-4 space-y-3">
           {shouldShowCalendarSkeleton ? <ZoomCalendarSkeleton /> : null}
 
-          {!shouldShowCalendarSkeleton ? (
+          {!shouldShowCalendarSkeleton && previousSessionRecap ? (
+            <Card>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
+                МИНУЛА ЗУСТРІЧ
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {resolvePreviousZoomRecapTitle(previousSessionRecap)}
+              </p>
+              <p className="mt-1 text-sm text-white/65">
+                {resolvePreviousZoomRecapDateLabel(previousSessionRecap.startsAt)}
+              </p>
+              {resolvePreviousZoomRecapPreview(previousSessionRecap) ? (
+                <p className="mt-3 text-sm leading-6 text-white/70">
+                  {resolvePreviousZoomRecapPreview(previousSessionRecap)}
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {resolvePreviousZoomRecapAttendanceLabel(previousSessionRecap.attendanceCount ?? 0) ? (
+                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-semibold text-white/70">
+                    {resolvePreviousZoomRecapAttendanceLabel(previousSessionRecap.attendanceCount ?? 0)}
+                  </span>
+                ) : null}
+              </div>
+              {resolvePreviousZoomRecapNextStep(previousSessionRecap) ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
+                    Наступний крок
+                  </p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                    {resolvePreviousZoomRecapNextStep(previousSessionRecap)}
+                  </p>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+
+          {!shouldShowCalendarSkeleton && nextSession ? (
+            <Card>
+              <button
+                type="button"
+                onClick={() => void handleNextZoomAction()}
+                disabled={primaryAction.action === 'none'}
+                className={`${resolveZoomHubPrimaryActionClassName(primaryAction.action)} flex w-full items-center justify-center`}
+              >
+                {primaryAction.label}
+              </button>
+            </Card>
+          ) : null}
+
+          {!shouldShowCalendarSkeleton && nextSession ? (
             <Card>
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
                 Наступна Zoom-практика
               </p>
-              {nextSession ? (
-                <>
-                  <p className="mt-2 text-lg font-semibold">{resolveZoomSessionTitle(nextSession.topic)}</p>
-                  <p className="mt-1 text-sm text-white/65">
-                    {resolveNearestSessionDateLabel(nextSession.scheduledAt)} · {getSessionMeta(nextSession)}
+              <p className="mt-2 text-lg font-semibold">{resolveZoomSessionTitle(nextSession.topic)}</p>
+              <p className="mt-1 text-sm text-white/65">
+                {resolveNearestSessionDateLabel(nextSession.scheduledAt)} · {getSessionMeta(nextSession)}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-semibold text-white/70">
+                  {nextSession.attendeesCount} {pluralizeParticipants(nextSession.attendeesCount)}
+                </span>
+                {nextSession.isMyBooking ? (
+                  <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                    Записано
+                  </span>
+                ) : null}
+              </div>
+              {resolveNextSessionQuestionSummary(nextSession) ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
+                    Питання учасників
                   </p>
-                  <p className="mt-3 text-sm text-white/70">{primaryAction.description}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleNextZoomAction()}
-                      disabled={primaryAction.action === 'none'}
-                      className={resolveZoomHubPrimaryActionClassName(primaryAction.action)}
+                  {resolveNextSessionQuestionSummary(nextSession)?.primary.map((questionText) => (
+                    <p
+                      key={questionText}
+                      className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm leading-6 text-white/78"
                     >
-                      {primaryAction.label}
-                    </button>
-                    {nextSession.isMyBooking ? (
-                      <span className="min-h-11 rounded-xl bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200">
-                        Записано
-                      </span>
-                    ) : null}
-                  </div>
-                  {nextSession.isMyBooking ? (
-                    <p className="mt-3 text-sm text-emerald-100/90">Твій запис підтверджено.</p>
+                      {questionText}
+                    </p>
+                  ))}
+                  {resolveNextSessionQuestionSummary(nextSession)?.remaining ? (
+                    <p className="text-sm text-white/55">
+                      і ще {resolveNextSessionQuestionSummary(nextSession)?.remaining} питань від учасників
+                    </p>
                   ) : null}
-                </>
+                </div>
               ) : (
-                <>
-                  <p className="mt-2 text-lg font-semibold">На цей тиждень ще немає практики</p>
-                  <p className="mt-3 text-sm text-white/70">{primaryAction.description}</p>
-                </>
+                <p className="mt-4 text-sm text-white/55">Учасники ще не залишили питання до цієї практики.</p>
               )}
+            </Card>
+          ) : null}
+
+          {!shouldShowCalendarSkeleton && latestWeeklyReport ? (
+            <Card>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
+                Твій підсумок тижня
+              </p>
+              <p className="mt-2 text-sm text-white/65">
+                {resolveWeeklyReportPeriodLabel(latestWeeklyReport)}
+              </p>
+              {resolveWeeklyReportSummaryPreview(latestWeeklyReport) ? (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
+                    Що змінилося
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-white/72">
+                    {resolveWeeklyReportSummaryPreview(latestWeeklyReport)}
+                  </p>
+                </div>
+              ) : null}
+              {latestWeeklyReport.progress || latestWeeklyReport.achievement ? (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
+                    Що вже є
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-white/72">
+                    {latestWeeklyReport.progress ?? latestWeeklyReport.achievement}
+                  </p>
+                </div>
+              ) : null}
+              {latestWeeklyReport.blocker ? (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
+                    Що підтримати
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-white/72">
+                    {latestWeeklyReport.blocker}
+                  </p>
+                </div>
+              ) : null}
+              {latestWeeklyReport.nextStep ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
+                    Наступний крок
+                  </p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                    {latestWeeklyReport.nextStep}
+                  </p>
+                </div>
+              ) : null}
+              {latestWeeklyReport.detailsAvailable ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <a
+                    href={ROUTES.PROGRESS}
+                    className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold"
+                  >
+                    📊 ПЕРЕГЛЯНУТИ ПОВНИЙ ЗВІТ
+                  </a>
+                </div>
+              ) : null}
             </Card>
           ) : null}
 
@@ -1320,12 +1537,11 @@ export default function CleanMiniAppZoomCalendar() {
             </Card>
           ) : null}
 
-          {!shouldShowCalendarSkeleton && weekEmptyMessage ? (
+          {!shouldShowCalendarSkeleton && emptyState ? (
             <Card>
-              <p className="font-semibold">Доступ активний.</p>
-              <p className="mt-1 text-sm text-white/65">
-                {weekEmptyMessage}
-              </p>
+              <p className="font-semibold">{emptyState.title}</p>
+              <p className="mt-1 text-sm text-white/65">{emptyState.description}</p>
+              <p className="mt-3 text-sm text-emerald-100/90">{emptyState.accessNote}</p>
             </Card>
           ) : null}
 

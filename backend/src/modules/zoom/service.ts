@@ -15,6 +15,7 @@ import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js';
 import { parseZoomPostReport } from './zoomPostReport.types.js';
 import { getBotLink } from '../../lib/telegram.js';
 import { buildZoomCalendarUrl } from './urls.js';
+import { getCachedLatestWeeklyReport } from '../../lib/db/weeklyReportCache.js';
 
 function isGroupPracticeRequest(requests: unknown): boolean {
   if (!requests || Array.isArray(requests) || typeof requests !== 'object') return false;
@@ -208,6 +209,9 @@ export async function getCurrentWeekZoomOverview(args: {
     type: ZoomSessionType
     zoomLink: string
     attendeesCount: number
+    questionPreviews: string[]
+    questionsCount: number
+    remainingQuestionsCount: number
     isMyBooking: boolean
     audioFileId: string | null
     hasAudio: boolean
@@ -230,6 +234,7 @@ export async function getCurrentWeekZoomOverview(args: {
     userId: args.userId,
     expertId: args.expertId ?? undefined,
   })
+  const questionSummaries = await getQuestionSummariesBySessionId(sessions.map((session) => session.id))
 
   const normalized = sessions.map((session) => {
     const meta = session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests)
@@ -238,6 +243,7 @@ export async function getCurrentWeekZoomOverview(args: {
     const report = parseZoomPostReport(session.postSessionReport)
     const attendeesCount = (session as { _count?: { attendees?: number } })._count?.attendees ?? 0
     const zoomLink = extractZoomLinkFromRequests(session.requests)
+    const questionSummary = questionSummaries.get(session.id)
 
     return {
       id: session.id,
@@ -247,6 +253,9 @@ export async function getCurrentWeekZoomOverview(args: {
       type: (typeof meta.type === 'string' ? meta.type : session.type) as ZoomSessionType,
       zoomLink,
       attendeesCount,
+      questionPreviews: questionSummary?.questionPreviews ?? [],
+      questionsCount: questionSummary?.questionsCount ?? 0,
+      remainingQuestionsCount: questionSummary?.remainingQuestionsCount ?? 0,
       isMyBooking: Boolean((session as { isMyBooking?: boolean }).isMyBooking),
       audioFileId: report?.audioFileId ?? null,
       hasAudio: Boolean(report?.audioFileId),
@@ -648,6 +657,233 @@ export async function savePostSessionReport(
     where: { id: sessionId },
     data: { postSessionReport: report, status: ZoomStatus.COMPLETED },
   });
+}
+
+export type PreviousZoomSessionRecap = {
+  id: string
+  title: string | null
+  startsAt: string
+  endsAt: string | null
+  summary: string | null
+  recordingUrl: string | null
+  materialsUrl: string | null
+  attendanceStatus: string | null
+  attendanceCount: number
+  nextStep: string | null
+}
+
+export type ZoomWeeklyReportSummary = {
+  id: string
+  weekStart: string
+  weekEnd: string
+  generatedAt: string
+  summary: string | null
+  progress: string | null
+  achievement: string | null
+  blocker: string | null
+  nextStep: string | null
+  detailsAvailable: boolean
+}
+
+type BookingQuestionEventPayload = {
+  sessionId?: string
+  questionText?: string
+}
+
+function parseBookingQuestionPayload(payload: unknown): BookingQuestionEventPayload {
+  if (!payload || Array.isArray(payload) || typeof payload !== 'object') {
+    return {}
+  }
+
+  return payload as BookingQuestionEventPayload
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean)
+}
+
+function dedupeQuestionTexts(questionTexts: string[]): string[] {
+  const seen = new Set<string>()
+
+  return questionTexts.filter((questionText) => {
+    const normalized = questionText.trim().toLowerCase()
+    if (!normalized || seen.has(normalized)) {
+      return false
+    }
+
+    seen.add(normalized)
+    return true
+  })
+}
+
+async function getQuestionSummariesBySessionId(sessionIds: string[]) {
+  if (sessionIds.length === 0) {
+    return new Map<string, {
+      questionPreviews: string[]
+      questionsCount: number
+      remainingQuestionsCount: number
+    }>()
+  }
+
+  const questionEvents = await prisma.event.findMany({
+    where: {
+      type: 'ZOOM_BOOKING_QUESTION',
+      OR: sessionIds.map((sessionId) => ({
+        payload: {
+          path: ['sessionId'],
+          equals: sessionId,
+        },
+      })),
+    },
+    select: {
+      payload: true,
+      createdAt: true,
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
+  })
+
+  const questionsBySessionId = new Map<string, string[]>()
+
+  for (const event of questionEvents) {
+    const payload = parseBookingQuestionPayload(event.payload)
+    const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId.trim() : ''
+    const questionText = typeof payload.questionText === 'string' ? payload.questionText.trim() : ''
+    if (!sessionId || !questionText) {
+      continue
+    }
+
+    const currentQuestions = questionsBySessionId.get(sessionId) ?? []
+    currentQuestions.push(questionText)
+    questionsBySessionId.set(sessionId, currentQuestions)
+  }
+
+  const summaries = new Map<string, {
+    questionPreviews: string[]
+    questionsCount: number
+    remainingQuestionsCount: number
+  }>()
+
+  for (const sessionId of sessionIds) {
+    const questions = dedupeQuestionTexts(questionsBySessionId.get(sessionId) ?? [])
+    summaries.set(sessionId, {
+      questionPreviews: questions.slice(0, 2),
+      questionsCount: questions.length,
+      remainingQuestionsCount: Math.max(questions.length - 2, 0),
+    })
+  }
+
+  return summaries
+}
+
+export async function getUserPreviousZoomSessionRecap(
+  userId: string,
+  now = new Date(),
+): Promise<PreviousZoomSessionRecap | null> {
+  const attendee = await prisma.zoomSessionAttendee.findFirst({
+    where: {
+      userId,
+      session: {
+        status: ZoomStatus.COMPLETED,
+        scheduledAt: { lte: now },
+      },
+    },
+    include: {
+      session: {
+        include: {
+          _count: {
+            select: {
+              attendees: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      session: {
+        scheduledAt: 'desc',
+      },
+    },
+  })
+
+  if (!attendee) {
+    return null
+  }
+
+  const report = parseZoomPostReport(attendee.session.postSessionReport)
+  const title = attendee.session.topic.trim()
+
+  return {
+    id: attendee.session.id,
+    title: title || null,
+    startsAt: attendee.session.scheduledAt.toISOString(),
+    endsAt: null,
+    summary: report?.summary?.trim() || null,
+    recordingUrl: report?.audioUrl?.trim() || null,
+    materialsUrl: null,
+    attendanceStatus: attendee.attended ? 'ATTENDED' : 'BOOKED',
+    attendanceCount: attendee.session._count.attendees,
+    nextStep: report?.actionItems?.[0]?.trim() || report?.nextFocus?.trim() || null,
+  }
+}
+
+export async function getUserLatestWeeklyReportSummary(
+  userId: string,
+): Promise<ZoomWeeklyReportSummary | null> {
+  const report = await getCachedLatestWeeklyReport(userId)
+  if (!report) {
+    return null
+  }
+
+  const topInsights = normalizeStringList(report.topInsights)
+  const struggleAreas = normalizeStringList(report.struggleAreas)
+  const nextWeekTasks = normalizeStringList(report.nextWeekTasks)
+  const metrics =
+    report.metrics && typeof report.metrics === 'object' && !Array.isArray(report.metrics)
+      ? report.metrics as Record<string, unknown>
+      : {}
+  const analysis =
+    report.analysis && typeof report.analysis === 'object' && !Array.isArray(report.analysis)
+      ? report.analysis as Record<string, unknown>
+      : {}
+
+  const tasksDone = typeof metrics.tasksDone === 'number' ? metrics.tasksDone : null
+  const tasksTotal = typeof metrics.tasksTotal === 'number' ? metrics.tasksTotal : null
+  const reflections = typeof metrics.reflections === 'number' ? metrics.reflections : null
+  const sessions = typeof metrics.sessions === 'number' ? metrics.sessions : null
+
+  const progressParts = [
+    tasksDone !== null && tasksTotal !== null ? `Виконано ${tasksDone}/${tasksTotal} задач` : null,
+    reflections !== null ? `${reflections} рефлексій` : null,
+    sessions !== null ? `${sessions} AI-сесій` : null,
+  ].filter(Boolean)
+
+  return {
+    id: report.id,
+    weekStart: report.weekStart.toISOString(),
+    weekEnd: report.weekEnd.toISOString(),
+    generatedAt: report.createdAt.toISOString(),
+    summary: typeof report.summaryText === 'string' && report.summaryText.trim()
+      ? report.summaryText.trim()
+      : null,
+    progress: progressParts[0] ?? null,
+    achievement: topInsights[0] ?? null,
+    blocker: struggleAreas[0]
+      ?? (typeof analysis.mainPainThisWeek === 'string' && analysis.mainPainThisWeek.trim()
+        ? analysis.mainPainThisWeek.trim()
+        : null),
+    nextStep: typeof report.nextWeekFocus === 'string' && report.nextWeekFocus.trim()
+      ? report.nextWeekFocus.trim()
+      : nextWeekTasks[0] ?? null,
+    detailsAvailable: true,
+  }
 }
 
 export async function getSessionAttendees(

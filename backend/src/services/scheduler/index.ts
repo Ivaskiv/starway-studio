@@ -8,7 +8,7 @@ import { resetMonthlySwapUsage } from '../../modules/zoom/service.js'
 import {
   cancelStaleBattlesCron,
   expireZoomSwapRequestsCron,
-  generateZoomSessionsFromAvailabilityCron,
+  scanZoomAvailabilityAutoGenerate,
   syncZoomWeeklyChannelPostCron,
 } from '../../modules/zoom/index.js'
 import { getProductCronProfile } from '../../platform/index.js'
@@ -171,7 +171,7 @@ const CANONICAL_CRON_REGISTRATIONS: readonly CanonicalCronRegistration[] = [
   { key: 'zoomNoShowRecoveryCron', expression: '*/5 * * * *', task: async () => { await scanZoomNoShowRecovery(bot) }, options: { critical: false } },
   { key: 'zoomWeeklyChannelSyncCron', expression: '0 18 * * 0', task: syncZoomWeeklyChannelPostCron },
   { key: 'zoomSwapExpiryCron', expression: '*/30 * * * *', task: expireZoomSwapRequestsCron },
-  { key: 'zoomWeeklySessionGenerationCron', expression: '0 0 * * 0', task: generateZoomSessionsFromAvailabilityCron },
+  { key: 'zoomAvailabilityAutoGenerateCron', expression: '12 2 * * *', task: async () => { await scanZoomAvailabilityAutoGenerate() } },
   { key: 'battleCleanupCron', expression: '0 3 * * *', task: cancelStaleBattlesCron },
 ] as const
 

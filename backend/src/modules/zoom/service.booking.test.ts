@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockZoomSessionAttendeeUpsert = vi.fn()
 const mockZoomSessionAttendeeFindUnique = vi.fn()
 const mockZoomSessionAttendeeFindMany = vi.fn()
+const mockZoomSessionAttendeeFindFirst = vi.fn()
 const mockZoomSessionFindUnique = vi.fn()
 const mockZoomSessionFindMany = vi.fn()
 const mockEventCreate = vi.fn()
+const mockEventFindMany = vi.fn()
+const mockGetCachedLatestWeeklyReport = vi.fn()
 
 vi.mock('../../db/client.js', () => ({
   prisma: {
@@ -17,9 +20,11 @@ vi.mock('../../db/client.js', () => ({
       upsert: (...args: unknown[]) => mockZoomSessionAttendeeUpsert(...args),
       findUnique: (...args: unknown[]) => mockZoomSessionAttendeeFindUnique(...args),
       findMany: (...args: unknown[]) => mockZoomSessionAttendeeFindMany(...args),
+      findFirst: (...args: unknown[]) => mockZoomSessionAttendeeFindFirst(...args),
     },
     event: {
       create: (...args: unknown[]) => mockEventCreate(...args),
+      findMany: (...args: unknown[]) => mockEventFindMany(...args),
     },
   },
 }))
@@ -31,9 +36,16 @@ vi.mock('../../lib/telegram.js', () => ({
   sendOpsTelegramMessage: vi.fn(),
 }))
 
+vi.mock('../../lib/db/weeklyReportCache.js', () => ({
+  getCachedLatestWeeklyReport: (...args: unknown[]) => mockGetCachedLatestWeeklyReport(...args),
+}))
+
 import {
   assertCanBookGroupPracticeSession,
   getCalendarSessions,
+  getCurrentWeekZoomOverview,
+  getUserLatestWeeklyReportSummary,
+  getUserPreviousZoomSessionRecap,
   registerAttendee,
   saveBookingQuestionForAttendee,
   selectTrialZoomEligibleSession,
@@ -448,6 +460,167 @@ describe('zoom booking service', () => {
     expect(sessions[0]).toMatchObject({
       id: 'session-1',
       isMyBooking: false,
+    })
+  })
+
+  it('selects the latest completed attendee session as previous Zoom recap', async () => {
+    const now = new Date('2026-08-04T09:00:00.000Z')
+
+    mockZoomSessionAttendeeFindFirst.mockResolvedValue({
+      id: 'att-1',
+      attended: true,
+      session: {
+        id: 'session-completed',
+        topic: 'Рух без перевантаження',
+        scheduledAt: new Date('2026-08-03T15:00:00.000Z'),
+        postSessionReport: {
+          summary: 'Повернули один конкретний фокус і прибрали зайві задачі.',
+          actionItems: ['Зафіксувати один конкретний крок.'],
+          audioUrl: 'https://cdn.example.com/audio/session-completed.mp3',
+        },
+        _count: {
+          attendees: 7,
+        },
+      },
+    })
+
+    const recap = await getUserPreviousZoomSessionRecap('user-1', now)
+
+    expect(mockZoomSessionAttendeeFindFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        session: {
+          status: 'COMPLETED',
+          scheduledAt: { lte: now },
+        },
+      },
+      include: {
+        session: {
+          include: {
+            _count: {
+              select: {
+                attendees: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        session: {
+          scheduledAt: 'desc',
+        },
+      },
+    })
+    expect(recap).toEqual({
+      id: 'session-completed',
+      title: 'Рух без перевантаження',
+      startsAt: '2026-08-03T15:00:00.000Z',
+      endsAt: null,
+      summary: 'Повернули один конкретний фокус і прибрали зайві задачі.',
+      recordingUrl: 'https://cdn.example.com/audio/session-completed.mp3',
+      materialsUrl: null,
+      attendanceStatus: 'ATTENDED',
+      attendanceCount: 7,
+      nextStep: 'Зафіксувати один конкретний крок.',
+    })
+  })
+
+  it('adds attendee counts and participant question previews to the current week overview', async () => {
+    vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-08-31T20:59:59.999Z'),
+    })
+    mockZoomSessionFindMany.mockResolvedValue([
+      {
+        id: 'session-next',
+        expertId: 'expert-1',
+        scheduledAt: new Date('2026-08-10T16:00:00.000Z'),
+        status: 'SCHEDULED',
+        type: 'GROUP',
+        topic: 'ФОКУС · Zoom-практика',
+        requests: { type: 'group_practice', durationMinutes: 60, zoomLink: 'https://zoom.example/next' },
+        postSessionReport: null,
+        _count: { attendees: 4 },
+      },
+    ])
+    mockZoomSessionAttendeeFindMany.mockResolvedValue([])
+    mockEventFindMany.mockResolvedValue([
+      {
+        createdAt: new Date('2026-08-04T09:00:00.000Z'),
+        payload: {
+          sessionId: 'session-next',
+          questionText: 'Хочу зрозуміти, як не випадати з ритму.',
+        },
+      },
+      {
+        createdAt: new Date('2026-08-04T09:05:00.000Z'),
+        payload: {
+          sessionId: 'session-next',
+          questionText: 'Як обрати один наступний крок?',
+        },
+      },
+      {
+        createdAt: new Date('2026-08-04T09:10:00.000Z'),
+        payload: {
+          sessionId: 'session-next',
+          questionText: 'Як обрати один наступний крок?',
+        },
+      },
+    ])
+
+    const overview = await getCurrentWeekZoomOverview({
+      userId: 'user-1',
+      role: 'user',
+      expertId: 'expert-1',
+      now: new Date('2026-08-04T09:00:00.000Z'),
+    })
+
+    expect(overview.sessions[0]).toMatchObject({
+      id: 'session-next',
+      attendeesCount: 4,
+      questionPreviews: [
+        'Хочу зрозуміти, як не випадати з ритму.',
+        'Як обрати один наступний крок?',
+      ],
+      questionsCount: 2,
+      remainingQuestionsCount: 0,
+    })
+  })
+
+  it('returns the latest persisted weekly report summary without raw analysis payload', async () => {
+    mockGetCachedLatestWeeklyReport.mockResolvedValue({
+      id: 'report-1',
+      weekStart: new Date('2026-07-27T00:00:00.000Z'),
+      weekEnd: new Date('2026-08-03T23:59:59.000Z'),
+      createdAt: new Date('2026-08-04T06:30:00.000Z'),
+      summaryText: 'Тиждень показав, де ти тримаєш ритм, а де розпорошуєшся.',
+      topInsights: ['Є рух, але не все доводиться до кінця.'],
+      struggleAreas: ['перевантаження'],
+      nextWeekFocus: 'Тримати один ясний крок на день.',
+      nextWeekTasks: ['Повернути ранкову сесію в ритм'],
+      metrics: { tasksDone: 3, tasksTotal: 5, reflections: 4, sessions: 2 },
+      analysis: {
+        mainPainThisWeek: 'хаотичний фокус',
+        provider: 'hidden',
+      },
+    })
+
+    const report = await getUserLatestWeeklyReportSummary('user-1')
+
+    expect(mockGetCachedLatestWeeklyReport).toHaveBeenCalledWith('user-1')
+    expect(report).toEqual({
+      id: 'report-1',
+      weekStart: '2026-07-27T00:00:00.000Z',
+      weekEnd: '2026-08-03T23:59:59.000Z',
+      generatedAt: '2026-08-04T06:30:00.000Z',
+      summary: 'Тиждень показав, де ти тримаєш ритм, а де розпорошуєшся.',
+      progress: 'Виконано 3/5 задач',
+      achievement: 'Є рух, але не все доводиться до кінця.',
+      blocker: 'перевантаження',
+      nextStep: 'Тримати один ясний крок на день.',
+      detailsAvailable: true,
     })
   })
 })

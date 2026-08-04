@@ -3,6 +3,8 @@ export interface ZoomPostSessionReport {
   highlights?: string[]
   quotes?: string[]
   summary?: string
+  actionItems?: string[]
+  nextFocus?: string
   transcribedAt?: string
   audioFileId?: string
   audioUrl?: string
@@ -33,6 +35,8 @@ export function parseZoomPostReport(v: unknown): ZoomPostSessionReport | null {
     highlights: isStringArray(r.highlights) ? r.highlights : undefined,
     quotes: isStringArray(r.quotes) ? r.quotes : undefined,
     summary: typeof r.summary === 'string' ? r.summary : undefined,
+    actionItems: isStringArray(r.actionItems) ? r.actionItems : undefined,
+    nextFocus: typeof r.nextFocus === 'string' ? r.nextFocus : undefined,
     transcribedAt: typeof r.transcribedAt === 'string' ? r.transcribedAt : undefined,
     audioFileId: typeof r.audioFileId === 'string' ? r.audioFileId : undefined,
     audioUrl: typeof r.audioUrl === 'string' ? r.audioUrl : undefined,
