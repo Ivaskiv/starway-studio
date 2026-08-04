@@ -7,7 +7,6 @@ import { prisma } from '../../../db/client.js'
 import { FOCUS_PRODUCT_CODES } from './focus.access.js'
 import {
   AB_TEST_BOOK_ZOOM_CTA_TEXT,
-  AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT,
   AB_TEST_FOCUS_MENU_BUTTON_TEXT,
   AB_TEST_JOIN_CHANNEL_BUTTON_TEXT,
 } from '@/products/ab-system/content/abTest.shared.js'
@@ -114,7 +113,7 @@ function buildTrialZoomSuccessResponse(): ConversationResponse {
       'Обери найближчу Zoom-практику та запишись.',
     ].join('\n'),
     [
-      { kind: 'callback', label: AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT, value: FOCUS_ZOOM_CALLBACK },
+      { kind: 'callback', label: AB_TEST_BOOK_ZOOM_CTA_TEXT, value: FOCUS_ZOOM_CALLBACK },
       { kind: 'callback', label: '🏠 ГОЛОВНЕ МЕНЮ', value: MAIN_MENU_CALLBACK },
     ],
     'HTML',

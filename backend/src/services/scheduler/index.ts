@@ -8,9 +8,9 @@ import { resetMonthlySwapUsage } from '../../modules/zoom/service.js'
 import {
   cancelStaleBattlesCron,
   expireZoomSwapRequestsCron,
-  scanZoomAvailabilityAutoGenerate,
   syncZoomWeeklyChannelPostCron,
 } from '../../modules/zoom/index.js'
+import { generateZoomSessionsFromAvailabilityCron } from '../../modules/zoom/zoom.notifications.js'
 import { getProductCronProfile } from '../../platform/index.js'
 import { withRuntimeAdvisoryLock } from '../../core/runtime/runtimeIdempotency.js'
 import { bot, sendOpsTelegramMessage } from '../../lib/telegram.js'
@@ -171,7 +171,7 @@ const CANONICAL_CRON_REGISTRATIONS: readonly CanonicalCronRegistration[] = [
   { key: 'zoomNoShowRecoveryCron', expression: '*/5 * * * *', task: async () => { await scanZoomNoShowRecovery(bot) }, options: { critical: false } },
   { key: 'zoomWeeklyChannelSyncCron', expression: '0 18 * * 0', task: syncZoomWeeklyChannelPostCron },
   { key: 'zoomSwapExpiryCron', expression: '*/30 * * * *', task: expireZoomSwapRequestsCron },
-  { key: 'zoomAvailabilityAutoGenerateCron', expression: '12 2 * * *', task: async () => { await scanZoomAvailabilityAutoGenerate() } },
+  { key: 'zoomAvailabilityAutoGenerateCron', expression: '12 2 * * *', task: generateZoomSessionsFromAvailabilityCron },
   { key: 'battleCleanupCron', expression: '0 3 * * *', task: cancelStaleBattlesCron },
 ] as const
 

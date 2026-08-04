@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AB_TEST_BOOK_ZOOM_CTA_TEXT } from '@/products/ab-system/content/abTest.shared.js'
 
 const mockProductSubscriptionFindFirst = vi.fn()
 const mockProductSubscriptionUpdate = vi.fn()
@@ -195,7 +196,7 @@ describe('callback.notifications — canonical Focus URL', () => {
     const serialized = JSON.stringify(mockRenderOutbound.mock.calls[0][1])
     expect(serialized).toContain('Тобі доступний один пробний Zoom за 1 грн.')
     expect(serialized).toContain('Обери найближчу Zoom-практику та запишись.')
-    expect(serialized).toContain('"label":"📅 ОБРАТИ ZOOM"')
+    expect(serialized).toContain(`"label":"${AB_TEST_BOOK_ZOOM_CTA_TEXT}"`)
     expect(serialized).toContain('"value":"focus:next_zoom"')
     expect(serialized).toContain('"label":"🏠 ГОЛОВНЕ МЕНЮ"')
     expect(serialized).toContain('"value":"return_main_menu"')
