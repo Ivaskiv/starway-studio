@@ -64,7 +64,7 @@ describe('messageFormatter', () => {
       { sendMessage },
       '42',
       { text: '<b>Title</b>\n\n<blockquote>Quote</blockquote>', parseMode: 'HTML' },
-      { replyMarkup: { inline_keyboard: [[{ text: 'CTA', callback_data: 'x' }]] } },
+ { replyMarkup: { inline_keyboard: [[{ text: 'CTA', callback_data: 'x' }]] } },
     )
 
     expect(sendMessage).toHaveBeenCalledTimes(2)

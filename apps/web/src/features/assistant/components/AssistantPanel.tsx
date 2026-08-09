@@ -161,7 +161,7 @@ export function AssistantPanel({
               onClick={onClose}
               aria-label="Закрити"
             >
-              ✕
+              
             </button>
           )}
         </div>

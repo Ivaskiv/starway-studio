@@ -14,68 +14,77 @@ import type {
 // ── Mock data (залишено без змін) ─────────────────────────────────────────────
 export const MOCK_SESSIONS: ZoomSessionWithAttendance[] = [
   {
-    id: 'mock-1', expertId: 'expert-1',
-    scheduledAt:       new Date(Date.now() + 2 * 86400000).toISOString(),
-    topic:             'Фокус-сфера: Реалізація та цілі',
-    status:            'SCHEDULED',
-    requests:          [],
+    id: 'mock-1',
+    expertId: 'expert-1',
+    scheduledAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+    topic: 'Фокус-сфера: Реалізація та цілі',
+    status: 'SCHEDULED',
+    requests: [],
     postSessionReport: null,
-    createdAt:         new Date().toISOString(),
-    updatedAt:         new Date().toISOString(),
-    isRegistered:      false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    isRegistered: false,
   },
   {
-    id: 'mock-2', expertId: 'expert-1',
-    scheduledAt:       new Date(Date.now() - 7 * 86400000).toISOString(),
-    topic:             'Колесо балансу: розбір результатів',
-    status:            'COMPLETED',
-    requests:          [],
+    id: 'mock-2',
+    expertId: 'expert-1',
+    scheduledAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+    topic: 'Колесо балансу: розбір результатів',
+    status: 'COMPLETED',
+    requests: [],
     postSessionReport: {
-      summary:     'Розібрали слабкі сфери та сформували план дій на місяць.',
-      actionItems: ['Щоденна медитація 10 хв', 'Облік витрат', 'Дзвінок близькій людині'],
-      nextFocus:   'inner_support',
+      summary: 'Розібрали слабкі сфери та сформували план дій на місяць.',
+      actionItems: [
+        'Щоденна медитація 10 хв',
+        'Облік витрат',
+        'Дзвінок близькій людині',
+      ],
+      nextFocus: 'inner_support',
       mentorNotes: 'Гарний прогрес у сфері реалізації.',
     },
-    createdAt:    new Date().toISOString(),
-    updatedAt:    new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     isRegistered: true,
-    attendeeId:   'att-1',
+    attendeeId: 'att-1',
   },
   {
-    id: 'mock-3', expertId: 'expert-1',
-    scheduledAt:       new Date(Date.now() - 21 * 86400000).toISOString(),
-    topic:             'Вступна сесія: знайомство та цілі',
-    status:            'COMPLETED',
-    requests:          [],
+    id: 'mock-3',
+    expertId: 'expert-1',
+    scheduledAt: new Date(Date.now() - 21 * 86400000).toISOString(),
+    topic: 'Вступна сесія: знайомство та цілі',
+    status: 'COMPLETED',
+    requests: [],
     postSessionReport: {
-      summary:     'Визначили пріоритетні сфери та перші кроки.',
+      summary: 'Визначили пріоритетні сфери та перші кроки.',
       actionItems: ['Заповнити колесо балансу', '3 цілі на місяць'],
-      nextFocus:   'realization',
+      nextFocus: 'realization',
     },
-    createdAt:    new Date().toISOString(),
-    updatedAt:    new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     isRegistered: true,
-    attendeeId:   'att-2',
+    attendeeId: 'att-2',
   },
 ]
 
 // ── API ───────────────────────────────────────────────────────────────────────
 // api.injectEndpoints → токен передається через baseQueryWithReauth автоматично
 export const zoomApi = api.injectEndpoints({
-  endpoints: build => ({
-
+  endpoints: (build) => ({
     getUpcomingSession: build.query<ZoomSessionDTO | null, void>({
-      query:        () => '/zoom/upcoming',
+      query: () => '/zoom/upcoming',
       providesTags: ['ZoomSession'],
     }),
-
+    getPublicUpcomingSession: build.query<ZoomSessionDTO | null, void>({
+      query: () => '/zoom/public/upcoming',
+      providesTags: ['ZoomSession'],
+    }),
     getMySessions: build.query<ZoomMySessionsResponse, void>({
-      query:        () => '/zoom/my',
+      query: () => '/zoom/my',
       providesTags: ['ZoomSession'],
     }),
 
     getWeekOverview: build.query<ZoomWeekOverview, void>({
-        query:        () => '/zoom/week',
+      query: () => '/zoom/week',
       providesTags: ['ZoomSession'],
     }),
 
@@ -85,7 +94,7 @@ export const zoomApi = api.injectEndpoints({
     }),
 
     registerAttendee: build.mutation<ZoomAttendeeDTO, RegisterAttendeeDto>({
-      query:           body => ({ url: '/zoom/register', method: 'POST', body }),
+      query: (body) => ({ url: '/zoom/register', method: 'POST', body }),
       invalidatesTags: ['ZoomSession', 'ZoomAttendee'],
     }),
 
@@ -93,7 +102,11 @@ export const zoomApi = api.injectEndpoints({
       { ok: boolean; id: string; createdAt: string },
       { sessionId: string; questionText: string }
     >({
-      query: body => ({ url: '/zoom/booking-question', method: 'POST', body }),
+      query: (body) => ({
+        url: '/zoom/booking-question',
+        method: 'POST',
+        body,
+      }),
       invalidatesTags: ['ZoomSession'],
     }),
 
@@ -101,26 +114,34 @@ export const zoomApi = api.injectEndpoints({
       { ok: boolean; id: string; createdAt: string },
       { sessionId: string; preparationAnswer: string }
     >({
-      query: body => ({ url: '/zoom/booking-preparation', method: 'POST', body }),
+      query: (body) => ({
+        url: '/zoom/booking-preparation',
+        method: 'POST',
+        body,
+      }),
       invalidatesTags: ['ZoomSession'],
     }),
 
     markAttended: build.mutation<ZoomAttendeeDTO, { attendeeId: string }>({
-      query:           body => ({ url: '/zoom/attendee/attended', method: 'PATCH', body }),
+      query: (body) => ({
+        url: '/zoom/attendee/attended',
+        method: 'PATCH',
+        body,
+      }),
       invalidatesTags: ['ZoomSession'],
     }),
 
     getAttendees: build.query<ZoomAttendeeDTO[], string>({
-      query:        sessionId => `/zoom/session/${sessionId}/attendees`,
+      query: (sessionId) => `/zoom/session/${sessionId}/attendees`,
       providesTags: ['ZoomAttendee'],
     }),
-
   }),
   overrideExisting: false,
 })
 
 export const {
   useGetUpcomingSessionQuery,
+  useGetPublicUpcomingSessionQuery,
   useGetMySessionsQuery,
   useGetWeekOverviewQuery,
   useGetPublicWeekOverviewQuery,

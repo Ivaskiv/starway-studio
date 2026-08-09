@@ -282,7 +282,7 @@ const Header = memo(function Header({
             disabled={isNavigationLocked}
             onClick={() => setOpenDrop((value) => value === 'notifications' ? null : 'notifications')}
           >
-            🔔
+            
             {unreadCount > 0 ? (
               <span className="hdr-notif-dot" aria-label={`${unreadCount} непрочитаних`}>
                 {Math.min(unreadCount, 99)}

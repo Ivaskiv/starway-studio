@@ -1,29 +1,49 @@
 // backend/src/modules/zoom/service.ts
-import { createHash } from 'node:crypto';
-import { prisma } from '../../db/client.js';
-import { NotificationType, Prisma, SwapStatus, ZoomSessionType, ZoomSlotStatus, ZoomStatus, ZoomSwapStatus } from '@starway/db/prisma-client';
-import type { ZoomAttendeeWithUser, ZoomSession, ZoomSessionAttendee } from './types.js';
-import { bot, sendDedupedTelegramMessage, sendOpsTelegramMessage } from '../../lib/telegram.js';
-import type { Telegraf } from 'telegraf';
-import { NotificationEvent } from '../../services/notifications/NotificationEvent.js';
-import { abTestZoomContent } from '@/products/ab-system/content/abTest.zoom.js';
-import { FOCUS_PRODUCT_CODE } from '@/products/focus/config/focus.constants.js';
-import { FOCUS_PRODUCT_CODES, getUserAccessState } from '../subscriptions/payments/focus.access.js';
-import { activateAbsystemTrialAfterFirstZoom } from '../access/service.js';
-import { buildShortWayForPayCheckoutUrl } from '../subscriptions/payments/wayforpay.checkout.js';
-import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js';
-import { parseZoomPostReport } from './zoomPostReport.types.js';
-import { getBotLink } from '../../lib/telegram.js';
-import { buildZoomCalendarUrl } from './urls.js';
-import { getCachedLatestWeeklyReport } from '../../lib/db/weeklyReportCache.js';
+import { abTestZoomContent } from '@/products/ab-system/content/abTest.zoom.js'
+import { FOCUS_PRODUCT_CODE } from '@/products/focus/config/focus.constants.js'
+import {
+  NotificationType,
+  Prisma,
+  SwapStatus,
+  ZoomSessionType,
+  ZoomSlotStatus,
+  ZoomStatus,
+  ZoomSwapStatus,
+} from '@starway/db/prisma-client'
+import { createHash } from 'node:crypto'
+import type { Telegraf } from 'telegraf'
+import { prisma } from '../../db/client.js'
+import { getCachedLatestWeeklyReport } from '../../lib/db/weeklyReportCache.js'
+import {
+  bot,
+  getBotLink,
+  sendDedupedTelegramMessage,
+  sendOpsTelegramMessage,
+} from '../../lib/telegram.js'
+import { NotificationEvent } from '../../services/notifications/NotificationEvent.js'
+import { activateAbsystemTrialAfterFirstZoom } from '../access/service.js'
+import {
+  FOCUS_PRODUCT_CODES,
+  getUserAccessState,
+} from '../subscriptions/payments/focus.access.js'
+import { buildShortWayForPayCheckoutUrl } from '../subscriptions/payments/wayforpay.checkout.js'
+import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js'
+import type {
+  ZoomAttendeeWithUser,
+  ZoomSession,
+  ZoomSessionAttendee,
+} from './types.js'
+import { buildZoomCalendarUrl } from './urls.js'
+import { parseZoomPostReport } from './zoomPostReport.types.js'
 
 function isGroupPracticeRequest(requests: unknown): boolean {
-  if (!requests || Array.isArray(requests) || typeof requests !== 'object') return false;
-  return (requests as Record<string, unknown>).type === 'group_practice';
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object')
+    return false
+  return (requests as Record<string, unknown>).type === 'group_practice'
 }
 
 function getSafeName(firstName?: string | null): string {
-  if (!firstName) return '';
+  if (!firstName) return ''
   const trimmed = firstName
     .replace(/[<>{}\[\]]/g, '')
     .replace(/\s+/g, ' ')
@@ -53,14 +73,18 @@ function getSafeName(firstName?: string | null): string {
 const KYIV_TIME_ZONE = 'Europe/Kyiv'
 const CHANNEL_POST_SYNC_TTL_MS = 60_000
 const WEEKLY_LIMIT = 3
-const WEEKLY_PRIVATE_LIMIT_MESSAGE = 'Цього тижня всі слоти зайняті. Запропонувати наступний тиждень?'
+const WEEKLY_PRIVATE_LIMIT_MESSAGE =
+  'Цього тижня всі слоти зайняті. Запропонувати наступний тиждень?'
 
 let channelPostSyncInFlight: Promise<void> | null = null
 let lastChannelPostSyncSignature = ''
 let lastChannelPostSyncAt = 0
 let lastChannelPostContentHash = ''
 
-function resolveZoomCalendarUrl(params?: { intent?: string | null; sessionId?: string | null }): string {
+function resolveZoomCalendarUrl(params?: {
+  intent?: string | null
+  sessionId?: string | null
+}): string {
   return buildZoomCalendarUrl(params)
 }
 
@@ -115,13 +139,15 @@ function getKyivDateKey(date: Date): string {
 }
 
 function extractZoomLinkFromRequests(requests: unknown): string {
-  if (!requests || Array.isArray(requests) || typeof requests !== 'object') return ''
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object')
+    return ''
   const meta = requests as Record<string, unknown>
   return typeof meta.zoomLink === 'string' ? meta.zoomLink : ''
 }
 
 function resolveRequestedSessionType(requests: unknown): string | null {
-  if (!requests || Array.isArray(requests) || typeof requests !== 'object') return null
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object')
+    return null
   const rawType = (requests as Record<string, unknown>).type
   return typeof rawType === 'string' ? rawType.trim().toLowerCase() : null
 }
@@ -133,24 +159,35 @@ type TrialZoomSessionCandidate = {
   type?: ZoomSessionType
 }
 
-export function selectTrialZoomEligibleSession<T extends TrialZoomSessionCandidate>(
-  sessions: T[],
-  trialEndsAt: Date | null,
-): T | null {
+export function selectTrialZoomEligibleSession<
+  T extends TrialZoomSessionCandidate,
+>(sessions: T[], trialEndsAt: Date | null): T | null {
   if (!trialEndsAt) return null
 
   const targetDateKey = getKyivDateKey(trialEndsAt)
   const matchingSessions = sessions
     .filter((session) => {
-      const sessionType = resolveRequestedSessionType(session.requests) ?? String(session.type ?? '').trim().toLowerCase()
-      return sessionType === 'group_practice' && getKyivDateKey(session.scheduledAt) === targetDateKey
+      const sessionType =
+        resolveRequestedSessionType(session.requests) ??
+        String(session.type ?? '')
+          .trim()
+          .toLowerCase()
+      return (
+        sessionType === 'group_practice' &&
+        getKyivDateKey(session.scheduledAt) === targetDateKey
+      )
     })
-    .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())
+    .sort(
+      (left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime()
+    )
 
   return matchingSessions[0] ?? null
 }
 
-async function countWeeklyPrivateSessions(expertId: string, anchorDate: Date): Promise<number> {
+async function countWeeklyPrivateSessions(
+  expertId: string,
+  anchorDate: Date
+): Promise<number> {
   const weekStart = startOfKyivWeek(anchorDate)
   const weekEnd = endOfKyivWeek(anchorDate)
 
@@ -167,14 +204,19 @@ async function countWeeklyPrivateSessions(expertId: string, anchorDate: Date): P
   })
 }
 
-async function assertWeeklyPrivateLimit(expertId: string, anchorDate: Date): Promise<void> {
+async function assertWeeklyPrivateLimit(
+  expertId: string,
+  anchorDate: Date
+): Promise<void> {
   const weeklyCount = await countWeeklyPrivateSessions(expertId, anchorDate)
   if (weeklyCount >= WEEKLY_LIMIT) {
     throw new Error(WEEKLY_PRIVATE_LIMIT_MESSAGE)
   }
 }
 
-export async function isActiveFocusSubscriber(userId: string): Promise<boolean> {
+export async function isActiveFocusSubscriber(
+  userId: string
+): Promise<boolean> {
   const now = new Date()
   const subscription = await prisma.productSubscription.findFirst({
     where: {
@@ -183,10 +225,7 @@ export async function isActiveFocusSubscriber(userId: string): Promise<boolean> 
       product: {
         code: FOCUS_PRODUCT_CODE,
       },
-      OR: [
-        { expiresAt: null },
-        { expiresAt: { gt: now } },
-      ],
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     },
     select: { id: true },
   })
@@ -234,14 +273,20 @@ export async function getCurrentWeekZoomOverview(args: {
     userId: args.userId,
     expertId: args.expertId ?? undefined,
   })
-  const questionSummaries = await getQuestionSummariesBySessionId(sessions.map((session) => session.id))
+  const questionSummaries = await getQuestionSummariesBySessionId(
+    sessions.map((session) => session.id)
+  )
 
   const normalized = sessions.map((session) => {
-    const meta = session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests)
-      ? session.requests as Record<string, unknown>
-      : {}
+    const meta =
+      session.requests &&
+      typeof session.requests === 'object' &&
+      !Array.isArray(session.requests)
+        ? (session.requests as Record<string, unknown>)
+        : {}
     const report = parseZoomPostReport(session.postSessionReport)
-    const attendeesCount = (session as { _count?: { attendees?: number } })._count?.attendees ?? 0
+    const attendeesCount =
+      (session as { _count?: { attendees?: number } })._count?.attendees ?? 0
     const zoomLink = extractZoomLinkFromRequests(session.requests)
     const questionSummary = questionSummaries.get(session.id)
 
@@ -250,7 +295,9 @@ export async function getCurrentWeekZoomOverview(args: {
       scheduledAt: session.scheduledAt.toISOString(),
       topic: session.topic,
       status: session.status,
-      type: (typeof meta.type === 'string' ? meta.type : session.type) as ZoomSessionType,
+      type: (typeof meta.type === 'string'
+        ? meta.type
+        : session.type) as ZoomSessionType,
       zoomLink,
       attendeesCount,
       questionPreviews: questionSummary?.questionPreviews ?? [],
@@ -279,12 +326,18 @@ export async function getCurrentWeekZoomOverview(args: {
       to: to.toISOString(),
       timezone: KYIV_TIME_ZONE,
     },
-    sessions: normalized.sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime()),
+    sessions: normalized.sort(
+      (left, right) =>
+        new Date(left.scheduledAt).getTime() -
+        new Date(right.scheduledAt).getTime()
+    ),
     audios,
   }
 }
 
-export async function getPublicCurrentWeekZoomOverview(now = new Date()): Promise<{
+export async function getPublicCurrentWeekZoomOverview(
+  now = new Date()
+): Promise<{
   week: { from: string; to: string; timezone: string }
   sessions: Array<{
     id: string
@@ -323,11 +376,15 @@ export async function getPublicCurrentWeekZoomOverview(now = new Date()): Promis
   })
 
   const normalized = sessions.map((session) => {
-    const meta = session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests)
-      ? session.requests as Record<string, unknown>
-      : {}
+    const meta =
+      session.requests &&
+      typeof session.requests === 'object' &&
+      !Array.isArray(session.requests)
+        ? (session.requests as Record<string, unknown>)
+        : {}
     const report = parseZoomPostReport(session.postSessionReport)
-    const attendeesCount = (session as { _count?: { attendees?: number } })._count?.attendees ?? 0
+    const attendeesCount =
+      (session as { _count?: { attendees?: number } })._count?.attendees ?? 0
     const zoomLink = extractZoomLinkFromRequests(session.requests)
 
     return {
@@ -335,7 +392,9 @@ export async function getPublicCurrentWeekZoomOverview(now = new Date()): Promis
       scheduledAt: session.scheduledAt.toISOString(),
       topic: session.topic,
       status: session.status,
-      type: (typeof meta.type === 'string' ? meta.type : session.type) as ZoomSessionType,
+      type: (typeof meta.type === 'string'
+        ? meta.type
+        : session.type) as ZoomSessionType,
       zoomLink,
       attendeesCount,
       isMyBooking: false,
@@ -370,7 +429,7 @@ export async function createZoomSession(
   expertId: string,
   scheduledAt: Date,
   topic: string,
-  requests: any[] = [],
+  requests: any[] = []
 ): Promise<ZoomSession> {
   if (resolveRequestedSessionType(requests) === 'individual') {
     await assertWeeklyPrivateLimit(expertId, scheduledAt)
@@ -382,37 +441,39 @@ export async function createZoomSession(
     topic,
     type:
       requests && typeof requests === 'object' && !Array.isArray(requests)
-        ? (requests as Record<string, unknown>).type ?? null
+        ? ((requests as Record<string, unknown>).type ?? null)
         : null,
-  });
-  let session: ZoomSession;
+  })
+  let session: ZoomSession
   try {
     session = await prisma.zoomSession.create({
       data: {
-        expertId,  // ← прямий expertId (найпростіший і найшвидший спосіб)
+        expertId, // ← прямий expertId (найпростіший і найшвидший спосіб)
         scheduledAt,
         topic,
         requests: requests as Prisma.InputJsonValue,
         status: ZoomStatus.SCHEDULED,
       },
-    });
+    })
   } catch (err) {
-    console.error('[zoom/service createZoomSession] ERROR:', err);
-    throw err;
+    console.error('[zoom/service createZoomSession] ERROR:', err)
+    throw err
   }
-  console.log('[zoom/service createZoomSession] created:', session.id);
+  console.log('[zoom/service createZoomSession] created:', session.id)
 
   void afterZoomOperation(bot, {
     operation: 'create',
     sessionId: session.id,
     affectedUserIds: [],
-  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err));
+  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
 
   if (isGroupPracticeRequest(session.requests)) {
-    void notifySubscribersNewSession(bot, session).catch(err => console.error('[zoom] notify failed:', err));
+    void notifySubscribersNewSession(bot, session).catch((err) =>
+      console.error('[zoom] notify failed:', err)
+    )
   }
 
-  return session;
+  return session
 }
 
 export async function getUpcomingZoom(): Promise<ZoomSession | null> {
@@ -422,18 +483,202 @@ export async function getUpcomingZoom(): Promise<ZoomSession | null> {
       status: ZoomStatus.SCHEDULED,
     },
     orderBy: { scheduledAt: 'asc' },
-  });
+  })
+}
+
+export async function getUpcomingZoomBookingView(userId: string) {
+  const session = await prisma.zoomSession.findFirst({
+    where: {
+      scheduledAt: { gte: new Date() },
+      status: ZoomStatus.SCHEDULED,
+    },
+    include: {
+      _count: { select: { attendees: true } },
+    },
+    orderBy: { scheduledAt: 'asc' },
+  })
+
+  if (!session) return null
+
+  const attendee = await prisma.zoomSessionAttendee.findUnique({
+    where: {
+      sessionId_userId: {
+        sessionId: session.id,
+        userId,
+      },
+    },
+    select: { id: true },
+  })
+
+  const questionEvents = await prisma.event.findMany({
+    where: {
+      type: 'ZOOM_BOOKING_QUESTION',
+    },
+    select: {
+      userId: true,
+      payload: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  const effectiveQuestions = new Map<
+    string,
+    { userId: string; text: string; createdAt: Date }
+  >()
+
+  for (const event of questionEvents) {
+    if (!event.userId) continue
+    if (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)) {
+      continue
+    }
+
+    const payload = event.payload as Record<string, unknown>
+    if (payload.sessionId !== session.id) continue
+
+    const questionText =
+      typeof payload.questionText === 'string' ? payload.questionText.trim() : ''
+
+    if (!questionText) continue
+
+    effectiveQuestions.set(event.userId, {
+      userId: event.userId,
+      text: questionText,
+      createdAt: event.createdAt,
+    })
+  }
+
+  const orderedQuestions = [...effectiveQuestions.values()].sort(
+    (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+  )
+
+  const myQuestionIndex = orderedQuestions.findIndex(
+    (question) => question.userId === userId,
+  )
+
+  const otherQuestions = orderedQuestions.filter(
+    (question) => question.userId !== userId,
+  )
+
+  return {
+    ...session,
+    attendeesCount: session._count.attendees,
+    isMyBooking: Boolean(attendee),
+    myQuestion:
+      myQuestionIndex >= 0
+        ? {
+            text: orderedQuestions[myQuestionIndex].text,
+            position: myQuestionIndex + 1,
+          }
+        : null,
+    questionPreviews: otherQuestions.slice(0, 3).map((question) => question.text),
+    questionsCount: orderedQuestions.length,
+    remainingQuestionsCount: Math.max(otherQuestions.length - 3, 0),
+  }
+}
+
+export async function getZoomBookingNotificationContext(
+  userId: string,
+  sessionId: string
+) {
+  const [session, user, attendeesCount, questionEvents] = await Promise.all([
+    prisma.zoomSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        topic: true,
+        scheduledAt: true,
+      },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        firstName: true,
+        lastName: true,
+        telegramUserName: true,
+      },
+    }),
+    prisma.zoomSessionAttendee.count({
+      where: { sessionId },
+    }),
+    prisma.event.findMany({
+      where: {
+        type: 'ZOOM_BOOKING_QUESTION',
+      },
+      select: {
+        userId: true,
+        payload: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ])
+
+  if (!session || !user) return null
+
+  const effectiveQuestions = new Map<
+    string,
+    { userId: string; text: string; createdAt: Date }
+  >()
+
+  for (const event of questionEvents) {
+    if (!event.userId) continue
+    if (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)) {
+      continue
+    }
+
+    const payload = event.payload as Record<string, unknown>
+    if (payload.sessionId !== sessionId) continue
+
+    const questionText =
+      typeof payload.questionText === 'string' ? payload.questionText.trim() : ''
+
+    if (!questionText) continue
+
+    effectiveQuestions.set(event.userId, {
+      userId: event.userId,
+      text: questionText,
+      createdAt: event.createdAt,
+    })
+  }
+
+  const orderedQuestions = [...effectiveQuestions.values()].sort(
+    (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+  )
+
+  const myQuestionIndex = orderedQuestions.findIndex(
+    (question) => question.userId === userId,
+  )
+
+  const myQuestion =
+    myQuestionIndex >= 0
+      ? {
+          text: orderedQuestions[myQuestionIndex].text,
+          position: myQuestionIndex + 1,
+        }
+      : null
+
+  const displayName =
+    [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Учасник'
+
+  return {
+    session,
+    displayName,
+    username: user.telegramUserName?.trim() || null,
+    attendeesCount,
+    myQuestion,
+  }
 }
 
 export async function registerAttendee(
   userId: string,
-  sessionId: string,
+  sessionId: string
 ): Promise<ZoomSessionAttendee> {
   return prisma.zoomSessionAttendee.upsert({
     where: { sessionId_userId: { sessionId, userId } },
     create: { userId, sessionId },
     update: {},
-  });
+  })
 }
 
 export async function assertCanBookGroupPracticeSession(args: {
@@ -447,44 +692,8 @@ export async function assertCanBookGroupPracticeSession(args: {
   })
 
   if (!session) throw new Error('session_not_found')
-  if (session.status !== ZoomStatus.SCHEDULED) throw new Error('session_unavailable')
-
-  const accessState = await getUserAccessState(userId)
-  const hasGroupPracticeAccess =
-    accessState.hasFocus || accessState.state === 'PREMIUM' || accessState.state === 'FREE_WEEK1'
-
-  if (!hasGroupPracticeAccess) {
-    throw new Error('NO_ACTIVE_SUBSCRIPTION')
-  }
-
-  if (accessState.state === 'PREMIUM') {
-    const dayStart = new Date(session.scheduledAt)
-    dayStart.setHours(0, 0, 0, 0)
-    const dayEnd = new Date(session.scheduledAt)
-    dayEnd.setHours(23, 59, 59, 999)
-    const sameDayGroupSessions = await prisma.zoomSession.findMany({
-      where: {
-        expertId: session.expertId,
-        status: { not: ZoomStatus.CANCELLED },
-        scheduledAt: {
-          gte: dayStart,
-          lte: dayEnd,
-        },
-        OR: [
-          { requests: { path: ['type'], equals: 'group_practice' } },
-          { type: ZoomSessionType.GROUP },
-        ],
-      },
-      orderBy: { scheduledAt: 'asc' },
-    })
-    const eligibleSession = selectTrialZoomEligibleSession(
-      sameDayGroupSessions,
-      accessState.expiresAt,
-    )
-
-    if (!eligibleSession || eligibleSession.id !== session.id) {
-      throw new Error('NO_ACTIVE_SUBSCRIPTION')
-    }
+  if (session.status !== ZoomStatus.SCHEDULED) {
+    throw new Error('session_unavailable')
   }
 
   const existingAttendee = await prisma.zoomSessionAttendee.findUnique({
@@ -511,7 +720,7 @@ export async function assertCanBookGroupPracticeSession(args: {
 export async function saveBookingQuestionForAttendee(
   userId: string,
   sessionId: string,
-  questionText: string,
+  questionText: string
 ): Promise<{ id: string; createdAt: Date }> {
   const normalizedQuestionText = questionText.trim()
   if (!normalizedQuestionText) {
@@ -556,7 +765,7 @@ export async function saveBookingQuestionForAttendee(
 export async function saveBookingPreparationForAttendee(
   userId: string,
   sessionId: string,
-  preparationAnswer: string,
+  preparationAnswer: string
 ): Promise<{ id: string; createdAt: Date }> {
   const normalizedPreparationAnswer = preparationAnswer.trim()
   if (!normalizedPreparationAnswer) {
@@ -598,7 +807,9 @@ export async function saveBookingPreparationForAttendee(
   return event
 }
 
-export async function autoBookAllUpcomingGroupSessions(userId: string): Promise<void> {
+export async function autoBookAllUpcomingGroupSessions(
+  userId: string
+): Promise<void> {
   const sessions = await prisma.zoomSession.findMany({
     where: {
       status: ZoomStatus.SCHEDULED,
@@ -619,7 +830,7 @@ export async function autoBookAllUpcomingGroupSessions(userId: string): Promise<
 
 export async function markAttended(
   attendeeId: string,
-  attendedAt = new Date(),
+  attendedAt = new Date()
 ): Promise<ZoomSessionAttendee> {
   return prisma.$transaction(async (tx) => {
     const current = await tx.zoomSessionAttendee.findUnique({
@@ -646,17 +857,17 @@ export async function markAttended(
     })
 
     return attendee
-  });
+  })
 }
 
 export async function savePostSessionReport(
   sessionId: string,
-  report: Prisma.InputJsonValue,
+  report: Prisma.InputJsonValue
 ): Promise<ZoomSession> {
   return prisma.zoomSession.update({
     where: { id: sessionId },
     data: { postSessionReport: report, status: ZoomStatus.COMPLETED },
-  });
+  })
 }
 
 export type PreviousZoomSessionRecap = {
@@ -690,7 +901,9 @@ type BookingQuestionEventPayload = {
   questionText?: string
 }
 
-function parseBookingQuestionPayload(payload: unknown): BookingQuestionEventPayload {
+function parseBookingQuestionPayload(
+  payload: unknown
+): BookingQuestionEventPayload {
   if (!payload || Array.isArray(payload) || typeof payload !== 'object') {
     return {}
   }
@@ -703,9 +916,7 @@ function normalizeStringList(value: unknown): string[] {
     return []
   }
 
-  return value
-    .map((item) => String(item ?? '').trim())
-    .filter(Boolean)
+  return value.map((item) => String(item ?? '').trim()).filter(Boolean)
 }
 
 function dedupeQuestionTexts(questionTexts: string[]): string[] {
@@ -724,11 +935,14 @@ function dedupeQuestionTexts(questionTexts: string[]): string[] {
 
 async function getQuestionSummariesBySessionId(sessionIds: string[]) {
   if (sessionIds.length === 0) {
-    return new Map<string, {
-      questionPreviews: string[]
-      questionsCount: number
-      remainingQuestionsCount: number
-    }>()
+    return new Map<
+      string,
+      {
+        questionPreviews: string[]
+        questionsCount: number
+        remainingQuestionsCount: number
+      }
+    >()
   }
 
   const questionEvents = await prisma.event.findMany({
@@ -754,8 +968,12 @@ async function getQuestionSummariesBySessionId(sessionIds: string[]) {
 
   for (const event of questionEvents) {
     const payload = parseBookingQuestionPayload(event.payload)
-    const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId.trim() : ''
-    const questionText = typeof payload.questionText === 'string' ? payload.questionText.trim() : ''
+    const sessionId =
+      typeof payload.sessionId === 'string' ? payload.sessionId.trim() : ''
+    const questionText =
+      typeof payload.questionText === 'string'
+        ? payload.questionText.trim()
+        : ''
     if (!sessionId || !questionText) {
       continue
     }
@@ -765,18 +983,57 @@ async function getQuestionSummariesBySessionId(sessionIds: string[]) {
     questionsBySessionId.set(sessionId, currentQuestions)
   }
 
-  const summaries = new Map<string, {
-    questionPreviews: string[]
-    questionsCount: number
-    remainingQuestionsCount: number
-  }>()
+  const summaries = new Map<
+    string,
+    {
+      questionPreviews: string[]
+      questionsCount: number
+      remainingQuestionsCount: number
+    }
+  >()
+  const sessionsWithStarterQuestions = await prisma.zoomSession.findMany({
+    where: {
+      id: { in: sessionIds },
+    },
+    select: {
+      id: true,
+      requests: true,
+    },
+  })
 
+  const starterQuestionsBySessionId = new Map<string, string[]>()
+
+  for (const session of sessionsWithStarterQuestions) {
+    const requests =
+      session.requests &&
+      typeof session.requests === 'object' &&
+      !Array.isArray(session.requests)
+        ? (session.requests as Record<string, unknown>)
+        : {}
+
+    const starterQuestions = Array.isArray(requests.starterQuestions)
+      ? requests.starterQuestions
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : []
+
+    starterQuestionsBySessionId.set(session.id, starterQuestions)
+  }
   for (const sessionId of sessionIds) {
-    const questions = dedupeQuestionTexts(questionsBySessionId.get(sessionId) ?? [])
+    const starterQuestions = starterQuestionsBySessionId.get(sessionId) ?? []
+
+    const userQuestions = questionsBySessionId.get(sessionId) ?? []
+
+    const questions = dedupeQuestionTexts([
+      ...starterQuestions,
+      ...userQuestions,
+    ])
+
     summaries.set(sessionId, {
-      questionPreviews: questions.slice(0, 2),
+      questionPreviews: questions,
       questionsCount: questions.length,
-      remainingQuestionsCount: Math.max(questions.length - 2, 0),
+      remainingQuestionsCount: Math.max(questions.length - 3, 0),
     })
   }
 
@@ -785,7 +1042,7 @@ async function getQuestionSummariesBySessionId(sessionIds: string[]) {
 
 export async function getUserPreviousZoomSessionRecap(
   userId: string,
-  now = new Date(),
+  now = new Date()
 ): Promise<PreviousZoomSessionRecap | null> {
   const session = await prisma.zoomSession.findFirst({
     where: {
@@ -823,11 +1080,14 @@ export async function getUserPreviousZoomSessionRecap(
 
   const report = parseZoomPostReport(session.postSessionReport)
   const explicitTitle = session.topic.trim()
-  const fallbackTitle = `Zoom-практика за ${session.scheduledAt.toLocaleDateString('uk-UA', {
-    day: 'numeric',
-    month: 'long',
-    timeZone: KYIV_TIME_ZONE,
-  })}`
+  const fallbackTitle = `Zoom-практика за ${session.scheduledAt.toLocaleDateString(
+    'uk-UA',
+    {
+      day: 'numeric',
+      month: 'long',
+      timeZone: KYIV_TIME_ZONE,
+    }
+  )}`
   const attendee = session.attendees[0] ?? null
 
   return {
@@ -838,14 +1098,19 @@ export async function getUserPreviousZoomSessionRecap(
     summary: report?.summary?.trim() || null,
     recordingUrl: report?.audioUrl?.trim() || null,
     materialsUrl: null,
-    attendanceStatus: attendee ? (attendee.attended ? 'ATTENDED' : 'BOOKED') : null,
+    attendanceStatus: attendee
+      ? attendee.attended
+        ? 'ATTENDED'
+        : 'BOOKED'
+      : null,
     attendanceCount: session._count.attendees,
-    nextStep: report?.actionItems?.[0]?.trim() || report?.nextFocus?.trim() || null,
+    nextStep:
+      report?.actionItems?.[0]?.trim() || report?.nextFocus?.trim() || null,
   }
 }
 
 export async function getUserLatestWeeklyReportSummary(
-  userId: string,
+  userId: string
 ): Promise<ZoomWeeklyReportSummary | null> {
   const report = await getCachedLatestWeeklyReport(userId)
   if (!report) {
@@ -856,21 +1121,31 @@ export async function getUserLatestWeeklyReportSummary(
   const struggleAreas = normalizeStringList(report.struggleAreas)
   const nextWeekTasks = normalizeStringList(report.nextWeekTasks)
   const metrics =
-    report.metrics && typeof report.metrics === 'object' && !Array.isArray(report.metrics)
-      ? report.metrics as Record<string, unknown>
+    report.metrics &&
+    typeof report.metrics === 'object' &&
+    !Array.isArray(report.metrics)
+      ? (report.metrics as Record<string, unknown>)
       : {}
   const analysis =
-    report.analysis && typeof report.analysis === 'object' && !Array.isArray(report.analysis)
-      ? report.analysis as Record<string, unknown>
+    report.analysis &&
+    typeof report.analysis === 'object' &&
+    !Array.isArray(report.analysis)
+      ? (report.analysis as Record<string, unknown>)
       : {}
 
-  const tasksDone = typeof metrics.tasksDone === 'number' ? metrics.tasksDone : null
-  const tasksTotal = typeof metrics.tasksTotal === 'number' ? metrics.tasksTotal : null
-  const reflections = typeof metrics.reflections === 'number' ? metrics.reflections : null
-  const sessions = typeof metrics.sessions === 'number' ? metrics.sessions : null
+  const tasksDone =
+    typeof metrics.tasksDone === 'number' ? metrics.tasksDone : null
+  const tasksTotal =
+    typeof metrics.tasksTotal === 'number' ? metrics.tasksTotal : null
+  const reflections =
+    typeof metrics.reflections === 'number' ? metrics.reflections : null
+  const sessions =
+    typeof metrics.sessions === 'number' ? metrics.sessions : null
 
   const progressParts = [
-    tasksDone !== null && tasksTotal !== null ? `Виконано ${tasksDone}/${tasksTotal} задач` : null,
+    tasksDone !== null && tasksTotal !== null
+      ? `Виконано ${tasksDone}/${tasksTotal} задач`
+      : null,
     reflections !== null ? `${reflections} рефлексій` : null,
     sessions !== null ? `${sessions} AI-сесій` : null,
   ].filter(Boolean)
@@ -880,46 +1155,56 @@ export async function getUserLatestWeeklyReportSummary(
     weekStart: report.weekStart.toISOString(),
     weekEnd: report.weekEnd.toISOString(),
     generatedAt: report.createdAt.toISOString(),
-    summary: typeof report.summaryText === 'string' && report.summaryText.trim()
-      ? report.summaryText.trim()
-      : null,
+    summary:
+      typeof report.summaryText === 'string' && report.summaryText.trim()
+        ? report.summaryText.trim()
+        : null,
     progress: progressParts[0] ?? null,
     achievement: topInsights[0] ?? null,
-    blocker: struggleAreas[0]
-      ?? (typeof analysis.mainPainThisWeek === 'string' && analysis.mainPainThisWeek.trim()
+    blocker:
+      struggleAreas[0] ??
+      (typeof analysis.mainPainThisWeek === 'string' &&
+      analysis.mainPainThisWeek.trim()
         ? analysis.mainPainThisWeek.trim()
         : null),
-    nextStep: typeof report.nextWeekFocus === 'string' && report.nextWeekFocus.trim()
-      ? report.nextWeekFocus.trim()
-      : nextWeekTasks[0] ?? null,
+    nextStep:
+      typeof report.nextWeekFocus === 'string' && report.nextWeekFocus.trim()
+        ? report.nextWeekFocus.trim()
+        : (nextWeekTasks[0] ?? null),
     detailsAvailable: true,
   }
 }
 
 export async function getSessionAttendees(
-  sessionId: string,
+  sessionId: string
 ): Promise<ZoomAttendeeWithUser[]> {
   return prisma.zoomSessionAttendee.findMany({
     where: { sessionId },
-    include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
-  });
+    include: {
+      user: {
+        select: { id: true, firstName: true, lastName: true, email: true },
+      },
+    },
+  })
 }
 
 export async function getCalendarSessions(args: {
-  from: Date;
-  to: Date;
-  role: 'coach' | 'user';
-  userId: string;
-  expertId?: string;
-}): Promise<(ZoomSession & { _count: { attendees: number }; isMyBooking?: boolean })[]> {
-  const { from, to, role, userId, expertId } = args;
+  from: Date
+  to: Date
+  role: 'coach' | 'user'
+  userId: string
+  expertId?: string
+}): Promise<
+  (ZoomSession & { _count: { attendees: number }; isMyBooking?: boolean })[]
+> {
+  const { from, to, role, userId, expertId } = args
 
   if (role === 'coach') {
     return prisma.zoomSession.findMany({
       where: { expertId, scheduledAt: { gte: from, lte: to } },
       include: { _count: { select: { attendees: true } } },
       orderBy: { scheduledAt: 'asc' },
-    });
+    })
   }
 
   if (!expertId) {
@@ -937,13 +1222,21 @@ export async function getCalendarSessions(args: {
     })
 
     const bookedIds = new Set(
-      (await prisma.zoomSessionAttendee.findMany({
-        where: { userId, sessionId: { in: sessions.map((session) => session.id) } },
-        select: { sessionId: true },
-      })).map((attendee) => attendee.sessionId),
+      (
+        await prisma.zoomSessionAttendee.findMany({
+          where: {
+            userId,
+            sessionId: { in: sessions.map((session) => session.id) },
+          },
+          select: { sessionId: true },
+        })
+      ).map((attendee) => attendee.sessionId)
     )
 
-    return sessions.map((session) => ({ ...session, isMyBooking: bookedIds.has(session.id) }))
+    return sessions.map((session) => ({
+      ...session,
+      isMyBooking: bookedIds.has(session.id),
+    }))
   }
 
   const zoomAccess = await getUserAccessState(userId)
@@ -964,7 +1257,10 @@ export async function getCalendarSessions(args: {
       orderBy: { scheduledAt: 'asc' },
     })
 
-    const eligibleSession = selectTrialZoomEligibleSession(sessions, zoomAccess.expiresAt)
+    const eligibleSession = selectTrialZoomEligibleSession(
+      sessions,
+      zoomAccess.expiresAt
+    )
     if (!eligibleSession) {
       return []
     }
@@ -1000,13 +1296,21 @@ export async function getCalendarSessions(args: {
     })
 
     const bookedIds = new Set(
-      (await prisma.zoomSessionAttendee.findMany({
-        where: { userId, sessionId: { in: sessions.map((session) => session.id) } },
-        select: { sessionId: true },
-      })).map((attendee) => attendee.sessionId),
+      (
+        await prisma.zoomSessionAttendee.findMany({
+          where: {
+            userId,
+            sessionId: { in: sessions.map((session) => session.id) },
+          },
+          select: { sessionId: true },
+        })
+      ).map((attendee) => attendee.sessionId)
     )
 
-    return sessions.map((session) => ({ ...session, isMyBooking: bookedIds.has(session.id) }))
+    return sessions.map((session) => ({
+      ...session,
+      isMyBooking: bookedIds.has(session.id),
+    }))
   }
 
   // Show all expert sessions, flagging which ones the user booked
@@ -1018,95 +1322,123 @@ export async function getCalendarSessions(args: {
     },
     include: { _count: { select: { attendees: true } } },
     orderBy: { scheduledAt: 'asc' },
-  });
+  })
 
   const bookedIds = new Set(
-    (await prisma.zoomSessionAttendee.findMany({
-      where: { userId, sessionId: { in: sessions.map(s => s.id) } },
-      select: { sessionId: true },
-    })).map(a => a.sessionId),
-  );
+    (
+      await prisma.zoomSessionAttendee.findMany({
+        where: { userId, sessionId: { in: sessions.map((s) => s.id) } },
+        select: { sessionId: true },
+      })
+    ).map((a) => a.sessionId)
+  )
 
-  return sessions.map(s => ({ ...s, isMyBooking: bookedIds.has(s.id) }));
+  return sessions.map((s) => ({ ...s, isMyBooking: bookedIds.has(s.id) }))
 }
 
 export async function updateSession(
   sessionId: string,
-  patch: { scheduledAt?: Date; topic?: string; requests?: Prisma.InputJsonValue },
+  patch: {
+    scheduledAt?: Date
+    topic?: string
+    requests?: Prisma.InputJsonValue
+  }
 ): Promise<ZoomSession> {
-  const session = await prisma.zoomSession.update({ where: { id: sessionId }, data: patch });
+  const session = await prisma.zoomSession.update({
+    where: { id: sessionId },
+    data: patch,
+  })
   void afterZoomOperation(bot, {
     operation: 'update',
     sessionId: session.id,
     affectedUserIds: [],
-  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err));
-  return session;
+  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
+  return session
 }
 
 export async function cancelSession(sessionId: string): Promise<ZoomSession> {
   const session = await prisma.zoomSession.update({
     where: { id: sessionId },
     data: { status: ZoomStatus.CANCELLED },
-  });
+  })
 
   void afterZoomOperation(bot, {
     operation: 'cancel',
     sessionId: session.id,
     affectedUserIds: [],
-  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err));
+  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
 
-  return session;
+  return session
 }
 
-export async function createFullSession(data: {
-  expertId?: string;
-  scheduledAt: Date;
-  topic: string;
-  requests: Prisma.InputJsonValue;
-}, options?: { suppressAutomation?: boolean; suppressSessionNotification?: boolean }): Promise<ZoomSession> {
+export async function createFullSession(
+  data: {
+    expertId?: string
+    scheduledAt: Date
+    topic: string
+    requests: Prisma.InputJsonValue
+  },
+  options?: {
+    suppressAutomation?: boolean
+    suppressSessionNotification?: boolean
+  }
+): Promise<ZoomSession> {
   console.log('[zoom/service createFullSession] input:', {
     expertId: data.expertId ?? null,
     scheduledAt: data.scheduledAt?.toISOString?.() ?? String(data.scheduledAt),
     topic: data.topic,
     type:
-      data.requests && typeof data.requests === 'object' && !Array.isArray(data.requests)
-        ? (data.requests as Record<string, unknown>).type ?? null
+      data.requests &&
+      typeof data.requests === 'object' &&
+      !Array.isArray(data.requests)
+        ? ((data.requests as Record<string, unknown>).type ?? null)
         : null,
-  });
-  let session: ZoomSession;
+  })
+  let session: ZoomSession
   try {
-    session = await prisma.zoomSession.create({ data: { ...data, status: ZoomStatus.SCHEDULED } });
+    session = await prisma.zoomSession.create({
+      data: { ...data, status: ZoomStatus.SCHEDULED },
+    })
   } catch (err) {
-    console.error('[zoom/service createFullSession] ERROR:', err);
-    throw err;
+    console.error('[zoom/service createFullSession] ERROR:', err)
+    throw err
   }
-  console.log('[zoom/service createFullSession] created:', session.id);
+  console.log('[zoom/service createFullSession] created:', session.id)
   if (!options?.suppressAutomation) {
     void afterZoomOperation(bot, {
       operation: 'create',
       sessionId: session.id,
       affectedUserIds: [],
-    }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err));
+    }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
   }
 
-  if (isGroupPracticeRequest(session.requests) && !options?.suppressSessionNotification) {
-    void notifySubscribersNewSession(bot, session).catch(err => console.error('[zoom] notify failed:', err));
+  if (
+    isGroupPracticeRequest(session.requests) &&
+    !options?.suppressSessionNotification
+  ) {
+    void notifySubscribersNewSession(bot, session).catch((err) =>
+      console.error('[zoom] notify failed:', err)
+    )
   }
-  return session;
+  return session
 }
 
 export async function getSessionById(id: string): Promise<ZoomSession | null> {
-  return prisma.zoomSession.findUnique({ where: { id } });
+  return prisma.zoomSession.findUnique({ where: { id } })
 }
 
-export async function getAllUpcomingSessionsForNotification(before: Date): Promise<ZoomSession[]> {
+export async function getAllUpcomingSessionsForNotification(
+  before: Date
+): Promise<ZoomSession[]> {
   return prisma.zoomSession.findMany({
     where: { status: ZoomStatus.SCHEDULED, scheduledAt: { lte: before } },
     orderBy: { scheduledAt: 'asc' },
-  });
+  })
 }
 
-export async function getUpcomingGroupSessions(limit: number): Promise<ZoomSession[]> {
+export async function getUpcomingGroupSessions(
+  limit: number
+): Promise<ZoomSession[]> {
   return prisma.zoomSession.findMany({
     where: {
       status: ZoomStatus.SCHEDULED,
@@ -1115,16 +1447,18 @@ export async function getUpcomingGroupSessions(limit: number): Promise<ZoomSessi
     },
     orderBy: { scheduledAt: 'asc' },
     take: Math.max(1, limit),
-  });
+  })
 }
 
-export async function getAvailableSlotsForUser(userId: string): Promise<Array<{
-  id: string
-  date: string
-  hour: number
-  bookedCount: number
-  isBooked: boolean
-}>> {
+export async function getAvailableSlotsForUser(userId: string): Promise<
+  Array<{
+    id: string
+    date: string
+    hour: number
+    bookedCount: number
+    isBooked: boolean
+  }>
+> {
   const now = new Date()
   const startOfToday = startOfKyivDay(now)
   const nextFourteenDays = endOfRollingKyivWindow(now)
@@ -1150,10 +1484,13 @@ export async function getAvailableSlotsForUser(userId: string): Promise<Array<{
     .map((session) => {
       const meta = (session.requests as Record<string, unknown>) ?? {}
       const maxSlots = typeof meta.maxSlots === 'number' ? meta.maxSlots : 50
-      const deadlineHours = typeof meta.bookingDeadlineHours === 'number'
-        ? meta.bookingDeadlineHours
-        : 24
-      const deadline = new Date(session.scheduledAt.getTime() - deadlineHours * 60 * 60 * 1000)
+      const deadlineHours =
+        typeof meta.bookingDeadlineHours === 'number'
+          ? meta.bookingDeadlineHours
+          : 24
+      const deadline = new Date(
+        session.scheduledAt.getTime() - deadlineHours * 60 * 60 * 1000
+      )
       const bookedCount = session._count.attendees
       const isBooked = session.attendees.length > 0
       const isOpen = bookedCount < maxSlots && now < deadline
@@ -1168,80 +1505,108 @@ export async function getAvailableSlotsForUser(userId: string): Promise<Array<{
         isBooked,
       }
     })
-    .filter((slot): slot is {
-      id: string
-      date: string
-      hour: number
-      bookedCount: number
-      isBooked: boolean
-    } => Boolean(slot))
+    .filter(
+      (
+        slot
+      ): slot is {
+        id: string
+        date: string
+        hour: number
+        bookedCount: number
+        isBooked: boolean
+      } => Boolean(slot)
+    )
 }
 
 export async function patchSessionRequests(
   sessionId: string,
-  requests: Prisma.InputJsonValue,
+  requests: Prisma.InputJsonValue
 ): Promise<ZoomSession> {
-  return prisma.zoomSession.update({ where: { id: sessionId }, data: { requests } });
+  return prisma.zoomSession.update({
+    where: { id: sessionId },
+    data: { requests },
+  })
 }
 
 export async function bookSlot(
   sessionId: string,
-  userId: string,
+  userId: string
 ): Promise<{ booked: boolean; remainingSlots: number }> {
   const session = await prisma.zoomSession.findUniqueOrThrow({
     where: { id: sessionId },
     include: { _count: { select: { attendees: true } } },
-  });
+  })
 
-  const meta = (session.requests as Record<string, unknown>) ?? {};
-  const maxSlots = typeof meta.maxSlots === 'number' ? meta.maxSlots : 50;
-  const deadlineHours = typeof meta.bookingDeadlineHours === 'number' ? meta.bookingDeadlineHours : 24;
+  const meta = (session.requests as Record<string, unknown>) ?? {}
+  const maxSlots = typeof meta.maxSlots === 'number' ? meta.maxSlots : 50
+  const deadlineHours =
+    typeof meta.bookingDeadlineHours === 'number'
+      ? meta.bookingDeadlineHours
+      : 24
 
-  if (session._count.attendees >= maxSlots) throw new Error('slot_full');
+  if (session._count.attendees >= maxSlots) throw new Error('slot_full')
 
-  const deadline = new Date(session.scheduledAt.getTime() - deadlineHours * 60 * 60 * 1000);
-  if (new Date() >= deadline) throw new Error('deadline_passed');
+  const deadline = new Date(
+    session.scheduledAt.getTime() - deadlineHours * 60 * 60 * 1000
+  )
+  if (new Date() >= deadline) throw new Error('deadline_passed')
 
   await prisma.zoomSessionAttendee.upsert({
     where: { sessionId_userId: { sessionId, userId } },
     create: { sessionId, userId, attended: false },
     update: {},
-  });
+  })
 
-  const newCount = await prisma.zoomSessionAttendee.count({ where: { sessionId } });
+  const newCount = await prisma.zoomSessionAttendee.count({
+    where: { sessionId },
+  })
 
   if (newCount >= maxSlots) {
-    await patchSessionRequests(sessionId, { ...meta, slotStatus: 'booked' } as unknown as Prisma.InputJsonValue);
+    await patchSessionRequests(sessionId, {
+      ...meta,
+      slotStatus: 'booked',
+    } as unknown as Prisma.InputJsonValue)
   }
 
   void afterZoomOperation(bot, {
     operation: 'book',
     sessionId,
     affectedUserIds: [userId],
-  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err));
+  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
 
-  return { booked: true, remainingSlots: maxSlots - newCount };
+  return { booked: true, remainingSlots: maxSlots - newCount }
 }
 
-export async function unbookSlot(sessionId: string, userId: string): Promise<void> {
-  const session = await prisma.zoomSession.findUniqueOrThrow({ where: { id: sessionId } });
+export async function unbookSlot(
+  sessionId: string,
+  userId: string
+): Promise<void> {
+  const session = await prisma.zoomSession.findUniqueOrThrow({
+    where: { id: sessionId },
+  })
 
-  const cutoff = new Date(session.scheduledAt.getTime() - 24 * 60 * 60 * 1000);
-  if (new Date() >= cutoff) throw new Error('too_late');
+  const cutoff = new Date(session.scheduledAt.getTime() - 24 * 60 * 60 * 1000)
+  if (new Date() >= cutoff) throw new Error('too_late')
 
-  await prisma.zoomSessionAttendee.deleteMany({ where: { sessionId, userId } });
+  await prisma.zoomSessionAttendee.deleteMany({ where: { sessionId, userId } })
 
-  const meta = (session.requests as Record<string, unknown>) ?? {};
-  await patchSessionRequests(sessionId, { ...meta, slotStatus: 'available' } as unknown as Prisma.InputJsonValue);
+  const meta = (session.requests as Record<string, unknown>) ?? {}
+  await patchSessionRequests(sessionId, {
+    ...meta,
+    slotStatus: 'available',
+  } as unknown as Prisma.InputJsonValue)
 
   void afterZoomOperation(bot, {
     operation: 'unbook',
     sessionId,
     affectedUserIds: [userId],
-  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err));
+  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
 }
 
-async function cancelExistingReminders(userId: string, sessionId: string): Promise<void> {
+async function cancelExistingReminders(
+  userId: string,
+  sessionId: string
+): Promise<void> {
   await prisma.notificationJob.updateMany({
     where: {
       type: NotificationType.AI_REMINDER,
@@ -1260,19 +1625,27 @@ async function cancelExistingReminders(userId: string, sessionId: string): Promi
 
 export async function scheduleReminders(
   userId: string,
-  session: { id: string; scheduledAt: Date; topic: string; requests: unknown },
+  session: { id: string; scheduledAt: Date; topic: string; requests: unknown }
 ): Promise<void> {
   const scheduledAt = new Date(session.scheduledAt)
   const remind24h = new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000)
   const remind2h = new Date(scheduledAt.getTime() - 2 * 60 * 60 * 1000)
   const now = new Date()
-  const req = (!session.requests || Array.isArray(session.requests) || typeof session.requests !== 'object')
-    ? {}
-    : (session.requests as Record<string, unknown>)
+  const req =
+    !session.requests ||
+    Array.isArray(session.requests) ||
+    typeof session.requests !== 'object'
+      ? {}
+      : (session.requests as Record<string, unknown>)
 
-  const jobs: Array<{ flowTimerId: 'ZOOM_REMINDER_24H' | 'ZOOM_REMINDER_2H'; runAt: Date }> = []
-  if (remind24h > now) jobs.push({ flowTimerId: 'ZOOM_REMINDER_24H', runAt: remind24h })
-  if (remind2h > now) jobs.push({ flowTimerId: 'ZOOM_REMINDER_2H', runAt: remind2h })
+  const jobs: Array<{
+    flowTimerId: 'ZOOM_REMINDER_24H' | 'ZOOM_REMINDER_2H'
+    runAt: Date
+  }> = []
+  if (remind24h > now)
+    jobs.push({ flowTimerId: 'ZOOM_REMINDER_24H', runAt: remind24h })
+  if (remind2h > now)
+    jobs.push({ flowTimerId: 'ZOOM_REMINDER_2H', runAt: remind2h })
 
   if (jobs.length === 0) {
     console.log('[scheduleReminders] всі часи в минулому, jobs не створено')
@@ -1286,7 +1659,12 @@ export async function scheduleReminders(
         status: 'PENDING',
         payload: { path: ['userId'], equals: userId },
         AND: [
-          { payload: { path: ['payload', 'flow_timer_id'], equals: job.flowTimerId } },
+          {
+            payload: {
+              path: ['payload', 'flow_timer_id'],
+              equals: job.flowTimerId,
+            },
+          },
           { payload: { path: ['payload', 'sessionId'], equals: session.id } },
         ],
       },
@@ -1314,10 +1692,14 @@ export async function scheduleReminders(
     })
   }
 
-  console.log(`[scheduleReminders] userId=${userId} sessionId=${session.id} jobs=${jobs.length}`)
+  console.log(
+    `[scheduleReminders] userId=${userId} sessionId=${session.id} jobs=${jobs.length}`
+  )
 }
 
-async function getCoachReminderUserIds(expertId: string | null | undefined): Promise<string[]> {
+async function getCoachReminderUserIds(
+  expertId: string | null | undefined
+): Promise<string[]> {
   if (!expertId) return []
 
   const coaches = await prisma.user.findMany({
@@ -1334,27 +1716,41 @@ async function getCoachReminderUserIds(expertId: string | null | undefined): Pro
 
 export async function rescheduleReminders(
   userId: string,
-  session: { id: string; scheduledAt: Date; topic: string; requests: unknown },
+  session: { id: string; scheduledAt: Date; topic: string; requests: unknown }
 ): Promise<void> {
   await cancelExistingReminders(userId, session.id)
   await scheduleReminders(userId, session)
 }
 
-async function notifyCoach(expertId: string | null | undefined, details: { swapId: string }): Promise<void> {
+async function notifyCoach(
+  expertId: string | null | undefined,
+  details: { swapId: string }
+): Promise<void> {
   if (!expertId) return
   const expertUser = await prisma.user.findFirst({
     where: { expertId },
     select: { telegramChatId: true },
   })
   if (!expertUser?.telegramChatId) return
-  await sendDedupedTelegramMessage(expertUser.telegramChatId, `💱 Відбувся обмін слотами. Swap #${details.swapId}`).catch(() => undefined)
+  await sendDedupedTelegramMessage(
+    expertUser.telegramChatId,
+    `💱 Відбувся обмін слотами. Swap #${details.swapId}`
+  ).catch(() => undefined)
 }
 
 function isPrismaTableMissingError(err: unknown): err is { code: string } {
-  return err instanceof Error && 'code' in err && (err as { code: string }).code === 'P2021'
+  return (
+    err instanceof Error &&
+    'code' in err &&
+    (err as { code: string }).code === 'P2021'
+  )
 }
 
-export async function getAvailablePrivateSlots(expertId: string, from: Date, to: Date) {
+export async function getAvailablePrivateSlots(
+  expertId: string,
+  from: Date,
+  to: Date
+) {
   const sessions = await prisma.zoomSession.findMany({
     where: {
       expertId,
@@ -1367,7 +1763,10 @@ export async function getAvailablePrivateSlots(expertId: string, from: Date, to:
   })
 
   return sessions
-    .map((session) => ({ session, remaining: session.capacity - session._count.attendees }))
+    .map((session) => ({
+      session,
+      remaining: session.capacity - session._count.attendees,
+    }))
     .filter((row) => row.remaining > 0)
 }
 
@@ -1380,7 +1779,8 @@ export async function bookPrivateSlot(userId: string, sessionId: string) {
     include: { _count: { select: { attendees: true } } },
   })
   if (!session) throw new Error('session_not_found')
-  if (session.type !== ZoomSessionType.PRIVATE) throw new Error('not_private_session')
+  if (session.type !== ZoomSessionType.PRIVATE)
+    throw new Error('not_private_session')
   if (!session.expertId) throw new Error('expert_not_found')
 
   await assertWeeklyPrivateLimit(session.expertId, session.scheduledAt)
@@ -1400,7 +1800,7 @@ export async function bookPrivateSlot(userId: string, sessionId: string) {
     operation: 'book',
     sessionId,
     affectedUserIds: [userId],
-  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err));
+  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
 
   return { success: true, session }
 }
@@ -1413,7 +1813,8 @@ export async function cancelPrivateBooking(userId: string, sessionId: string) {
   if (!attendee) throw new Error('booking_not_found')
 
   const minCancellationAt = new Date(Date.now() + 2 * 60 * 60 * 1000)
-  if (attendee.session.scheduledAt <= minCancellationAt) throw new Error('too_late_to_cancel')
+  if (attendee.session.scheduledAt <= minCancellationAt)
+    throw new Error('too_late_to_cancel')
 
   await prisma.zoomSessionAttendee.delete({
     where: { sessionId_userId: { sessionId, userId } },
@@ -1423,7 +1824,7 @@ export async function cancelPrivateBooking(userId: string, sessionId: string) {
     operation: 'unbook',
     sessionId,
     affectedUserIds: [userId],
-  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err));
+  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
 
   return { success: true }
 }
@@ -1439,7 +1840,10 @@ function formatPrivateSessionSlotLabel(date: Date): string {
   })
 }
 
-export async function getSwapCandidates(requesterId: string, sessionIdFrom: string) {
+export async function getSwapCandidates(
+  requesterId: string,
+  sessionIdFrom: string
+) {
   const sessionFrom = await prisma.zoomSession.findUnique({
     where: { id: sessionIdFrom },
     select: {
@@ -1451,10 +1855,13 @@ export async function getSwapCandidates(requesterId: string, sessionIdFrom: stri
     },
   })
   if (!sessionFrom) throw new Error('session_not_found')
-  if (sessionFrom.type !== ZoomSessionType.PRIVATE) throw new Error('not_private_session')
+  if (sessionFrom.type !== ZoomSessionType.PRIVATE)
+    throw new Error('not_private_session')
 
   const requesterAttendee = await prisma.zoomSessionAttendee.findUnique({
-    where: { sessionId_userId: { sessionId: sessionIdFrom, userId: requesterId } },
+    where: {
+      sessionId_userId: { sessionId: sessionIdFrom, userId: requesterId },
+    },
     select: { id: true },
   })
   if (!requesterAttendee) throw new Error('requester_not_attendee')
@@ -1509,7 +1916,9 @@ export async function getSwapCandidates(requesterId: string, sessionIdFrom: stri
         slotLabel: formatPrivateSessionSlotLabel(session.scheduledAt),
       }
     })
-    .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
+    .filter((candidate): candidate is NonNullable<typeof candidate> =>
+      Boolean(candidate)
+    )
 }
 
 export async function createSwapRequest(
@@ -1519,18 +1928,23 @@ export async function createSwapRequest(
     targetUserId?: string
     sessionIdTo?: string
     targetUserIds?: string[]
-  },
+  }
 ) {
   try {
     const isSubscriber = await isActiveFocusSubscriber(requesterId)
     if (!isSubscriber) throw new Error('focus_subscription_required')
 
-    const sessionFrom = await prisma.zoomSession.findUnique({ where: { id: sessionIdFrom } })
+    const sessionFrom = await prisma.zoomSession.findUnique({
+      where: { id: sessionIdFrom },
+    })
     if (!sessionFrom) throw new Error('session_not_found')
-    if (sessionFrom.type !== ZoomSessionType.PRIVATE) throw new Error('not_private_session')
+    if (sessionFrom.type !== ZoomSessionType.PRIVATE)
+      throw new Error('not_private_session')
 
     const requesterAttendee = await prisma.zoomSessionAttendee.findUnique({
-      where: { sessionId_userId: { sessionId: sessionIdFrom, userId: requesterId } },
+      where: {
+        sessionId_userId: { sessionId: sessionIdFrom, userId: requesterId },
+      },
       select: { id: true },
     })
     if (!requesterAttendee) throw new Error('requester_not_attendee')
@@ -1544,7 +1958,9 @@ export async function createSwapRequest(
 
     if (targetUserId && sessionIdTo) {
       const targetAttendee = await prisma.zoomSessionAttendee.findUnique({
-        where: { sessionId_userId: { sessionId: sessionIdTo, userId: targetUserId } },
+        where: {
+          sessionId_userId: { sessionId: sessionIdTo, userId: targetUserId },
+        },
         select: {
           id: true,
           user: {
@@ -1571,9 +1987,12 @@ export async function createSwapRequest(
         },
       })
       if (!targetAttendee) throw new Error('swap_target_not_found')
-      if (targetAttendee.session.type !== ZoomSessionType.PRIVATE) throw new Error('not_private_session')
-      if (targetAttendee.session.status === ZoomStatus.CANCELLED) throw new Error('swap_target_unavailable')
-      if (targetAttendee.session.expertId !== sessionFrom.expertId) throw new Error('swap_target_mismatch')
+      if (targetAttendee.session.type !== ZoomSessionType.PRIVATE)
+        throw new Error('not_private_session')
+      if (targetAttendee.session.status === ZoomStatus.CANCELLED)
+        throw new Error('swap_target_unavailable')
+      if (targetAttendee.session.expertId !== sessionFrom.expertId)
+        throw new Error('swap_target_mismatch')
       if (targetUserId === requesterId) throw new Error('swap_self_forbidden')
 
       const duplicate = await prisma.zoomSlotSwapRequest.findFirst({
@@ -1605,9 +2024,9 @@ export async function createSwapRequest(
       })
 
       const targetChatId =
-        targetAttendee.user.telegramChatId
-        ?? targetAttendee.user.telegramLinks[0]?.chatId
-        ?? null
+        targetAttendee.user.telegramChatId ??
+        targetAttendee.user.telegramLinks[0]?.chatId ??
+        null
 
       if (targetChatId) {
         const requesterName = getSafeName(requesterUser?.firstName) || 'Учасник'
@@ -1621,12 +2040,20 @@ export async function createSwapRequest(
           ].join('\n'),
           {
             reply_markup: {
-              inline_keyboard: [[
-                { text: 'Прийняти', callback_data: `zoom:swap:accept:${swap.id}:${sessionIdTo}` },
-                { text: 'Відхилити', callback_data: `zoom:swap:decline:${swap.id}` },
-              ]],
+              inline_keyboard: [
+                [
+                  {
+                    text: 'Прийняти',
+                    callback_data: `zoom:swap:accept:${swap.id}:${sessionIdTo}`,
+                  },
+                  {
+                    text: 'Відхилити',
+                    callback_data: `zoom:swap:decline:${swap.id}`,
+                  },
+                ],
+              ],
             },
-          },
+          }
         ).catch(() => undefined)
       }
 
@@ -1645,14 +2072,20 @@ export async function createSwapRequest(
     }
   } catch (err: unknown) {
     if (isPrismaTableMissingError(err)) {
-      console.warn('[zoom/service] ZoomSlotSwapRequest table not found — run prisma migrate deploy to apply migration. Skipping createSwapRequest.')
+      console.warn(
+        '[zoom/service] ZoomSlotSwapRequest table not found — run prisma migrate deploy to apply migration. Skipping createSwapRequest.'
+      )
       throw new Error('swap_storage_unavailable')
     }
     throw err
   }
 }
 
-export async function acceptSwapRequest(swapId: string, acceptorId: string, sessionIdTo: string) {
+export async function acceptSwapRequest(
+  swapId: string,
+  acceptorId: string,
+  sessionIdTo: string
+) {
   try {
     const swap = await prisma.zoomSlotSwapRequest.findUnique({
       where: { id: swapId },
@@ -1663,22 +2096,33 @@ export async function acceptSwapRequest(swapId: string, acceptorId: string, sess
     if (!sessionIdFrom) throw new Error('swap_session_missing')
     if (swap.status !== SwapStatus.PENDING) throw new Error('swap_not_pending')
     if (swap.expiresAt <= new Date()) throw new Error('swap_expired')
-    if (swap.targetUserId && swap.targetUserId !== acceptorId) throw new Error('swap_for_another_user')
-    if (swap.sessionIdTo && swap.sessionIdTo !== sessionIdTo) throw new Error('swap_session_mismatch')
+    if (swap.targetUserId && swap.targetUserId !== acceptorId)
+      throw new Error('swap_for_another_user')
+    if (swap.sessionIdTo && swap.sessionIdTo !== sessionIdTo)
+      throw new Error('swap_session_mismatch')
 
     const acceptorAttendee = await prisma.zoomSessionAttendee.findUnique({
-      where: { sessionId_userId: { sessionId: sessionIdTo, userId: acceptorId } },
+      where: {
+        sessionId_userId: { sessionId: sessionIdTo, userId: acceptorId },
+      },
       select: { id: true },
     })
     if (!acceptorAttendee) throw new Error('acceptor_not_attendee')
 
     await prisma.$transaction(async (tx) => {
       await tx.zoomSessionAttendee.update({
-        where: { sessionId_userId: { sessionId: sessionIdFrom, userId: swap.requesterId } },
+        where: {
+          sessionId_userId: {
+            sessionId: sessionIdFrom,
+            userId: swap.requesterId,
+          },
+        },
         data: { userId: acceptorId },
       })
       await tx.zoomSessionAttendee.update({
-        where: { sessionId_userId: { sessionId: sessionIdTo, userId: acceptorId } },
+        where: {
+          sessionId_userId: { sessionId: sessionIdTo, userId: acceptorId },
+        },
         data: { userId: swap.requesterId },
       })
       await tx.zoomSlotSwapRequest.update({
@@ -1698,13 +2142,17 @@ export async function acceptSwapRequest(swapId: string, acceptorId: string, sess
       operation: 'swap_accept',
       sessionId: sessionIdFrom,
       affectedUserIds: [swap.requesterId, acceptorId],
-    }).catch((error) => console.error('[zoom] afterZoomOperation failed:', error))
+    }).catch((error) =>
+      console.error('[zoom] afterZoomOperation failed:', error)
+    )
 
     void afterZoomOperation(bot, {
       operation: 'swap_accept',
       sessionId: sessionIdTo,
       affectedUserIds: [acceptorId, swap.requesterId],
-    }).catch((error) => console.error('[zoom] afterZoomOperation failed:', error))
+    }).catch((error) =>
+      console.error('[zoom] afterZoomOperation failed:', error)
+    )
 
     return {
       success: true,
@@ -1713,7 +2161,9 @@ export async function acceptSwapRequest(swapId: string, acceptorId: string, sess
     }
   } catch (err: unknown) {
     if (isPrismaTableMissingError(err)) {
-      console.warn('[zoom/service] ZoomSlotSwapRequest table not found — run prisma migrate deploy to apply migration. Skipping acceptSwapRequest.')
+      console.warn(
+        '[zoom/service] ZoomSlotSwapRequest table not found — run prisma migrate deploy to apply migration. Skipping acceptSwapRequest.'
+      )
       throw new Error('swap_storage_unavailable')
     }
     throw err
@@ -1727,7 +2177,8 @@ export async function declineSwapRequest(swapId: string, _declinerId: string) {
       select: { id: true, targetUserId: true },
     })
     if (!existing) throw new Error('swap_not_found')
-    if (existing.targetUserId && existing.targetUserId !== _declinerId) throw new Error('swap_for_another_user')
+    if (existing.targetUserId && existing.targetUserId !== _declinerId)
+      throw new Error('swap_for_another_user')
 
     const swap = await prisma.zoomSlotSwapRequest.update({
       where: { id: swapId },
@@ -1738,7 +2189,10 @@ export async function declineSwapRequest(swapId: string, _declinerId: string) {
       select: { telegramChatId: true },
     })
     if (requester?.telegramChatId) {
-      await sendDedupedTelegramMessage(requester.telegramChatId, 'Обмін відхилено').catch(() => undefined)
+      await sendDedupedTelegramMessage(
+        requester.telegramChatId,
+        'Обмін відхилено'
+      ).catch(() => undefined)
     }
 
     if (swap.sessionIdFrom) {
@@ -1746,13 +2200,17 @@ export async function declineSwapRequest(swapId: string, _declinerId: string) {
         operation: 'swap_decline',
         sessionId: swap.sessionIdFrom,
         affectedUserIds: [swap.requesterId],
-      }).catch((error) => console.error('[zoom] afterZoomOperation failed:', error))
+      }).catch((error) =>
+        console.error('[zoom] afterZoomOperation failed:', error)
+      )
     }
 
     return { success: true }
   } catch (err: unknown) {
     if (isPrismaTableMissingError(err)) {
-      console.warn('[zoom/service] ZoomSlotSwapRequest table not found — run prisma migrate deploy to apply migration. Skipping declineSwapRequest.')
+      console.warn(
+        '[zoom/service] ZoomSlotSwapRequest table not found — run prisma migrate deploy to apply migration. Skipping declineSwapRequest.'
+      )
       throw new Error('swap_storage_unavailable')
     }
     throw err
@@ -1776,7 +2234,10 @@ function endOfWeekSunday(inputDate: Date): Date {
   return end
 }
 
-export async function getCoachWeekSlots(coachId: string, anchorDate = new Date()) {
+export async function getCoachWeekSlots(
+  coachId: string,
+  anchorDate = new Date()
+) {
   const from = startOfWeekMonday(anchorDate)
   const to = endOfWeekSunday(anchorDate)
   return prisma.zoomSlot.findMany({
@@ -1800,7 +2261,10 @@ export async function toggleCoachSlotStatus(input: {
   })
 }
 
-export async function initiateZoomSwap(initiatorId: string, targetSlotId: string) {
+export async function initiateZoomSwap(
+  initiatorId: string,
+  targetSlotId: string
+) {
   const isSubscriber = await isActiveFocusSubscriber(initiatorId)
   if (!isSubscriber) throw new Error('focus_subscription_required')
 
@@ -1816,7 +2280,8 @@ export async function initiateZoomSwap(initiatorId: string, targetSlotId: string
     select: { id: true, coachId: true, status: true },
   })
   if (!targetSlot) throw new Error('target_slot_not_found')
-  if (targetSlot.status !== ZoomSlotStatus.OPEN) throw new Error('target_slot_closed')
+  if (targetSlot.status !== ZoomSlotStatus.OPEN)
+    throw new Error('target_slot_closed')
 
   const duplicateSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const duplicate = await prisma.zoomSlotSwapRequest.findFirst({
@@ -1824,7 +2289,9 @@ export async function initiateZoomSwap(initiatorId: string, targetSlotId: string
       requesterId: initiatorId,
       targetSlotId,
       createdAt: { gte: duplicateSince },
-      paymentStatus: { in: [ZoomSwapStatus.PENDING_PAYMENT, ZoomSwapStatus.CONFIRMED] },
+      paymentStatus: {
+        in: [ZoomSwapStatus.PENDING_PAYMENT, ZoomSwapStatus.CONFIRMED],
+      },
     },
     select: { id: true },
   })
@@ -1855,16 +2322,22 @@ export async function initiateZoomSwap(initiatorId: string, targetSlotId: string
     product_price: [swap.fee],
   })
   const backendBaseUrl = (
-    process.env.PUBLIC_API_URL?.trim()
-    || process.env.APP_URL?.trim()
-    || process.env.TELEGRAM_WEBHOOK_URL?.trim()
-    || process.env.INTERNAL_API_URL?.trim()?.replace(/\/api$/, '')
-    || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : 'http://127.0.0.1:3001')
+    process.env.PUBLIC_API_URL?.trim() ||
+    process.env.APP_URL?.trim() ||
+    process.env.TELEGRAM_WEBHOOK_URL?.trim() ||
+    process.env.INTERNAL_API_URL?.trim()?.replace(/\/api$/, '') ||
+    (process.env.PORT
+      ? `http://127.0.0.1:${process.env.PORT}`
+      : 'http://127.0.0.1:3001')
   ).replace(/\/$/, '')
-  const checkoutUrl = await buildShortWayForPayCheckoutUrl(backendBaseUrl, payment, {
-    product: 'zoom_swap',
-    swapId: swap.id,
-  })
+  const checkoutUrl = await buildShortWayForPayCheckoutUrl(
+    backendBaseUrl,
+    payment,
+    {
+      product: 'zoom_swap',
+      swapId: swap.id,
+    }
+  )
 
   await prisma.zoomSlotSwapRequest.update({
     where: { id: swap.id },
@@ -1896,13 +2369,13 @@ async function notifyZoomSwapPaymentCompleted(input: {
     input.requesterChatId
       ? sendDedupedTelegramMessage(
           input.requesterChatId,
-          `✅ Оплату за Zoom swap підтверджено. Ваш запит #${input.swapId} зарезервовано ${slotLabel}.`,
+          `✅ Оплату за Zoom swap підтверджено. Ваш запит #${input.swapId} зарезервовано ${slotLabel}.`
         ).catch(() => undefined)
       : Promise.resolve(),
     input.coachChatId
       ? sendDedupedTelegramMessage(
           input.coachChatId,
-          `💱 Оплачений Zoom swap #${input.swapId}. ${getSafeName(input.requesterFirstName) || 'Учасник'} зарезервував слот ${slotLabel}.`,
+          `💱 Оплачений Zoom swap #${input.swapId}. ${getSafeName(input.requesterFirstName) || 'Учасник'} зарезервував слот ${slotLabel}.`
         ).catch(() => undefined)
       : Promise.resolve(),
   ])
@@ -1914,7 +2387,7 @@ export async function confirmZoomSwapPaymentByOrderRef(
     amount?: number
     currency?: string
     transactionId?: string | null
-  },
+  }
 ) {
   const swap = await prisma.zoomSlotSwapRequest.findFirst({
     where: { orderRef },
@@ -1968,23 +2441,29 @@ export async function confirmZoomSwapPaymentByOrderRef(
     return { updated: false, duplicate: true as const, swapId: swap.id }
   }
 
-  const existingPaymentLog = await prisma.paymentLog.findUnique({
-    where: { orderReference: orderRef },
-    select: { id: true },
-  }).catch(() => null)
+  const existingPaymentLog = await prisma.paymentLog
+    .findUnique({
+      where: { orderReference: orderRef },
+      select: { id: true },
+    })
+    .catch(() => null)
 
   const expertId =
-    swap.requester.expertId
-    ?? swap.sessionFrom?.expertId
-    ?? swap.targetSlot?.coach.expertId
-    ?? null
+    swap.requester.expertId ??
+    swap.sessionFrom?.expertId ??
+    swap.targetSlot?.coach.expertId ??
+    null
 
   if (!expertId) {
     console.error('[ZOOM_SWAP] missing_expert_id', {
       swapId: swap.id,
       orderRef,
     })
-    return { updated: false, error: 'missing_expert_id' as const, swapId: swap.id }
+    return {
+      updated: false,
+      error: 'missing_expert_id' as const,
+      swapId: swap.id,
+    }
   }
 
   try {
@@ -2093,7 +2572,11 @@ export async function expireStaleSwapRequests() {
       where: { status: SwapStatus.PENDING, expiresAt: { lt: new Date() } },
       select: { id: true, requesterId: true },
     })
-    if (stale.length === 0) return { expiredCount: 0, expired: [] as Array<{ id: string; requesterId: string }> }
+    if (stale.length === 0)
+      return {
+        expiredCount: 0,
+        expired: [] as Array<{ id: string; requesterId: string }>,
+      }
 
     await prisma.zoomSlotSwapRequest.updateMany({
       where: { id: { in: stale.map((item) => item.id) } },
@@ -2107,10 +2590,13 @@ export async function expireStaleSwapRequests() {
       (err as { code: string }).code === 'P2021'
     ) {
       console.warn(
-        '[zoom/service] ZoomSlotSwapRequest table not found — '
-        + 'run prisma migrate deploy to apply migration. Skipping.',
+        '[zoom/service] ZoomSlotSwapRequest table not found — ' +
+          'run prisma migrate deploy to apply migration. Skipping.'
       )
-      return { expiredCount: 0, expired: [] as Array<{ id: string; requesterId: string }> }
+      return {
+        expiredCount: 0,
+        expired: [] as Array<{ id: string; requesterId: string }>,
+      }
     }
     throw err
   }
@@ -2124,15 +2610,15 @@ export async function formatChannelPost(): Promise<string> {
     },
     orderBy: { scheduledAt: 'asc' },
     take: 1,
-  });
+  })
 
   const nextGroupPractice = sessions.find((session) =>
     isGroupPracticeRequest(session.requests)
-  );
+  )
 
   const nextSessionLine = nextGroupPractice
     ? formatFocusChannelNextSessionLine(nextGroupPractice.scheduledAt)
-    : 'Скоро опублікуємо найближчу дату в каналі.';
+    : 'Скоро опублікуємо найближчу дату в каналі.'
 
   return [
     'Вітаю, ти всередині ФОКУСУ.',
@@ -2153,193 +2639,208 @@ export async function formatChannelPost(): Promise<string> {
     '2. Обери найближчу практику і забронюй місце.',
     '',
     'Якщо загубилась або хочеш повернутись назад — натисни «Відкрити чат-бот».',
-  ].join('\n');
+  ].join('\n')
 }
 
 function formatFocusChannelNextSessionLine(date: Date): string {
   const weekday = date.toLocaleDateString('uk-UA', {
     weekday: 'long',
     timeZone: KYIV_TIME_ZONE,
-  });
+  })
   const month = date.toLocaleDateString('uk-UA', {
     month: 'long',
     timeZone: KYIV_TIME_ZONE,
-  });
+  })
   const time = date.toLocaleTimeString('uk-UA', {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: KYIV_TIME_ZONE,
-  });
+  })
 
-  return `${capitalizeLabel(weekday)}, ${date.getDate()} ${month} · ${time}`;
+  return `${capitalizeLabel(weekday)}, ${date.getDate()} ${month} · ${time}`
 }
 
 function capitalizeLabel(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function getChannelPostContentHash(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
+  return createHash('sha256').update(text).digest('hex')
 }
 
 async function cleanupExtraChannelPosts(keepId: string): Promise<void> {
-  await prisma.zoomChannelPost.deleteMany({
-    where: {
-      id: { not: keepId },
-    },
-  }).catch(() => undefined);
+  await prisma.zoomChannelPost
+    .deleteMany({
+      where: {
+        id: { not: keepId },
+      },
+    })
+    .catch(() => undefined)
 }
 
 export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
   if (channelPostSyncInFlight) {
-    console.log('[syncChannelPost] skipped: sync already in flight');
-    return channelPostSyncInFlight;
+    console.log('[syncChannelPost] skipped: sync already in flight')
+    return channelPostSyncInFlight
   }
 
   channelPostSyncInFlight = (async () => {
-  const channelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID?.trim();
-  console.log('[syncChannelPost] channelId:', channelId ?? null);
-  if (!channelId) {
-    console.warn('[syncChannelPost] FOCUS_TELEGRAM_CHANNEL_ID не задано');
-    return;
-  }
-
-  const text = await formatChannelPost();
-  console.log('[syncChannelPost] text length:', text.length);
-  const contentHash = getChannelPostContentHash(text);
-  const zoomUrl = resolveZoomCalendarUrl({ intent: 'booking' });
-  const mainBotUrl = getBotLink() || 'https://t.me/Test_ABsystem_bot';
-  const syncSignature = JSON.stringify({ channelId, text, zoomUrl });
-  const now = Date.now();
-
-  if (
-    lastChannelPostSyncSignature === syncSignature &&
-    now - lastChannelPostSyncAt < CHANNEL_POST_SYNC_TTL_MS
-  ) {
-    console.log('[syncChannelPost] skipped: identical payload within ttl');
-    return;
-  }
-
-  const replyMarkup = zoomUrl
-    ? {
-        inline_keyboard: [[
-          { text: 'Записатись на Zoom', url: zoomUrl },
-          { text: 'Відкрити чат-бот', url: mainBotUrl },
-        ]],
-      }
-    : {
-        inline_keyboard: [[{ text: 'Відкрити чат-бот', url: mainBotUrl }]],
-      };
-
-  const existing = await prisma.zoomChannelPost.findFirst({
-    orderBy: { updatedAt: 'desc' },
-  });
-  console.log('[syncChannelPost] existing:', existing?.messageId ?? null);
-  console.log('[CHANNEL_SYNC] start', {
-    channelId,
-    existing: existing?.messageId ?? null,
-    contentHash,
-  });
-
-  if (existing && lastChannelPostContentHash === contentHash) {
-    lastChannelPostSyncSignature = syncSignature;
-    lastChannelPostSyncAt = now;
-    console.log('[CHANNEL_SYNC] mode: skip', {
-      reason: 'same_content_hash',
-      messageId: existing.messageId,
-    });
-    return;
-  }
-
-  if (existing) {
-    try {
-      await telegramBot.telegram.editMessageText(
-        channelId,
-        existing.messageId,
-        undefined,
-        text,
-        {
-          reply_markup: replyMarkup,
-          link_preview_options: { is_disabled: true },
-        },
-      );
-      await cleanupExtraChannelPosts(existing.id);
-      lastChannelPostContentHash = contentHash;
-      lastChannelPostSyncSignature = syncSignature;
-      lastChannelPostSyncAt = now;
-      console.log('[CHANNEL_SYNC] mode: edit', { messageId: existing.messageId });
-      return;
-    } catch (err) {
-      const description =
-        err && typeof err === 'object' && 'description' in err
-          ? String(err.description ?? '')
-          : err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'description' in err.response
-            ? String(err.response.description ?? '')
-            : '';
-      if (description.includes('message is not modified')) {
-        lastChannelPostContentHash = contentHash;
-        lastChannelPostSyncSignature = syncSignature;
-        lastChannelPostSyncAt = now;
-        console.log('[CHANNEL_SYNC] mode: skip', {
-          messageId: existing.messageId,
-          reason: 'message_not_modified',
-        });
-        return;
-      }
-      console.error('[syncChannelPost] ERROR edit:', err);
-      await prisma.zoomChannelPost.delete({ where: { id: existing.id } }).catch(() => undefined);
+    const channelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID?.trim()
+    console.log('[syncChannelPost] channelId:', channelId ?? null)
+    if (!channelId) {
+      console.warn('[syncChannelPost] FOCUS_TELEGRAM_CHANNEL_ID не задано')
+      return
     }
-  }
 
-  try {
-    const sent = await telegramBot.telegram.sendMessage(channelId, text, {
-      reply_markup: replyMarkup,
-      link_preview_options: { is_disabled: true },
-    });
-    console.log('[syncChannelPost] sent:', sent.message_id);
-    if (existing?.messageId !== sent.message_id) {
-      await telegramBot.telegram.pinChatMessage(channelId, sent.message_id).catch(() => undefined);
+    const text = await formatChannelPost()
+    console.log('[syncChannelPost] text length:', text.length)
+    const contentHash = getChannelPostContentHash(text)
+    const zoomUrl = resolveZoomCalendarUrl({ intent: 'booking' })
+    const mainBotUrl = getBotLink() || 'https://t.me/Test_ABsystem_bot'
+    const syncSignature = JSON.stringify({ channelId, text, zoomUrl })
+    const now = Date.now()
+
+    if (
+      lastChannelPostSyncSignature === syncSignature &&
+      now - lastChannelPostSyncAt < CHANNEL_POST_SYNC_TTL_MS
+    ) {
+      console.log('[syncChannelPost] skipped: identical payload within ttl')
+      return
     }
-    let savedId: string
+
+    const replyMarkup = zoomUrl
+      ? {
+          inline_keyboard: [
+            [
+              { text: 'Записатись на Zoom', url: zoomUrl },
+              { text: 'Відкрити чат-бот', url: mainBotUrl },
+            ],
+          ],
+        }
+      : {
+          inline_keyboard: [[{ text: 'Відкрити чат-бот', url: mainBotUrl }]],
+        }
+
+    const existing = await prisma.zoomChannelPost.findFirst({
+      orderBy: { updatedAt: 'desc' },
+    })
+    console.log('[syncChannelPost] existing:', existing?.messageId ?? null)
+    console.log('[CHANNEL_SYNC] start', {
+      channelId,
+      existing: existing?.messageId ?? null,
+      contentHash,
+    })
+
+    if (existing && lastChannelPostContentHash === contentHash) {
+      lastChannelPostSyncSignature = syncSignature
+      lastChannelPostSyncAt = now
+      console.log('[CHANNEL_SYNC] mode: skip', {
+        reason: 'same_content_hash',
+        messageId: existing.messageId,
+      })
+      return
+    }
+
     if (existing) {
-      const updated = await prisma.zoomChannelPost.update({
-        where: { id: existing.id },
-        data: {
-          messageId: sent.message_id,
-          chatId: channelId,
-        },
-      });
-      savedId = updated.id
-    } else {
-      const created = await prisma.zoomChannelPost.create({
-        data: {
-          messageId: sent.message_id,
-          chatId: channelId,
-        },
-      });
-      savedId = created.id
+      try {
+        await telegramBot.telegram.editMessageText(
+          channelId,
+          existing.messageId,
+          undefined,
+          text,
+          {
+            reply_markup: replyMarkup,
+            link_preview_options: { is_disabled: true },
+          }
+        )
+        await cleanupExtraChannelPosts(existing.id)
+        lastChannelPostContentHash = contentHash
+        lastChannelPostSyncSignature = syncSignature
+        lastChannelPostSyncAt = now
+        console.log('[CHANNEL_SYNC] mode: edit', {
+          messageId: existing.messageId,
+        })
+        return
+      } catch (err) {
+        const description =
+          err && typeof err === 'object' && 'description' in err
+            ? String(err.description ?? '')
+            : err &&
+                typeof err === 'object' &&
+                'response' in err &&
+                err.response &&
+                typeof err.response === 'object' &&
+                'description' in err.response
+              ? String(err.response.description ?? '')
+              : ''
+        if (description.includes('message is not modified')) {
+          lastChannelPostContentHash = contentHash
+          lastChannelPostSyncSignature = syncSignature
+          lastChannelPostSyncAt = now
+          console.log('[CHANNEL_SYNC] mode: skip', {
+            messageId: existing.messageId,
+            reason: 'message_not_modified',
+          })
+          return
+        }
+        console.error('[syncChannelPost] ERROR edit:', err)
+        await prisma.zoomChannelPost
+          .delete({ where: { id: existing.id } })
+          .catch(() => undefined)
+      }
     }
-    await cleanupExtraChannelPosts(savedId);
-    lastChannelPostContentHash = contentHash;
-    lastChannelPostSyncSignature = syncSignature;
-    lastChannelPostSyncAt = now;
-    console.log('[CHANNEL_SYNC] mode: create', { messageId: sent.message_id });
-  } catch (err) {
-    console.error('[syncChannelPost] ERROR create:', err);
-  }
-  })().finally(() => {
-    channelPostSyncInFlight = null;
-  });
 
-  return channelPostSyncInFlight;
+    try {
+      const sent = await telegramBot.telegram.sendMessage(channelId, text, {
+        reply_markup: replyMarkup,
+        link_preview_options: { is_disabled: true },
+      })
+      console.log('[syncChannelPost] sent:', sent.message_id)
+      if (existing?.messageId !== sent.message_id) {
+        await telegramBot.telegram
+          .pinChatMessage(channelId, sent.message_id)
+          .catch(() => undefined)
+      }
+      let savedId: string
+      if (existing) {
+        const updated = await prisma.zoomChannelPost.update({
+          where: { id: existing.id },
+          data: {
+            messageId: sent.message_id,
+            chatId: channelId,
+          },
+        })
+        savedId = updated.id
+      } else {
+        const created = await prisma.zoomChannelPost.create({
+          data: {
+            messageId: sent.message_id,
+            chatId: channelId,
+          },
+        })
+        savedId = created.id
+      }
+      await cleanupExtraChannelPosts(savedId)
+      lastChannelPostContentHash = contentHash
+      lastChannelPostSyncSignature = syncSignature
+      lastChannelPostSyncAt = now
+      console.log('[CHANNEL_SYNC] mode: create', { messageId: sent.message_id })
+    } catch (err) {
+      console.error('[syncChannelPost] ERROR create:', err)
+    }
+  })().finally(() => {
+    channelPostSyncInFlight = null
+  })
+
+  return channelPostSyncInFlight
 }
 
 export async function notifySubscribersNewSession(
   telegramBot: Telegraf,
-  session: ZoomSession,
+  session: ZoomSession
 ): Promise<void> {
-  const zoomUrl = resolveZoomCalendarUrl();
-  const inviteUrl = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? '';
+  const zoomUrl = resolveZoomCalendarUrl()
+  const inviteUrl = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
 
   const paidUsers = await prisma.user.findMany({
     where: {
@@ -2365,33 +2866,35 @@ export async function notifySubscribersNewSession(
         select: { chatId: true },
       },
     },
-  });
+  })
 
-  const dt = new Date(session.scheduledAt);
+  const dt = new Date(session.scheduledAt)
   const dateStr = dt.toLocaleString('uk-UA', {
     weekday: 'long',
     day: '2-digit',
     month: 'long',
     hour: '2-digit',
     minute: '2-digit',
-  });
+  })
 
   for (const user of paidUsers) {
-    const tgId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null;
-    if (!tgId) continue;
+    const tgId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null
+    if (!tgId) continue
 
-    const safeName = getSafeName(user.firstName);
-    const greeting = safeName ? `${safeName}, ` : '';
+    const safeName = getSafeName(user.firstName)
+    const greeting = safeName ? `${safeName}, ` : ''
     const text =
-      `${greeting}опубліковано нову Zoom-практику.\n\n`
-      + `${dateStr}\n`
-      + `${session.topic}\n\n`
-      + 'Посилання на підключення надійде за 2 год до початку.';
+      `${greeting}опубліковано нову Zoom-практику.\n\n` +
+      `${dateStr}\n` +
+      `${session.topic}\n\n` +
+      'Посилання на підключення надійде за 2 год до початку.'
 
     const calendarButton = canUseTelegramWebAppButton(zoomUrl)
       ? { text: 'Переглянути календар', web_app: { url: zoomUrl } }
-      : { text: 'Переглянути календар', url: zoomUrl };
-    const secondRow = inviteUrl ? [{ text: 'УВІЙТИ У ФОКУС', url: inviteUrl }] : [];
+      : { text: 'Переглянути календар', url: zoomUrl }
+    const secondRow = inviteUrl
+      ? [{ text: 'УВІЙТИ У ФОКУС', url: inviteUrl }]
+      : []
 
     try {
       await telegramBot.telegram.sendMessage(tgId, text, {
@@ -2401,10 +2904,10 @@ export async function notifySubscribersNewSession(
             ...(secondRow.length > 0 ? [secondRow] : []),
           ],
         },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      })
+      await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (err) {
-      console.warn(`[notify paid] failed ${tgId}:`, err);
+      console.warn(`[notify paid] failed ${tgId}:`, err)
     }
   }
 
@@ -2427,7 +2930,7 @@ export async function notifySubscribersNewSession(
         select: { chatId: true },
       },
     },
-  });
+  })
 
   const RESULT_LABEL: Record<string, string> = {
     STATE: 'СТАН',
@@ -2435,31 +2938,36 @@ export async function notifySubscribersNewSession(
     CHOICE: 'ВИБІР',
     DECISION: 'РІШЕННЯ',
     ACTION: 'ДІЯ',
-  };
+  }
 
   for (const user of unpaidLeads) {
-    const tgId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null;
-    if (!tgId) continue;
-    const name = getSafeName(user.firstName);
-    const greeting = name ? `${name}, ` : '';
-    const focus = RESULT_LABEL[user.testResultType ?? ''] ?? 'поточний запит';
+    const tgId = user.telegramChatId ?? user.telegramLinks[0]?.chatId ?? null
+    if (!tgId) continue
+    const name = getSafeName(user.firstName)
+    const greeting = name ? `${name}, ` : ''
+    const focus = RESULT_LABEL[user.testResultType ?? ''] ?? 'поточний запит'
     const leadText =
-      `${greeting}відбудеться Zoom-практика ФОКУС.\n\n`
-      + `${dateStr}\n${session.topic}\n\n`
-      + `Діагностика зафіксувала пріоритетну точку: ${focus}.\n`
-      + 'Саме цей патерн розбирається на живих практиках ФОКУС.\n\n'
-      + 'Для участі необхідно активувати доступ.';
+      `${greeting}відбудеться Zoom-практика ФОКУС.\n\n` +
+      `${dateStr}\n${session.topic}\n\n` +
+      `Діагностика зафіксувала пріоритетну точку: ${focus}.\n` +
+      'Саме цей патерн розбирається на живих практиках ФОКУС.\n\n' +
+      'Для участі необхідно активувати доступ.'
     try {
       await telegramBot.telegram.sendMessage(tgId, leadText, {
         reply_markup: {
-          inline_keyboard: [[
-            { text: 'Активувати доступ до ФОКУС', callback_data: 'open_focus_payment' },
-          ]],
+          inline_keyboard: [
+            [
+              {
+                text: 'Активувати доступ до ФОКУС',
+                callback_data: 'open_focus_payment',
+              },
+            ],
+          ],
         },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      })
+      await new Promise((resolve) => setTimeout(resolve, 100))
     } catch (err) {
-      console.warn(`[notify lead] failed ${tgId}:`, err);
+      console.warn(`[notify lead] failed ${tgId}:`, err)
     }
   }
 }
@@ -2473,7 +2981,12 @@ type ZoomOperation =
   | 'swap_accept'
   | 'swap_decline'
 
-type ScheduleEventType = 'UPDATE' | 'CANCEL' | 'SWAP' | 'PAID_BOOKING' | 'CREATE'
+type ScheduleEventType =
+  | 'UPDATE'
+  | 'CANCEL'
+  | 'SWAP'
+  | 'PAID_BOOKING'
+  | 'CREATE'
 
 interface ScheduleEventPayload {
   eventType: ScheduleEventType
@@ -2493,7 +3006,10 @@ async function getSessionAttendeeUserIds(sessionId: string): Promise<string[]> {
 
 async function getActiveSubscriberIds(): Promise<string[]> {
   const rows = await prisma.user.findMany({
-    where: { productSubscriptions: { some: { status: 'ACTIVE' } }, deletedAt: null },
+    where: {
+      productSubscriptions: { some: { status: 'ACTIVE' } },
+      deletedAt: null,
+    },
     select: { id: true },
   })
   return rows.map((row) => row.id)
@@ -2503,7 +3019,7 @@ export async function notifyAffectedUsers(
   telegramBot: Telegraf,
   operation: ZoomOperation,
   session: ZoomSession,
-  userIds: string[],
+  userIds: string[]
 ): Promise<void> {
   if (userIds.length === 0) return
 
@@ -2530,7 +3046,10 @@ export async function notifyAffectedUsers(
     minute: '2-digit',
   })
 
-  const messageByOperation: Record<ZoomOperation, (greeting: string) => string> = {
+  const messageByOperation: Record<
+    ZoomOperation,
+    (greeting: string) => string
+  > = {
     create: (greeting) =>
       `${greeting}заплановано нову Zoom-сесію.\n\n${dateStr}\n${session.topic}`,
     update: (greeting) =>
@@ -2587,12 +3106,14 @@ function operationToEventType(operation: ZoomOperation): ScheduleEventType {
 
 export async function processScheduleNotification(
   telegramBot: Telegraf,
-  payload: ScheduleEventPayload,
+  payload: ScheduleEventPayload
 ): Promise<void> {
   const { eventType, affectedUserIds, sessionTitle, coachMetadata } = payload
   const zoomUrl = resolveZoomCalendarUrl()
   const baseUrl = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-  const bookingUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/zoom/booking` : null
+  const bookingUrl = baseUrl
+    ? `${baseUrl.replace(/\/$/, '')}/zoom/booking`
+    : null
 
   if (affectedUserIds.length > 0 && eventType !== 'SWAP') {
     const users = await prisma.user.findMany({
@@ -2620,33 +3141,33 @@ export async function processScheduleNotification(
       let buttons: Array<Array<{ text: string; [key: string]: unknown }>> = []
 
       const zoomBtn = zoomUrl
-        ? (canUseTelegramWebAppButton(zoomUrl)
+        ? canUseTelegramWebAppButton(zoomUrl)
           ? { text: 'Відкрити календар зустрічей', web_app: { url: zoomUrl } }
-          : { text: 'Відкрити календар зустрічей', url: zoomUrl })
+          : { text: 'Відкрити календар зустрічей', url: zoomUrl }
         : null
       const bookBtn = bookingUrl
-        ? (canUseTelegramWebAppButton(bookingUrl)
+        ? canUseTelegramWebAppButton(bookingUrl)
           ? { text: 'Забронювати новий слот', web_app: { url: bookingUrl } }
-          : { text: 'Забронювати новий слот', url: bookingUrl })
+          : { text: 'Забронювати новий слот', url: bookingUrl }
         : null
 
       if (eventType === 'UPDATE') {
         text =
-          `${greeting}оновлено графік запланованих сесій.\n\n`
-          + `Назва зустрічі: ${sessionTitle ?? 'Zoom-практика'}\n`
-          + `Новий час: ${String(coachMetadata.newDateTimeFormatted ?? 'оновлено')}\n\n`
-          + 'Зміни автоматично внесено у персональний додаток.'
+          `${greeting}оновлено графік запланованих сесій.\n\n` +
+          `Назва зустрічі: ${sessionTitle ?? 'Zoom-практика'}\n` +
+          `Новий час: ${String(coachMetadata.newDateTimeFormatted ?? 'оновлено')}\n\n` +
+          'Зміни автоматично внесено у персональний додаток.'
         if (zoomBtn) buttons = [[zoomBtn]]
       } else if (eventType === 'CANCEL') {
         text =
-          `${greeting}індивідуальну консультацію (${String(coachMetadata.oldDateTimeFormatted ?? '—')}) скасовано.\n\n`
-          + 'Для вибору нового вікна скористайтеся сервісом бронювання.'
+          `${greeting}індивідуальну консультацію (${String(coachMetadata.oldDateTimeFormatted ?? '—')}) скасовано.\n\n` +
+          'Для вибору нового вікна скористайтеся сервісом бронювання.'
         if (bookBtn) buttons = [[bookBtn]]
       } else if (eventType === 'PAID_BOOKING') {
         text =
-          `${greeting}запис на консультацію підтверджено.\n\n`
-          + `Назва зустрічі: ${sessionTitle ?? 'Zoom-консультація'}\n`
-          + `Час: ${String(coachMetadata.bookedDateTimeFormatted ?? '—')}`
+          `${greeting}запис на консультацію підтверджено.\n\n` +
+          `Назва зустрічі: ${sessionTitle ?? 'Zoom-консультація'}\n` +
+          `Час: ${String(coachMetadata.bookedDateTimeFormatted ?? '—')}`
         if (zoomBtn) buttons = [[zoomBtn]]
       }
 
@@ -2654,7 +3175,10 @@ export async function processScheduleNotification(
 
       try {
         await telegramBot.telegram.sendMessage(tgId, text, {
-          reply_markup: buttons.length > 0 ? ({ inline_keyboard: buttons } as any) : undefined,
+          reply_markup:
+            buttons.length > 0
+              ? ({ inline_keyboard: buttons } as any)
+              : undefined,
         })
         await new Promise((resolve) => setTimeout(resolve, 100))
       } catch (err) {
@@ -2667,8 +3191,14 @@ export async function processScheduleNotification(
     const user1Id = String(coachMetadata.user1Id ?? '')
     const user2Id = String(coachMetadata.user2Id ?? '')
     const swapUsers = [
-      { userId: user1Id, newTime: String(coachMetadata.newTime1 ?? 'оновлено') },
-      { userId: user2Id, newTime: String(coachMetadata.newTime2 ?? 'оновлено') },
+      {
+        userId: user1Id,
+        newTime: String(coachMetadata.newTime1 ?? 'оновлено'),
+      },
+      {
+        userId: user2Id,
+        newTime: String(coachMetadata.newTime2 ?? 'оновлено'),
+      },
     ].filter((item) => item.userId)
 
     for (const swapUser of swapUsers) {
@@ -2685,22 +3215,25 @@ export async function processScheduleNotification(
           },
         },
       })
-      const tgId = user?.telegramChatId ?? user?.telegramLinks[0]?.chatId ?? null
+      const tgId =
+        user?.telegramChatId ?? user?.telegramLinks[0]?.chatId ?? null
       if (!tgId) continue
       const safeName = getSafeName(user?.firstName)
       const greeting = safeName ? `${safeName}, ` : ''
       const zoomBtn = zoomUrl
-        ? (canUseTelegramWebAppButton(zoomUrl)
+        ? canUseTelegramWebAppButton(zoomUrl)
           ? { text: 'Переглянути оновлений розклад', web_app: { url: zoomUrl } }
-          : { text: 'Переглянути оновлений розклад', url: zoomUrl })
+          : { text: 'Переглянути оновлений розклад', url: zoomUrl }
         : null
       try {
         await telegramBot.telegram.sendMessage(
           tgId,
           `${greeting}обмін слотом підтверджено.\n\nНовий час консультації: ${swapUser.newTime}\n\nРозклад оновлено автоматично.`,
           {
-            reply_markup: zoomBtn ? { inline_keyboard: [[zoomBtn]] } : undefined,
-          },
+            reply_markup: zoomBtn
+              ? { inline_keyboard: [[zoomBtn]] }
+              : undefined,
+          }
         )
         await new Promise((resolve) => setTimeout(resolve, 100))
       } catch (err) {
@@ -2723,13 +3256,21 @@ export async function processScheduleNotification(
   }
 
   const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-  const panelUrl = panelBase ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom` : null
+  const panelUrl = panelBase
+    ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom`
+    : null
 
   void sendOpsTelegramMessage(
     report,
     panelUrl
-      ? { reply_markup: { inline_keyboard: [[{ text: 'Панель керування розкладом', url: panelUrl }]] } }
-      : undefined,
+      ? {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Панель керування розкладом', url: panelUrl }],
+            ],
+          },
+        }
+      : undefined
   ).catch((err) => console.error('[coach feed]', err))
 }
 
@@ -2740,7 +3281,7 @@ export async function afterZoomOperation(
     sessionId: string
     affectedUserIds: string[]
     coachNotify?: boolean
-  },
+  }
 ): Promise<void> {
   const { operation, sessionId } = params
 
@@ -2754,20 +3295,24 @@ export async function afterZoomOperation(
 
   if (isGroup) {
     void syncChannelPost(telegramBot).catch((err) =>
-      console.error('[afterZoomOp] syncChannelPost:', err),
+      console.error('[afterZoomOp] syncChannelPost:', err)
     )
   }
 
-  const affectedUserIds = params.affectedUserIds.length > 0
-    ? params.affectedUserIds
-    : await getSessionAttendeeUserIds(sessionId)
+  const affectedUserIds =
+    params.affectedUserIds.length > 0
+      ? params.affectedUserIds
+      : await getSessionAttendeeUserIds(sessionId)
 
   const shouldNotifyAffected = !(operation === 'create' && isGroup)
 
   if (shouldNotifyAffected && affectedUserIds.length > 0) {
-    void notifyAffectedUsers(telegramBot, operation, session, affectedUserIds).catch((err) =>
-      console.error('[afterZoomOp] notifyAffectedUsers:', err),
-    )
+    void notifyAffectedUsers(
+      telegramBot,
+      operation,
+      session,
+      affectedUserIds
+    ).catch((err) => console.error('[afterZoomOp] notifyAffectedUsers:', err))
   }
 
   const formatted = new Date(session.scheduledAt).toLocaleString('uk-UA', {
@@ -2802,54 +3347,62 @@ export async function afterZoomOperation(
     sessionTitle: session.topic,
     affectedUserIds,
     coachMetadata,
-  }).catch((err) => console.error('[afterZoomOp] processScheduleNotification:', err))
+  }).catch((err) =>
+    console.error('[afterZoomOp] processScheduleNotification:', err)
+  )
 
   if (operation === 'book') {
-    const reminderUserIds = [...new Set([
-      ...affectedUserIds,
-      ...(await getCoachReminderUserIds(session.expertId)),
-    ])]
+    const reminderUserIds = [
+      ...new Set([
+        ...affectedUserIds,
+        ...(await getCoachReminderUserIds(session.expertId)),
+      ]),
+    ]
     for (const userId of reminderUserIds) {
       void scheduleReminders(userId, session).catch((err) =>
-        console.error('[afterZoomOp] scheduleReminders:', err),
+        console.error('[afterZoomOp] scheduleReminders:', err)
       )
     }
   }
 
   if (operation === 'update' || operation === 'swap_accept') {
-    const reminderUserIds = [...new Set([
-      ...affectedUserIds,
-      ...(await getCoachReminderUserIds(session.expertId)),
-    ])]
+    const reminderUserIds = [
+      ...new Set([
+        ...affectedUserIds,
+        ...(await getCoachReminderUserIds(session.expertId)),
+      ]),
+    ]
     for (const userId of reminderUserIds) {
       void rescheduleReminders(userId, session).catch((err) =>
-        console.error('[afterZoomOp] rescheduleReminders:', err),
+        console.error('[afterZoomOp] rescheduleReminders:', err)
       )
     }
   }
 
   if (operation === 'cancel' || operation === 'unbook') {
-    const reminderUserIds = [...new Set([
-      ...affectedUserIds,
-      ...(await getCoachReminderUserIds(session.expertId)),
-    ])]
+    const reminderUserIds = [
+      ...new Set([
+        ...affectedUserIds,
+        ...(await getCoachReminderUserIds(session.expertId)),
+      ]),
+    ]
     for (const userId of reminderUserIds) {
       void cancelExistingReminders(userId, sessionId).catch((err) =>
-        console.error('[afterZoomOp] cancelExistingReminders:', err),
+        console.error('[afterZoomOp] cancelExistingReminders:', err)
       )
     }
   }
 
   if (params.coachNotify) {
-    void notifyCoach(session.expertId, { swapId: `${operation}:${sessionId}` }).catch((err) =>
-      console.error('[afterZoomOp] notifyCoach:', err),
-    )
+    void notifyCoach(session.expertId, {
+      swapId: `${operation}:${sessionId}`,
+    }).catch((err) => console.error('[afterZoomOp] notifyCoach:', err))
   }
 }
 
 export async function notifyMonthSchedule(
   telegramBot: Telegraf,
-  sessions: ZoomSession[],
+  sessions: ZoomSession[]
 ): Promise<void> {
   if (sessions.length === 0) return
 
@@ -2859,22 +3412,30 @@ export async function notifyMonthSchedule(
 
   if (upcomingGroupSessions.length === 0) return
 
-  const focusInviteUrl = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
+  const focusInviteUrl =
+    process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
   const zoomUrl = resolveZoomCalendarUrl()
 
-  const scheduleLines = upcomingGroupSessions.map((session) => {
-    const dt = new Date(session.scheduledAt)
-    return dt.toLocaleString('uk-UA', {
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }) + ` — ${session.topic}`
-  }).join('\n')
+  const scheduleLines = upcomingGroupSessions
+    .map((session) => {
+      const dt = new Date(session.scheduledAt)
+      return (
+        dt.toLocaleString('uk-UA', {
+          weekday: 'short',
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }) + ` — ${session.topic}`
+      )
+    })
+    .join('\n')
 
   const firstDt = new Date(upcomingGroupSessions[0].scheduledAt)
-  const monthLabel = firstDt.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })
+  const monthLabel = firstDt.toLocaleString('uk-UA', {
+    month: 'long',
+    year: 'numeric',
+  })
 
   const activeSubscriptionUsers = await prisma.user.findMany({
     where: {
@@ -2939,14 +3500,16 @@ export async function notifyMonthSchedule(
       userId: user.id,
       product: products.length > 0 ? products.join(',') : 'none',
       selected,
-      reason: selected ? 'active_focus_subscription' : 'active_non_focus_subscription',
+      reason: selected
+        ? 'active_focus_subscription'
+        : 'active_non_focus_subscription',
     })
   }
 
   const paidText =
-    `Розклад Zoom-практик ФОКУС — ${monthLabel}\n\n`
-    + `${scheduleLines}\n\n`
-    + 'Посилання на підключення надходить автоматично за 2 год до початку кожної практики.'
+    `Розклад Zoom-практик ФОКУС — ${monthLabel}\n\n` +
+    `${scheduleLines}\n\n` +
+    'Посилання на підключення надходить автоматично за 2 год до початку кожної практики.'
 
   const calBtn = canUseTelegramWebAppButton(zoomUrl)
     ? { text: 'Переглянути календар', web_app: { url: zoomUrl } }
@@ -2957,7 +3520,9 @@ export async function notifyMonthSchedule(
     if (!tgId) continue
     const name = getSafeName(user.firstName)
     const greeting = name ? `${name}, ` : ''
-    const secondRow = focusInviteUrl ? [{ text: 'УВІЙТИ У ФОКУС', url: focusInviteUrl }] : []
+    const secondRow = focusInviteUrl
+      ? [{ text: 'УВІЙТИ У ФОКУС', url: focusInviteUrl }]
+      : []
     try {
       await telegramBot.telegram.sendMessage(tgId, `${greeting}${paidText}`, {
         reply_markup: {
@@ -3002,11 +3567,15 @@ export async function notifyMonthSchedule(
   })
 
   const resultContext: Record<string, string> = {
-    STATE: 'Діагностика зафіксувала точку: СТАН. На практиках ФОКУС розбираємо саме цей патерн.',
+    STATE:
+      'Діагностика зафіксувала точку: СТАН. На практиках ФОКУС розбираємо саме цей патерн.',
     GOAL: 'Діагностика зафіксувала точку: ЦІЛЬ. На практиках ФОКУС переводимо запит у конкретний крок.',
-    CHOICE: 'Діагностика зафіксувала точку: ВИБІР. На практиках ФОКУС працюємо з блоком вибору.',
-    DECISION: 'Діагностика зафіксувала точку: РІШЕННЯ. На практиках ФОКУС доводимо до фіксації і дії.',
-    ACTION: 'Діагностика зафіксувала точку: ДІЯ. На практиках ФОКУС декомпозуємо крок до виконуваного формату.',
+    CHOICE:
+      'Діагностика зафіксувала точку: ВИБІР. На практиках ФОКУС працюємо з блоком вибору.',
+    DECISION:
+      'Діагностика зафіксувала точку: РІШЕННЯ. На практиках ФОКУС доводимо до фіксації і дії.',
+    ACTION:
+      'Діагностика зафіксувала точку: ДІЯ. На практиках ФОКУС декомпозуємо крок до виконуваного формату.',
   }
 
   for (const lead of leads) {
@@ -3016,17 +3585,22 @@ export async function notifyMonthSchedule(
     const greeting = name ? `${name}, ` : ''
     const context = resultContext[lead.testResultType ?? ''] ?? ''
     const text =
-      `${greeting}опубліковано розклад Zoom-практик ФОКУС на ${monthLabel}.\n\n`
-      + `${scheduleLines}\n\n`
-      + `${context ? `${context}\n\n` : ''}`
-      + 'Для участі необхідно активувати доступ.'
+      `${greeting}опубліковано розклад Zoom-практик ФОКУС на ${monthLabel}.\n\n` +
+      `${scheduleLines}\n\n` +
+      `${context ? `${context}\n\n` : ''}` +
+      'Для участі необхідно активувати доступ.'
 
     try {
       await telegramBot.telegram.sendMessage(tgId, text, {
         reply_markup: {
-          inline_keyboard: [[
-            { text: 'Активувати доступ до ФОКУС', callback_data: 'open_focus_payment' },
-          ]],
+          inline_keyboard: [
+            [
+              {
+                text: 'Активувати доступ до ФОКУС',
+                callback_data: 'open_focus_payment',
+              },
+            ],
+          ],
         },
       })
       await new Promise((resolve) => setTimeout(resolve, 100))
@@ -3035,5 +3609,7 @@ export async function notifyMonthSchedule(
     }
   }
 
-  console.log(`[notifyMonthSchedule] paid=${paidUsers.length} leads=${leads.length} sessions=${upcomingGroupSessions.length}`)
+  console.log(
+    `[notifyMonthSchedule] paid=${paidUsers.length} leads=${leads.length} sessions=${upcomingGroupSessions.length}`
+  )
 }

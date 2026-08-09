@@ -72,7 +72,7 @@ describe('getUserAccessState', () => {
       hasFocus: true,
       expiresAt: new Date('2026-08-20T00:00:00.000Z'),
     })
-    expect(mockProductSubscriptionFindFirst).toHaveBeenCalledTimes(2)
+    expect(mockProductSubscriptionFindFirst).toHaveBeenCalledTimes(3)
   })
 
   it('falls back to the latest subscription when no active row exists', async () => {
@@ -94,7 +94,7 @@ describe('getUserAccessState', () => {
       hasFocus: false,
       expiresAt: new Date('2026-07-15T00:00:00.000Z'),
     })
-    expect(mockProductSubscriptionFindFirst).toHaveBeenCalledTimes(2)
+    expect(mockProductSubscriptionFindFirst).toHaveBeenCalledTimes(3)
   })
 
   it('returns NO_ACCESS when there are no subscriptions', async () => {
@@ -173,6 +173,37 @@ describe('getUserAccessState', () => {
       isActive: true,
       hasFocus: true,
       expiresAt: new Date('2026-08-05T00:00:00.000Z'),
+    })
+  })
+
+  it('treats an active absystem subscription as Focus access for Zoom entitlement', async () => {
+    mockProductSubscriptionFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        status: 'active',
+        paidAt: new Date('2026-07-20T00:00:00.000Z'),
+        expiresAt: new Date('2026-08-20T00:00:00.000Z'),
+        trialEndsAt: null,
+        product: { code: 'absystem' },
+      })
+    mockProductSubscriptionFindMany.mockResolvedValue([
+      {
+        status: 'active',
+        paidAt: new Date('2026-07-20T00:00:00.000Z'),
+        expiresAt: new Date('2026-08-20T00:00:00.000Z'),
+        trialEndsAt: null,
+        product: { code: 'absystem' },
+      },
+    ])
+
+    const result = await getUserAccessState('user-1')
+
+    expect(result).toEqual({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-08-20T00:00:00.000Z'),
     })
   })
 

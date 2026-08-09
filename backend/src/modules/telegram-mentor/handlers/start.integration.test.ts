@@ -160,8 +160,8 @@ describe('handleStart — targeted home screen routing', () => {
     const [, , , text, options] = mockPlanMessage.mock.calls[0]
     expect(text).toContain('Твій <b>результат</b> уже готовий')
     const flat = JSON.stringify(options)
-    expect(flat).toMatch(/✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
+    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
     expect(flat).toMatch(/ab_test:show_result/)
     expect(flat).toMatch(/ab_test:restart/)
     expect(flat).not.toMatch(/open_focus_payment/)
@@ -230,8 +230,8 @@ describe('handleStart — targeted home screen routing', () => {
     expect(text).toContain('Ти ще не записана.')
     const flat = JSON.stringify(options)
     expect(flat).toMatch(/ЗАПИСАТИСЯ/)
-    expect(flat).toMatch(/✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
+    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
     expect(flat).toMatch(/КАНАЛ ФОКУСУ/)
   })
 

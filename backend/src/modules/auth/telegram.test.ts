@@ -121,4 +121,21 @@ describe('verifyTelegramInitData', () => {
       username: 'key_bot_user',
     })
   })
+
+  it('rejects tampered initData with an invalid signature', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'dev-main-token'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-main-token'
+    delete process.env.COACH_BOT_TOKEN
+    delete process.env.TEST_BOT_TOKEN
+
+    const validInitData = buildInitData('dev-main-token', {
+      id: 123456,
+      first_name: 'Vira',
+      username: 'vira',
+    })
+    const tamperedInitData = validInitData.replace('username%22%3A%22vira%22', 'username%22%3A%22attacker%22')
+
+    expect(() => verifyTelegramInitData(tamperedInitData)).toThrow('invalid_telegram_signature')
+  })
 })

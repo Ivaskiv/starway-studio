@@ -442,7 +442,7 @@ async function sendNudgeMessage(userId: string, task: Task, templateKey: string,
     reply_markup: {
       inline_keyboard: [
         [{ text: '▶️ ПРОДОВЖИТИ', callback_data: 'continue_task' }],
-        [{ text: '✕ ЗАКРИТИ', callback_data: 'dismiss_task' }],
+        [{ text: 'ЗАКРИТИ', callback_data: 'dismiss_task' }],
       ],
     },
   }

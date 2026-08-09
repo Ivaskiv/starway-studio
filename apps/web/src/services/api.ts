@@ -54,6 +54,13 @@ const normalizeApiBaseUrl = (value: string): string => {
 };
 
 const getApiBaseUrl = (): string => {
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname.endsWith('.ngrok-free.dev')
+  ) {
+    return '/api'
+  }
+
   const mode = getApiMode();
   const remoteApiUrl =
     import.meta.env.VITE_API_BASE_URL?.trim() ||
@@ -186,6 +193,18 @@ const rawBaseQuery = fetchBaseQuery({
 
     if (expertId) {
       headers.set('x-expert-id', expertId);
+    }
+
+    // ngrok Free may return its browser-warning HTML to Telegram WebView
+    // instead of the requested API response. Bypass it only for the
+    // Telegram Mini App running through an ngrok origin.
+    const isNgrokMiniAppRuntime =
+      isMiniAppRuntime &&
+      typeof window !== 'undefined' &&
+      window.location.hostname.endsWith('.ngrok-free.dev')
+
+    if (isNgrokMiniAppRuntime) {
+      headers.set('ngrok-skip-browser-warning', '1')
     }
 
     return headers;

@@ -185,7 +185,7 @@ function EmptyState({ onRequest }: { onRequest: () => void }) {
         onClick={onRequest}
         className="px-5 py-2.5 rounded-xl bg-[rgba(var(--accent-rgb),0.12)] border border-[rgba(var(--accent-rgb),0.3)] text-[rgb(var(--accent-rgb))] text-[13px] font-semibold hover:bg-[rgba(var(--accent-rgb),0.2)] transition-all"
       >
-        ✦ Подати запит на сесію
+         Подати запит на сесію
       </button>
     </div>
   );

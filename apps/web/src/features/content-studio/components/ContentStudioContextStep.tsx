@@ -186,7 +186,7 @@ export default function ContentStudioContextStep(props: Props) {
               onClick={onAddLeadMagnetStep}
               className="rounded-[18px] border border-[rgba(250,204,21,0.32)] bg-[rgb(250,204,21)] px-4 py-2.5 text-sm font-semibold text-[#111111] transition-colors hover:bg-[rgb(245,197,18)]"
             >
-              ✦ Додати Крок 10
+               Додати Крок 10
             </button>
             <button
               type="button"

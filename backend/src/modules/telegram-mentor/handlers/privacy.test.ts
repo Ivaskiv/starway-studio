@@ -10,15 +10,15 @@ const mockHandleAbTestCallback = vi.fn(async () => false)
 const mockObserveAbTestCanonicalAction = vi.fn(async () => undefined)
 const mockBuildHomeScreen = vi.fn(async () => ({
   text: 'Попереднє меню',
-  reply_markup: {
-    inline_keyboard: [[{ text: 'Кнопка меню', callback_data: 'menu' }]],
+ reply_markup: {
+ inline_keyboard: [[{ text: 'Кнопка меню', callback_data: 'menu' }]],
   },
   parseMode: 'HTML' as const,
 }))
 const mockWelcomeMessage = vi.fn(() => ({
   text: 'Guest menu',
-  reply_markup: {
-    inline_keyboard: [[{ text: 'Почати', callback_data: 'ab_test:start' }]],
+ reply_markup: {
+ inline_keyboard: [[{ text: 'Почати', callback_data: 'ab_test:start' }]],
   },
   parseMode: 'HTML' as const,
 }))

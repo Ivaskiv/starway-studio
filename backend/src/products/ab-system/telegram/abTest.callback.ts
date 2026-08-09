@@ -229,7 +229,7 @@ export async function deactivateCallbackMarkup(
     : [
         [
           {
-            text: '✅ ПЕРЕГЛЯНУТО',
+            text: 'ПЕРЕГЛЯНУТО',
             callback_data: 'disabled',
           },
         ],

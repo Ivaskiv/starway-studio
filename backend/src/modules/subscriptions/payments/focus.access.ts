@@ -1,6 +1,7 @@
 import { prisma } from '../../../db/client.js'
 
 export const FOCUS_PRODUCT_CODES = ['focus', 'FOCUS'] as const
+const FOCUS_INCLUDED_PRODUCT_CODES = ['absystem', 'absystem_ai'] as const
 export const EXCHANGE_PRICE = 200
 
 export type UserAccessState = {
@@ -81,6 +82,11 @@ function trialZoomActive(expiresAt: Date): UserAccessState {
  */
 export async function getUserAccessState(userId: string): Promise<UserAccessState> {
   const now = new Date()
+  const focusIncludedProductFilters = FOCUS_INCLUDED_PRODUCT_CODES.map((code) => ({
+    product: {
+      code: { equals: code, mode: 'insensitive' as const },
+    },
+  }))
   const relevantProductFilter = {
     userId,
     OR: [
@@ -94,6 +100,7 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
           code: { equals: 'trial_zoom', mode: 'insensitive' as const },
         },
       },
+      ...focusIncludedProductFilters,
     ],
   }
   const focusProductFilter = {
@@ -107,6 +114,20 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
     product: {
       code: { equals: 'trial_zoom', mode: 'insensitive' as const },
     },
+  }
+  const focusIncludedProductFilter = {
+    userId,
+    AND: [
+      {
+        OR: focusIncludedProductFilters,
+      },
+      {
+        status: { in: ['active', 'paid'] },
+      },
+      {
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+    ],
   }
 
   const user = await prisma.user.findUnique({
@@ -197,8 +218,25 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
     orderBy: { createdAt: 'desc' },
   })
 
+  const activeIncludedSubscription = await prisma.productSubscription.findFirst({
+    where: focusIncludedProductFilter,
+    select: {
+      status: true,
+      paidAt: true,
+      expiresAt: true,
+      trialEndsAt: true,
+      product: {
+        select: {
+          code: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
   const subscription =
     activeSubscription ??
+    activeIncludedSubscription ??
     activeTrialZoomSubscription ??
     (await prisma.productSubscription.findFirst({
       where: relevantProductFilter,
@@ -257,6 +295,9 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
 
   const status = String(subscription.status ?? '').trim().toLowerCase()
   const productCode = String(subscription.product.code ?? '').trim().toLowerCase()
+  const productProvidesFocus =
+    productCode === 'focus' ||
+    FOCUS_INCLUDED_PRODUCT_CODES.includes(productCode as (typeof FOCUS_INCLUDED_PRODUCT_CODES)[number])
 
   if (status === 'trial') {
     if (!subscription.trialEndsAt) return logResult(noAccess())
@@ -268,7 +309,7 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
       )
     }
     return logResult(
-      subscription.trialEndsAt.getTime() > now.getTime()
+      productCode === 'focus' && subscription.trialEndsAt.getTime() > now.getTime()
         ? focusActive(subscription.trialEndsAt)
         : noAccess(subscription.trialEndsAt),
     )
@@ -288,7 +329,7 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
       : logResult(noAccess(subscription.expiresAt))
   }
 
-  return logResult(focusActive(subscription.expiresAt ?? null))
+  return logResult(productProvidesFocus ? focusActive(subscription.expiresAt ?? null) : noAccess(subscription.expiresAt ?? null))
 }
 
 export async function getZoomExchangeAccessPolicy(userId: string): Promise<ZoomExchangeAccessPolicy> {

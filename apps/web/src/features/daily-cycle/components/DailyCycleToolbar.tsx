@@ -63,7 +63,7 @@ export function DailyCycleToolbar({
           onClick={() => onOpenMicroTasks?.()}
           className="rounded-xl border border-[rgba(var(--accent-rgb),0.26)] bg-[rgba(var(--accent-rgb),0.05)] px-3 py-1.5 text-xs font-semibold tracking-[0.04em] text-[var(--text-secondary)] transition-all hover:border-[rgba(var(--accent-soft-rgb),0.34)] hover:bg-[rgba(var(--accent-rgb),0.12)] hover:text-[var(--text-primary)]"
         >
-          📋 Мікрозавдання
+           Мікрозавдання
         </button>
 
         {!embedded ? (

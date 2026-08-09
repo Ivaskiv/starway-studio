@@ -3,8 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mockSendOpsTelegramMessage = vi.fn()
 const mockCoachSendMessage = vi.fn()
 const mockSaveAbTestProgress = vi.fn()
+const mockLoadAbTestProgress = vi.fn()
+const mockUserFindUnique = vi.fn()
+const mockScheduleFollowups = vi.fn()
 const mockHasTelegramCtaInteraction = vi.fn()
 const mockGetUserAccessState = vi.fn()
+const mockGetAbTestProfileEmail = vi.fn()
+const mockEnsureAbTestEmailCapturedFromProfile = vi.fn()
+const mockTrackAbTestEvent = vi.fn()
+const mockClearPendingTelegramIdentity = vi.fn()
+const mockWithRuntimeAdvisoryLock = vi.fn()
 const mockSendTelegramMessage = vi.fn(
   async (
     ctx: { telegram: { sendMessage: (chatId: string | number, text: string, options: Record<string, unknown>) => Promise<unknown> } },
@@ -20,7 +28,10 @@ const mockSendTelegramMessage = vi.fn(
 
 vi.mock('../../../db/client.js', () => ({
   prisma: {
-    user: { update: vi.fn() },
+    user: {
+      update: vi.fn(),
+      findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
+    },
     zoomSessionAttendee: {
       count: vi.fn(async ({ where }: { where?: { attended?: boolean } }) =>
         where?.attended ? 1 : 2,
@@ -66,7 +77,7 @@ vi.mock('../../../modules/telegram-mentor/services/pendingIdentity.service.js', 
 }))
 
 vi.mock('./abTest.analytics.js', () => ({
-  trackAbTestEvent: vi.fn(),
+  trackAbTestEvent: (...args: unknown[]) => mockTrackAbTestEvent(...args),
 }))
 
 vi.mock('./abTest.buttons.js', () => ({
@@ -75,17 +86,29 @@ vi.mock('./abTest.buttons.js', () => ({
 }))
 
 vi.mock('./abTest.scheduler.js', () => ({
-  scheduleFollowups: vi.fn(),
+  scheduleFollowups: (...args: unknown[]) => mockScheduleFollowups(...args),
 }))
 
 vi.mock('./abTest.progress.js', () => ({
   buildAbTestEmailGateMessage: vi.fn(),
-  getAbTestProfileEmail: vi.fn(),
+  getAbTestProfileEmail: (...args: unknown[]) => mockGetAbTestProfileEmail(...args),
   getAbTestProgressFromUiSettings: vi.fn(),
-  loadAbTestProgress: vi.fn(),
+  loadAbTestProgress: (...args: unknown[]) => mockLoadAbTestProgress(...args),
   loadUserUiSettings: vi.fn(),
   saveAbTestProgress: (...args: unknown[]) => mockSaveAbTestProgress(...args),
+  ensureAbTestEmailCapturedFromProfile: (...args: unknown[]) => mockEnsureAbTestEmailCapturedFromProfile(...args),
 }))
+
+vi.mock('./abTest.callback.js', async () => {
+  const actual = await vi.importActual<typeof import('./abTest.callback.js')>('./abTest.callback.js')
+  return {
+    ...actual,
+    deactivateCallbackMarkup: vi.fn(async () => undefined),
+    logAbTestStartDebug: vi.fn(),
+    formatMobileAnswerButtonText: vi.fn((value: string) => value),
+    resolveQuestionLatency: vi.fn(() => 1000),
+  }
+})
 
 vi.mock('@/modules/telegram-mentor/services/ctaInteraction.service.js', () => ({
   hasTelegramCtaInteraction: (...args: unknown[]) => mockHasTelegramCtaInteraction(...args),
@@ -107,6 +130,15 @@ vi.mock('@/modules/subscriptions/payments/focus.access.js', () => ({
   getUserAccessState: (...args: unknown[]) => mockGetUserAccessState(...args),
 }))
 
+vi.mock('../../../modules/telegram-mentor/services/pendingIdentity.service.js', () => ({
+  clearPendingTelegramIdentity: (...args: unknown[]) => mockClearPendingTelegramIdentity(...args),
+  setPendingTelegramIdentity: vi.fn(),
+}))
+
+vi.mock('../../../core/runtime/runtimeIdempotency.js', () => ({
+  withRuntimeAdvisoryLock: (...args: unknown[]) => mockWithRuntimeAdvisoryLock(...args),
+}))
+
 vi.mock('@/modules/zoom/urls.js', () => ({
   buildZoomCalendarUrl: vi.fn(() => 'https://miniapp.example/miniapp/zoom-calendar?intent=booking'),
 }))
@@ -121,13 +153,27 @@ import {
   dispatchAbTestResultSequence,
   dispatchAbTestPracticeSequence,
   renderAbTestEmailGate,
+  renderCurrentView,
   sendQuestionDirect,
   sendResultSnapshot,
 } from './abTest.views.js'
+import { handleShowResult } from './abTest.handlers.core.js'
+import { handleAbTestCallback } from './abTest.service.js'
 
 function createCtx() {
   return {
+    chat: { id: 42 },
     from: { id: 42, first_name: 'Vira' },
+    state: { userId: 'user-1' },
+    update: { update_id: 4242 },
+    callbackQuery: {
+      id: 'cb-1',
+      data: 'ab_test:show_result',
+      message: {
+        chat: { id: 42 },
+        message_id: 99,
+      },
+    },
     telegram: {
       sendChatAction: vi.fn(async () => undefined),
       sendMessage: vi.fn(async () => ({ message_id: 99 })),
@@ -135,6 +181,7 @@ function createCtx() {
       sendVoice: vi.fn(async () => undefined),
       sendVideo: vi.fn(async () => undefined),
     },
+    answerCbQuery: vi.fn(async () => undefined),
   }
 }
 
@@ -142,6 +189,11 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    mockWithRuntimeAdvisoryLock.mockImplementation(async (_input: unknown, task: () => Promise<unknown>) => ({
+      acquired: true,
+      value: await task(),
+    }))
+    mockClearPendingTelegramIdentity.mockResolvedValue(undefined)
     mockHasTelegramCtaInteraction.mockResolvedValue(false)
     mockGetUserAccessState.mockResolvedValue({
       state: 'NO_ACCESS',
@@ -149,6 +201,16 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
       hasFocus: false,
       expiresAt: null,
     })
+    mockScheduleFollowups.mockImplementation(async (_userId: string, progress: unknown) => progress)
+    mockUserFindUnique.mockResolvedValue({
+      testResultType: 'decision',
+      telegramUserName: 'vira',
+      firstName: 'Vira',
+      lifecycleState: 'TEST_DONE',
+    })
+    mockGetAbTestProfileEmail.mockResolvedValue(null)
+    mockEnsureAbTestEmailCapturedFromProfile.mockImplementation(async (_userId: string, progress: unknown) => progress)
+    mockTrackAbTestEvent.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -368,5 +430,357 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
 
     await expectation
     expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers legacy show_result state into canonical completed progress and skips duplicate delivery on repeat callback', async () => {
+    const ctx = createCtx()
+    const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    let storedProgress = {
+      status: 'active',
+      stage: 'S2_TEST_QUESTIONS',
+      current_question_id: 'q8',
+      result_key: null,
+      email_stage: null,
+      result_opened_at: null,
+      started_at: '2026-08-04T09:00:00.000Z',
+      answers: [],
+    }
+
+    mockLoadAbTestProgress.mockImplementation(async () => storedProgress)
+    mockSaveAbTestProgress.mockImplementation(async (_userId: string, progress: typeof storedProgress) => {
+      storedProgress = progress
+      return progress
+    })
+
+    const firstDelivery = handleShowResult(ctx as never, 'user-1')
+    await vi.runAllTimersAsync()
+    await firstDelivery
+
+    expect(storedProgress.status).toBe('completed')
+    expect(storedProgress.stage).toBe('S3_TEST_RESULT')
+    expect(storedProgress.result_key).toBe('decision')
+    expect(storedProgress.result_opened_at).not.toBeNull()
+    const sendMessageCountAfterFirstDelivery = vi.mocked(ctx.telegram.sendMessage).mock.calls.length
+    const followupCallsAfterFirstDelivery = mockScheduleFollowups.mock.calls.length
+
+    const repeatedTriggerHandled = await handleShowResult(ctx as never, 'user-1')
+
+    expect(repeatedTriggerHandled).toBe(true)
+    expect(vi.mocked(ctx.telegram.sendMessage).mock.calls).toHaveLength(sendMessageCountAfterFirstDelivery)
+    expect(mockScheduleFollowups.mock.calls.length).toBe(followupCallsAfterFirstDelivery)
+
+    const s3TraceLogs = consoleInfoSpy.mock.calls
+      .filter(([label]) => label === '[AB_TEST_S3_TRACE]')
+      .map(([, payload]) => payload)
+
+    expect(s3TraceLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'user-1',
+          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
+          trigger: 'ab_test:show_result',
+          deliveryResult: 'sent',
+        }),
+        expect.objectContaining({
+          userId: 'user-1',
+          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
+          trigger: 'ab_test:show_result',
+          deliveryResult: 'skipped_duplicate',
+        }),
+      ]),
+    )
+    expect(mockLoadAbTestProgress).toHaveBeenLastCalledWith('user-1')
+
+    consoleInfoSpy.mockRestore()
+  })
+})
+
+describe('handleAbTestCallback skip_email_before_result canonical dedupe', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    mockHasTelegramCtaInteraction.mockResolvedValue(false)
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'NO_ACCESS',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: null,
+    })
+    mockUserFindUnique.mockResolvedValue({
+      firstName: 'Vira',
+      telegramUserName: 'vira',
+      testResultType: 'decision',
+      lifecycleState: 'TEST_DONE',
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('delivers S3 once across concurrent and repeated skip-email callbacks', async () => {
+    const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    let storedProgress = {
+      status: 'completed',
+      stage: 'S3_TEST_RESULT',
+      result_key: 'decision',
+      email_stage: 'pending',
+      result_opened_at: null,
+      answers: [],
+    }
+
+    let lockHeld = false
+    let firstSavePending = true
+    let resolveSaveGate: (() => void) | null = null
+    const saveGate = new Promise<void>((resolve) => {
+      resolveSaveGate = resolve
+    })
+    let resolveFirstSaveEntered: (() => void) | null = null
+    const firstSaveEntered = new Promise<void>((resolve) => {
+      resolveFirstSaveEntered = resolve
+    })
+
+    mockLoadAbTestProgress.mockImplementation(async () => storedProgress)
+    mockSaveAbTestProgress.mockImplementation(async (_userId: string, progress: typeof storedProgress) => {
+      if (firstSavePending && progress.result_opened_at) {
+        firstSavePending = false
+        resolveFirstSaveEntered?.()
+        await saveGate
+      }
+      storedProgress = progress
+      return progress
+    })
+    mockScheduleFollowups.mockImplementation(async (_userId: string, progress: typeof storedProgress) => progress)
+    mockWithRuntimeAdvisoryLock.mockImplementation(async (_input: unknown, task: () => Promise<unknown>) => {
+      if (lockHeld) {
+        return { acquired: false, value: null }
+      }
+      lockHeld = true
+      try {
+        const value = await task()
+        return { acquired: true, value }
+      } finally {
+        lockHeld = false
+      }
+    })
+
+    const firstCtx = createCtx()
+    firstCtx.callbackQuery.data = 'skip_email_before_result'
+    const secondCtx = createCtx()
+    secondCtx.callbackQuery.id = 'cb-2'
+    secondCtx.callbackQuery.data = 'skip_email_before_result'
+    const thirdCtx = createCtx()
+    thirdCtx.callbackQuery.id = 'cb-3'
+    thirdCtx.callbackQuery.data = 'skip_email_before_result'
+
+    const firstCallback = handleAbTestCallback(firstCtx as never, 'skip_email_before_result')
+    await firstSaveEntered
+
+    const secondHandled = await handleAbTestCallback(secondCtx as never, 'skip_email_before_result')
+    resolveSaveGate?.()
+    await vi.runAllTimersAsync()
+    const firstHandled = await firstCallback
+    const sendMessageCountAfterFirstDelivery = vi.mocked(firstCtx.telegram.sendMessage).mock.calls.length
+    const thirdHandled = await handleAbTestCallback(thirdCtx as never, 'skip_email_before_result')
+
+    expect(firstHandled).toBe(true)
+    expect(secondHandled).toBe(true)
+    expect(thirdHandled).toBe(true)
+    expect(storedProgress.email_stage).toBe('skipped')
+    expect(storedProgress.result_opened_at).not.toBeNull()
+    expect(mockScheduleFollowups).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(firstCtx.telegram.sendMessage).mock.calls.length).toBe(sendMessageCountAfterFirstDelivery)
+    expect(vi.mocked(secondCtx.telegram.sendMessage).mock.calls.length).toBe(0)
+    expect(vi.mocked(thirdCtx.telegram.sendMessage).mock.calls.length).toBe(0)
+    expect(mockLoadAbTestProgress.mock.calls.map(([userId]) => userId)).toEqual(
+      expect.arrayContaining(['user-1']),
+    )
+
+    const s3TraceLogs = consoleInfoSpy.mock.calls
+      .filter(([label]) => label === '[AB_TEST_S3_TRACE]')
+      .map(([, payload]) => payload)
+
+    expect(s3TraceLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'user-1',
+          trigger: 'skip_email_before_result',
+          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
+          deliveryResult: 'sent',
+        }),
+        expect.objectContaining({
+          userId: 'user-1',
+          trigger: 'skip_email_before_result',
+          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
+          deliveryResult: 'skipped_race_condition',
+        }),
+        expect.objectContaining({
+          userId: 'user-1',
+          trigger: 'skip_email_before_result',
+          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
+          deliveryResult: 'skipped_duplicate',
+        }),
+      ]),
+    )
+
+    consoleInfoSpy.mockRestore()
+  })
+})
+
+describe('handleAbTestCallback confirm_profile_email_for_result canonical dedupe', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    mockHasTelegramCtaInteraction.mockResolvedValue(false)
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'NO_ACCESS',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: null,
+    })
+    mockUserFindUnique.mockResolvedValue({
+      firstName: 'Vira',
+      telegramUserName: 'vira',
+      testResultType: 'decision',
+      lifecycleState: 'TEST_DONE',
+    })
+    mockGetAbTestProfileEmail.mockResolvedValue('vira@example.com')
+    mockTrackAbTestEvent.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('keeps confirm-email callbacks on one canonical S3 delivery path', async () => {
+    const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    let storedProgress = {
+      status: 'completed',
+      stage: 'S3_TEST_RESULT',
+      result_key: 'decision',
+      email_stage: 'pending',
+      email_captured_at: null,
+      result_opened_at: null,
+      started_at: '2026-08-04T09:00:00.000Z',
+      answers: [],
+    }
+
+    let lockHeld = false
+    let firstResultSavePending = true
+    let resolveSaveGate: (() => void) | null = null
+    const saveGate = new Promise<void>((resolve) => {
+      resolveSaveGate = resolve
+    })
+    let resolveFirstResultSaveEntered: (() => void) | null = null
+    const firstResultSaveEntered = new Promise<void>((resolve) => {
+      resolveFirstResultSaveEntered = resolve
+    })
+
+    mockLoadAbTestProgress.mockImplementation(async () => storedProgress)
+    mockSaveAbTestProgress.mockImplementation(async (_userId: string, progress: typeof storedProgress) => {
+      if (firstResultSavePending && progress.result_opened_at) {
+        firstResultSavePending = false
+        resolveFirstResultSaveEntered?.()
+        await saveGate
+      }
+      storedProgress = progress
+      return progress
+    })
+    mockEnsureAbTestEmailCapturedFromProfile.mockImplementation(async (userId: string, progress: typeof storedProgress) => {
+      const nextProgress = {
+        ...progress,
+        email_stage: 'captured',
+        email_captured_at: progress.email_captured_at ?? '2026-08-05T10:00:00.000Z',
+      }
+      return mockSaveAbTestProgress(userId, nextProgress)
+    })
+    mockScheduleFollowups.mockImplementation(async (_userId: string, progress: typeof storedProgress) => progress)
+    mockWithRuntimeAdvisoryLock.mockImplementation(async (_input: unknown, task: () => Promise<unknown>) => {
+      if (lockHeld) {
+        return { acquired: false, value: null }
+      }
+      lockHeld = true
+      try {
+        const value = await task()
+        return { acquired: true, value }
+      } finally {
+        lockHeld = false
+      }
+    })
+
+    const ctxA = createCtx()
+    ctxA.callbackQuery.data = 'confirm_profile_email_for_result'
+    const ctxB = createCtx()
+    ctxB.callbackQuery.id = 'cb-confirm-2'
+    ctxB.callbackQuery.data = 'confirm_profile_email_for_result'
+    const ctxC = createCtx()
+    ctxC.callbackQuery.id = 'cb-confirm-3'
+    ctxC.callbackQuery.data = 'confirm_profile_email_for_result'
+
+    const firstCallback = handleAbTestCallback(ctxA as never, 'confirm_profile_email_for_result')
+    const secondCallback = handleAbTestCallback(ctxB as never, 'confirm_profile_email_for_result')
+    await firstResultSaveEntered
+    resolveSaveGate?.()
+    await vi.runAllTimersAsync()
+
+    const [firstHandled, secondHandled] = await Promise.all([firstCallback, secondCallback])
+    const sendMessageCountAfterFirstDelivery = vi.mocked(ctxA.telegram.sendMessage).mock.calls.length
+    const thirdHandled = await handleAbTestCallback(ctxC as never, 'confirm_profile_email_for_result')
+
+    expect(firstHandled).toBe(true)
+    expect(secondHandled).toBe(true)
+    expect(thirdHandled).toBe(true)
+    expect(storedProgress.email_stage).toBe('captured')
+    expect(storedProgress.email_captured_at).toBe('2026-08-05T10:00:00.000Z')
+    expect(storedProgress.result_opened_at).not.toBeNull()
+    expect(mockEnsureAbTestEmailCapturedFromProfile).toHaveBeenCalled()
+    expect(mockScheduleFollowups).toHaveBeenCalledTimes(1)
+    expect(mockTrackAbTestEvent).toHaveBeenCalledTimes(1)
+    expect(ctxA.answerCbQuery).toHaveBeenCalledTimes(1)
+    expect(ctxB.answerCbQuery).toHaveBeenCalledTimes(1)
+    expect(ctxC.answerCbQuery).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(ctxA.telegram.sendMessage).mock.calls.length).toBe(sendMessageCountAfterFirstDelivery)
+    expect(vi.mocked(ctxB.telegram.sendMessage).mock.calls.length).toBe(0)
+    expect(vi.mocked(ctxC.telegram.sendMessage).mock.calls.length).toBe(0)
+
+    const resultSentLogs = consoleInfoSpy.mock.calls.filter(([label]) => label === '[RESULT_SENT]')
+    const practiceButtonLogs = consoleInfoSpy.mock.calls.filter(([label]) => label === '[PRACTICE_BUTTON_RENDERED]')
+    const s3TraceLogs = consoleInfoSpy.mock.calls
+      .filter(([label]) => label === '[AB_TEST_S3_TRACE]')
+      .map(([, payload]) => payload)
+
+    expect(resultSentLogs).toHaveLength(1)
+    expect(practiceButtonLogs).toHaveLength(1)
+    expect(s3TraceLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'user-1',
+          trigger: 'confirm_profile_email_for_result',
+          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
+          deliveryResult: 'sent',
+        }),
+        expect.objectContaining({
+          userId: 'user-1',
+          trigger: 'confirm_profile_email_for_result',
+          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
+          deliveryResult: 'skipped_race_condition',
+        }),
+        expect.objectContaining({
+          userId: 'user-1',
+          trigger: 'confirm_profile_email_for_result',
+          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
+          deliveryResult: 'skipped_duplicate',
+        }),
+      ]),
+    )
+    expect(
+      s3TraceLogs
+        .filter((payload) => payload && typeof payload === 'object')
+        .map((payload) => (payload as { dedupeKey?: string }).dedupeKey),
+    ).toEqual(expect.arrayContaining([
+      'user-1:S3_TEST_RESULT:result_sequence',
+    ]))
+
+    consoleInfoSpy.mockRestore()
   })
 })

@@ -178,403 +178,403 @@ function docs(): LoadedDocs {
 function buildAiUnavailableStep(): OperatorStep {
   return {
     text: 'AI operator тимчасово недоступний. Перевір документи knowledge pack і спробуй ще раз.',
-    buttons: [],
-  }
+ buttons: [],
+ }
 }
 
 async function withAiDocuments<T>(action: () => Promise<T>): Promise<T | OperatorStep> {
-  try {
-    return await action()
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('ai_operator_document_unavailable:')) {
-      return buildAiUnavailableStep()
-    }
-    throw error
-  }
+ try {
+ return await action()
+ } catch (error) {
+ if (error instanceof Error && error.message.startsWith('ai_operator_document_unavailable:')) {
+ return buildAiUnavailableStep()
+ }
+ throw error
+ }
 }
 
 export const __testOnly = {
-  resetAiOperatorDocsCache() {
-    cachedDocsRoot = null
-    cachedDocs = null
-  },
-  listRepoRootCandidates,
-  resolveDocsRoot,
-  docs,
+ resetAiOperatorDocsCache() {
+ cachedDocsRoot = null
+ cachedDocs = null
+ },
+ listRepoRootCandidates,
+ resolveDocsRoot,
+ docs,
 }
 
 function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
+ return value
+ .replaceAll('&', '&amp;')
+ .replaceAll('<', '&lt;')
+ .replaceAll('>', '&gt;')
 }
 
 function getKyivDateKey(date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Kyiv',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date)
+ return new Intl.DateTimeFormat('en-CA', {
+ timeZone: 'Europe/Kyiv',
+ year: 'numeric',
+ month: '2-digit',
+ day: '2-digit',
+ }).format(date)
 }
 
 function getKyivDayBounds(date = new Date()): { start: Date; end: Date } {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Kyiv',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  const [year, month, day] = formatter.format(date).split('-').map(Number)
-  const start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
-  const end = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999))
-  return { start, end }
+ const formatter = new Intl.DateTimeFormat('en-CA', {
+ timeZone: 'Europe/Kyiv',
+ year: 'numeric',
+ month: '2-digit',
+ day: '2-digit',
+ })
+ const [year, month, day] = formatter.format(date).split('-').map(Number)
+ const start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+ const end = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999))
+ return { start, end }
 }
 
 function splitSentences(text: string): string[] {
-  return text
-    .split(/[.!?]\s+|\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
+ return text
+ .split(/[.!?]\s+|\n+/)
+ .map((part) => part.trim())
+ .filter(Boolean)
 }
 
 function averageSentenceLength(text: string): number {
-  const sentences = splitSentences(text)
-  if (sentences.length === 0) return 0
-  const totalWords = sentences.reduce((sum, sentence) => sum + sentence.split(/\s+/).filter(Boolean).length, 0)
-  return totalWords / sentences.length
+ const sentences = splitSentences(text)
+ if (sentences.length === 0) return 0
+ const totalWords = sentences.reduce((sum, sentence) => sum + sentence.split(/\s+/).filter(Boolean).length, 0)
+ return totalWords / sentences.length
 }
 
 function hasEmoji(text: string): boolean {
-  return /[\u{1F300}-\u{1FAFF}]/u.test(text)
+ return /[\u{1F300}-\u{1FAFF}]/u.test(text)
 }
 
 function countMoneyMentions(text: string): number {
-  const matches = text.match(/(?:\d+\s*(?:грн|євро|usd|\$)|гроші|ціна|вартість)/giu)
-  return matches?.length ?? 0
+ const matches = text.match(/(?:\d+\s*(?:грн|євро|usd|\$)|гроші|ціна|вартість)/giu)
+ return matches?.length ?? 0
 }
 
 function countWordMentions(text: string, words: string[]): number {
-  const lowered = text.toLowerCase()
-  return words.reduce((sum, word) => sum + (lowered.includes(word.toLowerCase()) ? 1 : 0), 0)
+ const lowered = text.toLowerCase()
+ return words.reduce((sum, word) => sum + (lowered.includes(word.toLowerCase()) ? 1 : 0), 0)
 }
 
 function extractDiff(original: string, edited: string): string[] {
-  const diff: string[] = []
-  const originalSentences = splitSentences(original)
-  const editedSentences = splitSentences(edited)
+ const diff: string[] = []
+ const originalSentences = splitSentences(original)
+ const editedSentences = splitSentences(edited)
 
-  if (editedSentences.length < originalSentences.length) {
-    diff.push('Скорочено структуру і прибрано зайві фрази.')
-  } else if (editedSentences.length > originalSentences.length) {
-    diff.push('Додано уточнення і додаткові акценти.')
-  }
+ if (editedSentences.length < originalSentences.length) {
+ diff.push('Скорочено структуру і прибрано зайві фрази.')
+ } else if (editedSentences.length > originalSentences.length) {
+ diff.push('Додано уточнення і додаткові акценти.')
+ }
 
-  if (averageSentenceLength(edited) < averageSentenceLength(original)) {
-    diff.push('Речення зроблено коротшими.')
-  }
+ if (averageSentenceLength(edited) < averageSentenceLength(original)) {
+ diff.push('Речення зроблено коротшими.')
+ }
 
-  if (hasEmoji(original) && !hasEmoji(edited)) {
-    diff.push('Прибрано емодзі.')
-  }
+ if (hasEmoji(original) && !hasEmoji(edited)) {
+ diff.push('Прибрано емодзі.')
+ }
 
-  if (countMoneyMentions(edited) > countMoneyMentions(original)) {
-    diff.push('Посилено акцент на грошах або ціні.')
-  }
+ if (countMoneyMentions(edited) > countMoneyMentions(original)) {
+ diff.push('Посилено акцент на грошах або ціні.')
+ }
 
-  const actionWords = ['дія', 'зараз', 'роби']
-  if (countWordMentions(edited, actionWords) > countWordMentions(original, actionWords)) {
-    diff.push('Посилено прямі слова дії.')
-  }
+ const actionWords = ['дія', 'зараз', 'роби']
+ if (countWordMentions(edited, actionWords) > countWordMentions(original, actionWords)) {
+ diff.push('Посилено прямі слова дії.')
+ }
 
-  return diff.length > 0 ? diff : ['Змінено тон і подачу під стиль коуча.']
+ return diff.length > 0 ? diff : ['Змінено тон і подачу під стиль коуча.']
 }
 
 function deriveStyleHints(edits: StyleEditRecord[]): string[] {
-  const hints = new Set<string>()
-  let shorterSentencesWins = 0
-  let emojiRemovalWins = 0
-  let moneyWins = 0
-  let actionWins = 0
+ const hints = new Set<string>()
+ let shorterSentencesWins = 0
+ let emojiRemovalWins = 0
+ let moneyWins = 0
+ let actionWins = 0
 
-  for (const edit of edits) {
-    const original = edit.original
-    const edited = edit.edited
+ for (const edit of edits) {
+ const original = edit.original
+ const edited = edit.edited
 
-    if (averageSentenceLength(edited) < averageSentenceLength(original)) {
-      shorterSentencesWins += 1
-    }
-    if (hasEmoji(original) && !hasEmoji(edited)) {
-      emojiRemovalWins += 1
-    }
-    if (countMoneyMentions(edited) > countMoneyMentions(original)) {
-      moneyWins += 1
-    }
-    if (
-      countWordMentions(edited, ['дія', 'зараз', 'роби']) >
-      countWordMentions(original, ['дія', 'зараз', 'роби'])
-    ) {
-      actionWins += 1
-    }
-  }
+ if (averageSentenceLength(edited) < averageSentenceLength(original)) {
+ shorterSentencesWins += 1
+ }
+ if (hasEmoji(original) && !hasEmoji(edited)) {
+ emojiRemovalWins += 1
+ }
+ if (countMoneyMentions(edited) > countMoneyMentions(original)) {
+ moneyWins += 1
+ }
+ if (
+ countWordMentions(edited, ['дія', 'зараз', 'роби']) >
+ countWordMentions(original, ['дія', 'зараз', 'роби'])
+ ) {
+ actionWins += 1
+ }
+ }
 
-  if (shorterSentencesWins > 0) {
-    hints.add('Роби речення коротшими і щільнішими.')
-  }
-  if (emojiRemovalWins > 0) {
-    hints.add('Не використовуй емодзі.')
-  }
-  if (moneyWins > 0) {
-    hints.add('Сильніше підкреслюй ціну, гроші або цінність покупки.')
-  }
-  if (actionWins > 0) {
-    hints.add('Частіше використовуй слова "дія", "зараз", "роби".')
-  }
+ if (shorterSentencesWins > 0) {
+ hints.add('Роби речення коротшими і щільнішими.')
+ }
+ if (emojiRemovalWins > 0) {
+ hints.add('Не використовуй емодзі.')
+ }
+ if (moneyWins > 0) {
+ hints.add('Сильніше підкреслюй ціну, гроші або цінність покупки.')
+ }
+ if (actionWins > 0) {
+ hints.add('Частіше використовуй слова "дія", "зараз", "роби".')
+ }
 
-  hints.add('Тримай тон прямим і без води.')
+ hints.add('Тримай тон прямим і без води.')
 
-  return Array.from(hints).slice(0, 6)
+ return Array.from(hints).slice(0, 6)
 }
 
 function readDailyExecution(rawSettings: unknown, dateKey: string): DailyExecutionState {
-  const settings = getSettingsObject(rawSettings)
-  const aiOperator = getSettingsObject(settings.aiOperator)
-  const dailyExecution = getSettingsObject(aiOperator.dailyExecution)
+ const settings = getSettingsObject(rawSettings)
+ const aiOperator = getSettingsObject(settings.aiOperator)
+ const dailyExecution = getSettingsObject(aiOperator.dailyExecution)
 
-  if (dailyExecution.date !== dateKey) {
-    return {
-      date: dateKey,
-      post_done: false,
-      outreach_done: false,
-      editing_post: false,
-      awaiting_dialogues: false,
-    }
-  }
+ if (dailyExecution.date !== dateKey) {
+ return {
+ date: dateKey,
+ post_done: false,
+ outreach_done: false,
+ editing_post: false,
+ awaiting_dialogues: false,
+ }
+ }
 
-  return {
-    date: dateKey,
-    post_done: dailyExecution.post_done === true,
-    outreach_done: dailyExecution.outreach_done === true,
-    editing_post: dailyExecution.editing_post === true,
-    awaiting_dialogues: dailyExecution.awaiting_dialogues === true,
-    draft_post:
-      typeof dailyExecution.draft_post === 'string'
-        ? dailyExecution.draft_post
-        : undefined,
-    final_post:
-      typeof dailyExecution.final_post === 'string'
-        ? dailyExecution.final_post
-        : undefined,
-    post_content:
-      typeof dailyExecution.post_content === 'string'
-        ? dailyExecution.post_content
-        : undefined,
-    outreach_content:
-      typeof dailyExecution.outreach_content === 'string'
-        ? dailyExecution.outreach_content
-        : undefined,
-    dialogue_context:
-      typeof dailyExecution.dialogue_context === 'string'
-        ? dailyExecution.dialogue_context
-        : undefined,
-  }
+ return {
+ date: dateKey,
+ post_done: dailyExecution.post_done === true,
+ outreach_done: dailyExecution.outreach_done === true,
+ editing_post: dailyExecution.editing_post === true,
+ awaiting_dialogues: dailyExecution.awaiting_dialogues === true,
+ draft_post:
+ typeof dailyExecution.draft_post === 'string'
+ ? dailyExecution.draft_post
+ : undefined,
+ final_post:
+ typeof dailyExecution.final_post === 'string'
+ ? dailyExecution.final_post
+ : undefined,
+ post_content:
+ typeof dailyExecution.post_content === 'string'
+ ? dailyExecution.post_content
+ : undefined,
+ outreach_content:
+ typeof dailyExecution.outreach_content === 'string'
+ ? dailyExecution.outreach_content
+ : undefined,
+ dialogue_context:
+ typeof dailyExecution.dialogue_context === 'string'
+ ? dailyExecution.dialogue_context
+ : undefined,
+ }
 }
 
 function readStyleMemory(rawSettings: unknown): StyleMemoryState {
-  const settings = getSettingsObject(rawSettings)
-  const aiOperator = getSettingsObject(settings.aiOperator)
-  const styleMemory = getSettingsObject(aiOperator.styleMemory)
-  const rawEdits = Array.isArray(styleMemory.edits) ? styleMemory.edits : []
-  const edits = rawEdits
-    .map((entry) => {
-      const record = getSettingsObject(entry)
-      const original = typeof record.original === 'string' ? record.original : ''
-      const edited = typeof record.edited === 'string' ? record.edited : ''
-      const diff = Array.isArray(record.diff)
-        ? record.diff.filter((item): item is string => typeof item === 'string')
-        : []
-      const timestamp = typeof record.timestamp === 'string' ? record.timestamp : ''
-      if (!original || !edited || !timestamp) return null
-      return { original, edited, diff, timestamp }
-    })
-    .filter((entry): entry is StyleEditRecord => Boolean(entry))
-    .slice(-10)
+ const settings = getSettingsObject(rawSettings)
+ const aiOperator = getSettingsObject(settings.aiOperator)
+ const styleMemory = getSettingsObject(aiOperator.styleMemory)
+ const rawEdits = Array.isArray(styleMemory.edits) ? styleMemory.edits : []
+ const edits = rawEdits
+ .map((entry) => {
+ const record = getSettingsObject(entry)
+ const original = typeof record.original === 'string' ? record.original : ''
+ const edited = typeof record.edited === 'string' ? record.edited : ''
+ const diff = Array.isArray(record.diff)
+ ? record.diff.filter((item): item is string => typeof item === 'string')
+ : []
+ const timestamp = typeof record.timestamp === 'string' ? record.timestamp : ''
+ if (!original || !edited || !timestamp) return null
+ return { original, edited, diff, timestamp }
+ })
+ .filter((entry): entry is StyleEditRecord => Boolean(entry))
+ .slice(-10)
 
-  const styleHints = Array.isArray(styleMemory.styleHints)
-    ? styleMemory.styleHints.filter((item): item is string => typeof item === 'string').slice(0, 10)
-    : []
+ const styleHints = Array.isArray(styleMemory.styleHints)
+ ? styleMemory.styleHints.filter((item): item is string => typeof item === 'string').slice(0, 10)
+ : []
 
-  return {
-    edits,
-    styleHints,
-  }
+ return {
+ edits,
+ styleHints,
+ }
 }
 
 async function saveDailyExecution(
-  userId: string,
-  currentSettings: unknown,
-  dailyExecution: DailyExecutionState,
-  styleMemory?: StyleMemoryState,
+ userId: string,
+ currentSettings: unknown,
+ dailyExecution: DailyExecutionState,
+ styleMemory?: StyleMemoryState,
 ): Promise<void> {
-  const settings = getSettingsObject(currentSettings)
-  const aiOperator = getSettingsObject(settings.aiOperator)
-  const nextSettings: Prisma.InputJsonValue = {
-    ...settings,
-    aiOperator: {
-      ...aiOperator,
-      dailyExecution,
-      ...(styleMemory ? { styleMemory } : {}),
-    },
-  }
+ const settings = getSettingsObject(currentSettings)
+ const aiOperator = getSettingsObject(settings.aiOperator)
+ const nextSettings: Prisma.InputJsonValue = {
+ ...settings,
+ aiOperator: {
+ ...aiOperator,
+ dailyExecution,
+ ...(styleMemory ? { styleMemory } : {}),
+ },
+ }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { settings: nextSettings },
-  })
+ await prisma.user.update({
+ where: { id: userId },
+ data: { settings: nextSettings },
+ })
 }
 
 async function collectStartDayState(userId: string): Promise<StartDayState> {
-  const { start, end } = getKyivDayBounds()
+ const { start, end } = getKyivDayBounds()
 
-  const zoom_bookings_today = await prisma.zoomSessionAttendee.count({
-    where: {
-      userId,
-      session: {
-        scheduledAt: {
-          gte: start,
-          lte: end,
-        },
-      },
-    },
-  })
+ const zoom_bookings_today = await prisma.zoomSessionAttendee.count({
+ where: {
+ userId,
+ session: {
+ scheduledAt: {
+ gte: start,
+ lte: end,
+ },
+ },
+ },
+ })
 
-  return {
-    post_today_exists: false,
-    zoom_bookings_today,
-    conversations_count: null,
-  }
+ return {
+ post_today_exists: false,
+ zoom_bookings_today,
+ conversations_count: null,
+ }
 }
 
 async function generateContentPost(styleHints: string[]): Promise<string> {
-  const knowledgePack = docs()
-  const response = await callProviderSafe(
-    'claude',
-    [
-      'Ти виконуєш роль ai-content як операторський execution agent.',
-      'Використовуй тільки knowledge pack нижче.',
-      knowledgePack.operatingRules,
-      knowledgePack.aiContentPrompt,
-    ].join('\n\n'),
-    [
-      'Завдання: згенеруй 1 Instagram-пост для FOCUS українською.',
-      'Формат:',
-      '- сильний хук на початку',
-      '- 2-4 короткі абзаци',
-      '- один чіткий CTA в кінці',
-      '- без хештегів',
-      '- без markdown',
-      '- без пояснень і варіантів',
-      'Контекст продукту: FOCUS = щотижневі Zoom-практики AB System.',
-      'Ціль: підштовхнути до публікації поста сьогодні.',
-      styleHints.length > 0
-        ? `Write in this style:\n${styleHints.join('\n')}`
-        : `Write in this style:\n${DEFAULT_STYLE_HINTS.join('\n')}`,
-      'Поверни тільки готовий текст поста.',
-    ].join('\n'),
-    {
-      contentType: 'telegram',
-      strategyTier: resolveModelStrategyTier('raw_truth'),
-    },
-  )
+ const knowledgePack = docs()
+ const response = await callProviderSafe(
+ 'claude',
+ [
+ 'Ти виконуєш роль ai-content як операторський execution agent.',
+ 'Використовуй тільки knowledge pack нижче.',
+ knowledgePack.operatingRules,
+ knowledgePack.aiContentPrompt,
+ ].join('\n\n'),
+ [
+ 'Завдання: згенеруй 1 Instagram-пост для FOCUS українською.',
+ 'Формат:',
+ '- сильний хук на початку',
+ '- 2-4 короткі абзаци',
+ '- один чіткий CTA в кінці',
+ '- без хештегів',
+ '- без markdown',
+ '- без пояснень і варіантів',
+ 'Контекст продукту: FOCUS = щотижневі Zoom-практики AB System.',
+ 'Ціль: підштовхнути до публікації поста сьогодні.',
+ styleHints.length > 0
+ ? `Write in this style:\n${styleHints.join('\n')}`
+ : `Write in this style:\n${DEFAULT_STYLE_HINTS.join('\n')}`,
+ 'Поверни тільки готовий текст поста.',
+ ].join('\n'),
+ {
+ contentType: 'telegram',
+ strategyTier: resolveModelStrategyTier('raw_truth'),
+ },
+ )
 
-  return response.content?.trim() || 'Сьогодні вийди не в контент, а в ясність.\n\nFOCUS не про ще одну мотивацію. Це місце, де перестаєш крутити одну й ту саму думку по колу і починаєш бачити, де саме зливається дія.\n\nРаз на тиждень на Zoom-практиці розбирається реальна ситуація: що відкладається, яке рішення зависло і який крок потрібно зробити зараз.\n\nЯкщо час перестати ходити по колу — заходь у FOCUS.'
+ return response.content?.trim() || 'Сьогодні вийди не в контент, а в ясність.\n\nFOCUS не про ще одну мотивацію. Це місце, де перестаєш крутити одну й ту саму думку по колу і починаєш бачити, де саме зливається дія.\n\nРаз на тиждень на Zoom-практиці розбирається реальна ситуація: що відкладається, яке рішення зависло і який крок потрібно зробити зараз.\n\nЯкщо час перестати ходити по колу — заходь у FOCUS.'
 }
 
 async function generateOutreachMessage(): Promise<string> {
-  const knowledgePack = docs()
-  const response = await callProviderSafe(
-    'claude',
-    [
-      'Ти виконуєш роль ai-assistant для operator execution flow.',
-      'Використовуй тільки knowledge pack нижче.',
-      knowledgePack.operatingRules,
-      knowledgePack.aiAssistantPrompt,
-      knowledgePack.aiMentorMethodPrompt,
-      knowledgePack.aiFocusPrompt,
-    ].join('\n\n'),
-    [
-      'Завдання: згенеруй 1 коротке outreach-повідомлення, яке коуч надішле 5 людям.',
-      'Формат:',
-      '- українською',
-      '- 4-6 коротких рядків',
-      '- природно, без маніпуляцій',
-      '- одна чітка дія в кінці',
-      '- без markdown',
-      '- без варіантів і без пояснень',
-      'Контекст: запросити в FOCUS на щотижневу Zoom-практику.',
-      'Поверни тільки готовий текст повідомлення.',
-    ].join('\n'),
-    {
-      contentType: 'telegram',
-      strategyTier: resolveModelStrategyTier('raw_truth'),
-    },
-  )
+ const knowledgePack = docs()
+ const response = await callProviderSafe(
+ 'claude',
+ [
+ 'Ти виконуєш роль ai-assistant для operator execution flow.',
+ 'Використовуй тільки knowledge pack нижче.',
+ knowledgePack.operatingRules,
+ knowledgePack.aiAssistantPrompt,
+ knowledgePack.aiMentorMethodPrompt,
+ knowledgePack.aiFocusPrompt,
+ ].join('\n\n'),
+ [
+ 'Завдання: згенеруй 1 коротке outreach-повідомлення, яке коуч надішле 5 людям.',
+ 'Формат:',
+ '- українською',
+ '- 4-6 коротких рядків',
+ '- природно, без маніпуляцій',
+ '- одна чітка дія в кінці',
+ '- без markdown',
+ '- без варіантів і без пояснень',
+ 'Контекст: запросити в FOCUS на щотижневу Zoom-практику.',
+ 'Поверни тільки готовий текст повідомлення.',
+ ].join('\n'),
+ {
+ contentType: 'telegram',
+ strategyTier: resolveModelStrategyTier('raw_truth'),
+ },
+ )
 
-  return response.content?.trim() || 'Привіт.\n\nЄ формат, де можна не говорити навколо проблеми, а розібрати одну реальну ситуацію й побачити, де саме стопориться дія.\n\nЦе щотижнева Zoom-практика FOCUS.\n\nЯкщо хочеш — скину деталі і найближчу дату.'
+ return response.content?.trim() || 'Привіт.\n\nЄ формат, де можна не говорити навколо проблеми, а розібрати одну реальну ситуацію й побачити, де саме стопориться дія.\n\nЦе щотижнева Zoom-практика FOCUS.\n\nЯкщо хочеш — скину деталі і найближчу дату.'
 }
 
 async function generateDialogueAssistMessage(dialogueContext: string): Promise<string> {
-  const knowledgePack = docs()
-  const response = await callProviderSafe(
-    'claude',
-    [
-      'Ти виконуєш роль ai-assistant для operator execution flow.',
-      'Використовуй тільки knowledge pack нижче.',
-      knowledgePack.operatingRules,
-      knowledgePack.aiAssistantPrompt,
-      knowledgePack.aiMentorMethodPrompt,
-      knowledgePack.aiFocusPrompt,
-    ].join('\n\n'),
-    [
-      'Завдання: допоможи коучу дотиснути діалог після outreach.',
-      'Формат:',
-      '- українською',
-      '- короткий розбір у 1-2 рядки',
-      '- далі 1 готова відповідь, яку можна одразу надіслати',
-      '- без markdown',
-      '- без кількох варіантів',
-      'Ось відповіді або контекст діалогу:',
-      dialogueContext,
-    ].join('\n'),
-    {
-      contentType: 'telegram',
-      strategyTier: resolveModelStrategyTier('raw_truth'),
-    },
-  )
+ const knowledgePack = docs()
+ const response = await callProviderSafe(
+ 'claude',
+ [
+ 'Ти виконуєш роль ai-assistant для operator execution flow.',
+ 'Використовуй тільки knowledge pack нижче.',
+ knowledgePack.operatingRules,
+ knowledgePack.aiAssistantPrompt,
+ knowledgePack.aiMentorMethodPrompt,
+ knowledgePack.aiFocusPrompt,
+ ].join('\n\n'),
+ [
+ 'Завдання: допоможи коучу дотиснути діалог після outreach.',
+ 'Формат:',
+ '- українською',
+ '- короткий розбір у 1-2 рядки',
+ '- далі 1 готова відповідь, яку можна одразу надіслати',
+ '- без markdown',
+ '- без кількох варіантів',
+ 'Ось відповіді або контекст діалогу:',
+ dialogueContext,
+ ].join('\n'),
+ {
+ contentType: 'telegram',
+ strategyTier: resolveModelStrategyTier('raw_truth'),
+ },
+ )
 
-  return response.content?.trim() || 'Тримай коротку відповідь: "Бачу, що тема зараз жива. Якщо хочеш, я скину найближчу дату Zoom-практики і ти подивишся, чи тобі підходить формат."'
+ return response.content?.trim() || 'Тримай коротку відповідь: "Бачу, що тема зараз жива. Якщо хочеш, я скину найближчу дату Zoom-практики і ти подивишся, чи тобі підходить формат."'
 }
 
 function buildPostStep(input: {
-  state: StartDayState
-  postContent: string
+ state: StartDayState
+ postContent: string
 }): OperatorStep {
-  return {
-    text: [
-      '<b>Стан:</b>',
-      `Пост: ${input.state.post_today_exists ? '✅' : '❌'}`,
-      `Zoom бронювання сьогодні: ${input.state.zoom_bookings_today}`,
-      '',
-      '<b>Що робимо:</b>',
-      'Опублікувати пост',
-      '',
-      '<b>Пост:</b>',
-      escapeHtml(input.postContent),
-    ].join('\n'),
-    buttons: [
-      [
-        { text: 'Редагувати', callback_data: AI_OPERATOR_ACTIONS.POST_EDIT },
+ return {
+ text: [
+ '<b>Стан:</b>',
+ `Пост: ${input.state.post_today_exists ? '' : ''}`,
+ `Zoom бронювання сьогодні: ${input.state.zoom_bookings_today}`,
+ '',
+ '<b>Що робимо:</b>',
+ 'Опублікувати пост',
+ '',
+ '<b>Пост:</b>',
+ escapeHtml(input.postContent),
+ ].join('\n'),
+ buttons: [
+ [
+ { text: 'Редагувати', callback_data: AI_OPERATOR_ACTIONS.POST_EDIT },
         { text: 'Опублікувала', callback_data: AI_OPERATOR_ACTIONS.POST_DONE },
       ],
     ],
@@ -584,19 +584,19 @@ function buildPostStep(input: {
 function buildEditPromptStep(): OperatorStep {
   return {
     text: 'Відредагуй текст і надішли його повідомленням',
-    buttons: [],
-  }
+ buttons: [],
+ }
 }
 
 function buildEditedPostStep(finalPost: string): OperatorStep {
-  return {
-    text: [
-      '<b>Оновлений пост:</b>',
-      escapeHtml(finalPost),
-    ].join('\n\n'),
-    buttons: [
-      [
-        { text: 'Опублікувати', callback_data: AI_OPERATOR_ACTIONS.POST_PUBLISH },
+ return {
+ text: [
+ '<b>Оновлений пост:</b>',
+ escapeHtml(finalPost),
+ ].join('\n\n'),
+ buttons: [
+ [
+ { text: 'Опублікувати', callback_data: AI_OPERATOR_ACTIONS.POST_PUBLISH },
         { text: 'Згенерувати новий', callback_data: AI_OPERATOR_ACTIONS.POST_REGEN },
       ],
     ],
@@ -664,9 +664,9 @@ function buildDialogueAssistStep(assistMessage: string): OperatorStep {
 
 function buildDialogueLoopStep(): OperatorStep {
   return {
-    text: '👉 Напиши ще 5 людям',
-    buttons: [
-      [{ text: 'Написала', callback_data: AI_OPERATOR_ACTIONS.OUTREACH_DONE }],
+    text: 'Напиши ще 5 людям',
+ buttons: [
+ [{ text: 'Написала', callback_data: AI_OPERATOR_ACTIONS.OUTREACH_DONE }],
     ],
   }
 }

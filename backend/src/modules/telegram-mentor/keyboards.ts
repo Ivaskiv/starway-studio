@@ -14,7 +14,7 @@ const isDevRuntime = process.env.NODE_ENV !== 'production'
 const isTestPaymentEnabled = isDevRuntime && process.env.TEST_PAYMENT_ENABLED?.trim() === 'true'
 const DEV_TEST_PAYMENT_URL = 'https://secure.wayforpay.com/button/bcd1a02457187'
 const DEV_TEST_PAYMENT_BUTTON = {
-  text: '🧪 ТЕСТ 1 ГРН',
+  text: 'ТЕСТ 1 ГРН',
   url: DEV_TEST_PAYMENT_URL,
 } as const
 const LEGACY_TELEGRAM_MINIAPP_PATH = '/miniapp'

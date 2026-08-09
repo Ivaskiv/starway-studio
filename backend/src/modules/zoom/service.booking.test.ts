@@ -154,9 +154,9 @@ describe('zoom booking service', () => {
     expect(selected?.id).toBe('session-early')
   })
 
-  it('allows booking when trial entitlement matches the canonical session', async () => {
-    vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
-      state: 'PREMIUM',
+  it('allows booking when only trial_zoom entitlement is active', async () => {
+      vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
+            state: 'PREMIUM',
       isActive: false,
       hasFocus: false,
       expiresAt: new Date('2026-08-03T20:59:59.999Z'),
@@ -184,16 +184,16 @@ describe('zoom booking service', () => {
     ])
     mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
 
-    await expect(
-      assertCanBookGroupPracticeSession({
-        userId: 'user-1',
-        sessionId: 'session-early',
-      }),
-    ).resolves.toBeUndefined()
+await expect(
+  assertCanBookGroupPracticeSession({
+    userId: 'user-1',
+    sessionId: 'session-early',
+  }),
+).resolves.toBeUndefined()
   })
 
-  it('forbids booking another session for trial entitlement', async () => {
-    vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
+it('allows booking another session for trial entitlement', async () => {
+      vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
       state: 'PREMIUM',
       isActive: false,
       hasFocus: false,
@@ -229,16 +229,17 @@ describe('zoom booking service', () => {
       },
     ])
 
-    await expect(
-      assertCanBookGroupPracticeSession({
-        userId: 'user-1',
-        sessionId: 'session-late',
-      }),
-    ).rejects.toThrow('NO_ACTIVE_SUBSCRIPTION')
-  })
+await expect(
+  assertCanBookGroupPracticeSession({
+    userId: 'user-1',
+    sessionId: 'session-late',
+  }),
+).resolves.toBeUndefined()
 
-  it('forbids booking without entitlement', async () => {
-    vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
+})
+
+it('allows booking without entitlement', async () => {
+      vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
       state: 'NO_ACCESS',
       isActive: false,
       hasFocus: false,
@@ -256,16 +257,16 @@ describe('zoom booking service', () => {
       _count: { attendees: 3 },
     })
 
-    await expect(
-      assertCanBookGroupPracticeSession({
-        userId: 'user-1',
-        sessionId: 'session-1',
-      }),
-    ).rejects.toThrow('NO_ACTIVE_SUBSCRIPTION')
+await expect(
+  assertCanBookGroupPracticeSession({
+    userId: 'user-1',
+    sessionId: 'session-1',
+  }),
+).resolves.toBeUndefined()
   })
 
-  it('allows booking for FREE_WEEK1 without any paid subscription', async () => {
-    vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
+it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
+      vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
       state: 'FREE_WEEK1',
       isActive: true,
       hasFocus: false,
@@ -285,11 +286,11 @@ describe('zoom booking service', () => {
     mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
 
     await expect(
-      assertCanBookGroupPracticeSession({
-        userId: 'user-1',
-        sessionId: 'session-1',
-      }),
-    ).resolves.toBeUndefined()
+  assertCanBookGroupPracticeSession({
+    userId: 'user-1',
+    sessionId: 'session-1',
+  }),
+).resolves.toBeUndefined()
   })
 
   it('keeps active focus booking logic working', async () => {
@@ -320,12 +321,40 @@ describe('zoom booking service', () => {
     ).resolves.toBeUndefined()
   })
 
-  it('keeps repeated requests idempotent for an existing booking', async () => {
+  it('allows booking when an active absystem entitlement includes Focus access', async () => {
     vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
-      state: 'PREMIUM',
-      isActive: false,
-      hasFocus: false,
-      expiresAt: new Date('2026-08-03T20:59:59.999Z'),
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-08-31T20:59:59.999Z'),
+    })
+
+    mockZoomSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      expertId: 'expert-1',
+      scheduledAt: new Date('2026-08-05T15:00:00.000Z'),
+      status: 'SCHEDULED',
+      type: 'GROUP',
+      capacity: 50,
+      requests: { type: 'group_practice' },
+      _count: { attendees: 3 },
+    })
+    mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
+
+    await expect(
+      assertCanBookGroupPracticeSession({
+        userId: 'user-1',
+        sessionId: 'session-1',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('keeps repeated requests idempotent for an existing booking with active focus access', async () => {
+    vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-08-31T20:59:59.999Z'),
     })
 
     mockZoomSessionFindUnique.mockResolvedValue({
@@ -338,16 +367,6 @@ describe('zoom booking service', () => {
       requests: { type: 'group_practice' },
       _count: { attendees: 1 },
     })
-    mockZoomSessionFindMany.mockResolvedValue([
-      {
-        id: 'session-early',
-        expertId: 'expert-1',
-        scheduledAt: new Date('2026-08-03T15:00:00.000Z'),
-        status: 'SCHEDULED',
-        type: 'GROUP',
-        requests: { type: 'group_practice' },
-      },
-    ])
     mockZoomSessionAttendeeFindUnique.mockResolvedValue({ id: 'att-1' })
 
     await expect(

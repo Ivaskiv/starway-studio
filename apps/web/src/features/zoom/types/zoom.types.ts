@@ -33,6 +33,18 @@ export interface ZoomSessionDTO {
   postSessionReport: PostSessionReport | null;
   createdAt:         string;
   updatedAt:         string;
+
+  attendeesCount?: number;
+  isMyBooking?: boolean;
+
+  myQuestion?: {
+    text: string;
+    position: number;
+  } | null;
+
+  questionPreviews?: string[];
+  questionsCount?: number;
+  remainingQuestionsCount?: number;
 }
 
 /** ZoomSessionAttendee DTO */

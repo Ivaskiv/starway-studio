@@ -212,7 +212,15 @@ async function deliver(
   },
 ): Promise<void> {
   const deliveryChatId = ctx.chat?.id ?? ctx.from?.id
-  console.info('[START_DELIVER]', { deliveryChatId, textLen: payload.text?.length ?? 0 })
+  const zoomBookingButton = payload.reply_markup?.inline_keyboard
+    ?.flat()
+    ?.find((button: any) => button?.text === 'ЗАПИСАТИСЯ')
+
+  console.info('[START_DELIVER]', {
+    deliveryChatId,
+    textLen: payload.text?.length ?? 0,
+    zoomBookingUrl: zoomBookingButton?.web_app?.url ?? null,
+  })
   if (!deliveryChatId) {
     console.warn('[START_DELIVER] no chatId — skipped')
     return

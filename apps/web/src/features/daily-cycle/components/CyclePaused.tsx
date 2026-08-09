@@ -84,7 +84,7 @@ export default function CyclePaused({ onRecover, onOpenProgress }: CyclePausedPr
             className="btn-liquid-dashboard btn-liquid-dashboard--primary"
             onClick={() => onRecover(firstMissed?.dateKey ?? toDateKey(new Date()), recoverySession)}
           >
-            ⏩ Надолужити пропущені дні
+             Надолужити пропущені дні
           </button>
           <button
             type="button"

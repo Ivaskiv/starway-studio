@@ -136,7 +136,7 @@ describe('Focus home CTA matrix', () => {
     expect(payload.text).not.toContain('ABSystem')
     expect(payload.text).not.toContain('Практикум')
     expect(payload.text).not.toContain('робочому просторі')
-    expect(buttonTexts).toEqual(['ЗАПИСАТИСЯ', '✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', '🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ', 'КАНАЛ ФОКУСУ'])
+    expect(buttonTexts).toEqual(['ЗАПИСАТИСЯ', 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', 'ПРОЙТИ ТЕСТ ЩЕ РАЗ', 'КАНАЛ ФОКУСУ'])
     expect(buttonTexts.join(' ')).not.toContain('кімнату')
   })
 
@@ -198,8 +198,8 @@ describe('Focus home CTA matrix', () => {
     expect(payload.text).not.toContain('ABSystem')
     expect(payload.buttons).toEqual([
       [{ text: 'ЗАПИСАТИСЯ', web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking' } }],
-      [{ text: '✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: expect.any(String) }],
-      [{ text: '🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ', callback_data: 'ab_test:restart' }],
+      [{ text: 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ', callback_data: expect.any(String) }],
+      [{ text: 'ПРОЙТИ ТЕСТ ЩЕ РАЗ', callback_data: 'ab_test:restart' }],
       [{ text: 'КАНАЛ ФОКУСУ', url: 'https://t.me/focus-channel' }],
     ])
   })

@@ -58,7 +58,7 @@ export async function sendWheelNotification(
 
     await bot.telegram.sendMessage(user.telegramChatId, messageLines.join('\n'), {
       reply_markup: {
-        inline_keyboard: [[{ text: '📄 Отримати PDF', url: payload.pdfUrl }]],
+        inline_keyboard: [[{ text: 'Отримати PDF', url: payload.pdfUrl }]],
       },
     })
 

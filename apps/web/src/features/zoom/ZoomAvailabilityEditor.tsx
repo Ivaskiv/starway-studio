@@ -241,7 +241,7 @@ function SlotRow({
           onClick={onDelete}
           className="px-2.5 py-1 rounded-lg border border-red-500/20 text-[11px] text-red-400/60 hover:text-red-400 hover:bg-red-500/[0.07] transition-all"
         >
-          ✕
+          
         </button>
       </div>
     </div>

@@ -35,7 +35,15 @@ function joinPath(base: string, path: string): string {
 
 export function resolveTelegramWebappBaseUrl(): string {
   const explicitWebappBase = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
-  if (explicitWebappBase && !isBackendPublicUrl(explicitWebappBase)) {
+
+  const hasDevFrontendProxy =
+    process.env.NODE_ENV !== 'production' &&
+    Boolean(process.env.DEV_FRONTEND_PROXY_TARGET?.trim())
+
+  if (
+    explicitWebappBase &&
+    (hasDevFrontendProxy || !isBackendPublicUrl(explicitWebappBase))
+  ) {
     return normalizeBaseUrl(explicitWebappBase)
   }
 

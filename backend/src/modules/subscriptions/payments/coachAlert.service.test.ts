@@ -131,11 +131,11 @@ describe('coachAlert.service', () => {
         reply_markup: {
           inline_keyboard: [[
             expect.objectContaining({
-              text: '✅ ПІДТВЕРДИТИ ПРОБНИЙ ZOOM',
+              text: 'ПІДТВЕРДИТИ ПРОБНИЙ ZOOM',
               callback_data: 'admin:grant_trial_zoom:trial-token',
             }),
             expect.objectContaining({
-              text: '💬 ЗАПИТАТИ ДЕТАЛІ',
+              text: 'ЗАПИТАТИ ДЕТАЛІ',
               callback_data: 'admin:ask_payment_details:trial-token',
             }),
           ]],

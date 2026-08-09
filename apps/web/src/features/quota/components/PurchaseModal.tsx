@@ -59,7 +59,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ open, onClose }) =
       <GlassCard className="max-w-lg w-full space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-bold text-white">Обрати пакет генерацій</h3>
-          <button className="text-white/50" onClick={onClose}>✕</button>
+          <button className="text-white/50" onClick={onClose}></button>
         </div>
         <p className="text-sm text-white/60">
           Додаткові пакети відкривають нові можливості для ментора. Платіж через WayForPay зручним способом.

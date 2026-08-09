@@ -179,7 +179,7 @@ export function LoginForm({
 
         <div className="flex justify-end text-[13px] text-white/70">
           <button type="button" onClick={() => setMode('forgot')} className="underline" disabled={anyLoading}>
-            Забули пароль?🙈
+            Забули пароль?
           </button>
         </div>
 

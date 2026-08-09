@@ -33,24 +33,24 @@ describe('TelegramConversationRenderer outbound', () => {
 
     const sent = await renderer.renderOutbound({ chatId: '123' }, {
       text: 'Привіт',
-      buttons: [{ kind: 'url', label: 'Open', value: 'https://example.com' }],
-      cards: [],
-      media: [],
-      nextActions: [],
-      telemetry: {},
-      analytics: {},
-    })
+ buttons: [{ kind: 'url', label: 'Open', value: 'https://example.com' }],
+ cards: [],
+ media: [],
+ nextActions: [],
+ telemetry: {},
+ analytics: {},
+ })
 
-    expect(sent).toBe(true)
-    expect(mocks.sendDedupedTelegramMessage).toHaveBeenCalledWith(
-      '123',
-      'Привіт',
-      {
-        link_preview_options: {
-          is_disabled: true,
-        },
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Open', url: 'https://example.com' }]],
+ expect(sent).toBe(true)
+ expect(mocks.sendDedupedTelegramMessage).toHaveBeenCalledWith(
+ '123',
+ 'Привіт',
+ {
+ link_preview_options: {
+ is_disabled: true,
+ },
+ reply_markup: {
+ inline_keyboard: [[{ text: 'Open', url: 'https://example.com' }]],
         },
       },
       expect.anything(),

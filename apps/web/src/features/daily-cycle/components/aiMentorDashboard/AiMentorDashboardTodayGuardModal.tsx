@@ -74,7 +74,7 @@ export default function AiMentorDashboardTodayGuardModal({ state }: Props) {
             onClick={state.handleFinishYesterday}
             className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-yellow-300 bg-yellow-300/14 px-4 py-2 text-sm font-semibold text-yellow-300 transition-colors hover:bg-yellow-300/20"
           >
-            🕐 Завершити вчора
+             Завершити вчора
           </button>
           <button
             type="button"

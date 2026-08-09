@@ -102,8 +102,8 @@ describe('buildHomeScreen — /start funnel regression', () => {
 
     expect(screen.text).toContain('Твій <b>результат</b> уже готовий')
     const flat = JSON.stringify(screen.reply_markup)
-    expect(flat).toMatch(/✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
+    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
     expect(flat).toMatch(/ab_test:show_result/)
     expect(flat).toMatch(/ab_test:restart/)
     expect(flat).not.toMatch(/open_focus_payment/)
@@ -140,8 +140,8 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(screen.reply_markup.inline_keyboard).toHaveLength(4)
     const flat = JSON.stringify(screen.reply_markup)
     expect(flat).toMatch(/ЗАПИСАТИСЯ/)
-    expect(flat).toMatch(/✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
+    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
     expect(flat).toMatch(/КАНАЛ ФОКУСУ/)
   })
 

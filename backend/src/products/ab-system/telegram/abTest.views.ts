@@ -14,6 +14,7 @@ import {
 } from '../../../lib/telegram/messageFormatter.js'
 // import { buildBehavioralSnapshot } from '../../../core/behavioral/behavioralSnapshot.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
+import { withRuntimeAdvisoryLock } from '../../../core/runtime/runtimeIdempotency.js'
 import {
   AB_TEST_UI_SETTINGS_KEY,
   buildAbTestProgressPatch,
@@ -1308,7 +1309,11 @@ export async function renderAbTestPostEmailSubmitSequence(
   ctx: Context,
   userId: string,
   progress: AbTestProgress,
-  options: { notifyOps?: boolean; forceRedelivery?: boolean } = {}
+  options: {
+    notifyOps?: boolean
+    forceRedelivery?: boolean
+    trigger?: string
+  } = {}
 ) {
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) return
@@ -1327,6 +1332,14 @@ export async function renderAbTestPostEmailSubmitSequence(
     progress.status === 'completed' &&
     progress.email_stage !== 'pending' &&
     Boolean(progress.result_opened_at)
+  const callbackData =
+    ctx.callbackQuery && 'data' in ctx.callbackQuery && typeof ctx.callbackQuery.data === 'string'
+      ? ctx.callbackQuery.data.trim()
+      : ''
+  const trigger =
+    options.trigger ??
+    (callbackData || 'text_message')
+  const dedupeKey = `${userId}:S3_TEST_RESULT:result_sequence`
 
   console.info('[RESULT_FLOW]', {
     step: shouldSkipRedelivery
@@ -1338,27 +1351,41 @@ export async function renderAbTestPostEmailSubmitSequence(
     emailStage: progress.email_stage,
     resultOpenedAt: progress.result_opened_at,
     forceRedelivery: options.forceRedelivery ?? false,
+    trigger,
+  })
+  console.info('[AB_TEST_S3_TRACE]', {
+    userId,
+    updateId: ctx.update?.update_id ?? null,
+    currentState: progress.stage,
+    trigger,
+    sender: 'renderAbTestPostEmailSubmitSequence',
+    messageType: 'result_sequence',
+    orderReference: null,
+    sessionId: null,
+    dedupeKey,
+    deliveryResult: shouldSkipRedelivery ? 'skipped_duplicate' : 'dispatching',
   })
 
   if (shouldSkipRedelivery) {
     return
   }
 
-  let openedTracked = false
-
-  // Атомарно виставляємо result_opened_at: якщо вже виставлено (race condition / duplicate callback) — виходимо.
-  if (!progress.result_opened_at) {
-    const freshProgress = await loadAbTestProgress(userId)
-    if (freshProgress.result_opened_at) {
-      console.info('[RESULT_FLOW]', {
-        step: 'post_email_sequence_race_condition_skipped',
-        userId,
-        chatId: String(chatId),
-        resultKey,
-      })
-      return
+  const deliveryClaim = await withRuntimeAdvisoryLock({
+    scope: 'ab_test_delivery',
+    type: 'S3_TEST_RESULT',
+    source: 'telegram',
+    userId,
+    state: 'S3_TEST_RESULT',
+  }, async () => {
+    const persistedProgress = await loadAbTestProgress(userId)
+    if (persistedProgress.result_opened_at) {
+      return {
+        outcome: 'duplicate' as const,
+        progress: persistedProgress,
+      }
     }
-    const nextProgress = buildAbTestProgressPatch(freshProgress, {
+
+    const nextProgress = buildAbTestProgressPatch(persistedProgress, {
       result_opened_at: new Date().toISOString(),
       last_event_at: new Date().toISOString(),
     })
@@ -1367,11 +1394,59 @@ export async function renderAbTestPostEmailSubmitSequence(
       nextProgress,
       'S4_FOCUS_INVITE'
     )
-    await saveAbTestProgress(userId, scheduledProgress)
-    openedTracked = true
+    const savedProgress = await saveAbTestProgress(userId, scheduledProgress)
+
+    return {
+      outcome: 'claimed' as const,
+      progress: savedProgress,
+    }
+  })
+
+  if (!deliveryClaim.acquired) {
+    console.info('[RESULT_FLOW]', {
+      step: 'post_email_sequence_race_condition_skipped',
+      userId,
+      chatId: String(chatId),
+      resultKey,
+    })
+    console.info('[AB_TEST_S3_TRACE]', {
+      userId,
+      updateId: ctx.update?.update_id ?? null,
+      currentState: progress.stage,
+      trigger,
+      sender: 'renderAbTestPostEmailSubmitSequence',
+      messageType: 'result_sequence',
+      orderReference: null,
+      sessionId: null,
+      dedupeKey,
+      deliveryResult: 'skipped_race_condition',
+    })
+    return
   }
 
-  if (openedTracked) {
+  if (deliveryClaim.value.outcome === 'duplicate') {
+    console.info('[RESULT_FLOW]', {
+      step: 'post_email_sequence_skipped_duplicate',
+      userId,
+      chatId: String(chatId),
+      resultKey,
+    })
+    console.info('[AB_TEST_S3_TRACE]', {
+      userId,
+      updateId: ctx.update?.update_id ?? null,
+      currentState: deliveryClaim.value.progress.stage,
+      trigger,
+      sender: 'renderAbTestPostEmailSubmitSequence',
+      messageType: 'result_sequence',
+      orderReference: null,
+      sessionId: null,
+      dedupeKey,
+      deliveryResult: 'skipped_duplicate',
+    })
+    return
+  }
+
+  if (deliveryClaim.value.outcome === 'claimed') {
     await trackAbTestEvent({
       userId,
       type: 'RESULT_OPENED',
@@ -1396,6 +1471,18 @@ export async function renderAbTestPostEmailSubmitSequence(
     userId,
     chatId: String(chatId),
     resultKey,
+  })
+  console.info('[AB_TEST_S3_TRACE]', {
+    userId,
+    updateId: ctx.update?.update_id ?? null,
+    currentState: 'S3_TEST_RESULT',
+    trigger,
+    sender: 'renderAbTestPostEmailSubmitSequence',
+    messageType: 'result_sequence',
+    orderReference: null,
+    sessionId: null,
+    dedupeKey,
+    deliveryResult: 'sent',
   })
 }
 

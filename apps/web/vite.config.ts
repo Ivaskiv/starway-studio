@@ -33,6 +33,36 @@ export default defineConfig(({ mode }) => {
         res.setHeader('Expires', '0');
         res.end(JSON.stringify({ stamp: reloadStamp }));
       });
+
+      server.middlewares.use(
+        '/telegram-legacy/telegram-webview.js',
+        async (_req, res) => {
+          const fs = await import('node:fs/promises');
+          const bundlePath = path.resolve(
+            __dirname,
+            'public/telegram-legacy/telegram-webview.js',
+          );
+
+          try {
+            const bundle = await fs.readFile(bundlePath);
+
+            res.statusCode = 200;
+            res.setHeader(
+              'Content-Type',
+              'application/javascript; charset=utf-8',
+            );
+            res.setHeader(
+              'Cache-Control',
+              'no-cache, no-store, must-revalidate',
+            );
+            res.end(bundle);
+          } catch {
+            res.statusCode = 404;
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.end('telegram-webview.js not built');
+          }
+        },
+      );
     },
   };
 

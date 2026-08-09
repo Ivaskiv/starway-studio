@@ -321,7 +321,7 @@ export async function weeklyContentReminderCron(): Promise<void> {
   await sendOpsTelegramMessage(reportText, {
     parse_mode: 'HTML',
     reply_markup: Markup.inlineKeyboard([
-      Markup.button.callback('📝 Аналізуємо і плануємо контент', 'content_os:start_planning'),
+      Markup.button.callback('Аналізуємо і плануємо контент', 'content_os:start_planning'),
     ]).reply_markup,
   }, {
     messageType: 'weekly_content_reminder',
@@ -1035,7 +1035,7 @@ export async function coachWeeklyPlannerTuesdayCron(): Promise<void> {
   const snapshot = await loadWeeklyPlannerSnapshot()
   const text = buildCoachWeeklyReminderText('Час оновити контент-план тижня.', snapshot)
   await sendCoachPanelReport(text, [
-    [{ text: '🧭 /planner', callback_data: 'coach-content:planner' }],
+    [{ text: '/planner', callback_data: 'coach-content:planner' }],
   ])
 }
 
@@ -1056,7 +1056,7 @@ export async function coachWeeklyPlannerSaturdayCron(): Promise<void> {
     'CTA: /planner',
   ].join('\n')
   await sendCoachPanelReport(text, [
-    [{ text: '🧭 /planner', callback_data: 'coach-content:planner' }],
+    [{ text: '/planner', callback_data: 'coach-content:planner' }],
   ])
 }
 

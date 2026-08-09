@@ -186,7 +186,7 @@ function BookedState({
   return (
     <div className="flex flex-col gap-2 mt-2">
       <div className="text-green-400 text-sm font-semibold">
-        Ти записана ✅
+        Ти записана
       </div>
 
       <button
@@ -364,7 +364,7 @@ function SessionDetailCard({
                   disabled={bookingPrivate}
                   className={`self-start text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
                 >
-                  📅 Записатись
+                   Записатись
                 </button>
               )}
             </div>

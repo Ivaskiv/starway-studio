@@ -9,6 +9,7 @@ const mockSaveAbTestProgress = vi.fn()
 const mockSendQuestionDirect = vi.fn()
 const mockRenderCurrentView = vi.fn()
 const mockRenderAbTestEmailGate = vi.fn()
+const mockRenderAbTestPostEmailSubmitSequence = vi.fn()
 const mockTrackAbTestEvent = vi.fn()
 const mockScheduleFollowups = vi.fn()
 const mockOnTestCompleted = vi.fn()
@@ -38,7 +39,7 @@ vi.mock('./abTest.progress.js', () => ({
 
 vi.mock('./abTest.views.js', () => ({
   renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
-  renderAbTestPostEmailSubmitSequence: vi.fn(),
+  renderAbTestPostEmailSubmitSequence: (...args: unknown[]) => mockRenderAbTestPostEmailSubmitSequence(...args),
   renderAbTestEmailGate: (...args: unknown[]) => mockRenderAbTestEmailGate(...args),
   resolveFirstName: vi.fn(() => 'Тест'),
 }))
@@ -83,7 +84,7 @@ vi.mock('./abTest.views.js', async () => {
   return {
     ...actual,
     renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
-    renderAbTestPostEmailSubmitSequence: vi.fn(),
+    renderAbTestPostEmailSubmitSequence: (...args: unknown[]) => mockRenderAbTestPostEmailSubmitSequence(...args),
     renderAbTestEmailGate: (...args: unknown[]) => mockRenderAbTestEmailGate(...args),
     resolveFirstName: vi.fn(() => 'Тест'),
     sendQuestionDirect: (...args: unknown[]) => mockSendQuestionDirect(...args),
@@ -92,7 +93,7 @@ vi.mock('./abTest.views.js', async () => {
 
 import { handleAbTestAnswer } from './abTest.handlers.core.js'
 import { handleAbTestStart } from './abTest.handlers.ui.js'
-import { handleAbTestRestart } from './abTest.handlers.core.js'
+import { handleAbTestRestart, handleSkipEmail } from './abTest.handlers.core.js'
 
 function createCtx() {
   return {
@@ -128,6 +129,7 @@ describe('ab test new user completion flow', () => {
     mockSendQuestionDirect.mockResolvedValue(undefined)
     mockRenderCurrentView.mockResolvedValue(undefined)
     mockRenderAbTestEmailGate.mockResolvedValue(undefined)
+    mockRenderAbTestPostEmailSubmitSequence.mockResolvedValue(undefined)
     mockTrackAbTestEvent.mockResolvedValue(undefined)
     mockStartAbTestFlow.mockResolvedValue(undefined)
     mockUserUpdate.mockResolvedValue(undefined)
@@ -306,5 +308,52 @@ describe('ab test new user completion flow', () => {
 
     expect(storedProgress).toEqual(firstSnapshot)
     expect(mockStartAbTestFlow).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips duplicate result redelivery on repeated skip-email callbacks after the first post-result send', async () => {
+    const ctx = createCtx()
+    storedProgress = normalizeAbTestProgress({
+      status: 'completed',
+      stage: 'S3_TEST_RESULT',
+      result_key: 'action',
+      email_stage: 'pending',
+      result_opened_at: null,
+    } as Partial<AbTestProgress>)
+
+    mockRenderAbTestPostEmailSubmitSequence.mockImplementation(
+      async (_ctx: unknown, _userId: string, progress: AbTestProgress) => {
+        storedProgress = {
+          ...progress,
+          result_opened_at: progress.result_opened_at ?? '2026-08-04T10:00:00.000Z',
+        }
+      },
+    )
+
+    const firstHandled = await handleSkipEmail(ctx, 'user-1')
+
+    expect(firstHandled).toBe(true)
+    expect(storedProgress.email_stage).toBe('skipped')
+    expect(mockRenderAbTestPostEmailSubmitSequence).toHaveBeenCalledTimes(1)
+    expect(mockRenderAbTestPostEmailSubmitSequence).toHaveBeenLastCalledWith(
+      ctx,
+      'user-1',
+      expect.objectContaining({
+        email_stage: 'skipped',
+      }),
+      {},
+    )
+
+    await handleSkipEmail(ctx, 'user-1')
+
+    expect(mockRenderAbTestPostEmailSubmitSequence).toHaveBeenCalledTimes(2)
+    expect(mockRenderAbTestPostEmailSubmitSequence).toHaveBeenLastCalledWith(
+      ctx,
+      'user-1',
+      expect.objectContaining({
+        email_stage: 'skipped',
+        result_opened_at: '2026-08-04T10:00:00.000Z',
+      }),
+      {},
+    )
   })
 })

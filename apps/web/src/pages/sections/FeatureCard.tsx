@@ -209,7 +209,7 @@ export function AIMentorModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             onClick={onClose}
             className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
           >
-            ✕
+            
           </button>
         </div>
 
@@ -240,7 +240,7 @@ export function AIMentorModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
               onClick={sendMessage}
               className={`px-6 py-3 rounded-xl font-semibold hover:scale-105 transition-transform ${ACCENT_FILL_GRADIENT}`}
             >
-              ➤
+              
             </button>
           </div>
         </div>

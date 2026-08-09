@@ -331,7 +331,7 @@ async function showCoachAudioLibrarySession(ctx: Context, coach: CoachAccess, se
       {
         reply_markup: {
           inline_keyboard: [
-            [Markup.button.url('🎧 Слухати', audioUrl), Markup.button.url('💾 Завантажити', audioDownloadUrl)],
+            [Markup.button.url('Слухати', audioUrl), Markup.button.url('Завантажити', audioDownloadUrl)],
             ...sectionKeyboard.inline_keyboard,
           ],
         },
@@ -494,15 +494,15 @@ function buildCoachLibrarySectionsKeyboard(sessionId: string) {
   return {
     inline_keyboard: [
       [
-        Markup.button.callback('🎧 Аудіо', `coach-library:session:${sessionId}:audio`),
-        Markup.button.callback('📝 Транскрипт', `coach-library:session:${sessionId}:transcript`),
+        Markup.button.callback('Аудіо', `coach-library:session:${sessionId}:audio`),
+        Markup.button.callback('Транскрипт', `coach-library:session:${sessionId}:transcript`),
       ],
       [
-        Markup.button.callback('📊 Аналіз', `coach-library:session:${sessionId}:analysis`),
-        Markup.button.callback('🎬 Контент', `coach-library:session:${sessionId}:content`),
+        Markup.button.callback('Аналіз', `coach-library:session:${sessionId}:analysis`),
+        Markup.button.callback('Контент', `coach-library:session:${sessionId}:content`),
       ],
       [
-        Markup.button.callback('📈 Інсайти', `coach-library:session:${sessionId}:insights`),
+        Markup.button.callback('Інсайти', `coach-library:session:${sessionId}:insights`),
       ],
     ],
   }
@@ -732,7 +732,7 @@ async function handleCoachAudioAction(ctx: Context, action: string): Promise<boo
     ].join('\n'),
     Markup.inlineKeyboard([
       [Markup.button.url(primaryLabel, primaryUrl)],
-      [Markup.button.url('💾 Завантажити', downloadUrl)],
+      [Markup.button.url('Завантажити', downloadUrl)],
     ]),
   ).catch(() => undefined)
   return true

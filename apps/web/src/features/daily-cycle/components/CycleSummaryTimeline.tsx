@@ -169,7 +169,7 @@ export default function CycleSummaryTimeline({
                         : 'border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] text-[var(--text-muted)] hover:text-[var(--text-primary)]',
                     ].join(' ')}
                   >
-                    <span className="absolute inset-0 flex items-center justify-center text-[10px]">🔔</span>
+                    <span className="absolute inset-0 flex items-center justify-center text-[10px]"></span>
                     <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-[14px] min-w-[14px] items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold leading-none text-slate-950">
                       {incompleteMicroTaskCount > 0 ? incompleteMicroTaskCount : unfinishedStepCount}
                     </span>
@@ -207,7 +207,7 @@ export default function CycleSummaryTimeline({
                         className="text-[11px] font-bold leading-none text-emerald-300"
                         aria-hidden="true"
                       >
-                        ✓
+                        
                       </span>
                     ))}
                   </div>

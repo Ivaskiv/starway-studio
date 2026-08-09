@@ -173,6 +173,11 @@ function defaultTopicByType(type: ZoomSessionType): string {
     case 'battle_review':  return 'Battle Review';
   }
 }
+const DEFAULT_GROUP_PRACTICE_QUESTIONS = [
+  'Як не зриватись на вихідних',
+  'Планування тижня з дітьми',
+  'Повернення після відпустки',
+] as const
 
 export async function generateSessionsFromAvailability(
   expertId: string,
@@ -215,18 +220,24 @@ export async function generateSessionsFromAvailability(
         expertId,
         scheduledAt: date,
         topic: slot.defaultTopic ?? defaultTopicByType(slot.sessionType),
-        requests: {
-          type: slot.sessionType,
-          maxSlots: slot.maxSlots,
-          priceCents: slot.priceCents,
-          durationMinutes: slot.durationMinutes,
-          slotStatus: 'available',
-          notify24h: true,
-          notify2h: true,
-          notifiedAt24h: null,
-          notifiedAt2h: null,
-        } as unknown as Prisma.InputJsonValue,
-      });
+      requests: {
+        type: slot.sessionType,
+        maxSlots: slot.maxSlots,
+        priceCents: slot.priceCents,
+        durationMinutes: slot.durationMinutes,
+        slotStatus: 'available',
+
+        starterQuestions:
+          slot.sessionType === 'group_practice'
+            ? [...DEFAULT_GROUP_PRACTICE_QUESTIONS]
+            : [],
+
+        notify24h: true,
+        notify2h: true,
+        notifiedAt24h: null,
+        notifiedAt2h: null,
+      } as unknown as Prisma.InputJsonValue,
+    });
       created++;
     }
   }

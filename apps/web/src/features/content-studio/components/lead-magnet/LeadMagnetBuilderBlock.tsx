@@ -246,7 +246,7 @@ export function LeadMagnetBuilderBlock(props: {
               <div className="mt-4 flex gap-2">
                 <Button type="button" onClick={handlePublish} disabled={!canPublish} className="btn-liquid-dashboard--ice inline-flex items-center gap-2 rounded-[16px] px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">
                   <PenLine className="h-4 w-4" />
-                  ✅ Опублікувати
+                   Опублікувати
                 </Button>
                 <span className="self-center text-xs text-[var(--text-muted)]">{canPublish ? 'Лідмагніт підтверджено' : `Підтвердь чекбокси (${readyCount}/5)`}</span>
               </div>

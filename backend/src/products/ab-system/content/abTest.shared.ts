@@ -4,11 +4,11 @@ export const AB_TEST_START_BUTTON_TEXT = 'ПОЧАТИ ТЕСТ'
 export const AB_TEST_CONTINUE_BUTTON_TEXT = 'ПРОДОВЖИТИ ТЕСТ'
 export const AB_TEST_CONTINUE_SHORT_BUTTON_TEXT = 'ПРОДОВЖИТИ'
 export const AB_TEST_SHOW_RESULT_BUTTON_TEXT = 'ПОКАЗАТИ РЕЗУЛЬТАТ'
-export const AB_TEST_MY_RESULT_BUTTON_TEXT = '✅ ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ'
+export const AB_TEST_MY_RESULT_BUTTON_TEXT = 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ'
 export const AB_TEST_RESTART_BUTTON_TEXT = 'ПОЧАТИ ТЕСТ ЗАНОВО'
-export const AB_TEST_RETAKE_BUTTON_TEXT = '🔄 ПРОЙТИ ТЕСТ ЩЕ РАЗ'
+export const AB_TEST_RETAKE_BUTTON_TEXT = 'ПРОЙТИ ТЕСТ ЩЕ РАЗ'
 export const AB_TEST_OPEN_FOCUS_BUTTON_TEXT = 'ХОЧУ У ФОКУС'
-export const AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT = '📅 ОБРАТИ ZOOM'
+export const AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT = 'ОБРАТИ ZOOM'
 export const AB_TEST_PAY_1M_BUTTON_TEXT = 'ОПЛАТИТИ 1 МІСЯЦЬ'
 export const AB_TEST_PAY_3M_BUTTON_TEXT = 'ОПЛАТИТИ 3 МІСЯЦІ'
 export const AB_TEST_JOIN_CHANNEL_BUTTON_TEXT = 'ПЕРЕЙТИ В КАНАЛ'
@@ -226,8 +226,8 @@ export const AB_TEST_RESULT_AUDIO_INTRO_TEXT =
 export const AB_TEST_RESULT_AUDIO_PROMPT_TEXT =
   AB_TEST_VOICE_CAPTION_PROMPT
 
-export const AB_TEST_SHOW_INSIDE_CTA_TEXT = '👁 ЗАГЛЯНУТИ'
-export const AB_TEST_BOOK_ZOOM_CTA_TEXT = '📅 ЗАПИСАТИСЯ НА ZOOM'
+export const AB_TEST_SHOW_INSIDE_CTA_TEXT = 'ЗАГЛЯНУТИ'
+export const AB_TEST_BOOK_ZOOM_CTA_TEXT = 'ЗАПИСАТИСЯ НА ZOOM'
 export const AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT =
   'Показати\nяк проходить\nпрактика'
 

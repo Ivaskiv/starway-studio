@@ -300,3 +300,4 @@ export function formatPrice(priceCents: number, isSubscriber: boolean): string {
 export function getRemainingLabel(remaining: number, max: number): string {
   return `${remaining} з ${max} місць`;
 }
+

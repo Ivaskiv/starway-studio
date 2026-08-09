@@ -218,56 +218,56 @@ function buildButtonRows(productKey: ProductKey, state: ProductState, urls: { op
       if (state === 'active' || state === 'trial' || state === 'onboarding-started') {
         return [[
           ...(urls.openUrl ? [{ text: nextLessonTitle ? `▶️ ${String(nextLessonTitle).toUpperCase()}` : '▶️ ПРОДОВЖИТИ ПРАКТИКУ', web_app: { url: urls.openUrl } }] : []),
-          ...(urls.progressUrl ? [{ text: '📊 МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.progressUrl ? [{ text: 'МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
         ]]
       }
 
       if (state === 'paused') {
         return withDevTestPaymentButton([[
-          ...(urls.paymentUrl ? [{ text: '🚀 ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
-          ...(urls.progressUrl ? [{ text: '📊 МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.paymentUrl ? [{ text: 'ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
+          ...(urls.progressUrl ? [{ text: 'МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
         ]])
       }
 
       return withDevTestPaymentButton([[
-        ...(urls.paymentUrl ? [{ text: '💳 АКТИВУВАТИ', url: urls.paymentUrl }] : []),
+        ...(urls.paymentUrl ? [{ text: 'АКТИВУВАТИ', url: urls.paymentUrl }] : []),
       ]])
     case 'ABsystem':
       if (state === 'active' || state === 'trial' || state === 'onboarding-started') {
         return [[
-          ...(urls.openUrl ? [{ text: '💬 ВІДКРИТИ ABSYSTEM', web_app: { url: urls.openUrl } }] : []),
-          ...(urls.progressUrl ? [{ text: '📈 МОЯ СТАТИСТИКА', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.openUrl ? [{ text: 'ВІДКРИТИ ABSYSTEM', web_app: { url: urls.openUrl } }] : []),
+          ...(urls.progressUrl ? [{ text: 'МОЯ СТАТИСТИКА', web_app: { url: urls.progressUrl } }] : []),
         ]]
       }
 
       if (state === 'paused') {
         return withDevTestPaymentButton([[
-          ...(urls.paymentUrl ? [{ text: '🔄 ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
-          ...(urls.progressUrl ? [{ text: '📈 МОЯ СТАТИСТИКА', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.paymentUrl ? [{ text: 'ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
+          ...(urls.progressUrl ? [{ text: 'МОЯ СТАТИСТИКА', web_app: { url: urls.progressUrl } }] : []),
         ]])
       }
 
       return withDevTestPaymentButton([[
-        ...(urls.paymentUrl ? [{ text: '💳 АКТИВУВАТИ', url: urls.paymentUrl }] : []),
+        ...(urls.paymentUrl ? [{ text: 'АКТИВУВАТИ', url: urls.paymentUrl }] : []),
       ]])
     case 'FOCUS':
     default:
       if (state === 'active' || state === 'trial' || state === 'onboarding-started') {
         return [[
-          ...(urls.openUrl ? [{ text: '💬 ВІДКРИТИ FOCUS', callback_data: 'open_focus_portal' }] : []),
-          ...(urls.progressUrl ? [{ text: '📈 МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.openUrl ? [{ text: 'ВІДКРИТИ FOCUS', callback_data: 'open_focus_portal' }] : []),
+          ...(urls.progressUrl ? [{ text: 'МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
         ]]
       }
 
       if (state === 'paused') {
         return withDevTestPaymentButton([[
-          ...(urls.paymentUrl ? [{ text: '🔄 ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
-          ...(urls.progressUrl ? [{ text: '📈 МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
+          ...(urls.paymentUrl ? [{ text: 'ВІДНОВИТИ ДОСТУП', url: urls.paymentUrl }] : []),
+          ...(urls.progressUrl ? [{ text: 'МІЙ ОГЛЯД', web_app: { url: urls.progressUrl } }] : []),
         ]])
       }
 
       return withDevTestPaymentButton([[
-        ...(urls.paymentUrl ? [{ text: '💳 АКТИВУВАТИ', url: urls.paymentUrl }] : []),
+        ...(urls.paymentUrl ? [{ text: 'АКТИВУВАТИ', url: urls.paymentUrl }] : []),
       ]])
   }
 }

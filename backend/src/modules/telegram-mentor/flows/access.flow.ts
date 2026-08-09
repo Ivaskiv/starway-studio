@@ -102,8 +102,8 @@ export async function sendAccessGrantedNotification(input: {
   //   reply_markup: {
   //     inline_keyboard: [[
   //       isSafeWebApp
-  //         ? { text: '🌐 Відкрити Starway', web_app: { url: openUrl } }
-  //         : { text: '🌐 Відкрити Starway', url: openUrl },
+  //         ? { text: 'Відкрити Starway', web_app: { url: openUrl } }
+  //         : { text: 'Відкрити Starway', url: openUrl },
   //     ]],
   //   },
   // })

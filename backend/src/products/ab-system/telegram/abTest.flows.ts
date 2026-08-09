@@ -261,14 +261,15 @@ export async function handleAbTestEmailCaptureText(
       await saveAbTestProgress(persistedUserId, scheduled)
     }
 
+    const deliveryProgress = scheduled !== next ? scheduled : next
     const { renderAbTestPostEmailSubmitSequence } = await import('./abTest.views.js')
     await renderAbTestPostEmailSubmitSequence(
       ctx,
-      userId,
-      progress,
+      persistedUserId,
+      deliveryProgress,
       {
         notifyOps: false,
-        forceRedelivery: true,
+        trigger: 'email_capture',
       }
     )
     return true
@@ -554,11 +555,11 @@ export async function renderFocusSubscriptionCard(
     {
       inline_keyboard: [
         ...(inviteUrl
-          ? [[{ text: '🔗 ПОСИЛАННЯ НА КАНАЛ', url: inviteUrl }]]
+          ? [[{ text: 'ПОСИЛАННЯ НА КАНАЛ', url: inviteUrl }]]
           : []),
         [
           {
-            text: '🔄 ВІДНОВИТИ ДОСТУП',
+            text: 'ВІДНОВИТИ ДОСТУП',
             callback_data: 'resend_focus_block12',
           },
         ],
@@ -682,7 +683,7 @@ export async function handleFocusPaymentAction(
     ...(testPaymentButton ? [[testPaymentButton]] : []),
     [
       {
-        text: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ',
+        text: 'ПРОБЛЕМА З ОПЛАТОЮ',
         callback_data: 'focus:payment_issue',
       },
     ],

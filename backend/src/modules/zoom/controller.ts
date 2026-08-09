@@ -10,7 +10,10 @@ import { schedulePostZoomBridge, scheduleUpgradeOffer } from '@/modules/subscrip
 import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js';
 import { notificationService } from '../../services/notifications/NotificationService.js';
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js';
-import { sendDedupedTelegramMessage } from '../../lib/telegram.js';
+import {
+  sendDedupedTelegramMessage,
+  sendOpsTelegramMessage,
+} from '../../lib/telegram.js';
 import {
   assertCanBookGroupPracticeSession,
   createZoomSession,
@@ -20,6 +23,8 @@ import {
   getSessionById,
   getSessionAttendees,
   getUpcomingZoom,
+  getUpcomingZoomBookingView,
+  getZoomBookingNotificationContext,
   getUserPreviousZoomSessionRecap,
   markAttended,
   registerAttendee,
@@ -29,6 +34,66 @@ import {
 } from './service.js';
 import { ZoomSessionWithAttendance } from './types.js';
 import { EXCHANGE_PRICE, getZoomExchangeAccessPolicy } from '../subscriptions/payments/focus.access.js';
+
+async function notifyCoachAboutZoomBooking(
+  userId: string,
+  sessionId: string,
+  kind: 'booking' | 'question'
+): Promise<void> {
+  try {
+    const context = await getZoomBookingNotificationContext(userId, sessionId)
+    if (!context) return
+
+    const scheduledLabel = context.session.scheduledAt.toLocaleString('uk-UA', {
+      timeZone: 'Europe/Kyiv',
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+    const usernameLine = context.username ? `\n@${context.username}` : ''
+
+    const text =
+      kind === 'question' && context.myQuestion
+        ? [
+            'НОВЕ ПИТАННЯ ДО ZOOM',
+            '',
+            `${context.displayName}${usernameLine}`,
+            '',
+            scheduledLabel,
+            `Питання №${context.myQuestion.position} у черзі`,
+            '',
+            `«${context.myQuestion.text}»`,
+            '',
+            `Учасників: ${context.attendeesCount}`,
+          ].join('\n')
+        : [
+            'НОВИЙ ЗАПИС НА ZOOM',
+            '',
+            `${context.displayName}${usernameLine}`,
+            '',
+            scheduledLabel,
+            '',
+            `Учасників: ${context.attendeesCount}`,
+          ].join('\n')
+
+    await sendOpsTelegramMessage(text, undefined, {
+      messageType:
+        kind === 'question'
+          ? 'zoom_booking_question'
+          : 'zoom_booking_registered',
+      source: 'zoom.controller',
+    })
+  } catch (error) {
+    console.error('[ZOOM_COACH_NOTIFY_ERROR]', {
+      userId,
+      sessionId,
+      kind,
+      error,
+    })
+  }
+}
 
 // Отримуємо expertId з бази по userId (найнадійніше)
 const getCurrentExpertId = async (userId: string | undefined): Promise<string> => {
@@ -125,9 +190,39 @@ export async function createSession(req: AuthenticatedRequest, res: Response, ne
 }
 
 // решта ендпоінтів без змін
-export async function getUpcoming(req: Request, res: Response, next: NextFunction) {
+export async function getUpcoming(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const session = await getUpcomingZoom();
+    const session = req.user?.id
+      ? await getUpcomingZoomBookingView(req.user.id)
+      : await getUpcomingZoom()
+
+    if (req.user?.id) {
+      console.info('[ZOOM_UPCOMING_LIVE]', {
+        userId: req.user.id,
+        sessionId: session?.id ?? null,
+        attendeesCount:
+          session && 'attendeesCount' in session
+            ? session.attendeesCount
+            : null,
+        isMyBooking:
+          session && 'isMyBooking' in session
+            ? session.isMyBooking
+            : null,
+        myQuestion:
+          session && 'myQuestion' in session
+            ? session.myQuestion
+            : null,
+        questionPreviews:
+          session && 'questionPreviews' in session
+            ? session.questionPreviews
+            : null,
+        questionsCount:
+          session && 'questionsCount' in session
+            ? session.questionsCount
+            : null,
+      })
+    }
+
     return res.status(200).json(session ?? null);
   } catch (err) {
     next(err);
@@ -180,6 +275,13 @@ export async function register(req: AuthenticatedRequest, res: Response, next: N
       await saveBookingQuestionForAttendee(userId, sessionId, normalizedQuestionText)
     }
     await syncZoomRegistrationLifecycle(userId, sessionId)
+
+    void notifyCoachAboutZoomBooking(userId, sessionId, 'booking')
+
+    if (normalizedQuestionText) {
+      void notifyCoachAboutZoomBooking(userId, sessionId, 'question')
+    }
+
     return res.status(201).json(attendee);
   } catch (err) {
     next(err);
@@ -211,6 +313,12 @@ export async function saveBookingQuestion(req: AuthenticatedRequest, res: Respon
       userId,
       normalizedSessionId,
       normalizedQuestionText,
+    )
+
+    void notifyCoachAboutZoomBooking(
+      userId,
+      normalizedSessionId,
+      'question',
     )
 
     return res.status(201).json({

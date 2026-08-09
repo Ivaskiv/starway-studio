@@ -191,7 +191,7 @@ export function ContentStudioOverview(props: Props) {
           </div>
           <div className="flex w-full flex-col gap-3 xl:w-[320px]">
             <button type="button" onClick={onLaunchSales} className="btn-liquid-dashboard btn-liquid-dashboard--primary inline-flex items-center justify-center gap-2 rounded-[18px] px-5 py-3.5 text-sm font-semibold">
-              <UploadCloud className="h-4 w-4" />🚀 Запустити продаж
+              <UploadCloud className="h-4 w-4" /> Запустити продаж
             </button>
             <button type="button" onClick={onOpenScripts} className="dashboard-liquid-card--soft rounded-[18px] px-5 py-3 text-sm font-semibold text-[var(--text-primary)]">Переглянути пакет</button>
             <button type="button" onClick={onOpenStrategy} className="dashboard-liquid-card--soft rounded-[18px] px-5 py-3 text-sm font-semibold text-[var(--text-primary)]">Змінити стратегію</button>

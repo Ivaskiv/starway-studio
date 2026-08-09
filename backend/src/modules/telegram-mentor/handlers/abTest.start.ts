@@ -50,8 +50,11 @@ function withKeyboard(payload: StartMessagePayload) {
   }
 }
 
-function resolveZoomBookingWebAppUrl(): string {
-  return buildZoomCalendarUrl({ intent: MINI_APP_ENTRY_INTENT.BOOKING })
+function resolveZoomBookingWebAppUrl() {
+  return buildZoomCalendarUrl({
+    intent: 'booking',
+    cacheBust: Date.now(),
+  })
 }
 
 function resolveZoomCalendarWebAppUrl(): string {
@@ -196,8 +199,8 @@ export function offerShownMessage(): ReturnType<typeof withKeyboard> {
 export function focusPaidMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Доступ до ФОКУС активний. Обери наступну дію в меню.',
-    buttons: [
-      [{ text: 'КАЛЕНДАР ZOOM-ПРАКТИК', callback_data: 'focus:next_zoom' }],
+ buttons: [
+ [{ text: 'КАЛЕНДАР ZOOM-ПРАКТИК', callback_data: 'focus:next_zoom' }],
       [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
       [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
     ],
@@ -349,8 +352,8 @@ export async function zoomMemberMessage(userId: string): Promise<ReturnType<type
 export function aiMentorMenuMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: 'Переходимо в AI Mentor режим. Обери, з чого почнемо.',
-    buttons: [
-      [{ text: 'AI MENTOR МЕНЮ', callback_data: 'ai_mentor:menu' }],
+ buttons: [
+ [{ text: 'AI MENTOR МЕНЮ', callback_data: 'ai_mentor:menu' }],
       [{ text: 'МІЙ ПЛАН ДІЙ', callback_data: 'ai_mentor:plan' }],
     ],
   })

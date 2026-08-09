@@ -202,17 +202,17 @@ function buildMentorTelegramActions(input: {
 }) {
   return [
     {
-      text: '✦ Перейти в мініап',
+      text: 'Перейти в мініап',
       url: input.miniAppUrl,
       mode: 'web_app' as const,
     },
     {
-      text: '✦ Перейти для відповідей на сайт',
+      text: 'Перейти для відповідей на сайт',
       url: input.webUrl,
       mode: 'url' as const,
     },
     {
-      text: '✦ Продовжити відповідати в Telegram',
+      text: 'Продовжити відповідати в Telegram',
       url: input.telegramCallback,
       mode: 'callback' as const,
     },
@@ -2058,12 +2058,12 @@ export class NotificationService {
           }),
           ctaActions: [
             {
-              text: '✦ Відкрити в мініап',
+              text: 'Відкрити в мініап',
               url: buildMiniAppStartUrl('tracker'),
               mode: 'web_app',
             },
             {
-              text: '✦ Відкрити всі звіти на сайті',
+              text: 'Відкрити всі звіти на сайті',
               url: reportsWebUrl,
               mode: 'url',
             },
@@ -2309,17 +2309,17 @@ export class NotificationService {
           }),
           ctaActions: [
             {
-              text: '✦ Відкрити в мініап',
+              text: 'Відкрити в мініап',
               url: buildMiniAppStartUrl('tracker'),
               mode: 'web_app',
             },
             {
-              text: '✦ Відкрити всі звіти на сайті',
+              text: 'Відкрити всі звіти на сайті',
               url: reportsWebUrl,
               mode: 'url',
             },
             {
-              text: '✦ Обрати підписку',
+              text: 'Обрати підписку',
               url: buildMiniAppStartUrl('subscription'),
               mode: 'web_app',
             },

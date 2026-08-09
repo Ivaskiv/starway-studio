@@ -4,7 +4,6 @@ import {
   ADMIN_ROUTES,
   DASHBOARD_ROUTES,
   PROTECTED_ALIASES,
-  devMode,
   toLegacyRouteRedirect,
   withGuard,
 } from '@/app/router/routeConfig'
@@ -15,15 +14,15 @@ import {
   MiniAppPage,
 } from '@/app/router/routePages'
 import { ROUTES, toAppRoutePath } from '@/config/routes'
-import { selectCurrentUser } from '@/features/auth/services/auth.slice'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
+import { selectCurrentUser } from '@/features/auth/services/auth.slice'
 import {
   FOCUS_ALIAS_ROUTE,
   FOCUS_ROUTE,
 } from '@/features/landings/focus/content/constants'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
-import CleanMiniAppZoomCalendar from '@/features/zoom/routes/CleanMiniAppZoomCalendar'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
+import CleanMiniAppZoomCalendar from '@/features/zoom/routes/CleanMiniAppZoomCalendar'
 import MainLayout from '@/layout/MainLayout'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
@@ -67,27 +66,38 @@ function hasTelegramRuntimeEvidence(): boolean {
     search.has('tgWebAppThemeParams') ||
     search.has('tgWebAppStartParam')
 
-  const initData = (window as {
-    Telegram?: {
-      WebApp?: {
-        initData?: string
+  const initData = (
+    window as {
+      Telegram?: {
+        WebApp?: {
+          initData?: string
+        }
       }
     }
-  }).Telegram?.WebApp?.initData?.trim()
+  ).Telegram?.WebApp?.initData?.trim()
 
   return Boolean(initData || hasTelegramQueryHints)
 }
 
-function resolveTelegramRuntimeTarget(pathname: string, search: string): string {
+function resolveTelegramRuntimeTarget(
+  pathname: string,
+  search: string
+): string {
   if (pathname.startsWith('/dashboard/ai-mentor')) {
     return `${MINIAPP_MENTOR_TARGET}${search}`
   }
 
-  if (pathname.startsWith('/dashboard/profile') || pathname.startsWith('/dashboard/settings')) {
+  if (
+    pathname.startsWith('/dashboard/profile') ||
+    pathname.startsWith('/dashboard/settings')
+  ) {
     return `/miniapp/profile${search}`
   }
 
-  if (pathname.startsWith('/dashboard/progress') || pathname.startsWith('/dashboard/journal')) {
+  if (
+    pathname.startsWith('/dashboard/progress') ||
+    pathname.startsWith('/dashboard/journal')
+  ) {
     return `/miniapp/tracker${search}`
   }
 
@@ -112,7 +122,11 @@ function renderAbTestRoutes() {
 
 function renderTaskRedirectRoutes() {
   return TASK_REDIRECT_PATHS.map((path) => (
-    <Route key={path} path={path} element={<Navigate to={MINIAPP_TASK_TARGET} replace />} />
+    <Route
+      key={path}
+      path={path}
+      element={<Navigate to={MINIAPP_TASK_TARGET} replace />}
+    />
   ))
 }
 
@@ -126,7 +140,10 @@ function PublicWebsiteRouter() {
       {renderAbTestRoutes()}
       <Route path={FOCUS_ROUTE} element={<FocusRouteView />} />
       {FOCUS_ALIAS_ROUTE !== FOCUS_ROUTE ? (
-        <Route path={FOCUS_ALIAS_ROUTE} element={<Navigate to={FOCUS_ROUTE} replace />} />
+        <Route
+          path={FOCUS_ALIAS_ROUTE}
+          element={<Navigate to={FOCUS_ROUTE} replace />}
+        />
       ) : null}
       <Route path="*" element={<FocusRouteView />} />
     </Routes>
@@ -136,13 +153,28 @@ function PublicWebsiteRouter() {
 function TelegramMiniAppRouter() {
   return (
     <Routes>
-      <Route path="/miniapp" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
-      <Route path="/miniapp/zoom-calendar" element={<CleanMiniAppZoomCalendar />} />
+      <Route
+        path="/miniapp"
+        element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />}
+      />
+      <Route
+        path="/miniapp/zoom-calendar"
+        element={<CleanMiniAppZoomCalendar />}
+      />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
       {renderTaskRedirectRoutes()}
-      <Route path="/content" element={<Navigate to="/miniapp/library" replace />} />
-      <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
-      <Route path="/zoom-calendar" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
+      <Route
+        path="/content"
+        element={<Navigate to="/miniapp/library" replace />}
+      />
+      <Route
+        path="/zoom"
+        element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />}
+      />
+      <Route
+        path="/zoom-calendar"
+        element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />}
+      />
       <Route path="*" element={<Navigate to={FOCUS_ROUTE} replace />} />
     </Routes>
   )
@@ -154,18 +186,35 @@ function ProtectedAppRouter() {
   return (
     <Routes>
       <Route element={<MainLayout dashboard />}>
-        <Route path="/zoom" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
-        <Route path="/zoom-calendar" element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />} />
-        <Route path="/miniapp/zoom-calendar" element={<CleanMiniAppZoomCalendar />} />
+        <Route
+          path="/zoom"
+          element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />}
+        />
+        <Route
+          path="/zoom-calendar"
+          element={<Navigate to={MINIAPP_ZOOM_TARGET} replace />}
+        />
+        <Route
+          path="/miniapp/zoom-calendar"
+          element={<CleanMiniAppZoomCalendar />}
+        />
         {protectedRoutes.map((route) => (
           <Route
             key={route.path}
-            path={route.path.startsWith('/dashboard') ? toAppRoutePath(route.path) : route.path}
+            path={
+              route.path.startsWith('/dashboard')
+                ? toAppRoutePath(route.path)
+                : route.path
+            }
             element={withGuard(route)}
           />
         ))}
         {ADMIN_ROUTES.map((route) => (
-          <Route key={route.path} path={route.path} element={withGuard(route)} />
+          <Route
+            key={route.path}
+            path={route.path}
+            element={withGuard(route)}
+          />
         ))}
         {DASHBOARD_ROUTES.map((route) => (
           <Route
@@ -193,13 +242,31 @@ export default function AppRouter() {
   const { authRestoreStatus } = useSessionOrchestrator()
   const isTelegramRuntime = isTelegramMiniApp(location.pathname)
   const isMiniAppRoute = isTelegramMiniAppRoute(location.pathname)
-  const isAuthRestoring = authRestoreStatus === 'idle' || authRestoreStatus === 'restoring'
+  const isZoomBookingEntry =
+    location.pathname === MINIAPP_ZOOM_TARGET &&
+    new URLSearchParams(location.search).get('intent') === 'booking'
+  const isAuthRestoring =
+    authRestoreStatus === 'idle' || authRestoreStatus === 'restoring'
 
-  if (isTelegramRuntime && !isMiniAppRoute && !isProtectedPath(location.pathname) && !isPublicWebsiteRoute(location.pathname)) {
-    return <Navigate to={resolveTelegramRuntimeTarget(location.pathname, location.search)} replace />
+  if (
+    isTelegramRuntime &&
+    !isMiniAppRoute &&
+    !isProtectedPath(location.pathname) &&
+    !isPublicWebsiteRoute(location.pathname)
+  ) {
+    return (
+      <Navigate
+        to={resolveTelegramRuntimeTarget(location.pathname, location.search)}
+        replace
+      />
+    )
   }
 
   if (isMiniAppRoute) {
+    if (isZoomBookingEntry) {
+      return <TelegramMiniAppRouter />
+    }
+
     if (user) {
       return <TelegramMiniAppRouter />
     }
@@ -210,7 +277,6 @@ export default function AppRouter() {
 
     return <PublicWebsiteRouter />
   }
-
   if (isProtectedPath(location.pathname)) {
     return <ProtectedAppRouter />
   }

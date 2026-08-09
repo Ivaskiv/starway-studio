@@ -593,7 +593,7 @@ export default function JourneyPathBoard({
                 {tags[goalIndex]}
               </span>
               <button type="button" className={journeyTokens.iconButton}>
-                ✎
+                
               </button>
             </div>
           ))}
@@ -602,7 +602,7 @@ export default function JourneyPathBoard({
             onClick={() => onToggleStep('goals')}
             className={journeyTokens.saveButton}
           >
-            Зберегти цілі ✓
+            Зберегти цілі 
           </button>
         </div>
       )

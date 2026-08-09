@@ -959,7 +959,7 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
           const finalReplyMarkup: CoachInlineKeyboardMarkup = {
             inline_keyboard: [[
               {
-                text: '📝 Планувати контент',
+                text: 'Планувати контент',
                 callback_data: 'content_os:start_planning',
               },
             ]],

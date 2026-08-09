@@ -52,8 +52,8 @@ export async function notifySwapProposal(targetTelegramId: string, swapDetails: 
   await sendDedupedTelegramMessage(targetTelegramId, text, {
     reply_markup: {
       inline_keyboard: [[
-        { text: '✅ Погодитись', callback_data: `zoom:swap:accept:${swapDetails.swapId}:${swapDetails.sessionIdTo}` },
-        { text: '❌ Відхилити', callback_data: `zoom:swap:decline:${swapDetails.swapId}` },
+        { text: 'Погодитись', callback_data: `zoom:swap:accept:${swapDetails.swapId}:${swapDetails.sessionIdTo}` },
+        { text: 'Відхилити', callback_data: `zoom:swap:decline:${swapDetails.swapId}` },
       ]],
     },
   }).catch(() => undefined)
@@ -295,13 +295,25 @@ export async function scanZoomAvailabilityAutoGenerate(): Promise<{
       && (slot as { active?: boolean }).active === true
     ));
 
-    if (!hasActiveAvailability) {
-      expertsSkipped += 1;
-      continue;
-    }
+if (!hasActiveAvailability) {
+  const seedResult = await seedDefaultAvailability(expert.id)
 
-    try {
-      const result = await generateSessionsFromAvailability(expert.id, 4);
+  expertsScanned += 1
+  created += seedResult.created
+  skipped += seedResult.skipped
+
+  console.info('[zoom.schedule.default_availability_seeded]', {
+    expertId: expert.id,
+    seeded: seedResult.seeded,
+    created: seedResult.created,
+    skipped: seedResult.skipped,
+  })
+
+  continue
+}
+
+try {
+  const result = await generateSessionsFromAvailability(expert.id, 4)
       expertsScanned += 1;
       created += result.created;
       skipped += result.skipped;

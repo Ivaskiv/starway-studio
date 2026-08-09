@@ -1,24 +1,38 @@
 import type { Context, Telegraf } from 'telegraf'
 import { Markup } from 'telegraf'
 
-import { coachBotContent } from '../../content/coachBot.content.js'
+import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 import { prisma } from '../../../db/client.js'
-import { toMutableReplyKeyboard } from '../../../utils/keyboard.js'
-import { analyticsHandler } from './analytics.handler.js'
-import { activateProductSubscription } from '../../../modules/subscriptions/payments/paymentActivation.service.js'
+import {
+  AI_OPERATOR_ACTIONS,
+  isCoachDialogueAwaiting,
+  isCoachPostEditingActive,
+  runCoachOperatorAction,
+  runCoachStartDay,
+  submitCoachDialogues,
+  submitCoachEditedPost,
+} from '../../../modules/ai-operator/operator.service.js'
+import {
+  buildWebDeepLink,
+  generateDeepLink,
+} from '../../../modules/deeplinks/service.js'
 import { processEcosystemPayment } from '../../../modules/subscriptions/payments/business.processing.js'
 import {
   notifyUserFocusPaymentIssueDenied,
-  sendAbTestBlock12Welcome,
   sendFocusPaymentSuccessTelegramMessageByOrder,
   sendTrialZoomPaymentSuccessTelegramMessage,
 } from '../../../modules/subscriptions/payments/callback.notifications.js'
+import { activateProductSubscription } from '../../../modules/subscriptions/payments/paymentActivation.service.js'
+import { generateSessionsFromAvailability } from '../../../modules/zoom/zoom.availability.service.js'
+import { toMutableReplyKeyboard } from '../../../utils/keyboard.js'
+import { coachBotContent } from '../../content/coachBot.content.js'
 import {
   handleCoachAudioCommand,
   handleCoachNotifyCommand,
   handleCoachUsersCommand,
   validateCoachContentCatalog,
 } from '../coachContent.handler.js'
+import { analyticsHandler } from './analytics.handler.js'
 import {
   hoursMenuHandler,
   nextWeekDoneHandler,
@@ -29,20 +43,10 @@ import {
   toggleDayHandler,
   toggleHourHandler,
 } from './schedule.handler.js'
-import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
-import {
-  AI_OPERATOR_ACTIONS,
-  isCoachDialogueAwaiting,
-  isCoachPostEditingActive,
-  runCoachOperatorAction,
-  runCoachStartDay,
-  submitCoachDialogues,
-  submitCoachEditedPost,
-} from '../../../modules/ai-operator/operator.service.js'
-import { buildWebDeepLink, generateDeepLink } from '../../../modules/deeplinks/service.js'
 
 const COACH_CALENDAR_ROUTE = '/miniapp/zoom-calendar'
-const COACH_AGENTS_ROUTE = '/app/dashboard/admin/studio?tab=agents&item=agents.overview'
+const COACH_AGENTS_ROUTE =
+  '/app/dashboard/admin/studio?tab=agents&item=agents.overview'
 const COACH_MENU_CONDUCT_PATTERN = /^(?:🎙️?\s*)?(?:Новий\s+Zoom|Провести)$/iu
 const COACH_MENU_LIBRARY_PATTERN = /^(?:📚\s*)?(?:Бібліотека(?:\s+Zoom)?)$/iu
 const COACH_MENU_ANALYTICS_PATTERN = /^(?:📊\s*)?Аналітика$/iu
@@ -52,9 +56,9 @@ const COACH_MENU_CALENDAR_PATTERN = /^(?:📅\s*)?Календар$/iu
 
 function readCoachTelegramAccessId(): string {
   return String(
-    process.env.COACH_TELEGRAM_ID
-    ?? process.env.TEST_COACH_MENTOR_TELEGRAM_ID
-    ?? '',
+    process.env.COACH_TELEGRAM_ID ??
+      process.env.TEST_COACH_MENTOR_TELEGRAM_ID ??
+      ''
   ).trim()
 }
 
@@ -67,7 +71,8 @@ function resolveCoachCalendarWebAppUrl(): string {
     finalUrl,
     mode: 'web_app',
     envBase: {
-      TELEGRAM_WEBAPP_BASE_URL: process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
+      TELEGRAM_WEBAPP_BASE_URL:
+        process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
       PUBLIC_FRONTEND_URL: process.env.PUBLIC_FRONTEND_URL?.trim() ?? null,
     },
     route: COACH_CALENDAR_ROUTE,
@@ -102,7 +107,11 @@ function getCommandPayload(ctx: Context): string {
 
 const COACH_RUNTIME_ERROR_MESSAGE = coachBotContent.runtime.error
 
-async function reportCoachRuntimeError(ctx: Context, scope: string, error: unknown): Promise<void> {
+async function reportCoachRuntimeError(
+  ctx: Context,
+  scope: string,
+  error: unknown
+): Promise<void> {
   console.error(`[coach-start:${scope}] failed`, error)
   if (ctx.callbackQuery) {
     await ctx.answerCbQuery(COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
@@ -112,7 +121,7 @@ async function reportCoachRuntimeError(ctx: Context, scope: string, error: unkno
 
 function withCoachRuntimeProtection<T extends Context>(
   scope: string,
-  handler: (ctx: T) => Promise<unknown>,
+  handler: (ctx: T) => Promise<unknown>
 ) {
   return async (ctx: T): Promise<void> => {
     try {
@@ -174,13 +183,15 @@ async function resolvePaymentAdminTarget(rawCallbackData: string): Promise<{
       },
     })
 
-    return legacyCheckout ?? {
-      userId: firstPayloadPart,
-      orderReference: secondPayloadPart,
-      productCode: null,
-      amount: 0,
-      currency: 'UAH',
-    }
+    return (
+      legacyCheckout ?? {
+        userId: firstPayloadPart,
+        orderReference: secondPayloadPart,
+        productCode: null,
+        amount: 0,
+        currency: 'UAH',
+      }
+    )
   }
 
   return prisma.checkoutSession.findUnique({
@@ -245,7 +256,7 @@ async function activateTrialZoomFromValidatedPayment(input: {
       currency: input.currency,
       payRef: input.orderReference,
       orderReference: input.orderReference,
-    },
+    }
   )
 
   if (result.status !== 'approved') {
@@ -277,18 +288,9 @@ function buildCoachMainMenuReplyMarkup() {
   return {
     reply_markup: toMutableReplyKeyboard({
       keyboard: [
-        [
-          coachBotContent.menu.conduct,
-          coachBotContent.menu.library,
-        ],
-        [
-          coachBotContent.menu.analytics,
-          coachBotContent.menu.content,
-        ],
-        [
-          coachBotContent.menu.settings,
-          coachBotContent.menu.agents,
-        ],
+        [coachBotContent.menu.conduct, coachBotContent.menu.library],
+        [coachBotContent.menu.analytics, coachBotContent.menu.content],
+        [coachBotContent.menu.settings, coachBotContent.menu.agents],
       ],
       resize_keyboard: true,
       is_persistent: true,
@@ -304,7 +306,8 @@ async function showCoachSystemMenu(ctx: Context): Promise<void> {
     finalUrl,
     mode: 'web_app',
     envBase: {
-      TELEGRAM_WEBAPP_BASE_URL: process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
+      TELEGRAM_WEBAPP_BASE_URL:
+        process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
       PUBLIC_FRONTEND_URL: process.env.PUBLIC_FRONTEND_URL?.trim() ?? null,
     },
     route: COACH_CALENDAR_ROUTE,
@@ -316,12 +319,27 @@ async function showCoachSystemMenu(ctx: Context): Promise<void> {
       ...buildCoachMainMenuReplyMarkup(),
       ...Markup.inlineKeyboard([
         [Markup.button.webApp(coachBotContent.menu.schedule, finalUrl)],
-        [Markup.button.callback(coachBotContent.menu.members, 'coach:participants')],
-        [Markup.button.callback(coachBotContent.menu.notifications, 'coach:notifications')],
-        [Markup.button.callback(coachBotContent.menu.payments, 'coach-content:payments')],
-        [Markup.button.callback('📈 Повна аналітика', 'coach:analytics')],
+        [
+          Markup.button.callback(
+            coachBotContent.menu.members,
+            'coach:participants'
+          ),
+        ],
+        [
+          Markup.button.callback(
+            coachBotContent.menu.notifications,
+            'coach:notifications'
+          ),
+        ],
+        [
+          Markup.button.callback(
+            coachBotContent.menu.payments,
+            'coach-content:payments'
+          ),
+        ],
+        [Markup.button.callback('Повна аналітика', 'coach:analytics')],
       ]),
-    },
+    }
   )
 }
 
@@ -335,12 +353,98 @@ async function showCoachAgentsMenu(ctx: Context): Promise<void> {
       ...Markup.inlineKeyboard([
         [Markup.button.url(coachBotContent.system.agentsCta, agentsUrl)],
       ]),
-    },
+    }
   )
 }
 
 async function showCoachNewZoomPrompt(ctx: Context): Promise<void> {
-  await ctx.reply(coachBotContent.audio.uploadPrompt, buildCoachMainMenuReplyMarkup())
+  const coachUserId = await resolveCoachUserId(ctx)
+
+  if (!coachUserId) {
+    await ctx.reply('Не вдалося визначити профіль коуча.')
+    return
+  }
+
+  const coach = await prisma.user.findUnique({
+    where: { id: coachUserId },
+    select: { expertId: true },
+  })
+
+  const expertId =
+    coach?.expertId ??
+    (
+      await prisma.expert.findFirst({
+        where: {
+          isActive: true,
+          deletedAt: null,
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      })
+    )?.id ??
+    null
+
+  if (!expertId) {
+    await ctx.reply('Активний профіль експерта не знайдено.')
+    return
+  }
+
+  await generateSessionsFromAvailability(expertId, 4)
+
+  const nextSession = await prisma.zoomSession.findFirst({
+    where: {
+      expertId,
+      status: 'SCHEDULED',
+      scheduledAt: { gt: new Date() },
+    },
+    orderBy: { scheduledAt: 'asc' },
+    select: {
+      id: true,
+      scheduledAt: true,
+      topic: true,
+      status: true,
+    },
+  })
+
+  if (!nextSession) {
+    await ctx.reply(
+      'Не вдалося створити наступну Zoom-сесію. Перевір розклад коуча.'
+    )
+    return
+  }
+
+  const dateLabel = nextSession.scheduledAt.toLocaleString('uk-UA', {
+    timeZone: 'Europe/Kyiv',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  await ctx.reply(
+    [
+      '🎙️ Наступний Zoom',
+      '',
+      nextSession.topic,
+      dateLabel,
+      '',
+      `sessionId: ${nextSession.id}`,
+      '',
+      'Сесія активна для запису.',
+    ].join('\n'),
+    {
+      ...buildCoachMainMenuReplyMarkup(),
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            'Підтвердити наступний Zoom',
+            `coach:zoom:confirm:${nextSession.id}`
+          ),
+        ],
+      ]),
+    }
+  )
 }
 
 async function checkCoachRole(ctx: Context): Promise<boolean> {
@@ -350,10 +454,7 @@ async function checkCoachRole(ctx: Context): Promise<boolean> {
 
   const user = await prisma.user.findFirst({
     where: {
-      OR: [
-        { telegramUserId: tgId },
-        { telegramChatId: tgId },
-      ],
+      OR: [{ telegramUserId: tgId }, { telegramChatId: tgId }],
     },
     select: { role: true },
   })
@@ -369,10 +470,7 @@ async function resolveCoachUserId(ctx: Context): Promise<string | null> {
 
   const user = await prisma.user.findFirst({
     where: {
-      OR: [
-        { telegramUserId: tgId },
-        { telegramChatId: tgId },
-      ],
+      OR: [{ telegramUserId: tgId }, { telegramChatId: tgId }],
     },
     select: { id: true },
   })
@@ -380,15 +478,9 @@ async function resolveCoachUserId(ctx: Context): Promise<string | null> {
   if (!user && privilegedTelegramId === tgId) {
     const fallbackCoach = await prisma.user.findFirst({
       where: {
-        OR: [
-          { role: 'SUPERADMIN' },
-          { role: 'EXPERT' },
-        ],
+        OR: [{ role: 'SUPERADMIN' }, { role: 'EXPERT' }],
       },
-      orderBy: [
-        { role: 'desc' },
-        { createdAt: 'asc' },
-      ],
+      orderBy: [{ role: 'desc' }, { createdAt: 'asc' }],
       select: { id: true },
     })
     return fallbackCoach?.id ?? null
@@ -396,7 +488,68 @@ async function resolveCoachUserId(ctx: Context): Promise<string | null> {
 
   return user?.id ?? null
 }
+async function confirmCoachZoomSession(
+  ctx: Context,
+  sessionId: string
+): Promise<void> {
+  const session = await prisma.zoomSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      scheduledAt: true,
+      status: true,
+      requests: true,
+    },
+  })
 
+  if (!session || session.status !== 'SCHEDULED') {
+    await ctx.answerCbQuery('Сесія недоступна').catch(() => undefined)
+    return
+  }
+
+  const bookingClosesAt = new Date(
+    session.scheduledAt.getTime() - 60 * 60 * 1000
+  )
+
+  const bookingOpensAt = new Date(
+    session.scheduledAt.getTime() - (6 * 24 + 23) * 60 * 60 * 1000
+  )
+
+  const currentRequests =
+    session.requests &&
+    typeof session.requests === 'object' &&
+    !Array.isArray(session.requests)
+      ? (session.requests as Record<string, unknown>)
+      : {}
+
+  await prisma.zoomSession.update({
+    where: { id: session.id },
+    data: {
+      requests: {
+        ...currentRequests,
+        bookingOpensAt: bookingOpensAt.toISOString(),
+        bookingClosesAt: bookingClosesAt.toISOString(),
+        coachConfirmedAt: new Date().toISOString(),
+        bookingSource: 'coach',
+      },
+    },
+  })
+
+  await ctx.answerCbQuery('Zoom підтверджено').catch(() => undefined)
+
+  await ctx.reply(
+    [
+      '✅ Zoom підтверджено',
+      '',
+      `Запис відкритий: ${bookingOpensAt.toLocaleString('uk-UA', {
+        timeZone: 'Europe/Kyiv',
+      })}`,
+      `Запис закривається: ${bookingClosesAt.toLocaleString('uk-UA', {
+        timeZone: 'Europe/Kyiv',
+      })}`,
+    ].join('\n')
+  )
+}
 export function registerCoachBotHandlers(telegramBot: Telegraf): void {
   validateCoachContentCatalog()
 
@@ -404,7 +557,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     if (!ctx.message || !('text' in ctx.message)) {
       return next()
     }
-    if (!await checkCoachAccess(ctx)) {
+    if (!(await checkCoachAccess(ctx))) {
       return next()
     }
 
@@ -429,7 +582,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       return
     }
 
-    if (!await isCoachDialogueAwaiting(userId)) {
+    if (!(await isCoachDialogueAwaiting(userId))) {
       return next()
     }
 
@@ -443,276 +596,430 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     return
   })
 
-  telegramBot.start(withCoachRuntimeProtection('start', async (ctx) => {
-    const isCoach = await checkCoachAccess(ctx)
-    if (!isCoach) {
-      await ctx.reply(coachBotContent.access.denied)
-      return
-    }
-    await showCoachMenu(ctx)
-  }))
-  telegramBot.command('start', withCoachRuntimeProtection('command:start', async (ctx) => {
-    const isCoach = await checkCoachAccess(ctx)
-    if (!isCoach) {
-      await ctx.reply(coachBotContent.access.denied)
-      return
-    }
-    await showCoachMenu(ctx)
-  }))
-  telegramBot.hears(/^\/schedule(?:@\w+)?(?:\s+(.*))?$/iu, withCoachRuntimeProtection('command:schedule', async (ctx) => {
-    const isCoach = await checkCoachAccess(ctx)
-    if (!isCoach) return
+  telegramBot.start(
+    withCoachRuntimeProtection('start', async (ctx) => {
+      const isCoach = await checkCoachAccess(ctx)
+      if (!isCoach) {
+        await ctx.reply(coachBotContent.access.denied)
+        return
+      }
+      await showCoachMenu(ctx)
+    })
+  )
+  telegramBot.command(
+    'start',
+    withCoachRuntimeProtection('command:start', async (ctx) => {
+      const isCoach = await checkCoachAccess(ctx)
+      if (!isCoach) {
+        await ctx.reply(coachBotContent.access.denied)
+        return
+      }
+      await showCoachMenu(ctx)
+    })
+  )
+  telegramBot.hears(
+    /^\/schedule(?:@\w+)?(?:\s+(.*))?$/iu,
+    withCoachRuntimeProtection('command:schedule', async (ctx) => {
+      const isCoach = await checkCoachAccess(ctx)
+      if (!isCoach) return
 
-    const payload = getCommandPayload(ctx).toLowerCase()
-    if (payload.startsWith('add')) {
-      await nextWeekMenuHandler(ctx)
-      return
-    }
+      const payload = getCommandPayload(ctx).toLowerCase()
+      if (payload.startsWith('add')) {
+        await nextWeekMenuHandler(ctx)
+        return
+      }
 
-    await scheduleMenuHandler(ctx)
-  }))
-  telegramBot.hears(/^\/start-day(?:@\w+)?$/iu, withCoachRuntimeProtection('command:start-day', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
+      await scheduleMenuHandler(ctx)
+    })
+  )
+  telegramBot.hears(
+    /^\/start-day(?:@\w+)?$/iu,
+    withCoachRuntimeProtection('command:start-day', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
 
-    const userId = await resolveCoachUserId(ctx)
-    if (!userId) {
-      await ctx.reply('Не вдалося визначити профіль коуча.')
-      return
-    }
+      const userId = await resolveCoachUserId(ctx)
+      if (!userId) {
+        await ctx.reply('Не вдалося визначити профіль коуча.')
+        return
+      }
 
-    const step = await runCoachStartDay(userId)
-    await ctx.reply(
-      step.text,
-      {
+      const step = await runCoachStartDay(userId)
+      await ctx.reply(step.text, {
         parse_mode: 'HTML',
         ...(step.buttons.length
           ? { reply_markup: { inline_keyboard: step.buttons } }
           : {}),
-      },
-    )
-  }))
-  telegramBot.action('coach:schedule', withCoachRuntimeProtection('action:coach:schedule', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return scheduleMenuHandler(ctx)
-  }))
-  telegramBot.action(/^coach:slot:/, withCoachRuntimeProtection('action:coach:slot', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return scheduleToggleHandler(ctx)
-  }))
-  telegramBot.action('coach:next_week', withCoachRuntimeProtection('action:coach:next_week', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return nextWeekMenuHandler(ctx)
-  }))
-  telegramBot.action(/^coach:nw:day:/, withCoachRuntimeProtection('action:coach:nw:day', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return toggleDayHandler(ctx)
-  }))
-  telegramBot.action('coach:nw:hours', withCoachRuntimeProtection('action:coach:nw:hours', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return hoursMenuHandler(ctx)
-  }))
-  telegramBot.action(/^coach:nw:hour:/, withCoachRuntimeProtection('action:coach:nw:hour', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return toggleHourHandler(ctx)
-  }))
-  telegramBot.action('coach:nw:done', withCoachRuntimeProtection('action:coach:nw:done', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return nextWeekDoneHandler(ctx)
-  }))
-  telegramBot.action(/^coach:nw:(label):/, withCoachRuntimeProtection('action:coach:nw:label', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return nextWeekNoopHandler(ctx)
-  }))
-  telegramBot.action('coach:analytics', withCoachRuntimeProtection('action:coach:analytics', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return analyticsHandler(ctx)
-  }))
-  telegramBot.action('coach:participants', withCoachRuntimeProtection('action:coach:participants', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return handleCoachUsersCommand(ctx, '')
-  }))
-  telegramBot.action('coach:notifications', withCoachRuntimeProtection('action:coach:notifications', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    return handleCoachNotifyCommand(ctx, '')
-  }))
-  telegramBot.action('content_os:start_planning', withCoachRuntimeProtection('action:content_os:start_planning', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-    await ctx.answerCbQuery('Починаємо планування').catch(() => undefined)
-    await ctx.reply([
-      '📍 Зараз: Аналіз тижня',
-      '⬜ Далі: Бізнес-сигнали → Інсайти → Тема → Контент-план',
-      '',
-      'Ми аналізуємо минулий тиждень і плануємо новий?',
-      'Або одразу плануємо — і ти розкажеш що було по ходу?',
-    ].join('\n'))
-  }))
-  telegramBot.action(/^aiop:/, withCoachRuntimeProtection('action:ai-operator', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
-
-    const userId = await resolveCoachUserId(ctx)
-    if (!userId) {
-      await ctx.answerCbQuery('Профіль не знайдено').catch(() => undefined)
-      return
-    }
-
-    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const action = raw as typeof AI_OPERATOR_ACTIONS[keyof typeof AI_OPERATOR_ACTIONS]
-    const step = await runCoachOperatorAction(userId, action)
-
-    await ctx.answerCbQuery('Оновлено').catch(() => undefined)
-    await ctx.editMessageText(step.text, {
-      parse_mode: 'HTML',
-      ...(step.buttons.length
-        ? { reply_markup: { inline_keyboard: step.buttons } }
-        : {}),
-    }).catch(() => undefined)
-  }))
-  telegramBot.hears(COACH_MENU_LIBRARY_PATTERN, withCoachRuntimeProtection('menu:audio', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
-    await handleCoachAudioCommand(ctx, '')
-  }))
-  telegramBot.hears(COACH_MENU_CONDUCT_PATTERN, withCoachRuntimeProtection('menu:newZoom', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
-    await showCoachNewZoomPrompt(ctx)
-  }))
-  telegramBot.hears(coachBotContent.menu.members, withCoachRuntimeProtection('menu:members', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
-    await handleCoachUsersCommand(ctx, '')
-  }))
-  telegramBot.hears(COACH_MENU_ANALYTICS_PATTERN, withCoachRuntimeProtection('menu:analytics', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
-    await analyticsHandler(ctx)
-  }))
-  telegramBot.hears(COACH_MENU_AGENTS_PATTERN, withCoachRuntimeProtection('menu:agents', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
-    await showCoachAgentsMenu(ctx)
-  }))
-  telegramBot.hears(COACH_MENU_CALENDAR_PATTERN, withCoachRuntimeProtection('menu:calendar', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
-    await scheduleMenuHandler(ctx)
-  }))
-  telegramBot.hears(COACH_MENU_SETTINGS_PATTERN, withCoachRuntimeProtection('menu:system', async (ctx) => {
-    if (!await checkCoachAccess(ctx)) return
-    await showCoachSystemMenu(ctx)
-  }))
-  telegramBot.action(/^admin:grant_focus:/, withCoachRuntimeProtection('action:admin:grant_focus', async (ctx) => {
-    const hasAccess = await checkCoachAccess(ctx)
-    if (!hasAccess && !isStarwayOpsChat(ctx)) {
-      return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
-    }
-    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const checkoutTarget = await resolvePaymentAdminTarget(raw)
-    if (!checkoutTarget?.userId || !checkoutTarget.orderReference) {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
-      return
-    }
-    const userId = checkoutTarget.userId
-    const orderReference = checkoutTarget.orderReference
-    const result = await activateProductSubscription({
-      userId,
-      productCode: 'focus',
-      source: 'coach_manual',
-      orderReference,
-      planMonths: 1,
-      manualNote: 'coach confirmed via telegram',
+      })
     })
-    if (result.success) {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.accessGranted).catch(() => undefined)
-      const alreadyActive = result.message === 'already_active'
+  )
+  telegramBot.action(
+    'coach:schedule',
+    withCoachRuntimeProtection('action:coach:schedule', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return scheduleMenuHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    /^coach:slot:/,
+    withCoachRuntimeProtection('action:coach:slot', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return scheduleToggleHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    'coach:next_week',
+    withCoachRuntimeProtection('action:coach:next_week', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return nextWeekMenuHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    /^coach:nw:day:/,
+    withCoachRuntimeProtection('action:coach:nw:day', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return toggleDayHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    'coach:nw:hours',
+    withCoachRuntimeProtection('action:coach:nw:hours', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return hoursMenuHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    /^coach:nw:hour:/,
+    withCoachRuntimeProtection('action:coach:nw:hour', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return toggleHourHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    'coach:nw:done',
+    withCoachRuntimeProtection('action:coach:nw:done', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return nextWeekDoneHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    /^coach:nw:(label):/,
+    withCoachRuntimeProtection('action:coach:nw:label', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return nextWeekNoopHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    'coach:analytics',
+    withCoachRuntimeProtection('action:coach:analytics', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return analyticsHandler(ctx)
+    })
+  )
+  telegramBot.action(
+    'coach:participants',
+    withCoachRuntimeProtection('action:coach:participants', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return handleCoachUsersCommand(ctx, '')
+    })
+  )
+  telegramBot.action(
+    'coach:notifications',
+    withCoachRuntimeProtection('action:coach:notifications', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return handleCoachNotifyCommand(ctx, '')
+    })
+  )
+  telegramBot.action(
+    'content_os:start_planning',
+    withCoachRuntimeProtection(
+      'action:content_os:start_planning',
+      async (ctx) => {
+        if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+        await ctx.answerCbQuery('Починаємо планування').catch(() => undefined)
+        await ctx.reply(
+          [
+            '📍 Зараз: Аналіз тижня',
+            '⬜ Далі: Бізнес-сигнали → Інсайти → Тема → Контент-план',
+            '',
+            'Ми аналізуємо минулий тиждень і плануємо новий?',
+            'Або одразу плануємо — і ти розкажеш що було по ходу?',
+          ].join('\n')
+        )
+      }
+    )
+  )
 
-      if (!alreadyActive) {
-        await sendFocusPaymentSuccessTelegramMessageByOrder({
-          userId,
-          orderReference: checkoutTarget.orderReference,
-        }).catch((error: unknown) => {
-          console.error('[coach-start:admin:grant_focus] success sender failed', {
-            userId,
-            orderReference: checkoutTarget.orderReference,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        })
+
+  telegramBot.action(
+    /^aiop:/,
+    withCoachRuntimeProtection('action:ai-operator', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+
+      const userId = await resolveCoachUserId(ctx)
+      if (!userId) {
+        await ctx.answerCbQuery('Профіль не знайдено').catch(() => undefined)
+        return
       }
 
-      await ctx.reply(
-        alreadyActive
-          ? `Доступ до ФОКУСУ вже був активний.\nuserId: ${userId}`
-          : `${coachBotContent.paymentAdmin.manualAccessGranted}\nuserId: ${userId}`,
-      )
-      return
-    }
-    await ctx.answerCbQuery(coachBotContent.paymentAdmin.error).catch(() => undefined)
-    await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessFailed}\nПричина: ${result.message}\nuserId: ${userId}`)
-  }))
-  telegramBot.action(/^admin:grant_trial_zoom:/, withCoachRuntimeProtection('action:admin:grant_trial_zoom', async (ctx) => {
-    const hasAccess = await checkCoachAccess(ctx)
-    if (!hasAccess && !isStarwayOpsChat(ctx)) {
-      return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
-    }
-    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const checkoutTarget = await resolvePaymentAdminTarget(raw.replace('admin:grant_trial_zoom:', 'admin:grant_focus:'))
-    if (!checkoutTarget?.userId || !checkoutTarget.orderReference) {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
-      return
-    }
+      const raw =
+        'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+      const action =
+        raw as (typeof AI_OPERATOR_ACTIONS)[keyof typeof AI_OPERATOR_ACTIONS]
+      const step = await runCoachOperatorAction(userId, action)
 
-    const result = await activateTrialZoomFromValidatedPayment({
-      userId: checkoutTarget.userId,
-      orderReference: checkoutTarget.orderReference,
-      amount: checkoutTarget.amount,
-      currency: checkoutTarget.currency,
+      await ctx.answerCbQuery('Оновлено').catch(() => undefined)
+      await ctx
+        .editMessageText(step.text, {
+          parse_mode: 'HTML',
+          ...(step.buttons.length
+            ? { reply_markup: { inline_keyboard: step.buttons } }
+            : {}),
+        })
+        .catch(() => undefined)
     })
+  )
+  telegramBot.hears(
+    COACH_MENU_LIBRARY_PATTERN,
+    withCoachRuntimeProtection('menu:audio', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await handleCoachAudioCommand(ctx, '')
+    })
+  )
+  telegramBot.hears(
+    COACH_MENU_CONDUCT_PATTERN,
+    withCoachRuntimeProtection('menu:newZoom', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await showCoachNewZoomPrompt(ctx)
+    })
+  )
+  telegramBot.hears(
+    coachBotContent.menu.members,
+    withCoachRuntimeProtection('menu:members', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await handleCoachUsersCommand(ctx, '')
+    })
+  )
+  telegramBot.hears(
+    COACH_MENU_ANALYTICS_PATTERN,
+    withCoachRuntimeProtection('menu:analytics', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await analyticsHandler(ctx)
+    })
+  )
+  telegramBot.hears(
+    COACH_MENU_AGENTS_PATTERN,
+    withCoachRuntimeProtection('menu:agents', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await showCoachAgentsMenu(ctx)
+    })
+  )
+  telegramBot.hears(
+    COACH_MENU_CALENDAR_PATTERN,
+    withCoachRuntimeProtection('menu:calendar', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await scheduleMenuHandler(ctx)
+    })
+  )
+  telegramBot.hears(
+    COACH_MENU_SETTINGS_PATTERN,
+    withCoachRuntimeProtection('menu:system', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await showCoachSystemMenu(ctx)
+    })
+  )
+  telegramBot.action(
+    /^admin:grant_focus:/,
+    withCoachRuntimeProtection('action:admin:grant_focus', async (ctx) => {
+      const hasAccess = await checkCoachAccess(ctx)
+      if (!hasAccess && !isStarwayOpsChat(ctx)) {
+        return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
+      }
+      const raw =
+        'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+      const checkoutTarget = await resolvePaymentAdminTarget(raw)
+      if (!checkoutTarget?.userId || !checkoutTarget.orderReference) {
+        await ctx
+          .answerCbQuery(coachBotContent.paymentAdmin.invalidToken)
+          .catch(() => undefined)
+        return
+      }
+      const userId = checkoutTarget.userId
+      const orderReference = checkoutTarget.orderReference
+      const result = await activateProductSubscription({
+        userId,
+        productCode: 'focus',
+        source: 'coach_manual',
+        orderReference,
+        planMonths: 1,
+        manualNote: 'coach confirmed via telegram',
+      })
+      if (result.success) {
+        await ctx
+          .answerCbQuery(coachBotContent.paymentAdmin.accessGranted)
+          .catch(() => undefined)
+        const alreadyActive = result.message === 'already_active'
 
-    if (result.success) {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.trialAccessGranted).catch(() => undefined)
+        if (!alreadyActive) {
+          await sendFocusPaymentSuccessTelegramMessageByOrder({
+            userId,
+            orderReference: checkoutTarget.orderReference,
+          }).catch((error: unknown) => {
+            console.error(
+              '[coach-start:admin:grant_focus] success sender failed',
+              {
+                userId,
+                orderReference: checkoutTarget.orderReference,
+                error: error instanceof Error ? error.message : String(error),
+              }
+            )
+          })
+        }
+
+        await ctx.reply(
+          alreadyActive
+            ? `Доступ до ФОКУСУ вже був активний.\nuserId: ${userId}`
+            : `${coachBotContent.paymentAdmin.manualAccessGranted}\nuserId: ${userId}`
+        )
+        return
+      }
+      await ctx
+        .answerCbQuery(coachBotContent.paymentAdmin.error)
+        .catch(() => undefined)
       await ctx.reply(
-        `${coachBotContent.paymentAdmin.manualTrialAccessGranted}\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference}`,
+        `${coachBotContent.paymentAdmin.manualAccessFailed}\nПричина: ${result.message}\nuserId: ${userId}`
       )
-      return
-    }
+    })
+  )
+  telegramBot.action(
+    /^admin:grant_trial_zoom:/,
+    withCoachRuntimeProtection('action:admin:grant_trial_zoom', async (ctx) => {
+      const hasAccess = await checkCoachAccess(ctx)
+      if (!hasAccess && !isStarwayOpsChat(ctx)) {
+        return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
+      }
+      const raw =
+        'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+      const checkoutTarget = await resolvePaymentAdminTarget(
+        raw.replace('admin:grant_trial_zoom:', 'admin:grant_focus:')
+      )
+      if (!checkoutTarget?.userId || !checkoutTarget.orderReference) {
+        await ctx
+          .answerCbQuery(coachBotContent.paymentAdmin.invalidToken)
+          .catch(() => undefined)
+        return
+      }
 
-    if (result.message === 'PAYMENT_EVIDENCE_NOT_VALIDATED') {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.askPaymentDetails).catch(() => undefined)
+      const result = await activateTrialZoomFromValidatedPayment({
+        userId: checkoutTarget.userId,
+        orderReference: checkoutTarget.orderReference,
+        amount: checkoutTarget.amount,
+        currency: checkoutTarget.currency,
+      })
+
+      if (result.success) {
+        await ctx
+          .answerCbQuery(coachBotContent.paymentAdmin.trialAccessGranted)
+          .catch(() => undefined)
+        await ctx.reply(
+          `${coachBotContent.paymentAdmin.manualTrialAccessGranted}\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference}`
+        )
+        return
+      }
+
+      if (result.message === 'PAYMENT_EVIDENCE_NOT_VALIDATED') {
+        await ctx
+          .answerCbQuery(coachBotContent.paymentAdmin.askPaymentDetails)
+          .catch(() => undefined)
+        await ctx.reply(
+          `Підтверджена оплата для пробного Zoom не знайдена.\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference}`
+        )
+        return
+      }
+
+      await ctx
+        .answerCbQuery(coachBotContent.paymentAdmin.error)
+        .catch(() => undefined)
       await ctx.reply(
-        `Підтверджена оплата для пробного Zoom не знайдена.\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference}`,
+        `${coachBotContent.paymentAdmin.manualTrialAccessFailed}\nПричина: ${result.message}\nuserId: ${checkoutTarget.userId}`
       )
-      return
+    })
+  )
+  telegramBot.action(
+    /^admin:deny_focus:/,
+    withCoachRuntimeProtection('action:admin:deny_focus', async (ctx) => {
+      const hasAccess = await checkCoachAccess(ctx)
+      if (!hasAccess && !isStarwayOpsChat(ctx)) {
+        return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
+      }
+      const raw =
+        'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+      const checkoutTarget = await resolvePaymentAdminTarget(raw)
+      if (!checkoutTarget?.userId) {
+        await ctx
+          .answerCbQuery(coachBotContent.paymentAdmin.invalidToken)
+          .catch(() => undefined)
+        return
+      }
+      const userId = checkoutTarget.userId
+      await ctx
+        .answerCbQuery(coachBotContent.paymentAdmin.denied)
+        .catch(() => undefined)
+      await notifyUserFocusPaymentIssueDenied(userId).catch(() => undefined)
+      await ctx.reply(
+        `${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: ${userId}`
+      )
+    })
+  )
+  telegramBot.action(
+  /^coach:zoom:confirm:(.+)$/,
+  withCoachRuntimeProtection('action:coach:zoom:confirm', async (ctx) => {
+    if (!await checkCoachAccess(ctx)) {
+      return ctx.answerCbQuery()
     }
 
-    await ctx.answerCbQuery(coachBotContent.paymentAdmin.error).catch(() => undefined)
-    await ctx.reply(
-      `${coachBotContent.paymentAdmin.manualTrialAccessFailed}\nПричина: ${result.message}\nuserId: ${checkoutTarget.userId}`,
+    const raw =
+      'data' in ctx.callbackQuery
+        ? String(ctx.callbackQuery.data ?? '')
+        : ''
+
+    const sessionId = raw.replace('coach:zoom:confirm:', '').trim()
+
+    if (!sessionId) {
+      return ctx.answerCbQuery('Сесію не знайдено')
+    }
+
+    await confirmCoachZoomSession(ctx, sessionId)
+  })
+)
+  telegramBot.action(
+    /^admin:ask_payment_details:/,
+    withCoachRuntimeProtection(
+      'action:admin:ask_payment_details',
+      async (ctx) => {
+        const hasAccess = await checkCoachAccess(ctx)
+        if (!hasAccess && !isStarwayOpsChat(ctx)) {
+          return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
+        }
+        const raw =
+          'data' in ctx.callbackQuery
+            ? String(ctx.callbackQuery.data ?? '')
+            : ''
+        const checkoutTarget = await resolvePaymentAdminTarget(
+          raw.replace('admin:ask_payment_details:', 'admin:grant_focus:')
+        )
+        if (!checkoutTarget?.userId) {
+          await ctx
+            .answerCbQuery(coachBotContent.paymentAdmin.invalidToken)
+            .catch(() => undefined)
+          return
+        }
+        await ctx
+          .answerCbQuery(coachBotContent.paymentAdmin.askPaymentDetails)
+          .catch(() => undefined)
+        await ctx.reply(
+          `Запитай у користувача чек або деталі транзакції.\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference ?? 'unknown'}`
+        )
+      }
     )
-  }))
-  telegramBot.action(/^admin:deny_focus:/, withCoachRuntimeProtection('action:admin:deny_focus', async (ctx) => {
-    const hasAccess = await checkCoachAccess(ctx)
-    if (!hasAccess && !isStarwayOpsChat(ctx)) {
-      return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
-    }
-    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const checkoutTarget = await resolvePaymentAdminTarget(raw)
-    if (!checkoutTarget?.userId) {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
-      return
-    }
-    const userId = checkoutTarget.userId
-    await ctx.answerCbQuery(coachBotContent.paymentAdmin.denied).catch(() => undefined)
-    await notifyUserFocusPaymentIssueDenied(userId).catch(() => undefined)
-    await ctx.reply(`${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: ${userId}`)
-  }))
-  telegramBot.action(/^admin:ask_payment_details:/, withCoachRuntimeProtection('action:admin:ask_payment_details', async (ctx) => {
-    const hasAccess = await checkCoachAccess(ctx)
-    if (!hasAccess && !isStarwayOpsChat(ctx)) {
-      return ctx.answerCbQuery('Немає доступу').catch(() => undefined)
-    }
-    const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
-    const checkoutTarget = await resolvePaymentAdminTarget(raw.replace('admin:ask_payment_details:', 'admin:grant_focus:'))
-    if (!checkoutTarget?.userId) {
-      await ctx.answerCbQuery(coachBotContent.paymentAdmin.invalidToken).catch(() => undefined)
-      return
-    }
-    await ctx.answerCbQuery(coachBotContent.paymentAdmin.askPaymentDetails).catch(() => undefined)
-    await ctx.reply(
-      `Запитай у користувача чек або деталі транзакції.\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference ?? 'unknown'}`,
-    )
-  }))
+  )
 }

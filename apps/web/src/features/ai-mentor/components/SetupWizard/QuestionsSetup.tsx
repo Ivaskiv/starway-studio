@@ -198,7 +198,7 @@ export function QuestionsSetup({ onComplete }: QuestionsSetupProps) {
                   variant="ghost"
                   size="sm"
                 >
-                  ✕
+                  
                 </Button>
               )}
             </div>
