@@ -7,7 +7,7 @@ export const AB_TEST_SHOW_RESULT_BUTTON_TEXT = 'ПОКАЗАТИ РЕЗУЛЬТ�
 export const AB_TEST_MY_RESULT_BUTTON_TEXT = 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ'
 export const AB_TEST_RESTART_BUTTON_TEXT = 'ПОЧАТИ ТЕСТ ЗАНОВО'
 export const AB_TEST_RETAKE_BUTTON_TEXT = 'ПРОЙТИ ТЕСТ ЩЕ РАЗ'
-export const AB_TEST_OPEN_FOCUS_BUTTON_TEXT = 'ХОЧУ У ФОКУС'
+export const AB_TEST_OPEN_FOCUS_BUTTON_TEXT = 'СПРОБУВАТИ ПЕРШИЙ МІСЯЦЬ'
 export const AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT = 'ОБРАТИ ZOOM'
 export const AB_TEST_PAY_1M_BUTTON_TEXT = 'ОПЛАТИТИ 1 МІСЯЦЬ'
 export const AB_TEST_PAY_3M_BUTTON_TEXT = 'ОПЛАТИТИ 3 МІСЯЦІ'
@@ -15,7 +15,7 @@ export const AB_TEST_JOIN_CHANNEL_BUTTON_TEXT = 'ПЕРЕЙТИ В КАНАЛ'
 export const AB_TEST_OPEN_ZOOM_BUTTON_TEXT = 'ВІДКРИТИ ZOOM'
 export const AB_TEST_OPEN_PLATFORM_BUTTON_TEXT = 'ВІДКРИТИ ПЛАТФОРМУ'
 export const AB_TEST_OPEN_ABSYSTEM_AI_BUTTON_TEXT = 'ПЕРЕЙТИ В ABSYSTEM AI'
-export const AB_TEST_FOCUS_CALENDAR_BUTTON_TEXT = 'КАЛЕНДАР ZOOM-ПРАКТИК'
+export const AB_TEST_FOCUS_CALENDAR_BUTTON_TEXT = 'КАЛЕНДАР ZOOM-РОЗБОРІВ'
 export const AB_TEST_FOCUS_AI_BUTTON_TEXT = 'ABSYSTEM AI'
 export const AB_TEST_NEXT_ZOOM_BUTTON_TEXT = 'НАСТУПНИЙ ZOOM'
 export const AB_TEST_FOCUS_MENU_BUTTON_TEXT = 'МЕНЮ ФОКУС'
@@ -209,9 +209,9 @@ export const telegramBlock = {
 
 export const AB_TEST_VOICE_CAPTION_PROMPT =
   'Слухай голосове — розповім чому це відбувається і як мені це вдалось змінити.\n👇'
-export const AB_TEST_VOICE_NOTE_HEADER = `Тест показав де ти застрягла. ${AB_TEST_VOICE_CAPTION_PROMPT.replace('\n', '')}`
-export const AB_TEST_PRACTICE_PREVIEW_PROMPT = 'Хочеш подивитись як це проходить на практиці?'
-export const AB_TEST_FINAL_CTA_PROMPT = 'Хочеш приєднатись до ФОКУСУ?'
+export const AB_TEST_VOICE_NOTE_HEADER = `Тест показав твою головну точку на зараз. ${AB_TEST_VOICE_CAPTION_PROMPT.replace('\n', '')}`
+export const AB_TEST_PRACTICE_PREVIEW_PROMPT = 'Хочеш подивитись, як це виглядає зсередини?'
+export const AB_TEST_FINAL_CTA_PROMPT = 'Хочеш спробувати перший місяць у ФОКУСІ?'
 
 export const AB_TEST_VOICE_NOTE_LINK_TEXT = '🎧 Прослухати'
 
@@ -232,17 +232,64 @@ export const AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT =
   'Показати\nяк проходить\nпрактика'
 
 export const AB_TEST_FOCUS_CTA_TEXT = 'ХОЧУ У ФОКУС →'
-export const AB_TEST_FOCUS_CTA_RESULT_VALUE = ' ХОЧУ У ФОКУС →'
-export const AB_TEST_FOCUS_JOIN_CTA_TEXT = 'ПРИЄДНАТИСЬ ДО ФОКУСУ →'
+export const AB_TEST_FOCUS_CTA_RESULT_VALUE = 'СПРОБУВАТИ ПЕРШИЙ МІСЯЦЬ →'
+export const AB_TEST_FOCUS_JOIN_CTA_TEXT = 'СПРОБУВАТИ ПЕРШИЙ МІСЯЦЬ →'
 export const AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT =
-  'ПРИЄДНАТИСЬ ДО\nФОКУСУ →'
+  'СПРОБУВАТИ\nПЕРШИЙ МІСЯЦЬ →'
 export const AB_TEST_FOCUS_PAY_CTA_TEXT = 'ОПЛАТИТИ ФОКУС →'
 export const AB_TEST_FOCUS_CTA_MARKER = ''
 export const AB_TEST_FOCUS_PAY_CTA_MARKER = ''
-export const AB_TEST_FOCUS_PAYMENT_CTA_1M = 'ОПЛАТИТИ 1 МІСЯЦЬ — 15 ЄВРО'
-export const AB_TEST_FOCUS_PAYMENT_CTA_3M = 'ОПЛАТИТИ 3 МІСЯЦІ — 39 ЄВРО'
-export const AB_TEST_FOCUS_PRICE_1M = '1 місяць — 15 євро'
-export const AB_TEST_FOCUS_PRICE_3M = '3 місяці — 39 євро'
+const FOCUS_TITLE_PARTS = {
+  brand: 'ФОКУС',
+  subtitle: 'живі Zoom-розбори AB System',
+} as const
+
+const FOCUS_WEEKLY_CORE_TEXT = 'раз на тиждень живий Zoom-розбір'
+
+const FOCUS_REAL_SITUATION_ITEMS = [
+  'що відкладаєш',
+  'яке рішення переносиш',
+  'яка ціль не рухається.',
+] as const
+
+const FOCUS_INCLUDED_ITEMS = [
+  '4 живі Zoom-розбори щомісяця',
+  'Закритий Telegram-чат',
+  'Мою підтримку і підтримку учасниць між Zoom-розборами',
+  'Записи всіх Zoom-розборів',
+] as const
+
+const FOCUS_PRICE_COPY = {
+  oneMonth: '1 місяць — 33 €',
+  threeMonths: '3 місяці — 69 € (23 € / місяць)',
+  oneYear: '1 рік — 229 € (19 € / місяць)',
+  paymentCta1m: 'ОПЛАТИТИ 1 МІСЯЦЬ — 33 €',
+  paymentCta3m: 'ОПЛАТИТИ 3 МІСЯЦІ — 69 €',
+  resultOfferLine1m: '• 1 місяць — 4 живі Zoom-розбори — 33 €.',
+} as const
+
+const FOCUS_PRICE_LINES = [
+  FOCUS_PRICE_COPY.oneMonth,
+  FOCUS_PRICE_COPY.threeMonths,
+  FOCUS_PRICE_COPY.oneYear,
+] as const
+
+function formatFocusTitle(separator: '|' | '│'): string {
+  return `${FOCUS_TITLE_PARTS.brand} ${separator} ${FOCUS_TITLE_PARTS.subtitle}`
+}
+
+function formatFocusListItems(
+  items: readonly string[],
+  marker: string,
+): string[] {
+  return items.map((item) => `${marker} ${item}`)
+}
+
+export const AB_TEST_FOCUS_PAYMENT_CTA_1M = FOCUS_PRICE_COPY.paymentCta1m
+export const AB_TEST_FOCUS_PAYMENT_CTA_3M = FOCUS_PRICE_COPY.paymentCta3m
+export const AB_TEST_FOCUS_PRICE_1M = FOCUS_PRICE_COPY.oneMonth
+export const AB_TEST_FOCUS_PRICE_3M = FOCUS_PRICE_COPY.threeMonths
+export const AB_TEST_FOCUS_PRICE_1Y = FOCUS_PRICE_COPY.oneYear
 export const abTestPaymentsContent = {
   title: '💳 Focus payment',
   body: 'Оплата відкриває стабільний Focus-ритм, щоб рух не розсипався після рішення.',
@@ -250,28 +297,24 @@ export const abTestPaymentsContent = {
   ctaQuarterly: AB_TEST_FOCUS_PAYMENT_CTA_3M,
 } as const
 export const AB_TEST_FOCUS_PRICE_SUMMARY =
-  `${AB_TEST_FOCUS_PRICE_1M} | ${AB_TEST_FOCUS_PRICE_3M}`
-export const AB_TEST_FOCUS_TITLE = 'ФОКУС | Zoom-практики AB System'
-export const AB_TEST_FOCUS_TITLE_STYLED = '*ФОКУС │ Zoom-практики AB System*'
-export const AB_TEST_FOCUS_TITLE_PLAIN = 'ФОКУС │ Zoom-практики AB System'
+  FOCUS_PRICE_LINES.join(' | ')
+export const AB_TEST_FOCUS_TITLE = formatFocusTitle('|')
+export const AB_TEST_FOCUS_TITLE_STYLED = `*${formatFocusTitle('│')}*`
+export const AB_TEST_FOCUS_TITLE_PLAIN = formatFocusTitle('│')
 export const AB_TEST_FOCUS_WEEKLY_TEXT =
-  'ФОКУС — це живі Zoom-практики раз на тиждень.'
+  `${FOCUS_TITLE_PARTS.brand} — це ${FOCUS_WEEKLY_CORE_TEXT}.`
 export const AB_TEST_FOCUS_WEEKLY_TEXT_BOLD =
-  '**ФОКУС — це живі Zoom-практики раз на тиждень**.'
+  `**${FOCUS_TITLE_PARTS.brand} — це ${FOCUS_WEEKLY_CORE_TEXT}**.`
 export const AB_TEST_FOCUS_REAL_SITUATION_HEADER =
   'Ти приходиш із реальною ситуацією:'
-export const AB_TEST_FOCUS_REAL_SITUATION_LINES = [
-  '— що відкладаєш,',
-  '— яке рішення переносиш,',
-  '— яка ціль не рухається.',
-] as const
+export const AB_TEST_FOCUS_REAL_SITUATION_LINES = formatFocusListItems(FOCUS_REAL_SITUATION_ITEMS, '—') as readonly string[]
 export const AB_TEST_FOCUS_REAL_SITUATION_INLINE =
-  'Ти приходиш із реальною ситуацією: що відкладаєш, яке рішення переносиш, яка ціль не рухається.'
+  `${AB_TEST_FOCUS_REAL_SITUATION_HEADER} ${FOCUS_REAL_SITUATION_ITEMS.join(', ')}`
 export const AB_TEST_FOCUS_TARIFF_HEADER = 'Тарифи:'
 export const AB_TEST_FOCUS_TARIFF_HEADER_BOLD = '**Тарифи:**'
 export const AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER = '📸 **[СКРІН]**'
 export const AB_TEST_FOCUS_RESULT_WORK_TEXT =
-  'У ФОКУСІ ми працюємо саме з **тим що показав твій результат**. Наживо. На реальних ситуаціях.'
+  'У ФОКУСІ ми працюємо з твоєю реальною ситуацією наживо — на Zoom-розборах.'
 
 export const AB_TEST_FOCUS_BENEFIT_HEADER = 'Що ти отримуєш у ФОКУСІ:'
 export const AB_TEST_FOCUS_BENEFIT_LINES = [
@@ -282,12 +325,7 @@ export const AB_TEST_FOCUS_BENEFIT_LINES = [
 ] as const
 
 export const AB_TEST_FOCUS_INCLUDED_HEADER = 'Що входить у ФОКУС:'
-export const AB_TEST_FOCUS_INCLUDED_LINES = [
-  '· 4 живі Zoom-практики на місяць — розбір саме твоєї ситуації',
-  '· Закритий Telegram-канал з підтримкою між зустрічами',
-  '· Чат зі мною і дівчатами — не сама',
-  '· Запис кожної Zoom-практики',
-] as const
+export const AB_TEST_FOCUS_INCLUDED_LINES = formatFocusListItems(FOCUS_INCLUDED_ITEMS, '·') as readonly string[]
 
 export const AB_TEST_FOCUS_PRACTICE_TEXT =
   '**Що відбувається у ФОКУСІ** — закритому просторі де ми працюємо через **AB System**.'
@@ -297,10 +335,12 @@ export const AB_TEST_FOCUS_BENEFITS_TEXT =
   `**${AB_TEST_FOCUS_BENEFIT_HEADER}**\n\n${AB_TEST_FOCUS_BENEFIT_LINES.join('\n')}`
 export const AB_TEST_FOCUS_INCLUDED_TEXT =
   `**${AB_TEST_FOCUS_INCLUDED_HEADER}**\n\n${AB_TEST_FOCUS_INCLUDED_LINES.join('\n')}`
+export const AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT =
+  `У ФОКУС ти отримуєш:\n${formatFocusListItems(FOCUS_INCLUDED_ITEMS, '•').join('\n')}\nЯкщо між Zoom-розборами виникне питання або складна ситуація, ти завжди можеш написати в чат.`
 export const AB_TEST_FOCUS_PRICING_TEXT =
-  `**${AB_TEST_FOCUS_PRICE_1M}**\n4 живі Zoom-практики, підтримка між зустрічами та розбір твоїх ситуацій через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n**7 днів гарантії повернення коштів**, якщо формат тобі не підійде.\n\n**Обери, що хочеш зробити далі:**`
+  `Найближчий Zoom-розбір уже цього тижня.\n${FOCUS_PRICE_COPY.resultOfferLine1m}\n• 3 місяці — 69 € (23 € на місяць).\n• 1 рік — 229 € (19 € на місяць).\n↩ Якщо після першого Zoom-розбору зрозумієш, що тобі не підходить, я поверну гроші.`
 export const AB_TEST_FOCUS_PROOF_PRICING_TEXT =
-  `Почати можна з **одного місяця**. Це **15 євро** — менше ніж одна консультація.\n\n**${AB_TEST_FOCUS_TITLE}**\n${AB_TEST_FOCUS_PRICE_SUMMARY}\n\n${AB_TEST_FOCUS_PAY_CTA_MARKER}`
+  `**${AB_TEST_FOCUS_TITLE}**\n${FOCUS_PRICE_LINES.join('\n')}\n\n${AB_TEST_FOCUS_PAY_CTA_MARKER}`
 export const AB_TEST_FOCUS_TEST_DRIVE_PITCH_BLOCKS = [
   telegramBlock.text(AB_TEST_FOCUS_BENEFIT_HEADER),
   ...AB_TEST_FOCUS_BENEFIT_LINES.map((line) =>
@@ -309,7 +349,7 @@ export const AB_TEST_FOCUS_TEST_DRIVE_PITCH_BLOCKS = [
 ] as const
 
 export const AB_TEST_FOCUS_OPENING_LINES = [
-  'Почати можна з одного місяця участі.',
+  'Почати можна з першого місяця участі — 33 €.',
   ...AB_TEST_VOICE_NOTE_LINES,
 ] as const
 
@@ -363,10 +403,9 @@ export const AB_TEST_FOCUS_PRACTICE_FULL_LINES = [
 ] as const
 
 export const AB_TEST_FOCUS_PRICE_LINES = [
-  'За цей час ти проходиш 4 живі практики і можеш розібрати кілька своїх ситуацій через AB System.',
+  'За місяць ти отримуєш 4 живі Zoom-розбори, закритий Telegram-чат, підтримку та записи всіх Zoom-розборів.',
   '',
-  AB_TEST_FOCUS_PRICE_1M,
-  AB_TEST_FOCUS_PRICE_3M,
+  ...FOCUS_PRICE_LINES,
 ] as const
 
 export const AB_TEST_FOCUS_PRICING_LINES = [
@@ -376,8 +415,7 @@ export const AB_TEST_FOCUS_PRICING_LINES = [
 ] as const
 
 export const AB_TEST_FOCUS_TARIFF_BLOCKS = [
-  telegramBlock.pricing(AB_TEST_FOCUS_PRICE_1M),
-  telegramBlock.pricing(AB_TEST_FOCUS_PRICE_3M),
+  ...FOCUS_PRICE_LINES.map((line) => telegramBlock.pricing(line)),
 ] as const
 
 export const AB_TEST_FOCUS_CTA_BLOCK = telegramBlock.cta(AB_TEST_FOCUS_CTA_TEXT)
@@ -414,12 +452,12 @@ export const AB_TEST_BOLD_LINES = new Set<string>([
 ])
 
 export const AB_TEST_ACTION_REVIEW_1_EXTRA_LINES = [
-  'Раз на тиждень — 2-3 години живого Zoom.',
-  'Між зустрічами — закритий канал щоб не загубити те що відбулось.',
+  'Раз на тиждень — живий Zoom-розбір.',
+  'Між зустрічами — закритий Telegram-чат, підтримка та записи Zoom-розборів.',
 ] as const
 
 export const AB_TEST_ACTION_AUDIO_REVIEW_TEXT =
-  `**${AB_TEST_REVIEW_HEADERS.action}**\n\n> ${AB_TEST_KSENIIA_REVIEW_QUOTE_1}\n\n${AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER}\n\nПочати можна з одного місяця участі.\n\nЗа цей час ти проходиш **4 живі практики** і можеш розібрати **кілька своїх ситуацій** через **AB System**.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n\n${AB_TEST_ACTION_REVIEW_1_EXTRA_LINES.join('\n')}`
+  `**${AB_TEST_REVIEW_HEADERS.action}**\n\n> ${AB_TEST_KSENIIA_REVIEW_QUOTE_1}\n\n${AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER}\n\nПочати можна з першого місяця участі.\n\nЗа місяць ти отримуєш **4 живі Zoom-розбори**, закритий Telegram-чат, підтримку та записи всіх Zoom-розборів.\n\n**${AB_TEST_FOCUS_PRICE_1M}**\n**${AB_TEST_FOCUS_PRICE_3M}**\n**${AB_TEST_FOCUS_PRICE_1Y}**\n\n${AB_TEST_ACTION_REVIEW_1_EXTRA_LINES.join('\n')}`
 
 export function buildAbTestReviewText(header: string, quote: string): string {
   return `${AB_TEST_FOCUS_REVIEW_SCREENSHOT_MARKER}\n\n**${header}**\n\n> ${quote}`

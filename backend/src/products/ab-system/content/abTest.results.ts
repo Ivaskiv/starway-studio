@@ -1,6 +1,5 @@
 //backend/src/products/ab-system/content/abTest.results.ts
 import type { TelegramButton } from '@/core/flow-builder/flowTemplates.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import type { AbTestFollowupTimerId } from './abTest.followups.js'
 import type { AbTestAnswerKey } from './abTest.questions.js'
 import {
@@ -16,6 +15,7 @@ import {
   AB_TEST_FOCUS_CTA_TEXT,
   AB_TEST_FOCUS_HOW_IT_WORKS_TEXT,
   AB_TEST_FOCUS_INCLUDED_TEXT,
+  AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT,
   AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   AB_TEST_FOCUS_JOIN_CTA_TEXT,
   AB_TEST_FOCUS_PAYMENT_CTA_1M,
@@ -26,6 +26,7 @@ import {
   AB_TEST_FOCUS_PRACTICE_TEXT,
   AB_TEST_FOCUS_PRACTICE_TITLE,
   AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_1Y,
   AB_TEST_FOCUS_PRICE_3M,
   AB_TEST_FOCUS_PRICING_TEXT,
   AB_TEST_FOCUS_PROOF_PRICING_TEXT,
@@ -136,15 +137,7 @@ export function interpolateFirstName(
   return text.replace(/\{firstName\}/g, normalizedName)
 }
 
-const AB_TEST_RESULT_DAILY_PRACTICE_TEXT = AB_TEST_FOCUS_PRACTICE_TEXT
-const AB_TEST_RESULT_BENEFITS_TEXT = AB_TEST_FOCUS_BENEFITS_TEXT
-const AB_TEST_RESULT_INCLUDED_TEXT = AB_TEST_FOCUS_INCLUDED_TEXT
-const AB_TEST_RESULT_HOW_IT_WORKS_TEXT = AB_TEST_FOCUS_HOW_IT_WORKS_TEXT
 const AB_TEST_RESULT_PRICING_TEXT = AB_TEST_FOCUS_PRICING_TEXT
-const AB_TEST_RESULT_BRIDGE_TEXT =
-  'Я не можу пообіцяти що все зміниться за один день. Але коли людина бачить що насправді створює її ситуацію — вона перестає ходити по колу.'
-const AB_TEST_RESULT_NADYA_INTRO_TEXT =
-  'Мене звати Надя. Вже 3 роки я допомагаю дівчатам виходити з цього кола. Я знаю як допомогти тобі це пройти — послухай 👇'
 const AB_TEST_RESULT_AUDIO_PROMPT = AB_TEST_RESULT_AUDIO_PROMPT_TEXT
 const AB_TEST_RESULT_TARIFF_SUMMARY = buildAbTestFocusTariffSummaryText()
 const AB_TEST_RESULT_CTA_VALUE = AB_TEST_FOCUS_CTA_RESULT_VALUE
@@ -256,18 +249,24 @@ function buildDojimProofText(proofQuote: string): string {
 const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
   state: {
     message_key: 'TEST_RESULT_STATE',
-    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.STATE.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.STATE.quote}`,
+    msg1:
+      'Зараз ти живеш більше на автоматі. Робиш те, що треба, але це забирає занадто багато сил. Усередині накопичилася втома, і через це навіть те, що колись було простим, зараз здається важким.',
     msg1_story:
-      'Я сама так жила. І знаю що скільки не намагайся з цього стану — воно не змінюється. Не тому що ти недостатньо стараєшся. А тому що неможливо кудись йти коли немає сил навіть почати.',
+      'Я дуже добре знаю цей стан. Скільки б ти не обіцяла собі почати з понеділка чи взяти себе в руки — нічого не виходить. Бо коли сил майже немає, проблема не в дисципліні. Проблема в тому, що немає з чого ці сили взяти.',
 
     title: 'СТАН',
 
-    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
-    msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
-    msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
-    msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
-    msg2_included: AB_TEST_RESULT_INCLUDED_TEXT,
-    msg2_howItWorks: AB_TEST_RESULT_HOW_IT_WORKS_TEXT,
+    msg1_audio:
+      'Мене звати Надя.\nЯ вже три роки допомагаю дівчатам  вибратися зі стану, який ти зараз побачила у своєму результаті. Хочу поділитися тим, що зрозуміла за цей час. Думаю, тобі це зараз буде дуже вчасно.\nПослухай голосове. 👇',
+    msg2_audio:
+      'Все не зміниться за один день. Але коли ти розумієш, звідки насправді починаються твої проблеми, рішення стають зовсім іншими. І життя потроху перестає повторювати один і той самий сценарій.',
+    msg2_practice:
+      'ФОКУС — це зустріч раз на тиждень.\nТи приходиш зі своєю ситуацією. Такою, яка є зараз. Якщо немає сил, якщо все заплуталося, якщо не знаєш, що робити далі — цього достатньо.\nМи беремо одну твою ситуацію і разом розбираємося, чому вона ніяк не вирішується.',
+    msg2_benefits:
+      'На кожному Zoom ми:\n• розбираємо одну твою ситуацію;\n• знаходимо, чому вона повторюється;\n• дивимося, що зараз заважає її вирішити;\n• визначаємо твій наступний крок.',
+    msg2_included:
+      'У ФОКУС ти отримуєш:\n• 4 живі Zoom-розбори  щомісяця;\n• закритий Telegram-чат;\n• мою підтримку і підтримку учасниць;\n• записи всіх Zoom-розборів.\nТобі не потрібно чекати наступної зустрічі, якщо з\'явилося запитання або складна ситуація. Ти завжди можеш написати в чат.',
+    msg2_howItWorks: AB_TEST_FOCUS_HOW_IT_WORKS_TEXT,
     msg2_review: buildResultReviewText(
       AB_TEST_REVIEW_HEADERS.state,
       AB_TEST_NEONILA_REVIEW_QUOTE
@@ -318,18 +317,24 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   goal: {
     message_key: 'TEST_RESULT_GOAL',
-    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.GOAL.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.GOAL.quote}`,
+    msg1:
+      '{firstName}, Ти хочеш змін, але не розумієш, з чого почати. Начебто варіантів багато, але жоден не здається правильним. Через це рішення відкладаються, а життя ніби стоїть на місці.',
     msg1_story:
-      'Насправді ти знаєш чого хочеш. Просто ще не дозволила собі це почути. Я теж так жила — поки не навчилась чути себе а не чужі голоси навколо.',
+      'Насправді відповідь у тебе вже є. Просто зараз її не так легко почути.\nЯ теж колись постійно сумнівалася. Прислухалася до чужих порад, шукала правильне рішення, а своє відчуття відкладала. І тільки з часом зрозуміла, наскільки це віддаляє від себе.',
 
     title: 'ЦІЛЬ',
 
-    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
-    msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
-    msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
-    msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
-    msg2_included: AB_TEST_RESULT_INCLUDED_TEXT,
-    msg2_howItWorks: AB_TEST_RESULT_HOW_IT_WORKS_TEXT,
+    msg1_audio:
+      'Мене звати Надя.\nОстанні три роки я працюю з жінками, які проходять через схожі ситуації. Хочу коротко розповісти, що я побачила за цей час і чому багато хто знову і знову стикається з одними й тими самими ситуаціями.\nПослухай голосове. 👇',
+    msg2_audio:
+      'За один день життя не змінюється.\nАле коли ти починаєш розуміти, чому знову опиняєшся в одній і тій самій ситуації, стає набагато легше приймати зовсім інші рішення.',
+    msg2_practice:
+      'ФОКУС — це раз на тиждень живий Zoom-розбір.\nТи приходиш зі своєю ситуацією. Не потрібно мати готові відповіді.\nМи розбираємося, чому ти зараз не бачиш виходу, і знаходимо, з чого почати.',
+    msg2_benefits:
+      'На кожному  Zoom-розборі ти:\n• розбираєш одну свою ситуацію;\n• починаєш розуміти, чому вона ніяк не вирішується;\n• бачиш, що робити далі;\n• йдеш із чітким наступним кроком.',
+    msg2_included:
+      AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT,
+    msg2_howItWorks: AB_TEST_FOCUS_HOW_IT_WORKS_TEXT,
     msg2_review: buildResultReviewText(
       AB_TEST_REVIEW_HEADERS.goal,
       AB_TEST_NATALIIA_REVIEW_QUOTE
@@ -380,18 +385,24 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   choice: {
     message_key: 'TEST_RESULT_CHOICE',
-    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.CHOICE.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.CHOICE.quote}`,
+    msg1:
+      '{firstName}, ось твій результат.\nТи ніби знаєш, які є варіанти. Але щойно потрібно обрати один, з\'являється страх помилитися. І саме він найчастіше зупиняє.',
     msg1_story:
-      'Я теж довго кружляла в одних і тих самих варіантах. Поки не знайшла де насправді затик. Як тільки побачила що саме лякає — вибір стався сам.',
+      'Я теж довго не могла зробити вибір. Постійно все зважувала, змінювала рішення, сумнівалася.\nА потім зрозуміла, що насправді мене зупиняє. Після цього приймати рішення стало набагато легше.',
 
     title: 'ВИБІР',
 
-    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
-    msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
-    msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
-    msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
-    msg2_included: AB_TEST_RESULT_INCLUDED_TEXT,
-    msg2_howItWorks: AB_TEST_RESULT_HOW_IT_WORKS_TEXT,
+    msg1_audio:
+      'Мене звати Надя.\nЗа останні три роки я побачила, що багато жінок приходять із різними історіями. Але причина, через яку вони роками не можуть вирішити свою проблему, часто одна й та сама.\nПослухай голосове. Там поясню, що я маю на увазі. 👇',
+    msg2_audio:
+      'Я не обіцяю швидких змін.\nАле коли бачиш, чому приймаєш саме такі рішення, багато що стає на свої місця. І тоді з\'являється можливість діяти по-іншому',
+    msg2_practice:
+      'ФОКУС — це раз на тиждень живий Zoom-розбір.\nТи приходиш зі своєю ситуацією. Якщо зараз кружляєш між варіантами — ми не будемо говорити, що тобі обрати.\nМи разом розбираємося, чому так важко прийняти рішення, і знаходимо, з чого почати.',
+    msg2_benefits:
+      'На кожному Zoom-розборі ти:\n• розбираєш одну свою ситуацію;\n• починаєш розуміти, чому так важко зробити вибір;\n• бачиш, що робити далі;\n• йдеш із чітким наступним кроком.',
+    msg2_included:
+      AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT,
+    msg2_howItWorks: AB_TEST_FOCUS_HOW_IT_WORKS_TEXT,
     msg2_review: buildResultReviewText(
       AB_TEST_REVIEW_HEADERS.choice,
       AB_TEST_VALENTYNA_REVIEW_QUOTE
@@ -442,18 +453,24 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   decision: {
     message_key: 'TEST_RESULT_DECISION',
-    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.DECISION.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.DECISION.quote}`,
+    msg1:
+      '{firstName}, ось твій результат.\nТи вже знаєш, яке рішення хочеш прийняти. Але щоразу в останній момент відкладаєш його. І так повторюється знову і знову.',
     msg1_story:
-      '«Я все розумію але не роблю» — це була я. Роками. Рішення без внутрішнього «так» не тримається — воно зупиняється перед першим кроком. І знаю як це проходить.',
+      '«Я все розумію, але не роблю» — це була я. Роками.\nЗдавалося, що ще трохи — і я нарешті почну. Але це «ще трохи» повторювалося знову і знову. Усе змінилося, коли я зрозуміла, що мене насправді зупиняє.',
 
     title: 'РІШЕННЯ',
 
-    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
-    msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
-    msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
-    msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
-    msg2_included: AB_TEST_RESULT_INCLUDED_TEXT,
-    msg2_howItWorks: AB_TEST_RESULT_HOW_IT_WORKS_TEXT,
+    msg1_audio:
+      'Мене звати Надя.\nЗа останні три роки я побачила, що найважче — не прийняти рішення. Найважче — зробити перший крок після нього.\nПослухай голосове. Там розповім, чому так відбувається. 👇',
+    msg2_audio:
+      'Я не обіцяю швидких змін.\nАле коли стає зрозуміло, чому ти постійно відкладаєш, нарешті з\'являються сили зробити те, що давно хотіла.',
+    msg2_practice:
+      'ФОКУС — це раз на тиждень живий Zoom-розбір.\nТи приходиш зі своєю ситуацією. Якщо вже давно все вирішила, але ніяк не можеш зробити перший крок — ми не будемо тебе підганяти.\nМи разом розбираємося, що саме тебе зараз зупиняє.',
+    msg2_benefits:
+      'На кожному Zoom-розборі ти:\n• розбираєш одну свою ситуацію;\n• починаєш розуміти, що зупиняє тебе перед першим кроком;\n• бачиш, що робити далі;\n• йдеш із чітким наступним кроком.',
+    msg2_included:
+      AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT,
+    msg2_howItWorks: AB_TEST_FOCUS_HOW_IT_WORKS_TEXT,
     msg2_review: buildResultReviewText(
       AB_TEST_REVIEW_HEADERS.decision,
       AB_TEST_YELYZAVETA_REVIEW_QUOTE
@@ -504,18 +521,24 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
 
   action: {
     message_key: 'TEST_RESULT_ACTION',
-    msg1: `${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.ACTION.title}\n${absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.ACTION.quote}`,
+    msg1:
+      '{firstName}, ось твій результат.\nТи не сидиш без діла. Постійно щось вирішуєш, плануєш, робиш. Але результат зовсім не такий, якого очікувала.',
     msg1_story:
-      'Одна точна дія дає більше ніж десять хаотичних. Я сама так кружляла — поки не зрозуміла де справжня точка входу.',
+      'Я теж довго намагалася вирішити все одразу. Робила більше, брала нові задачі, шукала інші підходи.\nАле справа була не в кількості дій. Потрібно було зрозуміти, куди саме спрямувати увагу.',
 
     title: 'ДІЯ',
 
-    msg1_audio: AB_TEST_RESULT_NADYA_INTRO_TEXT,
-    msg2_audio: AB_TEST_RESULT_AUDIO_PROMPT,
-    msg2_practice: AB_TEST_RESULT_DAILY_PRACTICE_TEXT,
-    msg2_benefits: AB_TEST_RESULT_BENEFITS_TEXT,
-    msg2_included: AB_TEST_RESULT_INCLUDED_TEXT,
-    msg2_howItWorks: AB_TEST_RESULT_HOW_IT_WORKS_TEXT,
+    msg1_audio:
+      'Мене звати Надя.\nОстанні три роки я працюю з жінками, які хочуть змін, але втомилися постійно бігти й не бачити результату.\nУ голосовому розповім, що я помітила за цей час. 👇',
+    msg2_audio:
+      'Я не обіцяю, що все зміниться за один день.\nАле коли стає зрозуміло, чому твої дії не приводять до бажаного результату, можна перестати просто робити більше і почати рухатися в потрібному напрямку.',
+    msg2_practice:
+      'ФОКУС — це раз на тиждень живий Zoom-розбір.\nТи приходиш зі своєю реальною ситуацією. Якщо зараз робиш багато, але результату немає — ми не додаємо тобі ще більше завдань.\nМи розбираємося, чому те, що ти вже робиш, не приводить туди, куди хочеться.',
+    msg2_benefits:
+      'На кожному Zoom-розборі ти:\n• розбираєш одну свою ситуацію;\n• бачиш, чому твої дії зараз не дають потрібного результату;\n• знаходиш, що варто змінити в першу чергу;\n• йдеш із конкретним наступним кроком.',
+    msg2_included:
+      AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT,
+    msg2_howItWorks: AB_TEST_FOCUS_HOW_IT_WORKS_TEXT,
     msg2_review: buildResultReviewText(
       AB_TEST_REVIEW_HEADERS.action,
       AB_TEST_KSENIIA_REVIEW_QUOTE_2
@@ -591,37 +614,24 @@ function buildAbTestResultBlocks(
   resultKey: AbTestResultKey,
   result: AbTestResultDefinition
 ): NonNullable<AbTestResultDefinition['blocks']> {
-  const snapshotCopyByKey = {
-    state: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.STATE,
-    goal: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.GOAL,
-    choice: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.CHOICE,
-    decision: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.DECISION,
-    action: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.ACTION,
-  } as const
-  const snapshotCopy = snapshotCopyByKey[resultKey]
   const reviewHeader = extractReviewHeader(result.msg2_review)
-  const reviewQuote = extractReviewQuote(result.msg2_review)
   const screenshotKey = resultKeyToScreenshotKey(resultKey)
 
   return {
     intro: [
-      telegramBlock.text(`${snapshotCopy.title}\n${snapshotCopy.quote}`),
-      telegramBlock.text(AB_TEST_RESULT_BRIDGE_TEXT),
-      telegramBlock.text(AB_TEST_RESULT_NADYA_INTRO_TEXT),
+      telegramBlock.text(result.msg1),
+      telegramBlock.text(result.msg1_story),
+      telegramBlock.text(result.msg2_audio),
+      telegramBlock.text(result.msg1_audio),
       telegramBlock.audio(AB_TEST_AUDIO_URL),
     ],
     practice: [
       telegramBlock.text(result.msg2_practice),
       telegramBlock.text(result.msg2_benefits),
       telegramBlock.text(result.msg2_included),
-      telegramBlock.text(result.msg2_howItWorks),
     ],
     review: [
-      // text + quote рендеряться одним повідомленням через splitReviewSequence:
-      // [text(header), quote(quote)] → renderTelegramContentBlocks → join('\n\n')
-      // Результат: "Єлизавета написала...\n\n<blockquote>Завдяки...</blockquote>"
       telegramBlock.text(reviewHeader),
-      telegramBlock.quote(reviewQuote),
       telegramBlock.image(AB_TEST_SCREENSHOT_URLS[screenshotKey]),
     ],
     pricing: [telegramBlock.text(result.msg3_pricing)],
@@ -848,6 +858,7 @@ export const BLOCK10_FOCUS = {
     '',
     AB_TEST_FOCUS_PRICE_1M,
     AB_TEST_FOCUS_PRICE_3M,
+    AB_TEST_FOCUS_PRICE_1Y,
   ].join('\n'),
   cta_1m: AB_TEST_FOCUS_PAYMENT_CTA_1M,
   cta_3m: AB_TEST_FOCUS_PAYMENT_CTA_3M,
@@ -859,7 +870,7 @@ export const BLOCK10_FOCUS = {
       `**${AB_TEST_FOCUS_WEEKLY_TEXT}**\n\n` +
       `${AB_TEST_FOCUS_REAL_SITUATION_INLINE}\n\n` +
       `**${AB_TEST_FOCUS_TARIFF_HEADER}**\n\n` +
-      `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}`
+      `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}\n${AB_TEST_FOCUS_PRICE_1Y}`
     ),
   ],
 } as const

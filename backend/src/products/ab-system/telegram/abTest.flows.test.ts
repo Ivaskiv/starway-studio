@@ -38,7 +38,7 @@ const {
   isTestPaymentEnabledMock: vi.fn(() => false),
   isValidEmailMock: vi.fn(() => true),
   scheduleFollowupsMock: vi.fn(async (_userId: string, progress: unknown) => progress),
-  getDevTestPaymentButtonMock: vi.fn(() => null),
+  getDevTestPaymentButtonMock: vi.fn<() => { text: string; url: string } | null>(() => null),
   sendTelegramContentChunkMock: vi.fn(),
   renderAbTestPostEmailSubmitSequenceMock: vi.fn(),
   loadAbTestProgressMock: vi.fn(),
@@ -503,12 +503,12 @@ describe('legacy focus callbacks for active users', () => {
     const handled = await handlePendingFocusPaymentEvidenceText(
       ctx as never,
       'user-1',
-      'Є чек, дата 28.07, 15 євро, картка 1234',
+      'Є чек, дата 28.07, 33 євро, картка 1234',
     )
 
     expect(handled).toBe(true)
     expect(sendOpsTelegramMessageMock).toHaveBeenCalledWith(
-      expect.stringContaining('Є чек, дата 28.07, 15 євро, картка 1234'),
+      expect.stringContaining('Є чек, дата 28.07, 33 євро, картка 1234'),
       undefined,
       expect.objectContaining({
         messageType: 'focus_payment_evidence',
