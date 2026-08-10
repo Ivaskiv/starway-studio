@@ -1,9 +1,11 @@
 import type { AuthRestoreStatus } from '@/features/auth/context/SessionOrchestratorContext'
 import {
   useGetMySessionsQuery,
-  useGetPublicUpcomingSessionQuery,  useGetUpcomingSessionQuery,
+  useGetPublicUpcomingSessionQuery,
+  useGetPublicWeekOverviewQuery,
+  useGetUpcomingSessionQuery,
+  useGetWeekOverviewQuery,
 } from '@/features/zoom/services/zoom.api'
-import { useGetCalendarSessionsQuery } from '@/features/zoom/zoom.api'
 import { getKyivWeekRange } from '../utils/zoomDateTime.utils'
 
 type UseZoomCalendarDataInput = {
@@ -28,33 +30,36 @@ export function useZoomCalendarData({
     authRestoreStatus === 'ready' &&
     canRunProtectedQueries
 
-  // Booking screen must always render the canonical real Zoom schedule.
-  // Authenticated state is still used for user-specific booking data/mutations.
-  const usePublicBookingSchedule = isBookingEntry
+  // Public upcoming is only a bootstrap fallback while auth is restoring.
+  // Once protected queries are ready, booking UI must switch to the
+  // authenticated Zoom runtime so counts/questions/bookings stay consistent.
+  const usePublicBookingSchedule =
+    isBookingEntry && !protectedQueriesReady
 
   const weekRange = getKyivWeekRange()
 
   const {
-    data: rawCurrentWeekSessions = [],
+    data: currentWeekOverview,
     isLoading: isCurrentWeekLoading,
     isError: isCurrentWeekError,
     refetch: refetchCurrentWeek,
-  } = useGetCalendarSessionsQuery(
-    {
-      from: weekRange.from,
-      to: weekRange.to,
-      role: isCoach ? 'coach' : 'user',
-      userId,
-    },
-    {
-      skip: !protectedQueriesReady,
-      refetchOnMountOrArgChange: true,
-    }
-  )
+  } = useGetWeekOverviewQuery(undefined, {
+    skip: !protectedQueriesReady,
+    refetchOnMountOrArgChange: true,
+  })
 
-  const publicWeekOverview = undefined
-  const isPublicWeekLoading = false
-  const isPublicWeekError = false
+  const {
+    data: publicWeekOverview,
+    isLoading: isPublicWeekLoading,
+    isError: isPublicWeekError,
+  } = useGetPublicWeekOverviewQuery(undefined, {
+    skip: !usePublicBookingSchedule,
+    refetchOnMountOrArgChange: true,
+  })
+
+  const rawCurrentWeekSessions =
+    currentWeekOverview?.sessions ??
+    (usePublicBookingSchedule ? (publicWeekOverview?.sessions ?? []) : [])
 
   const {
     data: publicUpcomingSession,

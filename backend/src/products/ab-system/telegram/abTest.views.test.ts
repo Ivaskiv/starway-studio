@@ -123,7 +123,7 @@ vi.mock('@/products/absystem/config/absystem.content.js', async () => {
 })
 
 vi.mock('@/modules/zoom/service.js', () => ({
-  getUpcomingZoom: vi.fn(),
+  getUpcomingZoomBookingView: vi.fn(),
 }))
 
 vi.mock('@/modules/subscriptions/payments/focus.access.js', () => ({
@@ -159,6 +159,7 @@ import {
 } from './abTest.views.js'
 import { handleShowResult } from './abTest.handlers.core.js'
 import { handleAbTestCallback } from './abTest.service.js'
+import { getUpcomingZoomBookingView } from '@/modules/zoom/service.js'
 
 function createCtx() {
   return {
@@ -211,6 +212,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     mockGetAbTestProfileEmail.mockResolvedValue(null)
     mockEnsureAbTestEmailCapturedFromProfile.mockImplementation(async (_userId: string, progress: unknown) => progress)
     mockTrackAbTestEvent.mockResolvedValue(undefined)
+    vi.mocked(getUpcomingZoomBookingView).mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -350,6 +352,46 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(mockSaveAbTestProgress).not.toHaveBeenCalled()
     expect(mockSendOpsTelegramMessage).not.toHaveBeenCalled()
     expect(mockCoachSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('uses live booked Zoom state in the result snapshot and removes duplicate booking CTA', async () => {
+    const ctx = createCtx()
+    vi.mocked(getUpcomingZoomBookingView).mockResolvedValue({
+      id: 'zoom-1',
+      scheduledAt: new Date('2026-08-17T16:00:00.000Z'),
+      isMyBooking: true,
+      myQuestion: {
+        text: 'Як не розсипати фокус після Zoom?',
+        position: 1,
+      },
+    } as never)
+
+    await sendResultSnapshot(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey: 'decision',
+      firstName: 'Vira',
+    })
+
+    const replayCall = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)
+    const snapshotText = replayCall?.[1]
+
+    expect(snapshotText).toContain('Zoom-практики: ти вже записана на 17 серпня')
+    expect(snapshotText).toContain('Твоя точка фокусу:')
+    expect(snapshotText).toContain('Як не розсипати фокус після Zoom?')
+    expect(snapshotText).toContain('Питання №1 у черзі')
+    expect(replayCall?.[2]).toMatchObject({
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
+              callback_data: 'show_inside_DECISION',
+            },
+          ],
+        ],
+      },
+    })
   })
 
   it('uses canonical focus access for the result snapshot instead of legacy subscription state', async () => {

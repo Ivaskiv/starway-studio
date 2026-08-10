@@ -62,7 +62,7 @@ import {
   resolveBrowserTestUrlOrNull,
 } from './abTest.buttons.js'
 import { scheduleFollowups } from './abTest.scheduler.js'
-import { getUpcomingZoom } from '@/modules/zoom/service.js'
+import { getUpcomingZoomBookingView } from '@/modules/zoom/service.js'
 import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 import { getUserAccessState } from '@/modules/subscriptions/payments/focus.access.js'
 import {
@@ -114,6 +114,26 @@ function buildResultPreviewKeyboard(
       ],
     ],
   }
+}
+
+function buildResultPreviewKeyboardForBookingState(input: {
+  resultKey: AbTestResultKey
+  isMyBooking: boolean
+}): InlineKeyboardMarkup {
+  if (input.isMyBooking) {
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
+            callback_data: `show_inside_${input.resultKey.toUpperCase()}`,
+          },
+        ],
+      ],
+    }
+  }
+
+  return buildResultPreviewKeyboard(input.resultKey)
 }
 
 function shouldBoldAbTestLine(normalized: string): boolean {
@@ -951,20 +971,8 @@ export async function sendResultSnapshot(
       where: { userId: input.userId },
     }),
     getUserAccessState(input.userId),
-    getUpcomingZoom(),
+    getUpcomingZoomBookingView(input.userId),
   ])
-
-  const upcomingAttendee = upcomingZoom
-    ? await prisma.zoomSessionAttendee.findUnique({
-        where: {
-          sessionId_userId: {
-            sessionId: upcomingZoom.id,
-            userId: input.userId,
-          },
-        },
-        select: { id: true },
-      })
-    : null
 
   const subscriptionLine = accessState.isActive
     ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.subscriptionActiveLabel(
@@ -972,17 +980,27 @@ export async function sendResultSnapshot(
       )
     : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.subscriptionInactiveLabel
 
-  const zoomLine = totalBookedCount > 0
-    ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.zoomAttendedLabel(
-        attendedCount,
-        totalBookedCount,
-      )
-    : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.zoomNotBookedLabel
+  const zoomLine =
+    upcomingZoom?.isMyBooking === true
+      ? `Zoom-практики: ти вже записана на ${upcomingZoom.scheduledAt.toLocaleDateString(
+          'uk-UA',
+          {
+            day: 'numeric',
+            month: 'long',
+            timeZone: 'Europe/Kyiv',
+          },
+        )}`
+      : totalBookedCount > 0
+        ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.zoomAttendedLabel(
+            attendedCount,
+            totalBookedCount,
+          )
+        : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.zoomNotBookedLabel
 
   const nextStep =
     !accessState.isActive
       ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepNoAccess
-      : upcomingZoom && !upcomingAttendee
+      : upcomingZoom && !upcomingZoom.isMyBooking
         ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepZoom(
             upcomingZoom.scheduledAt.toLocaleDateString('uk-UA', {
               day: 'numeric',
@@ -990,9 +1008,19 @@ export async function sendResultSnapshot(
               timeZone: 'Europe/Kyiv',
             }),
           )
-        : upcomingAttendee
+        : upcomingZoom?.isMyBooking
           ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepBooked
           : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepZoomGeneric
+
+  const liveQuestionLines =
+    upcomingZoom?.isMyBooking && upcomingZoom.myQuestion
+      ? [
+          '',
+          '<b>Твоя точка фокусу:</b>',
+          `«${upcomingZoom.myQuestion.text}»`,
+          `Питання №${upcomingZoom.myQuestion.position} у черзі`,
+        ]
+      : []
 
   const text = [
     snapshotCopy.title,
@@ -1001,6 +1029,7 @@ export async function sendResultSnapshot(
     '',
     zoomLine,
     subscriptionLine,
+    ...liveQuestionLines,
     '',
     nextStep,
   ].join('\n')
@@ -1014,7 +1043,10 @@ export async function sendResultSnapshot(
     },
     {
       replyMarkup: {
-        inline_keyboard: buildResultPreviewKeyboard(input.resultKey).inline_keyboard,
+        inline_keyboard: buildResultPreviewKeyboardForBookingState({
+          resultKey: input.resultKey,
+          isMyBooking: upcomingZoom?.isMyBooking === true,
+        }).inline_keyboard,
       },
     },
   ).catch((error) => {

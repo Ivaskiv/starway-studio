@@ -10,7 +10,7 @@ import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business.checkout.js'
 import { prisma } from '@/db/client.js'
 import { getUserAccessState } from '@/modules/subscriptions/payments/focus.access.js'
-import { getUpcomingZoom } from '@/modules/zoom/service.js'
+import { getUpcomingZoomBookingView } from '@/modules/zoom/service.js'
 import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { withDevTestPaymentButton } from '../keyboards.js'
@@ -39,6 +39,12 @@ type FocusHomeState =
   | 'BOOKED'
   | 'JOIN_WINDOW'
   | 'NO_SESSION'
+
+type FocusHomeContext = {
+  accessState: Awaited<ReturnType<typeof getUserAccessState>>
+  upcomingZoom: Awaited<ReturnType<typeof getUpcomingZoomBookingView>>
+  state: FocusHomeState
+}
 
 function withKeyboard(payload: StartMessagePayload) {
   return {
@@ -236,25 +242,14 @@ export async function buildFocusActionButtons(
     ]
   }
 
-  const upcomingZoom = await getUpcomingZoom()
+  const upcomingZoom = await getUpcomingZoomBookingView(userId)
   if (!upcomingZoom) {
     return []
   }
 
-  const attendee = await prisma.zoomSessionAttendee.findUnique({
-    where: {
-      sessionId_userId: {
-        sessionId: upcomingZoom.id,
-        userId,
-      },
-    },
-    select: {
-      id: true,
-    },
-  })
-
-  const booked = Boolean(attendee)
-  const joinable = booked && isJoinWindow(upcomingZoom.scheduledAt)
+  const booked = upcomingZoom.isMyBooking === true
+  const scheduledAt = new Date(upcomingZoom.scheduledAt)
+  const joinable = booked && isJoinWindow(scheduledAt)
   const zoomLink = extractZoomLink(upcomingZoom.requests)
 
   if (joinable) {
@@ -277,42 +272,43 @@ export async function buildFocusActionButtons(
 }
 
 async function resolveFocusHomeState(
-  userId: string,
-  accessState: Awaited<ReturnType<typeof getUserAccessState>>,
+  context: FocusHomeContext,
 ): Promise<FocusHomeState> {
+  const { accessState, upcomingZoom } = context
   if (!accessState.isActive) {
     return 'NO_SESSION'
   }
 
-  const upcomingZoom = await getUpcomingZoom()
   if (!upcomingZoom) {
     return 'NO_SESSION'
   }
 
-  const attendee = await prisma.zoomSessionAttendee.findUnique({
-    where: {
-      sessionId_userId: {
-        sessionId: upcomingZoom.id,
-        userId,
-      },
-    },
-    select: {
-      id: true,
-    },
-  })
-
-  if (!attendee) {
+  if (!upcomingZoom.isMyBooking) {
     return 'NOT_BOOKED'
   }
 
-  return isJoinWindow(upcomingZoom.scheduledAt) ? 'JOIN_WINDOW' : 'BOOKED'
+  return isJoinWindow(new Date(upcomingZoom.scheduledAt)) ? 'JOIN_WINDOW' : 'BOOKED'
+}
+
+async function resolveFocusHomeContext(userId: string): Promise<FocusHomeContext> {
+  const [accessState, upcomingZoom] = await Promise.all([
+    getUserAccessState(userId),
+    getUpcomingZoomBookingView(userId),
+  ])
+
+  const context: FocusHomeContext = {
+    accessState,
+    upcomingZoom,
+    state: 'NO_SESSION',
+  }
+
+  context.state = await resolveFocusHomeState(context)
+  return context
 }
 
 async function buildFocusHomeMessage(userId: string): Promise<StartMessagePayload> {
-  const accessState = await getUserAccessState(userId)
-  const [state, upcomingZoom, channelUrl] = await Promise.all([
-    resolveFocusHomeState(userId, accessState),
-    getUpcomingZoom(),
+  const [{ accessState, upcomingZoom, state }, channelUrl] = await Promise.all([
+    resolveFocusHomeContext(userId),
     getOrCreateFocusInviteLink(userId),
   ])
 
@@ -330,10 +326,21 @@ async function buildFocusHomeMessage(userId: string): Promise<StartMessagePayloa
           ? absystemContent.TELEGRAM_COPY.FOCUS_HOME.NOT_BOOKED(expiryLabel, nextZoomLabel)
           : absystemContent.TELEGRAM_COPY.FOCUS_HOME.NO_SESSION(expiryLabel)
 
+  const liveQuestionBlock =
+    upcomingZoom?.isMyBooking && upcomingZoom.myQuestion
+      ? [
+          '',
+          '<b>Твоя точка фокусу:</b>',
+          `«${upcomingZoom.myQuestion.text}»`,
+          `Питання №${upcomingZoom.myQuestion.position} у черзі`,
+          `Учасників: ${upcomingZoom.attendeesCount}`,
+        ].join('\n')
+      : ''
+
   return {
-    text,
+    text: `${text}${liveQuestionBlock}`,
     buttons: [
-      [{ text: 'ЗАПИСАТИСЯ', web_app: { url: resolveZoomBookingWebAppUrl() } }],
+      ...(await buildFocusActionButtons(userId)),
       [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
       [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
       [{ text: 'КАНАЛ ФОКУСУ', url: channelUrl }],

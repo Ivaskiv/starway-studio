@@ -486,6 +486,51 @@ export async function getUpcomingZoom(): Promise<ZoomSession | null> {
   })
 }
 
+function resolveEffectiveBookingQuestions(input: {
+  sessionId: string
+  questionEvents: Array<{
+    userId: string | null
+    payload: unknown
+    createdAt: Date
+  }>
+}) {
+  const effectiveQuestions = new Map<
+    string,
+    { userId: string; text: string; createdAt: Date }
+  >()
+
+  for (const event of input.questionEvents) {
+    if (!event.userId) continue
+    if (
+      !event.payload ||
+      typeof event.payload !== 'object' ||
+      Array.isArray(event.payload)
+    ) {
+      continue
+    }
+
+    const payload = event.payload as Record<string, unknown>
+    if (payload.sessionId !== input.sessionId) continue
+
+    const questionText =
+      typeof payload.questionText === 'string' ? payload.questionText.trim() : ''
+
+    if (!questionText) continue
+
+    const previousQuestion = effectiveQuestions.get(event.userId)
+    effectiveQuestions.set(event.userId, {
+      userId: event.userId,
+      text: questionText,
+      // Preserve the original queue slot when a participant edits the question.
+      createdAt: previousQuestion?.createdAt ?? event.createdAt,
+    })
+  }
+
+  return [...effectiveQuestions.values()].sort(
+    (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+  )
+}
+
 export async function getUpcomingZoomBookingView(userId: string) {
   const session = await prisma.zoomSession.findFirst({
     where: {
@@ -522,35 +567,10 @@ export async function getUpcomingZoomBookingView(userId: string) {
     orderBy: { createdAt: 'asc' },
   })
 
-  const effectiveQuestions = new Map<
-    string,
-    { userId: string; text: string; createdAt: Date }
-  >()
-
-  for (const event of questionEvents) {
-    if (!event.userId) continue
-    if (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)) {
-      continue
-    }
-
-    const payload = event.payload as Record<string, unknown>
-    if (payload.sessionId !== session.id) continue
-
-    const questionText =
-      typeof payload.questionText === 'string' ? payload.questionText.trim() : ''
-
-    if (!questionText) continue
-
-    effectiveQuestions.set(event.userId, {
-      userId: event.userId,
-      text: questionText,
-      createdAt: event.createdAt,
-    })
-  }
-
-  const orderedQuestions = [...effectiveQuestions.values()].sort(
-    (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
-  )
+  const orderedQuestions = resolveEffectiveBookingQuestions({
+    sessionId: session.id,
+    questionEvents,
+  })
 
   const myQuestionIndex = orderedQuestions.findIndex(
     (question) => question.userId === userId,
@@ -616,35 +636,10 @@ export async function getZoomBookingNotificationContext(
 
   if (!session || !user) return null
 
-  const effectiveQuestions = new Map<
-    string,
-    { userId: string; text: string; createdAt: Date }
-  >()
-
-  for (const event of questionEvents) {
-    if (!event.userId) continue
-    if (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)) {
-      continue
-    }
-
-    const payload = event.payload as Record<string, unknown>
-    if (payload.sessionId !== sessionId) continue
-
-    const questionText =
-      typeof payload.questionText === 'string' ? payload.questionText.trim() : ''
-
-    if (!questionText) continue
-
-    effectiveQuestions.set(event.userId, {
-      userId: event.userId,
-      text: questionText,
-      createdAt: event.createdAt,
-    })
-  }
-
-  const orderedQuestions = [...effectiveQuestions.values()].sort(
-    (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
-  )
+  const orderedQuestions = resolveEffectiveBookingQuestions({
+    sessionId,
+    questionEvents,
+  })
 
   const myQuestionIndex = orderedQuestions.findIndex(
     (question) => question.userId === userId,
@@ -956,6 +951,7 @@ async function getQuestionSummariesBySessionId(sessionIds: string[]) {
       })),
     },
     select: {
+      userId: true,
       payload: true,
       createdAt: true,
     },
@@ -965,23 +961,6 @@ async function getQuestionSummariesBySessionId(sessionIds: string[]) {
   })
 
   const questionsBySessionId = new Map<string, string[]>()
-
-  for (const event of questionEvents) {
-    const payload = parseBookingQuestionPayload(event.payload)
-    const sessionId =
-      typeof payload.sessionId === 'string' ? payload.sessionId.trim() : ''
-    const questionText =
-      typeof payload.questionText === 'string'
-        ? payload.questionText.trim()
-        : ''
-    if (!sessionId || !questionText) {
-      continue
-    }
-
-    const currentQuestions = questionsBySessionId.get(sessionId) ?? []
-    currentQuestions.push(questionText)
-    questionsBySessionId.set(sessionId, currentQuestions)
-  }
 
   const summaries = new Map<
     string,
@@ -1022,8 +1001,12 @@ async function getQuestionSummariesBySessionId(sessionIds: string[]) {
   }
   for (const sessionId of sessionIds) {
     const starterQuestions = starterQuestionsBySessionId.get(sessionId) ?? []
+    const userQuestions = resolveEffectiveBookingQuestions({
+      sessionId,
+      questionEvents,
+    }).map((question) => question.text)
 
-    const userQuestions = questionsBySessionId.get(sessionId) ?? []
+    questionsBySessionId.set(sessionId, userQuestions)
 
     const questions = dedupeQuestionTexts([
       ...starterQuestions,

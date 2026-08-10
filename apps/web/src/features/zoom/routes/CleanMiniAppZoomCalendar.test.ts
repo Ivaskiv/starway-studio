@@ -125,6 +125,13 @@ vi.mock('@/features/auth/services/auth.api', () => ({
   ],
 }))
 
+vi.mock('@/features/auth/services/auth.slice', () => ({
+  selectAuthStatus: (state: typeof mockAuthState) => state.auth.status,
+  selectCurrentUser: (state: typeof mockAuthState) => state.auth.user,
+  selectUserRole: (state: typeof mockAuthState) => state.auth.role,
+  setLoading: vi.fn(() => ({ type: 'auth/setLoading' })),
+}))
+
 vi.mock('@/features/auth/services/accessApi', () => ({
   accessApi: {
     util: {
@@ -154,6 +161,34 @@ vi.mock('@/features/subscription/utils/openExternalPaymentUrl', () => ({
 }))
 
 vi.mock('@/features/zoom/services/zoom.api', () => ({
+  useGetWeekOverviewQuery: () => ({
+    data: {
+      week: {
+        from: '2026-08-10T00:00:00.000Z',
+        to: '2026-08-16T23:59:59.999Z',
+        timezone: 'Europe/Kyiv',
+      },
+      sessions: mockCurrentWeekSessions,
+      audios: [],
+    },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useGetPublicWeekOverviewQuery: () => ({
+    data: {
+      week: {
+        from: '2026-08-10T00:00:00.000Z',
+        to: '2026-08-16T23:59:59.999Z',
+        timezone: 'Europe/Kyiv',
+      },
+      sessions: mockCurrentWeekSessions,
+      audios: [],
+    },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   useGetMySessionsQuery: () => ({
     data: mockMySessionsResponse,
     isLoading: false,
@@ -162,6 +197,12 @@ vi.mock('@/features/zoom/services/zoom.api', () => ({
   }),
   useGetUpcomingSessionQuery: () => ({
     data: null,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useGetPublicUpcomingSessionQuery: () => ({
+    data: mockCurrentWeekSessions[0] ?? null,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -176,13 +217,16 @@ vi.mock('@/features/zoom/services/zoom.api', () => ({
   ],
 }))
 
+vi.mock('@/features/zoom/zoom.utils', () => ({
+  getSessionDateLabel: vi.fn((scheduledAt: string) => scheduledAt),
+  getSessionMeta: vi.fn(() => 'Meta'),
+  getNormalizedSessionType: vi.fn((session: { type?: string | null }) =>
+    String(session.type ?? '').toLowerCase(),
+  ),
+}))
+
 vi.mock('@/features/zoom/zoom.api', () => ({
-  useGetCalendarSessionsQuery: () => ({
-    data: mockCurrentWeekSessions,
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  }),
+  useGetCalendarSessionsQuery: vi.fn(),
 }))
 
 vi.mock('@/services/api', () => ({
@@ -230,6 +274,7 @@ let resolvePreviousZoomRecapTitle: typeof import('./CleanMiniAppZoomCalendar').r
 let resolvePreviousZoomRecapDateLabel: typeof import('./CleanMiniAppZoomCalendar').resolvePreviousZoomRecapDateLabel
 let resolvePreviousZoomRecapPreview: typeof import('./CleanMiniAppZoomCalendar').resolvePreviousZoomRecapPreview
 let resolveZoomCalendarEntryMode: typeof import('./CleanMiniAppZoomCalendar').resolveZoomCalendarEntryMode
+let resolveNextSessionQuestionSummary: typeof import('./CleanMiniAppZoomCalendar').resolveNextSessionQuestionSummary
 let performBookingScreenRegistration: typeof import('./CleanMiniAppZoomCalendar').performBookingScreenRegistration
 let resolveTelegramMiniAppAuthInitData: typeof import('./CleanMiniAppZoomCalendar').resolveTelegramMiniAppAuthInitData
 let CleanMiniAppZoomCalendar: typeof import('./CleanMiniAppZoomCalendar').default
@@ -269,6 +314,7 @@ beforeAll(async () => {
     resolvePreviousZoomRecapDateLabel,
     resolvePreviousZoomRecapPreview,
     resolveZoomCalendarEntryMode,
+    resolveNextSessionQuestionSummary,
     performBookingScreenRegistration,
     resolveTelegramMiniAppAuthInitData,
     default: CleanMiniAppZoomCalendar,
@@ -612,12 +658,7 @@ describe('zoom hub next session', () => {
     expect(bookingMarkup).toContain('Відстежити енергію ввечері')
     expect(bookingMarkup).toContain('ЗАПИСАТИСЬ')
     expect(bookingMarkup).toContain('Понеділок, 10 серпня · 19:00')
-    expect(bookingMarkup).toContain('Вже записались: 9')
-    expect(bookingMarkup).toContain('Про що питають учасники')
-    expect(bookingMarkup).toContain('Як не зриватись на вихідних')
-    expect(bookingMarkup).toContain('Планування тижня з дітьми')
-    expect(bookingMarkup).toContain('Повернення після відпустки')
-    expect(bookingMarkup).toContain('і ще 6 питань від учасників')
+    expect(bookingMarkup).toContain('Записано учасників: 9')
     expect(bookingMarkup).not.toContain('Наступний Zoom уже готується')
     expect(bookingMarkup).not.toContain('Твій підсумок тижня')
     expect(bookingMarkup).not.toContain('ПЕРЕГЛЯНУТИ ПОВНИЙ ЗВІТ')
@@ -661,15 +702,9 @@ describe('zoom hub next session', () => {
     mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousCurrentWeekSessions)
     consoleErrorSpy.mockRestore()
 
-    expect(bookingMarkup).toContain('Минула зустріч, 28 липня')
-    expect(bookingMarkup).toContain('Понеділок, 10 серпня · 19:00')
-    expect(bookingMarkup).toContain('14')
-    expect(bookingMarkup).toContain('Вже записались: 9')
-    expect(bookingMarkup).toContain('ЗАПИСАТИСЬ')
-    expect(bookingMarkup).toContain('Реальна сесія ще не створена')
-    expect(bookingMarkup).toContain('disabled=""')
-    expect(bookingMarkup).toContain('і ще 6 питань від учасників')
-    expect(bookingMarkup).not.toContain('Наступний Zoom уже готується')
+    expect(bookingMarkup).toContain('Наступний Zoom уже готується')
+    expect(bookingMarkup).toContain('Розклад оновлюється автоматично.')
+    expect(bookingMarkup).not.toContain('ЗАПИСАТИСЬ')
     expect(mockRegisterAttendee).not.toHaveBeenCalled()
   })
 
@@ -698,9 +733,7 @@ describe('zoom hub next session', () => {
     consoleErrorSpy.mockRestore()
 
     expect(bookingMarkup).toContain('Розбирали, чому важко тримати фокус увечері')
-    expect(bookingMarkup).toContain('Понеділок, 10 серпня · 19:00')
-    expect(bookingMarkup).toContain('Вже записались: 9')
-    expect(bookingMarkup).toContain('Реальна сесія ще не створена')
+    expect(bookingMarkup).not.toContain('Понеділок, 10 серпня · 19:00')
     expect(bookingMarkup).not.toContain('Твій підсумок тижня')
   })
 
@@ -739,31 +772,10 @@ describe('zoom hub next session', () => {
     mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousCurrentWeekSessions)
     consoleErrorSpy.mockRestore()
 
-expect(emptyMarkup).toContain('Минула зустріч, 28 липня')
+expect(emptyMarkup).toContain('Наступний Zoom уже готується')
 expect(emptyMarkup).toContain(
-  'Розбирали, чому важко тримати фокус увечері',
+  'Розклад оновлюється автоматично. Щойно наступна практика буде доступна, ми повідомимо тебе в боті.',
 )
-expect(emptyMarkup).toContain(
-  'Основний інсайт: втома тіла плутається з втомою мотивації.',
-)
-expect(emptyMarkup).toContain('Було на сесії')
-expect(emptyMarkup).toContain('14')
-expect(emptyMarkup).toContain('Наступний крок')
-expect(emptyMarkup).toContain('Відстежити енергію ввечері')
-
-expect(emptyMarkup).toContain('ЗАПИСАТИСЬ')
-expect(emptyMarkup).toContain('Реальна сесія ще не створена')
-expect(emptyMarkup).toContain('disabled=""')
-
-expect(emptyMarkup).toContain('Понеділок, 10 серпня · 19:00')
-expect(emptyMarkup).toContain('Вже записались: 9')
-expect(emptyMarkup).toContain('Про що питають учасники')
-expect(emptyMarkup).toContain('Як не зриватись на вихідних')
-expect(emptyMarkup).toContain('Планування тижня з дітьми')
-expect(emptyMarkup).toContain('Повернення після відпустки')
-expect(emptyMarkup).toContain('і ще 6 питань від учасників')
-
-expect(emptyMarkup).not.toContain('Наступний Zoom уже готується')
 expect(emptyMarkup).not.toContain('Твій підсумок тижня')
 expect(emptyMarkup).not.toContain('ПЕРЕГЛЯНУТИ ПОВНИЙ ЗВІТ')
 expect(mockRegisterAttendee).not.toHaveBeenCalled()
@@ -828,6 +840,114 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
     expect(refetchCurrentWeek).toHaveBeenCalledTimes(1)
     expect(refetchUpcoming).toHaveBeenCalledTimes(1)
     expect(refetchMySessions).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps live booking fields from authenticated upcoming session instead of erasing them with secondary sources', () => {
+    const resolved = resolveUpcomingZoomSessions({
+      currentWeekSessions: [],
+      upcomingSession: {
+        id: 'zoom-live',
+        expertId: null,
+        scheduledAt: '2026-08-17T16:00:00.000Z',
+        topic: 'Live Zoom',
+        status: 'SCHEDULED',
+        requests: [],
+        postSessionReport: null,
+        createdAt: '2026-08-10T08:00:00.000Z',
+        updatedAt: '2026-08-10T08:00:00.000Z',
+        attendeesCount: 1,
+        questionPreviews: [],
+        questionsCount: 1,
+        remainingQuestionsCount: 0,
+        isMyBooking: true,
+        myQuestion: {
+          text: 'Як втримати ритм після практики?',
+          position: 1,
+        },
+      },
+      mySessions: [],
+      now: new Date('2026-08-10T09:00:00.000Z'),
+    })
+
+    expect(resolved.nextSession).toMatchObject({
+      id: 'zoom-live',
+      attendeesCount: 1,
+      isMyBooking: true,
+      questionsCount: 1,
+      remainingQuestionsCount: 0,
+      myQuestion: {
+        text: 'Як втримати ритм після практики?',
+        position: 1,
+      },
+    })
+  })
+
+  it('does not return the empty-question state when live booking already has a queue or myQuestion', () => {
+    expect(
+      resolveNextSessionQuestionSummary({
+        id: 'zoom-with-my-question',
+        expertId: null,
+        scheduledAt: '2026-08-17T16:00:00.000Z',
+        topic: 'Live Zoom',
+        status: 'SCHEDULED',
+        requests: [],
+        postSessionReport: null,
+        createdAt: '2026-08-10T08:00:00.000Z',
+        updatedAt: '2026-08-10T08:00:00.000Z',
+        type: 'GROUP',
+        attendeesCount: 1,
+        questionPreviews: [],
+        questionsCount: 1,
+        remainingQuestionsCount: 0,
+        isMyBooking: true,
+        myQuestion: {
+          text: 'Як втримати ритм після практики?',
+          position: 1,
+        },
+        audioFileId: null,
+        hasAudio: false,
+        zoomLink: '',
+      } as ZoomWeekOverview['sessions'][number]),
+    ).toEqual({
+      primary: [],
+      all: [],
+      remaining: 0,
+    })
+  })
+
+  it('does not show the empty participants copy on the non-booking hub when the current week session already has myQuestion', () => {
+    const previousSessions = [...mockCurrentWeekSessions]
+
+    mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, {
+      ...previousSessions[0],
+      isMyBooking: true,
+      questionPreviews: [],
+      questionsCount: 1,
+      remainingQuestionsCount: 0,
+      myQuestion: {
+        text: 'Як не зірвати ритм після Zoom?',
+        position: 1,
+      },
+    } as ZoomWeekOverview['sessions'][number])
+
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/miniapp/zoom-calendar'] },
+        createElement(
+          Routes,
+          undefined,
+          createElement(Route, {
+            path: '/miniapp/zoom-calendar',
+            element: createElement(CleanMiniAppZoomCalendar),
+          }),
+        ),
+      ),
+    )
+
+    mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousSessions)
+
+    expect(markup).not.toContain('Учасники ще не залишили питання до цієї практики.')
   })
 
   it('hides ended sessions and returns an honest empty state when nothing upcoming remains', () => {

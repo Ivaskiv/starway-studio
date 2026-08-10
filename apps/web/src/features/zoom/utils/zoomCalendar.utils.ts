@@ -22,7 +22,15 @@ export function resolveNextSessionQuestionSummary(
 ) {
   const questions = session.questionPreviews ?? []
 
-  if (questions.length === 0) {
+  if (session.myQuestion) {
+    return {
+      primary: [],
+      all: [],
+      remaining: 0,
+    }
+  }
+
+  if (questions.length === 0 && (session.questionsCount ?? 0) === 0) {
     return null
   }
 
@@ -378,12 +386,7 @@ export function resolveUpcomingZoomSessions(input: {
 
   if (input.upcomingSession) {
     const existingSession = mergedSessions.get(input.upcomingSession.id)
-    const authenticatedUpcoming = normalizeZoomHubSession(
-      input.upcomingSession,
-      {
-        isMyBooking: bookedSessionIds.has(input.upcomingSession.id),
-      }
-    )
+    const authenticatedUpcoming = normalizeZoomHubSession(input.upcomingSession)
 
     mergedSessions.set(
       input.upcomingSession.id,

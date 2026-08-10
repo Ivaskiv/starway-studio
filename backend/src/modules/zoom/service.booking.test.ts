@@ -4,12 +4,14 @@ const mockZoomSessionAttendeeUpsert = vi.fn()
 const mockZoomSessionAttendeeFindUnique = vi.fn()
 const mockZoomSessionAttendeeFindMany = vi.fn()
 const mockZoomSessionAttendeeFindFirst = vi.fn()
+const mockZoomSessionAttendeeCount = vi.fn()
 const mockZoomSessionFindFirst = vi.fn()
 const mockZoomSessionFindUnique = vi.fn()
 const mockZoomSessionFindMany = vi.fn()
 const mockEventCreate = vi.fn()
 const mockEventFindMany = vi.fn()
 const mockGetCachedLatestWeeklyReport = vi.fn()
+const mockUserFindUnique = vi.fn()
 
 vi.mock('../../db/client.js', () => ({
   prisma: {
@@ -23,10 +25,14 @@ vi.mock('../../db/client.js', () => ({
       findUnique: (...args: unknown[]) => mockZoomSessionAttendeeFindUnique(...args),
       findMany: (...args: unknown[]) => mockZoomSessionAttendeeFindMany(...args),
       findFirst: (...args: unknown[]) => mockZoomSessionAttendeeFindFirst(...args),
+      count: (...args: unknown[]) => mockZoomSessionAttendeeCount(...args),
     },
     event: {
       create: (...args: unknown[]) => mockEventCreate(...args),
       findMany: (...args: unknown[]) => mockEventFindMany(...args),
+    },
+    user: {
+      findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
     },
   },
 }))
@@ -48,6 +54,7 @@ import {
   getCurrentWeekZoomOverview,
   getUserLatestWeeklyReportSummary,
   getUserPreviousZoomSessionRecap,
+  getZoomBookingNotificationContext,
   registerAttendee,
   saveBookingQuestionForAttendee,
   selectTrialZoomEligibleSession,
@@ -126,6 +133,53 @@ describe('zoom booking service', () => {
         id: true,
         createdAt: true,
       },
+    })
+  })
+
+  it('keeps the original queue position when a participant edits the booking question', async () => {
+    mockZoomSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      topic: 'Focus Zoom',
+      scheduledAt: new Date('2026-08-17T16:00:00.000Z'),
+    })
+    mockUserFindUnique.mockResolvedValue({
+      firstName: 'Vira',
+      lastName: null,
+      telegramUserName: 'vira',
+    })
+    mockZoomSessionAttendeeCount.mockResolvedValue(2)
+    mockEventFindMany.mockResolvedValue([
+      {
+        userId: 'user-1',
+        payload: {
+          sessionId: 'session-1',
+          questionText: 'Початкове питання',
+        },
+        createdAt: new Date('2026-08-01T08:00:00.000Z'),
+      },
+      {
+        userId: 'user-2',
+        payload: {
+          sessionId: 'session-1',
+          questionText: 'Інше питання',
+        },
+        createdAt: new Date('2026-08-01T08:05:00.000Z'),
+      },
+      {
+        userId: 'user-1',
+        payload: {
+          sessionId: 'session-1',
+          questionText: 'Оновлене питання',
+        },
+        createdAt: new Date('2026-08-01T08:10:00.000Z'),
+      },
+    ])
+
+    const context = await getZoomBookingNotificationContext('user-1', 'session-1')
+
+    expect(context?.myQuestion).toEqual({
+      text: 'Оновлене питання',
+      position: 1,
     })
   })
 
@@ -572,6 +626,7 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
     mockZoomSessionAttendeeFindMany.mockResolvedValue([])
     mockEventFindMany.mockResolvedValue([
       {
+        userId: 'user-2',
         createdAt: new Date('2026-08-04T09:00:00.000Z'),
         payload: {
           sessionId: 'session-next',
@@ -579,6 +634,7 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
         },
       },
       {
+        userId: 'user-3',
         createdAt: new Date('2026-08-04T09:05:00.000Z'),
         payload: {
           sessionId: 'session-next',
@@ -586,6 +642,7 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
         },
       },
       {
+        userId: 'user-3',
         createdAt: new Date('2026-08-04T09:10:00.000Z'),
         payload: {
           sessionId: 'session-next',
