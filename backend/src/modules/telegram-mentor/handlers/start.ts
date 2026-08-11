@@ -446,13 +446,48 @@ export async function handlePendingTelegramIdentityText(ctx: StartContext, text:
 
 export async function handleStart(ctx: StartContext) {
   const rawChatId = ctx.chat?.id
-  if (!rawChatId) return
+  const updateId = Number((ctx.update as { update_id?: number }).update_id ?? 0)
+  const rawMessageText =
+    'message' in ctx && ctx.message && 'text' in ctx.message
+      ? String(ctx.message.text ?? '')
+      : ''
+
+  if (!rawChatId) {
+    console.warn('[START_SKIPPED_NO_CHAT]', {
+      updateId: Number.isFinite(updateId) ? updateId : null,
+      fromId: String(ctx.from?.id ?? ''),
+      messageText: rawMessageText || null,
+    })
+    return
+  }
 
   const chatId = String(rawChatId)
-  const updateId = Number((ctx.update as { update_id?: number }).update_id ?? 0)
+  const startPayload = getStartPayload(ctx)
 
-  if (Number.isFinite(updateId) && updateId > 0 && processedStartUpdateIds.has(updateId)) return
-  if (activeStartProcessing.has(chatId)) return
+  console.info('[START_RECEIVED]', {
+    chatId,
+    fromId: String(ctx.from?.id ?? ''),
+    updateId: Number.isFinite(updateId) ? updateId : null,
+    startPayload: startPayload || null,
+    messageText: rawMessageText || null,
+  })
+
+  if (Number.isFinite(updateId) && updateId > 0 && processedStartUpdateIds.has(updateId)) {
+    console.info('[START_SKIPPED_DUPLICATE_UPDATE]', {
+      chatId,
+      updateId,
+      startPayload: startPayload || null,
+    })
+    return
+  }
+  if (activeStartProcessing.has(chatId)) {
+    console.info('[START_SKIPPED_ACTIVE_PROCESSING]', {
+      chatId,
+      updateId: Number.isFinite(updateId) ? updateId : null,
+      startPayload: startPayload || null,
+    })
+    return
+  }
 
   if (Number.isFinite(updateId) && updateId > 0) {
     processedStartUpdateIds.add(updateId)
@@ -464,7 +499,6 @@ export async function handleStart(ctx: StartContext) {
 
   try {
     const telegramUserId = ctx.from?.id ? String(ctx.from.id) : chatId
-    const startPayload = getStartPayload(ctx)
     const firstTouch = parseFirstTouchPayload(startPayload)
     let resolvedUserId = await resolveLinkedUserIdFromContext(ctx)
     const identityResolutionError = (
@@ -580,6 +614,7 @@ export async function handleStart(ctx: StartContext) {
     const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
     if (
       isPlainStart &&
+      user.lifecycleState === 'TEST_DONE' &&
       abTestProgress?.status === 'completed' &&
       abTestProgress.result_key
     ) {

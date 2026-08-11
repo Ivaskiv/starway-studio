@@ -184,6 +184,53 @@ describe('handleStart — targeted home screen routing', () => {
     )
   })
 
+  it('FOCUS_PAID + completed progress + plain start keeps paid home as winner', async () => {
+    mockResolveLinkedUserId.mockResolvedValue('user-focus-1')
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'decision',
+      email_stage: 'captured',
+    })
+    mockFindUniqueOrThrow.mockResolvedValue({
+      id: 'user-focus-1',
+      role: 'USER',
+      activeRole: 'USER',
+      lifecycleState: 'FOCUS_PAID',
+      testStartedAt: null,
+      testCompletedAt: new Date('2026-07-20T10:00:00Z'),
+      offerShownAt: null,
+      testResultType: 'decision',
+      updatedAt: new Date('2026-07-20T10:00:00Z'),
+      firstName: 'Фокус',
+    })
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-11-15T00:00:00Z'),
+    })
+    mockGetUpcomingZoomBookingView.mockResolvedValue({
+      id: 'zoom-focus-1',
+      scheduledAt: new Date('2026-08-03T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/focus-1' },
+      isMyBooking: false,
+      myQuestion: null,
+      attendeesCount: 0,
+    })
+
+    const { ctx, reply } = makeFakeCtx({ chatId: 120, fromId: 120, updateId: 1007 })
+    await handleStart(ctx)
+
+    expect(reply).not.toHaveBeenCalled()
+    expect(mockRenderCurrentView).not.toHaveBeenCalled()
+    expect(mockPlanMessage).toHaveBeenCalledTimes(1)
+    const [, , transition, text, options] = mockPlanMessage.mock.calls[0]
+    expect(transition).toBe('start_home_screen')
+    expect(text).toContain('Твій доступ до ФОКУСУ активний до <b>15 листопада 2026')
+    expect(text).toContain('Ти ще не записана.')
+    expect(JSON.stringify(options)).toMatch(/ЗАПИСАТИСЯ/)
+  })
+
   it('completed test without access does not fall back to intro', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-1b')
     mockFindUniqueOrThrow.mockResolvedValue({
@@ -254,6 +301,11 @@ describe('handleStart — targeted home screen routing', () => {
 
   it('FOCUS_ACTIVE with stale intro lifecycle opens canonical Focus Home', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-2b')
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'decision',
+      email_stage: 'captured',
+    })
     mockFindUniqueOrThrow.mockResolvedValue({
       id: 'user-2b',
       role: 'USER',
@@ -285,6 +337,7 @@ describe('handleStart — targeted home screen routing', () => {
     await handleStart(ctx)
 
     expect(reply).not.toHaveBeenCalled()
+    expect(mockRenderCurrentView).not.toHaveBeenCalled()
     const [, , , text, options] = mockPlanMessage.mock.calls[0]
     expect(text).toContain('Твій доступ до ФОКУСУ активний до <b>15 листопада 2026')
     expect(text).toContain('Ти ще не записана.')
