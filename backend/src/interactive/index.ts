@@ -36,6 +36,7 @@ import {
   startHttpServer,
   startRuntimeEventLoopMonitor,
 } from '../runtime/runtimeBootstrap.js'
+import { syncTelegramWebhookContract } from './telegramWebhookSync.js'
 
 loadRuntimeEnv()
 
@@ -244,14 +245,12 @@ async function startTelegramBot() {
           }
 
           if (mainWebhookUrl) {
-            const webhookInfoBefore = await bot.telegram.getWebhookInfo()
-            if (webhookInfoBefore.url !== mainWebhookUrl) {
-              await bot.telegram.setWebhook(mainWebhookUrl, {
-                drop_pending_updates: false,
-                allowed_updates: ['message', 'callback_query', 'channel_post', 'edited_channel_post', 'chat_member', 'my_chat_member'],
-                ...(mainWebhookSecret ? { secret_token: mainWebhookSecret } : {}),
-              })
-            }
+            await syncTelegramWebhookContract({
+              bot,
+              botName: 'main',
+              webhookUrl: mainWebhookUrl,
+              webhookSecret: mainWebhookSecret,
+            })
             telegramRunningMode = 'webhook'
             console.log(`🤖 Interactive Telegram ready @${telegramBotConfig.username} [webhook]`)
             return

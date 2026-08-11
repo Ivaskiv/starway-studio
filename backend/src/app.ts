@@ -359,6 +359,10 @@ export function createApp(): Express {
     const webhookTarget = resolveTelegramWebhookTarget(incomingSecret)
 
     if (!webhookTarget) {
+      console.warn('[TELEGRAM_WEBHOOK_REJECTED]', {
+        hasIncomingSecret: Boolean(incomingSecret),
+        reason: incomingSecret ? 'invalid_secret' : 'missing_secret',
+      })
       return res
         .status(401)
         .json({ ok: false, message: incomingSecret ? 'invalid telegram webhook secret' : 'missing telegram webhook secret' })
