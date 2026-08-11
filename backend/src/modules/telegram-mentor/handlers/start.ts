@@ -215,11 +215,15 @@ async function deliver(
   const zoomBookingButton = payload.reply_markup?.inline_keyboard
     ?.flat()
     ?.find((button: any) => button?.text === 'ЗАПИСАТИСЯ')
+  const zoomBookingUrl =
+    zoomBookingButton && 'web_app' in zoomBookingButton
+      ? zoomBookingButton.web_app?.url ?? null
+      : null
 
   console.info('[START_DELIVER]', {
     deliveryChatId,
     textLen: payload.text?.length ?? 0,
-    zoomBookingUrl: zoomBookingButton?.web_app?.url ?? null,
+    zoomBookingUrl,
   })
   if (!deliveryChatId) {
     console.warn('[START_DELIVER] no chatId — skipped')
