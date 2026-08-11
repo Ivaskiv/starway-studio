@@ -2602,28 +2602,18 @@ export async function formatChannelPost(): Promise<string> {
   )
 
   const nextSessionLine = nextGroupPractice
-    ? formatFocusChannelNextSessionLine(nextGroupPractice.scheduledAt)
-    : 'Скоро опублікуємо найближчу дату в каналі.'
+    ? [
+        'Наступна Zoom-практика:',
+        formatFocusChannelNextSessionLine(nextGroupPractice.scheduledAt),
+      ]
+    : ['Щопонеділка Zoom-практика · 19:00']
 
   return [
-    'Вітаю, ти всередині ФОКУСУ.',
+    'ФОКУС',
     '',
-    'Тут відбувається реальна робота.',
+    ...nextSessionLine,
     '',
-    'Що далі:',
-    '',
-    '— щотижня Zoom-практика',
-    '— розбір твоєї ситуації',
-    '— конкретні рішення і дії',
-    '',
-    '📅 Наступна Zoom-практика:',
-    nextSessionLine,
-    '',
-    'Що зробити зараз:',
-    '1. Натисни «Записатись на Zoom» під цим повідомленням.',
-    '2. Обери найближчу практику і забронюй місце.',
-    '',
-    'Якщо загубилась або хочеш повернутись назад — натисни «Відкрити чат-бот».',
+    'Повернися в чат-бот та обери найближчу практику і забронюй місце.',
   ].join('\n')
 }
 
@@ -2632,7 +2622,8 @@ function formatFocusChannelNextSessionLine(date: Date): string {
     weekday: 'long',
     timeZone: KYIV_TIME_ZONE,
   })
-  const month = date.toLocaleDateString('uk-UA', {
+  const dayMonth = date.toLocaleDateString('uk-UA', {
+    day: 'numeric',
     month: 'long',
     timeZone: KYIV_TIME_ZONE,
   })
@@ -2642,7 +2633,7 @@ function formatFocusChannelNextSessionLine(date: Date): string {
     timeZone: KYIV_TIME_ZONE,
   })
 
-  return `${capitalizeLabel(weekday)}, ${date.getDate()} ${month} · ${time}`
+  return `${capitalizeLabel(weekday)}, ${dayMonth} · ${time}`
 }
 
 function capitalizeLabel(value: string): string {
@@ -2680,18 +2671,8 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
     const text = await formatChannelPost()
     console.log('[syncChannelPost] text length:', text.length)
     const contentHash = getChannelPostContentHash(text)
-    const zoomUrl = resolveZoomCalendarUrl({ intent: 'booking' })
     const mainBotUrl = getBotLink() || 'https://t.me/Test_ABsystem_bot'
-    const channelMiniAppUrl = (() => {
-      try {
-        const url = new URL(mainBotUrl)
-        url.searchParams.set('startapp', 'zoom_booking')
-        return url.toString()
-      } catch {
-        return zoomUrl
-      }
-    })()
-    const syncSignature = JSON.stringify({ channelId, text, zoomUrl })
+    const syncSignature = JSON.stringify({ channelId, text, mainBotUrl })
     const now = Date.now()
 
     if (
@@ -2702,18 +2683,9 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
       return
     }
 
-    const replyMarkup = zoomUrl
-      ? {
-          inline_keyboard: [
-            [
-              { text: 'Записатись на Zoom', url: channelMiniAppUrl },
-              { text: 'Відкрити чат-бот', url: mainBotUrl },
-            ],
-          ],
-        }
-      : {
-          inline_keyboard: [[{ text: 'Відкрити чат-бот', url: mainBotUrl }]],
-        }
+    const replyMarkup = {
+      inline_keyboard: [[{ text: 'ПОВЕРНУТИСЯ', url: mainBotUrl }]],
+    }
 
     const existing = await prisma.zoomChannelPost.findFirst({
       orderBy: { updatedAt: 'desc' },
