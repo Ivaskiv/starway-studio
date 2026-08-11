@@ -95,6 +95,7 @@ vi.mock('@/products/ab-system/telegram/abTest.views.js', () => ({
 
 import { handleStart } from './start.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
+import { generateMagicLink } from '../../deeplinks/service.js'
 
 function makeFakeCtx(overrides: Partial<{
   chatId: number
@@ -216,6 +217,39 @@ describe('handleStart — targeted home screen routing', () => {
         result_key: 'action',
       }),
     )
+  })
+
+  it('completed test with magic-link payload keeps payload route priority', async () => {
+    mockGetStartPayload.mockReturnValue('ml_request-123')
+    mockResolveLinkedUserId.mockResolvedValue('user-ml')
+    mockFindUniqueOrThrow.mockResolvedValue({
+      id: 'user-ml',
+      role: 'USER',
+      activeRole: 'USER',
+      lifecycleState: 'TEST_DONE',
+      testStartedAt: null,
+      testCompletedAt: new Date('2026-07-20T10:00:00Z'),
+      offerShownAt: null,
+      testResultType: 'action',
+      updatedAt: new Date('2026-07-20T10:00:00Z'),
+      firstName: 'Тестова',
+    })
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'action',
+      email_stage: 'captured',
+    })
+
+    const { ctx, reply } = makeFakeCtx({ chatId: 112, fromId: 112, updateId: 1006 })
+    await handleStart(ctx)
+
+    expect(reply).not.toHaveBeenCalled()
+    expect(mockRenderCurrentView).not.toHaveBeenCalled()
+    expect(generateMagicLink).toHaveBeenCalledWith('user-ml')
+    expect(mockPlanMessage).toHaveBeenCalledTimes(1)
+    const [, , transition, text] = mockPlanMessage.mock.calls[0]
+    expect(transition).toBe('start_home_screen')
+    expect(text).toContain('магічне посилання')
   })
 
   it('FOCUS_ACTIVE with stale intro lifecycle opens canonical Focus Home', async () => {

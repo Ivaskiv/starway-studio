@@ -561,15 +561,7 @@ export async function handleStart(ctx: StartContext) {
     // fire-and-forget: не блокуємо deliver() якщо Telegram API зависає
     void syncAccessAwareChatEntryPoints(chatId, user.id).catch(() => undefined)
 
-    const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
-    if (
-      abTestProgress?.status === 'completed' &&
-      abTestProgress.result_key
-    ) {
-      await renderCurrentView(ctx, user.id, abTestProgress)
-      startMessageSent = true
-      return
-    }
+    const isPlainStart = startPayload.length === 0
 
     if (startPayload.startsWith('ml_')) {
       const requestToken = startPayload.replace(/^ml_/, '').trim()
@@ -582,6 +574,17 @@ export async function handleStart(ctx: StartContext) {
       })
 
       await deliver(ctx, magicLinkReadyMessage(magicLink))
+      return
+    }
+
+    const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
+    if (
+      isPlainStart &&
+      abTestProgress?.status === 'completed' &&
+      abTestProgress.result_key
+    ) {
+      await renderCurrentView(ctx, user.id, abTestProgress)
+      startMessageSent = true
       return
     }
 
