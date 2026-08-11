@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockZoomSessionAttendeeFindUnique = vi.fn()
 const mockGetUserAccessState = vi.fn()
 const mockGetUpcomingZoom = vi.fn()
+const mockGetUpcomingZoomBookingView = vi.fn()
 const mockGetOrCreateFocusInviteLink = vi.fn()
 
 vi.mock('../../../db/client.js', () => ({
@@ -23,6 +24,7 @@ vi.mock('@/modules/subscriptions/payments/focus.access.js', () => ({
 
 vi.mock('@/modules/zoom/service.js', () => ({
   getUpcomingZoom: (...args: unknown[]) => mockGetUpcomingZoom(...args),
+  getUpcomingZoomBookingView: (...args: unknown[]) => mockGetUpcomingZoomBookingView(...args),
 }))
 
 vi.mock('@/products/focus/payments/inviteLink.js', () => ({
@@ -83,6 +85,7 @@ beforeEach(() => {
     expiresAt: null,
   })
   mockGetUpcomingZoom.mockResolvedValue(null)
+  mockGetUpcomingZoomBookingView.mockResolvedValue(null)
   mockGetOrCreateFocusInviteLink.mockResolvedValue('https://t.me/focus-channel')
   mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
 })
@@ -96,17 +99,17 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(JSON.stringify(screen.reply_markup)).toMatch(/тест/i)
   })
 
-  it('TEST_DONE with result: shows result and retake options, not the buy CTA', async () => {
+  it('TEST_DONE with result falls back to generic test-done screen', async () => {
     const snapshot = makeSnapshot({ lifecycleState: 'TEST_DONE', testResultType: 'action' })
     const screen = await buildHomeScreen(snapshot, fakeCtx)
 
-    expect(screen.text).toContain('Твій <b>результат</b> уже готовий')
+    expect(screen.text).toContain('Твій <b>результат</b> готовий')
     const flat = JSON.stringify(screen.reply_markup)
     expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
     expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
     expect(flat).toMatch(/ab_test:show_result/)
     expect(flat).toMatch(/ab_test:restart/)
-    expect(flat).not.toMatch(/open_focus_payment/)
+    expect(flat).toMatch(/open_focus_payment/)
   })
 
   it('OFFER_SHOWN keeps offer CTA separate from TEST_DONE', async () => {
@@ -126,10 +129,13 @@ describe('buildHomeScreen — /start funnel regression', () => {
       hasFocus: true,
       expiresAt: new Date('2026-11-15T00:00:00Z'),
     })
-    mockGetUpcomingZoom.mockResolvedValue({
+    mockGetUpcomingZoomBookingView.mockResolvedValue({
       id: 'zoom-1',
       scheduledAt: new Date('2026-08-03T16:00:00Z'),
       requests: { zoomLink: 'https://zoom.example/1' },
+      isMyBooking: false,
+      myQuestion: null,
+      attendeesCount: 0,
     })
 
     const snapshot = makeSnapshot({ lifecycleState: 'FOCUS_PAID' })
@@ -152,10 +158,13 @@ describe('buildHomeScreen — /start funnel regression', () => {
       hasFocus: true,
       expiresAt: new Date('2026-11-15T00:00:00Z'),
     })
-    mockGetUpcomingZoom.mockResolvedValue({
+    mockGetUpcomingZoomBookingView.mockResolvedValue({
       id: 'zoom-2',
       scheduledAt: new Date('2026-08-03T16:00:00Z'),
       requests: { zoomLink: 'https://zoom.example/2' },
+      isMyBooking: true,
+      myQuestion: null,
+      attendeesCount: 0,
     })
     mockZoomSessionAttendeeFindUnique.mockResolvedValue({ id: 'attendee-1' })
 
@@ -216,10 +225,13 @@ describe('buildHomeScreen — /start funnel regression', () => {
           hasFocus: true,
           expiresAt: new Date('2026-11-15T00:00:00Z'),
         })
-        mockGetUpcomingZoom.mockResolvedValue({
+        mockGetUpcomingZoomBookingView.mockResolvedValue({
           id: 'zoom-loop',
           scheduledAt: new Date('2026-08-03T16:00:00Z'),
           requests: { zoomLink: 'https://zoom.example/loop' },
+          isMyBooking: state === 'ZOOM_MEMBER',
+          myQuestion: null,
+          attendeesCount: 0,
         })
       } else {
         mockGetUserAccessState.mockResolvedValue({

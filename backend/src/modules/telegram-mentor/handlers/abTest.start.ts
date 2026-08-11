@@ -175,19 +175,6 @@ export function testDoneMessage(): ReturnType<typeof withKeyboard> {
   })
 }
 
-export function resultReadyMessage(): ReturnType<typeof withKeyboard> {
-  return withKeyboard({
-    text: joinBlocks([
-      `Твій ${bold('результат')} уже готовий.`,
-      'Можеш переглянути його ще раз або пройти тест заново.',
-    ]),
-    buttons: [
-      [{ text: AB_TEST_MY_RESULT_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.SHOW_RESULT }],
-      [{ text: AB_TEST_RETAKE_BUTTON_TEXT, callback_data: AB_TEST_ACTIONS.RESTART }],
-    ],
-  })
-}
-
 export function offerShownMessage(): ReturnType<typeof withKeyboard> {
   return withKeyboard({
     text: joinBlocks([

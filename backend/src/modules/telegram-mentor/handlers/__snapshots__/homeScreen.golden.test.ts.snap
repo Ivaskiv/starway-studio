@@ -32,7 +32,7 @@ exports[`Golden Master — /start screens per lifecycleState > FOCUS_PAID — fa
         {
           "text": "ЗАПИСАТИСЯ",
           "web_app": {
-            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking",
+            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking&v=<normalized>",
           },
         },
       ],
@@ -40,6 +40,12 @@ exports[`Golden Master — /start screens per lifecycleState > FOCUS_PAID — fa
         {
           "callback_data": "ab_test:show_result",
           "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:restart",
+          "text": "ПРОЙТИ ТЕСТ ЩЕ РАЗ",
         },
       ],
       [
@@ -71,7 +77,7 @@ exports[`Golden Master — /start screens per lifecycleState > FOCUS_PAID — wi
         {
           "text": "ЗАПИСАТИСЯ",
           "web_app": {
-            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking",
+            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking&v=<normalized>",
           },
         },
       ],
@@ -79,6 +85,12 @@ exports[`Golden Master — /start screens per lifecycleState > FOCUS_PAID — wi
         {
           "callback_data": "ab_test:show_result",
           "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:restart",
+          "text": "ПРОЙТИ ТЕСТ ЩЕ РАЗ",
         },
       ],
       [
@@ -163,13 +175,13 @@ exports[`Golden Master — /start screens per lifecycleState > OFFER_SHOWN + NO_
       [
         {
           "callback_data": "ab_test:restart",
-          "text": "ПРОЙТИ ТЕСТ ЗАНОВО",
+          "text": "ПРОЙТИ ТЕСТ ЩЕ РАЗ",
         },
       ],
       [
         {
           "callback_data": "ab_test:show_result",
-          "text": "МІЙ РЕЗУЛЬТАТ",
+          "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
         },
       ],
     ],
@@ -223,22 +235,26 @@ exports[`Golden Master — /start screens per lifecycleState > TEST_DONE + NO_AC
       [
         {
           "callback_data": "ab_test:show_result",
-          "text": "МІЙ РЕЗУЛЬТАТ",
+          "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
         },
       ],
       [
         {
           "callback_data": "ab_test:restart",
-          "text": "🔄 ПРОЙТИ ЗАНОВО",
+          "text": "ПРОЙТИ ТЕСТ ЩЕ РАЗ",
+        },
+      ],
+      [
+        {
+          "callback_data": "open_focus_payment",
+          "text": "ХОЧУ У ФОКУС →",
         },
       ],
     ],
   },
   "text": "Тестова
 
-Твій <b>результат</b> уже готовий.
-
-Можеш переглянути його ще раз або пройти тест заново.",
+Твій <b>результат</b> готовий. Подивись висновок і переходь до наступного кроку у ФОКУС.",
 }
 `;
 
@@ -250,13 +266,13 @@ exports[`Golden Master — /start screens per lifecycleState > TEST_DONE without
       [
         {
           "callback_data": "ab_test:show_result",
-          "text": "ПОКАЗАТИ РЕЗУЛЬТАТ",
+          "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
         },
       ],
       [
         {
           "callback_data": "ab_test:restart",
-          "text": "ПОЧАТИ ТЕСТ ЗАНОВО",
+          "text": "ПРОЙТИ ТЕСТ ЩЕ РАЗ",
         },
       ],
       [
@@ -380,9 +396,9 @@ exports[`Golden Master — /start screens per lifecycleState > ZOOM_MEMBER — f
     "inline_keyboard": [
       [
         {
-          "text": "ЗАПИСАТИСЯ",
+          "text": "ПЕРЕГЛЯНУТИ ЗАПИС",
           "web_app": {
-            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking",
+            "url": "http://localhost:5173/miniapp/zoom-calendar",
           },
         },
       ],
@@ -390,6 +406,12 @@ exports[`Golden Master — /start screens per lifecycleState > ZOOM_MEMBER — f
         {
           "callback_data": "ab_test:show_result",
           "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:restart",
+          "text": "ПРОЙТИ ТЕСТ ЩЕ РАЗ",
         },
       ],
       [
@@ -419,9 +441,9 @@ exports[`Golden Master — /start screens per lifecycleState > ZOOM_MEMBER — w
     "inline_keyboard": [
       [
         {
-          "text": "ЗАПИСАТИСЯ",
+          "text": "ПЕРЕГЛЯНУТИ ЗАПИС",
           "web_app": {
-            "url": "http://localhost:5173/miniapp/zoom-calendar?intent=booking",
+            "url": "http://localhost:5173/miniapp/zoom-calendar",
           },
         },
       ],
@@ -429,6 +451,12 @@ exports[`Golden Master — /start screens per lifecycleState > ZOOM_MEMBER — w
         {
           "callback_data": "ab_test:show_result",
           "text": "ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ",
+        },
+      ],
+      [
+        {
+          "callback_data": "ab_test:restart",
+          "text": "ПРОЙТИ ТЕСТ ЩЕ РАЗ",
         },
       ],
       [

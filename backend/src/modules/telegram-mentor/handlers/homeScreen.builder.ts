@@ -5,7 +5,6 @@ import {
   expiredMessage,
   offerShownMessage,
   postZoom1Message,
-  resultReadyMessage,
   testDoneMessage,
   testInProgressMessage,
   upsellMessage,
@@ -58,7 +57,7 @@ async function resolveBodySection(
       return { text: payload.text, buttons: payload.reply_markup.inline_keyboard }
     }
     case 'TEST_DONE': {
-      const payload = user.testResultType ? resultReadyMessage() : testDoneMessage()
+      const payload = testDoneMessage()
       return { text: payload.text, buttons: payload.reply_markup.inline_keyboard }
     }
     case 'OFFER_SHOWN': {

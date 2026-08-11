@@ -20,6 +20,7 @@ import {
 } from './abTest.start.js'
 import { buildHomeScreen } from './homeScreen.builder.js'
 import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
+import { renderCurrentView } from '@/products/ab-system/telegram/abTest.views.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
 import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTest.service.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
@@ -559,6 +560,16 @@ export async function handleStart(ctx: StartContext) {
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
     // fire-and-forget: не блокуємо deliver() якщо Telegram API зависає
     void syncAccessAwareChatEntryPoints(chatId, user.id).catch(() => undefined)
+
+    const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
+    if (
+      abTestProgress?.status === 'completed' &&
+      abTestProgress.result_key
+    ) {
+      await renderCurrentView(ctx, user.id, abTestProgress)
+      startMessageSent = true
+      return
+    }
 
     if (startPayload.startsWith('ml_')) {
       const requestToken = startPayload.replace(/^ml_/, '').trim()

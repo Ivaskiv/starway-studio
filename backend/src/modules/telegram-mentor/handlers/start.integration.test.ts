@@ -6,9 +6,11 @@ const mockZoomSessionAttendeeFindUnique = vi.fn()
 const mockGetUserAccessState = vi.fn()
 const mockHasActiveFocusSubscription = vi.fn()
 const mockGetUpcomingZoom = vi.fn()
+const mockGetUpcomingZoomBookingView = vi.fn()
 const mockGetOrCreateFocusInviteLink = vi.fn()
 const mockLoadAbTestProgress = vi.fn()
 const mockPlanMessage = vi.fn()
+const mockRenderCurrentView = vi.fn()
 
 vi.mock('../../../db/client.js', () => ({
   prisma: {
@@ -76,6 +78,7 @@ vi.mock('../../subscriptions/payments/focus.access.js', () => ({
 
 vi.mock('../../zoom/service.js', () => ({
   getUpcomingZoom: (...args: unknown[]) => mockGetUpcomingZoom(...args),
+  getUpcomingZoomBookingView: (...args: unknown[]) => mockGetUpcomingZoomBookingView(...args),
 }))
 
 vi.mock('@/products/focus/payments/inviteLink.js', () => ({
@@ -84,6 +87,10 @@ vi.mock('@/products/focus/payments/inviteLink.js', () => ({
 
 vi.mock('@/products/ab-system/telegram/abTest.progress.js', () => ({
   loadAbTestProgress: (...args: unknown[]) => mockLoadAbTestProgress(...args),
+}))
+
+vi.mock('@/products/ab-system/telegram/abTest.views.js', () => ({
+  renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
 }))
 
 import { handleStart } from './start.js'
@@ -117,6 +124,7 @@ function makeFakeCtx(overrides: Partial<{
 beforeEach(() => {
   vi.clearAllMocks()
   mockPlanMessage.mockResolvedValue({ message_id: 1 })
+  mockRenderCurrentView.mockResolvedValue(undefined)
   mockUserUpdate.mockResolvedValue(undefined)
   mockGetStartPayload.mockReturnValue('')
   mockParseFirstTouchPayload.mockReturnValue({ product: null, source: null, campaign: null })
@@ -129,6 +137,7 @@ beforeEach(() => {
   })
   mockHasActiveFocusSubscription.mockResolvedValue(false)
   mockGetUpcomingZoom.mockResolvedValue(null)
+  mockGetUpcomingZoomBookingView.mockResolvedValue(null)
   mockGetOrCreateFocusInviteLink.mockResolvedValue('https://t.me/focus-channel')
   mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
   mockLoadAbTestProgress.mockResolvedValue({
@@ -138,8 +147,13 @@ beforeEach(() => {
 })
 
 describe('handleStart — targeted home screen routing', () => {
-  it('TEST_DONE + NO_ACCESS uses result-ready contract without offer CTA', async () => {
+  it('TEST_DONE + NO_ACCESS delegates to canonical AB result owner', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-1')
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'action',
+      email_stage: 'captured',
+    })
     mockFindUniqueOrThrow.mockResolvedValue({
       id: 'user-1',
       role: 'USER',
@@ -157,14 +171,16 @@ describe('handleStart — targeted home screen routing', () => {
     await handleStart(ctx)
 
     expect(reply).not.toHaveBeenCalled()
-    const [, , , text, options] = mockPlanMessage.mock.calls[0]
-    expect(text).toContain('Твій <b>результат</b> уже готовий')
-    const flat = JSON.stringify(options)
-    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
-    expect(flat).toMatch(/ab_test:show_result/)
-    expect(flat).toMatch(/ab_test:restart/)
-    expect(flat).not.toMatch(/open_focus_payment/)
+    expect(mockPlanMessage).not.toHaveBeenCalled()
+    expect(mockRenderCurrentView).toHaveBeenCalledTimes(1)
+    expect(mockRenderCurrentView).toHaveBeenCalledWith(
+      ctx,
+      'user-1',
+      expect.objectContaining({
+        status: 'completed',
+        result_key: 'action',
+      }),
+    )
   })
 
   it('completed test without access does not fall back to intro', async () => {
@@ -190,9 +206,16 @@ describe('handleStart — targeted home screen routing', () => {
     await handleStart(ctx)
 
     expect(reply).not.toHaveBeenCalled()
-    const [, , , text, options] = mockPlanMessage.mock.calls[0]
-    expect(text).toContain('Твій <b>результат</b> уже готовий')
-    expect(JSON.stringify(options)).not.toMatch(/ab_test:start/)
+    expect(mockPlanMessage).not.toHaveBeenCalled()
+    expect(mockRenderCurrentView).toHaveBeenCalledTimes(1)
+    expect(mockRenderCurrentView).toHaveBeenCalledWith(
+      ctx,
+      'user-1b',
+      expect.objectContaining({
+        status: 'completed',
+        result_key: 'action',
+      }),
+    )
   })
 
   it('FOCUS_ACTIVE with stale intro lifecycle opens canonical Focus Home', async () => {
@@ -215,10 +238,13 @@ describe('handleStart — targeted home screen routing', () => {
       hasFocus: true,
       expiresAt: new Date('2026-11-15T00:00:00Z'),
     })
-    mockGetUpcomingZoom.mockResolvedValue({
+    mockGetUpcomingZoomBookingView.mockResolvedValue({
       id: 'zoom-2',
       scheduledAt: new Date('2026-08-03T16:00:00Z'),
       requests: { zoomLink: 'https://zoom.example/2' },
+      isMyBooking: false,
+      myQuestion: null,
+      attendeesCount: 0,
     })
 
     const { ctx, reply } = makeFakeCtx({ chatId: 202, fromId: 202, updateId: 1002 })
