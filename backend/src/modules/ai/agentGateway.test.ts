@@ -321,4 +321,66 @@ describe('TelegramAgentGateway', () => {
       }),
     })
   })
+
+  it('runs a targeted agent test through the canonical registration key without routing selection', async () => {
+    const runtimeExecutor = {
+      execute: vi.fn(async ({ agentDefinition, task }) => ({
+        id: 'artifact-targeted-1',
+        type: 'assistant_response_artifact',
+        summary: 'targeted-replied',
+        payload: {
+          response: 'Ось targeted відповідь.',
+          suggestions: ['Уточни ціль'],
+          followUp: 'Потрібен ще один приклад?',
+          provider: 'openai',
+          model: 'test-model',
+          tokensUsed: 17,
+        },
+        metadata: {
+          ownerAgentId: agentDefinition.id,
+          taskId: task.id,
+        },
+      })),
+    }
+
+    const gateway = new TelegramAgentGateway({ runtimeExecutor })
+
+    const result = await gateway.executeTargetedAgentTest({
+      key: 'sales',
+      bot: 'admin',
+      chatId: 'admin-chat-1',
+      userId: 'admin-user-1',
+      message: 'Дай один конкретний CTA для продажу.',
+    })
+
+    expect(result.intent).toBe('telegram_assistant')
+    expect(result.agentId).toBe('sales_agent')
+    expect(result.artifact.payload).toMatchObject({
+      response: 'Ось targeted відповідь.',
+      provider: 'openai',
+      model: 'test-model',
+    })
+    expect(runtimeExecutor.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentDefinition: expect.objectContaining({
+          id: 'sales_agent',
+        }),
+        task: expect.objectContaining({
+          metadata: expect.objectContaining({
+            bot: 'admin',
+            chatId: 'admin-chat-1',
+            userId: 'admin-user-1',
+            input: expect.objectContaining({
+              userMessage: 'Дай один конкретний CTA для продажу.',
+              orchestration: expect.objectContaining({
+                selectedAgent: 'sales',
+                delegated: false,
+                capability: 'sales',
+              }),
+            }),
+          }),
+        }),
+      }),
+    )
+  })
 })

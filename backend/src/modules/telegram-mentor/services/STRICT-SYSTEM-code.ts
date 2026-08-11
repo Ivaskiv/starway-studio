@@ -1,3 +1,10 @@
+import {
+  AB_TEST_FOCUS_PRICE_1M,
+  AB_TEST_FOCUS_PRICE_1Y,
+  AB_TEST_FOCUS_PRICE_3M,
+  AB_TEST_FOCUS_WEEKLY_TEXT,
+} from '../../../products/ab-system/content/abTest.shared.js'
+
 export type StrictTelegramIntent =
   | 'about_focus'
   | 'about_absystem'
@@ -35,18 +42,18 @@ const STRICT_FALLBACK_MESSAGE =
 const STRICT_KNOWLEDGE_BASE = {
   focus: {
     name: 'ФОКУС',
-    summary:
-      'ФОКУС — це 4 Zoom-практики на тиждень, по 1 годині кожна.',
+    summary: AB_TEST_FOCUS_WEEKLY_TEXT,
     format:
       'Це жива група до 15 жінок, де кожна розбирає свою ситуацію через СТАН → ЦІЛЬ → ВИБІР → РІШЕННЯ → ДІЯ.',
     audience:
       'ФОКУС для жінок, які знають що потрібно робити, але не можуть це робити.',
     schedule:
-      'ФОКУС — це 4 дні на тиждень, по 1 годині. Точний розклад уточни у Наді.',
+      'У ФОКУСІ є 4 живі Zoom-розбори щомісяця. Точний розклад уточни у Наді.',
     pricing: {
-      oneMonth: '15€',
-      threeMonths: '39€',
-      savings: '6€',
+      oneMonth: AB_TEST_FOCUS_PRICE_1M.replace('1 місяць — ', '').replace(' €', '€'),
+      threeMonths: AB_TEST_FOCUS_PRICE_3M.replace('3 місяці — ', '').replace(' (23 € / місяць)', '').replace(' €', '€'),
+      year: AB_TEST_FOCUS_PRICE_1Y.replace('1 рік — ', '').replace(' (19 € / місяць)', '').replace(' €', '€'),
+      savings: '30€',
       abSystemOneMonth: '29€',
       abSystemThreeMonths: '69€',
     },
@@ -196,6 +203,10 @@ function buildPricingAnswer(message: string): string {
     return `ФОКУС на 3 місяці коштує ${STRICT_KNOWLEDGE_BASE.focus.pricing.threeMonths}. Це економія ${STRICT_KNOWLEDGE_BASE.focus.pricing.savings} в порівнянні з трьома місяцями по ${STRICT_KNOWLEDGE_BASE.focus.pricing.oneMonth}.`
   }
 
+  if (/\bрік\b|12\s*місяц|1\s*рік/i.test(message)) {
+    return `ФОКУС на 1 рік коштує ${STRICT_KNOWLEDGE_BASE.focus.pricing.year}.`
+  }
+
   if (mentionsOneMonth(message)) {
     return `ФОКУС на 1 місяць коштує ${STRICT_KNOWLEDGE_BASE.focus.pricing.oneMonth}.`
   }
@@ -204,7 +215,7 @@ function buildPricingAnswer(message: string): string {
     return `ABSystem коштує ${STRICT_KNOWLEDGE_BASE.focus.pricing.abSystemOneMonth} на 1 місяць або ${STRICT_KNOWLEDGE_BASE.focus.pricing.abSystemThreeMonths} на 3 місяці.`
   }
 
-  return `ФОКУС коштує ${STRICT_KNOWLEDGE_BASE.focus.pricing.oneMonth} на 1 місяць або ${STRICT_KNOWLEDGE_BASE.focus.pricing.threeMonths} на 3 місяці.`
+  return `ФОКУС коштує ${STRICT_KNOWLEDGE_BASE.focus.pricing.oneMonth} на 1 місяць, ${STRICT_KNOWLEDGE_BASE.focus.pricing.threeMonths} на 3 місяці або ${STRICT_KNOWLEDGE_BASE.focus.pricing.year} на 1 рік.`
 }
 
 function buildAbsystemAnswer(): string {
@@ -217,7 +228,7 @@ function buildAbsystemAnswer(): string {
 
 function containsDisallowedPrice(text: string): boolean {
   const matches = text.match(/\d+€/g) ?? []
-  const allowed = new Set(['15€', '39€', '6€', '29€', '69€'])
+  const allowed = new Set(['29€', '33€', '69€', '229€', '30€'])
   return matches.some((match) => !allowed.has(match))
 }
 

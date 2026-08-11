@@ -26,6 +26,19 @@ type RouteMatcher = Readonly<{
   priority: number
 }>
 
+export type CanonicalGatewayAgentCategory = 'marketing' | 'sales' | 'ops'
+export type CanonicalGatewayAgentStatus = 'active' | 'running' | 'pending'
+
+type AgentDisplayMeta = Readonly<{
+  name: string
+  icon: string
+  category: CanonicalGatewayAgentCategory
+  description: string
+  status: CanonicalGatewayAgentStatus
+  isSystem: boolean
+  sourceFiles: readonly string[]
+}>
+
 export type CanonicalGatewayAgentRegistration = Readonly<{
   key: CanonicalGatewayAgentKey
   intent: TelegramGatewayIntent
@@ -36,6 +49,7 @@ export type CanonicalGatewayAgentRegistration = Readonly<{
   route?: RouteMatcher
   specialistInstructions?: string
   fallbackTo?: AssistantSpecialistKey
+  display: AgentDisplayMeta
 }>
 
 const INTELLIGENCE_ALLOWED_BOTS: readonly TelegramGatewayBot[] = [
@@ -66,6 +80,15 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
     objective: 'Classify the incoming Telegram message for downstream reply selection.',
     buildInputKind: 'classification',
     allowedBots: INTELLIGENCE_ALLOWED_BOTS,
+    display: {
+      name: 'Telegram Intelligence',
+      icon: '🧠',
+      category: 'ops',
+      description: 'Класифікує вхідні Telegram-повідомлення для downstream reply selection.',
+      status: 'active',
+      isSystem: true,
+      sourceFiles: ['backend/src/modules/telegram-mentor/services/intelligence.service.ts'],
+    },
   },
   {
     key: 'telegram_echo',
@@ -79,6 +102,15 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
     objective: 'Echo the incoming Telegram greeting back to the user.',
     buildInputKind: 'echo',
     allowedBots: INTELLIGENCE_ALLOWED_BOTS,
+    display: {
+      name: 'Telegram Echo',
+      icon: '🪞',
+      category: 'ops',
+      description: 'Fallback echo-agent для базових Telegram greeting flows.',
+      status: 'active',
+      isSystem: true,
+      sourceFiles: ['backend/src/modules/ai/agentGateway.ts'],
+    },
   },
   {
     key: 'coach',
@@ -99,6 +131,15 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
     },
     specialistInstructions: 'Focus on coaching resistance into one concrete action. Stay direct, grounded, and practical.',
     fallbackTo: 'assistant',
+    display: {
+      name: 'Coach Agent',
+      icon: '🧭',
+      category: 'ops',
+      description: 'Працює з опором, емоційним блоком і next-step coaching guidance.',
+      status: 'active',
+      isSystem: true,
+      sourceFiles: ['docs/agents/shared/OPERATING-RULES.md', 'docs/client/svoia-nadya/SKILL-coach.md'],
+    },
   },
   {
     key: 'content',
@@ -118,6 +159,15 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
     },
     specialistInstructions: 'Focus on content clarity, narrative structure, and one concrete publishing action.',
     fallbackTo: 'assistant',
+    display: {
+      name: 'Content Agent',
+      icon: '🎬',
+      category: 'marketing',
+      description: 'Допомагає з hooks, structure і одним concrete publishing action.',
+      status: 'active',
+      isSystem: true,
+      sourceFiles: ['docs/agents/ai-content/SKILL-creative-ads.md', 'docs/agents/ai-content/dna-content-generator-offer.md'],
+    },
   },
   {
     key: 'sales',
@@ -137,6 +187,15 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
     },
     specialistInstructions: 'Focus on sales movement, objections, CTA clarity, and the shortest path to a real next step.',
     fallbackTo: 'assistant',
+    display: {
+      name: 'Sales Agent',
+      icon: '🎯',
+      category: 'sales',
+      description: 'Рухається по objections, CTA clarity і shortest path to a sales next step.',
+      status: 'active',
+      isSystem: true,
+      sourceFiles: ['docs/agents/ai-seller/ai-seller-system-prompt.md', 'docs/agents/ai-seller/ai-seller-rules.md'],
+    },
   },
   {
     key: 'funnel',
@@ -156,6 +215,15 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
     },
     specialistInstructions: 'Focus on funnel movement, drop-off points, and the next conversion step inside the existing product flow.',
     fallbackTo: 'assistant',
+    display: {
+      name: 'Funnel Agent',
+      icon: '📄',
+      category: 'sales',
+      description: 'Покриває onboarding, funnel movement, drop-off points і conversion next steps.',
+      status: 'active',
+      isSystem: true,
+      sourceFiles: ['docs/agents/ai-funnel-assistant/README.md'],
+    },
   },
   {
     key: 'mentor',
@@ -176,6 +244,15 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
     },
     specialistInstructions: 'Focus on Starway product guidance, lifecycle clarity, and the best next in-product action.',
     fallbackTo: 'assistant',
+    display: {
+      name: 'AI Mentor',
+      icon: '🧭',
+      category: 'ops',
+      description: 'Дає grounded Starway mentor reply з lifecycle clarity і next in-product action.',
+      status: 'running',
+      isSystem: true,
+      sourceFiles: ['docs/agents/ai-mentor/methodology-absystem.md', 'docs/agents/ai-mentor/comeback-flows.md'],
+    },
   },
   {
     key: 'assistant',
@@ -190,6 +267,15 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
     buildInputKind: 'assistant',
     allowedBots: INTELLIGENCE_ALLOWED_BOTS,
     specialistInstructions: 'Act as the default assistant. Use the shared context, stay concise, and recommend one high-value next action.',
+    display: {
+      name: 'Assistant Agent',
+      icon: '💬',
+      category: 'sales',
+      description: 'Default assistant, shared-context reply layer для Telegram assistant flows.',
+      status: 'active',
+      isSystem: true,
+      sourceFiles: ['docs/agents/ai-assistant-bot/00-SURGICAL-SYSTEM-UPDATE.md', 'docs/agents/ai-assistant-bot/ANALYSIS-strict-guardrails.md'],
+    },
   },
 ] as const
 
@@ -217,6 +303,10 @@ export class CanonicalGatewayAgentRegistry {
 
   getAllAgentDefinitions(): AgentDefinition[] {
     return this.registry.getAllAgents()
+  }
+
+  listRegistrations(): CanonicalGatewayAgentRegistration[] {
+    return [...CANONICAL_GATEWAY_AGENT_REGISTRATIONS]
   }
 
   getRegistrationByRuntimeAgentId(agentId: AgentDefinition['id']): CanonicalGatewayAgentRegistration {

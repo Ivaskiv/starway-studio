@@ -647,17 +647,6 @@ export async function handleShowInside(
   if (!chatId) {
     return true
   }
-  const progress = await loadAbTestProgress(userId)
-  if (progress.result_key !== resultKey) {
-    await renderCurrentView(ctx, userId, progress)
-    await planAck(
-      ctx,
-      'ctx.answerCbQuery',
-      'ab_test_show_inside_stale_result',
-      'Показую актуальний крок'
-    ).catch(() => undefined)
-    return true
-  }
   const userRecord = await prisma.user.findUnique({
     where: { id: userId },
     select: { firstName: true, telegramUserName: true },
@@ -668,7 +657,6 @@ export async function handleShowInside(
     resultKey: resultKey as AbTestResultKey,
     firstName: resolveFirstName(userRecord, ctx, userId),
   })
-  await scheduleFollowups(userId, progress, 'S4_FOCUS_INVITE')
   return true
 }
 
@@ -685,7 +673,12 @@ export async function handleTestDrive(
   const progress = await loadAbTestProgress(userId)
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId || !progress.result_key) {
-    await renderCurrentView(ctx, userId, progress)
+    await planAck(
+      ctx,
+      'ctx.answerCbQuery',
+      'ab_test_test_drive_missing_result',
+      'Не вдалося відкрити практику. Спробуй ще раз.'
+    ).catch(() => undefined)
     return true
   }
   const userRecord = await prisma.user.findUnique({

@@ -1278,7 +1278,6 @@ export default function CleanMiniAppZoomCalendar() {
     string | null
   >(null)
   const [showQuestionInput, setShowQuestionInput] = useState(false)
-  const [showAllBookingQuestions, setShowAllBookingQuestions] = useState(false)
   const [primedDirectSessionId, setPrimedDirectSessionId] = useState<
     string | null
   >(null)
@@ -2358,7 +2357,7 @@ export default function CleanMiniAppZoomCalendar() {
 
                   <div>
                     <p className="text-sm text-white/55">
-                      Найближча Zoom-практика
+                      Найближчий Zoom-розбір
                     </p>
                     <p className="mt-1 text-2xl font-semibold">
                       {resolveBookingSessionDateLabel(
@@ -2374,22 +2373,42 @@ export default function CleanMiniAppZoomCalendar() {
                   {bookingNextSession.myQuestion ? (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-                        Твоя точка фокусу
+                        ТВОЄ ПИТАННЯ
                       </p>
                       <p className="mt-2 text-lg leading-7 text-white">
                         «{bookingNextSession.myQuestion.text}»
                       </p>
-                      <p className="mt-2 text-xs text-white/45">
-                        Питання №{bookingNextSession.myQuestion.position} у черзі
-                      </p>
+                      {bookingNextSession.myQuestion.position != null ? (
+                        <p className="mt-2 text-xs text-white/45">
+                          №{bookingNextSession.myQuestion.position} У ЧЕРЗІ
+                        </p>
+                      ) : null}
+                      {bookingQuestionSummary.questionsCount > 0 ? (
+                        <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                          ПИТАНЬ ДО РОЗБОРУ: {bookingQuestionSummary.questionsCount}
+                        </p>
+                      ) : null}
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="font-semibold">Точка фокусу ще не додана</p>
-                      <p className="mt-2 text-sm leading-6 text-white/65">
-                        Сформулюй одну конкретну ситуацію або питання, яке хочеш
-                        розібрати на Zoom.
-                      </p>
+                      {bookingQuestionSummary.state === 'missing-own' ? (
+                        <>
+                          <p className="font-semibold">
+                            ПИТАННЯ ДО РОЗБОРУ ВЖЕ Є: {bookingQuestionSummary.questionsCount}
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-white/65">
+                            ТИ ЩЕ НЕ ДОДАЛА СВОЄ ПИТАННЯ.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-semibold">ПИТАНЬ ДО РОЗБОРУ ПОКИ НЕМАЄ.</p>
+                          <p className="mt-2 text-sm leading-6 text-white/65">
+                            Сформулюй одну конкретну ситуацію або питання, яке хочеш
+                            розібрати на Zoom.
+                          </p>
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -2399,7 +2418,7 @@ export default function CleanMiniAppZoomCalendar() {
                     </p>
                     <p className="mt-2 text-sm font-semibold leading-6 text-white">
                       {bookingNextSession.myQuestion
-                        ? 'Підготуй одну конкретну ситуацію, яку хочеш розібрати на Zoom. Посилання на підключення з’явиться тут перед початком практики.'
+                        ? 'Підготуй одну конкретну ситуацію, яку хочеш розібрати на Zoom. Посилання на підключення з’явиться тут перед початком Zoom-розбору.'
                         : 'Сформулюй та запиши одну конкретну ситуацію для розбору.'}
                     </p>
                   </div>
@@ -2407,38 +2426,6 @@ export default function CleanMiniAppZoomCalendar() {
                   <div className="text-sm text-white/55">
                     {`Записано учасників: ${bookingNextSession.attendeesCount}`}
                   </div>
-
-                  {bookingQuestionSummary ? (
-                    <div className="space-y-3 border-t border-white/10 pt-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-                        Про що запитують інші учасники
-                      </p>
-                      {(showAllBookingQuestions
-                        ? bookingQuestionSummary.all
-                        : bookingQuestionSummary.primary
-                      ).map((questionText) => (
-                        <p
-                          key={questionText}
-                          className="rounded-2xl border-l-2 border-[rgb(var(--accent-rgb))] bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/75"
-                        >
-                          «{questionText}»
-                        </p>
-                      ))}
-                      {bookingQuestionSummary.remaining > 0 ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setShowAllBookingQuestions((current) => !current)
-                          }
-                          className="text-left text-sm font-medium text-white/65 underline underline-offset-4"
-                        >
-                          {showAllBookingQuestions
-                            ? 'Згорнути'
-                            : `Показати ще ${bookingQuestionSummary.remaining}`}
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
 
                   {renderBookingQuestionPanel(bookingNextSession, false)}
                 </div>
@@ -2533,7 +2520,7 @@ export default function CleanMiniAppZoomCalendar() {
           {!shouldShowCalendarSkeleton && !isBookingEntry && nextSession ? (
             <Card>
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
-                Наступна Zoom-практика
+                Наступний Zoom-розбір
               </p>
               <p className="mt-2 text-lg font-semibold">
                 {resolveZoomSessionTitle(nextSession.topic)}
@@ -2553,35 +2540,39 @@ export default function CleanMiniAppZoomCalendar() {
                   </span>
                 ) : null}
               </div>
-              {resolveNextSessionQuestionSummary(nextSession) ? (
+              {resolveNextSessionQuestionSummary(nextSession).state === 'own' ? (
                 <div className="mt-4 space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
-                    Питання учасників
+                    ТВОЄ ПИТАННЯ
                   </p>
-                  {resolveNextSessionQuestionSummary(nextSession)?.primary.map(
-                    (questionText) => (
-                      <p
-                        key={questionText}
-                        className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm leading-6 text-white/78"
-                      >
-                        {questionText}
-                      </p>
-                    )
-                  )}
-                  {resolveNextSessionQuestionSummary(nextSession)?.remaining ? (
+                  <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm leading-6 text-white/78">
+                    «{nextSession.myQuestion?.text}»
+                  </p>
+                  {nextSession.myQuestion?.position != null ? (
                     <p className="text-sm text-white/55">
-                      і ще{' '}
-                      {
-                        resolveNextSessionQuestionSummary(nextSession)
-                          ?.remaining
-                      }{' '}
-                      питань від учасників
+                      №{nextSession.myQuestion.position} У ЧЕРЗІ
+                    </p>
+                  ) : null}
+                  {resolveNextSessionQuestionSummary(nextSession).questionsCount > 0 ? (
+                    <p className="text-sm text-white/55">
+                      ПИТАНЬ ДО РОЗБОРУ: {resolveNextSessionQuestionSummary(nextSession).questionsCount}
                     </p>
                   ) : null}
                 </div>
+              ) : resolveNextSessionQuestionSummary(nextSession).state ===
+                'missing-own' ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm font-semibold text-white">
+                    ПИТАННЯ ДО РОЗБОРУ ВЖЕ Є:{' '}
+                    {resolveNextSessionQuestionSummary(nextSession).questionsCount}
+                  </p>
+                  <p className="text-sm text-white/55">
+                    ТИ ЩЕ НЕ ДОДАЛА СВОЄ ПИТАННЯ.
+                  </p>
+                </div>
               ) : (
                 <p className="mt-4 text-sm text-white/55">
-                  Учасники ще не залишили питання до цієї практики.
+                  ПИТАНЬ ДО РОЗБОРУ ПОКИ НЕМАЄ.
                 </p>
               )}
             </Card>
@@ -2715,7 +2706,7 @@ export default function CleanMiniAppZoomCalendar() {
                         </a>
                       ) : (
                         <span className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white/50">
-                          Посилання з’явиться перед практикою
+                          Посилання з’явиться перед Zoom-розбором
                         </span>
                       )}
                     </div>

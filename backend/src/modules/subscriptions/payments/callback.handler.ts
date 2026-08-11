@@ -14,6 +14,7 @@ import {
 import { buildRequestFingerprint } from '../../../core/state-machine/securityFoundation.js'
 import { prisma } from '../../../db/client.js'
 import { bot, coachBot, sendOpsTelegramMessage } from '../../../lib/telegram.js'
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
 import { runWeeklyAnalysis } from '../../ai-mentor/weekly-analysis/service.js'
@@ -137,7 +138,15 @@ async function sendTelegramMessageWithFallback(
   options?: Parameters<typeof bot.telegram.sendMessage>[2],
 ): Promise<boolean> {
   try {
-    await bot.telegram.sendMessage(chatId, text, options)
+    await sendTelegramMessage(bot, chatId, text, {
+      replyMarkup: options?.reply_markup,
+      disableWebPagePreview:
+        typeof options?.link_preview_options === 'object'
+        && options?.link_preview_options !== null
+        && 'is_disabled' in options.link_preview_options
+        ? Boolean((options.link_preview_options as { is_disabled?: unknown }).is_disabled)
+        : false,
+    })
     return true
   } catch (error) {
     console.error('[payment] rich telegram send failed, retrying plain text', {
@@ -147,7 +156,7 @@ async function sendTelegramMessageWithFallback(
   }
 
   try {
-    await bot.telegram.sendMessage(chatId, text)
+    await sendTelegramMessage(bot, chatId, text)
     return true
   } catch (error) {
     console.error('[payment] plain telegram send failed', {

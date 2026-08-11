@@ -5,6 +5,7 @@ import { Markup } from 'telegraf'
 
 import { prisma, withRetry } from '../../db/client.js'
 import { bot, coachBot, sendOpsTelegramMessage } from '../../lib/telegram.js'
+import { sendTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 import { NotificationEvent } from '../notifications/NotificationEvent.js'
 import { notificationService } from '../notifications/NotificationService.js'
 import { runWeeklyAnalysis } from '../../modules/ai-mentor/weekly-analysis/service.js'
@@ -1005,9 +1006,11 @@ async function sendCoachPanelReport(
       : Markup.button.callback(button.text, button.callback_data)
   }))
 
-  await coachBot.telegram.sendMessage(chatId, text, {
-    parse_mode: 'HTML',
-    reply_markup: Markup.inlineKeyboard(keyboard).reply_markup,
+  await sendTelegramMessage(coachBot, chatId, {
+    text,
+    parseMode: 'HTML',
+  }, {
+    replyMarkup: Markup.inlineKeyboard(keyboard).reply_markup,
   })
 }
 

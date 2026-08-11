@@ -1,5 +1,7 @@
 // backend/src/modules/admin/routes.ts
 
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { Router, type Response } from 'express'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { prisma } from '../../db/client.js'
@@ -29,6 +31,8 @@ import { getUserInsights } from './user-insights.service.js'
 import { notificationPreferenceService } from '../../services/notifications/services/NotificationPreferenceService.js'
 import { reassignLifecycleUsersToExpert, resolveViewerScopedExpertId } from '../experts/ownership.service.js'
 import { runGuardedAiTask, stableHash } from '../../services/aiGuard.service.js'
+import { buildGatewayPromptSources, TelegramAgentGateway } from '../ai/agentGateway.js'
+import { CanonicalGatewayAgentRegistry } from '../ai/canonicalAgentRegistry.js'
 
 const router = Router()
 
@@ -101,6 +105,11 @@ interface CompatibilityCheckRequest {
   checkRules: string[]
 }
 
+interface AgentRuntimeTestRequest {
+  message: string
+  messageType?: string | null
+}
+
 const PROMPT_ANALYSIS_MODEL = process.env.ADMIN_PROMPT_ANALYSIS_MODEL?.trim()
   || process.env.OPENAI_MODEL?.trim()
   || 'gpt-4o-mini'
@@ -112,6 +121,31 @@ function normalizePromptReference(value: string) {
 function parseStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map(item => item.trim())
+}
+
+async function buildRuntimePromptFallbackRecord(name: string) {
+  const source = buildGatewayPromptSources().find((item) => item.id === name)
+  if (!source) {
+    return null
+  }
+
+  const filePath = path.isAbsolute(source.filePath)
+    ? source.filePath
+    : path.resolve(process.cwd(), source.filePath)
+  const content = await readFile(filePath, 'utf8')
+  if (!content.trim()) {
+    return null
+  }
+
+  return {
+    id: `runtime:${name}`,
+    name,
+    version: 0,
+    content,
+    parsedContent: parsePromptContent(content),
+    isActive: true,
+    createdAt: new Date(0),
+  }
 }
 
 function extractPromptConfig(content: unknown) {
@@ -1070,6 +1104,68 @@ router.delete('/question-sets/:id', authRequired, async (req: AuthenticatedReque
 
 // ─── GET /api/admin/prompts ───────────────────────────────
 
+router.get('/agents', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  if (expertGuard(req, res)) return
+
+  const registry = new CanonicalGatewayAgentRegistry()
+  return res.json({
+    agents: registry.listRegistrations().map((registration) => ({
+      key: registration.key,
+      runtimeAgentId: registration.runtime.id,
+      promptId: registration.runtime.prompt,
+      capability: registration.runtime.capability,
+      objective: registration.objective,
+      buildInputKind: registration.buildInputKind,
+      name: registration.display.name,
+      icon: registration.display.icon,
+      category: registration.display.category,
+      description: registration.display.description,
+      status: registration.display.status,
+      isSystem: registration.display.isSystem,
+      sourceFiles: [...registration.display.sourceFiles],
+    })),
+  })
+})
+
+router.post('/agents/:key/test', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  if (expertGuard(req, res)) return
+
+  const key = typeof req.params.key === 'string' ? req.params.key.trim() : ''
+  const body = req.body as AgentRuntimeTestRequest
+  const message = typeof body?.message === 'string' ? body.message.trim() : ''
+  const messageType = typeof body?.messageType === 'string' ? body.messageType.trim() : null
+
+  if (!key || !message) {
+    return res.status(400).json({ error: 'invalid_agent_test_payload' })
+  }
+
+  try {
+    const gateway = new TelegramAgentGateway()
+    const result = await gateway.executeTargetedAgentTest({
+      key: key as Parameters<CanonicalGatewayAgentRegistry['getRegistrationByKey']>[0],
+      bot: req.user?.role === Role.EXPERT ? 'coach' : 'admin',
+      chatId: `admin-agent-test:${req.user?.id ?? 'unknown'}`,
+      userId: req.user?.id ?? null,
+      message,
+      messageType,
+      requestId: `admin:agent-test:${key}:${Date.now()}`,
+    })
+
+    return res.json({
+      ok: true,
+      result,
+    })
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : 'agent_test_failed'
+    const statusCode = messageText.includes('not registered') || messageText.includes('not allowed')
+      ? 400
+      : 502
+    return res.status(statusCode).json({ error: 'agent_test_failed', detail: messageText })
+  }
+})
+
+// ─── GET /api/admin/prompts ───────────────────────────────
+
 router.get('/prompts', authRequired, async (req: AuthenticatedRequest, res: Response) => {
   if (expertGuard(req, res)) return
 
@@ -1082,8 +1178,25 @@ router.get('/prompts', authRequired, async (req: AuthenticatedRequest, res: Resp
     ],
   })
 
+  const responsePrompts = prompts.map((prompt) => ({
+    id: prompt.id,
+    name: prompt.name,
+    version: prompt.version,
+    content: prompt.content,
+    parsedContent: parsePromptContent(prompt.content),
+    isActive: prompt.isActive,
+    createdAt: prompt.createdAt,
+  }))
+
+  if (rawName && !responsePrompts.some((prompt) => prompt.isActive)) {
+    const runtimeFallback = await buildRuntimePromptFallbackRecord(rawName).catch(() => null)
+    if (runtimeFallback) {
+      responsePrompts.unshift(runtimeFallback)
+    }
+  }
+
   return res.json({
-    prompts: prompts.map((prompt) => ({
+    prompts: responsePrompts.map((prompt) => ({
       id: prompt.id,
       name: prompt.name,
       version: prompt.version,
@@ -1152,7 +1265,7 @@ router.post('/prompts/analyze-impact', authRequired, async (req: AuthenticatedRe
 // ─── POST /api/admin/prompts ─────────────────────────────
 
 router.post('/prompts', authRequired, async (req: AuthenticatedRequest, res: Response) => {
-  if (superGuard(req, res)) return
+  if (expertGuard(req, res)) return
 
   const name = String(req.body.name ?? '').trim()
   const content = String(req.body.content ?? '').trim()

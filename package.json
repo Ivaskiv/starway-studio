@@ -36,6 +36,7 @@
     "test:assistant:e2e": "pnpm exec vitest run backend/src/modules/assistant/assistant.e2e.test.ts backend/src/modules/assistant/assistant.scheduler.test.ts backend/src/modules/assistant/decisionEngine.test.ts backend/src/modules/assistant/service.test.ts backend/src/modules/ai/agentGateway.test.ts backend/src/modules/telegram-mentor/handlers/intelligence.runtime.test.ts backend/src/modules/telegram-mentor/conversation/engine/conversationEngine.test.ts backend/src/modules/telegram-mentor/router/messageRouter.test.ts && pnpm test:mentor:quality && pnpm --dir backend exec tsc --noEmit && pnpm --dir apps/web exec tsc --noEmit",
     "test:mentor:quality": "pnpm exec vitest run backend/src/modules/assistant/mentorQuality.test.ts",
     "test:unit": "vitest",
+    "content:sync": "tsx scripts/content-sync.ts",
     "sync:docs": "tsx scripts/sync-instructions.ts",
     "sync:docs:watch": "tsx scripts/sync-instructions.ts --watch"
   },

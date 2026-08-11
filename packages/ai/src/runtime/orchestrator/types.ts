@@ -18,6 +18,15 @@ export type AgentId =
   | 'sales_agent'
   | 'coach_agent'
   | 'funnel_agent'
+  | 'strategy_agent'
+  | 'product_agent'
+  | 'methodology_agent'
+  | 'ads_creative_agent'
+  | 'user_intelligence_agent'
+  | 'retention_agent'
+  | 'analytics_agent'
+  | 'finance_agent'
+  | 'tech_ai_agent'
 
 export type RoutingDecision =
   | {

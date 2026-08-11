@@ -96,7 +96,7 @@ export default function MasterPanelPage() {
   const isSuperAdmin = normalizedRole === 'SUPERADMIN' || user?.isSuperAdmin === true
   const isExpertRole = normalizedRole === 'EXPERT' || normalizedRole === 'ADMIN'
   const canAccessMasterPanel = isSuperAdmin || isExpertRole
-  const canEditPrompts = isSuperAdmin
+  const canEditPrompts = isSuperAdmin || isExpertRole
   const canEditNotifications = isSuperAdmin || isExpertRole
   const canManageNotifications = isSuperAdmin
   const canEditFunnels = isSuperAdmin || isExpertRole

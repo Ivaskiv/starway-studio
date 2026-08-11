@@ -176,4 +176,52 @@ describe('ContextLoader', () => {
 
     await expect(loader.loadContext(makeInput())).rejects.toBeInstanceOf(ContextValidationError)
   })
+
+  it('passes canonical business context through the existing task context source', async () => {
+    const loader = new ContextLoader({
+      providers: [new TaskContextProvider(), new RuntimeStateContextProvider(), new PromptContextProvider()],
+      merger: new DeterministicContextMerger(),
+      validator: new RuntimeContextValidator(),
+      logger,
+    })
+
+    const context = await loader.loadContext(
+      makeInput({
+        agentDefinition: {
+          ...agentDefinition,
+          requiredContextSources: ['task', 'runtime_state', 'prompt'],
+        },
+        task: {
+          ...task,
+          metadata: {
+            canonicalBusinessContext: {
+              focusPricing: {
+                month1: '33 €',
+                month3: '69 €',
+                year1: '229 €',
+              },
+              aiMentor: {
+                launched: false,
+                target: 'October 2026',
+              },
+            },
+          },
+        },
+      }),
+    )
+
+    expect(context.task?.metadata).toMatchObject({
+      canonicalBusinessContext: {
+        focusPricing: {
+          month1: '33 €',
+          month3: '69 €',
+          year1: '229 €',
+        },
+        aiMentor: {
+          launched: false,
+          target: 'October 2026',
+        },
+      },
+    })
+  })
 })

@@ -4,6 +4,10 @@
 import crypto from 'crypto'
 import { Telegraf } from 'telegraf'
 import {
+  formatTelegramCaption,
+  formatTelegramMessage,
+} from './telegram/messageFormatter.js'
+import {
   readCoachBotToken,
   requireTelegramBotConfig,
   resolveTelegramDeliveryMode,
@@ -14,6 +18,129 @@ let contentBotInstance: Telegraf | null = null
 let coachBotInstance: Telegraf | null = null
 let testBotInstance: Telegraf | null = null
 
+function patchTelegramTransportFormatting(targetBot: Telegraf): Telegraf {
+  const telegram = targetBot.telegram as typeof targetBot.telegram & {
+    __starwayFormattingPatched__?: boolean
+  }
+
+  if (telegram.__starwayFormattingPatched__) {
+    return targetBot
+  }
+
+  telegram.__starwayFormattingPatched__ = true
+
+  const originalSendMessage = telegram.sendMessage.bind(telegram)
+  const originalSendPhoto = telegram.sendPhoto.bind(telegram)
+  const originalSendVoice = telegram.sendVoice.bind(telegram)
+  const originalSendVideo = telegram.sendVideo.bind(telegram)
+  const originalSendDocument = telegram.sendDocument.bind(telegram)
+
+  telegram.sendMessage = (async (
+    chatId: string | number,
+    text: string,
+    options?: Record<string, unknown>,
+  ) => {
+    const formatted =
+      options?.parse_mode === 'HTML'
+        ? formatTelegramMessage({
+            text,
+            preformatted: true,
+          })
+        : formatTelegramMessage(text)
+
+    return originalSendMessage(chatId, formatted.text, {
+      ...options,
+      parse_mode: formatted.parseMode,
+    })
+  }) as typeof telegram.sendMessage
+
+  telegram.sendPhoto = (async (
+    chatId: string | number,
+    photo: string,
+    options?: Record<string, unknown>,
+  ) => {
+    const caption = formatTelegramCaption(
+      typeof options?.caption === 'string' ? options.caption : '',
+      typeof options?.parse_mode === 'string' ? options.parse_mode : null,
+    )
+
+    return originalSendPhoto(chatId, photo, {
+      ...options,
+      ...(caption
+        ? {
+            caption: caption.text,
+            parse_mode: caption.parseMode,
+          }
+        : {}),
+    })
+  }) as typeof telegram.sendPhoto
+
+  telegram.sendVoice = (async (
+    chatId: string | number,
+    voice: string,
+    options?: Record<string, unknown>,
+  ) => {
+    const caption = formatTelegramCaption(
+      typeof options?.caption === 'string' ? options.caption : '',
+      typeof options?.parse_mode === 'string' ? options.parse_mode : null,
+    )
+
+    return originalSendVoice(chatId, voice, {
+      ...options,
+      ...(caption
+        ? {
+            caption: caption.text,
+            parse_mode: caption.parseMode,
+          }
+        : {}),
+    })
+  }) as typeof telegram.sendVoice
+
+  telegram.sendVideo = (async (
+    chatId: string | number,
+    video: string,
+    options?: Record<string, unknown>,
+  ) => {
+    const caption = formatTelegramCaption(
+      typeof options?.caption === 'string' ? options.caption : '',
+      typeof options?.parse_mode === 'string' ? options.parse_mode : null,
+    )
+
+    return originalSendVideo(chatId, video, {
+      ...options,
+      ...(caption
+        ? {
+            caption: caption.text,
+            parse_mode: caption.parseMode,
+          }
+        : {}),
+    })
+  }) as typeof telegram.sendVideo
+
+  telegram.sendDocument = (async (
+    chatId: string | number,
+    document: string,
+    options?: Record<string, unknown>,
+  ) => {
+    const caption = formatTelegramCaption(
+      typeof options?.caption === 'string' ? options.caption : '',
+      typeof options?.parse_mode === 'string' ? options.parse_mode : null,
+    )
+
+    return originalSendDocument(chatId, document, {
+      ...options,
+      ...(caption
+        ? {
+            caption: caption.text,
+            parse_mode: caption.parseMode,
+          }
+        : {}),
+    })
+  }) as typeof telegram.sendDocument
+
+  return targetBot
+}
+
 function getTelegramBotInstance(): Telegraf {
   if (telegramBotInstance) {
     return telegramBotInstance
@@ -21,7 +148,7 @@ function getTelegramBotInstance(): Telegraf {
 
   const { token } = requireTelegramBotConfig('telegram bot bootstrap')
   telegramBotInstance = new Telegraf(token)
-  return telegramBotInstance
+  return patchTelegramTransportFormatting(telegramBotInstance)
 }
 
 function readTelegramApiRoot(envKey: string): string {
@@ -185,7 +312,7 @@ function getContentBotInstance(): Telegraf {
       apiRoot,
     },
   })
-  return contentBotInstance
+  return patchTelegramTransportFormatting(contentBotInstance)
 }
 
 function getCoachBotInstance(): Telegraf {
@@ -198,7 +325,7 @@ function getCoachBotInstance(): Telegraf {
     throw new Error('[Telegram] Missing required env var during coach bot bootstrap: COACH_BOT_TOKEN')
   }
   coachBotInstance = new Telegraf(token)
-  return coachBotInstance
+  return patchTelegramTransportFormatting(coachBotInstance)
 }
 
 function getTestBotInstance(): Telegraf {
@@ -212,7 +339,7 @@ function getTestBotInstance(): Telegraf {
   }
 
   testBotInstance = new Telegraf(token)
-  return testBotInstance
+  return patchTelegramTransportFormatting(testBotInstance)
 }
 
 function createBotProxy(resolver: () => Telegraf): Telegraf {

@@ -475,7 +475,7 @@ async function generateContentPost(styleHints: string[]): Promise<string> {
  '- без хештегів',
  '- без markdown',
  '- без пояснень і варіантів',
- 'Контекст продукту: FOCUS = щотижневі Zoom-практики AB System.',
+ 'Контекст продукту: FOCUS = щотижневі Zoom-розбори AB System.',
  'Ціль: підштовхнути до публікації поста сьогодні.',
  styleHints.length > 0
  ? `Write in this style:\n${styleHints.join('\n')}`
@@ -488,7 +488,7 @@ async function generateContentPost(styleHints: string[]): Promise<string> {
  },
  )
 
- return response.content?.trim() || 'Сьогодні вийди не в контент, а в ясність.\n\nFOCUS не про ще одну мотивацію. Це місце, де перестаєш крутити одну й ту саму думку по колу і починаєш бачити, де саме зливається дія.\n\nРаз на тиждень на Zoom-практиці розбирається реальна ситуація: що відкладається, яке рішення зависло і який крок потрібно зробити зараз.\n\nЯкщо час перестати ходити по колу — заходь у FOCUS.'
+ return response.content?.trim() || 'Сьогодні вийди не в контент, а в ясність.\n\nFOCUS не про ще одну мотивацію. Це місце, де перестаєш крутити одну й ту саму думку по колу і починаєш бачити, де саме зливається дія.\n\nРаз на тиждень на Zoom-розборі розбирається реальна ситуація: що відкладається, яке рішення зависло і який крок потрібно зробити зараз.\n\nЯкщо час перестати ходити по колу — заходь у FOCUS.'
 }
 
 async function generateOutreachMessage(): Promise<string> {
@@ -512,7 +512,7 @@ async function generateOutreachMessage(): Promise<string> {
  '- одна чітка дія в кінці',
  '- без markdown',
  '- без варіантів і без пояснень',
- 'Контекст: запросити в FOCUS на щотижневу Zoom-практику.',
+ 'Контекст: запросити в FOCUS на щотижневий Zoom-розбір.',
  'Поверни тільки готовий текст повідомлення.',
  ].join('\n'),
  {
@@ -521,7 +521,7 @@ async function generateOutreachMessage(): Promise<string> {
  },
  )
 
- return response.content?.trim() || 'Привіт.\n\nЄ формат, де можна не говорити навколо проблеми, а розібрати одну реальну ситуацію й побачити, де саме стопориться дія.\n\nЦе щотижнева Zoom-практика FOCUS.\n\nЯкщо хочеш — скину деталі і найближчу дату.'
+ return response.content?.trim() || 'Привіт.\n\nЄ формат, де можна не говорити навколо проблеми, а розібрати одну реальну ситуацію й побачити, де саме стопориться дія.\n\nЦе щотижневий Zoom-розбір FOCUS.\n\nЯкщо хочеш — скину деталі і найближчу дату.'
 }
 
 async function generateDialogueAssistMessage(dialogueContext: string): Promise<string> {
@@ -553,7 +553,7 @@ async function generateDialogueAssistMessage(dialogueContext: string): Promise<s
  },
  )
 
- return response.content?.trim() || 'Тримай коротку відповідь: "Бачу, що тема зараз жива. Якщо хочеш, я скину найближчу дату Zoom-практики і ти подивишся, чи тобі підходить формат."'
+ return response.content?.trim() || 'Тримай коротку відповідь: "Бачу, що тема зараз жива. Якщо хочеш, я скину найближчу дату Zoom-розбору і ти подивишся, чи тобі підходить формат."'
 }
 
 function buildPostStep(input: {

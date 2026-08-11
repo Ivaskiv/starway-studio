@@ -4,9 +4,13 @@ import {
   blockquote,
   bold,
   escapeTelegramHtml,
+  formatTelegramCaption,
   formatTelegramMessage,
   joinBlocks,
-  sendTelegramMessage,
+  sendTelegramDocument,
+    sendTelegramMessage,
+  sendTelegramPhoto,
+  sendTelegramVoice,
 } from './messageFormatter.js'
 
 describe('messageFormatter', () => {
@@ -28,6 +32,24 @@ describe('messageFormatter', () => {
 
   it('unicode and ukrainian text are preserved', () => {
     expect(formatTelegramMessage('РІШЕННЯ — це твій фокус').text).toBe('РІШЕННЯ — це твій фокус')
+  })
+
+  it('formats accent markdown into bold html', () => {
+    expect(formatTelegramMessage('**Акцентна фраза**').text).toBe('<b>Акцентна фраза</b>')
+  })
+
+  it('formats quote markers into telegram blockquotes', () => {
+    expect(formatTelegramMessage('QUOTE: Це цитата').text).toBe('<blockquote>Це цитата</blockquote>')
+    expect(formatTelegramMessage('> Це теж цитата').text).toBe('<blockquote>Це теж цитата</blockquote>')
+  })
+
+  it('preserves preformatted block semantics for pricing and testimonials', () => {
+    expect(
+      formatTelegramMessage({
+        blocks: [bold('12 000 грн'), blockquote('Відгук після практики')],
+        preformatted: true,
+      }).text,
+    ).toBe('<b>12 000 грн</b>\n\n<blockquote>Відгук після практики</blockquote>')
   })
 
   it('escapes ampersand, angle brackets and quotes', () => {
@@ -83,5 +105,61 @@ describe('messageFormatter', () => {
     await sendTelegramMessage({ sendMessage }, '42', { text: '<b>OK</b>', parseMode: 'HTML' })
 
     expect(sendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('formats image captions through the canonical formatter', async () => {
+    const sendPhoto = vi.fn(async () => ({ message_id: 4 }))
+
+    await sendTelegramPhoto({ sendMessage: vi.fn(), sendPhoto }, '42', 'asset-key', {
+      caption: '**Хочу показати тобі повідомлення**',
+    })
+
+    expect(sendPhoto).toHaveBeenCalledWith(
+      '42',
+      'asset-key',
+      expect.objectContaining({
+        caption: '<b>Хочу показати тобі повідомлення</b>',
+        parse_mode: 'HTML',
+      }),
+    )
+  })
+
+  it('formats audio captions through the canonical formatter', async () => {
+    const sendVoice = vi.fn(async () => ({ message_id: 5 }))
+
+    await sendTelegramVoice({ sendMessage: vi.fn(), sendVoice }, '42', 'voice-key', {
+      caption: '[ЦИТАТА] Важливий інсайт',
+    })
+
+    expect(sendVoice).toHaveBeenCalledWith(
+      '42',
+      'voice-key',
+      expect.objectContaining({
+        caption: '<blockquote>Важливий інсайт</blockquote>',
+        parse_mode: 'HTML',
+      }),
+    )
+  })
+
+  it('formats document captions through the canonical formatter', async () => {
+    const sendDocument = vi.fn(async () => ({ message_id: 6 }))
+
+    await sendTelegramDocument({ sendMessage: vi.fn(), sendDocument }, '42', 'doc-key', {
+      caption: 'Тариф: **3 місяці**',
+    })
+
+    expect(sendDocument).toHaveBeenCalledWith(
+      '42',
+      'doc-key',
+      expect.objectContaining({
+        caption: 'Тариф: <b>3 місяці</b>',
+        parse_mode: 'HTML',
+      }),
+    )
+  })
+
+  it('formats standalone captions without leaking raw markers', () => {
+    expect(formatTelegramCaption('**ТВОЄ ПИТАННЯ**')?.text).toBe('<b>ТВОЄ ПИТАННЯ</b>')
+    expect(formatTelegramCaption('QUOTE: Цитата')?.text).toBe('<blockquote>Цитата</blockquote>')
   })
 })

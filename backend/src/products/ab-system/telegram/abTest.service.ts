@@ -2,6 +2,7 @@
 
 import type { Context, Telegraf } from 'telegraf'
 import type { Prisma } from '@starway/db/prisma-client'
+import type { AbTestResultKey } from '../content/abTest.results.js'
 import {
   buildAbTestProgressPatch,
   cloneAbTestProgress,
@@ -31,6 +32,7 @@ import {
   logFlowRender,
   logMessageSent,
   resolveContextUserId,
+  claimAbTestCallbackInteraction,
 } from './abTest.callback.js'
 import {
   trackAbTestEvent,
@@ -251,6 +253,7 @@ export async function handleAbTestCallback(
   let userId = (ctx.state as { userId?: string | null }).userId ?? null
   if (!userId && (
     action === 'ab_test:show_result' ||
+    action === 'ab_test:test_drive' ||
     action === 'skip_email_before_result' ||
     action.startsWith('show_inside_') ||
     action === 'open_focus_payment' ||
@@ -264,12 +267,17 @@ export async function handleAbTestCallback(
   if (!userId) {
     if (
       action === 'ab_test:show_result' ||
+      action.startsWith('show_inside_') ||
       action === 'open_focus_payment' ||
       action.startsWith('open_focus_payment:')
     ) {
       const errorText =
-        action === 'ab_test:show_result'
+      action === 'ab_test:show_result'
           ? 'Не вдалося відкрити результат. Спробуй ще раз.'
+          : action.startsWith('show_inside_')
+            ? 'Не вдалося відкрити практику. Спробуй ще раз.'
+          : action === 'ab_test:test_drive'
+            ? 'Не вдалося відкрити практику. Спробуй ще раз.'
           : 'Не вдалося відкрити ФОКУС. Спробуй ще раз.'
       await ctx.answerCbQuery(errorText).catch(() => null)
       console.error('[AB_TEST_CALLBACK_MISSING_USER_ID]', {
@@ -282,6 +290,8 @@ export async function handleAbTestCallback(
       action,
       handled:
         action === 'ab_test:show_result' ||
+        action.startsWith('show_inside_') ||
+        action === 'ab_test:test_drive' ||
         action === 'open_focus_payment' ||
         action.startsWith('open_focus_payment:'),
       reason: 'missing_user_id',
@@ -289,9 +299,30 @@ export async function handleAbTestCallback(
     logAbTestStartDebug('callback:missing_user_id', { action })
     return (
       action === 'ab_test:show_result' ||
+      action.startsWith('show_inside_') ||
+      action === 'ab_test:test_drive' ||
       action === 'open_focus_payment' ||
       action.startsWith('open_focus_payment:')
     )
+  }
+
+  const directShowInsideMatch = action.match(
+    /^show_inside_(STATE|GOAL|CHOICE|DECISION|ACTION)$/
+  )
+  if (directShowInsideMatch) {
+    const resultKey = directShowInsideMatch[1].toLowerCase() as AbTestResultKey
+    const dedupeClaimed = await claimAbTestCallbackInteraction(ctx, userId, action)
+    if (!dedupeClaimed) {
+      await ctx.answerCbQuery().catch(() => null)
+      logCallbackHandled({
+        action,
+        handled: true,
+        reason: 'duplicate_callback_deduped',
+        userId,
+      })
+      return true
+    }
+    return handleShowInside(ctx, userId, resultKey)
   }
 
   // ========== FOCUS SHORTCUTS ==========
@@ -373,6 +404,18 @@ export async function handleAbTestCallback(
     kind: parsed.kind,
   })
 
+  const dedupeClaimed = await claimAbTestCallbackInteraction(ctx, userId, action)
+  if (!dedupeClaimed) {
+    await ctx.answerCbQuery().catch(() => null)
+    logCallbackHandled({
+      action,
+      handled: true,
+      reason: 'duplicate_callback_deduped',
+      userId,
+    })
+    return true
+  }
+
   // ========== FOCUS FUNNEL LOCK ==========
   const focusProgress = await loadAbTestProgress(userId)
   const focusFlowLocked = isAbTestFocusFunnelLocked(focusProgress)
@@ -388,6 +431,7 @@ export async function handleAbTestCallback(
     parsed.kind === 'confirm_profile_email_for_result' ||
     parsed.kind === 'change_email_for_result' ||
     parsed.kind === 'skip_email_before_result' ||
+    parsed.kind === 'test_drive' ||
     action.startsWith('show_inside_') ||
     action.startsWith('open_focus_payment:')
 
@@ -427,6 +471,10 @@ export async function handleAbTestCallback(
   }
 
   if (parsed.kind === 'test_drive') {
+    const progress = await loadAbTestProgress(userId)
+    if (progress.status === 'completed' && progress.result_key) {
+      return handleShowInside(ctx, userId, progress.result_key)
+    }
     return handleTestDrive(ctx, userId)
   }
 

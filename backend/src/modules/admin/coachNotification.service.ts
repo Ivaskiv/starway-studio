@@ -1,5 +1,6 @@
 import type { Telegraf } from 'telegraf'
 import { coachBotContent } from '../../bot/content/coachBot.content.js'
+import { sendTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 
 export async function notifyCoachAboutFailedPayment(params: {
   coachBot: Telegraf
@@ -27,21 +28,28 @@ export async function notifyCoachAboutFailedPayment(params: {
   console.info(
     `[OPS_ROUTE_DEBUG] messageType=payment_attention_required chatId=${coachChatId} source=notifyCoachAboutFailedPayment bot=coachBot`,
   )
-  await coachBot.telegram.sendMessage(coachChatId, text, {
-    parse_mode: 'HTML',
-    reply_markup: {
-      inline_keyboard: [[
-        {
-          text: coachBotContent.paymentAdmin.paymentAttentionOpen,
-          callback_data: `admin:grant_focus:${userId}:${orderReference}`,
-        },
-        {
-          text: coachBotContent.paymentAdmin.paymentAttentionDeny,
-          callback_data: `admin:deny_focus:${userId}`,
-        },
-      ]],
+  await sendTelegramMessage(
+    coachBot,
+    coachChatId,
+    {
+      text,
+      parseMode: 'HTML',
     },
-  }).then(() => {
+    {
+      replyMarkup: {
+        inline_keyboard: [[
+          {
+            text: coachBotContent.paymentAdmin.paymentAttentionOpen,
+            callback_data: `admin:grant_focus:${userId}:${orderReference}`,
+          },
+          {
+            text: coachBotContent.paymentAdmin.paymentAttentionDeny,
+            callback_data: `admin:deny_focus:${userId}`,
+          },
+        ]],
+      },
+    },
+  ).then(() => {
     console.info(
       `[OPS_ROUTE_OK] messageType=payment_attention_required chatId=${coachChatId} source=notifyCoachAboutFailedPayment bot=coachBot`,
     )

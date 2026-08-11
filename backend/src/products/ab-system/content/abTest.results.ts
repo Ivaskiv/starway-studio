@@ -736,7 +736,7 @@ export function getTestDriveResultSurface(input: {
       [
         {
           text: AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT,
-          callback_data: 'ab_test:test_drive',
+          callback_data: `show_inside_${input.resultKey?.toUpperCase()}`,
         },
       ],
     ],

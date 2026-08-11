@@ -34,6 +34,7 @@ export type RoutingDecisionWithMetadata = RoutingDecision & {
 }
 
 export interface RoutingPolicyContext {
+  task: import('../orchestrator/types.js').EngineeringTask
   state: ExecutionStateSnapshot
   lastAgentId?: AgentId
   artifact?: PersistedArtifact

@@ -603,7 +603,7 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
     })
   })
 
-  it('adds attendee counts and participant question previews to the current week overview', async () => {
+  it('keeps question counts for users without exposing other participants texts in the current week overview', async () => {
     vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
       state: 'FOCUS_ACTIVE',
       isActive: true,
@@ -661,12 +661,59 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
     expect(overview.sessions[0]).toMatchObject({
       id: 'session-next',
       attendeesCount: 4,
+      questionPreviews: [],
+      questionsCount: 2,
+      remainingQuestionsCount: 0,
+    })
+  })
+
+  it('keeps question previews for coach overview ordered by the canonical queue', async () => {
+    mockZoomSessionFindMany.mockResolvedValue([
+      {
+        id: 'session-next',
+        expertId: 'expert-1',
+        scheduledAt: new Date('2026-08-10T16:00:00.000Z'),
+        status: 'SCHEDULED',
+        type: 'GROUP',
+        topic: 'ФОКУС · Zoom-практика',
+        requests: { type: 'group_practice', durationMinutes: 60, zoomLink: 'https://zoom.example/next' },
+        postSessionReport: null,
+        _count: { attendees: 4 },
+      },
+    ])
+    mockEventFindMany.mockResolvedValue([
+      {
+        userId: 'user-2',
+        createdAt: new Date('2026-08-04T09:00:00.000Z'),
+        payload: {
+          sessionId: 'session-next',
+          questionText: 'Хочу зрозуміти, як не випадати з ритму.',
+        },
+      },
+      {
+        userId: 'user-3',
+        createdAt: new Date('2026-08-04T09:05:00.000Z'),
+        payload: {
+          sessionId: 'session-next',
+          questionText: 'Як обрати один наступний крок?',
+        },
+      },
+    ])
+
+    const overview = await getCurrentWeekZoomOverview({
+      userId: 'coach-1',
+      role: 'coach',
+      expertId: 'expert-1',
+      now: new Date('2026-08-04T09:00:00.000Z'),
+    })
+
+    expect(overview.sessions[0]).toMatchObject({
+      id: 'session-next',
       questionPreviews: [
         'Хочу зрозуміти, як не випадати з ритму.',
         'Як обрати один наступний крок?',
       ],
       questionsCount: 2,
-      remainingQuestionsCount: 0,
     })
   })
 

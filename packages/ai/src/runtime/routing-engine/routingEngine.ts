@@ -23,6 +23,7 @@ export class RoutingEngine implements IRoutingEngine {
     let decision: RoutingDecision
     try {
       decision = await this.deps.policy.determineFirstDecision({
+        task: input.task,
         state: input.state,
       })
     } catch (cause) {
@@ -64,6 +65,7 @@ export class RoutingEngine implements IRoutingEngine {
     let decision: RoutingDecision
     try {
       decision = await this.deps.policy.determineNextDecision({
+        task: input.task,
         state: input.state,
         lastAgentId: input.lastAgentId,
         artifact: input.artifact,

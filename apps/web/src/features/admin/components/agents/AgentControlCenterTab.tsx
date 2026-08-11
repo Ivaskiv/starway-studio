@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { useGetRuntimeAgentsQuery } from '@/features/admin/services/admin.api'
 import { GlassCard } from '@/ui'
 
 import { AgentFlowDiagram } from './AgentFlowDiagram'
@@ -12,6 +13,22 @@ interface Props {
 
 export function AgentControlCenterTab({ canEdit }: Props) {
   const [selectedAgent, setSelectedAgent] = useState<AgentCardDef | null>(null)
+  const { data } = useGetRuntimeAgentsQuery()
+
+  const agents: AgentCardDef[] = (data?.agents ?? []).map((agent) => ({
+    key: agent.key,
+    runtimeAgentId: agent.runtimeAgentId,
+    promptId: agent.promptId,
+    capability: agent.capability,
+    objective: agent.objective,
+    name: agent.name,
+    icon: agent.icon,
+    category: agent.category,
+    desc: agent.description,
+    status: agent.status,
+    isSystem: agent.isSystem,
+    sourceFiles: agent.sourceFiles,
+  }))
 
   return (
     <>
@@ -29,7 +46,7 @@ export function AgentControlCenterTab({ canEdit }: Props) {
         </div>
 
         <div className="p-5">
-          <AgentFlowDiagram onSelectAgent={setSelectedAgent} />
+          <AgentFlowDiagram agents={agents} onSelectAgent={setSelectedAgent} />
         </div>
       </GlassCard>
 

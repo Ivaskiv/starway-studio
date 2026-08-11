@@ -3,7 +3,10 @@ export type AgentStatus = 'active' | 'running' | 'pending'
 
 export interface AgentCardDef {
   key: string
+  runtimeAgentId?: string
   promptId: string
+  capability?: string
+  objective?: string
   name: string
   icon: string
   category: AgentCategory

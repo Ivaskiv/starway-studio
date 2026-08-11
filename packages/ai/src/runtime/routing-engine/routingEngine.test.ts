@@ -202,4 +202,206 @@ describe('RoutingEngine', () => {
       }),
     ).rejects.toBeInstanceOf(TransitionValidationError)
   })
+
+  it('routes finance tasks through analytics, finance, funnel, ads creative, and guardian in order', async () => {
+    const engine = new RoutingEngine({
+      policy: new RoutingPolicy(),
+      validator: new TransitionValidator(),
+      logger,
+    })
+    const financeTask: EngineeringTask = {
+      ...task,
+      id: 'task-routing-finance',
+      objective: 'Проаналізуй CAC FOCUS по каналах і запропонуй зниження.',
+    }
+
+    const first = await engine.determineFirstAgent({
+      task: financeTask,
+      state: makeState({ task: financeTask }),
+    })
+    expect(first).toMatchObject({ kind: 'execute', agentId: 'project_manager' })
+
+    const analytics = await engine.determineNextAgent({
+      task: financeTask,
+      state: makeState({
+        task: financeTask,
+        status: 'running',
+        completedAgentIds: ['project_manager'],
+      }),
+      lastAgentId: 'project_manager',
+      artifact: makeArtifact('project_manager'),
+    })
+    expect(analytics).toMatchObject({ kind: 'execute', agentId: 'analytics_agent' })
+
+    const finance = await engine.determineNextAgent({
+      task: financeTask,
+      state: makeState({
+        task: financeTask,
+        status: 'running',
+        completedAgentIds: ['project_manager', 'analytics_agent'],
+      }),
+      lastAgentId: 'analytics_agent',
+      artifact: makeArtifact('analytics_agent'),
+    })
+    expect(finance).toMatchObject({ kind: 'execute', agentId: 'finance_agent' })
+
+    const funnel = await engine.determineNextAgent({
+      task: financeTask,
+      state: makeState({
+        task: financeTask,
+        status: 'running',
+        completedAgentIds: ['project_manager', 'analytics_agent', 'finance_agent'],
+      }),
+      lastAgentId: 'finance_agent',
+      artifact: makeArtifact('finance_agent'),
+    })
+    expect(funnel).toMatchObject({ kind: 'execute', agentId: 'funnel_agent' })
+
+    const adsCreative = await engine.determineNextAgent({
+      task: financeTask,
+      state: makeState({
+        task: financeTask,
+        status: 'running',
+        completedAgentIds: ['project_manager', 'analytics_agent', 'finance_agent', 'funnel_agent'],
+      }),
+      lastAgentId: 'funnel_agent',
+      artifact: makeArtifact('funnel_agent'),
+    })
+    expect(adsCreative).toMatchObject({ kind: 'execute', agentId: 'ads_creative_agent' })
+
+    const guardian = await engine.determineNextAgent({
+      task: financeTask,
+      state: makeState({
+        task: financeTask,
+        status: 'running',
+        completedAgentIds: ['project_manager', 'analytics_agent', 'finance_agent', 'funnel_agent', 'ads_creative_agent'],
+      }),
+      lastAgentId: 'ads_creative_agent',
+      artifact: makeArtifact('ads_creative_agent'),
+    })
+    expect(guardian).toMatchObject({ kind: 'awaiting_approval', checkpoint: 'guardian_validation' })
+  })
+
+  it('routes methodology changes to the methodology owner and then the guardian gate', async () => {
+    const engine = new RoutingEngine({
+      policy: new RoutingPolicy(),
+      validator: new TransitionValidator(),
+      logger,
+    })
+    const methodologyTask: EngineeringTask = {
+      ...task,
+      id: 'task-routing-methodology',
+      objective: 'Заміни етап ЦІЛЬ на МРІЯ в методології AB System.',
+    }
+
+    const methodology = await engine.determineNextAgent({
+      task: methodologyTask,
+      state: makeState({
+        task: methodologyTask,
+        status: 'running',
+        completedAgentIds: ['project_manager'],
+      }),
+      lastAgentId: 'project_manager',
+      artifact: makeArtifact('project_manager'),
+    })
+    expect(methodology).toMatchObject({ kind: 'execute', agentId: 'methodology_agent' })
+
+    const guardian = await engine.determineNextAgent({
+      task: methodologyTask,
+      state: makeState({
+        task: methodologyTask,
+        status: 'running',
+        completedAgentIds: ['project_manager', 'methodology_agent'],
+      }),
+      lastAgentId: 'methodology_agent',
+      artifact: makeArtifact('methodology_agent'),
+    })
+    expect(guardian).toMatchObject({ kind: 'awaiting_approval', checkpoint: 'guardian_validation' })
+  })
+
+  it('routes individual-user analysis to user intelligence instead of analytics', async () => {
+    const engine = new RoutingEngine({
+      policy: new RoutingPolicy(),
+      validator: new TransitionValidator(),
+      logger,
+    })
+    const userTask: EngineeringTask = {
+      ...task,
+      id: 'task-routing-user',
+      objective: 'Проаналізуй стан конкретного користувача та визнач наступну дію.',
+    }
+
+    const decision = await engine.determineNextAgent({
+      task: userTask,
+      state: makeState({
+        task: userTask,
+        status: 'running',
+        completedAgentIds: ['project_manager'],
+      }),
+      lastAgentId: 'project_manager',
+      artifact: makeArtifact('project_manager'),
+    })
+
+    expect(decision).toMatchObject({ kind: 'execute', agentId: 'user_intelligence_agent' })
+  })
+
+  it('blocks historical FOCUS finance calculations with MISSING_CONTEXT instead of fabricating LTV', async () => {
+    const engine = new RoutingEngine({
+      policy: new RoutingPolicy(),
+      validator: new TransitionValidator(),
+      logger,
+    })
+    const historicalTask: EngineeringTask = {
+      ...task,
+      id: 'task-routing-historical',
+      objective: 'Порахуй LTV FOCUS, використовуючи 80% повторної покупки.',
+    }
+
+    const decision = await engine.determineNextAgent({
+      task: historicalTask,
+      state: makeState({
+        task: historicalTask,
+        status: 'running',
+        completedAgentIds: ['project_manager', 'analytics_agent', 'finance_agent'],
+      }),
+      lastAgentId: 'finance_agent',
+      artifact: makeArtifact('finance_agent'),
+    })
+
+    expect(decision.kind).toBe('blocked')
+    if (decision.kind !== 'blocked') {
+      throw new Error('Expected blocked decision')
+    }
+    expect(decision.reason).toContain('MISSING_CONTEXT')
+  })
+
+  it('preserves agent conflicts instead of selecting a winner', async () => {
+    const engine = new RoutingEngine({
+      policy: new RoutingPolicy(),
+      validator: new TransitionValidator(),
+      logger,
+    })
+
+    const decision = await engine.determineNextAgent({
+      task,
+      state: makeState({
+        status: 'running',
+        completedAgentIds: ['project_manager', 'analytics_agent'],
+      }),
+      lastAgentId: 'analytics_agent',
+      artifact: makeArtifact('analytics_agent', {
+        conflicts: [
+          { agentId: 'analytics_agent', summary: 'Current CAC is stable.' },
+          { agentId: 'finance_agent', summary: 'Current CAC is deteriorating.' },
+        ],
+        conflictSummary: 'Analytics and Finance disagree on CAC direction.',
+      }),
+    })
+
+    expect(decision.kind).toBe('blocked')
+    if (decision.kind !== 'blocked') {
+      throw new Error('Expected blocked decision')
+    }
+    expect(decision.reason).toContain('AGENT_CONFLICT')
+  })
 })

@@ -22,6 +22,39 @@ export interface PromptVersionRecord {
   createdAt: string;
 }
 
+export interface RuntimeAgentRecord {
+  key: string
+  runtimeAgentId: string
+  promptId: string
+  capability: string
+  objective: string
+  buildInputKind: 'classification' | 'echo' | 'assistant'
+  name: string
+  icon: string
+  category: 'marketing' | 'sales' | 'ops'
+  description: string
+  status: 'active' | 'running' | 'pending'
+  isSystem: boolean
+  sourceFiles: string[]
+}
+
+export interface RuntimeAgentTestResult {
+  ok: boolean
+  result: {
+    bot: string
+    intent: string
+    agentId: string
+    taskId: string
+    artifact: {
+      id: string
+      type: string
+      summary: string
+      payload: Record<string, unknown>
+      metadata?: Record<string, unknown>
+    }
+  }
+}
+
 export interface PromptImpactDependencyCard {
   name: string;
   severity: 'high' | 'medium' | 'low';
@@ -76,6 +109,24 @@ export const adminApi = api.injectEndpoints({
         params: args?.name ? { name: args.name } : undefined,
       }),
       providesTags: ['PromptVersions'],
+    }),
+
+    getRuntimeAgents: builder.query<{ agents: RuntimeAgentRecord[] }, void>({
+      query: () => ({
+        url: '/admin/agents',
+      }),
+      providesTags: ['PromptVersions'],
+    }),
+
+    runRuntimeAgentTest: builder.mutation<
+      RuntimeAgentTestResult,
+      { key: string; message: string; messageType?: string | null }
+    >({
+      query: ({ key, ...body }) => ({
+        url: `/admin/agents/${key}/test`,
+        method: 'POST',
+        body,
+      }),
     }),
 
     createPromptVersion: builder.mutation<
@@ -138,6 +189,8 @@ export const {
   useUpdateAdminSettingsMutation,
   useGetAdminProductsQuery,
   useGetPromptVersionsQuery,
+  useGetRuntimeAgentsQuery,
+  useRunRuntimeAgentTestMutation,
   useCreatePromptVersionMutation,
   useActivatePromptVersionMutation,
   useDeletePromptVersionMutation,

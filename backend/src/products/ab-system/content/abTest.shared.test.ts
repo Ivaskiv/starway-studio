@@ -117,8 +117,8 @@ describe('abTest shared testimonial contract', () => {
     }
 
     const reviewBlocks = results.getAbTestResultDefinition('state').blocks?.review ?? []
-    expect(reviewBlocks).toHaveLength(3)
-    expect(reviewBlocks[2]).toEqual({
+    expect(reviewBlocks).toHaveLength(2)
+    expect(reviewBlocks[1]).toEqual({
       type: 'image',
       assetKey: shared.AB_TEST_SCREENSHOT_URLS.state_review,
     })

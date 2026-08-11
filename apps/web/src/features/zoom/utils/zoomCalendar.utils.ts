@@ -20,24 +20,25 @@ export function resolveZoomCalendarEntryMode(search: string) {
 export function resolveNextSessionQuestionSummary(
   session: ZoomWeekOverview['sessions'][number]
 ) {
-  const questions = session.questionPreviews ?? []
+  const questionsCount = session.questionsCount ?? 0
 
   if (session.myQuestion) {
     return {
-      primary: [],
-      all: [],
-      remaining: 0,
+      state: 'own' as const,
+      questionsCount,
     }
   }
 
-  if (questions.length === 0 && (session.questionsCount ?? 0) === 0) {
-    return null
+  if (questionsCount > 0) {
+    return {
+      state: 'missing-own' as const,
+      questionsCount,
+    }
   }
 
   return {
-    primary: questions.slice(0, 3),
-    all: questions,
-    remaining: Math.max(questions.length - 3, 0),
+    state: 'empty' as const,
+    questionsCount: 0,
   }
 }
 
@@ -490,7 +491,7 @@ export function formatWeekDate(value: string): string {
   })
 }
 
-const FALLBACK_ZOOM_SESSION_TITLE = 'Групова Zoom-практика'
+const FALLBACK_ZOOM_SESSION_TITLE = 'Груповий Zoom-розбір'
 
 export type ZoomHubPrimaryAction = 'open_access' | 'book' | 'join' | 'browse' | 'none'
 
@@ -523,7 +524,7 @@ export function resolveZoomSessionTitle(topic: string | null | undefined) {
 }
 
 const PREVIOUS_ZOOM_MATERIALS_PENDING_COPY =
-  'Матеріали цієї практики ще готуються.'
+  'Матеріали цього розбору ще готуються.'
 
 export function resolvePreviousZoomRecapTitle(recap: ZoomPreviousSessionRecap) {
   const explicitTitle = recap.title?.trim()
@@ -531,7 +532,7 @@ export function resolvePreviousZoomRecapTitle(recap: ZoomPreviousSessionRecap) {
     return explicitTitle
   }
 
-  return `Zoom-практика за ${formatWeekDate(recap.startsAt)}`
+  return `Zoom-розбір за ${formatWeekDate(recap.startsAt)}`
 }
 
 export function resolvePreviousZoomRecapDateLabel(startsAt: string) {
@@ -608,12 +609,12 @@ export function resolveZoomHubEmptyState(input: {
   }
 
   if (!input.nextSession && !input.previousSessionRecap) {
-    return {
-      title: 'Наступний Zoom уже готується',
-      description:
-        'Розклад оновлюється автоматично. Щойно наступна практика буде доступна, ми повідомимо тебе в боті.',
-      accessNote: 'Твій доступ активний.',
-    }
+        return {
+          title: 'Наступний Zoom уже готується',
+          description:
+        'Розклад оновлюється автоматично. Щойно наступний Zoom-розбір буде доступний, ми повідомимо тебе в боті.',
+          accessNote: 'Твій доступ активний.',
+        }
   }
 
   return null
@@ -646,20 +647,20 @@ export function resolveZoomHubPrimaryAction(input: {
     new Date(input.session.scheduledAt).getTime() <= now.getTime()
 
   if (sessionIsActive && input.session.zoomLink) {
-    return {
-      action: 'join' as ZoomHubPrimaryAction,
-      label: 'ПРИЄДНАТИСЯ',
-      description: 'Практика вже триває. Відкрий Zoom за активним посиланням.',
-    }
+      return {
+        action: 'join' as ZoomHubPrimaryAction,
+        label: 'ПРИЄДНАТИСЯ',
+      description: 'Zoom-розбір уже триває. Відкрий Zoom за активним посиланням.',
+      }
   }
 
   if (input.session.status === 'COMPLETED') {
-    return {
-      action: 'none' as ZoomHubPrimaryAction,
-      label: 'Zoom завершено',
-      description:
-        'Ця практика вже завершилась. Обери наступну доступну сесію.',
-    }
+      return {
+        action: 'none' as ZoomHubPrimaryAction,
+        label: 'Zoom завершено',
+        description:
+        'Цей Zoom-розбір уже завершився. Обери наступну доступну сесію.',
+      }
   }
 
   if (input.session.status === 'CANCELLED') {
@@ -683,7 +684,7 @@ export function resolveZoomHubPrimaryAction(input: {
   return {
     action: 'book' as ZoomHubPrimaryAction,
     label: `ЗАПИСАТИСЬ НА ${formatUppercaseWeekday(input.session.scheduledAt)}`,
-    description: 'Обери цю практику як наступний конкретний крок.',
+    description: 'Обери цей Zoom-розбір як наступний конкретний крок.',
   }
 }
 

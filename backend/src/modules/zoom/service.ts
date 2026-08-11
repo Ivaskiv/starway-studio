@@ -20,6 +20,7 @@ import {
   sendDedupedTelegramMessage,
   sendOpsTelegramMessage,
 } from '../../lib/telegram.js'
+import { sendTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js'
 import { activateAbsystemTrialAfterFirstZoom } from '../access/service.js'
 import {
@@ -300,7 +301,8 @@ export async function getCurrentWeekZoomOverview(args: {
         : session.type) as ZoomSessionType,
       zoomLink,
       attendeesCount,
-      questionPreviews: questionSummary?.questionPreviews ?? [],
+      questionPreviews:
+        args.role === 'coach' ? (questionSummary?.questionPreviews ?? []) : [],
       questionsCount: questionSummary?.questionsCount ?? 0,
       remainingQuestionsCount: questionSummary?.remainingQuestionsCount ?? 0,
       isMyBooking: Boolean((session as { isMyBooking?: boolean }).isMyBooking),
@@ -591,7 +593,7 @@ export async function getUpcomingZoomBookingView(userId: string) {
             position: myQuestionIndex + 1,
           }
         : null,
-    questionPreviews: otherQuestions.slice(0, 3).map((question) => question.text),
+    questionPreviews: [],
     questionsCount: orderedQuestions.length,
     remainingQuestionsCount: Math.max(otherQuestions.length - 3, 0),
   }
@@ -2774,10 +2776,10 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
     }
 
     try {
-      const sent = await telegramBot.telegram.sendMessage(channelId, text, {
-        reply_markup: replyMarkup,
-        link_preview_options: { is_disabled: true },
-      })
+      const sent = await sendTelegramMessage(telegramBot, channelId, text, {
+        replyMarkup: replyMarkup,
+        disableWebPagePreview: true,
+      }) as { message_id: number }
       console.log('[syncChannelPost] sent:', sent.message_id)
       if (existing?.messageId !== sent.message_id) {
         await telegramBot.telegram
@@ -2880,8 +2882,8 @@ export async function notifySubscribersNewSession(
       : []
 
     try {
-      await telegramBot.telegram.sendMessage(tgId, text, {
-        reply_markup: {
+      await sendTelegramMessage(telegramBot, tgId, text, {
+        replyMarkup: {
           inline_keyboard: [
             [calendarButton],
             ...(secondRow.length > 0 ? [secondRow] : []),
@@ -2936,8 +2938,8 @@ export async function notifySubscribersNewSession(
       'Саме цей патерн розбирається на живих практиках ФОКУС.\n\n' +
       'Для участі необхідно активувати доступ.'
     try {
-      await telegramBot.telegram.sendMessage(tgId, leadText, {
-        reply_markup: {
+      await sendTelegramMessage(telegramBot, tgId, leadText, {
+        replyMarkup: {
           inline_keyboard: [
             [
               {
@@ -3062,8 +3064,8 @@ export async function notifyAffectedUsers(
     const text = messageByOperation[operation](greeting)
 
     try {
-      await telegramBot.telegram.sendMessage(chatId, text, {
-        reply_markup: calendarButton
+      await sendTelegramMessage(telegramBot, chatId, text, {
+        replyMarkup: calendarButton
           ? { inline_keyboard: [[calendarButton]] }
           : undefined,
       })
@@ -3157,8 +3159,8 @@ export async function processScheduleNotification(
       if (!text) continue
 
       try {
-        await telegramBot.telegram.sendMessage(tgId, text, {
-          reply_markup:
+        await sendTelegramMessage(telegramBot, tgId, text, {
+          replyMarkup:
             buttons.length > 0
               ? ({ inline_keyboard: buttons } as any)
               : undefined,
@@ -3209,11 +3211,12 @@ export async function processScheduleNotification(
           : { text: 'Переглянути оновлений розклад', url: zoomUrl }
         : null
       try {
-        await telegramBot.telegram.sendMessage(
+        await sendTelegramMessage(
+          telegramBot,
           tgId,
           `${greeting}обмін слотом підтверджено.\n\nНовий час консультації: ${swapUser.newTime}\n\nРозклад оновлено автоматично.`,
           {
-            reply_markup: zoomBtn
+            replyMarkup: zoomBtn
               ? { inline_keyboard: [[zoomBtn]] }
               : undefined,
           }
@@ -3507,8 +3510,8 @@ export async function notifyMonthSchedule(
       ? [{ text: 'УВІЙТИ У ФОКУС', url: focusInviteUrl }]
       : []
     try {
-      await telegramBot.telegram.sendMessage(tgId, `${greeting}${paidText}`, {
-        reply_markup: {
+      await sendTelegramMessage(telegramBot, tgId, `${greeting}${paidText}`, {
+        replyMarkup: {
           inline_keyboard: [
             [calBtn],
             ...(secondRow.length > 0 ? [secondRow] : []),
@@ -3574,8 +3577,8 @@ export async function notifyMonthSchedule(
       'Для участі необхідно активувати доступ.'
 
     try {
-      await telegramBot.telegram.sendMessage(tgId, text, {
-        reply_markup: {
+      await sendTelegramMessage(telegramBot, tgId, text, {
+        replyMarkup: {
           inline_keyboard: [
             [
               {

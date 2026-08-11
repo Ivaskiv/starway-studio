@@ -91,6 +91,7 @@ export function parseAbTestCallback(
 const AB_TEST_START_DEBUG_PREFIX = '[AB_TEST_START_DEBUG]'
 const AB_TEST_EMAIL_SKIP_GUARD_TTL_MS = 10_000
 const AB_TEST_EMAIL_SKIP_LOG_PREFIX = '[ab-test-email-skip]'
+const AB_TEST_CALLBACK_DEDUPE_TTL_SECONDS = 60 * 60 * 24
 
 const activeEmailSkipGuards = new Map<string, number>()
 
@@ -193,51 +194,65 @@ export function formatSubscriptionDate(
 export async function deactivateCallbackMarkup(
   ctx: Context
 ): Promise<void> {
+  void ctx
+}
+
+function resolveCallbackMessageId(ctx: Context): string {
   const callbackMessage =
     ctx.callbackQuery && 'message' in ctx.callbackQuery
       ? ctx.callbackQuery.message
       : null
-  const pressedCallbackData =
-    ctx.callbackQuery && 'data' in ctx.callbackQuery
-      ? ctx.callbackQuery.data
-      : null
 
-  const currentKeyboard =
-    callbackMessage &&
-    'reply_markup' in callbackMessage &&
-    callbackMessage.reply_markup &&
-    typeof callbackMessage.reply_markup === 'object' &&
-    'inline_keyboard' in callbackMessage.reply_markup &&
-    Array.isArray(callbackMessage.reply_markup.inline_keyboard)
-      ? callbackMessage.reply_markup.inline_keyboard
-      : null
+  if (!callbackMessage || typeof callbackMessage !== 'object') {
+    return 'no-message'
+  }
 
-  const inline_keyboard = currentKeyboard?.length
-    ? currentKeyboard.map((row) =>
-        row.map((button) => {
-          if (!('callback_data' in button) || button.callback_data !== pressedCallbackData) {
-            return button
-          }
+  const messageId =
+    'message_id' in callbackMessage ? callbackMessage.message_id : null
 
-          return {
-            ...button,
-            text: button.text.startsWith('✅ ') ? button.text : `✅ ${button.text}`,
-            callback_data: 'disabled',
-          }
-        })
-      )
-    : [
-        [
-          {
-            text: 'ПЕРЕГЛЯНУТО',
-            callback_data: 'disabled',
-          },
-        ],
-      ]
+  return String(messageId ?? 'no-message').trim() || 'no-message'
+}
 
-  await ctx
-    .editMessageReplyMarkup({ inline_keyboard })
-    .catch(() => undefined)
+export function isAbTestConversionCallback(action: string): boolean {
+  const normalized = String(action ?? '').trim()
+  if (!normalized) return false
+
+  return (
+    normalized === 'open_focus_payment' ||
+    normalized.startsWith('open_focus_payment:') ||
+    normalized === 'trial_zoom'
+  )
+}
+
+export function shouldDedupeAbTestCallback(action: string): boolean {
+  const normalized = String(action ?? '').trim()
+  if (!normalized) return false
+  if (isAbTestConversionCallback(normalized)) return false
+  if (normalized.startsWith('ab_test_answer:')) return false
+  return true
+}
+
+export async function claimAbTestCallbackInteraction(
+  ctx: Context,
+  userId: string,
+  action: string,
+): Promise<boolean> {
+  const normalizedAction = String(action ?? '').trim()
+  if (!userId || !shouldDedupeAbTestCallback(normalizedAction)) {
+    return true
+  }
+
+  const chatId = String(ctx.chat?.id ?? ctx.from?.id ?? 'no-chat').trim() || 'no-chat'
+  const messageId = resolveCallbackMessageId(ctx)
+  const cacheKey =
+    `ab-test-callback:${userId}:${chatId}:${messageId}:${normalizedAction}`
+
+  if (await cacheGet<boolean>(cacheKey)) {
+    return false
+  }
+
+  await cacheSet(cacheKey, true, AB_TEST_CALLBACK_DEDUPE_TTL_SECONDS)
+  return true
 }
 
 export function escapeHtml(value: string): string {

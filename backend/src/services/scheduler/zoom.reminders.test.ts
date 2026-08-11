@@ -170,6 +170,39 @@ describe('scanZoomSessionReminders', () => {
     })
   })
 
+  it('sends the 2h reminder when the scan runs 10 minutes late', async () => {
+    vi.setSystemTime(new Date('2026-07-31T18:10:00.000Z'))
+    mockZoomSessionFindMany.mockImplementation(async ({ where }: { where: { OR: Array<{ scheduledAt: { gte: Date; lte: Date } }> } }) => {
+      expect(where.OR[0]?.scheduledAt.gte.toISOString()).toBe('2026-07-31T20:00:00.000Z')
+      expect(where.OR[0]?.scheduledAt.lte.toISOString()).toBe('2026-07-31T20:10:00.000Z')
+
+      return [
+        {
+          id: 'session-two-hour-grace',
+          scheduledAt: new Date('2026-07-31T20:00:00.000Z'),
+          expertId: 'expert-1',
+          requests: { zoomLink: 'https://zoom.example/grace-2h' },
+          attendees: [
+            {
+              userId: 'trial-user',
+              user: {
+                telegramChatId: '630111093',
+              },
+            },
+          ],
+        },
+      ]
+    })
+    const telegramBot = createTelegramBot()
+
+    await scanZoomSessionReminders(telegramBot as never)
+
+    expect(telegramBot.telegram.sendMessage).toHaveBeenCalledTimes(1)
+    expect(createdNotifications[0]).toMatchObject({
+      templateKey: 'ZOOM_REMINDER_2H',
+    })
+  })
+
   it('sends one 5m reminder in the correct short window', async () => {
     mockZoomSessionFindMany.mockResolvedValue([
       {
@@ -187,6 +220,39 @@ describe('scanZoomSessionReminders', () => {
         ],
       },
     ])
+    const telegramBot = createTelegramBot()
+
+    await scanZoomSessionReminders(telegramBot as never)
+
+    expect(telegramBot.telegram.sendMessage).toHaveBeenCalledTimes(1)
+    expect(createdNotifications[0]).toMatchObject({
+      templateKey: 'ZOOM_REMINDER_5M',
+    })
+  })
+
+  it('sends the 5m reminder when the scan reaches the exact session-start minute', async () => {
+    vi.setSystemTime(new Date('2026-07-31T18:05:00.000Z'))
+    mockZoomSessionFindMany.mockImplementation(async ({ where }: { where: { OR: Array<{ scheduledAt: { gte: Date; lte: Date } }> } }) => {
+      expect(where.OR[1]?.scheduledAt.gte.toISOString()).toBe('2026-07-31T18:04:00.000Z')
+      expect(where.OR[1]?.scheduledAt.lte.toISOString()).toBe('2026-07-31T18:10:00.000Z')
+
+      return [
+        {
+          id: 'session-five-minute-grace',
+          scheduledAt: new Date('2026-07-31T18:05:00.000Z'),
+          expertId: 'expert-1',
+          requests: { zoomLink: 'https://zoom.example/grace-5m' },
+          attendees: [
+            {
+              userId: 'trial-user',
+              user: {
+                telegramChatId: '630111093',
+              },
+            },
+          ],
+        },
+      ]
+    })
     const telegramBot = createTelegramBot()
 
     await scanZoomSessionReminders(telegramBot as never)

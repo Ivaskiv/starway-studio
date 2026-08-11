@@ -60,8 +60,8 @@ describe('telegram intelligence routing', () => {
       message: 'Скільки коштує ФОКУС на 3 місяці?',
     })
 
-    expect(result.message).toContain('39€')
-    expect(result.message).toContain('6€')
+    expect(result.message).toContain('69€')
+    expect(result.message).toContain('30€')
     expect(result.isFallback).toBe(false)
   })
 
@@ -72,7 +72,7 @@ describe('telegram intelligence routing', () => {
       message: 'Який точний час сесій ФОКУСУ?',
     })
 
-    expect(result.message).toContain('4 дні на тиждень')
+    expect(result.message).toContain('4 живі Zoom-розбори щомісяця')
     expect(result.message).toContain('Точний розклад уточни у Наді')
     expect(result.message).not.toMatch(/\b\d{1,2}:\d{2}\b/)
   })

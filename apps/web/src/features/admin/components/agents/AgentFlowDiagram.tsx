@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { AGENT_CARDS, AGENT_EDGES, CATEGORY_META } from './agentControlCenter.config'
+import { AGENT_EDGES, CATEGORY_META } from './agentControlCenter.config'
 import { AgentCard } from './AgentCard'
 import type { AgentCardDef, AgentCategory } from './agentControlCenter.types'
 
 interface Props {
+  agents: AgentCardDef[]
   onSelectAgent: (agent: AgentCardDef) => void
 }
 
@@ -18,7 +19,7 @@ interface EdgeLine {
 
 const CATEGORIES: AgentCategory[] = ['marketing', 'sales', 'ops']
 
-export function AgentFlowDiagram({ onSelectAgent }: Props) {
+export function AgentFlowDiagram({ agents, onSelectAgent }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState<EdgeLine[]>([])
 
@@ -29,13 +30,16 @@ export function AgentFlowDiagram({ onSelectAgent }: Props) {
 
       const containerRect = containerRefCurrent.getBoundingClientRect()
       const nextEdges = AGENT_EDGES.flatMap((edge) => {
+        if (!agents.some((agent) => agent.key === edge.from) || !agents.some((agent) => agent.key === edge.to)) {
+          return []
+        }
         const fromEl = containerRefCurrent.querySelector<HTMLElement>(`[data-agent-id="${edge.from}"]`)
         const toEl = containerRefCurrent.querySelector<HTMLElement>(`[data-agent-id="${edge.to}"]`)
         if (!fromEl || !toEl) return []
 
         const fromRect = fromEl.getBoundingClientRect()
         const toRect = toEl.getBoundingClientRect()
-        const sourceAgent = AGENT_CARDS.find((agent) => agent.key === edge.from)
+        const sourceAgent = agents.find((agent) => agent.key === edge.from)
 
         return [{
           x1: fromRect.right - containerRect.left,
@@ -56,7 +60,7 @@ export function AgentFlowDiagram({ onSelectAgent }: Props) {
       window.clearTimeout(timeoutId)
       window.removeEventListener('resize', recalcEdges)
     }
-  }, [])
+  }, [agents])
 
   return (
     <div ref={containerRef} className="relative">
@@ -86,7 +90,7 @@ export function AgentFlowDiagram({ onSelectAgent }: Props) {
       <div className="relative grid gap-5 lg:grid-cols-3">
         {CATEGORIES.map((category) => {
           const meta = CATEGORY_META[category]
-          const agents = AGENT_CARDS.filter((agent) => agent.category === category)
+          const categoryAgents = agents.filter((agent) => agent.category === category)
 
           return (
             <div key={category} className="flex flex-col">
@@ -99,7 +103,7 @@ export function AgentFlowDiagram({ onSelectAgent }: Props) {
               </div>
 
               <div className="flex flex-1 flex-col gap-1.5 rounded-b-xl border border-t-0 border-white/10 bg-white/[0.015] p-2">
-                {agents.map((agent) => (
+                {categoryAgents.map((agent) => (
                   <div key={agent.key} data-agent-id={agent.key}>
                     <AgentCard agent={agent} colColor={meta.color} onClick={() => onSelectAgent(agent)} />
                   </div>

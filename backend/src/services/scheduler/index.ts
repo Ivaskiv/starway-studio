@@ -14,6 +14,7 @@ import { generateZoomSessionsFromAvailabilityCron } from '../../modules/zoom/zoo
 import { getProductCronProfile } from '../../platform/index.js'
 import { withRuntimeAdvisoryLock } from '../../core/runtime/runtimeIdempotency.js'
 import { bot, sendOpsTelegramMessage } from '../../lib/telegram.js'
+import { sendTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 import { prisma } from '../../db/client.js'
 import { AB_TEST_LIFECYCLE_REMINDERS, type LifecycleReminderKey } from '../../products/ab-system/content/abTest.followups.js'
 import { startNotificationJobWorker, stopNotificationJobWorker } from '../notifications/worker.js'
@@ -235,6 +236,10 @@ type ReminderDispatch = {
 type ZoomReminderType = 'ZOOM_REMINDER_2H' | 'ZOOM_REMINDER_5M'
 type ZoomRecoveryType = 'ZOOM_NO_SHOW'
 type ZoomCoachSummaryType = 'ZOOM_COACH_SUMMARY_60M'
+const ZOOM_REMINDER_2H_TARGET_MINUTES = 120
+const ZOOM_REMINDER_2H_GRACE_MINUTES = 10
+const ZOOM_REMINDER_5M_TARGET_MINUTES = 5
+const ZOOM_REMINDER_5M_GRACE_MINUTES = 1
 
 async function wasReminderSentRecently(userId: string, reminderKey: LifecycleReminderKey): Promise<boolean> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
@@ -268,6 +273,26 @@ async function wasZoomReminderSentRecently(
   })
 
   return Boolean(hit)
+}
+
+function resolveZoomReminderType(diffMs: number): ZoomReminderType | null {
+  const diffMinutes = diffMs / (60 * 1000)
+
+  if (
+    diffMinutes >= ZOOM_REMINDER_2H_TARGET_MINUTES - ZOOM_REMINDER_2H_GRACE_MINUTES
+    && diffMinutes <= ZOOM_REMINDER_2H_TARGET_MINUTES
+  ) {
+    return 'ZOOM_REMINDER_2H'
+  }
+
+  if (
+    diffMinutes >= -ZOOM_REMINDER_5M_GRACE_MINUTES
+    && diffMinutes <= ZOOM_REMINDER_5M_TARGET_MINUTES
+  ) {
+    return 'ZOOM_REMINDER_5M'
+  }
+
+  return null
 }
 
 function formatZoomReminderDate(date: Date): string {
@@ -607,12 +632,12 @@ async function sendZoomReminder(
       ]]
 
   try {
-    await telegramBot.telegram.sendMessage(
+    await sendTelegramMessage(
+      telegramBot,
       params.chatId,
       [title, '', dateLabel, '', body].join('\n'),
       {
-        parse_mode: 'HTML',
-        reply_markup: {
+        replyMarkup: {
           inline_keyboard: inlineKeyboard,
         },
       },
@@ -659,17 +684,17 @@ async function sendZoomReminder(
 
 export async function scanZoomSessionReminders(telegramBot: Telegraf): Promise<void> {
   const now = new Date()
-  const twoHourStart = new Date(now.getTime() + 110 * 60 * 1000)
-  const twoHourEnd = new Date(now.getTime() + 120 * 60 * 1000)
-  const fiveMinuteStart = now
-  const fiveMinuteEnd = new Date(now.getTime() + 5 * 60 * 1000)
+  const twoHourStart = new Date(now.getTime() + (ZOOM_REMINDER_2H_TARGET_MINUTES - ZOOM_REMINDER_2H_GRACE_MINUTES) * 60 * 1000)
+  const twoHourEnd = new Date(now.getTime() + ZOOM_REMINDER_2H_TARGET_MINUTES * 60 * 1000)
+  const fiveMinuteStart = new Date(now.getTime() - ZOOM_REMINDER_5M_GRACE_MINUTES * 60 * 1000)
+  const fiveMinuteEnd = new Date(now.getTime() + ZOOM_REMINDER_5M_TARGET_MINUTES * 60 * 1000)
 
   const sessions = await prisma.zoomSession.findMany({
     where: {
       status: ZoomStatus.SCHEDULED,
       OR: [
-        { scheduledAt: { gt: twoHourStart, lte: twoHourEnd } },
-        { scheduledAt: { gt: fiveMinuteStart, lte: fiveMinuteEnd } },
+        { scheduledAt: { gte: twoHourStart, lte: twoHourEnd } },
+        { scheduledAt: { gte: fiveMinuteStart, lte: fiveMinuteEnd } },
       ],
     },
     select: {
@@ -692,12 +717,7 @@ export async function scanZoomSessionReminders(telegramBot: Telegraf): Promise<v
 
   for (const session of sessions) {
     const diffMs = session.scheduledAt.getTime() - now.getTime()
-    const reminderType: ZoomReminderType | null =
-      diffMs > 110 * 60 * 1000 && diffMs <= 120 * 60 * 1000
-        ? 'ZOOM_REMINDER_2H'
-        : diffMs > 0 && diffMs <= 5 * 60 * 1000
-          ? 'ZOOM_REMINDER_5M'
-          : null
+    const reminderType = resolveZoomReminderType(diffMs)
 
     if (!reminderType) continue
 
@@ -799,11 +819,12 @@ export async function scanZoomNoShowRecovery(
         sessionId: attendee.session.id,
         triggered: true,
       })
-      await telegramBot.telegram.sendMessage(
+      await sendTelegramMessage(
+        telegramBot,
         chatId,
         [title, '', body].join('\n'),
         {
-          reply_markup: {
+          replyMarkup: {
             inline_keyboard: [
               [{ text: 'Написати причину', callback_data: 'continue_ai_mentor_chat' }],
               [{ text: 'Записатись ще раз', web_app: { url: bookingUrl } }],
@@ -876,11 +897,16 @@ async function dispatchLifecycleReminder(
 
     const copy = AB_TEST_LIFECYCLE_REMINDERS[config.reminderKey]
     try {
-      await telegramBot.telegram.sendMessage(user.telegramChatId, `${copy.title}\n\n${copy.body}`, {
-        reply_markup: {
-          inline_keyboard: [[{ text: copy.cta ?? 'Відкрити', callback_data: config.ctaAction }]],
+      await sendTelegramMessage(
+        telegramBot,
+        user.telegramChatId,
+        `${copy.title}\n\n${copy.body}`,
+        {
+          replyMarkup: {
+            inline_keyboard: [[{ text: copy.cta ?? 'Відкрити', callback_data: config.ctaAction }]],
+          },
         },
-      })
+      )
       await prisma.notification.create({
         data: {
           expertId: user.expertId,
@@ -1037,11 +1063,16 @@ export async function scheduleSubscriptionExpiryReminders(telegramBot: Telegraf)
 
       const copy = AB_TEST_LIFECYCLE_REMINDERS[window.reminderKey]
       try {
-        await telegramBot.telegram.sendMessage(user.telegramChatId, `${copy.title}\n\n${copy.body}`, {
-          reply_markup: {
-            inline_keyboard: [[{ text: copy.cta ?? 'Відкрити', callback_data: 'open_focus_payment' }]],
+        await sendTelegramMessage(
+          telegramBot,
+          user.telegramChatId,
+          `${copy.title}\n\n${copy.body}`,
+          {
+            replyMarkup: {
+              inline_keyboard: [[{ text: copy.cta ?? 'Відкрити', callback_data: 'open_focus_payment' }]],
+            },
           },
-        })
+        )
         await prisma.notification.create({
           data: {
             expertId: user.expertId,

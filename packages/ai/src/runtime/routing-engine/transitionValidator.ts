@@ -29,7 +29,57 @@ const EXECUTE_TRANSITIONS: Record<AgentId, AgentId[]> = {
   sales_agent: [],
   coach_agent: [],
   funnel_agent: [],
+  strategy_agent: [],
+  product_agent: [],
+  methodology_agent: [],
+  ads_creative_agent: [],
+  user_intelligence_agent: [],
+  retention_agent: [],
+  analytics_agent: [],
+  finance_agent: [],
+  tech_ai_agent: [],
 }
+
+EXECUTE_TRANSITIONS.project_manager = [
+  'task_planning',
+  'strategy_agent',
+  'product_agent',
+  'methodology_agent',
+  'ads_creative_agent',
+  'user_intelligence_agent',
+  'retention_agent',
+  'analytics_agent',
+  'finance_agent',
+  'tech_ai_agent',
+  'assistant_agent',
+  'content_agent',
+  'sales_agent',
+  'coach_agent',
+  'funnel_agent',
+  'mentor_agent',
+]
+
+EXECUTE_TRANSITIONS.analytics_agent = ['finance_agent']
+EXECUTE_TRANSITIONS.finance_agent = ['funnel_agent', 'ads_creative_agent']
+EXECUTE_TRANSITIONS.funnel_agent = ['ads_creative_agent', 'content_agent']
+
+const DOMAIN_COMPLETION_AGENT_IDS = new Set<AgentId>([
+  'assistant_agent',
+  'content_agent',
+  'sales_agent',
+  'coach_agent',
+  'funnel_agent',
+  'strategy_agent',
+  'product_agent',
+  'methodology_agent',
+  'ads_creative_agent',
+  'user_intelligence_agent',
+  'retention_agent',
+  'analytics_agent',
+  'finance_agent',
+  'tech_ai_agent',
+  'mentor_agent',
+])
 
 export class TransitionValidator implements ITransitionValidator {
   private readonly allowedInitialAgentIds: Set<AgentId>
@@ -110,10 +160,10 @@ export class TransitionValidator implements ITransitionValidator {
     }
 
     if (decision.kind === 'complete') {
-      if (lastAgentId !== 'release_readiness') {
+      if (lastAgentId !== 'release_readiness' && !DOMAIN_COMPLETION_AGENT_IDS.has(lastAgentId)) {
         return {
           valid: false,
-          reason: `Only release readiness may complete execution, received '${lastAgentId}'.`,
+          reason: `Only release readiness or a registered domain owner may complete execution, received '${lastAgentId}'.`,
         }
       }
       return { valid: true }

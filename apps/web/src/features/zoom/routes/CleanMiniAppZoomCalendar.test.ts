@@ -46,17 +46,18 @@ const mockSubmitBookingQuestion = vi.fn(() => ({
   unwrap: async () => ({ ok: true, id: 'booking-question', createdAt: '2026-08-05T09:00:00.000Z' }),
 }))
 const mockTelegramMiniAppAuth = vi.fn(() => Promise.resolve({}))
+let mockUpcomingSessionData: Record<string, unknown> | null = null
 const mockCurrentWeekSessions: ZoomWeekOverview['sessions'] = [
   {
     id: 'zoom-booking-session',
     expertId: null,
-    scheduledAt: '2026-08-10T16:00:00.000Z',
+    scheduledAt: '2026-08-17T16:00:00.000Z',
     topic: 'Фокус-сесія',
     status: 'SCHEDULED',
     requests: [],
     postSessionReport: null,
-    createdAt: '2026-08-01T08:00:00.000Z',
-    updatedAt: '2026-08-01T08:00:00.000Z',
+    createdAt: '2026-08-08T08:00:00.000Z',
+    updatedAt: '2026-08-08T08:00:00.000Z',
     type: 'group_practice',
     attendeesCount: 9,
     questionPreviews: [
@@ -164,8 +165,8 @@ vi.mock('@/features/zoom/services/zoom.api', () => ({
   useGetWeekOverviewQuery: () => ({
     data: {
       week: {
-        from: '2026-08-10T00:00:00.000Z',
-        to: '2026-08-16T23:59:59.999Z',
+        from: '2026-08-17T00:00:00.000Z',
+        to: '2026-08-23T23:59:59.999Z',
         timezone: 'Europe/Kyiv',
       },
       sessions: mockCurrentWeekSessions,
@@ -178,8 +179,8 @@ vi.mock('@/features/zoom/services/zoom.api', () => ({
   useGetPublicWeekOverviewQuery: () => ({
     data: {
       week: {
-        from: '2026-08-10T00:00:00.000Z',
-        to: '2026-08-16T23:59:59.999Z',
+        from: '2026-08-17T00:00:00.000Z',
+        to: '2026-08-23T23:59:59.999Z',
         timezone: 'Europe/Kyiv',
       },
       sessions: mockCurrentWeekSessions,
@@ -196,7 +197,7 @@ vi.mock('@/features/zoom/services/zoom.api', () => ({
     refetch: vi.fn(),
   }),
   useGetUpcomingSessionQuery: () => ({
-    data: null,
+    data: mockUpcomingSessionData,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -588,7 +589,7 @@ describe('zoom hub next session', () => {
         attendanceCount: 0,
         nextStep: null,
       }),
-    ).toBe('Zoom-практика за 3 серпня')
+    ).toBe('Zoom-розбір за 3 серпня')
   })
 
   it('shows only confirmed recap content and uses the pending materials fallback', () => {
@@ -622,7 +623,7 @@ describe('zoom hub next session', () => {
         attendanceCount: 0,
         nextStep: null,
       }),
-    ).toBe('Матеріали цієї практики ще готуються.')
+    ).toBe('Матеріали цього розбору ще готуються.')
   })
 
   it('reads booking entry mode only from the route search params', () => {
@@ -657,7 +658,7 @@ describe('zoom hub next session', () => {
     expect(bookingMarkup).toContain('14')
     expect(bookingMarkup).toContain('Відстежити енергію ввечері')
     expect(bookingMarkup).toContain('ЗАПИСАТИСЬ')
-    expect(bookingMarkup).toContain('Понеділок, 10 серпня · 19:00')
+    expect(bookingMarkup).toContain('Понеділок, 17 серпня · 19:00')
     expect(bookingMarkup).toContain('Записано учасників: 9')
     expect(bookingMarkup).not.toContain('Наступний Zoom уже готується')
     expect(bookingMarkup).not.toContain('Твій підсумок тижня')
@@ -772,10 +773,10 @@ describe('zoom hub next session', () => {
     mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousCurrentWeekSessions)
     consoleErrorSpy.mockRestore()
 
-expect(emptyMarkup).toContain('Наступний Zoom уже готується')
-expect(emptyMarkup).toContain(
-  'Розклад оновлюється автоматично. Щойно наступна практика буде доступна, ми повідомимо тебе в боті.',
-)
+    expect(emptyMarkup).toContain('Наступний Zoom уже готується')
+    expect(emptyMarkup).toContain(
+      'Розклад оновлюється автоматично. Щойно наступний Zoom-розбір буде доступний, ми повідомимо тебе в боті.',
+    )
 expect(emptyMarkup).not.toContain('Твій підсумок тижня')
 expect(emptyMarkup).not.toContain('ПЕРЕГЛЯНУТИ ПОВНИЙ ЗВІТ')
 expect(mockRegisterAttendee).not.toHaveBeenCalled()
@@ -814,7 +815,7 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
     consoleErrorSpy.mockRestore()
 
     expect(bookingMarkup).toContain('ЗАПИСАТИСЬ')
-    expect(bookingMarkup).toContain('Понеділок, 10 серпня · 19:00')
+    expect(bookingMarkup).toContain('Понеділок, 17 серпня · 19:00')
     expect(bookingMarkup).not.toContain('Доступ до Zoom ще не підтверджено.')
     expect(bookingMarkup).not.toContain('ОПЛАТИТИ ФОКУС')
     expect(bookingMarkup).not.toContain('Твій підсумок тижня')
@@ -909,9 +910,66 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
         zoomLink: '',
       } as ZoomWeekOverview['sessions'][number]),
     ).toEqual({
-      primary: [],
-      all: [],
-      remaining: 0,
+      state: 'own',
+      questionsCount: 1,
+    })
+  })
+
+  it('returns the own-question-missing state when there are queued questions but no myQuestion', () => {
+    expect(
+      resolveNextSessionQuestionSummary({
+        id: 'zoom-with-queue',
+        expertId: null,
+        scheduledAt: '2026-08-17T16:00:00.000Z',
+        topic: 'Live Zoom',
+        status: 'SCHEDULED',
+        requests: [],
+        postSessionReport: null,
+        createdAt: '2026-08-10T08:00:00.000Z',
+        updatedAt: '2026-08-10T08:00:00.000Z',
+        type: 'GROUP',
+        attendeesCount: 2,
+        questionPreviews: [],
+        questionsCount: 2,
+        remainingQuestionsCount: 0,
+        isMyBooking: true,
+        myQuestion: null,
+        audioFileId: null,
+        hasAudio: false,
+        zoomLink: '',
+      } as ZoomWeekOverview['sessions'][number]),
+    ).toEqual({
+      state: 'missing-own',
+      questionsCount: 2,
+    })
+  })
+
+  it('returns the true empty-question state only when there are no queued questions', () => {
+    expect(
+      resolveNextSessionQuestionSummary({
+        id: 'zoom-empty',
+        expertId: null,
+        scheduledAt: '2026-08-17T16:00:00.000Z',
+        topic: 'Live Zoom',
+        status: 'SCHEDULED',
+        requests: [],
+        postSessionReport: null,
+        createdAt: '2026-08-10T08:00:00.000Z',
+        updatedAt: '2026-08-10T08:00:00.000Z',
+        type: 'GROUP',
+        attendeesCount: 1,
+        questionPreviews: [],
+        questionsCount: 0,
+        remainingQuestionsCount: 0,
+        isMyBooking: true,
+        myQuestion: null,
+        audioFileId: null,
+        hasAudio: false,
+        zoomLink: '',
+      } as ZoomWeekOverview['sessions'][number]),
+    ).toEqual({
+      state: 'empty',
+      questionsCount: 0,
     })
   })
 
@@ -948,6 +1006,58 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
     mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousSessions)
 
     expect(markup).not.toContain('Учасники ще не залишили питання до цієї практики.')
+    expect(markup).toContain('ТВОЄ ПИТАННЯ')
+    expect(markup).toContain('«Як не зірвати ритм після Zoom?»')
+    expect(markup).toContain('№1 У ЧЕРЗІ')
+  })
+
+  it('shows only the current user question in booking entry even when questionPreviews is empty', () => {
+    const previousUpcomingSession = mockUpcomingSessionData
+
+    mockUpcomingSessionData = {
+      id: 'zoom-live',
+      expertId: null,
+      scheduledAt: '2026-08-17T16:00:00.000Z',
+      topic: 'Live Zoom',
+      status: 'SCHEDULED',
+      requests: [],
+      postSessionReport: null,
+      createdAt: '2026-08-10T08:00:00.000Z',
+      updatedAt: '2026-08-10T08:00:00.000Z',
+      attendeesCount: 1,
+      questionPreviews: [],
+      questionsCount: 1,
+      remainingQuestionsCount: 0,
+      isMyBooking: true,
+      myQuestion: {
+        text: 'Хочу розібрати, чому я постійно розпорошуюсь між різними задачами й не можу втримати фокус на одній головній цілі.',
+        position: 1,
+      },
+    } as any
+
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/miniapp/zoom-calendar?intent=booking'] },
+        createElement(
+          Routes,
+          undefined,
+          createElement(Route, {
+            path: '/miniapp/zoom-calendar',
+            element: createElement(CleanMiniAppZoomCalendar),
+          }),
+        ),
+      ),
+    )
+
+    mockUpcomingSessionData = previousUpcomingSession
+
+    expect(markup).toContain('ТВОЄ ПИТАННЯ')
+    expect(markup).toContain(
+      'Хочу розібрати, чому я постійно розпорошуюсь між різними задачами й не можу втримати фокус на одній головній цілі.',
+    )
+    expect(markup).toContain('№1 У ЧЕРЗІ')
+    expect(markup).not.toContain('Учасники ще не залишили питання')
   })
 
   it('hides ended sessions and returns an honest empty state when nothing upcoming remains', () => {
@@ -988,7 +1098,7 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
       }),
     ).toEqual({
       title: 'Наступний Zoom уже готується',
-      description: 'Розклад оновлюється автоматично. Щойно наступна практика буде доступна, ми повідомимо тебе в боті.',
+      description: 'Розклад оновлюється автоматично. Щойно наступний Zoom-розбір буде доступний, ми повідомимо тебе в боті.',
       accessNote: 'Твій доступ активний.',
     })
   })
@@ -1535,7 +1645,7 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
       }),
     ).toEqual({
       title: 'Наступний Zoom уже готується',
-      description: 'Розклад оновлюється автоматично. Щойно наступна практика буде доступна, ми повідомимо тебе в боті.',
+      description: 'Розклад оновлюється автоматично. Щойно наступний Zoom-розбір буде доступний, ми повідомимо тебе в боті.',
       accessNote: 'Твій доступ активний.',
     })
   })
@@ -1558,13 +1668,13 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
   })
 
   it('uses the canonical group title only for blank topics', () => {
-    expect(resolveZoomSessionTitle('')).toBe('Групова Zoom-практика')
-    expect(resolveZoomSessionTitle(undefined)).toBe('Групова Zoom-практика')
+    expect(resolveZoomSessionTitle('')).toBe('Груповий Zoom-розбір')
+    expect(resolveZoomSessionTitle(undefined)).toBe('Груповий Zoom-розбір')
   })
 
   it('preserves a normal real title unchanged', () => {
-    expect(resolveZoomSessionTitle('Групова Zoom-практика')).toBe('Групова Zoom-практика')
-    expect(resolveZoomSessionTitle('ФОКУС · Zoom-практика')).toBe('ФОКУС · Zoom-практика')
+    expect(resolveZoomSessionTitle('Груповий Zoom-розбір')).toBe('Груповий Zoom-розбір')
+    expect(resolveZoomSessionTitle('ФОКУС · Zoom-розбір')).toBe('ФОКУС · Zoom-розбір')
   })
 
   it('resolves a booked scheduled session to the canonical booked CTA', () => {

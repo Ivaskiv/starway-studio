@@ -1,6 +1,7 @@
 import {
   AB_TEST_FOCUS_CTA_BLOCK,
   AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
+  AB_TEST_FOCUS_PRICE_1Y,
   AB_TEST_FOCUS_REAL_SITUATION_INLINE,
   AB_TEST_FOCUS_TARIFF_BLOCKS,
   AB_TEST_FOCUS_WEEKLY_TEXT,
@@ -60,6 +61,7 @@ export const FAQ_WHAT_IS_FOCUS = {
     '',
     AB_TEST_FOCUS_PRICE_1M,
     AB_TEST_FOCUS_PRICE_3M,
+    AB_TEST_FOCUS_PRICE_1Y,
   ].join('\n'),
   cta: AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   ctaCallback: 'open_focus_payment',
@@ -128,7 +130,7 @@ export const FAQ_FOCUS_VS_COURSE = {
   callbackData: 'faq:focus_vs_course',
   text: [
     'Курс ти проходиш у своєму темпі.',
-    'ФОКУС — це живі практики раз на тиждень.',
+    AB_TEST_FOCUS_WEEKLY_TEXT,
     '',
     'Тут важливо не просто отримати інформацію,',
     'а прийти, подивитись на свою ситуацію',
@@ -138,7 +140,7 @@ export const FAQ_FOCUS_VS_COURSE = {
   ctaCallback: null,
   blocks: [
     telegramBlock.text('Курс ти проходиш у своєму темпі.'),
-    telegramBlock.text('ФОКУС — це живі практики раз на тиждень.'),
+    telegramBlock.text(AB_TEST_FOCUS_WEEKLY_TEXT),
     telegramBlock.text('Тут важливо не просто отримати інформацію, а прийти, подивитись на свою ситуацію і вийти з конкретним кроком.'),
   ],
 } as const
@@ -150,7 +152,7 @@ export const FAQ_AFTER_FOCUS = {
   text: [
     'Після ФОКУСУ для учасників відкривається перехід в ABSystem AI.',
     '',
-    'Це платформа, яка веде тебе щодня між Zoom-практиками:',
+    'Це платформа, яка веде тебе щодня між Zoom-розборами:',
     '— допомагає прописати цілі,',
     '— зібрати стратегію,',
     '— проходити колесо балансу,',
@@ -163,7 +165,7 @@ export const FAQ_AFTER_FOCUS = {
   ctaCallback: null,
   blocks: [
     telegramBlock.text('Після ФОКУСУ для учасників відкривається перехід в ABSystem AI.'),
-    telegramBlock.text('Це платформа, яка веде тебе щодня між Zoom-практиками: допомагає прописати цілі, зібрати стратегію, проходити колесо балансу, відстежувати кроки, бачити, де ти знову переносиш важливе.'),
+    telegramBlock.text('Це платформа, яка веде тебе щодня між Zoom-розборами: допомагає прописати цілі, зібрати стратегію, проходити колесо балансу, відстежувати кроки, бачити, де ти знову переносиш важливе.'),
     telegramBlock.text('Але в платформу можна перейти тільки після входу у ФОКУС.'),
   ],
 } as const

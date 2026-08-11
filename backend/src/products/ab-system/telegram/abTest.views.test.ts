@@ -148,12 +148,14 @@ import {
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
   AB_TEST_SCREENSHOT_URLS,
   AB_TEST_SHOW_INSIDE_CTA_TEXT,
+  telegramBlock,
 } from '../content/abTest.shared.js'
 import {
   dispatchAbTestResultSequence,
   dispatchAbTestPracticeSequence,
   renderAbTestEmailGate,
   renderCurrentView,
+  sendTelegramContentChunk,
   sendQuestionDirect,
   sendResultSnapshot,
 } from './abTest.views.js'
@@ -238,13 +240,16 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
       .map(([, text]) => text)
       .filter((text): text is string => typeof text === 'string')
 
-    expect(introTexts.some((text) => text.includes('<b>Твій результат: РІШЕННЯ</b>'))).toBe(true)
-    expect(introTexts.some((text) => text.trim() === '<b>РІШЕННЯ</b>')).toBe(false)
     expect(
       introTexts.some((text) =>
-        text.includes('«Я все розумію але не роблю» — це була я. Роками.'),
+        text.includes('Ти вже знаєш, яке рішення хочеш прийняти. Але щоразу в останній момент відкладаєш його.'),
       ),
-    ).toBe(false)
+    ).toBe(true)
+    expect(
+      introTexts.some((text) =>
+        text.includes('«Я все розумію, але не роблю» — це була я. Роками.'),
+      ),
+    ).toBe(true)
     expect(introTexts.some((text) => text.includes('**РІШЕННЯ**'))).toBe(false)
 
     const lastCall = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)
@@ -537,6 +542,153 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
   })
 })
 
+describe('canonical telegram formatter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('formats accent markdown in text blocks without leaking raw **', async () => {
+    const ctx = createCtx()
+
+    await sendTelegramContentChunk(
+      ctx as never,
+      '42',
+      '',
+      [telegramBlock.text('**Акцентна фраза**')],
+      { parseMode: 'HTML' },
+    )
+
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
+      '42',
+      '<b>Акцентна фраза</b>',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+    expect(JSON.stringify(ctx.telegram.sendMessage.mock.calls[0])).not.toContain('**Акцентна фраза**')
+  })
+
+  it('formats quote blocks through canonical blockquote rendering', async () => {
+    const ctx = createCtx()
+
+    await sendTelegramContentChunk(
+      ctx as never,
+      '42',
+      '',
+      [telegramBlock.quote('Це цитата')],
+      { parseMode: 'HTML' },
+    )
+
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
+      '42',
+      '<blockquote>Це цитата</blockquote>',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+  })
+
+  it('formats image captions through the same formatter instead of sending raw markdown', async () => {
+    const ctx = createCtx()
+
+    await sendTelegramContentChunk(
+      ctx as never,
+      '42',
+      '',
+      [telegramBlock.image(AB_TEST_SCREENSHOT_URLS.state_review, '**Хочу показати тобі повідомлення**')],
+      { parseMode: 'HTML' },
+    )
+
+    expect(ctx.telegram.sendPhoto).toHaveBeenCalledWith(
+      '42',
+      AB_TEST_SCREENSHOT_URLS.state_review,
+      expect.objectContaining({
+        caption: '<b>Хочу показати тобі повідомлення</b>',
+        parse_mode: 'HTML',
+      }),
+    )
+    expect(JSON.stringify(ctx.telegram.sendPhoto.mock.calls[0])).not.toContain('**Хочу показати тобі повідомлення**')
+  })
+
+  it('preserves pricing block formatting contract', async () => {
+    const ctx = createCtx()
+
+    await sendTelegramContentChunk(
+      ctx as never,
+      '42',
+      '',
+      [telegramBlock.pricing('1 місяць — 33 €')],
+      { parseMode: 'HTML' },
+    )
+
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
+      '42',
+      '<b>1 місяць — 33 €</b>',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+  })
+})
+
+describe('handleAbTestCallback show_inside direct route live regression', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    mockWithRuntimeAdvisoryLock.mockImplementation(async (_input: unknown, task: () => Promise<unknown>) => ({
+      acquired: true,
+      value: await task(),
+    }))
+    mockHasTelegramCtaInteraction.mockResolvedValue(false)
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'NO_ACCESS',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: null,
+    })
+    mockUserFindUnique.mockResolvedValue({
+      testResultType: 'state',
+      telegramUserName: 'vira',
+      firstName: 'Vira',
+      lifecycleState: 'TEST_DONE',
+    })
+    mockScheduleFollowups.mockResolvedValue(undefined)
+    mockTrackAbTestEvent.mockResolvedValue(undefined)
+    mockGetAbTestProfileEmail.mockResolvedValue(null)
+    mockEnsureAbTestEmailCapturedFromProfile.mockImplementation(async (_userId: string, progress: unknown) => progress)
+    vi.mocked(getUpcomingZoomBookingView).mockResolvedValue(null)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('renders show_inside_STATE directly from callback data even when stored progress is stale idle q1', async () => {
+    const ctx = createCtx()
+    ctx.callbackQuery.data = 'show_inside_STATE'
+
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'idle',
+      stage: 'S2_TEST_QUESTIONS',
+      current_question_id: 'q1',
+      answers: [],
+      result_key: null,
+      revision: 0,
+      started_at: null,
+      email_stage: null,
+      email_captured_at: null,
+      result_opened_at: null,
+    })
+
+    const callback = handleAbTestCallback(ctx as never, 'show_inside_STATE')
+    await vi.runAllTimersAsync()
+    const handled = await callback
+
+    expect(handled).toBe(true)
+    expect(mockSaveAbTestProgress).not.toHaveBeenCalled()
+    expect(mockLoadAbTestProgress).not.toHaveBeenCalled()
+    expect(vi.mocked(ctx.telegram.sendMessage).mock.calls.some(([, text]) =>
+      typeof text === 'string' && text.includes('Питання 1 з 8'),
+    )).toBe(false)
+    expect(vi.mocked(ctx.telegram.sendMessage).mock.calls.length).toBeGreaterThan(0)
+    expect(vi.mocked(ctx.answerCbQuery)).toHaveBeenCalled()
+  })
+})
+
 describe('handleAbTestCallback skip_email_before_result canonical dedupe', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -654,13 +806,7 @@ describe('handleAbTestCallback skip_email_before_result canonical dedupe', () =>
           userId: 'user-1',
           trigger: 'skip_email_before_result',
           dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
-          deliveryResult: 'skipped_race_condition',
-        }),
-        expect.objectContaining({
-          userId: 'user-1',
-          trigger: 'skip_email_before_result',
-          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
-          deliveryResult: 'skipped_duplicate',
+          deliveryResult: 'dispatching',
         }),
       ]),
     )
@@ -805,13 +951,7 @@ describe('handleAbTestCallback confirm_profile_email_for_result canonical dedupe
           userId: 'user-1',
           trigger: 'confirm_profile_email_for_result',
           dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
-          deliveryResult: 'skipped_race_condition',
-        }),
-        expect.objectContaining({
-          userId: 'user-1',
-          trigger: 'confirm_profile_email_for_result',
-          dedupeKey: 'user-1:S3_TEST_RESULT:result_sequence',
-          deliveryResult: 'skipped_duplicate',
+          deliveryResult: 'dispatching',
         }),
       ]),
     )

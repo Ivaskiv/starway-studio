@@ -20,8 +20,11 @@ import {
   type ExecutionStateSnapshot,
   type IRuntimeLogger,
   type IAIProvider,
+  type IPromptLoader,
+  type PromptLoaderInput,
   DEFAULT_RUNTIME_PROMPT_SOURCES,
 } from '@starway/ai'
+import { prisma } from '../../db/client.js'
 import {
   OpenAIProvider,
   AnthropicProvider,
@@ -31,7 +34,6 @@ import {
 } from '@starway/ai/providers'
 
 import { resolveAiModel } from '../../platform/ai.registry.js'
-import { prisma } from '../../db/client.js'
 import {
   resolveAssistantDecision,
   type AssistantDecision,
@@ -45,6 +47,7 @@ import type { TelegramAiRequestContext } from '../telegram-mentor/services/reque
 import { getTelegramConversationHistory } from '../telegram-mentor/services/intelligence.service.js'
 import {
   CanonicalGatewayAgentRegistry,
+  type CanonicalGatewayAgentKey,
   type CanonicalGatewayAgentRegistration,
 } from './canonicalAgentRegistry.js'
 
@@ -78,6 +81,17 @@ export interface TelegramAgentGatewayResult<TPayload = Record<string, unknown>> 
     payload: TPayload
     metadata?: Record<string, unknown>
   }
+}
+
+export interface TargetedGatewayAgentTestRequest {
+  key: CanonicalGatewayAgentKey
+  bot: TelegramGatewayBot
+  chatId: string
+  userId?: string | null
+  message: string
+  messageType?: string | null
+  requestContext?: TelegramAiRequestContext | null
+  requestId?: string | null
 }
 
 export interface IAgentGateway {
@@ -266,6 +280,43 @@ export class TelegramAgentGateway implements IAgentGateway {
     }
   }
 
+  async executeTargetedAgentTest(input: TargetedGatewayAgentTestRequest): Promise<TelegramAgentGatewayResult> {
+    const registration = this.registry.getRegistrationByKey(input.key)
+    if (!registration.allowedBots.includes(input.bot)) {
+      throw new Error(`Bot '${input.bot}' is not allowed to execute '${registration.key}'.`)
+    }
+
+    const requestId = input.requestId ?? `tg:test:${registration.key}:${input.chatId}:${Date.now()}`
+    const request: TelegramAgentGatewayRequest = {
+      bot: input.bot,
+      intent: registration.intent,
+      chatId: input.chatId,
+      userId: input.userId ?? null,
+      message: input.message,
+      messageType: input.messageType ?? null,
+      requestContext: input.requestContext ?? null,
+      requestId,
+    }
+
+    const executed = await this.executeRegistration({
+      requestId,
+      input: request,
+      selectedRegistration: registration,
+      executionRegistration: registration,
+      delegated: false,
+      fallbackActivated: false,
+      fallbackAgent: null,
+    })
+
+    return {
+      bot: request.bot,
+      intent: request.intent,
+      agentId: executed.agentDefinition.id,
+      taskId: executed.task.id,
+      artifact: executed.artifact,
+    }
+  }
+
   private async executeRegistration(input: {
     requestId: string
     selectedRegistration: CanonicalGatewayAgentRegistration
@@ -284,7 +335,7 @@ export class TelegramAgentGateway implements IAgentGateway {
       input.input,
       input.requestId,
       input.executionRegistration,
-      input.selectedRegistration.key !== 'assistant',
+      input.delegated,
       input.selectedRegistration.key,
     )
     const decision = readAssistantDecision(task.metadata?.input)
@@ -429,8 +480,8 @@ class TelegramRuntimeExecutor implements IRuntimeGatewayExecutor {
     this.registry = registry
 
     const promptRegistry = new PromptRegistry({
-      sources: this.buildPromptSources(),
-      loader: new FileSystemPromptLoader(),
+      sources: buildGatewayPromptSources(),
+      loader: new DatabaseBackedPromptLoader(),
       cache: new InMemoryPromptCache(),
       logger,
     })
@@ -574,24 +625,6 @@ class TelegramRuntimeExecutor implements IRuntimeGatewayExecutor {
     }
   }
 
-  private buildPromptSources() {
-    const promptsDir = resolveRepositoryPromptsDir()
-    const defaultSources = DEFAULT_RUNTIME_PROMPT_SOURCES.map((source) => ({
-      ...source,
-      filePath: path.join(promptsDir, path.basename(source.filePath)),
-    }))
-    const mentorPromptFilePath = path.join(promptsDir, 'mentor-agent-prompt.md')
-
-    return [
-      ...defaultSources,
-      buildPromptAlias('assistant-agent-prompt', 'assistant_agent', mentorPromptFilePath),
-      buildPromptAlias('content-agent-prompt', 'content_agent', mentorPromptFilePath),
-      buildPromptAlias('sales-agent-prompt', 'sales_agent', mentorPromptFilePath),
-      buildPromptAlias('coach-agent-prompt', 'coach_agent', mentorPromptFilePath),
-      buildPromptAlias('funnel-agent-prompt', 'funnel_agent', mentorPromptFilePath),
-    ]
-  }
-
   private async readLatestTelemetry(): Promise<RuntimeTelemetry | null> {
     const entries = await this.usageLedgerStore.list()
     const latest = entries.at(-1)
@@ -614,11 +647,29 @@ class TelegramRuntimeExecutor implements IRuntimeGatewayExecutor {
   }
 }
 
-function resolveRepositoryPromptsDir(): string {
+export function resolveRepositoryPromptsDir(): string {
   return path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '../../../../prompts',
   )
+}
+
+export function buildGatewayPromptSources() {
+  const promptsDir = resolveRepositoryPromptsDir()
+  const defaultSources = DEFAULT_RUNTIME_PROMPT_SOURCES.map((source) => ({
+    ...source,
+    filePath: path.join(promptsDir, path.basename(source.filePath)),
+  }))
+  const mentorPromptFilePath = path.join(promptsDir, 'mentor-agent-prompt.md')
+
+  return [
+    ...defaultSources,
+    buildPromptAlias('assistant-agent-prompt', 'assistant_agent', mentorPromptFilePath),
+    buildPromptAlias('content-agent-prompt', 'content_agent', mentorPromptFilePath),
+    buildPromptAlias('sales-agent-prompt', 'sales_agent', mentorPromptFilePath),
+    buildPromptAlias('coach-agent-prompt', 'coach_agent', mentorPromptFilePath),
+    buildPromptAlias('funnel-agent-prompt', 'funnel_agent', mentorPromptFilePath),
+  ]
 }
 
 function buildPromptAlias(
@@ -633,6 +684,31 @@ function buildPromptAlias(
     ownerAgentIds: [ownerAgentId],
     canonical: true,
     defaultVersion: true,
+  }
+}
+
+class DatabaseBackedPromptLoader implements IPromptLoader {
+  private readonly fallback = new FileSystemPromptLoader()
+
+  async load(input: PromptLoaderInput): Promise<string> {
+    const activePrompt = await prisma.promptVersion.findFirst({
+      where: {
+        name: input.source.id,
+        isActive: true,
+      },
+      orderBy: {
+        version: 'desc',
+      },
+      select: {
+        content: true,
+      },
+    })
+
+    if (activePrompt?.content.trim()) {
+      return activePrompt.content
+    }
+
+    return this.fallback.load(input)
   }
 }
 
