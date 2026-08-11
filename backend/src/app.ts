@@ -167,7 +167,7 @@ import analyticsRoutes from './modules/analytics/routes.js'
 import assistantRoutes from './modules/assistant/routes.js'
 import authRoutes, { telegramRouter } from './modules/auth/auth.routes.js'
 import { authRequired } from './modules/auth/middleware/auth.js'
-import { bot, coachBot, resolveTelegramWebhookSecretMap, testBot } from './lib/telegram.js'
+import { bot, coachBot, resolveTelegramWebhookSecretMap } from './lib/telegram.js'
 import billingRoutes from './modules/billing/billing.module.js'
 import consultationRoutes from './modules/consultation/routes.js'
 import dailyRoutes from './modules/daily-cycle/routes.js'
@@ -210,7 +210,7 @@ import intelligenceRoutes from './routes/intelligence.routes.js'
 import salesAssistantRouter from './routers/salesAssistant.router.js'
 
 type TelegramWebhookTarget = {
-  id: 'main' | 'coach' | 'test'
+  id: 'main' | 'coach'
   secret: string
   handleUpdate: (update: unknown) => Promise<unknown>
 }
@@ -228,11 +228,6 @@ export function resolveTelegramWebhookTarget(
       id: 'coach',
       secret: String(resolveTelegramWebhookSecretMap().coach ?? '').trim(),
       handleUpdate: (update) => coachBot.handleUpdate(update as Parameters<typeof coachBot.handleUpdate>[0]),
-    },
-    {
-      id: 'test',
-      secret: String(resolveTelegramWebhookSecretMap().test ?? '').trim(),
-      handleUpdate: (update) => testBot.handleUpdate(update as Parameters<typeof testBot.handleUpdate>[0]),
     },
   ]
 

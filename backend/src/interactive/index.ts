@@ -8,10 +8,8 @@ import {
   destroyTelegramClientTransports,
   launchBot,
   normalizeTelegramWebhookUrl,
-  readTestBotToken,
   resolveTelegramWebhookSecret,
   seedBotInfo,
-  testBot,
 } from '../lib/telegram.js'
 import { registerDailyTelegramCommands } from '../modules/daily-cycle/telegram.js'
 import {
@@ -72,9 +70,17 @@ const connectionTracker = createConnectionTracker()
 let server: Server | null = null
 let telegramRunningMode: 'webhook' | 'polling' | null = null
 let coachTelegramRunningMode: 'webhook' | 'polling' | null = null
-let testTelegramRunningMode: 'webhook' | 'polling' | null = null
 let telegramStartupPromise: Promise<void> | null = null
 let isShuttingDown = false
+
+function readBuildSha(): string {
+  return String(
+    process.env.RENDER_GIT_COMMIT
+    || process.env.COMMIT_SHA
+    || process.env.VERCEL_GIT_COMMIT_SHA
+    || 'unknown',
+  ).trim()
+}
 
 function describeInteractiveRuntime() {
   return {
@@ -131,7 +137,6 @@ async function startTelegramBot() {
         console.log('🤖 [CoachBot] skipped: COACH_BOT_TOKEN is not set')
       }
 
-      const testBotToken = readTestBotToken()
       const mainWebhookUrl =
         telegramDeliveryMode === 'webhook'
           ? normalizeTelegramWebhookUrl(TELEGRAM_WEBHOOK_URL)
@@ -143,20 +148,6 @@ async function startTelegramBot() {
               || TELEGRAM_WEBHOOK_URL
             )
           : ''
-      // Deprecated: keep reading TEST_BOT_WEBHOOK_URL for staging/CI compatibility,
-      // but local polling runtime must ignore it for the test bot.
-      const configuredTestWebhookUrl = normalizeTelegramWebhookUrl(
-        process.env.TEST_BOT_WEBHOOK_URL?.trim() || '',
-      )
-      const testWebhookUrl =
-        telegramDeliveryMode === 'webhook'
-          ? configuredTestWebhookUrl
-          : ''
-      if (telegramDeliveryMode !== 'webhook' && configuredTestWebhookUrl) {
-        console.warn(
-          '[Telegram] Ignoring TEST_BOT_WEBHOOK_URL because local runtime uses polling mode',
-        )
-      }
       const mainWebhookSecret = resolveTelegramWebhookSecret({
         botId: 'main',
         token: telegramBotConfig.token,
@@ -164,22 +155,26 @@ async function startTelegramBot() {
       const coachWebhookSecret = coachToken
         ? resolveTelegramWebhookSecret({ botId: 'coach', token: coachToken })
         : ''
-      const testWebhookSecret = testBotToken
-        ? resolveTelegramWebhookSecret({ botId: 'test', token: testBotToken })
-        : ''
 
       await Promise.allSettled([
         (async () => {
           if (!telegramBotConfig.token) return
 
+          const me = await bot.telegram.getMe()
+          const expectedUsername = readExpectedTelegramBotUsername()
+          if (expectedUsername && me.username !== expectedUsername) {
+            throw new Error(
+              `[TELEGRAM_BOT_MISMATCH] Expected @${expectedUsername} but got @${me.username}.`,
+            )
+          }
+          console.log('[TELEGRAM_RUNTIME]', {
+            env: process.env.NODE_ENV || 'development',
+            username: me.username || telegramBotConfig.username || 'unknown',
+            deliveryMode: telegramDeliveryMode,
+            buildSha: readBuildSha(),
+          })
+
           try {
-            const me = await bot.telegram.getMe()
-            const expectedUsername = readExpectedTelegramBotUsername()
-            if (expectedUsername && me.username !== expectedUsername) {
-              throw new Error(
-                `[TELEGRAM_BOT_MISMATCH] Expected @${expectedUsername} but got @${me.username}.`,
-              )
-            }
             await bot.telegram
               .setChatMenuButton({
                 menuButton: {
@@ -245,7 +240,7 @@ async function startTelegramBot() {
                 console.warn('⚠️ [Telegram] Failed to set admin chat commands:', error)
               })
           } catch (error) {
-            console.warn('⚠️ [Telegram] main bot identity/setup failed:', error)
+            console.warn('⚠️ [Telegram] main bot setup warning:', error)
           }
 
           if (mainWebhookUrl) {
@@ -272,14 +267,6 @@ async function startTelegramBot() {
             webhookSecret: coachWebhookSecret || undefined,
           })
           coachTelegramRunningMode = coachWebhookUrl ? 'webhook' : 'polling'
-        })(),
-        (async () => {
-          if (!testBotToken) return
-          await launchBot(testBot, telegramBotNames.test, testWebhookUrl || undefined, {
-            botId: 'test',
-            webhookSecret: testWebhookSecret || undefined,
-          })
-          testTelegramRunningMode = testWebhookUrl ? 'webhook' : 'polling'
         })(),
       ])
     } catch (error) {
@@ -361,9 +348,6 @@ async function shutdown(signal: string) {
         stopBotSafely('main bot', () => { bot.stop(signal) })
         if (coachTelegramRunningMode) {
           stopBotSafely('coach bot', () => { coachBot.stop(signal) })
-        }
-        if (testTelegramRunningMode) {
-          stopBotSafely('test bot', () => { testBot.stop(signal) })
         }
       }
       destroyTelegramClientTransports()

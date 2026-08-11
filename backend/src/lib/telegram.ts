@@ -10,13 +10,11 @@ import {
 import {
   readCoachBotToken,
   requireTelegramBotConfig,
-  resolveTelegramDeliveryMode,
 } from '../modules/telegram-mentor/runtime/botConfig.js'
 
 let telegramBotInstance: Telegraf | null = null
 let contentBotInstance: Telegraf | null = null
 let coachBotInstance: Telegraf | null = null
-let testBotInstance: Telegraf | null = null
 
 function patchTelegramTransportFormatting(targetBot: Telegraf): Telegraf {
   const telegram = targetBot.telegram as typeof targetBot.telegram & {
@@ -219,7 +217,7 @@ export function normalizeTelegramChatIdForBotApi(chatId: string): string {
   return trimmed
 }
 
-export type TelegramWebhookBotId = 'main' | 'coach' | 'test'
+export type TelegramWebhookBotId = 'main' | 'coach'
 
 type TelegramWebhookSecretInput = {
   botId: TelegramWebhookBotId
@@ -238,10 +236,6 @@ function readTelegramWebhookSecretSeed(): string {
   }
 
   return ''
-}
-
-export function readTestBotToken(): string {
-  return String(process.env.TEST_BOT_TOKEN ?? '').trim()
 }
 
 export function resolveTelegramWebhookSecret({
@@ -274,15 +268,11 @@ export function resolveTelegramWebhookSecret({
 export function resolveTelegramWebhookSecretMap(): Partial<Record<TelegramWebhookBotId, string>> {
   const mainToken = requireTelegramBotConfig('telegram webhook secret map').token
   const coachToken = readCoachBotToken()
-  const testToken = readTestBotToken()
 
   return {
     main: resolveTelegramWebhookSecret({ botId: 'main', token: mainToken }),
     coach: coachToken
       ? resolveTelegramWebhookSecret({ botId: 'coach', token: coachToken })
-      : '',
-    test: testToken
-      ? resolveTelegramWebhookSecret({ botId: 'test', token: testToken })
       : '',
   }
 }
@@ -326,20 +316,6 @@ function getCoachBotInstance(): Telegraf {
   }
   coachBotInstance = new Telegraf(token)
   return patchTelegramTransportFormatting(coachBotInstance)
-}
-
-function getTestBotInstance(): Telegraf {
-  if (testBotInstance) {
-    return testBotInstance
-  }
-
-  const token = readTestBotToken()
-  if (!token) {
-    throw new Error('[Telegram] Missing required env var during test bot bootstrap: TEST_BOT_TOKEN')
-  }
-
-  testBotInstance = new Telegraf(token)
-  return patchTelegramTransportFormatting(testBotInstance)
 }
 
 function createBotProxy(resolver: () => Telegraf): Telegraf {
@@ -386,7 +362,6 @@ export function seedBotInfo(
 export const bot = createBotProxy(getTelegramBotInstance)
 export const contentBot = createBotProxy(getContentBotInstance)
 export const coachBot = createBotProxy(getCoachBotInstance)
-export const testBot = createBotProxy(getTestBotInstance)
 const LAST_MESSAGE_TTL_MS = 6 * 60 * 60 * 1000
 const lastMessageHashes = new Map<string, { hash: string; sentAt: number }>()
 
@@ -412,7 +387,6 @@ export function destroyTelegramClientTransports(): void {
   destroyTelegramTransportClient(telegramBotInstance)
   destroyTelegramTransportClient(contentBotInstance)
   destroyTelegramTransportClient(coachBotInstance)
-  destroyTelegramTransportClient(testBotInstance)
 }
 
 const getBotLink = () =>
@@ -440,12 +414,8 @@ export async function launchBot(
       firstName: name,
       username: name.toLowerCase().replace(/\s+/g, '_'),
     })
-    const deliveryMode = resolveTelegramDeliveryMode()
-    const isTestBot = options?.botId === 'test'
     const normalizedWebhookUrl = String(webhookUrl ?? '').trim()
-    const shouldUseWebhook =
-      normalizedWebhookUrl
-      && (!isTestBot || deliveryMode === 'webhook')
+    const shouldUseWebhook = normalizedWebhookUrl
 
     if (shouldUseWebhook) {
       const webhookSecret = String(options?.webhookSecret ?? '').trim()
@@ -454,10 +424,6 @@ export async function launchBot(
       })
       console.log(`✓ ${name} started [webhook]`)
       return
-    }
-
-    if (isTestBot && normalizedWebhookUrl && deliveryMode !== 'webhook') {
-      console.warn('[Telegram] Ignoring deprecated TEST_BOT_WEBHOOK_URL because test bot uses polling mode')
     }
 
     // Polling mode requires webhook to be cleared, otherwise Telegram keeps

@@ -4,6 +4,7 @@ import {
   describeLocalTelegramConsumerDisableReason,
   readExpectedTelegramBotUsername,
   readTelegramBotConfig,
+  readTelegramVerificationTokens,
   requireTelegramBotConfig,
   resolveLocalTelegramConsumerState,
   resolveTelegramDeliveryMode,
@@ -13,6 +14,7 @@ const originalTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
 const originalTelegramBotUsername = process.env.TELEGRAM_BOT_USERNAME
 const originalTestTelegramBotToken = process.env.TEST_TELEGRAM_BOT_TOKEN
 const originalTestTelegramBotUsername = process.env.TEST_TELEGRAM_BOT_USERNAME
+const originalLegacyTestBotToken = process.env.TEST_BOT_TOKEN
 const originalNodeEnv = process.env.NODE_ENV
 const originalTelegramWebhookUrl = process.env.TELEGRAM_WEBHOOK_URL
 const originalTelegramDeliveryMode = process.env.TELEGRAM_DELIVERY_MODE
@@ -29,6 +31,9 @@ afterEach(() => {
 
   if (originalTestTelegramBotUsername === undefined) delete process.env.TEST_TELEGRAM_BOT_USERNAME
   else process.env.TEST_TELEGRAM_BOT_USERNAME = originalTestTelegramBotUsername
+
+  if (originalLegacyTestBotToken === undefined) delete process.env.TEST_BOT_TOKEN
+  else process.env.TEST_BOT_TOKEN = originalLegacyTestBotToken
 
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV
   else process.env.NODE_ENV = originalNodeEnv
@@ -93,6 +98,46 @@ describe('telegram bot config', () => {
     process.env.TELEGRAM_BOT_USERNAME = 'prod_bot'
 
     expect(readExpectedTelegramBotUsername()).toBe('prod_bot')
+  })
+
+  it.each([
+    {
+      env: 'development',
+      productionToken: 'prod-token',
+      productionUsername: 'Test_ABsystem_bot',
+      runtimeToken: 'test-token',
+      runtimeUsername: 'test_starway_bot',
+    },
+    {
+      env: 'production',
+      productionToken: 'prod-token',
+      productionUsername: 'Test_ABsystem_bot',
+      runtimeToken: 'prod-token',
+      runtimeUsername: 'Test_ABsystem_bot',
+    },
+  ])('keeps one main runtime config for %s without token fallback crossover', ({
+    env,
+    productionToken,
+    productionUsername,
+    runtimeToken,
+    runtimeUsername,
+  }) => {
+    process.env.NODE_ENV = env
+    process.env.TELEGRAM_BOT_TOKEN = productionToken
+    process.env.TELEGRAM_BOT_USERNAME = productionUsername
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'test-token'
+    process.env.TEST_TELEGRAM_BOT_USERNAME = 'test_starway_bot'
+    process.env.TEST_BOT_TOKEN = 'legacy-test-bot-token'
+
+    expect(readTelegramBotConfig()).toEqual({
+      token: runtimeToken,
+      username: runtimeUsername,
+      botLink: `https://t.me/${runtimeUsername}`,
+    })
+
+    expect(readTelegramVerificationTokens()).toContain(runtimeToken)
+    expect(readTelegramVerificationTokens()).toContain('legacy-test-bot-token')
+    expect(readTelegramVerificationTokens()[0]).toBe(runtimeToken)
   })
 
   it('disables the local telegram consumer when the test token is missing', () => {
