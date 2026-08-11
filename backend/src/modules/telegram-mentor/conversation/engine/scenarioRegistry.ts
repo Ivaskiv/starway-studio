@@ -2,6 +2,7 @@ import type { Context } from 'telegraf'
 
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { BLOCK10_FOCUS } from '@/products/ab-system/content/abTest.results.js'
+import { resolveCanonicalFocusPaymentView } from '@/products/ab-system/telegram/abTest.flows.js'
 import { renderTelegramContentMessage } from '@/products/ab-system/telegram/abTest.views.js'
 import { buildFaqKeyboard } from '@/products/ab-system/content/abTest.faq.js'
 import {
@@ -26,7 +27,6 @@ import {
 } from '@/products/ab-system/content/abTest.focus.js'
 import { buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business.checkout.js'
 import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus.access.js'
-import { hasTelegramCtaInteraction } from '@/modules/telegram-mentor/services/ctaInteraction.service.js'
 import { prisma } from '@/db/client.js'
 import { trackEvent } from '@/modules/events/service.js'
 import { scheduleFollowups } from '@/products/ab-system/telegram/abTest.scheduler.js'
@@ -240,21 +240,8 @@ async function buildFocusPaymentResponse(context: TelegramConversationScenarioCo
   ])
 
   const progressForCheckout = await loadAbTestProgress(resolvedUserId).catch(() => null)
-  const previewSeen =
-    progressForCheckout?.result_key
-      ? await hasTelegramCtaInteraction(
-          resolvedUserId,
-          `show_inside_${progressForCheckout.result_key.toUpperCase()}`,
-        ).catch(() => false)
-      : false
-
-  const paymentText = previewSeen
-    ? renderTelegramContentMessage('', [
-        { type: 'text', text: 'Супер. Якщо відгукується — нижче можеш одразу вибрати формат участі.' },
-        { type: 'text', text: 'Обирай зручний варіант, і після оплати ми відкриємо тобі доступ у ФОКУС.' },
-        { type: 'pricing', text: `${BLOCK10_FOCUS.cta_1m}\n${BLOCK10_FOCUS.cta_3m}` },
-      ]).trim()
-    : renderTelegramContentMessage('', [...BLOCK10_FOCUS.blocks]).trim()
+  const { blocks: paymentBlocks } = await resolveCanonicalFocusPaymentView(resolvedUserId)
+  const paymentText = renderTelegramContentMessage('', paymentBlocks).trim()
 
   const testPaymentButton = isTestPaymentEnabled()
     ? getDevTestPaymentButton()

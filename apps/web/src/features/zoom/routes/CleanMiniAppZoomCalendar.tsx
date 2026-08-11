@@ -2383,7 +2383,8 @@ export default function CleanMiniAppZoomCalendar() {
                           №{bookingNextSession.myQuestion.position} У ЧЕРЗІ
                         </p>
                       ) : null}
-                      {bookingQuestionSummary.questionsCount > 0 ? (
+                      {bookingQuestionSummary?.questionsCount
+                      && bookingQuestionSummary.questionsCount > 0 ? (
                         <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
                           ПИТАНЬ ДО РОЗБОРУ: {bookingQuestionSummary.questionsCount}
                         </p>
@@ -2391,7 +2392,7 @@ export default function CleanMiniAppZoomCalendar() {
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      {bookingQuestionSummary.state === 'missing-own' ? (
+                      {bookingQuestionSummary?.state === 'missing-own' ? (
                         <>
                           <p className="font-semibold">
                             ПИТАННЯ ДО РОЗБОРУ ВЖЕ Є: {bookingQuestionSummary.questionsCount}

@@ -86,6 +86,55 @@ import { getDevTestPaymentButton } from '../../../modules/telegram-mentor/keyboa
 const FOCUS_PAYMENT_EVIDENCE_ACK_MSG =
   'Дякую. Чек і деталі платежу передано в STARWAY OPS.\n\nПовернемося з відповіддю після перевірки транзакції.'
 
+export function buildCanonicalFocusPaymentPreviewBlocks() {
+  return [
+    { type: 'text' as const, text: 'Супер. Якщо відгукується — нижче можеш одразу вибрати формат участі.' },
+    { type: 'text' as const, text: 'Обирай зручний варіант, і після оплати ми відкриємо тобі доступ у ФОКУС.' },
+    { type: 'pricing' as const, text: `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}` },
+  ]
+}
+
+export async function resolveCanonicalFocusPaymentView(userId: string | null) {
+  const text =
+    BLOCK10_FOCUS?.text ??
+    `${AB_TEST_FOCUS_TITLE}\n\n` +
+      `${AB_TEST_FOCUS_WEEKLY_TEXT}\n` +
+      '\n' +
+      `${AB_TEST_FOCUS_REAL_SITUATION_HEADER}\n` +
+      `${AB_TEST_FOCUS_REAL_SITUATION_LINES.join('\n')}\n\n` +
+      `${AB_TEST_FOCUS_TARIFF_HEADER}\n` +
+      '\n' +
+      `${AB_TEST_FOCUS_PRICE_1M}\n` +
+      AB_TEST_FOCUS_PRICE_3M
+  const focusPaymentBlocks =
+    BLOCK10_FOCUS.blocks
+      ? [...BLOCK10_FOCUS.blocks]
+      : splitTelegramContentBlocks(text.split('\n'))
+
+  if (!userId) {
+    return {
+      blocks: focusPaymentBlocks,
+      progressForCheckout: null,
+    }
+  }
+
+  const progressForCheckout = await loadAbTestProgress(userId).catch(() => null)
+  const previewSeen =
+    progressForCheckout?.result_key
+      ? await hasTelegramCtaInteraction(
+          userId,
+          `show_inside_${progressForCheckout.result_key.toUpperCase()}`
+        ).catch(() => false)
+      : false
+
+  return {
+    blocks: previewSeen
+      ? buildCanonicalFocusPaymentPreviewBlocks()
+      : focusPaymentBlocks,
+    progressForCheckout,
+  }
+}
+
 function resolveOpsChatId(): string {
   const raw = String(
     process.env.STARWAY_OPS_CHAT_ID ?? process.env.OPS_TELEGRAM_CHAT_ID ?? ''
@@ -634,43 +683,12 @@ export async function handleFocusPaymentAction(
     await ctx.answerCbQuery('Не вдалося відкрити ФОКУС. Спробуй ще раз.').catch(() => null)
     return true
   }
-  const text =
-    BLOCK10_FOCUS?.text ??
-    `${AB_TEST_FOCUS_TITLE}\n\n` +
-      `${AB_TEST_FOCUS_WEEKLY_TEXT}\n` +
-      '\n' +
-      `${AB_TEST_FOCUS_REAL_SITUATION_HEADER}\n` +
-      `${AB_TEST_FOCUS_REAL_SITUATION_LINES.join('\n')}\n\n` +
-      `${AB_TEST_FOCUS_TARIFF_HEADER}\n` +
-      '\n' +
-      `${AB_TEST_FOCUS_PRICE_1M}\n` +
-      AB_TEST_FOCUS_PRICE_3M
   const cta1m = BLOCK10_FOCUS?.cta_1m ?? AB_TEST_FOCUS_PAYMENT_CTA_1M
   const cta3m = BLOCK10_FOCUS?.cta_3m ?? AB_TEST_FOCUS_PAYMENT_CTA_3M
-  const focusPaymentBlocks =
-    BLOCK10_FOCUS.blocks
-      ? [...BLOCK10_FOCUS.blocks]
-      : splitTelegramContentBlocks(text.split('\n'))
-  let paymentBlocksToSend = focusPaymentBlocks
-  let progressForCheckout = null
-  if (resolvedUserId) {
-    progressForCheckout = await loadAbTestProgress(resolvedUserId).catch(() => null)
-    const previewSeen =
-      progressForCheckout?.result_key
-        ? await hasTelegramCtaInteraction(
-            resolvedUserId,
-            `show_inside_${progressForCheckout.result_key.toUpperCase()}`
-          ).catch(() => false)
-        : false
-
-    if (previewSeen) {
-      paymentBlocksToSend = [
-        { type: 'text', text: 'Супер. Якщо відгукується — нижче можеш одразу вибрати формат участі.' },
-        { type: 'text', text: 'Обирай зручний варіант, і після оплати ми відкриємо тобі доступ у ФОКУС.' },
-        { type: 'pricing', text: `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}` },
-      ]
-    }
-  }
+  const {
+    blocks: paymentBlocksToSend,
+    progressForCheckout,
+  } = await resolveCanonicalFocusPaymentView(resolvedUserId)
   const testPaymentButton = isTestPaymentEnabled()
     ? getDevTestPaymentButton()
     : null

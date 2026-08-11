@@ -197,8 +197,9 @@ export function QuestionsSetup({ onComplete }: QuestionsSetupProps) {
                   onClick={() => handleRemoveQuestion(index)}
                   variant="ghost"
                   size="sm"
+                  aria-label="Видалити питання"
                 >
-                  
+                  ×
                 </Button>
               )}
             </div>
