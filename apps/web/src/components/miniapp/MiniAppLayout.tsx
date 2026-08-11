@@ -29,6 +29,7 @@ const START_PARAM_ROUTE_MAP: Record<string, string> = {
   library: '/miniapp/library',
   content: '/miniapp/library',
   zoom: '/miniapp/zoom-calendar',
+  zoom_booking: '/miniapp/zoom-calendar?intent=booking',
   profile: '/miniapp/profile',
   subscription: '/miniapp/profile?panel=subscription',
   level_up: '/miniapp/profile?panel=level_up',

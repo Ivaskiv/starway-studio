@@ -2682,6 +2682,15 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
     const contentHash = getChannelPostContentHash(text)
     const zoomUrl = resolveZoomCalendarUrl({ intent: 'booking' })
     const mainBotUrl = getBotLink() || 'https://t.me/Test_ABsystem_bot'
+    const channelMiniAppUrl = (() => {
+      try {
+        const url = new URL(mainBotUrl)
+        url.searchParams.set('startapp', 'zoom_booking')
+        return url.toString()
+      } catch {
+        return zoomUrl
+      }
+    })()
     const syncSignature = JSON.stringify({ channelId, text, zoomUrl })
     const now = Date.now()
 
@@ -2697,7 +2706,7 @@ export async function syncChannelPost(telegramBot: Telegraf): Promise<void> {
       ? {
           inline_keyboard: [
             [
-              { text: 'Записатись на Zoom', url: zoomUrl },
+              { text: 'Записатись на Zoom', url: channelMiniAppUrl },
               { text: 'Відкрити чат-бот', url: mainBotUrl },
             ],
           ],
