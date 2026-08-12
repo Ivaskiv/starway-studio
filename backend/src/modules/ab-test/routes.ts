@@ -25,6 +25,7 @@ import {
   loadUserUiSettings,
   saveAbTestProgress,
 } from '../../products/ab-system/telegram/abTest.progress.js'
+import { persistCanonicalCompletedAbTestProgress } from '../../products/ab-system/telegram/abTest.handlers.core.js'
 import { resolveUserLifecycle } from '../users/runtime/resolveUserLifecycle.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { getServerUser } from '../auth/getServerUser.js'
@@ -396,16 +397,14 @@ router.post(
       const current = await loadAbTestProgress(userId)
       const incomingAnswers = buildProgressAnswers(resolvedAnswers, nowIso)
       const mergedAnswers = mergeProgressAnswers(current.answers, incomingAnswers)
-      const next = buildAbTestProgressPatch(current, {
-        status: 'completed',
-        stage: 'S3_TEST_RESULT',
+      await persistCanonicalCompletedAbTestProgress({
+        userId,
+        progress: current,
         answers: mergedAnswers,
-        current_question_id: null,
-        result_key: dominantBlock,
-        updated_at: nowIso,
-        last_event_at: nowIso,
+        occurredAt: new Date(nowIso),
+        questionsShown: AB_TEST_QUESTION_ORDER.slice(),
+        lastCallbackKey: 'web:ab_test_submit',
       })
-      await saveAbTestProgress(userId, next)
       await persistTestOutcome(userId, canonical)
     }
 

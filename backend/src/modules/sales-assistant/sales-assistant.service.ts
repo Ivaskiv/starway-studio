@@ -16,6 +16,7 @@ import {
 import { validateOutput } from '@/modules/sales-assistant/sales-assistant.validation.js'
 import type { ModelProvider } from '@/modules/ai-assistant/promptCompiler.js'
 import { fromSalesAssistantInput, runPipeline } from '@/core/dna/index.js'
+import { executeCanonicalPromptAgent } from '@/modules/ai/agentGateway.js'
 
 // ─── re-export types ──────────────────────────────────────────────────────────
 export type { SalesAssistantGenerateBody, SalesAssistantWorkspaceResponse, UpdateSalesAssistantWorkspaceBody }
@@ -205,6 +206,122 @@ async function generateContentLegacy(
     userContext: body.userContext,
     userRequest: safeUserRequest,
   })
+
+  if (resolvedType === 'sales') {
+    const canonicalResult = await executeCanonicalPromptAgent({
+      agentKey: 'sales',
+      systemPrompt: promptPair.system,
+      userPrompt: promptPair.user,
+      strategyTier,
+      contentType: body.contentType,
+      preferredProvider: enabledProviders[0],
+      userId: requestUserId || null,
+      taskDescription: `Generate ${body.contentType} sales assistant content.`,
+      objective: `Return one ${body.contentType} artifact for the sales assistant request.`,
+      contextSummary: body.userContext,
+      taskMetadata: {
+        selectedProtocol: body.selectedProtocol,
+        selectedOutputs: body.selectedOutputs,
+      },
+    })
+
+    const tokenUsage = canonicalResult.metadata?.providerResponse as
+      | {
+          provider?: unknown
+          model?: unknown
+          tokenUsage?: {
+            inputTokens?: unknown
+            outputTokens?: unknown
+            totalTokens?: unknown
+          }
+        }
+      | undefined
+    const provider = typeof tokenUsage?.provider === 'string' ? tokenUsage.provider : 'unknown'
+    const model = typeof tokenUsage?.model === 'string' ? tokenUsage.model : provider
+    const modelKey =
+      enabledProviders[0] ??
+      (provider === 'anthropic'
+        ? 'claude'
+        : provider === 'gemini'
+          ? 'gemini'
+          : 'gpt')
+    const usage = tokenUsage?.tokenUsage
+    const totalTokens =
+      typeof usage?.totalTokens === 'number' && Number.isFinite(usage.totalTokens)
+        ? usage.totalTokens
+        : 0
+    const inputTokens =
+      typeof usage?.inputTokens === 'number' && Number.isFinite(usage.inputTokens)
+        ? usage.inputTokens
+        : 0
+    const outputTokens =
+      typeof usage?.outputTokens === 'number' && Number.isFinite(usage.outputTokens)
+        ? usage.outputTokens
+        : 0
+    const firstSuccess: ModelGenerationResult = {
+      modelKey,
+      content: canonicalResult.content,
+      usage: {
+        provider,
+        model,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        estimatedCostUsd: 0,
+        actualCostUsd: null,
+        costTier: 'low',
+      },
+      error: null,
+      durationMs: 0,
+    }
+    const validation = await validateOutput(firstSuccess.content!, profile.key)
+
+    let generationId: string | undefined
+    if (workspaceId) {
+      try {
+        const gen = await prisma.salesAssistantGeneration.create({
+          data: {
+            workspaceId,
+            contentType: body.contentType,
+            modelUsed: firstSuccess.modelKey,
+            protocol: body.selectedProtocol,
+            userContext: body.userContext,
+            request: body.userRequest,
+            result: firstSuccess.content!,
+            tokensUsed: firstSuccess.usage?.totalTokens ?? 0,
+          },
+        })
+        generationId = gen.id
+
+        await prisma.userAiWorkspace.update({
+          where: { id: workspaceId },
+          data: { usedTokensThisMonth: { increment: firstSuccess.usage?.totalTokens ?? 0 } },
+        })
+      } catch (dbError) {
+        console.error('[DNA][service][LEGACY] DB persist failed', dbError)
+      }
+    }
+
+    return {
+      id: generationId,
+      content: firstSuccess.content!,
+      modelUsed: firstSuccess.modelKey,
+      contentType: body.contentType,
+      protocol: body.selectedProtocol,
+      tokensUsed: firstSuccess.usage?.totalTokens ?? 0,
+      usage: firstSuccess.usage ?? undefined,
+      createdAt: new Date().toISOString(),
+      validationWarning: validation.valid ? undefined : validation.reason,
+      multiModelResults: [firstSuccess],
+      dnaDebug: {
+        pipeline: 'legacy',
+        preset: null,
+        provider: firstSuccess.modelKey,
+        fallbackTriggered: false,
+        generationType: resolveContentTypeKey(body.contentType),
+      },
+    }
+  }
 
   let prompt = `${promptPair.system}\n\n${promptPair.user}`
   if (prompt.length > MAX_PROMPT_CHARS) prompt = prompt.slice(0, MAX_PROMPT_CHARS)

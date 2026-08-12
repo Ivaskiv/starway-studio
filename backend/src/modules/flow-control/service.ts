@@ -7,6 +7,7 @@ import { isNotificationRoleAllowed } from '../../services/notifications/domain/n
 import type { UserLifecycleSnapshot } from './types.js'
 import { mapLifecycleToFunnelStage } from '../../lib/funnel/stage.js'
 import { stopLeadMagnet } from '../integrations/sendpulse/sendpulse.service.js'
+import { getUserAccessState, type UserAccessState } from '../subscriptions/payments/focus.access.js'
 
 type FlowDbClient = typeof prisma | Prisma.TransactionClient
 const LEAD_MAGNET_TTL_MS = 48 * 60 * 60 * 1000
@@ -101,54 +102,58 @@ function isFreshLeadMagnetDate(value: Date | null | undefined, now: Date) {
 }
 
 export async function resolveUserLifecycle(userId: string, db: FlowDbClient = prisma): Promise<UserLifecycleSnapshot> {
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: {
-      focusPaid: true,
-      onboardingStartedAt: true,
-      currentStep: true,
-      trialStartsAt: true,
-      trialEndsAt: true,
-      fivePointsEnrollment: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: {
-          createdAt: true,
-          progress: true,
-          completedAt: true,
+  const [user, accessState] = await Promise.all([
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        focusPaid: true,
+        onboardingStartedAt: true,
+        currentStep: true,
+        trialStartsAt: true,
+        trialEndsAt: true,
+        fivePointsEnrollment: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            createdAt: true,
+            progress: true,
+            completedAt: true,
+          },
+        },
+        subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            status: true,
+            trialEndsAt: true,
+            currentPeriodEnd: true,
+            createdAt: true,
+          },
+        },
+        funnelLeads: {
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+          select: {
+            status: true,
+            updatedAt: true,
+          },
         },
       },
-      subscriptions: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: {
-          status: true,
-          trialEndsAt: true,
-          currentPeriodEnd: true,
-          createdAt: true,
-        },
-      },
-      funnelLeads: {
-        orderBy: { updatedAt: 'desc' },
-        take: 1,
-        select: {
-          status: true,
-          updatedAt: true,
-        },
-      },
-    },
-  })
+    }),
+    getUserAccessState(userId).catch(() => null),
+  ])
 
   if (!user) {
     throw new Error('USER_NOT_FOUND')
   }
 
-  return resolveUserLifecycleFromRecord(user)
+  return resolveUserLifecycleFromRecord(user, new Date(), accessState)
 }
 
 export function resolveUserLifecycleFromRecord(
   user: LifecycleResolutionUserRecord,
   now: Date = new Date(),
+  accessState: Pick<UserAccessState, 'state' | 'isActive' | 'hasFocus'> | null = null,
 ): UserLifecycleSnapshot {
 
   const subscription = user.subscriptions[0] ?? null
@@ -162,15 +167,15 @@ export function resolveUserLifecycleFromRecord(
     && isFreshLeadMagnetDate(leadEnrollment.createdAt, now),
   )
   const hasWaitlistFlag = isWaitlistFlag(currentStep) || isWaitlistFlag(user.currentStep)
-  const isPaidActive =
+  const legacyPaidActive =
     user.focusPaid === true || (
       subscription?.status === 'ACTIVE' &&
       (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)
     )
-  const isTrialActive =
-    (!isPaidActive && subscription?.status === 'TRIAL' && !!subscription.trialEndsAt && subscription.trialEndsAt > now)
+  const legacyTrialActive =
+    (!legacyPaidActive && subscription?.status === 'TRIAL' && !!subscription.trialEndsAt && subscription.trialEndsAt > now)
     || (!!user.trialStartsAt && !!user.trialEndsAt && user.trialEndsAt > now)
-  const hadMentorAccess = Boolean(
+  const legacyHadMentorAccess = Boolean(
     user.trialStartsAt ||
     user.trialEndsAt ||
     subscription?.trialEndsAt ||
@@ -178,6 +183,18 @@ export function resolveUserLifecycleFromRecord(
     subscription?.status === 'ACTIVE' ||
     subscription?.status === 'TRIAL',
   )
+  const isCanonicalPaidActive =
+    accessState?.state === 'FOCUS_ACTIVE' ||
+    accessState?.hasFocus === true
+  const isCanonicalTrialActive =
+    accessState?.state === 'FREE_WEEK1' &&
+    accessState?.isActive === true
+  const isPremiumZoomOnly = accessState?.state === 'PREMIUM'
+  const isPaidActive = accessState ? isCanonicalPaidActive : legacyPaidActive
+  const isTrialActive = accessState ? isCanonicalTrialActive : legacyTrialActive
+  const hadMentorAccess = accessState
+    ? (isCanonicalPaidActive || isCanonicalTrialActive || (!isPremiumZoomOnly && legacyHadMentorAccess))
+    : legacyHadMentorAccess
   const hasExpiredAccess = !isPaidActive && !isTrialActive && hadMentorAccess
   const leadStep = deriveLeadStep(leadEnrollment?.progress)
   const hasCompletedLeadMagnet = Boolean(

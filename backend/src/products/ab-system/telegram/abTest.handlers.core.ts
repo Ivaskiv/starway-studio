@@ -9,6 +9,7 @@ import {
   resolveAbTestQuestionOrder,
   resolveAbTestResultKey,
   type AbTestAnswer,
+  type AbTestProgress,
 } from '../../../core/state-machine/abTestFoundation.js'
 import { prisma } from '../../../db/client.js'
 import { getAbTestQuestion } from '../content/abTest.questions.js'
@@ -54,6 +55,44 @@ import { normalizeAbTestProgress } from '../../../core/state-machine/abTestFound
 // ============================================================================
 // ANSWER HANDLER (MAIN LOGIC)
 // ============================================================================
+
+type PersistCanonicalCompletedAbTestProgressInput = {
+  userId: string
+  progress: AbTestProgress
+  answers: AbTestAnswer[]
+  occurredAt: Date
+  revision?: number
+  questionsShown?: AbTestProgress['questions_shown']
+  lastCallbackKey?: string | null
+  lastMessageKey?: AbTestProgress['last_message_key']
+  traceId?: string
+}
+
+export async function persistCanonicalCompletedAbTestProgress(
+  input: PersistCanonicalCompletedAbTestProgressInput
+): Promise<{ progress: AbTestProgress; resultKey: AbTestResultKey | null }> {
+  const resultKey = resolveAbTestResultKey(input.answers)
+  const next = buildAbTestProgressPatch(input.progress, {
+    status: 'completed',
+    stage: 'S3_TEST_RESULT',
+    current_question_id: null,
+    revision: input.revision ?? input.progress.revision,
+    questions_shown: input.questionsShown ?? input.progress.questions_shown,
+    answers: input.answers,
+    result_key: resultKey,
+    last_callback_key: input.lastCallbackKey ?? input.progress.last_callback_key,
+    last_message_key: input.lastMessageKey ?? input.progress.last_message_key,
+    last_event_at: input.occurredAt.toISOString(),
+  })
+  const savedProgress = await saveAbTestProgress(input.userId, next, input.traceId
+    ? { traceId: input.traceId }
+    : undefined)
+
+  return {
+    progress: savedProgress,
+    resultKey,
+  }
+}
 
 export async function handleAbTestAnswer(
   ctx: Context,
@@ -210,7 +249,7 @@ export async function handleAbTestAnswer(
     ? resolveAbTestResultKey(nextAnswers)
     : progress.result_key
 
-  const next = buildAbTestProgressPatch(progress, {
+  let next = buildAbTestProgressPatch(progress, {
     status: complete ? 'completed' : 'active',
     stage: complete ? 'S3_TEST_RESULT' : 'S2_TEST_QUESTIONS',
     current_question_id: nextQuestionId,
@@ -235,7 +274,23 @@ export async function handleAbTestAnswer(
     oldAnswersLength: progress.answers.length,
     newAnswersLength: next.answers.length,
   })
-  await saveAbTestProgress(userId, next, { traceId })
+  if (complete) {
+    next = (
+      await persistCanonicalCompletedAbTestProgress({
+        userId,
+        progress,
+        answers: nextAnswers,
+        occurredAt: answeredAt,
+        revision: progress.revision + 1,
+        questionsShown: next.questions_shown,
+        lastCallbackKey: `ab_test_answer:${parsed.questionId}`,
+        lastMessageKey: question.message_key,
+        traceId,
+      })
+    ).progress
+  } else {
+    await saveAbTestProgress(userId, next, { traceId })
+  }
   const progressAfterWrite1 = await loadAbTestProgress(userId)
   console.info('[ABTEST_PROGRESS_AFTER_WRITE_1]', {
     traceId,

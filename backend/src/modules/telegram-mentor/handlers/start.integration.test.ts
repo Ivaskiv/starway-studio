@@ -121,7 +121,7 @@ function makeFakeCtx(overrides: Partial<{
     telegram: { sendMessage },
   }
 
-  return { ctx: ctx as never, reply, sendMessage }
+  return { ctx: ctx as any, reply, sendMessage }
 }
 
 beforeEach(() => {

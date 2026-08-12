@@ -10,6 +10,7 @@ import type {
 } from '../orchestrator/types.js'
 import type { IContextLoader, LoadedExecutionContext } from '../context-loader/types.js'
 import type { IUsageLedger } from '../../providers/usageLedger.js'
+import type { ModelStrategyTier } from '../../providers/models.js'
 
 export type { AgentRunInput, AgentRunResult, IAgentRunner, IContextLoader, LoadedExecutionContext }
 
@@ -28,11 +29,23 @@ export interface AgentDefinition {
   requiredContextSources?: import('../context-loader/types.js').ContextSourceKind[]
 }
 
+export interface PromptExecutionMetadata {
+  // `content` remains the canonical system instruction; these fields preserve
+  // separated user input and routing metadata for provider adapters.
+  userPrompt?: string
+  strategyTier?: ModelStrategyTier
+  contentType?: string
+}
+
+export interface PromptMetadata extends Record<string, unknown> {
+  execution?: PromptExecutionMetadata
+}
+
 export interface ResolvedPrompt {
   id: string
   version: string
   content: string
-  metadata?: Record<string, unknown>
+  metadata?: PromptMetadata
 }
 
 export interface AIProviderResponse {

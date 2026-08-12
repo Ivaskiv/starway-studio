@@ -11,5 +11,7 @@ export type {
   IContextLoader,
   IPromptRegistry,
   LoadedExecutionContext,
+  PromptExecutionMetadata,
+  PromptMetadata,
   ResolvedPrompt,
 } from './types.js'

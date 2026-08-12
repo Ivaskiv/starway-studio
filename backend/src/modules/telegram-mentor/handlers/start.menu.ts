@@ -10,8 +10,8 @@ import { buildRelationshipContinuityLead, resolveConversationProfile } from '../
 import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
 import { prisma } from '../../../db/client.js'
 import { bot } from '../../../lib/telegram.js'
-import { getAccessControlState } from '../../access/service.js'
 import { trackEvent } from '../../events/service.js'
+import { getUserAccessState } from '../../subscriptions/payments/focus.access.js'
 import { isExplicitWaitlistUser, resolveLinkedUserIdFromContext, resolveUserState as resolveCoreUserState, type UserState as CoreUserState } from '../core/state.service.js'
 import { sendWaitlist } from '../flows/onboarding.flow.js'
 import { getTelegramAppUrl, openAppKeyboard, withDevTestPaymentButton } from '../keyboards.js'
@@ -319,8 +319,12 @@ await prisma.runtimeOutbox.create({
 async function hasOpenStarwayAccess(userId: string | null): Promise<boolean> {
   if (!userId) return false
   try {
-    const access = await getAccessControlState(userId)
-    return access.hasRequiredContacts
+    const access = await getUserAccessState(userId)
+    return (
+      access.state === 'FOCUS_ACTIVE' ||
+      access.isActive === true ||
+      access.hasFocus === true
+    )
   } catch {
     return false
   }

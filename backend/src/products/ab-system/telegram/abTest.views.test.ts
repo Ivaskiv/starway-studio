@@ -434,6 +434,25 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(snapshotText).toContain('Підписка неактивна')
   })
 
+  it('uses the updated STATE snapshot copy while preserving dynamic status slots', async () => {
+    const ctx = createCtx()
+
+    await sendResultSnapshot(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey: 'state',
+      firstName: 'Vira',
+    })
+
+    const snapshotText = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[1]
+    expect(snapshotText).toContain('З поверненням! 👋')
+    expect(snapshotText).toContain('Твій поточний фокус за результатом тесту — <b>СТАН</b>.')
+    expect(snapshotText).toContain('📌 <b>Твій статус у системі:</b>')
+    expect(snapshotText).toContain('• Zoom-практики:')
+    expect(snapshotText).toContain('• Підписка: неактивна')
+    expect(snapshotText).toContain('Обирай формат участі у «ФОКУСІ» нижче')
+  })
+
   it('sends the step 8 screenshot via sendPhoto exactly once without inlining stale urls into text messages', async () => {
     const ctx = createCtx()
 

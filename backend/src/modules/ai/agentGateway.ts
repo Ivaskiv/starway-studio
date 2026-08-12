@@ -16,12 +16,14 @@ import {
   InMemoryUsageLedgerStore,
   UsageLedger,
   type AgentDefinition,
+  type AIProviderResponse,
   type EngineeringTask,
   type ExecutionStateSnapshot,
   type IRuntimeLogger,
   type IAIProvider,
   type IPromptLoader,
   type PromptLoaderInput,
+  type PromptMetadata,
   DEFAULT_RUNTIME_PROMPT_SOURCES,
 } from '@starway/ai'
 import { prisma } from '../../db/client.js'
@@ -32,6 +34,12 @@ import {
   OllamaProvider,
   OpenRouterProvider,
 } from '@starway/ai/providers'
+import {
+  ProviderFactory,
+  ProviderRegistry,
+  type ProviderConfiguration,
+} from '@starway/ai/providers/registry'
+import type { ModelStrategyTier } from '@starway/ai/providers/models'
 
 import { resolveAiModel } from '../../platform/ai.registry.js'
 import {
@@ -50,6 +58,7 @@ import {
   type CanonicalGatewayAgentKey,
   type CanonicalGatewayAgentRegistration,
 } from './canonicalAgentRegistry.js'
+import type { ModelProvider } from '../ai-assistant/promptCompiler.js'
 
 export type TelegramGatewayBot = 'user' | 'coach' | 'support' | 'admin'
 
@@ -102,6 +111,26 @@ export interface TelegramAgentGatewayDependencies {
   runtimeExecutor?: IRuntimeGatewayExecutor
   logger?: IRuntimeLogger
   aiProvider?: IAIProvider
+}
+
+export interface CanonicalPromptAgentExecutionInput {
+  agentKey: Extract<CanonicalGatewayAgentKey, 'assistant' | 'content' | 'sales' | 'coach' | 'funnel' | 'mentor'>
+  systemPrompt: string
+  userPrompt: string
+  strategyTier: ModelStrategyTier
+  contentType: string
+  preferredProvider?: ModelProvider
+  userId?: string | null
+  taskId?: string
+  taskDescription?: string
+  objective?: string
+  contextSummary?: string
+  taskMetadata?: Record<string, unknown>
+}
+
+export interface CanonicalPromptAgentExecutionResult {
+  content: string
+  metadata?: Record<string, unknown>
 }
 
 interface RuntimeGatewayExecutionInput {
@@ -740,36 +769,192 @@ function resolveGatewayProviderId(): 'openai' | 'anthropic' | 'gemini' | 'ollama
   return 'openai'
 }
 
-function buildGatewayAiProvider(): IAIProvider {
-  const providerId = resolveGatewayProviderId()
-  switch (providerId) {
-    case 'anthropic':
-      return new AnthropicProvider({
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        defaultModel: process.env.TELEGRAM_AGENT_GATEWAY_ANTHROPIC_MODEL ?? 'claude-sonnet-4-5',
-      })
-    case 'gemini':
-      return new GeminiProvider({
-        apiKey: process.env.GOOGLE_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY,
-        defaultModel: process.env.TELEGRAM_AGENT_GATEWAY_GEMINI_MODEL ?? 'gemini-2.5-flash',
-      })
-    case 'ollama':
-      return new OllamaProvider({
-        baseUrl: process.env.OLLAMA_BASE_URL,
-        defaultModel: process.env.TELEGRAM_AGENT_GATEWAY_OLLAMA_MODEL ?? 'qwen3:latest',
-        timeoutMs: 120_000,
-      })
-    case 'openrouter':
-      return new OpenRouterProvider({
-        apiKey: process.env.OPENROUTER_API_KEY,
-        defaultModel: process.env.TELEGRAM_AGENT_GATEWAY_OPENROUTER_MODEL ?? resolveAiModel('telegram_intelligence'),
-      })
-    case 'openai':
-    default:
-      return new OpenAIProvider({
-        apiKey: process.env.OPENAI_API_KEY,
-        defaultModel: process.env.TELEGRAM_AGENT_GATEWAY_OPENAI_MODEL ?? resolveAiModel('telegram_intelligence'),
-      })
+function buildGatewayProviderConfiguration(
+  preferredProvider?: ModelProvider,
+): ProviderConfiguration {
+  return {
+    selectedProvider: resolveCanonicalProviderId(preferredProvider),
+    providers: {
+      anthropic: {
+        config: {
+          apiKey: process.env.ANTHROPIC_API_KEY,
+          defaultModel: process.env.TELEGRAM_AGENT_GATEWAY_ANTHROPIC_MODEL ?? 'claude-sonnet-4-5',
+        },
+      },
+      gemini: {
+        config: {
+          apiKey: process.env.GOOGLE_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY,
+          defaultModel: process.env.TELEGRAM_AGENT_GATEWAY_GEMINI_MODEL ?? 'gemini-2.5-flash',
+        },
+      },
+      ollama: {
+        config: {
+          baseUrl: process.env.OLLAMA_BASE_URL,
+          defaultModel: process.env.TELEGRAM_AGENT_GATEWAY_OLLAMA_MODEL ?? 'qwen3:latest',
+          timeoutMs: 120_000,
+        },
+      },
+      openrouter: {
+        config: {
+          apiKey: process.env.OPENROUTER_API_KEY,
+          defaultModel:
+            process.env.TELEGRAM_AGENT_GATEWAY_OPENROUTER_MODEL ??
+            resolveAiModel('telegram_intelligence'),
+        },
+      },
+      openai: {
+        config: {
+          apiKey: process.env.OPENAI_API_KEY,
+          defaultModel:
+            process.env.TELEGRAM_AGENT_GATEWAY_OPENAI_MODEL ??
+            resolveAiModel('telegram_intelligence'),
+        },
+      },
+    },
+  }
+}
+
+function buildGatewayAiProvider(
+  logger?: IRuntimeLogger,
+  preferredProvider?: ModelProvider,
+): IAIProvider {
+  const registry = new ProviderRegistry({
+    configuration: buildGatewayProviderConfiguration(preferredProvider),
+    factory: new ProviderFactory({
+      creators: {
+        openai: config => new OpenAIProvider(config),
+        anthropic: config => new AnthropicProvider(config),
+        gemini: config => new GeminiProvider(config),
+        ollama: config => new OllamaProvider(config),
+        openrouter: config => new OpenRouterProvider(config),
+      },
+      logger,
+    }),
+    logger,
+  })
+  return registry.getProvider()
+}
+
+export async function executeCanonicalPromptAgent(
+  input: CanonicalPromptAgentExecutionInput,
+): Promise<CanonicalPromptAgentExecutionResult> {
+  const logger = new NoopRuntimeLogger()
+  const registry = new CanonicalGatewayAgentRegistry(logger)
+  const registration = registry.getRegistrationByKey(input.agentKey)
+  const agentDefinition = registry.getAgentDefinition(registration)
+  const promptMetadata: PromptMetadata = {
+    execution: {
+      userPrompt: input.userPrompt,
+      strategyTier: input.strategyTier,
+      contentType: input.contentType,
+    },
+  }
+  const task: EngineeringTask = {
+    id:
+      input.taskId ??
+      `sales-assistant:${input.agentKey}:${input.userId ?? 'anonymous'}:${Date.now()}`,
+    description:
+      input.taskDescription ??
+      `Execute canonical ${input.agentKey} agent for sales assistant generation.`,
+    objective:
+      input.objective ??
+      'Return one canonical content artifact for the sales assistant request.',
+    metadata: {
+      userId: input.userId ?? null,
+      contentType: input.contentType,
+      ...(input.taskMetadata ?? {}),
+    },
+  }
+  const runner = new AgentRunner({
+    agentDefinitions: [agentDefinition],
+    promptRegistry: {
+      resolvePrompt: async () => ({
+        id: agentDefinition.promptId,
+        version: 'sales-assistant-canonical-v1',
+        content: input.systemPrompt,
+        metadata: promptMetadata,
+      }),
+    },
+    contextLoader: {
+      loadContext: async () => ({
+        summary: input.contextSummary?.trim() || input.userPrompt,
+        sourceOrder: ['task', 'prompt'],
+        task: {
+          id: task.id,
+          description: task.description,
+          objective: task.objective,
+          metadata: task.metadata,
+        },
+        prompt: {
+          id: agentDefinition.promptId,
+          version: 'sales-assistant-canonical-v1',
+        },
+        metadata: {
+          contentType: input.contentType,
+        },
+      }),
+    },
+    aiProvider: buildGatewayAiProvider(logger, input.preferredProvider),
+    artifactFactory: {
+      createArtifact: async ({ providerResponse, task: activeTask, agentDefinition: activeAgent }) =>
+        createCanonicalPromptArtifact({
+          providerResponse,
+          task: activeTask,
+          agentDefinition: activeAgent,
+        }),
+    },
+    artifactValidator: {
+      validate: async ({ artifact }) => ({
+        valid:
+          typeof (artifact.payload as { response?: unknown }).response === 'string' &&
+          (artifact.payload as { response?: string }).response!.trim().length > 0,
+        reason: 'Canonical prompt artifact must return a non-empty response.',
+      }),
+    },
+    logger,
+  })
+
+  const runResult = await runner.run({
+    task,
+    agentId: agentDefinition.id,
+    state: createExecutionState(task, agentDefinition.id),
+  })
+
+  const payload = runResult.artifact.payload as { response?: string }
+  return {
+    content: payload.response ?? '',
+    metadata: runResult.artifact.metadata,
+  }
+}
+
+function resolveCanonicalProviderId(
+  preferredProvider?: ModelProvider,
+): ProviderConfiguration['selectedProvider'] {
+  if (preferredProvider === 'claude') return 'anthropic'
+  if (preferredProvider === 'gemini') return 'gemini'
+  if (preferredProvider === 'gpt') return 'openai'
+  return resolveGatewayProviderId()
+}
+
+function createCanonicalPromptArtifact(input: {
+  providerResponse: AIProviderResponse
+  task: EngineeringTask
+  agentDefinition: AgentDefinition
+}) {
+  return {
+    id: `canonical-prompt-${input.task.id}`,
+    type: input.agentDefinition.artifactType,
+    owner: input.agentDefinition.id,
+    summary: `Canonical prompt execution generated for task '${input.task.id}'.`,
+    payload: {
+      response: input.providerResponse.content ?? '',
+      provider: getStringMetadata(input.providerResponse.metadata, 'provider'),
+      model: getStringMetadata(input.providerResponse.metadata, 'model'),
+      tokensUsed: getTokenUsage(input.providerResponse.metadata),
+    },
+    metadata: {
+      providerResponse: input.providerResponse.metadata ?? {},
+    },
   }
 }
 

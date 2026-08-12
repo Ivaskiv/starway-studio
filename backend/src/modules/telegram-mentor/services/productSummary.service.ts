@@ -79,29 +79,6 @@ type ProductSummaryResult = {
   hasCorePurchase: boolean
 }
 
-function resolveSubscriptionState(subscription: SubscriptionLike | null | undefined): ProductState {
-  const now = new Date()
-  if (!subscription) return 'inactive'
-
-  if (subscription.status === 'ACTIVE' && (!subscription.currentPeriodEnd || subscription.currentPeriodEnd > now)) {
-    return 'active'
-  }
-
-  if (subscription.status === 'TRIAL' && !!subscription.trialEndsAt && subscription.trialEndsAt > now) {
-    return 'trial'
-  }
-
-  if (subscription.status === 'PAUSED' || subscription.status === 'CANCELLED') {
-    return 'paused'
-  }
-
-  if (subscription.status === 'ACTIVE' || subscription.status === 'TRIAL') {
-    return 'paused'
-  }
-
-  return 'inactive'
-}
-
 function statusIcon(state: ProductState): string {
   switch (state) {
     case 'active':
@@ -186,10 +163,6 @@ function safeGetNextLessonTitle(mediaId: string | null | undefined): string | nu
     })
     return null
   }
-}
-
-function hasSubscriptionOwnership(subscription: SubscriptionLike | null | undefined): boolean {
-  return Boolean(subscription)
 }
 
 function hasCorePurchase(purchaseHistory: Array<{ metadata: unknown }>): boolean {

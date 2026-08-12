@@ -4,9 +4,12 @@ import {
   TELEGRAM_CANONICAL_ALLOWED_UPDATES,
   syncTelegramWebhookContract,
 } from './interactive/telegramWebhookSync.js'
+import { startInteractiveTelegramConsumers } from './interactive/telegramConsumerStartup.js'
 
-const mainHandleUpdate = vi.fn(async () => undefined)
-const coachHandleUpdate = vi.fn(async () => undefined)
+const { mainHandleUpdate, coachHandleUpdate } = vi.hoisted(() => ({
+  mainHandleUpdate: vi.fn(async () => undefined),
+  coachHandleUpdate: vi.fn(async () => undefined),
+}))
 const originalStartTelegramBot = process.env.START_TELEGRAM_BOT
 const originalNodeEnv = process.env.NODE_ENV
 
@@ -40,21 +43,28 @@ type TestResponse = {
 }
 
 async function loadTelegramWebhookHandler() {
+  return loadRouteHandler('/api/telegram/webhook', 'post')
+}
+
+async function loadRouteHandler(
+  path: string,
+  method: 'get' | 'post',
+) {
   const { createApp } = await import('./app.js')
   const app = createApp()
 
   const stack = (app as ExpressWithRouter)._router?.stack ?? []
-  const webhookLayer = stack.find(
+  const routeLayer = stack.find(
     (layer) =>
-      layer.route?.path === '/api/telegram/webhook'
-      && layer.route.methods?.post,
+      layer.route?.path === path
+      && layer.route.methods?.[method],
   )
-  const webhookHandler = webhookLayer?.route?.stack?.[0]?.handle
-  if (!webhookHandler) {
-    throw new Error('Telegram webhook route handler not found')
+  const routeHandler = routeLayer?.route?.stack?.[0]?.handle
+  if (!routeHandler) {
+    throw new Error(`Route handler not found for ${method.toUpperCase()} ${path}`)
   }
 
-  return webhookHandler
+  return routeHandler
 }
 
 function createTestResponse(): TestResponse {
@@ -85,6 +95,7 @@ function createTestResponse(): TestResponse {
 vi.mock('./lib/telegram.js', () => ({
   bot: { handleUpdate: mainHandleUpdate },
   coachBot: { handleUpdate: coachHandleUpdate },
+  launchBot: vi.fn(async () => undefined),
   resolveTelegramWebhookSecretMap: () => ({
     main: 'main-secret',
     coach: 'coach-secret',
@@ -266,5 +277,164 @@ describe('telegram webhook contract', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(mainHandleUpdate).toHaveBeenCalledWith(payload)
+  })
+
+  it('rejects main startup when webhook sync fails and does not log MAIN_READY', async () => {
+    const logger = {
+      log: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }
+    const setMainRunningMode = vi.fn()
+    const mainBot = {
+      telegram: {
+        getMe: vi.fn(async () => ({ username: 'Test_ABsystem_bot' })),
+        setChatMenuButton: vi.fn(async () => undefined),
+        setMyCommands: vi.fn(async () => undefined),
+        deleteWebhook: vi.fn(async () => undefined),
+      },
+    } as never
+
+    await expect(
+      startInteractiveTelegramConsumers({
+        main: {
+          bot: mainBot,
+          botName: 'Starway Main',
+          telegramBotConfig: {
+            token: 'prod-token',
+            username: 'Test_ABsystem_bot',
+          },
+          expectedUsername: 'Test_ABsystem_bot',
+          deliveryMode: 'webhook',
+          buildSha: 'build-1',
+          webhookUrl: 'https://example.com/api/telegram/webhook',
+          webhookSecret: 'secret-1',
+          setRunningMode: vi.fn(),
+          syncTelegramWebhookContractFn: vi.fn(async () => {
+            throw new Error('sync failed')
+          }),
+          logger,
+        },
+        setMainRunningMode,
+        logger,
+      }),
+    ).rejects.toThrow('sync failed')
+
+    expect(setMainRunningMode).toHaveBeenCalledWith(null)
+    expect(logger.error).toHaveBeenCalledWith('[TELEGRAM_MAIN_STARTUP_FATAL]', {
+      error: 'sync failed',
+    })
+    expect(
+      logger.log.mock.calls.some((call) => call[0] === '[TELEGRAM_MAIN_READY]'),
+    ).toBe(false)
+  })
+
+  it('logs MAIN_READY when main startup succeeds', async () => {
+    const logger = {
+      log: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }
+
+    await startInteractiveTelegramConsumers({
+      main: {
+        bot: {
+          telegram: {
+            getMe: vi.fn(async () => ({ username: 'Test_ABsystem_bot' })),
+            setChatMenuButton: vi.fn(async () => undefined),
+            setMyCommands: vi.fn(async () => undefined),
+            deleteWebhook: vi.fn(async () => undefined),
+          },
+        } as never,
+        botName: 'Starway Main',
+        telegramBotConfig: {
+          token: 'prod-token',
+          username: 'Test_ABsystem_bot',
+        },
+        expectedUsername: 'Test_ABsystem_bot',
+        deliveryMode: 'webhook',
+        buildSha: 'build-2',
+        webhookUrl: 'https://example.com/api/telegram/webhook',
+        webhookSecret: 'secret-1',
+        setRunningMode: vi.fn(),
+        syncTelegramWebhookContractFn: vi.fn(async () => ({
+          url: 'https://example.com/api/telegram/webhook',
+          pending_update_count: 0,
+          last_error_date: undefined,
+          last_error_message: undefined,
+        })),
+        logger,
+      },
+      setMainRunningMode: vi.fn(),
+      logger,
+    })
+
+    expect(logger.log).toHaveBeenCalledWith('[TELEGRAM_MAIN_READY]', {
+      username: 'Test_ABsystem_bot',
+      deliveryMode: 'webhook',
+      buildSha: 'build-2',
+    })
+  })
+
+  it('keeps main runtime ready when optional coach startup fails', async () => {
+    const logger = {
+      log: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }
+
+    await startInteractiveTelegramConsumers({
+      main: {
+        bot: {
+          telegram: {
+            getMe: vi.fn(async () => ({ username: 'Test_ABsystem_bot' })),
+            setChatMenuButton: vi.fn(async () => undefined),
+            setMyCommands: vi.fn(async () => undefined),
+            deleteWebhook: vi.fn(async () => undefined),
+          },
+        } as never,
+        botName: 'Starway Main',
+        telegramBotConfig: {
+          token: 'prod-token',
+          username: 'Test_ABsystem_bot',
+        },
+        expectedUsername: 'Test_ABsystem_bot',
+        deliveryMode: 'webhook',
+        buildSha: 'build-3',
+        webhookUrl: 'https://example.com/api/telegram/webhook',
+        webhookSecret: 'secret-1',
+        setRunningMode: vi.fn(),
+        syncTelegramWebhookContractFn: vi.fn(async () => ({
+          url: 'https://example.com/api/telegram/webhook',
+          pending_update_count: 0,
+          last_error_date: undefined,
+          last_error_message: undefined,
+        })),
+        logger,
+      },
+      coach: {
+        coachToken: 'coach-token',
+        coachBot: {} as never,
+        botName: 'Coach',
+        webhookUrl: 'https://example.com/api/telegram/webhook',
+        webhookSecret: 'coach-secret',
+        setRunningMode: vi.fn(),
+        launchBotFn: vi.fn(async () => {
+          throw new Error('coach failed')
+        }),
+        logger,
+      },
+      setMainRunningMode: vi.fn(),
+      logger,
+    })
+
+    expect(logger.log).toHaveBeenCalledWith('[TELEGRAM_MAIN_READY]', {
+      username: 'Test_ABsystem_bot',
+      deliveryMode: 'webhook',
+      buildSha: 'build-3',
+    })
+    expect(logger.error).toHaveBeenCalledWith('[TELEGRAM_COACH_STARTUP_ERROR]', {
+      error: 'coach failed',
+    })
   })
 })

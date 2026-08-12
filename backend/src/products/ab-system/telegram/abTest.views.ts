@@ -966,6 +966,16 @@ export async function sendResultSnapshot(
     action: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.ACTION,
   } as const
   const snapshotCopy = snapshotCopyByKey[input.resultKey]
+  const snapshotOverrides = snapshotCopy as Partial<{
+    statusHeader: string
+    zoomNotBookedLabel: string
+    subscriptionInactiveLabel: string
+    nextStepNoAccess: string
+  }>
+  const formatStatusLine = (line: string) =>
+    snapshotOverrides.statusHeader && !line.trim().startsWith('•')
+      ? `• ${line}`
+      : line
 
   const [attendedCount, totalBookedCount, accessState, upcomingZoom] = await Promise.all([
     prisma.zoomSessionAttendee.count({
@@ -982,7 +992,8 @@ export async function sendResultSnapshot(
     ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.subscriptionActiveLabel(
         `<b>${accessState.expiresAt?.toLocaleDateString('uk-UA', { timeZone: 'Europe/Kyiv' }) ?? 'без кінцевої дати'}</b>`,
       )
-    : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.subscriptionInactiveLabel
+    : snapshotOverrides.subscriptionInactiveLabel ??
+      absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.subscriptionInactiveLabel
 
   const zoomLine =
     upcomingZoom?.isMyBooking === true
@@ -999,11 +1010,13 @@ export async function sendResultSnapshot(
             attendedCount,
             totalBookedCount,
           )
-        : absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.zoomNotBookedLabel
+        : snapshotOverrides.zoomNotBookedLabel ??
+          absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.zoomNotBookedLabel
 
   const nextStep =
     !accessState.isActive
-      ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepNoAccess
+      ? snapshotOverrides.nextStepNoAccess ??
+        absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepNoAccess
       : upcomingZoom && !upcomingZoom.isMyBooking
         ? absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.nextStepZoom(
             upcomingZoom.scheduledAt.toLocaleDateString('uk-UA', {
@@ -1031,8 +1044,9 @@ export async function sendResultSnapshot(
     '',
     snapshotCopy.quote,
     '',
-    zoomLine,
-    subscriptionLine,
+    ...(snapshotOverrides.statusHeader ? [snapshotOverrides.statusHeader] : []),
+    formatStatusLine(zoomLine),
+    formatStatusLine(subscriptionLine),
     ...liveQuestionLines,
     '',
     nextStep,

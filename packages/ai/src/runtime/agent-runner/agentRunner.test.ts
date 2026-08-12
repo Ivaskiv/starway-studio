@@ -15,6 +15,7 @@ import type {
   IArtifactValidator,
   IContextLoader,
   IPromptRegistry,
+  PromptMetadata,
 } from './types.js'
 import type { ContextSourceKind } from '../context-loader/types.js'
 import { InMemoryUsageLedgerStore, UsageLedger } from '../../providers/usageLedger.js'
@@ -130,6 +131,43 @@ describe('AgentRunner', () => {
 
     expect(result.artifact).toEqual(makeArtifact())
     expect(result.notes).toEqual(['provider-note', 'artifact-validated'])
+  })
+
+  it('preserves split prompt execution metadata at the provider boundary', async () => {
+    const providerExecute = vi.fn(async (): Promise<AIProviderResponse> => ({
+      content: 'Execution plan',
+    }))
+    const executionMetadata: PromptMetadata = {
+      execution: {
+        userPrompt: 'USER_SENTINEL',
+        strategyTier: 'complex',
+        contentType: 'telegram',
+      },
+    }
+    const runner = makeRunner({
+      promptRegistry: {
+        resolvePrompt: vi.fn(async () => ({
+          id: 'task-planning-prompt',
+          version: '1.0.0',
+          content: 'SYSTEM_SENTINEL',
+          metadata: executionMetadata,
+        })),
+      },
+      aiProvider: {
+        execute: providerExecute,
+      },
+    })
+
+    await runner.run(makeInput())
+
+    expect(providerExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          content: 'SYSTEM_SENTINEL',
+          metadata: executionMetadata,
+        }),
+      }),
+    )
   })
 
   it('fails when the agent definition is missing', async () => {

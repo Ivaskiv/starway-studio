@@ -17,7 +17,7 @@ import {
 import { telegramContentRegistry } from '../content/contentRegistry.js'
 import type { UserLifecycleSnapshot } from '../../flow-control/types.js'
 import { mapTelegramConversationHistory } from './intelligence.service.js'
-import { hasActiveFocusSubscription } from '../../subscriptions/payments/focus.access.js'
+import { getUserAccessState } from '../../subscriptions/payments/focus.access.js'
 
 type RequestContextState = {
   userId?: string | null
@@ -329,7 +329,8 @@ async function buildLinkedRequestContext(
     subscriptions: userRecord.subscriptions,
     funnelLeads: userRecord.funnelLeads,
   }
-  const lifecycle = resolveUserLifecycleFromRecord(lifecycleInput, now)
+  const accessState = await getUserAccessState(userId).catch(() => null)
+  const lifecycle = resolveUserLifecycleFromRecord(lifecycleInput, now, accessState)
   const userState = resolveUserStateFromSnapshot({
     currentState: userRecord.currentState,
     currentStep: userRecord.currentStep,
@@ -367,7 +368,7 @@ async function buildLinkedRequestContext(
     .reverse()
     .find((message) => message.role === 'assistant')
     ?.content ?? null
-  const canonicalFocusAccess = await hasActiveFocusSubscription(userId).catch(() => false)
+  const canonicalFocusAccess = accessState?.state === 'FOCUS_ACTIVE' || accessState?.hasFocus === true
 
   return freezeContext({
     chatId,

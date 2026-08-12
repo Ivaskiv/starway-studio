@@ -237,6 +237,15 @@ export function resolveTelegramWebhookTarget(
   return targets.find((target) => target.secret && target.secret === normalizedSecret) ?? null
 }
 
+function resolveTelegramWebhookUpdateType(update: unknown): string | null {
+  if (!update || typeof update !== 'object' || Array.isArray(update)) {
+    return null
+  }
+
+  const candidate = Object.keys(update).find((key) => key !== 'update_id') ?? null
+  return candidate
+}
+
 export function createApp(): Express {
   const app = express()
   const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
@@ -356,6 +365,15 @@ export function createApp(): Express {
 
     const incomingSecret =
       req.get('x-telegram-bot-api-secret-token')?.trim() || ''
+    const updateId =
+      typeof req.body?.update_id === 'number' || typeof req.body?.update_id === 'string'
+        ? req.body.update_id
+        : null
+    console.log('[TELEGRAM_WEBHOOK_RECEIVED]', {
+      updateId,
+      hasSecret: Boolean(incomingSecret),
+      updateType: resolveTelegramWebhookUpdateType(req.body),
+    })
     const webhookTarget = resolveTelegramWebhookTarget(incomingSecret)
 
     if (!webhookTarget) {
@@ -367,6 +385,11 @@ export function createApp(): Express {
         .status(401)
         .json({ ok: false, message: incomingSecret ? 'invalid telegram webhook secret' : 'missing telegram webhook secret' })
     }
+
+    console.log('[TELEGRAM_WEBHOOK_ACCEPTED]', {
+      botId: webhookTarget.id,
+      updateId,
+    })
 
     // ACK immediately to avoid webhook caller timeout/retries;
     // update processing runs in background.

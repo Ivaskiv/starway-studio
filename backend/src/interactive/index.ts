@@ -36,6 +36,7 @@ import {
   startHttpServer,
   startRuntimeEventLoopMonitor,
 } from '../runtime/runtimeBootstrap.js'
+import { startInteractiveTelegramConsumers } from './telegramConsumerStartup.js'
 import { syncTelegramWebhookContract } from './telegramWebhookSync.js'
 
 loadRuntimeEnv()
@@ -157,120 +158,42 @@ async function startTelegramBot() {
         ? resolveTelegramWebhookSecret({ botId: 'coach', token: coachToken })
         : ''
 
-      await Promise.allSettled([
-        (async () => {
-          if (!telegramBotConfig.token) return
-
-          const me = await bot.telegram.getMe()
-          const expectedUsername = readExpectedTelegramBotUsername()
-          if (expectedUsername && me.username !== expectedUsername) {
-            throw new Error(
-              `[TELEGRAM_BOT_MISMATCH] Expected @${expectedUsername} but got @${me.username}.`,
-            )
-          }
-          console.log('[TELEGRAM_RUNTIME]', {
-            env: process.env.NODE_ENV || 'development',
-            username: me.username || telegramBotConfig.username || 'unknown',
-            deliveryMode: telegramDeliveryMode,
-            buildSha: readBuildSha(),
-          })
-
-          try {
-            await bot.telegram
-              .setChatMenuButton({
-                menuButton: {
-                  type: 'default',
-                },
-              })
-              .catch((error) => {
-                console.warn('⚠️ [Telegram] Failed to reset chat menu button:', error)
-              })
-            await bot.telegram
-              .setMyCommands([
-                {
-                  command: 'privacy',
-                  description: 'Політика конфіденційності чат-бота',
-                },
-              ])
-              .catch((error) => {
-                console.warn('⚠️ [Telegram] Failed to set global commands:', error)
-              })
-            await bot.telegram
-              .setMyCommands(
-                [
-                  {
-                    command: 'privacy',
-                    description: 'Політика конфіденційності чат-бота',
-                  },
-                ],
-                {
-                  scope: { type: 'all_private_chats' },
-                },
-              )
-              .catch((error) => {
-                console.warn('⚠️ [Telegram] Failed to set private chat commands:', error)
-              })
-            await bot.telegram
-              .setMyCommands(
-                [
-                  {
-                    command: 'privacy',
-                    description: 'Політика конфіденційності чат-бота',
-                  },
-                ],
-                {
-                  scope: { type: 'all_group_chats' },
-                },
-              )
-              .catch((error) => {
-                console.warn('⚠️ [Telegram] Failed to set group chat commands:', error)
-              })
-            await bot.telegram
-              .setMyCommands(
-                [
-                  {
-                    command: 'privacy',
-                    description: 'Політика конфіденційності чат-бота',
-                  },
-                ],
-                {
-                  scope: { type: 'all_chat_administrators' },
-                },
-              )
-              .catch((error) => {
-                console.warn('⚠️ [Telegram] Failed to set admin chat commands:', error)
-              })
-          } catch (error) {
-            console.warn('⚠️ [Telegram] main bot setup warning:', error)
-          }
-
-          if (mainWebhookUrl) {
-            await syncTelegramWebhookContract({
-              bot,
-              botName: 'main',
-              webhookUrl: mainWebhookUrl,
-              webhookSecret: mainWebhookSecret,
-            })
-            telegramRunningMode = 'webhook'
-            console.log(`🤖 Interactive Telegram ready @${telegramBotConfig.username} [webhook]`)
-            return
-          }
-
-          await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
-          await launchBot(bot, telegramBotNames.main)
-          telegramRunningMode = 'polling'
-        })(),
-        (async () => {
-          if (!coachToken) return
-          await launchBot(coachBot, telegramBotNames.coach, coachWebhookUrl || undefined, {
-            webhookSecret: coachWebhookSecret || undefined,
-          })
-          coachTelegramRunningMode = coachWebhookUrl ? 'webhook' : 'polling'
-        })(),
-      ])
+      await startInteractiveTelegramConsumers({
+        main: {
+          bot,
+          botName: telegramBotNames.main,
+          telegramBotConfig,
+          expectedUsername: readExpectedTelegramBotUsername(),
+          deliveryMode: telegramDeliveryMode,
+          buildSha: readBuildSha(),
+          webhookUrl: mainWebhookUrl,
+          webhookSecret: mainWebhookSecret,
+          setRunningMode: (mode) => {
+            telegramRunningMode = mode
+          },
+          syncTelegramWebhookContractFn: syncTelegramWebhookContract,
+          launchBotFn: launchBot,
+        },
+        coach: coachToken
+          ? {
+              coachToken,
+              coachBot,
+              botName: telegramBotNames.coach,
+              webhookUrl: coachWebhookUrl,
+              webhookSecret: coachWebhookSecret,
+              setRunningMode: (mode) => {
+                coachTelegramRunningMode = mode
+              },
+              launchBotFn: launchBot,
+            }
+          : null,
+        setMainRunningMode: (mode) => {
+          telegramRunningMode = mode
+        },
+      })
     } catch (error) {
       telegramRunningMode = null
-      console.error('⚠️ Interactive telegram setup failed:', error)
+      throw error
     } finally {
       telegramStartupPromise = null
     }
@@ -308,9 +231,7 @@ async function bootstrap() {
       })
     }
 
-    void startTelegramBot().catch((err: unknown) => {
-      console.error('⚠️ Interactive telegram async error:', err)
-    })
+    await startTelegramBot()
   })()
 }
 

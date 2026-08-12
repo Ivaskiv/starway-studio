@@ -1,4 +1,5 @@
 import { prisma } from '../../db/client.js'
+import { getUserAccessState } from '../subscriptions/payments/focus.access.js'
 
 export type PlatformAccessStatus =
   | 'TRIAL_ACTIVE'
@@ -20,66 +21,62 @@ export interface PlatformAccess {
 }
 
 export async function getPlatformAccess(userId: string): Promise<PlatformAccess> {
-  const user = await prisma.user.findUnique({
+  const [user, accessState] = await Promise.all([
+    prisma.user.findUnique({
     where: { id: userId },
     select: {
       currentState: true,
-      focusPaid: true,
       onboardingDone: true,
-      trialStartsAt: true,
       trialEndsAt: true,
     },
-  })
+    }),
+    getUserAccessState(userId),
+  ])
 
   if (!user) throw new Error('User not found')
 
   const now = new Date()
   const state = user.currentState
 
-  const isPaidOnboarding = state === 'PAID_ONBOARDING'
-  const isActive = state === 'ACTIVE'
-  const aiUpgraded = isPaidOnboarding || isActive
-
   const trialDayMatch = state.match(/^TRIAL_DAY_(\d+)$/)
   const trialDay = trialDayMatch ? Number(trialDayMatch[1]) : null
-  const isTrialState = trialDay !== null
-
-  const daysLeft =
-    isTrialState && user.trialEndsAt
-      ? Math.max(0, Math.ceil((user.trialEndsAt.getTime() - now.getTime()) / 86_400_000))
-      : null
-
+  const isCanonicalPaidAccess =
+    accessState.state === 'FOCUS_ACTIVE' ||
+    accessState.hasFocus === true
+  const isCanonicalPlatformTrial =
+    accessState.state === 'FREE_WEEK1' &&
+    accessState.isActive === true
+  const daysLeft = accessState.expiresAt
+    ? Math.max(0, Math.ceil((accessState.expiresAt.getTime() - now.getTime()) / 86_400_000))
+    : null
   const trialExpired =
-    isTrialState && user.trialEndsAt != null && user.trialEndsAt <= now
+    trialDay !== null &&
+    user.trialEndsAt != null &&
+    user.trialEndsAt <= now
 
   let status: PlatformAccessStatus
-  if (isActive) {
-    status = 'PAID_ACTIVE'
-  } else if (isPaidOnboarding) {
-    status = 'PAID_ONBOARDING'
-  } else if (isTrialState && !trialExpired) {
+  if (isCanonicalPaidAccess) {
+    status = state === 'PAID_ONBOARDING' ? 'PAID_ONBOARDING' : 'PAID_ACTIVE'
+  } else if (isCanonicalPlatformTrial) {
     status = 'TRIAL_ACTIVE'
   } else if (trialExpired) {
-    status = user.focusPaid ? 'FOCUS_ONLY' : 'TRIAL_EXPIRED'
-  } else if (user.focusPaid) {
-    status = 'FOCUS_ONLY'
+    status = 'TRIAL_EXPIRED'
   } else {
     status = 'BLOCKED'
   }
 
   const canAccessPlatform =
-    status === 'TRIAL_ACTIVE' ||
-    status === 'PAID_ONBOARDING' ||
-    status === 'PAID_ACTIVE'
+    isCanonicalPlatformTrial ||
+    isCanonicalPaidAccess
 
-  const canAccessPaidModules = status === 'PAID_ONBOARDING' || status === 'PAID_ACTIVE'
+  const canAccessPaidModules = isCanonicalPaidAccess
 
   return {
     status,
     trialDay,
     daysLeft,
-    focusPaid: user.focusPaid,
-    aiUpgraded,
+    focusPaid: isCanonicalPaidAccess,
+    aiUpgraded: isCanonicalPaidAccess,
     onboardingDone: user.onboardingDone,
     canAccessPlatform,
     canAccessPaidModules,
