@@ -11,6 +11,7 @@ const mockGetOrCreateFocusInviteLink = vi.fn()
 const mockLoadAbTestProgress = vi.fn()
 const mockPlanMessage = vi.fn()
 const mockRenderCurrentView = vi.fn()
+const mockSendResultSnapshot = vi.fn()
 
 vi.mock('../../../db/client.js', () => ({
   prisma: {
@@ -91,6 +92,7 @@ vi.mock('@/products/ab-system/telegram/abTest.progress.js', () => ({
 
 vi.mock('@/products/ab-system/telegram/abTest.views.js', () => ({
   renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
+  sendResultSnapshot: (...args: unknown[]) => mockSendResultSnapshot(...args),
 }))
 
 import { handleStart } from './start.js'
@@ -126,6 +128,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockPlanMessage.mockResolvedValue({ message_id: 1 })
   mockRenderCurrentView.mockResolvedValue(undefined)
+  mockSendResultSnapshot.mockResolvedValue(undefined)
   mockUserUpdate.mockResolvedValue(undefined)
   mockGetStartPayload.mockReturnValue('')
   mockParseFirstTouchPayload.mockReturnValue({ product: null, source: null, campaign: null })
@@ -148,7 +151,7 @@ beforeEach(() => {
 })
 
 describe('handleStart — targeted home screen routing', () => {
-  it('TEST_DONE + NO_ACCESS delegates to canonical AB result owner', async () => {
+  it('TEST_DONE + NO_ACCESS delegates to canonical repeated-result renderer', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-1')
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
@@ -173,13 +176,15 @@ describe('handleStart — targeted home screen routing', () => {
 
     expect(reply).not.toHaveBeenCalled()
     expect(mockPlanMessage).not.toHaveBeenCalled()
-    expect(mockRenderCurrentView).toHaveBeenCalledTimes(1)
-    expect(mockRenderCurrentView).toHaveBeenCalledWith(
+    expect(mockRenderCurrentView).not.toHaveBeenCalled()
+    expect(mockSendResultSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockSendResultSnapshot).toHaveBeenCalledWith(
       ctx,
-      'user-1',
       expect.objectContaining({
-        status: 'completed',
-        result_key: 'action',
+        chatId: '111',
+        userId: 'user-1',
+        resultKey: 'action',
+        firstName: 'Тестова',
       }),
     )
   })
@@ -255,13 +260,15 @@ describe('handleStart — targeted home screen routing', () => {
 
     expect(reply).not.toHaveBeenCalled()
     expect(mockPlanMessage).not.toHaveBeenCalled()
-    expect(mockRenderCurrentView).toHaveBeenCalledTimes(1)
-    expect(mockRenderCurrentView).toHaveBeenCalledWith(
+    expect(mockRenderCurrentView).not.toHaveBeenCalled()
+    expect(mockSendResultSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockSendResultSnapshot).toHaveBeenCalledWith(
       ctx,
-      'user-1b',
       expect.objectContaining({
-        status: 'completed',
-        result_key: 'action',
+        chatId: '101',
+        userId: 'user-1b',
+        resultKey: 'action',
+        firstName: 'Тестова',
       }),
     )
   })

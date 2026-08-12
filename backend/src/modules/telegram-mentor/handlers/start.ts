@@ -20,7 +20,7 @@ import {
 } from './abTest.start.js'
 import { buildHomeScreen } from './homeScreen.builder.js'
 import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
-import { renderCurrentView } from '@/products/ab-system/telegram/abTest.views.js'
+import { renderCurrentView, sendResultSnapshot } from '@/products/ab-system/telegram/abTest.views.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
 import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTest.service.js'
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
@@ -618,7 +618,12 @@ export async function handleStart(ctx: StartContext) {
       abTestProgress?.status === 'completed' &&
       abTestProgress.result_key
     ) {
-      await renderCurrentView(ctx, user.id, abTestProgress)
+      await sendResultSnapshot(ctx, {
+        chatId,
+        userId: user.id,
+        resultKey: abTestProgress.result_key,
+        firstName: user.firstName,
+      })
       startMessageSent = true
       return
     }
