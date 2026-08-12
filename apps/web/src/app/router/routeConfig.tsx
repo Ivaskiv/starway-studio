@@ -27,7 +27,6 @@ import {
   GoalsPage,
   JournalPage,
 } from '@/app/router/routePages'
-import CleanMiniAppZoomCalendar from '@/features/zoom/routes/CleanMiniAppZoomCalendar'
 import type { ReactElement } from 'react'
 import { Navigate } from 'react-router-dom'
 
@@ -210,7 +209,7 @@ export const DASHBOARD_ROUTES: RouteConfig[] = [
   },
   {
     path: '/dashboard/zoom',
-    element: <CleanMiniAppZoomCalendar />,
+    element: <Navigate to="/miniapp/zoom-calendar" replace />,
     ability: 'dashboard.view',
   },
   {

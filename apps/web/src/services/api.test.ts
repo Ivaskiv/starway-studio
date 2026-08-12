@@ -42,4 +42,19 @@ describe('resolveApiUrl', () => {
 
     expect(resolveApiUrl('/access/state')).toBe('https://api.example.com/api/access/state')
   })
+
+  it('keeps the same zoom endpoint path in local and remote modes', async () => {
+    vi.stubEnv('VITE_API_MODE', 'local')
+    let module = await import('./api')
+    const localUrl = module.resolveApiUrl('/zoom/week')
+
+    vi.resetModules()
+    vi.stubEnv('VITE_API_MODE', 'remote')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com')
+    module = await import('./api')
+    const remoteUrl = module.resolveApiUrl('/zoom/week')
+
+    expect(new URL(localUrl, 'https://local.example').pathname).toBe('/api/zoom/week')
+    expect(new URL(remoteUrl).pathname).toBe('/api/zoom/week')
+  })
 })

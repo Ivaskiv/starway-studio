@@ -1,6 +1,6 @@
 import { useSelector } from 'react-redux'
 import { useEffect, useMemo, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import type { RootState } from '@/app/store'
 import MiniAppLayout from '@/components/miniapp/MiniAppLayout'
@@ -21,7 +21,6 @@ import { useGetTrialStatusQuery } from '@/features/trial/services/trial.api'
 import { useTrackFrontendEventMutation } from '@/features/analytics/services/events.api'
 import type { MiniAppLibraryItem, MiniAppPageId } from '@/features/social/types/miniapp'
 import { useGetLatestWheelAssessmentQuery } from '@/features/wheel/services/wheel.api'
-import { MiniAppZoomWeekPanel } from '@/features/zoom/routes/MiniAppZoomRoute'
 
 const LIBRARY_ITEMS: MiniAppLibraryItem[] = [
   { title: '5 точок опори', sub: 'Безкоштовно', locked: false },
@@ -198,6 +197,10 @@ export default function MiniAppPage() {
     )
   }
 
+  if (page === 'home') {
+    return <Navigate to={`/miniapp/zoom-calendar${location.search}`} replace />
+  }
+
   return (
     <MiniAppLayout activeTab={page}>
         {isBootstrappingAuth && !userId ? (
@@ -210,8 +213,6 @@ export default function MiniAppPage() {
             </div>
           </div>
         ) : null}
-
-{!isBootstrappingAuth && page === 'home' && <MiniAppZoomWeekPanel />}
 
         {!isBootstrappingAuth && page === 'mentor' && mentorAccess.isLocked && (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
@@ -263,4 +264,3 @@ export default function MiniAppPage() {
     </MiniAppLayout>
   )
 }
-
