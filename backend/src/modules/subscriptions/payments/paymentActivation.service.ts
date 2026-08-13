@@ -128,7 +128,7 @@ export async function activateProductSubscription(params: {
 
     const existing = await db.productSubscription.findUnique({
       where: { userId_productId: { userId, productId: product.id } },
-      select: { status: true, paidAt: true, amount: true },
+      select: { status: true, paidAt: true, amount: true, expiresAt: true },
     })
 
     const canonicalAmount = resolveCanonicalAmount({
@@ -137,13 +137,43 @@ export async function activateProductSubscription(params: {
       planId: catalogPlanId,
       fallbackAmount: amount,
     })
+    const manualBy = resolveManualGrantBy(source)
 
     if (existing?.status.toLowerCase() === 'active' && existing.paidAt) {
-      if (existing.amount !== canonicalAmount) {
+      const shouldSyncExpiry =
+        expiresAtOverride instanceof Date &&
+        Number.isFinite(expiresAtOverride.getTime()) &&
+        (existing.expiresAt?.getTime() ?? null) !== expiresAtOverride.getTime()
+      const shouldSyncAmount = existing.amount !== canonicalAmount
+
+      if (shouldSyncAmount || shouldSyncExpiry) {
         await db.productSubscription.update({
           where: { userId_productId: { userId, productId: product.id } },
-          data: { amount: canonicalAmount },
+          data: {
+            amount: canonicalAmount,
+            ...(shouldSyncExpiry ? { expiresAt: expiresAtOverride } : {}),
+            manuallyGrantedBy: manualBy,
+            manualGrantNote: manualNote ?? null,
+          },
         })
+
+        const canonicalSubscription = await db.subscription.findFirst({
+          where: { userId, productId: product.id },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        })
+
+        if (canonicalSubscription && shouldSyncExpiry) {
+          await db.subscription.update({
+            where: { id: canonicalSubscription.id },
+            data: {
+              status: 'ACTIVE',
+              startsAt: existing.paidAt,
+              currentPeriodEnd: expiresAtOverride,
+              planCode: resolvePlanCode(product.code, planMonths),
+            },
+          })
+        }
       }
       if (product.code.toLowerCase() === 'focus' && !user.focusPaid) {
         await db.user.update({
@@ -155,12 +185,16 @@ export async function activateProductSubscription(params: {
           },
         })
       }
-      return { success: true, message: 'already_active', userId, source }
+      return {
+        success: true,
+        message: shouldSyncAmount || shouldSyncExpiry ? 'activated' : 'already_active',
+        userId,
+        source,
+      }
     }
 
     const paidAt = paidAtOverride ?? new Date()
     const expiresAt = expiresAtOverride ?? resolveExpiresAt(paidAt, planMonths ?? 1)
-    const manualBy = resolveManualGrantBy(source)
     const planCode = resolvePlanCode(product.code, planMonths)
 
     await db.productSubscription.upsert({
