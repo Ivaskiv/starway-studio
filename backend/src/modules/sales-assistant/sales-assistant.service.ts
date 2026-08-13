@@ -207,9 +207,9 @@ async function generateContentLegacy(
     userRequest: safeUserRequest,
   })
 
-  if (resolvedType === 'sales') {
+  if (resolvedType === 'sales' || (resolvedType !== 'reels' && resolvedType !== 'warmup')) {
     const canonicalResult = await executeCanonicalPromptAgent({
-      agentKey: 'sales',
+      agentKey: resolvedType === 'sales' ? 'sales' : 'content',
       systemPrompt: promptPair.system,
       userPrompt: promptPair.user,
       strategyTier,

@@ -158,4 +158,57 @@ describe('generateContent sales canonical runner transition', () => {
       }),
     ])
   })
+
+  it('routes landing generation through canonical AgentRunner and skips direct callProviderSafe', async () => {
+    const { AgentRunner } = await import('@starway/ai')
+    const runSpy = vi.spyOn(AgentRunner.prototype, 'run')
+    const { generateContent } = await import('./sales-assistant.service.js')
+
+    const result = await generateContent(
+      null,
+      {
+        contentType: 'landing',
+        selectedProtocol: 'raw_truth',
+        selectedOutputs: ['landing'],
+        userContext: 'LANDING_CONTEXT_SENTINEL',
+        userRequest: 'LANDING_REQUEST_SENTINEL',
+      },
+      {
+        key: 'STARWAY_OGOLENA_PRAVDA',
+        systemAnchor: 'anchor',
+        supportedProtocols: {},
+        supportedOutputs: ['landing'],
+      },
+      'user-2',
+    )
+
+    expect(runSpy).toHaveBeenCalledTimes(1)
+    expect(providerExecuteMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentDefinition: expect.objectContaining({
+          id: 'content_agent',
+        }),
+        prompt: expect.objectContaining({
+          content: 'SYSTEM_SENTINEL',
+          metadata: expect.objectContaining({
+            execution: expect.objectContaining({
+              userPrompt: 'USER_SENTINEL',
+              strategyTier: 'standard',
+              contentType: 'landing',
+            }),
+          }),
+        }),
+      }),
+    )
+    expect(callProviderSafeMock).not.toHaveBeenCalled()
+    expect(result.content).toBe('CANONICAL_RESULT')
+    expect(result.modelUsed).toBe('claude')
+    expect(result.tokensUsed).toBe(18)
+    expect(result.multiModelResults).toEqual([
+      expect.objectContaining({
+        modelKey: 'claude',
+        content: 'CANONICAL_RESULT',
+      }),
+    ])
+  })
 })
