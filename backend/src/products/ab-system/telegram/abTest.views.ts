@@ -94,10 +94,38 @@ const UI_COPY = {
   browser: absystemButtons.openInBrowser,
 } as const
 const RESULT_ZOOM_BOOKING_INTENT = 'booking'
+const STATE_RESULT_PRIMARY_CTA_TEXT = '🚀 ОБРАТИ ФОРМАТ У «ФОКУСІ»'
+const STATE_RESULT_ZOOM_CTA_TEXT = '📅 Розклад Zoom'
+const STATE_RESULT_ABOUT_CTA_TEXT = '❓ Про програму'
 
 function buildResultPreviewKeyboard(
   resultKey: AbTestResultKey,
 ): InlineKeyboardMarkup {
+  if (resultKey === 'state') {
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: STATE_RESULT_PRIMARY_CTA_TEXT,
+            callback_data: 'open_focus_payment',
+          },
+        ],
+        [
+          {
+            text: STATE_RESULT_ZOOM_CTA_TEXT,
+            web_app: {
+              url: buildZoomCalendarUrl(),
+            },
+          },
+          {
+            text: STATE_RESULT_ABOUT_CTA_TEXT,
+            callback_data: 'show_inside_STATE',
+          },
+        ],
+      ],
+    }
+  }
+
   return {
     inline_keyboard: [
       [
@@ -120,6 +148,10 @@ function buildResultPreviewKeyboardForBookingState(input: {
   resultKey: AbTestResultKey
   isMyBooking: boolean
 }): InlineKeyboardMarkup {
+  if (input.resultKey === 'state') {
+    return buildResultPreviewKeyboard(input.resultKey)
+  }
+
   if (input.isMyBooking) {
     return {
       inline_keyboard: [

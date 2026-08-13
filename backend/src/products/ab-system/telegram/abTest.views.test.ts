@@ -445,12 +445,20 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     })
 
     const snapshotText = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[1]
+    const replyMarkup = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[2]?.reply_markup
+    const buttonLabels = JSON.stringify(replyMarkup)
     expect(snapshotText).toContain('З поверненням! 👋')
     expect(snapshotText).toContain('Твій поточний фокус за результатом тесту — <b>СТАН</b>.')
     expect(snapshotText).toContain('📌 <b>Твій статус у системі:</b>')
     expect(snapshotText).toContain('• Zoom-практики:')
     expect(snapshotText).toContain('• Підписка: неактивна')
     expect(snapshotText).toContain('Обирай формат участі у «ФОКУСІ» нижче')
+    expect(buttonLabels).toContain('🚀 ОБРАТИ ФОРМАТ У «ФОКУСІ»')
+    expect(buttonLabels).toContain('📅 Розклад Zoom')
+    expect(buttonLabels).toContain('❓ Про програму')
+    expect(buttonLabels).toContain('open_focus_payment')
+    expect(buttonLabels).toContain('show_inside_STATE')
+    expect(buttonLabels).not.toContain('ЗАПИСАТ')
   })
 
   it('sends the step 8 screenshot via sendPhoto exactly once without inlining stale urls into text messages', async () => {
