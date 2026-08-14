@@ -26,6 +26,7 @@ import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTe
 import { absystemContent } from '@/products/absystem/config/absystem.content.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { getUserAccessState, type UserAccessState } from '../../subscriptions/payments/focus.access.js'
+import { logger } from '../../../utils/logger.js'
 
 export * from './start.shared.js'
 
@@ -36,6 +37,15 @@ const recentStartPayloadByChat = new Map<
   { signature: string; sentAt: number }
 >()
 const START_PAYLOAD_DEDUP_WINDOW_MS = 15_000
+
+function readRuntimeCommitSha(): string {
+  return String(
+    process.env.RENDER_GIT_COMMIT
+    || process.env.COMMIT_SHA
+    || process.env.VERCEL_GIT_COMMIT_SHA
+    || 'unknown',
+  ).trim()
+}
 
 export type StartUserSnapshot = {
   id: string
@@ -464,6 +474,14 @@ export async function handleStart(ctx: StartContext) {
   const chatId = String(rawChatId)
   const startPayload = getStartPayload(ctx)
 
+  logger.info(`[TELEGRAM_START_RUNTIME] ${JSON.stringify({
+    updateId: Number.isFinite(updateId) ? updateId : null,
+    chatId,
+    botUsername: ctx.botInfo?.username ?? 'unknown',
+    runtimeCommitSha: readRuntimeCommitSha(),
+    phase: 'received',
+  })}`)
+
   console.info('[START_RECEIVED]', {
     chatId,
     fromId: String(ctx.from?.id ?? ''),
@@ -612,12 +630,41 @@ export async function handleStart(ctx: StartContext) {
     }
 
     const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
+    const selectedBranch =
+      isPlainStart &&
+      user.lifecycleState === 'TEST_DONE' &&
+      abTestProgress?.status === 'completed' &&
+      abTestProgress.result_key
+        ? 'completed_result_replay'
+        : 'home_or_payload'
+
+    logger.info(`[TELEGRAM_START_RUNTIME] ${JSON.stringify({
+      updateId: Number.isFinite(updateId) ? updateId : null,
+      chatId,
+      botUsername: ctx.botInfo?.username ?? 'unknown',
+      lifecycleState: user.lifecycleState,
+      progressStatus: abTestProgress?.status ?? null,
+      progressResultKey: abTestProgress?.result_key ?? null,
+      selectedBranch,
+      runtimeCommitSha: readRuntimeCommitSha(),
+      phase: 'resolved',
+    })}`)
+
     if (
       isPlainStart &&
       user.lifecycleState === 'TEST_DONE' &&
       abTestProgress?.status === 'completed' &&
       abTestProgress.result_key
     ) {
+      logger.info(`[TELEGRAM_START_RUNTIME] ${JSON.stringify({
+        updateId: Number.isFinite(updateId) ? updateId : null,
+        chatId,
+        botUsername: ctx.botInfo?.username ?? 'unknown',
+        resultKey: abTestProgress.result_key,
+        selectedBranch,
+        runtimeCommitSha: readRuntimeCommitSha(),
+        phase: 'before_result_snapshot',
+      })}`)
       await sendResultSnapshot(ctx, {
         chatId,
         userId: user.id,

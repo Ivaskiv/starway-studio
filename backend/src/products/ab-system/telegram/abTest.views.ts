@@ -77,6 +77,7 @@ import {
   formatMobileAnswerButtonText,
   formatMobileAnswerListForMessage,
 } from './abTest.helpers.js'
+import { logger } from '../../../utils/logger.js'
 
 const QUESTION_LABELS: Record<AbTestQuestionId, string> = {
   q1: 'Що відбувається',
@@ -166,6 +167,25 @@ function buildResultPreviewKeyboardForBookingState(input: {
   }
 
   return buildResultPreviewKeyboard(input.resultKey)
+}
+
+function describeInlineKeyboard(keyboard: InlineKeyboardMarkup): Array<Array<{
+  text: string
+  destinationType: 'callback' | 'web_app' | 'url' | 'unknown'
+  destination: string
+}>> {
+  return keyboard.inline_keyboard.map(row => row.map((button) => {
+    if ('callback_data' in button) {
+      return { text: button.text, destinationType: 'callback', destination: button.callback_data }
+    }
+    if ('web_app' in button) {
+      return { text: button.text, destinationType: 'web_app', destination: 'zoom_calendar' }
+    }
+    if ('url' in button) {
+      return { text: button.text, destinationType: 'url', destination: 'external' }
+    }
+    return { text: button.text, destinationType: 'unknown', destination: 'unknown' }
+  }))
 }
 
 function shouldBoldAbTestLine(normalized: string): boolean {
@@ -1084,6 +1104,24 @@ export async function sendResultSnapshot(
     nextStep,
   ].join('\n')
 
+  const replyMarkup = buildResultPreviewKeyboardForBookingState({
+    resultKey: input.resultKey,
+    isMyBooking: upcomingZoom?.isMyBooking === true,
+  })
+
+  logger.info(`[TELEGRAM_RESULT_SNAPSHOT] ${JSON.stringify({
+    chatId: String(input.chatId),
+    resultKey: input.resultKey,
+    keyboard: describeInlineKeyboard(replyMarkup),
+    runtimeCommitSha: String(
+      process.env.RENDER_GIT_COMMIT
+      || process.env.COMMIT_SHA
+      || process.env.VERCEL_GIT_COMMIT_SHA
+      || 'unknown',
+    ).trim(),
+    phase: 'before_send',
+  })}`)
+
   await sendTelegramMessage(
     ctx,
     input.chatId,
@@ -1093,13 +1131,21 @@ export async function sendResultSnapshot(
     },
     {
       replyMarkup: {
-        inline_keyboard: buildResultPreviewKeyboardForBookingState({
-          resultKey: input.resultKey,
-          isMyBooking: upcomingZoom?.isMyBooking === true,
-        }).inline_keyboard,
+        inline_keyboard: replyMarkup.inline_keyboard,
       },
     },
-  ).catch((error) => {
+  ).then((message) => {
+    const messageId =
+      typeof message === 'object' && message !== null && 'message_id' in message
+        ? (message as { message_id: unknown }).message_id
+        : null
+    logger.info(`[TELEGRAM_RESULT_SNAPSHOT] ${JSON.stringify({
+      messageId,
+      chatId: String(input.chatId),
+      resultKey: input.resultKey,
+      phase: 'sent',
+    })}`)
+  }).catch((error) => {
     console.error('[sendResultSnapshot] failed', {
       userId: input.userId,
       resultKey: input.resultKey,

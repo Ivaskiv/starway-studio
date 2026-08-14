@@ -21,6 +21,7 @@ vi.mock('../../../db/client.js', () => ({
     },
     zoomSessionAttendee: {
       findUnique: (...args: unknown[]) => mockZoomSessionAttendeeFindUnique(...args),
+      count: vi.fn().mockResolvedValue(0),
     },
   },
 }))
@@ -90,10 +91,17 @@ vi.mock('@/products/ab-system/telegram/abTest.progress.js', () => ({
   loadAbTestProgress: (...args: unknown[]) => mockLoadAbTestProgress(...args),
 }))
 
-vi.mock('@/products/ab-system/telegram/abTest.views.js', () => ({
-  renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
-  sendResultSnapshot: (...args: unknown[]) => mockSendResultSnapshot(...args),
-}))
+vi.mock('@/products/ab-system/telegram/abTest.views.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/products/ab-system/telegram/abTest.views.js')>()
+  return {
+    ...actual,
+    renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
+    sendResultSnapshot: async (...args: Parameters<typeof actual.sendResultSnapshot>) => {
+      mockSendResultSnapshot(...args)
+      return actual.sendResultSnapshot(...args)
+    },
+  }
+})
 
 import { handleStart } from './start.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
@@ -151,6 +159,48 @@ beforeEach(() => {
 })
 
 describe('handleStart — targeted home screen routing', () => {
+  it('TEST_DONE state replay sends the canonical STAN keyboard exactly once', async () => {
+    mockResolveLinkedUserId.mockResolvedValue('user-state')
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'state',
+      email_stage: 'captured',
+    })
+    mockFindUniqueOrThrow.mockResolvedValue({
+      id: 'user-state',
+      role: 'USER',
+      activeRole: 'USER',
+      lifecycleState: 'TEST_DONE',
+      testStartedAt: null,
+      testCompletedAt: new Date('2026-08-13T10:00:00Z'),
+      offerShownAt: null,
+      testResultType: 'state',
+      updatedAt: new Date('2026-08-13T10:00:00Z'),
+      firstName: 'Тестова',
+    })
+
+    const { ctx, sendMessage } = makeFakeCtx({ chatId: 113, fromId: 113, updateId: 1013 })
+    await handleStart(ctx)
+
+    expect(mockSendResultSnapshot).toHaveBeenCalledTimes(1)
+    expect(sendMessage).toHaveBeenCalledTimes(1)
+    const replyMarkup = sendMessage.mock.calls[0]?.[2]?.reply_markup
+    expect(replyMarkup).toEqual({
+      inline_keyboard: [
+        [{ text: '🚀 ОБРАТИ ФОРМАТ У «ФОКУСІ»', callback_data: 'open_focus_payment' }],
+        [
+          {
+            text: '📅 Розклад Zoom',
+            web_app: { url: expect.stringContaining('/miniapp/zoom-calendar') },
+          },
+          { text: '❓ Про програму', callback_data: 'show_inside_STATE' },
+        ],
+      ],
+    })
+    expect(JSON.stringify(replyMarkup)).not.toContain('ЗАГЛЯНУТИ')
+    expect(JSON.stringify(replyMarkup)).not.toContain('ЗАПИСАТИСЯ НА ZOOM')
+  })
+
   it('TEST_DONE + NO_ACCESS delegates to canonical repeated-result renderer', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-1')
     mockLoadAbTestProgress.mockResolvedValue({
