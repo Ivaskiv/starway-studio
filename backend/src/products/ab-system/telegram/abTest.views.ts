@@ -1,5 +1,4 @@
 //backend/src/products/ab-system/telegram/abTest.views.ts
-import { hasTelegramCtaInteraction } from '@/modules/telegram-mentor/services/ctaInteraction.service.js'
 import { absystemButtons, absystemContent } from '@/products/absystem/config/absystem.content.js'
 import type { Prisma } from '@starway/db/prisma-client'
 import type { Context } from 'telegraf'
@@ -13,7 +12,6 @@ import {
   sendTelegramMessage,
 } from '../../../lib/telegram/messageFormatter.js'
 // import { buildBehavioralSnapshot } from '../../../core/behavioral/behavioralSnapshot.js'
-import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import { withRuntimeAdvisoryLock } from '../../../core/runtime/runtimeIdempotency.js'
 import {
   AB_TEST_UI_SETTINGS_KEY,
@@ -25,7 +23,6 @@ import { prisma } from '../../../db/client.js'
 import { planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 import { setPendingTelegramIdentity } from '../../../modules/telegram-mentor/services/pendingIdentity.service.js'
 // import { PromptProvider } from '../../../PromptProvider.js'
-import { resolveAbTestFollowupCopy } from '../content/abTest.followups.js'
 import {
   getAbTestAnswer,
   getAbTestQuestion,
@@ -34,20 +31,14 @@ import {
 import {
   getAbTestResultDefinition,
   interpolateFirstName,
-  resolveTestDriveVersion,
   type AbTestResultKey,
 } from '../content/abTest.results.js'
 import {
   AB_TEST_AUDIO_URL,
-  AB_TEST_BOOK_ZOOM_CTA_TEXT,
   AB_TEST_BOLD_LINES,
-  AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT,
-  AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
-  AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
   AB_TEST_REVIEW_HEADER_VALUES,
   AB_TEST_SCREENSHOT_URLS,
-  AB_TEST_SHOW_INSIDE_CTA_TEXT,
   AB_TEST_VOICE_CAPTION_PROMPT,
   AB_TEST_VOICE_NOTE_HEADER,
   AB_TEST_VOICE_NOTE_LINK_TEXT,
@@ -78,6 +69,7 @@ import {
   formatMobileAnswerListForMessage,
 } from './abTest.helpers.js'
 import { logger } from '../../../utils/logger.js'
+import { buildCanonicalResultKeyboard } from './abTest.keyboardPolicy.js'
 
 const QUESTION_LABELS: Record<AbTestQuestionId, string> = {
   q1: 'Що відбувається',
@@ -95,79 +87,6 @@ const UI_COPY = {
   browser: absystemButtons.openInBrowser,
 } as const
 const RESULT_ZOOM_BOOKING_INTENT = 'booking'
-const STATE_RESULT_PRIMARY_CTA_TEXT = '🚀 ОБРАТИ ФОРМАТ У «ФОКУСІ»'
-const STATE_RESULT_ZOOM_CTA_TEXT = '📅 Розклад Zoom'
-const STATE_RESULT_ABOUT_CTA_TEXT = '❓ Про програму'
-
-function buildResultPreviewKeyboard(
-  resultKey: AbTestResultKey,
-): InlineKeyboardMarkup {
-  if (resultKey === 'state') {
-    return {
-      inline_keyboard: [
-        [
-          {
-            text: STATE_RESULT_PRIMARY_CTA_TEXT,
-            callback_data: 'open_focus_payment',
-          },
-        ],
-        [
-          {
-            text: STATE_RESULT_ZOOM_CTA_TEXT,
-            web_app: {
-              url: buildZoomCalendarUrl(),
-            },
-          },
-          {
-            text: STATE_RESULT_ABOUT_CTA_TEXT,
-            callback_data: 'show_inside_STATE',
-          },
-        ],
-      ],
-    }
-  }
-
-  return {
-    inline_keyboard: [
-      [
-        {
-          text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
-          callback_data: `show_inside_${resultKey.toUpperCase()}`,
-        },
-        {
-          text: AB_TEST_BOOK_ZOOM_CTA_TEXT,
-          web_app: {
-            url: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }),
-          },
-        },
-      ],
-    ],
-  }
-}
-
-function buildResultPreviewKeyboardForBookingState(input: {
-  resultKey: AbTestResultKey
-  isMyBooking: boolean
-}): InlineKeyboardMarkup {
-  if (input.resultKey === 'state') {
-    return buildResultPreviewKeyboard(input.resultKey)
-  }
-
-  if (input.isMyBooking) {
-    return {
-      inline_keyboard: [
-        [
-          {
-            text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
-            callback_data: `show_inside_${input.resultKey.toUpperCase()}`,
-          },
-        ],
-      ],
-    }
-  }
-
-  return buildResultPreviewKeyboard(input.resultKey)
-}
 
 function describeInlineKeyboard(keyboard: InlineKeyboardMarkup): Array<Array<{
   text: string
@@ -910,7 +829,7 @@ export async function dispatchAbTestResultSequence(
   ctx: Context,
   input: {
     chatId: string | number
-    userId?: string
+    userId: string
     resultKey: AbTestResultKey
     firstName?: string | null
     deliverySource: 'post_email' | 'show_result'
@@ -934,7 +853,16 @@ export async function dispatchAbTestResultSequence(
     resultDef.blocks?.pricing ?? [],
     input.firstName
   )
-  const previewKeyboard = buildResultPreviewKeyboard(input.resultKey)
+  const [accessState, upcomingZoom] = await Promise.all([
+    getUserAccessState(input.userId),
+    getUpcomingZoomBookingView(input.userId),
+  ])
+  const previewKeyboard = buildCanonicalResultKeyboard({
+    resultKey: input.resultKey,
+    hasFocus: accessState.hasFocus,
+    isMyBooking: upcomingZoom?.isMyBooking === true,
+    zoomCalendarUrl: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }),
+  })
   console.info('[RESULT_FLOW]', {
     step: 'result_sequence_started',
     userId: input.userId ?? null,
@@ -1103,10 +1031,13 @@ export async function sendResultSnapshot(
     '',
     nextStep,
   ].join('\n')
+  const renderedText = text.replaceAll(' 👋', '').replaceAll('📌 ', '').replaceAll(' 👇', '')
 
-  const replyMarkup = buildResultPreviewKeyboardForBookingState({
+  const replyMarkup = buildCanonicalResultKeyboard({
     resultKey: input.resultKey,
+    hasFocus: accessState.hasFocus,
     isMyBooking: upcomingZoom?.isMyBooking === true,
+    zoomCalendarUrl: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }),
   })
 
   logger.info(`[TELEGRAM_RESULT_SNAPSHOT] ${JSON.stringify({
@@ -1126,7 +1057,7 @@ export async function sendResultSnapshot(
     ctx,
     input.chatId,
     {
-      text,
+      text: renderedText,
       parseMode: 'HTML',
     },
     {
@@ -1158,6 +1089,7 @@ export async function dispatchAbTestPracticeSequence(
   ctx: Context,
   input: {
     chatId: string | number
+    userId: string
     resultKey: AbTestResultKey
     firstName?: string | null
   }
@@ -1190,7 +1122,7 @@ export async function dispatchAbTestPracticeSequence(
     }
   )
   console.info('[FOCUS_DESCRIPTION_SENT]', {
-    userId: null,
+    userId: input.userId,
     segment: input.resultKey,
     messageId: null,
     callback: `show_inside_${input.resultKey.toUpperCase()}`,
@@ -1226,34 +1158,31 @@ export async function dispatchAbTestPracticeSequence(
 
   await pauseBetweenPracticeSections()
   await sendTypingBeforeBlocks(ctx, input.chatId, pricingBlocks.slice(0, 1))
+  const [accessState, upcomingZoom] = await Promise.all([
+    getUserAccessState(input.userId),
+    getUpcomingZoomBookingView(input.userId),
+  ])
+  const offerKeyboard = buildCanonicalResultKeyboard({
+    resultKey: input.resultKey,
+    hasFocus: accessState.hasFocus,
+    isMyBooking: upcomingZoom?.isMyBooking === true,
+    zoomCalendarUrl: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }),
+    includeProgramDescription: false,
+  })
   await sendTelegramContentChunk(
     ctx,
     input.chatId,
     'Формат участі',
     pricingBlocks,
     {
-      inlineKeyboard: {
-        inline_keyboard: [
-          [
-            {
-              text: AB_TEST_OPEN_FOCUS_BUTTON_TEXT,
-              callback_data: 'open_focus_payment',
-            },
-            {
-              text: AB_TEST_CHOOSE_ZOOM_BUTTON_TEXT,
-              web_app: { url: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }) },
-            },
-          ],
-        ],
-      },
+      inlineKeyboard: offerKeyboard,
       parseMode: 'HTML',
     }
   )
   console.info('[FOCUS_OFFER_SENT]', {
     chatId: String(input.chatId),
     resultKey: input.resultKey,
-    callbackData: 'open_focus_payment',
-    zoomWebAppUrl: buildZoomCalendarUrl({ intent: RESULT_ZOOM_BOOKING_INTENT }),
+    primaryAction: accessState.hasFocus ? 'zoom_calendar' : 'open_focus_payment',
   })
 }
 
@@ -1354,71 +1283,6 @@ function normalizeResultReviewScreenshot(
   return lines.map((line) =>
     line.includes('📸 **[СКРІН]**') ? screenshotMarker : line
   )
-}
-
-export async function renderAbTestFocusOffer(
-  ctx: Context,
-  userId: string,
-  progress: AbTestProgress
-) {
-  if (!progress.result_key) {
-    return
-  }
-
-  const chatId = ctx.chat?.id ?? ctx.from?.id
-  if (!chatId) {
-    return
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { firstName: true, telegramUserName: true },
-  })
-  const version = progress.started_at
-    ? resolveTestDriveVersion(progress.started_at)
-    : 'legacy'
-  const copy = resolveAbTestFollowupCopy(
-    'DOJIM_0_IMMEDIATE',
-    progress.result_key,
-    version,
-    {
-      firstName: resolveFirstName(user, ctx, userId),
-    }
-  )
-  const focusBlocks =
-    copy.blocks ?? splitTelegramContentBlocks(copy.body.split('\n'))
-  const hasPreviewClick = await hasTelegramCtaInteraction(
-    userId,
-    `show_inside_${progress.result_key.toUpperCase()}`
-  )
-  const inlineKeyboard = [
-    [
-      {
-        text: copy.cta ?? AB_TEST_FOCUS_JOIN_CTA_MULTILINE_TEXT,
-        callback_data: 'open_focus_payment',
-      },
-    ],
-    ...(hasPreviewClick
-      ? []
-      : [
-          [
-            {
-              text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
-              callback_data: `show_inside_${progress.result_key.toUpperCase()}`,
-            },
-          ],
-        ]),
-  ]
-
-  await sendTelegramContentChunk(ctx, chatId, copy.title, focusBlocks, {
-    inlineKeyboard: {
-      inline_keyboard: inlineKeyboard,
-    },
-    parseMode: 'HTML',
-    separateBlocks: true,
-  })
-
-  await testOrchestrator.onDojimSequenceComplete(userId).catch(() => undefined)
 }
 
 export async function renderAbTestResultThenOffer(

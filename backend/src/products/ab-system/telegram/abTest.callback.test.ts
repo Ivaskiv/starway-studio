@@ -17,7 +17,7 @@ function createCtx(action = 'show_inside_STATE', messageId = 99) {
       message: {
         message_id: messageId,
         reply_markup: {
-          inline_keyboard: [[{ text: 'ЗАГЛЯНУТИ', callback_data: action }]],
+          inline_keyboard: [[{ text: 'ПРО ПРОГРАМУ', callback_data: action }]],
         },
       },
     },

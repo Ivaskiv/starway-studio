@@ -709,6 +709,7 @@ export async function handleShowInside(
   const { dispatchAbTestPracticeSequence } = await import('./abTest.views.js')
   await dispatchAbTestPracticeSequence(ctx, {
     chatId,
+    userId,
     resultKey: resultKey as AbTestResultKey,
     firstName: resolveFirstName(userRecord, ctx, userId),
   })
@@ -743,6 +744,7 @@ export async function handleTestDrive(
   const { dispatchAbTestPracticeSequence } = await import('./abTest.views.js')
   await dispatchAbTestPracticeSequence(ctx, {
     chatId,
+    userId,
     resultKey: progress.result_key,
     firstName: resolveFirstName(userRecord, ctx, userId),
   })

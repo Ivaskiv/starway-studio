@@ -144,10 +144,8 @@ vi.mock('@/modules/zoom/urls.js', () => ({
 }))
 
 import {
-  AB_TEST_BOOK_ZOOM_CTA_TEXT,
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
   AB_TEST_SCREENSHOT_URLS,
-  AB_TEST_SHOW_INSIDE_CTA_TEXT,
   telegramBlock,
 } from '../content/abTest.shared.js'
 import {
@@ -188,6 +186,8 @@ function createCtx() {
   }
 }
 
+const RESULT_KEYS = ['state', 'goal', 'choice', 'decision', 'action'] as const
+
 describe('dispatchAbTestResultSequence practice preview keyboard', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -221,7 +221,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     vi.useRealTimers()
   })
 
-  it('renders practice preview with show-practice and canonical zoom buttons in one row without side effects', async () => {
+  it('renders the initial result preview through the canonical inactive keyboard', async () => {
     const ctx = createCtx()
 
     const promise = dispatchAbTestResultSequence(ctx as never, {
@@ -261,18 +261,8 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [
-              {
-                text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
-                callback_data: 'show_inside_DECISION',
-              },
-              {
-                text: AB_TEST_BOOK_ZOOM_CTA_TEXT,
-                web_app: {
-                url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking',
-                },
-              },
-            ],
+            [{ text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' }],
+            [{ text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_DECISION' }],
           ],
         },
       },
@@ -280,8 +270,8 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(JSON.stringify(lastCall)).not.toContain('ПОКАЗАТИ ПРАКТИКУ')
     expect(JSON.stringify(lastCall)).not.toContain('localhost')
     expect(JSON.stringify(lastCall)).not.toContain('ngrok')
-    expect(vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[2]?.reply_markup.inline_keyboard).toHaveLength(1)
-    expect(vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[2]?.reply_markup.inline_keyboard[0]).toHaveLength(2)
+    expect(vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[2]?.reply_markup.inline_keyboard).toHaveLength(2)
+    expect(JSON.stringify(lastCall)).not.toContain('zoom-calendar')
     expect(mockSaveAbTestProgress).not.toHaveBeenCalled()
     expect(mockSendOpsTelegramMessage).not.toHaveBeenCalled()
     expect(mockCoachSendMessage).not.toHaveBeenCalled()
@@ -319,7 +309,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     })
   })
 
-  it('reuses the same canonical keyboard for result replay without triggering booking side effects', async () => {
+  it('reuses the same canonical inactive keyboard for result replay', async () => {
     const ctx = createCtx()
 
     await sendResultSnapshot(ctx as never, {
@@ -334,23 +324,12 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [
-            {
-              text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
-              callback_data: 'show_inside_DECISION',
-            },
-            {
-              text: AB_TEST_BOOK_ZOOM_CTA_TEXT,
-              web_app: {
-                url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking',
-              },
-            },
-          ],
+          [{ text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' }],
+          [{ text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_DECISION' }],
         ],
       },
     })
-    expect(replayCall?.[2]?.reply_markup.inline_keyboard).toHaveLength(1)
-    expect(replayCall?.[2]?.reply_markup.inline_keyboard[0]).toHaveLength(2)
+    expect(replayCall?.[2]?.reply_markup.inline_keyboard).toHaveLength(2)
     expect(JSON.stringify(replayCall)).not.toContain('ПОКАЗАТИ ПРАКТИКУ')
     expect(JSON.stringify(replayCall)).not.toContain('localhost')
     expect(JSON.stringify(replayCall)).not.toContain('ngrok')
@@ -361,6 +340,12 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
 
   it('uses live booked Zoom state in the result snapshot and removes duplicate booking CTA', async () => {
     const ctx = createCtx()
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-09-01T00:00:00.000Z'),
+    })
     vi.mocked(getUpcomingZoomBookingView).mockResolvedValue({
       id: 'zoom-1',
       scheduledAt: new Date('2026-08-17T16:00:00.000Z'),
@@ -388,12 +373,11 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(replayCall?.[2]).toMatchObject({
       reply_markup: {
         inline_keyboard: [
-          [
-            {
-              text: AB_TEST_SHOW_INSIDE_CTA_TEXT,
-              callback_data: 'show_inside_DECISION',
-            },
-          ],
+          [{
+            text: 'ПЕРЕГЛЯНУТИ ЗАПИС',
+            web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking' },
+          }],
+          [{ text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_DECISION' }],
         ],
       },
     })
@@ -434,31 +418,109 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(snapshotText).toContain('Підписка неактивна')
   })
 
-  it('uses the updated STATE snapshot copy while preserving dynamic status slots', async () => {
+  it.each(RESULT_KEYS)('routes inactive %s users only to canonical focus acquisition', async (resultKey) => {
     const ctx = createCtx()
 
     await sendResultSnapshot(ctx as never, {
       chatId: '42',
       userId: 'user-1',
-      resultKey: 'state',
+      resultKey,
       firstName: 'Vira',
     })
 
     const snapshotText = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[1]
     const replyMarkup = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[2]?.reply_markup
     const buttonLabels = JSON.stringify(replyMarkup)
-    expect(snapshotText).toContain('З поверненням! 👋')
-    expect(snapshotText).toContain('Твій поточний фокус за результатом тесту — <b>СТАН</b>.')
-    expect(snapshotText).toContain('📌 <b>Твій статус у системі:</b>')
-    expect(snapshotText).toContain('• Zoom-практики:')
-    expect(snapshotText).toContain('• Підписка: неактивна')
-    expect(snapshotText).toContain('Обирай формат участі у «ФОКУСІ» нижче')
-    expect(buttonLabels).toContain('🚀 ОБРАТИ ФОРМАТ У «ФОКУСІ»')
-    expect(buttonLabels).toContain('📅 Розклад Zoom')
-    expect(buttonLabels).toContain('❓ Про програму')
+    if (resultKey === 'state') {
+      expect(snapshotText).toContain('З поверненням!')
+      expect(snapshotText).toContain('Твій поточний фокус за результатом тесту — <b>СТАН</b>.')
+      expect(snapshotText).toContain('<b>Твій статус у системі:</b>')
+      expect(snapshotText).toContain('• Zoom-практики:')
+      expect(snapshotText).toContain('• Підписка: неактивна')
+      expect(snapshotText).toContain('Обирай формат участі у «ФОКУСІ» нижче')
+    }
+    expect(buttonLabels).toContain('ОБРАТИ ФОРМАТ У ФОКУСІ')
+    expect(buttonLabels).toContain('ПРО ПРОГРАМУ')
     expect(buttonLabels).toContain('open_focus_payment')
-    expect(buttonLabels).toContain('show_inside_STATE')
-    expect(buttonLabels).not.toContain('ЗАПИСАТ')
+    expect(buttonLabels).toContain(`show_inside_${resultKey.toUpperCase()}`)
+    expect(buttonLabels).not.toContain('zoom-calendar')
+    expect(replyMarkup).toEqual({
+      inline_keyboard: [
+        [{ text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' }],
+        [{ text: 'ПРО ПРОГРАМУ', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+      ],
+    })
+    expect(`${snapshotText}${buttonLabels}`).not.toMatch(/[👋📌👇🚀📅❓]/u)
+  })
+
+  it.each(RESULT_KEYS)('routes active unbooked %s users to the Zoom calendar exactly once', async (resultKey) => {
+    const ctx = createCtx()
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-09-01T00:00:00.000Z'),
+    })
+
+    await sendResultSnapshot(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey,
+      firstName: 'Vira',
+    })
+
+    const replyMarkup = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[2]?.reply_markup
+    const serialized = JSON.stringify(replyMarkup)
+    expect(replyMarkup).toEqual({
+      inline_keyboard: [
+        [{
+          text: 'ВІДКРИТИ РОЗКЛАД ZOOM',
+          web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking' },
+        }],
+        [{ text: 'ПРО ПРОГРАМУ', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+      ],
+    })
+    expect(serialized).not.toContain('ОБРАТИ ФОРМАТ У ФОКУСІ')
+    expect(serialized.match(/zoom-calendar/g)).toHaveLength(1)
+    expect(serialized).not.toMatch(/[🚀📅❓]/u)
+  })
+
+  it.each(RESULT_KEYS)('routes active booked %s users to their Zoom booking exactly once', async (resultKey) => {
+    const ctx = createCtx()
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-09-01T00:00:00.000Z'),
+    })
+    vi.mocked(getUpcomingZoomBookingView).mockResolvedValue({
+      id: 'zoom-1',
+      scheduledAt: new Date('2026-08-17T16:00:00.000Z'),
+      isMyBooking: true,
+      myQuestion: null,
+    } as never)
+
+    await sendResultSnapshot(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey,
+      firstName: 'Vira',
+    })
+
+    const replyMarkup = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)?.[2]?.reply_markup
+    const serialized = JSON.stringify(replyMarkup)
+    expect(replyMarkup).toEqual({
+      inline_keyboard: [
+        [{
+          text: 'ПЕРЕГЛЯНУТИ ЗАПИС',
+          web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking' },
+        }],
+        [{ text: 'ПРО ПРОГРАМУ', callback_data: `show_inside_${resultKey.toUpperCase()}` }],
+      ],
+    })
+    expect(serialized).not.toContain('ОБРАТИ ФОРМАТ У ФОКУСІ')
+    expect(serialized.match(/zoom-calendar/g)).toHaveLength(1)
+    expect(serialized).not.toMatch(/[🚀📅❓]/u)
   })
 
   it('sends the step 8 screenshot via sendPhoto exactly once without inlining stale urls into text messages', async () => {
@@ -466,6 +528,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
 
     const promise = dispatchAbTestPracticeSequence(ctx as never, {
       chatId: '42',
+      userId: 'user-1',
       resultKey: 'state',
       firstName: 'Vira',
     })
@@ -495,6 +558,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
 
     const promise = dispatchAbTestPracticeSequence(ctx as never, {
       chatId: '42',
+      userId: 'user-1',
       resultKey: 'state',
       firstName: 'Vira',
     })

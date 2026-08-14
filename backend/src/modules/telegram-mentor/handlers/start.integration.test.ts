@@ -187,18 +187,13 @@ describe('handleStart — targeted home screen routing', () => {
     const replyMarkup = sendMessage.mock.calls[0]?.[2]?.reply_markup
     expect(replyMarkup).toEqual({
       inline_keyboard: [
-        [{ text: '🚀 ОБРАТИ ФОРМАТ У «ФОКУСІ»', callback_data: 'open_focus_payment' }],
-        [
-          {
-            text: '📅 Розклад Zoom',
-            web_app: { url: expect.stringContaining('/miniapp/zoom-calendar') },
-          },
-          { text: '❓ Про програму', callback_data: 'show_inside_STATE' },
-        ],
+        [{ text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' }],
+        [{ text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_STATE' }],
       ],
     })
     expect(JSON.stringify(replyMarkup)).not.toContain('ЗАГЛЯНУТИ')
     expect(JSON.stringify(replyMarkup)).not.toContain('ЗАПИСАТИСЯ НА ZOOM')
+    expect(JSON.stringify(replyMarkup)).not.toContain('zoom-calendar')
   })
 
   it('TEST_DONE + NO_ACCESS delegates to canonical repeated-result renderer', async () => {
