@@ -5,6 +5,7 @@
     { "path": "./apps/web/tsconfig.node.json" },
     { "path": "./apps/bot/tsconfig.json" },
     { "path": "./backend/tsconfig.json" },
+    { "path": "./backend/tsconfig.test.json" },
     { "path": "./packages/db/tsconfig.json" },
     { "path": "./packages/shared/tsconfig.json" }
   ]
