@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Context, Telegram } from 'telegraf'
+import type { Update, UserFromGetMe } from 'telegraf/types'
 
 const mockZoomSessionAttendeeFindUnique = vi.fn()
 const mockGetUserAccessState = vi.fn()
@@ -6,16 +8,12 @@ const mockGetUpcomingZoom = vi.fn()
 const mockGetUpcomingZoomBookingView = vi.fn()
 const mockGetOrCreateFocusInviteLink = vi.fn()
 
-vi.mock('../../../db/client.js', () => ({
+vi.mock('@/db/client.js', () => ({
   prisma: {
     zoomSessionAttendee: {
       findUnique: (...args: unknown[]) => mockZoomSessionAttendeeFindUnique(...args),
     },
   },
-}))
-
-vi.mock('../services/productSummary.service.js', () => ({
-  resolveTelegramProductSummary: vi.fn(),
 }))
 
 vi.mock('@/modules/subscriptions/payments/focus.access.js', () => ({
@@ -51,10 +49,9 @@ vi.mock('@/modules/subscriptions/payments/business.checkout.js', () => ({
   })),
 }))
 
-import { buildHomeScreen } from './homeScreen.builder.js'
-import type { StartUserSnapshot } from './start.js'
-import type { StartContext } from './start.shared.js'
-import { resolveTelegramProductSummary } from '../services/productSummary.service.js'
+import { buildHomeScreen } from '@/modules/telegram-mentor/handlers/homeScreen.builder.js'
+import type { StartUserSnapshot } from '@/modules/telegram-mentor/handlers/start.js'
+import type { StartContext } from '@/modules/telegram-mentor/handlers/start.shared.js'
 
 function makeSnapshot(overrides: Partial<StartUserSnapshot>): StartUserSnapshot {
   return {
@@ -72,12 +69,43 @@ function makeSnapshot(overrides: Partial<StartUserSnapshot>): StartUserSnapshot 
   }
 }
 
-const fakeCtx = {} as StartContext
+function makeStartContext(): StartContext {
+  const update: Update = {
+    update_id: 1,
+    message: {
+      message_id: 1,
+      date: 0,
+      chat: {
+        id: 1,
+        type: 'private',
+        first_name: 'Test',
+      },
+      from: {
+        id: 1,
+        is_bot: false,
+        first_name: 'Test',
+      },
+      text: '/start',
+    },
+  }
+
+  const botInfo: UserFromGetMe = {
+    id: 1,
+    is_bot: true,
+    first_name: 'test_starway_bot',
+    username: 'test_starway_bot',
+    can_join_groups: true,
+    can_read_all_group_messages: false,
+    supports_inline_queries: false,
+  }
+
+  return new Context<Update>(update, new Telegram('test-token'), botInfo)
+}
+
+const fakeCtx = makeStartContext()
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(resolveTelegramProductSummary).mockReset()
-  vi.mocked(resolveTelegramProductSummary).mockResolvedValue(null)
   mockGetUserAccessState.mockResolvedValue({
     state: 'NO_ACCESS',
     isActive: false,
@@ -213,8 +241,16 @@ describe('buildHomeScreen — /start funnel regression', () => {
 
   it('every known lifecycleState produces non-empty text and at least one button', async () => {
     const states: StartUserSnapshot['lifecycleState'][] = [
-      'NEW_USER', 'TEST_NOT_STARTED', 'TEST_IN_PROGRESS', 'TEST_DONE', 'OFFER_SHOWN',
-      'FOCUS_PAID', 'ZOOM_MEMBER', 'POST_ZOOM_1', 'UPSELL', 'EXPIRED',
+      'NEW_USER',
+      'TEST_NOT_STARTED',
+      'TEST_IN_PROGRESS',
+      'TEST_DONE',
+      'OFFER_SHOWN',
+      'FOCUS_PAID',
+      'ZOOM_MEMBER',
+      'POST_ZOOM_1',
+      'UPSELL',
+      'EXPIRED',
     ]
 
     for (const state of states) {
@@ -243,12 +279,20 @@ describe('buildHomeScreen — /start funnel regression', () => {
         mockGetUpcomingZoom.mockResolvedValue(null)
       }
 
-      mockZoomSessionAttendeeFindUnique.mockResolvedValue(state === 'ZOOM_MEMBER' ? { id: 'attendee-loop' } : null)
+      mockZoomSessionAttendeeFindUnique.mockResolvedValue(
+        state === 'ZOOM_MEMBER' ? { id: 'attendee-loop' } : null,
+      )
 
-      const snapshot = makeSnapshot({ lifecycleState: state, testResultType: state === 'TEST_DONE' ? 'action' : null })
+      const snapshot = makeSnapshot({
+        lifecycleState: state,
+        testResultType: state === 'TEST_DONE' ? 'action' : null,
+      })
       const screen = await buildHomeScreen(snapshot, fakeCtx)
       expect(screen.text.trim().length, `state ${state} produced empty text`).toBeGreaterThan(0)
-      expect(screen.reply_markup.inline_keyboard.length, `state ${state} produced zero buttons`).toBeGreaterThan(0)
+      expect(
+        screen.reply_markup.inline_keyboard.length,
+        `state ${state} produced zero buttons`,
+      ).toBeGreaterThan(0)
     }
   })
 })
