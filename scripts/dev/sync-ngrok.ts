@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // FIX(18.05.2026): auto-sync ngrok envs — Codex
 
@@ -118,6 +119,11 @@ function normalizeBaseUrl(url: string) {
   return url.trim().replace(/\/+$/, '')
 }
 
+export function resolveLocalTelegramDeliveryMode(env: EnvValues) {
+  const explicitMode = env.TELEGRAM_DELIVERY_MODE?.trim().toLowerCase()
+  return explicitMode === 'polling' ? 'polling' : 'webhook'
+}
+
 function parseEnv(content: string): EnvValues {
   const values: EnvValues = {}
 
@@ -201,19 +207,32 @@ function updateEnvContent(
     : nextContent
 }
 
+export function buildLocalTunnelEnvUpdates(
+  existingEnv: EnvValues,
+  publicUrl: string,
+): EnvValues {
+  const updates: EnvValues = {
+    PUBLIC_API_URL: publicUrl,
+    TELEGRAM_WEBAPP_BASE_URL: publicUrl,
+    WAYFORPAY_CALLBACK_URL: `${publicUrl}${WAYFORPAY_CALLBACK_PATH}`,
+  }
+
+  if (resolveLocalTelegramDeliveryMode(existingEnv) === 'webhook') {
+    updates.TELEGRAM_WEBHOOK_URL = publicUrl
+    updates.TELEGRAM_DELIVERY_MODE = 'webhook'
+  }
+
+  return updates
+}
+
 async function updateBackendEnv(publicUrl: string) {
   const targetEnvPath = BACKEND_LOCAL_ENV_PATH
   const envContent = existsSync(targetEnvPath)
     ? await readFile(targetEnvPath, 'utf8')
     : ''
+  const existingEnv = parseEnv(envContent)
 
-  const updates = {
-    PUBLIC_API_URL: publicUrl,
-    TELEGRAM_WEBHOOK_URL: publicUrl,
-    TELEGRAM_DELIVERY_MODE: 'webhook',
-    TELEGRAM_WEBAPP_BASE_URL: publicUrl,
-    WAYFORPAY_CALLBACK_URL: `${publicUrl}${WAYFORPAY_CALLBACK_PATH}`,
-  }
+  const updates = buildLocalTunnelEnvUpdates(existingEnv, publicUrl)
 
   const nextContent = updateEnvContent(
     envContent,
@@ -270,6 +289,10 @@ async function syncTelegramWebhook(
   env: EnvValues,
   publicUrl: string,
 ) {
+  if (resolveLocalTelegramDeliveryMode(env) === 'polling') {
+    return
+  }
+
   const token = env.TEST_TELEGRAM_BOT_TOKEN?.trim()
 
   if (!token) {
@@ -340,7 +363,7 @@ async function syncTelegramWebhook(
   }
 }
 
-async function main() {
+export async function main() {
   process.once('SIGINT', () => shutdown(0))
 
   process.once('SIGTERM', () => shutdown(0))
@@ -368,13 +391,19 @@ async function main() {
   await new Promise(() => undefined)
 }
 
-main().catch(error => {
-  const message =
-    error instanceof Error
-      ? error.message
-      : String(error)
+const isDirectExecution =
+  process.argv[1] != null &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 
-  console.error(`[NGROK] ${message}`)
+if (isDirectExecution) {
+  main().catch(error => {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error)
 
-  shutdown(1)
-})
+    console.error(`[NGROK] ${message}`)
+
+    shutdown(1)
+  })
+}
