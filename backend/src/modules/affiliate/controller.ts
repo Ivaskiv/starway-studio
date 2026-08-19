@@ -1,6 +1,6 @@
 import type { Response } from "express"
 import type { AuthenticatedRequest } from "../../types/globalTypes.js"
-import { createAffiliateLink } from "./index.js"
+import { createAffiliateLink } from "./service.js"
 import { trackEvent } from "../events/service.js"
 import { resolveUserState } from "../telegram-mentor/handlers/start.js"
 

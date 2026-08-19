@@ -9,7 +9,7 @@ import {
   createTelegramBindingDeepLink,
   generateDeepLink,
   resolveDeepLinkToken,
-} from './index.js'
+} from './service.js'
 import type { DeepLinkAction, DeepLinkSource, DeepLinkTarget } from './types.js'
 
 const ALLOWED_ACTIONS: ReadonlySet<DeepLinkAction> = new Set([

@@ -4,7 +4,7 @@ import type { Prisma } from '@starway/db/prisma-client'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '../../../../db/client.js'
 import { getWayForPayCallbackUrl } from '../callback-url.js'
-import { buildPaymentRequest } from './index.js'
+import { buildPaymentRequest } from './service.js'
 import { buildWayForPayReturnUrl } from '../business/checkout.js'
 
 export type StankeyPlanId = (typeof stankeyManifest.pricing.plans)[number]['id']

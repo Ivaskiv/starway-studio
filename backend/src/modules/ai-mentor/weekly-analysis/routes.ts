@@ -2,7 +2,7 @@
 
 import { Router, type Response }     from 'express'
 // import type { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { runWeeklyAnalysis }         from './index.js'
+import { runWeeklyAnalysis }         from './service.js'
 import { AuthenticatedRequest } from '../../../types/globalTypes.js'
 import { Role } from '@starway/db/prisma-client'
 import { authRequired } from '../../auth/middleware/auth.js'

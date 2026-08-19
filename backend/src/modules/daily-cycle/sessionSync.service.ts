@@ -1,6 +1,6 @@
 import { ensureUserExpertId } from '../ai-mentor/helpers.js'
 import { prisma } from '../../db/client.js'
-import { getDailyEntryForDate, getJournalDayAnchor, getOrCreateTodayEntry } from './index.js'
+import { getDailyEntryForDate, getJournalDayAnchor, getOrCreateTodayEntry } from './service.js'
 
 type SessionKind = 'morning' | 'evening'
 

@@ -1,7 +1,7 @@
 import type { Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
-import { trackEvent, type EventSource } from './index.js'
+import { trackEvent, type EventSource } from './service.js'
 
 const CONTENT_PAYLOAD_PATTERN = /^(reel|reels|ad|ads|post|podcast|story|stories|dm|banner)_(sale|traffic|warmup)_(\d{1,3})$/i
 const CONTENT_ATTRIBUTION_WINDOW_HOURS = 72

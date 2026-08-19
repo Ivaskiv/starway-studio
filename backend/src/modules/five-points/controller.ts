@@ -1,6 +1,6 @@
 // backend/src/modules/five-points/controller.ts
 import type {  Response } from 'express';
-import { fivePointsService } from './index.js';
+import { fivePointsService } from './service.js';
 import { fivePointsRepo } from './repo.js';
 import type { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';

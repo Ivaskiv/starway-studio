@@ -1,6 +1,6 @@
 import type { NextFunction, Response } from 'express'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { checkQuota } from './index.js'
+import { checkQuota } from './service.js'
 
 export async function requireGenerationQuota(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const userId = req.user?.id

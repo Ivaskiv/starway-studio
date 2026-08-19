@@ -25,7 +25,7 @@ import type {
   DailyStats,
   UpsertDailyEntryInput,
 } from './types.js'
-import { getRecoveryPolicy } from './recovery.js'
+import { getRecoveryPolicy } from './recoveryPolicy.js'
 import {
   getJournalDayAnchor,
   getPreviousJournalDayAnchor,

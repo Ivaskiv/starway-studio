@@ -4,7 +4,7 @@ export {
 buildGatewayPromptSources,
 resolveRepositoryPromptsDir
 } from './runtime.js'
-export { TelegramAgentGateway } from './index.js'
+export { TelegramAgentGateway } from './service.js'
 export type {
 CanonicalPromptAgentExecutionInput,
 CanonicalPromptAgentExecutionResult,
@@ -17,7 +17,7 @@ TelegramGatewayBot,
 TelegramGatewayIntent
 } from './types.js'
 
-import { TelegramAgentGateway } from './index.js'
+import { TelegramAgentGateway } from './service.js'
 let telegramAgentGatewaySingleton: TelegramAgentGateway | null = null
 export function getTelegramAgentGateway(): TelegramAgentGateway {
   if (!telegramAgentGatewaySingleton)

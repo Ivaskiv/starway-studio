@@ -3,7 +3,7 @@ import type { Context } from 'telegraf'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { BLOCK10_FOCUS } from '@/products/ab-system/content/abTest.results.js'
 import { resolveCanonicalFocusPaymentView } from '@/products/ab-system/telegram/flow.js'
-import { renderTelegramContentMessage } from '@/products/ab-system/telegram/views/index.js'
+import { renderTelegramContentMessage } from '@/products/ab-system/telegram/views.js'
 import { buildFaqKeyboard } from '@/products/ab-system/content/abTest.faq.js'
 import {
   buildAbTestProgressPatch,

@@ -13,7 +13,7 @@ import {
   getUserAccess,
   getUserProductAccesses,
   getUserSystemState,
-} from './index.js'
+} from './service.js'
 import {
   PRODUCT_ACCESS_PRODUCTS,
   PRODUCT_ACCESS_ROLES,

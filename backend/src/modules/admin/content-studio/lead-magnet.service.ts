@@ -3,7 +3,7 @@ import { logger } from '../../../utils/logger.js'
 import { trackEvent } from '../../events/service.js'
 import { createLeadMagnetLandingCard } from '../../landing/cards/landingController.js'
 import { startLeadMagnet } from '../../telegram-mentor/flows/leadMagnet.flow.js'
-import type { LeadMagnetPreviewPayload,LeadMagnetPublishResult,LeadMagnetStatus } from './index.js'
+import type { LeadMagnetPreviewPayload,LeadMagnetPublishResult,LeadMagnetStatus } from './service.js'
 
 function buildLeadMagnetContentText(payload: LeadMagnetPreviewPayload): string {
   return [

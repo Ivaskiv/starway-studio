@@ -2,7 +2,7 @@ import type { NextFunction, Response } from 'express'
 
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { logger } from '../../utils/logger.js'
-import { getAccessControlState } from './index.js'
+import { getAccessControlState } from './service.js'
 import type { AccessBlockReason } from './types.js'
 
 type LeadAccessOptions = {

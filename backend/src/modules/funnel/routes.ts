@@ -15,7 +15,7 @@ import {
   getFunnelById,
   updateFunnel,
   deleteFunnel,
-} from './index.js';
+} from './service.js';
 
 import type { AuthenticatedRequest } from '../../types/globalTypes.js';
 import type { Response } from 'express';

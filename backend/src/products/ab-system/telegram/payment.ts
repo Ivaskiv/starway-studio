@@ -38,6 +38,7 @@ import {
 import { scheduleFollowups } from './scheduler.js'
 import { buildEcosystemPaymentCheckoutSession } from '../../../modules/subscriptions/payments/business/service.js'
 import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus-access.js'
+import { hasTelegramCtaInteraction } from '@/modules/telegram-mentor/services/engagement/cta.js'
 import {
   alertCoachAboutPaymentIssue,
   findRelevantFocusCheckoutSession,
@@ -146,7 +147,7 @@ async function hasPendingFocusPaymentEvidence(
   )
 }
 
-async function renderCurrentFocusStateMenu(
+export async function renderCurrentFocusStateMenu(
   ctx: Context,
   userId: string,
 ): Promise<void> {

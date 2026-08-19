@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express'
 import type { Prisma } from '@starway/db/prisma-client'
-import { createExpert } from './index.js'
+import { createExpert } from './service.js'
 import type { ExpertRegistrationPayload } from './types.js'
 
 function isPrismaDuplicateError(error: unknown): error is Prisma.PrismaClientKnownRequestError {

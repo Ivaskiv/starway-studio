@@ -4,7 +4,7 @@
  */
 
 import { Response, NextFunction } from 'express';
-import { startTrial, generateTrialMirror, getTrialStatus } from './index.js';
+import { startTrial, generateTrialMirror, getTrialStatus } from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';
 import { getContentAttributionEventPayload } from '../events/contentAttribution.service.js';

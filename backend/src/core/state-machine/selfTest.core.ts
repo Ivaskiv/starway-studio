@@ -10,7 +10,7 @@ import {
   simulateFocusActivation,
 } from '../../modules/subscriptions/payments/business/service.js'
 import { processPaymentWebhook } from '../../modules/subscriptions/payments/callback.js'
-import { aiSellerContent } from '../../products/ab-system/content/ai-seller.js'
+import { aiSellerContent } from '../../products/ab-system/content/abTest.aiSeller.js'
 import { detectStateInstability } from '../../products/ab-system/telegram/service.js'
 import {
   absystemContent,

@@ -13,7 +13,7 @@ import {
   enrollUser,
   checkProductAccess,
   getUserEnrollments,
-} from './index.js';
+} from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { promoteUserToAdminIfNeeded } from '../auth/service/index.js';
 import { trackEvent } from '../events/service.js';

@@ -4,7 +4,7 @@
  */
 
 import { Response, NextFunction } from 'express';
-import { createVisionStatement, getLatestVision, updateVisionStatement } from './index.js';
+import { createVisionStatement, getLatestVision, updateVisionStatement } from './service.js';
 import { VisionAnswers } from './types.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';

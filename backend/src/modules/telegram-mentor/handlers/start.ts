@@ -20,7 +20,7 @@ import {
 } from './abTest.start.js'
 import { buildHomeScreen } from './homeScreen.builder.js'
 import { loadAbTestProgress } from '@/products/ab-system/telegram/progress.js'
-import { renderCurrentView, sendResultSnapshot } from '@/products/ab-system/telegram/views/index.js'
+import { renderCurrentView, sendResultSnapshot } from '@/products/ab-system/telegram/views.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
 import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/service.js'
 import { absystemContent } from '@/products/absystem/config/content.js'

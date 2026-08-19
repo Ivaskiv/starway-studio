@@ -16,7 +16,7 @@ type ContentStudioInputs,
 type ContentStudioItem,
 type ContentStudioRequestedFormat,
 type LeadMagnetPreviewPayload,
-} from './index.js'
+} from './service.js'
 
 const contentStudioRouter = Router()
 

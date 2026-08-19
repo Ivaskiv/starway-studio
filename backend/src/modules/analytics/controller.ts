@@ -32,7 +32,7 @@ import {
   getTopEvents,
   getTopQuestions,
   getUserJourney,
-} from './index.js'
+} from './service.js'
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 

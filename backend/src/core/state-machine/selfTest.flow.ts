@@ -15,7 +15,7 @@ import {
   resolveCanonicalMessageKeyByTestEvent,
 } from './ctaFoundation.js'
 import { resolveCanonicalFlowOrchestration } from './flowOrchestrationFoundation.js'
-import { applyTransition } from './index.js'
+import { applyTransition } from './service.js'
 import { transition } from './stateMachine.js'
 import { resolveCanonicalTestTransition } from './testFoundation.js'
 

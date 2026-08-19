@@ -12,7 +12,7 @@ import {
   handlePendingTelegramIdentityText,
 } from '../handlers/start.js'
 import { loadAbTestProgress } from '@/products/ab-system/telegram/progress.js'
-import { renderCurrentView } from '@/products/ab-system/telegram/views/index.js'
+import { renderCurrentView } from '@/products/ab-system/telegram/views.js'
 import {
   hasPendingName,
 } from '../services/identity/pending.js'

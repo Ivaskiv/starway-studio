@@ -5,7 +5,7 @@ import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 import { serverError } from '../../utils/serverError.js';
-import { socialService } from './index.js';
+import { socialService } from './service.js';
 import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js';
 
 // ================= GET CONNECTIONS =================

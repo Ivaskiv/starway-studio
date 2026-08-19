@@ -1,6 +1,6 @@
 // backend/src/modules/progress/progress.controller.ts
 import type { Response } from 'express';
-import { getProgress, updateProgress } from './index.js';
+import { getProgress, updateProgress } from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';

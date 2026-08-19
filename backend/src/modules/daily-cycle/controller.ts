@@ -17,8 +17,8 @@ import {
   getMicroTasks,
   completeMicroTask,
   getDailyEntryHistory,
-} from './index.js';
-import { getRecoveryPolicy } from './recovery.js';
+} from './service.js';
+import { getRecoveryPolicy } from './recoveryPolicy.js';
 import { rewardEngine } from '../gamification/reward.engine.js';
 import { ensureUserExpertId } from '../ai-mentor/helpers.js';
 

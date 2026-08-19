@@ -2,7 +2,7 @@
 // HTTP controller (thin)
 
 import type { FastifyRequest } from 'fastify';
-import { registerStreakActivity, getUserStreaks } from './index.js';
+import { registerStreakActivity, getUserStreaks } from './service.js';
 import type { RegisterStreakInput } from './types.js';
 
 export async function registerStreakHandler(

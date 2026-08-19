@@ -14,7 +14,7 @@ import {
   invalidateDayCache,
   setCachedEntryByDate,
 } from '../../lib/db/dailyCache.js'
-import { assertRecoverableDate } from './recovery.js'
+import { assertRecoverableDate } from './recoveryPolicy.js'
 import type { SaveDailyAnswerInput } from './types.js'
 import {
   getAnswerRecord,

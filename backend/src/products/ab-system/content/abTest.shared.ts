@@ -338,7 +338,7 @@ export const AB_TEST_FOCUS_INCLUDED_TEXT =
 export const AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT =
   `**У ФОКУС ти отримуєш:**\n${formatFocusListItems(FOCUS_INCLUDED_ITEMS, '•').join('\n')}\nЯкщо між Zoom-розборами виникне питання або складна ситуація, ти завжди можеш написати в чат.`
 export const AB_TEST_FOCUS_PRICING_TEXT =
-  `Найближчий Zoom-розбір уже цього тижня.\n${FOCUS_PRICE_COPY.resultOfferLine1m}\n• 3 місяці — 69 € (23 € на місяць).\n• 1 рік — 229 € (19 € на місяць).\n↩ Якщо після першого Zoom-розбору зрозумієш, що тобі не підходить, я поверну гроші.`
+  `Найближчий Zoom-розбір уже цього тижня.\n${FOCUS_PRICE_COPY.resultOfferLine1m}\n• 3 місяці — 69 € (23 € на місяць).\n↩ Якщо після першого Zoom-розбору зрозумієш, що тобі не підходить, я поверну гроші.`
 export const AB_TEST_FOCUS_PROOF_PRICING_TEXT =
   `**${AB_TEST_FOCUS_TITLE}**\n${FOCUS_PRICE_LINES.join('\n')}\n\n${AB_TEST_FOCUS_PAY_CTA_MARKER}`
 export const AB_TEST_FOCUS_TEST_DRIVE_PITCH_BLOCKS = [

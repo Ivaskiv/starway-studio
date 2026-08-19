@@ -2,7 +2,7 @@ import type { Response } from 'express'
 import { trackEvent } from '../events/service.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { startFlow } from './index.js'
+import { startFlow } from './service.js'
 
 export async function startFlowController(
   req: AuthenticatedRequest,

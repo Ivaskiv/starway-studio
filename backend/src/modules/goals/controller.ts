@@ -4,7 +4,7 @@
  */
 
 import {Response, NextFunction } from 'express';
-import { setGoals, getLatestGoals, getPrimaryGoal, checkChoiceAlignment } from './index.js';
+import { setGoals, getLatestGoals, getPrimaryGoal, checkChoiceAlignment } from './service.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';

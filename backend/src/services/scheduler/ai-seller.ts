@@ -2,7 +2,7 @@
 // Інструкція: тут follow-up, focus, retention і reactivation задачі AI seller funnel.
 
 import { resolveUserLifecycle } from '@/modules/users/runtime/resolveUserLifecycle.js'
-import { aiSellerContent } from '@/products/ab-system/content/ai-seller.js'
+import { aiSellerContent } from '@/products/ab-system/content/abTest.aiSeller.js'
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { daysBetween,ensureNotificationPreferenceTableAvailability,getEndOfUtcDay,getSettingsObject,getStartOfUtcDay,readTimestamp,sendAiSellerTelegramMessage } from './common.js'
