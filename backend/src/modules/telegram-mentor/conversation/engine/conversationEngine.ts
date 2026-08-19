@@ -1,6 +1,6 @@
 import type { Context } from 'telegraf'
 
-import { getTelegramAgentGateway, type IAgentGateway } from '../../../ai/agentGateway.js'
+import { getTelegramAgentGateway, type IAgentGateway } from '../../../ai/gateway/index.js'
 import type { TelegramTextRoute } from '../../router/messageRouter.js'
 import {
   resolveTelegramScenarioHandler,

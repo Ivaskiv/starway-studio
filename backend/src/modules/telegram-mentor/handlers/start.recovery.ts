@@ -1,4 +1,4 @@
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { stankeyContent } from '@/products/stankey/config/stankey.content.js'
 import type { Context } from 'telegraf'
 

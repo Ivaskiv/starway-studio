@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { authRequired } from '../../modules/auth/middleware/auth.js';
-import { requireOnboardingStage } from '../../modules/onboarding/middleware/requireOnboardingStage.js';
+import { authRequired } from '../auth/middleware/auth.js';
+import { requireOnboardingStage } from './middleware/requireOnboardingStage.js';
 import * as onboardingController from './controller.js';
 
 const router = Router();

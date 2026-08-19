@@ -3,7 +3,7 @@ import {
   quickDetectIntent,
   resolveStrictIntelligenceReply,
   type StrictTelegramIntent,
-} from '../modules/telegram-mentor/services/STRICT-SYSTEM-code.js'
+} from '../modules/telegram-mentor/services/strict-system.js'
 
 interface ConversationMessage {
   role: 'user' | 'assistant'

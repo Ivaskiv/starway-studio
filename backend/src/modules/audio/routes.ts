@@ -4,7 +4,7 @@ import { authRequired } from '../auth/middleware/auth.js'
 import {
   findCloudinaryZoomAudioById,
   listCloudinaryZoomAudio,
-} from '../zoom/cloudinary-audio-ingest.service.js'
+} from '../zoom/audio/cloudinary-audio-ingest.service.js'
 
 const router = Router()
 const KYIV_TZ = 'Europe/Kyiv'

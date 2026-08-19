@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authRequired } from '../../modules/auth/middleware/auth.js'
+import { authRequired } from '../auth/middleware/auth.js'
 import {
   getMyAccess,
   getMySystemState,

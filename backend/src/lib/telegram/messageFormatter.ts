@@ -104,6 +104,10 @@ function renderInlineBoldMarkdown(value: string): string {
     return escapeTelegramHtml(source)
   }
 
+  if (source.startsWith('**') && !source.slice(2).includes('**')) {
+    return `<b>${escapeTelegramHtml(source.slice(2).trim())}</b>`
+  }
+
   return source.replace(/\*\*([^*]+)\*\*/g, (_, boldValue: string) =>
     `<b>${escapeTelegramHtml(boldValue)}</b>`,
   )

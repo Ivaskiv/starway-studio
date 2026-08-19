@@ -10,7 +10,7 @@ description: "Ти senior full-stack розробник та технічний 
 - `apps/backend` — Node.js + Express + Prisma → Render
 - `packages/` — shared types, utils
 - **DB:** Neon PostgreSQL (Prisma ORM)
-- **Telegram:** @Starway_byNadya_Bot, @test_starway_bot, @Starway_DNA_Bot (coach)
+- **Telegram:** `@Test_ABsystem_bot` (production funnel), `@test_starway_bot` (local funnel/dev), `@StarwayDNACoach_bot` (coach/admin)
 - **AI:** OpenAI GPT-4o
 - **Payments:** WayForPay
 
@@ -35,7 +35,7 @@ description: "Ти senior full-stack розробник та технічний 
 ### Backend / Bot
 9. Trial статус — single source of truth: `useGetTrialStatusQuery()` → `/api/trial/status`
 10. Role — з Redux: `selectUserRole()`
-11. **Кожен бот** — окремий `BOT_TOKEN` в `.env`, окрема ініціалізація в спільному `initBots()`, спільний `coachGuard` middleware для перевірки ролі.
+11. **Bot identity source of truth** — `backend/src/modules/telegram-mentor/runtime/botConfig.ts`: production → `TELEGRAM_BOT_*`, local/dev → `TEST_TELEGRAM_BOT_*`, coach → `COACH_BOT_*`.
 
 ### docs/dev-skills/ — правило росту
 - **Перед новим файлом** → `grep -r "тема" docs/dev-skills/`
@@ -49,12 +49,12 @@ description: "Ти senior full-stack розробник та технічний 
 
 | Продукт | Статус | Опис |
 |---|---|---|
-| Вхідний тест (@test_starway_bot) | ~85% | 10 блоків, chain priority СТАН→ЦІЛЬ→ВИБІР→РІШЕННЯ→ДІЯ |
+| Вхідний тест (`@test_starway_bot` local / `@Test_ABsystem_bot` production) | ~85% | 10 блоків, chain priority СТАН→ЦІЛЬ→ВИБІР→РІШЕННЯ→ДІЯ |
 | AI Ментор | active | Coaching бот, методологія СТАН→ЦІЛЬ→ВИБІР→РІШЕННЯ→ДІЯ |
 | ФОКУС | active | landing: apps/web/src/features/landings/focus/ |
 | Balance Wheel | active | Колесо балансу + weekly PDF звіт |
 | Daily Cycle | active | 6 статичних ранкових + 2–4 динамічних питань |
-| Бот ДНК (@Starway_DNA_Bot) | in progress | Коуч-панель: розклад, аналітика, нотифікації |
+| Бот ДНК (`@StarwayDNACoach_bot`) | in progress | Коуч-панель: розклад, аналітика, нотифікації |
 | AI Seller | planned | SPIN-методологія |
 | WEB-Карта 2026 | planned | Prisma: WebMap, WebMapGoal, MonthPlan |
 
@@ -76,8 +76,8 @@ bot/
 ```
 
 **Правило нового бота:**
-1. BotFather → отримати токен → записати в `.env` як `XXXXX_BOT_TOKEN`
-2. Додати в `initBots()` — не створювати новий entry point
+1. BotFather → отримати токен → записати в canonical env (`TELEGRAM_BOT_*`, `TEST_TELEGRAM_BOT_*` або `COACH_BOT_*`)
+2. Не дублювати identity owner — runtime username/token читаються через `botConfig.ts`
 3. Guard middleware — перевірка ролі з БД
 4. Content файл — весь copy окремо
 5. `.env.example` — додати змінну без значення

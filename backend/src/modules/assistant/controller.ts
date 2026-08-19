@@ -2,7 +2,7 @@ import type { Response } from 'express'
 import { trackEvent, trackQuestionEvent } from '../events/service.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { assistantChat } from "./service.js"
+import { assistantChat } from "./index.js"
 
 function resolveRequestId(req: AuthenticatedRequest): string {
   const headerValue = req.headers['x-request-id']

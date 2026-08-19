@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useGetJournalEventsQuery } from '../journal.api';
-import { useGetUpcomingSessionQuery } from '@/features/zoom/services/zoom.api';
+import { useGetUpcomingSessionQuery } from '@/features/zoom/services/booking.api';
 import type { JournalDayState, JournalEvent, JournalFilter } from '../types';
 import { filterDayState, filterEvents, parseDateKey, toDateKey } from '../utils';
 import { useJournalCalendar } from './useJournalCalendar';
@@ -242,7 +242,7 @@ export function useJournal() {
 // import { useGetJournalEventsQuery } from '../journal.api'
 // import type { JournalDayState, JournalEvent, JournalFilter } from '../types'
 // import { filterDayState, filterEvents, toDateKey } from '../utils'
-// import { useGetUpcomingSessionQuery } from '@/features/zoom/services/zoom.api'
+// import { useGetUpcomingSessionQuery } from '@/features/zoom/services/booking.api'
 
 // function createFallbackDayState(dateKey: string): JournalDayState {
 //   return {

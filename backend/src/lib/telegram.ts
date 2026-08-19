@@ -16,7 +16,59 @@ let telegramBotInstance: Telegraf | null = null
 let contentBotInstance: Telegraf | null = null
 let coachBotInstance: Telegraf | null = null
 
-function patchTelegramTransportFormatting(targetBot: Telegraf): Telegraf {
+type TelegramSendOptions = Record<string, unknown> | undefined
+
+function hasTelegramEntities(options: TelegramSendOptions, entityKey: 'entities' | 'caption_entities') {
+  return Array.isArray(options?.[entityKey])
+}
+
+function formatTelegramTextPayload(
+  text: string,
+  options?: TelegramSendOptions,
+): { text: string; parseMode?: 'HTML' } {
+  if (hasTelegramEntities(options, 'entities')) {
+    return { text }
+  }
+
+  const formatted =
+    options?.parse_mode === 'HTML'
+      ? formatTelegramMessage({
+          text,
+          preformatted: true,
+        })
+      : formatTelegramMessage(text)
+
+  return {
+    text: formatted.text,
+    parseMode: formatted.parseMode,
+  }
+}
+
+function formatTelegramCaptionPayload(
+  options?: TelegramSendOptions,
+): { caption?: string; parseMode?: 'HTML' } {
+  if (hasTelegramEntities(options, 'caption_entities')) {
+    return {
+      caption: typeof options?.caption === 'string' ? options.caption : undefined,
+    }
+  }
+
+  const caption = formatTelegramCaption(
+    typeof options?.caption === 'string' ? options.caption : '',
+    typeof options?.parse_mode === 'string' ? options.parse_mode : null,
+  )
+
+  if (!caption) {
+    return {}
+  }
+
+  return {
+    caption: caption.text,
+    parseMode: caption.parseMode,
+  }
+}
+
+export function patchTelegramTransportFormatting(targetBot: Telegraf): Telegraf {
   const telegram = targetBot.telegram as typeof targetBot.telegram & {
     __starwayFormattingPatched__?: boolean
   }
@@ -32,44 +84,55 @@ function patchTelegramTransportFormatting(targetBot: Telegraf): Telegraf {
   const originalSendVoice = telegram.sendVoice.bind(telegram)
   const originalSendVideo = telegram.sendVideo.bind(telegram)
   const originalSendDocument = telegram.sendDocument.bind(telegram)
+  const originalSendAudio = telegram.sendAudio.bind(telegram)
+  const originalEditMessageText = telegram.editMessageText.bind(telegram)
+  const originalEditMessageCaption = telegram.editMessageCaption.bind(telegram)
 
   telegram.sendMessage = (async (
     chatId: string | number,
     text: string,
     options?: Record<string, unknown>,
   ) => {
-    const formatted =
-      options?.parse_mode === 'HTML'
-        ? formatTelegramMessage({
-            text,
-            preformatted: true,
-          })
-        : formatTelegramMessage(text)
+    const formatted = formatTelegramTextPayload(text, options)
 
     return originalSendMessage(chatId, formatted.text, {
       ...options,
-      parse_mode: formatted.parseMode,
+      ...(formatted.parseMode ? { parse_mode: formatted.parseMode } : {}),
     })
   }) as typeof telegram.sendMessage
+
+  telegram.editMessageText = (async (
+    chatId: string | undefined,
+    messageId: number | undefined,
+    inlineMessageId: string | undefined,
+    text: string,
+    extra?: Record<string, unknown>,
+  ) => {
+    const formatted = formatTelegramTextPayload(text, extra)
+
+    return originalEditMessageText(
+      chatId,
+      messageId,
+      inlineMessageId,
+      formatted.text,
+      {
+        ...extra,
+        ...(formatted.parseMode ? { parse_mode: formatted.parseMode } : {}),
+      },
+    )
+  }) as typeof telegram.editMessageText
 
   telegram.sendPhoto = (async (
     chatId: string | number,
     photo: string,
     options?: Record<string, unknown>,
   ) => {
-    const caption = formatTelegramCaption(
-      typeof options?.caption === 'string' ? options.caption : '',
-      typeof options?.parse_mode === 'string' ? options.parse_mode : null,
-    )
+    const caption = formatTelegramCaptionPayload(options)
 
     return originalSendPhoto(chatId, photo, {
       ...options,
-      ...(caption
-        ? {
-            caption: caption.text,
-            parse_mode: caption.parseMode,
-          }
-        : {}),
+      ...(caption.caption ? { caption: caption.caption } : {}),
+      ...(caption.parseMode ? { parse_mode: caption.parseMode } : {}),
     })
   }) as typeof telegram.sendPhoto
 
@@ -78,19 +141,12 @@ function patchTelegramTransportFormatting(targetBot: Telegraf): Telegraf {
     voice: string,
     options?: Record<string, unknown>,
   ) => {
-    const caption = formatTelegramCaption(
-      typeof options?.caption === 'string' ? options.caption : '',
-      typeof options?.parse_mode === 'string' ? options.parse_mode : null,
-    )
+    const caption = formatTelegramCaptionPayload(options)
 
     return originalSendVoice(chatId, voice, {
       ...options,
-      ...(caption
-        ? {
-            caption: caption.text,
-            parse_mode: caption.parseMode,
-          }
-        : {}),
+      ...(caption.caption ? { caption: caption.caption } : {}),
+      ...(caption.parseMode ? { parse_mode: caption.parseMode } : {}),
     })
   }) as typeof telegram.sendVoice
 
@@ -99,19 +155,12 @@ function patchTelegramTransportFormatting(targetBot: Telegraf): Telegraf {
     video: string,
     options?: Record<string, unknown>,
   ) => {
-    const caption = formatTelegramCaption(
-      typeof options?.caption === 'string' ? options.caption : '',
-      typeof options?.parse_mode === 'string' ? options.parse_mode : null,
-    )
+    const caption = formatTelegramCaptionPayload(options)
 
     return originalSendVideo(chatId, video, {
       ...options,
-      ...(caption
-        ? {
-            caption: caption.text,
-            parse_mode: caption.parseMode,
-          }
-        : {}),
+      ...(caption.caption ? { caption: caption.caption } : {}),
+      ...(caption.parseMode ? { parse_mode: caption.parseMode } : {}),
     })
   }) as typeof telegram.sendVideo
 
@@ -120,21 +169,52 @@ function patchTelegramTransportFormatting(targetBot: Telegraf): Telegraf {
     document: string,
     options?: Record<string, unknown>,
   ) => {
-    const caption = formatTelegramCaption(
-      typeof options?.caption === 'string' ? options.caption : '',
-      typeof options?.parse_mode === 'string' ? options.parse_mode : null,
-    )
+    const caption = formatTelegramCaptionPayload(options)
 
     return originalSendDocument(chatId, document, {
       ...options,
-      ...(caption
-        ? {
-            caption: caption.text,
-            parse_mode: caption.parseMode,
-          }
-        : {}),
+      ...(caption.caption ? { caption: caption.caption } : {}),
+      ...(caption.parseMode ? { parse_mode: caption.parseMode } : {}),
     })
   }) as typeof telegram.sendDocument
+
+  telegram.sendAudio = (async (
+    chatId: string | number,
+    audio: string,
+    options?: Record<string, unknown>,
+  ) => {
+    const caption = formatTelegramCaptionPayload(options)
+
+    return originalSendAudio(chatId, audio, {
+      ...options,
+      ...(caption.caption ? { caption: caption.caption } : {}),
+      ...(caption.parseMode ? { parse_mode: caption.parseMode } : {}),
+    })
+  }) as typeof telegram.sendAudio
+
+  telegram.editMessageCaption = (async (
+    chatId: string | undefined,
+    messageId: number | undefined,
+    inlineMessageId: string | undefined,
+    caption: string | undefined,
+    extra?: Record<string, unknown>,
+  ) => {
+    const formattedCaption = formatTelegramCaptionPayload({
+      ...extra,
+      caption,
+    })
+
+    return originalEditMessageCaption(
+      chatId,
+      messageId,
+      inlineMessageId,
+      formattedCaption.caption,
+      {
+        ...extra,
+        ...(formattedCaption.parseMode ? { parse_mode: formattedCaption.parseMode } : {}),
+      },
+    )
+  }) as typeof telegram.editMessageCaption
 
   return targetBot
 }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { productOwnerGuard } from '../../middleware/productOwnerGuard.js';
 import { requireClientAccess } from '../access/guard.js';
-import { authRequired } from '../../modules/auth/middleware/auth.js';
+import { authRequired } from '../auth/middleware/auth.js';
 import { requireGenerationQuota } from '../quota/generation.middleware.js';
 import { requireBehavioralReadAccess } from '../../core/access/behavioralAccess.js';
 import * as aiController from './controllers.js';

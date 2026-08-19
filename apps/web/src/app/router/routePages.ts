@@ -1,6 +1,6 @@
 export {
   AbTestLandingRouteView,
-  AbTestPage,
+  TestPage,
   ActionsPage,
   AdminAnalyticsPage,
   AiMentorDashboardPage,

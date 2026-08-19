@@ -1,7 +1,7 @@
 import type { TelegramMentorMode } from '@/content/telegram.product-context.js'
 import type { RelationshipMemoryProfile } from '../memory/relationshipMemory.js'
 import { buildRelationshipContinuityLines, resolveRelationshipUpgradeGate } from '../memory/relationshipMemory.js'
-import { absystemContent, buildAbsystemRecoveryCopy, buildAbsystemStatusSnapshot } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent, buildAbsystemRecoveryCopy, buildAbsystemStatusSnapshot } from '@/products/absystem/config/content.js'
 
 export type ConversationProductId = 'focus' | 'stankey' | 'absystem'
 

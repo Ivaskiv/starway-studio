@@ -11,12 +11,12 @@ import { getPrimaryGoal } from '../goals/service.js'
 import {
   resolveAssistantDecision,
   type AssistantDecision as CanonicalAssistantDecision,
-} from './decisionEngine.js'
-import { pickBestTask, type Task as PriorityTask } from '../telegram-mentor/services/taskPriority.service.js'
-import { getTelegramAgentGateway, type IAgentGateway } from '../ai/agentGateway.js'
+} from './decision-engine.js'
+import { pickBestTask, type Task as PriorityTask } from '../telegram-mentor/services/engagement/task-priority.js'
+import { getTelegramAgentGateway, type IAgentGateway } from '../ai/gateway/index.js'
 import { resolveIntelligenceConversationResponse } from '../telegram-mentor/conversation/engine/intelligenceScenario.js'
-import { getTelegramAiRequestContextForUser } from '../telegram-mentor/services/requestContext.service.js'
-import { detectTelegramIntelligenceMessageType } from '../telegram-mentor/services/intelligence.service.js'
+import { getTelegramAiRequestContextForUser } from '../telegram-mentor/services/context/request.js'
+import { detectTelegramIntelligenceMessageType } from '../telegram-mentor/services/context/intelligence.js'
 
 const ASSISTANT_CONVERSATION_TITLE = 'Starway Assistant'
 

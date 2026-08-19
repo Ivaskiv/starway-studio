@@ -1,7 +1,7 @@
 import { lazy } from 'react'
 
 export const HomePage = lazy(() => import('@/pages/HomePage'))
-export const AbTestPage = lazy(() => import('@/features/ab-test/pages/AbTestPage'))
+export const TestPage = lazy(() => import('@/features/ab-test/pages/TestPage'))
 export const AbTestLandingRouteView = lazy(
   () => import('@/features/ab-test-landing/page/AbTestLandingRouteView')
 )

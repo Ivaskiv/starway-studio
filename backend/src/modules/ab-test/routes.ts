@@ -24,11 +24,11 @@ import {
   loadAbTestProgress,
   loadUserUiSettings,
   saveAbTestProgress,
-} from '../../products/ab-system/telegram/abTest.progress.js'
-import { persistCanonicalCompletedAbTestProgress } from '../../products/ab-system/telegram/abTest.handlers.core.js'
+} from '../../products/ab-system/telegram/progress.js'
+import { persistCanonicalCompletedAbTestProgress } from '../../products/ab-system/telegram/handler.js'
 import { resolveUserLifecycle } from '../users/runtime/resolveUserLifecycle.js'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { getServerUser } from '../auth/getServerUser.js'
+import { getServerUser } from '../auth/server-user.js'
 
 type AbTestSubmissionAnswer = {
   questionId: AbTestQuestionId

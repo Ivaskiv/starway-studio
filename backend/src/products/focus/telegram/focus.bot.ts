@@ -1,4 +1,4 @@
-import { registerMentorBot } from '@/modules/telegram-mentor/index.js'
+import { registerMentorBot } from '@/modules/telegram-mentor/bot/register.js'
 
 import { FOCUS_PRODUCT_CODE } from '../config/focus.constants.js'
 

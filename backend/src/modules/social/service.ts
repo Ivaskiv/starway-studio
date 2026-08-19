@@ -31,7 +31,7 @@ export async function getSocialConnections(userId: string): Promise<SocialConnec
 export async function connectSocial(userId: string, data: SocialConnection): Promise<void> {
   if (data.provider !== 'telegram') return;
 
-  const username = data.username?.replace('../..', '').trim() || null;
+  const username = data.username?.replace('../../index.ts', '').trim() || null;
   const rawExternalId = (data.externalId || '').trim();
   const chatId = /^-?\d+$/.test(rawExternalId) ? rawExternalId : null;
 

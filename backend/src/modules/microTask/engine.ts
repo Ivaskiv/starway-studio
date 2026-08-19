@@ -1,5 +1,5 @@
 // backend/src/modules/microTask/engine.ts
-import { MicroTask, MicroTaskResponse } from '../../modules/microTask/types.js'
+import { MicroTask, MicroTaskResponse } from './types.js'
 import { v4 as uuid } from 'uuid'
 
 export const microTaskEngine = {

@@ -1,4 +1,6 @@
 import type { MediaAssets, PipelineContext } from '../pipeline.types.js'
+import { contentBot } from '../../../lib/telegram.js'
+import { sendTelegramVideo } from '../../../lib/telegram/messageFormatter.js'
 
 export async function publishContent(
   context: PipelineContext,
@@ -81,29 +83,28 @@ async function publishToTelegram(
   assets: MediaAssets,
   caption: string,
 ): Promise<number> {
-  const channelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID
-  const botToken = process.env.TELEGRAM_BOT_TOKEN
+  const channelId = process.env.FOCUS_TELEGRAM_CHANNEL_ID?.trim() ?? ''
   const videoUrl = assets.finalVideo || assets.scenes[0]
 
-  if (!channelId || !botToken || !videoUrl) {
+  if (!channelId || !videoUrl) {
     return 0
   }
 
-  const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: channelId,
-      video: videoUrl,
-      caption,
-      parse_mode: 'HTML',
-    }),
+  // FOCUS channel publishing must stay on the content/channel transport owner,
+  // not on a raw token path or another bot runtime.
+  const message = await sendTelegramVideo(contentBot, channelId, videoUrl, {
+    caption,
+    parse_mode: 'HTML',
   })
 
-  if (!res.ok) {
-    throw new Error(`Telegram channel publish error: ${res.status}`)
+  if (
+    typeof message === 'object'
+    && message
+    && 'message_id' in message
+    && typeof message.message_id === 'number'
+  ) {
+    return message.message_id
   }
 
-  const data = await res.json() as { result?: { message_id?: number } }
-  return data.result?.message_id ?? 0
+  return 0
 }

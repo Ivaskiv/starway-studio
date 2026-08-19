@@ -14,7 +14,7 @@ import {
 } from './zoom.api';
 import { getSessionBorderClass, getSessionMeta, isZoomLinkActive } from './zoom.utils';
 import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './zoom.types';
-import ZoomCalendar from './ZoomCalendar';
+import ZoomCalendar from './components/calendar/Calendar';
 import { openExternalPaymentUrl } from '@/features/subscription/utils/openExternalPaymentUrl';
 const RANK_EMOJI = ['🥇', '🥈', '🥉'];
 

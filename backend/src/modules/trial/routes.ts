@@ -3,7 +3,7 @@
  * Trial Routes
  */
 
-import { authRequired } from '../../modules/auth/middleware/auth.js';
+import { authRequired } from '../auth/middleware/auth.js';
 import { Router } from 'express';
 import { generateMirrorHandler, getTrialStatusHandler, startTrialHandler } from './controller.js';
 

@@ -1,6 +1,6 @@
 import { prisma } from '../../../db/client.js';
-import { isOnboardingStage, stageIndex } from '../../../modules/onboarding/onboarding.utils.js';
-import type { OnboardingStage } from '../../../modules/onboarding/types.js';
+import { isOnboardingStage, stageIndex } from '../onboarding.utils.js';
+import type { OnboardingStage } from '../types.js';
 import { AuthenticatedRequest } from '../../../types/globalTypes.js';
 import type { NextFunction, Response } from 'express';
 

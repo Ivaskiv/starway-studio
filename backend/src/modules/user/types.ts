@@ -1,5 +1,5 @@
 import type { SafeUser, UserRole, UserWithSub } from '../../types/globalTypes.js'
-import { computeAvailableRoles, resolveActiveRole } from '../auth/roleUtils.js'
+import { computeAvailableRoles, resolveActiveRole } from '../auth/access/roles.js'
 import { normalizeSubscriptionPlan, normalizeSubscriptionStatus } from '../subscriptions/utils.js'
 
 export type { UserRole }

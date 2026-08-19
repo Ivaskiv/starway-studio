@@ -139,7 +139,7 @@ export function HeroSection({ onGetStarted, onLearnMore, onOpenTest }: HeroSecti
 
         {/* <div className="mb-10 flex justify-center">
           <a
-            href="https://tg.pulse.is/Starway_byNadya_Bot?start=69b937fefa457b8036094169&username=value1&telegram_id=value2"
+            href="https://tg.pulse.is/Test_ABsystem_bot?start=69b937fefa457b8036094169&username=value1&telegram_id=value2"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 rounded-2xl border border-white/20 px-6 py-3 text-sm text-white/70 transition-colors hover:border-white/40 hover:text-white"

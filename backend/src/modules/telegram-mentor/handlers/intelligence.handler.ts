@@ -1,16 +1,16 @@
 import type { Context } from 'telegraf'
 
 import { resolveLinkedUserIdFromContext } from '../core/state.service.js'
-import { getTelegramAgentGateway, type IAgentGateway } from '../../ai/agentGateway.js'
+import { getTelegramAgentGateway, type IAgentGateway } from '../../ai/gateway/index.js'
 import { logCanonicalAiRequest } from '../../assistant/service.js'
 import { buildIntelligenceConversationResponse } from '../conversation/engine/intelligenceScenario.js'
 import { TelegramConversationRenderer } from '../conversation/renderers/telegramConversationRenderer.js'
-import { getTelegramAiRequestContext } from '../services/requestContext.service.js'
+import { getTelegramAiRequestContext } from '../services/context/request.js'
 import {
   detectTelegramIntelligenceMessageType as detectTelegramIntelligenceMessageTypeBase,
   type TelegramIntelligenceMessageType,
-} from '../services/intelligence.service.js'
-export type { TelegramIntelligenceMessageType } from '../services/intelligence.service.js'
+} from '../services/context/intelligence.js'
+export type { TelegramIntelligenceMessageType } from '../services/context/intelligence.js'
 
 function extractMessageText(ctx: Context): string | null {
   const message = ctx.message

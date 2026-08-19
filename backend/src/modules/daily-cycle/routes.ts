@@ -3,7 +3,7 @@ const router = express.Router();
 
 import { requireClientAccess } from '../access/guard.js';
 import { requireBehavioralReadAccess } from '../../core/access/behavioralAccess.js';
-import { authOrBotRequired } from '../../modules/auth/middleware/auth-or-bot.js';
+import { authOrBotRequired } from '../auth/middleware/auth-or-bot.js';
 import {
   completeTask,
   getHistoryController,

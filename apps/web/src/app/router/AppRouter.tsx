@@ -9,7 +9,7 @@ import {
 } from '@/app/router/routeConfig'
 import {
   AbTestLandingRouteView,
-  AbTestPage,
+  TestPage,
   FocusRouteView,
   MiniAppPage,
 } from '@/app/router/routePages'
@@ -22,7 +22,7 @@ import {
 } from '@/features/landings/focus/content/constants'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
-import CleanMiniAppZoomCalendar from '@/features/zoom/routes/CleanMiniAppZoomCalendar'
+import CalendarRoute from '@/features/zoom/mini-app/CalendarRoute'
 import MainLayout from '@/layout/MainLayout'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
@@ -108,10 +108,10 @@ function renderAbTestRoutes() {
   return (
     <>
       <Route path={ROUTES.AB_TEST} element={<AbTestLandingRouteView />} />
-      <Route path={ROUTES.AB_TEST_QUIZ} element={<AbTestPage />} />
-      <Route path={`${ROUTES.AB_TEST_QUIZ}/*`} element={<AbTestPage />} />
-      <Route path="/ab-test/result" element={<AbTestPage />} />
-      <Route path="/ab-test/result/*" element={<AbTestPage />} />
+      <Route path={ROUTES.AB_TEST_QUIZ} element={<TestPage />} />
+      <Route path={`${ROUTES.AB_TEST_QUIZ}/*`} element={<TestPage />} />
+      <Route path="/ab-test/result" element={<TestPage />} />
+      <Route path="/ab-test/result/*" element={<TestPage />} />
     </>
   )
 }
@@ -159,7 +159,7 @@ function TelegramMiniAppRouter() {
       />
       <Route
         path="/miniapp/zoom-calendar"
-        element={<CleanMiniAppZoomCalendar />}
+        element={<CalendarRoute />}
       />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
       {renderTaskRedirectRoutes()}
@@ -196,7 +196,7 @@ function ProtectedAppRouter() {
         />
         <Route
           path="/miniapp/zoom-calendar"
-          element={<CleanMiniAppZoomCalendar />}
+          element={<CalendarRoute />}
         />
         {protectedRoutes.map((route) => (
           <Route

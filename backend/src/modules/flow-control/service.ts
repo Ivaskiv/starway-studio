@@ -7,7 +7,7 @@ import { isNotificationRoleAllowed } from '../../services/notifications/domain/n
 import type { UserLifecycleSnapshot } from './types.js'
 import { mapLifecycleToFunnelStage } from '../../lib/funnel/stage.js'
 import { stopLeadMagnet } from '../integrations/sendpulse/sendpulse.service.js'
-import { getUserAccessState, type UserAccessState } from '../subscriptions/payments/focus.access.js'
+import { getUserAccessState, type UserAccessState } from '../subscriptions/payments/focus-access.js'
 
 type FlowDbClient = typeof prisma | Prisma.TransactionClient
 const LEAD_MAGNET_TTL_MS = 48 * 60 * 60 * 1000

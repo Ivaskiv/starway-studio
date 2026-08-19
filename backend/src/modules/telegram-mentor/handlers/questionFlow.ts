@@ -2,9 +2,9 @@ import type { Context } from 'telegraf'
 
 import { prisma } from '../../../db/client.js'
 import { rewardEngine } from '../../gamification/reward.engine.js'
-import { saveDailySession, getJournalDayAnchor } from '../../daily-cycle/service.js'
-import { saveDailyAnswer } from '../../daily-cycle/service.js'
-import { getSharedSessionState } from '../../daily-cycle/sessionSync.service.js'
+import { saveDailySession, getJournalDayAnchor } from '../../daily-cycle/index.js'
+import { saveDailyAnswer } from '../../daily-cycle/index.js'
+import { getSharedSessionState } from '../../daily-cycle/session-sync.js'
 import {
   clearSession,
   getActiveQuestionSet,

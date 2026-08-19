@@ -1,6 +1,6 @@
 import type { Response } from 'express'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { getProfile, getStreakSummary, getSummary, handleGamificationEvent } from './service.js'
+import { getProfile, getStreakSummary, getSummary, handleGamificationEvent } from './index.js'
 import { trackEvent } from '../events/service.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import type { GamificationEventType } from './types.js'

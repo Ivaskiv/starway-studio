@@ -1,5 +1,5 @@
 // backend/src/modules/mentorship/routes.ts
-import { authRequired } from '../../modules/auth/middleware/auth.js'
+import { authRequired } from '../auth/middleware/auth.js'
 import { Router } from 'express'
 import {
   create,

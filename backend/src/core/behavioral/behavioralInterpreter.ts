@@ -1,6 +1,6 @@
 import type { BehavioralSnapshot } from './behavioralSnapshot.js'
 import { resolveBehavioralPriority, type BehavioralPriority } from './behavioralPriority.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { detectBehavioralPattern, type BehavioralPattern } from './behavioralPatterns.js'
 import { resolveBehavioralMovementState, type BehavioralMovementState } from './behavioralMovement.js'
 

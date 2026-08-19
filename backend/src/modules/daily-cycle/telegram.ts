@@ -10,7 +10,7 @@ import { checkDailyAccess } from './subscription.js';
 import type { DailyCheckUser } from './subscription.js'; // імпорт типу
 import { buildRecoveryCopy, resolveConversationProfile } from '../../core/state-machine/conversationPresentation.js';
 import { resolveRelationshipMemory } from '../../core/memory/relationshipMemory.js';
-import { absystemContent } from '@/products/absystem/config/absystem.content.js';
+import { absystemContent } from '@/products/absystem/config/content.js';
 
 let dailyCommandsRegistered = false;
 

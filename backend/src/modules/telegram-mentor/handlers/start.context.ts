@@ -1,4 +1,4 @@
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { resolveTelegramWebappBaseUrl } from '@/config/webapp.js'
 import { prisma } from '../../../db/client.js'
 import { resolveUserLifecycle as resolveRuntimeLifecycle } from '../../users/runtime/resolveUserLifecycle.js'

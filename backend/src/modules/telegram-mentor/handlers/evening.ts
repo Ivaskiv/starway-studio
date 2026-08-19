@@ -3,7 +3,7 @@ import type { Context } from 'telegraf'
 import { postEveningAction } from '../api/client.js'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
 import { answerQuestion, startQuestionSession } from './questionFlow.js'
-import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
+import { renderDecisionUnlessAllowed } from '../services/delivery/decision-transport.js'
 import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleEvening(ctx: Context) {

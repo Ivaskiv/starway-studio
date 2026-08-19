@@ -1,4 +1,4 @@
-import { absystemContent } from '../../products/absystem/config/absystem.content.js'
+import { absystemContent } from '../../products/absystem/config/content.js'
 import { buildBehavioralNarrative } from '../behavioral/behavioralNarrative.js'
 import type { BehavioralContinuityResolution } from '../continuity/behavioralContinuity.js'
 import { buildContinuityBlocks, createTelegramFlow, type TelegramButton, type TelegramFlow } from './flowTemplates.js'

@@ -5,7 +5,7 @@ import {
   purchaseQuota,
   checkQuota,
   getAvailableQuota,
-} from './service.js'
+} from './index.js'
 
 const router = Router()
 router.use(authRequired)

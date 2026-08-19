@@ -3,7 +3,7 @@ import {
   resolveComeback,
   resolveStartScenario,
 } from '../../modules/telegram-mentor/handlers/start.js'
-import { resolveAiSellerMode } from '../../products/ab-system/telegram/abTest.service.js'
+import { resolveAiSellerMode } from '../../products/ab-system/telegram/service.js'
 import {
   aiSellerLeadFollowup3dCron,
   scheduleBillingExpiryWarning,
@@ -15,7 +15,7 @@ import {
   resolveCanonicalMessageKeyByTestEvent,
 } from './ctaFoundation.js'
 import { resolveCanonicalFlowOrchestration } from './flowOrchestrationFoundation.js'
-import { applyTransition } from './service.js'
+import { applyTransition } from './index.js'
 import { transition } from './stateMachine.js'
 import { resolveCanonicalTestTransition } from './testFoundation.js'
 

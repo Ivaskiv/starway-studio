@@ -6,7 +6,7 @@ import {
   runtimeRedisGet,
   runtimeRedisSet,
   runtimeRedisSetNx,
-} from '../core/runtime/runtimeRedis.js'
+} from '../core/runtime/redis.js'
 
 export interface AiGuardDescriptor {
   userId: string

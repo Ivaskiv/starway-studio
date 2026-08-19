@@ -3,7 +3,7 @@ import {
   AI_PRODUCER_SYSTEM_PROMPT,
 } from './config/prompts.js'
 import { prisma } from './db/client.js'
-import { AB_TEST_START_INTRO, AB_TEST_START_STEP2 } from './products/absystem/config/absystem.content.js'
+import { AB_TEST_START_INTRO, AB_TEST_START_STEP2 } from './products/absystem/config/content.js'
 
 export interface PromptResult {
   content: string

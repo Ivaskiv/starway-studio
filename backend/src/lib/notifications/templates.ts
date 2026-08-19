@@ -1,5 +1,5 @@
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 export type { AbTestFollowupTimerId } from '@/products/ab-system/content/abTest.followups.js'
 import { resolveAbTestFollowupCopy, type AbTestFollowupTimerId } from '@/products/ab-system/content/abTest.followups.js'
 import type { AbTestResultKey, TestDriveContentVersion } from '@/products/ab-system/content/abTest.results.js'

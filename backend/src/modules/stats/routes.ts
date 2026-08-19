@@ -1,6 +1,6 @@
 // backend/src/modules/stats/routes.ts
 import { prisma } from '../../db/client.js';
-import { authRequired } from '../../modules/auth/middleware/auth.js';
+import { authRequired } from '../auth/middleware/auth.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { Response, Router } from 'express';
 

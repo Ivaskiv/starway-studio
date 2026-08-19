@@ -165,6 +165,9 @@ export async function syncAuthSession({
   const token = getToken()
   const refreshToken = getRefreshToken()
   const sessionHint = hasSessionHint()
+  const telegramUser = getTelegramRuntimeUser()
+  const telegramInitData = getTelegramRuntimeInitData()
+  const isTelegramMiniAppRuntime = isLikelyTelegramMiniAppRuntime()
   const canTryRefresh =
     Boolean(refreshToken) ||
     sessionHint ||
@@ -176,13 +179,57 @@ export async function syncAuthSession({
         allowRefreshWithoutHint,
         hasToken: Boolean(token),
         hasSessionHint: sessionHint,
-        isTelegramRuntime: isLikelyTelegramMiniAppRuntime(),
-        telegramUserId: getTelegramRuntimeUser()?.id ?? null,
-        hasTelegramInitData: Boolean(getTelegramRuntimeInitData()),
+        isTelegramRuntime: isTelegramMiniAppRuntime,
+        telegramUserId: telegramUser?.id ?? null,
+        hasTelegramInitData: Boolean(telegramInitData),
       })
     }
     dispatch(clearAuth())
     return false
+  }
+
+  // In Mini App runtime Telegram identity is canonical and must win over stale web cookies/tokens.
+  if (telegramUser?.id && telegramInitData && isTelegramMiniAppRuntime) {
+    try {
+      const socialRes = await fetch(resolveApiUrl('/auth/telegram'), {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          initData: telegramInitData,
+        }),
+      })
+      const socialData = await readJsonSafely(socialRes)
+      if (socialData) {
+        const socialUser = (socialData.user ?? null) as User | null
+        const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null
+        const socialRefreshToken = typeof socialData.refreshToken === 'string'
+          ? socialData.refreshToken
+          : undefined
+
+        if (socialUser && socialToken) {
+          if (import.meta.env.DEV) {
+            console.info('[sessionSync] restored via telegram initData', {
+              userId: socialUser.id,
+              email: socialUser.email ?? null,
+              telegramRuntimeUserId: telegramUser.id,
+            })
+          }
+          dispatch(setCredentials({
+            user: socialUser,
+            accessToken: socialToken,
+            refreshToken: socialRefreshToken,
+          }))
+          applyUserTheme(theme, socialUser)
+          return true
+        }
+      }
+    } catch (error) {
+      console.warn('[sessionSync] Telegram social restore failed', error)
+    }
   }
 
   if (canTryRefresh) {
@@ -232,7 +279,6 @@ export async function syncAuthSession({
           Authorization: `Bearer ${token}`,
         },
       })
-
       const meData = await readJsonSafely(meRes)
       if (meData) {
         const restoredUser = (meData.user ?? null) as User | null
@@ -256,46 +302,7 @@ export async function syncAuthSession({
 
   await waitForTelegramRuntimeReady()
 
-  const telegramUser = getTelegramRuntimeUser()
-  const telegramInitData = getTelegramRuntimeInitData()
-  if (telegramUser?.id && telegramInitData && isLikelyTelegramMiniAppRuntime()) {
-    try {
-      const socialRes = await fetch(resolveApiUrl('/auth/telegram'), {
-        method: 'POST',
-        credentials: 'include',
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          initData: telegramInitData,
-        }),
-      })
-
-      const socialData = await readJsonSafely(socialRes)
-      if (socialData) {
-        const socialUser = (socialData.user ?? null) as User | null
-        const socialToken = typeof socialData.accessToken === 'string' ? socialData.accessToken : null
-
-        if (socialUser && socialToken) {
-          if (import.meta.env.DEV) {
-            console.info('[sessionSync] restored via telegram initData', {
-              userId: socialUser.id,
-              email: socialUser.email ?? null,
-              telegramRuntimeUserId: telegramUser.id,
-            })
-          }
-          dispatch(setCredentials({ user: socialUser, accessToken: socialToken }))
-          applyUserTheme(theme, socialUser)
-          return true
-        }
-      }
-    } catch (error) {
-      console.warn('[sessionSync] Telegram social restore failed', error)
-    }
-  }
-
-  if (telegramUser?.id && !telegramInitData && isLikelyTelegramMiniAppRuntime() && isTelegramDevFallbackAllowed()) {
+  if (telegramUser?.id && !telegramInitData && isTelegramMiniAppRuntime && isTelegramDevFallbackAllowed()) {
     try {
       const socialRes = await fetch(resolveApiUrl('/auth/social'), {
         method: 'POST',

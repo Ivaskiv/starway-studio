@@ -2,8 +2,8 @@ import type { Role, UserLifecycleState } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 import { UserCreationSource } from '../../user/userCreation.service.js'
-import { upsertTelegramBinding } from '../services/linking.service.js'
-import { clearPendingTelegramIdentity, getPendingTelegramIdentity, isValidEmail, setPendingTelegramIdentity, setPendingName, hasPendingName, clearPendingName } from '../services/pendingIdentity.service.js'
+import { upsertTelegramBinding } from '../services/identity/linking.js'
+import { clearPendingTelegramIdentity, getPendingTelegramIdentity, isValidEmail, setPendingTelegramIdentity, setPendingName, hasPendingName, clearPendingName } from '../services/identity/pending.js'
 import { planMessage } from '../conversation/delivery/planDelivery.js'
 import {
   type StartContext,
@@ -12,20 +12,20 @@ import {
   resolveLinkedUserIdFromContext,
   syncAccessAwareChatEntryPoints,
 } from './start.shared.js'
-import { hasActiveFocusSubscription } from '../../subscriptions/payments/focus.access.js'
+import { hasActiveFocusSubscription } from '../../subscriptions/payments/focus-access.js'
 import {
   type StartMessagePayload,
   magicLinkReadyMessage,
   welcomeMessage,
 } from './abTest.start.js'
 import { buildHomeScreen } from './homeScreen.builder.js'
-import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
-import { renderCurrentView, sendResultSnapshot } from '@/products/ab-system/telegram/abTest.views.js'
+import { loadAbTestProgress } from '@/products/ab-system/telegram/progress.js'
+import { renderCurrentView, sendResultSnapshot } from '@/products/ab-system/telegram/views/index.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
-import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/abTest.service.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/service.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
-import { getUserAccessState, type UserAccessState } from '../../subscriptions/payments/focus.access.js'
+import { getUserAccessState, type UserAccessState } from '../../subscriptions/payments/focus-access.js'
 import { logger } from '../../../utils/logger.js'
 
 export * from './start.shared.js'

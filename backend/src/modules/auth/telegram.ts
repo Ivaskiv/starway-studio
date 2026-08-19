@@ -1,9 +1,9 @@
 import crypto from 'crypto'
 
-import { AuthServiceError } from './auth.errors.js'
 import {
-  readTelegramVerificationTokens,
+readTelegramVerificationTokens,
 } from '../telegram-mentor/runtime/botConfig.js'
+import { AuthServiceError } from './errors.js'
 
 export type TelegramMiniAppProfile = {
   id: string

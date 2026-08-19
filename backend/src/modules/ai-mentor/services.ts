@@ -1,7 +1,7 @@
 import { prisma } from '../../db/client.js';
 import type { DailyState, Prisma } from '@starway/db/prisma-client';
 import { openai } from '../../lib/openai.js';
-import { logDailyCycle, recordMicroSupport, calculateStreak, triggerAICheckIn } from '../daily-cycle/service.js';
+import { logDailyCycle, recordMicroSupport, calculateStreak, triggerAICheckIn } from '../daily-cycle/index.js';
 import { getPrimaryGoal } from '../goals/service.js';
 import { SPHERE_LABELS, type WheelSphereId } from '../wheel/types.js';
 import { generatePayload as generateMentorPayload } from './generation.service.js';

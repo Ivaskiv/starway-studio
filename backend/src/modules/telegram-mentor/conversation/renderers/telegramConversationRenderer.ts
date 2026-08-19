@@ -1,7 +1,7 @@
 import type { Context, Telegraf } from 'telegraf'
 
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
-import { handleAbTestCallback } from '@/products/ab-system/telegram/abTest.service.js'
+import { handleAbTestCallback } from '@/products/ab-system/telegram/service.js'
 import { bot, sendDedupedTelegramMessage } from '../../../../lib/telegram.js'
 import { prisma } from '../../../../db/client.js'
 import { handleEveningAnswer } from '../../handlers/evening.js'
@@ -14,7 +14,7 @@ import {
 import { sendStateMenu } from '../../handlers/start.menu.js'
 import {
   clearPendingName,
-} from '../../services/pendingIdentity.service.js'
+} from '../../services/identity/pending.js'
 import { planMessage } from '../delivery/planDelivery.js'
 import { telegramContentRegistry } from '../../content/contentRegistry.js'
 import type {

@@ -10,7 +10,7 @@ import {
   getCourseById,
   enrollInCourse,
   getUserEnrollments
-} from '../../modules/mini-courses/servise.js';
+} from './servise.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
 import { trackEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';

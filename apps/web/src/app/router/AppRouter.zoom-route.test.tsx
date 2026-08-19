@@ -47,7 +47,7 @@ vi.mock('@/app/router/routeConfig', () => ({
 
 vi.mock('@/app/router/routePages', () => ({
   AbTestLandingRouteView: () => createElement('div', undefined, 'AB_TEST_LANDING'),
-  AbTestPage: () => createElement('div', undefined, 'AB_TEST_PAGE'),
+  TestPage: () => createElement('div', undefined, 'AB_TEST_PAGE'),
   FocusRouteView: () => createElement('div', undefined, 'FOCUS_ROUTE'),
   MiniAppPage: () => createElement('div', undefined, 'MINIAPP_PAGE'),
 }))
@@ -73,7 +73,7 @@ vi.mock('@/layout/MainLayout', async () => {
   }
 })
 
-vi.mock('@/features/zoom/routes/CleanMiniAppZoomCalendar', async () => {
+vi.mock('@/features/zoom/mini-app/CalendarRoute', async () => {
   const React = await import('react')
   const { useLocation } = await import('react-router-dom')
 

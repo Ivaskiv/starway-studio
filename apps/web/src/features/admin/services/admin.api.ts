@@ -20,6 +20,7 @@ export interface PromptVersionRecord {
   parsedContent?: unknown;
   isActive: boolean;
   createdAt: string;
+  source: 'db' | 'filesystem';
 }
 
 export interface RuntimeAgentRecord {

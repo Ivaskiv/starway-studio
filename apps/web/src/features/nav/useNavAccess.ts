@@ -2,7 +2,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { useGetMyProductsQuery } from '@/features/products/services/products.api'
-import { useGetUpcomingSessionQuery } from '@/features/zoom/services/zoom.api'
+import { useGetUpcomingSessionQuery } from '@/features/zoom/services/booking.api'
 import { useMemo } from 'react'
 import type { NavItemConfig, NavRole } from './navConfig'
 

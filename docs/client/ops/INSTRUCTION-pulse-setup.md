@@ -228,7 +228,7 @@ const transcribeAudio = async (audioBlob: Blob) => {
 Коуч надсилає голосове в окремий **приватний бот-асистент** (не той що для клієнтів):
 
 ```
-@Starway_byNadya_Bot (для клієнтів) ← окремий
+@Test_ABsystem_bot (для клієнтів) ← окремий
 @starway_coach_assistant_bot (для Наді) ← новий приватний бот
 ```
 

@@ -82,9 +82,11 @@ Rules:
 
 ```env
 # Telegram Bots
-MAIN_BOT_TOKEN=           # @Starway_byNadya_Bot
-TEST_BOT_TOKEN=           # @test_starway_bot
-COACH_BOT_TOKEN=          # @Starway_DNA_Bot
+TELEGRAM_BOT_USERNAME=Test_ABsystem_bot
+TELEGRAM_BOT_TOKEN=       # production funnel bot
+TEST_TELEGRAM_BOT_USERNAME=test_starway_bot
+TEST_TELEGRAM_BOT_TOKEN=  # local/dev funnel bot
+COACH_BOT_TOKEN=          # @StarwayDNACoach_bot
 
 # Telegram Channels
 FOCUS_CHANNEL_ID=         # канал учасників ФОКУС

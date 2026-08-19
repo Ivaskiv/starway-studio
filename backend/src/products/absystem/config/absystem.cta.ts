@@ -1,4 +1,4 @@
-import { absystemContent } from './absystem.content.js'
+import { absystemContent } from './content.js'
 
 export const absystemCtaRegistry = {
   continue: absystemContent.behavioral.cta.continue,

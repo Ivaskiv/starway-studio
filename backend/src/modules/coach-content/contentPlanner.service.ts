@@ -4,7 +4,7 @@ import { Prisma, ZoomStatus } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
 import { coachContent, buildPlannerUserPrompt, buildZoomListMessage } from '../../bot/content/coachContent.content.js'
-import { parseZoomPostReport } from '../zoom/zoomPostReport.types.js'
+import { parseZoomPostReport } from '../zoom/reports/zoomPostReport.types.js'
 import { hashCacheParts, rememberResultCache, resultCache } from '../sales-assistant/sales-assistant.helpers.js'
 
 export type ContentPlanMode = 'WEEKLY_PLAN' | 'MONTHLY_PLAN' | 'REELS_IDEAS' | 'FULL_CONTENT'

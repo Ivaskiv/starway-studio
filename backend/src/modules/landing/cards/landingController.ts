@@ -1,6 +1,6 @@
 // backend/src/modules/landing/cards/landingController.ts
 import { Request, Response } from 'express';
-import { buildPaymentRequest } from '../../subscriptions/payments/wayforpay.js';
+import { buildPaymentRequest } from '../../subscriptions/payments/wayforpay/service.js';
 import { trackEvent } from '../../events/service.js';
 import { resolveUserState } from '../../telegram-mentor/handlers/start.js';
 

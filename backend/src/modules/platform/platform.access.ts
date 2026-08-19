@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client.js'
-import { getUserAccessState } from '../subscriptions/payments/focus.access.js'
+import { getUserAccessState } from '../subscriptions/payments/focus-access.js'
 
 export type PlatformAccessStatus =
   | 'TRIAL_ACTIVE'

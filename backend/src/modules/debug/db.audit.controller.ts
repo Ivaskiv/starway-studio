@@ -2,7 +2,7 @@ import type { Request, Response } from 'express'
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { bot } from '../../lib/telegram.js'
-import { broadcastBlock9Update } from '../../products/ab-system/telegram/abTest.service.js'
+import { broadcastBlock9Update } from '../../products/ab-system/telegram/service.js'
 import { resolveNotificationType } from '../../services/notifications/domain/notificationPolicy.js'
 import { NotificationEvent } from '../../services/notifications/NotificationEvent.js'
 

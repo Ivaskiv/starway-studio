@@ -1,7 +1,7 @@
 import type { Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
-import { buildRuntimeResilienceSnapshotFromCounts, type RuntimeResilienceSnapshot } from '../runtime/runtimeResilience.js'
+import { buildRuntimeResilienceSnapshotFromCounts, type RuntimeResilienceSnapshot } from '../runtime/resilience.js'
 import { FEATURE_FLAG_NAMES, getFeatureFlagCatalog, resolveFeatureGate, validateFeatureFlagFoundation } from './featureFlags.js'
 
 type SafeJson = Prisma.JsonValue | null

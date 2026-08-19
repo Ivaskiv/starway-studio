@@ -4,7 +4,7 @@ import { Role } from '@starway/db/prisma-client'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { authRequired } from '../auth/middleware/auth.js'
 import { requireUser } from '../../utils/requireUser.js'
-import { attachEmailToUser } from './identity.service.js'
+import { attachEmailToUser } from './identity/service.js'
 
 const router = Router()
 

@@ -1,4 +1,4 @@
-import { applyReward, awardStreakBonus } from './service.js'
+import { applyReward, awardStreakBonus } from './index.js'
 
 export const rewardEngine = {
   async onDailyEntryCreated(userId: string) {

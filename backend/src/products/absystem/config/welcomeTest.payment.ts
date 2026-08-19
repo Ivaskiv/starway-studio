@@ -1,7 +1,7 @@
 import type { Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '../../../db/client.js'
-import { getUiSettings, isJsonObject } from '../../ab-system/telegram/abTest.progress.js'
+import { getUiSettings, isJsonObject } from '../../ab-system/telegram/progress.js'
 import { resolveUserLifecycle } from '../../../modules/users/runtime/resolveUserLifecycle.js'
 
 export const WELCOME_TEST_UI_KEY = 'welcomeTest'

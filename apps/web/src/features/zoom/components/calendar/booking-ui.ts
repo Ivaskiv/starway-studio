@@ -1,0 +1,1 @@
+export const PRIMARY_BOOKING_BUTTON_CLASS = 'bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-xl shadow-md disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed';

@@ -5,7 +5,7 @@ import { resolveDecision } from '../../../core/decision/decision.resolver.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
 import { planAck } from '../conversation/delivery/planDelivery.js'
-import { getTelegramAiRequestContext } from '../services/requestContext.service.js'
+import { getTelegramAiRequestContext } from '../services/context/request.js'
 
 type GuardState = {
   userId?: string | null

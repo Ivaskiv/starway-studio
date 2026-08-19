@@ -7,7 +7,7 @@ import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 import { assistantChat } from '../assistant/service.js';
 import { createWheelAssessment } from '../wheel/controller.js';
 import type { StreamChatMessage } from './types.js';
-import { detectStateInstability, sendStateCourseOffer } from '@/products/ab-system/telegram/abTest.service.js';
+import { detectStateInstability, sendStateCourseOffer } from '@/products/ab-system/telegram/service.js';
 import {
   completeMicroTask as completeRichMicroTask,
   createMicroTask,

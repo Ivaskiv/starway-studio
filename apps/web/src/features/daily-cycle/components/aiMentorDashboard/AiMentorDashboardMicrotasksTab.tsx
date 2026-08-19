@@ -4,10 +4,10 @@ import { MicroTaskList } from '@/features/microTask/components/MicroTaskList'
 import type { MicroTask as MicroTaskItem } from '@/features/microTask/types/types'
 
 import RecoveryMicrotasksPanel from './RecoveryMicrotasksPanel'
-import type { AiMentorDashboardScreenState } from '../../hooks/useAiMentorDashboardScreenState'
+import type { DashboardState } from '../../hooks/dashboard/useDashboardState'
 
 type Props = {
-  state: AiMentorDashboardScreenState
+  state: DashboardState
 }
 
 export default function AiMentorDashboardMicrotasksTab({ state }: Props) {

@@ -1,8 +1,8 @@
 import AiMentorDashboardScreenContent from './AiMentorDashboardScreenContent'
-import { useAiMentorDashboardScreenState } from '../../hooks/useAiMentorDashboardScreenState'
+import { useDashboardState } from '../../hooks/dashboard/useDashboardState'
 
 export default function AiMentorDashboardScreen() {
-  const state = useAiMentorDashboardScreenState()
+  const state = useDashboardState()
 
   return <AiMentorDashboardScreenContent state={state} />
 }

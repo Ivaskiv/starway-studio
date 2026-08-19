@@ -1,7 +1,7 @@
 // backend/src/modules/funnel/routes.ts
 
 import { Router } from 'express';
-import { authRequired } from '../../modules/auth/middleware/auth.js';
+import { authRequired } from '../auth/middleware/auth.js';
 
 import {
   createFunnelHandler,
@@ -15,7 +15,7 @@ import {
   getFunnelById,
   updateFunnel,
   deleteFunnel,
-} from './service.js';
+} from './index.js';
 
 import type { AuthenticatedRequest } from '../../types/globalTypes.js';
 import type { Response } from 'express';

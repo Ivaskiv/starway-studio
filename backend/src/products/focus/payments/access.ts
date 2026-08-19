@@ -1,5 +1,5 @@
 import { prisma } from '../../../db/client.js'
-import { FOCUS_PRODUCT_CODES } from '../../../modules/subscriptions/payments/focus.access.js'
+import { FOCUS_PRODUCT_CODES } from '../../../modules/subscriptions/payments/focus-access.js'
 
 /**
  * Перевіряє, чи має користувач активну підписку на Focus.

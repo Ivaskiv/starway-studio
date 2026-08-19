@@ -1,7 +1,7 @@
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
 import type { Response } from 'express'
-import { isSuperAdminRequest } from '../../modules/auth/superadmin.js'
-import { findUserById } from '../../modules/auth/auth.service.js'
+import { isSuperAdminRequest } from '../auth/access/superadmin.js'
+import { findUserById } from '../auth/service/index.js'
 import { trackEvent } from '../events/service.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import { prisma } from '../../db/client.js'
@@ -13,7 +13,7 @@ import {
   getUserAccess,
   getUserProductAccesses,
   getUserSystemState,
-} from './service.js'
+} from './index.js'
 import {
   PRODUCT_ACCESS_PRODUCTS,
   PRODUCT_ACCESS_ROLES,

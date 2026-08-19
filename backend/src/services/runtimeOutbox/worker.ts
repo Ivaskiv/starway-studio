@@ -1,4 +1,4 @@
-import { processRuntimeOutbox } from '../../core/runtime/runtimeOutbox.js'
+import { processRuntimeOutbox } from '../../core/runtime/outbox.js'
 
 const OUTBOX_WORKER_DISABLED = process.env.DISABLE_RUNTIME_OUTBOX_WORKER === 'true'
 const POLL_INTERVAL_MS = 5_000

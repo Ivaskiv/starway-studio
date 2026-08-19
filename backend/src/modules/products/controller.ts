@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { prisma } from '../../db/client.js';
-import { isSuperAdminRequest } from '../../modules/auth/superadmin.js';
+import { isSuperAdminRequest } from '../auth/access/superadmin.js';
 import { logSuperAdminAudit } from '../../utils/logger.js';
 import {
   getAllProducts,
@@ -13,9 +13,9 @@ import {
   enrollUser,
   checkProductAccess,
   getUserEnrollments,
-} from './service.js';
+} from './index.js';
 import { AuthenticatedRequest } from '../../types/globalTypes.js';
-import { promoteUserToAdminIfNeeded } from '../auth/auth.service.js';
+import { promoteUserToAdminIfNeeded } from '../auth/service/index.js';
 import { trackEvent } from '../events/service.js';
 import { resolveUserState } from '../telegram-mentor/handlers/start.js';
 

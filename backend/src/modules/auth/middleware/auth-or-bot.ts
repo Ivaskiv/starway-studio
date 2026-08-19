@@ -1,7 +1,7 @@
-import type { NextFunction, Response } from 'express'
+import type { NextFunction,Response } from 'express'
 
 import type { AuthenticatedRequest } from '../../../types/globalTypes.js'
-import { getServerUser } from '../getServerUser.js'
+import { getServerUser } from '../server-user.js'
 
 export async function authOrBotRequired(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {

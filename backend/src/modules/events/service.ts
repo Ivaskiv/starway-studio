@@ -9,9 +9,9 @@ import {
   claimRuntimeEventReplay,
   withRuntimeAdvisoryLock,
   type RuntimeTelemetry,
-} from '../../core/runtime/runtimeIdempotency.js'
-import { buildRuntimeResilienceSnapshot } from '../../core/runtime/runtimeResilience.js'
-import { enqueueRuntimeOutboxItem } from '../../core/runtime/runtimeOutbox.js'
+} from '../../core/runtime/idempotency.js'
+import { buildRuntimeResilienceSnapshot } from '../../core/runtime/resilience.js'
+import { enqueueRuntimeOutboxItem } from '../../core/runtime/outbox.js'
 import { UserAutoCreationDisabledError, UserCreationSource } from '../user/userCreation.service.js'
 import { resolveOrCreateUser } from '../user/resolveOrCreateUser.js'
 

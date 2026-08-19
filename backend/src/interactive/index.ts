@@ -22,8 +22,8 @@ import {
   resolveLocalTelegramConsumerState,
   resolveTelegramDeliveryMode,
 } from '../modules/telegram-mentor/runtime/botConfig.js'
-import { registerCoachBotHandlers } from '../bot/handlers/coach/coachStart.handler.js'
-import { registerCoachContentHandlers } from '../bot/handlers/coachContent.handler.js'
+import { registerCoachBotHandlers } from '../bot/handlers/coach/register.js'
+import { registerCoachContentHandlers } from '../bot/handlers/coach-content/index.js'
 import { registerStankeyBot } from '../products/stankey/index.js'
 import {
   connectDatabaseWithRetry,

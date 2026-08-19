@@ -1,4 +1,4 @@
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import type { Context } from 'telegraf'
 
 import { resolveUserState as resolveCoreUserState, resolveLinkedUserIdFromContext, type UserState as CoreUserState } from '../core/state.service.js'

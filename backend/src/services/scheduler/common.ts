@@ -3,9 +3,9 @@
 
 import { resolveTelegramWebappBaseUrl } from '@/config/webapp.js'
 import type { PlatformProductId } from '@starway/shared/platform.registry'
-import { prisma, withRetry } from '../../db/client.js'
-import { getUserAccess } from '../../modules/access/service.js'
+import { prisma,withRetry } from '../../db/client.js'
 import { sendDedupedTelegramMessage } from '../../lib/telegram.js'
+import { getUserAccess } from '../../modules/access/service.js'
 import { notificationService } from '../notifications/NotificationService.js'
 
 export type SchedulerNotifier = {
@@ -198,4 +198,22 @@ export async function ensureNotificationPreferenceTableAvailability(): Promise<b
 
 export function resolvePublicFrontendBaseUrl() {
   return resolveTelegramWebappBaseUrl()
+}
+
+export function endOfDay(date: Date): Date {
+  const normalized = new Date(date)
+  normalized.setHours(23, 59, 59, 999)
+  return normalized
+}
+
+export function startOfDay(date: Date): Date {
+  const normalized = new Date(date)
+  normalized.setHours(0, 0, 0, 0)
+  return normalized
+}
+
+export function addDays(date: Date, days: number): Date {
+  const normalized = new Date(date)
+  normalized.setDate(normalized.getDate() + days)
+  return normalized
 }

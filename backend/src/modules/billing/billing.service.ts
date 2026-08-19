@@ -1,8 +1,8 @@
 import { prisma } from '../../db/client.js'
 import { Prisma } from '@starway/db/prisma-client'
-import { processPayment } from '../subscriptions/payments/business.js'
-import { verifySignature } from '../subscriptions/payments/crypto.js'
-import { buildPaymentRequest } from '../subscriptions/payments/wayforpay.js'
+import { processPayment } from '../subscriptions/payments/business/service.js'
+import { verifySignature } from '../subscriptions/payments/wayforpay/signature.js'
+import { buildPaymentRequest } from '../subscriptions/payments/wayforpay/service.js'
 import type { PaymentCallbackData } from '../subscriptions/types.js'
 
 import type { BillingPlan, UserSubscription } from './subscription.entity.js'

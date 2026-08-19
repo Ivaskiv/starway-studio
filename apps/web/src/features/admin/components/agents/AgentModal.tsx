@@ -11,6 +11,10 @@ import {
 import { Badge, Button, Textarea } from '@/ui'
 
 import type { AgentCardDef } from './agentControlCenter.types'
+import {
+  isAgentPromptDraftModified,
+  resolveAgentPromptLoadState,
+} from './agentPromptDraft'
 
 interface Props {
   agent: AgentCardDef
@@ -23,10 +27,12 @@ type ModalTab = 'prompt' | 'analyze' | 'test'
 export function AgentModal({ agent, canEdit, onClose }: Props) {
   const [activeTab, setActiveTab] = useState<ModalTab>('prompt')
   const [draftContent, setDraftContent] = useState('')
+  const [initialContent, setInitialContent] = useState<string | null>(null)
+  const [savedVersion, setSavedVersion] = useState<number | null>(null)
   const [analysisResult, setAnalysisResult] = useState<string | null>(null)
   const [testMessage, setTestMessage] = useState('Покажи, як цей агент відповість на типовий запит.')
   const [testResult, setTestResult] = useState<string | null>(null)
-  const { data: promptsData, isLoading } = useGetPromptVersionsQuery({ name: agent.promptId })
+  const { data: promptsData, isLoading, error } = useGetPromptVersionsQuery({ name: agent.promptId })
   const [createPromptVersion, { isLoading: isSaving }] = useCreatePromptVersionMutation()
   const [runCompatibilityCheck, { isLoading: isAnalyzing }] = useRunCompatibilityCheckMutation()
   const [runRuntimeAgentTest, { isLoading: isTesting }] = useRunRuntimeAgentTestMutation()
@@ -38,13 +44,32 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
   )
 
   useEffect(() => {
-    setDraftContent(activePrompt?.content ?? '')
+    if (isLoading) return
+
+    const content = activePrompt?.content ?? ''
+    setDraftContent(content)
+    setInitialContent(content)
+    setSavedVersion(activePrompt?.version ?? null)
     setAnalysisResult(null)
     setTestResult(null)
     setActiveTab('prompt')
-  }, [activePrompt?.id, agent.key])
+  }, [activePrompt?.id, agent.key, isLoading])
 
   const currentContent = draftContent.trim()
+  const isModified = isAgentPromptDraftModified(initialContent, draftContent)
+  const promptLoadState = resolveAgentPromptLoadState({
+    promptId: agent.promptId,
+    isLoading,
+    error,
+    prompt: activePrompt,
+  })
+
+  const handleClose = () => {
+    if (isModified && !window.confirm('Закрити редактор і втратити незбережені зміни?')) {
+      return
+    }
+    onClose()
+  }
 
   const handleAnalyze = async () => {
     if (!currentContent) return
@@ -81,14 +106,17 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
   }
 
   const handleSave = async () => {
-    if (!canEdit || !currentContent) return
+    if (!canEdit || !currentContent || !isModified) return
 
     try {
-      await createPromptVersion({
+      const result = await createPromptVersion({
         name: agent.promptId,
         content: draftContent,
         isActive: true,
       }).unwrap()
+      setDraftContent(result.prompt.content)
+      setInitialContent(result.prompt.content)
+      setSavedVersion(result.prompt.version)
       toast.success('Активну версію промпта збережено')
     } catch {
       toast.error('Не вдалося зберегти версію промпта')
@@ -114,7 +142,7 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
   return (
     <BaseModal
       isOpen
-      onClose={onClose}
+      onClose={handleClose}
       panelClassName="w-full max-w-4xl rounded-[28px] border border-[var(--border)] bg-[var(--bg-secondary)] p-0 shadow-[0_40px_120px_rgba(0,0,0,0.45)]"
     >
       <div className="dashboard-liquid-edge--top border-b border-[var(--border)] px-5 py-5">
@@ -131,8 +159,8 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
               Role: {agent.capability} · Runtime: {agent.runtimeAgentId}
             </p>
           </div>
-          <Button type="button" variant="ghost" color="muted" onClick={onClose}>
-            Закрити
+          <Button type="button" variant="ghost" color="muted" onClick={handleClose}>
+            ЗАКРИТИ
           </Button>
         </div>
       </div>
@@ -149,9 +177,9 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
 
       <div className="flex gap-5 border-b border-[var(--border)] px-5 pt-4">
         {[
-          { id: 'prompt', label: 'Промпт' },
-          { id: 'analyze', label: 'AI-аналіз' },
-          { id: 'test', label: 'Тест' },
+          { id: 'prompt', label: 'ПРОМПТ' },
+          { id: 'analyze', label: 'AI-АНАЛІЗ' },
+          { id: 'test', label: 'ТЕСТ' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -172,24 +200,36 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
       <div className="space-y-4 p-5">
         {activeTab === 'prompt' ? (
           <>
-            {activePrompt ? (
-              <div className="text-[11px] text-[var(--text-muted)]">
-                Активна версія: <span className="font-semibold text-[var(--text-secondary)]">v{activePrompt.version}</span>
-                {' · '}
-                {new Date(activePrompt.createdAt).toLocaleDateString('uk-UA')}
+            {promptLoadState.status === 'loading' ? (
+              <div className="text-sm text-[var(--text-muted)]">Завантажуємо активну версію...</div>
+            ) : promptLoadState.status === 'error' || promptLoadState.status === 'missing' ? (
+              <div className="rounded-[20px] border border-[rgba(248,113,113,0.22)] bg-[rgba(248,113,113,0.08)] p-4 text-sm leading-6 text-[rgb(252,165,165)]">
+                {promptLoadState.message}
               </div>
-            ) : null}
+            ) : (
+              <>
+                <div className="text-[11px] text-[var(--text-muted)]">
+                  {activePrompt ? (
+                    <>
+                      {promptLoadState.message}
+                      {' · '}Активна версія:{' '}
+                      <span className="font-semibold text-[var(--text-secondary)]">v{savedVersion ?? activePrompt.version}</span>
+                    </>
+                  ) : 'Активний промпт і filesystem fallback не знайдені.'}
+                </div>
 
-            <Textarea
-              label="Content"
-              value={draftContent}
-              onChange={(event) => setDraftContent(event.target.value)}
-              size="lg"
-              className="bg-[var(--card)] font-mono"
-              rows={18}
-              disabled={!canEdit && !activePrompt}
-              helperText={isLoading ? 'Завантажуємо активну версію…' : 'Збереження створює нову active version, яку наступний runtime call має прочитати.'}
-            />
+                <Textarea
+                  label="Content"
+                  value={draftContent}
+                  onChange={(event) => setDraftContent(event.target.value)}
+                  size="lg"
+                  className="bg-[var(--card)] font-mono"
+                  rows={18}
+                  disabled={!canEdit}
+                  helperText={isModified ? 'Є незбережені зміни.' : 'Змін немає.'}
+                />
+              </>
+            )}
 
             {agent.isSystem ? (
               <div className="rounded-[20px] border border-[rgba(96,165,250,0.22)] bg-[rgba(96,165,250,0.08)] p-4 text-sm leading-6 text-[rgb(147,197,253)]">
@@ -233,7 +273,7 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
           disabled={!currentContent}
           onClick={() => void handleAnalyze()}
         >
-          Запустити аналіз
+          АНАЛІЗУВАТИ
         </Button>
         <Button
           type="button"
@@ -243,7 +283,7 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
           disabled={!testMessage.trim()}
           onClick={() => void handleTest()}
         >
-          Тестувати агента
+          ТЕСТУВАТИ
         </Button>
         <div className="flex-1" />
         {canEdit ? (
@@ -252,10 +292,10 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
             variant="solid"
             color="accent"
             loading={isSaving}
-            disabled={!currentContent}
+            disabled={!currentContent || !isModified || isLoading || Boolean(error)}
             onClick={() => void handleSave()}
           >
-            Зберегти версію
+            ЗБЕРЕГТИ ВЕРСІЮ
           </Button>
         ) : null}
       </div>

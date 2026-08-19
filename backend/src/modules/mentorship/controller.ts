@@ -9,7 +9,7 @@ import {
   cancelMentorship,
   getActiveMentorship,
   hasActiveMentorship,
-} from './service.js'
+} from './index.js'
 import { AuthenticatedRequest } from '../../types/globalTypes.js'
 import { trackEvent } from '../events/service.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'

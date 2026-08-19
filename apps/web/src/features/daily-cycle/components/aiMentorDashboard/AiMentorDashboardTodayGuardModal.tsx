@@ -4,10 +4,10 @@ import toast from 'react-hot-toast'
 import { formatVerboseDate } from '@/features/daily-cycle/utils/dashboard.utils'
 import { BaseModal } from '@/features/modals/BaseModal'
 
-import type { AiMentorDashboardScreenState } from '../../hooks/useAiMentorDashboardScreenState'
+import type { DashboardState } from '../../hooks/dashboard/useDashboardState'
 
 type Props = {
-  state: AiMentorDashboardScreenState
+  state: DashboardState
 }
 
 export default function AiMentorDashboardTodayGuardModal({ state }: Props) {

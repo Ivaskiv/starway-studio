@@ -2,7 +2,7 @@
 // Роути підписок + WayForPay callback — authRequired для захищених ендпоінтів
 // Приклад: router.get('/status', authRequired, getSubscriptionStatus)
 
-import { authRequired } from '../../modules/auth/middleware/auth.js';
+import { authRequired } from '../auth/middleware/auth.js';
 import { Router } from 'express';
 import {
   activateSubscriptionGrantHandler,
@@ -14,7 +14,7 @@ import {
   renderWayForPayCheckoutPageHandler,
   wayForPayReturnHandler,
   startSuperadminTrialTestHandler,
-} from './controller.js';
+} from './api/controller.js';
 import { wayForPayCallback } from './payments/callback.js';
 
 const router = Router();

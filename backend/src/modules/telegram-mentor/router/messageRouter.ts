@@ -3,7 +3,7 @@ import type { Context } from 'telegraf'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import {
   handleAbTestEmailCaptureText,
-} from '@/products/ab-system/telegram/abTest.service.js'
+} from '@/products/ab-system/telegram/service.js'
 import {
   detectTelegramIntelligenceMessageType,
   type TelegramIntelligenceMessageType,
@@ -11,11 +11,11 @@ import {
 import {
   handlePendingTelegramIdentityText,
 } from '../handlers/start.js'
-import { loadAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
-import { renderCurrentView } from '@/products/ab-system/telegram/abTest.views.js'
+import { loadAbTestProgress } from '@/products/ab-system/telegram/progress.js'
+import { renderCurrentView } from '@/products/ab-system/telegram/views/index.js'
 import {
   hasPendingName,
-} from '../services/pendingIdentity.service.js'
+} from '../services/identity/pending.js'
 import { getSession, parseQuestionState } from '../session.js'
 import { TelegramConversationEngine } from '../conversation/engine/conversationEngine.js'
 import { createConversationResponse } from '../conversation/engine/types.js'

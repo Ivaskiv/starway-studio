@@ -212,7 +212,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '⚖️',
     label: 'Колесо балансу',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -226,7 +226,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -248,7 +248,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '🌅',
     label: 'Ранкова сесія',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -266,7 +266,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -285,7 +285,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '📋',
     label: 'Мікрозавдання',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -302,7 +302,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -321,7 +321,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '🌙',
     label: 'Вечірня сесія',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -339,7 +339,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -357,7 +357,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '🔥',
     label: 'Стрік',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -374,7 +374,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -393,7 +393,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '🧭',
     label: 'Trial conversion D6',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -410,7 +410,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -432,7 +432,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '😴',
     label: 'Неактивність',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -450,7 +450,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -473,7 +473,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '⏸',
     label: 'Пауза',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -490,7 +490,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -509,7 +509,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '🎁',
     label: 'Бонуси / Анонси',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -526,7 +526,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',
@@ -549,7 +549,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
     icon: '📅',
     label: 'Zoom-сесія',
     user: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Юзер (бот)',
       avatar: 'U',
       composerPlaceholder: 'Написати повідомлення...',
@@ -566,7 +566,7 @@ export const NOTIFICATION_PREVIEW_MODULES: NotificationPreviewModule[] = [
       ],
     },
     expert: {
-      title: '@Starway_byNadya_Bot',
+      title: '@Test_ABsystem_bot',
       subtitle: 'Надя — особиста бесіда (EXPERT_CHAT_ID)',
       avatar: 'Н',
       composerPlaceholder: 'Написати повідомлення...',

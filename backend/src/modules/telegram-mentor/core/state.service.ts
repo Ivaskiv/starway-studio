@@ -2,7 +2,7 @@ import type { Context } from 'telegraf'
 
 import { prisma } from '../../../db/client.js'
 import { resolveUserLifecycle } from '../../flow-control/service.js'
-import { findLinkedUserId } from '../services/linking.service.js'
+import { findLinkedUserId } from '../services/identity/linking.js'
 import type { UserLifecycleSnapshot } from '../../flow-control/types.js'
 
 export type UserState =

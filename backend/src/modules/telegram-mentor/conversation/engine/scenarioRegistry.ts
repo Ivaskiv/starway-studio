@@ -2,8 +2,8 @@ import type { Context } from 'telegraf'
 
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { BLOCK10_FOCUS } from '@/products/ab-system/content/abTest.results.js'
-import { resolveCanonicalFocusPaymentView } from '@/products/ab-system/telegram/abTest.flows.js'
-import { renderTelegramContentMessage } from '@/products/ab-system/telegram/abTest.views.js'
+import { resolveCanonicalFocusPaymentView } from '@/products/ab-system/telegram/flow.js'
+import { renderTelegramContentMessage } from '@/products/ab-system/telegram/views/index.js'
 import { buildFaqKeyboard } from '@/products/ab-system/content/abTest.faq.js'
 import {
   buildAbTestProgressPatch,
@@ -17,30 +17,30 @@ import {
   formatMobileAnswerListForMessage,
   formatSubscriptionDate,
   isTestPaymentEnabled,
-} from '@/products/ab-system/telegram/abTest.helpers.js'
-import { loadAbTestProgress, saveAbTestProgress } from '@/products/ab-system/telegram/abTest.progress.js'
+} from '@/products/ab-system/telegram/helpers.js'
+import { loadAbTestProgress, saveAbTestProgress } from '@/products/ab-system/telegram/progress.js'
 import {
   FOCUS_ALREADY_ACTIVE_MSG,
   FOCUS_RESEND_MISSING_USER_MSG,
   FOCUS_RESEND_NO_SUB_MSG,
   FOCUS_RESEND_SUCCESS_MSG,
 } from '@/products/ab-system/content/abTest.focus.js'
-import { buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business.checkout.js'
-import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus.access.js'
+import { buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business/checkout.js'
+import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus-access.js'
 import { prisma } from '@/db/client.js'
 import { trackEvent } from '@/modules/events/service.js'
-import { scheduleFollowups } from '@/products/ab-system/telegram/abTest.scheduler.js'
+import { scheduleFollowups } from '@/products/ab-system/telegram/scheduler.js'
 import { buildAbsystemStatusFlow, buildAbTestQuestionFlow } from '@/core/flow-builder/flowBuilder.js'
 import type { TelegramFlow } from '@/core/flow-builder/flowTemplates.js'
 import { composeTelegramUx } from '@/core/rendering/uxComposition.js'
 import { getAccessAwareAppReplyMarkupForContext } from '../../handlers/start.js'
-import { renderDecisionUnlessAllowed } from '../../services/decisionTransport.service.js'
+import { renderDecisionUnlessAllowed } from '../../services/delivery/decision-transport.js'
 import { resolveBehavioralContinuity, type BehavioralContinuityResolution } from '@/core/continuity/behavioralContinuity.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { createOnceInviteLink } from '@/products/focus/payments/inviteLink.js'
-import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/abTest.markers.js'
+import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/markers.js'
 import { getDevTestPaymentButton } from '../../keyboards.js'
-import type { IAgentGateway } from '../../../ai/agentGateway.js'
+import type { IAgentGateway } from '../../../ai/gateway/index.js'
 import type { TelegramTextRoute } from '../../router/messageRouter.js'
 import { buildIntelligenceConversationResponse } from './intelligenceScenario.js'
 import {

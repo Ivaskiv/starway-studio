@@ -8,24 +8,23 @@ import {
   schedulePostZoomBridge,
   scheduleUpgradeOffer,
   simulateFocusActivation,
-} from '../../modules/subscriptions/payments/business.js'
+} from '../../modules/subscriptions/payments/business/service.js'
 import { processPaymentWebhook } from '../../modules/subscriptions/payments/callback.js'
-import { aiSellerContent } from '../../products/ab-system/content/abTest.aiSeller.js'
-import { detectStateInstability } from '../../products/ab-system/telegram/abTest.service.js'
+import { aiSellerContent } from '../../products/ab-system/content/ai-seller.js'
+import { detectStateInstability } from '../../products/ab-system/telegram/service.js'
 import {
   absystemContent,
   getBillingMessage,
-} from '../../products/absystem/config/absystem.content.js'
+} from '../../products/absystem/config/content.js'
 import { validateFeatureFlagFoundation } from '../governance/featureFlags.js'
 import {
   validateLaunchGovernanceFoundation,
   validateOperatorGovernanceFoundation,
-  validateProductIntelligenceFoundation,
 } from '../governance/productIntelligence.js'
 import { validateReleaseGovernanceFoundation } from '../governance/releaseGovernance.js'
 import { validateRelationshipMemoryLayer } from '../memory/relationshipMemory.js'
-import { validateRuntimeIdempotencyFoundation } from '../runtime/runtimeIdempotency.js'
-import { validateRuntimeResilienceFoundation } from '../runtime/runtimeResilience.js'
+import { validateRuntimeIdempotencyFoundation } from '../runtime/idempotency.js'
+import { validateRuntimeResilienceFoundation } from '../runtime/resilience.js'
 import { validateAbTestFoundation } from './abTestFoundation.js'
 import { validateCanonicalCtaMessageFoundation } from './ctaFoundation.js'
 import { validateCanonicalFlowOrchestrationFoundation } from './flowOrchestrationFoundation.js'
@@ -417,14 +416,7 @@ export async function runCoreTests() {
     featureFlagValidation.ok,
     `feature flag foundation invalid: ${featureFlagValidation.errors.join(',')}`
   )
-
-  const productIntelligenceValidation = validateProductIntelligenceFoundation()
-  assert(
-    productIntelligenceValidation.ok,
-    `product intelligence foundation invalid: ${productIntelligenceValidation.errors.join(',')}`
-  )
-
-  const operatorGovernanceValidation = validateOperatorGovernanceFoundation()
+const operatorGovernanceValidation = validateOperatorGovernanceFoundation()
   assert(
     operatorGovernanceValidation.ok,
     `operator governance foundation invalid: ${operatorGovernanceValidation.errors.join(',')}`

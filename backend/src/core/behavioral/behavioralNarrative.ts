@@ -1,4 +1,4 @@
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 
 import type { BehavioralSnapshot } from './behavioralSnapshot.js'
 import { buildBehavioralNarrative as buildBehavioralNarrativeText } from './buildBehavioralNarrative.js'

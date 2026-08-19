@@ -3,7 +3,7 @@ import type { AuthenticatedRequest } from '../../../types/globalTypes.js'
 import { resolveCanonicalTestResult } from '../../../core/state-machine/testFoundation.js'
 import { TestStateMachine } from './testStateMachine.js'
 import { TestStatus, type UserTestAnswer } from '../../../database/schema.js'
-import { loadUserUiSettings } from '../../ab-system/telegram/abTest.progress.js'
+import { loadUserUiSettings } from '../../ab-system/telegram/progress.js'
 import {
   getWelcomeTestPaymentFromUiSettings,
   isFocusSubscriptionActive,

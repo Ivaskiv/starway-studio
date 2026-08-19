@@ -6,7 +6,7 @@ import type { PaymentCallbackData } from '../subscriptions/types.js'
 
 import { handleBillingWebhook } from './billing.service.js'
 import { buildRequestFingerprint } from '../../core/state-machine/securityFoundation.js'
-import { claimRuntimeEventReplay, buildRuntimeTelemetry, withRuntimeAdvisoryLock } from '../../core/runtime/runtimeIdempotency.js'
+import { claimRuntimeEventReplay, buildRuntimeTelemetry, withRuntimeAdvisoryLock } from '../../core/runtime/idempotency.js'
 
 export async function billingWebhookHandler(req: Request, res: Response) {
   try {

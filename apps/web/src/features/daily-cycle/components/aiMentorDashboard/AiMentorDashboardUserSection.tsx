@@ -9,12 +9,12 @@ import JourneySection from '@/features/daily-cycle/components/JourneySection'
 import WheelMonthlyBoard from '@/features/wheel/components/WheelMonthlyBoard'
 import JournalPage from '@/features/journal/JournalPage'
 
-import type { AiMentorDashboardScreenState } from '../../hooks/useAiMentorDashboardScreenState'
+import type { DashboardState } from '../../hooks/dashboard/useDashboardState'
 
 import AiMentorDashboardMicrotasksTab from './AiMentorDashboardMicrotasksTab'
 
 type Props = {
-  state: AiMentorDashboardScreenState
+  state: DashboardState
 }
 
 export default function AiMentorDashboardUserSection({ state }: Props) {

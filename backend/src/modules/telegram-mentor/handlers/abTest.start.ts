@@ -1,4 +1,4 @@
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import {
   AB_TEST_CONTINUE_BUTTON_TEXT,
   AB_TEST_FOCUS_CTA_TEXT,
@@ -7,9 +7,9 @@ import {
   AB_TEST_RETAKE_BUTTON_TEXT,
 } from '@/products/ab-system/content/abTest.shared.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
-import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business.checkout.js'
+import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business/checkout.js'
 import { prisma } from '@/db/client.js'
-import { getUserAccessState } from '@/modules/subscriptions/payments/focus.access.js'
+import { getUserAccessState } from '@/modules/subscriptions/payments/focus-access.js'
 import { getUpcomingZoomBookingView } from '@/modules/zoom/service.js'
 import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'

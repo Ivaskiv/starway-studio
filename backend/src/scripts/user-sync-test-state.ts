@@ -3,12 +3,12 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { prisma } from '../db/client.js'
-import { findLinkedUserId } from '../modules/telegram-mentor/services/linking.service.js'
+import { findLinkedUserId } from '../modules/telegram-mentor/services/identity/linking.js'
 import {
   activateProductSubscription,
   type ActivationResult,
-} from '../modules/subscriptions/payments/paymentActivation.service.js'
-import { getUserAccessState } from '../modules/subscriptions/payments/focus.access.js'
+} from '../modules/subscriptions/payments/activation.js'
+import { getUserAccessState } from '../modules/subscriptions/payments/focus-access.js'
 import {
   getUpcomingZoomBookingView,
   registerAttendee,

@@ -16,7 +16,7 @@ import {
 import { validateOutput } from '@/modules/sales-assistant/sales-assistant.validation.js'
 import type { ModelProvider } from '@/modules/ai-assistant/promptCompiler.js'
 import { fromSalesAssistantInput, runPipeline } from '@/core/dna/index.js'
-import { executeCanonicalPromptAgent } from '@/modules/ai/agentGateway.js'
+import { executeCanonicalPromptAgent } from '@/modules/ai/gateway/index.js'
 
 // ─── re-export types ──────────────────────────────────────────────────────────
 export type { SalesAssistantGenerateBody, SalesAssistantWorkspaceResponse, UpdateSalesAssistantWorkspaceBody }

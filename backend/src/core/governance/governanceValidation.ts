@@ -8,9 +8,8 @@ import {
   type OperatorGovernanceSnapshot,
   validateLaunchGovernanceFoundation,
   validateOperatorGovernanceFoundation,
-  validateProductIntelligenceFoundation,
 } from './productIntelligence.js'
-import { buildRuntimeResilienceSnapshotFromCounts } from '../runtime/runtimeResilience.js'
+import { buildRuntimeResilienceSnapshotFromCounts } from '../runtime/resilience.js'
 import { resolveFeatureGate, validateFeatureFlagFoundation } from './featureFlags.js'
 
 type ValidationResult = {

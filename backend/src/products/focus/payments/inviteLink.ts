@@ -1,6 +1,6 @@
 import { prisma } from '../../../db/client.js'
-import { resolveFocusChannelInviteLink } from '../../../modules/subscriptions/payments/business.js'
-import { FOCUS_PRODUCT_CODES } from '../../../modules/subscriptions/payments/focus.access.js'
+import { resolveFocusChannelInviteLink } from '../../../modules/subscriptions/payments/business/service.js'
+import { FOCUS_PRODUCT_CODES } from '../../../modules/subscriptions/payments/focus-access.js'
 
 export async function createOnceInviteLink(chatId: string): Promise<string> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN

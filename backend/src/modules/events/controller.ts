@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import type { Prisma } from '@starway/db/prisma-client'
-import { trackEvent, trackLeadEnteredApp } from './service.js'
+import { trackEvent, trackLeadEnteredApp } from './index.js'
 import {
   buildCanonicalTestAnalyticsHooks,
   resolveCanonicalTestCurrentState,

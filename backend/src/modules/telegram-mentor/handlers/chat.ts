@@ -4,7 +4,7 @@ import { postAIChat } from '../api/client.js'
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleChat(ctx: Context, message: string) {

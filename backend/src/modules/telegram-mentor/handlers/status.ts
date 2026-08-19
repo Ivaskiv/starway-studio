@@ -1,11 +1,11 @@
 import type { Context } from 'telegraf'
 
 import { getAccessAwareAppReplyMarkupForContext } from './start.js'
-import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
+import { renderDecisionUnlessAllowed } from '../services/delivery/decision-transport.js'
 import { resolveBehavioralContinuity, type BehavioralContinuityResolution } from '../../../core/continuity/behavioralContinuity.js'
 import { buildAbsystemStatusFlow } from '../../../core/flow-builder/flowBuilder.js'
 import { deliverTelegramFlow } from '../../../core/transport/telegramTransport.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleStatus(ctx: Context) {

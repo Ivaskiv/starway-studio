@@ -10,7 +10,7 @@ import {
 } from './zoom.api';
 import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './zoom.types';
 import { getSessionDateLabel, getSessionIconBgClass, getSessionIconKey, getSessionMeta } from './zoom.utils';
-import ZoomCalendar from './ZoomCalendar';
+import ZoomCalendar from './components/calendar/Calendar';
 import { ZoomAvailabilityEditor } from './ZoomAvailabilityEditor';
 import { useAppSelector } from '@/app/hooks';
 import { useGetAttendeesQuery, useMarkAttendedMutation } from './services/zoom.api';

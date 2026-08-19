@@ -1,7 +1,7 @@
 import type { Prisma, Role } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
-import { mergeUsersById } from './identity.service.js'
+import { mergeUsersById } from './identity/service.js'
 import { UserCreationService, type UserCreationSource } from './userCreation.service.js'
 
 export interface ResolveIdentity {

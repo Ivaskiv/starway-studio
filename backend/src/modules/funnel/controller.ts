@@ -2,7 +2,7 @@
 
 import type { Response } from 'express';
 import { prisma } from '../../db/client.js';
-import * as funnelService from './service.js';
+import * as funnelService from './index.js';
 import { canOverrideFunnelOwner } from './policy.js';
 import type { AuthenticatedRequest, FunnelInput } from '../../types/globalTypes.js';
 

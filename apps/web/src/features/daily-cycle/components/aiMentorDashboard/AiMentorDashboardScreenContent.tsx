@@ -1,13 +1,13 @@
 import { ExpertStatsSection, Greeting } from '@/features/daily-cycle/components/DashboardChrome'
 
-import type { AiMentorDashboardScreenState } from '../../hooks/useAiMentorDashboardScreenState'
+import type { DashboardState } from '../../hooks/dashboard/useDashboardState'
 
 import AiMentorDashboardLevelUpCallout from './AiMentorDashboardLevelUpCallout'
 import AiMentorDashboardTodayGuardModal from './AiMentorDashboardTodayGuardModal'
 import AiMentorDashboardUserSection from './AiMentorDashboardUserSection'
 
 type Props = {
-  state: AiMentorDashboardScreenState
+  state: DashboardState
 }
 
 export default function AiMentorDashboardScreenContent({ state }: Props) {

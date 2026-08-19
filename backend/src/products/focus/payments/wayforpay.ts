@@ -4,7 +4,7 @@ import {
   buildEcosystemPaymentCheckoutUrl,
   simulateFocusActivation,
   type EcosystemPaymentPlanId,
-} from '../../../modules/subscriptions/payments/business.js'
+} from '../../../modules/subscriptions/payments/business/service.js'
 import { syncLifecycleForUser } from '../../../modules/flow-control/service.js'
 import { CheckoutSession, ProductPaymentProvider } from './payment.provider.js'
 

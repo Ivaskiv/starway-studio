@@ -1,10 +1,9 @@
-import type { NextFunction, Response } from 'express'
-import type { AuthenticatedRequest } from '../../../types/globalTypes.js'
-import type { UserRole } from '../../../types/globalTypes.js'
-import { getServerUser } from '../getServerUser.js'
-import { verifyTelegramInitData } from '../telegram.js'
+import type { NextFunction,Response } from 'express'
 import { buildRequestFingerprint } from '../../../core/state-machine/securityFoundation.js'
 import { prisma } from '../../../db/client.js'
+import type { AuthenticatedRequest,UserRole } from '../../../types/globalTypes.js'
+import { getServerUser } from '../server-user.js'
+import { verifyTelegramInitData } from '../telegram.js'
 
 // Middleware: перевірка JWT, присвоєння повного AuthUser
 export async function authRequired(

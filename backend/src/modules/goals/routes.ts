@@ -3,7 +3,7 @@
  * Goals Routes
  */
 
-import { authRequired } from '../../modules/auth/middleware/auth.js';
+import { authRequired } from '../auth/middleware/auth.js';
 import { requireClientAccess } from '../access/guard.js';
 import { requireBehavioralReadAccess } from '../../core/access/behavioralAccess.js';
 import { Router } from 'express';

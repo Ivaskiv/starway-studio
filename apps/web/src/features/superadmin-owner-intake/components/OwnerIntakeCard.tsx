@@ -119,7 +119,7 @@ export default function OwnerIntakeCard() {
             label="Telegram bot username"
             value={values.telegramBotName}
             onChange={(value) => updateField('telegramBotName', value)}
-            placeholder="@Starway_byNadya_Bot"
+            placeholder="@Test_ABsystem_bot"
           />
           <Field
             label="Telegram bot token"

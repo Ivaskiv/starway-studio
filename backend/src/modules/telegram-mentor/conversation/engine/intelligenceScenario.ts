@@ -1,4 +1,4 @@
-import type { IAgentGateway } from '../../../ai/agentGateway.js'
+import type { IAgentGateway } from '../../../ai/gateway/index.js'
 import type { Context } from 'telegraf'
 import {
   createConversationResponse,
@@ -9,9 +9,9 @@ import {
   appendTelegramConversationTurn,
   resolveTelegramSupportUrl,
   type TelegramIntelligenceMessageType,
-} from '../../services/intelligence.service.js'
-import { getTelegramAiRequestContext } from '../../services/requestContext.service.js'
-import type { TelegramAiRequestContext } from '../../services/requestContext.service.js'
+} from '../../services/context/intelligence.js'
+import { getTelegramAiRequestContext } from '../../services/context/request.js'
+import type { TelegramAiRequestContext } from '../../services/context/request.js'
 
 export interface IntelligenceScenarioInput {
   ctx: Context

@@ -6,7 +6,7 @@ import { prisma } from '../db/client.js'
 import {
   activateProductSubscription,
   type GrantSource,
-} from '../modules/subscriptions/payments/paymentActivation.service.js'
+} from '../modules/subscriptions/payments/activation.js'
 
 const FOCUS_PRODUCT_CODE = 'focus'
 const LEGACY_FOCUS_EXPIRES_AT = new Date('2027-07-20T23:59:59Z')

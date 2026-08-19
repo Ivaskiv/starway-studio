@@ -2,9 +2,9 @@
 // Сторінка /dashboard/sessions — рендериться коли юзер натискає "Сесії" в сайдбарі
 // Підключається в AppRoutes через lazy import
 
-import ZoomSchedule from "@/features/zoom/components/ZoomSchedule";
+import CalendarToolbar from "@/features/zoom/components/calendar/CalendarToolbar";
 
 
 export default function SessionsPage() {
-  return <ZoomSchedule />;
+  return <CalendarToolbar />;
 }

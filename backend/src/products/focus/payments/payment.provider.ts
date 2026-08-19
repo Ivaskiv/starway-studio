@@ -1,4 +1,4 @@
-import { EcosystemPaymentPlanId } from '../../../modules/subscriptions/payments/business.js'
+import { EcosystemPaymentPlanId } from '../../../modules/subscriptions/payments/business/service.js'
 
 export interface CheckoutSession {
   checkoutUrl: string

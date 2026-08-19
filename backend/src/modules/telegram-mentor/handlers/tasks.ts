@@ -6,11 +6,11 @@ import { completeMicroTask, listMicroTasksForUser } from '../../microTask/servic
 import { getUserIdByChatId } from '../session.js'
 import { taskDoneKeyboard } from '../keyboards.js'
 import { sendEntryOffer, sendStateMenu } from './start.js'
-import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
+import { renderDecisionUnlessAllowed } from '../services/delivery/decision-transport.js'
 import { isLmOnlyModeEnabled } from '../runtime.js'
 import { buildRecoveryCopy, resolveConversationProfile } from '../../../core/state-machine/conversationPresentation.js'
 import { resolveRelationshipMemory } from '../../../core/memory/relationshipMemory.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { planAck, planMessage } from '../conversation/delivery/planDelivery.js'
 
 export async function handleTasks(ctx: Context) {

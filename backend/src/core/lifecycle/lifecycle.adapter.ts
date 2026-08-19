@@ -1,6 +1,6 @@
 import { prisma } from '../../db/client.js'
 import { resolveUserLifecycle } from '../../modules/flow-control/service.js'
-import { hasActiveFocusSubscription } from '../../modules/subscriptions/payments/focus.access.js'
+import { hasActiveFocusSubscription } from '../../modules/subscriptions/payments/focus-access.js'
 
 export type CanonicalLifecycleState =
   | 'anonymous'

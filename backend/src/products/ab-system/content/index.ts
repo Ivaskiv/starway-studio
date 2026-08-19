@@ -1,5 +1,5 @@
 export * from './abTest.shared.js'
-export * from './abTest.aiSeller.js'
+export * from './ai-seller.js'
 export * from './abTest.questions.js'
 export * from './abTest.results.js'
 export * from './abTest.followups.js'

@@ -12,7 +12,7 @@ import {
   getWheelCooldown,
   getWheelHistory,
   scoresFromMap,
-} from './service.js'
+} from './index.js'
 import {
   generateWheelInsights,
 } from './ai.js'

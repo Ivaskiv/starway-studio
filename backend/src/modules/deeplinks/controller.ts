@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import type { Prisma } from '@starway/db/prisma-client'
 import type { AuthenticatedRequest } from '../../types/globalTypes.js'
-import { createSessionForUserId } from '../auth/auth.service.js'
+import { createSessionForUserId } from '../auth/service/index.js'
 import { resolveUserState } from '../telegram-mentor/handlers/start.js'
 import {
   buildTelegramDeepLink,
@@ -9,7 +9,7 @@ import {
   createTelegramBindingDeepLink,
   generateDeepLink,
   resolveDeepLinkToken,
-} from './service.js'
+} from './index.js'
 import type { DeepLinkAction, DeepLinkSource, DeepLinkTarget } from './types.js'
 
 const ALLOWED_ACTIONS: ReadonlySet<DeepLinkAction> = new Set([

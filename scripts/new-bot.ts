@@ -88,7 +88,7 @@ async function main() {
 
   // 1. Збір даних
   const displayName = await ask('Публічна назва бота (напр. Starway DNA): ')
-  const username = await ask('Username без @ (напр. Starway_DNA_Bot): ')
+  const username = await ask('Username без @ (напр. StarwayDNACoach_bot): ')
   const envPrefix = await ask('.env prefix (напр. COACH → COACH_BOT_TOKEN): ')
   const roleRaw = await ask('Роль доступу [USER/EXPERT/SUPERADMIN/ANY]: ')
   const needChannel =

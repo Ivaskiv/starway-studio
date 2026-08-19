@@ -1,10 +1,10 @@
 import type { Context } from 'telegraf'
 
 import { prisma } from '../../../db/client.js'
-import { absystemContent } from '@/products/absystem/config/absystem.content.js'
+import { absystemContent } from '@/products/absystem/config/content.js'
 import { getSession } from '../session.js'
 import { sendEntryOffer, sendStateMenu } from './start.js'
-import { renderDecisionUnlessAllowed } from '../services/decisionTransport.service.js'
+import { renderDecisionUnlessAllowed } from '../services/delivery/decision-transport.js'
 import { isLmOnlyModeEnabled } from '../runtime.js'
 import { resolveUserLifecycle } from '../../flow-control/service.js'
 import { resolveCentralLifecycleSnapshot } from '../../lifecycle/service.js'
