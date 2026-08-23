@@ -6,7 +6,9 @@ const isAdmin = (role?: string) =>
   role === Role.SUPERADMIN || role === Role.ADMIN
 
 const isExpertOrAdmin = (role?: string) =>
-  role === Role.EXPERT || role === Role.SUPERADMIN || role === Role.ADMIN
+  role === Role.EXPERT ||
+  role === Role.SUPERADMIN ||
+  role === Role.ADMIN
 
 export const guard = (req: AuthenticatedRequest, res: Response): boolean => {
   if (!req.user)               { res.status(401).json({ error: 'unauthorized' }); return true }

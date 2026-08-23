@@ -52,21 +52,29 @@ const {
   onTestCompletedMock: vi.fn(async () => undefined),
 }))
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('@/db/client.js', () => ({
   prisma: {
+    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        user: {
+          update: vi.fn(async () => undefined),
+        },
+      }),
+    ),
     user: { findFirst: vi.fn() },
     checkoutSession: { findFirst: vi.fn() },
     paymentLog: { findFirst: vi.fn() },
     productSubscription: { findFirst: vi.fn(), updateMany: vi.fn() },
+    telegramLink: { findFirst: vi.fn() },
   },
 }))
 
-vi.mock('../../../../core/state-machine/abTestFoundation.ts', () => ({
+vi.mock('@/core/state-machine/abTestFoundation.js', () => ({
   buildAbTestProgressPatch: buildAbTestProgressPatchMock,
   normalizeAbTestProgress: normalizeAbTestProgressMock,
 }))
 
-vi.mock('../../content/abTest.focus.ts', () => ({
+vi.mock('@/products/ab-system/content/abTest.focus.js', () => ({
   FOCUS_PAYMENT_ISSUE_COACH_MSG: vi.fn(() => ''),
   FOCUS_PAYMENT_ISSUE_NO_USER_MSG: '',
   FOCUS_PAYMENT_ISSUE_USER_MSG: '',
@@ -74,11 +82,13 @@ vi.mock('../../content/abTest.focus.ts', () => ({
   FOCUS_RESEND_NO_SUB_MSG: 'no-sub',
 }))
 
-vi.mock('../../content/abTest.shared.ts', () => ({
+vi.mock('@/products/ab-system/content/abTest.shared.js', () => ({
   AB_TEST_FOCUS_PAYMENT_CTA_1M: '1m',
   AB_TEST_FOCUS_PAYMENT_CTA_3M: '3m',
+  AB_TEST_FOCUS_PAYMENT_CTA_1Y: '1y',
   AB_TEST_FOCUS_PRICE_1M: '1m-price',
   AB_TEST_FOCUS_PRICE_3M: '3m-price',
+  AB_TEST_FOCUS_PRICE_1Y: '1y-price',
   AB_TEST_FOCUS_REAL_SITUATION_HEADER: 'header',
   AB_TEST_FOCUS_REAL_SITUATION_LINES: ['line'],
   AB_TEST_FOCUS_TARIFF_HEADER: 'tariff',
@@ -86,22 +96,22 @@ vi.mock('../../content/abTest.shared.ts', () => ({
   AB_TEST_FOCUS_WEEKLY_TEXT: 'weekly',
 }))
 
-vi.mock('../../content/abTest.results.ts', () => ({
+vi.mock('@/products/ab-system/content/abTest.results.js', () => ({
   BLOCK10_FOCUS: { text: '', blocks: [] },
 }))
 
-vi.mock('../views.ts', () => ({
+vi.mock('@/products/ab-system/telegram/views.js', () => ({
  splitTelegramContentBlocks: vi.fn(),
  sendTelegramContentChunk: sendTelegramContentChunkMock,
  renderAbTestPostEmailSubmitSequence: renderAbTestPostEmailSubmitSequenceMock,
 }))
 
-vi.mock('../progress.ts', () => ({
+vi.mock('@/products/ab-system/telegram/progress.js', () => ({
  loadAbTestProgress: loadAbTestProgressMock,
  saveAbTestProgress: saveAbTestProgressMock,
 }))
 
-vi.mock('../callback.ts', () => ({
+vi.mock('@/products/ab-system/telegram/callback.js', () => ({
  escapeHtml: vi.fn(),
  isTestPaymentEnabled: isTestPaymentEnabledMock,
  formatSubscriptionDate: vi.fn(),
@@ -110,7 +120,7 @@ vi.mock('../callback.ts', () => ({
  isValidEmail: isValidEmailMock,
 }))
 
-vi.mock('../../../../modules/telegram-mentor/keyboards.ts', () => ({
+vi.mock('@/modules/telegram-mentor/keyboards.js', () => ({
  getDevTestPaymentButton: getDevTestPaymentButtonMock,
 }))
 
@@ -139,17 +149,17 @@ vi.mock('@/modules/telegram-mentor/services/engagement/cta.js', () => ({
  hasTelegramCtaInteraction: vi.fn(),
 }))
 
-vi.mock('../scheduler.ts', () => ({
+vi.mock('@/products/ab-system/telegram/scheduler.js', () => ({
  scheduleFollowups: scheduleFollowupsMock,
 }))
 
-vi.mock('../../../../core/orchestrator/testOrchestrator.ts', () => ({
+vi.mock('@/core/orchestrator/testOrchestrator.js', () => ({
  testOrchestrator: {
  onTestCompleted: onTestCompletedMock,
  },
 }))
 
-vi.mock('../../../../modules/subscriptions/payments/business/service.ts', () => ({
+vi.mock('@/modules/subscriptions/payments/business/service.js', () => ({
  buildEcosystemPaymentCheckoutSession: buildCheckoutSessionMock,
 }))
 
@@ -166,7 +176,7 @@ vi.mock('@/modules/subscriptions/payments/coach-alert.js', () => ({
  findRelevantFocusCheckoutSession: findRelevantFocusCheckoutSessionMock,
 }))
 
-vi.mock('../../../../lib/telegram.ts', () => ({
+vi.mock('@/lib/telegram.js', () => ({
  coachBot: {
  telegram: {
  sendMessage: vi.fn(),
@@ -181,7 +191,7 @@ vi.mock('@/modules/events/service.js', () => ({
  trackEvent: vi.fn(),
 }))
 
-vi.mock('../../../../modules/telegram-mentor/conversation/delivery/planDelivery.ts', () => ({
+vi.mock('@/modules/telegram-mentor/conversation/delivery/planDelivery.js', () => ({
  planMessage: vi.fn(),
  planAck: planAckMock,
 }))
@@ -190,30 +200,30 @@ vi.mock('@/packages/abTestActions.js', () => ({
  AB_TEST_ACTIONS: {},
 }))
 
-vi.mock('../../../../modules/telegram-mentor/session.ts', () => ({
+vi.mock('@/modules/telegram-mentor/session.js', () => ({
  clearSession: vi.fn(),
  getSession: vi.fn(),
  updateSession: vi.fn(),
 }))
 
-vi.mock('../../../../modules/telegram-mentor/handlers/abTest.start.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/abTest.start.js', () => ({
  zoomSection: zoomSectionMock,
 }))
 
-vi.mock('../../../../modules/telegram-mentor/handlers/start.menu.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/start.menu.js', () => ({
  sendStateMenu: sendStateMenuMock,
 }))
 
-vi.mock('../../../../modules/telegram-mentor/handlers/aiMentor.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/aiMentor.js', () => ({
  handleAIMentor: handleAIMentorMock,
 }))
 
-vi.mock('../../../../modules/telegram-mentor/handlers/status.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/status.js', () => ({
  handleStatus: vi.fn(),
 }))
 
-import { prisma } from '../../../../db/client.ts'
-import { clearSession, getSession, updateSession } from '../../../../modules/telegram-mentor/session.ts'
+import { prisma } from '@/db/client.js'
+import { clearSession, getSession, updateSession } from '@/modules/telegram-mentor/session.js'
 import {
  handleAbTestEmailCaptureText,
  handleFocusPaymentAction,
@@ -222,7 +232,7 @@ import {
  handlePendingFocusPaymentEvidenceText,
  handleResendFocusBlock12,
  resolveFocusShortcutCallback,
-} from '../flow.ts'
+} from '../../../../../src/products/ab-system/telegram/flow.ts'
 
 function createCtx() {
  return {
@@ -326,6 +336,7 @@ describe('legacy focus callbacks for active users', () => {
           inline_keyboard: [
             [{ text: '1m', url: 'https://checkout.example' }],
             [{ text: '3m', url: 'https://checkout.example' }],
+            [{ text: '1y', url: 'https://checkout.example' }],
             [{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: 'https://checkout.example' }],
             [{ text: 'ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
           ],
@@ -359,6 +370,7 @@ describe('legacy focus callbacks for active users', () => {
           inline_keyboard: [
             [{ text: '1m', url: 'https://checkout.example' }],
             [{ text: '3m', url: 'https://checkout.example' }],
+            [{ text: '1y', url: 'https://checkout.example' }],
             [{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: 'https://checkout.example' }],
             [{ text: 'ТЕСТ 1 ГРН', url: 'https://secure.wayforpay.com/button/bcd1a02457187' }],
             [{ text: 'ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
@@ -373,6 +385,7 @@ describe('legacy focus callbacks for active users', () => {
     hasActiveFocusSubscriptionMock.mockResolvedValue(false)
     isTestPaymentEnabledMock.mockReturnValue(false)
     buildCheckoutSessionMock
+      .mockResolvedValueOnce({ checkoutUrl: 'https://checkout.example' })
       .mockResolvedValueOnce({ checkoutUrl: 'https://checkout.example' })
       .mockResolvedValueOnce({ checkoutUrl: 'https://checkout.example' })
       .mockRejectedValueOnce(new Error('TRIAL_ZOOM_ALREADY_USED'))
@@ -390,6 +403,7 @@ describe('legacy focus callbacks for active users', () => {
           inline_keyboard: [
             [{ text: '1m', url: 'https://checkout.example' }],
             [{ text: '3m', url: 'https://checkout.example' }],
+            [{ text: '1y', url: 'https://checkout.example' }],
             [{ text: 'ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
           ],
         },

@@ -14,8 +14,10 @@ import {
 import {
   AB_TEST_FOCUS_PAYMENT_CTA_1M,
   AB_TEST_FOCUS_PAYMENT_CTA_3M,
+  AB_TEST_FOCUS_PAYMENT_CTA_1Y,
   AB_TEST_FOCUS_PRICE_1M,
   AB_TEST_FOCUS_PRICE_3M,
+  AB_TEST_FOCUS_PRICE_1Y,
   AB_TEST_FOCUS_REAL_SITUATION_HEADER,
   AB_TEST_FOCUS_REAL_SITUATION_LINES,
   AB_TEST_FOCUS_TARIFF_HEADER,
@@ -62,7 +64,10 @@ export function buildCanonicalFocusPaymentPreviewBlocks() {
   return [
     { type: 'text' as const, text: 'Супер. Якщо відгукується — нижче можеш одразу вибрати формат участі.' },
     { type: 'text' as const, text: 'Обирай зручний варіант, і після оплати ми відкриємо тобі доступ у ФОКУС.' },
-    { type: 'pricing' as const, text: `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}` },
+    {
+      type: 'pricing' as const,
+      text: `${AB_TEST_FOCUS_PRICE_1M}\n${AB_TEST_FOCUS_PRICE_3M}\n${AB_TEST_FOCUS_PRICE_1Y}`,
+    },
   ]
 }
 
@@ -77,7 +82,8 @@ export async function resolveCanonicalFocusPaymentView(userId: string | null) {
       `${AB_TEST_FOCUS_TARIFF_HEADER}\n` +
       '\n' +
       `${AB_TEST_FOCUS_PRICE_1M}\n` +
-      AB_TEST_FOCUS_PRICE_3M
+      `${AB_TEST_FOCUS_PRICE_3M}\n` +
+      AB_TEST_FOCUS_PRICE_1Y
   const focusPaymentBlocks =
     BLOCK10_FOCUS.blocks
       ? [...BLOCK10_FOCUS.blocks]
@@ -185,11 +191,13 @@ export async function handleFocusPaymentAction(
 
   let url1m: string
   let url3m: string
+  let url1y: string
   let trialZoomUrl: string | null = null
   try {
-    const [session1m, session3m, trialZoomSession] = await Promise.all([
+    const [session1m, session3m, session1y, trialZoomSession] = await Promise.all([
       buildEcosystemPaymentCheckoutSession('focus', '1month', resolvedUserId, 'telegram'),
       buildEcosystemPaymentCheckoutSession('focus', '3month', resolvedUserId, 'telegram'),
+      buildEcosystemPaymentCheckoutSession('focus', '1year', resolvedUserId, 'telegram'),
       buildEcosystemPaymentCheckoutSession('trial_zoom', 'single', resolvedUserId, 'telegram')
         .catch((error) => {
           if (error instanceof Error && error.message === 'TRIAL_ZOOM_ALREADY_USED') {
@@ -201,6 +209,7 @@ export async function handleFocusPaymentAction(
     ])
     url1m = session1m.checkoutUrl
     url3m = session3m.checkoutUrl
+    url1y = session1y.checkoutUrl
     trialZoomUrl = trialZoomSession?.checkoutUrl ?? null
   } catch (error) {
     console.error('[FOCUS_PAY] dynamic_checkout_failed', error)
@@ -209,6 +218,7 @@ export async function handleFocusPaymentAction(
   }
   const cta1m = BLOCK10_FOCUS?.cta_1m ?? AB_TEST_FOCUS_PAYMENT_CTA_1M
   const cta3m = BLOCK10_FOCUS?.cta_3m ?? AB_TEST_FOCUS_PAYMENT_CTA_3M
+  const cta1y = AB_TEST_FOCUS_PAYMENT_CTA_1Y
   const {
     blocks: paymentBlocksToSend,
     progressForCheckout,
@@ -219,6 +229,7 @@ export async function handleFocusPaymentAction(
   const paymentInlineKeyboard = [
     [{ text: cta1m, url: url1m }],
     [{ text: cta3m, url: url3m }],
+    [{ text: cta1y, url: url1y }],
     ...(trialZoomUrl
       ? [[{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: trialZoomUrl }]]
       : []),

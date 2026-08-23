@@ -82,9 +82,6 @@ export async function getAvailablePrivateSlots(
 }
 
 export async function bookPrivateSlot(userId: string, sessionId: string) {
-  const isSubscriber = await isActiveFocusSubscriber(userId)
-  if (!isSubscriber) throw new Error('focus_subscription_required')
-
   const session = await prisma.zoomSession.findUnique({
     where: { id: sessionId },
     include: { _count: { select: { attendees: true } } },

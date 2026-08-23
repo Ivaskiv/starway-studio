@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  assertTelegramBotIdentity,
   describeLocalTelegramConsumerDisableReason,
   readExpectedTelegramBotUsername,
   readTelegramBotConfig,
@@ -8,13 +9,15 @@ import {
   requireTelegramBotConfig,
   resolveLocalTelegramConsumerState,
   resolveTelegramDeliveryMode,
-} from '../botConfig.ts'
+} from '../../../../../src/modules/telegram-mentor/runtime/botConfig.ts'
 
 const originalTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
 const originalTelegramBotUsername = process.env.TELEGRAM_BOT_USERNAME
 const originalTestTelegramBotToken = process.env.TEST_TELEGRAM_BOT_TOKEN
 const originalTestTelegramBotUsername = process.env.TEST_TELEGRAM_BOT_USERNAME
 const originalLegacyTestBotToken = process.env.TEST_BOT_TOKEN
+const originalContentBotToken = process.env.CONTENT_BOT_TOKEN
+const originalCoachBotToken = process.env.COACH_BOT_TOKEN
 const originalNodeEnv = process.env.NODE_ENV
 const originalTelegramWebhookUrl = process.env.TELEGRAM_WEBHOOK_URL
 const originalTelegramDeliveryMode = process.env.TELEGRAM_DELIVERY_MODE
@@ -35,6 +38,12 @@ afterEach(() => {
   if (originalLegacyTestBotToken === undefined) delete process.env.TEST_BOT_TOKEN
   else process.env.TEST_BOT_TOKEN = originalLegacyTestBotToken
 
+  if (originalContentBotToken === undefined) delete process.env.CONTENT_BOT_TOKEN
+  else process.env.CONTENT_BOT_TOKEN = originalContentBotToken
+
+  if (originalCoachBotToken === undefined) delete process.env.COACH_BOT_TOKEN
+  else process.env.COACH_BOT_TOKEN = originalCoachBotToken
+
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV
   else process.env.NODE_ENV = originalNodeEnv
 
@@ -46,30 +55,26 @@ afterEach(() => {
 })
 
 describe('telegram bot config', () => {
-  it('allows missing username while keeping the token required', () => {
-    process.env.NODE_ENV = 'test'
-    process.env.TEST_TELEGRAM_BOT_TOKEN = 'token'
-    delete process.env.TEST_TELEGRAM_BOT_USERNAME
-
-    expect(readTelegramBotConfig()).toEqual({
-      token: 'token',
-      username: '',
-      botLink: '',
-    })
-    expect(requireTelegramBotConfig('test')).toEqual({
-      token: 'token',
-      username: '',
-      botLink: '',
-    })
-  })
-
   it('still requires the telegram token', () => {
     process.env.NODE_ENV = 'test'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-token-that-must-not-be-used'
     delete process.env.TEST_TELEGRAM_BOT_TOKEN
     delete process.env.TEST_TELEGRAM_BOT_USERNAME
 
     expect(() => requireTelegramBotConfig('test')).toThrow(
       '[Telegram] Missing required env var during test: TEST_TELEGRAM_BOT_TOKEN',
+    )
+  })
+
+  it('rejects production runtime when the production token is missing even if the test token exists', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'test-token-that-must-not-be-used'
+    process.env.TEST_TELEGRAM_BOT_USERNAME = 'test_starway_bot'
+    delete process.env.TELEGRAM_BOT_TOKEN
+    process.env.TELEGRAM_BOT_USERNAME = 'Test_ABsystem_bot'
+
+    expect(() => requireTelegramBotConfig('production test')).toThrow(
+      '[Telegram] Missing required env var during production test: TELEGRAM_BOT_TOKEN',
     )
   })
 
@@ -95,9 +100,9 @@ describe('telegram bot config', () => {
   it('uses the configured production username as the expected bot identity', () => {
     process.env.NODE_ENV = 'production'
     process.env.TELEGRAM_BOT_TOKEN = 'prod-token'
-    process.env.TELEGRAM_BOT_USERNAME = 'prod_bot'
+    process.env.TELEGRAM_BOT_USERNAME = 'Test_ABsystem_bot'
 
-    expect(readExpectedTelegramBotUsername()).toBe('prod_bot')
+    expect(readExpectedTelegramBotUsername()).toBe('Test_ABsystem_bot')
   })
 
   it.each([
@@ -168,6 +173,40 @@ describe('telegram bot config', () => {
     ).toBe('TEST_TELEGRAM_BOT_TOKEN matches TELEGRAM_BOT_TOKEN')
   })
 
+  it('disables the local telegram consumer when test and content tokens match', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'shared-token'
+    process.env.CONTENT_BOT_TOKEN = 'shared-token'
+
+    expect(resolveLocalTelegramConsumerState()).toEqual({
+      enabled: false,
+      reason: 'same_as_content_token',
+    })
+    expect(
+      describeLocalTelegramConsumerDisableReason('same_as_content_token'),
+    ).toBe('TEST_TELEGRAM_BOT_TOKEN matches CONTENT_BOT_TOKEN')
+    expect(() => requireTelegramBotConfig('test')).toThrow(
+      '[Telegram] Invalid local test bot config during test: TEST_TELEGRAM_BOT_TOKEN matches CONTENT_BOT_TOKEN',
+    )
+  })
+
+  it('disables the local telegram consumer when test and coach tokens match', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'shared-token'
+    process.env.COACH_BOT_TOKEN = 'shared-token'
+
+    expect(resolveLocalTelegramConsumerState()).toEqual({
+      enabled: false,
+      reason: 'same_as_coach_token',
+    })
+    expect(
+      describeLocalTelegramConsumerDisableReason('same_as_coach_token'),
+    ).toBe('TEST_TELEGRAM_BOT_TOKEN matches COACH_BOT_TOKEN')
+    expect(() => requireTelegramBotConfig('test')).toThrow(
+      '[Telegram] Invalid local test bot config during test: TEST_TELEGRAM_BOT_TOKEN matches COACH_BOT_TOKEN',
+    )
+  })
+
   it('keeps production runtime enabled without local token checks', () => {
     process.env.NODE_ENV = 'production'
     process.env.TELEGRAM_BOT_TOKEN = 'prod-token'
@@ -179,7 +218,7 @@ describe('telegram bot config', () => {
     })
   })
 
-  it('resolves webhook mode when a webhook url exists', () => {
+  it('keeps local runtime on polling even when a webhook url exists', () => {
     process.env.NODE_ENV = 'development'
     process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com'
     delete process.env.TELEGRAM_DELIVERY_MODE
@@ -187,11 +226,82 @@ describe('telegram bot config', () => {
     expect(resolveTelegramDeliveryMode()).toBe('polling')
   })
 
-  it('keeps explicit polling override even when webhook url exists', () => {
+  it('ignores local webhook override and stays on polling', () => {
     process.env.NODE_ENV = 'development'
     process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com'
-    process.env.TELEGRAM_DELIVERY_MODE = 'polling'
+    process.env.TELEGRAM_DELIVERY_MODE = 'webhook'
 
     expect(resolveTelegramDeliveryMode()).toBe('polling')
+  })
+
+  it('keeps local expected identity anchored to test_starway_bot', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'local-token'
+    delete process.env.TEST_TELEGRAM_BOT_USERNAME
+
+    expect(readTelegramBotConfig()).toEqual({
+      token: 'local-token',
+      username: 'test_starway_bot',
+      botLink: 'https://t.me/test_starway_bot',
+    })
+    expect(readExpectedTelegramBotUsername()).toBe('test_starway_bot')
+  })
+
+  it('rejects bot username mismatch without exposing the token', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'local-secret-token'
+    process.env.TEST_TELEGRAM_BOT_USERNAME = 'test_starway_bot'
+
+    expect(() =>
+      assertTelegramBotIdentity('wrong_bot', undefined, 'identity test'),
+    ).toThrow(
+      '[TELEGRAM_BOT_MISMATCH] Expected @test_starway_bot from TEST_TELEGRAM_BOT_USERNAME but got @wrong_bot.',
+    )
+
+    try {
+      assertTelegramBotIdentity('wrong_bot', undefined, 'identity test')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      expect(message).not.toContain('local-secret-token')
+    }
+  })
+
+  it('rejects production bot username mismatch without exposing the token', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-secret-token'
+    process.env.TELEGRAM_BOT_USERNAME = 'Test_ABsystem_bot'
+
+    expect(() =>
+      assertTelegramBotIdentity('wrong_prod_bot', undefined, 'production identity test'),
+    ).toThrow(
+      '[TELEGRAM_BOT_MISMATCH] Expected @Test_ABsystem_bot from TELEGRAM_BOT_USERNAME but got @wrong_prod_bot.',
+    )
+
+    try {
+      assertTelegramBotIdentity('wrong_prod_bot', undefined, 'production identity test')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      expect(message).not.toContain('prod-secret-token')
+    }
+  })
+
+  it('accepts the correct local identity for test_starway_bot', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'local-token'
+    process.env.TEST_TELEGRAM_BOT_USERNAME = 'test_starway_bot'
+
+    expect(
+      assertTelegramBotIdentity('test_starway_bot', undefined, 'local success test'),
+    ).toBe('test_starway_bot')
+  })
+
+  it('accepts the correct production identity for Test_ABsystem_bot', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-token'
+    process.env.TELEGRAM_BOT_USERNAME = 'Test_ABsystem_bot'
+
+    expect(
+      assertTelegramBotIdentity('Test_ABsystem_bot', undefined, 'production success test'),
+    ).toBe('Test_ABsystem_bot')
   })
 })

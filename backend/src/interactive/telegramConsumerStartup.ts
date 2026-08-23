@@ -1,6 +1,7 @@
 import type { Telegraf } from 'telegraf'
 
 import { launchBot } from '../lib/telegram.js'
+import { assertTelegramBotIdentity } from '../modules/telegram-mentor/runtime/botConfig.js'
 import { syncTelegramWebhookContract } from './telegramWebhookSync.js'
 
 type RunningMode = 'webhook' | 'polling'
@@ -145,11 +146,7 @@ export async function startMainTelegramConsumer({
 }: MainTelegramConsumerInput): Promise<void> {
   const resolvedLogger = resolveLogger(logger)
   const me = await bot.telegram.getMe()
-  if (expectedUsername && me.username !== expectedUsername) {
-    throw new Error(
-      `[TELEGRAM_BOT_MISMATCH] Expected @${expectedUsername} but got @${me.username}.`,
-    )
-  }
+  assertTelegramBotIdentity(me.username, expectedUsername, 'telegram startup identity verification')
 
   resolvedLogger.log('[TELEGRAM_RUNTIME]', {
     env: process.env.NODE_ENV || 'development',

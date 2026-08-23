@@ -118,3 +118,26 @@ export async function scheduleFollowups(
 
   return nextProgress
 }
+
+export async function cancelPendingAbTestSalesFollowups(
+  userId: string
+): Promise<void> {
+  const timerIds = [
+    ...resolveAbTestFlowTimerIdsForStage('S3_TEST_RESULT'),
+    ...resolveAbTestFlowTimerIdsForStage('S4_FOCUS_INVITE'),
+    ...resolveAbTestFlowTimerIdsForStage('S5_PAYMENT'),
+  ]
+
+  if (!timerIds.length) return
+
+  await prisma.notificationJob.deleteMany({
+    where: {
+      type: resolveNotificationType(NotificationEvent.AB_TEST_FOLLOWUP),
+      status: 'PENDING',
+      payload: { path: ['userId'], equals: userId },
+      OR: timerIds.map((timerId) => ({
+        payload: { path: ['payload', 'flow_timer_id'], equals: timerId },
+      })),
+    },
+  })
+}

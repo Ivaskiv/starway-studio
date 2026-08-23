@@ -3,11 +3,13 @@ import type { AgentId, EngineeringTask, ExecutionStateSnapshot, IRuntimeLogger }
 
 export type { IPromptRegistry, ResolvedPrompt }
 
+export type PromptSourceOwnerId = AgentId | (string & {})
+
 export interface PromptSourceDefinition {
   id: string
   version: string
   filePath: string
-  ownerAgentIds: AgentId[]
+  ownerAgentIds: PromptSourceOwnerId[]
   canonical: boolean
   deprecated?: boolean
   defaultVersion?: boolean
@@ -19,7 +21,7 @@ export interface PromptLoaderInput {
 }
 
 export interface PromptCacheRecord extends ResolvedPrompt {
-  ownerAgentIds: AgentId[]
+  ownerAgentIds: PromptSourceOwnerId[]
   canonical: boolean
   deprecated: boolean
 }
@@ -33,7 +35,7 @@ export interface PromptInfo {
   id: string
   availableVersions: string[]
   defaultVersion: string
-  ownerAgentIds: AgentId[]
+  ownerAgentIds: PromptSourceOwnerId[]
   canonical: boolean
 }
 

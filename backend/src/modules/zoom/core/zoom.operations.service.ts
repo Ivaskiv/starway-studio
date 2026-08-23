@@ -5,7 +5,6 @@ import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import type { ZoomSession } from '../types.js'
 import { buildZoomCalendarUrl } from '../urls.js'
 import { syncChannelPost } from '../notifications/zoom.channel.service.js'
-import { cancelExistingReminders, getCoachReminderUserIds, rescheduleReminders, scheduleReminders } from '../notifications/zoom.reminders.service.js'
 
 function resolveZoomCalendarUrl(params?: { intent?: string | null; sessionId?: string | null }): string { return buildZoomCalendarUrl(params) }
 function canUseTelegramWebAppButton(url: string | null | undefined): boolean { return Boolean(url && url.startsWith('https://') && !url.includes('localhost') && !url.includes('127.0.0.1')) }
@@ -355,47 +354,8 @@ export async function afterZoomOperation(
     console.error('[afterZoomOp] processScheduleNotification:', err)
   )
 
-  if (operation === 'book') {
-    const reminderUserIds = [
-      ...new Set([
-        ...affectedUserIds,
-        ...(await getCoachReminderUserIds(session.expertId)),
-      ]),
-    ]
-    for (const userId of reminderUserIds) {
-      void scheduleReminders(userId, session).catch((err) =>
-        console.error('[afterZoomOp] scheduleReminders:', err)
-      )
-    }
-  }
 
-  if (operation === 'update' || operation === 'swap_accept') {
-    const reminderUserIds = [
-      ...new Set([
-        ...affectedUserIds,
-        ...(await getCoachReminderUserIds(session.expertId)),
-      ]),
-    ]
-    for (const userId of reminderUserIds) {
-      void rescheduleReminders(userId, session).catch((err) =>
-        console.error('[afterZoomOp] rescheduleReminders:', err)
-      )
-    }
-  }
 
-  if (operation === 'cancel' || operation === 'unbook') {
-    const reminderUserIds = [
-      ...new Set([
-        ...affectedUserIds,
-        ...(await getCoachReminderUserIds(session.expertId)),
-      ]),
-    ]
-    for (const userId of reminderUserIds) {
-      void cancelExistingReminders(userId, sessionId).catch((err) =>
-        console.error('[afterZoomOp] cancelExistingReminders:', err)
-      )
-    }
-  }
 
   if (params.coachNotify) {
     void notifyCoach(session.expertId, {

@@ -4,7 +4,7 @@ import {
   normalizeTelegramChatIdForBotApi,
   normalizeTelegramWebhookUrl,
   patchTelegramTransportFormatting,
-} from '../telegram.ts'
+} from '../../../src/lib/telegram.ts'
 
 describe('normalizeTelegramWebhookUrl', () => {
   it('appends the Telegram webhook path to a base origin', () => {
@@ -71,9 +71,13 @@ describe('patchTelegramTransportFormatting', () => {
 
     await bot.telegram.sendMessage('42', '**акцент**\n> цитата\nplain <>&')
 
-    expect(bot.original.sendMessage).toHaveBeenCalledWith('42', '<b>акцент</b>\n<blockquote>цитата</blockquote>\nplain &lt;&gt;&amp;', {
-      parse_mode: 'HTML',
-    })
+    expect(bot.original.sendMessage).toHaveBeenCalledWith(
+      '42',
+      '<b>акцент</b>\n\n<blockquote>цитата</blockquote>\n\nplain &lt;&gt;&amp;',
+      {
+        parse_mode: 'HTML',
+      },
+    )
   })
 
   it('preserves existing valid HTML markup', async () => {

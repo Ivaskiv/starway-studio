@@ -108,6 +108,12 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
   const handleSave = async () => {
     if (!canEdit || !currentContent || !isModified) return
 
+    if (agent.isSystem && !analysisResult) {
+      toast.error('Перед збереженням системного агента запусти AI-аналіз')
+      setActiveTab('analyze')
+      return
+    }
+
     try {
       const result = await createPromptVersion({
         name: agent.promptId,
@@ -221,7 +227,10 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
                 <Textarea
                   label="Content"
                   value={draftContent}
-                  onChange={(event) => setDraftContent(event.target.value)}
+                  onChange={(event) => {
+                    setDraftContent(event.target.value)
+                    setAnalysisResult(null)
+                  }}
                   size="lg"
                   className="bg-[var(--card)] font-mono"
                   rows={18}
@@ -292,7 +301,13 @@ export function AgentModal({ agent, canEdit, onClose }: Props) {
             variant="solid"
             color="accent"
             loading={isSaving}
-            disabled={!currentContent || !isModified || isLoading || Boolean(error)}
+            disabled={
+              !currentContent ||
+              !isModified ||
+              isLoading ||
+              Boolean(error) ||
+              (agent.isSystem && !analysisResult)
+            }
             onClick={() => void handleSave()}
           >
             ЗБЕРЕГТИ ВЕРСІЮ

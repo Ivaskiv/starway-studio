@@ -431,13 +431,12 @@ async function sendZoomReminder(
     : 'Переходь за посиланням.'
   const inlineKeyboard = isTwoHourReminder
     ? [[
-        { text: 'Записатись', web_app: { url: calendarUrl } },
-        { text: 'Відкрити календар', web_app: { url: fallbackCalendarUrl } },
+        { text: 'ВІДКРИТИ КАЛЕНДАР', web_app: { url: calendarUrl } },
       ]]
     : [[
         params.zoomLink
-          ? { text: 'Приєднатись', url: params.zoomLink }
-          : { text: 'Приєднатись', web_app: { url: fallbackCalendarUrl } },
+          ? { text: 'ПРИЄДНАТИСЬ', url: params.zoomLink }
+          : { text: 'ПРИЄДНАТИСЬ', web_app: { url: fallbackCalendarUrl } },
       ]]
 
   try {

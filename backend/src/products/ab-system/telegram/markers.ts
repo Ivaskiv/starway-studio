@@ -38,14 +38,14 @@ function readAbTestPaymentSuccessAt(settings: unknown): Date | null {
 
 function readFocusPlanIdFromOrderReference(
   orderReference: string | null | undefined,
-): 'welcome_test' | '1month' | '3month' | null {
+): 'welcome_test' | '1month' | '3month' | '1year' | null {
   const match = String(orderReference ?? '').trim().match(
-    /^focus_(welcome_test|1month|3month)_[0-9a-f-]{36}_\d+$/i,
+    /^focus_(welcome_test|1month|3month|1year)_[0-9a-f-]{36}_\d+$/i,
   )
 
   if (!match) return null
 
-  return match[1] as 'welcome_test' | '1month' | '3month'
+  return match[1] as 'welcome_test' | '1month' | '3month' | '1year'
 }
 
 async function finalizeAbTestPaymentSuccess(
@@ -78,7 +78,7 @@ async function finalizeAbTestPaymentSuccess(
       productCode: 'focus',
       source: 'webhook_fallback',
       amount: 1,
-      planMonths: planId === '3month' ? 3 : 1,
+      planMonths: planId === '3month' ? 3 : planId === '1year' ? 12 : 1,
       catalogPlanId: planId,
       paidAtOverride: paidAt,
       expiresAtOverride: expiresAt,

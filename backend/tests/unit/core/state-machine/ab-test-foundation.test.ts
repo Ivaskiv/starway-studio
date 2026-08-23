@@ -4,8 +4,10 @@ import {
   buildAbTestProgressPatch,
   createAbTestProgress,
   repairAbTestProgress,
+  resolveAbTestFlowTimerIdsForStage,
   validateAbTestProgress,
-} from '../abTestFoundation.ts'
+} from '../../../../src/core/state-machine/abTestFoundation.ts'
+import { CANONICAL_FLOW_TIMER_REGISTRY } from '../../../../src/core/state-machine/flowTimingFoundation.ts'
 
 describe('abTestFoundation question progress validation', () => {
   it('keeps the canonical q1-opened state resumable before the first answer', () => {
@@ -32,5 +34,25 @@ describe('abTestFoundation question progress validation', () => {
     expect(repaired.progress.status).toBe('active')
     expect(repaired.progress.stage).toBe('S2_TEST_QUESTIONS')
     expect(repaired.progress.answers).toEqual([])
+  })
+
+  it('keeps the canonical STATE dojim wave delays aligned with 24h/48h/72h/5d/7d', () => {
+    const timerIds = resolveAbTestFlowTimerIdsForStage('S4_FOCUS_INVITE')
+    const delays = timerIds.map((timerId) => CANONICAL_FLOW_TIMER_REGISTRY[timerId].delay_ms)
+
+    expect(timerIds).toEqual([
+      'RESULT_DOJIM_24H',
+      'RESULT_DOJIM_48H',
+      'RESULT_DOJIM_72H',
+      'RESULT_DOJIM_5D',
+      'RESULT_DOJIM_7D',
+    ])
+    expect(delays).toEqual([
+      24 * 60 * 60 * 1000,
+      48 * 60 * 60 * 1000,
+      72 * 60 * 60 * 1000,
+      5 * 24 * 60 * 60 * 1000,
+      7 * 24 * 60 * 60 * 1000,
+    ])
   })
 })

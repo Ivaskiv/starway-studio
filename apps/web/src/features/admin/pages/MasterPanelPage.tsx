@@ -95,8 +95,9 @@ export default function MasterPanelPage() {
   const normalizedRole = String(user?.role ?? '').toUpperCase()
   const isSuperAdmin = normalizedRole === 'SUPERADMIN' || user?.isSuperAdmin === true
   const isExpertRole = normalizedRole === 'EXPERT' || normalizedRole === 'ADMIN'
-  const canAccessMasterPanel = isSuperAdmin || isExpertRole
-  const canEditPrompts = isSuperAdmin || isExpertRole
+  const isCoachRole = normalizedRole === 'COACH'
+  const canAccessMasterPanel = isSuperAdmin || isExpertRole || isCoachRole
+  const canEditPrompts = isSuperAdmin || isExpertRole || isCoachRole
   const canEditNotifications = isSuperAdmin || isExpertRole
   const canManageNotifications = isSuperAdmin
   const canEditFunnels = isSuperAdmin || isExpertRole
@@ -407,7 +408,11 @@ export default function MasterPanelPage() {
       .filter((section) => section.items.length > 0)
   }, [activeTab, dynamicFunnelSidebarSections])
 
-  const roleBadgeLabel = isSuperAdmin ? 'Superadmin' : 'Expert'
+  const roleBadgeLabel = isSuperAdmin
+    ? 'Superadmin'
+    : isCoachRole
+      ? 'Coach'
+      : 'Expert'
 
   if (!canAccessMasterPanel) {
     return (
@@ -420,7 +425,7 @@ export default function MasterPanelPage() {
             Доступ обмежено
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-[var(--text-muted)]">
-            Цей модуль доступний лише для `SUPERADMIN` і `EXPERT`-ролей. Для звичайного користувача він прихований.
+            Цей модуль доступний для `SUPERADMIN`, `EXPERT` / `ADMIN` і `COACH`. Для звичайного користувача він прихований.
           </p>
         </div>
       </div>

@@ -10,6 +10,7 @@ import type {
   PromptInfo,
   PromptLookupContext,
   PromptRegistryDependencies,
+  PromptSourceOwnerId,
   PromptSourceDefinition,
   ResolvePromptByIdInput,
   ResolvedPrompt,
@@ -22,6 +23,37 @@ class NoopRuntimeLogger implements IRuntimeLogger {
   warn(): void {}
   error(): void {}
 }
+
+const EXECUTABLE_AGENT_IDS = new Set<AgentId>([
+  'project_manager',
+  'task_planning',
+  'implementation',
+  'code_review',
+  'bug_investigation',
+  'refactoring',
+  'release_readiness',
+  'smoke_test',
+  'echo_agent',
+  'summarizer_agent',
+  'classification_agent',
+  'extraction_agent',
+  'planning_agent',
+  'mentor_agent',
+  'assistant_agent',
+  'content_agent',
+  'sales_agent',
+  'coach_agent',
+  'funnel_agent',
+  'strategy_agent',
+  'product_agent',
+  'methodology_agent',
+  'ads_creative_agent',
+  'user_intelligence_agent',
+  'retention_agent',
+  'analytics_agent',
+  'finance_agent',
+  'tech_ai_agent',
+])
 
 export class PromptRegistry implements IPromptRegistry {
   private readonly logger: IRuntimeLogger
@@ -217,6 +249,9 @@ function indexCanonicalPromptIdsByAgentId(
     }
 
     for (const agentId of source.ownerAgentIds) {
+      if (!isExecutableAgentId(agentId)) {
+        continue
+      }
       const promptIds = grouped.get(agentId) ?? new Set<string>()
       promptIds.add(source.id)
       grouped.set(agentId, promptIds)
@@ -228,6 +263,10 @@ function indexCanonicalPromptIdsByAgentId(
 
 function pickDefaultSource(sources: PromptSourceDefinition[]): PromptSourceDefinition {
   return sources.find((source) => source.defaultVersion) ?? sources[0]
+}
+
+function isExecutableAgentId(value: PromptSourceOwnerId): value is AgentId {
+  return EXECUTABLE_AGENT_IDS.has(value as AgentId)
 }
 
 function buildCacheKey(promptId: string, version: string): string {

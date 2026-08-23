@@ -27,8 +27,8 @@ export async function scheduleReminders(
   session: { id: string; scheduledAt: Date; topic: string; requests: unknown }
 ): Promise<void> {
   const scheduledAt = new Date(session.scheduledAt)
-  const remind24h = new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000)
   const remind2h = new Date(scheduledAt.getTime() - 2 * 60 * 60 * 1000)
+  const remind5m = new Date(scheduledAt.getTime() - 5 * 60 * 1000)
   const now = new Date()
   const req =
     !session.requests ||
@@ -38,13 +38,13 @@ export async function scheduleReminders(
       : (session.requests as Record<string, unknown>)
 
   const jobs: Array<{
-    flowTimerId: 'ZOOM_REMINDER_24H' | 'ZOOM_REMINDER_2H'
+    flowTimerId: 'ZOOM_REMINDER_2H' | 'ZOOM_REMINDER_5M'
     runAt: Date
   }> = []
-  if (remind24h > now)
-    jobs.push({ flowTimerId: 'ZOOM_REMINDER_24H', runAt: remind24h })
   if (remind2h > now)
     jobs.push({ flowTimerId: 'ZOOM_REMINDER_2H', runAt: remind2h })
+  if (remind5m > now)
+    jobs.push({ flowTimerId: 'ZOOM_REMINDER_5M', runAt: remind5m })
 
   if (jobs.length === 0) {
     console.log('[scheduleReminders] всі часи в минулому, jobs не створено')

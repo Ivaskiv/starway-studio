@@ -1,6 +1,7 @@
 import { AB_TEST_LANDING_ROUTE } from '@/features/ab-test-landing/config'
 import { TOTAL_BALLS } from '../model/config'
-import type { AbTestProgressResponse
+import type {
+  AbTestProgressResponse,
   AbTestResult,
 } from '../model/types'
 import { useEffect } from 'react'

@@ -20,10 +20,12 @@ type AgentDefinition,
 type EngineeringTask,
 type ExecutionStateSnapshot,
 type IAIProvider,
-type IPromptLoader,
-type IRuntimeLogger,
-type PromptLoaderInput,
-} from '@starway/ai'
+    type IPromptLoader,
+    type PromptSourceDefinition,
+    type PromptSourceOwnerId,
+    type IRuntimeLogger,
+    type PromptLoaderInput,
+    } from '@starway/ai'
 import {
 AnthropicProvider,
 GeminiProvider,
@@ -297,7 +299,7 @@ export function resolveRepositoryPromptsDir(): string {
   )
 }
 
-export function buildGatewayPromptSources() {
+export function buildGatewayPromptSources(): PromptSourceDefinition[] {
   const promptsDir = resolveRepositoryPromptsDir()
   const defaultSources = DEFAULT_RUNTIME_PROMPT_SOURCES.map((source) => ({
     ...source,
@@ -308,30 +310,53 @@ export function buildGatewayPromptSources() {
   return [
     ...defaultSources,
     buildPromptAlias(
+      'marketing-analyst-prompt',
+      'marketing_analyst',
+      path.resolve(promptsDir, '../docs/agents/ai-strategist/business-model-full.md')
+    ),
+    buildPromptAlias(
       'assistant-agent-prompt',
       'assistant_agent',
-      mentorPromptFilePath
+      path.resolve(promptsDir, '../docs/agents/ai-assistant-bot/00-SURGICAL-SYSTEM-UPDATE.md')
     ),
     buildPromptAlias(
       'content-agent-prompt',
       'content_agent',
-      mentorPromptFilePath
+      path.resolve(promptsDir, '../docs/agents/ai-content/dna-content-generator-offer.md')
     ),
-    buildPromptAlias('sales-agent-prompt', 'sales_agent', mentorPromptFilePath),
-    buildPromptAlias('coach-agent-prompt', 'coach_agent', mentorPromptFilePath),
+    buildPromptAlias(
+      'trend-radar-prompt',
+      'trend_radar',
+      path.resolve(promptsDir, '../docs/agents/ai-content/SKILL-output-engine.md')
+    ),
+    buildPromptAlias(
+      'sales-agent-prompt',
+      'sales_agent',
+      path.resolve(promptsDir, '../docs/agents/ai-seller/ai-seller-system-prompt.md')
+    ),
     buildPromptAlias(
       'funnel-agent-prompt',
       'funnel_agent',
-      mentorPromptFilePath
+      path.resolve(promptsDir, '../docs/agents/ai-funnel-assistant/README.md')
+    ),
+    buildPromptAlias(
+      'zoom-recap-prompt',
+      'zoom_recap',
+      path.resolve(promptsDir, '../docs/agents/ai-mentor/focus-course-materials.md')
+    ),
+    buildPromptAlias(
+      'coach-agent-prompt',
+      'coach_agent',
+      path.resolve(promptsDir, '../docs/client/svoia-nadya/SKILL-coach.md')
     ),
   ]
 }
 
 function buildPromptAlias(
   id: string,
-  ownerAgentId: AgentDefinition['id'],
+  ownerAgentId: PromptSourceOwnerId,
   filePath: string
-) {
+): PromptSourceDefinition {
   return {
     id,
     version: '1.0.0',
