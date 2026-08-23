@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const processEcosystemPaymentMock = vi.fn()
+const sendOpsTelegramMessageMock = vi.fn()
 
 vi.mock('@/lib/payments/registry.js', () => ({
   findByAmount: vi.fn(() => null),
 }))
 
-vi.mock('../../../ai-mentor/helpers.ts', () => ({
+vi.mock('@/modules/ai-mentor/helpers.js', () => ({
   ensureUserExpertId: vi.fn(async () => 'expert-1'),
 }))
 
@@ -18,12 +19,16 @@ vi.mock('../../../zoom/service.ts', () => ({
   confirmZoomSwapPaymentByOrderRef: vi.fn(),
 }))
 
-vi.mock('../business/service.ts', () => ({
+vi.mock('@/modules/subscriptions/payments/business/service.js', () => ({
   processEcosystemPayment: (...args: unknown[]) => processEcosystemPaymentMock(...args),
   processPayment: vi.fn(),
 }))
 
-import { processPaymentWebhook } from '../callback/processing.ts'
+vi.mock('@/lib/telegram.js', () => ({
+  sendOpsTelegramMessage: (...args: unknown[]) => sendOpsTelegramMessageMock(...args),
+}))
+
+import { processPaymentWebhook } from '@/modules/subscriptions/payments/callback/processing.ts'
 
 describe('processPaymentWebhook', () => {
   const userId = '11111111-1111-4111-8111-111111111111'
@@ -55,6 +60,7 @@ describe('processPaymentWebhook', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    sendOpsTelegramMessageMock.mockResolvedValue(true)
     processEcosystemPaymentMock.mockResolvedValue({
       status: 'approved',
       userId,
@@ -128,6 +134,12 @@ describe('processPaymentWebhook', () => {
         }),
       }),
     )
+    expect(sendOpsTelegramMessageMock).toHaveBeenCalledWith(
+      expect.stringContaining('TRIAL_ZOOM_PAID'),
+    )
+    expect(sendOpsTelegramMessageMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('FOCUS_PAID'),
+    )
   })
 
   it('rejects an approved callback with the wrong amount before PAID is written', async () => {
@@ -184,5 +196,45 @@ describe('processPaymentWebhook', () => {
     })
     expect(processEcosystemPaymentMock).not.toHaveBeenCalled()
     expect(db.paymentLog.create).not.toHaveBeenCalled()
+    expect(sendOpsTelegramMessageMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps FOCUS_PAID ops semantics for canonical focus payments', async () => {
+    const focusPayRef = 'focus_1year_11111111-1111-4111-8111-111111111111_456'
+    const db = createDb()
+    db.checkoutSession.findFirst.mockResolvedValueOnce({
+      amount: 1,
+      currency: 'UAH',
+      userId,
+      productCode: 'focus',
+    })
+    processEcosystemPaymentMock.mockResolvedValueOnce({
+      status: 'approved',
+      userId,
+      productId: 'focus',
+      enrollmentId: null,
+      expertId: 'expert-1',
+    })
+
+    const result = await processPaymentWebhook(
+      {
+        order_reference: focusPayRef,
+        amount: 1,
+        currency: 'UAH',
+        clientAccountId: userId,
+        transaction_status: 'Approved',
+      },
+      db,
+    )
+
+    expect(result).toMatchObject({
+      duplicate: false,
+      scope: 'ecosystem',
+      productId: 'focus',
+      planId: '1year',
+    })
+    expect(sendOpsTelegramMessageMock).toHaveBeenCalledWith(
+      expect.stringContaining('FOCUS_PAID'),
+    )
   })
 })

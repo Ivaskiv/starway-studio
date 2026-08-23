@@ -124,13 +124,15 @@ export class TelegramConversationRenderer {
     }
 
     for (const card of [...response.cards].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+      const shouldUseResponseButtons = !response.text && !card.buttons?.length
+      const cardButtons = shouldUseResponseButtons ? response.buttons : (card.buttons ?? [])
       if (card.kind === 'edit') {
         await planMessage(
           ctx,
           'ctx.editMessageText',
           'conversation_engine_edit',
           card.text,
-          mapButtonsToReplyMarkup(card.buttons ?? []),
+          mapButtonsToReplyMarkup(cardButtons),
           card.parseMode,
         )
       } else {
@@ -139,7 +141,7 @@ export class TelegramConversationRenderer {
           'ctx.reply',
           'conversation_engine_card',
           card.text,
-          mapButtonsToReplyMarkup(card.buttons ?? []),
+          mapButtonsToReplyMarkup(cardButtons),
           card.parseMode,
         )
       }
@@ -208,11 +210,13 @@ export class TelegramConversationRenderer {
     }
 
     for (const card of [...response.cards].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+      const shouldUseResponseButtons = !response.text && !card.buttons?.length
+      const cardButtons = shouldUseResponseButtons ? response.buttons : (card.buttons ?? [])
       const sent = await sendDedupedTelegramMessage(chatId, card.text, {
         ...(card.parseMode ? { parse_mode: card.parseMode } : {}),
         link_preview_options: { is_disabled: true },
-        ...(card.buttons?.length
-          ? { reply_markup: mapButtonsToReplyMarkup(card.buttons) }
+        ...(cardButtons.length
+          ? { reply_markup: mapButtonsToReplyMarkup(cardButtons) }
           : {}),
       }, transportBot)
       rendered = rendered || sent

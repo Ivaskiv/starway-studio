@@ -674,9 +674,18 @@ export async function processPaymentWebhook(
     })
 
     if (result.status === 'approved' && resolvedUserId) {
-      void sendOpsTelegramMessage(
-        `✅ FOCUS_PAID | User: ${resolvedUserId} | Plan: ${target.planId} | Amount: €${amount}`,
-      )
+      const opsEvent =
+        target.productId === 'trial_zoom'
+          ? 'TRIAL_ZOOM_PAID'
+          : target.productId === 'focus'
+            ? 'FOCUS_PAID'
+            : null
+
+      if (opsEvent) {
+        void sendOpsTelegramMessage(
+          `✅ ${opsEvent} | User: ${resolvedUserId} | Plan: ${target.planId} | Amount: €${amount}`,
+        )
+      }
     }
 
     return {

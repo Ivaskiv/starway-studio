@@ -146,8 +146,9 @@ vi.mock('@/modules/zoom/urls.js', () => ({
 import {
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
   AB_TEST_SCREENSHOT_URLS,
+  AB_TEST_VIDEO_URLS,
   telegramBlock,
-} from '../../content/abTest.shared.ts'
+} from '../../../../../src/products/ab-system/content/abTest.shared.ts'
 import {
   dispatchAbTestResultSequence,
   dispatchAbTestPracticeSequence,
@@ -156,9 +157,9 @@ import {
   sendTelegramContentChunk,
   sendQuestionDirect,
   sendResultSnapshot,
-} from '../views.ts'
-import { handleShowResult } from '../handler.ts'
-import { handleAbTestCallback } from '../service.ts'
+} from '../../../../../src/products/ab-system/telegram/views.ts'
+import { handleShowResult } from '../../../../../src/products/ab-system/telegram/handler.ts'
+import { handleAbTestCallback } from '../../../../../src/products/ab-system/telegram/service.ts'
 import { getUpcomingZoomBookingView } from '@/modules/zoom/service.js'
 
 function createCtx() {
@@ -192,6 +193,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    process.env.PUBLIC_API_URL = 'https://api.starway.test'
     mockWithRuntimeAdvisoryLock.mockImplementation(async (_input: unknown, task: () => Promise<unknown>) => ({
       acquired: true,
       value: await task(),
@@ -545,7 +547,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledWith(
       '42',
-      AB_TEST_SCREENSHOT_URLS.state_review,
+      'https://api.starway.test/deliverables/focus-review-state.png',
       expect.objectContaining({
         parse_mode: 'HTML',
       }),
@@ -554,6 +556,123 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     const sentMessages = JSON.stringify(vi.mocked(ctx.telegram.sendMessage).mock.calls)
     expect(sentMessages).not.toContain(AB_TEST_SCREENSHOT_URLS.state_review)
     expect(sentMessages).not.toContain('drive.google.com')
+  })
+
+  it('resolves the STATE Neonila screenshot deliverable to an absolute https URL before sendPhoto', async () => {
+    const ctx = createCtx()
+
+    await sendTelegramContentChunk(
+      ctx as never,
+      '42',
+      '',
+      [telegramBlock.image('/deliverables/focus-review-state.png')],
+      { parseMode: 'HTML' },
+    )
+
+    expect(ctx.telegram.sendPhoto).toHaveBeenCalledWith(
+      '42',
+      'https://api.starway.test/deliverables/focus-review-state.png',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+
+    const [, resolvedUrl] = ctx.telegram.sendPhoto.mock.calls[0]
+    const parsed = new URL(String(resolvedUrl))
+    expect(parsed.protocol).toBe('https:')
+    expect(parsed.hostname).toBe('api.starway.test')
+  })
+
+  it('delivers the Neonila review header to the final send owner as formatted HTML text without raw markdown markers', async () => {
+    const ctx = createCtx()
+
+    const promise = dispatchAbTestPracticeSequence(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey: 'state',
+      firstName: 'Vira',
+    })
+
+    await vi.runAllTimersAsync()
+    await promise
+
+    expect(vi.mocked(ctx.telegram.sendMessage).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          '42',
+          'Хочу показати тобі повідомлення від Неоніли.\nВона написала це після Zoom-розбору — про те, як перестала давати своєму стану керувати собою.',
+          expect.objectContaining({ parse_mode: 'HTML' }),
+        ],
+      ]),
+    )
+    expect(JSON.stringify(vi.mocked(ctx.telegram.sendMessage).mock.calls)).not.toContain(
+      '**Хочу показати тобі повідомлення від Неоніли.**',
+    )
+  })
+
+  it('sends the Nadya intro video in step 4 before the existing voice delivery', async () => {
+    const ctx = createCtx()
+
+    const promise = dispatchAbTestResultSequence(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey: 'state',
+      firstName: 'Vira',
+      deliverySource: 'show_result',
+    })
+
+    await vi.runAllTimersAsync()
+    await promise
+
+    expect(vi.mocked(ctx.telegram.sendVideo)).toHaveBeenCalledWith(
+      '42',
+      'https://api.starway.test/deliverables/focus-nadya.mp4',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+    expect(vi.mocked(ctx.telegram.sendVoice)).toHaveBeenCalledWith(
+      '42',
+      expect.any(String),
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+
+    const firstVideoCall = vi.mocked(ctx.telegram.sendVideo).mock.invocationCallOrder[0]
+    const firstVoiceCall = vi.mocked(ctx.telegram.sendVoice).mock.invocationCallOrder[0]
+    expect(firstVideoCall).toBeLessThan(firstVoiceCall)
+  })
+
+  it('sends the Focus presentation video before the first practice text block', async () => {
+    const ctx = createCtx()
+
+    const promise = dispatchAbTestPracticeSequence(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey: 'state',
+      firstName: 'Vira',
+    })
+
+    await vi.runAllTimersAsync()
+    await promise
+
+    expect(vi.mocked(ctx.telegram.sendVideo)).toHaveBeenCalledWith(
+      '42',
+      'https://api.starway.test/deliverables/focus-presentation.mp4',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+
+    const firstVideoCall = vi.mocked(ctx.telegram.sendVideo).mock.calls.findIndex(
+      ([, assetKey]) => assetKey === 'https://api.starway.test/deliverables/focus-presentation.mp4',
+    )
+    const practiceMessageCall = vi.mocked(ctx.telegram.sendMessage).mock.calls.findIndex(
+      ([, text]) =>
+        typeof text === 'string' &&
+        text.includes('<b>ФОКУС</b> — це зустріч раз на тиждень.'),
+    )
+
+    expect(firstVideoCall).toBeGreaterThanOrEqual(0)
+    expect(practiceMessageCall).toBeGreaterThanOrEqual(0)
+    expect(
+      vi.mocked(ctx.telegram.sendVideo).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(ctx.telegram.sendMessage).mock.invocationCallOrder[practiceMessageCall],
+    )
   })
 
   it('propagates sendPhoto failures instead of marking the review step as delivered', async () => {
@@ -642,6 +761,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
 describe('canonical telegram formatter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    process.env.PUBLIC_API_URL = 'https://api.starway.test'
   })
 
   it('formats accent markdown in text blocks without leaking raw **', async () => {
@@ -694,7 +814,7 @@ describe('canonical telegram formatter', () => {
 
     expect(ctx.telegram.sendPhoto).toHaveBeenCalledWith(
       '42',
-      AB_TEST_SCREENSHOT_URLS.state_review,
+      'https://api.starway.test/deliverables/focus-review-state.png',
       expect.objectContaining({
         caption: '<b>Хочу показати тобі повідомлення</b>',
         parse_mode: 'HTML',
@@ -717,6 +837,42 @@ describe('canonical telegram formatter', () => {
     expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
       '42',
       '<b>1 місяць — 33 €</b>',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+  })
+
+  it('preserves final telegram_flow paragraph spacing for focus practice blocks', async () => {
+    const ctx = createCtx()
+
+    await sendTelegramContentChunk(
+      ctx as never,
+      '42',
+      '',
+      [telegramBlock.text('Заголовок\n• item 1\n• item 2\nФінальний абзац')],
+      { parseMode: 'HTML' },
+    )
+
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
+      '42',
+      'Заголовок\n\n• item 1\n• item 2\n\nФінальний абзац',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+  })
+
+  it('resolves relative deliverables to the runtime public origin before final video send', async () => {
+    const ctx = createCtx()
+
+    await sendTelegramContentChunk(
+      ctx as never,
+      '42',
+      '',
+      [telegramBlock.video(AB_TEST_VIDEO_URLS.nadya_intro)],
+      { parseMode: 'HTML' },
+    )
+
+    expect(ctx.telegram.sendVideo).toHaveBeenCalledWith(
+      '42',
+      'https://api.starway.test/deliverables/focus-nadya.mp4',
       expect.objectContaining({ parse_mode: 'HTML' }),
     )
   })

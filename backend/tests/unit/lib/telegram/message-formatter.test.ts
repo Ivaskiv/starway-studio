@@ -8,10 +8,15 @@ import {
   formatTelegramMessage,
   joinBlocks,
   sendTelegramDocument,
-    sendTelegramMessage,
+  sendTelegramMessage,
   sendTelegramPhoto,
   sendTelegramVoice,
-} from '../messageFormatter.ts'
+} from '@/lib/telegram/messageFormatter.js'
+import { resolveAbTestFollowupCopy } from '@/products/ab-system/content/abTest.followups.js'
+import {
+  compactFocusDojimBlocks,
+  renderFocusDojimBlock,
+} from '@/services/notifications/NotificationService.telegram.js'
 
 describe('messageFormatter', () => {
   it('bold escapes dynamic values', () => {
@@ -49,6 +54,74 @@ describe('messageFormatter', () => {
     expect(formatTelegramMessage('> Це теж цитата').text).toBe('<blockquote>Це теж цитата</blockquote>')
   })
 
+  it('adds a single blank line between logical paragraphs', () => {
+    expect(formatTelegramMessage('Заголовок\nАбзац 1\nАбзац 2').text).toBe(
+      'Заголовок\n\nАбзац 1\n\nАбзац 2',
+    )
+  })
+
+  it('keeps existing paragraph spacing idempotent', () => {
+    expect(formatTelegramMessage('Заголовок\n\nАбзац 1\n\nАбзац 2').text).toBe(
+      'Заголовок\n\nАбзац 1\n\nАбзац 2',
+    )
+  })
+
+  it('adds a blank line before bullet items while keeping list rows compact', () => {
+    expect(formatTelegramMessage('Список:\n• один\n• два').text).toBe(
+      'Список:\n\n• один\n• два',
+    )
+  })
+
+  it('adds a blank line after bullet lists before the next prose paragraph', () => {
+    expect(formatTelegramMessage('Список:\n• один\n• два\nФінальний абзац').text).toBe(
+      'Список:\n\n• один\n• два\n\nФінальний абзац',
+    )
+  })
+
+  it('keeps bold bullet rows compact in final html payloads', async () => {
+    const sendMessage = vi.fn(async () => ({ message_id: 9 }))
+
+    await sendTelegramMessage(
+      { sendMessage },
+      '42',
+      {
+        text: '<b>У ФОКУС ти отримуєш:</b>\n<b>• item 1</b>\n<b>• item 2</b>\nФінальний абзац',
+        parseMode: 'HTML',
+      },
+    )
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      '42',
+      '<b>У ФОКУС ти отримуєш:</b>\n\n<b>• item 1</b>\n<b>• item 2</b>\n\nФінальний абзац',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+  })
+
+  it('keeps bold pricing rows compact in final html payloads', async () => {
+    const sendMessage = vi.fn(async () => ({ message_id: 10 }))
+
+    await sendTelegramMessage(
+      { sendMessage },
+      '42',
+      {
+        text: '<b>1 місяць — 33 €</b>\n<b>3 місяці — 69 € (23 € на місяць)</b>\n<b>1 рік — 229 € (19 € на місяць)</b>',
+        parseMode: 'HTML',
+      },
+    )
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      '42',
+      '<b>1 місяць — 33 €</b>\n<b>3 місяці — 69 € (23 € на місяць)</b>\n<b>1 рік — 229 € (19 € на місяць)</b>',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+  })
+
+  it('normalizes spacing for safe html input without breaking tags', () => {
+    expect(formatTelegramCaption('<b>Заголовок</b>\nРядок 1\n<blockquote>Цитата</blockquote>', 'HTML')?.text).toBe(
+      '<b>Заголовок</b>\n\nРядок 1\n\n<blockquote>Цитата</blockquote>',
+    )
+  })
+
   it('preserves preformatted block semantics for pricing and testimonials', () => {
     expect(
       formatTelegramMessage({
@@ -56,6 +129,85 @@ describe('messageFormatter', () => {
         preformatted: true,
       }).text,
     ).toBe('<b>12 000 грн</b>\n\n<blockquote>Відгук після практики</blockquote>')
+  })
+
+  it('normalizes preformatted semantic paragraphs with exactly one blank line', () => {
+    expect(
+      formatTelegramMessage({
+        text: 'Абзац 1.\nАбзац 2.',
+        preformatted: true,
+      }).text,
+    ).toBe('Абзац 1.\n\nАбзац 2.')
+  })
+
+  it('keeps pricing lines compact while separating body and offer blocks', () => {
+    expect(
+      formatTelegramMessage({
+        text: [
+          'Основний текст.',
+          'ФОКУС | живі Zoom-розбори AB System.',
+          '1 місяць — 33 €.',
+          '3 місяці — 69 € (23 € на місяць).',
+          '1 рік — 229 € (19 € на місяць).',
+        ].join('\n'),
+        preformatted: true,
+      }).text,
+    ).toBe(
+      [
+        'Основний текст.',
+        '',
+        'ФОКУС | живі Zoom-розбори AB System.',
+        '',
+        '1 місяць — 33 €.',
+        '3 місяці — 69 € (23 € на місяць).',
+        '1 рік — 229 € (19 € на місяць).',
+      ].join('\n'),
+    )
+  })
+
+  it('is idempotent for preformatted telegram text', () => {
+    const first = formatTelegramMessage({
+      text: 'Абзац 1.\nАбзац 2.\n1 місяць — 33 €.\n3 місяці — 69 € (23 € на місяць).',
+      preformatted: true,
+    })
+    const second = formatTelegramMessage({
+      text: first.text,
+      preformatted: true,
+    })
+
+    expect(second).toEqual(first)
+  })
+
+  it('renders the final STATE dojim 24h payload with paragraph and pricing separators', () => {
+    const copy = resolveAbTestFollowupCopy('RESULT_DOJIM_24H', 'state', 'v2', {})
+    const block = compactFocusDojimBlocks((copy.blocks ?? []).filter((candidate) => candidate.type !== 'cta'))[0]
+
+    expect(block?.type).toBe('text')
+
+    const rendered = renderFocusDojimBlock(block!)
+    const formatted = formatTelegramMessage({
+      text: rendered ?? '',
+      preformatted: true,
+    })
+
+    expect(formatted.text).toContain('ти вже побачила свій результат у тесті.\n\nТи впізнала цей стан')
+    expect(formatted.text).toContain('що забирає сили без результату.\n\nФОКУС | живі Zoom-розбори AB System.')
+    expect(formatted.text).toContain('ФОКУС | живі Zoom-розбори AB System.\n\n1 місяць — 33 €.\n3 місяці — 69 € (23 € на місяць).\n1 рік — 229 € (19 € на місяць).')
+  })
+
+  it('removes an unwanted leading dot from GOAL dojim payloads', () => {
+    const copy = resolveAbTestFollowupCopy('RESULT_DOJIM_24H', 'goal', 'v2', {})
+    const block = compactFocusDojimBlocks((copy.blocks ?? []).filter((candidate) => candidate.type !== 'cta'))[0]
+    const rendered = renderFocusDojimBlock(block!)
+    const formatted = formatTelegramMessage({
+      text: rendered ?? '',
+      preformatted: true,
+    })
+
+    expect(copy.body.startsWith('. ')).toBe(false)
+    expect(block?.type).toBe('text')
+    expect(block?.text.startsWith('. ')).toBe(false)
+    expect(formatted.text.startsWith('. ')).toBe(false)
   })
 
   it('escapes ampersand, angle brackets and quotes', () => {
@@ -78,6 +230,44 @@ describe('messageFormatter', () => {
     expect(sendMessage).toHaveBeenCalledWith(
       '42',
       '<b>Результат</b>',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+  })
+
+  it('normalizes final outbound html payload for semantic paragraphs', async () => {
+    const sendMessage = vi.fn(async () => ({ message_id: 7 }))
+
+    await sendTelegramMessage(
+      { sendMessage },
+      '42',
+      {
+        text: 'Абзац 1\nАбзац 2\nАбзац 3',
+        parseMode: 'HTML',
+      },
+    )
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      '42',
+      'Абзац 1\n\nАбзац 2\n\nАбзац 3',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+  })
+
+  it('normalizes final outbound html payload for headings, bullets and trailing prose', async () => {
+    const sendMessage = vi.fn(async () => ({ message_id: 8 }))
+
+    await sendTelegramMessage(
+      { sendMessage },
+      '42',
+      {
+        text: 'Заголовок\n• item 1\n• item 2\nФінальний абзац',
+        parseMode: 'HTML',
+      },
+    )
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      '42',
+      'Заголовок\n\n• item 1\n• item 2\n\nФінальний абзац',
       expect.objectContaining({ parse_mode: 'HTML' }),
     )
   })

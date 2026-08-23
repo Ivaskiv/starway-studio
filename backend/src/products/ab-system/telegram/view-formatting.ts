@@ -251,15 +251,7 @@ function buildBlockPausePlan(
 export function buildPracticeBlockPausePlan(
   blocks: TelegramContentBlock[],
 ): number[] {
-  return blocks.slice(1).map((block) => {
-    if (block.type === 'image' || block.type === 'video' || block.type === 'audio') {
-      return 3200
-    }
-    const textLength = 'text' in block ? block.text.length : 0
-    if (textLength <= 90) return 2600
-    if (textLength <= 180) return 4200
-    return 6500
-  })
+  return blocks.slice(1).map(() => 5000)
 }
 
 export async function pauseBetweenPracticeSections(): Promise<void> {

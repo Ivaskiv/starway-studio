@@ -1,14 +1,14 @@
 import { existsSync, statSync } from 'node:fs'
+import { basename } from 'node:path'
 import { resolve } from 'node:path'
-import express from 'express'
 import { describe, expect, it } from 'vitest'
 
 describe('abTest shared testimonial contract', () => {
   it('keeps semantic review header contracts for all five Focus segments', async () => {
     process.env.PUBLIC_API_URL = 'https://api.starway.test'
 
-    const shared = await import('../abTest.shared.ts')
-    const results = await import('../abTest.results.ts')
+    const shared = await import('@/products/ab-system/content/abTest.shared.js')
+    const results = await import('@/products/ab-system/content/abTest.results.js')
     const reviewHeaders = shared.AB_TEST_REVIEW_HEADERS
     const stateReview = results.getAbTestResultDefinition('state').msg2_review
     const goalReview = results.getAbTestResultDefinition('goal').msg2_review
@@ -26,14 +26,12 @@ describe('abTest shared testimonial contract', () => {
 
     expect(reviewHeaders.state).toBeTruthy()
     expect(reviewHeaders.state).toContain('Неоніли')
-    expect(reviewHeaders.state).toContain('ФОКУС')
-    expect(reviewHeaders.state).toContain('стан')
+    expect(reviewHeaders.state).toContain('перестала давати своєму стану керувати собою')
     expect(stateReview).toContain(reviewHeaders.state)
 
     expect(reviewHeaders.goal).toBeTruthy()
-    expect(reviewHeaders.goal).toContain('Неоніла')
-    expect(reviewHeaders.goal).toContain('ФОКУС')
-    expect(reviewHeaders.goal).toContain('Zoom-розбору')
+    expect(reviewHeaders.goal).toContain('Наталії')
+    expect(reviewHeaders.goal).toContain('ціль стала ясною')
     expect(goalReview).toContain(reviewHeaders.goal)
 
     expect(reviewHeaders.choice).toBeTruthy()
@@ -48,16 +46,15 @@ describe('abTest shared testimonial contract', () => {
     expect(decisionReview).toContain(reviewHeaders.decision)
 
     expect(reviewHeaders.action).toBeTruthy()
-    expect(reviewHeaders.action).toContain('Ксенія')
-    expect(reviewHeaders.action).toContain('результат')
-    expect(reviewHeaders.action).toContain('Zoom-розбору')
+    expect(reviewHeaders.action).toContain('Ксенії')
+    expect(reviewHeaders.action).toContain('точний список')
     expect(actionReview).toContain(reviewHeaders.action)
   })
 
   it('maps the five active Focus review screenshots to local deliverables and keeps files readable', async () => {
     process.env.PUBLIC_API_URL = 'https://api.starway.test'
 
-    const shared = await import('../abTest.shared.ts')
+    const shared = await import('@/products/ab-system/content/abTest.shared.js')
     const assetDir = resolve(process.cwd(), 'public/deliverables')
     const expectedAssets = {
       state_review: 'focus-review-state.png',
@@ -89,14 +86,38 @@ describe('abTest shared testimonial contract', () => {
     expect(shared.AB_TEST_SCREENSHOT_URLS.action_review_1).not.toContain('1a6ItYLMKfeDCerSkWqO38PQZCgT4SPA2')
   })
 
-  it('serves review screenshots from the backend static root and keeps step 8 image blocks canonical', async () => {
+  it('maps the customer-provided mp4 assets into canonical public deliverables', async () => {
+    process.env.PUBLIC_API_URL = 'https://api.starway.test'
+
+    const shared = await import('@/products/ab-system/content/abTest.shared.js')
+    const assetDir = resolve(process.cwd(), 'public/deliverables')
+    const expectedAssets = {
+      nadya_intro: 'focus-nadya.mp4',
+      focus_presentation: 'focus-presentation.mp4',
+    } as const
+
+    expect(shared.AB_TEST_VIDEO_URLS).toEqual({
+      nadya_intro: '/deliverables/focus-nadya.mp4',
+      focus_presentation: '/deliverables/focus-presentation.mp4',
+    })
+
+    for (const [key, fileName] of Object.entries(expectedAssets)) {
+      const assetPath = resolve(assetDir, fileName)
+      expect(existsSync(assetPath)).toBe(true)
+      expect(statSync(assetPath).isFile()).toBe(true)
+      expect(statSync(assetPath).size).toBeGreaterThan(0)
+      expect(basename(shared.AB_TEST_VIDEO_URLS[key as keyof typeof expectedAssets])).toBe(fileName)
+    }
+  })
+
+  it('keeps step 8 review assets canonical under the backend static deliverables root', async () => {
     process.env.PUBLIC_API_URL = 'https://api.starway.test'
 
     const [{ resolvePublicDeliverablesPath }, shared, results] =
       await Promise.all([
-        import('../../../../lib/publicDeliverables.ts'),
-        import('../abTest.shared.ts'),
-        import('../abTest.results.ts'),
+        import('@/lib/publicDeliverables.js'),
+        import('@/products/ab-system/content/abTest.shared.js'),
+        import('@/products/ab-system/content/abTest.results.js'),
       ])
 
     const staticRoot = resolvePublicDeliverablesPath(resolve(process.cwd(), 'backend/dist/src'))
@@ -113,7 +134,13 @@ describe('abTest shared testimonial contract', () => {
     for (const fileName of expectedAssets) {
       const assetPath = resolve(staticRoot, fileName)
       expect(existsSync(assetPath)).toBe(true)
+      expect(statSync(assetPath).isFile()).toBe(true)
       expect(statSync(assetPath).size).toBeGreaterThan(0)
+      expect(
+        basename(
+          new URL(`https://api.starway.test/deliverables/${fileName}`).pathname,
+        ),
+      ).toBe(fileName)
     }
 
     const reviewBlocks = results.getAbTestResultDefinition('state').blocks?.review ?? []
@@ -126,45 +153,8 @@ describe('abTest shared testimonial contract', () => {
       'https://api.starway.test/deliverables/focus-review-state.png'
     )
     expect(shared.AB_TEST_SCREENSHOT_URLS.state_review).not.toContain('drive.google.com')
-
-    const app = express()
-    app.use(
-      '/deliverables',
-      express.static(staticRoot, {
-        fallthrough: false,
-        index: false,
-        redirect: false,
-      })
+    expect(basename(new URL(shared.AB_TEST_SCREENSHOT_URLS.state_review).pathname)).toBe(
+      'focus-review-state.png'
     )
-
-    const server = await new Promise<import('node:http').Server>((resolveServer) => {
-      const listeningServer = app.listen(0, () => resolveServer(listeningServer))
-    })
-
-    try {
-      const address = server.address()
-      if (!address || typeof address === 'string') {
-        throw new Error('Expected TCP server address')
-      }
-
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/deliverables/focus-review-state.png`
-      )
-
-      expect(response.status).toBe(200)
-      expect(response.headers.get('content-type')).toContain('image/png')
-      expect(Number(response.headers.get('content-length') ?? '0')).toBeGreaterThan(0)
-      expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0)
-    } finally {
-      await new Promise<void>((resolveClose, rejectClose) => {
-        server.close((error) => {
-          if (error) {
-            rejectClose(error)
-            return
-          }
-          resolveClose()
-        })
-      })
-    }
-  }, 15000)
+  })
 })

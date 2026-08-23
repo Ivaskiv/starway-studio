@@ -1,45 +1,71 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../../../lib/funnel/getUserFunnelStage.ts', () => ({
+const mockAccessUserFindUnique = vi.fn()
+const mockAccessProductSubscriptionFindFirst = vi.fn()
+const mockAccessProductSubscriptionFindMany = vi.fn()
+const mockAccessZoomSessionAttendeeFindFirst = vi.fn()
+
+vi.mock('@/db/client.js', () => ({
+  prisma: {
+    user: {
+      findUnique: (...args: unknown[]) => mockAccessUserFindUnique(...args),
+    },
+    productSubscription: {
+      findFirst: (...args: unknown[]) => mockAccessProductSubscriptionFindFirst(...args),
+      findMany: (...args: unknown[]) => mockAccessProductSubscriptionFindMany(...args),
+    },
+    zoomSessionAttendee: {
+      findFirst: (...args: unknown[]) => mockAccessZoomSessionAttendeeFindFirst(...args),
+    },
+  },
+}))
+
+vi.mock('@/lib/funnel/getUserFunnelStage.js', () => ({
   invalidateFunnelStage: vi.fn(async () => undefined),
 }))
 
-vi.mock('../../../flow-control/service.ts', () => ({
+vi.mock('@/modules/flow-control/service.js', () => ({
   syncLifecycleForUser: vi.fn(async () => undefined),
 }))
 
 import {
   processEcosystemPayment,
-  resolveStrictNextKyivMonday,
   resolveTrialZoomExpiryDate,
-} from '../business/processing.ts'
+} from '@/modules/subscriptions/payments/business/processing.ts'
+import { getUserAccessState } from '@/modules/subscriptions/payments/focus-access.ts'
 
 describe('trial_zoom payment processing', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-22T17:03:28.621Z'))
     vi.clearAllMocks()
+    mockAccessUserFindUnique.mockResolvedValue({
+      id: 'user-1',
+      telegramUserId: '630111093',
+      telegramChatId: '630111093',
+      testCompletedAt: null,
+      deletedAt: null,
+    })
+    mockAccessZoomSessionAttendeeFindFirst.mockResolvedValue(null)
+    mockAccessProductSubscriptionFindMany.mockResolvedValue([])
   })
 
-  it('maps a Friday registration to the next Monday in Kyiv', () => {
-    const monday = resolveStrictNextKyivMonday(new Date('2026-07-31T12:00:00.000Z'))
-
-    expect(monday.toISOString()).toBe('2026-08-03T00:00:00.000Z')
-    expect(resolveTrialZoomExpiryDate(new Date('2026-07-31T12:00:00.000Z')).toISOString())
-      .toBe('2026-08-03T20:59:59.999Z')
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
-  it('maps a Monday registration to the Monday of the following week in Kyiv', () => {
-    const monday = resolveStrictNextKyivMonday(new Date('2026-08-03T08:00:00.000Z'))
-
-    expect(monday.toISOString()).toBe('2026-08-10T00:00:00.000Z')
-    expect(resolveTrialZoomExpiryDate(new Date('2026-08-03T08:00:00.000Z')).toISOString())
-      .toBe('2026-08-10T20:59:59.999Z')
+  it('resolves trial_zoom validity from payment time plus seven days', () => {
+    expect(resolveTrialZoomExpiryDate(new Date('2026-08-22T17:03:28.621Z')).toISOString())
+      .toBe('2026-08-29T17:03:28.621Z')
   })
 
-  it('stores trial_zoom as a separate paid trial entitlement without activating focus', async () => {
+  it('persists a fresh 7-day trial_zoom entitlement and canonical access prefers it over an expired old trial', async () => {
     const userUpdate = vi.fn()
     const productSubscriptionUpsert = vi.fn()
     const subscriptionFindFirst = vi.fn().mockResolvedValue(null)
     const subscriptionCreate = vi.fn()
+    const paymentTime = new Date('2026-08-22T17:03:28.621Z')
+    const freshExpiry = new Date('2026-08-29T17:03:28.621Z')
 
     const db = {
       user: {
@@ -95,13 +121,15 @@ describe('trial_zoom payment processing', () => {
           status: 'trial',
           amount: 1,
           expiresAt: null,
-          trialEndsAt: new Date('2026-08-03T20:59:59.999Z'),
+          paidAt: paymentTime,
+          trialEndsAt: freshExpiry,
         }),
         create: expect.objectContaining({
           status: 'trial',
           amount: 1,
           expiresAt: null,
-          trialEndsAt: new Date('2026-08-03T20:59:59.999Z'),
+          paidAt: paymentTime,
+          trialEndsAt: freshExpiry,
         }),
       }),
     )
@@ -109,10 +137,44 @@ describe('trial_zoom payment processing', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           planCode: 'trial_zoom:single',
-          currentPeriodEnd: new Date('2026-08-03T20:59:59.999Z'),
+          currentPeriodEnd: freshExpiry,
         }),
       }),
     )
     expect(userUpdate).not.toHaveBeenCalled()
+
+    mockAccessProductSubscriptionFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        status: 'trial',
+        paidAt: paymentTime,
+        expiresAt: null,
+        trialEndsAt: freshExpiry,
+        product: { code: 'trial_zoom' },
+      })
+      .mockResolvedValueOnce(null)
+    mockAccessProductSubscriptionFindMany.mockResolvedValue([
+      {
+        status: 'trial',
+        paidAt: paymentTime,
+        expiresAt: null,
+        trialEndsAt: freshExpiry,
+        product: { code: 'trial_zoom' },
+      },
+      {
+        status: 'trial',
+        paidAt: new Date('2026-07-27T10:00:00.000Z'),
+        expiresAt: null,
+        trialEndsAt: new Date('2026-08-03T20:59:59.999Z'),
+        product: { code: 'trial_zoom' },
+      },
+    ])
+
+    await expect(getUserAccessState('user-1')).resolves.toEqual({
+      state: 'PREMIUM',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: freshExpiry,
+    })
   })
 })

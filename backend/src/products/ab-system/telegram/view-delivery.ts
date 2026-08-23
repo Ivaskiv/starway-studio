@@ -4,6 +4,7 @@ import type { Prisma } from '@starway/db/prisma-client'
 import type { Context } from 'telegraf'
 import type { InlineKeyboardMarkup } from 'telegraf/types'
 import { coachBot, sendOpsTelegramMessage } from '../../../lib/telegram.js'
+import { resolvePublicDeliverableUrl } from '../../../lib/publicDeliverables.js'
 import {
   blockquote,
   bold,
@@ -74,6 +75,14 @@ import {
 } from './keyboard-policy.js'
 import { renderInlineBoldMarkdown, renderTelegramContentMessage, resolveSingleMediaBlock, sendTypingBeforeBlocks, sleep } from './view-formatting.js'
 
+function resolveTelegramDeliverableAssetKey(assetKey: string): string {
+  if (!assetKey.startsWith('/deliverables/')) {
+    return assetKey
+  }
+
+  return resolvePublicDeliverableUrl(assetKey)
+}
+
 export async function sendTelegramContentChunk(
   ctx: Context,
   chatId: string | number,
@@ -103,7 +112,7 @@ export async function sendTelegramContentChunk(
   }
 
   if (mediaBlock?.type === 'image') {
-    await ctx.telegram.sendPhoto(chatId, mediaBlock.assetKey, {
+    await ctx.telegram.sendPhoto(chatId, resolveTelegramDeliverableAssetKey(mediaBlock.assetKey), {
       caption: renderedMediaCaption,
       parse_mode: options?.parseMode ?? 'HTML',
       reply_markup: options?.inlineKeyboard,
@@ -121,7 +130,7 @@ export async function sendTelegramContentChunk(
   }
 
   if (mediaBlock?.type === 'video') {
-    await ctx.telegram.sendVideo(chatId, mediaBlock.assetKey, {
+    await ctx.telegram.sendVideo(chatId, resolveTelegramDeliverableAssetKey(mediaBlock.assetKey), {
       caption: renderedMediaCaption,
       parse_mode: options?.parseMode ?? 'HTML',
       reply_markup: options?.inlineKeyboard,

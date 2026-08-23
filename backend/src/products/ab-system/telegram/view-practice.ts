@@ -103,7 +103,7 @@ export async function dispatchAbTestPracticeSequence(
   await sendTelegramContentChunk(
     ctx,
     input.chatId,
-    'Як це виглядає зсередини?',
+    '',
     practiceBlocks,
     {
       parseMode: 'HTML',
@@ -119,7 +119,7 @@ export async function dispatchAbTestPracticeSequence(
   })
 
   if (reviewSequence.message.length) {
-    await pauseBetweenPracticeSections()
+    await sleep(6000)
     await sendTypingBeforeBlocks(ctx, input.chatId, reviewSequence.message)
     await sendTelegramContentChunk(
       ctx,
@@ -146,7 +146,7 @@ export async function dispatchAbTestPracticeSequence(
     )
   }
 
-  await pauseBetweenPracticeSections()
+  await sleep(7000)
   await sendTypingBeforeBlocks(ctx, input.chatId, pricingBlocks.slice(0, 1))
   const [accessState, upcomingZoom] = await Promise.all([
     getUserAccessState(input.userId),
@@ -162,7 +162,7 @@ export async function dispatchAbTestPracticeSequence(
   await sendTelegramContentChunk(
     ctx,
     input.chatId,
-    'Формат участі',
+    '',
     pricingBlocks,
     {
       inlineKeyboard: offerKeyboard,

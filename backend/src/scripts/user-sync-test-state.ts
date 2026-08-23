@@ -25,6 +25,10 @@ type FocusSnapshot = {
   expiresAt: string | null
 }
 
+type TrialZoomSnapshot = {
+  eligible: boolean
+}
+
 type ZoomSnapshot = {
   sessionId: string
   startsAt: string
@@ -34,8 +38,9 @@ type ZoomSnapshot = {
 
 export type UserTestStateSnapshot = {
   telegramFromId: string
-  focus: FocusSnapshot
-  zoom: ZoomSnapshot
+  focus?: FocusSnapshot
+  trialZoom?: TrialZoomSnapshot
+  zoom?: ZoomSnapshot
 }
 
 type SyncReport = {
@@ -43,6 +48,7 @@ type SyncReport = {
   userId: string
   actions: {
     focus: 'noop' | 'activated'
+    trialZoom: 'noop' | 'reset'
     zoom: 'noop' | 'booked' | 'unbooked' | 'rebooked'
   }
   before: {
@@ -105,24 +111,34 @@ export function loadSnapshot(snapshotFile: string): UserTestStateSnapshot {
     throw new Error('Snapshot must contain telegramFromId')
   }
 
-  if (typeof parsed?.focus?.active !== 'boolean') {
-    throw new Error('Snapshot must contain focus.active')
+  if (!parsed?.focus && !parsed?.trialZoom && !parsed?.zoom) {
+    throw new Error('Snapshot must contain at least one of focus, trialZoom, or zoom')
   }
 
-  if (String(parsed?.zoom?.sessionId ?? '').trim() === '') {
-    throw new Error('Snapshot must contain zoom.sessionId')
+  if (parsed?.focus && typeof parsed.focus.active !== 'boolean') {
+    throw new Error('Snapshot focus must contain active')
   }
 
-  if (String(parsed?.zoom?.startsAt ?? '').trim() === '') {
-    throw new Error('Snapshot must contain zoom.startsAt')
+  if (parsed?.trialZoom && typeof parsed.trialZoom.eligible !== 'boolean') {
+    throw new Error('Snapshot trialZoom must contain eligible')
   }
 
-  if (parsed?.zoom?.status !== 'SCHEDULED') {
-    throw new Error('Snapshot currently supports only zoom.status=SCHEDULED')
-  }
+  if (parsed?.zoom) {
+    if (String(parsed.zoom.sessionId ?? '').trim() === '') {
+      throw new Error('Snapshot must contain zoom.sessionId')
+    }
 
-  if (typeof parsed?.zoom?.booked !== 'boolean') {
-    throw new Error('Snapshot must contain zoom.booked')
+    if (String(parsed.zoom.startsAt ?? '').trim() === '') {
+      throw new Error('Snapshot must contain zoom.startsAt')
+    }
+
+    if (parsed.zoom.status !== 'SCHEDULED') {
+      throw new Error('Snapshot currently supports only zoom.status=SCHEDULED')
+    }
+
+    if (typeof parsed.zoom.booked !== 'boolean') {
+      throw new Error('Snapshot must contain zoom.booked')
+    }
   }
 
   return parsed
@@ -189,6 +205,111 @@ async function syncFocusAccess(params: {
   }
 
   return { action: 'activated', activationResult }
+}
+
+type TrialZoomResetResult = {
+  action: 'noop' | 'reset'
+  dryRun: {
+    subscriptions: number
+    paymentLogs: number
+    checkoutSessions: number
+  }
+  mutated: {
+    subscriptions: number
+    paymentLogs: number
+    checkoutSessions: number
+  }
+}
+
+async function resetTrialZoomUsage(params: {
+  userId: string
+  snapshot: TrialZoomSnapshot
+}): Promise<TrialZoomResetResult> {
+  if (!params.snapshot.eligible) {
+    return {
+      action: 'noop',
+      dryRun: { subscriptions: 0, paymentLogs: 0, checkoutSessions: 0 },
+      mutated: { subscriptions: 0, paymentLogs: 0, checkoutSessions: 0 },
+    }
+  }
+
+  const trialProducts = await prisma.product.findMany({
+    where: { code: { equals: 'trial_zoom', mode: 'insensitive' } },
+    select: { id: true },
+  })
+  const trialProductIds = trialProducts.map((product) => product.id)
+
+  const [subscriptions, paymentLogs, checkoutSessions] = await Promise.all([
+    trialProductIds.length > 0
+      ? prisma.productSubscription.count({
+          where: {
+            userId: params.userId,
+            productId: { in: trialProductIds },
+          },
+        })
+      : Promise.resolve(0),
+    prisma.paymentLog.count({
+      where: {
+        userId: params.userId,
+        OR: [
+          { orderReference: { startsWith: 'trial_zoom_single_' } },
+          { metadata: { path: ['productId'], equals: 'trial_zoom' } },
+        ],
+      },
+    }),
+    prisma.checkoutSession.count({
+      where: {
+        userId: params.userId,
+        productCode: 'trial_zoom',
+      },
+    }),
+  ])
+
+  if (subscriptions === 0 && paymentLogs === 0 && checkoutSessions === 0) {
+    return {
+      action: 'noop',
+      dryRun: { subscriptions, paymentLogs, checkoutSessions },
+      mutated: { subscriptions: 0, paymentLogs: 0, checkoutSessions: 0 },
+    }
+  }
+
+  const [deletedSubscriptions, deletedPaymentLogs, deletedCheckoutSessions] = await prisma.$transaction(
+    async (tx) => Promise.all([
+      trialProductIds.length > 0
+        ? tx.productSubscription.deleteMany({
+            where: {
+              userId: params.userId,
+              productId: { in: trialProductIds },
+            },
+          })
+        : Promise.resolve({ count: 0 }),
+      tx.paymentLog.deleteMany({
+        where: {
+          userId: params.userId,
+          OR: [
+            { orderReference: { startsWith: 'trial_zoom_single_' } },
+            { metadata: { path: ['productId'], equals: 'trial_zoom' } },
+          ],
+        },
+      }),
+      tx.checkoutSession.deleteMany({
+        where: {
+          userId: params.userId,
+          productCode: 'trial_zoom',
+        },
+      }),
+    ]),
+  )
+
+  return {
+    action: 'reset',
+    dryRun: { subscriptions, paymentLogs, checkoutSessions },
+    mutated: {
+      subscriptions: deletedSubscriptions.count,
+      paymentLogs: deletedPaymentLogs.count,
+      checkoutSessions: deletedCheckoutSessions.count,
+    },
+  }
 }
 
 async function resolveTargetZoomSession(snapshot: ZoomSnapshot) {
@@ -268,23 +389,40 @@ export async function syncUserTestState(input: {
   const beforeAccess = await getUserAccessState(userId)
   const beforeZoom = await getUpcomingZoomBookingView(userId)
 
-  const focusResult = await syncFocusAccess({
-    userId,
-    snapshot: input.snapshot.focus,
-    current: beforeAccess,
-  })
+  const trialZoomResult = input.snapshot.trialZoom
+    ? await resetTrialZoomUsage({
+        userId,
+        snapshot: input.snapshot.trialZoom,
+      })
+    : {
+        action: 'noop' as const,
+        dryRun: { subscriptions: 0, paymentLogs: 0, checkoutSessions: 0 },
+        mutated: { subscriptions: 0, paymentLogs: 0, checkoutSessions: 0 },
+      }
 
-  const zoomAction = await syncZoomBooking({
-    userId,
-    snapshot: input.snapshot.zoom,
-    current: beforeZoom,
-  })
+  const focusResult = input.snapshot.focus
+    ? await syncFocusAccess({
+        userId,
+        snapshot: input.snapshot.focus,
+        current: beforeAccess,
+      })
+    : { action: 'noop' as const, activationResult: null }
+
+  const zoomAction = input.snapshot.zoom
+    ? await syncZoomBooking({
+        userId,
+        snapshot: input.snapshot.zoom,
+        current: beforeZoom,
+      })
+    : 'noop'
 
   const afterAccess = await getUserAccessState(userId)
   const afterZoom = await getUpcomingZoomBookingView(userId)
-  const desiredFocusExpiresAt = parseIsoDate(input.snapshot.focus.expiresAt, 'focus.expiresAt')
+  const desiredFocusExpiresAt = input.snapshot.focus
+    ? parseIsoDate(input.snapshot.focus.expiresAt, 'focus.expiresAt')
+    : null
 
-  if (input.snapshot.focus.active) {
+  if (input.snapshot.focus?.active) {
     if (afterAccess.state !== 'FOCUS_ACTIVE') {
       throw new Error(`Focus parity verification failed: got ${afterAccess.state}`)
     }
@@ -295,11 +433,26 @@ export async function syncUserTestState(input: {
     }
   }
 
-  if (input.snapshot.zoom.booked) {
+  if (input.snapshot.trialZoom?.eligible) {
+    const trialEligibilityProbe = await prisma.productSubscription.findFirst({
+      where: {
+        userId,
+        product: {
+          code: { equals: 'trial_zoom', mode: 'insensitive' },
+        },
+      },
+      select: { id: true },
+    })
+    if (trialEligibilityProbe) {
+      throw new Error('Trial parity verification failed: trial_zoom subscription still exists')
+    }
+  }
+
+  if (input.snapshot.zoom?.booked) {
     if (!afterZoom?.isMyBooking || afterZoom.id !== input.snapshot.zoom.sessionId) {
       throw new Error('Zoom parity verification failed: expected booked target session')
     }
-  } else if (afterZoom?.isMyBooking) {
+  } else if (input.snapshot.zoom && afterZoom?.isMyBooking) {
     throw new Error(`Zoom parity verification failed: still booked on session ${afterZoom.id}`)
   }
 
@@ -308,6 +461,7 @@ export async function syncUserTestState(input: {
     userId,
     actions: {
       focus: focusResult.action,
+      trialZoom: trialZoomResult.action,
       zoom: zoomAction,
     },
     before: {

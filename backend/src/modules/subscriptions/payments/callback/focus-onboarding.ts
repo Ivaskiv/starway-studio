@@ -233,20 +233,6 @@ export async function sendFocusPaymentOnboardingIfNeeded(
     })
   }
 
-  if (confirmationSent && input.focusSubscription?.id) {
-    await prisma.productSubscription
-      .update({
-        where: { id: input.focusSubscription.id },
-        data: { focusWelcomedAt: new Date() },
-      })
-      .catch((err) =>
-        console.error('[PAYMENT_LIFECYCLE] failed to mark focus onboarding sent', {
-          userId: input.userId,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      )
-  }
-
   return confirmationSent
 }
 

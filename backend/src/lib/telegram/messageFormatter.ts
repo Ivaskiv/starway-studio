@@ -155,6 +155,55 @@ function renderSemanticTelegramText(value: string): string {
   return rendered.join('\n')
 }
 
+function isTelegramListLine(value: string): boolean {
+  const normalized = value.replace(ALLOWED_TELEGRAM_TAG_PATTERN, '').trim()
+  return /^\s*[•·*-]\s+/u.test(normalized)
+}
+
+function isTelegramPricingLine(value: string): boolean {
+  const normalized = value.replace(ALLOWED_TELEGRAM_TAG_PATTERN, '').trim()
+  return /^\s*\d+\s*(?:місяць|місяці|рік)\s+—/u.test(normalized)
+}
+
+function resolveTelegramLineSeparator(previousLine: string, currentLine: string): '\n' | '\n\n' {
+  const previousIsList = isTelegramListLine(previousLine)
+  const currentIsList = isTelegramListLine(currentLine)
+  if (previousIsList && currentIsList) {
+    return '\n'
+  }
+
+  const previousIsPricing = isTelegramPricingLine(previousLine)
+  const currentIsPricing = isTelegramPricingLine(currentLine)
+  if (previousIsPricing && currentIsPricing) {
+    return '\n'
+  }
+
+  return '\n\n'
+}
+
+function normalizeTelegramParagraphSpacing(value: string): string {
+  const normalized = String(value ?? '').replace(/\r/g, '').trim()
+  if (!normalized) {
+    return ''
+  }
+
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (lines.length === 0) {
+    return ''
+  }
+
+  let formatted = lines[0] ?? ''
+  for (let index = 1; index < lines.length; index += 1) {
+    formatted += resolveTelegramLineSeparator(lines[index - 1]!, lines[index]!) + lines[index]
+  }
+
+  return formatted.replace(/\n{3,}/g, '\n\n')
+}
+
 function usesOnlyAllowedTelegramHtml(value: string): boolean {
   const normalized = String(value ?? '').trim()
   if (!normalized || !/[<>]/.test(normalized)) {
@@ -171,13 +220,13 @@ function normalizeTelegramText(
 ): TelegramMessage {
   if (parseMode === 'HTML' && usesOnlyAllowedTelegramHtml(value)) {
     return {
-      text: value.trim(),
+      text: normalizeTelegramParagraphSpacing(value),
       parseMode: 'HTML',
     }
   }
 
   return {
-    text: renderSemanticTelegramText(value),
+    text: normalizeTelegramParagraphSpacing(renderSemanticTelegramText(value)),
     parseMode: 'HTML',
   }
 }
@@ -208,10 +257,9 @@ export function formatTelegramMessage(input: FormatTelegramMessageInput): Telegr
     }),
   )
 
-  return {
-    text: preformatted ? text : renderSemanticTelegramText(text),
-    parseMode: 'HTML',
-  }
+  return preformatted
+    ? normalizeTelegramText(text, 'HTML')
+    : normalizeTelegramText(text)
 }
 
 function stripTelegramHtml(value: string): string {
@@ -248,7 +296,10 @@ export async function sendTelegramMessage(
   },
 ): Promise<unknown> {
   const telegram = resolveTelegramApi(target)
-  const normalized = typeof message === 'string' ? formatTelegramMessage(message) : message
+  const normalized =
+    typeof message === 'string'
+      ? formatTelegramMessage(message)
+      : normalizeTelegramText(message.text, message.parseMode)
   const sendOptions = {
     parse_mode: normalized.parseMode,
     ...(options?.replyMarkup ? { reply_markup: options.replyMarkup } : {}),

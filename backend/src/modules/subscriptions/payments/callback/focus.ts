@@ -2,13 +2,13 @@ import { telegramContentRegistry } from '@/modules/telegram-mentor/content/conte
 import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import { FOCUS_WELCOME } from '@/products/ab-system/content/abTest.focus.js'
 import { loadAbTestProgress } from '@/products/ab-system/telegram/progress.js'
-import { scheduleFollowups } from '@/products/ab-system/telegram/scheduler.js'
+import { cancelPendingAbTestSalesFollowups, scheduleFollowups } from '@/products/ab-system/telegram/scheduler.js'
 
 import { prisma } from '../../../../db/client.js'
 import { bot, sendOpsTelegramMessage } from '../../../../lib/telegram.js'
 import { NotificationEvent } from '../../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../../services/notifications/NotificationService.js'
-import { getUpcomingGroupSessions, scheduleReminders } from '../../../zoom/service.js'
+import { getUpcomingGroupSessions } from '../../../zoom/service.js'
 import { resolveFocusChannelInviteLink, simulateFocusActivation } from '../business/service.js'
 import type { PaymentCallbackData } from '../../types.js'
 import { getSafeName, resolvePaidTelegramChatId, sendFocusPaymentOnboardingIfNeeded } from './focus-onboarding.js'
@@ -23,6 +23,8 @@ export async function handleFocusPaymentSuccess(input: {
   amount: number
 }): Promise<void> {
   const { userId, data, webhookResult, payRef, amount } = input
+
+  await cancelPendingAbTestSalesFollowups(userId)
 
 
         const activation = simulateFocusActivation(userId, {
@@ -169,7 +171,7 @@ export async function handleFocusPaymentSuccess(input: {
             })} — ${session.topic}`
           })
           .join('\n')
-        const onboardingSent = await sendFocusPaymentOnboardingIfNeeded({
+        await sendFocusPaymentOnboardingIfNeeded({
           userId,
           paidUser,
           focusSubscription,
@@ -177,12 +179,6 @@ export async function handleFocusPaymentSuccess(input: {
           planLabel,
           upcomingLines: lines,
         })
-
-        if (onboardingSent && paidUser) {
-          for (const session of upcoming) {
-            await scheduleReminders(paidUser.id, session)
-          }
-        }
 
         if (!focusSubscription?.focusWelcomedAt) {
           const paidChatId = resolvePaidTelegramChatId({

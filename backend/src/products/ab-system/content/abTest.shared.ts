@@ -121,15 +121,15 @@ export const abTestMenuContent = {
 
 export const AB_TEST_REVIEW_HEADERS = {
   state:
-    '**Хочу показати тобі повідомлення від Неоніли.**\nКоли вона прийшла у ФОКУС, її стан був дуже схожий на той, який зараз показав твій тест.',
+    'Хочу показати тобі повідомлення від Неоніли.\nВона написала це після Zoom-розбору — про те, як перестала давати своєму стану керувати собою.',
   goal:
-    'Коли Неоніла прийшла у ФОКУС, їй теж було непросто зрозуміти, куди рухатися далі.\nОсь що вона написала після Zoom-розбору.',
+    'Хочу показати тобі повідомлення від Наталії.\nВона написала його одразу після Zoom-розбору — про те, як ціль стала ясною і як швидко після цього почалась дія.',
   choice:
     'Коли Валентина прийшла у ФОКУС, їй теж було важко зробити вибір.\nОсь що вона написала після Zoom-розбору.',
   decision:
     'Мені дуже відгукнувся цей відгук Єлизавети.',
   action:
-    'Ксенія теж прийшла з відчуттям, що багато робить, але результат не змінюється.\nОсь що вона написала після Zoom-розбору.',
+    'Хочу показати тобі повідомлення від Ксенії.\nОсь як виглядають дії, коли вони конкретні й сфокусовані: точний список, кожен пункт про одне й те саме.',
 } as const
 
 export const AB_TEST_REVIEW_HEADER_VALUES = Object.values(AB_TEST_REVIEW_HEADERS)
@@ -175,6 +175,10 @@ function buildPublicDeliverableUrl(relativePath: string): string {
 
 export const AB_TEST_AUDIO_FILE_ID = '12Jj5yk0Qb13pKozSC6Ha_nFNcqlCTA17'
 export const AB_TEST_AUDIO_URL = buildGoogleDriveDownloadUrl(AB_TEST_AUDIO_FILE_ID)
+export const AB_TEST_VIDEO_URLS = {
+  nadya_intro: '/deliverables/focus-nadya.mp4',
+  focus_presentation: '/deliverables/focus-presentation.mp4',
+} as const
 
 export type TelegramContentBlock =
   | { type: 'text'; text: string }
@@ -226,8 +230,9 @@ export const AB_TEST_RESULT_AUDIO_INTRO_TEXT =
 export const AB_TEST_RESULT_AUDIO_PROMPT_TEXT =
   AB_TEST_VOICE_CAPTION_PROMPT
 
-export const AB_TEST_SHOW_INSIDE_CTA_TEXT = 'ЗАГЛЯНУТИ'
+export const AB_TEST_SHOW_INSIDE_CTA_TEXT = 'ПРО ПРОГРАМУ'
 export const AB_TEST_BOOK_ZOOM_CTA_TEXT = 'ЗАПИСАТИСЯ НА ZOOM'
+export const AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT = 'ОБРАТИ ZOOM-ПРАКТИКУ'
 export const AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT =
   'Показати\nяк проходить\nпрактика'
 
@@ -261,11 +266,11 @@ const FOCUS_INCLUDED_ITEMS = [
 
 const FOCUS_PRICE_COPY = {
   oneMonth: '1 місяць — 33 €',
-  threeMonths: '3 місяці — 69 € (23 € / місяць)',
-  oneYear: '1 рік — 229 € (19 € / місяць)',
+  threeMonths: '3 місяці — 69 € (23 € на місяць)',
+  oneYear: '1 рік — 229 € (19 € на місяць)',
   paymentCta1m: 'ОПЛАТИТИ 1 МІСЯЦЬ — 33 €',
   paymentCta3m: 'ОПЛАТИТИ 3 МІСЯЦІ — 69 €',
-  resultOfferLine1m: '• 1 місяць — 4 живі Zoom-розбори — 33 €.',
+  paymentCta1y: 'ОПЛАТИТИ 1 РІК — 229 €',
 } as const
 
 const FOCUS_PRICE_LINES = [
@@ -287,6 +292,7 @@ function formatFocusListItems(
 
 export const AB_TEST_FOCUS_PAYMENT_CTA_1M = FOCUS_PRICE_COPY.paymentCta1m
 export const AB_TEST_FOCUS_PAYMENT_CTA_3M = FOCUS_PRICE_COPY.paymentCta3m
+export const AB_TEST_FOCUS_PAYMENT_CTA_1Y = FOCUS_PRICE_COPY.paymentCta1y
 export const AB_TEST_FOCUS_PRICE_1M = FOCUS_PRICE_COPY.oneMonth
 export const AB_TEST_FOCUS_PRICE_3M = FOCUS_PRICE_COPY.threeMonths
 export const AB_TEST_FOCUS_PRICE_1Y = FOCUS_PRICE_COPY.oneYear
@@ -295,6 +301,7 @@ export const abTestPaymentsContent = {
   body: 'Оплата відкриває стабільний Focus-ритм, щоб рух не розсипався після рішення.',
   ctaMonthly: AB_TEST_FOCUS_PAYMENT_CTA_1M,
   ctaQuarterly: AB_TEST_FOCUS_PAYMENT_CTA_3M,
+  ctaYearly: AB_TEST_FOCUS_PAYMENT_CTA_1Y,
 } as const
 export const AB_TEST_FOCUS_PRICE_SUMMARY =
   FOCUS_PRICE_LINES.join(' | ')
@@ -338,7 +345,7 @@ export const AB_TEST_FOCUS_INCLUDED_TEXT =
 export const AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT =
   `**У ФОКУС ти отримуєш:**\n${formatFocusListItems(FOCUS_INCLUDED_ITEMS, '•').join('\n')}\nЯкщо між Zoom-розборами виникне питання або складна ситуація, ти завжди можеш написати в чат.`
 export const AB_TEST_FOCUS_PRICING_TEXT =
-  `Найближчий Zoom-розбір уже цього тижня.\n${FOCUS_PRICE_COPY.resultOfferLine1m}\n• 3 місяці — 69 € (23 € на місяць).\n↩ Якщо після першого Zoom-розбору зрозумієш, що тобі не підходить, я поверну гроші.`
+  `Найближчий Zoom-розбір уже цього тижня.\n${AB_TEST_FOCUS_TITLE}.\n${FOCUS_PRICE_COPY.oneMonth}.\n${FOCUS_PRICE_COPY.threeMonths}.\n${FOCUS_PRICE_COPY.oneYear}.\n↩ Якщо після першого Zoom-розбору зрозумієш, що тобі не підходить, я поверну гроші.`
 export const AB_TEST_FOCUS_PROOF_PRICING_TEXT =
   `**${AB_TEST_FOCUS_TITLE}**\n${FOCUS_PRICE_LINES.join('\n')}\n\n${AB_TEST_FOCUS_PAY_CTA_MARKER}`
 export const AB_TEST_FOCUS_TEST_DRIVE_PITCH_BLOCKS = [
@@ -448,7 +455,6 @@ export const AB_TEST_BOLD_LINES = new Set<string>([
   'Більше дій — не вихід.',
   'Коли рішення не прийняте всередині, дія стає важкою.',
   'Якщо ти відчуваєш, що відкладаєш важливе через нечіткість у цілі, заходь у ФОКУС.',
-  ...AB_TEST_REVIEW_HEADER_VALUES,
 ])
 
 export const AB_TEST_ACTION_REVIEW_1_EXTRA_LINES = [

@@ -123,17 +123,8 @@ export function resolveStrictNextKyivMonday(date: Date): Date {
   return baseUtc
 }
 
-export function resolveTrialZoomExpiryDate(createdAt: Date): Date {
-  const nextMonday = resolveStrictNextKyivMonday(createdAt)
-  return new Date(Date.UTC(
-    nextMonday.getUTCFullYear(),
-    nextMonday.getUTCMonth(),
-    nextMonday.getUTCDate(),
-    20,
-    59,
-    59,
-    999,
-  ))
+export function resolveTrialZoomExpiryDate(paidAt: Date, durationDays = 7): Date {
+  return new Date(paidAt.getTime() + Math.max(1, durationDays) * 86400000)
 }
 
 export async function processEcosystemPayment(
@@ -252,7 +243,7 @@ export async function processEcosystemPayment(
   const planCode = `${productId}:${planId}`
   const isTrialZoom = productId === 'trial_zoom'
   const trialZoomExpiresAt = isTrialZoom
-    ? resolveTrialZoomExpiryDate(user.createdAt ?? now)
+    ? resolveTrialZoomExpiryDate(now, plan.durationDays)
     : null
 
   await db.productSubscription.upsert({

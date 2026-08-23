@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   sendDedupedTelegramMessage: vi.fn(),
   sendPhoto: vi.fn(),
+  renderOutbound: vi.fn(),
 }))
 
-vi.mock('../../../../../lib/telegram.ts', () => ({
+vi.mock('../../../../../../src/lib/telegram.ts', () => ({
   bot: {
     telegram: {
       sendPhoto: mocks.sendPhoto,
@@ -18,8 +19,7 @@ vi.mock('../../../../../lib/telegram.ts', () => ({
   sendDedupedTelegramMessage: mocks.sendDedupedTelegramMessage,
 }))
 
-import { TelegramConversationRenderer } from '../telegramConversationRenderer.ts'
-import { TelegramDeliveryAdapter } from '../../../../../services/notifications/delivery/TelegramDeliveryAdapter.ts'
+import { TelegramConversationRenderer } from '../../../../../../src/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.ts'
 
 describe('TelegramConversationRenderer outbound', () => {
   beforeEach(() => {
@@ -51,6 +51,40 @@ describe('TelegramConversationRenderer outbound', () => {
  },
  reply_markup: {
  inline_keyboard: [[{ text: 'Open', url: 'https://example.com' }]],
+        },
+      },
+      expect.anything(),
+    )
+  })
+
+  it('applies top-level outbound buttons to card delivery when response text is null', async () => {
+    const renderer = new TelegramConversationRenderer()
+
+    const sent = await renderer.renderOutbound({ chatId: '555' }, {
+      text: null,
+      buttons: [{ kind: 'web_app', label: 'ОБРАТИ ZOOM-ПРАКТИКУ', value: 'https://example.com/miniapp/zoom-calendar' }],
+      cards: [{
+        kind: 'message',
+        text: '✅ Оплату підтверджено',
+        parseMode: 'HTML',
+      }],
+      media: [],
+      nextActions: [],
+      telemetry: {},
+      analytics: {},
+    })
+
+    expect(sent).toBe(true)
+    expect(mocks.sendDedupedTelegramMessage).toHaveBeenCalledWith(
+      '555',
+      '✅ Оплату підтверджено',
+      {
+        link_preview_options: {
+          is_disabled: true,
+        },
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [[{ text: 'ОБРАТИ ZOOM-ПРАКТИКУ', web_app: { url: 'https://example.com/miniapp/zoom-calendar' } }]],
         },
       },
       expect.anything(),
@@ -91,9 +125,24 @@ describe('TelegramDeliveryAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.sendDedupedTelegramMessage.mockResolvedValue(true)
+    mocks.renderOutbound.mockResolvedValue(true)
   })
 
   it('converts delivery messages to conversation cards and uses the shared renderer', async () => {
+    vi.resetModules()
+    const renderOutboundMock = vi.fn().mockResolvedValue(true)
+    vi.doMock('../../../../../../src/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.ts', () => ({
+      TelegramConversationRenderer: class {
+        renderOutbound = renderOutboundMock
+      },
+    }))
+    vi.doMock('../../../../../../src/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js', () => ({
+      TelegramConversationRenderer: class {
+        renderOutbound = renderOutboundMock
+      },
+    }))
+
+    const { TelegramDeliveryAdapter } = await import('../../../../../../src/services/notifications/delivery/TelegramDeliveryAdapter.ts')
     const adapter = new TelegramDeliveryAdapter()
 
     const sent = await adapter.send({
@@ -112,19 +161,19 @@ describe('TelegramDeliveryAdapter', () => {
     })
 
     expect(sent).toBe(true)
-    expect(mocks.sendDedupedTelegramMessage).toHaveBeenCalledWith(
-      '777',
-      '<b>Заголовок</b>\n\nТіло',
-      {
-        link_preview_options: {
-          is_disabled: true,
-        },
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Відкрити', url: 'https://example.com/app' }]],
-        },
-      },
-      expect.anything(),
+    expect(renderOutboundMock).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: '777' }),
+      expect.objectContaining({
+        text: null,
+        buttons: [{ kind: 'url', label: 'Відкрити', value: 'https://example.com/app' }],
+        cards: [
+          expect.objectContaining({
+            kind: 'message',
+            text: '<b>Заголовок</b>\n\nТіло',
+            parseMode: 'HTML',
+          }),
+        ],
+      }),
     )
   })
 })

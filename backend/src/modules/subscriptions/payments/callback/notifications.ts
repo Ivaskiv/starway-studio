@@ -9,7 +9,9 @@ import {
   AB_TEST_BOOK_ZOOM_CTA_TEXT,
   AB_TEST_FOCUS_MENU_BUTTON_TEXT,
   AB_TEST_JOIN_CHANNEL_BUTTON_TEXT,
+  AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT,
 } from '@/products/ab-system/content/abTest.shared.js'
+import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 
 let rendererInstance: TelegramConversationRenderer | null = null
 const PAYMENT_SUCCESS_DELIVERY_MARKER_KEY = 'telegramPaymentSuccess'
@@ -113,8 +115,11 @@ function buildTrialZoomSuccessResponse(): ConversationResponse {
       'Обери найближчу Zoom-практику та запишись.',
     ].join('\n'),
     [
-      { kind: 'callback', label: AB_TEST_BOOK_ZOOM_CTA_TEXT, value: FOCUS_ZOOM_CALLBACK },
-      { kind: 'callback', label: '🏠 ГОЛОВНЕ МЕНЮ', value: MAIN_MENU_CALLBACK },
+      {
+        kind: 'web_app',
+        label: AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT,
+        value: buildZoomCalendarUrl({ intent: 'booking' }),
+      },
     ],
     'HTML',
   )

@@ -30,9 +30,16 @@ const mockState = vi.hoisted(() => {
     } as MockAccessState,
     zoom: null as MockZoomView,
     linkedUserId: 'user-1',
+    trialProductIds: ['trial-product-1'],
+    trialSubscriptionCount: 1,
+    trialPaymentLogCount: 1,
+    trialCheckoutSessionCount: 1,
     activateCalls: vi.fn(),
     registerCalls: vi.fn(),
     unbookCalls: vi.fn(),
+    deletedTrialSubscriptions: vi.fn(),
+    deletedTrialPaymentLogs: vi.fn(),
+    deletedTrialCheckoutSessions: vi.fn(),
     reset() {
       this.access = {
         state: 'NO_ACCESS',
@@ -42,31 +49,97 @@ const mockState = vi.hoisted(() => {
       }
       this.zoom = null
       this.linkedUserId = 'user-1'
+      this.trialProductIds = ['trial-product-1']
+      this.trialSubscriptionCount = 1
+      this.trialPaymentLogCount = 1
+      this.trialCheckoutSessionCount = 1
       this.activateCalls.mockReset()
       this.registerCalls.mockReset()
       this.unbookCalls.mockReset()
+      this.deletedTrialSubscriptions.mockReset()
+      this.deletedTrialPaymentLogs.mockReset()
+      this.deletedTrialCheckoutSessions.mockReset()
     },
     session,
   }
 })
 
-vi.mock('../../db/client.ts', () => ({
+vi.mock('../../../src/db/client.js', () => ({
   prisma: {
+    product: {
+      findMany: vi.fn(async () => mockState.trialProductIds.map((id) => ({ id }))),
+    },
+    productSubscription: {
+      count: vi.fn(async () => mockState.trialSubscriptionCount),
+      findFirst: vi.fn(async () => (
+        mockState.trialSubscriptionCount > 0 ? { id: 'trial-sub-1' } : null
+      )),
+      deleteMany: vi.fn(async () => {
+        const count = mockState.trialSubscriptionCount
+        mockState.deletedTrialSubscriptions({ count })
+        mockState.trialSubscriptionCount = 0
+        return { count }
+      }),
+    },
+    paymentLog: {
+      count: vi.fn(async () => mockState.trialPaymentLogCount),
+      deleteMany: vi.fn(async () => {
+        const count = mockState.trialPaymentLogCount
+        mockState.deletedTrialPaymentLogs({ count })
+        mockState.trialPaymentLogCount = 0
+        return { count }
+      }),
+    },
+    checkoutSession: {
+      count: vi.fn(async () => mockState.trialCheckoutSessionCount),
+      deleteMany: vi.fn(async () => {
+        const count = mockState.trialCheckoutSessionCount
+        mockState.deletedTrialCheckoutSessions({ count })
+        mockState.trialCheckoutSessionCount = 0
+        return { count }
+      }),
+    },
     zoomSession: {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         if (where.id !== mockState.session.id) return null
         return { ...mockState.session }
       }),
     },
+    $transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) => callback({
+      productSubscription: {
+        deleteMany: async () => {
+          const count = mockState.trialSubscriptionCount
+          mockState.deletedTrialSubscriptions({ count })
+          mockState.trialSubscriptionCount = 0
+          return { count }
+        },
+      },
+      paymentLog: {
+        deleteMany: async () => {
+          const count = mockState.trialPaymentLogCount
+          mockState.deletedTrialPaymentLogs({ count })
+          mockState.trialPaymentLogCount = 0
+          return { count }
+        },
+      },
+      checkoutSession: {
+        deleteMany: async () => {
+          const count = mockState.trialCheckoutSessionCount
+          mockState.deletedTrialCheckoutSessions({ count })
+          mockState.trialCheckoutSessionCount = 0
+          return { count }
+        },
+      },
+    })),
     $disconnect: vi.fn(),
   },
 }))
 
-vi.mock('../../modules/telegram-mentor/services/identity/linking.ts', () => ({
+vi.mock('../../../src/modules/telegram-mentor/services/identity/linking.js', () => ({
   findLinkedUserId: vi.fn(async () => mockState.linkedUserId),
 }))
 
-vi.mock('../../modules/subscriptions/payments/activation.ts', () => ({
+vi.mock('../../../src/modules/subscriptions/payments/activation.js', () => ({
   activateProductSubscription: vi.fn(async (params: { expiresAtOverride?: Date | null }) => {
     mockState.activateCalls(params)
     mockState.access = {
@@ -84,11 +157,11 @@ vi.mock('../../modules/subscriptions/payments/activation.ts', () => ({
   }),
 }))
 
-vi.mock('../../modules/subscriptions/payments/focus-access.ts', () => ({
+vi.mock('../../../src/modules/subscriptions/payments/focus-access.js', () => ({
   getUserAccessState: vi.fn(async () => mockState.access),
 }))
 
-vi.mock('../../modules/zoom/service.ts', () => ({
+vi.mock('../../../src/modules/zoom/service.js', () => ({
   getUpcomingZoomBookingView: vi.fn(async () => mockState.zoom),
   registerAttendee: vi.fn(async (_userId: string, sessionId: string) => {
     mockState.registerCalls({ sessionId })
@@ -106,7 +179,7 @@ vi.mock('../../modules/zoom/service.ts', () => ({
   }),
 }))
 
-import { syncUserTestState } from '../user-sync-test-state.ts'
+import { syncUserTestState } from '../../../src/scripts/user-sync-test-state.ts'
 
 describe('user-sync-test-state', () => {
   const baseSnapshot = {
@@ -143,6 +216,28 @@ describe('user-sync-test-state', () => {
     expect(mockState.activateCalls).toHaveBeenCalledTimes(1)
     expect(report.after.access.state).toBe('FOCUS_ACTIVE')
     expect(report.after.access.expiresAt?.toISOString()).toBe('2026-09-01T00:00:00.000Z')
+  })
+
+  it('resets only trial zoom artifacts for a clean local eligibility state', async () => {
+    const report = await syncUserTestState({
+      telegramId: '630111093',
+      snapshot: {
+        telegramFromId: '630111093',
+        trialZoom: {
+          eligible: true,
+        },
+      },
+    })
+
+    expect(report.actions.trialZoom).toBe('reset')
+    expect(mockState.deletedTrialSubscriptions).toHaveBeenCalledTimes(1)
+    expect(mockState.deletedTrialPaymentLogs).toHaveBeenCalledTimes(1)
+    expect(mockState.deletedTrialCheckoutSessions).toHaveBeenCalledTimes(1)
+    expect(mockState.activateCalls).not.toHaveBeenCalled()
+    expect(mockState.registerCalls).not.toHaveBeenCalled()
+    expect(mockState.unbookCalls).not.toHaveBeenCalled()
+    expect(report.after.access.state).toBe('NO_ACCESS')
+    expect(report.after.zoom).toBeNull()
   })
 
   it('books zoom through canonical owner when snapshot requires booking', async () => {
@@ -182,6 +277,7 @@ describe('user-sync-test-state', () => {
     expect(mockState.registerCalls).not.toHaveBeenCalled()
     expect(mockState.unbookCalls).not.toHaveBeenCalled()
     expect(report.actions.focus).toBe('noop')
+    expect(report.actions.trialZoom).toBe('noop')
     expect(report.actions.zoom).toBe('noop')
   })
 

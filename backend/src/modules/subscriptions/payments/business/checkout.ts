@@ -33,7 +33,7 @@ function resolveDevelopmentPaymentAmount(
   }
 
   const shouldOverride =
-    (productId === 'focus' && (planId === '1month' || planId === '3month')) ||
+    (productId === 'focus' && (planId === '1month' || planId === '3month' || planId === '1year')) ||
     (productId === 'trial_zoom' && planId === 'single') ||
     (productId === 'absystem_ai' &&
       (planId === '1month' || planId === '6month' || planId === '1year'))

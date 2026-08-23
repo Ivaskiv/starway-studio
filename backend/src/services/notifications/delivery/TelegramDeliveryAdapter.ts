@@ -1,10 +1,10 @@
 import type { ConversationButton } from '../../../modules/telegram-mentor/conversation/engine/types.js'
 import { bot } from '../../../lib/telegram.js'
+import { TelegramConversationRenderer } from '../../../modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import {
   bold,
   escapeTelegramHtml,
   formatTelegramMessage,
-  sendTelegramMessage,
   type TelegramMessage,
 } from '../../../lib/telegram/messageFormatter.js'
 import type { DeliveryMessage, DeliveryUser } from './types.js'
@@ -111,16 +111,25 @@ export class TelegramDeliveryAdapter {
     if (!chatId) return false
 
     try {
-      await sendTelegramMessage(
-        bot,
-        chatId,
-        buildText(message),
+      const renderer = new TelegramConversationRenderer()
+      const text = buildText(message)
+
+      return renderer.renderOutbound(
+        { chatId, transportBot: bot },
         {
-          replyMarkup: mapButtonsToReplyMarkup(buildButtons(message)),
-          disableWebPagePreview: true,
+          text: null,
+          buttons: buildButtons(message),
+          cards: [{
+            kind: 'message',
+            text: text.text,
+            ...(text.parseMode ? { parseMode: text.parseMode } : {}),
+          }],
+          media: [],
+          nextActions: [],
+          telemetry: {},
+          analytics: {},
         },
       )
-      return true
     } catch {
       return false
     }

@@ -38,6 +38,12 @@ const ECOSYSTEM_PAYMENT_CATALOG: Record<
       dbProductCodes: ['focus'],
       lifecycleState: 'focus_active',
     },
+    '1year': {
+      amount: 229,
+      durationDays: 365,
+      dbProductCodes: ['focus'],
+      lifecycleState: 'focus_active',
+    },
   },
   trial_zoom: {
     single: {

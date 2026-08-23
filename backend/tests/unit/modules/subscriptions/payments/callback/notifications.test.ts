@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AB_TEST_BOOK_ZOOM_CTA_TEXT } from '@/products/ab-system/content/abTest.shared.js'
+import {
+  AB_TEST_BOOK_ZOOM_CTA_TEXT,
+  AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT,
+} from '@/products/ab-system/content/abTest.shared.js'
 
 const mockProductSubscriptionFindFirst = vi.fn()
 const mockProductSubscriptionUpdate = vi.fn()
@@ -11,7 +14,7 @@ const mockRenderOutbound = vi.fn()
 const mockSendMessage = vi.fn()
 const mockGetOrCreateFocusInviteLink = vi.fn()
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('@/db/client.js', () => ({
   prisma: {
     productSubscription: {
       findFirst: (...args: unknown[]) => mockProductSubscriptionFindFirst(...args),
@@ -24,6 +27,9 @@ vi.mock('../../../../db/client.ts', () => ({
     user: {
       findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
       findFirst: (...args: unknown[]) => mockUserFindFirst(...args),
+    },
+    telegramLink: {
+      findFirst: vi.fn(async () => null),
     },
   },
 }))
@@ -59,7 +65,7 @@ import {
   sendAbTestBlock12Welcome,
   sendFocusPaymentSuccessTelegramMessageByOrder,
   sendTrialZoomPaymentSuccessTelegramMessage,
-} from '../callback/notifications.ts'
+} from '@/modules/subscriptions/payments/callback/notifications.ts'
 
 describe('callback.notifications — canonical Focus URL', () => {
   beforeEach(() => {
@@ -196,10 +202,9 @@ describe('callback.notifications — canonical Focus URL', () => {
     const serialized = JSON.stringify(mockRenderOutbound.mock.calls[0][1])
     expect(serialized).toContain('Тобі доступний один пробний Zoom за 1 грн.')
     expect(serialized).toContain('Обери найближчу Zoom-практику та запишись.')
-    expect(serialized).toContain(`"label":"${AB_TEST_BOOK_ZOOM_CTA_TEXT}"`)
-    expect(serialized).toContain('"value":"focus:next_zoom"')
-    expect(serialized).toContain('"label":"🏠 ГОЛОВНЕ МЕНЮ"')
-    expect(serialized).toContain('"value":"return_main_menu"')
+    expect(serialized).toContain(`"label":"${AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT}"`)
+    expect(serialized).toContain('"kind":"web_app"')
+    expect(serialized).toContain('"value":"https://app.starway.test/miniapp/zoom-calendar?intent=booking"')
     expect(serialized).not.toContain('Доступ до ФОКУСУ активовано')
     expect(serialized).not.toContain('Перейди в закритий канал')
     expect(serialized).not.toContain('ПЕРЕЙТИ В КАНАЛ')

@@ -10,7 +10,7 @@ function parseFocusOrderReference(payRef: string): {
   planId: EcosystemPaymentPlanId | null
 } | null {
   const match = String(payRef ?? '').trim().match(
-    /^focus_(welcome_test|1month|3month)_([0-9a-f-]{36})_\d+$/i,
+    /^focus_(welcome_test|1month|3month|1year)_([0-9a-f-]{36})_\d+$/i,
   )
 
   if (!match) return null
