@@ -206,6 +206,10 @@ import wheelRoutes from './modules/wheel/routes.js'
 import zoomRoutes from './modules/zoom/api/routes.js'
 import zoomCoachRoutes from './modules/zoom/api/zoom.coach.routes.js'
 import audioRoutes from './modules/audio/routes.js'
+import {
+  getTelegramIdentityParityHandler,
+  postTelegramIdentityRepairHandler,
+} from './modules/telegram-mentor/runtime/identityParity.js'
 import { getTelegramRuntimeParityHandler } from './modules/telegram-mentor/runtime/parity.js'
 import testSyncRoutes from './products/absystem/config/testSync.router.js'
 import intelligenceRoutes from './routes/intelligence.routes.js'
@@ -477,6 +481,8 @@ export function createApp(): Express {
   // =====================
   app.use('/api/auth', authRoutes)
   app.use('/api/telegram', telegramRouter)
+  app.get('/api/telegram/runtime/identity-parity', authOrBotRequired, getTelegramIdentityParityHandler)
+  app.post('/api/telegram/runtime/identity-repair', authOrBotRequired, postTelegramIdentityRepairHandler)
   app.get('/api/telegram/runtime/parity', authOrBotRequired, getTelegramRuntimeParityHandler)
   app.use('/api/access', accessRoutes)
   app.use('/api/analytics', analyticsRoutes)
