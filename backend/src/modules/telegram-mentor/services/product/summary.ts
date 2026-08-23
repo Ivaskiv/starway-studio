@@ -10,6 +10,7 @@ import { resolveStankeyProgressSnapshot } from '../../../../products/stankey/pro
 import { resolveUserLifecycle } from '../../../flow-control/service.js'
 import type { UserLifecycleSnapshot } from '../../../flow-control/types.js'
 import { resolveCentralLifecycleSnapshot,type CentralLifecycleSnapshot } from '../../../lifecycle/service.js'
+import { getUserAccessState, type UserAccessState } from '../../../subscriptions/payments/focus-access.js'
 import { getTelegramAppUrl,withDevTestPaymentButton } from '../../keyboards.js'
 import {
 resolveTelegramProductRoom,
@@ -299,6 +300,7 @@ function buildProductBlock(params: {
   key: ProductKey
   title: string
   subscription: SubscriptionLike | null
+  canonicalState?: ProductState | null
   userLifecycle: UserLifecycleSnapshot
   lifecycle: CentralLifecycleSnapshot
   touched: boolean
@@ -312,7 +314,8 @@ function buildProductBlock(params: {
   productAccesses: Array<{ product: string; role: string; createdAt: Date }>
 }): ProductSummaryBlock | null {
   const touched = params.touched || params.lifecycle.state !== 'guest'
-  const state: ProductState | null = params.lifecycle.roomState === 'active'
+  const state: ProductState | null = params.canonicalState
+    ?? (params.lifecycle.roomState === 'active'
     ? 'active'
     : params.lifecycle.roomState === 'trial'
       ? 'trial'
@@ -322,7 +325,7 @@ function buildProductBlock(params: {
           ? 'onboarding-started'
           : touched
             ? 'inactive'
-            : null
+            : null)
 
   if (!state) {
     return null
@@ -340,6 +343,7 @@ function buildProductBlock(params: {
     productKey: params.key,
     title: params.title,
     state,
+    canonicalState: params.canonicalState ?? undefined,
     lifecycle: params.userLifecycle,
     subscription: params.subscription,
     purchaseHistory: params.purchaseHistory,
@@ -382,6 +386,18 @@ function buildProductBlock(params: {
   }
 }
 
+function resolveCanonicalFocusRoomState(accessState: UserAccessState): ProductState {
+  if (accessState.state === 'FOCUS_ACTIVE') {
+    return 'active'
+  }
+
+  if (accessState.state === 'PREMIUM' || accessState.state === 'FREE_WEEK1') {
+    return 'trial'
+  }
+
+  return 'inactive'
+}
+
 function buildWebRoomSnapshot(product: ProductSummaryBlock) {
   return {
     key: product.key,
@@ -407,7 +423,7 @@ function buildWebRoomSnapshot(product: ProductSummaryBlock) {
 
 /** @deprecated-split: web snapshot to be extracted in STEP 43 */
 export async function resolveTelegramProductSummary(userId: string): Promise<ProductSummaryResult> {
-  const [user, subscriptions, purchaseHistory, progress, lifecycle] = await Promise.all([
+  const [user, subscriptions, purchaseHistory, progress, lifecycle, focusAccessState] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -452,6 +468,7 @@ export async function resolveTelegramProductSummary(userId: string): Promise<Pro
     }),
     resolveStankeyProgressSnapshot(userId),
     resolveUserLifecycle(userId),
+    getUserAccessState(userId),
   ])
 
   const coreSubscription = latestSubscriptionByFilter(subscriptions, (item) => item.productId == null)
@@ -484,7 +501,7 @@ export async function resolveTelegramProductSummary(userId: string): Promise<Pro
   const focusTouched = Boolean(focusSubscription || purchaseHistory.some((item) => {
     const metadata = item.metadata as Record<string, unknown> | null
     return metadata?.productId === focusManifest.slug
-  }))
+  })) || focusAccessState.state !== 'NO_ACCESS'
 
   const stankeyStageLabel = friendlyStageLabel(user?.currentStep ?? user?.currentStep ?? null)
   const coreStageLabel = friendlyStageLabel(user?.currentStep ?? user?.currentStep ?? null)
@@ -527,6 +544,7 @@ export async function resolveTelegramProductSummary(userId: string): Promise<Pro
       key: 'FOCUS',
       title: focusManifest.name,
       subscription: focusSubscription,
+      canonicalState: resolveCanonicalFocusRoomState(focusAccessState),
       userLifecycle: lifecycle,
       lifecycle: lifecycleSnapshot,
       touched: focusTouched,

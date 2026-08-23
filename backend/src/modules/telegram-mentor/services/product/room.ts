@@ -89,6 +89,7 @@ export type TelegramProductRoomInput = {
   productKey: TelegramProductKey
   title: string
   state: TelegramRoomState
+  canonicalState?: TelegramRoomState | null
   lifecycle?: UserLifecycleSnapshot | null
   subscription: {
     status: string
@@ -219,6 +220,10 @@ function resolveMentorMode(
 }
 
 function resolveRoomState(input: TelegramProductRoomInput): TelegramRoomState {
+  if (input.canonicalState) {
+    return input.canonicalState
+  }
+
   const now = new Date()
   const subscription = input.subscription
 
@@ -473,6 +478,7 @@ function buildRoomButtons(input: {
 }
 
 export function resolveTelegramProductRoom(input: TelegramProductRoomInput): TelegramProductRoom {
+  const initialState = input.canonicalState ?? input.state
   const context = getTelegramProductContext(input.productId)
   const intent = getTelegramProductIntent(input.payload)
   const accessSource =
@@ -489,9 +495,9 @@ export function resolveTelegramProductRoom(input: TelegramProductRoomInput): Tel
               : null)
     ?? resolveAccessSourceFromMetadata(input.purchaseHistory[0]?.metadata)
     ?? (input.productAccesses?.length ? 'manual' : null)
-    ?? (input.state === 'trial' ? 'trial' : null)
-    ?? (input.state === 'active' ? 'payment' : null)
-    ?? (input.state === 'paused' ? 'restore' : null)
+    ?? (initialState === 'trial' ? 'trial' : null)
+    ?? (initialState === 'active' ? 'payment' : null)
+    ?? (initialState === 'paused' ? 'restore' : null)
     ?? 'unknown'
 
   const reminderProfile = getProductCronProfile(input.productId)

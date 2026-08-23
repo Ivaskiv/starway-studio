@@ -9,9 +9,10 @@ const mockResolveCentralLifecycleSnapshot = vi.fn()
 const mockResolveTelegramProductRoom = vi.fn()
 const mockGetMediaById = vi.fn()
 const mockGetNextLesson = vi.fn()
+const mockGetUserAccessState = vi.fn()
 const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 
-vi.mock('../../../../../db/client.ts', () => ({
+vi.mock('../../../../../../src/db/client.js', () => ({
   prisma: {
     user: {
       findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
@@ -25,24 +26,28 @@ vi.mock('../../../../../db/client.ts', () => ({
   },
 }))
 
-vi.mock('../../../../../products/stankey/media/catalog.ts', () => ({
+vi.mock('../../../../../../src/products/stankey/media/catalog.js', () => ({
   getMediaById: (...args: unknown[]) => mockGetMediaById(...args),
   getNextLesson: (...args: unknown[]) => mockGetNextLesson(...args),
 }))
 
-vi.mock('../../../../../products/stankey/progress.service.ts', () => ({
+vi.mock('../../../../../../src/products/stankey/progress.service.js', () => ({
   resolveStankeyProgressSnapshot: (...args: unknown[]) => mockResolveStankeyProgressSnapshot(...args),
 }))
 
-vi.mock('../../../../flow-control/service.ts', () => ({
+vi.mock('../../../../../../src/modules/flow-control/service.js', () => ({
   resolveUserLifecycle: (...args: unknown[]) => mockResolveUserLifecycle(...args),
 }))
 
-vi.mock('../../../../lifecycle/service.ts', () => ({
+vi.mock('../../../../../../src/modules/lifecycle/service.js', () => ({
   resolveCentralLifecycleSnapshot: (...args: unknown[]) => mockResolveCentralLifecycleSnapshot(...args),
 }))
 
-vi.mock('../room.ts', () => ({
+vi.mock('../../../../../../src/modules/subscriptions/payments/focus-access.js', () => ({
+  getUserAccessState: (...args: unknown[]) => mockGetUserAccessState(...args),
+}))
+
+vi.mock('../../../../../../src/modules/telegram-mentor/services/product/room.ts', () => ({
   resolveTelegramProductRoom: (...args: unknown[]) => mockResolveTelegramProductRoom(...args),
 }))
 
@@ -62,7 +67,7 @@ vi.mock('@starway/shared/platform.registry', () => ({
   })),
 }))
 
-import { resolveTelegramProductSummary } from '../summary.ts'
+import { resolveTelegramProductSummary } from '../../../../../../src/modules/telegram-mentor/services/product/summary.ts'
 
 describe('productSummary.service', () => {
   beforeEach(() => {
@@ -98,8 +103,14 @@ describe('productSummary.service', () => {
       roomState: 'active',
       state: 'paid',
     })
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'NO_ACCESS',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: null,
+    })
     mockResolveTelegramProductRoom.mockImplementation((input: Record<string, unknown>) => ({
-      state: input.state,
+      state: input.canonicalState ?? input.state,
       selectedFlow: 'default',
       roomId: `room:${String(input.title)}`,
       accessSource: 'payment',
@@ -142,6 +153,30 @@ describe('productSummary.service', () => {
       expect.objectContaining({
         operation: 'getNextLesson',
         mediaId: 'lesson-1',
+      }),
+    )
+  })
+
+  it('passes canonical focus room state from getUserAccessState instead of legacy subscription rows', async () => {
+    mockSubscriptionFindMany.mockResolvedValue([])
+    mockResolveCentralLifecycleSnapshot.mockResolvedValue({
+      roomState: 'inactive',
+      state: 'guest',
+    })
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'PREMIUM',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: new Date('2026-08-30T12:00:00.000Z'),
+    })
+
+    const result = await resolveTelegramProductSummary('user-focus')
+
+    expect(result.allProducts.some((product) => product.key === 'FOCUS' && product.state === 'trial')).toBe(true)
+    expect(mockResolveTelegramProductRoom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productId: 'focus',
+        canonicalState: 'trial',
       }),
     )
   })

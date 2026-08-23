@@ -166,6 +166,7 @@ import aiRoutes from './modules/ai/routes.js'
 import analyticsRoutes from './modules/analytics/routes.js'
 import assistantRoutes from './modules/assistant/routes.js'
 import authRoutes, { telegramRouter } from './modules/auth/api/routes.js'
+import { authOrBotRequired } from './modules/auth/middleware/auth-or-bot.js'
 import { authRequired } from './modules/auth/middleware/auth.js'
 import { bot, coachBot, resolveTelegramWebhookSecretMap } from './lib/telegram.js'
 import billingRoutes from './modules/billing/billing.module.js'
@@ -205,6 +206,7 @@ import wheelRoutes from './modules/wheel/routes.js'
 import zoomRoutes from './modules/zoom/api/routes.js'
 import zoomCoachRoutes from './modules/zoom/api/zoom.coach.routes.js'
 import audioRoutes from './modules/audio/routes.js'
+import { getTelegramRuntimeParityHandler } from './modules/telegram-mentor/runtime/parity.js'
 import testSyncRoutes from './products/absystem/config/testSync.router.js'
 import intelligenceRoutes from './routes/intelligence.routes.js'
 import salesAssistantRouter from './routers/salesAssistant.router.js'
@@ -475,6 +477,7 @@ export function createApp(): Express {
   // =====================
   app.use('/api/auth', authRoutes)
   app.use('/api/telegram', telegramRouter)
+  app.get('/api/telegram/runtime/parity', authOrBotRequired, getTelegramRuntimeParityHandler)
   app.use('/api/access', accessRoutes)
   app.use('/api/analytics', analyticsRoutes)
   app.use('/api/events', eventsRoutes)

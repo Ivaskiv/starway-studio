@@ -2,6 +2,7 @@ import { FOCUS_PRODUCT_CODE } from '@/products/focus/config/focus.constants.js'
 import { ZoomSessionType, ZoomStatus } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { bot } from '../../../lib/telegram.js'
+import { getUserAccessState } from '../../subscriptions/payments/focus-access.js'
 import { afterZoomOperation } from '../core/zoom.operations.service.js'
 import { endOfKyivWeek, startOfKyivWeek } from '../shared/zoom.time.utils.js'
 
@@ -41,20 +42,9 @@ export async function assertWeeklyPrivateLimit(
 export async function isActiveFocusSubscriber(
   userId: string
 ): Promise<boolean> {
-  const now = new Date()
-  const subscription = await prisma.productSubscription.findFirst({
-    where: {
-      userId,
-      status: 'ACTIVE',
-      product: {
-        code: FOCUS_PRODUCT_CODE,
-      },
-      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-    },
-    select: { id: true },
-  })
-
-  return Boolean(subscription)
+  void FOCUS_PRODUCT_CODE
+  const accessState = await getUserAccessState(userId)
+  return accessState.hasFocus
 }
 
 export async function getAvailablePrivateSlots(

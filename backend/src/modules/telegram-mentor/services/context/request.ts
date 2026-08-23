@@ -369,6 +369,14 @@ async function buildLinkedRequestContext(
     .find((message) => message.role === 'assistant')
     ?.content ?? null
   const canonicalFocusAccess = accessState?.state === 'FOCUS_ACTIVE' || accessState?.hasFocus === true
+  const focusParticipationStatus =
+    accessState?.state === 'FOCUS_ACTIVE'
+      ? 'active'
+      : accessState?.state === 'PREMIUM' || accessState?.state === 'FREE_WEEK1'
+        ? 'trial'
+        : 'inactive'
+  const focusParticipationIsActive =
+    accessState?.state === 'FOCUS_ACTIVE' || accessState?.state === 'FREE_WEEK1'
 
   return freezeContext({
     chatId,
@@ -391,12 +399,8 @@ async function buildLinkedRequestContext(
       wheelCooldownDaysLeft: wheelCooldown.daysLeft,
     },
     focusParticipation: {
-      isActive: canonicalFocusAccess || userRecord.focusPaid,
-      status: canonicalFocusAccess
-        ? 'active'
-        : lifecycle.state === 'trial'
-          ? 'trial'
-          : 'inactive',
+      isActive: focusParticipationIsActive,
+      status: focusParticipationStatus,
     },
     nextZoom: nextZoom
       ? {

@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
 import { prisma } from '../../../../db/client.js'
 import { trackEvent } from '../../../events/service.js'
+import { getUserAccessState } from '../../../subscriptions/payments/focus-access.js'
 import { reconcileTelegramIdentityUsers } from '../../../user/identity/service.js'
 
 type IdentityCandidate = {
@@ -10,35 +11,12 @@ type IdentityCandidate = {
   telegramChatId: string | null
   telegramLinkedAt: Date | null
   createdAt: Date
-  productSubscriptions: Array<{
-    status: string
-    paidAt: Date | null
-    expiresAt: Date | null
-    trialEndsAt: Date | null
-    createdAt: Date
-  }>
-}
-
-function hasActiveFocusSubscription(candidate: IdentityCandidate, now: Date): boolean {
-  return candidate.productSubscriptions.some((subscription) => {
-    const status = String(subscription.status ?? '').trim().toLowerCase()
-
-    if (status === 'trial') {
-      return Boolean(subscription.trialEndsAt && subscription.trialEndsAt.getTime() > now.getTime())
-    }
-
-    if (status !== 'active' && status !== 'paid') {
-      return false
-    }
-
-    return !subscription.expiresAt || subscription.expiresAt.getTime() > now.getTime()
-  })
 }
 
 function scoreIdentityCandidate(
   candidate: IdentityCandidate,
   params: { chatId: string; telegramUserId: string; telegramUserName: string | null },
-  now: Date,
+  hasCanonicalFocusAccess: boolean,
 ): number {
   let score = 0
 
@@ -46,24 +24,34 @@ function scoreIdentityCandidate(
   if (candidate.telegramUserId === params.telegramUserId) score += 12
   if (params.telegramUserName && candidate.telegramUserName === params.telegramUserName) score += 6
   if (candidate.telegramLinkedAt) score += 3
-  if (hasActiveFocusSubscription(candidate, now)) score += 40
+  if (hasCanonicalFocusAccess) score += 40
 
   return score
 }
 
-function chooseBestIdentityCandidate(
+async function chooseBestIdentityCandidate(
   candidates: IdentityCandidate[],
   params: { chatId: string; telegramUserId: string; telegramUserName: string | null },
-): IdentityCandidate | null {
+): Promise<IdentityCandidate | null> {
   if (candidates.length === 0) return null
 
-  const now = new Date()
+  const canonicalAccessByUserId = new Map(
+    await Promise.all(candidates.map(async (candidate) => [
+      candidate.id,
+      await getUserAccessState(candidate.id)
+        .then((accessState) => accessState.hasFocus)
+        .catch(() => false),
+    ] as const)),
+  )
+
   return [...candidates].sort((left, right) => {
-    const scoreDiff = scoreIdentityCandidate(right, params, now) - scoreIdentityCandidate(left, params, now)
+    const scoreDiff =
+      scoreIdentityCandidate(right, params, canonicalAccessByUserId.get(right.id) === true)
+      - scoreIdentityCandidate(left, params, canonicalAccessByUserId.get(left.id) === true)
     if (scoreDiff !== 0) return scoreDiff
 
-    const leftHasFocus = hasActiveFocusSubscription(left, now)
-    const rightHasFocus = hasActiveFocusSubscription(right, now)
+    const leftHasFocus = canonicalAccessByUserId.get(left.id) === true
+    const rightHasFocus = canonicalAccessByUserId.get(right.id) === true
     if (leftHasFocus !== rightHasFocus) {
       return Number(rightHasFocus) - Number(leftHasFocus)
     }
@@ -102,24 +90,9 @@ export async function findLinkedUserId(params: {
       telegramChatId: true,
       telegramLinkedAt: true,
       createdAt: true,
-      productSubscriptions: {
-        where: {
-          product: {
-            code: { equals: 'focus', mode: 'insensitive' },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: {
-          status: true,
-          paidAt: true,
-          expiresAt: true,
-          trialEndsAt: true,
-          createdAt: true,
-        },
-      },
     },
   })
-  const foundByTelegramIdentity = chooseBestIdentityCandidate(identityCandidates, params)
+  const foundByTelegramIdentity = await chooseBestIdentityCandidate(identityCandidates, params)
 
   if (existingLink?.userId && foundByTelegramIdentity?.id && existingLink.userId !== foundByTelegramIdentity.id) {
     const reconciled = await reconcileTelegramIdentityUsers({
