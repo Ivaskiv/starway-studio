@@ -99,6 +99,40 @@ const ROUTE_TRANSITION_TIMEOUT_MS = 6000
 const REHYDRATE_COOLDOWN_MS = 1500
 const DEBUG_LOG_LIMIT = 50
 const SAFE_GUEST_FALLBACK_ROUTE = '/'
+export const PENDING_DEEPLINK_TOKEN_KEY = 'starway_pending_deeplink_token'
+export const PENDING_DEEPLINK_SESSION_EVENT = 'starway:deeplink-session-state-changed'
+
+export function shouldSuppressMiniAppAuthModal(
+  isMiniAppRuntime: boolean,
+  appState: SessionAppState,
+): boolean {
+  return isMiniAppRuntime && appState === 'auth_restoring'
+}
+
+export function logCoachWebAppTrace(
+  event: string,
+  payload: Record<string, unknown> = {},
+): void {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return
+
+  const requestPayload = {
+    channel: 'COACH_WEBAPP_TRACE',
+    event,
+    payload,
+  }
+
+  console.info('[COACH_WEBAPP_TRACE]', requestPayload)
+  if (typeof fetch !== 'function') return
+  void fetch('/api/debug/client-trace', {
+    method: 'POST',
+    credentials: 'include',
+    keepalive: true,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestPayload),
+  }).catch(() => undefined)
+}
 
 function logAuthTrace(event: string, data: Record<string, unknown> = {}): void {
   if (!import.meta.env.DEV) return
@@ -131,6 +165,23 @@ function hasRecoverableSessionEvidence(): boolean {
   )
 }
 
+export function hasPendingDeepLinkSessionHandoff(pathname: string, search: string): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const params = new URLSearchParams(search)
+  if (params.get('dl')?.trim()) {
+    return true
+  }
+
+  try {
+    return Boolean(window.sessionStorage.getItem(PENDING_DEEPLINK_TOKEN_KEY)?.trim())
+  } catch {
+    return pathname === '/auth/telegram/success'
+  }
+}
+
 function SessionModalHost() {
   const orchestrator = useSessionOrchestrator()
   const navigate = useNavigate()
@@ -138,7 +189,7 @@ function SessionModalHost() {
   const isMiniAppRuntime = isTelegramMiniApp(location.pathname)
 
   if (orchestrator.sessionModal.kind === 'auth') {
-    if (isMiniAppRuntime) {
+    if (shouldSuppressMiniAppAuthModal(isMiniAppRuntime, orchestrator.appState)) {
       return null
     }
 
@@ -261,6 +312,9 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   const [restoreAttempted, setRestoreAttempted] = useState(false)
   const [lastRestoreAt, setLastRestoreAt] = useState(0)
   const [restoreFailureWithEvidence, setRestoreFailureWithEvidence] = useState(false)
+  const [hasPendingDeepLinkSession, setHasPendingDeepLinkSession] = useState(() => (
+    hasPendingDeepLinkSessionHandoff(location.pathname, location.search)
+  ))
 
   const accessQuery = useGetMyAccessQuery(undefined, {
     skip: !isAuthenticated || authRestoreStatus !== 'ready',
@@ -282,7 +336,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
     ? true
     : isAuthenticated
       ? authRestoreStatus === 'ready' && isAccessReady && isSystemReady && !routeTransitionTarget
-      : authRestoreStatus === 'ready' || authRestoreStatus === 'failed'
+      : !hasPendingDeepLinkSession && (authRestoreStatus === 'ready' || authRestoreStatus === 'failed')
 
   const isNavigationLocked =
     appState === 'booting' ||
@@ -305,6 +359,31 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   useEffect(() => {
     locationPathRef.current = location.pathname
   }, [location.pathname])
+
+  useEffect(() => {
+    setHasPendingDeepLinkSession(hasPendingDeepLinkSessionHandoff(location.pathname, location.search))
+  }, [location.pathname, location.search])
+
+  useEffect(() => {
+    logCoachWebAppTrace('APP_BOOTSTRAPPED', {
+      pathname: location.pathname,
+      protectedRoute: isProtectedRoute,
+    })
+  }, [isProtectedRoute, location.pathname])
+
+  useEffect(() => {
+    const syncPendingDeepLinkState = () => {
+      setHasPendingDeepLinkSession(
+        hasPendingDeepLinkSessionHandoff(locationPathRef.current, window.location.search),
+      )
+    }
+
+    window.addEventListener(PENDING_DEEPLINK_SESSION_EVENT, syncPendingDeepLinkState)
+
+    return () => {
+      window.removeEventListener(PENDING_DEEPLINK_SESSION_EVENT, syncPendingDeepLinkState)
+    }
+  }, [])
 
   useEffect(() => {
     isAuthenticatedRef.current = isAuthenticated
@@ -448,6 +527,11 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   useEffect(() => {
     if (!restoreAttempted && authRestoreStatus === 'idle') return
 
+    if (!isAuthenticated && hasPendingDeepLinkSession) {
+      setAppState('auth_restoring')
+      return
+    }
+
     if (authRestoreStatus === 'restoring') {
       setAppState('auth_restoring')
       return
@@ -467,7 +551,65 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
     }
 
     setAppState('guest')
-  }, [authRestoreStatus, isAuthenticated, isProtectedRoute, pendingNavigation, restoreAttempted, restoreFailureWithEvidence])
+  }, [
+    authRestoreStatus,
+    hasPendingDeepLinkSession,
+    isAuthenticated,
+    isProtectedRoute,
+    pendingNavigation,
+    restoreAttempted,
+    restoreFailureWithEvidence,
+  ])
+
+  useEffect(() => {
+    logCoachWebAppTrace('SESSION_STATE', {
+      appState,
+      authRestoreStatus,
+      hasPendingDeepLinkSession,
+      isAuthenticated,
+      routeReady,
+      isAccessReady,
+      isSystemReady,
+    })
+  }, [
+    appState,
+    authRestoreStatus,
+    hasPendingDeepLinkSession,
+    isAccessReady,
+    isAuthenticated,
+    isSystemReady,
+    routeReady,
+  ])
+
+  useEffect(() => {
+    if (canRunProtectedQueries) {
+      logCoachWebAppTrace('ACCESS_START', {
+        pathname: location.pathname,
+      })
+    }
+  }, [canRunProtectedQueries, location.pathname])
+
+  useEffect(() => {
+    if (!canRunProtectedQueries) return
+    if (!accessQuery.isSuccess && !accessQuery.isError) return
+
+    logCoachWebAppTrace('ACCESS_RESULT', {
+      ok: accessQuery.isSuccess,
+      status: accessQuery.isSuccess ? 'success' : 'error',
+      hasProductsManage:
+        accessQuery.isSuccess && accessQuery.data
+          ? accessQuery.data.abilities?.['products.manage'] === true
+          : null,
+    })
+  }, [accessQuery.data, accessQuery.isError, accessQuery.isSuccess, canRunProtectedQueries])
+
+  useEffect(() => {
+    if (routeReady) {
+      logCoachWebAppTrace('ROUTE_RELEASED', {
+        pathname: location.pathname,
+      })
+    }
+  }, [location.pathname, routeReady])
 
   useEffect(() => {
     if (!routeTransitionTarget) return
@@ -495,6 +637,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   useEffect(() => {
     if (!pendingNavigation) return
     if (appState === 'auth_restoring') return
+    if (hasPendingDeepLinkSession) return
 
     if (isAuthenticated && isAccessReady && isSystemReady) {
       const nextRequest = pendingNavigation
@@ -512,7 +655,16 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
         reason: isTelegramMiniAppAuthContext() ? 'telegram_required' : 'protected_route',
       })
     }
-  }, [appState, isAccessReady, isAuthenticated, isSystemReady, navigate, pendingNavigation, pushDebugEvent])
+  }, [
+    appState,
+    hasPendingDeepLinkSession,
+    isAccessReady,
+    isAuthenticated,
+    isSystemReady,
+    navigate,
+    pendingNavigation,
+    pushDebugEvent,
+  ])
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -528,7 +680,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   }, [restoreSession])
 
   useEffect(() => {
-    if (!isProtectedRoute || appState === 'auth_restoring') return
+    if (!isProtectedRoute || appState === 'auth_restoring' || hasPendingDeepLinkSession) return
 
     if (!isAuthenticated && restoreAttempted) {
       logAuthTrace('routeGuardTriggered', {
@@ -551,7 +703,21 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
       })
       setPendingNavigation((current) => current ?? { path: `${location.pathname}${location.search}` })
     }
-  }, [appState, isAuthenticated, isProtectedRoute, location.pathname, location.search, restoreAttempted])
+  }, [
+    appState,
+    hasPendingDeepLinkSession,
+    isAuthenticated,
+    isProtectedRoute,
+    location.pathname,
+    location.search,
+    restoreAttempted,
+  ])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    setSessionModal((current) => current.kind === 'closed' ? current : { kind: 'closed' })
+  }, [isAuthenticated])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !import.meta.env.DEV) return
@@ -567,6 +733,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
         appState,
         authRestoreStatus,
         isAuthenticated,
+        hasPendingDeepLinkSession,
         routeReady,
         isProtectedRoute,
         routeTransitionTarget,
@@ -578,6 +745,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   }, [
     appState,
     authRestoreStatus,
+    hasPendingDeepLinkSession,
     isAuthenticated,
     isProtectedRoute,
     lastRestoreAt,

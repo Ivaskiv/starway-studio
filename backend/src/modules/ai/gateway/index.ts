@@ -2,6 +2,7 @@
 export { executeCanonicalPromptAgent } from './execute.js'
 export {
 buildGatewayPromptSources,
+resolveGatewayPromptRead,
 resolveRepositoryPromptsDir
 } from './runtime.js'
 export { TelegramAgentGateway } from './service.js'

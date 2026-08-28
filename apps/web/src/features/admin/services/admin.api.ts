@@ -39,21 +39,47 @@ export interface RuntimeAgentRecord {
   sourceFiles: string[]
 }
 
+export interface AgentPromptReadRecord {
+  agentKey: string
+  capabilityType: 'LIVE_AGENT' | 'PROMPT_ONLY' | 'KNOWLEDGE_TOOL'
+  promptId: string
+  editablePrompt: boolean
+  reason?: string
+  promptContent: string | null
+  content: string | null
+  source: 'db' | 'filesystem' | null
+  version: number | null
+  sourceFiles: string[]
+}
+
+export interface AgentDetailRecord extends AgentPromptReadRecord {
+  name: string
+  runtimeRegistered: boolean
+  runtimeStatus: 'active' | 'running' | 'pending' | null
+  providerPolicy: string | null
+  analysisState: 'idle'
+}
+
 export interface RuntimeAgentTestResult {
-  ok: boolean
-  result: {
-    bot: string
-    intent: string
-    agentId: string
-    taskId: string
-    artifact: {
-      id: string
-      type: string
-      summary: string
-      payload: Record<string, unknown>
-      metadata?: Record<string, unknown>
-    }
-  }
+  testRunId: string | null
+  agentKey: string
+  provider: string | null
+  model: string | null
+  passed: boolean
+  output: Record<string, unknown> | null
+  errors: string[]
+}
+
+export interface AgentRegressionCaseResult {
+  id: string
+  passed: boolean
+  error?: string
+}
+
+export interface RuntimeAgentRegressionResult {
+  regressionRunId: string | null
+  passed: boolean
+  cases: AgentRegressionCaseResult[]
 }
 
 export interface PromptImpactDependencyCard {
@@ -119,9 +145,28 @@ export const adminApi = api.injectEndpoints({
       providesTags: ['PromptVersions'],
     }),
 
+    getAgent: builder.query<AgentDetailRecord, { key: string }>({
+      query: ({ key }) => ({
+        url: `/admin/agents/${key}`,
+      }),
+    }),
+
+    getAgentPrompt: builder.query<AgentPromptReadRecord, { key: string }>({
+      query: ({ key }) => ({
+        url: `/admin/agents/${key}/prompt`,
+      }),
+    }),
+
     runRuntimeAgentTest: builder.mutation<
       RuntimeAgentTestResult,
-      { key: string; message: string; messageType?: string | null }
+      {
+        key: string
+        promptContent: string
+        testInput: {
+          message: string
+          messageType?: string | null
+        }
+      }
     >({
       query: ({ key, ...body }) => ({
         url: `/admin/agents/${key}/test`,
@@ -130,9 +175,32 @@ export const adminApi = api.injectEndpoints({
       }),
     }),
 
+    runRuntimeAgentRegressionTest: builder.mutation<
+      RuntimeAgentRegressionResult,
+      { key: string; promptContent: string }
+    >({
+      query: ({ key, ...body }) => ({
+        url: `/admin/agents/${key}/regression-test`,
+        method: 'POST',
+        body,
+      }),
+    }),
+
     createPromptVersion: builder.mutation<
       { prompt: PromptVersionRecord },
-      { name: string; content: string; isActive?: boolean }
+      {
+        name: string
+        content: string
+        isActive?: boolean
+        agentKey?: string
+        promptId?: string
+        validationState?: 'passed' | 'failed' | 'idle'
+        analysisState?: 'passed' | 'failed' | 'idle'
+        testState?: 'passed' | 'failed' | 'idle'
+        regressionState?: 'passed' | 'failed' | 'idle'
+        testRunId?: string | null
+        regressionRunId?: string | null
+      }
     >({
       query: (body) => ({
         url: '/admin/prompts',
@@ -191,7 +259,10 @@ export const {
   useGetAdminProductsQuery,
   useGetPromptVersionsQuery,
   useGetRuntimeAgentsQuery,
+  useGetAgentQuery,
+  useGetAgentPromptQuery,
   useRunRuntimeAgentTestMutation,
+  useRunRuntimeAgentRegressionTestMutation,
   useCreatePromptVersionMutation,
   useActivatePromptVersionMutation,
   useDeletePromptVersionMutation,

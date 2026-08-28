@@ -63,6 +63,15 @@ RuntimeGatewayExecutionInput,
 RuntimeTelemetry,
 TelegramAgentGatewayResult,
 } from './types.js'
+
+export type GatewayPromptReadSource = 'db' | 'filesystem'
+
+export interface GatewayPromptReadResult {
+  promptId: string
+  content: string
+  source: GatewayPromptReadSource
+  version: number
+}
 export class TelegramRuntimeExecutor implements IRuntimeGatewayExecutor {
   private readonly logger: IRuntimeLogger
   private readonly agentRunner: AgentRunner
@@ -249,9 +258,10 @@ export class TelegramRuntimeExecutor implements IRuntimeGatewayExecutor {
   async execute(
     input: RuntimeGatewayExecutionInput
   ): Promise<TelegramAgentGatewayResult['artifact']> {
-    const state = createExecutionState(input.task, input.agentDefinition.id)
+    const task = attachPromptOverride(input.task, input.promptOverride ?? null)
+    const state = createExecutionState(task, input.agentDefinition.id)
     const runResult = await this.agentRunner.run({
-      task: input.task,
+      task,
       agentId: input.agentDefinition.id,
       state,
     })
@@ -292,6 +302,23 @@ export class TelegramRuntimeExecutor implements IRuntimeGatewayExecutor {
   }
 }
 
+function attachPromptOverride(
+  task: EngineeringTask,
+  promptOverride: RuntimeGatewayExecutionInput['promptOverride']
+): EngineeringTask {
+  if (!promptOverride?.content.trim()) {
+    return task
+  }
+
+  return {
+    ...task,
+    metadata: {
+      ...(task.metadata ?? {}),
+      promptOverride,
+    },
+  }
+}
+
 export function resolveRepositoryPromptsDir(): string {
   return path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -309,6 +336,11 @@ export function buildGatewayPromptSources(): PromptSourceDefinition[] {
 
   return [
     ...defaultSources,
+    buildPromptAlias(
+      'strategist-agent-prompt',
+      'strategy_agent',
+      path.resolve(promptsDir, '../docs/agents/ai-strategist/business-model-full.md')
+    ),
     buildPromptAlias(
       'marketing-analyst-prompt',
       'marketing_analyst',
@@ -350,6 +382,53 @@ export function buildGatewayPromptSources(): PromptSourceDefinition[] {
       path.resolve(promptsDir, '../docs/client/svoia-nadya/SKILL-coach.md')
     ),
   ]
+}
+
+export async function resolveGatewayPromptRead(
+  promptId: string
+): Promise<GatewayPromptReadResult | null> {
+  const activePrompt = await prisma.promptVersion.findFirst({
+    where: {
+      name: promptId,
+      isActive: true,
+    },
+    orderBy: {
+      version: 'desc',
+    },
+    select: {
+      content: true,
+      version: true,
+    },
+  })
+
+  if (activePrompt?.content.trim()) {
+    return {
+      promptId,
+      content: activePrompt.content,
+      source: 'db',
+      version: activePrompt.version,
+    }
+  }
+
+  const source = buildGatewayPromptSources().find((item) => item.id === promptId)
+  if (!source) {
+    return null
+  }
+
+  const content = await new FileSystemPromptLoader().load({
+    source,
+  } as PromptLoaderInput)
+
+  if (!content.trim()) {
+    return null
+  }
+
+  return {
+    promptId,
+    content,
+    source: 'filesystem',
+    version: 0,
+  }
 }
 
 function buildPromptAlias(
@@ -417,6 +496,7 @@ function resolveGatewayProviderId():
     .trim()
     .toLowerCase()
   if (
+    raw === 'openai' ||
     raw === 'anthropic' ||
     raw === 'gemini' ||
     raw === 'ollama' ||

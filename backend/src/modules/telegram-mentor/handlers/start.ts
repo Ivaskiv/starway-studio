@@ -20,7 +20,7 @@ import {
 } from './abTest.start.js'
 import { buildHomeScreen } from './homeScreen.builder.js'
 import { loadAbTestProgress } from '@/products/ab-system/telegram/progress.js'
-import { renderCurrentView, sendResultSnapshot } from '@/products/ab-system/telegram/views.js'
+import { buildResultSnapshotPayload } from '@/products/ab-system/telegram/views.js'
 import { generateMagicLink } from '../../deeplinks/service.js'
 import { handleAbTestEmailCaptureText } from '@/products/ab-system/telegram/service.js'
 import { absystemContent } from '@/products/absystem/config/content.js'
@@ -211,6 +211,77 @@ async function loadUserSnapshot(userId: string): Promise<StartUserSnapshot> {
   return {
     ...snapshot,
     lifecycleState: effectiveLifecycleState,
+  }
+}
+
+export type PlainStartPreviewPayload =
+  | {
+      branch: 'completed_result_replay'
+      text: string
+      buttons: Array<Array<
+        | { text: string; callback_data: string }
+        | { text: string; url: string }
+        | { text: string; web_app: { url: string } }
+      >>
+      parseMode: 'HTML'
+    }
+  | {
+      branch: 'home_screen'
+      text: string
+      buttons: Array<Array<
+        | { text: string; callback_data: string }
+        | { text: string; url: string }
+        | { text: string; web_app: { url: string } }
+      >>
+      parseMode: 'HTML'
+    }
+  | {
+      branch: 'name_prompt'
+      text: string
+      buttons: []
+      parseMode: null
+    }
+
+type PlainStartPreviewButtons = Exclude<PlainStartPreviewPayload['buttons'], []>
+
+export async function buildPlainStartPreview(userId: string): Promise<PlainStartPreviewPayload> {
+  const user = await loadUserSnapshot(userId)
+  const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
+
+  if (
+    user.lifecycleState === 'TEST_DONE' &&
+    abTestProgress?.status === 'completed' &&
+    abTestProgress.result_key
+  ) {
+    const payload = await buildResultSnapshotPayload({
+      chatId: 'preview',
+      userId: user.id,
+      resultKey: abTestProgress.result_key,
+      firstName: user.firstName,
+    })
+    return {
+      branch: 'completed_result_replay',
+      text: payload.text,
+      buttons: payload.replyMarkup.inline_keyboard as PlainStartPreviewButtons,
+      parseMode: 'HTML',
+    }
+  }
+
+  if (user.lifecycleState === 'NEW_USER' && !user.firstName) {
+    return {
+      branch: 'name_prompt',
+      text: 'Як тебе звати?',
+      buttons: [],
+      parseMode: null,
+    }
+  }
+
+  const screen = await buildHomeScreen(user, {} as StartContext)
+  return {
+    branch: 'home_screen',
+    text: screen.text,
+    buttons: screen.reply_markup.inline_keyboard,
+    parseMode: screen.parseMode ?? 'HTML',
   }
 }
 
@@ -632,10 +703,9 @@ export async function handleStart(ctx: StartContext) {
     const abTestProgress = await loadAbTestProgress(user.id).catch(() => null)
     const selectedBranch =
       isPlainStart &&
-      user.lifecycleState === 'TEST_DONE' &&
       abTestProgress?.status === 'completed' &&
       abTestProgress.result_key
-        ? 'completed_result_replay'
+        ? 'completed_returning_home'
         : 'home_or_payload'
 
     logger.info(`[TELEGRAM_START_RUNTIME] ${JSON.stringify({
@@ -649,31 +719,6 @@ export async function handleStart(ctx: StartContext) {
       runtimeCommitSha: readRuntimeCommitSha(),
       phase: 'resolved',
     })}`)
-
-    if (
-      isPlainStart &&
-      user.lifecycleState === 'TEST_DONE' &&
-      abTestProgress?.status === 'completed' &&
-      abTestProgress.result_key
-    ) {
-      logger.info(`[TELEGRAM_START_RUNTIME] ${JSON.stringify({
-        updateId: Number.isFinite(updateId) ? updateId : null,
-        chatId,
-        botUsername: ctx.botInfo?.username ?? 'unknown',
-        resultKey: abTestProgress.result_key,
-        selectedBranch,
-        runtimeCommitSha: readRuntimeCommitSha(),
-        phase: 'before_result_snapshot',
-      })}`)
-      await sendResultSnapshot(ctx, {
-        chatId,
-        userId: user.id,
-        resultKey: abTestProgress.result_key,
-        firstName: user.firstName,
-      })
-      startMessageSent = true
-      return
-    }
 
     if (user.lifecycleState === 'NEW_USER' && !ctx.from?.first_name && !user.firstName) {
       await ctx.telegram.sendMessage(chatId, 'Як тебе звати?')

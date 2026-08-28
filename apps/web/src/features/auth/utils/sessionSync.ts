@@ -59,7 +59,8 @@ function isLikelyTelegramMiniAppRuntime(): boolean {
   return Boolean(
     window.location.pathname.startsWith('/miniapp') ||
     hasTelegramQueryHints ||
-    (hasTelegramWebAppObject && hasInitData),
+    hasTelegramWebAppObject ||
+    hasInitData,
   )
 }
 
@@ -101,9 +102,8 @@ async function waitForTelegramRuntimeReady(timeoutMs = 1600): Promise<void> {
   while (Date.now() - startedAt < timeoutMs) {
     const runtimeUser = getTelegramRuntimeUser()
     const initData = getTelegramRuntimeInitData()
-    const telegramReady = Boolean((window as { Telegram?: { WebApp?: unknown } }).Telegram?.WebApp)
 
-    if (runtimeUser?.id || initData || telegramReady) {
+    if (runtimeUser?.id || initData) {
       return
     }
 
@@ -117,11 +117,18 @@ function isTelegramDevFallbackAllowed(): boolean {
 }
 
 function canUseCookieSessionRecovery(): boolean {
-  return typeof document !== 'undefined' && (
-    hasSessionHint() ||
-    Boolean(getRefreshToken()) ||
-    isLikelyTelegramMiniAppRuntime()
-  )
+  if (typeof document === 'undefined' || typeof window === 'undefined') return false
+
+  if (hasSessionHint() || Boolean(getRefreshToken()) || isLikelyTelegramMiniAppRuntime()) {
+    return true
+  }
+
+  const refreshUrl = resolveApiUrl('/auth/refresh')
+  try {
+    return new URL(refreshUrl, window.location.origin).origin === window.location.origin
+  } catch {
+    return refreshUrl.startsWith('/')
+  }
 }
 
 async function readJsonSafely(response: Response) {
@@ -152,13 +159,19 @@ export async function syncAuthSession({
   dispatch,
   theme,
 }: SyncAuthSessionOptions): Promise<boolean> {
+  const isTelegramMiniAppRuntime = isLikelyTelegramMiniAppRuntime()
+
+  if (isTelegramMiniAppRuntime) {
+    await waitForTelegramRuntimeReady()
+  }
+
   if (import.meta.env.DEV) {
     console.info('[sessionSync] start', {
       allowRefreshWithoutHint,
       hasToken: Boolean(getToken()),
       hasRefreshToken: Boolean(getRefreshToken()),
       hasSessionHint: hasSessionHint(),
-      isTelegramRuntime: isLikelyTelegramMiniAppRuntime(),
+      isTelegramRuntime: isTelegramMiniAppRuntime,
     })
   }
 
@@ -167,7 +180,6 @@ export async function syncAuthSession({
   const sessionHint = hasSessionHint()
   const telegramUser = getTelegramRuntimeUser()
   const telegramInitData = getTelegramRuntimeInitData()
-  const isTelegramMiniAppRuntime = isLikelyTelegramMiniAppRuntime()
   const canTryRefresh =
     Boolean(refreshToken) ||
     sessionHint ||
@@ -299,8 +311,6 @@ export async function syncAuthSession({
       console.warn('[sessionSync] Access-token restore failed', error)
     }
   }
-
-  await waitForTelegramRuntimeReady()
 
   if (telegramUser?.id && !telegramInitData && isTelegramMiniAppRuntime && isTelegramDevFallbackAllowed()) {
     try {

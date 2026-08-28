@@ -509,10 +509,13 @@ export async function launchBot(
     // Polling mode requires webhook to be cleared, otherwise Telegram keeps
     // delivering updates to webhook endpoint and getUpdates sees conflicts.
     await targetBot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => undefined)
-    await targetBot.launch()
+    void targetBot.launch({ dropPendingUpdates: false }).catch((error: unknown) => {
+      console.error(`✗ ${name} failed to start:`, error)
+    })
     console.log(`✓ ${name} started [polling]`)
   } catch (err) {
     console.error(`✗ ${name} failed to start:`, err)
+    throw err
   }
 }
 

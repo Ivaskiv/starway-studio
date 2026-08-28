@@ -1,9 +1,7 @@
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
-import { useTelegramMiniAppAuthMutation } from '@/features/auth/services/auth.api'
 import {
-  selectAuthStatus,
   selectCurrentUser,
   selectUserRole,
 } from '@/features/auth/services/auth.slice'
@@ -13,7 +11,7 @@ import {
 } from '@/features/zoom/services/zoom.api'
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import { api } from '@/services/api'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useCalendarData } from './useCalendarData'
 import { useAccessActions } from './useAccessActions'
@@ -26,7 +24,6 @@ import {
   resolveDirectZoomBookingState,
   resolveNextSessionQuestionSummary,
   resolveNextZoomBoundaryAt,
-  resolveTelegramMiniAppAuthInitData,
   resolveUpcomingZoomSessions,
   resolveZoomAccessState,
   resolveZoomCalendarEntryMode,
@@ -42,7 +39,6 @@ import {
 export function useMiniAppCalendar() {
   const dispatch = useAppDispatch()
   const location = useLocation()
-  const authStatus = useAppSelector(selectAuthStatus)
   const user = useAppSelector(selectCurrentUser)
   const role = useAppSelector(selectUserRole)
   const isCoach = isCoachRole(role)
@@ -82,7 +78,6 @@ export function useMiniAppCalendar() {
     authRestoreStatus,
     canRunProtectedQueries,
   })
-  const [telegramMiniAppAuth] = useTelegramMiniAppAuthMutation()
   const [registerAttendee] = useRegisterAttendeeMutation()
   const [submitBookingQuestion, { isLoading: isSubmittingBookingQuestion }] =
     useSubmitBookingQuestionMutation()
@@ -109,7 +104,6 @@ export function useMiniAppCalendar() {
     string | null
   >(null)
   const [directBookingExpired, setDirectBookingExpired] = useState(false)
-  const authBootstrapStartedRef = useRef(false)
   const directBookingParams = readDirectZoomBookingParams(routeSearch)
   const scheduleSessions = usePublicBookingSchedule
     ? []
@@ -232,28 +226,6 @@ export function useMiniAppCalendar() {
       ])
     )
   }, [dispatch])
-  useEffect(() => {
-    if (authBootstrapStartedRef.current) {
-      return
-    }
-    const nextInitData = resolveTelegramMiniAppAuthInitData(
-      authStatus,
-      (
-        window as {
-          Telegram?: {
-            WebApp?: {
-              initData?: string
-            }
-          }
-        }
-      ).Telegram?.WebApp?.initData
-    )
-    if (!nextInitData) {
-      return
-    }
-    authBootstrapStartedRef.current = true
-    void telegramMiniAppAuth({ initData: nextInitData })
-  }, [authStatus, dispatch, telegramMiniAppAuth])
   useEffect(() => {
     if (!user || authRestoreStatus !== 'ready' || !canRunProtectedQueries) {
       return

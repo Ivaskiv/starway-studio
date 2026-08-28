@@ -83,7 +83,64 @@ export async function sendResultSnapshot(
     firstName?: string | null
   }
 ): Promise<void> {
-  const resultDef = getAbTestResultDefinition(input.resultKey)
+  const payload = await buildResultSnapshotPayload(input)
+
+  logger.info(`[TELEGRAM_RESULT_SNAPSHOT] ${JSON.stringify({
+    chatId: String(input.chatId),
+    resultKey: input.resultKey,
+    keyboard: describeInlineKeyboard(payload.replyMarkup),
+    runtimeCommitSha: String(
+      process.env.RENDER_GIT_COMMIT
+      || process.env.COMMIT_SHA
+      || process.env.VERCEL_GIT_COMMIT_SHA
+      || 'unknown',
+    ).trim(),
+    phase: 'before_send',
+  })}`)
+
+  await sendTelegramMessage(
+    ctx,
+    input.chatId,
+    {
+      text: payload.text,
+      parseMode: 'HTML',
+    },
+    {
+      replyMarkup: {
+        inline_keyboard: payload.replyMarkup.inline_keyboard,
+      },
+    },
+  ).then((message) => {
+    const messageId =
+      typeof message === 'object' && message !== null && 'message_id' in message
+        ? (message as { message_id: unknown }).message_id
+        : null
+    logger.info(`[TELEGRAM_RESULT_SNAPSHOT] ${JSON.stringify({
+      messageId,
+      chatId: String(input.chatId),
+      resultKey: input.resultKey,
+      phase: 'sent',
+    })}`)
+  }).catch((error) => {
+    console.error('[sendResultSnapshot] failed', {
+      userId: input.userId,
+      resultKey: input.resultKey,
+      error,
+    })
+  })
+}
+
+export async function buildResultSnapshotPayload(
+  input: {
+    chatId: string | number
+    userId: string
+    resultKey: AbTestResultKey
+    firstName?: string | null
+  }
+): Promise<{
+  text: string
+  replyMarkup: InlineKeyboardMarkup
+}> {
   const snapshotCopyByKey = {
     state: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.STATE,
     goal: absystemContent.TELEGRAM_COPY.RESULT_SNAPSHOT.GOAL,
@@ -195,47 +252,8 @@ export async function sendResultSnapshot(
     resolvedNextStep,
   ].join('\n').replaceAll(' 👋', '').replaceAll('📌 ', '').replaceAll(' 👇', '')
 
-  logger.info(`[TELEGRAM_RESULT_SNAPSHOT] ${JSON.stringify({
-    chatId: String(input.chatId),
-    resultKey: input.resultKey,
-    keyboard: describeInlineKeyboard(replyMarkup),
-    runtimeCommitSha: String(
-      process.env.RENDER_GIT_COMMIT
-      || process.env.COMMIT_SHA
-      || process.env.VERCEL_GIT_COMMIT_SHA
-      || 'unknown',
-    ).trim(),
-    phase: 'before_send',
-  })}`)
-
-  await sendTelegramMessage(
-    ctx,
-    input.chatId,
-    {
-      text: renderedSnapshotText,
-      parseMode: 'HTML',
-    },
-    {
-      replyMarkup: {
-        inline_keyboard: replyMarkup.inline_keyboard,
-      },
-    },
-  ).then((message) => {
-    const messageId =
-      typeof message === 'object' && message !== null && 'message_id' in message
-        ? (message as { message_id: unknown }).message_id
-        : null
-    logger.info(`[TELEGRAM_RESULT_SNAPSHOT] ${JSON.stringify({
-      messageId,
-      chatId: String(input.chatId),
-      resultKey: input.resultKey,
-      phase: 'sent',
-    })}`)
-  }).catch((error) => {
-    console.error('[sendResultSnapshot] failed', {
-      userId: input.userId,
-      resultKey: input.resultKey,
-      error,
-    })
-  })
+  return {
+    text: renderedSnapshotText,
+    replyMarkup,
+  }
 }

@@ -73,6 +73,34 @@ export class PromptRegistry implements IPromptRegistry {
       throw new PromptOwnershipConflictError(input.agentDefinition.id, [...canonicalPromptIds])
     }
 
+    const override = readPromptOverride(input.task.metadata, input.agentDefinition.promptId)
+    if (override) {
+      const source = this.selectSource({ promptId: input.agentDefinition.promptId })
+      if (!source.ownerAgentIds.includes(input.agentDefinition.id)) {
+        throw new PromptCompatibilityError(
+          `Prompt '${source.id}' override is not owned by agent '${input.agentDefinition.id}'.`,
+        )
+      }
+
+      this.logger.info('prompt_registry.prompt_override_resolved', {
+        taskId: input.task.id,
+        agentId: input.agentDefinition.id,
+        promptId: source.id,
+        promptVersion: override.version,
+      })
+
+      return {
+        id: source.id,
+        version: override.version,
+        content: override.content,
+        metadata: {
+          filePath: source.filePath,
+          ...source.metadata,
+          override: true,
+        },
+      }
+    }
+
     const prompt = await this.resolvePromptById({ promptId: input.agentDefinition.promptId })
     const matchingSource = this.findSource(prompt.id, prompt.version)
 
@@ -177,6 +205,35 @@ export class PromptRegistry implements IPromptRegistry {
       throw new PromptNotFoundError(promptId, version)
     }
     return source
+  }
+}
+
+function readPromptOverride(
+  metadata: Record<string, unknown> | undefined,
+  expectedPromptId: string,
+): { content: string; version: string } | null {
+  const candidate = metadata?.promptOverride
+  if (!candidate || typeof candidate !== 'object') {
+    return null
+  }
+
+  const promptId = typeof (candidate as { promptId?: unknown }).promptId === 'string'
+    ? (candidate as { promptId: string }).promptId.trim()
+    : ''
+  const content = typeof (candidate as { content?: unknown }).content === 'string'
+    ? (candidate as { content: string }).content
+    : ''
+  const version = typeof (candidate as { version?: unknown }).version === 'string'
+    ? (candidate as { version: string }).version.trim()
+    : 'draft-test'
+
+  if (!promptId || promptId !== expectedPromptId || !content.trim()) {
+    return null
+  }
+
+  return {
+    content,
+    version: version || 'draft-test',
   }
 }
 

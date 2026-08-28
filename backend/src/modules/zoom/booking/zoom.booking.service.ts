@@ -52,6 +52,10 @@ export async function getUpcomingZoomBookingView(userId: string) {
     where: {
       scheduledAt: { gte: new Date() },
       status: ZoomStatus.SCHEDULED,
+      OR: [
+        { requests: { path: ['type'], equals: 'group_practice' } },
+        { type: ZoomSessionType.GROUP },
+      ],
     },
     include: {
       _count: { select: { attendees: true } },

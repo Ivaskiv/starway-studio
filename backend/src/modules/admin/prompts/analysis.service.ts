@@ -1,9 +1,7 @@
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
 import { prisma } from '../../../db/client.js'
 import { openai } from '../../../lib/openai.js'
 import { runGuardedAiTask,stableHash } from '../../../services/aiGuard.service.js'
-import { buildGatewayPromptSources } from '../../ai/gateway/index.js'
+import { resolveGatewayPromptRead } from '../../ai/gateway/index.js'
 
 export const parsePromptContent = (content: string): unknown => {
   try {
@@ -67,16 +65,8 @@ function parseStringArray(value: unknown): string[] {
 }
 
 export async function buildRuntimePromptFallbackRecord(name: string) {
-  const source = buildGatewayPromptSources().find((item) => item.id === name)
-  if (!source) {
-    return null
-  }
-
-  const filePath = path.isAbsolute(source.filePath)
-    ? source.filePath
-    : path.resolve(process.cwd(), source.filePath)
-  const content = await readFile(filePath, 'utf8')
-  if (!content.trim()) {
+  const resolvedPrompt = await resolveGatewayPromptRead(name)
+  if (!resolvedPrompt || resolvedPrompt.source !== 'filesystem') {
     return null
   }
 
@@ -84,8 +74,8 @@ export async function buildRuntimePromptFallbackRecord(name: string) {
     id: `runtime:${name}`,
     name,
     version: 0,
-    content,
-    parsedContent: parsePromptContent(content),
+    content: resolvedPrompt.content,
+    parsedContent: parsePromptContent(resolvedPrompt.content),
     isActive: true,
     createdAt: new Date(0),
     source: 'filesystem' as const,

@@ -13,7 +13,7 @@ const mockPlanMessage = vi.fn()
 const mockRenderCurrentView = vi.fn()
 const mockSendResultSnapshot = vi.fn()
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('../../../../../src/db/client.js', () => ({
   prisma: {
     user: {
       findUniqueOrThrow: (...args: unknown[]) => mockFindUniqueOrThrow(...args),
@@ -31,19 +31,19 @@ const mockGetStartPayload = vi.fn()
 const mockParseFirstTouchPayload = vi.fn()
 const mockSyncAccessAwareChatEntryPoints = vi.fn()
 
-vi.mock('../start.shared.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/handlers/start.shared.js', () => ({
   getStartPayload: (...args: unknown[]) => mockGetStartPayload(...args),
   parseFirstTouchPayload: (...args: unknown[]) => mockParseFirstTouchPayload(...args),
   resolveLinkedUserIdFromContext: (...args: unknown[]) => mockResolveLinkedUserId(...args),
   syncAccessAwareChatEntryPoints: (...args: unknown[]) => mockSyncAccessAwareChatEntryPoints(...args),
 }))
 
-vi.mock('../../services/product/summary.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/product/summary.js', () => ({
   resolveTelegramProductSummary: vi.fn().mockResolvedValue(null),
 }))
 
 const mockSetPendingName = vi.fn()
-vi.mock('../../services/identity/pending.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/identity/pending.js', () => ({
   clearPendingTelegramIdentity: vi.fn(),
   getPendingTelegramIdentity: vi.fn(),
   isValidEmail: vi.fn(),
@@ -53,19 +53,19 @@ vi.mock('../../services/identity/pending.ts', () => ({
   clearPendingName: vi.fn(),
 }))
 
-vi.mock('../../../deeplinks/service.ts', () => ({
+vi.mock('../../../../../src/modules/deeplinks/service.js', () => ({
   generateMagicLink: vi.fn().mockResolvedValue('https://example.com/magic'),
 }))
 
-vi.mock('../../conversation/delivery/planDelivery.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/conversation/delivery/planDelivery.js', () => ({
   planMessage: (...args: unknown[]) => mockPlanMessage(...args),
 }))
 
-vi.mock('../../../user/resolveOrCreateUser.ts', () => ({
+vi.mock('../../../../../src/modules/user/resolveOrCreateUser.js', () => ({
   resolveOrCreateUser: vi.fn(),
 }))
 
-vi.mock('../../services/identity/linking.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/identity/linking.js', () => ({
   upsertTelegramBinding: vi.fn(),
 }))
 
@@ -73,12 +73,12 @@ vi.mock('@/products/ab-system/telegram/service.js', () => ({
   handleAbTestEmailCaptureText: vi.fn(),
 }))
 
-vi.mock('../../../subscriptions/payments/focus-access.ts', () => ({
+vi.mock('../../../../../src/modules/subscriptions/payments/focus-access.js', () => ({
   getUserAccessState: (...args: unknown[]) => mockGetUserAccessState(...args),
   hasActiveFocusSubscription: (...args: unknown[]) => mockHasActiveFocusSubscription(...args),
 }))
 
-vi.mock('../../../zoom/service.ts', () => ({
+vi.mock('../../../../../src/modules/zoom/service.js', () => ({
   getUpcomingZoom: (...args: unknown[]) => mockGetUpcomingZoom(...args),
   getUpcomingZoomBookingView: (...args: unknown[]) => mockGetUpcomingZoomBookingView(...args),
 }))
@@ -91,8 +91,8 @@ vi.mock('@/products/ab-system/telegram/progress.js', () => ({
   loadAbTestProgress: (...args: unknown[]) => mockLoadAbTestProgress(...args),
 }))
 
-vi.mock('@/products/ab-system/telegram/views/index.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/products/ab-system/telegram/views/index.js')>()
+vi.mock('@/products/ab-system/telegram/views.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/products/ab-system/telegram/views.js')>()
   return {
     ...actual,
     renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
@@ -103,9 +103,9 @@ vi.mock('@/products/ab-system/telegram/views/index.js', async (importOriginal) =
   }
 })
 
-import { handleStart } from '../start.ts'
-import { resolveOrCreateUser } from '../../../user/resolveOrCreateUser.ts'
-import { generateMagicLink } from '../../../deeplinks/service.ts'
+import { handleStart } from '../../../../../src/modules/telegram-mentor/handlers/start.ts'
+import { resolveOrCreateUser } from '../../../../../src/modules/user/resolveOrCreateUser.ts'
+import { generateMagicLink } from '../../../../../src/modules/deeplinks/service.ts'
 
 function makeFakeCtx(overrides: Partial<{
   chatId: number
@@ -159,7 +159,7 @@ beforeEach(() => {
 })
 
 describe('handleStart — targeted home screen routing', () => {
-  it('TEST_DONE state replay sends the canonical STAN keyboard exactly once', async () => {
+  it('TEST_DONE state now renders conversational returning home with canonical no-access CTA', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-state')
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
@@ -179,12 +179,20 @@ describe('handleStart — targeted home screen routing', () => {
       firstName: 'Тестова',
     })
 
-    const { ctx, sendMessage } = makeFakeCtx({ chatId: 113, fromId: 113, updateId: 1013 })
+    const { ctx, reply, sendMessage } = makeFakeCtx({ chatId: 113, fromId: 113, updateId: 1013 })
     await handleStart(ctx)
 
-    expect(mockSendResultSnapshot).toHaveBeenCalledTimes(1)
-    expect(sendMessage).toHaveBeenCalledTimes(1)
-    const replyMarkup = sendMessage.mock.calls[0]?.[2]?.reply_markup
+    expect(reply).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+    expect(mockSendResultSnapshot).not.toHaveBeenCalled()
+    expect(mockPlanMessage).toHaveBeenCalledTimes(1)
+    const [, , transition, text, replyMarkup] = mockPlanMessage.mock.calls[0]
+    expect(transition).toBe('start_home_screen')
+    expect(text).toContain('Тестова, рада бачити тебе знову.')
+    expect(text).toContain('Минулого разу твій тест показав <b>СТАН</b>:')
+    expect(text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
+    expect(text).toContain('Зараз активного доступу до Zoom-практик немає.')
+    expect(text).toContain('Найближча групова Zoom-практика ще не запланована.')
     expect(replyMarkup).toEqual({
       inline_keyboard: [
         [{ text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' }],
@@ -196,7 +204,7 @@ describe('handleStart — targeted home screen routing', () => {
     expect(JSON.stringify(replyMarkup)).not.toContain('zoom-calendar')
   })
 
-  it('TEST_DONE + NO_ACCESS delegates to canonical repeated-result renderer', async () => {
+  it('TEST_DONE + NO_ACCESS uses conversational returning home instead of result replay', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-1')
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
@@ -220,21 +228,18 @@ describe('handleStart — targeted home screen routing', () => {
     await handleStart(ctx)
 
     expect(reply).not.toHaveBeenCalled()
-    expect(mockPlanMessage).not.toHaveBeenCalled()
+    expect(mockPlanMessage).toHaveBeenCalledTimes(1)
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
-    expect(mockSendResultSnapshot).toHaveBeenCalledTimes(1)
-    expect(mockSendResultSnapshot).toHaveBeenCalledWith(
-      ctx,
-      expect.objectContaining({
-        chatId: '111',
-        userId: 'user-1',
-        resultKey: 'action',
-        firstName: 'Тестова',
-      }),
-    )
+    expect(mockSendResultSnapshot).not.toHaveBeenCalled()
+    const [, , transition, text, replyMarkup] = mockPlanMessage.mock.calls[0]
+    expect(transition).toBe('start_home_screen')
+    expect(text).toContain('Минулого разу твій тест показав <b>ДІЯ</b>:')
+    expect(text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
+    expect(text).toContain('Зараз активного доступу до Zoom-практик немає.')
+    expect(JSON.stringify(replyMarkup)).toMatch(/ОБРАТИ ФОРМАТ У ФОКУСІ/)
   })
 
-  it('FOCUS_PAID + completed progress + plain start keeps paid home as winner', async () => {
+  it('FOCUS_PAID + completed progress + plain start uses conversational returning home', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-focus-1')
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
@@ -274,11 +279,16 @@ describe('handleStart — targeted home screen routing', () => {
     expect(reply).not.toHaveBeenCalled()
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
     expect(mockPlanMessage).toHaveBeenCalledTimes(1)
+    expect(mockSendResultSnapshot).not.toHaveBeenCalled()
     const [, , transition, text, options] = mockPlanMessage.mock.calls[0]
     expect(transition).toBe('start_home_screen')
-    expect(text).toContain('Твій доступ до ФОКУСУ активний до <b>15 листопада 2026')
-    expect(text).toContain('Ти ще не записана.')
-    expect(JSON.stringify(options)).toMatch(/ЗАПИСАТИСЯ/)
+    expect(text).toContain('Фокус, рада бачити тебе знову.')
+    expect(text).toContain('Минулого разу твій тест показав <b>РІШЕННЯ</b>:')
+    expect(text).toContain('Ти вже перейшла від результату до Zoom-практики і зараз можеш обрати найближчу зустріч.')
+    expect(text).toContain('Зараз у тебе активна підписка ФОКУС до 15 листопада 2026 р.')
+    expect(text).toContain('Найближча групова Zoom-практика — 3 серпня о 19:00 за Києвом.')
+    expect(JSON.stringify(options)).toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
+    expect(JSON.stringify(options)).toMatch(/ПРО ПРОГРАМУ/)
   })
 
   it('completed test without access does not fall back to intro', async () => {
@@ -304,18 +314,12 @@ describe('handleStart — targeted home screen routing', () => {
     await handleStart(ctx)
 
     expect(reply).not.toHaveBeenCalled()
-    expect(mockPlanMessage).not.toHaveBeenCalled()
+    expect(mockPlanMessage).toHaveBeenCalledTimes(1)
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
-    expect(mockSendResultSnapshot).toHaveBeenCalledTimes(1)
-    expect(mockSendResultSnapshot).toHaveBeenCalledWith(
-      ctx,
-      expect.objectContaining({
-        chatId: '101',
-        userId: 'user-1b',
-        resultKey: 'action',
-        firstName: 'Тестова',
-      }),
-    )
+    expect(mockSendResultSnapshot).not.toHaveBeenCalled()
+    const [, , transition, text] = mockPlanMessage.mock.calls[0]
+    expect(transition).toBe('start_home_screen')
+    expect(text).toContain('Минулого разу твій тест показав <b>ДІЯ</b>:')
   })
 
   it('completed test with magic-link payload keeps payload route priority', async () => {
@@ -351,7 +355,7 @@ describe('handleStart — targeted home screen routing', () => {
     expect(text).toContain('магічне посилання')
   })
 
-  it('FOCUS_ACTIVE with stale intro lifecycle opens canonical Focus Home', async () => {
+  it('FOCUS_ACTIVE with stale intro lifecycle also resolves to conversational returning home', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-2b')
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
@@ -390,14 +394,13 @@ describe('handleStart — targeted home screen routing', () => {
 
     expect(reply).not.toHaveBeenCalled()
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
+    expect(mockSendResultSnapshot).not.toHaveBeenCalled()
     const [, , , text, options] = mockPlanMessage.mock.calls[0]
-    expect(text).toContain('Твій доступ до ФОКУСУ активний до <b>15 листопада 2026')
-    expect(text).toContain('Ти ще не записана.')
+    expect(text).toContain('Фокус, рада бачити тебе знову.')
+    expect(text).toContain('Минулого разу твій тест показав <b>РІШЕННЯ</b>:')
+    expect(text).toContain('Зараз у тебе активна підписка ФОКУС до 15 листопада 2026 р.')
     const flat = JSON.stringify(options)
-    expect(flat).toMatch(/ЗАПИСАТИСЯ/)
-    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
-    expect(flat).toMatch(/КАНАЛ ФОКУСУ/)
+    expect(flat).toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
   })
 
   it('new user without first_name asks for name first', async () => {

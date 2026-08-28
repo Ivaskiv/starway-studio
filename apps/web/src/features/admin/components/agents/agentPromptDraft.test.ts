@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   isAgentPromptDraftModified,
+  resolveAgentPromptDraftContent,
   resolveAgentPromptLoadState,
 } from './agentPromptDraft'
 
@@ -28,7 +29,22 @@ describe('agent prompt editor state', () => {
     expect(resolveAgentPromptLoadState({
       promptId: 'content-agent-prompt',
       isLoading: false,
-      prompt: { content: 'DB prompt', version: 4, source: 'db' },
+      prompt: {
+        editablePrompt: false,
+        reason: 'Agent uses runtime-only supporting docs.',
+        promptContent: null,
+        content: null,
+        version: null,
+        source: null,
+      },
+    })).toEqual({
+      status: 'uneditable',
+      message: 'Agent uses runtime-only supporting docs.',
+    })
+    expect(resolveAgentPromptLoadState({
+      promptId: 'content-agent-prompt',
+      isLoading: false,
+      prompt: { editablePrompt: true, promptContent: 'DB prompt', content: 'DB prompt', version: 4, source: 'db' },
     })).toEqual({
       status: 'loaded',
       source: 'db',
@@ -38,7 +54,7 @@ describe('agent prompt editor state', () => {
     expect(resolveAgentPromptLoadState({
       promptId: 'content-agent-prompt',
       isLoading: false,
-      prompt: { content: 'Filesystem prompt', version: 0, source: 'filesystem' },
+      prompt: { editablePrompt: true, promptContent: 'Filesystem prompt', content: 'Filesystem prompt', version: 0, source: 'filesystem' },
     })).toEqual({
       status: 'loaded',
       source: 'filesystem',
@@ -52,6 +68,8 @@ describe('agent prompt editor state', () => {
       promptId: 'content-agent-prompt',
       isLoading: false,
       prompt: {
+        editablePrompt: true,
+        promptContent: 'You are the Starway Telegram AI assistant.',
         content: 'You are the Starway Telegram AI assistant.',
         version: 0,
         source: 'filesystem',
@@ -71,5 +89,50 @@ describe('agent prompt editor state', () => {
     expect(isAgentPromptDraftModified(null, '')).toBe(false)
     expect(isAgentPromptDraftModified('active prompt', 'active prompt')).toBe(false)
     expect(isAgentPromptDraftModified('active prompt', 'updated prompt')).toBe(true)
+  })
+
+  it('initializes the editor draft from non-empty editable prompt content only', () => {
+    expect(resolveAgentPromptDraftContent(null)).toBe('')
+    expect(resolveAgentPromptDraftContent({
+      editablePrompt: false,
+      promptContent: 'hidden',
+      content: 'hidden',
+      version: null,
+      source: null,
+    })).toBe('')
+    expect(resolveAgentPromptDraftContent({
+      editablePrompt: true,
+      promptContent: 'AI seller prompt',
+      content: 'AI seller prompt',
+      version: 0,
+      source: 'filesystem',
+    })).toBe('AI seller prompt')
+  })
+
+  it('prefers promptContent over legacy content when initializing draft and loaded state', () => {
+    expect(resolveAgentPromptLoadState({
+      promptId: 'mentor-agent-prompt',
+      isLoading: false,
+      prompt: {
+        editablePrompt: true,
+        promptContent: 'Canonical mentor prompt',
+        content: '',
+        version: 0,
+        source: 'filesystem',
+      },
+    })).toEqual({
+      status: 'loaded',
+      source: 'filesystem',
+      version: 0,
+      message: 'Завантажено з filesystem fallback.',
+    })
+
+    expect(resolveAgentPromptDraftContent({
+      editablePrompt: true,
+      promptContent: 'Canonical mentor prompt',
+      content: '',
+      version: 0,
+      source: 'filesystem',
+    })).toBe('Canonical mentor prompt')
   })
 })

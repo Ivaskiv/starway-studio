@@ -133,11 +133,11 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
     title: 'СТАН',
 
     msg1_audio:
-      'Мене звати Надя.\nЯ допомагаю дівчатам вибратися зі стану, який ти зараз побачила у своєму результаті. Хочу поділитися тим, що зрозуміла за цей час.\nДумаю, тобі це зараз буде дуже вчасно.\nПослухай голосове.',
+      '**Мене звати Надя.**\n\nЯ вже три роки допомагаю дівчатам вибратися зі стану, який ти зараз побачила у своєму результаті.\nХочу поділитися тим, що зрозуміла за цей час.\nДумаю, тобі це зараз буде дуже вчасно.',
     msg2_audio:
       'Все не зміниться за один день. Але коли ти розумієш, звідки насправді починаються твої проблеми, рішення стають зовсім іншими. І життя потроху перестає повторювати один і той самий сценарій.',
     msg2_practice:
-      '**ФОКУС** — це зустріч раз на тиждень.\nТи приходиш зі **своєю ситуацією**. Такою, яка є зараз. Якщо немає сил, якщо все заплуталося, якщо не знаєш, що робити далі — цього достатньо.\nМи беремо **одну твою ситуацію і разом розбираємося**, чому вона ніяк не вирішується.',
+      '**ЯК ЦЕ ВИГЛЯДАЄ ІЗ СЕРЕДИНИ?**\n\n**ФОКУС** — це Zoom-зустріч раз на тиждень.\n\nТи приходиш **зі своєю ситуацією**. Такою, яка є зараз.\n\nЯкщо немає сил, якщо все заплуталося, якщо не знаєш, що робити далі — **цього достатньо**.\n\nМи беремо **одну твою ситуацію** і разом розбираємося, чому вона ніяк не вирішується.',
     msg2_benefits:
       '**На кожному Zoom ми:**\n• розбираємо одну твою ситуацію;\n• знаходимо, чому вона повторюється;\n• дивимося, що зараз заважає її вирішити;\n• визначаємо твій наступний крок.',
     msg2_included:
@@ -498,13 +498,11 @@ function buildAbTestResultBlocks(
       telegramBlock.text(result.msg1),
       telegramBlock.text(result.msg1_story),
       telegramBlock.text(result.msg2_audio),
-      telegramBlock.text(result.msg1_audio),
-      telegramBlock.video(AB_TEST_VIDEO_URLS.nadya_intro),
+      telegramBlock.video(AB_TEST_VIDEO_URLS.nadya_intro, result.msg1_audio),
       telegramBlock.audio(AB_TEST_AUDIO_URL),
     ],
     practice: [
-      telegramBlock.video(AB_TEST_VIDEO_URLS.focus_presentation),
-      telegramBlock.text(result.msg2_practice),
+      telegramBlock.video(AB_TEST_VIDEO_URLS.focus_presentation, result.msg2_practice),
       telegramBlock.text(result.msg2_benefits),
       telegramBlock.text(result.msg2_included),
     ],

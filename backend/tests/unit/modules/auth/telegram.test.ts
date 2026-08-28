@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { verifyTelegramInitData } from '../telegram.ts'
+import { verifyTelegramInitData } from '../../../../src/modules/auth/telegram.ts'
 
 const ORIGINAL_ENV = {
   NODE_ENV: process.env.NODE_ENV,
@@ -9,6 +9,7 @@ const ORIGINAL_ENV = {
   TEST_TELEGRAM_BOT_TOKEN: process.env.TEST_TELEGRAM_BOT_TOKEN,
   CONTENT_BOT_TOKEN: process.env.CONTENT_BOT_TOKEN,
   COACH_BOT_TOKEN: process.env.COACH_BOT_TOKEN,
+  TEST_COACH_BOT_TOKEN: process.env.TEST_COACH_BOT_TOKEN,
   TEST_BOT_TOKEN: process.env.TEST_BOT_TOKEN,
 }
 
@@ -119,6 +120,27 @@ describe('verifyTelegramInitData', () => {
       id: '424242',
       firstName: 'Key',
       username: 'key_bot_user',
+    })
+  })
+
+  it('accepts initData signed by TEST_COACH_BOT_TOKEN in development without falling back to COACH_BOT_TOKEN', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'dev-main-token'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-main-token'
+    process.env.TEST_COACH_BOT_TOKEN = 'dev-coach-token'
+    process.env.COACH_BOT_TOKEN = 'prod-coach-token'
+    delete process.env.TEST_BOT_TOKEN
+
+    const initData = buildInitData('dev-coach-token', {
+      id: 303030,
+      first_name: 'Coach',
+      username: 'coach_test',
+    })
+
+    expect(verifyTelegramInitData(initData)).toEqual({
+      id: '303030',
+      firstName: 'Coach',
+      username: 'coach_test',
     })
   })
 

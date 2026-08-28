@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../../config/webapp.ts', () => ({
+vi.mock('../../../../src/config/webapp.ts', () => ({
+  resolveCoachWebAppBaseUrl: vi.fn(() => 'https://starway-frontend.vercel.app'),
   resolveTelegramWebappBaseUrl: vi.fn(() => 'https://starway-frontend.vercel.app'),
 }))
 
 const mockDeepLinkCreate = vi.fn()
 const mockTrackEvent = vi.fn()
 
-vi.mock('../../../db/client.ts', () => ({
+vi.mock('../../../../src/db/client.ts', () => ({
   prisma: {
     deepLinkToken: {
       create: (...args: unknown[]) => mockDeepLinkCreate(...args),
@@ -18,7 +19,7 @@ vi.mock('../../../db/client.ts', () => ({
   },
 }))
 
-vi.mock('../../events/service.ts', () => ({
+vi.mock('../../../../src/modules/events/service.ts', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
 
@@ -27,7 +28,7 @@ import {
   buildWebDeepLink,
   COACH_AGENTS_RETURN_TARGET,
   generateCoachAgentsWebDeepLink,
-} from '../service.ts'
+} from '../../../../src/modules/deeplinks/service.ts'
 
 describe('deeplinks service frontend origin', () => {
   it('builds web deeplinks against the public frontend origin', () => {

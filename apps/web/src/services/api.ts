@@ -36,14 +36,14 @@ type AuthUserWithExpert = User & {
   expertId?: string | null;
 };
 
-type ApiMode = 'auto' | 'local' | 'remote';
+type ApiMode = 'local' | 'remote';
 
 const DEFAULT_REMOTE_API_URL = 'https://starway-api.onrender.com/api';
 
 const getApiMode = (): ApiMode => {
   const rawMode = import.meta.env.VITE_API_MODE?.trim().toLowerCase();
   if (rawMode === 'local' || rawMode === 'remote') return rawMode;
-  return 'auto';
+  return import.meta.env.DEV ? 'local' : 'remote';
 };
 
 const normalizeApiBaseUrl = (value: string): string => {
@@ -53,25 +53,25 @@ const normalizeApiBaseUrl = (value: string): string => {
   return `${trimmed}/api`;
 };
 
+function isLocalBrowserOrigin(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const { hostname } = window.location;
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
 const getApiBaseUrl = (): string => {
-  if (
-    typeof window !== 'undefined' &&
-    window.location.hostname.endsWith('.ngrok-free.dev')
-  ) {
-    return '/api'
+  const mode = getApiMode();
+  if (mode === 'local') {
+    return '/api';
   }
 
-  const mode = getApiMode();
   const remoteApiUrl =
     import.meta.env.VITE_API_BASE_URL?.trim() ||
     import.meta.env.VITE_API_URL?.trim() ||
     DEFAULT_REMOTE_API_URL;
-  const remoteUrl = normalizeApiBaseUrl(remoteApiUrl);
 
-  if (mode === 'local') return '/api';
-  if (mode === 'remote') return remoteUrl;
-  if (import.meta.env.DEV) return '/api';
-  return remoteUrl;
+  return normalizeApiBaseUrl(remoteApiUrl);
 };
 
 const API_MODE = getApiMode();
@@ -108,6 +108,15 @@ function logAuthTrace(event: string, data: Record<string, unknown> = {}): void {
   });
 }
 
+function isAgentPromptReadPath(path: string): boolean {
+  return /^\/admin\/agents\/[^/]+\/prompt$/.test(path)
+}
+
+function logAgentPromptReadTrace(data: Record<string, unknown>): void {
+  if (!import.meta.env.DEV) return
+  console.info('[AGENT_PROMPT_READ_TRACE]', data)
+}
+
 function canProbeCookieSessionWithoutTokens(): boolean {
   if (typeof window === 'undefined') return false;
   const hasTelegramInitData = Boolean(
@@ -116,9 +125,10 @@ function canProbeCookieSessionWithoutTokens(): boolean {
   return hasSessionHint() || hasTelegramInitData;
 }
 
-console.info('[api] configuration', {
+console.info('[API_OWNER]', {
   mode: API_MODE,
   baseUrl: API_BASE_URL,
+  proxyTarget: import.meta.env.DEV ? 'http://127.0.0.1:3001' : null,
 });
 
 const REFRESH_IGNORED_PATHS = new Set([
@@ -345,13 +355,46 @@ export const baseQueryWithReauth: BaseQueryFn<
   FetchBaseQueryMeta
 > = async (args, api, extraOptions): Promise<RawBaseQueryResult> => {
   const requestPathForLog = getRequestPath(args);
+  const requestUrlForLog = resolveApiUrl(requestPathForLog)
   const isDnaRequest =
     requestPathForLog.includes('/ai/sales-assistant') ||
     requestPathForLog.includes('/admin/content-studio');
+  const isAgentPromptReadRequest = isAgentPromptReadPath(requestPathForLog)
   if (isDnaRequest && import.meta.env.DEV) {
     console.log('[DNA][api] request', { path: requestPathForLog });
   }
   let result = await rawBaseQuery(args, api, extraOptions);
+
+  if (isAgentPromptReadRequest) {
+    const payload =
+      result.data && typeof result.data === 'object'
+        ? result.data as {
+            agentKey?: unknown
+            promptId?: unknown
+            source?: unknown
+            version?: unknown
+            content?: unknown
+          }
+        : null
+    const httpStatus =
+      result.meta?.response?.status ??
+      ((result.error as { status?: unknown } | undefined)?.status ?? null)
+
+    logAgentPromptReadTrace({
+      agentKey: typeof payload?.agentKey === 'string'
+        ? payload.agentKey
+        : (() => {
+            const pathParts = requestPathForLog.split('/')
+            return pathParts.length >= 2 ? pathParts[pathParts.length - 2] : null
+          })(),
+      requestUrl: requestUrlForLog,
+      httpStatus,
+      promptId: typeof payload?.promptId === 'string' ? payload.promptId : null,
+      source: payload?.source ?? null,
+      version: typeof payload?.version === 'number' ? payload.version : null,
+      responseContentLength: typeof payload?.content === 'string' ? payload.content.length : 0,
+    })
+  }
 
   if (isDnaRequest && result.error) {
     console.error('[DNA][api] error', { path: requestPathForLog, status: (result.error as { status?: unknown }).status });

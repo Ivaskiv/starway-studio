@@ -49,6 +49,32 @@ export const dbAudit = async (_req: Request, res: Response) => {
   }
 }
 
+export const postClientTrace = async (req: Request, res: Response) => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'FORBIDDEN_IN_PRODUCTION' })
+    }
+
+    const channel = String(req.body?.channel ?? '').trim()
+    const event = String(req.body?.event ?? '').trim()
+    const payload = req.body?.payload
+
+    if (!channel || !event || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return res.status(400).json({ error: 'channel, event, payload are required' })
+    }
+
+    console.info(`[${channel}]`, {
+      event,
+      ...payload,
+    })
+
+    return res.json({ ok: true })
+  } catch (e) {
+    const error = e instanceof Error ? e.message : 'Unknown error'
+    return res.status(500).json({ success: false, error })
+  }
+}
+
 // FIX 2025-05-25 P18: dev-only fast-forward for notification jobs (runAt shift).
 export const fastForwardNotificationJobs = async (req: Request, res: Response) => {
   try {

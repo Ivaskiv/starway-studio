@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useGetRuntimeAgentsQuery } from '@/features/admin/services/admin.api'
 import { GlassCard } from '@/ui'
 
+import { buildAgentControlCenterCards } from './agentControlCenterViewModel'
 import { AgentFlowDiagram } from './AgentFlowDiagram'
 import { AgentModal } from './AgentModal'
 import type { AgentCardDef } from './agentControlCenter.types'
@@ -15,20 +16,7 @@ export function AgentControlCenterTab({ canEdit }: Props) {
   const [selectedAgent, setSelectedAgent] = useState<AgentCardDef | null>(null)
   const { data } = useGetRuntimeAgentsQuery()
 
-  const agents: AgentCardDef[] = (data?.agents ?? []).map((agent) => ({
-    key: agent.key,
-    runtimeAgentId: agent.runtimeAgentId,
-    promptId: agent.promptId,
-    capability: agent.capability,
-    objective: agent.objective,
-    name: agent.name,
-    icon: agent.icon,
-    category: agent.category,
-    desc: agent.description,
-    status: agent.status,
-    isSystem: agent.isSystem,
-    sourceFiles: agent.sourceFiles,
-  }))
+  const agents = buildAgentControlCenterCards(data?.agents ?? [])
 
   return (
     <>

@@ -1,8 +1,11 @@
+import type { Prisma, UserLifecycleState } from '@starway/db/prisma-client'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { prisma } from '../db/client.js'
+import { buildAbTestProgressPatch } from '../core/state-machine/abTestFoundation.js'
+import { syncLifecycleForUser } from '../modules/flow-control/service.js'
 import { findLinkedUserId } from '../modules/telegram-mentor/services/identity/linking.js'
 import {
   activateProductSubscription,
@@ -14,6 +17,10 @@ import {
   registerAttendee,
   unbookSlot,
 } from '../modules/zoom/service.js'
+import {
+  loadAbTestProgress,
+  saveAbTestProgress,
+} from '../products/ab-system/telegram/progress.js'
 
 type ScriptArgs = {
   telegramId: string
@@ -21,12 +28,23 @@ type ScriptArgs = {
 }
 
 type FocusSnapshot = {
-  active: boolean
+  state: 'FOCUS_ACTIVE' | 'NO_ACCESS' | 'EXPIRED_FOCUS'
   expiresAt: string | null
 }
 
 type TrialZoomSnapshot = {
-  eligible: boolean
+  state: 'ELIGIBLE' | 'TRIAL_ACTIVE' | 'NONE'
+  trialEndsAt?: string | null
+}
+
+type AbTestSnapshot = {
+  lifecycleState: UserLifecycleState
+  resultKey: 'state' | 'goal' | 'choice' | 'decision' | 'action' | null
+  status: 'idle' | 'active' | 'completed' | 'abandoned'
+  emailStage: 'pending' | 'captured' | 'skipped' | null
+  testCompletedAt?: string | null
+  offerShownAt?: string | null
+  firstName?: string | null
 }
 
 type ZoomSnapshot = {
@@ -40,6 +58,7 @@ export type UserTestStateSnapshot = {
   telegramFromId: string
   focus?: FocusSnapshot
   trialZoom?: TrialZoomSnapshot
+  abTest?: AbTestSnapshot
   zoom?: ZoomSnapshot
 }
 
@@ -48,7 +67,8 @@ type SyncReport = {
   userId: string
   actions: {
     focus: 'noop' | 'activated'
-    trialZoom: 'noop' | 'reset'
+    trialZoom: 'noop' | 'reset' | 'activated'
+    abTest: 'noop' | 'synced'
     zoom: 'noop' | 'booked' | 'unbooked' | 'rebooked'
   }
   before: {
@@ -59,6 +79,13 @@ type SyncReport = {
     access: Awaited<ReturnType<typeof getUserAccessState>>
     zoom: Awaited<ReturnType<typeof getUpcomingZoomBookingView>>
   }
+}
+
+type SyncMode = 'dry-run' | 'apply'
+
+type SyncExecutionOptions = {
+  mode?: SyncMode
+  allowProduction?: boolean
 }
 
 function parseIsoDate(value: string | null | undefined, field: string): Date | null {
@@ -111,16 +138,31 @@ export function loadSnapshot(snapshotFile: string): UserTestStateSnapshot {
     throw new Error('Snapshot must contain telegramFromId')
   }
 
-  if (!parsed?.focus && !parsed?.trialZoom && !parsed?.zoom) {
-    throw new Error('Snapshot must contain at least one of focus, trialZoom, or zoom')
+  if (!parsed?.focus && !parsed?.trialZoom && !parsed?.zoom && !parsed?.abTest) {
+    throw new Error('Snapshot must contain at least one of focus, trialZoom, abTest, or zoom')
   }
 
-  if (parsed?.focus && typeof parsed.focus.active !== 'boolean') {
-    throw new Error('Snapshot focus must contain active')
+  if (
+    parsed?.focus &&
+    !['FOCUS_ACTIVE', 'NO_ACCESS', 'EXPIRED_FOCUS'].includes(String(parsed.focus.state ?? ''))
+  ) {
+    throw new Error('Snapshot focus must contain state')
   }
 
-  if (parsed?.trialZoom && typeof parsed.trialZoom.eligible !== 'boolean') {
-    throw new Error('Snapshot trialZoom must contain eligible')
+  if (
+    parsed?.trialZoom &&
+    !['ELIGIBLE', 'TRIAL_ACTIVE', 'NONE'].includes(String(parsed.trialZoom.state ?? ''))
+  ) {
+    throw new Error('Snapshot trialZoom must contain state')
+  }
+
+  if (parsed?.abTest) {
+    if (String(parsed.abTest.lifecycleState ?? '').trim() === '') {
+      throw new Error('Snapshot abTest must contain lifecycleState')
+    }
+    if (!['idle', 'active', 'completed', 'abandoned'].includes(String(parsed.abTest.status ?? ''))) {
+      throw new Error('Snapshot abTest must contain status')
+    }
   }
 
   if (parsed?.zoom) {
@@ -162,14 +204,24 @@ async function resolveCanonicalUserId(telegramFromId: string): Promise<string> {
   return userId
 }
 
+function isApplyMode(mode: SyncMode): boolean {
+  return mode === 'apply'
+}
+
 function shouldSyncFocusAccess(params: {
   current: Awaited<ReturnType<typeof getUserAccessState>>
   desired: FocusSnapshot
 }): boolean {
   const desiredExpiresAt = parseIsoDate(params.desired.expiresAt, 'focus.expiresAt')
   return (
-    params.current.state !== 'FOCUS_ACTIVE'
-    || !sameInstant(params.current.expiresAt, desiredExpiresAt)
+    (params.desired.state === 'FOCUS_ACTIVE' && (
+      params.current.state !== 'FOCUS_ACTIVE'
+      || !sameInstant(params.current.expiresAt, desiredExpiresAt)
+    ))
+    || (params.desired.state !== 'FOCUS_ACTIVE' && (
+      params.current.state !== 'NO_ACCESS'
+      || !sameInstant(params.current.expiresAt, desiredExpiresAt)
+    ))
   )
 }
 
@@ -177,34 +229,110 @@ async function syncFocusAccess(params: {
   userId: string
   snapshot: FocusSnapshot
   current: Awaited<ReturnType<typeof getUserAccessState>>
+  mode: SyncMode
 }): Promise<{ action: 'noop' | 'activated'; activationResult: ActivationResult | null }> {
-  if (!params.snapshot.active) {
-    throw new Error('focus.active=false is unsupported without a canonical revoke path')
-  }
+  const desiredExpiresAt = parseIsoDate(params.snapshot.expiresAt, 'focus.expiresAt')
 
   if (!shouldSyncFocusAccess({ current: params.current, desired: params.snapshot })) {
     return { action: 'noop', activationResult: null }
   }
 
-  const desiredExpiresAt = parseIsoDate(params.snapshot.expiresAt, 'focus.expiresAt')
-  if (!desiredExpiresAt) {
-    throw new Error('focus.expiresAt is required when focus.active=true')
+  if (!isApplyMode(params.mode)) {
+    return { action: 'activated', activationResult: null }
   }
 
-  const activationResult = await activateProductSubscription({
-    userId: params.userId,
-    productCode: 'focus',
-    source: 'admin_manual',
-    manualNote: 'codex parity sync',
-    expiresAtOverride: desiredExpiresAt,
-    autoBookGroupSessions: false,
+  if (params.snapshot.state === 'FOCUS_ACTIVE') {
+    if (!desiredExpiresAt) {
+      throw new Error('focus.expiresAt is required when focus.state=FOCUS_ACTIVE')
+    }
+
+    const activationResult = await activateProductSubscription({
+      userId: params.userId,
+      productCode: 'focus',
+      source: 'admin_manual',
+      manualNote: 'codex parity sync',
+      expiresAtOverride: desiredExpiresAt,
+      autoBookGroupSessions: false,
+    })
+
+    if (!activationResult.success) {
+      throw new Error(`Focus activation failed: ${activationResult.message}`)
+    }
+
+    return { action: 'activated', activationResult }
+  }
+
+  const focusProduct = await prisma.product.findFirst({
+    where: { code: { equals: 'focus', mode: 'insensitive' } },
+    select: { id: true },
+  })
+  if (!focusProduct) {
+    throw new Error('Focus product not found')
+  }
+
+  const now = new Date()
+  const expiredAt = desiredExpiresAt ?? new Date(now.getTime() - 60_000)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.productSubscription.upsert({
+      where: { userId_productId: { userId: params.userId, productId: focusProduct.id } },
+      create: {
+        userId: params.userId,
+        productId: focusProduct.id,
+        status: 'expired',
+        paidAt: null,
+        expiresAt: expiredAt,
+        amount: 0,
+        manuallyGrantedBy: 'admin_manual',
+        manualGrantNote: 'codex parity sync expired focus',
+      },
+      update: {
+        status: 'expired',
+        expiresAt: expiredAt,
+        trialEndsAt: null,
+        paidAt: null,
+        manuallyGrantedBy: 'admin_manual',
+        manualGrantNote: 'codex parity sync expired focus',
+      },
+    })
+
+    const existingSubscription = await tx.subscription.findFirst({
+      where: { userId: params.userId, productId: focusProduct.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    })
+
+    if (existingSubscription) {
+      await tx.subscription.update({
+        where: { id: existingSubscription.id },
+        data: {
+          status: 'EXPIRED',
+          currentPeriodEnd: expiredAt,
+          trialEndsAt: null,
+        },
+      })
+    } else {
+      await tx.subscription.create({
+        data: {
+          userId: params.userId,
+          productId: focusProduct.id,
+          startsAt: new Date(expiredAt.getTime() - 30 * 24 * 60 * 60 * 1000),
+          status: 'EXPIRED',
+          planCode: 'focus_expired',
+          currentPeriodEnd: expiredAt,
+        },
+      })
+    }
+
+    await tx.user.update({
+      where: { id: params.userId },
+      data: {
+        focusPaid: false,
+      },
+    })
   })
 
-  if (!activationResult.success) {
-    throw new Error(`Focus activation failed: ${activationResult.message}`)
-  }
-
-  return { action: 'activated', activationResult }
+  return { action: 'activated', activationResult: null }
 }
 
 type TrialZoomResetResult = {
@@ -224,8 +352,9 @@ type TrialZoomResetResult = {
 async function resetTrialZoomUsage(params: {
   userId: string
   snapshot: TrialZoomSnapshot
+  mode: SyncMode
 }): Promise<TrialZoomResetResult> {
-  if (!params.snapshot.eligible) {
+  if (params.snapshot.state !== 'ELIGIBLE') {
     return {
       action: 'noop',
       dryRun: { subscriptions: 0, paymentLogs: 0, checkoutSessions: 0 },
@@ -273,6 +402,14 @@ async function resetTrialZoomUsage(params: {
     }
   }
 
+  if (!isApplyMode(params.mode)) {
+    return {
+      action: 'reset',
+      dryRun: { subscriptions, paymentLogs, checkoutSessions },
+      mutated: { subscriptions: 0, paymentLogs: 0, checkoutSessions: 0 },
+    }
+  }
+
   const [deletedSubscriptions, deletedPaymentLogs, deletedCheckoutSessions] = await prisma.$transaction(
     async (tx) => Promise.all([
       trialProductIds.length > 0
@@ -310,6 +447,211 @@ async function resetTrialZoomUsage(params: {
       checkoutSessions: deletedCheckoutSessions.count,
     },
   }
+}
+
+async function syncTrialZoomAccess(params: {
+  userId: string
+  snapshot: TrialZoomSnapshot
+  mode: SyncMode
+}): Promise<'noop' | 'activated'> {
+  if (params.snapshot.state === 'NONE') {
+    const trialProduct = await prisma.product.findFirst({
+      where: { code: { equals: 'trial_zoom', mode: 'insensitive' } },
+      select: { id: true },
+    })
+    if (!trialProduct) {
+      throw new Error('trial_zoom product not found')
+    }
+
+    const existing = await prisma.productSubscription.findUnique({
+      where: { userId_productId: { userId: params.userId, productId: trialProduct.id } },
+      select: { status: true },
+    })
+    if (!existing) {
+      return 'noop'
+    }
+
+    if (!isApplyMode(params.mode)) {
+      return 'activated'
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.productSubscription.deleteMany({
+        where: {
+          userId: params.userId,
+          productId: trialProduct.id,
+        },
+      })
+      await tx.subscription.deleteMany({
+        where: {
+          userId: params.userId,
+          productId: trialProduct.id,
+        },
+      })
+    })
+
+    return 'activated'
+  }
+
+  if (params.snapshot.state !== 'TRIAL_ACTIVE') {
+    return 'noop'
+  }
+
+  const desiredTrialEndsAt = parseIsoDate(params.snapshot.trialEndsAt, 'trialZoom.trialEndsAt')
+  if (!desiredTrialEndsAt) {
+    throw new Error('trialZoom.trialEndsAt is required when state=TRIAL_ACTIVE')
+  }
+
+  const trialProduct = await prisma.product.findFirst({
+    where: { code: { equals: 'trial_zoom', mode: 'insensitive' } },
+    select: { id: true },
+  })
+  if (!trialProduct) {
+    throw new Error('trial_zoom product not found')
+  }
+
+  const existing = await prisma.productSubscription.findUnique({
+    where: { userId_productId: { userId: params.userId, productId: trialProduct.id } },
+    select: {
+      status: true,
+      trialEndsAt: true,
+    },
+  })
+  if (
+    existing?.status?.toLowerCase() === 'trial' &&
+    sameInstant(existing.trialEndsAt ?? null, desiredTrialEndsAt)
+  ) {
+    return 'noop'
+  }
+
+  if (!isApplyMode(params.mode)) {
+    return 'activated'
+  }
+
+  const now = new Date()
+  await prisma.$transaction(async (tx) => {
+    await tx.productSubscription.upsert({
+      where: { userId_productId: { userId: params.userId, productId: trialProduct.id } },
+      create: {
+        userId: params.userId,
+        productId: trialProduct.id,
+        status: 'trial',
+        paidAt: now,
+        trialEndsAt: desiredTrialEndsAt,
+        expiresAt: null,
+        amount: 0,
+        manuallyGrantedBy: 'admin_manual',
+        manualGrantNote: 'codex parity sync trial zoom',
+      },
+      update: {
+        status: 'trial',
+        paidAt: now,
+        trialEndsAt: desiredTrialEndsAt,
+        expiresAt: null,
+        manuallyGrantedBy: 'admin_manual',
+        manualGrantNote: 'codex parity sync trial zoom',
+      },
+    })
+
+    const existingSubscription = await tx.subscription.findFirst({
+      where: { userId: params.userId, productId: trialProduct.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    })
+    if (existingSubscription) {
+      await tx.subscription.update({
+        where: { id: existingSubscription.id },
+        data: {
+          status: 'TRIAL',
+          startsAt: now,
+          planCode: 'trial_zoom',
+          trialEndsAt: desiredTrialEndsAt,
+          currentPeriodEnd: null,
+        },
+      })
+    } else {
+      await tx.subscription.create({
+        data: {
+          userId: params.userId,
+          productId: trialProduct.id,
+          status: 'TRIAL',
+          planCode: 'trial_zoom',
+          startsAt: now,
+          trialEndsAt: desiredTrialEndsAt,
+          autoRenew: false,
+        },
+      })
+    }
+  })
+
+  return 'activated'
+}
+
+async function syncAbTestState(params: {
+  userId: string
+  snapshot: AbTestSnapshot
+  mode: SyncMode
+}): Promise<'noop' | 'synced'> {
+  const currentProgress = await loadAbTestProgress(params.userId)
+  const desiredTestCompletedAt = parseIsoDate(params.snapshot.testCompletedAt, 'abTest.testCompletedAt')
+  const desiredOfferShownAt = parseIsoDate(params.snapshot.offerShownAt, 'abTest.offerShownAt')
+  const currentUser = await prisma.user.findUnique({
+    where: { id: params.userId },
+    select: {
+      lifecycleState: true,
+      testResultType: true,
+      testCompletedAt: true,
+      offerShownAt: true,
+      firstName: true,
+    },
+  })
+  if (!currentUser) {
+    throw new Error('User not found for abTest sync')
+  }
+
+  const desiredProgress = buildAbTestProgressPatch(currentProgress, {
+    status: params.snapshot.status,
+    result_key: params.snapshot.resultKey,
+    email_stage: params.snapshot.emailStage,
+    ...(params.snapshot.status === 'completed'
+      ? { stage: 'S3_TEST_RESULT' as const }
+      : {}),
+  })
+
+  const progressUnchanged =
+    currentProgress.status === desiredProgress.status &&
+    currentProgress.result_key === desiredProgress.result_key &&
+    currentProgress.email_stage === desiredProgress.email_stage &&
+    currentProgress.stage === desiredProgress.stage
+
+  const userUnchanged =
+    currentUser.lifecycleState === params.snapshot.lifecycleState &&
+    currentUser.testResultType === params.snapshot.resultKey &&
+    sameInstant(currentUser.testCompletedAt, desiredTestCompletedAt) &&
+    sameInstant(currentUser.offerShownAt, desiredOfferShownAt) &&
+    (params.snapshot.firstName === undefined || currentUser.firstName === params.snapshot.firstName)
+
+  if (progressUnchanged && userUnchanged) {
+    return 'noop'
+  }
+
+  if (!isApplyMode(params.mode)) {
+    return 'synced'
+  }
+
+  await prisma.user.update({
+    where: { id: params.userId },
+    data: {
+      lifecycleState: params.snapshot.lifecycleState,
+      testResultType: params.snapshot.resultKey,
+      testCompletedAt: desiredTestCompletedAt,
+      offerShownAt: desiredOfferShownAt,
+      ...(params.snapshot.firstName === undefined ? {} : { firstName: params.snapshot.firstName }),
+    },
+  })
+  await saveAbTestProgress(params.userId, desiredProgress)
+
+  return 'synced'
 }
 
 async function resolveTargetZoomSession(snapshot: ZoomSnapshot) {
@@ -374,8 +716,12 @@ async function syncZoomBooking(params: {
 export async function syncUserTestState(input: {
   telegramId: string
   snapshot: UserTestStateSnapshot
+  options?: SyncExecutionOptions
 }): Promise<SyncReport> {
-  if (process.env.NODE_ENV === 'production') {
+  const mode = input.options?.mode ?? 'apply'
+  const allowProduction = input.options?.allowProduction === true
+
+  if (process.env.NODE_ENV === 'production' && !allowProduction) {
     throw new Error('user-sync-test-state is disabled in production')
   }
 
@@ -393,6 +739,7 @@ export async function syncUserTestState(input: {
     ? await resetTrialZoomUsage({
         userId,
         snapshot: input.snapshot.trialZoom,
+        mode,
       })
     : {
         action: 'noop' as const,
@@ -405,8 +752,25 @@ export async function syncUserTestState(input: {
         userId,
         snapshot: input.snapshot.focus,
         current: beforeAccess,
+        mode,
       })
     : { action: 'noop' as const, activationResult: null }
+
+  const trialZoomActivation = input.snapshot.trialZoom
+    ? await syncTrialZoomAccess({
+        userId,
+        snapshot: input.snapshot.trialZoom,
+        mode,
+      })
+    : 'noop'
+
+  const abTestAction = input.snapshot.abTest
+    ? await syncAbTestState({
+        userId,
+        snapshot: input.snapshot.abTest,
+        mode,
+      })
+    : 'noop'
 
   const zoomAction = input.snapshot.zoom
     ? await syncZoomBooking({
@@ -416,13 +780,38 @@ export async function syncUserTestState(input: {
       })
     : 'noop'
 
+  if (isApplyMode(mode)) {
+    await syncLifecycleForUser(userId)
+  }
+
+  if (!isApplyMode(mode)) {
+    return {
+      telegramFromId: input.telegramId,
+      userId,
+      actions: {
+        focus: focusResult.action,
+        trialZoom: trialZoomActivation === 'activated' ? 'activated' : trialZoomResult.action,
+        abTest: abTestAction,
+        zoom: zoomAction,
+      },
+      before: {
+        access: beforeAccess,
+        zoom: beforeZoom,
+      },
+      after: {
+        access: beforeAccess,
+        zoom: beforeZoom,
+      },
+    }
+  }
+
   const afterAccess = await getUserAccessState(userId)
   const afterZoom = await getUpcomingZoomBookingView(userId)
   const desiredFocusExpiresAt = input.snapshot.focus
     ? parseIsoDate(input.snapshot.focus.expiresAt, 'focus.expiresAt')
     : null
 
-  if (input.snapshot.focus?.active) {
+  if (input.snapshot.focus?.state === 'FOCUS_ACTIVE') {
     if (afterAccess.state !== 'FOCUS_ACTIVE') {
       throw new Error(`Focus parity verification failed: got ${afterAccess.state}`)
     }
@@ -433,7 +822,13 @@ export async function syncUserTestState(input: {
     }
   }
 
-  if (input.snapshot.trialZoom?.eligible) {
+  if (input.snapshot.focus && input.snapshot.focus.state !== 'FOCUS_ACTIVE') {
+    if (afterAccess.state === 'FOCUS_ACTIVE') {
+      throw new Error(`Focus parity verification failed: expected non-active state, got ${afterAccess.state}`)
+    }
+  }
+
+  if (input.snapshot.trialZoom?.state === 'ELIGIBLE') {
     const trialEligibilityProbe = await prisma.productSubscription.findFirst({
       where: {
         userId,
@@ -446,6 +841,13 @@ export async function syncUserTestState(input: {
     if (trialEligibilityProbe) {
       throw new Error('Trial parity verification failed: trial_zoom subscription still exists')
     }
+  }
+
+  if (input.snapshot.trialZoom?.state === 'TRIAL_ACTIVE' && afterAccess.state !== 'PREMIUM') {
+    throw new Error(`Trial parity verification failed: got ${afterAccess.state}`)
+  }
+  if (input.snapshot.trialZoom?.state === 'NONE' && afterAccess.state === 'PREMIUM') {
+    throw new Error('Trial parity verification failed: trial_zoom access still active')
   }
 
   if (input.snapshot.zoom?.booked) {
@@ -461,7 +863,8 @@ export async function syncUserTestState(input: {
     userId,
     actions: {
       focus: focusResult.action,
-      trialZoom: trialZoomResult.action,
+      trialZoom: trialZoomActivation === 'activated' ? 'activated' : trialZoomResult.action,
+      abTest: abTestAction,
       zoom: zoomAction,
     },
     before: {

@@ -2,6 +2,7 @@ const PROD_FRONTEND_FALLBACK = (
   process.env.FRONTEND_URL?.trim()
   || 'http://localhost:5173'
 ).replace(/\/$/, '')
+const COACH_WEBAPP_PROD_URL = 'https://starway-frontend.vercel.app'
 
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/$/, '')
@@ -68,6 +69,28 @@ export function resolveTelegramWebappBaseUrl(): string {
   return process.env.NODE_ENV !== 'production'
     ? 'http://localhost:5173'
     : PROD_FRONTEND_FALLBACK
+}
+
+function isLocalhostLike(value: string): boolean {
+  return /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(value)
+}
+
+export function resolveCoachWebAppBaseUrl(): string {
+  if (process.env.NODE_ENV === 'production') {
+    return COACH_WEBAPP_PROD_URL
+  }
+
+  const configured = process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
+  if (!configured) {
+    throw new Error('COACH_WEBAPP_DEV_URL_MISSING')
+  }
+
+  const normalized = normalizeBaseUrl(configured)
+  if (!normalized.startsWith('https://') || isLocalhostLike(normalized)) {
+    throw new Error('COACH_WEBAPP_DEV_URL_MISSING')
+  }
+
+  return normalized
 }
 
 export function resolveTelegramWebappUrl(path = '/ab-test'): string {

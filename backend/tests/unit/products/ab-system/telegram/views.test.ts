@@ -26,7 +26,7 @@ const mockSendTelegramMessage = vi.fn(
     }),
 )
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('../../../../../src/db/client.js', () => ({
   prisma: {
     user: {
       update: vi.fn(),
@@ -76,7 +76,7 @@ vi.mock('../../../../modules/telegram-mentor/services/identity/pending.ts', () =
   setPendingTelegramIdentity: vi.fn(),
 }))
 
-vi.mock('../analytics.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/analytics.js', () => ({
   trackAbTestEvent: (...args: unknown[]) => mockTrackAbTestEvent(...args),
 }))
 
@@ -85,11 +85,11 @@ vi.mock('../buttons.ts', () => ({
   resolveBrowserTestUrlOrNull: vi.fn(),
 }))
 
-vi.mock('../scheduler.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/scheduler.js', () => ({
   scheduleFollowups: (...args: unknown[]) => mockScheduleFollowups(...args),
 }))
 
-vi.mock('../progress.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/progress.js', () => ({
   buildAbTestEmailGateMessage: vi.fn(),
   getAbTestProfileEmail: (...args: unknown[]) => mockGetAbTestProfileEmail(...args),
   getAbTestProgressFromUiSettings: vi.fn(),
@@ -99,8 +99,10 @@ vi.mock('../progress.ts', () => ({
   ensureAbTestEmailCapturedFromProfile: (...args: unknown[]) => mockEnsureAbTestEmailCapturedFromProfile(...args),
 }))
 
-vi.mock('../callback.ts', async () => {
-  const actual = await vi.importActual<typeof import('../callback.ts')>('../callback.ts')
+vi.mock('../../../../../src/products/ab-system/telegram/callback.js', async () => {
+  const actual = await vi.importActual<typeof import('../../../../../src/products/ab-system/telegram/callback.js')>(
+    '../../../../../src/products/ab-system/telegram/callback.js',
+  )
   return {
     ...actual,
     deactivateCallbackMarkup: vi.fn(async () => undefined),
@@ -135,7 +137,7 @@ vi.mock('../../../../modules/telegram-mentor/services/identity/pending.ts', () =
   setPendingTelegramIdentity: vi.fn(),
 }))
 
-vi.mock('../../../../core/runtime/idempotency.ts', () => ({
+vi.mock('../../../../../src/core/runtime/idempotency.js', () => ({
   withRuntimeAdvisoryLock: (...args: unknown[]) => mockWithRuntimeAdvisoryLock(...args),
 }))
 
@@ -598,7 +600,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
       expect.arrayContaining([
         [
           '42',
-          'Хочу показати тобі повідомлення від Неоніли.\nВона написала це після Zoom-розбору — про те, як перестала давати своєму стану керувати собою.',
+          'Хочу показати тобі повідомлення від Неоніли.\n\nВона написала це після Zoom-розбору — про те, як перестала давати своєму стану керувати собою.',
           expect.objectContaining({ parse_mode: 'HTML' }),
         ],
       ]),
@@ -625,7 +627,10 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(vi.mocked(ctx.telegram.sendVideo)).toHaveBeenCalledWith(
       '42',
       'https://api.starway.test/deliverables/focus-nadya.mp4',
-      expect.objectContaining({ parse_mode: 'HTML' }),
+      expect.objectContaining({
+        parse_mode: 'HTML',
+        caption: expect.stringContaining('<b>Мене звати Надя.</b>'),
+      }),
     )
     expect(vi.mocked(ctx.telegram.sendVoice)).toHaveBeenCalledWith(
       '42',
@@ -636,6 +641,12 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     const firstVideoCall = vi.mocked(ctx.telegram.sendVideo).mock.invocationCallOrder[0]
     const firstVoiceCall = vi.mocked(ctx.telegram.sendVoice).mock.invocationCallOrder[0]
     expect(firstVideoCall).toBeLessThan(firstVoiceCall)
+    expect(
+      vi.mocked(ctx.telegram.sendMessage).mock.calls.some(
+        ([, text]) =>
+          typeof text === 'string' && text.includes('Мене звати Надя.'),
+      ),
+    ).toBe(false)
   })
 
   it('sends the Focus presentation video before the first practice text block', async () => {
@@ -654,7 +665,10 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     expect(vi.mocked(ctx.telegram.sendVideo)).toHaveBeenCalledWith(
       '42',
       'https://api.starway.test/deliverables/focus-presentation.mp4',
-      expect.objectContaining({ parse_mode: 'HTML' }),
+      expect.objectContaining({
+        parse_mode: 'HTML',
+        caption: expect.stringContaining('<b>ЯК ЦЕ ВИГЛЯДАЄ ІЗ СЕРЕДИНИ?</b>'),
+      }),
     )
 
     const firstVideoCall = vi.mocked(ctx.telegram.sendVideo).mock.calls.findIndex(
@@ -663,7 +677,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     const practiceMessageCall = vi.mocked(ctx.telegram.sendMessage).mock.calls.findIndex(
       ([, text]) =>
         typeof text === 'string' &&
-        text.includes('<b>ФОКУС</b> — це зустріч раз на тиждень.'),
+        text.includes('<b>На кожному Zoom ми:</b>'),
     )
 
     expect(firstVideoCall).toBeGreaterThanOrEqual(0)
@@ -673,6 +687,12 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     ).toBeLessThan(
       vi.mocked(ctx.telegram.sendMessage).mock.invocationCallOrder[practiceMessageCall],
     )
+    expect(
+      vi.mocked(ctx.telegram.sendMessage).mock.calls.some(
+        ([, text]) =>
+          typeof text === 'string' && text.includes('ЯК ЦЕ ВИГЛЯДАЄ ІЗ СЕРЕДИНИ?'),
+      ),
+    ).toBe(false)
   })
 
   it('propagates sendPhoto failures instead of marking the review step as delivered', async () => {

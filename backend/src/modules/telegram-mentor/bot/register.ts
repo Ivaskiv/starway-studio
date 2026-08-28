@@ -38,6 +38,7 @@ import { handleStatus } from '../handlers/status.js'
 import { registerCallbackHandler } from './callback.js'
 import { registerChannelHandlers } from './channel.js'
 import { registerMessageHandlers } from './messages.js'
+import { buildTelegramDebugStateMessages } from '../runtime/parity.js'
 import { registerZoomAdminHandlers } from './zoom-admin.js'
 
 let mentorBotRegistered = false
@@ -97,6 +98,45 @@ export async function registerMentorBot(
    })
    bot.command('privacy', async (ctx) => {
    await handlePrivacy(ctx)
+   })
+
+  bot.command('debug_state', async (ctx) => {
+   if (process.env.NODE_ENV === 'production') {
+   await planMessage(
+   ctx,
+   'ctx.reply',
+   'telegram_debug_state_unavailable',
+   'Команда недоступна у production середовищі.',
+   undefined,
+   'HTML'
+   )
+   return
+   }
+
+   const userId = String((ctx.state as { userId?: string | null }).userId ?? '').trim()
+   if (!userId) {
+   await planMessage(
+   ctx,
+   'ctx.reply',
+   'telegram_debug_state_missing_user',
+   'Не вдалося визначити користувача для debug snapshot.',
+   undefined,
+   'HTML'
+   )
+   return
+   }
+
+   const chunks = await buildTelegramDebugStateMessages(userId)
+   for (let index = 0; index < chunks.length; index += 1) {
+   await planMessage(
+   ctx,
+   'ctx.reply',
+   `telegram_debug_state_${index + 1}`,
+   chunks[index],
+   undefined,
+   'HTML'
+   )
+   }
    })
 
   bot.command('resend_block12', async (ctx) => {

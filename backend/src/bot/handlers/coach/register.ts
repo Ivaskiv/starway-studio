@@ -118,17 +118,6 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       await showCoachMenu(ctx)
     })
   )
-  telegramBot.command(
-    'start',
-    withCoachRuntimeProtection('command:start', async (ctx) => {
-      const isCoach = await checkCoachAccess(ctx)
-      if (!isCoach) {
-        await ctx.reply(coachBotContent.access.denied)
-        return
-      }
-      await showCoachMenu(ctx)
-    })
-  )
   telegramBot.hears(
     /^\/schedule(?:@\w+)?(?:\s+(.*))?$/iu,
     withCoachRuntimeProtection('command:schedule', async (ctx) => {

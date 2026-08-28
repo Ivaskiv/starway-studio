@@ -1,15 +1,19 @@
 export type AgentPromptSource = 'db' | 'filesystem'
 
 export type AgentPromptRecord = {
-  content: string
-  version: number
-  source: AgentPromptSource
+  editablePrompt: boolean
+  reason?: string
+  promptContent?: string | null
+  content: string | null
+  version: number | null
+  source: AgentPromptSource | null
 }
 
 export type AgentPromptLoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'missing'; message: string }
+  | { status: 'uneditable'; message: string }
   | { status: 'loaded'; source: AgentPromptSource; version: number; message: string }
 
 function resolvePromptLoadErrorMessage(promptId: string, error: unknown): string {
@@ -57,6 +61,23 @@ export function resolveAgentPromptLoadState(input: {
       message: `Промпт "${input.promptId}" не знайдено ні в active DB version, ні у filesystem fallback.`,
     }
   }
+  if (!input.prompt.editablePrompt) {
+    return {
+      status: 'uneditable',
+      message: input.prompt.reason ?? `Для "${input.promptId}" немає editable system prompt.`,
+    }
+  }
+  const resolvedContent =
+    input.prompt.promptContent
+    ?? input.prompt.content
+    ?? ''
+
+  if (!resolvedContent.trim() || input.prompt.source === null || input.prompt.version === null) {
+    return {
+      status: 'missing',
+      message: `Canonical prompt resolver для "${input.promptId}" повернув порожній content.`,
+    }
+  }
   return {
     status: 'loaded',
     source: input.prompt.source,
@@ -66,6 +87,16 @@ export function resolveAgentPromptLoadState(input: {
         ? 'Завантажено з active DB version.'
         : 'Завантажено з filesystem fallback.',
   }
+}
+
+export function resolveAgentPromptDraftContent(
+  prompt: AgentPromptRecord | null,
+): string {
+  if (!prompt?.editablePrompt) {
+    return ''
+  }
+
+  return prompt.promptContent ?? prompt.content ?? ''
 }
 
 export function isAgentPromptDraftModified(

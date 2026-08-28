@@ -1,6 +1,7 @@
 import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { coachBot } from '../../../lib/telegram.js'
+import { readCoachBotName, readCoachBotToken } from '../../../modules/telegram-mentor/runtime/botConfig.js'
 import { compressZoomAudioFile, downloadTelegramAudioSourceToTempFile, formatZoomAudioSizeMB, normalizeZoomAudioFile, OPENAI_AUDIO_TRANSCRIPTION_MAX_BYTES, probeZoomAudioFileSizeBytes, resolveZoomAudioStrategy, splitZoomAudioFile, transcribeTelegramAudio } from '../../../modules/voice/voice.service.js'
 import { resolveZoomAudioStorageType, uploadZoomAudioToCloudinary } from '../../../modules/zoom/audio/zoomAudioStorage.service.js'
 import { finalizeZoomTranscriptReport, matchZoomSessionForAudio, resolveZoomSessionUsername } from './report.js'
@@ -49,8 +50,8 @@ export async function processZoomAudioOutboxItem(
     : 'TELEGRAM_AUDIO'
   const telegramRuntime = coachBot
   const telegramRuntimeName = 'coachBot'
-  const telegramBotToken = String(process.env.COACH_BOT_TOKEN ?? '').trim()
-  const telegramBotUsername = String(process.env.COACH_BOT_NAME ?? '').trim() || null
+  const telegramBotToken = readCoachBotToken()
+  const telegramBotUsername = readCoachBotName() || null
   const telegramBotId = telegramBotToken.split(':')[0] || null
   const opsChatId = (typeof audioPayload.chatId === 'string' && audioPayload.chatId.trim())
     || process.env.STARWAY_OPS_CHAT_ID?.trim()

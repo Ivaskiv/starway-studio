@@ -3,7 +3,10 @@ import type { DeepLinkToken, Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { trackEvent } from '../events/service.js'
 import { requireTelegramBotConfig } from '../telegram-mentor/runtime/botConfig.js'
-import { resolveTelegramWebappBaseUrl } from '../../config/webapp.js'
+import {
+  resolveCoachWebAppBaseUrl,
+  resolveTelegramWebappBaseUrl,
+} from '../../config/webapp.js'
 import type {
   DeepLinkAction,
   DeepLinkSource,
@@ -126,7 +129,9 @@ export async function generateCoachAgentsWebDeepLink(userId: string): Promise<st
     path: COACH_AGENTS_RETURN_TARGET,
   })
 
-  return buildWebDeepLink(deepLink.token, deepLink.path)
+  const url = new URL(deepLink.path ?? COACH_AGENTS_RETURN_TARGET, resolveCoachWebAppBaseUrl())
+  url.searchParams.set('dl', deepLink.token)
+  return url.toString()
 }
 
 export async function generateDeepLink(input: GenerateDeepLinkInput): Promise<ResolvedDeepLink> {

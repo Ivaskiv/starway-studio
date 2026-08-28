@@ -2,7 +2,7 @@
 // Відображає postSessionReport (Json) після завершеної сесії
 // Приклад: <PostSessionReport report={session.postSessionReport} />
 
-import type { PostSessionReport } from '../types/zoom.types';
+import type { PostSessionReport } from '../../types/zoom.types';
 
 const SPHERE_LABELS: Record<string, string> = {
   money:             'Гроші',

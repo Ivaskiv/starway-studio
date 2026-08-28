@@ -4,10 +4,10 @@
 
 import { useState } from 'react';
 import { ArrowRight, CalendarDays, Clock3, Sparkles } from 'lucide-react';
-import { useZoom } from '../hooks/useZoom';
-import type { ZoomSessionWithAttendance } from '../types/zoom.types';
-import PostSessionReport from './booking/PostSessionReport';
-import RequestsList from './booking/RequestsList';
+import { useZoom } from '../../hooks/useZoom';
+import type { ZoomSessionWithAttendance } from '../../types/zoom.types';
+import PostSessionReport from '../booking/PostSessionReport';
+import RequestsList from '../booking/RequestsList';
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 

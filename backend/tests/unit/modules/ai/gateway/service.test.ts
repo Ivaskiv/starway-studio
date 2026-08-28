@@ -1,8 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { TelegramAgentGateway, type TelegramAgentGatewayRequest } from '../index.ts'
+import { TelegramAgentGateway, type TelegramAgentGatewayRequest } from '../../../../../src/modules/ai/gateway/index.js'
+import { buildGatewayAiProvider } from '../../../../../src/modules/ai/gateway/runtime.js'
 
 describe('TelegramAgentGateway', () => {
+  it('uses OpenAIProvider when TELEGRAM_AGENT_GATEWAY_PROVIDER is explicitly set to openai', () => {
+    vi.stubEnv('TELEGRAM_AGENT_GATEWAY_PROVIDER', 'openai')
+
+    const provider = buildGatewayAiProvider()
+
+    expect(provider.constructor.name).toBe('OpenAIProvider')
+
+    vi.unstubAllEnvs()
+  })
+
   it('routes telegram intelligence requests through the classification runtime intent', async () => {
     const runtimeExecutor = {
       execute: vi.fn(async ({ agentDefinition, task }) => ({
@@ -380,6 +391,62 @@ describe('TelegramAgentGateway', () => {
             }),
           }),
         }),
+      }),
+    )
+  })
+
+  it('runs a scoped draft test through the same canonical registration with runtime-scoped prompt override only', async () => {
+    const runtimeExecutor = {
+      execute: vi.fn(async ({ agentDefinition, task }) => ({
+        id: 'artifact-draft-test-1',
+        type: 'assistant_response_artifact',
+        summary: 'draft-test-replied',
+        payload: {
+          response: 'Ось draft test відповідь.',
+          provider: 'openai',
+          model: 'test-model',
+        },
+        metadata: {
+          ownerAgentId: agentDefinition.id,
+          taskId: task.id,
+          runtimeTelemetry: {
+            provider: 'openai',
+            model: 'test-model',
+            latency: 10,
+            promptTokens: 11,
+            completionTokens: 12,
+            cachedTokens: 0,
+            estimatedCost: 0,
+            actualCost: 0,
+            timestamp: new Date('2026-08-27T10:00:00.000Z').toISOString(),
+            user: null,
+          },
+        },
+      })),
+    }
+
+    const gateway = new TelegramAgentGateway({ runtimeExecutor })
+
+    const result = await gateway.executeDraftAgentTest({
+      key: 'sales',
+      bot: 'admin',
+      chatId: 'admin-chat-draft-1',
+      userId: 'admin-user-1',
+      promptContent: 'Draft sales prompt',
+      message: 'Дай CTA для продажу.',
+    })
+
+    expect(result.agentId).toBe('sales_agent')
+    expect(runtimeExecutor.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentDefinition: expect.objectContaining({
+          id: 'sales_agent',
+        }),
+        promptOverride: {
+          promptId: 'sales-agent-prompt',
+          content: 'Draft sales prompt',
+          version: 'draft-test',
+        },
       }),
     )
   })

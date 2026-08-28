@@ -1,5 +1,5 @@
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
-import type { CleanMiniAppZoomCalendarController } from '../hooks/useMiniAppCalendar'
+import type { CleanMiniAppZoomCalendarController } from '../../hooks/useMiniAppCalendar'
 
 type Props = {
   controller: CleanMiniAppZoomCalendarController

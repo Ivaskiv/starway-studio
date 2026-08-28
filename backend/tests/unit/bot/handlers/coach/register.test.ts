@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { coachBotContent } from '../../../content/coachBot.content.ts'
-import { registerCoachBotHandlers } from '../register.ts'
+import { coachBotContent } from '../../../../../src/bot/content/coachBot.content.ts'
+import { registerCoachBotHandlers } from '../../../../../src/bot/handlers/coach/register.ts'
 
 vi.mock('../../../../db/client.ts', () => ({
   prisma: {
@@ -183,7 +183,9 @@ describe('registerCoachBotHandlers', () => {
         reply_markup: expect.objectContaining({
           inline_keyboard: [[expect.objectContaining({
             text: coachBotContent.system.agentsCta,
-            url: 'https://miniapp.example/app/dashboard/admin/studio?tab=agents&item=agents.overview&dl=coach-agents-token',
+            web_app: {
+              url: 'https://miniapp.example/app/dashboard/admin/studio?tab=agents&item=agents.overview&dl=coach-agents-token',
+            },
           })]],
         }),
       }),

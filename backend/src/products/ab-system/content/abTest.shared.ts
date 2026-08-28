@@ -121,7 +121,7 @@ export const abTestMenuContent = {
 
 export const AB_TEST_REVIEW_HEADERS = {
   state:
-    'Хочу показати тобі повідомлення від Неоніли.\nВона написала це після Zoom-розбору — про те, як перестала давати своєму стану керувати собою.',
+    'Хочу показати тобі повідомлення від Неоніли.\n\nВона написала це після Zoom-розбору — про те, як **перестала давати своєму стану керувати собою**.',
   goal:
     'Хочу показати тобі повідомлення від Наталії.\nВона написала його одразу після Zoom-розбору — про те, як ціль стала ясною і як швидко після цього почалась дія.',
   choice:
@@ -345,7 +345,7 @@ export const AB_TEST_FOCUS_INCLUDED_TEXT =
 export const AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT =
   `**У ФОКУС ти отримуєш:**\n${formatFocusListItems(FOCUS_INCLUDED_ITEMS, '•').join('\n')}\nЯкщо між Zoom-розборами виникне питання або складна ситуація, ти завжди можеш написати в чат.`
 export const AB_TEST_FOCUS_PRICING_TEXT =
-  `Найближчий Zoom-розбір уже цього тижня.\n${AB_TEST_FOCUS_TITLE}.\n${FOCUS_PRICE_COPY.oneMonth}.\n${FOCUS_PRICE_COPY.threeMonths}.\n${FOCUS_PRICE_COPY.oneYear}.\n↩ Якщо після першого Zoom-розбору зрозумієш, що тобі не підходить, я поверну гроші.`
+  `**Найближчий Zoom-розбір** уже цього тижня.\n\n${AB_TEST_FOCUS_TITLE}.\n\n${FOCUS_PRICE_COPY.oneMonth}.\n${FOCUS_PRICE_COPY.threeMonths}.\n${FOCUS_PRICE_COPY.oneYear}.\n\n↩ Якщо після першого Zoom-розбору зрозумієш, що тобі не підходить, **я поверну гроші**.`
 export const AB_TEST_FOCUS_PROOF_PRICING_TEXT =
   `**${AB_TEST_FOCUS_TITLE}**\n${FOCUS_PRICE_LINES.join('\n')}\n\n${AB_TEST_FOCUS_PAY_CTA_MARKER}`
 export const AB_TEST_FOCUS_TEST_DRIVE_PITCH_BLOCKS = [

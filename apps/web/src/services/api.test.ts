@@ -57,4 +57,38 @@ describe('resolveApiUrl', () => {
     expect(new URL(localUrl, 'https://local.example').pathname).toBe('/api/zoom/week')
     expect(new URL(remoteUrl).pathname).toBe('/api/zoom/week')
   })
+
+  it('keeps the agent prompt read path on the local API origin', async () => {
+    vi.stubEnv('VITE_API_MODE', 'local')
+
+    const { resolveApiUrl } = await import('./api')
+
+    expect(resolveApiUrl('/admin/agents/sales/prompt')).toBe('/api/admin/agents/sales/prompt')
+  })
+
+  it('forces localhost browser origins onto the local /api contract even if remote env is stale', async () => {
+    vi.stubEnv('VITE_API_MODE', '')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://starway-api.onrender.com/api')
+    vi.stubGlobal('window', {
+      location: {
+        hostname: 'localhost',
+      },
+    })
+
+    const { resolveApiUrl } = await import('./api')
+
+    expect(resolveApiUrl('/auth/login')).toBe('/api/auth/login')
+    expect(resolveApiUrl('/admin/agents/sales/prompt')).toBe('/api/admin/agents/sales/prompt')
+  })
+
+  it('defaults development builds to the local /api owner even when VITE_API_URL is stale', async () => {
+    vi.stubEnv('VITE_API_MODE', '')
+    vi.stubEnv('VITE_API_BASE_URL', '')
+    vi.stubEnv('VITE_API_URL', 'https://starway-api.onrender.com')
+
+    const { resolveApiUrl } = await import('./api')
+
+    expect(resolveApiUrl('/auth/login')).toBe('/api/auth/login')
+    expect(resolveApiUrl('/access/state')).toBe('/api/access/state')
+  })
 })

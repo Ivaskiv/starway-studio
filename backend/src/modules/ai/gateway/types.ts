@@ -60,6 +60,10 @@ export interface TargetedGatewayAgentTestRequest {
   requestId?: string | null
 }
 
+export interface DraftGatewayAgentTestRequest extends TargetedGatewayAgentTestRequest {
+  promptContent: string
+}
+
 export interface IAgentGateway {
   execute(input: TelegramAgentGatewayRequest): Promise<TelegramAgentGatewayResult>
 }
@@ -71,7 +75,7 @@ export interface TelegramAgentGatewayDependencies {
 }
 
 export interface CanonicalPromptAgentExecutionInput {
-  agentKey: Extract<CanonicalGatewayAgentKey, 'assistant' | 'content' | 'sales' | 'coach' | 'funnel' | 'mentor'>
+  agentKey: Extract<CanonicalGatewayAgentKey, 'assistant' | 'content' | 'sales' | 'strategist' | 'coach' | 'funnel' | 'mentor'>
   systemPrompt: string
   userPrompt: string
   strategyTier: ModelStrategyTier
@@ -93,6 +97,11 @@ export interface CanonicalPromptAgentExecutionResult {
 export interface RuntimeGatewayExecutionInput {
   agentDefinition: AgentDefinition
   task: EngineeringTask
+  promptOverride?: {
+    promptId: string
+    content: string
+    version: string
+  } | null
 }
 
 export interface IRuntimeGatewayExecutor {

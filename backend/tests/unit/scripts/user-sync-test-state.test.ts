@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type MockAccessState = {
-  state: 'FOCUS_ACTIVE' | 'NO_ACCESS'
+  state: 'FOCUS_ACTIVE' | 'NO_ACCESS' | 'PREMIUM'
   isActive: boolean
   hasFocus: boolean
   expiresAt: Date | null
@@ -67,10 +67,21 @@ const mockState = vi.hoisted(() => {
 vi.mock('../../../src/db/client.js', () => ({
   prisma: {
     product: {
+      findFirst: vi.fn(async ({ where }: { where: { code: { equals: string } } }) => ({
+        id: where.code.equals === 'focus' ? 'focus-product-1' : 'trial-product-1',
+      })),
       findMany: vi.fn(async () => mockState.trialProductIds.map((id) => ({ id }))),
     },
     productSubscription: {
       count: vi.fn(async () => mockState.trialSubscriptionCount),
+      findUnique: vi.fn(async () => (
+        mockState.trialSubscriptionCount > 0
+          ? {
+              status: 'trial',
+              trialEndsAt: new Date('2026-08-30T12:00:00.000Z'),
+            }
+          : null
+      )),
       findFirst: vi.fn(async () => (
         mockState.trialSubscriptionCount > 0 ? { id: 'trial-sub-1' } : null
       )),
@@ -107,10 +118,27 @@ vi.mock('../../../src/db/client.js', () => ({
     },
     $transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) => callback({
       productSubscription: {
+        upsert: async ({ create }: { create: { productId: string; trialEndsAt?: Date | null } }) => {
+          if (create.productId === 'trial-product-1' && create.trialEndsAt) {
+            mockState.access = {
+              state: 'PREMIUM' as never,
+              isActive: false,
+              hasFocus: false,
+              expiresAt: create.trialEndsAt,
+            }
+          }
+          return { id: 'sub-1' }
+        },
         deleteMany: async () => {
           const count = mockState.trialSubscriptionCount
           mockState.deletedTrialSubscriptions({ count })
           mockState.trialSubscriptionCount = 0
+          mockState.access = {
+            state: 'NO_ACCESS',
+            isActive: false,
+            hasFocus: false,
+            expiresAt: null,
+          }
           return { count }
         },
       },
@@ -129,6 +157,15 @@ vi.mock('../../../src/db/client.js', () => ({
           mockState.trialCheckoutSessionCount = 0
           return { count }
         },
+      },
+      subscription: {
+        findFirst: async () => null,
+        deleteMany: async () => ({ count: 1 }),
+        update: async () => ({ id: 'canonical-sub-1' }),
+        create: async () => ({ id: 'canonical-sub-1' }),
+      },
+      user: {
+        update: async () => ({ id: 'user-1' }),
       },
     })),
     $disconnect: vi.fn(),
@@ -161,6 +198,10 @@ vi.mock('../../../src/modules/subscriptions/payments/focus-access.js', () => ({
   getUserAccessState: vi.fn(async () => mockState.access),
 }))
 
+vi.mock('../../../src/modules/flow-control/service.js', () => ({
+  syncLifecycleForUser: vi.fn(async () => ({ state: 'paid' })),
+}))
+
 vi.mock('../../../src/modules/zoom/service.js', () => ({
   getUpcomingZoomBookingView: vi.fn(async () => mockState.zoom),
   registerAttendee: vi.fn(async (_userId: string, sessionId: string) => {
@@ -185,7 +226,7 @@ describe('user-sync-test-state', () => {
   const baseSnapshot = {
     telegramFromId: '630111093',
     focus: {
-      active: true,
+      state: 'FOCUS_ACTIVE' as const,
       expiresAt: '2026-09-01T00:00:00.000Z',
     },
     zoom: {
@@ -224,7 +265,7 @@ describe('user-sync-test-state', () => {
       snapshot: {
         telegramFromId: '630111093',
         trialZoom: {
-          eligible: true,
+          state: 'ELIGIBLE' as const,
         },
       },
     })
@@ -288,5 +329,78 @@ describe('user-sync-test-state', () => {
       telegramId: '630111093',
       snapshot: baseSnapshot,
     })).rejects.toThrow('disabled in production')
+  })
+
+  it('supports a trial-active snapshot through the canonical state owner', async () => {
+    mockState.trialSubscriptionCount = 0
+    const report = await syncUserTestState({
+      telegramId: '630111093',
+      snapshot: {
+        telegramFromId: '630111093',
+        trialZoom: {
+          state: 'TRIAL_ACTIVE',
+          trialEndsAt: '2026-08-30T12:00:00.000Z',
+        },
+      },
+      options: {
+        mode: 'apply',
+      },
+    })
+
+    expect(report.actions.trialZoom).toBe('activated')
+  })
+
+  it('clears an active trial zoom entitlement when snapshot state is NONE', async () => {
+    mockState.access = {
+      state: 'PREMIUM',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: new Date('2026-08-30T12:00:00.000Z'),
+    }
+
+    const report = await syncUserTestState({
+      telegramId: '630111093',
+      snapshot: {
+        telegramFromId: '630111093',
+        trialZoom: {
+          state: 'NONE',
+        },
+      },
+      options: {
+        mode: 'apply',
+      },
+    })
+
+    expect(report.actions.trialZoom).toBe('activated')
+    expect(mockState.deletedTrialSubscriptions).toHaveBeenCalledTimes(1)
+    expect(report.after.access.state).toBe('NO_ACCESS')
+  })
+
+  it('reports planned mutations in dry-run mode without enforcing post-apply verification', async () => {
+    mockState.access = {
+      state: 'NO_ACCESS',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: null,
+    }
+
+    const report = await syncUserTestState({
+      telegramId: '630111093',
+      snapshot: {
+        telegramFromId: '630111093',
+        focus: {
+          state: 'FOCUS_ACTIVE',
+          expiresAt: '2026-09-01T00:00:00.000Z',
+        },
+      },
+      options: {
+        mode: 'dry-run',
+      },
+    })
+
+    expect(report.actions.focus).toBe('activated')
+    expect(mockState.activateCalls).not.toHaveBeenCalled()
+    expect(report.before.access.state).toBe('NO_ACCESS')
+    expect(report.after.access.state).toBe('NO_ACCESS')
   })
 })

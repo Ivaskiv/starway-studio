@@ -210,7 +210,10 @@ import {
   getTelegramIdentityParityHandler,
   postTelegramIdentityRepairHandler,
 } from './modules/telegram-mentor/runtime/identityParity.js'
-import { getTelegramRuntimeParityHandler } from './modules/telegram-mentor/runtime/parity.js'
+import {
+  getTelegramRuntimeParityHandler,
+  postTelegramRuntimeStateSyncHandler,
+} from './modules/telegram-mentor/runtime/parity.js'
 import testSyncRoutes from './products/absystem/config/testSync.router.js'
 import intelligenceRoutes from './routes/intelligence.routes.js'
 import salesAssistantRouter from './routers/salesAssistant.router.js'
@@ -484,6 +487,7 @@ export function createApp(): Express {
   app.get('/api/telegram/runtime/identity-parity', authOrBotRequired, getTelegramIdentityParityHandler)
   app.post('/api/telegram/runtime/identity-repair', authOrBotRequired, postTelegramIdentityRepairHandler)
   app.get('/api/telegram/runtime/parity', authOrBotRequired, getTelegramRuntimeParityHandler)
+  app.post('/api/telegram/runtime/state-sync', authOrBotRequired, postTelegramRuntimeStateSyncHandler)
   app.use('/api/access', accessRoutes)
   app.use('/api/analytics', analyticsRoutes)
   app.use('/api/events', eventsRoutes)

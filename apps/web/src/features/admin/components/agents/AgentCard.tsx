@@ -10,10 +10,34 @@ interface Props {
   onClick: () => void
 }
 
-const STATUS_DOT: Record<AgentCardDef['status'], string> = {
+const RUNTIME_STATUS_DOT = {
   active: 'bg-emerald-400 shadow-[0_0_6px_theme(colors.emerald.400)]',
   running: 'bg-sky-400 shadow-[0_0_6px_theme(colors.sky.400)] animate-pulse',
   pending: 'bg-slate-500',
+}
+
+function resolveStatusDot(agent: AgentCardDef): string {
+  if (!agent.runtimeRegistered || agent.runtimeStatus === null) {
+    return 'bg-slate-500'
+  }
+
+  return RUNTIME_STATUS_DOT[agent.runtimeStatus]
+}
+
+function resolveStatusBadge(agent: AgentCardDef): string {
+  if (agent.runtimeRegistered && agent.runtimeStatus === 'active') {
+    return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200'
+  }
+
+  if (agent.runtimeRegistered && agent.runtimeStatus === 'running') {
+    return 'border-sky-400/25 bg-sky-400/10 text-sky-200'
+  }
+
+  if (agent.capabilityType === 'KNOWLEDGE_TOOL') {
+    return 'border-white/10 bg-white/5 text-slate-300'
+  }
+
+  return 'border-white/10 bg-white/[0.04] text-slate-400'
 }
 
 export function AgentCard({ agent, colColor, onClick }: Props) {
@@ -38,13 +62,21 @@ export function AgentCard({ agent, colColor, onClick }: Props) {
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-1.5">
             <p className="truncate text-[12.5px] font-bold leading-tight text-white">{agent.name}</p>
+            <span
+              className={cn(
+                'shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide',
+                resolveStatusBadge(agent),
+              )}
+            >
+              {agent.statusLabel}
+            </span>
           </div>
           <p className="line-clamp-2 text-[11px] leading-snug text-slate-400">{agent.desc}</p>
           <p className="mt-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">
             {agent.isSystem ? 'Система' : 'Коуч'}
           </p>
         </div>
-        <div className={cn('mt-1 h-2 w-2 shrink-0 rounded-full', STATUS_DOT[agent.status])} />
+        <div className={cn('mt-1 h-2 w-2 shrink-0 rounded-full', resolveStatusDot(agent))} />
       </div>
     </button>
   )

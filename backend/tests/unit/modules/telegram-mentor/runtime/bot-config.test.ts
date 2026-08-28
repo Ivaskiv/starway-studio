@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   assertTelegramBotIdentity,
   describeLocalTelegramConsumerDisableReason,
+  readCoachBotToken,
+  readCoachBotName,
   readExpectedTelegramBotUsername,
   readTelegramBotConfig,
   readTelegramVerificationTokens,
@@ -18,6 +20,9 @@ const originalTestTelegramBotUsername = process.env.TEST_TELEGRAM_BOT_USERNAME
 const originalLegacyTestBotToken = process.env.TEST_BOT_TOKEN
 const originalContentBotToken = process.env.CONTENT_BOT_TOKEN
 const originalCoachBotToken = process.env.COACH_BOT_TOKEN
+const originalTestCoachBotToken = process.env.TEST_COACH_BOT_TOKEN
+const originalCoachBotName = process.env.COACH_BOT_NAME
+const originalTestCoachBotName = process.env.TEST_COACH_BOT_NAME
 const originalNodeEnv = process.env.NODE_ENV
 const originalTelegramWebhookUrl = process.env.TELEGRAM_WEBHOOK_URL
 const originalTelegramDeliveryMode = process.env.TELEGRAM_DELIVERY_MODE
@@ -43,6 +48,15 @@ afterEach(() => {
 
   if (originalCoachBotToken === undefined) delete process.env.COACH_BOT_TOKEN
   else process.env.COACH_BOT_TOKEN = originalCoachBotToken
+
+  if (originalTestCoachBotToken === undefined) delete process.env.TEST_COACH_BOT_TOKEN
+  else process.env.TEST_COACH_BOT_TOKEN = originalTestCoachBotToken
+
+  if (originalCoachBotName === undefined) delete process.env.COACH_BOT_NAME
+  else process.env.COACH_BOT_NAME = originalCoachBotName
+
+  if (originalTestCoachBotName === undefined) delete process.env.TEST_COACH_BOT_NAME
+  else process.env.TEST_COACH_BOT_NAME = originalTestCoachBotName
 
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV
   else process.env.NODE_ENV = originalNodeEnv
@@ -97,6 +111,34 @@ describe('telegram bot config', () => {
     expect(readExpectedTelegramBotUsername()).toBe('local_bot')
   })
 
+  it('reads the dedicated coach token by runtime and keeps local coach empty when TEST_COACH_BOT_TOKEN is missing', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.COACH_BOT_TOKEN = 'prod-coach-token'
+    delete process.env.TEST_COACH_BOT_TOKEN
+
+    expect(readCoachBotToken()).toBe('')
+
+    process.env.TEST_COACH_BOT_TOKEN = 'local-coach-token'
+    expect(readCoachBotToken()).toBe('local-coach-token')
+
+    process.env.NODE_ENV = 'production'
+    expect(readCoachBotToken()).toBe('prod-coach-token')
+  })
+
+  it('reads the dedicated coach name by runtime without falling back to prod identity in development', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.COACH_BOT_NAME = 'StarwayDNACoach'
+    delete process.env.TEST_COACH_BOT_NAME
+
+    expect(readCoachBotName()).toBe('Starway DNA Coach Test')
+
+    process.env.TEST_COACH_BOT_NAME = 'StarwayDNACoachTest'
+    expect(readCoachBotName()).toBe('StarwayDNACoachTest')
+
+    process.env.NODE_ENV = 'production'
+    expect(readCoachBotName()).toBe('StarwayDNACoach')
+  })
+
   it('uses the configured production username as the expected bot identity', () => {
     process.env.NODE_ENV = 'production'
     process.env.TELEGRAM_BOT_TOKEN = 'prod-token'
@@ -143,6 +185,22 @@ describe('telegram bot config', () => {
     expect(readTelegramVerificationTokens()).toContain(runtimeToken)
     expect(readTelegramVerificationTokens()).toContain('legacy-test-bot-token')
     expect(readTelegramVerificationTokens()[0]).toBe(runtimeToken)
+    if (env === 'production') {
+      expect(readTelegramVerificationTokens()).toContain('prod-token')
+    }
+  })
+
+  it('uses TEST_COACH_BOT_TOKEN in development verification tokens and never injects COACH_BOT_TOKEN there', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'test-main-token'
+    process.env.TELEGRAM_BOT_TOKEN = 'prod-main-token'
+    process.env.TEST_COACH_BOT_TOKEN = 'dev-coach-token'
+    process.env.COACH_BOT_TOKEN = 'prod-coach-token'
+
+    const tokens = readTelegramVerificationTokens()
+
+    expect(tokens).toContain('dev-coach-token')
+    expect(tokens).not.toContain('prod-coach-token')
   })
 
   it('disables the local telegram consumer when the test token is missing', () => {

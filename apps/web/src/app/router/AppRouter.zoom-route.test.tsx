@@ -38,6 +38,10 @@ vi.mock('@/app/router/routeConfig', () => ({
       path: '/dashboard/vision',
       element: createElement('div', undefined, 'DASHBOARD_VISION'),
     },
+    {
+      path: '/dashboard/admin/studio',
+      element: createElement('div', undefined, 'ADMIN_STUDIO'),
+    },
   ],
   PROTECTED_ALIASES: [],
   devMode: true,
@@ -73,7 +77,7 @@ vi.mock('@/layout/MainLayout', async () => {
   }
 })
 
-vi.mock('@/features/zoom/mini-app/CalendarRoute', async () => {
+vi.mock('@/features/zoom/routes/MiniAppCalendarRoute', async () => {
   const React = await import('react')
   const { useLocation } = await import('react-router-dom')
 
@@ -201,6 +205,25 @@ describe('AppRouter route access boundary', () => {
     expect(mockWithGuard).toHaveBeenCalled()
   })
 
+  it('/app/dashboard/admin/studio stays inside the protected dashboard branch', async () => {
+    authState.auth.user = { id: 'admin-1', role: 'SUPERADMIN' }
+    mockSessionOrchestrator.authRestoreStatus = 'ready'
+    mockWithGuard.mockClear()
+    const { default: AppRouter } = await import('./AppRouter')
+
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/app/dashboard/admin/studio?tab=agents&item=agents.overview'] },
+        createElement(AppRouter),
+      ),
+    )
+
+    expect(markup).toContain('GUARDED:/dashboard/admin/studio')
+    expect(markup).not.toContain('FOCUS_ROUTE')
+    expect(mockWithGuard).toHaveBeenCalled()
+  })
+
   it('authentication restoring does not redirect miniapp routes prematurely', async () => {
     authState.auth.user = null
     mockSessionOrchestrator.authRestoreStatus = 'restoring'
@@ -215,9 +238,8 @@ describe('AppRouter route access boundary', () => {
       ),
     )
 
-    expect(markup).toContain('LOADING_FALLBACK')
+    expect(markup).toContain('CLEAN_ZOOM_ROUTE:/miniapp/zoom-calendar?intent=booking')
     expect(markup).not.toContain('FOCUS_ROUTE')
-    expect(markup).not.toContain('CLEAN_ZOOM_ROUTE')
   })
 
   it('/ab-test child routes remain public under the same namespace contract', async () => {

@@ -173,10 +173,10 @@ export function readTelegramVerificationTokens(): string[] {
 
   return uniqueTokens([
     runtimeToken,
+    readCoachBotToken(),
     normalizeEnv(process.env.TELEGRAM_BOT_TOKEN),
     normalizeEnv(process.env.TEST_TELEGRAM_BOT_TOKEN),
     normalizeEnv(process.env.CONTENT_BOT_TOKEN),
-    normalizeEnv(process.env.COACH_BOT_TOKEN),
     normalizeEnv(process.env.TEST_BOT_TOKEN),
   ])
 }
@@ -192,7 +192,7 @@ export function resolveTelegramDeliveryMode(): TelegramDeliveryMode {
 export function readTelegramBotNames(): TelegramBotNames {
   return {
     main:  normalizeEnv(process.env.TELEGRAM_BOT_NAME)  || 'Starway Main',
-    coach: normalizeEnv(process.env.COACH_BOT_NAME)     || 'Starway DNA Coach',
+    coach: readCoachBotName(),
     test:  normalizeEnv(process.env.TEST_BOT_NAME)       || 'Starway Test',
   }
 }
@@ -218,5 +218,15 @@ export function requireTelegramBotConfig(context = 'startup'): TelegramBotConfig
 }
 
 export function readCoachBotToken(): string {
-  return normalizeEnv(process.env.COACH_BOT_TOKEN)
+  return isProductionRuntime()
+    ? normalizeEnv(process.env.COACH_BOT_TOKEN)
+    : normalizeEnv(process.env.TEST_COACH_BOT_TOKEN)
+}
+
+export function readCoachBotName(): string {
+  if (isProductionRuntime()) {
+    return normalizeEnv(process.env.COACH_BOT_NAME) || 'Starway DNA Coach'
+  }
+
+  return normalizeEnv(process.env.TEST_COACH_BOT_NAME) || 'Starway DNA Coach Test'
 }

@@ -12,6 +12,7 @@ export type AssistantSpecialistKey =
   | 'mentor'
   | 'content'
   | 'sales'
+  | 'strategist'
   | 'coach'
   | 'funnel'
 
@@ -64,6 +65,7 @@ const MENTOR_PROMPT_ID = 'mentor-agent-prompt'
 const ASSISTANT_PROMPT_ID = 'assistant-agent-prompt'
 const CONTENT_PROMPT_ID = 'content-agent-prompt'
 const SALES_PROMPT_ID = 'sales-agent-prompt'
+const STRATEGIST_PROMPT_ID = 'strategist-agent-prompt'
 const COACH_PROMPT_ID = 'coach-agent-prompt'
 const FUNNEL_PROMPT_ID = 'funnel-agent-prompt'
 
@@ -167,6 +169,37 @@ const CANONICAL_GATEWAY_AGENT_REGISTRATIONS: readonly CanonicalGatewayAgentRegis
       status: 'active',
       isSystem: true,
       sourceFiles: ['docs/agents/ai-content/SKILL-creative-ads.md', 'docs/agents/ai-content/dna-content-generator-offer.md'],
+    },
+  },
+  {
+    key: 'strategist',
+    intent: 'telegram_assistant',
+    runtime: {
+      id: 'strategy_agent',
+      capability: 'strategy',
+      prompt: STRATEGIST_PROMPT_ID,
+      artifactType: ASSISTANT_RESPONSE_ARTIFACT_TYPE,
+    },
+    objective: 'Help the user make structured business strategy decisions around business model, avatar, competitors, offer, and positioning.',
+    buildInputKind: 'assistant',
+    allowedBots: INTELLIGENCE_ALLOWED_BOTS,
+    route: {
+      priority: 48,
+      keywords: ['стратег', 'позиціон', 'аватар', 'конкурент', 'офер', 'business model', 'бізнес-модел', 'strategy'],
+    },
+    specialistInstructions: 'Stay within business strategy ownership. Use Client DNA when relevant. Keep the output structured and hand off content, sales, or mentoring work to the correct specialist.',
+    fallbackTo: 'assistant',
+    display: {
+      name: 'Strategist',
+      icon: '📊',
+      category: 'marketing',
+      description: 'Покриває business model, avatar, competitors, offer і positioning без підміни Seller, Content або Mentor.',
+      status: 'active',
+      isSystem: true,
+      sourceFiles: [
+        'docs/agents/ai-strategist/business-model-full.md',
+        'docs/agents/ai-strategist/competitor-analysis.md',
+      ],
     },
   },
   {

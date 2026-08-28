@@ -7,6 +7,7 @@ const mockGetUserAccessState = vi.fn()
 const mockGetUpcomingZoom = vi.fn()
 const mockGetUpcomingZoomBookingView = vi.fn()
 const mockGetOrCreateFocusInviteLink = vi.fn()
+const mockLoadAbTestProgress = vi.fn()
 
 vi.mock('@/db/client.js', () => ({
   prisma: {
@@ -27,6 +28,10 @@ vi.mock('@/modules/zoom/service.js', () => ({
 
 vi.mock('@/products/focus/payments/inviteLink.js', () => ({
   getOrCreateFocusInviteLink: (...args: unknown[]) => mockGetOrCreateFocusInviteLink(...args),
+}))
+
+vi.mock('@/products/ab-system/telegram/progress.js', () => ({
+  loadAbTestProgress: (...args: unknown[]) => mockLoadAbTestProgress(...args),
 }))
 
 vi.mock('@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js', () => ({
@@ -116,6 +121,7 @@ beforeEach(() => {
   mockGetUpcomingZoomBookingView.mockResolvedValue(null)
   mockGetOrCreateFocusInviteLink.mockResolvedValue('https://t.me/focus-channel')
   mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
+  mockLoadAbTestProgress.mockResolvedValue(null)
 })
 
 describe('buildHomeScreen — /start funnel regression', () => {
@@ -127,16 +133,25 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(JSON.stringify(screen.reply_markup)).toMatch(/тест/i)
   })
 
-  it('TEST_DONE with result falls back to generic test-done screen', async () => {
+  it('TEST_DONE with completed result renders conversational returning home', async () => {
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'goal',
+    })
     const snapshot = makeSnapshot({ lifecycleState: 'TEST_DONE', testResultType: 'action' })
     const screen = await buildHomeScreen(snapshot, fakeCtx)
 
-    expect(screen.text).toContain('Твій <b>результат</b> готовий')
+    expect(screen.text).toContain('Рада бачити тебе знову.')
+    expect(screen.text).toContain('Минулого разу твій тест показав <b>ЦІЛЬ</b>:')
+    expect(screen.text).toContain('Ти хочеш змін, але не розумієш, з чого почати.')
+    expect(screen.text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
+    expect(screen.text).toContain('Зараз активного доступу до Zoom-практик немає.')
+    expect(screen.text).toContain('Найближча групова Zoom-практика ще не запланована.')
     const flat = JSON.stringify(screen.reply_markup)
-    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
-    expect(flat).toMatch(/ab_test:show_result/)
-    expect(flat).toMatch(/ab_test:restart/)
+    expect(flat).toMatch(/ОБРАТИ ФОРМАТ У ФОКУСІ/)
+    expect(flat).toMatch(/ПРО ПРОГРАМУ/)
+    expect(flat).not.toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
+    expect(flat).toMatch(/show_inside_GOAL/)
     expect(flat).toMatch(/open_focus_payment/)
   })
 
@@ -177,6 +192,41 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
     expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
     expect(flat).toMatch(/КАНАЛ ФОКУСУ/)
+  })
+
+  it('FOCUS_PAID with PREMIUM trial access keeps trial semantics instead of active Focus copy', async () => {
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'state',
+    })
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'PREMIUM',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: new Date('2026-08-30T12:00:00Z'),
+    })
+    mockGetUpcomingZoomBookingView.mockResolvedValue({
+      id: 'zoom-trial-home',
+      scheduledAt: new Date('2026-08-27T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/trial-home' },
+      isMyBooking: false,
+      myQuestion: null,
+      attendeesCount: 0,
+    })
+
+    const snapshot = makeSnapshot({ lifecycleState: 'FOCUS_PAID' })
+    const screen = await buildHomeScreen(snapshot, fakeCtx)
+
+    expect(screen.text).toContain('Минулого разу твій тест показав <b>СТАН</b>:')
+    expect(screen.text).toContain('Зараз ти живеш більше на автоматі.')
+    expect(screen.text).toContain('Ти вже перейшла від результату до Zoom-практики і зараз можеш обрати найближчу зустріч.')
+    expect(screen.text).toContain('Зараз у тебе активний пробний доступ до Zoom до 30 серпня 2026 р.')
+    expect(screen.text).toContain('Найближча групова Zoom-практика — 27 серпня о 19:00 за Києвом.')
+    expect(screen.text).toContain('Ти ще не записувалась на неї.')
+    expect(screen.reply_markup.inline_keyboard).toEqual([
+      [{ text: 'ОБРАТИ ZOOM-ПРАКТИКУ', web_app: { url: expect.stringContaining('/miniapp/zoom-calendar?intent=booking') } }],
+      [{ text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_STATE' }],
+    ])
   })
 
   it('ZOOM_MEMBER with unresolved summary: renders booked Focus home', async () => {

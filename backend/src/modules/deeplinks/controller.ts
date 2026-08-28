@@ -108,17 +108,55 @@ export async function resolveDeepLinkSessionHandler(req: Request, res: Response)
   const token = typeof body?.token === 'string' ? body.token : ''
   const consume = typeof body?.consume === 'boolean' ? body.consume : true
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[DEEPLINK_LIVE]', {
+      event: 'REQUEST_RECEIVED',
+      consume,
+      hasToken: Boolean(token),
+    })
+  }
+
   if (!token) {
     return res.status(400).json({ error: 'token_required' })
   }
 
   const resolved = await resolveDeepLinkToken({ token, consume })
   if (!resolved) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[DEEPLINK_LIVE]', {
+        event: 'RESPONSE_STATUS',
+        status: 404,
+        resolved: false,
+      })
+    }
     return res.status(404).json({ error: 'invalid_or_expired_token' })
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[DEEPLINK_LIVE]', {
+      event: 'TOKEN_VALID',
+      action: resolved.action,
+      hasPath: Boolean(resolved.path),
+      target: resolved.target,
+      userIdPresent: Boolean(resolved.userId),
+    })
   }
 
   const session = await createSessionForUserId(resolved.userId)
   const state = await resolveUserState(resolved.userId).catch(() => null)
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[DEEPLINK_LIVE]', {
+      event: 'SESSION_CREATED',
+      role: session.user.role ?? null,
+      userIdPresent: Boolean(session.user.id),
+    })
+    console.info('[DEEPLINK_LIVE]', {
+      event: 'RESPONSE_STATUS',
+      status: 200,
+      stateResolved: Boolean(state),
+    })
+  }
 
   res.cookie('refreshToken', session.refreshToken, COOKIE_OPTIONS)
 

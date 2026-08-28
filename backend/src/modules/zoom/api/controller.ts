@@ -609,13 +609,36 @@ export async function getMySessions(req: AuthenticatedRequest, res: Response, ne
       attendeeId:         a.id,
     }));
 
-    const previousSessionRecap = await getUserPreviousZoomSessionRecap(userId)
-    const latestWeeklyReport = await getUserLatestWeeklyReportSummary(userId)
+    const [previousSessionRecapResult, latestWeeklyReportResult] =
+      await Promise.allSettled([
+        getUserPreviousZoomSessionRecap(userId),
+        getUserLatestWeeklyReportSummary(userId),
+      ])
+
+    if (previousSessionRecapResult.status === 'rejected') {
+      console.warn('[ZOOM_MY_RECAP_READ_ERROR]', {
+        userId,
+        error: previousSessionRecapResult.reason,
+      })
+    }
+
+    if (latestWeeklyReportResult.status === 'rejected') {
+      console.warn('[ZOOM_MY_WEEKLY_REPORT_READ_ERROR]', {
+        userId,
+        error: latestWeeklyReportResult.reason,
+      })
+    }
 
     return res.status(200).json({
       sessions: result,
-      previousSessionRecap,
-      latestWeeklyReport,
+      previousSessionRecap:
+        previousSessionRecapResult.status === 'fulfilled'
+          ? previousSessionRecapResult.value
+          : null,
+      latestWeeklyReport:
+        latestWeeklyReportResult.status === 'fulfilled'
+          ? latestWeeklyReportResult.value
+          : null,
     });
   } catch (err) {
     next(err);

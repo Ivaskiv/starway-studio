@@ -5,6 +5,7 @@ import {
   AB_TEST_MY_RESULT_BUTTON_TEXT,
   AB_TEST_OPEN_PLATFORM_BUTTON_TEXT,
   AB_TEST_RETAKE_BUTTON_TEXT,
+  AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT,
 } from '@/products/ab-system/content/abTest.shared.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { buildAbsystemAiUpgradeCheckoutUrl, buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business/checkout.js'
@@ -40,6 +41,12 @@ type FocusHomeState =
   | 'JOIN_WINDOW'
   | 'NO_SESSION'
 
+type TrialZoomHomeState =
+  | 'NOT_BOOKED'
+  | 'BOOKED'
+  | 'JOIN_WINDOW'
+  | 'NO_SESSION'
+
 type FocusHomeContext = {
   accessState: Awaited<ReturnType<typeof getUserAccessState>>
   upcomingZoom: Awaited<ReturnType<typeof getUpcomingZoomBookingView>>
@@ -54,6 +61,18 @@ function withKeyboard(payload: StartMessagePayload) {
       inline_keyboard: withDevTestPaymentButton(payload.buttons),
     },
   }
+}
+
+function buildTrialZoomActionButtons(state: TrialZoomHomeState): StartMessagePayload['buttons'] {
+  if (state === 'JOIN_WINDOW') {
+    return [[{ text: 'ПРИЄДНАТИСЯ', web_app: { url: resolveZoomCalendarWebAppUrl() } }]]
+  }
+
+  if (state === 'BOOKED') {
+    return [[{ text: 'ПЕРЕГЛЯНУТИ ЗАПИС', web_app: { url: resolveZoomCalendarWebAppUrl() } }]]
+  }
+
+  return [[{ text: AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT, web_app: { url: resolveZoomBookingWebAppUrl() } }]]
 }
 
 function resolveZoomBookingWebAppUrl() {
@@ -298,6 +317,53 @@ async function buildFocusHomeMessage(userId: string): Promise<StartMessagePayloa
     resolveFocusHomeContext(userId),
     getOrCreateFocusInviteLink(userId),
   ])
+
+  if (accessState.state === 'PREMIUM') {
+    const trialState: TrialZoomHomeState =
+      !upcomingZoom
+        ? 'NO_SESSION'
+        : upcomingZoom.isMyBooking
+          ? isJoinWindow(new Date(upcomingZoom.scheduledAt))
+            ? 'JOIN_WINDOW'
+            : 'BOOKED'
+          : 'NOT_BOOKED'
+
+    const trialText =
+      trialState === 'JOIN_WINDOW'
+        ? [
+            'Тобі доступний один пробний Zoom за 1 грн.',
+            '',
+            'Ти вже записана на найближчу Zoom-практику.',
+            '',
+            '<b>Наступний крок:</b> приєднайся до Zoom у вікно початку практики.',
+          ].join('\n')
+        : trialState === 'BOOKED'
+          ? [
+              'Тобі доступний один пробний Zoom за 1 грн.',
+              '',
+              'Ти вже записана на найближчу Zoom-практику.',
+              '',
+              '<b>Наступний крок:</b> відкрий запис і підготуй одну тему для розбору.',
+            ].join('\n')
+          : trialState === 'NOT_BOOKED'
+            ? [
+                'Тобі доступний один пробний Zoom за 1 грн.',
+                '',
+                'Обери найближчу Zoom-практику та запишись.',
+              ].join('\n')
+            : [
+                'Тобі доступний один пробний Zoom за 1 грн.',
+                '',
+                'Найближчу Zoom-практику ще не додано.',
+                '',
+                '<b>Наступний крок:</b> відкрий календар і перевір найближчі слоти.',
+              ].join('\n')
+
+    return {
+      text: trialText,
+      buttons: buildTrialZoomActionButtons(trialState),
+    }
+  }
 
   const expiryLabel = formatFocusExpiry(accessState.expiresAt)
   const nextZoomLabel = upcomingZoom

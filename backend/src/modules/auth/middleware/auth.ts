@@ -2,6 +2,7 @@ import type { NextFunction,Response } from 'express'
 import { buildRequestFingerprint } from '../../../core/state-machine/securityFoundation.js'
 import { prisma } from '../../../db/client.js'
 import type { AuthenticatedRequest,UserRole } from '../../../types/globalTypes.js'
+import { readTelegramVerificationTokens } from '../../telegram-mentor/runtime/botConfig.js'
 import { getServerUser } from '../server-user.js'
 import { verifyTelegramInitData } from '../telegram.js'
 
@@ -66,10 +67,7 @@ export function telegramWebAppAuth(allowedRoles?: string[]) {
         return res.status(401).json({ error: 'missing_init_data' })
       }
 
-      const tokens = [
-        process.env.COACH_BOT_TOKEN,
-        process.env.TELEGRAM_BOT_TOKEN,
-      ].filter(Boolean) as string[]
+      const tokens = readTelegramVerificationTokens()
 
       let telegramUser: { id: string } | null = null
       for (const token of tokens) {

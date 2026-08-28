@@ -5,9 +5,9 @@ import {
 import {
   ZoomCalendarCard as Card,
   CalendarSkeleton,
-} from './components/calendar/CalendarSkeleton'
-import { QuestionPanel } from './booking/QuestionPanel'
-import type { CleanMiniAppZoomCalendarController } from '../hooks/useMiniAppCalendar'
+} from '../calendar/CalendarSkeleton'
+import { QuestionPanel } from '../booking/QuestionPanel'
+import type { CleanMiniAppZoomCalendarController } from '../../hooks/useMiniAppCalendar'
 import {
   formatWeekDate,
   pluralizeParticipants,
@@ -22,11 +22,11 @@ import {
   resolveZoomHubPrimaryActionClassName,
   resolveZoomSessionTitle,
   shouldRenderPaymentGate,
-} from '../utils/zoomCalendar.utils'
+} from '../../utils/zoomCalendar.utils'
 import {
   MINIAPP_ACCENT_BUTTON_CLASSNAME,
   resolveNearestSessionDateLabel,
-} from '../utils/zoomCalendarRoute.utils'
+} from '../../utils/zoomCalendarRoute.utils'
 
 type Props = {
   controller: CleanMiniAppZoomCalendarController

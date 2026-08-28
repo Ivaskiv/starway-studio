@@ -22,7 +22,7 @@ import {
 } from '@/features/landings/focus/content/constants'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
-import CalendarRoute from '@/features/zoom/mini-app/CalendarRoute'
+import MiniAppCalendarRoute from '@/features/zoom/routes/MiniAppCalendarRoute'
 import MainLayout from '@/layout/MainLayout'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
@@ -159,7 +159,7 @@ function TelegramMiniAppRouter() {
       />
       <Route
         path="/miniapp/zoom-calendar"
-        element={<CalendarRoute />}
+        element={<MiniAppCalendarRoute />}
       />
       <Route path="/miniapp/*" element={<PublicMiniAppRoute />} />
       {renderTaskRedirectRoutes()}
@@ -196,7 +196,7 @@ function ProtectedAppRouter() {
         />
         <Route
           path="/miniapp/zoom-calendar"
-          element={<CalendarRoute />}
+          element={<MiniAppCalendarRoute />}
         />
         {protectedRoutes.map((route) => (
           <Route

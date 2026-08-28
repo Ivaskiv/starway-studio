@@ -3,6 +3,7 @@ import { Markup } from 'telegraf'
 
 import { enqueueRuntimeOutboxItem } from '../../../core/runtime/outbox.js'
 import { prisma } from '../../../db/client.js'
+import { readCoachBotName, readCoachBotToken } from '../../../modules/telegram-mentor/runtime/botConfig.js'
 import {
   findCloudinaryZoomAudioById,
   ingestCloudinaryZoomAudio,
@@ -340,9 +341,9 @@ export async function enqueueCoachAudioUpload(ctx: Context): Promise<boolean> {
   const uploadedAt = typeof message.date === 'number'
     ? new Date(message.date * 1000)
     : new Date()
-  const coachBotToken = String(process.env.COACH_BOT_TOKEN ?? '').trim()
+  const coachBotToken = readCoachBotToken()
   const coachBotId = coachBotToken.split(':')[0] || null
-  const coachBotUsername = String(process.env.COACH_BOT_NAME ?? '').trim() || null
+  const coachBotUsername = readCoachBotName() || null
 
   console.info('[ZOOM_AUDIO_TELEGRAM] update:received', {
     botInstance: 'coachBot',

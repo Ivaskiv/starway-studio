@@ -1,4 +1,9 @@
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
+import {
+  logCoachWebAppTrace,
+  PENDING_DEEPLINK_SESSION_EVENT,
+  PENDING_DEEPLINK_TOKEN_KEY,
+} from '@/features/auth/context/SessionOrchestratorContext'
 import { setCredentials } from '@/features/auth/services/auth.slice'
 import { useRestoreDeepLinkSessionMutation } from '@/features/auth/services/deeplinks.api'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
@@ -14,7 +19,40 @@ const BAD_COLORS = new Set([
 ])
 const AUTH_CALLBACK_PARAMS = ['token', 'accessToken', 'authToken', 'refreshToken']
 const TOKEN_PARAM_SAFE_PATHS = new Set(['/reset-password', '/auth/magic'])
-const PENDING_DEEPLINK_TOKEN_KEY = 'starway_pending_deeplink_token'
+
+export function readPendingDeepLinkToken(pathname: string, search: string): string | null {
+  const params = new URLSearchParams(search)
+  const directToken = params.get('dl')?.trim()
+  if (directToken) {
+    return directToken
+  }
+
+  if (pathname !== '/auth/telegram/success' || typeof window === 'undefined') {
+    return null
+  }
+
+  return window.sessionStorage.getItem(PENDING_DEEPLINK_TOKEN_KEY)?.trim() || null
+}
+
+export function shouldRedirectTelegramRuntimeToMiniApp(pathname: string): boolean {
+  return pathname === '/miniapp' || pathname.startsWith('/miniapp/')
+}
+
+function setPendingDeepLinkToken(token: string | null): void {
+  if (typeof window === 'undefined') return
+
+  try {
+    if (token?.trim()) {
+      window.sessionStorage.setItem(PENDING_DEEPLINK_TOKEN_KEY, token.trim())
+    } else {
+      window.sessionStorage.removeItem(PENDING_DEEPLINK_TOKEN_KEY)
+    }
+  } catch {
+    return
+  } finally {
+    window.dispatchEvent(new Event(PENDING_DEEPLINK_SESSION_EVENT))
+  }
+}
 
 function resolveTelegramMiniAppFallback(pathname: string, search: string): string {
   if (pathname.startsWith('/dashboard/ai-mentor')) {
@@ -47,6 +85,13 @@ export default function DeepLinkAuthBridge() {
   const processedTokenRef = useRef<string | null>(null)
 
   useEffect(() => {
+    logCoachWebAppTrace('DL_BRIDGE_MOUNTED', {
+      pathname: location.pathname,
+      hasDl: Boolean(new URLSearchParams(location.search).get('dl')?.trim()),
+    })
+  }, [location.pathname, location.search])
+
+  useEffect(() => {
     if (TOKEN_PARAM_SAFE_PATHS.has(location.pathname)) return
 
     const search = new URLSearchParams(location.search)
@@ -73,29 +118,45 @@ export default function DeepLinkAuthBridge() {
 
   useEffect(() => {
     const search = new URLSearchParams(location.search)
-    let token = search.get('dl')
-    if (!token && location.pathname === '/auth/telegram/success') {
-      token = window.sessionStorage.getItem(PENDING_DEEPLINK_TOKEN_KEY)
-      window.sessionStorage.removeItem(PENDING_DEEPLINK_TOKEN_KEY)
-    }
+    const token = readPendingDeepLinkToken(location.pathname, location.search)
+
+    logCoachWebAppTrace('AUTH_STATUS', {
+      pathname: location.pathname,
+      status,
+      hasDl: Boolean(search.get('dl')?.trim()),
+      hasPendingToken: Boolean(token),
+    })
 
     if (!token) {
       processedTokenRef.current = null
+      logCoachWebAppTrace('AUTH_FAILURE', {
+        reason: 'no_pending_token',
+        pathname: location.pathname,
+      })
       return
     }
 
     if (processedTokenRef.current === token) {
+      logCoachWebAppTrace('PENDING_SET', {
+        pathname: location.pathname,
+        state: 'already_processed',
+      })
       return
     }
 
     if (status === 'loading') {
+      logCoachWebAppTrace('AUTH_FAILURE', {
+        reason: 'auth_loading_guard',
+        pathname: location.pathname,
+      })
       return
     }
 
     if (status === 'authenticated' && location.pathname !== '/onboarding/continue') {
       processedTokenRef.current = token
+      setPendingDeepLinkToken(null)
       search.delete('dl')
-      if (isTelegramMiniApp(location.pathname)) {
+      if (isTelegramMiniApp(location.pathname) && shouldRedirectTelegramRuntimeToMiniApp(location.pathname)) {
         navigate('/miniapp/zoom-calendar', { replace: true })
         return
       }
@@ -110,6 +171,10 @@ export default function DeepLinkAuthBridge() {
     }
 
     processedTokenRef.current = token
+    setPendingDeepLinkToken(token)
+    logCoachWebAppTrace('RESTORE_START', {
+      pathname: location.pathname,
+    })
     search.delete('dl')
     navigate(
       {
@@ -123,7 +188,17 @@ export default function DeepLinkAuthBridge() {
     void restoreDeepLinkSession({ token, consume: true })
       .unwrap()
       .then(result => {
+        logCoachWebAppTrace('RESOLVE_HTTP_RESULT', {
+          ok: true,
+          pathname: location.pathname,
+          targetPath: result.link.path,
+        })
         dispatch(setCredentials({ user: result.user, accessToken: result.accessToken }))
+        logCoachWebAppTrace('SESSION_APPLIED', {
+          pathname: location.pathname,
+          role: result.user.role ?? null,
+          userIdPresent: Boolean(result.user.id),
+        })
         theme.setAccent(safeAccent(result.user.settings?.accentColor))
         theme.setMode(normalizeUiMode(result.user.settings?.theme))
         theme.setBgColor(result.user.settings?.bgColor ?? undefined)
@@ -131,7 +206,7 @@ export default function DeepLinkAuthBridge() {
         const currentPath = `${location.pathname}${location.search}`
         const targetPath = result.link.path
 
-        if (isTelegramMiniApp(location.pathname)) {
+        if (isTelegramMiniApp(location.pathname) && shouldRedirectTelegramRuntimeToMiniApp(location.pathname)) {
           navigate('/miniapp/zoom-calendar', { replace: true })
           return
         }
@@ -154,9 +229,14 @@ export default function DeepLinkAuthBridge() {
       })
       .catch(error => {
         console.warn('[DeepLinkAuthBridge] failed to restore deeplink session', error)
+        logCoachWebAppTrace('RESOLVE_HTTP_RESULT', {
+          ok: false,
+          pathname: location.pathname,
+          message: error instanceof Error ? error.message : 'unknown',
+        })
         processedTokenRef.current = null
 
-        if (isTelegramMiniApp(location.pathname)) {
+        if (isTelegramMiniApp(location.pathname) && shouldRedirectTelegramRuntimeToMiniApp(location.pathname)) {
           const nextSearch = new URLSearchParams(location.search)
           nextSearch.delete('dl')
           navigate(resolveTelegramMiniAppFallback(
@@ -164,6 +244,12 @@ export default function DeepLinkAuthBridge() {
             nextSearch.toString() ? `?${nextSearch.toString()}` : '',
           ), { replace: true })
         }
+      })
+      .finally(() => {
+        setPendingDeepLinkToken(null)
+        logCoachWebAppTrace('PENDING_CLEAR', {
+          pathname: location.pathname,
+        })
       })
   }, [dispatch, location.hash, location.pathname, location.search, navigate, restoreDeepLinkSession, status, theme])
 

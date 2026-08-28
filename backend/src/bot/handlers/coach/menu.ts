@@ -1,18 +1,17 @@
 import type { Context } from 'telegraf'
 import { Markup } from 'telegraf'
 
-import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 import {
-  buildWebDeepLink,
-  generateDeepLink,
+  COACH_AGENTS_RETURN_TARGET,
+  generateCoachAgentsWebDeepLink,
 } from '../../../modules/deeplinks/service.js'
 import { toMutableReplyKeyboard } from '../../../utils/keyboard.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 import { resolveCoachUserId } from './access.js'
+import { resolveCoachWebAppBaseUrl, resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 
 const COACH_CALENDAR_ROUTE = '/miniapp/zoom-calendar'
-const COACH_AGENTS_ROUTE =
-  '/app/dashboard/admin/studio?tab=agents&item=agents.overview'
+const lastCoachAgentsMessageByChat = new Map<string, number>()
 
 export const MENU_CONDUCT_PATTERN =
   /^(?:🎙️?\s*)?(?:Новий\s+Zoom|Провести)$/iu
@@ -56,15 +55,7 @@ async function resolveCoachAgentsUrl(ctx: Context): Promise<string> {
     throw new Error('COACH_USER_NOT_RESOLVED_FOR_AGENTS_LINK')
   }
 
-  const deepLink = await generateDeepLink({
-    userId: coachUserId,
-    action: 'open_web',
-    source: 'telegram',
-    target: 'web',
-    path: COACH_AGENTS_ROUTE,
-  })
-
-  return buildWebDeepLink(deepLink.token, deepLink.path)
+  return generateCoachAgentsWebDeepLink(coachUserId)
 }
 
 export async function showCoachMenu(ctx: Context): Promise<void> {
@@ -133,14 +124,34 @@ export async function showCoachSystemMenu(ctx: Context): Promise<void> {
 
 export async function showCoachAgentsMenu(ctx: Context): Promise<void> {
   const agentsUrl = await resolveCoachAgentsUrl(ctx)
+  const webappBase = resolveCoachWebAppBaseUrl()
+  const chatId = String(ctx.chat?.id ?? ctx.from?.id ?? '').trim()
+  const previousMessageId = chatId ? lastCoachAgentsMessageByChat.get(chatId) ?? null : null
 
-  await ctx.reply(
+  if (chatId && previousMessageId) {
+    await ctx.telegram.deleteMessage(chatId, previousMessageId).catch(() => undefined)
+  }
+
+  const replyMessage = await ctx.reply(
     `${coachBotContent.system.agentsTitle}\n\n${coachBotContent.system.agentsSubtitle}`,
     {
       ...buildCoachMainMenuReplyMarkup(),
       ...Markup.inlineKeyboard([
-        [Markup.button.url(coachBotContent.system.agentsCta, agentsUrl)],
+        [Markup.button.webApp(coachBotContent.system.agentsCta, agentsUrl)],
       ]),
     }
   )
+
+  if (chatId && typeof replyMessage?.message_id === 'number') {
+    lastCoachAgentsMessageByChat.set(chatId, replyMessage.message_id)
+  }
+
+  console.info('[COACH_AGENTS_BUTTON_DEBUG]', {
+    source: 'coachStart.showCoachAgentsMenu',
+    chatId,
+    finalUrl: agentsUrl,
+    mode: 'web_app',
+    webappBase,
+    route: COACH_AGENTS_RETURN_TARGET,
+  })
 }

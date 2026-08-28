@@ -1,4 +1,6 @@
 import type { MicroTask as MicroTaskItem } from '@/features/microTask/types/types'
+import { useAppFlowStore } from '@/features/app/useAppFlowStore'
+import { usePaywallStore } from '@/features/paywall/store/usePaywallStore'
 import {
   getTodayStep,
   saveManualMicroTask,

@@ -24,11 +24,13 @@ vi.mock('@/products/focus/payments/inviteLink.js', () => ({
   getOrCreateFocusInviteLink: vi.fn(async () => 'https://t.me/focus-channel'),
 }))
 
-vi.mock('../../../../config/webapp.ts', () => ({
+vi.mock('@/config/webapp.ts', () => ({
   resolveTelegramWebappBaseUrl: vi.fn(() => 'https://miniapp.example'),
 }))
 
-import { buildFocusActionButtons, zoomSection, postZoomAbsystemCtaMessage } from '../abTest.start.ts'
+import { getUserAccessState } from '@/modules/subscriptions/payments/focus-access.js'
+import { getUpcomingZoomBookingView } from '@/modules/zoom/service.js'
+import { buildFocusActionButtons, zoomSection, postZoomAbsystemCtaMessage } from '@/modules/telegram-mentor/handlers/abTest.start.js'
 
 describe('Focus home CTA matrix', () => {
   beforeEach(() => {
@@ -251,6 +253,31 @@ describe('Focus home CTA matrix', () => {
     expect(payload.buttons).toHaveLength(3)
   })
 
+  it('PREMIUM trial access does not masquerade as full Focus active copy', async () => {
+    vi.mocked(getUserAccessState).mockResolvedValue({
+      state: 'PREMIUM',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: new Date('2026-08-30T12:00:00Z'),
+    })
+    vi.mocked(getUpcomingZoomBookingView).mockResolvedValue({
+      id: 'zoom-trial',
+      scheduledAt: new Date('2026-08-27T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/trial' },
+      isMyBooking: false,
+      myQuestion: null,
+      attendeesCount: 0,
+    } as never)
+
+    const payload = await zoomSection('user-trial')
+    const buttonTexts = payload.buttons.flat().map((button) => button.text)
+
+    expect(payload.text).toContain('Тобі доступний один пробний Zoom за 1 грн.')
+    expect(payload.text).toContain('Обери найближчу Zoom-практику та запишись.')
+    expect(payload.text).not.toContain('Твій доступ до ФОКУСУ активний')
+    expect(buttonTexts).toEqual(['ОБРАТИ ZOOM-ПРАКТИКУ'])
+  })
+
   it('focus ai remains an explicit separate ABSystem upsell action', () => {
     const payload = postZoomAbsystemCtaMessage('user-7')
 
@@ -258,7 +285,7 @@ describe('Focus home CTA matrix', () => {
   })
 
   it('POST_ZOOM_1 copy stays Focus-only and does not include ABSystem CTA', async () => {
-    const { postZoom1Message } = await import('../abTest.start.ts')
+    const { postZoom1Message } = await import('@/modules/telegram-mentor/handlers/abTest.start.js')
 
     const payload = postZoom1Message('user-8')
     const flat = JSON.stringify(payload.reply_markup)

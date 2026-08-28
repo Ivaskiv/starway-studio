@@ -14,9 +14,11 @@ extractRuntimeTelemetry,
 readAssistantDecision,
 readDecisionDuration,
 } from './helpers.js'
+import { resolveGatewayPromptRead } from './runtime.js'
 import { TelegramRuntimeExecutor } from './runtime.js'
 import {
 TELEGRAM_INTELLIGENCE_CATEGORIES,
+type DraftGatewayAgentTestRequest,
 type ClassificationTaskInput,
 type EchoTaskInput,
 type IAgentGateway,
@@ -148,6 +150,55 @@ export class TelegramAgentGateway implements IAgentGateway {
     }
   }
 
+  async executeDraftAgentTest(
+    input: DraftGatewayAgentTestRequest
+  ): Promise<TelegramAgentGatewayResult> {
+    const registration = this.registry.getRegistrationByKey(input.key)
+    if (!registration.allowedBots.includes(input.bot)) {
+      throw new Error(
+        `Bot '${input.bot}' is not allowed to execute '${registration.key}'.`
+      )
+    }
+
+    const promptContent = input.promptContent.trim()
+    if (!promptContent) {
+      throw new Error('Draft prompt content is required.')
+    }
+
+    const requestId =
+      input.requestId ??
+      `tg:draft-test:${registration.key}:${input.chatId}:${Date.now()}`
+    const request: TelegramAgentGatewayRequest = {
+      bot: input.bot,
+      intent: registration.intent,
+      chatId: input.chatId,
+      userId: input.userId ?? null,
+      message: input.message,
+      messageType: input.messageType ?? null,
+      requestContext: input.requestContext ?? null,
+      requestId,
+    }
+
+    const executed = await this.executeRegistration({
+      requestId,
+      input: request,
+      selectedRegistration: registration,
+      executionRegistration: registration,
+      delegated: false,
+      fallbackActivated: false,
+      fallbackAgent: null,
+      promptOverride: promptContent,
+    })
+
+    return {
+      bot: request.bot,
+      intent: request.intent,
+      agentId: executed.agentDefinition.id,
+      taskId: executed.task.id,
+      artifact: executed.artifact,
+    }
+  }
+
   async invalidatePromptCache(): Promise<void> {
     await this.runtimeExecutor.invalidatePromptCache?.()
   }
@@ -159,6 +210,7 @@ export class TelegramAgentGateway implements IAgentGateway {
     delegated: boolean
     fallbackActivated: boolean
     fallbackAgent: string | null
+    promptOverride?: string | null
     input: TelegramAgentGatewayRequest
   }): Promise<{
     agentDefinition: AgentDefinition
@@ -173,7 +225,8 @@ export class TelegramAgentGateway implements IAgentGateway {
       input.requestId,
       input.executionRegistration,
       input.delegated,
-      input.selectedRegistration.key
+      input.selectedRegistration.key,
+      input.promptOverride ?? null,
     )
     const decision = readAssistantDecision(task.metadata?.input)
     const decisionDurationMs = readDecisionDuration(task.metadata)
@@ -205,6 +258,13 @@ export class TelegramAgentGateway implements IAgentGateway {
     const artifact = await this.runtimeExecutor.execute({
       agentDefinition,
       task,
+      promptOverride: input.promptOverride?.trim()
+        ? {
+            promptId: input.executionRegistration.runtime.prompt,
+            content: input.promptOverride,
+            version: 'draft-test',
+          }
+        : null,
     })
 
     artifact.metadata = {
@@ -236,6 +296,9 @@ export class TelegramAgentGateway implements IAgentGateway {
     })
 
     const runtimeTelemetry = extractRuntimeTelemetry(artifact.metadata)
+    const promptTrace = await resolveGatewayPromptRead(
+      input.executionRegistration.runtime.prompt
+    ).catch(() => null)
     if (runtimeTelemetry) {
       this.logger.info('telegram_agent_gateway.runtime_telemetry', {
         requestId: input.requestId,
@@ -250,6 +313,16 @@ export class TelegramAgentGateway implements IAgentGateway {
       })
     }
 
+    this.logger.info('telegram_agent_gateway.prompt_version_trace', {
+      requestId: input.requestId,
+      agentKey: input.executionRegistration.key,
+      promptId: input.executionRegistration.runtime.prompt,
+      promptVersion: promptTrace?.version ?? null,
+      provider: runtimeTelemetry?.provider ?? 'unknown',
+      model: runtimeTelemetry?.model ?? 'unknown',
+      runtimeEntry: agentDefinition.id,
+    })
+
     return {
       agentDefinition,
       task,
@@ -262,7 +335,8 @@ export class TelegramAgentGateway implements IAgentGateway {
     requestId: string,
     registration: CanonicalGatewayAgentRegistration,
     delegated: boolean,
-    selectedAgent: string
+    selectedAgent: string,
+    promptOverride?: string | null
   ): Promise<EngineeringTask> {
     const assistantTask =
       registration.buildInputKind === 'assistant'
