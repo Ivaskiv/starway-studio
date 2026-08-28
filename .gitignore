@@ -187,3 +187,7 @@ apps/web/src/features/**/styles/components/
 !packages/ai/package.json
 backend/.env
 backend/.env.local
+
+# Local env backups
+backend/.env.local.bak
+*.env.local.bak
