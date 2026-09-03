@@ -1,6 +1,7 @@
 import type { Telegraf } from 'telegraf'
 import { Markup } from 'telegraf'
 
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { pipelineContent } from '../pipeline.content.js'
 import type { ReelsVariant } from '../pipeline.types.js'
 
@@ -18,10 +19,12 @@ export async function sendVariantsPreview(
     [Markup.button.callback(pipelineContent.buttons.cancel, `pipeline:cancel:${pipelineId}`)],
   ])
 
-  await bot.telegram.sendMessage(chatId, message, {
-    parse_mode: 'HTML',
-    ...keyboard,
-  })
+  await sendTelegramMessage(
+    bot,
+    chatId,
+    { text: message, parseMode: 'HTML' },
+    { replyMarkup: keyboard.reply_markup },
+  )
 }
 
 function buildPreviewMessage(variants: ReelsVariant[]): string {

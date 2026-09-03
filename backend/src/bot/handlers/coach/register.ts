@@ -18,6 +18,8 @@ import { coachBotContent } from '../../content/coachBot.content.js'
 import {
   handleCoachAudioCommand,
   handleCoachNotifyCommand,
+  handleCoachPaymentsCommand,
+  PARTICIPANTS_UPCOMING_CALLBACK,
   handleCoachUsersCommand,
   validateCoachContentCatalog,
 } from '../coach-content/index.js'
@@ -48,9 +50,13 @@ import {
   MENU_CALENDAR_PATTERN,
   MENU_CONDUCT_PATTERN,
   MENU_LIBRARY_PATTERN,
+  MENU_NOTIFICATIONS_PATTERN,
+  MENU_PAYMENTS_PATTERN,
   MENU_SETTINGS_PATTERN,
+  showCoachCalendarMenu,
   showCoachAgentsMenu,
   showCoachMenu,
+  showCoachSettingsBack,
   showCoachSystemMenu,
 } from './menu.js'
 import {
@@ -210,6 +216,13 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     })
   )
   telegramBot.action(
+    'coach:settings:back',
+    withCoachRuntimeProtection('action:coach:settings:back', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return showCoachSettingsBack(ctx)
+    })
+  )
+  telegramBot.action(
     'coach:analytics',
     withCoachRuntimeProtection('action:coach:analytics', async (ctx) => {
       if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
@@ -224,10 +237,19 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     })
   )
   telegramBot.action(
-    'coach:notifications',
+    PARTICIPANTS_UPCOMING_CALLBACK,
+    withCoachRuntimeProtection('action:coach:participants:upcoming', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
+      return handleCoachUsersCommand(ctx, 'upcoming')
+    })
+  )
+  telegramBot.action(
+    /^coach:notifications(?::.*)?$/,
     withCoachRuntimeProtection('action:coach:notifications', async (ctx) => {
       if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
-      return handleCoachNotifyCommand(ctx, '')
+      const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+      const payload = raw.replace(/^coach:notifications:?/, '').trim()
+      return handleCoachNotifyCommand(ctx, payload)
     })
   )
   telegramBot.action(
@@ -318,7 +340,21 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     MENU_CALENDAR_PATTERN,
     withCoachRuntimeProtection('menu:calendar', async (ctx) => {
       if (!(await checkCoachAccess(ctx))) return
-      await scheduleMenuHandler(ctx)
+      await showCoachCalendarMenu(ctx)
+    })
+  )
+  telegramBot.hears(
+    MENU_NOTIFICATIONS_PATTERN,
+    withCoachRuntimeProtection('menu:notifications', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await handleCoachNotifyCommand(ctx, '')
+    })
+  )
+  telegramBot.hears(
+    MENU_PAYMENTS_PATTERN,
+    withCoachRuntimeProtection('menu:payments', async (ctx) => {
+      if (!(await checkCoachAccess(ctx))) return
+      await handleCoachPaymentsCommand(ctx)
     })
   )
   telegramBot.hears(

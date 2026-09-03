@@ -600,7 +600,7 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
       expect.arrayContaining([
         [
           '42',
-          'Хочу показати тобі повідомлення від Неоніли.\n\nВона написала це після Zoom-розбору — про те, як перестала давати своєму стану керувати собою.',
+          'Хочу показати тобі повідомлення від Неоніли.\n\nВона написала це після Zoom-розбору — про те, як <b>перестала давати своєму стану керувати собою</b>.',
           expect.objectContaining({ parse_mode: 'HTML' }),
         ],
       ]),

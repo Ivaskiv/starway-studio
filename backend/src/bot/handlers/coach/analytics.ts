@@ -1,74 +1,80 @@
 import type { Context } from 'telegraf'
 
 import { coachBotContent } from '../../content/coachBot.content.js'
-import { getCanonicalCoachMetrics } from '../../../modules/analytics/service.js'
+import { safeRate } from '../../../services/scheduler/daily/shared.js'
+import { loadDailyCoachBriefingData } from '../../../services/scheduler/daily/coach/data.js'
+import { replyOrEditPanelMessage } from '../coach-content/shared.js'
 
 type CoachAnalytics = {
-  total: number
-  inTest: number
+  newUsers: number
   testDone: number
   focusPaid: number
-  zoomActive: number
+  zoomActive: number | null
   conversion: number
-  abSystemUpgrades: number
-  revenueCents: number
-  mrr: number
+  monthRevenue: Array<{
+    currency: string
+    count: number
+    sumCents: number
+  }>
 }
 
-async function replyOrEditAnalytics(ctx: Context, text: string): Promise<void> {
-  if (ctx.callbackQuery) {
-    try {
-      await ctx.editMessageText(text).catch(() => undefined)
-      return
-    } catch (error) {
-      console.error('[coach-analytics:edit-fallback] failed', error)
-    }
-  }
-
-  await ctx.reply(text).catch(() => undefined)
+function formatCurrencyAmount(valueCents: number, currency: string): string {
+  const amount = (valueCents / 100).toFixed(currency === 'UAH' ? 0 : 2)
+  return `${amount} ${currency}`
 }
 
-function formatMoney(value: number): string {
-  return `€${value.toFixed(2)}`
+function formatMonthRevenue(rows: CoachAnalytics['monthRevenue']): string {
+  if (rows.length === 0) return '—'
+  if (rows.length > 1) return 'Дані по валюті потребують звірки'
+
+  const row = rows[0]
+  return formatCurrencyAmount(row.sumCents, row.currency)
 }
 
 async function readCoachAnalytics(): Promise<CoachAnalytics> {
-  const canonical = await getCanonicalCoachMetrics()
+  const daily = await loadDailyCoachBriefingData()
 
   return {
-    total: canonical.totalUsers,
-    inTest: canonical.testInProgress,
-    testDone: canonical.testCompleted,
-    focusPaid: canonical.focusPaid,
-    zoomActive: canonical.activeZoomUsers,
-    conversion: canonical.testToFocusConversion,
-    abSystemUpgrades: canonical.abSystemUpgrades,
-    revenueCents: canonical.revenueCents,
-    mrr: canonical.mrr,
+    newUsers: daily.newUsers,
+    testDone: daily.testsCompleted,
+    focusPaid: daily.focusPaidUsers,
+    zoomActive: null,
+    conversion: safeRate(daily.focusPaidUsers, Math.max(daily.testsCompleted, 1)),
+    monthRevenue: daily.monthRevenue,
   }
 }
 
 export async function analyticsHandler(ctx: Context): Promise<void> {
   const analytics = await readCoachAnalytics()
 
-  if (analytics.total === 0) {
-    await replyOrEditAnalytics(ctx, `${coachBotContent.analytics.title}\n\n${coachBotContent.analytics.noData}`)
+  if (analytics.newUsers === 0 && analytics.testDone === 0 && analytics.focusPaid === 0 && analytics.monthRevenue.length === 0) {
+    await replyOrEditPanelMessage(
+      ctx,
+      `${coachBotContent.analytics.title}\n\n${coachBotContent.analytics.noData}`,
+    )
     return
   }
 
   const lines = [
-    `📊 ${coachBotContent.analytics.title}`,
-    '─────────────────',
-    `👥 ${coachBotContent.analytics.total}: ${analytics.total}`,
-    `🔬 ${coachBotContent.analytics.inTest}: ${analytics.inTest}`,
-    `✅ ${coachBotContent.analytics.testDone}: ${analytics.testDone}`,
-    `💳 ${coachBotContent.analytics.focusPaid}: ${analytics.focusPaid}`,
-    `🎥 ${coachBotContent.analytics.zoomActive}: ${analytics.zoomActive}`,
-    `📈 ${coachBotContent.analytics.conversion}: ${analytics.conversion}%`,
-    `🚀 ${coachBotContent.analytics.abSystemUpgrades}: ${analytics.abSystemUpgrades}`,
-    `💰 ${coachBotContent.analytics.revenue}: ${formatMoney(analytics.revenueCents / 100)}`,
-    `📆 ${coachBotContent.analytics.mrr}: ${formatMoney(analytics.mrr)}`,
+    coachBotContent.analytics.title,
+    '',
+    coachBotContent.analytics.today,
+    '',
+    `${coachBotContent.analytics.newUsers}: ${analytics.newUsers}`,
+    `${coachBotContent.analytics.testDone}: ${analytics.testDone}`,
+    `${coachBotContent.analytics.focusPaid}: ${analytics.focusPaid}`,
+    ...(analytics.zoomActive === null
+      ? []
+      : [`${coachBotContent.analytics.zoomActive}: ${analytics.zoomActive}`]),
+    '',
+    coachBotContent.analytics.conversion,
+    '',
+    `${coachBotContent.analytics.testToFocus}: ${analytics.conversion}%`,
+    '',
+    coachBotContent.analytics.paymentsMonth,
+    '',
+    formatMonthRevenue(analytics.monthRevenue),
   ]
 
-  await replyOrEditAnalytics(ctx, lines.join('\n'))
+  await replyOrEditPanelMessage(ctx, lines.join('\n'))
 }

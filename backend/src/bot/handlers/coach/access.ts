@@ -43,7 +43,7 @@ async function checkCoachRole(ctx: Context): Promise<boolean> {
     select: { role: true },
   })
 
-  return user?.role === 'EXPERT' || user?.role === 'SUPERADMIN'
+  return user?.role === 'ADMIN' || user?.role === 'EXPERT' || user?.role === 'SUPERADMIN'
 }
 
 export async function resolveCoachUserId(ctx: Context): Promise<string | null> {

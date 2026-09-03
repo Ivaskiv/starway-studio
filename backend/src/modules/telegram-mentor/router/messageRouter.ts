@@ -17,6 +17,7 @@ import {
   hasPendingName,
 } from '../services/identity/pending.js'
 import { getSession, parseQuestionState } from '../session.js'
+import { planMessage } from '../conversation/delivery/planDelivery.js'
 import { TelegramConversationEngine } from '../conversation/engine/conversationEngine.js'
 import { createConversationResponse } from '../conversation/engine/types.js'
 import { TelegramConversationRenderer } from '../conversation/renderers/telegramConversationRenderer.js'
@@ -336,8 +337,10 @@ export async function routeTelegramTextMessage(
   }
 
   if (chatId && isLikelyMistypedStartCommand(text)) {
-    await ctx.telegram.sendMessage(
-      chatId,
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'telegram_mistyped_start_hint',
       'Можливо, ти мала на увазі команду /start? Натисни її внизу, щоб продовжити.',
     )
     return true

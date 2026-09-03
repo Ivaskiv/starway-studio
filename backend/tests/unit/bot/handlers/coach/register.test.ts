@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { coachBotContent } from '../../../../../src/bot/content/coachBot.content.ts'
-import { registerCoachBotHandlers } from '../../../../../src/bot/handlers/coach/register.ts'
+process.env.JWT_ACCESS_SECRET = 'test-access-secret'
+process.env.JWT_REFRESH_SECRET = 'test-refresh-secret'
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('../../../../../src/db/client.ts', () => ({
   prisma: {
     user: {
+      findFirst: vi.fn(),
+    },
+    zoomSession: {
       findFirst: vi.fn(),
     },
     checkoutSession: {
@@ -21,33 +24,35 @@ vi.mock('../../../../db/client.ts', () => ({
   },
 }))
 
-vi.mock('../../../../modules/subscriptions/payments/activation.ts', () => ({
+vi.mock('../../../../../src/modules/subscriptions/payments/activation.ts', () => ({
   activateProductSubscription: vi.fn(),
 }))
 
-vi.mock('../../../../modules/subscriptions/payments/business/processing.ts', () => ({
+vi.mock('../../../../../src/modules/subscriptions/payments/business/processing.ts', () => ({
   processEcosystemPayment: vi.fn(),
 }))
 
-vi.mock('../../../../modules/subscriptions/payments/callback/notifications.ts', () => ({
+vi.mock('../../../../../src/modules/subscriptions/payments/callback/notifications.ts', () => ({
   sendAbTestBlock12Welcome: vi.fn(),
   sendFocusPaymentSuccessTelegramMessageByOrder: vi.fn(),
   notifyUserFocusPaymentIssueDenied: vi.fn(),
   sendTrialZoomPaymentSuccessTelegramMessage: vi.fn(),
 }))
 
-vi.mock('../../coach-content/index.js', () => ({
+vi.mock('../../../../../src/bot/handlers/coach-content/index.js', () => ({
   handleCoachAudioCommand: vi.fn(),
   handleCoachNotifyCommand: vi.fn(),
+  handleCoachPaymentsCommand: vi.fn(),
   handleCoachUsersCommand: vi.fn(),
+  PARTICIPANTS_UPCOMING_CALLBACK: 'coach-content:users:upcoming',
   validateCoachContentCatalog: vi.fn(),
 }))
 
-vi.mock('../analytics.ts', () => ({
+vi.mock('../../../../../src/bot/handlers/coach/analytics.ts', () => ({
   analyticsHandler: vi.fn(),
 }))
 
-vi.mock('../schedule.ts', () => ({
+vi.mock('../../../../../src/bot/handlers/coach/schedule.ts', () => ({
   hoursMenuHandler: vi.fn(),
   nextWeekDoneHandler: vi.fn(),
   nextWeekMenuHandler: vi.fn(),
@@ -58,11 +63,15 @@ vi.mock('../schedule.ts', () => ({
   toggleHourHandler: vi.fn(),
 }))
 
-vi.mock('../../../../config/webapp.ts', () => ({
+vi.mock('../../../../../src/config/webapp.ts', () => ({
   resolveTelegramWebappBaseUrl: vi.fn(() => 'https://miniapp.example'),
+  resolveCoachWebAppBaseUrl: vi.fn(() => 'https://miniapp.example'),
 }))
 
-vi.mock('../../../../modules/deeplinks/service.ts', () => ({
+vi.mock('../../../../../src/modules/deeplinks/service.ts', () => ({
+  generateCoachZoomWebDeepLink: vi.fn(async () => 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token'),
+  generateCoachAgentsWebDeepLink: vi.fn(async () => 'https://miniapp.example/app/dashboard/admin/studio?tab=agents&item=agents.overview&dl=coach-agents-token'),
+  COACH_AGENTS_RETURN_TARGET: '/app/dashboard/admin/studio?tab=agents&item=agents.overview',
   generateDeepLink: vi.fn(async () => ({
     token: 'coach-agents-token',
     path: '/app/dashboard/admin/studio?tab=agents&item=agents.overview',
@@ -74,7 +83,7 @@ vi.mock('../../../../modules/deeplinks/service.ts', () => ({
   }),
 }))
 
-vi.mock('../../../../modules/ai-operator/operator.service.ts', () => ({
+vi.mock('../../../../../src/modules/ai-operator/operator.service.ts', () => ({
   AI_OPERATOR_ACTIONS: {},
   isCoachDialogueAwaiting: vi.fn(async () => false),
   isCoachPostEditingActive: vi.fn(async () => false),
@@ -84,18 +93,23 @@ vi.mock('../../../../modules/ai-operator/operator.service.ts', () => ({
   submitCoachEditedPost: vi.fn(),
 }))
 
-import { prisma } from '../../../../db/client.ts'
-import { processEcosystemPayment } from '../../../../modules/subscriptions/payments/business/processing.ts'
-import { activateProductSubscription } from '../../../../modules/subscriptions/payments/activation.ts'
+import { prisma } from '../../../../../src/db/client.ts'
+import { processEcosystemPayment } from '../../../../../src/modules/subscriptions/payments/business/processing.ts'
+import { activateProductSubscription } from '../../../../../src/modules/subscriptions/payments/activation.ts'
 import {
   notifyUserFocusPaymentIssueDenied,
   sendAbTestBlock12Welcome,
   sendFocusPaymentSuccessTelegramMessageByOrder,
   sendTrialZoomPaymentSuccessTelegramMessage,
-} from '../../../../modules/subscriptions/payments/callback/notifications.ts'
-import { generateDeepLink } from '../../../../modules/deeplinks/service.ts'
+} from '../../../../../src/modules/subscriptions/payments/callback/notifications.ts'
+import {
+  generateCoachAgentsWebDeepLink,
+  generateCoachZoomWebDeepLink,
+} from '../../../../../src/modules/deeplinks/service.ts'
 
 type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
+let coachBotContent: typeof import('../../../../../src/bot/content/coachBot.content.ts').coachBotContent
+let registerCoachBotHandlers: typeof import('../../../../../src/bot/handlers/coach/register.ts').registerCoachBotHandlers
 
 function createTelegramBotMock() {
   return {
@@ -122,6 +136,7 @@ describe('registerCoachBotHandlers', () => {
     delete process.env.COACH_TELEGRAM_ID
     delete process.env.TEST_COACH_MENTOR_TELEGRAM_ID
     vi.mocked(prisma.user.findFirst).mockResolvedValue({ role: 'EXPERT', id: 'coach-user-id' } as never)
+    vi.mocked(prisma.zoomSession.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.checkoutSession.findUnique).mockResolvedValue(null as never)
     vi.mocked(prisma.checkoutSession.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.paymentLog.findUnique).mockResolvedValue(null as never)
@@ -134,7 +149,12 @@ describe('registerCoachBotHandlers', () => {
     vi.mocked(sendTrialZoomPaymentSuccessTelegramMessage).mockResolvedValue(true as never)
   })
 
-  it('renders the coach-only main menu on /start with agents entry in the main keyboard', async () => {
+  beforeEach(async () => {
+    ;({ coachBotContent } = await import('../../../../../src/bot/content/coachBot.content.ts'))
+    ;({ registerCoachBotHandlers } = await import('../../../../../src/bot/handlers/coach/register.ts'))
+  })
+
+  it('renders the professional coach workspace on /start without user funnel actions', async () => {
     const telegramBot = createTelegramBotMock()
     registerCoachBotHandlers(telegramBot as never)
 
@@ -144,17 +164,21 @@ describe('registerCoachBotHandlers', () => {
     await startHandler(ctx)
 
     expect(ctx.reply).toHaveBeenCalledTimes(1)
-    const [, payload] = ctx.reply.mock.calls[0]
+    const [text, payload] = ctx.reply.mock.calls[0]
+    expect(text).toContain(coachBotContent.start.title)
+    expect(text).toContain(coachBotContent.start.upcomingTitle)
     expect(payload.reply_markup.keyboard).toEqual([
-      [coachBotContent.menu.conduct, coachBotContent.menu.library],
+      [coachBotContent.menu.conduct, coachBotContent.menu.calendar],
+      [coachBotContent.menu.members, coachBotContent.menu.agents],
       [coachBotContent.menu.analytics, coachBotContent.menu.content],
-      [coachBotContent.menu.settings, coachBotContent.menu.agents],
+      [coachBotContent.menu.notifications, coachBotContent.menu.payments],
     ])
 
     const flat = JSON.stringify(payload.reply_markup.keyboard)
     expect(flat).not.toContain('Продовжити')
     expect(flat).not.toContain('План дня')
     expect(flat).not.toContain('ФОКУС')
+    expect(flat).not.toContain(coachBotContent.menu.settings)
   })
 
   it('opens agents menu with authenticated deeplink to admin studio agents tab', async () => {
@@ -169,13 +193,7 @@ describe('registerCoachBotHandlers', () => {
 
     await handler(ctx)
 
-    expect(generateDeepLink).toHaveBeenCalledWith({
-      userId: 'coach-user-id',
-      action: 'open_web',
-      source: 'telegram',
-      target: 'web',
-      path: '/app/dashboard/admin/studio?tab=agents&item=agents.overview',
-    })
+    expect(generateCoachAgentsWebDeepLink).toHaveBeenCalledWith('coach-user-id')
 
     expect(ctx.reply).toHaveBeenCalledWith(
       `${coachBotContent.system.agentsTitle}\n\n${coachBotContent.system.agentsSubtitle}`,
@@ -185,6 +203,34 @@ describe('registerCoachBotHandlers', () => {
             text: coachBotContent.system.agentsCta,
             web_app: {
               url: 'https://miniapp.example/app/dashboard/admin/studio?tab=agents&item=agents.overview&dl=coach-agents-token',
+            },
+          })]],
+        }),
+      }),
+    )
+  })
+
+  it('opens calendar menu with authenticated deeplink to the staff zoom workspace', async () => {
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const hearsCall = telegramBot.hears.mock.calls.find(([matcher]) =>
+      matcher instanceof RegExp && matcher.test(coachBotContent.menu.calendar),
+    )
+    const handler = hearsCall?.[1] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await handler(ctx)
+
+    expect(generateCoachZoomWebDeepLink).toHaveBeenCalledWith('coach-user-id')
+    expect(ctx.reply).toHaveBeenCalledWith(
+      `${coachBotContent.system.calendarTitle}\n\n${coachBotContent.system.calendarSubtitle}`,
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [[expect.objectContaining({
+            text: coachBotContent.system.calendarCta,
+            web_app: {
+              url: 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token',
             },
           })]],
         }),
@@ -206,6 +252,51 @@ describe('registerCoachBotHandlers', () => {
 
     expect(ctx.reply).toHaveBeenCalledTimes(1)
     expect(ctx.reply.mock.calls[0]?.[0]).toContain(coachBotContent.start.title)
+  })
+
+  it('shows settings entry only for SUPERADMIN', async () => {
+    vi.mocked(prisma.user.findFirst)
+      .mockResolvedValueOnce({ role: 'SUPERADMIN', id: 'coach-superadmin-id' } as never)
+      .mockResolvedValueOnce({ role: 'SUPERADMIN', id: 'coach-superadmin-id' } as never)
+
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const startHandler = telegramBot.start.mock.calls[0]?.[0] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await startHandler(ctx)
+
+    const [, payload] = ctx.reply.mock.calls[0]
+    expect(JSON.stringify(payload.reply_markup.keyboard)).toContain(
+      coachBotContent.menu.settings
+    )
+  })
+
+  it('registers superadmin settings back callback and returns to the coach workspace', async () => {
+    vi.mocked(prisma.user.findFirst)
+      .mockResolvedValueOnce({ role: 'SUPERADMIN', id: 'coach-superadmin-id' } as never)
+      .mockResolvedValueOnce({ role: 'SUPERADMIN', id: 'coach-superadmin-id' } as never)
+
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const [, callbackHandler] = telegramBot.action.mock.calls.find(
+      ([matcher]) => matcher === 'coach:settings:back'
+    ) as [string, RegisteredHandler]
+    const ctx = createCoachCtx()
+
+    await callbackHandler(ctx)
+
+    expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining(coachBotContent.start.title),
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          keyboard: expect.any(Array),
+        }),
+      }),
+    )
   })
 
   it('keeps coach callback namespace separate from user callbacks', () => {

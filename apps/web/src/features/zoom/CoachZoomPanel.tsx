@@ -390,7 +390,7 @@ function LeaderboardRow({ entry, rank }: { entry: LeaderboardEntry; rank: number
 // ── CoachZoomPanel ────────────────────────────────────────────────────────────
 
 export interface CoachZoomPanelProps {
-  expertId: string;
+  expertId: string | null;
 }
 
 export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
@@ -399,7 +399,7 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
   const { data: sessions = [] } = useGetCalendarSessionsQuery(
-    { from: monthStart, to: monthEnd, role: 'coach', userId: expertId },
+    { from: monthStart, to: monthEnd, role: 'coach', userId: expertId ?? 'staff' },
     { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
   );
   const { data: leaderboard = [] } = useGetLeaderboardQuery();
@@ -424,13 +424,9 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
     .slice(0, 5);
 
-  const isMockSessions  = sessions.length === 0;
-  const isMockBattles   = activeBattles.length === 0;
-  const isMockLeaderboard = leaderboard.length === 0;
-
-  const displayUpcoming: ZoomCalendarSession[] = isMockSessions ? MOCK_SESSIONS : upcomingSessions;
-  const displayBattles: BattleSession[] = isMockBattles ? MOCK_BATTLES : (activeBattles as BattleSession[]);
-  const displayLeaderboard: LeaderboardEntry[] = isMockLeaderboard ? MOCK_LEADERBOARD : leaderboard;
+  const displayUpcoming: ZoomCalendarSession[] = upcomingSessions;
+  const displayBattles: BattleSession[] = activeBattles as BattleSession[];
+  const displayLeaderboard: LeaderboardEntry[] = leaderboard;
 
   const handleFinalize = (sessionId: string, outcome: BattleOutcome) => {
     finalize({ sessionId, outcome }).catch(console.error);
@@ -498,7 +494,7 @@ const canManageZoom =
       {/* 3. Calendar */}
       <section>
         <SectionLabel label="КАЛЕНДАР СЕСІЙ" />
-        <ZoomCalendar mode="coach" userId={expertId} expertId={expertId} />
+        <ZoomCalendar mode="coach" userId={expertId ?? 'staff'} expertId={expertId ?? undefined} />
       </section>
 
       <section>
@@ -525,7 +521,7 @@ const canManageZoom =
 
       {/* 5. Upcoming sessions */}
       <section>
-        <SectionLabel label="НАЙБЛИЖЧІ СЕСІЇ" count={displayUpcoming.length} demo={isMockSessions} />
+        <SectionLabel label="НАЙБЛИЖЧІ СЕСІЇ" count={displayUpcoming.length} />
         {displayUpcoming.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)] py-1">Немає запланованих сесій</p>
         ) : (
@@ -543,7 +539,6 @@ const canManageZoom =
           collapsible
           open={battlesOpen}
           onToggle={() => setBattlesOpen(o => !o)}
-          demo={isMockBattles}
         />
         {battlesOpen && (
           displayBattles.length === 0 ? (
@@ -563,7 +558,6 @@ const canManageZoom =
           collapsible
           open={leaderboardOpen}
           onToggle={() => setLeaderboardOpen(o => !o)}
-          demo={isMockLeaderboard}
         />
         {leaderboardOpen && (
           displayLeaderboard.length === 0 ? (

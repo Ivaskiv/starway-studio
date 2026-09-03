@@ -73,6 +73,7 @@ export type AbTestFollowupTimerId =
   | 'PAYMENT_REMINDER_7D'
   | 'ZOOM_REMINDER_24H'
   | 'ZOOM_REMINDER_2H'
+  | 'ZOOM_REMINDER_5M'
   | 'PLATFORM_INVITE_AFTER_ZOOM_1'
   | 'PLATFORM_INVITE_AFTER_ZOOM_2'
   | 'PLATFORM_INVITE_AFTER_ZOOM'
@@ -493,6 +494,11 @@ const GENERIC_FOLLOWUPS: Partial<Record<AbTestFollowupTimerId, FollowupCopy>> = 
     title: 'Zoom скоро почнеться',
     body: 'Сьогодні Zoom-практика у ФОКУСІ. Тема: чому відкладаєш те, що давно хочеш?',
     cta: AB_TEST_OPEN_ZOOM_BUTTON_TEXT,
+  },
+  ZOOM_REMINDER_5M: {
+    title: 'Zoom починається через 5 хв',
+    body: 'Переходь за посиланням.',
+    cta: 'ПРИЄДНАТИСЬ',
   },
   PLATFORM_INVITE_AFTER_ZOOM_1: {
     title: 'ABSystem AI',

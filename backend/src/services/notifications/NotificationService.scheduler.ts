@@ -308,6 +308,53 @@ export abstract class NotificationServiceScheduler extends NotificationServiceQu
     })
   }
 
+  async sendZoomBookingOpenedNotification(input: {
+    userId: string
+    sessionId: string
+    topic: string
+    scheduledAt: Date
+    ctaUrl: string
+  }): Promise<boolean> {
+    const scheduledLabel = input.scheduledAt.toLocaleString('uk-UA', {
+      timeZone: 'Europe/Kyiv',
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    const topic = input.topic.trim() || 'Zoom-практика'
+
+    return this.sendDirectTelegramNotification({
+      userId: input.userId,
+      type: NotificationType.AI_REMINDER,
+      title: 'Відкрито запис на Zoom',
+      body: [
+        'Запис на найближчу Zoom-практику вже відкрито.',
+        '',
+        `${scheduledLabel}`,
+        topic,
+        '',
+        'Забронюй місце та підготуй питання до практики.',
+      ].join('\n'),
+      telegramHtml: buildTelegramCard({
+        title: 'Відкрито запис на Zoom',
+        intro: 'Запис на найближчу Zoom-практику вже відкрито.',
+        facts: [scheduledLabel, topic],
+        note: 'Забронюй місце та підготуй питання до практики.',
+      }),
+      templateKey: `zoom_booking_open_${input.sessionId}`,
+      ctaText: 'ВІДКРИТИ ZOOM',
+      ctaUrl: input.ctaUrl,
+      data: {
+        sessionId: input.sessionId,
+        scheduledAt: input.scheduledAt.toISOString(),
+        topic,
+      },
+      duplicateWindowStart: new Date(0),
+      isEnabled: () => true,
+    })
+  }
+
   async sendSessionHandoffNotification(input: {
     userId: string
     session: 'morning' | 'evening'

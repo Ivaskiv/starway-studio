@@ -1,5 +1,6 @@
 import { prisma } from '../../db/client.js'
 import { bot } from '../../lib/telegram.js'
+import { sendTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 import { SPHERE_LABELS } from './types.js'
 import type { WheelNotificationPayload } from './types.js'
 import type { Telegraf } from 'telegraf'
@@ -56,11 +57,16 @@ export async function sendWheelNotification(
       `PDF: ${payload.pdfUrl}`,
     ].filter(Boolean)
 
-    await bot.telegram.sendMessage(user.telegramChatId, messageLines.join('\n'), {
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Отримати PDF', url: payload.pdfUrl }]],
+    await sendTelegramMessage(
+      bot,
+      user.telegramChatId,
+      messageLines.join('\n'),
+      {
+        replyMarkup: {
+          inline_keyboard: [[{ text: 'Отримати PDF', url: payload.pdfUrl }]],
+        },
       },
-    })
+    )
 
     return { ok: true }
   } catch (error) {

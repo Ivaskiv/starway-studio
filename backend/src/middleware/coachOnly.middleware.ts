@@ -26,7 +26,7 @@ export const coachOnly: MiddlewareFn<Context> = async (ctx, next) => {
   })
 
   if (!coach) return
-  if (coach.role !== 'EXPERT' && coach.role !== 'SUPERADMIN') return
+  if (coach.role !== 'ADMIN' && coach.role !== 'EXPERT' && coach.role !== 'SUPERADMIN') return
 
   await next()
 }

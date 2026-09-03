@@ -6,6 +6,7 @@ export {
 } from './audio.js'
 
 export {
+  PARTICIPANTS_UPCOMING_CALLBACK,
   handleCoachUsersCommand,
 } from './users.js'
 

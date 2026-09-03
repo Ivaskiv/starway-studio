@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const verifyTelegramInitDataMock = vi.fn()
 const findLinkedUserIdMock = vi.fn()
+const createSessionForUserIdMock = vi.fn()
 
 const prismaMock = {
   user: {
@@ -36,12 +37,16 @@ vi.mock('../../../../../lib/cache/index.ts', () => ({
   cacheDel: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('../../telegram.ts', () => ({
+vi.mock('../../../../../src/modules/auth/telegram.ts', () => ({
   verifyTelegramInitData: verifyTelegramInitDataMock,
 }))
 
-vi.mock('../../../../telegram-mentor/services/linking.service.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/identity/linking.ts', () => ({
   findLinkedUserId: findLinkedUserIdMock,
+}))
+
+vi.mock('../../../../../src/modules/auth/service/credentials.ts', () => ({
+  createSessionForUserId: createSessionForUserIdMock,
 }))
 
 describe('telegramMiniAppLoginUser', () => {
@@ -59,6 +64,19 @@ describe('telegramMiniAppLoginUser', () => {
     prismaMock.mentorConfig.findUnique.mockResolvedValue(null)
     prismaMock.notificationPreference.findUnique.mockResolvedValue(null)
     prismaMock.refreshToken.create.mockImplementation(async ({ data }) => data)
+    createSessionForUserIdMock.mockResolvedValue({
+      user: {
+        id: 'canonical-user-id',
+        email: 'vira@example.com',
+        firstName: 'Vira',
+        role: 'USER',
+        activeRole: 'USER',
+      },
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      needsProfile: false,
+      expiresIn: 900,
+    })
   })
 
   it('reuses canonical linked user session before telegram social fallback', async () => {
@@ -69,47 +87,7 @@ describe('telegramMiniAppLoginUser', () => {
     })
     findLinkedUserIdMock.mockResolvedValue('canonical-user-id')
 
-    prismaMock.user.findUnique
-      .mockResolvedValueOnce({
-        id: 'canonical-user-id',
-        email: 'vira@example.com',
-        phone: null,
-        firstName: 'Vira',
-        lastName: null,
-        expertId: null,
-        role: 'USER',
-        activeRole: 'USER',
-        passwordHash: null,
-        telegramUserId: '630111093',
-        telegramUserName: 'vira_333',
-        telegramChatId: '630111093',
-        telegramEnabled: true,
-        lastLoginAt: null,
-        createdAt: new Date('2026-07-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-07-01T00:00:00.000Z'),
-        settings: null,
-      })
-      .mockResolvedValueOnce({
-        id: 'canonical-user-id',
-        email: 'vira@example.com',
-        phone: null,
-        firstName: 'Vira',
-        lastName: null,
-        expertId: null,
-        role: 'USER',
-        activeRole: 'USER',
-        passwordHash: null,
-        telegramUserId: '630111093',
-        telegramUserName: 'vira_333',
-        telegramChatId: '630111093',
-        telegramEnabled: true,
-        lastLoginAt: null,
-        createdAt: new Date('2026-07-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-07-01T00:00:00.000Z'),
-        settings: null,
-      })
-
-    const { telegramMiniAppLoginUser } = await import('../index.ts')
+    const { telegramMiniAppLoginUser } = await import('../../../../../src/modules/auth/service/social.ts')
     const result = await telegramMiniAppLoginUser('signed-init-data', 'req-1')
 
     expect(findLinkedUserIdMock).toHaveBeenCalledWith({
@@ -117,7 +95,7 @@ describe('telegramMiniAppLoginUser', () => {
       telegramUserId: '630111093',
       telegramUserName: 'vira_333',
     })
-    expect(prismaMock.user.findUnique).toHaveBeenCalledTimes(2)
+    expect(createSessionForUserIdMock).toHaveBeenCalledWith('canonical-user-id')
     expect(result).toMatchObject({
       user: {
         id: 'canonical-user-id',
@@ -127,6 +105,43 @@ describe('telegramMiniAppLoginUser', () => {
       needsCompletion: false,
       isNewUser: false,
       needsProfile: false,
+    })
+  })
+
+  it('keeps the privileged canonical user id and role in session for linked telegram staff', async () => {
+    verifyTelegramInitDataMock.mockReturnValue({
+      id: '630111093',
+      firstName: 'Vira',
+      username: 'vira_333',
+    })
+    findLinkedUserIdMock.mockResolvedValue('canonical-admin-id')
+    createSessionForUserIdMock.mockResolvedValue({
+      user: {
+        id: 'canonical-admin-id',
+        email: 'vira.admin@example.com',
+        firstName: 'Vira',
+        role: 'ADMIN',
+        activeRole: 'ADMIN',
+      },
+      accessToken: 'admin-access-token',
+      refreshToken: 'admin-refresh-token',
+      needsProfile: false,
+      expiresIn: 900,
+    })
+
+    const { telegramMiniAppLoginUser } = await import('../../../../../src/modules/auth/service/social.ts')
+    const result = await telegramMiniAppLoginUser('signed-init-data', 'req-2')
+
+    expect(findLinkedUserIdMock).toHaveBeenCalledWith({
+      chatId: '630111093',
+      telegramUserId: '630111093',
+      telegramUserName: 'vira_333',
+    })
+    expect(createSessionForUserIdMock).toHaveBeenCalledWith('canonical-admin-id')
+    expect(result.user).toMatchObject({
+      id: 'canonical-admin-id',
+      role: 'ADMIN',
+      activeRole: 'ADMIN',
     })
   })
 })

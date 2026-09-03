@@ -26,11 +26,11 @@ const {
   resolveFocusShortcutCallbackMock: vi.fn(),
 }))
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('../../../../../src/db/client.ts', () => ({
   prisma: {},
 }))
 
-vi.mock('../../../../core/state-machine/abTestFoundation.ts', () => ({
+vi.mock('../../../../../src/core/state-machine/abTestFoundation.ts', () => ({
   buildAbTestProgressPatch: vi.fn(),
   cloneAbTestProgress: vi.fn(),
   resolveAbTestNextQuestion: vi.fn(),
@@ -38,12 +38,12 @@ vi.mock('../../../../core/state-machine/abTestFoundation.ts', () => ({
   validateAbTestProgress: vi.fn(() => ({ resumable: true })),
 }))
 
-vi.mock('../progress.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/progress.ts', () => ({
   loadAbTestProgress: loadAbTestProgressMock,
   saveAbTestProgress: vi.fn(),
 }))
 
-vi.mock('../views.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/views.ts', () => ({
   renderCurrentView: vi.fn(),
   formatAbTestTelegramCard: vi.fn(),
   sendQuestionDirect: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock('../views.ts', () => ({
   sendTelegramContentChunk: vi.fn(),
 }))
 
-vi.mock('../callback.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/callback.ts', () => ({
   parseAbTestCallback: parseAbTestCallbackMock,
   logCallbackReceived: logCallbackReceivedMock,
   logCallbackHandled: logCallbackHandledMock,
@@ -64,15 +64,15 @@ vi.mock('../callback.ts', () => ({
   claimAbTestCallbackInteraction: claimAbTestCallbackInteractionMock,
 }))
 
-vi.mock('../analytics.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/analytics.ts', () => ({
   trackAbTestEvent: vi.fn(),
 }))
 
-vi.mock('../scheduler.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/scheduler.ts', () => ({
   scheduleFollowups: vi.fn(),
 }))
 
-vi.mock('../../../../core/transport/telegramTransport.ts', () => ({
+vi.mock('../../../../../src/core/transport/telegramTransport.ts', () => ({
   deliverTelegramFlow: vi.fn(),
 }))
 
@@ -83,15 +83,15 @@ vi.mock('@/products/ab-system/config/content.js', () => ({
   },
 }))
 
-vi.mock('../../../../modules/telegram-mentor/conversation/delivery/planDelivery.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/conversation/delivery/planDelivery.ts', () => ({
   planMessage: vi.fn(),
 }))
 
-vi.mock('../../../../core/orchestrator/testOrchestrator.ts', () => ({
+vi.mock('../../../../../src/core/orchestrator/testOrchestrator.ts', () => ({
   testOrchestrator: {},
 }))
 
-vi.mock('../handler.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/handler.ts', () => ({
   handleAbTestAnswer: vi.fn(),
   handleAbTestRestart: vi.fn(),
   handleShowResult: handleShowResultMock,
@@ -102,7 +102,7 @@ vi.mock('../handler.ts', () => ({
   handleTestDrive: handleTestDriveMock,
 }))
 
-vi.mock('../ui.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/ui.ts', () => ({
   handleAbTestStart: vi.fn(),
   handleRestore: vi.fn(),
   handleMenu: vi.fn(),
@@ -116,7 +116,7 @@ vi.mock('../ui.ts', () => ({
   handleStartWheel: vi.fn(),
 }))
 
-vi.mock('../flow.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/flow.ts', () => ({
   handleAbTestEmailCaptureText: vi.fn(),
   resolveFocusShortcutCallback: resolveFocusShortcutCallbackMock,
   handleFocusPaymentAction: vi.fn(),
@@ -128,11 +128,11 @@ vi.mock('@/modules/telegram-mentor/core/advertisingGuard.js', () => ({
   canSendAdvertising: vi.fn(),
 }))
 
-vi.mock('../../content/abTest.results.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/content/abTest.results.ts', () => ({
   BLOCK9_POST_RESULT: {},
 }))
 
-import { handleAbTestCallback } from '../service.ts'
+import { handleAbTestCallback } from '../../../../../src/products/ab-system/telegram/service.ts'
 
 function createCtx(userId: string | null = null) {
   return {

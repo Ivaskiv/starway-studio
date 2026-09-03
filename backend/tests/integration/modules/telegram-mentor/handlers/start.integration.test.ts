@@ -423,7 +423,11 @@ describe('handleStart — targeted home screen routing', () => {
 
     await handleStart(ctx)
 
-    expect(sendMessage).toHaveBeenCalledWith(String(ctx.chat.id), 'Як тебе звати?')
+    expect(sendMessage).toHaveBeenCalledWith(
+      String(ctx.chat.id),
+      'Як тебе звати?',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
     expect(reply).not.toHaveBeenCalled()
     expect(mockSetPendingName).toHaveBeenCalledWith(String(ctx.chat.id))
   })

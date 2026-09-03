@@ -53,6 +53,9 @@ export const ProductInfoPage = lazy(
 export const SubscriptionPage = lazy(
   () => import('@/features/subscription/pages/SubscriptionPage')
 )
+export const ZoomCalendarPage = lazy(
+  () => import('@/features/zoom/pages/ZoomCalendarPage')
+)
 export const AiMentorDashboardPage = lazy(
   () => import('@/features/daily-cycle/pages/AiMentorDashboardPage')
 )

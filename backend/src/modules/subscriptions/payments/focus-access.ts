@@ -37,6 +37,21 @@ export async function hasActiveFocusSubscription(userId: string): Promise<boolea
   return accessState.hasFocus
 }
 
+export function buildActiveFocusSubscriptionWhere(now: Date): ProductSubscriptionWhere {
+  return {
+    OR: [
+      {
+        status: { in: ['active', 'paid'] },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      {
+        status: 'trial' as const,
+        trialEndsAt: { gt: now },
+      },
+    ],
+  }
+}
+
 function noAccess(expiresAt: Date | null = null): UserAccessState {
   return {
     state: 'NO_ACCESS',
@@ -173,16 +188,7 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
   const activeSubscription = await prisma.productSubscription.findFirst({
     where: {
       ...focusProductFilter,
-      OR: [
-        {
-          status: { in: ['active', 'paid'] },
-          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-        },
-        {
-          status: 'trial',
-          trialEndsAt: { gt: now },
-        },
-      ],
+      ...buildActiveFocusSubscriptionWhere(now),
     },
     select: {
       status: true,
@@ -362,3 +368,4 @@ export async function getZoomExchangeAccessPolicy(userId: string): Promise<ZoomE
     promo,
   }
 }
+type ProductSubscriptionWhere = NonNullable<Parameters<typeof prisma.productSubscription.findFirst>[0]>['where']

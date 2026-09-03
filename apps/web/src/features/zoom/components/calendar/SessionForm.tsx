@@ -7,23 +7,34 @@ import type {
 
 export function SessionForm({
   defaultDate,
+  initialValues,
   onSubmit,
   onClose,
   isLoading,
+  title = 'Нова сесія',
+  submitLabel = 'Створити',
+  loadingLabel = 'Створення...',
 }: {
   defaultDate: Date;
-  onSubmit: (p: CreateSessionPayload) => void;
+  initialValues?: Partial<CreateSessionPayload>;
+  onSubmit: (p: CreateSessionPayload) => void | Promise<void>;
   onClose: () => void;
   isLoading: boolean;
+  title?: string;
+  submitLabel?: string;
+  loadingLabel?: string;
 }) {
   const pad = (n: number) => String(n).padStart(2, '0');
+  const resolvedDate = initialValues?.scheduledAt ? new Date(initialValues.scheduledAt) : defaultDate
   const [date, setDate] = useState(
-    `${pad(defaultDate.getDate())}.${pad(defaultDate.getMonth() + 1)}.${defaultDate.getFullYear()}`,
+    `${pad(resolvedDate.getDate())}.${pad(resolvedDate.getMonth() + 1)}.${resolvedDate.getFullYear()}`,
   );
-  const [time, setTime] = useState('19:00');
-  const [topic, setTopic] = useState('');
-  const [type, setType] = useState<ZoomSessionType>('group_practice');
-  const [zoomLink, setZoomLink] = useState('');
+  const [time, setTime] = useState(
+    `${pad(resolvedDate.getHours())}:${pad(resolvedDate.getMinutes())}`,
+  );
+  const [topic, setTopic] = useState(initialValues?.topic ?? '');
+  const [type, setType] = useState<ZoomSessionType>(initialValues?.type ?? 'group_practice');
+  const [zoomLink, setZoomLink] = useState(initialValues?.zoomLink ?? '');
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -43,7 +54,7 @@ export function SessionForm({
       onSubmit={handleSubmit}
       className="rounded-xl border border-white/10 bg-white/[0.04] p-4 mt-3 flex flex-col gap-3"
     >
-      <p className="text-[12px] font-semibold text-white/60 uppercase tracking-wider">Нова сесія</p>
+      <p className="text-[12px] font-semibold text-white/60 uppercase tracking-wider">{title}</p>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -110,7 +121,7 @@ export function SessionForm({
           disabled={isLoading}
           className="flex-1 py-2 rounded-lg bg-[rgba(var(--accent-rgb),0.12)] border border-[rgba(var(--accent-rgb),0.3)] text-[rgb(var(--accent-rgb))] text-[13px] font-semibold hover:bg-[rgba(var(--accent-rgb),0.2)] transition-all disabled:opacity-50"
         >
-          {isLoading ? 'Створення...' : 'Створити'}
+          {isLoading ? loadingLabel : submitLabel}
         </button>
         <button
           type="button"

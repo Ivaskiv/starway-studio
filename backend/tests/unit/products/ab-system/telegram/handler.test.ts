@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { AbTestProgress } from '../../../../core/state-machine/abTestFoundation.ts'
-import { normalizeAbTestProgress } from '../../../../core/state-machine/abTestFoundation.ts'
+import type { AbTestProgress } from '../../../../../src/core/state-machine/abTestFoundation.ts'
+import { normalizeAbTestProgress } from '../../../../../src/core/state-machine/abTestFoundation.ts'
 
 let storedProgress: AbTestProgress
 
@@ -19,7 +19,7 @@ const mockUserUpdate = vi.fn()
 const mockNotificationJobUpdateMany = vi.fn()
 const mockClearPendingTelegramIdentity = vi.fn()
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('../../../../../src/db/client.ts', () => ({
   prisma: {
     user: {
       update: (...args: unknown[]) => mockUserUpdate(...args),
@@ -30,29 +30,29 @@ vi.mock('../../../../db/client.ts', () => ({
   },
 }))
 
-vi.mock('../progress.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/progress.ts', () => ({
   loadAbTestProgress: vi.fn(async () => storedProgress),
   saveAbTestProgress: (...args: unknown[]) => mockSaveAbTestProgress(...args),
   getAbTestProfileEmail: vi.fn(async () => null),
   ensureAbTestEmailCapturedFromProfile: vi.fn(async (_userId: string, progress: AbTestProgress) => progress),
 }))
 
-vi.mock('../views.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/views.ts', () => ({
   renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
   renderAbTestPostEmailSubmitSequence: (...args: unknown[]) => mockRenderAbTestPostEmailSubmitSequence(...args),
   renderAbTestEmailGate: (...args: unknown[]) => mockRenderAbTestEmailGate(...args),
   resolveFirstName: vi.fn(() => 'Тест'),
 }))
 
-vi.mock('../analytics.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/analytics.ts', () => ({
   trackAbTestEvent: (...args: unknown[]) => mockTrackAbTestEvent(...args),
 }))
 
-vi.mock('../scheduler.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/scheduler.ts', () => ({
   scheduleFollowups: (...args: unknown[]) => mockScheduleFollowups(...args),
 }))
 
-vi.mock('../callback.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/callback.ts', () => ({
   deactivateCallbackMarkup: vi.fn(),
   logAbTestStartDebug: vi.fn(),
   logCallbackHandled: vi.fn(),
@@ -60,27 +60,27 @@ vi.mock('../callback.ts', () => ({
   resolveQuestionLatency: vi.fn(() => 1000),
 }))
 
-vi.mock('../../../../modules/telegram-mentor/services/identity/pending.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/identity/pending.ts', () => ({
   clearPendingTelegramIdentity: (...args: unknown[]) => mockClearPendingTelegramIdentity(...args),
 }))
 
-vi.mock('../../../../modules/telegram-mentor/conversation/delivery/planDelivery.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/conversation/delivery/planDelivery.ts', () => ({
   planAck: vi.fn(async () => undefined),
 }))
 
-vi.mock('../../../../core/orchestrator/testOrchestrator.ts', () => ({
+vi.mock('../../../../../src/core/orchestrator/testOrchestrator.ts', () => ({
   testOrchestrator: {
     recordTestStart: (...args: unknown[]) => mockRecordTestStart(...args),
     onTestCompleted: (...args: unknown[]) => mockOnTestCompleted(...args),
   },
 }))
 
-vi.mock('../service.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/service.ts', () => ({
   startAbTestFlow: (...args: unknown[]) => mockStartAbTestFlow(...args),
 }))
 
-vi.mock('../views.ts', async () => {
-  const actual = await vi.importActual<typeof import('../views.ts')>('../views.ts')
+vi.mock('../../../../../src/products/ab-system/telegram/views.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../../../../src/products/ab-system/telegram/views.ts')>('../../../../../src/products/ab-system/telegram/views.ts')
   return {
     ...actual,
     renderCurrentView: (...args: unknown[]) => mockRenderCurrentView(...args),
@@ -91,9 +91,9 @@ vi.mock('../views.ts', async () => {
   }
 })
 
-import { handleAbTestAnswer } from '../handler.ts'
-import { handleAbTestStart } from '../ui.ts'
-import { handleAbTestRestart, handleSkipEmail } from '../handler.ts'
+import { handleAbTestAnswer } from '../../../../../src/products/ab-system/telegram/handler.ts'
+import { handleAbTestStart } from '../../../../../src/products/ab-system/telegram/ui.ts'
+import { handleAbTestRestart, handleSkipEmail } from '../../../../../src/products/ab-system/telegram/handler.ts'
 
 function createCtx() {
   return {
@@ -306,7 +306,19 @@ describe('ab test new user completion flow', () => {
     const firstSnapshot = structuredClone(storedProgress)
     await handleAbTestRestart(ctx, 'user-1')
 
-    expect(storedProgress).toEqual(firstSnapshot)
+    expect(storedProgress).toMatchObject({
+      ...firstSnapshot,
+      answers: [],
+      result_key: null,
+      focus_opened_at: null,
+      payment_started_at: null,
+      payment_success_at: null,
+      zoom_registered_at: null,
+      zoom_attended_at: null,
+      platform_invited_at: null,
+      platform_ready_at: null,
+      last_callback_key: 'ab_test:restart',
+    })
     expect(mockStartAbTestFlow).toHaveBeenCalledTimes(2)
   })
 

@@ -8,7 +8,7 @@ const recordTestStartMock = vi.fn()
 const logAbTestStartDebugMock = vi.fn()
 const logCallbackHandledMock = vi.fn()
 
-vi.mock('../progress.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/progress.ts', () => ({
   loadAbTestProgress: loadAbTestProgressMock,
   saveAbTestProgress: saveAbTestProgressMock,
   getAbTestProgressFromUiSettings: vi.fn(),
@@ -16,12 +16,12 @@ vi.mock('../progress.ts', () => ({
   isAbTestFocusFunnelLocked: vi.fn(),
 }))
 
-vi.mock('../../../../core/state-machine/abTestFoundation.ts', () => ({
+vi.mock('../../../../../src/core/state-machine/abTestFoundation.ts', () => ({
   buildAbTestProgressPatch: buildAbTestProgressPatchMock,
   resolveAbTestQuestionOrder: vi.fn(),
 }))
 
-vi.mock('../views.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/views.ts', () => ({
   renderCurrentView: vi.fn(),
   formatAbTestTelegramCard: vi.fn(),
   sendQuestionDirect: sendQuestionDirectMock,
@@ -29,13 +29,13 @@ vi.mock('../views.ts', () => ({
   sendTelegramContentChunk: vi.fn(),
 }))
 
-vi.mock('../../../../core/orchestrator/testOrchestrator.ts', () => ({
+vi.mock('../../../../../src/core/orchestrator/testOrchestrator.ts', () => ({
   testOrchestrator: {
     recordTestStart: recordTestStartMock,
   },
 }))
 
-vi.mock('../callback.ts', () => ({
+vi.mock('../../../../../src/products/ab-system/telegram/callback.ts', () => ({
   logAbTestStartDebug: logAbTestStartDebugMock,
   logCallbackHandled: logCallbackHandledMock,
 }))
@@ -54,7 +54,7 @@ describe('handleAbTestStart', () => {
     recordTestStartMock.mockResolvedValue(undefined)
     sendQuestionDirectMock.mockResolvedValue(undefined)
 
-    const { handleAbTestStart } = await import('../ui.ts')
+    const { handleAbTestStart } = await import('../../../../../src/products/ab-system/telegram/ui.ts')
 
     const ctx = {
       chat: { id: 12345 },
@@ -82,7 +82,7 @@ describe('handleAbTestStart', () => {
       answers: [],
     })
 
-    const { handleAbTestStart } = await import('../ui.ts')
+    const { handleAbTestStart } = await import('../../../../../src/products/ab-system/telegram/ui.ts')
 
     const ctx = {
       chat: { id: 12345 },

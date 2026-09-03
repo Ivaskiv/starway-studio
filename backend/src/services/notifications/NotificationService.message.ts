@@ -502,6 +502,7 @@ export async function buildNotificationMessage(event: NotificationEvent, user: D
         const resolvedCtaText = customCtaText ?? content.ctaText ?? 'Відкрити'
         const isPlainBridge = flowTimerId === 'ZOOM_REMINDER_24H'
           || flowTimerId === 'ZOOM_REMINDER_2H'
+          || flowTimerId === 'ZOOM_REMINDER_5M'
           || flowTimerId === 'PLATFORM_INVITE_AFTER_ZOOM_1'
           || flowTimerId === 'PLATFORM_INVITE_AFTER_ZOOM_2'
         const bridgeUrl = asString(

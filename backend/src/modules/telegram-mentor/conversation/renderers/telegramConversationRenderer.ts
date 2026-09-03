@@ -3,6 +3,12 @@ import type { Context, Telegraf } from 'telegraf'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { handleAbTestCallback } from '@/products/ab-system/telegram/service.js'
 import { bot, sendDedupedTelegramMessage } from '../../../../lib/telegram.js'
+import {
+  sendTelegramDocument,
+  sendTelegramPhoto,
+  sendTelegramVideo,
+  sendTelegramVoice,
+} from '../../../../lib/telegram/messageFormatter.js'
 import { prisma } from '../../../../db/client.js'
 import { handleEveningAnswer } from '../../handlers/evening.js'
 import { handleMorningAnswer } from '../../handlers/morning.js'
@@ -151,25 +157,25 @@ export class TelegramConversationRenderer {
     for (const item of [...response.media].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
       const replyMarkup = mapButtonsToReplyMarkup(item.buttons ?? [])
       if (item.kind === 'photo') {
-        await ctx.telegram.sendPhoto(String(ctx.chat?.id ?? ''), item.assetKey, {
+        await sendTelegramPhoto(ctx, String(ctx.chat?.id ?? ''), item.assetKey, {
           ...(item.caption ? { caption: item.caption } : {}),
           ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         })
       } else if (item.kind === 'voice') {
-        await ctx.telegram.sendVoice(String(ctx.chat?.id ?? ''), item.assetKey, {
+        await sendTelegramVoice(ctx, String(ctx.chat?.id ?? ''), item.assetKey, {
           ...(item.caption ? { caption: item.caption } : {}),
           ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         })
       } else if (item.kind === 'video') {
-        await ctx.telegram.sendVideo(String(ctx.chat?.id ?? ''), item.assetKey, {
+        await sendTelegramVideo(ctx, String(ctx.chat?.id ?? ''), item.assetKey, {
           ...(item.caption ? { caption: item.caption } : {}),
           ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         })
       } else {
-        await ctx.telegram.sendDocument(String(ctx.chat?.id ?? ''), item.assetKey, {
+        await sendTelegramDocument(ctx, String(ctx.chat?.id ?? ''), item.assetKey, {
           ...(item.caption ? { caption: item.caption } : {}),
           ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
@@ -232,13 +238,13 @@ export class TelegramConversationRenderer {
       }
 
       if (item.kind === 'photo') {
-        await transportBot.telegram.sendPhoto(chatId, item.assetKey, options)
+        await sendTelegramPhoto(transportBot, chatId, item.assetKey, options)
       } else if (item.kind === 'voice') {
-        await transportBot.telegram.sendVoice(chatId, item.assetKey, options)
+        await sendTelegramVoice(transportBot, chatId, item.assetKey, options)
       } else if (item.kind === 'video') {
-        await transportBot.telegram.sendVideo(chatId, item.assetKey, options)
+        await sendTelegramVideo(transportBot, chatId, item.assetKey, options)
       } else {
-        await transportBot.telegram.sendDocument(chatId, item.assetKey, options)
+        await sendTelegramDocument(transportBot, chatId, item.assetKey, options)
       }
       rendered = true
     }

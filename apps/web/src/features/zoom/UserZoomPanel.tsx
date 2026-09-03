@@ -393,13 +393,10 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
     .slice(0, 5);
 
-  const isMockSessions    = sessions.length === 0;
-  const isMockLeaderboard = leaderboard.length === 0;
-
-  const displayMySessions: ZoomCalendarSession[]      = isMockSessions    ? MOCK_MY_SESSIONS  : mySessions;
-  const displayActiveBattle: ZoomCalendarSession | null = isMockSessions  ? MOCK_ACTIVE_BATTLE : activeBattle;
-  const displayLeaderboard: LeaderboardEntry[]         = isMockLeaderboard ? MOCK_LEADERBOARD  : leaderboard;
-  const myStats = isMockLeaderboard ? MOCK_LEADERBOARD[0] : leaderboard.find(e => e.userId === userId);
+  const displayMySessions: ZoomCalendarSession[] = mySessions;
+  const displayActiveBattle: ZoomCalendarSession | null = activeBattle;
+  const displayLeaderboard: LeaderboardEntry[] = leaderboard;
+  const myStats = leaderboard.find(e => e.userId === userId);
 
   const handleLogProgress = (args: { sessionId: string; userId: string; day: number; text: string }) => {
     logProgress(args).catch(console.error);
@@ -474,7 +471,7 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
 
       {/* 4. My upcoming sessions */}
       <section>
-        <SectionLabel label="МОЇ НАЙБЛИЖЧІ ZOOM" demo={isMockSessions} />
+        <SectionLabel label="МОЇ НАЙБЛИЖЧІ ZOOM" />
         {displayMySessions.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)] py-1">Ти ще не зареєструвалась на жодну сесію</p>
         ) : (
@@ -486,7 +483,7 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
 
       {/* 5. Active battle */}
       <section>
-        <SectionLabel label="МІЙ АКТИВНИЙ BATTLE" demo={isMockSessions} />
+        <SectionLabel label="МІЙ АКТИВНИЙ BATTLE" />
         {displayActiveBattle ? (
           <ActiveBattleSection session={displayActiveBattle} userId={userId} onLogProgress={handleLogProgress} />
         ) : (
@@ -502,20 +499,20 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
 
       {/* 7. Reminders */}
       <section>
-        <SectionLabel label="НАГАДУВАННЯ" demo={isMockSessions} />
-        <RemindersSection sessions={isMockSessions ? MOCK_MY_SESSIONS : sessions} />
+        <SectionLabel label="НАГАДУВАННЯ" />
+        <RemindersSection sessions={sessions} />
       </section>
 
       {/* 8. Leaderboard */}
       <section>
-        <SectionLabel label="LEADERBOARD" demo={isMockLeaderboard} />
+        <SectionLabel label="LEADERBOARD" />
         <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] px-3 py-1">
           {displayLeaderboard.map((e, i) => (
             <UserLeaderboardRow
               key={e.userId}
               entry={e}
               rank={i}
-              isMe={!isMockLeaderboard && e.userId === userId}
+              isMe={e.userId === userId}
             />
           ))}
         </div>

@@ -2,6 +2,8 @@ import type { Prisma } from '@starway/db/prisma-client'
 
 import { prisma } from '@/db/client.js'
 import { autoBookAllUpcomingGroupSessions } from '@/modules/zoom/service.js'
+import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
+import { notificationService } from '@/services/notifications/NotificationService.js'
 
 import {
   resolveEcosystemPaymentPlan,
@@ -25,6 +27,67 @@ export interface ActivationResult {
 }
 
 type ActivationDbClient = Prisma.TransactionClient | typeof prisma
+
+function parseZoomSessionRequests(requests: unknown): Record<string, unknown> {
+  if (!requests || typeof requests !== 'object' || Array.isArray(requests)) {
+    return {}
+  }
+
+  return requests as Record<string, unknown>
+}
+
+function isOpenGroupPracticeZoomSession(session: {
+  requests: unknown
+  scheduledAt: Date
+}): boolean {
+  const requests = parseZoomSessionRequests(session.requests)
+  const bookingSource = typeof requests.bookingSource === 'string' ? requests.bookingSource : null
+  const coachConfirmedAt = typeof requests.coachConfirmedAt === 'string' ? requests.coachConfirmedAt : null
+  const bookingClosesAtRaw = typeof requests.bookingClosesAt === 'string' ? requests.bookingClosesAt : null
+
+  if (bookingSource !== 'coach' || !coachConfirmedAt || !bookingClosesAtRaw) {
+    return false
+  }
+
+  const bookingClosesAt = new Date(bookingClosesAtRaw)
+  if (!Number.isFinite(bookingClosesAt.getTime())) {
+    return false
+  }
+
+  return bookingClosesAt.getTime() > Date.now() && session.scheduledAt.getTime() >= Date.now()
+}
+
+async function notifyLateFocusEligibilityForOpenZoomSessions(userId: string): Promise<void> {
+  const sessions = await prisma.zoomSession.findMany({
+    where: {
+      status: 'SCHEDULED',
+      scheduledAt: { gte: new Date() },
+      requests: { path: ['type'], equals: 'group_practice' },
+    },
+    select: {
+      id: true,
+      topic: true,
+      scheduledAt: true,
+      requests: true,
+    },
+    orderBy: { scheduledAt: 'asc' },
+  })
+
+  for (const session of sessions) {
+    if (!isOpenGroupPracticeZoomSession(session)) continue
+
+    await notificationService.sendZoomBookingOpenedNotification({
+      userId,
+      sessionId: session.id,
+      topic: session.topic ?? 'Zoom-практика',
+      scheduledAt: session.scheduledAt,
+      ctaUrl: buildZoomCalendarUrl({
+        intent: 'booking',
+        sessionId: session.id,
+      }),
+    })
+  }
+}
 
 function resolveManualGrantBy(source: GrantSource): string | null {
   if (source === 'webhook_approved') return null
@@ -314,6 +377,7 @@ export async function activateProductSubscription(params: {
       productCode.trim().toLowerCase() === 'focus'
     ) {
       await autoBookAllUpcomingGroupSessions(userId)
+      await notifyLateFocusEligibilityForOpenZoomSessions(userId)
     }
 
     return result

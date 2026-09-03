@@ -25,6 +25,7 @@ const {
   coachSendPhotoMock,
   coachSendDocumentMock,
   onTestCompletedMock,
+  planMessageMock,
 } = vi.hoisted(() => ({
   sendStateMenuMock: vi.fn(),
   handleAIMentorMock: vi.fn(),
@@ -50,6 +51,7 @@ const {
   coachSendPhotoMock: vi.fn(),
   coachSendDocumentMock: vi.fn(),
   onTestCompletedMock: vi.fn(async () => undefined),
+  planMessageMock: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/db/client.js', () => ({
@@ -124,24 +126,24 @@ vi.mock('@/modules/telegram-mentor/keyboards.js', () => ({
  getDevTestPaymentButton: getDevTestPaymentButtonMock,
 }))
 
-vi.mock('../../../../modules/user/identity/service.js', () => ({
+vi.mock('../../../../../src/modules/user/identity/service.js', () => ({
  attachEmailToUser: vi.fn(),
 }))
 
-vi.mock('../../../../modules/telegram-mentor/services/identity/linking.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/identity/linking.js', () => ({
  upsertTelegramBinding: vi.fn(),
 }))
 
-vi.mock('../../../../modules/deeplinks/service.ts', () => ({
+vi.mock('../../../../../src/modules/deeplinks/service.js', () => ({
  buildWebDeepLink: vi.fn(),
  generateDeepLink: vi.fn(),
 }))
 
-vi.mock('../../../../modules/auth/services/mail.ts', () => ({
+vi.mock('../../../../../src/modules/auth/services/mail.js', () => ({
  sendMagicLoginEmail: vi.fn(),
 }))
 
-vi.mock('../../../../modules/telegram-mentor/services/identity/pending.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/identity/pending.js', () => ({
  clearPendingTelegramIdentity: vi.fn(),
 }))
 
@@ -192,7 +194,7 @@ vi.mock('@/modules/events/service.js', () => ({
 }))
 
 vi.mock('@/modules/telegram-mentor/conversation/delivery/planDelivery.js', () => ({
- planMessage: vi.fn(),
+ planMessage: planMessageMock,
  planAck: planAckMock,
 }))
 
@@ -420,7 +422,14 @@ describe('legacy focus callbacks for active users', () => {
     const handled = await handleFocusPaymentIssue(ctx as never, 'user-1')
 
     expect(handled).toBe(true)
-    expect(ctx.telegram.sendMessage).toHaveBeenCalledTimes(1)
+    expect(planMessageMock).toHaveBeenCalledWith(
+      ctx,
+      'ctx.reply',
+      'focus_payment_issue_user',
+      '',
+      undefined,
+      'HTML',
+    )
     expect(vi.mocked(updateSession)).toHaveBeenCalledWith(
       'user-1',
       '42',
@@ -467,9 +476,9 @@ describe('legacy focus callbacks for active users', () => {
 
   it('routes email capture through the canonical S3 sender with persisted user state', async () => {
     const ctx = createCtx()
-    const { attachEmailToUser } = await import('../../../../modules/user/identity/service.js')
-    const { generateDeepLink, buildWebDeepLink } = await import('../../../../modules/deeplinks/service.ts')
-    const { sendMagicLoginEmail } = await import('../../../../modules/auth/services/mail.ts')
+    const { attachEmailToUser } = await import('../../../../../src/modules/user/identity/service.js')
+    const { generateDeepLink, buildWebDeepLink } = await import('../../../../../src/modules/deeplinks/service.js')
+    const { sendMagicLoginEmail } = await import('../../../../../src/modules/auth/services/mail.js')
 
     vi.mocked(getSession).mockResolvedValue(null as never)
     vi.mocked(attachEmailToUser).mockResolvedValue({ userId: 'user-42' } as never)
@@ -529,8 +538,10 @@ describe('legacy focus callbacks for active users', () => {
       }),
     )
     expect(vi.mocked(clearSession)).toHaveBeenCalledWith('user-1', '42')
-    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
-      '42',
+    expect(planMessageMock).toHaveBeenCalledWith(
+      ctx,
+      'ctx.reply',
+      'focus_payment_evidence_ack_text',
       expect.stringContaining('Чек і деталі платежу передано'),
     )
   })
@@ -566,8 +577,14 @@ describe('legacy focus callbacks for active users', () => {
     expect(coachSendPhotoMock).toHaveBeenCalledWith(
       '-1003829747010',
       'https://files.example/check.jpg',
-      { caption: 'Ось чек' },
+      { caption: 'Ось чек', parse_mode: 'HTML' },
     )
     expect(vi.mocked(clearSession)).toHaveBeenCalledWith('user-1', '42')
+    expect(planMessageMock).toHaveBeenCalledWith(
+      ctx,
+      'ctx.reply',
+      'focus_payment_evidence_ack_attachment',
+      expect.stringContaining('Чек і деталі платежу передано'),
+    )
   })
 })

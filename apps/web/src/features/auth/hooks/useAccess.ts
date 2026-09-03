@@ -35,14 +35,20 @@ export function useAccess(options?: { enabled?: boolean }) {
     [],
   );
 
+  const normalizedRole = data?.role?.toUpperCase();
+  const hasPrivilegedProductsManage =
+    normalizedRole === 'EXPERT' ||
+    normalizedRole === 'ADMIN' ||
+    normalizedRole === 'SUPERADMIN'
+
   const can = useCallback((key: AccessKey): boolean => {
+    if (key === 'products.manage' && hasPrivilegedProductsManage) return true;
     if (data?.abilities) return data.abilities[key] === true;
     if (isError || !shouldFetchAccess) return fallbackFreeAbilities[key] === true;
     return false;
-  }, [data?.abilities, fallbackFreeAbilities, isError, shouldFetchAccess]);
+  }, [data?.abilities, fallbackFreeAbilities, hasPrivilegedProductsManage, isError, shouldFetchAccess]);
   const plan = data?.plan ?? 'free';
-  const normalizedRole = data?.role?.toUpperCase();
-  const isAdmin = normalizedRole === 'ADMIN' || normalizedRole === 'SUPERADMIN';
+  const isAdmin = normalizedRole === 'EXPERT' || normalizedRole === 'ADMIN' || normalizedRole === 'SUPERADMIN';
   const isPaid = plan === 'paid' || isAdmin;
   const isTrial = plan === 'trial';
   const isFree = plan === 'free' && !isAdmin;

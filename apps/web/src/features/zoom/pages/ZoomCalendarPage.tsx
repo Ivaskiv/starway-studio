@@ -2,15 +2,39 @@ import { useAppSelector } from '@/app/hooks'
 import { selectCurrentUser, selectAuthStatus } from '@/features/auth/services/auth.slice'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { buildTelegramDeepLink } from '@/shared/telegram/telegramDeepLinks'
-import ZoomCalendar from '@/features/zoom/components/calendar/Calendar'
-import { useBookTelegramSlotMutation, useGetTelegramAvailableSlotsQuery } from '@/features/zoom/zoom.api'
+import { CoachZoomPanel } from '@/features/zoom/CoachZoomPanel'
+import { UserZoomPanel } from '@/features/zoom/UserZoomPanel'
+import {
+  useBookTelegramSlotMutation,
+  useGetTelegramAvailableSlotsQuery,
+} from '@/features/zoom/zoom.api'
 import { hasPaidAccess } from '@/features/user/types/user.types'
 import { CalendarDays, Check } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type ViewState = 'locked' | 'personal' | 'pending'
 
 type ZoomCalendarPageProps = Record<string, never>
+
+function resolveViewState(input: {
+  canSeePersonalCalendar: boolean
+  isBrowserFallback: boolean
+  shouldWaitForStandaloneAuth: boolean
+}): ViewState {
+  if (input.canSeePersonalCalendar) {
+    return 'personal'
+  }
+
+  if (input.isBrowserFallback) {
+    return 'locked'
+  }
+
+  if (input.shouldWaitForStandaloneAuth) {
+    return 'pending'
+  }
+
+  return 'locked'
+}
 
 function formatBookingError(error: unknown): string {
   if (typeof error === 'object' && error && 'data' in error) {
@@ -147,8 +171,9 @@ function TelegramSlotBookingView() {
 export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
   const user = useAppSelector(selectCurrentUser)
   const authStatus = useAppSelector(selectAuthStatus)
-  const [viewState, setViewState] = useState<ViewState>('pending')
-  const isTelegramRuntime = isTelegramMiniApp(window.location.pathname)
+  const pathname =
+    typeof window !== 'undefined' ? window.location.pathname : ''
+  const isTelegramRuntime = isTelegramMiniApp(pathname)
   const hasTelegramInitData = Boolean(
     typeof window !== 'undefined' &&
       (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim()
@@ -159,29 +184,23 @@ export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
   const isBrowserFallback = !isTelegramRuntime || !hasTelegramInitData
   const shouldUseTelegramSlotBooking = shouldShowPersonalCalendar && !isCoach && isTelegramRuntime && hasTelegramInitData
   const shouldWaitForStandaloneAuth = authStatus === 'loading' && !isTelegramRuntime
+  const [viewState, setViewState] = useState<ViewState>(() =>
+    resolveViewState({
+      canSeePersonalCalendar,
+      isBrowserFallback,
+      shouldWaitForStandaloneAuth,
+    })
+  )
 
   useEffect(() => {
-    if (canSeePersonalCalendar) {
-      setViewState('personal')
-      return
-    }
-
-    if (isBrowserFallback) {
-      setViewState('locked')
-      return
-    }
-
-    if (shouldWaitForStandaloneAuth) {
-      setViewState('pending')
-      return
-    }
-
-    setViewState('locked')
+    setViewState(
+      resolveViewState({
+        canSeePersonalCalendar,
+        isBrowserFallback,
+        shouldWaitForStandaloneAuth,
+      })
+    )
   }, [canSeePersonalCalendar, isBrowserFallback, shouldWaitForStandaloneAuth])
-
-  const personalMode = useMemo(() => {
-    return isCoach ? 'coach' : 'user'
-  }, [isCoach])
 
   if (viewState === 'pending') {
     return (
@@ -198,7 +217,11 @@ export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
 
     return (
       <div className="mx-auto w-full max-w-6xl px-4 py-6">
-        <ZoomCalendar mode={personalMode} userId={user.id} expertId={user.expertId ?? undefined} />
+        {isCoach ? (
+          <CoachZoomPanel expertId={user.expertId ?? null} />
+        ) : (
+          <UserZoomPanel userId={user.id} />
+        )}
       </div>
     )
   }

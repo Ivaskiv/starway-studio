@@ -11,6 +11,9 @@ import {
   escapeTelegramHtml,
   joinBlocks,
   sendTelegramMessage,
+  sendTelegramPhoto,
+  sendTelegramVideo,
+  sendTelegramVoice,
 } from '../../../lib/telegram/messageFormatter.js'
 // import { buildBehavioralSnapshot } from '../../../core/behavioral/behavioralSnapshot.js'
 import { withRuntimeAdvisoryLock } from '../../../core/runtime/idempotency.js'
@@ -112,7 +115,7 @@ export async function sendTelegramContentChunk(
   }
 
   if (mediaBlock?.type === 'image') {
-    await ctx.telegram.sendPhoto(chatId, resolveTelegramDeliverableAssetKey(mediaBlock.assetKey), {
+    await sendTelegramPhoto(ctx, chatId, resolveTelegramDeliverableAssetKey(mediaBlock.assetKey), {
       caption: renderedMediaCaption,
       parse_mode: options?.parseMode ?? 'HTML',
       reply_markup: options?.inlineKeyboard,
@@ -121,7 +124,7 @@ export async function sendTelegramContentChunk(
   }
 
   if (mediaBlock?.type === 'audio') {
-    await ctx.telegram.sendVoice(chatId, mediaBlock.assetKey, {
+    await sendTelegramVoice(ctx, chatId, mediaBlock.assetKey, {
       caption: renderedMediaCaption,
       parse_mode: options?.parseMode ?? 'HTML',
       reply_markup: options?.inlineKeyboard,
@@ -130,7 +133,7 @@ export async function sendTelegramContentChunk(
   }
 
   if (mediaBlock?.type === 'video') {
-    await ctx.telegram.sendVideo(chatId, resolveTelegramDeliverableAssetKey(mediaBlock.assetKey), {
+    await sendTelegramVideo(ctx, chatId, resolveTelegramDeliverableAssetKey(mediaBlock.assetKey), {
       caption: renderedMediaCaption,
       parse_mode: options?.parseMode ?? 'HTML',
       reply_markup: options?.inlineKeyboard,

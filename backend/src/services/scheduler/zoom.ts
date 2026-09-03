@@ -4,6 +4,7 @@ import { prisma } from '../../db/client.js'
 import { bot,sendOpsTelegramMessage } from '../../lib/telegram.js'
 import { sendTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 import { sendCoachZoomSummary } from '../../modules/ai-operator/operator.service.js'
+import { enqueueDueReminderWindow } from '../../modules/zoom/notifications/zoom.reminders.service.js'
 import { buildZoomCalendarUrl } from '../../modules/zoom/urls.js'
 import { AB_TEST_LIFECYCLE_REMINDERS,type LifecycleReminderKey } from '../../products/ab-system/content/abTest.followups.js'
 import {
@@ -102,25 +103,6 @@ function resolveZoomReminderType(diffMs: number): ZoomReminderType | null {
   }
 
   return null
-}
-
-function formatZoomReminderDate(date: Date): string {
-  const weekday = date.toLocaleDateString('uk-UA', {
-    weekday: 'long',
-    timeZone: 'Europe/Kyiv',
-  })
-  const day = date.getDate()
-  const month = date.toLocaleDateString('uk-UA', {
-    month: 'long',
-    timeZone: 'Europe/Kyiv',
-  })
-  const time = date.toLocaleTimeString('uk-UA', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Europe/Kyiv',
-  })
-
-  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${day} ${month} · ${time}`
 }
 
 function resolveZoomSessionEndAt(scheduledAt: Date, requests: unknown): Date {
@@ -400,97 +382,7 @@ export async function scanZoomCoachSummary(): Promise<void> {
   }
 }
 
-async function sendZoomReminder(
-  telegramBot: Telegraf,
-  params: {
-    userId: string
-    expertId: string | null
-    chatId: string
-    sessionId: string
-    scheduledAt: Date
-    zoomLink: string
-    reminderType: ZoomReminderType
-  },
-): Promise<void> {
-  const alreadySent = await wasZoomReminderSentRecently(
-    params.userId,
-    params.sessionId,
-    params.reminderType,
-  )
-  if (alreadySent) return
-
-  const dateLabel = formatZoomReminderDate(params.scheduledAt)
-  const calendarUrl = buildZoomCalendarUrl({ intent: 'booking' })
-  const fallbackCalendarUrl = buildZoomCalendarUrl()
-  const isTwoHourReminder = params.reminderType === 'ZOOM_REMINDER_2H'
-  const title = isTwoHourReminder
-    ? '📅 <b>Сьогодні Zoom-практика</b>'
-    : '⏰ <b>Zoom починається через 5 хв</b>'
-  const body = isTwoHourReminder
-    ? 'Підготуйся і звільни час.'
-    : 'Переходь за посиланням.'
-  const inlineKeyboard = isTwoHourReminder
-    ? [[
-        { text: 'ВІДКРИТИ КАЛЕНДАР', web_app: { url: calendarUrl } },
-      ]]
-    : [[
-        params.zoomLink
-          ? { text: 'ПРИЄДНАТИСЬ', url: params.zoomLink }
-          : { text: 'ПРИЄДНАТИСЬ', web_app: { url: fallbackCalendarUrl } },
-      ]]
-
-  try {
-    await sendTelegramMessage(
-      telegramBot,
-      params.chatId,
-      [title, '', dateLabel, '', body].join('\n'),
-      {
-        replyMarkup: {
-          inline_keyboard: inlineKeyboard,
-        },
-      },
-    )
-    await prisma.notification.create({
-      data: {
-        expertId: params.expertId,
-        userId: params.userId,
-        channel: NotificationChannel.TELEGRAM,
-        type: NotificationType.AI_REMINDER,
-        templateKey: params.reminderType,
-        title,
-        body,
-        status: NotificationStatus.SENT,
-        sentAt: new Date(),
-        data: {
-          sessionId: params.sessionId,
-          scheduledAt: params.scheduledAt.toISOString(),
-          zoomLink: params.zoomLink,
-        },
-      },
-    })
-  } catch (error) {
-    await prisma.notification.create({
-      data: {
-        expertId: params.expertId,
-        userId: params.userId,
-        channel: NotificationChannel.TELEGRAM,
-        type: NotificationType.AI_REMINDER,
-        templateKey: params.reminderType,
-        title,
-        body,
-        status: NotificationStatus.FAILED,
-        failureReason: error instanceof Error ? error.message : String(error),
-        data: {
-          sessionId: params.sessionId,
-          scheduledAt: params.scheduledAt.toISOString(),
-          zoomLink: params.zoomLink,
-        },
-      },
-    })
-  }
-}
-
-export async function scanZoomSessionReminders(telegramBot: Telegraf): Promise<void> {
+export async function scanZoomSessionReminders(_telegramBot: Telegraf): Promise<void> {
   const now = new Date()
   const twoHourStart = new Date(now.getTime() + (ZOOM_REMINDER_2H_TARGET_MINUTES - ZOOM_REMINDER_2H_GRACE_MINUTES) * 60 * 1000)
   const twoHourEnd = new Date(now.getTime() + ZOOM_REMINDER_2H_TARGET_MINUTES * 60 * 1000)
@@ -507,6 +399,7 @@ export async function scanZoomSessionReminders(telegramBot: Telegraf): Promise<v
     },
     select: {
       id: true,
+      topic: true,
       scheduledAt: true,
       expertId: true,
       requests: true,
@@ -528,26 +421,22 @@ export async function scanZoomSessionReminders(telegramBot: Telegraf): Promise<v
     const reminderType = resolveZoomReminderType(diffMs)
 
     if (!reminderType) continue
-
-    const zoomLink =
-      session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests)
-        ? typeof (session.requests as Record<string, unknown>).zoomLink === 'string'
-          ? String((session.requests as Record<string, unknown>).zoomLink)
-          : ''
-        : ''
-
     for (const attendee of session.attendees) {
-      const chatId = attendee.user.telegramChatId?.trim()
-      if (!chatId) continue
+      if (!attendee.user.telegramChatId?.trim()) continue
 
-      await sendZoomReminder(telegramBot, {
-        userId: attendee.userId,
-        expertId: session.expertId ?? null,
-        chatId,
-        sessionId: session.id,
+      await enqueueDueReminderWindow(attendee.userId, {
+        id: session.id,
         scheduledAt: session.scheduledAt,
-        zoomLink,
-        reminderType,
+        topic: session.topic ?? '',
+        requests: session.requests,
+      }, reminderType)
+      .catch((error) => {
+        console.error('[zoom] failed to enqueue canonical reminder job', {
+          userId: attendee.userId,
+          sessionId: session.id,
+          reminderType,
+          error: error instanceof Error ? error.message : String(error),
+        })
       })
     }
   }

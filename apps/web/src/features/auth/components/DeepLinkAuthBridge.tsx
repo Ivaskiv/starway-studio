@@ -1,9 +1,11 @@
 import { useAppDispatch, useAppSelector } from '@/app/hooks'
+import type { AppDispatch } from '@/app/store'
 import {
   logCoachWebAppTrace,
   PENDING_DEEPLINK_SESSION_EVENT,
   PENDING_DEEPLINK_TOKEN_KEY,
 } from '@/features/auth/context/SessionOrchestratorContext'
+import { accessApi } from '@/features/auth/services/accessApi'
 import { setCredentials } from '@/features/auth/services/auth.slice'
 import { useRestoreDeepLinkSessionMutation } from '@/features/auth/services/deeplinks.api'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
@@ -19,6 +21,29 @@ const BAD_COLORS = new Set([
 ])
 const AUTH_CALLBACK_PARAMS = ['token', 'accessToken', 'authToken', 'refreshToken']
 const TOKEN_PARAM_SAFE_PATHS = new Set(['/reset-password', '/auth/magic'])
+export const DEEP_LINK_RESTORE_TIMEOUT_MS = 15_000
+
+export function withDeepLinkRestoreTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs = DEEP_LINK_RESTORE_TIMEOUT_MS,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error('DEEPLINK_RESTORE_TIMEOUT'))
+    }, timeoutMs)
+
+    promise.then(
+      value => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      },
+      error => {
+        clearTimeout(timeoutId)
+        reject(error)
+      },
+    )
+  })
+}
 
 export function readPendingDeepLinkToken(pathname: string, search: string): string | null {
   const params = new URLSearchParams(search)
@@ -36,6 +61,11 @@ export function readPendingDeepLinkToken(pathname: string, search: string): stri
 
 export function shouldRedirectTelegramRuntimeToMiniApp(pathname: string): boolean {
   return pathname === '/miniapp' || pathname.startsWith('/miniapp/')
+}
+
+export function shouldSkipDeepLinkRestore(status: string, pathname: string): boolean {
+  return status === 'loading'
+    || (status === 'authenticated' && pathname === '/onboarding/continue')
 }
 
 function setPendingDeepLinkToken(token: string | null): void {
@@ -73,6 +103,23 @@ function resolveTelegramMiniAppFallback(pathname: string, search: string): strin
 function safeAccent(color?: string | null): string {
   if (!color || BAD_COLORS.has(color)) return DEFAULT_ACCENT
   return color
+}
+
+export async function refreshDeepLinkProtectedState(dispatch: AppDispatch): Promise<void> {
+  await Promise.all([
+    dispatch(
+      accessApi.endpoints.getMyAccess.initiate(undefined, {
+        forceRefetch: true,
+        subscribe: false,
+      }),
+    ).unwrap(),
+    dispatch(
+      accessApi.endpoints.getMySystemState.initiate(undefined, {
+        forceRefetch: true,
+        subscribe: false,
+      }),
+    ).unwrap(),
+  ])
 }
 
 export default function DeepLinkAuthBridge() {
@@ -144,29 +191,11 @@ export default function DeepLinkAuthBridge() {
       return
     }
 
-    if (status === 'loading') {
+    if (shouldSkipDeepLinkRestore(status, location.pathname)) {
       logCoachWebAppTrace('AUTH_FAILURE', {
-        reason: 'auth_loading_guard',
+        reason: status === 'loading' ? 'auth_loading_guard' : 'deeplink_restore_skip_guard',
         pathname: location.pathname,
       })
-      return
-    }
-
-    if (status === 'authenticated' && location.pathname !== '/onboarding/continue') {
-      processedTokenRef.current = token
-      setPendingDeepLinkToken(null)
-      search.delete('dl')
-      if (isTelegramMiniApp(location.pathname) && shouldRedirectTelegramRuntimeToMiniApp(location.pathname)) {
-        navigate('/miniapp/zoom-calendar', { replace: true })
-        return
-      }
-      navigate(
-        {
-          pathname: location.pathname,
-          search: search.toString() ? `?${search.toString()}` : '',
-        },
-        { replace: true },
-      )
       return
     }
 
@@ -185,9 +214,10 @@ export default function DeepLinkAuthBridge() {
       { replace: true },
     )
 
-    void restoreDeepLinkSession({ token, consume: true })
-      .unwrap()
-      .then(result => {
+    void withDeepLinkRestoreTimeout(
+      restoreDeepLinkSession({ token, consume: true }).unwrap(),
+    )
+      .then(async result => {
         logCoachWebAppTrace('RESOLVE_HTTP_RESULT', {
           ok: true,
           pathname: location.pathname,
@@ -195,6 +225,12 @@ export default function DeepLinkAuthBridge() {
         })
         dispatch(setCredentials({ user: result.user, accessToken: result.accessToken }))
         logCoachWebAppTrace('SESSION_APPLIED', {
+          pathname: location.pathname,
+          role: result.user.role ?? null,
+          userIdPresent: Boolean(result.user.id),
+        })
+        await refreshDeepLinkProtectedState(dispatch)
+        logCoachWebAppTrace('PROTECTED_STATE_REFRESHED', {
           pathname: location.pathname,
           role: result.user.role ?? null,
           userIdPresent: Boolean(result.user.id),

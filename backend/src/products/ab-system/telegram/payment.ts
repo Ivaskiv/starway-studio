@@ -49,6 +49,10 @@ import {
   coachBot,
   sendOpsTelegramMessage,
 } from '../../../lib/telegram.js'
+import {
+  sendTelegramDocument,
+  sendTelegramPhoto,
+} from '../../../lib/telegram/messageFormatter.js'
 import { trackEvent } from '@/modules/events/service.js'
 import {
   clearSession,
@@ -56,6 +60,7 @@ import {
   updateSession,
 } from '../../../modules/telegram-mentor/session.js'
 import { getDevTestPaymentButton } from '../../../modules/telegram-mentor/keyboards.js'
+import { planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
 
 const FOCUS_PAYMENT_EVIDENCE_ACK_MSG =
   'Дякую. Чек і деталі платежу передано в STARWAY OPS.\n\nПовернемося з відповіддю після перевірки транзакції.'
@@ -312,19 +317,24 @@ export async function handleFocusPaymentIssue(
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!issueUserId) {
     if (chatId) {
-      await ctx.telegram.sendMessage(
-        String(chatId),
-        FOCUS_PAYMENT_ISSUE_NO_USER_MSG
+      await planMessage(
+        ctx,
+        'ctx.reply',
+        'focus_payment_issue_missing_user',
+        FOCUS_PAYMENT_ISSUE_NO_USER_MSG,
       )
     }
     return true
   }
 
   if (chatId) {
-    await ctx.telegram.sendMessage(
-      String(chatId),
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'focus_payment_issue_user',
       FOCUS_PAYMENT_ISSUE_USER_MSG,
-      { parse_mode: 'HTML' }
+      undefined,
+      'HTML',
     )
     await updateSession(
       issueUserId,
@@ -428,7 +438,12 @@ export async function handlePendingFocusPaymentEvidenceText(
   ).catch(() => false)
 
   await clearSession(resolvedUserId, chatId)
-  await ctx.telegram.sendMessage(chatId, FOCUS_PAYMENT_EVIDENCE_ACK_MSG)
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'focus_payment_evidence_ack_text',
+    FOCUS_PAYMENT_EVIDENCE_ACK_MSG,
+  )
   return true
 }
 
@@ -486,16 +501,21 @@ export async function handlePendingFocusPaymentEvidenceAttachment(
 
   const fileUrl = await ctx.telegram.getFileLink(fileId)
   if (photo) {
-    await coachBot.telegram.sendPhoto(opsChatId, fileUrl.toString(), {
+    await sendTelegramPhoto(coachBot, opsChatId, fileUrl.toString(), {
       caption: caption || `Чек від userId ${resolvedUserId}`,
     })
   } else {
-    await coachBot.telegram.sendDocument(opsChatId, fileUrl.toString(), {
+    await sendTelegramDocument(coachBot, opsChatId, fileUrl.toString(), {
       caption: caption || `Чек від userId ${resolvedUserId}`,
     })
   }
 
   await clearSession(resolvedUserId, chatId)
-  await ctx.telegram.sendMessage(chatId, FOCUS_PAYMENT_EVIDENCE_ACK_MSG)
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'focus_payment_evidence_ack_attachment',
+    FOCUS_PAYMENT_EVIDENCE_ACK_MSG,
+  )
   return true
 }

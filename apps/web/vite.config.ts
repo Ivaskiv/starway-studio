@@ -40,7 +40,7 @@ export default defineConfig(({ mode }) => {
           const fs = await import('node:fs/promises');
           const bundlePath = path.resolve(
             __dirname,
-            'public/telegram-legacy/telegram-webview.js',
+            '.telegram-legacy-dev/telegram-webview.js',
           );
 
           try {

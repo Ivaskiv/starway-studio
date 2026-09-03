@@ -182,6 +182,58 @@ export function hasPendingDeepLinkSessionHandoff(pathname: string, search: strin
   }
 }
 
+export function shouldSkipProtectedSessionQueries(params: {
+  isAuthenticated: boolean
+  authRestoreStatus: AuthRestoreStatus
+  hasPendingDeepLinkSession: boolean
+}): boolean {
+  return !params.isAuthenticated || params.authRestoreStatus !== 'ready' || params.hasPendingDeepLinkSession
+}
+
+export function shouldReleaseProtectedRoute(params: {
+  isProtectedRoute: boolean
+  isAuthenticated: boolean
+  authRestoreStatus: AuthRestoreStatus
+  isAccessReady: boolean
+  isSystemReady: boolean
+  hasPendingDeepLinkSession: boolean
+  routeTransitionTarget: string | null
+}): boolean {
+  if (!params.isProtectedRoute) {
+    return true
+  }
+
+  if (params.hasPendingDeepLinkSession) {
+    return false
+  }
+
+  if (!params.isAuthenticated) {
+    return params.authRestoreStatus === 'ready' || params.authRestoreStatus === 'failed'
+  }
+
+  return (
+    params.authRestoreStatus === 'ready'
+    && params.isAccessReady
+    && params.isSystemReady
+    && !params.routeTransitionTarget
+  )
+}
+
+export function shouldRunBootstrapRestore(params: {
+  hadPendingDeepLinkSessionOnEntry: boolean
+  authRestoreStatus: AuthRestoreStatus
+}): boolean {
+  return !params.hadPendingDeepLinkSessionOnEntry && params.authRestoreStatus === 'idle'
+}
+
+export function shouldDeferSessionResolution(params: {
+  restoreAttempted: boolean
+  authRestoreStatus: AuthRestoreStatus
+  isAuthenticated: boolean
+}): boolean {
+  return !params.restoreAttempted && params.authRestoreStatus === 'idle' && !params.isAuthenticated
+}
+
 function SessionModalHost() {
   const orchestrator = useSessionOrchestrator()
   const navigate = useNavigate()
@@ -316,14 +368,20 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
     hasPendingDeepLinkSessionHandoff(location.pathname, location.search)
   ))
 
+  const protectedQuerySkip = shouldSkipProtectedSessionQueries({
+    isAuthenticated,
+    authRestoreStatus,
+    hasPendingDeepLinkSession,
+  })
+
   const accessQuery = useGetMyAccessQuery(undefined, {
-    skip: !isAuthenticated || authRestoreStatus !== 'ready',
+    skip: protectedQuerySkip,
     refetchOnFocus: false,
     refetchOnReconnect: false,
     refetchOnMountOrArgChange: true,
   })
   const systemStateQuery = useGetMySystemStateQuery(undefined, {
-    skip: !isAuthenticated || authRestoreStatus !== 'ready',
+    skip: protectedQuerySkip,
     refetchOnFocus: false,
     refetchOnReconnect: false,
     refetchOnMountOrArgChange: true,
@@ -331,12 +389,16 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
 
   const isAccessReady = !isAuthenticated || accessQuery.isSuccess || accessQuery.isError
   const isSystemReady = !isAuthenticated || systemStateQuery.isSuccess || systemStateQuery.isError
-  const canRunProtectedQueries = isAuthenticated && authRestoreStatus === 'ready'
-  const routeReady = !isProtectedRoute
-    ? true
-    : isAuthenticated
-      ? authRestoreStatus === 'ready' && isAccessReady && isSystemReady && !routeTransitionTarget
-      : !hasPendingDeepLinkSession && (authRestoreStatus === 'ready' || authRestoreStatus === 'failed')
+  const canRunProtectedQueries = !protectedQuerySkip
+  const routeReady = shouldReleaseProtectedRoute({
+    isProtectedRoute,
+    isAuthenticated,
+    authRestoreStatus,
+    isAccessReady,
+    isSystemReady,
+    hasPendingDeepLinkSession,
+    routeTransitionTarget,
+  })
 
   const isNavigationLocked =
     appState === 'booting' ||
@@ -355,6 +417,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   const navigateRef = useRef(navigate)
   const themeRef = useRef(theme)
   const sessionModalKindRef = useRef(sessionModal.kind)
+  const hadPendingDeepLinkSessionOnEntryRef = useRef(hasPendingDeepLinkSession)
 
   useEffect(() => {
     locationPathRef.current = location.pathname
@@ -521,13 +584,24 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   }, [restoreSession])
 
   useEffect(() => {
+    if (!shouldRunBootstrapRestore({
+      hadPendingDeepLinkSessionOnEntry: hadPendingDeepLinkSessionOnEntryRef.current,
+      authRestoreStatus,
+    })) {
+      return
+    }
+
     void bootstrapRestoreRef.current?.('bootstrap')
-  }, [])
+  }, [authRestoreStatus])
 
   useEffect(() => {
-    if (!restoreAttempted && authRestoreStatus === 'idle') return
+    if (shouldDeferSessionResolution({
+      restoreAttempted,
+      authRestoreStatus,
+      isAuthenticated,
+    })) return
 
-    if (!isAuthenticated && hasPendingDeepLinkSession) {
+    if (hasPendingDeepLinkSession) {
       setAppState('auth_restoring')
       return
     }

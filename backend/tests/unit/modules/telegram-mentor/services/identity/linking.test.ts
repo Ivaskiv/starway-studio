@@ -54,6 +54,7 @@ describe('findLinkedUserId', () => {
     mockUserFindMany.mockResolvedValue([
       {
         id: 'stale-no-access-user',
+        role: 'USER',
         telegramUserId: null,
         telegramUserName: null,
         telegramChatId: '10029999',
@@ -63,6 +64,7 @@ describe('findLinkedUserId', () => {
       },
       {
         id: 'canonical-focus-user',
+        role: 'USER',
         telegramUserId: '10029999',
         telegramUserName: 'qa_brand_new_start',
         telegramChatId: '10029999',
@@ -91,5 +93,36 @@ describe('findLinkedUserId', () => {
     })
 
     expect(result).toBe('canonical-focus-user')
+  })
+
+  it('prefers the canonical privileged user when telegram identity matches both USER and ADMIN records', async () => {
+    mockUserFindMany.mockResolvedValue([
+      {
+        id: 'latest-user-record',
+        role: 'USER',
+        telegramUserId: '630111093',
+        telegramUserName: 'vira_333',
+        telegramChatId: '630111093',
+        telegramLinkedAt: new Date('2026-08-20T09:00:00.000Z'),
+        createdAt: new Date('2026-08-20T09:00:00.000Z'),
+      },
+      {
+        id: 'canonical-admin-record',
+        role: 'ADMIN',
+        telegramUserId: '630111093',
+        telegramUserName: 'vira_333',
+        telegramChatId: '630111093',
+        telegramLinkedAt: new Date('2026-08-10T09:00:00.000Z'),
+        createdAt: new Date('2026-08-10T09:00:00.000Z'),
+      },
+    ])
+
+    const result = await findLinkedUserId({
+      chatId: '630111093',
+      telegramUserId: '630111093',
+      telegramUserName: 'vira_333',
+    })
+
+    expect(result).toBe('canonical-admin-record')
   })
 })

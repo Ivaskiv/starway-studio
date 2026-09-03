@@ -36,6 +36,7 @@ export default function Calendar(
 
     view,
     setView,
+    sessions,
 
     monthGrid,
     weekDays,
@@ -96,6 +97,9 @@ export default function Calendar(
     closeBookingPreparation,
     handleBookingPreparationConfirm,
   } = useCalendar(props)
+  const editingSessionData = editingSession
+    ? sessions.find((session) => session.id === editingSession) ?? null
+    : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -329,19 +333,25 @@ export default function Calendar(
       )}
 
       {/* Edit form */}
-      {mode === 'coach' && editingSession && (
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 mt-3">
-          <p className="text-[12px] text-white/50 mb-3">Редагування сесії {editingSession.slice(0, 8)}…</p>
-          <button
-            onClick={async () => {
-              await updateSession({ id: editingSession, patch: {} });
-              setEditingSession(null);
-            }}
-            className="text-[12px] text-white/40 hover:text-white/70"
-          >
-            Закрити
-          </button>
-        </div>
+      {mode === 'coach' && editingSessionData && (
+        <SessionForm
+          defaultDate={new Date(editingSessionData.scheduledAt)}
+          initialValues={{
+            scheduledAt: editingSessionData.scheduledAt,
+            topic: editingSessionData.topic,
+            type: editingSessionData.type,
+            zoomLink: editingSessionData.zoomLink,
+          }}
+          onSubmit={async (payload) => {
+            await updateSession({ id: editingSessionData.id, patch: payload });
+            setEditingSession(null);
+          }}
+          onClose={() => setEditingSession(null)}
+          isLoading={creating}
+          title="Редагування сесії"
+          submitLabel="Зберегти"
+          loadingLabel="Збереження..."
+        />
       )}
 
       {mode === 'user' && bookingQuestionSession && (

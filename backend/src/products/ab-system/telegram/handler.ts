@@ -51,6 +51,7 @@ import {
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import { normalizeAbTestProgress } from '../../../core/state-machine/abTestFoundation.js'
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 
 // ============================================================================
 // ANSWER HANDLER (MAIN LOGIC)
@@ -531,11 +532,12 @@ export async function handleShowResult(
   })
   const resultKey = (userRecord?.testResultType ?? null) as string | null
   if (!resultKey) {
-    await ctx.telegram.sendMessage(
+    await sendTelegramMessage(
+      ctx,
       chatId,
       AB_TEST_NO_RESULT_YET_TEXT,
       {
-        reply_markup: {
+        replyMarkup: {
           inline_keyboard: [
             [
               {
@@ -545,7 +547,7 @@ export async function handleShowResult(
             ],
           ],
         },
-      }
+      },
     )
     return true
   }
@@ -678,9 +680,10 @@ export async function handleChangeEmail(
 
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (chatId) {
-    await ctx.telegram.sendMessage(
+    await sendTelegramMessage(
+      ctx,
       chatId,
-      'Надішли новий email одним повідомленням. Поточний email залишиться без змін, доки ти не надішлеш новий.'
+      'Надішли новий email одним повідомленням. Поточний email залишиться без змін, доки ти не надішлеш новий.',
     )
   }
 

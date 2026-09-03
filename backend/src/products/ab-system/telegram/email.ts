@@ -23,6 +23,7 @@ import { sendMagicLoginEmail } from '../../../modules/auth/services/mail.js'
 import { clearPendingTelegramIdentity } from '../../../modules/telegram-mentor/services/identity/pending.js'
 import { testOrchestrator } from '../../../core/orchestrator/testOrchestrator.js'
 import { planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import {
   clearSession,
   getSession,
@@ -40,21 +41,24 @@ export async function handleAbTestEmailCaptureText(
     if (session?.userId === userId && session.data?.postZoomInsightAwaiting === true) {
       await clearSession(userId, currentChatId)
 
-      await ctx.telegram.sendMessage(
+      await sendTelegramMessage(
+        ctx,
         currentChatId,
         [
           '🌿 Дякую.',
           '',
           'Навіть один зафіксований інсайт',
           'часто стає початком великих змін.',
-        ].join('\n')
+        ].join('\n'),
       )
 
       const payload = await zoomSection(userId)
-      await ctx.telegram.sendMessage(currentChatId, payload.text, {
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: payload.buttons },
-      })
+      await sendTelegramMessage(
+        ctx,
+        currentChatId,
+        { text: payload.text, parseMode: 'HTML' },
+        { replyMarkup: { inline_keyboard: payload.buttons } },
+      )
       return true
     }
   }
@@ -69,9 +73,10 @@ export async function handleAbTestEmailCaptureText(
   if (!isValidEmail(normalizedEmail)) {
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (chatId) {
-      await ctx.telegram.sendMessage(
+      await sendTelegramMessage(
+        ctx,
         chatId,
-        'Схоже, це не email. Введіть коректний email одним повідомленням.'
+        'Схоже, це не email. Введіть коректний email одним повідомленням.',
       )
     }
     return true

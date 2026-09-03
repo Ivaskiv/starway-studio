@@ -20,6 +20,7 @@ import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { renderCurrentFocusStateMenu } from './payment.js'
 import { updateSession } from '../../../modules/telegram-mentor/session.js'
 import { zoomSection } from '../../../modules/telegram-mentor/handlers/abTest.start.js'
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 
 export async function resolveFocusShortcutCallback(
   ctx: Context,
@@ -57,14 +58,15 @@ export async function resolveFocusShortcutCallback(
       0,
     )
 
-    await ctx.telegram.sendMessage(
+    await sendTelegramMessage(
+      ctx,
       chatId,
       [
         '💭 Напиши одним повідомленням:',
         '',
         '1. Який інсайт був найціннішим?',
         '2. Який один крок зробиш до наступної практики?',
-      ].join('\n')
+      ].join('\n'),
     )
     return true
   }
@@ -77,10 +79,12 @@ export async function resolveFocusShortcutCallback(
     }
 
     const payload = await zoomSection(userId)
-    await ctx.telegram.sendMessage(chatId, payload.text, {
-      parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: payload.buttons },
-    })
+    await sendTelegramMessage(
+      ctx,
+      chatId,
+      { text: payload.text, parseMode: 'HTML' },
+      { replyMarkup: { inline_keyboard: payload.buttons } },
+    )
     return true
   }
 
@@ -278,10 +282,7 @@ export async function handleResendFocusBlock12(
   if (!targetUserId) {
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (chatId) {
-      await ctx.telegram.sendMessage(
-        chatId,
-        FOCUS_RESEND_MISSING_USER_MSG
-      )
+      await sendTelegramMessage(ctx, chatId, FOCUS_RESEND_MISSING_USER_MSG)
     }
     await planAck(
       ctx,
@@ -319,7 +320,7 @@ export async function handleResendFocusBlock12(
   if (!hasCanonicalAccess && !verifiedFocusPayment && !paidFocusSubscription) {
     const chatId = ctx.chat?.id ?? ctx.from?.id
     if (chatId) {
-      await ctx.telegram.sendMessage(String(chatId), FOCUS_RESEND_NO_SUB_MSG)
+      await sendTelegramMessage(ctx, String(chatId), FOCUS_RESEND_NO_SUB_MSG)
     }
     await planAck(
       ctx,

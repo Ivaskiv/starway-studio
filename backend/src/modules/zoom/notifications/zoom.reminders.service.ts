@@ -1,6 +1,107 @@
-import { NotificationType, Prisma } from '@starway/db/prisma-client'
+import { NotificationType } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
+import { buildZoomCalendarUrl } from '../urls.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
+import { notificationService } from '../../../services/notifications/NotificationService.js'
+
+type ZoomReminderWindowId = 'ZOOM_REMINDER_2H' | 'ZOOM_REMINDER_5M'
+type ZoomReminderSession = {
+  id: string
+  scheduledAt: Date
+  topic: string
+  requests: unknown
+}
+
+function asSessionRequests(requests: unknown): Record<string, unknown> {
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object') {
+    return {}
+  }
+
+  return requests as Record<string, unknown>
+}
+
+function resolveReminderCtaUrl(windowId: ZoomReminderWindowId, session: ZoomReminderSession): string {
+  const calendarUrl = buildZoomCalendarUrl({
+    intent: 'booking',
+    sessionId: session.id,
+  })
+  const zoomLink = String(asSessionRequests(session.requests).zoomLink ?? '').trim()
+
+  if (windowId === 'ZOOM_REMINDER_5M' && zoomLink) {
+    return zoomLink
+  }
+
+  return calendarUrl
+}
+
+async function hasActiveReminderJob(userId: string, sessionId: string, windowId: ZoomReminderWindowId): Promise<boolean> {
+  const existingJob = await prisma.notificationJob.findFirst({
+    where: {
+      type: NotificationType.AI_REMINDER,
+      status: { in: ['PENDING', 'PROCESSING', 'DONE'] },
+      payload: { path: ['userId'], equals: userId },
+      AND: [
+        {
+          payload: {
+            path: ['payload', 'flow_timer_id'],
+            equals: windowId,
+          },
+        },
+        { payload: { path: ['payload', 'sessionId'], equals: sessionId } },
+      ],
+    },
+    select: { id: true },
+  })
+
+  return Boolean(existingJob)
+}
+
+async function wasReminderDelivered(userId: string, sessionId: string, windowId: ZoomReminderWindowId): Promise<boolean> {
+  const delivery = await prisma.notification.findFirst({
+    where: {
+      userId,
+      type: NotificationType.AI_REMINDER,
+      templateKey: windowId,
+      status: 'SENT',
+      OR: [
+        { data: { path: ['sessionId'], equals: sessionId } },
+        { data: { path: ['session_id'], equals: sessionId } },
+      ],
+    },
+    select: { id: true },
+  })
+
+  return Boolean(delivery)
+}
+
+async function enqueueReminderWindow(
+  userId: string,
+  session: ZoomReminderSession,
+  windowId: ZoomReminderWindowId,
+  runAt: Date,
+): Promise<void> {
+  if (await hasActiveReminderJob(userId, session.id, windowId)) {
+    return
+  }
+
+  if (await wasReminderDelivered(userId, session.id, windowId)) {
+    return
+  }
+
+  await notificationService.schedule(
+    NotificationEvent.AB_TEST_FOLLOWUP,
+    userId,
+    runAt,
+    {
+      flow_timer_id: windowId,
+      sessionId: session.id,
+      topic: session.topic,
+      scheduledAt: session.scheduledAt.toISOString(),
+      cta_url: resolveReminderCtaUrl(windowId, session),
+      request_fingerprint: `zoom-reminder:${windowId}:${session.id}:${userId}`,
+    },
+  )
+}
 
 export async function cancelExistingReminders(
   userId: string,
@@ -24,21 +125,14 @@ export async function cancelExistingReminders(
 
 export async function scheduleReminders(
   userId: string,
-  session: { id: string; scheduledAt: Date; topic: string; requests: unknown }
+  session: ZoomReminderSession
 ): Promise<void> {
   const scheduledAt = new Date(session.scheduledAt)
   const remind2h = new Date(scheduledAt.getTime() - 2 * 60 * 60 * 1000)
   const remind5m = new Date(scheduledAt.getTime() - 5 * 60 * 1000)
   const now = new Date()
-  const req =
-    !session.requests ||
-    Array.isArray(session.requests) ||
-    typeof session.requests !== 'object'
-      ? {}
-      : (session.requests as Record<string, unknown>)
-
   const jobs: Array<{
-    flowTimerId: 'ZOOM_REMINDER_2H' | 'ZOOM_REMINDER_5M'
+    flowTimerId: ZoomReminderWindowId
     runAt: Date
   }> = []
   if (remind2h > now)
@@ -52,43 +146,7 @@ export async function scheduleReminders(
   }
 
   for (const job of jobs) {
-    const exists = await prisma.notificationJob.findFirst({
-      where: {
-        type: NotificationType.AI_REMINDER,
-        status: 'PENDING',
-        payload: { path: ['userId'], equals: userId },
-        AND: [
-          {
-            payload: {
-              path: ['payload', 'flow_timer_id'],
-              equals: job.flowTimerId,
-            },
-          },
-          { payload: { path: ['payload', 'sessionId'], equals: session.id } },
-        ],
-      },
-      select: { id: true },
-    })
-    if (exists) continue
-
-    await prisma.notificationJob.create({
-      data: {
-        type: NotificationType.AI_REMINDER,
-        runAt: job.runAt,
-        status: 'PENDING',
-        payload: {
-          event: NotificationEvent.AB_TEST_FOLLOWUP,
-          userId,
-          payload: {
-            flow_timer_id: job.flowTimerId,
-            sessionId: session.id,
-            topic: session.topic,
-            scheduledAt: session.scheduledAt.toISOString(),
-            zoomLink: typeof req.zoomLink === 'string' ? req.zoomLink : '',
-          },
-        } as Prisma.InputJsonValue,
-      },
-    })
+    await enqueueReminderWindow(userId, session, job.flowTimerId, job.runAt)
   }
 
   console.log(
@@ -115,8 +173,16 @@ export async function getCoachReminderUserIds(
 
 export async function rescheduleReminders(
   userId: string,
-  session: { id: string; scheduledAt: Date; topic: string; requests: unknown }
+  session: ZoomReminderSession
 ): Promise<void> {
   await cancelExistingReminders(userId, session.id)
   await scheduleReminders(userId, session)
+}
+
+export async function enqueueDueReminderWindow(
+  userId: string,
+  session: ZoomReminderSession,
+  windowId: ZoomReminderWindowId,
+): Promise<void> {
+  await enqueueReminderWindow(userId, session, windowId, new Date())
 }

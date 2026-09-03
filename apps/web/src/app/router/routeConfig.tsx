@@ -19,6 +19,7 @@ import {
   SettingsPage,
   SubscriptionPage,
   TelegramPage,
+  ZoomCalendarPage,
   TransferOwnershipPage,
   TrialMirrorPage,
   VisionPage,
@@ -209,7 +210,7 @@ export const DASHBOARD_ROUTES: RouteConfig[] = [
   },
   {
     path: '/dashboard/zoom',
-    element: <Navigate to="/miniapp/zoom-calendar" replace />,
+    element: <ZoomCalendarPage />,
     ability: 'dashboard.view',
   },
   {

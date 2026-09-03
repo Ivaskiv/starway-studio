@@ -2,6 +2,7 @@ import type { Telegraf } from 'telegraf'
 
 import { prisma, withRetry } from '../../db/client.js'
 import { generateWeeklyReport } from '../ai-mentor/services.js'
+import { sendTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 
 const WEEKLY_REPORT_THROTTLE_MS = 3000
 
@@ -44,7 +45,8 @@ export async function runWeeklyReports(): Promise<void> {
         try {
           const { Telegraf: TelegrafCtor } = await import('telegraf')
           const ownerBot: Telegraf = new TelegrafCtor(product.botConfig.botToken)
-          await ownerBot.telegram.sendMessage(
+          await sendTelegramMessage(
+            ownerBot,
             telegramId,
             '✅ Твій щотижневий AI-звіт готовий → Dashboard / Content',
           )
@@ -62,4 +64,3 @@ export async function runWeeklyReports(): Promise<void> {
 
   console.log(`[Scheduler] Done. success=${success} failed=${failed}`)
 }
-

@@ -6,7 +6,7 @@ import { coachContent } from '../../content/coachContent.content.js'
 
 export type CoachAccess = {
   id: string
-  role: 'EXPERT' | 'SUPERADMIN'
+  role: 'ADMIN' | 'EXPERT' | 'SUPERADMIN'
   expertId: string | null
 }
 
@@ -147,20 +147,23 @@ export function splitPayload(payload: string): string[] {
   return payload.trim().split(/\s+/u).filter(Boolean)
 }
 
+type PanelMessageExtra = Parameters<Context['reply']>[1]
+
 export async function replyOrEditPanelMessage(
   ctx: Context,
   text: string,
+  extra?: PanelMessageExtra,
 ): Promise<void> {
   if (ctx.callbackQuery) {
     try {
-      await ctx.editMessageText(text).catch(() => undefined)
+      await ctx.editMessageText(text, extra as never).catch(() => undefined)
       return
     } catch (error) {
       console.error('[coach-panel:edit-fallback] failed', error)
     }
   }
 
-  await ctx.reply(text).catch(() => undefined)
+  await ctx.reply(text, extra).catch(() => undefined)
 }
 
 export async function reportCoachRuntimeError(ctx: Context, scope: string, error: unknown): Promise<void> {
@@ -184,34 +187,6 @@ export function withCoachRuntimeProtection<T extends Context>(
       await reportCoachRuntimeError(ctx, scope, error)
     }
   }
-}
-
-export function formatUserRow(user: {
-  id: string
-  firstName: string | null
-  lastName: string | null
-  email: string
-  telegramUserId: string | null
-  telegramChatId: string | null
-  telegramUserName: string | null
-  role: string
-  focusPaid: boolean
-  expertId: string | null
-  createdAt: Date
-}): string {
-  const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Без імені'
-  const telegram = user.telegramUserId ?? user.telegramChatId ?? user.telegramUserName ?? '—'
-
-  return [
-    `• ${name}`,
-    `  id: ${user.id}`,
-    `  email: ${user.email}`,
-    `  tg: ${telegram}`,
-    `  role: ${user.role}`,
-    `  expert: ${user.expertId ?? '—'}`,
-    `  focus: ${user.focusPaid ? 'yes' : 'no'}`,
-    `  created: ${formatKyivDateTime(user.createdAt)}`,
-  ].join('\n')
 }
 
 export function resolveCoachExpertScopeId(coach: CoachAccess): string {
@@ -264,6 +239,7 @@ export async function resolveCoachAccess(ctx: Context): Promise<CoachAccess | nu
     const fallbackCoach = await prisma.user.findFirst({
       where: {
         OR: [
+          { role: 'ADMIN' },
           { role: 'SUPERADMIN' },
           { role: 'EXPERT' },
         ],
@@ -276,7 +252,7 @@ export async function resolveCoachAccess(ctx: Context): Promise<CoachAccess | nu
     })
 
     if (!fallbackCoach) return null
-    if (fallbackCoach.role !== 'EXPERT' && fallbackCoach.role !== 'SUPERADMIN') return null
+    if (fallbackCoach.role !== 'ADMIN' && fallbackCoach.role !== 'EXPERT' && fallbackCoach.role !== 'SUPERADMIN') return null
     return {
       id: fallbackCoach.id,
       role: fallbackCoach.role,
@@ -285,7 +261,7 @@ export async function resolveCoachAccess(ctx: Context): Promise<CoachAccess | nu
   }
 
   if (!coach) return null
-  if (coach.role !== 'EXPERT' && coach.role !== 'SUPERADMIN') return null
+  if (coach.role !== 'ADMIN' && coach.role !== 'EXPERT' && coach.role !== 'SUPERADMIN') return null
   return {
     id: coach.id,
     role: coach.role,

@@ -3,6 +3,7 @@ import type { Context } from 'telegraf'
 
 import { prisma } from '../../../db/client.js'
 import { bot } from '../../../lib/telegram.js'
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { logger } from '../../../utils/logger.js'
 import {
   handleFocusChannelJoinByTelegramUserId,
@@ -133,7 +134,8 @@ export function registerChannelHandlers(): void {
             if (parsed.errors.length > 0 && hasStructuredFields(post.text)) {
               const expertTgId = process.env.COACH_TELEGRAM_ID?.trim()
               if (expertTgId) {
-                await ctx.telegram.sendMessage(
+                await sendTelegramMessage(
+                  ctx,
                   expertTgId,
                   'Помилка в шаблоні Zoom-сесії:\n\n' +
                     parsed.errors.join('\n') +
@@ -142,7 +144,7 @@ export function registerChannelHandlers(): void {
                     'Дата: DD.MM.YYYY\n' +
                     'Час: HH:MM\n' +
                     'Тема: назва практики\n' +
-                    'Link: https://zoom.us/j/...'
+                    'Link: https://zoom.us/j/...',
                 )
               }
             }
@@ -226,12 +228,13 @@ export function registerChannelHandlers(): void {
               hour: '2-digit',
               minute: '2-digit',
             })
-            await ctx.telegram.sendMessage(
+            await sendTelegramMessage(
+              ctx,
               expertTgId,
               `Zoom-сесію ${isCreated ? 'додано' : 'оновлено'} в системі.\n\n` +
                 `${dateStr}\n` +
                 `${parsed.topic}\n\n` +
-                'Нагадування заплановані.'
+                'Нагадування заплановані.',
             )
           }
           return

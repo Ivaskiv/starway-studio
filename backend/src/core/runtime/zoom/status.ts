@@ -1,4 +1,5 @@
 import { bot, coachBot } from '../../../lib/telegram.js'
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 
 export type CoachStatusMessageRef = {
   chatId: string
@@ -21,7 +22,7 @@ export function buildZoomCoachStatusText(lines: string[], fileName?: string | nu
 
 export async function sendZoomCoachStatusMessage(chatId: string, text: string, runtime: 'bot' | 'coachBot' = 'bot') {
   const client = runtime === 'coachBot' ? coachBot : bot
-  const message = await client.telegram.sendMessage(chatId, text)
+  const message = await sendTelegramMessage(client, chatId, text) as { message_id: number }
   return { chatId, messageId: message.message_id }
 }
 

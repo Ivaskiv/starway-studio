@@ -3,6 +3,7 @@ import { resolveModelStrategyTier } from '@starway/ai/providers/routing'
 
 import { prisma } from '@/db/client.js'
 import { coachBot } from '@/lib/telegram.js'
+import { sendTelegramMessage } from '@/lib/telegram/messageFormatter.js'
 import { callProviderSafe } from '@/modules/sales-assistant/sales-assistant.providers.js'
 import {
   AI_OPERATOR_ACTIONS,
@@ -562,10 +563,12 @@ export async function sendCoachZoomSummary(
       continue
     }
 
-    await coachBot.telegram.sendMessage(chatId, text, {
-      parse_mode: 'HTML',
-      reply_markup: options?.replyMarkup,
-    })
+    await sendTelegramMessage(
+      coachBot,
+      chatId,
+      { text, parseMode: 'HTML' },
+      { replyMarkup: options?.replyMarkup },
+    )
     results.push({ userId: coach.id, sent: true })
   }
 

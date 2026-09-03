@@ -3,6 +3,7 @@ import type { Context } from 'telegraf'
 import { Markup } from 'telegraf'
 
 import { callProviderSafe } from '../../sales-assistant/sales-assistant.providers.js'
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 
 function buildNotebookSystemPrompt(): string {
  return [
@@ -136,13 +137,14 @@ export async function handleNotebookChannelPost(
  hasError: Boolean(result.error),
  error: result.error ?? null,
  })
- await ctx.telegram
- .sendMessage(
+ await sendTelegramMessage(
+ ctx,
  chatId,
  ` Не вдалося передати нотатку в Claude.\n\n${reason}`,
- buttons
- )
- .catch(() => undefined)
+ {
+ replyMarkup: buttons.reply_markup,
+ },
+ ).catch(() => undefined)
  return true
  }
 
@@ -153,6 +155,6 @@ export async function handleNotebookChannelPost(
  responseLength: replyText.length,
  })
 
- await ctx.telegram.sendMessage(chatId, replyText).catch(() => undefined)
+ await sendTelegramMessage(ctx, chatId, replyText).catch(() => undefined)
  return true
 }

@@ -225,8 +225,8 @@ export function readCoachBotToken(): string {
 
 export function readCoachBotName(): string {
   if (isProductionRuntime()) {
-    return normalizeEnv(process.env.COACH_BOT_NAME) || 'Starway DNA Coach'
+    return normalizeEnv(process.env.COACH_BOT_NAME) || 'StarwayDNACoach_bot'
   }
 
-  return normalizeEnv(process.env.TEST_COACH_BOT_NAME) || 'Starway DNA Coach Test'
+  return normalizeEnv(process.env.TEST_COACH_BOT_NAME) || 'StarwayDNACoachTest_bot'
 }

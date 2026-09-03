@@ -5,7 +5,7 @@ import {
   deactivateCallbackMarkup,
   isAbTestConversionCallback,
   shouldDedupeAbTestCallback,
-} from '../callback.ts'
+} from '../../../../../src/products/ab-system/telegram/callback.ts'
 
 function createCtx(action = 'show_inside_STATE', messageId = 99) {
   return {

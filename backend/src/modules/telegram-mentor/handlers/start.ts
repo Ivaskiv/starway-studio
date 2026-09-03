@@ -27,6 +27,7 @@ import { absystemContent } from '@/products/absystem/config/content.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { getUserAccessState, type UserAccessState } from '../../subscriptions/payments/focus-access.js'
 import { logger } from '../../../utils/logger.js'
+import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 
 export * from './start.shared.js'
 
@@ -721,7 +722,7 @@ export async function handleStart(ctx: StartContext) {
     })}`)
 
     if (user.lifecycleState === 'NEW_USER' && !ctx.from?.first_name && !user.firstName) {
-      await ctx.telegram.sendMessage(chatId, 'Як тебе звати?')
+      await sendTelegramMessage(ctx, chatId, 'Як тебе звати?')
       await setPendingName(chatId)
       startMessageSent = true
       await setLifecycleState(user.id, 'TEST_NOT_STARTED')

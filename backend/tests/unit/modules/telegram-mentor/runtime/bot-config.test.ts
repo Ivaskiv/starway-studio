@@ -130,7 +130,7 @@ describe('telegram bot config', () => {
     process.env.COACH_BOT_NAME = 'StarwayDNACoach'
     delete process.env.TEST_COACH_BOT_NAME
 
-    expect(readCoachBotName()).toBe('Starway DNA Coach Test')
+    expect(readCoachBotName()).toBe('StarwayDNACoachTest_bot')
 
     process.env.TEST_COACH_BOT_NAME = 'StarwayDNACoachTest'
     expect(readCoachBotName()).toBe('StarwayDNACoachTest')

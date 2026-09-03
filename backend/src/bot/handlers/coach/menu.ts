@@ -1,16 +1,23 @@
 import type { Context } from 'telegraf'
 import { Markup } from 'telegraf'
+import type { KeyboardButton } from '@telegraf/types'
 
+import { prisma } from '../../../db/client.js'
 import {
   COACH_AGENTS_RETURN_TARGET,
   generateCoachAgentsWebDeepLink,
+  generateCoachZoomWebDeepLink,
 } from '../../../modules/deeplinks/service.js'
 import { toMutableReplyKeyboard } from '../../../utils/keyboard.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 import { resolveCoachUserId } from './access.js'
-import { resolveCoachWebAppBaseUrl, resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
+import { resolveCoachWebAppBaseUrl } from '../../../config/webapp.js'
+import {
+  buildExpertScopeWhere,
+  replyOrEditPanelMessage,
+  resolveCoachAccess,
+} from '../coach-content/shared.js'
 
-const COACH_CALENDAR_ROUTE = '/miniapp/zoom-calendar'
 const lastCoachAgentsMessageByChat = new Map<string, number>()
 
 export const MENU_CONDUCT_PATTERN =
@@ -23,31 +30,20 @@ export const MENU_ANALYTICS_PATTERN =
   /^(?:📊\s*)?Аналітика$/iu
 
 export const MENU_AGENTS_PATTERN =
-  /^(?:🤖\s*)?Агенти$/iu
+  /^(?:🤖\s*)?(?:AI-)?Агенти$/iu
 
 export const MENU_SETTINGS_PATTERN =
   /^(?:⚙️\s*)?(?:Система|Налаштування)$/iu
+const COACH_SETTINGS_BACK_ACTION = 'coach:settings:back'
 
 export const MENU_CALENDAR_PATTERN =
-  /^(?:📅\s*)?Календар$/iu
+  /^(?:📅\s*)?Календар(?:\s+Zoom)?$/iu
 
-function resolveCoachCalendarWebAppUrl(): string {
-  const base = resolveTelegramWebappBaseUrl()
-  const finalUrl = `${base.replace(/\/$/, '')}${COACH_CALENDAR_ROUTE}`
-  console.info('[ZOOM_CALENDAR_BUTTON_DEBUG]', {
-    source: 'coachStart.resolveCoachCalendarWebAppUrl',
-    chatId: null,
-    finalUrl,
-    mode: 'web_app',
-    envBase: {
-      TELEGRAM_WEBAPP_BASE_URL:
-        process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
-      PUBLIC_FRONTEND_URL: process.env.PUBLIC_FRONTEND_URL?.trim() ?? null,
-    },
-    route: COACH_CALENDAR_ROUTE,
-  })
-  return finalUrl
-}
+export const MENU_NOTIFICATIONS_PATTERN =
+  /^(?:🔔\s*)?Нагадування$/iu
+
+export const MENU_PAYMENTS_PATTERN =
+  /^(?:💳\s*)?Оплати$/iu
 
 async function resolveCoachAgentsUrl(ctx: Context): Promise<string> {
   const coachUserId = await resolveCoachUserId(ctx)
@@ -58,19 +54,88 @@ async function resolveCoachAgentsUrl(ctx: Context): Promise<string> {
   return generateCoachAgentsWebDeepLink(coachUserId)
 }
 
-export async function showCoachMenu(ctx: Context): Promise<void> {
-  const text = `${coachBotContent.start.title}\n\n${coachBotContent.start.subtitle}`
-  await ctx.reply(text, buildCoachMainMenuReplyMarkup())
+async function resolveCoachCalendarUrl(ctx: Context): Promise<string> {
+  const coachUserId = await resolveCoachUserId(ctx)
+  if (!coachUserId) {
+    throw new Error('COACH_USER_NOT_RESOLVED_FOR_ZOOM_LINK')
+  }
+
+  return generateCoachZoomWebDeepLink(coachUserId)
 }
 
-export function buildCoachMainMenuReplyMarkup() {
+export async function showCoachMenu(ctx: Context): Promise<void> {
+  const coach = await resolveCoachAccess(ctx)
+  const firstName = String(ctx.from?.first_name ?? '').trim() || 'коуч'
+
+  const nextSession = coach
+    ? await prisma.zoomSession.findFirst({
+        where: {
+          status: 'SCHEDULED',
+          scheduledAt: { gt: new Date() },
+          ...buildExpertScopeWhere(coach),
+        },
+        orderBy: { scheduledAt: 'asc' },
+        select: {
+          scheduledAt: true,
+          _count: {
+            select: {
+              attendees: true,
+            },
+          },
+        },
+      })
+    : null
+
+  const nextSessionLabel = nextSession
+    ? [
+        nextSession.scheduledAt.toLocaleDateString('uk-UA', {
+          timeZone: 'Europe/Kyiv',
+          day: 'numeric',
+          month: 'long',
+        }),
+        nextSession.scheduledAt.toLocaleTimeString('uk-UA', {
+          timeZone: 'Europe/Kyiv',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      ].join(' · ')
+    : coachBotContent.start.upcomingEmpty
+
+  const nextSessionAttendance = nextSession
+    ? `${nextSession._count.attendees} учасників`
+    : null
+
+  const text = [
+    coachBotContent.start.title,
+    '',
+    `Вітаю, ${firstName}.`,
+    '',
+    coachBotContent.start.upcomingTitle,
+    nextSessionLabel,
+    ...(nextSessionAttendance ? [nextSessionAttendance, ''] : ['']),
+    coachBotContent.start.subtitle,
+  ].join('\n')
+
+  await ctx.reply(text, buildCoachMainMenuReplyMarkup(coach?.role ?? 'EXPERT'))
+}
+
+export function buildCoachMainMenuReplyMarkup(
+  role: 'ADMIN' | 'EXPERT' | 'SUPERADMIN'
+) {
+  const keyboard: KeyboardButton[][] = [
+    [coachBotContent.menu.conduct, coachBotContent.menu.calendar],
+    [coachBotContent.menu.members, coachBotContent.menu.agents],
+    [coachBotContent.menu.analytics, coachBotContent.menu.content],
+    [coachBotContent.menu.notifications, coachBotContent.menu.payments],
+  ]
+
+  if (role === 'SUPERADMIN') {
+    keyboard.push([coachBotContent.menu.settings])
+  }
+
   return {
     reply_markup: toMutableReplyKeyboard({
-      keyboard: [
-        [coachBotContent.menu.conduct, coachBotContent.menu.library],
-        [coachBotContent.menu.analytics, coachBotContent.menu.content],
-        [coachBotContent.menu.settings, coachBotContent.menu.agents],
-      ],
+      keyboard,
       resize_keyboard: true,
       is_persistent: true,
     }),
@@ -78,9 +143,33 @@ export function buildCoachMainMenuReplyMarkup() {
 }
 
 export async function showCoachSystemMenu(ctx: Context): Promise<void> {
-  const finalUrl = resolveCoachCalendarWebAppUrl()
+  const coach = await resolveCoachAccess(ctx)
+  if (coach?.role !== 'SUPERADMIN') {
+    await ctx.reply('Налаштування доступні лише SUPERADMIN.')
+    return
+  }
+
+  await replyOrEditPanelMessage(
+    ctx,
+    `${coachBotContent.system.title}\n\n${coachBotContent.system.subtitle}`,
+    {
+      ...buildCoachMainMenuReplyMarkup(coach.role),
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback(coachBotContent.system.actions.back, COACH_SETTINGS_BACK_ACTION)],
+      ]),
+    }
+  )
+}
+
+export async function showCoachSettingsBack(ctx: Context): Promise<void> {
+  await ctx.answerCbQuery().catch(() => undefined)
+  await showCoachMenu(ctx)
+}
+
+export async function showCoachCalendarMenu(ctx: Context): Promise<void> {
+  const finalUrl = await resolveCoachCalendarUrl(ctx)
   console.info('[ZOOM_CALENDAR_BUTTON_DEBUG]', {
-    source: 'coachStart.showCoachSystemMenu',
+    source: 'coachStart.showCoachCalendarMenu',
     chatId: String(ctx.chat?.id ?? ctx.from?.id ?? ''),
     finalUrl,
     mode: 'web_app',
@@ -89,34 +178,16 @@ export async function showCoachSystemMenu(ctx: Context): Promise<void> {
         process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
       PUBLIC_FRONTEND_URL: process.env.PUBLIC_FRONTEND_URL?.trim() ?? null,
     },
-    route: COACH_CALENDAR_ROUTE,
+    route: '/app/dashboard/zoom',
   })
 
+  const coach = await resolveCoachAccess(ctx)
   await ctx.reply(
-    `${coachBotContent.system.title}\n\n${coachBotContent.system.subtitle}`,
+    `${coachBotContent.system.calendarTitle}\n\n${coachBotContent.system.calendarSubtitle}`,
     {
-      ...buildCoachMainMenuReplyMarkup(),
+      ...buildCoachMainMenuReplyMarkup(coach?.role ?? 'EXPERT'),
       ...Markup.inlineKeyboard([
-        [Markup.button.webApp(coachBotContent.menu.schedule, finalUrl)],
-        [
-          Markup.button.callback(
-            coachBotContent.menu.members,
-            'coach:participants'
-          ),
-        ],
-        [
-          Markup.button.callback(
-            coachBotContent.menu.notifications,
-            'coach:notifications'
-          ),
-        ],
-        [
-          Markup.button.callback(
-            coachBotContent.menu.payments,
-            'coach-content:payments'
-          ),
-        ],
-        [Markup.button.callback('Повна аналітика', 'coach:analytics')],
+        [Markup.button.webApp(coachBotContent.system.calendarCta, finalUrl)],
       ]),
     }
   )
@@ -125,6 +196,7 @@ export async function showCoachSystemMenu(ctx: Context): Promise<void> {
 export async function showCoachAgentsMenu(ctx: Context): Promise<void> {
   const agentsUrl = await resolveCoachAgentsUrl(ctx)
   const webappBase = resolveCoachWebAppBaseUrl()
+  const coach = await resolveCoachAccess(ctx)
   const chatId = String(ctx.chat?.id ?? ctx.from?.id ?? '').trim()
   const previousMessageId = chatId ? lastCoachAgentsMessageByChat.get(chatId) ?? null : null
 
@@ -135,7 +207,7 @@ export async function showCoachAgentsMenu(ctx: Context): Promise<void> {
   const replyMessage = await ctx.reply(
     `${coachBotContent.system.agentsTitle}\n\n${coachBotContent.system.agentsSubtitle}`,
     {
-      ...buildCoachMainMenuReplyMarkup(),
+      ...buildCoachMainMenuReplyMarkup(coach?.role ?? 'EXPERT'),
       ...Markup.inlineKeyboard([
         [Markup.button.webApp(coachBotContent.system.agentsCta, agentsUrl)],
       ]),

@@ -27,7 +27,9 @@ import {
   buildMagicLoginWebLink,
   buildWebDeepLink,
   COACH_AGENTS_RETURN_TARGET,
+  COACH_ZOOM_RETURN_TARGET,
   generateCoachAgentsWebDeepLink,
+  generateCoachZoomWebDeepLink,
 } from '../../../../src/modules/deeplinks/service.ts'
 
 describe('deeplinks service frontend origin', () => {
@@ -72,6 +74,36 @@ describe('deeplinks service frontend origin', () => {
         userId: 'coach-user-id',
         action: 'open_web',
         path: COACH_AGENTS_RETURN_TARGET,
+      }),
+    }))
+    expect(mockTrackEvent).toHaveBeenCalled()
+  })
+
+  it('builds coach zoom deeplinks through auth bootstrap with the canonical return target', async () => {
+    mockDeepLinkCreate.mockResolvedValueOnce({
+      id: 'dl-2',
+      userId: 'coach-user-id',
+      token: 'coach-zoom-token',
+      action: 'open_web',
+      source: 'telegram',
+      target: 'web',
+      path: COACH_ZOOM_RETURN_TARGET,
+      payload: null,
+      createdAt: new Date('2026-08-03T12:00:00.000Z'),
+      expiresAt: new Date('2026-08-03T12:15:00.000Z'),
+      consumedAt: null,
+    })
+
+    const url = await generateCoachZoomWebDeepLink('coach-user-id')
+
+    expect(url).toBe(
+      'https://starway-frontend.vercel.app/app/dashboard/zoom?dl=coach-zoom-token',
+    )
+    expect(mockDeepLinkCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        userId: 'coach-user-id',
+        action: 'open_web',
+        path: COACH_ZOOM_RETURN_TARGET,
       }),
     }))
     expect(mockTrackEvent).toHaveBeenCalled()

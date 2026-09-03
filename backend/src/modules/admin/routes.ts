@@ -875,7 +875,7 @@ router.post('/prompts', authRequired, async (req: AuthenticatedRequest, res: Res
 // ─── PUT /api/admin/prompts/:id/activate ─────────────────
 
 router.put('/prompts/:id/activate', authRequired, async (req: AuthenticatedRequest, res: Response) => {
-  if (superGuard(req, res)) return
+  if (expertGuard(req, res)) return
 
   const targetPromptVersion = await prisma.promptVersion.findUnique({
     where: { id: req.params.id },

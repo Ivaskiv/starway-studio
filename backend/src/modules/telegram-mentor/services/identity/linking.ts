@@ -1,3 +1,4 @@
+import type { Role } from '@starway/db/prisma-client'
 import { randomBytes } from 'crypto'
 import { prisma } from '../../../../db/client.js'
 import { trackEvent } from '../../../events/service.js'
@@ -6,11 +7,25 @@ import { reconcileTelegramIdentityUsers } from '../../../user/identity/service.j
 
 type IdentityCandidate = {
   id: string
+  role: Role
   telegramUserId: string | null
   telegramUserName: string | null
   telegramChatId: string | null
   telegramLinkedAt: Date | null
   createdAt: Date
+}
+
+function scorePrivilegedRole(role: IdentityCandidate['role']): number {
+  switch (role) {
+    case 'SUPERADMIN':
+      return 80
+    case 'ADMIN':
+      return 70
+    case 'EXPERT':
+      return 60
+    default:
+      return 0
+  }
 }
 
 function scoreIdentityCandidate(
@@ -24,6 +39,7 @@ function scoreIdentityCandidate(
   if (candidate.telegramUserId === params.telegramUserId) score += 12
   if (params.telegramUserName && candidate.telegramUserName === params.telegramUserName) score += 6
   if (candidate.telegramLinkedAt) score += 3
+  score += scorePrivilegedRole(candidate.role)
   if (hasCanonicalFocusAccess) score += 40
 
   return score
@@ -85,6 +101,7 @@ export async function findLinkedUserId(params: {
     },
     select: {
       id: true,
+      role: true,
       telegramUserId: true,
       telegramUserName: true,
       telegramChatId: true,

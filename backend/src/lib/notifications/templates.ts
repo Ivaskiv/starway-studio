@@ -173,6 +173,7 @@ export function buildNotificationContent(
     case 'PAYMENT_REMINDER_7D':
     case 'ZOOM_REMINDER_24H':
     case 'ZOOM_REMINDER_2H':
+    case 'ZOOM_REMINDER_5M':
     case 'PLATFORM_INVITE_AFTER_ZOOM_1':
     case 'PLATFORM_INVITE_AFTER_ZOOM_2': {
       const followupName = userName === 'Привіт' ? null : userName

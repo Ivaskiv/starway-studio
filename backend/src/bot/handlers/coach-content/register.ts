@@ -7,7 +7,7 @@ import {
   handleCoachContentText,
   handleCoachContentZooms,
 } from '../../flows/contentPlanner.flow.js'
-import { handleCoachPanelAction } from './actions.js'
+import { handleCoachPanelAction, showCoachContentWorkspace } from './actions.js'
 import {
   enqueueCoachAudioUpload,
   handleCoachAudioCommand,
@@ -27,7 +27,7 @@ export function registerCoachContentHandlers(telegramBot: Telegraf): void {
   validateCoachContentCatalog()
 
   telegramBot.hears(/^(?:🎬\s*)?Контент$/iu, coachOnly, withCoachRuntimeProtection('menu:content', async (ctx) => {
-    await handleCoachContentCommand(ctx, 'WEEKLY_PLAN')
+    await showCoachContentWorkspace(ctx)
   }))
 
   telegramBot.hears(/^\/planner(?:@\w+)?(?:\s+(.*))?$/iu, coachOnly, withCoachRuntimeProtection('command:planner', async (ctx) => {

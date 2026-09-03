@@ -262,6 +262,20 @@ describe('registerMentorBot runtime parity', () => {
       )
   })
 
+  it('does not register coach-only commands or callback namespaces on the user bot runtime', async () => {
+    const { snapshot } = await registerMentorBotForEnv('development')
+
+    expect(snapshot.registrations).not.toContainEqual({
+      method: 'command',
+      event: 'schedule',
+    })
+    expect(snapshot.registrations).not.toContainEqual({
+      method: 'command',
+      event: 'start-day',
+    })
+    expect(snapshot.registrations.some(({ event }) => event.includes('coach:'))).toBe(false)
+  })
+
   it('returns the debug snapshot through the canonical delivery layer in development', async () => {
     const { debugStateHandler, planMessageMock } = await registerMentorBotForEnv('development')
 

@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 
@@ -61,56 +61,66 @@ function inlineTelegramCompiledCss() {
   }
 }
 
-export default defineConfig({
-  publicDir: false,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const outDir = env.TELEGRAM_BUNDLE_OUT_DIR?.trim() || 'public/telegram-legacy'
 
-  // Browser-only Telegram bundle.
-  // Prevent Node globals from leaking into the IIFE runtime.
-  define: {
-    'process.env.NODE_ENV': JSON.stringify('production'),
-    'process.env': '{}',
-  },
+  return {
+    publicDir: false,
 
-  plugins: [
-    inlineTelegramCompiledCss(),
-    react(),
-    tsconfigPaths(),
-  ],
-
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-      '@shared': path.resolve(__dirname, '../../packages/shared/src'),
-      '@ai': path.resolve(__dirname, '../../packages/ai/src'),
+    // Browser-only Telegram bundle.
+    // Prevent Node globals from leaking into the IIFE runtime.
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('production'),
+      'process.env': '{}',
     },
-  },
 
-  css: {
-    preprocessorOptions: {
-      scss: {
-        api: 'modern-compiler',
-        includePaths: [path.resolve(__dirname, 'src/styles')],
+    plugins: [
+      inlineTelegramCompiledCss(),
+      react(),
+      tsconfigPaths(),
+    ],
+
+    esbuild: {
+      jsx: 'automatic',
+      jsxDev: false,
+    },
+
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, 'src'),
+        '@shared': path.resolve(__dirname, '../../packages/shared/src'),
+        '@ai': path.resolve(__dirname, '../../packages/ai/src'),
       },
     },
-  },
 
-  build: {
-    target: 'es2017',
-    outDir: 'public/telegram-legacy',
-    emptyOutDir: true,
-    cssCodeSplit: false,
-
-    lib: {
-      entry: path.resolve(__dirname, 'src/index.tsx'),
-      name: 'StarwayTelegramApp',
-      formats: ['iife'],
-      fileName: () => 'telegram-webview.js',
-    },
-
-    rollupOptions: {
-      output: {
-        inlineDynamicImports: true,
+    css: {
+      preprocessorOptions: {
+        scss: {
+          api: 'modern-compiler',
+          includePaths: [path.resolve(__dirname, 'src/styles')],
+        },
       },
     },
-  },
+
+    build: {
+      target: 'es2017',
+      outDir,
+      emptyOutDir: true,
+      cssCodeSplit: false,
+
+      lib: {
+        entry: path.resolve(__dirname, 'src/index.tsx'),
+        name: 'StarwayTelegramApp',
+        formats: ['iife'],
+        fileName: () => 'telegram-webview.js',
+      },
+
+      rollupOptions: {
+        output: {
+          inlineDynamicImports: true,
+        },
+      },
+    },
+  }
 })

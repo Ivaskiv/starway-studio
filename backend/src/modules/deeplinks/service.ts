@@ -21,6 +21,7 @@ const TELEGRAM_START_PREFIX = 'dl_'
 let hasWarnedAboutMissingDeepLinkTable = false
 
 export const COACH_AGENTS_RETURN_TARGET = '/app/dashboard/admin/studio?tab=agents&item=agents.overview'
+export const COACH_ZOOM_RETURN_TARGET = '/app/dashboard/zoom'
 
 interface DeepLinkTokenDelegateLike {
   create(args: Prisma.DeepLinkTokenCreateArgs): Promise<DeepLinkToken>
@@ -130,6 +131,20 @@ export async function generateCoachAgentsWebDeepLink(userId: string): Promise<st
   })
 
   const url = new URL(deepLink.path ?? COACH_AGENTS_RETURN_TARGET, resolveCoachWebAppBaseUrl())
+  url.searchParams.set('dl', deepLink.token)
+  return url.toString()
+}
+
+export async function generateCoachZoomWebDeepLink(userId: string): Promise<string> {
+  const deepLink = await generateDeepLink({
+    userId,
+    action: 'open_web',
+    source: 'telegram',
+    target: 'web',
+    path: COACH_ZOOM_RETURN_TARGET,
+  })
+
+  const url = new URL(deepLink.path ?? COACH_ZOOM_RETURN_TARGET, resolveCoachWebAppBaseUrl())
   url.searchParams.set('dl', deepLink.token)
   return url.toString()
 }

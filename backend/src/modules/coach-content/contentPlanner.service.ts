@@ -1,9 +1,11 @@
-import { anthropic } from '@starway/ai/providers'
-import { calculateAiCostUsd, getCostTier, type AiCostTelemetry } from '@starway/ai/providers/pricing'
+import { getCostTier, type AiCostTelemetry } from '@starway/ai/providers/pricing'
 import { Prisma, ZoomStatus } from '@starway/db/prisma-client'
 
 import { prisma } from '../../db/client.js'
 import { coachContent, buildPlannerUserPrompt, buildZoomListMessage } from '../../bot/content/coachContent.content.js'
+import { getTelegramAgentGateway } from '../ai/gateway/index.js'
+import { extractRuntimeTelemetry } from '../ai/gateway/helpers.js'
+import { resolveGatewayPromptRead } from '../ai/gateway/runtime.js'
 import { parseZoomPostReport } from '../zoom/reports/zoomPostReport.types.js'
 import { hashCacheParts, rememberResultCache, resultCache } from '../sales-assistant/sales-assistant.helpers.js'
 
@@ -38,6 +40,8 @@ export interface PlannerWeekWindow {
 
 const COACH_NOTE_SOURCE = 'coach_content_flow'
 const COACH_PLANNER_CONTEXT_CACHE_TTL_MS = 60_000
+const CONTENT_AGENT_KEY = 'content'
+const CONTENT_AGENT_PROMPT_ID = 'content-agent-prompt'
 
 type PlannerContextCacheValue = {
   expiresAt: number
@@ -245,10 +249,121 @@ export async function loadPlannerContextByScope(userId: string, scope: ContentPl
   return value
 }
 
-function ensureAnthropicConfigured(): void {
-  const apiKey = normalizeText(process.env.ANTHROPIC_API_KEY)
-  if (!apiKey || apiKey === 'SET') {
+function buildPlannerDraft(input: {
+  mode: ContentPlanMode
+  topic?: string | null
+  context: Awaited<ReturnType<typeof loadPlannerContextByScope>>
+  content: string
+}): CoachPlannerDraft {
+  return {
+    mode: input.mode,
+    planScope: input.context.period.planScope,
+    periodStart: input.context.period.periodStart,
+    periodEnd: input.context.period.periodEnd,
+    periodRange: input.context.period.periodRange,
+    topic: normalizeText(input.topic) || null,
+    content: input.content,
+    zooms: input.context.zooms,
+    notes: input.context.notes,
+  }
+}
+
+function mapPlannerGatewayUsage(input: {
+  metadata: Record<string, unknown> | undefined
+  provider?: unknown
+  model?: unknown
+  tokensUsed?: unknown
+}): AiCostTelemetry {
+  const telemetry = extractRuntimeTelemetry(input.metadata)
+  if (telemetry) {
+    const totalTokens = telemetry.promptTokens + telemetry.completionTokens
+    const effectiveCost = telemetry.actualCost || telemetry.estimatedCost || 0
+
+    return {
+      provider: telemetry.provider,
+      model: telemetry.model,
+      inputTokens: telemetry.promptTokens,
+      outputTokens: telemetry.completionTokens,
+      totalTokens,
+      estimatedCostUsd: telemetry.estimatedCost,
+      actualCostUsd: telemetry.actualCost,
+      costTier: getCostTier(effectiveCost),
+    }
+  }
+
+  const totalTokens =
+    typeof input.tokensUsed === 'number' && Number.isFinite(input.tokensUsed)
+      ? input.tokensUsed
+      : 0
+
+  return {
+    provider:
+      typeof input.provider === 'string' && input.provider.trim().length > 0
+        ? input.provider
+        : 'unknown',
+    model:
+      typeof input.model === 'string' && input.model.trim().length > 0
+        ? input.model
+        : 'unknown',
+    inputTokens: 0,
+    outputTokens: totalTokens,
+    totalTokens,
+    estimatedCostUsd: 0,
+    actualCostUsd: 0,
+    costTier: getCostTier(0),
+  }
+}
+
+function normalizePlannerGatewayError(error: unknown): never {
+  if (
+    error instanceof Error &&
+    /not configured/i.test(error.message)
+  ) {
     throw new Error('ai_not_configured')
+  }
+
+  throw error
+}
+
+async function runCanonicalContentAgent(input: {
+  userId: string
+  prompt: string
+}): Promise<{ content: string; usage: AiCostTelemetry }> {
+  try {
+    const result = await getTelegramAgentGateway().executeTargetedAgentTest({
+      key: CONTENT_AGENT_KEY,
+      bot: 'coach',
+      chatId: input.userId,
+      userId: input.userId,
+      message: input.prompt,
+      requestId: `coach-content:${input.userId}:${Date.now()}`,
+    })
+
+    const payload = result.artifact.payload as {
+      response?: unknown
+      provider?: unknown
+      model?: unknown
+      tokensUsed?: unknown
+    }
+    const content = typeof payload.response === 'string'
+      ? payload.response.trim()
+      : ''
+
+    if (!content) {
+      throw new Error('empty_content_agent_response')
+    }
+
+    return {
+      content,
+      usage: mapPlannerGatewayUsage({
+        metadata: result.artifact.metadata,
+        provider: payload.provider,
+        model: payload.model,
+        tokensUsed: payload.tokensUsed,
+      }),
+    }
+  } catch (error) {
+    normalizePlannerGatewayError(error)
   }
 }
 
@@ -258,11 +373,8 @@ export async function generateContentPlannerDraft(input: {
   scope?: ContentPlanScope
   topic?: string | null
 }): Promise<CoachPlannerDraft> {
-  ensureAnthropicConfigured()
-
   const scope = input.scope ?? (input.mode === 'MONTHLY_PLAN' ? 'MONTHLY' : 'WEEKLY')
   const context = await loadPlannerContextByScope(input.userId, scope)
-  const model = normalizeText(process.env.ANTHROPIC_MODEL) || 'claude-sonnet-4-20250514'
   const prompt = buildPlannerUserPrompt({
     mode: input.mode,
     scope,
@@ -272,70 +384,38 @@ export async function generateContentPlannerDraft(input: {
     noteDigest: formatNotesDigest(context.notes),
   })
   const maxTokens = 1600
+  const promptTrace = await resolveGatewayPromptRead(CONTENT_AGENT_PROMPT_ID)
   const cacheKey = hashCacheParts([
     'coach-planner-draft',
-    model,
-    coachContent.prompts.system,
+    CONTENT_AGENT_KEY,
+    CONTENT_AGENT_PROMPT_ID,
+    promptTrace?.source ?? 'unknown',
+    promptTrace?.version ?? null,
     prompt,
     maxTokens,
   ])
   const cached = resultCache.get(cacheKey)
   if (cached) {
-    return {
+    return buildPlannerDraft({
       mode: input.mode,
-      planScope: context.period.planScope,
-      periodStart: context.period.periodStart,
-      periodEnd: context.period.periodEnd,
-      periodRange: context.period.periodRange,
-      topic: normalizeText(input.topic) || null,
+      topic: input.topic,
+      context,
       content: cached.content,
-      zooms: context.zooms,
-      notes: context.notes,
-    }
+    })
   }
 
-  const response = await anthropic.messages.create({
-    model,
-    max_tokens: maxTokens,
-    system: coachContent.prompts.system,
-    messages: [{ role: 'user', content: prompt }],
+  const generated = await runCanonicalContentAgent({
+    userId: input.userId,
+    prompt,
   })
+  rememberResultCache(cacheKey, { content: generated.content, usage: generated.usage })
 
-  const text = response.content
-    .map((part) => ('text' in part ? part.text : ''))
-    .join('\n')
-    .trim()
-
-  if (!text) {
-    throw new Error('empty_claude_response')
-  }
-
-  const inputTokens = response.usage?.input_tokens ?? 0
-  const outputTokens = response.usage?.output_tokens ?? 0
-  const actualCostUsd = calculateAiCostUsd(model, inputTokens, outputTokens)
-  const usage: AiCostTelemetry = {
-    provider: 'claude',
-    model,
-    inputTokens,
-    outputTokens,
-    totalTokens: inputTokens + outputTokens,
-    estimatedCostUsd: actualCostUsd,
-    actualCostUsd,
-    costTier: getCostTier(actualCostUsd),
-  }
-  rememberResultCache(cacheKey, { content: text, usage })
-
-  return {
+  return buildPlannerDraft({
     mode: input.mode,
-    planScope: context.period.planScope,
-    periodStart: context.period.periodStart,
-    periodEnd: context.period.periodEnd,
-    periodRange: context.period.periodRange,
-    topic: normalizeText(input.topic) || null,
-    content: text,
-    zooms: context.zooms,
-    notes: context.notes,
-  }
+    topic: input.topic,
+    context,
+    content: generated.content,
+  })
 }
 
 export async function saveContentPlan(input: {

@@ -16,9 +16,20 @@ vi.mock('../../../../../src/bot/handlers/coach/access.js', () => ({
   resolveCoachUserId: vi.fn(async () => 'coach-user-id'),
 }))
 
+vi.mock('../../../../../src/bot/handlers/coach-content/shared.js', () => ({
+  buildExpertScopeWhere: vi.fn(() => ({})),
+  replyOrEditPanelMessage: vi.fn(async () => undefined),
+  resolveCoachAccess: vi.fn(async () => ({
+    id: 'coach-user-id',
+    role: 'EXPERT',
+    expertId: 'expert-1',
+  })),
+}))
+
 import { coachBotContent } from '../../../../../src/bot/content/coachBot.content.ts'
 import { generateCoachAgentsWebDeepLink } from '../../../../../src/modules/deeplinks/service.js'
-import { showCoachAgentsMenu } from '../../../../../src/bot/handlers/coach/menu.ts'
+import { replyOrEditPanelMessage, resolveCoachAccess } from '../../../../../src/bot/handlers/coach-content/shared.js'
+import { showCoachAgentsMenu, showCoachSystemMenu } from '../../../../../src/bot/handlers/coach/menu.ts'
 
 function createCoachCtx() {
   return {
@@ -61,5 +72,40 @@ describe('showCoachAgentsMenu', () => {
         }),
       }),
     )
+  })
+})
+
+describe('showCoachSystemMenu', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders superadmin settings as a read-only second-level workspace through the canonical formatter', async () => {
+    vi.mocked(resolveCoachAccess).mockResolvedValueOnce({
+      id: 'coach-superadmin-id',
+      role: 'SUPERADMIN',
+      expertId: null,
+    } as never)
+    const ctx = createCoachCtx()
+
+    await showCoachSystemMenu(ctx as never)
+
+    expect(replyOrEditPanelMessage).toHaveBeenCalledTimes(1)
+    const [, text, extra] = vi.mocked(replyOrEditPanelMessage).mock.calls[0]
+    expect(text).toBe(`${coachBotContent.system.title}\n\n${coachBotContent.system.subtitle}`)
+    expect(JSON.stringify(extra?.reply_markup?.inline_keyboard ?? [])).toContain(coachBotContent.system.actions.back)
+    expect(text).not.toContain('DATABASE_URL')
+    expect(text).not.toContain('token')
+    expect(text).not.toContain('diagnostics/status')
+  })
+
+  it('denies non-superadmin access to coach settings', async () => {
+    vi.mocked(resolveCoachAccess).mockResolvedValueOnce(null as never)
+    const ctx = createCoachCtx()
+
+    await showCoachSystemMenu(ctx as never)
+
+    expect(replyOrEditPanelMessage).not.toHaveBeenCalled()
+    expect(ctx.reply).toHaveBeenCalledWith('Налаштування доступні лише SUPERADMIN.')
   })
 })

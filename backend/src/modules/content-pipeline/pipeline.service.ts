@@ -1,6 +1,10 @@
 import type { Telegraf } from 'telegraf'
 
 import { prisma } from '../../db/client.js'
+import {
+  sendTelegramMessage,
+  sendTelegramVideo,
+} from '../../lib/telegram/messageFormatter.js'
 import { pipelineContent } from './pipeline.content.js'
 import { generateReelsVariants } from './steps/generate.step.js'
 import { produceMediaAssets } from './steps/media.step.js'
@@ -24,7 +28,7 @@ export async function startPipeline(
     },
   })
 
-  await bot.telegram.sendMessage(chatId, pipelineContent.generating(topic), { parse_mode: 'HTML' })
+  await sendTelegramMessage(bot, chatId, { text: pipelineContent.generating(topic), parseMode: 'HTML' })
 
   try {
     const variants = await generateReelsVariants(topic)
@@ -45,7 +49,7 @@ export async function startPipeline(
       where: { id: pipeline.id },
       data: { status: 'FAILED' },
     })
-    await bot.telegram.sendMessage(chatId, pipelineContent.generationError((error as Error).message))
+    await sendTelegramMessage(bot, chatId, pipelineContent.generationError((error as Error).message))
   }
 
   return pipeline.id
@@ -78,7 +82,7 @@ export async function handleVariantSelection(
     },
   })
 
-  await bot.telegram.sendMessage(chatId, pipelineContent.selected(variantId))
+  await sendTelegramMessage(bot, chatId, pipelineContent.selected(variantId))
 
   void produceAndPreview(bot, pipelineId, selected, chatId).catch(async (error) => {
     await prisma.contentPipeline.update({
@@ -86,7 +90,7 @@ export async function handleVariantSelection(
       data: { status: 'FAILED' },
     }).catch(() => undefined)
 
-    await bot.telegram.sendMessage(chatId, pipelineContent.producingError((error as Error).message))
+    await sendTelegramMessage(bot, chatId, pipelineContent.producingError((error as Error).message))
   })
 }
 
@@ -112,7 +116,7 @@ export async function handlePublish(
     where: { id: pipelineId },
     data: { status: 'PUBLISHING' },
   })
-  await bot.telegram.sendMessage(chatId, pipelineContent.publishing)
+  await sendTelegramMessage(bot, chatId, pipelineContent.publishing)
 
   const assets = {
     scenes: Array.isArray(pipeline.videoScenes) ? (pipeline.videoScenes as string[]) : [],
@@ -138,7 +142,8 @@ export async function handlePublish(
     },
   })
 
-  await bot.telegram.sendMessage(
+  await sendTelegramMessage(
+    bot,
     chatId,
     pipelineContent.publishDone(Boolean(results.instagram), Boolean(results.telegram)),
   )
@@ -169,13 +174,13 @@ async function produceAndPreview(
     },
   })
 
-  await bot.telegram.sendMessage(chatId, pipelineContent.previewReady)
+  await sendTelegramMessage(bot, chatId, pipelineContent.previewReady)
 
   if (!assets.scenes[0]) {
     throw new Error('Сцени не згенеровано')
   }
 
-  await bot.telegram.sendVideo(chatId, assets.scenes[0], {
+  await sendTelegramVideo(bot, chatId, assets.scenes[0], {
     caption: `Хук: ${variant.hook}`,
     reply_markup: {
       inline_keyboard: [

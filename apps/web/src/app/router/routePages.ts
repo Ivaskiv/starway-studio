@@ -26,6 +26,7 @@ export {
   SettingsPage,
   StartFlowPage,
   SubscriptionPage,
+  ZoomCalendarPage,
   TelegramPage,
   TelegramSuccessPage,
   TransferOwnershipPage,
