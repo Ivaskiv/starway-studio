@@ -21,13 +21,13 @@ import { renderCurrentFocusStateMenu } from './payment.js'
 import { updateSession } from '../../../modules/telegram-mentor/session.js'
 import { zoomSection } from '../../../modules/telegram-mentor/handlers/abTest.start.js'
 import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
+import { buildZoomCalendarUrl } from '@/modules/zoom/urls.js'
 
 export async function resolveFocusShortcutCallback(
   ctx: Context,
   action: string,
   userId: string
 ): Promise<boolean> {
-  const { handleStatus } = await import('../../../modules/telegram-mentor/handlers/status.js')
   const { handleAIMentor } = await import('../../../modules/telegram-mentor/handlers/aiMentor.js')
   const { sendStateMenu } = await import('../../../modules/telegram-mentor/handlers/start.menu.js')
   const { deactivateCallbackMarkup } = await import('./callback.js')
@@ -39,7 +39,26 @@ export async function resolveFocusShortcutCallback(
   if (action === 'focus:next_zoom') {
     await deactivateCallbackMarkup(ctx)
     await ctx.answerCbQuery().catch(() => null)
-    await handleStatus(ctx)
+    const chatId = ctx.chat?.id ?? ctx.from?.id
+    if (!chatId) {
+      return true
+    }
+
+    await sendTelegramMessage(
+      ctx,
+      chatId,
+      'Відкрити календар ФОКУСУ',
+      {
+        replyMarkup: {
+          inline_keyboard: [[{
+            text: 'КАЛЕНДАР ФОКУСУ',
+            web_app: {
+              url: buildZoomCalendarUrl({ intent: 'booking' }),
+            },
+          }]],
+        },
+      },
+    )
     return true
   }
 

@@ -6,7 +6,12 @@ import { pathToFileURL } from 'node:url'
 import { prisma } from '../db/client.js'
 import { buildAbTestProgressPatch } from '../core/state-machine/abTestFoundation.js'
 import { syncLifecycleForUser } from '../modules/flow-control/service.js'
-import { findLinkedUserId } from '../modules/telegram-mentor/services/identity/linking.js'
+import { computeAvailableRoles, isRoleAvailable, resolveActiveRole } from '../modules/auth/access/roles.js'
+import {
+  findLinkedUserId,
+  upsertTelegramBinding,
+} from '../modules/telegram-mentor/services/identity/linking.js'
+import { invalidateUserCache } from '../lib/db/userCache.js'
 import {
   activateProductSubscription,
   type ActivationResult,
@@ -23,9 +28,28 @@ import {
 } from '../products/ab-system/telegram/progress.js'
 
 type ScriptArgs = {
-  telegramId: string
-  snapshotFile: string
-}
+} & (
+  | {
+      mode: 'list-staff'
+      telegramId: string
+    }
+  | {
+      mode: 'sync'
+      telegramId: string
+      snapshotFile: string
+    }
+  | {
+      mode: 'bind'
+      telegramId: string
+      bindUserId: string
+      bindUserEmail: string
+    }
+  | {
+      mode: 'persona'
+      telegramId: string
+      testRole: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
+    }
+)
 
 type FocusSnapshot = {
   state: 'FOCUS_ACTIVE' | 'NO_ACCESS' | 'EXPIRED_FOCUS'
@@ -88,6 +112,70 @@ type SyncExecutionOptions = {
   allowProduction?: boolean
 }
 
+type BindExecutionOptions = {
+  allowProduction?: boolean
+}
+
+type LocalTelegramBindReport = {
+  telegramId: string
+  userId: string
+  email: string
+  role: 'ADMIN' | 'EXPERT' | 'SUPERADMIN'
+}
+
+type LocalStaffUserRow = {
+  id: string
+  email: string
+  role: 'ADMIN' | 'EXPERT' | 'SUPERADMIN'
+  name: string
+}
+
+type LocalTestPersonaReport = {
+  telegramId: string
+  userId: string
+  persistedRole: 'SUPERADMIN'
+  activeRole: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
+}
+
+const STAFF_ROLES = new Set(['ADMIN', 'EXPERT', 'SUPERADMIN'] as const)
+const TEST_PERSONA_ROLES = new Set(['USER', 'EXPERT', 'ADMIN', 'SUPERADMIN'] as const)
+
+async function releaseTelegramIdentityForLocalTesting(telegramId: string, targetUserId: string): Promise<void> {
+  const currentOwner = await prisma.user.findFirst({
+    where: {
+      id: { not: targetUserId },
+      OR: [
+        { telegramUserId: telegramId },
+        { telegramChatId: telegramId },
+      ],
+    },
+    select: {
+      id: true,
+      telegramUserId: true,
+      telegramChatId: true,
+      telegramEnabled: true,
+    },
+  })
+
+  if (!currentOwner) {
+    return
+  }
+
+  await prisma.user.update({
+    where: { id: currentOwner.id },
+    data: {
+      telegramUserId: currentOwner.telegramUserId === telegramId ? null : currentOwner.telegramUserId,
+      telegramChatId: currentOwner.telegramChatId === telegramId ? null : currentOwner.telegramChatId,
+      telegramEnabled:
+        currentOwner.telegramEnabled
+        && currentOwner.telegramUserId === telegramId
+        && currentOwner.telegramChatId === telegramId
+          ? false
+          : currentOwner.telegramEnabled,
+    },
+  })
+}
+
 function parseIsoDate(value: string | null | undefined, field: string): Date | null {
   if (value == null) return null
   const parsed = new Date(value)
@@ -100,6 +188,10 @@ function parseIsoDate(value: string | null | undefined, field: string): Date | n
 function parseArgs(argv = process.argv.slice(2)): ScriptArgs {
   let telegramId = ''
   let snapshotFile = ''
+  let bindUserId = ''
+  let bindUserEmail = ''
+  let testRole = ''
+  let listStaff = false
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -116,18 +208,73 @@ function parseArgs(argv = process.argv.slice(2)): ScriptArgs {
       continue
     }
 
+    if (arg === '--bind-user-id') {
+      bindUserId = String(argv[index + 1] ?? '').trim()
+      index += 1
+      continue
+    }
+
+    if (arg === '--bind-user-email') {
+      bindUserEmail = String(argv[index + 1] ?? '').trim()
+      index += 1
+      continue
+    }
+
+    if (arg === '--test-role') {
+      testRole = String(argv[index + 1] ?? '').trim().toUpperCase()
+      index += 1
+      continue
+    }
+
+    if (arg === '--list-staff') {
+      listStaff = true
+      continue
+    }
+
     throw new Error(`Unknown argument: ${arg}`)
+  }
+
+  if (listStaff) {
+    return {
+      mode: 'list-staff',
+      telegramId: '',
+    }
   }
 
   if (!telegramId) {
     throw new Error('Missing required --telegram-id')
   }
 
+  if (testRole) {
+    if (!TEST_PERSONA_ROLES.has(testRole as 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN')) {
+      throw new Error(`Unsupported --test-role ${testRole}`)
+    }
+
+    return {
+      mode: 'persona',
+      telegramId,
+      testRole: testRole as 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN',
+    }
+  }
+
+  if (bindUserId || bindUserEmail) {
+    if (bindUserId && bindUserEmail) {
+      throw new Error('Use either --bind-user-id or --bind-user-email')
+    }
+
+    return {
+      mode: 'bind',
+      telegramId,
+      bindUserId,
+      bindUserEmail,
+    }
+  }
+
   if (!snapshotFile) {
     throw new Error('Missing required --snapshot-file')
   }
 
-  return { telegramId, snapshotFile }
+  return { mode: 'sync', telegramId, snapshotFile }
 }
 
 export function loadSnapshot(snapshotFile: string): UserTestStateSnapshot {
@@ -878,8 +1025,187 @@ export async function syncUserTestState(input: {
   }
 }
 
+export async function bindTelegramIdentityForLocalTesting(input: {
+  telegramId: string
+  userId?: string
+  email?: string
+  options?: BindExecutionOptions
+}): Promise<LocalTelegramBindReport> {
+  const allowProduction = input.options?.allowProduction === true
+  if (process.env.NODE_ENV === 'production' && !allowProduction) {
+    throw new Error('user-sync-test-state is disabled in production')
+  }
+
+  const telegramId = String(input.telegramId ?? '').trim()
+  const userId = String(input.userId ?? '').trim()
+  const email = String(input.email ?? '').trim().toLowerCase()
+
+  if (!telegramId) {
+    throw new Error('Missing required telegramId')
+  }
+
+  if (!userId && !email) {
+    throw new Error('Missing required bind target')
+  }
+
+  const targetUser = userId
+    ? await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, role: true },
+      })
+    : await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, email: true, role: true },
+      })
+
+  if (!targetUser) {
+    throw new Error('Target user not found')
+  }
+
+  if (!STAFF_ROLES.has(targetUser.role as 'ADMIN' | 'EXPERT' | 'SUPERADMIN')) {
+    throw new Error(`Target user must be STAFF, got ${targetUser.role}`)
+  }
+
+  await releaseTelegramIdentityForLocalTesting(telegramId, targetUser.id)
+
+  await upsertTelegramBinding({
+    userId: targetUser.id,
+    chatId: telegramId,
+    telegramUserId: telegramId,
+    telegramUserName: null,
+    firstName: null,
+  })
+
+  const finalOwnerId = await findLinkedUserId({
+    chatId: telegramId,
+    telegramUserId: telegramId,
+    telegramUserName: null,
+  })
+
+  if (finalOwnerId !== targetUser.id) {
+    throw new Error(`Telegram bind verification failed: expected ${targetUser.id}, got ${finalOwnerId ?? 'null'}`)
+  }
+
+  return {
+    telegramId,
+    userId: targetUser.id,
+    email: targetUser.email,
+    role: targetUser.role as 'ADMIN' | 'EXPERT' | 'SUPERADMIN',
+  }
+}
+
+export async function listStaffForLocalTesting(): Promise<LocalStaffUserRow[]> {
+  const staffUsers = await prisma.user.findMany({
+    where: {
+      role: {
+        in: ['ADMIN', 'EXPERT', 'SUPERADMIN'],
+      },
+    },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      firstName: true,
+      lastName: true,
+    },
+    orderBy: [
+      { role: 'asc' },
+      { createdAt: 'asc' },
+    ],
+  })
+
+  return staffUsers.map((user) => ({
+    id: user.id,
+    email: user.email,
+    role: user.role as 'ADMIN' | 'EXPERT' | 'SUPERADMIN',
+    name: [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || '—',
+  }))
+}
+
+export async function switchLocalTestPersona(input: {
+  telegramId: string
+  testRole: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
+  options?: BindExecutionOptions
+}): Promise<LocalTestPersonaReport> {
+  const allowProduction = input.options?.allowProduction === true
+  if (process.env.NODE_ENV === 'production' && !allowProduction) {
+    throw new Error('user-sync-test-state is disabled in production')
+  }
+
+  const telegramId = String(input.telegramId ?? '').trim()
+  if (!telegramId) {
+    throw new Error('Missing required telegramId')
+  }
+
+  const canonicalUserId = await resolveCanonicalUserId(telegramId)
+  const canonicalUser = await prisma.user.findUnique({
+    where: { id: canonicalUserId },
+    select: { id: true, role: true, activeRole: true },
+  })
+
+  if (!canonicalUser) {
+    throw new Error('Canonical user not found')
+  }
+
+  const persistedRole = 'SUPERADMIN' as const
+  const availableRoles = computeAvailableRoles({ role: persistedRole })
+  if (!isRoleAvailable(input.testRole, availableRoles)) {
+    throw new Error(`Test role ${input.testRole} is not available for ${persistedRole}`)
+  }
+
+  const nextActiveRole = resolveActiveRole(input.testRole, availableRoles)
+
+  await prisma.user.update({
+    where: { id: canonicalUser.id },
+    data: {
+      role: persistedRole,
+      activeRole: nextActiveRole,
+    },
+  })
+  await invalidateUserCache(canonicalUser.id)
+
+  const after = await prisma.user.findUnique({
+    where: { id: canonicalUser.id },
+    select: { id: true, role: true, activeRole: true },
+  })
+
+  if (!after || after.role !== persistedRole || after.activeRole !== nextActiveRole) {
+    throw new Error('Test persona verification failed')
+  }
+
+  return {
+    telegramId,
+    userId: after.id,
+    persistedRole,
+    activeRole: after.activeRole as 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN',
+  }
+}
+
 async function main() {
   const args = parseArgs()
+  if (args.mode === 'list-staff') {
+    const report = await listStaffForLocalTesting()
+    console.log(JSON.stringify(report, null, 2))
+    return
+  }
+  if (args.mode === 'persona') {
+    const report = await switchLocalTestPersona({
+      telegramId: args.telegramId,
+      testRole: args.testRole,
+    })
+    console.log(JSON.stringify(report, null, 2))
+    return
+  }
+  if (args.mode === 'bind') {
+    const report = await bindTelegramIdentityForLocalTesting({
+      telegramId: args.telegramId,
+      userId: args.bindUserId || undefined,
+      email: args.bindUserEmail || undefined,
+    })
+    console.log(JSON.stringify(report, null, 2))
+    return
+  }
+
   const snapshot = loadSnapshot(args.snapshotFile)
   const report = await syncUserTestState({
     telegramId: args.telegramId,

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   sendStateMenuMock,
   handleAIMentorMock,
+  handleStatusMock,
   resendFocusAccessTelegramMessageMock,
   hasActiveFocusSubscriptionMock,
   buildCheckoutSessionMock,
@@ -26,9 +27,11 @@ const {
   coachSendDocumentMock,
   onTestCompletedMock,
   planMessageMock,
+  buildZoomCalendarUrlMock,
 } = vi.hoisted(() => ({
   sendStateMenuMock: vi.fn(),
   handleAIMentorMock: vi.fn(),
+  handleStatusMock: vi.fn(),
   resendFocusAccessTelegramMessageMock: vi.fn(),
   hasActiveFocusSubscriptionMock: vi.fn(),
   buildCheckoutSessionMock: vi.fn(),
@@ -52,6 +55,7 @@ const {
   coachSendDocumentMock: vi.fn(),
   onTestCompletedMock: vi.fn(async () => undefined),
   planMessageMock: vi.fn(async () => undefined),
+  buildZoomCalendarUrlMock: vi.fn(() => 'https://miniapp.example/miniapp/zoom-calendar?intent=booking'),
 }))
 
 vi.mock('@/db/client.js', () => ({
@@ -221,7 +225,11 @@ vi.mock('@/modules/telegram-mentor/handlers/aiMentor.js', () => ({
 }))
 
 vi.mock('@/modules/telegram-mentor/handlers/status.js', () => ({
- handleStatus: vi.fn(),
+ handleStatus: handleStatusMock,
+}))
+
+vi.mock('@/modules/zoom/urls.js', () => ({
+  buildZoomCalendarUrl: buildZoomCalendarUrlMock,
 }))
 
 import { prisma } from '@/db/client.js'
@@ -303,6 +311,30 @@ describe('legacy focus callbacks for active users', () => {
     expect(sendStateMenuMock).toHaveBeenCalledWith(ctx, 'user-1')
     expect(resendFocusAccessTelegramMessageMock).not.toHaveBeenCalled()
     expect(planAckMock).toHaveBeenCalled()
+  })
+
+  it('opens the USER zoom booking webapp for focus:next_zoom instead of status flow', async () => {
+    const ctx = createCtx()
+
+    const handled = await resolveFocusShortcutCallback(ctx as never, 'focus:next_zoom', 'user-1')
+
+    expect(handled).toBe(true)
+    expect(ctx.answerCbQuery).toHaveBeenCalled()
+    expect(handleStatusMock).not.toHaveBeenCalled()
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
+      42,
+      'Відкрити календар ФОКУСУ',
+      expect.objectContaining({
+        reply_markup: {
+          inline_keyboard: [[{
+            text: 'КАЛЕНДАР ФОКУСУ',
+            web_app: {
+              url: 'https://miniapp.example/miniapp/zoom-calendar?intent=booking',
+            },
+          }]],
+        },
+      }),
+    )
   })
 
   it('answers with a controlled error when focus payment checkout has no resolved user', async () => {

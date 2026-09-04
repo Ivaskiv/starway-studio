@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 const authState = {
   auth: {
@@ -15,6 +15,11 @@ const authState = {
         },
     status: 'authenticated' as 'authenticated' | 'loading' | 'guest',
   },
+}
+
+const telegramRuntime = {
+  miniApp: false,
+  initData: '',
 }
 
 vi.mock('@/app/hooks', () => ({
@@ -33,18 +38,8 @@ vi.mock('@/features/zoom/UserZoomPanel', () => ({
     createElement('div', undefined, `USER_PANEL:${userId}`),
 }))
 
-vi.mock('@/features/zoom/zoom.api', () => ({
-  useGetTelegramAvailableSlotsQuery: () => ({
-    data: [],
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  }),
-  useBookTelegramSlotMutation: () => [vi.fn()],
-}))
-
 vi.mock('@/features/social/utils/telegramWebApp', () => ({
-  isTelegramMiniApp: () => false,
+  isTelegramMiniApp: () => telegramRuntime.miniApp,
 }))
 
 vi.mock('@/shared/telegram/telegramDeepLinks', () => ({
@@ -58,6 +53,12 @@ describe('ZoomCalendarPage', () => {
       setItem: vi.fn(),
       removeItem: vi.fn(),
     })
+  })
+
+  afterEach(() => {
+    telegramRuntime.miniApp = false
+    telegramRuntime.initData = ''
+    vi.unstubAllGlobals()
   })
 
   it.each(['ADMIN', 'EXPERT', 'SUPERADMIN'] as const)(
@@ -110,5 +111,33 @@ describe('ZoomCalendarPage', () => {
 
     expect(markup).toContain('USER_PANEL:user-1')
     expect(markup).not.toContain('COACH_PANEL:')
+  })
+
+  it('keeps Telegram Mini App booking entry on the existing user panel', async () => {
+    telegramRuntime.miniApp = true
+    telegramRuntime.initData = 'telegram-init-data'
+    vi.stubGlobal('window', {
+      location: { pathname: '/miniapp/zoom-calendar' },
+      Telegram: {
+        WebApp: {
+          initData: telegramRuntime.initData,
+        },
+      },
+    })
+
+    authState.auth.user = {
+      id: 'focus-user',
+      role: 'USER',
+      expertId: null,
+      access: { isPaid: true },
+      subscriptionStatus: null,
+    }
+
+    const { default: ZoomCalendarPage } = await import('./ZoomCalendarPage')
+    const markup = renderToStaticMarkup(createElement(ZoomCalendarPage))
+
+    expect(markup).toContain('USER_PANEL:focus-user')
+    expect(markup).not.toContain('Записатись на Zoom')
+    expect(markup).not.toContain('Завантажуємо доступні Zoom-слоти')
   })
 })

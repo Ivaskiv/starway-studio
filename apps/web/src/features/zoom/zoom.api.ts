@@ -16,10 +16,10 @@ export const zoomCalendarApi = api.injectEndpoints({
 
     getCalendarSessions: build.query<
       ZoomCalendarSession[],
-      { from: string; to: string; role: ZoomCalendarMode; userId: string }
+      { from: string; to: string; role: ZoomCalendarMode; userId: string; expertId?: string }
     >({
-      query: ({ from, to, role, userId }) =>
-        `/zoom/sessions/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&role=${role}&userId=${userId}`,
+      query: ({ from, to, role, userId, expertId }) =>
+        `/zoom/sessions/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&role=${role}&userId=${userId}${expertId ? `&expertId=${encodeURIComponent(expertId)}` : ''}`,
       providesTags: ['ZoomSession'],
     }),
 

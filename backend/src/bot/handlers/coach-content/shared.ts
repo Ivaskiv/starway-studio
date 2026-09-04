@@ -3,6 +3,7 @@ import type { Context } from 'telegraf'
 import { prisma } from '../../../db/client.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 import { coachContent } from '../../content/coachContent.content.js'
+import { resolveCoachAccessProfileByTelegramId } from '../coach/access.js'
 
 export type CoachAccess = {
   id: string
@@ -18,14 +19,6 @@ const REQUIRED_PANEL_SECTIONS = ['start', 'menu', 'schedule', 'nextWeek', 'analy
 const REQUIRED_PLANNER_SECTIONS = ['planner', 'buttons', 'note', 'mode', 'topics', 'prompts'] as const
 
 let coachContentCatalogValidated = false
-
-function readCoachTelegramAccessId(): string {
-  return String(
-    process.env.COACH_TELEGRAM_ID
-    ?? process.env.TEST_COACH_MENTOR_TELEGRAM_ID
-    ?? '',
-  ).trim()
-}
 
 export function maskTelegramToken(token: string | null | undefined): string | null {
   const normalized = String(token ?? '').trim()
@@ -224,49 +217,7 @@ export async function resolveCoachAccess(ctx: Context): Promise<CoachAccess | nu
   const telegramUserId = ctx.from?.id ? String(ctx.from.id) : ''
   if (!telegramUserId) return null
 
-  const privilegedTelegramId = readCoachTelegramAccessId()
-  const coach = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { telegramUserId },
-        { telegramChatId: telegramUserId },
-      ],
-    },
-    select: { id: true, role: true, expertId: true },
-  })
-
-  if (!coach && privilegedTelegramId === telegramUserId) {
-    const fallbackCoach = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { role: 'ADMIN' },
-          { role: 'SUPERADMIN' },
-          { role: 'EXPERT' },
-        ],
-      },
-      orderBy: [
-        { role: 'desc' },
-        { createdAt: 'asc' },
-      ],
-      select: { id: true, role: true, expertId: true },
-    })
-
-    if (!fallbackCoach) return null
-    if (fallbackCoach.role !== 'ADMIN' && fallbackCoach.role !== 'EXPERT' && fallbackCoach.role !== 'SUPERADMIN') return null
-    return {
-      id: fallbackCoach.id,
-      role: fallbackCoach.role,
-      expertId: fallbackCoach.expertId ?? null,
-    }
-  }
-
-  if (!coach) return null
-  if (coach.role !== 'ADMIN' && coach.role !== 'EXPERT' && coach.role !== 'SUPERADMIN') return null
-  return {
-    id: coach.id,
-    role: coach.role,
-    expertId: coach.expertId ?? null,
-  }
+  return resolveCoachAccessProfileByTelegramId(telegramUserId)
 }
 
 async function resolveCoachUserId(ctx: Context): Promise<string | null> {

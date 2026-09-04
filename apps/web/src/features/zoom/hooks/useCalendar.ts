@@ -82,7 +82,7 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
   const to   = endOf(view, currentDate).toISOString();
 
   const { data: sessions = [] } = useGetCalendarSessionsQuery(
-    { from, to, role: mode, userId },
+    { from, to, role: mode, userId, expertId },
     { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
   );
   const visibleSessions = sessions.filter(

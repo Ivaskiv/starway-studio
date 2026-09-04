@@ -7,6 +7,8 @@ import {
 import { prisma } from '../../../db/client.js'
 import { bot } from '../../../lib/telegram.js'
 import { logger } from '../../../utils/logger.js'
+import { isProductionRuntime } from '../runtime/botConfig.js'
+import { switchLocalTestPersona } from '../../../scripts/user-sync-test-state.js'
 import {
   registerPipelineCommands,
 } from '../../content-pipeline/pipeline.controller.js'
@@ -18,6 +20,7 @@ import {
 } from '../../subscriptions/payments/focus-access.js'
 import {
   conversationOrchestrator,
+  planAck,
   planMessage,
 } from '../conversation/delivery/planDelivery.js'
 import type {
@@ -43,6 +46,65 @@ import { registerZoomAdminHandlers } from './zoom-admin.js'
 
 let mentorBotRegistered = false
 const processedUpdates = new Set<number>()
+const TEST_ROLE_ACTION_PATTERN = /^test-role:(USER|EXPERT|ADMIN|SUPERADMIN)$/u
+
+async function resolveLocalTestRoleOwner(ctx: OrchestratedContext) {
+  const resolvedUserId =
+    String((ctx.state as { userId?: string | null }).userId ?? '').trim()
+    || String((await resolveLinkedUserIdFromContext(ctx).catch(() => null)) ?? '').trim()
+
+  if (!resolvedUserId) {
+    return null
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: resolvedUserId },
+    select: { id: true, role: true, activeRole: true },
+  })
+
+  if (!user || user.role !== 'SUPERADMIN') {
+    return null
+  }
+
+  return user
+}
+
+function buildTestRoleMarkup() {
+  return {
+    inline_keyboard: [
+      [
+        { text: 'USER', callback_data: 'test-role:USER' },
+        { text: 'EXPERT', callback_data: 'test-role:EXPERT' },
+      ],
+      [
+        { text: 'ADMIN', callback_data: 'test-role:ADMIN' },
+        { text: 'SUPERADMIN', callback_data: 'test-role:SUPERADMIN' },
+      ],
+    ],
+  }
+}
+
+async function showLocalTestRoleMenu(ctx: OrchestratedContext): Promise<void> {
+  const user = await resolveLocalTestRoleOwner(ctx)
+  if (!user) {
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'telegram_test_role_unavailable',
+      'Тестова роль недоступна для цього акаунта.',
+    )
+    return
+  }
+
+  const currentRole = String(user.activeRole ?? user.role).trim() || user.role
+  await planMessage(
+    ctx,
+    'ctx.reply',
+    'telegram_test_role_menu',
+    `Test role: ${currentRole}`,
+    { inline_keyboard: buildTestRoleMarkup() },
+  )
+}
 
 interface MentorBotRegistrationOptions {
   product?: string
@@ -84,6 +146,54 @@ export async function registerMentorBot(
    bot.command('start', async (ctx) => {
    await handleStart(ctx)
    })
+
+  if (!isProductionRuntime()) {
+   bot.command('test-role', async (ctx) => {
+   await showLocalTestRoleMenu(ctx as OrchestratedContext)
+   })
+
+   bot.action(TEST_ROLE_ACTION_PATTERN, async (ctx) => {
+   const requestedRole = String(ctx.match?.[1] ?? '').trim()
+   if (
+   requestedRole !== 'USER'
+   && requestedRole !== 'EXPERT'
+   && requestedRole !== 'ADMIN'
+   && requestedRole !== 'SUPERADMIN'
+   ) {
+   await planAck(
+   ctx,
+   'ctx.answerCbQuery',
+   'telegram_test_role_invalid',
+   'Невідома тестова роль',
+   ).catch(() => undefined)
+   return
+   }
+
+   const user = await resolveLocalTestRoleOwner(ctx as OrchestratedContext)
+   if (!user) {
+   await planAck(
+   ctx,
+   'ctx.answerCbQuery',
+   'telegram_test_role_denied',
+   'Тестова роль недоступна',
+   ).catch(() => undefined)
+   return
+   }
+
+   await switchLocalTestPersona({
+   telegramId: String(ctx.from?.id ?? '').trim(),
+   testRole: requestedRole,
+   })
+
+   await planAck(
+   ctx,
+   'ctx.answerCbQuery',
+   'telegram_test_role_switched',
+   `Активна роль: ${requestedRole}`,
+   ).catch(() => undefined)
+   await showLocalTestRoleMenu(ctx as OrchestratedContext)
+   })
+  }
 
    bot.use(guard)
 

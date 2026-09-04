@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 type RegistrationEntry = {
-  method: 'use' | 'command' | 'hears' | 'on' | 'catch'
+  method: 'use' | 'command' | 'hears' | 'on' | 'catch' | 'action'
   event: string
   handler: (...args: unknown[]) => unknown
 }
@@ -48,6 +48,10 @@ async function registerMentorBotForEnv(
       registrations.push({ method: 'hears', event: String(pattern), handler })
       return botMock
     }),
+    action: vi.fn((pattern: string | RegExp, handler: (...args: unknown[]) => unknown) => {
+      registrations.push({ method: 'action', event: String(pattern), handler })
+      return botMock
+    }),
     on: vi.fn((event: string | string[], handler: (...args: unknown[]) => unknown) => {
       registrations.push({
         method: 'on',
@@ -67,6 +71,7 @@ async function registerMentorBotForEnv(
   const mockFalse = vi.fn(async () => false)
   const mockNull = vi.fn(async () => null)
   const planMessageMock = vi.fn(async () => undefined)
+  const planAckMock = vi.fn(async () => undefined)
   const buildTelegramDebugStateMessagesMock = vi.fn(async () => [
     '<b>DEBUG STATE</b>\n\nchunk-1',
     '<b>DEBUG STATE</b>\n\nchunk-2',
@@ -127,7 +132,7 @@ async function registerMentorBotForEnv(
     conversationOrchestrator: {
       patchContext: vi.fn(),
     },
-    planAck: mockNoop,
+    planAck: planAckMock,
     planMessage: planMessageMock,
   }))
   vi.doMock('@/modules/telegram-mentor/core/guard.middleware.js', () => ({
@@ -157,6 +162,14 @@ async function registerMentorBotForEnv(
   }))
   vi.doMock('@/modules/telegram-mentor/runtime/parity.js', () => ({
     buildTelegramDebugStateMessages: buildTelegramDebugStateMessagesMock,
+  }))
+  vi.doMock('@/scripts/user-sync-test-state.js', () => ({
+    switchLocalTestPersona: vi.fn(async ({ telegramId, testRole }: { telegramId: string; testRole: string }) => ({
+      telegramId,
+      userId: 'user-123',
+      persistedRole: 'SUPERADMIN',
+      activeRole: testRole,
+    })),
   }))
   vi.doMock('../handlers/voice.js', () => ({
     handleVoice: mockNoop,
@@ -238,6 +251,16 @@ describe('registerMentorBot runtime parity', () => {
         method: 'command',
         event: 'debug_state',
       })
+      if (env === 'development') {
+        expect(snapshot.registrations).toContainEqual({
+          method: 'command',
+          event: 'test-role',
+        })
+        expect(snapshot.registrations).toContainEqual({
+          method: 'action',
+          event: '/^test-role:(USER|EXPERT|ADMIN|SUPERADMIN)$/u',
+        })
+      }
       expect(snapshot.registrations).toContainEqual({
         method: 'on',
         event: 'text',
@@ -257,7 +280,9 @@ describe('registerMentorBot runtime parity', () => {
     const development = await registerMentorBotForEnv('development')
     const production = await registerMentorBotForEnv('production')
 
-      expect(development.snapshot.registrations).toEqual(
+      expect(
+        development.snapshot.registrations.filter(({ event }) => event !== 'test-role' && event !== '/^test-role:(USER|EXPERT|ADMIN|SUPERADMIN)$/u'),
+      ).toEqual(
         production.snapshot.registrations,
       )
   })
@@ -274,6 +299,24 @@ describe('registerMentorBot runtime parity', () => {
       event: 'start-day',
     })
     expect(snapshot.registrations.some(({ event }) => event.includes('coach:'))).toBe(false)
+  })
+
+  it('registers local /test-role only in development and keeps it absent in production', async () => {
+    const development = await registerMentorBotForEnv('development')
+    const production = await registerMentorBotForEnv('production')
+
+    expect(development.snapshot.registrations).toContainEqual({
+      method: 'command',
+      event: 'test-role',
+    })
+    expect(development.snapshot.registrations).toContainEqual({
+      method: 'action',
+      event: '/^test-role:(USER|EXPERT|ADMIN|SUPERADMIN)$/u',
+    })
+    expect(production.snapshot.registrations).not.toContainEqual({
+      method: 'command',
+      event: 'test-role',
+    })
   })
 
   it('returns the debug snapshot through the canonical delivery layer in development', async () => {

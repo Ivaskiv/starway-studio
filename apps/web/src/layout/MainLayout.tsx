@@ -6,7 +6,7 @@ import BottomNav from '@/components/miniapp/BottomNav'
 import { normalizeDashboardRoutePath } from '@/config/routes'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAppSelector } from '@/app/hooks'
-import { selectIsAuthenticated } from '@/features/auth/services/auth.slice'
+import { selectIsAuthenticated, selectUserRole } from '@/features/auth/services/auth.slice'
 import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { useSmartNavigation } from '@/hooks/useSmartNavigation'
@@ -112,13 +112,23 @@ export default function MainLayout({
 
   const user = useAppSelector((state) => state.auth.user)
   const isAuthenticated = useAppSelector(selectIsAuthenticated)
+  const persistedRole = useAppSelector(selectUserRole)
   const { state } = useSystemState()
   const { navigateTo } = useSmartNavigation()
   const { openAuthModal } = useSessionOrchestrator()
   const normalizedPathname = useMemo(() => normalizeDashboardRoutePath(location.pathname), [location.pathname])
+  const resolvedActiveRole = useMemo(() => {
+    const activeRole = (user as any)?.activeRole as string | undefined
+    const primaryRole = (persistedRole ?? (user as any)?.role ?? (state as any)?.permissions?.role ?? '') as string
+    const resolved = (activeRole || primaryRole).toUpperCase()
+    if (resolved === 'SUPERADMIN' || resolved === 'ADMIN' || resolved === 'EXPERT') return resolved
+    if (resolved === 'MENTOR' || resolved === 'PRODUCT_OWNER') return 'EXPERT'
+    return 'USER'
+  }, [persistedRole, state, user])
 
   const isMiniAppContext = isTelegramMiniApp(location.pathname)
   const isStandaloneMiniAppRoute = location.pathname.startsWith('/miniapp')
+  const isPrivilegedStaffRole = resolvedActiveRole === 'SUPERADMIN' || resolvedActiveRole === 'ADMIN' || resolvedActiveRole === 'EXPERT'
   const miniAppRouteTarget = useMemo(() => {
     if (!isMiniAppContext) return null
 
@@ -166,16 +176,8 @@ export default function MainLayout({
   }), [openAuthModal])
 
   useEffect(() => {
-    // Drive previewRole from activeRole if available, else fall back to primary role
-    const activeRole = (user as any)?.activeRole as string | undefined
-    const primaryRole = ((user as any)?.role ?? '') as string
-    const resolved = (activeRole || primaryRole).toUpperCase()
-    if (['SUPERADMIN', 'ADMIN', 'EXPERT', 'USER', 'MENTOR', 'PRODUCT_OWNER'].includes(resolved)) {
-      setPreviewRole(resolved as import('@/layout/types/layout.types').PreviewRole)
-    } else {
-      setPreviewRole('USER')
-    }
-  }, [user])
+    setPreviewRole(resolvedActiveRole as import('@/layout/types/layout.types').PreviewRole)
+  }, [resolvedActiveRole])
 
   useEffect(() => {
     if (isMiniAppContext) {
@@ -207,7 +209,12 @@ export default function MainLayout({
 
   const shouldUseDashboardShell = dashboard || isAuthenticated
   const shouldShowSidebar = shouldUseDashboardShell && !isEmbeddedFrame && !isMiniAppContext && !isCompactViewport
-  const shouldShowMiniAppNav = shouldUseDashboardShell && !isEmbeddedFrame && isMiniAppContext && !location.pathname.startsWith('/miniapp')
+  const shouldShowMiniAppNav =
+    shouldUseDashboardShell &&
+    !isEmbeddedFrame &&
+    isMiniAppContext &&
+    !location.pathname.startsWith('/miniapp') &&
+    !isPrivilegedStaffRole
   const isHomePage = normalizedPathname === '/'
 
   const activeMiniAppTab = (() => {

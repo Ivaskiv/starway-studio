@@ -35,11 +35,34 @@ const mockState = vi.hoisted(() => {
     trialPaymentLogCount: 1,
     trialCheckoutSessionCount: 1,
     activateCalls: vi.fn(),
+    upsertBindingCalls: vi.fn(),
     registerCalls: vi.fn(),
     unbookCalls: vi.fn(),
     deletedTrialSubscriptions: vi.fn(),
     deletedTrialPaymentLogs: vi.fn(),
     deletedTrialCheckoutSessions: vi.fn(),
+    bindTargetUser: {
+      id: 'staff-1',
+      email: 'staff@example.com',
+      role: 'ADMIN',
+    },
+    canonicalUser: {
+      id: 'user-1',
+      email: 'tester@example.com',
+      role: 'USER',
+      activeRole: 'USER',
+    },
+    telegramOwnerUser: {
+      id: 'user-1',
+      telegramUserId: '630111093',
+      telegramChatId: '630111093',
+      telegramEnabled: true,
+    },
+    staffUsers: [
+      { id: 'admin-1', email: 'admin@example.com', role: 'ADMIN', firstName: 'Ada', lastName: 'Admin' },
+      { id: 'expert-1', email: 'expert@example.com', role: 'EXPERT', firstName: 'Egor', lastName: 'Expert' },
+      { id: 'super-1', email: 'super@example.com', role: 'SUPERADMIN', firstName: null, lastName: null },
+    ],
     reset() {
       this.access = {
         state: 'NO_ACCESS',
@@ -53,7 +76,30 @@ const mockState = vi.hoisted(() => {
       this.trialSubscriptionCount = 1
       this.trialPaymentLogCount = 1
       this.trialCheckoutSessionCount = 1
+      this.bindTargetUser = {
+        id: 'staff-1',
+        email: 'staff@example.com',
+        role: 'ADMIN',
+      }
+      this.canonicalUser = {
+        id: 'user-1',
+        email: 'tester@example.com',
+        role: 'USER',
+        activeRole: 'USER',
+      }
+      this.telegramOwnerUser = {
+        id: 'user-1',
+        telegramUserId: '630111093',
+        telegramChatId: '630111093',
+        telegramEnabled: true,
+      }
+      this.staffUsers = [
+        { id: 'admin-1', email: 'admin@example.com', role: 'ADMIN', firstName: 'Ada', lastName: 'Admin' },
+        { id: 'expert-1', email: 'expert@example.com', role: 'EXPERT', firstName: 'Egor', lastName: 'Expert' },
+        { id: 'super-1', email: 'super@example.com', role: 'SUPERADMIN', firstName: null, lastName: null },
+      ]
       this.activateCalls.mockReset()
+      this.upsertBindingCalls.mockReset()
       this.registerCalls.mockReset()
       this.unbookCalls.mockReset()
       this.deletedTrialSubscriptions.mockReset()
@@ -63,6 +109,10 @@ const mockState = vi.hoisted(() => {
     session,
   }
 })
+
+const { invalidateUserCache } = vi.hoisted(() => ({
+  invalidateUserCache: vi.fn(async () => undefined),
+}))
 
 vi.mock('../../../src/db/client.js', () => ({
   prisma: {
@@ -116,6 +166,62 @@ vi.mock('../../../src/db/client.js', () => ({
         return { ...mockState.session }
       }),
     },
+    user: {
+      findUnique: vi.fn(async ({ where }: { where: { id?: string; email?: string } }) => {
+        if (where.id && where.id === mockState.canonicalUser.id) {
+          return { ...mockState.canonicalUser }
+        }
+        if (where.id && where.id === mockState.bindTargetUser.id) {
+          return { ...mockState.bindTargetUser }
+        }
+        if (where.email && where.email === mockState.bindTargetUser.email) {
+          return { ...mockState.bindTargetUser }
+        }
+        return null
+      }),
+      findFirst: vi.fn(async ({ where }: { where: { id?: { not?: string }; OR?: Array<{ telegramUserId?: string; telegramChatId?: string }> } }) => {
+        if (
+          mockState.telegramOwnerUser
+          && where.id?.not !== mockState.telegramOwnerUser.id
+          && where.OR?.some((clause) =>
+            clause.telegramUserId === mockState.telegramOwnerUser.telegramUserId
+            || clause.telegramChatId === mockState.telegramOwnerUser.telegramChatId,
+          )
+        ) {
+          return { ...mockState.telegramOwnerUser }
+        }
+        return null
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        if (mockState.telegramOwnerUser && where.id === mockState.telegramOwnerUser.id) {
+          mockState.telegramOwnerUser = {
+            ...mockState.telegramOwnerUser,
+            telegramUserId: Object.prototype.hasOwnProperty.call(data, 'telegramUserId')
+              ? (data.telegramUserId as string | null)
+              : mockState.telegramOwnerUser.telegramUserId,
+            telegramChatId: Object.prototype.hasOwnProperty.call(data, 'telegramChatId')
+              ? (data.telegramChatId as string | null)
+              : mockState.telegramOwnerUser.telegramChatId,
+            telegramEnabled: Object.prototype.hasOwnProperty.call(data, 'telegramEnabled')
+              ? (data.telegramEnabled as boolean)
+              : mockState.telegramOwnerUser.telegramEnabled,
+          }
+        }
+        if (where.id === mockState.canonicalUser.id) {
+          mockState.canonicalUser = {
+            ...mockState.canonicalUser,
+            role: Object.prototype.hasOwnProperty.call(data, 'role')
+              ? (data.role as string)
+              : mockState.canonicalUser.role,
+            activeRole: Object.prototype.hasOwnProperty.call(data, 'activeRole')
+              ? (data.activeRole as string)
+              : mockState.canonicalUser.activeRole,
+          }
+        }
+        return { id: where.id }
+      }),
+      findMany: vi.fn(async () => mockState.staffUsers.map((user) => ({ ...user }))),
+    },
     $transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) => callback({
       productSubscription: {
         upsert: async ({ create }: { create: { productId: string; trialEndsAt?: Date | null } }) => {
@@ -165,7 +271,23 @@ vi.mock('../../../src/db/client.js', () => ({
         create: async () => ({ id: 'canonical-sub-1' }),
       },
       user: {
-        update: async () => ({ id: 'user-1' }),
+        update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+          if (mockState.telegramOwnerUser && where.id === mockState.telegramOwnerUser.id) {
+            mockState.telegramOwnerUser = {
+              ...mockState.telegramOwnerUser,
+              telegramUserId: Object.prototype.hasOwnProperty.call(data, 'telegramUserId')
+                ? (data.telegramUserId as string | null)
+                : mockState.telegramOwnerUser.telegramUserId,
+              telegramChatId: Object.prototype.hasOwnProperty.call(data, 'telegramChatId')
+                ? (data.telegramChatId as string | null)
+                : mockState.telegramOwnerUser.telegramChatId,
+              telegramEnabled: Object.prototype.hasOwnProperty.call(data, 'telegramEnabled')
+                ? (data.telegramEnabled as boolean)
+                : mockState.telegramOwnerUser.telegramEnabled,
+            }
+          }
+          return { id: where.id }
+        },
       },
     })),
     $disconnect: vi.fn(),
@@ -173,7 +295,25 @@ vi.mock('../../../src/db/client.js', () => ({
 }))
 
 vi.mock('../../../src/modules/telegram-mentor/services/identity/linking.js', () => ({
-  findLinkedUserId: vi.fn(async () => mockState.linkedUserId),
+  findLinkedUserId: vi.fn(async ({ chatId }: { chatId: string }) => {
+    if (chatId === '630111093') {
+      return mockState.linkedUserId
+    }
+    if (mockState.bindTargetUser && mockState.telegramOwnerUser?.telegramUserId !== chatId && mockState.telegramOwnerUser?.telegramChatId !== chatId) {
+      return mockState.bindTargetUser.id
+    }
+    return mockState.linkedUserId
+  }),
+  upsertTelegramBinding: vi.fn(async (params: { userId: string; chatId: string; telegramUserId: string }) => {
+    mockState.upsertBindingCalls(params)
+    if (params.userId === mockState.bindTargetUser.id) {
+      mockState.linkedUserId = params.userId
+    }
+  }),
+}))
+
+vi.mock('../../../src/lib/db/userCache.js', () => ({
+  invalidateUserCache,
 }))
 
 vi.mock('../../../src/modules/subscriptions/payments/activation.js', () => ({
@@ -220,7 +360,12 @@ vi.mock('../../../src/modules/zoom/service.js', () => ({
   }),
 }))
 
-import { syncUserTestState } from '../../../src/scripts/user-sync-test-state.ts'
+import {
+  bindTelegramIdentityForLocalTesting,
+  switchLocalTestPersona,
+  listStaffForLocalTesting,
+  syncUserTestState,
+} from '../../../src/scripts/user-sync-test-state.ts'
 
 describe('user-sync-test-state', () => {
   const baseSnapshot = {
@@ -239,6 +384,7 @@ describe('user-sync-test-state', () => {
 
   beforeEach(() => {
     mockState.reset()
+    invalidateUserCache.mockClear()
     delete process.env.NODE_ENV
   })
 
@@ -402,5 +548,152 @@ describe('user-sync-test-state', () => {
     expect(mockState.activateCalls).not.toHaveBeenCalled()
     expect(report.before.access.state).toBe('NO_ACCESS')
     expect(report.after.access.state).toBe('NO_ACCESS')
+  })
+
+  it('binds a coach telegram identity to an existing STAFF user by user id', async () => {
+    const report = await bindTelegramIdentityForLocalTesting({
+      telegramId: '630111093',
+      userId: 'staff-1',
+    })
+
+    expect(report).toEqual({
+      telegramId: '630111093',
+      userId: 'staff-1',
+      email: 'staff@example.com',
+      role: 'ADMIN',
+    })
+    expect(mockState.upsertBindingCalls).toHaveBeenCalledWith({
+      userId: 'staff-1',
+      chatId: '630111093',
+      telegramUserId: '630111093',
+      telegramUserName: null,
+      firstName: null,
+    })
+  })
+
+  it('binds a coach telegram identity to an existing STAFF user by email', async () => {
+    const report = await bindTelegramIdentityForLocalTesting({
+      telegramId: '630111093',
+      email: 'staff@example.com',
+    })
+
+    expect(report.userId).toBe('staff-1')
+    expect(report.role).toBe('ADMIN')
+    expect(mockState.upsertBindingCalls).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails when bind target is not STAFF', async () => {
+    mockState.bindTargetUser = {
+      id: 'user-1',
+      email: 'user@example.com',
+      role: 'USER',
+    }
+
+    await expect(bindTelegramIdentityForLocalTesting({
+      telegramId: '630111093',
+      userId: 'user-1',
+    })).rejects.toThrow('Target user must be STAFF, got USER')
+
+    expect(mockState.upsertBindingCalls).not.toHaveBeenCalled()
+  })
+
+  it('releases current USER ownership before rebinding the same telegram id to STAFF', async () => {
+    mockState.linkedUserId = 'user-1'
+
+    const report = await bindTelegramIdentityForLocalTesting({
+      telegramId: '630111093',
+      userId: 'staff-1',
+    })
+
+    expect(report.userId).toBe('staff-1')
+    expect(mockState.telegramOwnerUser).toEqual({
+      id: 'user-1',
+      telegramUserId: null,
+      telegramChatId: null,
+      telegramEnabled: false,
+    })
+    expect(mockState.upsertBindingCalls).toHaveBeenCalledWith({
+      userId: 'staff-1',
+      chatId: '630111093',
+      telegramUserId: '630111093',
+      telegramUserName: null,
+      firstName: null,
+    })
+  })
+
+  it('keeps repeated STAFF rebind idempotent', async () => {
+    mockState.telegramOwnerUser = null as never
+    mockState.linkedUserId = 'staff-1'
+
+    await bindTelegramIdentityForLocalTesting({
+      telegramId: '630111093',
+      userId: 'staff-1',
+    })
+    mockState.upsertBindingCalls.mockClear()
+
+    const report = await bindTelegramIdentityForLocalTesting({
+      telegramId: '630111093',
+      userId: 'staff-1',
+    })
+
+    expect(report.userId).toBe('staff-1')
+    expect(mockState.upsertBindingCalls).toHaveBeenCalledTimes(1)
+  })
+
+  it('lists existing local staff users in read-only mode', async () => {
+    const report = await listStaffForLocalTesting()
+
+    expect(report).toEqual([
+      { id: 'admin-1', email: 'admin@example.com', role: 'ADMIN', name: 'Ada Admin' },
+      { id: 'expert-1', email: 'expert@example.com', role: 'EXPERT', name: 'Egor Expert' },
+      { id: 'super-1', email: 'super@example.com', role: 'SUPERADMIN', name: '—' },
+    ])
+    expect(mockState.upsertBindingCalls).not.toHaveBeenCalled()
+    expect(mockState.activateCalls).not.toHaveBeenCalled()
+    expect(mockState.registerCalls).not.toHaveBeenCalled()
+    expect(mockState.unbookCalls).not.toHaveBeenCalled()
+  })
+
+  it('switches one canonical telegram user into USER persona via activeRole while keeping persisted SUPERADMIN', async () => {
+    mockState.linkedUserId = 'user-1'
+
+    const report = await switchLocalTestPersona({
+      telegramId: '630111093',
+      testRole: 'USER',
+    })
+
+    expect(report).toEqual({
+      telegramId: '630111093',
+      userId: 'user-1',
+      persistedRole: 'SUPERADMIN',
+      activeRole: 'USER',
+    })
+    expect(mockState.canonicalUser.role).toBe('SUPERADMIN')
+    expect(mockState.canonicalUser.activeRole).toBe('USER')
+    expect(invalidateUserCache).toHaveBeenCalledWith('user-1')
+  })
+
+  it('switches the same canonical telegram user into ADMIN persona without rebinding another user', async () => {
+    mockState.linkedUserId = 'user-1'
+    mockState.canonicalUser = {
+      ...mockState.canonicalUser,
+      role: 'SUPERADMIN',
+      activeRole: 'USER',
+    }
+
+    const report = await switchLocalTestPersona({
+      telegramId: '630111093',
+      testRole: 'ADMIN',
+    })
+
+    expect(report).toEqual({
+      telegramId: '630111093',
+      userId: 'user-1',
+      persistedRole: 'SUPERADMIN',
+      activeRole: 'ADMIN',
+    })
+    expect(mockState.canonicalUser.role).toBe('SUPERADMIN')
+    expect(mockState.canonicalUser.activeRole).toBe('ADMIN')
+    expect(mockState.upsertBindingCalls).not.toHaveBeenCalled()
   })
 })

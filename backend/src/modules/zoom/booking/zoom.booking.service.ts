@@ -1,5 +1,6 @@
 import { ZoomSessionType, ZoomStatus } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
+import { getUserAccessState } from '../../subscriptions/payments/focus-access.js'
 import type { ZoomSessionAttendee } from '../types.js'
 
 export function resolveEffectiveBookingQuestions(input: {
@@ -201,6 +202,12 @@ export async function assertCanBookGroupPracticeSession(args: {
   sessionId: string
 }): Promise<void> {
   const { userId, sessionId } = args
+  const access = await getUserAccessState(userId)
+
+  if (access.state === 'NO_ACCESS') {
+    throw new Error('NO_ACTIVE_SUBSCRIPTION')
+  }
+
   const session = await prisma.zoomSession.findUnique({
     where: { id: sessionId },
     include: { _count: { select: { attendees: true } } },

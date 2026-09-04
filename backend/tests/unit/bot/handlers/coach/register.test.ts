@@ -93,7 +93,23 @@ vi.mock('../../../../../src/modules/ai-operator/operator.service.ts', () => ({
   submitCoachEditedPost: vi.fn(),
 }))
 
+vi.mock('../../../../../src/modules/telegram-mentor/handlers/start.ts', () => ({
+  handleStart: vi.fn(async (ctx: { reply: (...args: any[]) => Promise<unknown> }) => {
+    await ctx.reply('user-flow')
+  }),
+}))
+
+vi.mock('../../../../../src/scripts/user-sync-test-state.ts', () => ({
+  switchLocalTestPersona: vi.fn(async ({ telegramId, testRole }: { telegramId: string; testRole: string }) => ({
+    telegramId,
+    userId: 'coach-user-id',
+    persistedRole: 'SUPERADMIN',
+    activeRole: testRole,
+  })),
+}))
+
 import { prisma } from '../../../../../src/db/client.ts'
+import { handleStart } from '../../../../../src/modules/telegram-mentor/handlers/start.ts'
 import { processEcosystemPayment } from '../../../../../src/modules/subscriptions/payments/business/processing.ts'
 import { activateProductSubscription } from '../../../../../src/modules/subscriptions/payments/activation.ts'
 import {
@@ -106,6 +122,7 @@ import {
   generateCoachAgentsWebDeepLink,
   generateCoachZoomWebDeepLink,
 } from '../../../../../src/modules/deeplinks/service.ts'
+import { switchLocalTestPersona } from '../../../../../src/scripts/user-sync-test-state.ts'
 
 type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
 let coachBotContent: typeof import('../../../../../src/bot/content/coachBot.content.ts').coachBotContent
@@ -135,7 +152,13 @@ describe('registerCoachBotHandlers', () => {
     vi.clearAllMocks()
     delete process.env.COACH_TELEGRAM_ID
     delete process.env.TEST_COACH_MENTOR_TELEGRAM_ID
-    vi.mocked(prisma.user.findFirst).mockResolvedValue({ role: 'EXPERT', id: 'coach-user-id' } as never)
+    process.env.NODE_ENV = 'test'
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      role: 'EXPERT',
+      activeRole: 'EXPERT',
+      id: 'coach-user-id',
+      expertId: null,
+    } as never)
     vi.mocked(prisma.zoomSession.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.checkoutSession.findUnique).mockResolvedValue(null as never)
     vi.mocked(prisma.checkoutSession.findFirst).mockResolvedValue(null as never)
@@ -240,7 +263,19 @@ describe('registerCoachBotHandlers', () => {
 
   it('allows configured coach telegram id even when DB role lookup is absent', async () => {
     process.env.COACH_TELEGRAM_ID = '99'
-    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never)
+    vi.mocked(prisma.user.findFirst)
+      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        id: 'coach-superadmin-id',
+        expertId: null,
+      } as never)
+      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        id: 'coach-superadmin-id',
+        expertId: null,
+      } as never)
 
     const telegramBot = createTelegramBotMock()
     registerCoachBotHandlers(telegramBot as never)
@@ -256,8 +291,24 @@ describe('registerCoachBotHandlers', () => {
 
   it('shows settings entry only for SUPERADMIN', async () => {
     vi.mocked(prisma.user.findFirst)
-      .mockResolvedValueOnce({ role: 'SUPERADMIN', id: 'coach-superadmin-id' } as never)
-      .mockResolvedValueOnce({ role: 'SUPERADMIN', id: 'coach-superadmin-id' } as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        activeRole: 'SUPERADMIN',
+        id: 'coach-superadmin-id',
+        expertId: null,
+      } as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        activeRole: 'SUPERADMIN',
+        id: 'coach-superadmin-id',
+        expertId: null,
+      } as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        activeRole: 'SUPERADMIN',
+        id: 'coach-superadmin-id',
+        expertId: null,
+      } as never)
 
     const telegramBot = createTelegramBotMock()
     registerCoachBotHandlers(telegramBot as never)
@@ -275,8 +326,18 @@ describe('registerCoachBotHandlers', () => {
 
   it('registers superadmin settings back callback and returns to the coach workspace', async () => {
     vi.mocked(prisma.user.findFirst)
-      .mockResolvedValueOnce({ role: 'SUPERADMIN', id: 'coach-superadmin-id' } as never)
-      .mockResolvedValueOnce({ role: 'SUPERADMIN', id: 'coach-superadmin-id' } as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        activeRole: 'SUPERADMIN',
+        id: 'coach-superadmin-id',
+        expertId: null,
+      } as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        activeRole: 'SUPERADMIN',
+        id: 'coach-superadmin-id',
+        expertId: null,
+      } as never)
 
     const telegramBot = createTelegramBotMock()
     registerCoachBotHandlers(telegramBot as never)
@@ -306,6 +367,188 @@ describe('registerCoachBotHandlers', () => {
     const actionMatchers = telegramBot.action.mock.calls.map(([matcher]) => String(matcher))
     expect(actionMatchers.some((matcher) => matcher.includes('coach:'))).toBe(true)
     expect(actionMatchers.some((matcher) => matcher.includes('user:'))).toBe(false)
+  })
+
+  it('routes USER test persona through the existing user /start owner', async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      role: 'SUPERADMIN',
+      activeRole: 'USER',
+      id: 'coach-user-id',
+      expertId: null,
+    } as never)
+
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const startHandler = telegramBot.start.mock.calls[0]?.[0] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await startHandler(ctx)
+
+    expect(handleStart).toHaveBeenCalledWith(ctx)
+    expect(ctx.reply).toHaveBeenNthCalledWith(1, '…', {
+      reply_markup: {
+        remove_keyboard: true,
+      },
+    })
+    expect(ctx.reply).toHaveBeenNthCalledWith(2, 'user-flow')
+  })
+
+  it('keeps ADMIN test persona inside coach workspace without superadmin settings', async () => {
+    vi.mocked(prisma.user.findFirst)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        activeRole: 'ADMIN',
+        id: 'coach-admin-id',
+        expertId: null,
+      } as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        activeRole: 'ADMIN',
+        id: 'coach-admin-id',
+        expertId: null,
+      } as never)
+      .mockResolvedValueOnce({
+        role: 'SUPERADMIN',
+        activeRole: 'ADMIN',
+        id: 'coach-admin-id',
+        expertId: null,
+      } as never)
+
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const startHandler = telegramBot.start.mock.calls[0]?.[0] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await startHandler(ctx)
+
+    const [, payload] = ctx.reply.mock.calls[0]
+    const keyboard = JSON.stringify(payload.reply_markup.keyboard)
+    expect(keyboard).not.toContain(coachBotContent.menu.settings)
+    expect(ctx.reply.mock.calls[0]?.[0]).toContain(coachBotContent.start.title)
+  })
+
+  it('shows test-role menu in dev and switches the active persona', async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      role: 'SUPERADMIN',
+      activeRole: 'EXPERT',
+      id: 'coach-user-id',
+      expertId: null,
+    } as never)
+
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const hearsCall = telegramBot.hears.mock.calls.find(([matcher]) =>
+      matcher instanceof RegExp && matcher.test('/test-role'),
+    )
+    const commandHandler = hearsCall?.[1] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await commandHandler(ctx)
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      'Test role: EXPERT',
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.arrayContaining([
+            expect.arrayContaining([
+              expect.objectContaining({ text: 'USER', callback_data: 'coach:test-role:USER' }),
+              expect.objectContaining({ text: 'EXPERT', callback_data: 'coach:test-role:EXPERT' }),
+            ]),
+          ]),
+        }),
+      }),
+    )
+
+    const [, actionHandler] = telegramBot.action.mock.calls.find(
+      ([matcher]) => String(matcher) === '/^coach:test-role:(USER|EXPERT|ADMIN|SUPERADMIN)$/u'
+    ) as [unknown, RegisteredHandler]
+    const callbackCtx = {
+      ...createCoachCtx(),
+      match: ['coach:test-role:SUPERADMIN', 'SUPERADMIN'],
+    }
+
+    await actionHandler(callbackCtx)
+
+    expect(switchLocalTestPersona).toHaveBeenCalledWith({
+      telegramId: '99',
+      testRole: 'SUPERADMIN',
+    })
+    expect(callbackCtx.answerCbQuery).toHaveBeenCalledWith('Активна роль: SUPERADMIN')
+  })
+
+  it('keeps /test-role available for persisted SUPERADMIN even when activeRole is USER', async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      role: 'SUPERADMIN',
+      activeRole: 'USER',
+      id: 'coach-user-id',
+      expertId: null,
+    } as never)
+
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const hearsCall = telegramBot.hears.mock.calls.find(([matcher]) =>
+      matcher instanceof RegExp && matcher.test('/test-role'),
+    )
+    const commandHandler = hearsCall?.[1] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await commandHandler(ctx)
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      'Test role: USER',
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.any(Array),
+        }),
+      }),
+    )
+  })
+
+  it('denies /test-role for persisted ADMIN even in dev', async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      role: 'ADMIN',
+      activeRole: 'ADMIN',
+      id: 'coach-admin-id',
+      expertId: null,
+    } as never)
+
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const hearsCall = telegramBot.hears.mock.calls.find(([matcher]) =>
+      matcher instanceof RegExp && matcher.test('/test-role'),
+    )
+    const commandHandler = hearsCall?.[1] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await commandHandler(ctx)
+
+    expect(ctx.reply).toHaveBeenCalledWith('Тестова роль недоступна для цього акаунта.')
+  })
+
+  it('does not register /test-role in production runtime', async () => {
+    process.env.NODE_ENV = 'production'
+    vi.resetModules()
+
+    const { registerCoachBotHandlers: registerCoachBotHandlersProd } = await import('../../../../../src/bot/handlers/coach/register.ts')
+    const telegramBot = createTelegramBotMock()
+
+    registerCoachBotHandlersProd(telegramBot as never)
+
+    expect(
+      telegramBot.hears.mock.calls.some(([matcher]) =>
+        matcher instanceof RegExp && matcher.test('/test-role'),
+      )
+    ).toBe(false)
+    expect(
+      telegramBot.action.mock.calls.some(([matcher]) =>
+        String(matcher) === '/^coach:test-role:(USER|EXPERT|ADMIN|SUPERADMIN)$/u',
+      )
+    ).toBe(false)
   })
 
   it('grants focus from the current token-based OPS callback', async () => {

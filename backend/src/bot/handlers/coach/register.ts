@@ -14,6 +14,9 @@ import {
   sendFocusPaymentSuccessTelegramMessageByOrder,
 } from '../../../modules/subscriptions/payments/callback/notifications.js'
 import { activateProductSubscription } from '../../../modules/subscriptions/payments/activation.js'
+import { handleStart } from '../../../modules/telegram-mentor/handlers/start.js'
+import { isProductionRuntime } from '../../../modules/telegram-mentor/runtime/botConfig.js'
+import { switchLocalTestPersona } from '../../../scripts/user-sync-test-state.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 import {
   handleCoachAudioCommand,
@@ -38,6 +41,7 @@ import {
 import {
   checkCoachAccess,
   isStarwayOpsChat,
+  resolveLinkedCoachUserByTelegramId,
   resolveCoachUserId,
 } from './access.js'
 import {
@@ -67,6 +71,77 @@ import {
   confirmCoachZoomSession,
   showCoachNewZoomPrompt,
 } from './zoom.js'
+
+const TEST_ROLE_COMMAND_PATTERN = /^\/test-role(?:@\w+)?$/iu
+const TEST_ROLE_ACTION_PATTERN = /^coach:test-role:(USER|EXPERT|ADMIN|SUPERADMIN)$/u
+const TEST_ROLE_OWNER_ROLE = 'SUPERADMIN'
+
+async function resolveCoachTestRoleOwner(ctx: Parameters<RegisteredHandler>[0]) {
+  const telegramUserId = String(ctx.from?.id ?? '').trim()
+  if (!telegramUserId) {
+    return null
+  }
+
+  const linkedUser = await resolveLinkedCoachUserByTelegramId(telegramUserId)
+  if (!linkedUser || linkedUser.role !== TEST_ROLE_OWNER_ROLE) {
+    return null
+  }
+
+  return linkedUser
+}
+
+function buildTestRoleReplyMarkup() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: 'USER', callback_data: 'coach:test-role:USER' },
+          { text: 'EXPERT', callback_data: 'coach:test-role:EXPERT' },
+        ],
+        [
+          { text: 'ADMIN', callback_data: 'coach:test-role:ADMIN' },
+          { text: 'SUPERADMIN', callback_data: 'coach:test-role:SUPERADMIN' },
+        ],
+      ],
+    },
+  }
+}
+
+async function showTestRoleMenu(ctx: Parameters<RegisteredHandler>[0]) {
+  const linkedUser = await resolveCoachTestRoleOwner(ctx)
+  if (!linkedUser) {
+    await ctx.reply('Тестова роль недоступна для цього акаунта.')
+    return
+  }
+
+  const currentRole = String(linkedUser.activeRole ?? linkedUser.role).trim() || linkedUser.role
+  await ctx.reply(`Test role: ${currentRole}`, buildTestRoleReplyMarkup())
+}
+
+async function maybeHandleUserPersonaStart(ctx: Parameters<RegisteredHandler>[0]): Promise<boolean> {
+  if (isProductionRuntime()) {
+    return false
+  }
+
+  const linkedUser = await resolveCoachTestRoleOwner(ctx)
+  if (!linkedUser) {
+    return false
+  }
+
+  if ((linkedUser.activeRole ?? linkedUser.role) !== 'USER') {
+    return false
+  }
+
+  await ctx.reply('…', {
+    reply_markup: {
+      remove_keyboard: true,
+    },
+  })
+  await handleStart(ctx)
+  return true
+}
+
+type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
 
 export function registerCoachBotHandlers(telegramBot: Telegraf): void {
   validateCoachContentCatalog()
@@ -116,6 +191,10 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
 
   telegramBot.start(
     withCoachRuntimeProtection('start', async (ctx) => {
+      if (await maybeHandleUserPersonaStart(ctx)) {
+        return
+      }
+
       const isCoach = await checkCoachAccess(ctx)
       if (!isCoach) {
         await ctx.reply(coachBotContent.access.denied)
@@ -124,6 +203,43 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       await showCoachMenu(ctx)
     })
   )
+  if (!isProductionRuntime()) {
+    telegramBot.hears(
+      TEST_ROLE_COMMAND_PATTERN,
+      withCoachRuntimeProtection('command:test-role', async (ctx) => {
+        await showTestRoleMenu(ctx)
+      })
+    )
+    telegramBot.action(
+      TEST_ROLE_ACTION_PATTERN,
+      withCoachRuntimeProtection('action:coach:test-role', async (ctx) => {
+        const requestedRole = String(ctx.match?.[1] ?? '').trim()
+        if (
+          requestedRole !== 'USER'
+          && requestedRole !== 'EXPERT'
+          && requestedRole !== 'ADMIN'
+          && requestedRole !== 'SUPERADMIN'
+        ) {
+          await ctx.answerCbQuery().catch(() => undefined)
+          return
+        }
+
+        const linkedUser = await resolveCoachTestRoleOwner(ctx)
+        if (!linkedUser) {
+          await ctx.answerCbQuery('Тестова роль недоступна').catch(() => undefined)
+          return
+        }
+
+        const report = await switchLocalTestPersona({
+          telegramId: String(ctx.from?.id ?? '').trim(),
+          testRole: requestedRole,
+        })
+
+        await ctx.answerCbQuery(`Активна роль: ${report.activeRole}`).catch(() => undefined)
+        await showTestRoleMenu(ctx)
+      })
+    )
+  }
   telegramBot.hears(
     /^\/schedule(?:@\w+)?(?:\s+(.*))?$/iu,
     withCoachRuntimeProtection('command:schedule', async (ctx) => {
