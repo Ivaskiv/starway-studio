@@ -712,10 +712,6 @@ export async function handleStart(ctx: StartContext) {
       abTestProgress.result_key
         ? 'completed_returning_home'
         : 'home_or_payload'
-    const currentAccessState =
-      selectedBranch === 'completed_returning_home'
-        ? await getUserAccessState(user.id).catch(() => null)
-        : null
 
     logger.info(`[TELEGRAM_START_RUNTIME] ${JSON.stringify({
       updateId: Number.isFinite(updateId) ? updateId : null,
@@ -737,9 +733,7 @@ export async function handleStart(ctx: StartContext) {
       return
     }
 
-    const screen = await buildHomeScreen(user, ctx, {
-      accessState: currentAccessState,
-    })
+    const screen = await buildHomeScreen(user, ctx)
     await deliver(ctx, screen)
     startMessageSent = true
 
