@@ -16,6 +16,7 @@ const CRITICAL_TEMPLATE_PREFIXES = [
   'subscription_expired_',
   'subscription',
   'post_trial_reports_',
+  'battle_',
 ] as const
 
 function startOfDay(date = new Date()) {
@@ -62,6 +63,13 @@ export function resolveNotificationType(event: NotificationEvent): NotificationT
     case NotificationEvent.AB_TEST_FOLLOWUP:
     case NotificationEvent.ABSYSTEM_COMEBACK:
       return NotificationType.AI_REMINDER
+    case NotificationEvent.BATTLE_CREATED_BY_USER:
+    case NotificationEvent.BATTLE_CREATED_BY_COACH:
+    case NotificationEvent.BATTLE_ACCEPTED:
+    case NotificationEvent.BATTLE_DECLINED:
+    case NotificationEvent.BATTLE_EXPIRED:
+    case NotificationEvent.BATTLE_RESULT:
+      return NotificationType.AI_REMINDER
   }
 }
 
@@ -89,6 +97,13 @@ export function resolveNotificationTemplateKey(event: NotificationEvent, payload
       return String(payload?.flow_timer_id ?? payload?.flowTimerId ?? 'ab_test_followup')
     case NotificationEvent.ABSYSTEM_COMEBACK:
       return `absystem_comeback_${String(payload?.comeback_key ?? payload?.comebackKey ?? 'unknown')}`
+    case NotificationEvent.BATTLE_CREATED_BY_USER:
+    case NotificationEvent.BATTLE_CREATED_BY_COACH:
+    case NotificationEvent.BATTLE_ACCEPTED:
+    case NotificationEvent.BATTLE_DECLINED:
+    case NotificationEvent.BATTLE_EXPIRED:
+    case NotificationEvent.BATTLE_RESULT:
+      return `battle_${event}_${String(payload?.sessionId ?? 'unknown')}_${String(payload?.recipientRole ?? 'user')}`
     default:
       return resolveNotificationType(event)
   }

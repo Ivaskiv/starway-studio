@@ -54,6 +54,12 @@ export interface ZoomAttendeeDTO {
   userId:    string;
   attended:  boolean;
   createdAt: string;
+  user?: {
+    id?: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  };
 }
 
 /** Розширена сесія з attendance-статусом для поточного юзера */

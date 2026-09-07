@@ -11,6 +11,10 @@ import type {
 import { getUserStreaks } from '../streak/service.js'
 import { rewardEngine } from './reward.engine.js'
 
+type BattleWinRewardDbClient = Pick<Prisma.TransactionClient, 'gamificationProfile' | 'streak'>
+const BATTLE_WIN_REWARD = { mindXP: 100, neuroGems: 20 } as const
+const BATTLE_SHARED_REWARD = { mindXP: 50, neuroGems: 10 } as const
+
 async function ensureProfile(userId: string) {
   return prisma.gamificationProfile.upsert({
     where: { userId },
@@ -105,6 +109,127 @@ function isToday(date: Date) {
   return date.getFullYear() === now.getFullYear()
     && date.getMonth() === now.getMonth()
     && date.getDate() === now.getDate()
+}
+
+async function applyBattleProfileReward(
+  client: BattleWinRewardDbClient,
+  input: {
+    userId: string
+    mindXP: number
+    neuroGems: number
+  },
+): Promise<void> {
+  const profile = await client.gamificationProfile.upsert({
+    where: { userId: input.userId },
+    create: {
+      userId: input.userId,
+      mindXP: input.mindXP,
+      neuroGems: input.neuroGems,
+    },
+    update: {
+      mindXP: { increment: input.mindXP },
+      neuroGems: { increment: input.neuroGems },
+    },
+  })
+
+  const level = resolveLevel(profile.mindXP)
+
+  if (profile.level !== level.level) {
+    await client.gamificationProfile.update({
+      where: { userId: input.userId },
+      data: { level: level.level },
+    })
+  }
+}
+
+export async function applyBattleSharedReward(
+  client: BattleWinRewardDbClient,
+  input: {
+    userId: string
+    at: Date
+  },
+): Promise<void> {
+  await applyBattleProfileReward(client, {
+    userId: input.userId,
+    mindXP: BATTLE_SHARED_REWARD.mindXP,
+    neuroGems: BATTLE_SHARED_REWARD.neuroGems,
+  })
+}
+
+export async function applyBattleWinReward(
+  client: BattleWinRewardDbClient,
+  input: {
+    userId: string
+    expertId: string
+    at: Date
+  },
+): Promise<void> {
+  await applyBattleProfileReward(client, {
+    userId: input.userId,
+    mindXP: BATTLE_WIN_REWARD.mindXP,
+    neuroGems: BATTLE_WIN_REWARD.neuroGems,
+  })
+
+  const streak = await client.streak.findUnique({
+    where: {
+      userId_ruleKey: {
+        userId: input.userId,
+        ruleKey: 'battle_win',
+      },
+    },
+  })
+
+  if (!streak) {
+    await client.streak.create({
+      data: {
+        userId: input.userId,
+        expertId: input.expertId,
+        ruleKey: 'battle_win',
+        ruleVer: 1,
+        startAt: input.at,
+        lastAt: input.at,
+        current: 1,
+        longest: 1,
+        totalDays: 1,
+      },
+    })
+    return
+  }
+
+  const gap = Math.floor((input.at.getTime() - streak.lastAt.getTime()) / 86_400_000)
+  if (gap === 0) return
+
+  if (gap <= 30) {
+    const current = streak.current + gap
+    await client.streak.update({
+      where: { id: streak.id },
+      data: {
+        lastAt: input.at,
+        current,
+        longest: Math.max(streak.longest, current),
+        totalDays: streak.totalDays + gap,
+      },
+    })
+    return
+  }
+
+  await client.streak.update({
+    where: { id: streak.id },
+    data: { endAt: input.at },
+  })
+  await client.streak.create({
+    data: {
+      userId: input.userId,
+      expertId: input.expertId,
+      ruleKey: 'battle_win',
+      ruleVer: 1,
+      startAt: input.at,
+      lastAt: input.at,
+      current: 1,
+      longest: streak.longest,
+      totalDays: streak.totalDays + 1,
+    },
+  })
 }
 
 export async function getProfile(userId: string): Promise<GamificationProfileView> {

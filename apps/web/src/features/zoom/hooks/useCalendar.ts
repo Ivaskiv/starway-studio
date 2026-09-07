@@ -11,11 +11,13 @@ import {
   useGetCalendarSessionsQuery,
   useUpdateZoomSessionMutation,
 } from '../zoom.api'
+import { useGetAttendeesQuery } from '../services/zoom.api'
 import {
   useRegisterAttendeeMutation,
   useSubmitBookingPreparationMutation,
   useSubmitBookingQuestionMutation,
 } from '../services/zoom.api'
+import { useGetUsersQuery } from '@/features/admin/services/ownership.api'
 import type {
   CalendarView,
   CreateSessionPayload,
@@ -30,6 +32,7 @@ import {
 } from '../zoom.utils'
 import {
   endOf,
+  filterSessionsInRange,
   getNearestSession,
   startOf,
 } from '../utils/calendar-range'
@@ -85,7 +88,8 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
     { from, to, role: mode, userId, expertId },
     { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
   );
-  const visibleSessions = sessions.filter(
+  const periodSessions = filterSessionsInRange(sessions, from, to)
+  const visibleSessions = periodSessions.filter(
     (session) => new Date(session.scheduledAt) >= new Date(),
   );
   useGetAvailablePrivateSlotsQuery(
@@ -95,6 +99,13 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
   const [createSession, { isLoading: creating }] = useCreateZoomSessionMutation();
   const [updateSession] = useUpdateZoomSessionMutation();
   const [cancelSession] = useCancelZoomSessionMutation();
+  const { data: coachUsers = [] } = useGetUsersQuery(undefined, {
+    skip: mode !== 'coach',
+  })
+  const { data: editingAttendees = [] } = useGetAttendeesQuery(editingSession ?? '', {
+    skip: mode !== 'coach' || !editingSession,
+    refetchOnMountOrArgChange: true,
+  })
   const isSubmittingBookingQuestion = isRegisteringAttendee || isSavingBookingQuestion || isBookingPrivateSlot;
   const isSubmittingBookingPreparation = isSavingBookingPreparation;
 
@@ -127,7 +138,7 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
 
   const sessionsOnDay = (day: Date | null) => {
     if (!day) return [];
-    return sessions.filter(s => isSameDay(new Date(s.scheduledAt), day));
+    return periodSessions.filter(s => isSameDay(new Date(s.scheduledAt), day));
   };
 
   const handleDayClick = (day: Date | null) => {
@@ -151,7 +162,7 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
     }
   };
 
-  const todaySession = sessions.find(s => isSameDay(new Date(s.scheduledAt), new Date()));
+  const todaySession = periodSessions.find(s => isSameDay(new Date(s.scheduledAt), new Date()));
 
   useEffect(() => {
     if (mode !== 'user' || selectedDate || visibleSessions.length === 0) {
@@ -169,7 +180,7 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
     setIsDaySheetOpen(true);
   }, [mode, selectedDate, visibleSessions]);
 
-  const handleCreate = async (payload: CreateSessionPayload) => {
+  const handleCreate = async (payload: CreateSessionPayload & { participantUserId?: string }) => {
     await createSession(payload).unwrap();
     setCreateDate(null);
   };
@@ -310,7 +321,7 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
     setView,
     currentDate,
 
-    sessions,
+    sessions: periodSessions,
     visibleSessions,
     monthGrid,
     weekDays,
@@ -346,6 +357,8 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
 
     editingSession,
     setEditingSession,
+    editingParticipantUserId: editingAttendees[0]?.userId ?? null,
+    coachUsers,
 
     creating,
 

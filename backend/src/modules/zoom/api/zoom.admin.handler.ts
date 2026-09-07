@@ -3,11 +3,19 @@
 
 import type { NextFunction, Response } from 'express';
 import type { AuthenticatedRequest } from '../../../types/globalTypes.js';
-import { recordBattleResult } from '../battle/battle.service.js';
+import {
+  acceptBattle,
+  declineBattle,
+  notifyBattleCreatedByCoach,
+  recordBattleResult,
+  setBattleGoal,
+} from '../battle/battle.service.js';
+import type { BattleOutcome } from '../battle/battle.service.js';
 import {
   updateSession,
   cancelSession,
   createFullSession,
+  registerAttendee,
   getCalendarSessions,
   bookSlot,
   unbookSlot,
@@ -32,11 +40,103 @@ import {
 import type { AvailabilitySlot } from '../booking/zoom.availability.service.js';
 import { prisma } from '../../../db/client.js';
 import { sendOpsTelegramMessage } from '../../../lib/telegram.js';
-import { SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/prisma-client';
+import { Prisma, SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/prisma-client';
 import { syncZoomRegistrationLifecycle } from './controller.js';
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js';
 
-type BattleOutcome = 'challenger' | 'opponent' | 'both' | 'none';
+const BATTLE_PARTICIPANTS_REQUIRED = 2;
+
+function normalizeParticipantUserIds(input: unknown): string[] {
+  if (Array.isArray(input)) {
+    return [...new Set(input
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0))]
+  }
+
+  if (typeof input === 'string') {
+    const normalized = input.trim()
+    return normalized ? [normalized] : []
+  }
+
+  return []
+}
+
+function buildIndividualRequests(requests: {
+  [key: string]: unknown
+  type: string
+  zoomLink: string
+  productId: string | null
+  maxAttendees: number | null
+  notify24h: boolean
+  notify2h: boolean
+  notifiedAt24h: string | null
+  notifiedAt2h: string | null
+}) {
+  if (requests.type !== 'individual') {
+    return requests
+  }
+
+  return {
+    ...requests,
+    maxAttendees: 1,
+  }
+}
+
+function buildBattleRequests(requests: {
+  [key: string]: unknown
+  type: string
+  zoomLink: string
+  productId: string | null
+  maxAttendees: number | null
+  notify24h: boolean
+  notify2h: boolean
+  notifiedAt24h: string | null
+  notifiedAt2h: string | null
+}, participantUserIds: string[]) {
+  if (requests.type !== 'battle_review') {
+    return requests
+  }
+
+  const { goalA: _goalA, goalB: _goalB, progress: _progress, ...sessionRequests } = requests
+
+  return {
+    ...sessionRequests,
+    battleStatus: typeof requests.battleStatus === 'string' ? requests.battleStatus : 'active',
+    challengerId: participantUserIds[0],
+    opponentId: participantUserIds[1],
+    winnerId: requests.winnerId ?? null,
+  }
+}
+
+function validateParticipantCount(type: string, participantUserIds: string[]): string | null {
+  if (type === 'individual') {
+    if (participantUserIds.length !== 1) {
+      return participantUserIds.length === 0
+        ? 'participant_required'
+        : 'participant_single_required'
+    }
+  }
+
+  if (type === 'battle_review' && participantUserIds.length !== BATTLE_PARTICIPANTS_REQUIRED) {
+    return 'battle_participants_two_required'
+  }
+
+  return null
+}
+
+async function findMissingParticipantUserId(participantUserIds: string[]): Promise<string | null> {
+  for (const participantUserId of participantUserIds) {
+    const participant = await prisma.user.findUnique({
+      where: { id: participantUserId },
+      select: { id: true },
+    })
+    if (!participant) {
+      return participantUserId
+    }
+  }
+
+  return null
+}
 
 async function requireActiveFocusSubscription(userId: string, res: Response): Promise<boolean> {
   const accessState = await getUserAccessState(userId)
@@ -60,13 +160,45 @@ export async function finalizeBattleResult(
     const session = await prisma.zoomSession.findUnique({ where: { id: sessionId } });
     if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    const meta = session.requests as { challengerId?: string; opponentId?: string };
-    const winnerId =
-      outcome === 'challenger' ? (meta.challengerId ?? null)
-      : outcome === 'opponent' ? (meta.opponentId ?? null)
-      : null;
+    if (!['challenger', 'opponent', 'both', 'none'].includes(outcome)) {
+      return res.status(400).json({ error: 'INVALID_BATTLE_OUTCOME' });
+    }
 
-    const updated = await recordBattleResult({ sessionId, winnerId });
+    const updated = await recordBattleResult({ sessionId, outcome });
+    return res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleAcceptBattle(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { sessionId } = req.params;
+    const updated = await acceptBattle({ sessionId, userId });
+    return res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleDeclineBattle(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { sessionId } = req.params;
+    const updated = await declineBattle({ sessionId, userId });
     return res.status(200).json(updated);
   } catch (err) {
     next(err);
@@ -92,6 +224,9 @@ export async function handleCreateSession(
 
     const { scheduledAt, topic, type, zoomLink, productId, maxAttendees, notify24h, notify2h } =
       req.body;
+    const participantUserIds = normalizeParticipantUserIds(
+      req.body.participantUserIds ?? req.body.participantUserId,
+    )
 
     if (!scheduledAt || !topic) {
       return res.status(400).json({ error: 'scheduledAt and topic required' });
@@ -100,8 +235,19 @@ export async function handleCreateSession(
     const parsedAt = new Date(scheduledAt);
     if (isNaN(parsedAt.getTime())) return res.status(400).json({ error: 'Invalid scheduledAt' });
 
-    const requests = {
-      type: type ?? 'group_practice',
+    const nextType = type ?? 'group_practice'
+    const participantCountError = validateParticipantCount(nextType, participantUserIds)
+    if (participantCountError) {
+      return res.status(400).json({ error: participantCountError })
+    }
+
+    const missingParticipantUserId = await findMissingParticipantUserId(participantUserIds)
+    if (missingParticipantUserId) {
+      return res.status(404).json({ error: 'participant_not_found' })
+    }
+
+    const requests = buildBattleRequests(buildIndividualRequests({
+      type: nextType,
       zoomLink: zoomLink ?? '',
       productId: productId ?? null,
       maxAttendees: maxAttendees ?? null,
@@ -109,14 +255,21 @@ export async function handleCreateSession(
       notify2h: notify2h !== false,
       notifiedAt24h: null,
       notifiedAt2h: null,
-    };
+    }), participantUserIds);
 
     const session = await createFullSession({
       expertId: user.expertId,
       scheduledAt: parsedAt,
       topic,
-      requests,
+      requests: requests as Prisma.InputJsonValue,
     });
+
+    for (const participantUserId of participantUserIds) {
+      await registerAttendee(participantUserId, session.id)
+    }
+    if (nextType === 'battle_review') {
+      await notifyBattleCreatedByCoach(session as Parameters<typeof notifyBattleCreatedByCoach>[0])
+    }
     console.log('[zoom/POST sessions] created session:', session.id);
     return res.status(201).json(session);
   } catch (err) {
@@ -133,9 +286,13 @@ export async function handleUpdateSession(
   try {
     const { id } = req.params;
     const { scheduledAt, topic, zoomLink, type } = req.body;
+    const participantUserIds = normalizeParticipantUserIds(
+      req.body.participantUserIds ?? req.body.participantUserId,
+    )
 
     const existing = await prisma.zoomSession.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    const existingMeta = (existing.requests as Record<string, unknown>) ?? {}
 
     const patch: Record<string, unknown> = {};
     if (scheduledAt) {
@@ -146,10 +303,64 @@ export async function handleUpdateSession(
     if (topic) patch.topic = topic;
 
     if (zoomLink !== undefined || type !== undefined) {
-      const meta = (existing.requests as Record<string, unknown>) ?? {};
+      const meta = { ...existingMeta };
       if (zoomLink !== undefined) meta.zoomLink = zoomLink;
       if (type !== undefined) meta.type = type;
-      patch.requests = meta;
+      patch.requests = {
+        ...meta,
+      };
+    }
+
+    const nextRequests =
+      (patch.requests as Record<string, unknown> | undefined) ?? existingMeta
+    const nextType = String(
+      nextRequests.type ?? existingMeta.type ?? existing.type ?? 'group_practice',
+    )
+
+    const isManagedParticipantSession = nextType === 'individual' || nextType === 'battle_review'
+
+    if (isManagedParticipantSession) {
+      const existingAttendees = await prisma.zoomSessionAttendee.findMany({
+        where: { sessionId: id },
+        select: { userId: true },
+      })
+      const nextParticipantUserIds =
+        participantUserIds.length > 0
+          ? participantUserIds
+          : existingAttendees.map((attendee) => attendee.userId)
+      const participantCountError = validateParticipantCount(nextType, nextParticipantUserIds)
+      if (participantCountError) {
+        return res.status(400).json({ error: participantCountError })
+      }
+
+      const missingParticipantUserId = await findMissingParticipantUserId(nextParticipantUserIds)
+      if (missingParticipantUserId) {
+        return res.status(404).json({ error: 'participant_not_found' })
+      }
+
+      const baseRequests = {
+        ...nextRequests,
+        type: nextType,
+        zoomLink: String(nextRequests.zoomLink ?? ''),
+        productId: typeof nextRequests.productId === 'string' ? nextRequests.productId : null,
+        maxAttendees: typeof nextRequests.maxAttendees === 'number' ? nextRequests.maxAttendees : null,
+        notify24h: nextRequests.notify24h !== false,
+        notify2h: nextRequests.notify2h !== false,
+        notifiedAt24h: (nextRequests.notifiedAt24h as string | null) ?? null,
+        notifiedAt2h: (nextRequests.notifiedAt2h as string | null) ?? null,
+      }
+
+      patch.requests = buildBattleRequests(buildIndividualRequests(baseRequests), nextParticipantUserIds);
+
+      const existingParticipantKey = existingAttendees.map((attendee) => attendee.userId).sort().join('|')
+      const nextParticipantKey = [...nextParticipantUserIds].sort().join('|')
+
+      if (existingParticipantKey !== nextParticipantKey) {
+        await prisma.zoomSessionAttendee.deleteMany({ where: { sessionId: id } })
+        for (const participantUserId of nextParticipantUserIds) {
+          await registerAttendee(participantUserId, id)
+        }
+      }
     }
 
     const updated = await updateSession(id, patch as Parameters<typeof updateSession>[1]);
@@ -238,6 +449,15 @@ export async function handleGetCalendarSessions(
       const isArray = Array.isArray(meta);
       const attendeesCount = (s as { _count?: { attendees?: number } })._count?.attendees ?? 0;
       const maxSlots = isArray ? 50 : typeof meta.maxSlots === 'number' ? meta.maxSlots : 50;
+      const attendees = (s as {
+        attendees?: Array<{ userId: string; goalText: string | null; progress: unknown }>
+      }).attendees ?? [];
+      const challenger = attendees.find((attendee) => attendee.userId === meta.challengerId);
+      const opponent = attendees.find((attendee) => attendee.userId === meta.opponentId);
+      const ownAttendee = attendees.find((attendee) => attendee.userId === userId);
+      const ownProgress = Array.isArray(ownAttendee?.progress) ? ownAttendee.progress : [];
+      const challengerProgress = Array.isArray(challenger?.progress) ? challenger.progress : [];
+      const opponentProgress = Array.isArray(opponent?.progress) ? opponent.progress : [];
       return {
         id: s.id,
         scheduledAt: s.scheduledAt.toISOString(),
@@ -248,7 +468,15 @@ export async function handleGetCalendarSessions(
         attendeesCount,
         notifiedAt24h: isArray ? null : ((meta.notifiedAt24h as string | null) ?? null),
         notifiedAt2h: isArray ? null : ((meta.notifiedAt2h as string | null) ?? null),
-        goalText: isArray ? null : ((meta.goalA as string | null) ?? null),
+        goalText: isArray ? null : (ownAttendee?.goalText ?? null),
+        battleProgress: isArray ? [] : ownProgress,
+        goalA: isArray ? null : (challenger?.goalText ?? null),
+        goalB: isArray ? null : (opponent?.goalText ?? null),
+        progressA: isArray ? 0 : challengerProgress.length,
+        progressB: isArray ? 0 : opponentProgress.length,
+        battleStatus: isArray ? null : ((meta.battleStatus as string | null) ?? null),
+        challengerId: isArray ? null : ((meta.challengerId as string | null) ?? null),
+        opponentId: isArray ? null : ((meta.opponentId as string | null) ?? null),
         canEdit: role === 'coach',
         slotStatus: isArray ? 'available' : ((meta.slotStatus as string) ?? 'available'),
         remainingSlots: maxSlots - attendeesCount,
@@ -397,13 +625,39 @@ export async function handleLogBattleProgress(
 ) {
   try {
     const { sessionId } = req.params;
-    const { userId, day, text } = req.body;
-    if (!userId || !day || !text) {
-      return res.status(400).json({ error: 'userId, day, text required' });
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const { day, text } = req.body;
+    if (!day || !text) {
+      return res.status(400).json({ error: 'day, text required' });
     }
 
     const { logBattleProgress } = await import('../battle/battle.service.js');
     const session = await logBattleProgress({ sessionId, userId, day, text });
+    return res.status(200).json(session);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleSetBattleGoal(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const goalText = typeof req.body.goalText === 'string'
+      ? req.body.goalText.trim()
+      : null;
+    const session = await setBattleGoal({
+      sessionId,
+      userId,
+      goalText: goalText && goalText.length > 0 ? goalText : null,
+    });
     return res.status(200).json(session);
   } catch (err) {
     next(err);

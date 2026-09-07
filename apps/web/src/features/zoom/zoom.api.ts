@@ -66,6 +66,16 @@ export const zoomCalendarApi = api.injectEndpoints({
       }),
     }),
 
+    acceptBattle: build.mutation<{ id: string }, string>({
+      query: sessionId => ({ url: `/zoom/battle/${sessionId}/accept`, method: 'POST' }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    declineBattle: build.mutation<{ id: string }, string>({
+      query: sessionId => ({ url: `/zoom/battle/${sessionId}/decline`, method: 'POST' }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
     getEligibleOpponents: build.query<
       { id: string; name: string | null; email: string }[],
       string
@@ -187,6 +197,8 @@ export const {
   useCancelZoomSessionMutation,
   useGetLeaderboardQuery,
   useInitiateBattleMutation,
+  useAcceptBattleMutation,
+  useDeclineBattleMutation,
   useLogBattleProgressMutation,
   useGetEligibleOpponentsQuery,
   useFinalizeBattleMutation,

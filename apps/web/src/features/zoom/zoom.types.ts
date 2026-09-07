@@ -1,6 +1,10 @@
 // apps/web/src/features/zoom/zoom.types.ts
 
-export type ZoomSessionType = 'group_practice' | 'individual' | 'intensive' | 'battle_review' | 'PRIVATE' | 'GROUP' | string;
+export const COACH_ZOOM_SESSION_TYPES = ['group_practice', 'individual', 'intensive', 'battle_review'] as const
+
+export type CoachZoomSessionType = typeof COACH_ZOOM_SESSION_TYPES[number]
+
+export type ZoomSessionType = CoachZoomSessionType | 'PRIVATE' | 'GROUP' | string;
 
 export type ZoomStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
@@ -16,8 +20,6 @@ export interface ZoomSessionRequests {
   battleId?: string | null;
   challengerId?: string;
   opponentId?: string;
-  goalA?: string | null;
-  goalB?: string | null;
   winnerId?: string | null;
   battleStatus?: 'pending' | 'active' | 'completed' | 'cancelled';
   entryFee?: number;
@@ -44,6 +46,14 @@ export interface ZoomCalendarSession {
   notifiedAt24h?: string | null;
   notifiedAt2h?: string | null;
   goalText?: string | null;
+  goalA?: string | null;
+  goalB?: string | null;
+  battleProgress?: BattleProgressEntry[];
+  progressA?: number;
+  progressB?: number;
+  battleStatus?: 'pending' | 'active' | 'completed' | 'cancelled' | null;
+  challengerId?: string | null;
+  opponentId?: string | null;
   attended?: boolean;
   canEdit: boolean;
   slotStatus?: SlotStatus;
@@ -92,6 +102,9 @@ export interface CreateSessionPayload {
   type: ZoomSessionType;
   zoomLink?: string;
   productId?: string;
+  participantUserId?: string;
+  participantUserIds?: string[];
+  maxAttendees?: number;
 }
 
 export interface LeaderboardEntry {

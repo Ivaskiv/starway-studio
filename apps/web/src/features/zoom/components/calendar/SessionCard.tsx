@@ -63,6 +63,22 @@ export function SessionCard({
   const isIntensive = isIntensiveSession(session);
 
   const tooLateToUnbook = new Date(session.scheduledAt).getTime() - Date.now() < 24 * 60 * 60 * 1000;
+  const canUnbook = session.isMyBooking && !tooLateToUnbook && (isPrivate || isGroupPractice);
+
+  const handleUnbook = async () => {
+    if (!canUnbook) {
+      return;
+    }
+
+    if (isPrivate) {
+      await cancelPrivateBooking(session.id).unwrap();
+      return;
+    }
+
+    if (isGroupPractice) {
+      await unbookSlot(session.id).unwrap();
+    }
+  };
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 mt-3">
@@ -117,7 +133,12 @@ export function SessionCard({
           {isPrivate && (
             <div className="flex flex-col gap-2">
               {session.isMyBooking ? (
-                <BookingStatus session={session} onAddToCalendar={onAddToCalendar} />
+                <BookingStatus
+                  session={session}
+                  onAddToCalendar={onAddToCalendar}
+                  onUnbook={canUnbook ? () => void handleUnbook() : undefined}
+                  unbookDisabled={!canUnbook || unbooking || cancelingPrivate}
+                />
               ) : (
                 <button
                   onClick={() => onRequestBooking?.(session)}
@@ -131,7 +152,12 @@ export function SessionCard({
           )}
           {isGroupPractice && (
             session.isMyBooking ? (
-              <BookingStatus session={session} onAddToCalendar={onAddToCalendar} />
+              <BookingStatus
+                session={session}
+                onAddToCalendar={onAddToCalendar}
+                onUnbook={canUnbook ? () => void handleUnbook() : undefined}
+                unbookDisabled={!canUnbook || unbooking}
+              />
             ) : (
               <button
                 onClick={() => onRequestBooking?.(session)}
@@ -156,7 +182,12 @@ export function SessionCard({
                 </div>
               )}
               {session.isMyBooking ? (
-                <BookingStatus session={session} onAddToCalendar={onAddToCalendar} />
+                <BookingStatus
+                  session={session}
+                  onAddToCalendar={onAddToCalendar}
+                  onUnbook={canUnbook ? () => void handleUnbook() : undefined}
+                  unbookDisabled={!canUnbook || unbooking || cancelingPrivate}
+                />
               ) : session.slotStatus === 'booked' ? (
                 <span className="text-[12px] px-2 py-1 rounded-full bg-white/[0.05] text-white/30 self-start">
                   Зайнято
@@ -183,7 +214,12 @@ export function SessionCard({
             </button>
           )}
           {isIntensive && session.isMyBooking && (
-            <BookingStatus session={session} onAddToCalendar={onAddToCalendar} />
+            <BookingStatus
+              session={session}
+              onAddToCalendar={onAddToCalendar}
+              onUnbook={canUnbook ? () => void handleUnbook() : undefined}
+              unbookDisabled={!canUnbook || unbooking || cancelingPrivate}
+            />
           )}
         </div>
       )}

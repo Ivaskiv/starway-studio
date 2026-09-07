@@ -5,6 +5,7 @@ services:
     region: frankfurt
     plan: starter
     buildCommand: "npm install -g pnpm && pnpm install && pnpm --dir backend run build"
+    preDeployCommand: pnpm prisma:migrate:deploy
     startCommand: cd backend && node dist/src/index.js
     healthCheckPath: /health
     envVars:

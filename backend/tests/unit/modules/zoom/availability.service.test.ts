@@ -5,7 +5,7 @@ const mockExpertUpdate = vi.fn()
 const mockZoomSessionFindFirst = vi.fn()
 const mockCreateFullSession = vi.fn()
 
-vi.mock('../../../db/client.js', () => ({
+vi.mock('../../../../src/db/client.js', () => ({
   prisma: {
     expert: {
       findUnique: (...args: unknown[]) => mockExpertFindUnique(...args),
@@ -17,11 +17,11 @@ vi.mock('../../../db/client.js', () => ({
   },
 }))
 
-vi.mock('../index.js', () => ({
+vi.mock('../../../../src/modules/zoom/index.js', () => ({
   createFullSession: (...args: unknown[]) => mockCreateFullSession(...args),
 }))
 
-import { generateSessionsFromAvailability } from '../booking/zoom.availability.service.js'
+import { generateSessionsFromAvailability } from '../../../../src/modules/zoom/booking/zoom.availability.service.js'
 
 describe('generateSessionsFromAvailability', () => {
   beforeEach(() => {
@@ -104,5 +104,53 @@ describe('generateSessionsFromAvailability', () => {
     expect(firstRun).toEqual({ created: 2, skipped: 0 })
     expect(secondRun).toEqual({ created: 0, skipped: 2 })
     expect(mockCreateFullSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('carries the full GROUP template contract into generated sessions', async () => {
+    mockExpertFindUnique.mockResolvedValue({
+      zoomAvailability: [
+        {
+          id: 'group-slot',
+          dayOfWeek: 1,
+          hour: 19,
+          minute: 0,
+          timezone: 'Europe/Kyiv',
+          sessionType: 'group_practice',
+          maxSlots: 50,
+          priceCents: 7500,
+          durationMinutes: 90,
+          active: true,
+        },
+      ],
+    })
+    mockZoomSessionFindFirst.mockResolvedValue(null)
+    mockCreateFullSession.mockResolvedValue({ id: 'session-1' })
+
+    await generateSessionsFromAvailability(
+      'expert-1',
+      1,
+      new Date('2026-08-04T09:00:00.000Z'),
+    )
+
+    expect(mockCreateFullSession.mock.calls[0]?.[0]).toMatchObject({
+      expertId: 'expert-1',
+      topic: 'ФОКУС · Zoom-практика',
+      requests: {
+        type: 'group_practice',
+        maxSlots: 50,
+        priceCents: 7500,
+        durationMinutes: 90,
+        slotStatus: 'available',
+        starterQuestions: [
+          'Як не зриватись на вихідних',
+          'Планування тижня з дітьми',
+          'Повернення після відпустки',
+        ],
+        notify24h: true,
+        notify2h: true,
+        notifiedAt24h: null,
+        notifiedAt2h: null,
+      },
+    })
   })
 })

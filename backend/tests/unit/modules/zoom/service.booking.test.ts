@@ -12,9 +12,12 @@ const mockEventCreate = vi.fn()
 const mockEventFindMany = vi.fn()
 const mockGetCachedLatestWeeklyReport = vi.fn()
 const mockUserFindUnique = vi.fn()
+const mockPrismaTransaction = vi.fn()
+const mockDb = vi.hoisted(() => ({ tx: null as null | Record<string, unknown> }))
 
-vi.mock('../../../db/client.js', () => ({
-  prisma: {
+vi.mock('../../../../src/db/client.js', () => {
+  const tx = {
+    $queryRaw: vi.fn(async () => []),
     zoomSession: {
       findFirst: (...args: unknown[]) => mockZoomSessionFindFirst(...args),
       findUnique: (...args: unknown[]) => mockZoomSessionFindUnique(...args),
@@ -34,39 +37,59 @@ vi.mock('../../../db/client.js', () => ({
     user: {
       findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
     },
-  },
-}))
+  }
+  mockDb.tx = tx
 
-vi.mock('../../../lib/telegram.js', () => ({
+  return {
+    prisma: {
+      ...tx,
+      $transaction: (...args: unknown[]) => mockPrismaTransaction(...args),
+    },
+  }
+})
+
+vi.mock('../../../../src/lib/telegram.js', () => ({
   bot: {},
   getBotLink: vi.fn(),
   sendDedupedTelegramMessage: vi.fn(),
   sendOpsTelegramMessage: vi.fn(),
 }))
 
-vi.mock('../../../lib/db/weeklyReportCache.js', () => ({
+vi.mock('../../../../src/lib/db/weeklyReportCache.js', () => ({
   getCachedLatestWeeklyReport: (...args: unknown[]) => mockGetCachedLatestWeeklyReport(...args),
 }))
 
 import {
   assertCanBookGroupPracticeSession,
-  getCalendarSessions,
-  getCurrentWeekZoomOverview,
-  getUserLatestWeeklyReportSummary,
-  getUserPreviousZoomSessionRecap,
   getZoomBookingNotificationContext,
   registerAttendee,
   saveBookingQuestionForAttendee,
-  selectTrialZoomEligibleSession,
-} from '../index.js'
-import * as focusAccessModule from '../../subscriptions/payments/focus-access.js'
+} from '../../../../src/modules/zoom/booking/zoom.booking.service.js'
+import { getCalendarSessions, getCurrentWeekZoomOverview } from '../../../../src/modules/zoom/calendar/zoom.calendar.service.js'
+import { getUserLatestWeeklyReportSummary, getUserPreviousZoomSessionRecap } from '../../../../src/modules/zoom/reports/zoom.reports.service.js'
+import { selectTrialZoomEligibleSession } from '../../../../src/modules/zoom/shared/zoom.session-selection.js'
+import * as focusAccessModule from '../../../../src/modules/subscriptions/payments/focus-access.js'
 
 describe('zoom booking service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    let queue = Promise.resolve()
+    mockPrismaTransaction.mockImplementation(async (callback: (client: any) => Promise<unknown>) => {
+      const next = queue.then(() => callback(mockDb.tx))
+      queue = next.then(() => undefined, () => undefined)
+      return next
+    })
   })
 
   it('registerAttendee uses idempotent upsert for repeated booking clicks', async () => {
+    mockZoomSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      type: 'GROUP',
+      capacity: 50,
+      requests: { type: 'group_practice', maxSlots: 50 },
+      _count: { attendees: 3 },
+      attendees: [],
+    })
     mockZoomSessionAttendeeUpsert.mockResolvedValue({
       id: 'att-1',
       sessionId: 'session-1',
@@ -82,11 +105,85 @@ describe('zoom booking service', () => {
       sessionId: 'session-1',
       userId: 'user-1',
     })
+    expect(mockZoomSessionFindUnique).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      include: {
+        _count: { select: { attendees: true } },
+        attendees: {
+          where: { userId: 'user-1' },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    })
     expect(mockZoomSessionAttendeeUpsert).toHaveBeenCalledWith({
       where: { sessionId_userId: { sessionId: 'session-1', userId: 'user-1' } },
       create: { userId: 'user-1', sessionId: 'session-1' },
       update: {},
     })
+  })
+
+  it('rejects group registrations after the template capacity is reached', async () => {
+    mockZoomSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      type: 'GROUP',
+      capacity: 50,
+      requests: { type: 'group_practice', maxSlots: 1 },
+      _count: { attendees: 1 },
+      attendees: [],
+    })
+
+    await expect(registerAttendee('user-1', 'session-1')).rejects.toThrow('slot_full')
+    expect(mockZoomSessionAttendeeUpsert).not.toHaveBeenCalled()
+  })
+
+  it('serializes parallel group registrations at capacity one', async () => {
+    const persistedAttendees = new Map<string, { id: string; sessionId: string; userId: string }>()
+    let nextId = 1
+
+    mockZoomSessionFindUnique.mockImplementation(async ({ include }: { include?: { attendees?: { where?: { userId?: string } } } }) => {
+      const userId = include?.attendees?.where?.userId
+      const existing = userId ? persistedAttendees.get(userId) : null
+
+      return {
+        id: 'session-1',
+        type: 'GROUP',
+        capacity: 50,
+        requests: { type: 'group_practice', maxSlots: 1 },
+        _count: { attendees: persistedAttendees.size },
+        attendees: existing ? [{ id: existing.id }] : [],
+      }
+    })
+    mockZoomSessionAttendeeUpsert.mockImplementation(async ({ create }: { create: { sessionId: string; userId: string } }) => {
+      const existing = persistedAttendees.get(create.userId)
+      if (existing) return existing
+      if (persistedAttendees.size >= 1) {
+        throw new Error('slot_full')
+      }
+      const attendee = {
+        id: `att-${nextId++}`,
+        sessionId: create.sessionId,
+        userId: create.userId,
+      }
+      persistedAttendees.set(create.userId, attendee)
+      return attendee
+    })
+
+    const results = await Promise.allSettled([
+      registerAttendee('user-1', 'session-1'),
+      registerAttendee('user-2', 'session-1'),
+    ])
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1)
+
+    const rejection = results.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    )
+    expect(rejection?.reason).toBeInstanceOf(Error)
+    expect((rejection?.reason as Error).message).toBe('slot_full')
+    expect(persistedAttendees.size).toBe(1)
+    expect(mockPrismaTransaction).toHaveBeenCalledTimes(2)
   })
 
   it('saveBookingQuestionForAttendee stores questionText for an existing booking', async () => {
@@ -292,7 +389,7 @@ await expect(
 
 })
 
-it('allows booking without entitlement', async () => {
+it('rejects booking without entitlement', async () => {
       vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
       state: 'NO_ACCESS',
       isActive: false,
@@ -316,7 +413,7 @@ await expect(
     userId: 'user-1',
     sessionId: 'session-1',
   }),
-).resolves.toBeUndefined()
+).rejects.toThrow('NO_ACTIVE_SUBSCRIPTION')
   })
 
 it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
@@ -375,6 +472,34 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
     ).resolves.toBeUndefined()
   })
 
+  it('uses template maxSlots rather than session.capacity for group booking guard', async () => {
+    vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-08-31T20:59:59.999Z'),
+    })
+
+    mockZoomSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      expertId: 'expert-1',
+      scheduledAt: new Date('2026-08-05T15:00:00.000Z'),
+      status: 'SCHEDULED',
+      type: 'GROUP',
+      capacity: 50,
+      requests: { type: 'group_practice', maxSlots: 1 },
+      _count: { attendees: 1 },
+      attendees: [],
+    })
+
+    await expect(
+      assertCanBookGroupPracticeSession({
+        userId: 'user-1',
+        sessionId: 'session-1',
+      }),
+    ).rejects.toThrow('slot_full')
+  })
+
   it('allows booking when an active absystem entitlement includes Focus access', async () => {
     vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
       state: 'FOCUS_ACTIVE',
@@ -420,6 +545,7 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
       capacity: 1,
       requests: { type: 'group_practice' },
       _count: { attendees: 1 },
+      attendees: [{ id: 'att-1' }],
     })
     mockZoomSessionAttendeeFindUnique.mockResolvedValue({ id: 'att-1' })
 

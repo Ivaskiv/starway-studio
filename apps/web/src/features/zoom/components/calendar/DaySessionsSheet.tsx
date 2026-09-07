@@ -3,7 +3,13 @@ import {
   getNormalizedSessionType,
   getSessionMeta,
   isPastDate,
+  isGroupPracticeSession,
+  isPrivateSession,
 } from '../../zoom.utils'
+import {
+  useCancelPrivateBookingMutation,
+  useUnbookSlotMutation,
+} from '../../zoom.api'
 
 import { BookingStatus } from './BookingStatus'
 import { PRIMARY_BOOKING_BUTTON_CLASS } from './booking-ui'
@@ -21,6 +27,8 @@ export function DaySessionsSheet({
   onRequestBooking: (session: ZoomCalendarSession) => void;
   onAddToCalendar: (session: ZoomCalendarSession) => void;
 }) {
+  const [unbookSlot, { isLoading: unbooking }] = useUnbookSlotMutation()
+  const [cancelPrivateBooking, { isLoading: cancelingPrivate }] = useCancelPrivateBookingMutation()
   const dateLabel = selectedDate.toLocaleDateString('uk-UA', {
     weekday: 'long',
     day: 'numeric',
@@ -30,6 +38,18 @@ export function DaySessionsSheet({
   const remainingSessions = nearestSession
     ? selectedSessions.filter((session) => session.id !== nearestSession.id)
     : [];
+
+  const canUnbookSession = (session: ZoomCalendarSession) =>
+    isGroupPracticeSession(session) || isPrivateSession(session)
+
+  const handleUnbook = async (session: ZoomCalendarSession) => {
+    if (isGroupPracticeSession(session)) {
+      await unbookSlot(session.id).unwrap()
+      return
+    }
+
+    await cancelPrivateBooking(session.id).unwrap()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-3 py-4 sm:items-center">
@@ -86,8 +106,13 @@ export function DaySessionsSheet({
                           </p>
                         </div>
 
-                        {session.isMyBooking ? (
-                          <BookingStatus session={session} onAddToCalendar={onAddToCalendar} />
+                        {session.isMyBooking && canUnbookSession(session) ? (
+                          <BookingStatus
+                            session={session}
+                            onAddToCalendar={onAddToCalendar}
+                            onUnbook={() => void handleUnbook(session)}
+                            unbookDisabled={unbooking || cancelingPrivate}
+                          />
                         ) : normalizedSessionType === 'battle_review' || isPast || session.status === 'CANCELLED' || session.status === 'COMPLETED' ? (
                           <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
                             Недоступно
@@ -133,8 +158,13 @@ export function DaySessionsSheet({
                         </p>
                       </div>
 
-                        {session.isMyBooking ? (
-                          <BookingStatus session={session} onAddToCalendar={onAddToCalendar} />
+                        {session.isMyBooking && canUnbookSession(session) ? (
+                          <BookingStatus
+                            session={session}
+                            onAddToCalendar={onAddToCalendar}
+                            onUnbook={() => void handleUnbook(session)}
+                            unbookDisabled={unbooking || cancelingPrivate}
+                          />
                         ) : normalizedSessionType === 'battle_review' || isPast || session.status === 'CANCELLED' || session.status === 'COMPLETED' ? (
                           <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
                             Недоступно

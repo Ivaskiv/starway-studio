@@ -8,7 +8,7 @@ import type { Streak as PrismaStreak } from '@starway/db/prisma-client';
 export type Streak = PrismaStreak;
 
 // Rule keys — строго
-export type StreakRuleKey = 'daily_checkin' | 'wheel_activity';
+export type StreakRuleKey = 'daily_checkin' | 'wheel_activity' | 'battle_win';
 
 // DTO для API
 export interface RegisterStreakInput {
@@ -45,6 +45,11 @@ export const STREAK_RULES: Record<string, StreakRule> = {
   },
   wheel_activity: {
     key: 'wheel_activity',
+    version: 1,
+    maxGapDays: 30,
+  },
+  battle_win: {
+    key: 'battle_win',
     version: 1,
     maxGapDays: 30,
   },

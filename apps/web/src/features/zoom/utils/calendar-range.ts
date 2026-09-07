@@ -27,3 +27,17 @@ export function getNearestSession(sessions: ZoomCalendarSession[]): ZoomCalendar
     .filter((session) => new Date(session.scheduledAt).getTime() > now)
     .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())[0] ?? null;
 }
+
+export function filterSessionsInRange(
+  sessions: ZoomCalendarSession[],
+  from: string,
+  to: string,
+): ZoomCalendarSession[] {
+  const fromTime = new Date(from).getTime()
+  const toTime = new Date(to).getTime()
+
+  return sessions.filter((session) => {
+    const scheduledAt = new Date(session.scheduledAt).getTime()
+    return scheduledAt >= fromTime && scheduledAt <= toTime
+  })
+}

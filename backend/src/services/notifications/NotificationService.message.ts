@@ -16,6 +16,58 @@ export async function buildNotificationMessage(event: NotificationEvent, user: D
     const firstName = user.firstName ?? 'Привіт'
 
     switch (event) {
+      case NotificationEvent.BATTLE_CREATED_BY_USER:
+        return {
+          title: 'Новий Zoom Battle',
+          body: String(payload?.recipientRole) === 'coach'
+            ? 'Створено новий Zoom Battle. Перевір учасників і статус у календарі.'
+            : String(payload?.recipientRole) === 'challenger'
+              ? 'Виклик надіслано. Очікується рішення другого учасника протягом 48 годин.'
+              : 'Надійшов виклик. Прийми або відхили участь протягом 48 годин.',
+          ctaText: 'Відкрити календар Zoom',
+          ctaUrl: buildMiniAppStartUrl('zoom_calendar'),
+        }
+      case NotificationEvent.BATTLE_CREATED_BY_COACH:
+        return {
+          title: 'Призначено Zoom Battle',
+          body: String(payload?.recipientRole) === 'coach'
+            ? 'Zoom Battle створено для двох учасників.'
+            : 'Підтверди участь і зафіксуй ціль.',
+          ctaText: 'Відкрити календар Zoom',
+          ctaUrl: buildMiniAppStartUrl('zoom_calendar'),
+        }
+      case NotificationEvent.BATTLE_ACCEPTED:
+        return {
+          title: 'Zoom Battle прийнято',
+          body: String(payload?.recipientRole) === 'coach'
+            ? 'Учасник прийняв Zoom Battle. Статус оновлено.'
+            : 'Статус оновлено. Наступний крок — зафіксувати ціль.',
+          ctaText: 'Відкрити календар Zoom',
+          ctaUrl: buildMiniAppStartUrl('zoom_calendar'),
+        }
+      case NotificationEvent.BATTLE_DECLINED:
+        return {
+          title: 'Zoom Battle відхилено',
+          body: String(payload?.recipientRole) === 'coach'
+            ? 'Учасник відхилив Zoom Battle. Статус закрито.'
+            : 'Zoom Battle закрито. Участь не підтверджено.',
+          ctaText: 'Відкрити календар Zoom',
+          ctaUrl: buildMiniAppStartUrl('zoom_calendar'),
+        }
+      case NotificationEvent.BATTLE_EXPIRED:
+        return {
+          title: 'Zoom Battle закрито',
+          body: 'Час на підтвердження завершився.',
+          ctaText: 'Відкрити календар Zoom',
+          ctaUrl: buildMiniAppStartUrl('zoom_calendar'),
+        }
+      case NotificationEvent.BATTLE_RESULT:
+        return {
+          title: 'Результат Zoom Battle зафіксовано',
+          body: 'Фінальний результат збережено в календарі.',
+          ctaText: 'Відкрити календар Zoom',
+          ctaUrl: buildMiniAppStartUrl('zoom_calendar'),
+        }
       case NotificationEvent.DAILY_MORNING_DUE:
       {
         const sessionPath = '/dashboard?from=tg&step=cycle'

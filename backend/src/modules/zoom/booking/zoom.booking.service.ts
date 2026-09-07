@@ -3,6 +3,37 @@ import { prisma } from '../../../db/client.js'
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js'
 import type { ZoomSessionAttendee } from '../types.js'
 
+function isGroupPracticeSession(session: {
+  type: ZoomSessionType
+  requests: unknown
+}): boolean {
+  const meta =
+    session.requests &&
+    typeof session.requests === 'object' &&
+    !Array.isArray(session.requests)
+      ? (session.requests as Record<string, unknown>)
+      : {}
+
+  return (
+    session.type === ZoomSessionType.GROUP ||
+    meta.type === 'group_practice'
+  )
+}
+
+function resolveGroupBookingLimit(session: {
+  capacity: number
+  requests: unknown
+}): number {
+  const meta =
+    session.requests &&
+    typeof session.requests === 'object' &&
+    !Array.isArray(session.requests)
+      ? (session.requests as Record<string, unknown>)
+      : {}
+
+  return typeof meta.maxSlots === 'number' ? meta.maxSlots : session.capacity
+}
+
 export function resolveEffectiveBookingQuestions(input: {
   sessionId: string
   questionEvents: Array<{
@@ -190,10 +221,45 @@ export async function registerAttendee(
   userId: string,
   sessionId: string
 ): Promise<ZoomSessionAttendee> {
-  return prisma.zoomSessionAttendee.upsert({
-    where: { sessionId_userId: { sessionId, userId } },
-    create: { userId, sessionId },
-    update: {},
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT 1
+      FROM "ZoomSession"
+      WHERE id = ${sessionId}
+      FOR UPDATE
+    `
+
+    const session = await tx.zoomSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        _count: { select: { attendees: true } },
+        attendees: {
+          where: { userId },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    })
+
+    if (!session) {
+      throw new Error('session_not_found')
+    }
+
+    if (isGroupPracticeSession(session)) {
+      const existingAttendee = session.attendees?.[0] ?? null
+      if (!existingAttendee) {
+        const groupLimit = resolveGroupBookingLimit(session)
+        if (session._count.attendees >= groupLimit) {
+          throw new Error('slot_full')
+        }
+      }
+    }
+
+    return tx.zoomSessionAttendee.upsert({
+      where: { sessionId_userId: { sessionId, userId } },
+      create: { userId, sessionId },
+      update: {},
+    })
   })
 }
 
@@ -210,7 +276,14 @@ export async function assertCanBookGroupPracticeSession(args: {
 
   const session = await prisma.zoomSession.findUnique({
     where: { id: sessionId },
-    include: { _count: { select: { attendees: true } } },
+    include: {
+      _count: { select: { attendees: true } },
+      attendees: {
+        where: { userId },
+        select: { id: true },
+        take: 1,
+      },
+    },
   })
 
   if (!session) throw new Error('session_not_found')
@@ -218,23 +291,13 @@ export async function assertCanBookGroupPracticeSession(args: {
     throw new Error('session_unavailable')
   }
 
-  const existingAttendee = await prisma.zoomSessionAttendee.findUnique({
-    where: {
-      sessionId_userId: {
-        sessionId,
-        userId,
-      },
-    },
-    select: {
-      id: true,
-    },
-  })
+  const existingAttendee = session.attendees?.[0] ?? null
 
   if (existingAttendee) {
     return
   }
 
-  if (session._count.attendees >= session.capacity) {
+  if (session._count.attendees >= resolveGroupBookingLimit(session)) {
     throw new Error('slot_full')
   }
 }

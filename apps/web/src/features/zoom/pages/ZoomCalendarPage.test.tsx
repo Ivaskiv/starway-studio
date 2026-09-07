@@ -113,6 +113,23 @@ describe('ZoomCalendarPage', () => {
     expect(markup).not.toContain('COACH_PANEL:')
   })
 
+  it('keeps NO_ACCESS users on the locked entry state', async () => {
+    authState.auth.user = {
+      id: 'user-2',
+      role: 'USER',
+      expertId: null,
+      access: { isPaid: false },
+      subscriptionStatus: null,
+    }
+
+    const { default: ZoomCalendarPage } = await import('./ZoomCalendarPage')
+    const markup = renderToStaticMarkup(createElement(ZoomCalendarPage))
+
+    expect(markup).toContain('Персональний календар доступний тільки після входу через Telegram Mini App або з активним доступом ФОКУС.')
+    expect(markup).not.toContain('USER_PANEL:')
+    expect(markup).not.toContain('COACH_PANEL:')
+  })
+
   it('keeps Telegram Mini App booking entry on the existing user panel', async () => {
     telegramRuntime.miniApp = true
     telegramRuntime.initData = 'telegram-init-data'

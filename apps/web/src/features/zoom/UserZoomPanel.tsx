@@ -3,18 +3,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bell, CheckCircle2, Crosshair, Target, X } from 'lucide-react';
 import {
-  useGetCalendarSessionsQuery,
   useGetLeaderboardQuery,
   useInitiateBattleMutation,
+  useAcceptBattleMutation,
+  useDeclineBattleMutation,
   useLogBattleProgressMutation,
   useGetEligibleOpponentsQuery,
   useGetPendingSwapsQuery,
   useAcceptSwapMutation,
   useDeclineSwapMutation,
+  useGetCalendarSessionsQuery,
 } from './zoom.api';
+import { useGetMySessionsQuery } from './services/zoom.api';
 import { getSessionBorderClass, getSessionMeta, isZoomLinkActive } from './zoom.utils';
 import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './zoom.types';
+import { normalizeZoomHubSession } from './utils/zoomCalendar.utils';
 import ZoomCalendar from './components/calendar/Calendar';
+import { BattleInstruction } from './components/BattleInstruction';
 import { openExternalPaymentUrl } from '@/features/subscription/utils/openExternalPaymentUrl';
 const RANK_EMOJI = ['🥇', '🥈', '🥉'];
 
@@ -142,16 +147,40 @@ function MySessionRow({ session }: { session: ZoomCalendarSession }) {
   );
 }
 
+function AvailableSessionRow({ session }: { session: ZoomCalendarSession }) {
+  const sessionMeta = getSessionMeta(session);
+
+  return (
+    <div className={['rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] p-3 pl-4', getSessionBorderClass(session)].join(' ')}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-[var(--text-primary)] truncate">{session.topic}</p>
+          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+            {fmtDateTime(session.scheduledAt)} · {sessionMeta}
+          </p>
+        </div>
+        <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-semibold flex-shrink-0">
+          Доступно
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ── ActiveBattleSection ───────────────────────────────────────────────────────
 
 function ActiveBattleSection({
   session,
   userId,
   onLogProgress,
+  onAccept,
+  onDecline,
 }: {
   session: ZoomCalendarSession;
   userId: string;
   onLogProgress: (args: { sessionId: string; userId: string; day: number; text: string }) => void;
+  onAccept: (sessionId: string) => void;
+  onDecline: (sessionId: string) => void;
 }) {
   const progRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState('');
@@ -160,6 +189,8 @@ function ActiveBattleSection({
   const elapsed = Math.min(Date.now() - startedAt, 7 * 24 * 60 * 60 * 1000);
   const pct = Math.round((elapsed / (7 * 24 * 60 * 60 * 1000)) * 100);
   const day = Math.min(Math.ceil(elapsed / (24 * 60 * 60 * 1000)), 7);
+  const isPending = session.battleStatus === 'pending';
+  const isOpponent = session.opponentId === userId;
 
   useEffect(() => {
     progRef.current?.style.setProperty('--my-progress', `${pct}%`);
@@ -183,6 +214,29 @@ function ActiveBattleSection({
           День {day}/7
         </span>
       </div>
+      {isPending && (
+        <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-200">
+          {isOpponent ? 'Battle очікує твого рішення.' : 'Battle очікує прийняття суперником.'}
+          {isOpponent && (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onAccept(session.id)}
+                className="rounded-lg bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-200"
+              >
+                Прийняти
+              </button>
+              <button
+                type="button"
+                onClick={() => onDecline(session.id)}
+                className="rounded-lg bg-rose-500/20 px-3 py-2 text-xs font-semibold text-rose-200"
+              >
+                Відхилити
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {session.goalText && (
         <p className="text-xs text-[var(--text-muted)] mb-3">Моя ціль: {session.goalText}</p>
       )}
@@ -215,7 +269,13 @@ function ActiveBattleSection({
 
 // ── BattleCallSection ─────────────────────────────────────────────────────────
 
-function BattleCallSection({ userId }: { userId: string }) {
+function BattleCallSection({
+  userId,
+  onOpenInstructions,
+}: {
+  userId: string
+  onOpenInstructions: () => void
+}) {
   const [selectedOpponent, setSelectedOpponent] = useState('');
   const { data: opponents = [] } = useGetEligibleOpponentsQuery(userId);
   const [initiate, { isLoading }] = useInitiateBattleMutation();
@@ -257,18 +317,28 @@ function BattleCallSection({ userId }: { userId: string }) {
           })}
         </div>
       )}
-      <button
-        onClick={handleSend}
-        disabled={!selectedOpponent || isLoading}
-        className="glass-button inline-flex items-center gap-1.5 text-sm font-semibold px-5 py-2 rounded-[var(--btn-radius)] disabled:opacity-40"
-      >
-        {isLoading ? 'Відправка...' : (
-          <>
-            <Crosshair className="h-4 w-4" />
-            Надіслати виклик
-          </>
-        )}
-      </button>
+      <div className="grid w-full grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!selectedOpponent || isLoading}
+          className="glass-button inline-flex items-center justify-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-[var(--btn-radius)] disabled:opacity-40"
+        >
+          {isLoading ? 'Відправка...' : (
+            <>
+              <Crosshair className="h-4 w-4" />
+              Викликати на Battle
+            </>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onOpenInstructions}
+          className="rounded-[var(--btn-radius)] border border-[var(--border-primary)] bg-transparent px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-all hover:bg-[var(--glass-bg-hover)]"
+        >
+          Правила
+        </button>
+      </div>
     </div>
   );
 }
@@ -378,28 +448,60 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
     { from: monthStart, to: monthEnd, role: 'user', userId },
     { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
   );
+  const { data: mySessionsResponse } = useGetMySessionsQuery(undefined, {
+    pollingInterval: 30_000,
+    refetchOnMountOrArgChange: true,
+  });
   const { data: leaderboard = [] } = useGetLeaderboardQuery();
   const [logProgress] = useLogBattleProgressMutation();
+  const [acceptBattle] = useAcceptBattleMutation();
+  const [declineBattle] = useDeclineBattleMutation();
   const { data: pendingSwaps = [] } = useGetPendingSwapsQuery();
   const [acceptSwap] = useAcceptSwapMutation();
   const [declineSwap] = useDeclineSwapMutation();
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   const activeBattle = sessions.find(
     s => s.type === 'battle_review' && s.status !== 'COMPLETED' && s.status !== 'CANCELLED',
   ) ?? null;
 
-  const mySessions = sessions
-    .filter(s => s.isMyBooking && s.type !== 'battle_review' && new Date(s.scheduledAt) > now)
+  const bookedSessionIds = new Set(
+    (mySessionsResponse?.sessions ?? []).map((session) => session.id),
+  );
+
+  const availableSessions = sessions
+    .filter(s => s.type !== 'battle_review' && new Date(s.scheduledAt) > now)
+    .filter(s => !s.isMyBooking && !bookedSessionIds.has(s.id))
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
     .slice(0, 5);
 
-  const displayMySessions: ZoomCalendarSession[] = mySessions;
+  const displayMySessions: ZoomCalendarSession[] = (mySessionsResponse?.sessions ?? [])
+    .map((session) =>
+      ({
+        ...normalizeZoomHubSession(session, {
+          type: 'GROUP',
+          zoomLink: '',
+        }),
+        canEdit: false,
+      }),
+    )
+    .filter(s => s.type !== 'battle_review' && new Date(s.scheduledAt) > now)
+    .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+    .slice(0, 5);
+
+  const displayAvailableSessions: ZoomCalendarSession[] = availableSessions;
   const displayActiveBattle: ZoomCalendarSession | null = activeBattle;
   const displayLeaderboard: LeaderboardEntry[] = leaderboard;
   const myStats = leaderboard.find(e => e.userId === userId);
 
   const handleLogProgress = (args: { sessionId: string; userId: string; day: number; text: string }) => {
     logProgress(args).catch(console.error);
+  };
+  const handleAcceptBattle = (sessionId: string) => {
+    acceptBattle(sessionId).catch(console.error);
+  };
+  const handleDeclineBattle = (sessionId: string) => {
+    declineBattle(sessionId).catch(console.error);
   };
 
   return (
@@ -431,6 +533,26 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
 
       {/* 3. Calendar */}
       <section>
+        <SectionLabel label="ДОСТУПНІ СЕСІЇ" />
+        {displayAvailableSessions.length === 0 ? (
+          <p className="text-xs text-[var(--text-muted)] py-1">Немає доступних майбутніх сесій</p>
+        ) : (
+          <div className="flex flex-col gap-2 mb-4">
+            {displayAvailableSessions.map((session) => (
+              <AvailableSessionRow key={session.id} session={session} />
+            ))}
+          </div>
+        )}
+
+        <SectionLabel label="МІЙ ZOOM" />
+        {displayMySessions.length === 0 ? (
+          <p className="text-xs text-[var(--text-muted)] py-1">Ти ще не зареєструвалась на жодну сесію</p>
+        ) : (
+          <div className="flex flex-col gap-2 mb-4">
+            {displayMySessions.map(s => <MySessionRow key={s.id} session={s} />)}
+          </div>
+        )}
+
         <SectionLabel label="МІЙ ZOOM-РОЗКЛАД" />
         <ZoomCalendar mode="user" userId={userId} />
       </section>
@@ -469,41 +591,38 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
         </section>
       )}
 
-      {/* 4. My upcoming sessions */}
-      <section>
-        <SectionLabel label="МОЇ НАЙБЛИЖЧІ ZOOM" />
-        {displayMySessions.length === 0 ? (
-          <p className="text-xs text-[var(--text-muted)] py-1">Ти ще не зареєструвалась на жодну сесію</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {displayMySessions.map(s => <MySessionRow key={s.id} session={s} />)}
-          </div>
-        )}
-      </section>
-
-      {/* 5. Active battle */}
+      {/* 4. Active battle */}
       <section>
         <SectionLabel label="МІЙ АКТИВНИЙ BATTLE" />
         {displayActiveBattle ? (
-          <ActiveBattleSection session={displayActiveBattle} userId={userId} onLogProgress={handleLogProgress} />
+          <ActiveBattleSection
+            session={displayActiveBattle}
+            userId={userId}
+            onLogProgress={handleLogProgress}
+            onAccept={handleAcceptBattle}
+            onDecline={handleDeclineBattle}
+          />
         ) : (
           <p className="text-xs text-[var(--text-muted)] py-1">Активних battles немає</p>
         )}
       </section>
 
-      {/* 6. Battle call */}
+      {/* 5. Battle call */}
       <section>
         <SectionLabel label="ВИКЛИКАТИ НА BATTLE" />
-        <BattleCallSection userId={userId} />
+        <BattleCallSection
+          userId={userId}
+          onOpenInstructions={() => setInstructionsOpen(true)}
+        />
       </section>
 
-      {/* 7. Reminders */}
+      {/* 6. Reminders */}
       <section>
         <SectionLabel label="НАГАДУВАННЯ" />
         <RemindersSection sessions={sessions} />
       </section>
 
-      {/* 8. Leaderboard */}
+      {/* 7. Leaderboard */}
       <section>
         <SectionLabel label="LEADERBOARD" />
         <div className="rounded-xl border border-[var(--border-primary)] bg-[var(--glass-bg)] px-3 py-1">
@@ -518,6 +637,9 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
         </div>
       </section>
 
+      {instructionsOpen && (
+        <BattleInstruction onClose={() => setInstructionsOpen(false)} />
+      )}
     </div>
   );
 }

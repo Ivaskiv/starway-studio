@@ -24,6 +24,9 @@ import {
   handleGetCalendarSessions,
   handleGetLeaderboard,
   handleInitiateBattle,
+  handleAcceptBattle,
+  handleDeclineBattle,
+  handleSetBattleGoal,
   handleLogBattleProgress,
   handleGetEligibleOpponents,
   finalizeBattleResult,
@@ -72,6 +75,9 @@ router.delete('/sessions/:id',                 authRequired, handleCancelSession
 router.get('/battle/leaderboard',              authRequired, handleGetLeaderboard);
 router.get('/battle/eligible',                 authRequired, handleGetEligibleOpponents);
 router.post('/battle/initiate',                authRequired, handleInitiateBattle);
+router.post('/battle/:sessionId/accept',       authRequired, handleAcceptBattle);
+router.post('/battle/:sessionId/decline',      authRequired, handleDeclineBattle);
+router.put('/battle/:sessionId/goal',          authRequired, handleSetBattleGoal);
 router.post('/battle/:sessionId/progress',     authRequired, handleLogBattleProgress);
 router.patch('/battle/:sessionId/result',      authRequired, finalizeBattleResult);
 

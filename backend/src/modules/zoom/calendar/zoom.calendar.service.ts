@@ -14,14 +14,21 @@ export async function getCalendarSessions(args: {
   userId: string
   expertId?: string
 }): Promise<
-  (ZoomSession & { _count: { attendees: number }; isMyBooking?: boolean })[]
+  (ZoomSession & {
+    _count: { attendees: number };
+    attendees?: Array<{ userId: string; goalText: string | null; progress: unknown }>;
+    isMyBooking?: boolean;
+  })[]
 > {
   const { from, to, role, userId, expertId } = args
 
   if (role === 'coach') {
     return prisma.zoomSession.findMany({
       where: { expertId, scheduledAt: { gte: from, lte: to } },
-      include: { _count: { select: { attendees: true } } },
+      include: {
+        _count: { select: { attendees: true } },
+        attendees: { select: { userId: true, goalText: true, progress: true } },
+      },
       orderBy: { scheduledAt: 'asc' },
     })
   }
@@ -36,7 +43,10 @@ export async function getCalendarSessions(args: {
           { type: ZoomSessionType.GROUP },
         ],
       },
-      include: { _count: { select: { attendees: true } } },
+      include: {
+        _count: { select: { attendees: true } },
+        attendees: { select: { userId: true, goalText: true, progress: true } },
+      },
       orderBy: { scheduledAt: 'asc' },
     })
 
@@ -72,7 +82,10 @@ export async function getCalendarSessions(args: {
           { type: ZoomSessionType.GROUP },
         ],
       },
-      include: { _count: { select: { attendees: true } } },
+      include: {
+        _count: { select: { attendees: true } },
+        attendees: { select: { userId: true, goalText: true, progress: true } },
+      },
       orderBy: { scheduledAt: 'asc' },
     })
 
@@ -110,7 +123,10 @@ export async function getCalendarSessions(args: {
           { type: ZoomSessionType.GROUP },
         ],
       },
-      include: { _count: { select: { attendees: true } } },
+      include: {
+        _count: { select: { attendees: true } },
+        attendees: { select: { userId: true, goalText: true, progress: true } },
+      },
       orderBy: { scheduledAt: 'asc' },
     })
 
@@ -139,7 +155,10 @@ export async function getCalendarSessions(args: {
       scheduledAt: { gte: from, lte: to },
       status: { not: ZoomStatus.CANCELLED },
     },
-    include: { _count: { select: { attendees: true } } },
+    include: {
+      _count: { select: { attendees: true } },
+      attendees: { select: { userId: true, goalText: true, progress: true } },
+    },
     orderBy: { scheduledAt: 'asc' },
   })
 

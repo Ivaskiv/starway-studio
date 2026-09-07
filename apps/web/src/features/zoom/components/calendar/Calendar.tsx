@@ -72,8 +72,10 @@ export default function Calendar(
 
     editingSession,
     setEditingSession,
+    editingParticipantUserId,
 
     creating,
+    coachUsers,
 
     isSubmittingBookingQuestion,
     isSubmittingBookingPreparation,
@@ -229,8 +231,52 @@ export default function Calendar(
         </div>
       )}
 
-      {/* Week grid */}
-      {view === 'week' && (
+      {/* Coach week list */}
+      {view === 'week' && mode === 'coach' && (
+        <div className="flex flex-col overflow-hidden rounded-xl border border-white/[0.07]" data-zoom-week-view="coach-vertical">
+          {weekDays.map((d, i) => {
+            const today = isToday(d);
+            const daySessions = sessionsOnDay(d);
+            return (
+              <div
+                key={i}
+                data-zoom-week-day={UK_DAY_SHORT[i]}
+                onClick={() => handleDayClick(d)}
+                className={[
+                  'min-h-[64px] cursor-pointer border-b border-white/[0.05] bg-[#0d1117] px-3 py-2 transition-colors last:border-b-0 hover:bg-white/[0.03]',
+                  today ? 'bg-purple-500/[0.05]' : '',
+                ].join(' ')}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-white/35">{UK_DAY_SHORT[i]}</span>
+                  <span className={['text-[15px] font-semibold', today ? 'text-purple-400' : 'text-white/70'].join(' ')}>
+                    {d.getDate()}
+                  </span>
+                </div>
+                {daySessions.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {daySessions.map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setSelectedSession(s); setCreateDate(null); }}
+                        className={['w-full rounded px-2 py-1.5 text-left text-[12px] transition-colors', getSessionBadgeClass(s)].join(' ')}
+                      >
+                        {new Date(s.scheduledAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+                        {' '}
+                        {s.topic}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* User week grid */}
+      {view === 'week' && mode !== 'coach' && (
         <div className="rounded-xl border border-white/[0.07] overflow-hidden">
           <div className="grid grid-cols-7">
             {weekDays.map((d, i) => {
@@ -326,6 +372,7 @@ export default function Calendar(
       {mode === 'coach' && createDate && (
         <SessionForm
           defaultDate={createDate}
+          participants={coachUsers}
           onSubmit={handleCreate}
           onClose={() => setCreateDate(null)}
           isLoading={creating}
@@ -336,11 +383,20 @@ export default function Calendar(
       {mode === 'coach' && editingSessionData && (
         <SessionForm
           defaultDate={new Date(editingSessionData.scheduledAt)}
+          sessionId={editingSessionData.id}
+          participants={coachUsers}
           initialValues={{
             scheduledAt: editingSessionData.scheduledAt,
             topic: editingSessionData.topic,
             type: editingSessionData.type,
             zoomLink: editingSessionData.zoomLink,
+            maxAttendees:
+              editingSessionData.type === 'individual'
+                ? 1
+                : (editingSessionData.attendeesCount !== undefined && editingSessionData.remainingSlots !== undefined
+                    ? editingSessionData.attendeesCount + editingSessionData.remainingSlots
+                    : undefined),
+            participantUserId: editingParticipantUserId ?? undefined,
           }}
           onSubmit={async (payload) => {
             await updateSession({ id: editingSessionData.id, patch: payload });

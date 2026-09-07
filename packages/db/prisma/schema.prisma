@@ -1431,7 +1431,10 @@ model ZoomSessionAttendee {
   sessionId String
   userId    String
   attended  Boolean     @default(false)
+  goalText  String?
+  progress  Json        @default("[]")
   createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
   session   ZoomSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
