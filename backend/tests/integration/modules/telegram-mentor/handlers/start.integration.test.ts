@@ -190,6 +190,8 @@ describe('handleStart — targeted home screen routing', () => {
     expect(transition).toBe('start_home_screen')
     expect(text).toContain('Тестова, рада бачити тебе знову.')
     expect(text).toContain('Минулого разу твій тест показав <b>СТАН</b>:')
+    expect(text).not.toContain('\n\n\n')
+    expect(mockPlanMessage.mock.calls[0][5]).toBe('HTML')
     expect(text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
     expect(text).toContain('Зараз активного доступу до Zoom-практик немає.')
     expect(text).toContain('Найближча групова Zoom-практика ще не запланована.')
@@ -289,6 +291,116 @@ describe('handleStart — targeted home screen routing', () => {
     expect(text).toContain('Найближча групова Zoom-практика — 3 серпня о 19:00 за Києвом.')
     expect(JSON.stringify(options)).toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
     expect(JSON.stringify(options)).toMatch(/ПРО ПРОГРАМУ/)
+  })
+
+  it('completed returning USER with current NO_ACCESS renders expired state and no booking CTA', async () => {
+    mockResolveLinkedUserId.mockResolvedValue('user-return-no-access')
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'action',
+      email_stage: 'captured',
+    })
+    mockFindUniqueOrThrow.mockResolvedValue({
+      id: 'user-return-no-access',
+      role: 'USER',
+      activeRole: 'USER',
+      lifecycleState: 'FOCUS_PAID',
+      testStartedAt: null,
+      testCompletedAt: new Date('2026-07-20T10:00:00Z'),
+      offerShownAt: null,
+      testResultType: 'action',
+      updatedAt: new Date('2026-07-20T10:00:00Z'),
+      firstName: 'Тестова',
+    })
+    mockGetUserAccessState.mockResolvedValue({
+      state: 'NO_ACCESS',
+      isActive: false,
+      hasFocus: false,
+      expiresAt: new Date('2026-07-01T00:00:00Z'),
+    })
+    mockGetUpcomingZoomBookingView.mockResolvedValue(null)
+
+    const { ctx, reply } = makeFakeCtx({ chatId: 121, fromId: 121, updateId: 1011 })
+    await handleStart(ctx)
+
+    expect(reply).not.toHaveBeenCalled()
+    expect(mockPlanMessage).toHaveBeenCalledTimes(1)
+    const [, , transition, text, options] = mockPlanMessage.mock.calls[0]
+    expect(transition).toBe('start_home_screen')
+    expect(text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
+    expect(text).toContain('Зараз активного доступу до Zoom-практик немає. Попередній доступ завершився 1 липня 2026 р.')
+    expect(JSON.stringify(options)).toMatch(/ОБРАТИ ФОРМАТ У ФОКУСІ/)
+    expect(JSON.stringify(options)).not.toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
+  })
+
+  it('completed returning USER reflects the fresh canonical access state after payment activation', async () => {
+    mockResolveLinkedUserId.mockResolvedValue('user-return-flip')
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'decision',
+      email_stage: 'captured',
+    })
+    mockFindUniqueOrThrow.mockResolvedValue({
+      id: 'user-return-flip',
+      role: 'USER',
+      activeRole: 'USER',
+      lifecycleState: 'TEST_DONE',
+      testStartedAt: null,
+      testCompletedAt: new Date('2026-07-20T10:00:00Z'),
+      offerShownAt: null,
+      testResultType: 'decision',
+      updatedAt: new Date('2026-07-20T10:00:00Z'),
+      firstName: 'Фокус',
+    })
+    mockGetUpcomingZoomBookingView.mockResolvedValue({
+      id: 'zoom-flip',
+      scheduledAt: new Date('2026-08-03T16:00:00Z'),
+      requests: { zoomLink: 'https://zoom.example/flip' },
+      isMyBooking: false,
+      myQuestion: null,
+      attendeesCount: 0,
+    })
+
+    mockGetUserAccessState
+      .mockResolvedValueOnce({
+        state: 'NO_ACCESS',
+        isActive: false,
+        hasFocus: false,
+        expiresAt: new Date('2026-07-01T00:00:00Z'),
+      })
+      .mockResolvedValueOnce({
+        state: 'NO_ACCESS',
+        isActive: false,
+        hasFocus: false,
+        expiresAt: new Date('2026-07-01T00:00:00Z'),
+      })
+      .mockResolvedValueOnce({
+        state: 'FOCUS_ACTIVE',
+        isActive: true,
+        hasFocus: true,
+        expiresAt: new Date('2026-11-15T00:00:00Z'),
+      })
+      .mockResolvedValueOnce({
+        state: 'FOCUS_ACTIVE',
+        isActive: true,
+        hasFocus: true,
+        expiresAt: new Date('2026-11-15T00:00:00Z'),
+      })
+
+    const firstCtx = makeFakeCtx({ chatId: 122, fromId: 122, updateId: 4012 })
+    await handleStart(firstCtx.ctx)
+
+    const secondCtx = makeFakeCtx({ chatId: 122, fromId: 122, updateId: 4013 })
+    await handleStart(secondCtx.ctx)
+
+    expect(mockPlanMessage).toHaveBeenCalledTimes(2)
+
+    const firstCall = mockPlanMessage.mock.calls[0]
+    expect(firstCall[3]).toContain('Зараз активного доступу до Zoom-практик немає.')
+
+    const secondCall = mockPlanMessage.mock.calls[1]
+    expect(secondCall[3]).toContain('Зараз у тебе активна підписка ФОКУС до 15 листопада 2026 р.')
+    expect(JSON.stringify(secondCall[4])).toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
   })
 
   it('completed test without access does not fall back to intro', async () => {

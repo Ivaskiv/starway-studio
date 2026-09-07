@@ -27,7 +27,7 @@ import { absystemContent } from '@/products/absystem/config/content.js'
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { getUserAccessState, type UserAccessState } from '../../subscriptions/payments/focus-access.js'
 import { logger } from '../../../utils/logger.js'
-import { sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
+import { formatTelegramMessage, sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 
 export * from './start.shared.js'
 
@@ -313,11 +313,15 @@ async function deliver(
     return
   }
 
+  const formattedMessage = formatTelegramMessage({
+    text: payload.text,
+    preformatted: payload.parseMode === 'HTML',
+  })
   const dedupKey = String(deliveryChatId)
   const payloadSignature = JSON.stringify({
-    text: payload.text,
+    text: formattedMessage.text,
     reply_markup: payload.reply_markup,
-    parseMode: payload.parseMode ?? null,
+    parseMode: formattedMessage.parseMode,
   })
   const now = Date.now()
   const lastPayload = recentStartPayloadByChat.get(dedupKey)
@@ -338,9 +342,9 @@ async function deliver(
       ctx,
       'ctx.reply',
       'start_home_screen',
-      payload.text,
+      formattedMessage.text,
       payload.reply_markup,
-      payload.parseMode,
+      formattedMessage.parseMode,
     )
     recentStartPayloadByChat.set(dedupKey, {
       signature: payloadSignature,
@@ -708,6 +712,10 @@ export async function handleStart(ctx: StartContext) {
       abTestProgress.result_key
         ? 'completed_returning_home'
         : 'home_or_payload'
+    const currentAccessState =
+      selectedBranch === 'completed_returning_home'
+        ? await getUserAccessState(user.id).catch(() => null)
+        : null
 
     logger.info(`[TELEGRAM_START_RUNTIME] ${JSON.stringify({
       updateId: Number.isFinite(updateId) ? updateId : null,
@@ -729,7 +737,9 @@ export async function handleStart(ctx: StartContext) {
       return
     }
 
-    const screen = await buildHomeScreen(user, ctx)
+    const screen = await buildHomeScreen(user, ctx, {
+      accessState: currentAccessState,
+    })
     await deliver(ctx, screen)
     startMessageSent = true
 
