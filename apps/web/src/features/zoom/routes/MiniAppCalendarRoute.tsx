@@ -3,7 +3,7 @@ import { useAppSelector } from '@/app/hooks'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
 import MiniAppLayout from '@/components/miniapp/MiniAppLayout'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { CoachZoomPanel } from '../CoachZoomPanel'
 import { UserZoomPanel } from '../UserZoomPanel'
 import { isCoachRole } from '../utils/zoomCalendarRoute.utils'
@@ -14,6 +14,7 @@ export default function MiniAppCalendarRoute() {
   const role = useAppSelector(selectUserRole)
   const { authRestoreStatus, restoreSession } = useSessionOrchestrator()
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const effectiveRole = user?.activeRole ?? role ?? user?.role ?? null
   const canSwitchZoomRole = Boolean(user && isCoachRole(effectiveRole))
   const requestedZoomRole = searchParams.get('zoomRole')
@@ -66,7 +67,7 @@ export default function MiniAppCalendarRoute() {
       {isCoach ? (
         <main className="mx-auto w-full max-w-6xl px-4 py-4 pb-28">
           {roleSwitch}
-          <CoachZoomPanel expertId={user?.expertId ?? null} />
+          <CoachZoomPanel expertId={user?.expertId ?? null} activeScreen={({ '#participants': 'participants', '#battle': 'battle', '#analytics': 'analytics', '#more': 'more' } as const)[location.hash] ?? 'calendar'} />
         </main>
       ) : user ? (
         <main className="mx-auto w-full max-w-6xl px-4 py-4 pb-28">

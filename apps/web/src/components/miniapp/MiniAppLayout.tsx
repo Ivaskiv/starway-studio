@@ -115,14 +115,6 @@ export default function MiniAppLayout({
     }
   }, [hasAiMentorAccess, hasCoreAccess, location.pathname, location.search, navigate, navVariant])
 
-  useEffect(() => {
-    if (navVariant !== 'coach') return
-    const section = location.hash.slice(1)
-    if (!['participants', 'battle', 'analytics', 'more'].includes(section)) return
-
-    document.getElementById(section)?.scrollIntoView({ block: 'start' })
-  }, [location.hash, navVariant])
-
   const userPanel = new URLSearchParams(location.search).get('panel')
   const coachTabByHash: Record<string, BottomNavTab> = {
     '#participants': 'participants',

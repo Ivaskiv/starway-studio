@@ -104,8 +104,8 @@ vi.mock('../../../src/app/hooks', () => ({
     selector({ auth: { user: { role: 'EXPERT', activeRole: 'EXPERT' } } }),
 }))
 
-function renderPanel() {
-  return renderToStaticMarkup(createElement(CoachZoomPanel, { expertId: 'expert-1' }))
+function renderPanel(activeScreen: 'calendar' | 'battle' = 'calendar') {
+  return renderToStaticMarkup(createElement(CoachZoomPanel, { expertId: 'expert-1', activeScreen }))
 }
 
 async function loadPanel() {
@@ -206,9 +206,9 @@ describe('CoachZoomPanel', () => {
     expect(markup).toContain('КАЛЕНДАР')
     expect(markup).toContain('МОЯ ДОСТУПНІСТЬ')
     expect(markup).not.toContain('ЗВИЧНИЙ ГРАФІК')
-    expect(markup).toContain('id="participants"')
-    expect(markup).toContain('id="analytics"')
-    expect(markup).toContain('id="more"')
+    expect(markup).not.toContain('id="participants"')
+    expect(markup).not.toContain('id="analytics"')
+    expect(markup).not.toContain('id="more"')
   })
 
   it('renders Mon-Sun order with today marker, past completed sessions, and compact empty days', () => {
@@ -282,15 +282,13 @@ describe('CoachZoomPanel', () => {
       },
     ]
 
-    const markup = renderPanel()
+    const markup = renderPanel('battle')
 
     expect(markup).toContain('V3')
-    expect(markup).toContain('Я готова до змін!')
     expect(markup).toContain('Vira vs V3')
     expect(markup).toContain('Перші конвертації')
     expect(markup).toContain('День 7/7')
     expect(markup).toContain('АКТИВНІ BATTLES · 1')
-    expect(markup.match(/data-coach-session-id="battle-1"/g)).toHaveLength(1)
   })
 
 

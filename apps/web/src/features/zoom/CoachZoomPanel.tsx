@@ -712,6 +712,7 @@ function BattleCard({
 
 export interface CoachZoomPanelProps {
   expertId: string | null
+  activeScreen?: 'calendar' | 'participants' | 'battle' | 'analytics' | 'more'
 }
 
 function CoachParticipantsSummary() {
@@ -763,7 +764,7 @@ export function getCoachSessionInitialValues(
   }
 }
 
-export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
+export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'calendar' }: CoachZoomPanelProps) {
   const [weekAnchor, setWeekAnchor] = useState(() => new Date())
   const [calendarMode, setCalendarMode] = useState<'calendar' | 'availability'>('calendar')
   const weekRange = getKyivWeekRange(weekAnchor)
@@ -907,7 +908,7 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
               <p className="mt-0.5 text-xs text-white/56">Vira · Starway Studio</p>
             </div>
           </div>
-          {canManageZoom && calendarMode === 'calendar' && (
+          {canManageZoom && activeCoachScreen === 'calendar' && calendarMode === 'calendar' && (
             <button
               type="button"
               onClick={() => handleCreateForDate(new Date())}
@@ -918,10 +919,10 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
           )}
         </div>
 
-        <div className="mt-3 grid grid-cols-2 rounded-xl border border-white/10 bg-black/15 p-1">
+        {activeCoachScreen === 'calendar' && <div className="mt-3 grid grid-cols-2 rounded-xl border border-white/10 bg-black/15 p-1">
           <button type="button" onClick={() => setCalendarMode('calendar')} className={`rounded-lg px-3 py-2 text-xs font-semibold ${calendarMode === 'calendar' ? 'bg-sky-500/20 text-white' : 'text-white/55'}`}>КАЛЕНДАР</button>
           <button type="button" onClick={() => setCalendarMode('availability')} className={`rounded-lg px-3 py-2 text-xs font-semibold ${calendarMode === 'availability' ? 'bg-sky-500/20 text-white' : 'text-white/55'}`}>МОЯ ДОСТУПНІСТЬ</button>
-        </div>
+        </div>}
 
         {calendarMode === 'calendar' && <>
         <div className="mt-3 grid grid-cols-4 gap-1.5">
@@ -962,7 +963,7 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
         </>}
       </div>
 
-      {calendarMode === 'availability' ? (
+      {activeCoachScreen === 'calendar' && calendarMode === 'availability' ? (
         <ZoomAvailabilityEditor
           weekAnchor={weekAnchor}
           sessions={sessions}
@@ -971,7 +972,7 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
           onCurrentWeek={goToCurrentWeek}
         />
       ) : <>
-      <CoachWeeklyDiary
+      {activeCoachScreen === 'calendar' && <CoachWeeklyDiary
         days={weekDays}
         onSelectSession={(session) => {
           setSelectedSession(session)
@@ -992,9 +993,9 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
         }}
         commerceActionPending={isApprovingCommerce || isRejectingCommerce}
         canManageZoom={canManageZoom}
-      />
+      />}
 
-      <section id="battle" className="scroll-mt-4">
+      {activeCoachScreen === 'battle' && <section id="battle" className="scroll-mt-4">
         <SectionLabel
           label="АКТИВНІ BATTLES"
           count={displayBattles.length}
@@ -1031,10 +1032,10 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
             </div>
           )
         )}
-      </section>
-      <CoachParticipantsSummary />
-      <CoachAnalyticsSummary sessions={sessions} attendeeCount={totalAttendees} activeBattles={displayBattles.length} />
-      <CoachMoreSummary />
+      </section>}
+      {activeCoachScreen === 'participants' && <CoachParticipantsSummary />}
+      {activeCoachScreen === 'analytics' && <CoachAnalyticsSummary sessions={sessions} attendeeCount={totalAttendees} activeBattles={displayBattles.length} />}
+      {activeCoachScreen === 'more' && <CoachMoreSummary />}
       </>}
 
       {selectedSessionData && (
