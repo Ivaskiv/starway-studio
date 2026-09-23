@@ -120,12 +120,12 @@ describe('showCoachSystemMenu', () => {
 })
 
 describe('canonical coach main menu', () => {
-  it('preserves calendar auth URL and routes Battle through the existing calendar', () => {
+  it('preserves calendar auth URL and routes every Coach destination through the existing calendar', () => {
     const url = 'https://miniapp.example/miniapp/zoom-calendar?dl=coach-token'
     const { reply_markup } = buildCoachMainMenuReplyMarkup('EXPERT', url)
     expect(reply_markup.keyboard).toEqual([
-      ['👥 УЧАСНИКИ', expect.objectContaining({ text: '⚔️ BATTLE', web_app: { url: `${url}#battle` } })],
-      ['📊 АНАЛІТИКА', '⚙️ ЩЕ'],
+      [expect.objectContaining({ text: '👥 УЧАСНИКИ', web_app: { url: `${url}#participants` } }), expect.objectContaining({ text: '⚔️ BATTLE', web_app: { url: `${url}#battle` } })],
+      [expect.objectContaining({ text: '📊 АНАЛІТИКА', web_app: { url: `${url}#analytics` } }), expect.objectContaining({ text: '⚙️ ЩЕ', web_app: { url: `${url}#more` } })],
     ])
     expect(reply_markup.resize_keyboard).toBe(true)
     expect(reply_markup.is_persistent).toBe(true)

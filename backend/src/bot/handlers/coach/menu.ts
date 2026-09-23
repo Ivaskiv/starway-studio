@@ -316,11 +316,25 @@ export function buildCoachMainMenuReplyMarkup(
   role: 'ADMIN' | 'EXPERT' | 'SUPERADMIN' = 'EXPERT',
   calendarUrl?: string
 ) {
+  const coachPanelUrl = (panel: 'participants' | 'battle' | 'analytics' | 'more') =>
+    calendarUrl ? `${calendarUrl.split('#')[0]}#${panel}` : null
+  const participantsUrl = coachPanelUrl('participants')
+  const battleUrl = coachPanelUrl('battle')
+  const analyticsUrl = coachPanelUrl('analytics')
+  const moreUrl = coachPanelUrl('more')
   const keyboard: KeyboardButton[][] = [
-    [coachBotContent.menu.members, calendarUrl
-      ? Markup.button.webApp(coachBotContent.menu.battle, `${calendarUrl.split('#')[0]}#battle`)
+    [participantsUrl
+      ? Markup.button.webApp(coachBotContent.menu.members, participantsUrl)
+      : coachBotContent.menu.members,
+    battleUrl
+      ? Markup.button.webApp(coachBotContent.menu.battle, battleUrl)
       : coachBotContent.menu.battle],
-    [coachBotContent.menu.analytics, coachBotContent.menu.more],
+    [analyticsUrl
+      ? Markup.button.webApp(coachBotContent.menu.analytics, analyticsUrl)
+      : coachBotContent.menu.analytics,
+    moreUrl
+      ? Markup.button.webApp(coachBotContent.menu.more, moreUrl)
+      : coachBotContent.menu.more],
   ]
   void role
 

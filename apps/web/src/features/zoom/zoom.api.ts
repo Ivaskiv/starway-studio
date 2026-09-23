@@ -161,6 +161,9 @@ export const zoomCalendarApi = api.injectEndpoints({
       query: () => '/zoom/availability',
       providesTags: ['ZoomSession'],
     }),
+    getCoachParticipants: build.query<{ summary: { activeFocusCount: number; newThisWeekCount: number }; participants: Array<{ id: string; displayName: string; focusActive: boolean; zoomStatus: string; nextSessionAt: string | null; lastPoint: string | null }> }, void>({
+      query: () => '/zoom/coach/participants',
+    }),
 
     getAvailabilityWeek: build.query<AvailabilityWeekDay[], string>({
       query: from => `/zoom/availability/week?from=${encodeURIComponent(from)}`,
@@ -288,6 +291,7 @@ export const {
   useGetEligibleOpponentsQuery,
   useFinalizeBattleMutation,
   useGetAvailabilityQuery,
+  useGetCoachParticipantsQuery,
   useGetAvailabilityWeekQuery,
   useSaveAvailabilityWeekMutation,
   useSaveAvailabilityMutation,

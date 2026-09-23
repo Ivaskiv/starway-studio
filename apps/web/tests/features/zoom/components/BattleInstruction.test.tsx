@@ -2,8 +2,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
-import { BattleInstruction } from './BattleInstruction'
-import { battleInstructionContent } from './battleInstruction.content'
+import { BattleInstruction } from '@/features/zoom/components/BattleInstruction'
+import { battleInstructionContent } from '@/features/zoom/components/battleInstruction.content'
 
 describe('BattleInstruction', () => {
   it('renders the canonical Battle instruction content owner', () => {

@@ -33,7 +33,7 @@ export function BattleInstruction({
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-4 py-4">
+        <div className="max-h-[70vh] overflow-y-auto px-4 py-4 pb-8">
           <div className="space-y-4">
             {battleInstructionContent.sections.map((section) => (
               <section key={section.heading} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">

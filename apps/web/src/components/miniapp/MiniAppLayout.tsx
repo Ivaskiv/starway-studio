@@ -116,14 +116,22 @@ export default function MiniAppLayout({
   }, [hasAiMentorAccess, hasCoreAccess, location.pathname, location.search, navigate, navVariant])
 
   useEffect(() => {
-    if (navVariant !== 'coach' || location.hash !== '#battle') return
+    if (navVariant !== 'coach') return
+    const section = location.hash.slice(1)
+    if (!['participants', 'battle', 'analytics', 'more'].includes(section)) return
 
-    document.getElementById('battle')?.scrollIntoView({ block: 'start' })
+    document.getElementById(section)?.scrollIntoView({ block: 'start' })
   }, [location.hash, navVariant])
 
   const userPanel = new URLSearchParams(location.search).get('panel')
-  const resolvedActiveTab: BottomNavTab = navVariant === 'coach' && location.hash === '#battle'
-    ? 'battle'
+  const coachTabByHash: Record<string, BottomNavTab> = {
+    '#participants': 'participants',
+    '#battle': 'battle',
+    '#analytics': 'analytics',
+    '#more': 'more',
+  }
+  const resolvedActiveTab: BottomNavTab = navVariant === 'coach' && coachTabByHash[location.hash]
+    ? coachTabByHash[location.hash]
     : navVariant === 'user' && location.pathname === '/miniapp/zoom-calendar' && userPanel === 'progress'
       ? 'tracker'
       : navVariant === 'user' && location.pathname === '/miniapp/zoom-calendar' && userPanel === 'materials'
@@ -155,8 +163,11 @@ export default function MiniAppLayout({
         onTabChange={(tab: BottomNavTab) => {
           if (navVariant === 'coach') {
             switch (tab) {
+              case 'participants':
               case 'battle':
-                navigate('/miniapp/zoom-calendar#battle')
+              case 'analytics':
+              case 'more':
+                navigate(`/miniapp/zoom-calendar#${tab}`)
                 return
               case 'home':
                 navigate('/miniapp/zoom-calendar')

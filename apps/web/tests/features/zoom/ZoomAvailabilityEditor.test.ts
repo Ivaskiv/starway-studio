@@ -50,4 +50,11 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
     expect(() => getWeekDateKeys(new Date(current.getTime() - 7 * 86_400_000)).forEach((key) => formatter.formatToParts(new Date(key)))).not.toThrow()
     expect(() => getWeekDateKeys(new Date(current.getTime() + 7 * 86_400_000)).forEach((key) => formatter.formatToParts(new Date(key)))).not.toThrow()
   })
+
+  it('keeps an explicit weekday off when no recurring individual window exists', () => {
+    const monday = createIndividualWindow(1)
+    const sundayWindows = [monday].filter((slot) => slot.dayOfWeek === 0)
+
+    expect(sundayWindows).toEqual([])
+  })
 })

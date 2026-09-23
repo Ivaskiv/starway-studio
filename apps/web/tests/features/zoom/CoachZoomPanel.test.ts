@@ -73,6 +73,7 @@ vi.mock('../../../src/features/zoom/zoom.api', () => ({
     calendarQueryCalls.push({ args, options })
     return { data: calendarSessions }
   },
+  useGetCoachParticipantsQuery: () => ({ data: { summary: { activeFocusCount: 0, newThisWeekCount: 0 }, participants: [] }, isLoading: false, isError: false }),
   useFinalizeBattleMutation: () => [vi.fn()],
   useApproveZoomCommerceRequestMutation: () => [vi.fn(), { isLoading: false }],
   useRejectZoomCommerceRequestMutation: () => [vi.fn(), { isLoading: false }],
@@ -205,6 +206,9 @@ describe('CoachZoomPanel', () => {
     expect(markup).toContain('КАЛЕНДАР')
     expect(markup).toContain('МОЯ ДОСТУПНІСТЬ')
     expect(markup).not.toContain('ЗВИЧНИЙ ГРАФІК')
+    expect(markup).toContain('id="participants"')
+    expect(markup).toContain('id="analytics"')
+    expect(markup).toContain('id="more"')
   })
 
   it('renders Mon-Sun order with today marker, past completed sessions, and compact empty days', () => {

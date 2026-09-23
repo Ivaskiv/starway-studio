@@ -176,16 +176,16 @@ describe('MiniAppCalendarRoute', () => {
     expect(buttons[0]).not.toContain('aria-current="page"')
   })
 
-  it('does not keep dead hash navigation for coach tabs without destination owners', () => {
+  it('keeps every Coach nav item on a concrete calendar section route', () => {
     const source = readFileSync(
       new URL('../../../../src/components/miniapp/MiniAppLayout.tsx', import.meta.url),
       'utf8',
     )
 
-    expect(source).not.toContain('#participants')
-    expect(source).not.toContain('#analytics')
-    expect(source).not.toContain('#more')
-    expect(source).toContain("navigate('/miniapp/zoom-calendar#battle')")
+    expect(source).toContain("'#participants': 'participants'")
+    expect(source).toContain("'#analytics': 'analytics'")
+    expect(source).toContain("'#more': 'more'")
+    expect(source).toContain('navigate(`/miniapp/zoom-calendar#${tab}`)')
   })
 
   it('renders the existing USER calendar owner for an authenticated user', async () => {

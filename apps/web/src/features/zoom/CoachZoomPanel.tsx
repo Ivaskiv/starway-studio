@@ -24,6 +24,7 @@ import {
   useApproveZoomCommerceRequestMutation,
   useFinalizeBattleMutation,
   useGetCalendarSessionsQuery,
+  useGetCoachParticipantsQuery,
   useRejectZoomCommerceRequestMutation,
   useUpdateZoomSessionMutation,
 } from './zoom.api'
@@ -713,6 +714,32 @@ export interface CoachZoomPanelProps {
   expertId: string | null
 }
 
+function CoachParticipantsSummary() {
+  const { data, isLoading, isError } = useGetCoachParticipantsQuery()
+  const [search, setSearch] = useState('')
+  const participants = data?.participants.filter((participant) => participant.displayName.toLowerCase().includes(search.trim().toLowerCase())) ?? []
+  return <section id="participants" className="rounded-[24px] border border-white/10 bg-slate-950/70 p-4 scroll-mt-4">
+    <h2 className="text-lg font-semibold text-white">УЧАСНИКИ</h2>
+    <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Пошук" className="mt-4 w-full rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm text-white" />
+    {isLoading ? <p className="mt-4 text-sm text-white/55">Завантажуємо учасників…</p> : isError ? <p className="mt-4 text-sm text-red-200">Не вдалося завантажити учасників.</p> : <><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-white/65"><span>Активні у ФОКУСІ: {data?.summary.activeFocusCount ?? 0}</span><span>Нові цього тижня: {data?.summary.newThisWeekCount ?? 0}</span></div>{participants.length ? <div className="mt-4 space-y-2">{participants.map((participant) => <div key={participant.id} className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-3"><p className="font-medium text-white">{participant.displayName}</p><p className="mt-1 text-xs text-white/55">ФОКУС: {participant.focusActive ? 'активний' : 'неактивний'}<br />Zoom: {participant.zoomStatus}<br />Остання точка: {participant.lastPoint ?? '—'}</p></div>)}</div> : <p className="mt-4 text-sm text-white/45">Учасників не знайдено.</p>}</>}
+  </section>
+}
+
+function CoachAnalyticsSummary({ sessions, attendeeCount, activeBattles }: { sessions: ZoomCalendarSession[]; attendeeCount: number; activeBattles: number }) {
+  return <section id="analytics" className="rounded-[24px] border border-white/10 bg-slate-950/70 p-4 scroll-mt-4">
+    <h2 className="text-lg font-semibold text-white">АНАЛІТИКА</h2>
+    <p className="mt-1 text-sm text-white/55">Поточний тиждень Zoom</p>
+    <div className="mt-4 grid grid-cols-3 gap-2"><CoachMetricCard label="Сесій" value={sessions.length} caption="у календарі" /><CoachMetricCard label="Учасників" value={attendeeCount} caption="у сесіях" /><CoachMetricCard label="Battle" value={activeBattles} caption="активні" /></div>
+  </section>
+}
+
+function CoachMoreSummary() {
+  return <section id="more" className="rounded-[24px] border border-white/10 bg-slate-950/70 p-4 scroll-mt-4">
+    <h2 className="text-lg font-semibold text-white">ЩЕ</h2>
+    <p className="mt-2 text-sm leading-6 text-white/55">Додаткові робочі інструменти коуча доступні у Telegram-меню. Календар і доступність залишаються в цьому Mini App.</p>
+  </section>
+}
+
 export function getCoachSessionInitialValues(
   session: ZoomCalendarSession,
   participantUserIds: string[] = []
@@ -967,7 +994,7 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
         canManageZoom={canManageZoom}
       />
 
-      <section id="battle">
+      <section id="battle" className="scroll-mt-4">
         <SectionLabel
           label="АКТИВНІ BATTLES"
           count={displayBattles.length}
@@ -1005,6 +1032,9 @@ export function CoachZoomPanel({ expertId }: CoachZoomPanelProps) {
           )
         )}
       </section>
+      <CoachParticipantsSummary />
+      <CoachAnalyticsSummary sessions={sessions} attendeeCount={totalAttendees} activeBattles={displayBattles.length} />
+      <CoachMoreSummary />
       </>}
 
       {selectedSessionData && (

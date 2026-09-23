@@ -33,6 +33,7 @@ import {
   handleGetEligibleOpponents,
   finalizeBattleResult,
   handleGetAvailability,
+  handleGetCoachParticipants,
   handleGetAvailabilityWeek,
   handleGetIndividualAvailability,
   handleGetIndividualAvailabilitySummary,
@@ -95,6 +96,7 @@ router.patch('/battle/:sessionId/result',      authRequired, finalizeBattleResul
 
 // ── Availability ──────────────────────────────────────────────────────────────
 router.get('/availability',                    authRequired, handleGetAvailability);
+router.get('/coach/participants',               authRequired, handleGetCoachParticipants);
 router.get('/availability/week',               authRequired, handleGetAvailabilityWeek);
 router.get('/individual-availability/summary', authRequired, handleGetIndividualAvailabilitySummary);
 router.get('/individual-availability',         authRequired, handleGetIndividualAvailability);

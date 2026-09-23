@@ -71,6 +71,7 @@ import { bot, sendOpsTelegramMessage } from '../../../lib/telegram.js';
 import { Prisma, SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/prisma-client';
 import { syncZoomRegistrationLifecycle } from './controller.js';
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js';
+import { getCoachParticipants } from '../participants/coach-participants.service.js';
 
 const BATTLE_PARTICIPANTS_REQUIRED = 2;
 const DEFAULT_SESSION_DURATION_MINUTES = 60;
@@ -1158,6 +1159,15 @@ export async function handleGetAvailability(
   } catch (err) {
     next(err);
   }
+}
+
+export async function handleGetCoachParticipants(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { expertId: true } });
+    if (!user?.expertId) return res.status(403).json({ error: 'Expert only' });
+    return res.status(200).json(await getCoachParticipants(user.expertId));
+  } catch (error) { next(error); }
 }
 
 export async function handleGetAvailabilityWeek(
