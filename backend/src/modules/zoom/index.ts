@@ -40,6 +40,7 @@ export {
 
 export {
   markAttended,
+  completeZoomSession,
   savePostSessionReport,
   getSessionAttendees,
 } from './attendance/zoom.attendance.service.js';
@@ -49,6 +50,8 @@ export {
   getAvailablePrivateSlots,
   bookPrivateSlot,
   cancelPrivateBooking,
+  notifyAssignedPrivateSession,
+  notifyPrivateSessionPayment,
 } from './private/zoom.private-booking.service.js';
 
 export {

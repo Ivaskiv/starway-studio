@@ -83,6 +83,25 @@ vi.mock('../../../../../src/modules/deeplinks/service.ts', () => ({
   }),
 }))
 
+vi.mock('../../../../../src/modules/zoom/commerce/zoom.commerce-request.service.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../../src/modules/zoom/commerce/zoom.commerce-request.service.ts')>()
+  return {
+    ...actual,
+    getCalendarRequests: vi.fn(async () => []),
+  }
+})
+
+vi.mock('../../../../../src/modules/zoom/calendar/zoom.calendar.service.ts', () => ({
+  getCoachWeeklyDiary: vi.fn(async () => ({
+    week: {
+      from: '2026-09-07T00:00:00.000Z',
+      to: '2026-09-13T20:59:59.999Z',
+      timezone: 'Europe/Kyiv',
+    },
+    sessions: [],
+  })),
+}))
+
 vi.mock('../../../../../src/modules/ai-operator/operator.service.ts', () => ({
   AI_OPERATOR_ACTIONS: {},
   isCoachDialogueAwaiting: vi.fn(async () => false),
@@ -122,6 +141,7 @@ import {
   generateCoachAgentsWebDeepLink,
   generateCoachZoomWebDeepLink,
 } from '../../../../../src/modules/deeplinks/service.ts'
+import { getCoachWeeklyDiary } from '../../../../../src/modules/zoom/calendar/zoom.calendar.service.ts'
 import { switchLocalTestPersona } from '../../../../../src/scripts/user-sync-test-state.ts'
 
 type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
@@ -141,10 +161,20 @@ function createTelegramBotMock() {
 function createCoachCtx() {
   return {
     chat: { id: 42, type: 'private' },
-    from: { id: 99 },
+    from: { id: 99, first_name: 'Vira' },
     reply: vi.fn(async () => undefined),
     answerCbQuery: vi.fn(async () => undefined),
   }
+}
+
+function expectCoachCalendarWebAppButton(
+  button: unknown,
+  expectedUrl = 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token&zoomRole=coach',
+) {
+  expect(button).toEqual(expect.objectContaining({
+    text: coachBotContent.system.calendarCta,
+    web_app: { url: expectedUrl },
+  }))
 }
 
 describe('registerCoachBotHandlers', () => {
@@ -170,6 +200,14 @@ describe('registerCoachBotHandlers', () => {
     vi.mocked(sendFocusPaymentSuccessTelegramMessageByOrder).mockResolvedValue(true as never)
     vi.mocked(notifyUserFocusPaymentIssueDenied).mockResolvedValue(true as never)
     vi.mocked(sendTrialZoomPaymentSuccessTelegramMessage).mockResolvedValue(true as never)
+    vi.mocked(getCoachWeeklyDiary).mockResolvedValue({
+      week: {
+        from: '2026-09-07T00:00:00.000Z',
+        to: '2026-09-13T20:59:59.999Z',
+        timezone: 'Europe/Kyiv',
+      },
+      sessions: [],
+    })
   })
 
   beforeEach(async () => {
@@ -177,7 +215,102 @@ describe('registerCoachBotHandlers', () => {
     ;({ registerCoachBotHandlers } = await import('../../../../../src/bot/handlers/coach/register.ts'))
   })
 
-  it('renders the professional coach workspace on /start without user funnel actions', async () => {
+  it('renders weekly operational diary on /start without generic filler or duplicate reads', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-08T12:00:00.000Z'))
+    vi.mocked(getCoachWeeklyDiary).mockResolvedValue({
+      week: {
+        from: '2026-09-07T00:00:00.000Z',
+        to: '2026-09-13T20:59:59.999Z',
+        timezone: 'Europe/Kyiv',
+      },
+      sessions: [
+        {
+          id: 'monday-group',
+          scheduledAt: '2026-09-07T15:00:00.000Z',
+          topic: 'Фокус',
+          status: 'COMPLETED',
+          type: 'group_practice',
+          attendeesCount: 12,
+          remainingSlots: 38,
+          participantNames: [],
+          challengerName: null,
+          opponentName: null,
+          challengerId: null,
+          opponentId: null,
+          winnerId: null,
+          goalA: null,
+          goalB: null,
+          progressA: 0,
+          progressB: 0,
+          battleStatus: null,
+          questionPreviews: [],
+        },
+        {
+          id: 'today-individual',
+          scheduledAt: '2026-09-08T16:00:00.000Z',
+          topic: 'Індивідуальна',
+          status: 'SCHEDULED',
+          type: 'individual',
+          attendeesCount: 1,
+          remainingSlots: 0,
+          participantNames: ['V3'],
+          challengerName: null,
+          opponentName: null,
+          challengerId: null,
+          opponentId: null,
+          winnerId: null,
+          goalA: null,
+          goalB: null,
+          progressA: 0,
+          progressB: 0,
+          battleStatus: null,
+          questionPreviews: ['Я готова до змін!'],
+        },
+        {
+          id: 'today-battle',
+          scheduledAt: '2026-09-08T17:00:00.000Z',
+          topic: 'Перші конвертації',
+          status: 'ACTIVE',
+          type: 'battle_review',
+          attendeesCount: 2,
+          remainingSlots: 0,
+          participantNames: ['Vira', 'V3'],
+          challengerName: 'Vira',
+          opponentName: 'V3',
+          challengerId: 'coach-user-id',
+          opponentId: 'user-v3',
+          winnerId: null,
+          goalA: 'Перші конвертації',
+          goalB: null,
+          progressA: 7,
+          progressB: 5,
+          battleStatus: 'active',
+          questionPreviews: [],
+        },
+        {
+          id: 'thursday-group',
+          scheduledAt: '2026-09-10T14:00:00.000Z',
+          topic: 'Щотижнева сесія балансу',
+          status: 'COMPLETED',
+          type: 'battle_review',
+          attendeesCount: 2,
+          remainingSlots: 0,
+          participantNames: ['Vira', 'V3'],
+          challengerName: 'Vira',
+          opponentName: 'V3',
+          challengerId: 'coach-user-id',
+          opponentId: 'user-v3',
+          winnerId: null,
+          goalA: null,
+          goalB: null,
+          progressA: 0,
+          progressB: 0,
+          battleStatus: 'completed',
+          questionPreviews: [],
+        },
+      ],
+    })
     const telegramBot = createTelegramBotMock()
     registerCoachBotHandlers(telegramBot as never)
 
@@ -188,20 +321,73 @@ describe('registerCoachBotHandlers', () => {
 
     expect(ctx.reply).toHaveBeenCalledTimes(1)
     const [text, payload] = ctx.reply.mock.calls[0]
-    expect(text).toContain(coachBotContent.start.title)
-    expect(text).toContain(coachBotContent.start.upcomingTitle)
+    expect(text).toContain('Вітаю, Vira! 👋')
+    expect(text).toContain('Твій розклад на цей тиждень')
+    expect(text).toContain('<b>7–13 ВЕРЕСЕНЬ</b>')
+
+    expect(text).toContain('<b>ПН · 7.09</b>')
+    expect(text).toContain('🟢 18:00 · Групова практика «Фокус» · 12/50 · Завершено')
+
+    expect(text).toContain('<b>ВТ · 8.09 · Сьогодні</b>')
+    expect(text).toContain('🔵 19:00 · Індивідуальна сесія · V3 · Індивідуальна · Заплановано')
+    expect(text).toContain('🟣 20:00 · Zoom Battle · Vira vs V3 · Перші конвертації · Активний')
+
+    expect(text).not.toContain('СР · 9.09')
+    expect(text).not.toContain('— Немає сесій')
+
+    expect(text).toContain('<b>ЧТ · 10.09</b>')
+    expect(text).toContain('🟣 17:00 · Zoom Battle · Vira vs V3 · Щотижнева сесія балансу · Завершено')
+
+    expect(text).toContain('<b>Разом: 4 сесії · 1 активний battle</b>')
+    expect(text).not.toContain(coachBotContent.start.upcomingTitle)
+    expect(text).not.toContain(coachBotContent.start.subtitle)
+
+    expect(
+      text.match(/(?:🟢|🔵|🟣) \d{2}:\d{2} · (?:Групова практика|Індивідуальна сесія|Zoom Battle)/g),
+    ).toHaveLength(4)
     expect(payload.reply_markup.keyboard).toEqual([
-      [coachBotContent.menu.conduct, coachBotContent.menu.calendar],
-      [coachBotContent.menu.members, coachBotContent.menu.agents],
-      [coachBotContent.menu.analytics, coachBotContent.menu.content],
-      [coachBotContent.menu.notifications, coachBotContent.menu.payments],
+      [expect.objectContaining({ text: coachBotContent.system.calendarCta })],
+      [
+        coachBotContent.menu.members,
+        expect.objectContaining({ text: coachBotContent.menu.battle }),
+      ],
+      [coachBotContent.menu.analytics, coachBotContent.menu.more],
     ])
+    expectCoachCalendarWebAppButton(payload.reply_markup.keyboard[0][0])
+    expect(generateCoachZoomWebDeepLink).toHaveBeenCalledWith('coach-user-id')
+    expect(getCoachWeeklyDiary).toHaveBeenCalledTimes(1)
+    expect(getCoachWeeklyDiary).toHaveBeenCalledWith({
+      userId: 'coach-user-id',
+      expertId: 'coach-user-id',
+    })
 
     const flat = JSON.stringify(payload.reply_markup.keyboard)
     expect(flat).not.toContain('Продовжити')
     expect(flat).not.toContain('План дня')
     expect(flat).not.toContain('ФОКУС')
     expect(flat).not.toContain(coachBotContent.menu.settings)
+    vi.useRealTimers()
+  })
+
+  it('renders an empty-week summary without fake day rows', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-08T12:00:00.000Z'))
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+
+    const startHandler = telegramBot.start.mock.calls[0]?.[0] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await startHandler(ctx)
+
+    const [text] = ctx.reply.mock.calls[0]
+    expect(text).toContain('Вітаю, Vira! 👋')
+    expect(text).toContain('Твій розклад на цей тиждень')
+    expect(text).toContain('<b>7–13 ВЕРЕСЕНЬ</b>')
+    expect(text).toContain('<b>Разом: 0 сесій</b>')
+    expect(text).not.toContain('— Немає сесій')
+    expect(getCoachWeeklyDiary).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
   })
 
   it('opens agents menu with authenticated deeplink to admin studio agents tab', async () => {
@@ -219,46 +405,29 @@ describe('registerCoachBotHandlers', () => {
     expect(generateCoachAgentsWebDeepLink).toHaveBeenCalledWith('coach-user-id')
 
     expect(ctx.reply).toHaveBeenCalledWith(
-      `${coachBotContent.system.agentsTitle}\n\n${coachBotContent.system.agentsSubtitle}`,
+      expect.stringContaining(coachBotContent.system.agentsTitle),
       expect.objectContaining({
         reply_markup: expect.objectContaining({
           inline_keyboard: [[expect.objectContaining({
             text: coachBotContent.system.agentsCta,
-            web_app: {
+            web_app: expect.objectContaining({
               url: 'https://miniapp.example/app/dashboard/admin/studio?tab=agents&item=agents.overview&dl=coach-agents-token',
-            },
+            }),
           })]],
         }),
       }),
     )
   })
 
-  it('opens calendar menu with authenticated deeplink to the staff zoom workspace', async () => {
+  it('does not register the old text-only calendar menu mediator', async () => {
     const telegramBot = createTelegramBotMock()
     registerCoachBotHandlers(telegramBot as never)
 
     const hearsCall = telegramBot.hears.mock.calls.find(([matcher]) =>
       matcher instanceof RegExp && matcher.test(coachBotContent.menu.calendar),
     )
-    const handler = hearsCall?.[1] as RegisteredHandler
-    const ctx = createCoachCtx()
 
-    await handler(ctx)
-
-    expect(generateCoachZoomWebDeepLink).toHaveBeenCalledWith('coach-user-id')
-    expect(ctx.reply).toHaveBeenCalledWith(
-      `${coachBotContent.system.calendarTitle}\n\n${coachBotContent.system.calendarSubtitle}`,
-      expect.objectContaining({
-        reply_markup: expect.objectContaining({
-          inline_keyboard: [[expect.objectContaining({
-            text: coachBotContent.system.calendarCta,
-            web_app: {
-              url: 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token',
-            },
-          })]],
-        }),
-      }),
-    )
+    expect(hearsCall).toBeUndefined()
   })
 
   it('allows configured coach telegram id even when DB role lookup is absent', async () => {
@@ -286,10 +455,10 @@ describe('registerCoachBotHandlers', () => {
     await startHandler(ctx)
 
     expect(ctx.reply).toHaveBeenCalledTimes(1)
-    expect(ctx.reply.mock.calls[0]?.[0]).toContain(coachBotContent.start.title)
+    expect(ctx.reply.mock.calls[0]?.[0]).toContain('Твій розклад на цей тиждень')
   })
 
-  it('shows settings entry only for SUPERADMIN', async () => {
+  it('shows the compact more entry for SUPERADMIN', async () => {
     vi.mocked(prisma.user.findFirst)
       .mockResolvedValueOnce({
         role: 'SUPERADMIN',
@@ -320,6 +489,9 @@ describe('registerCoachBotHandlers', () => {
 
     const [, payload] = ctx.reply.mock.calls[0]
     expect(JSON.stringify(payload.reply_markup.keyboard)).toContain(
+      coachBotContent.menu.more
+    )
+    expect(JSON.stringify(payload.reply_markup.keyboard)).not.toContain(
       coachBotContent.menu.settings
     )
   })
@@ -351,7 +523,7 @@ describe('registerCoachBotHandlers', () => {
 
     expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
     expect(ctx.reply).toHaveBeenCalledWith(
-      expect.stringContaining(coachBotContent.start.title),
+      expect.stringContaining('Твій розклад на цей тиждень'),
       expect.objectContaining({
         reply_markup: expect.objectContaining({
           keyboard: expect.any(Array),
@@ -386,7 +558,8 @@ describe('registerCoachBotHandlers', () => {
     await startHandler(ctx)
 
     expect(handleStart).toHaveBeenCalledWith(ctx)
-    expect(ctx.reply).toHaveBeenNthCalledWith(1, '…', {
+    expect(ctx.reply).toHaveBeenNthCalledWith(1, '\u2060', {
+      parse_mode: 'HTML',
       reply_markup: {
         remove_keyboard: true,
       },
@@ -426,7 +599,7 @@ describe('registerCoachBotHandlers', () => {
     const [, payload] = ctx.reply.mock.calls[0]
     const keyboard = JSON.stringify(payload.reply_markup.keyboard)
     expect(keyboard).not.toContain(coachBotContent.menu.settings)
-    expect(ctx.reply.mock.calls[0]?.[0]).toContain(coachBotContent.start.title)
+    expect(ctx.reply.mock.calls[0]?.[0]).toContain('Твій розклад на цей тиждень')
   })
 
   it('shows test-role menu in dev and switches the active persona', async () => {
@@ -527,7 +700,10 @@ describe('registerCoachBotHandlers', () => {
 
     await commandHandler(ctx)
 
-    expect(ctx.reply).toHaveBeenCalledWith('Тестова роль недоступна для цього акаунта.')
+    expect(ctx.reply).toHaveBeenCalledWith(
+      'Тестова роль недоступна для цього акаунта.',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
   })
 
   it('does not register /test-role in production runtime', async () => {
@@ -617,7 +793,8 @@ describe('registerCoachBotHandlers', () => {
     expect(sendFocusPaymentSuccessTelegramMessageByOrder).not.toHaveBeenCalled()
     expect(ctx.answerCbQuery).toHaveBeenCalledTimes(1)
     expect(ctx.reply).toHaveBeenCalledWith(
-      'Доступ до ФОКУСУ вже був активний.\nuserId: user-1'
+      expect.stringContaining('Доступ до ФОКУСУ вже був активний.'),
+      expect.objectContaining({ parse_mode: 'HTML' }),
     )
   })
 
@@ -675,7 +852,8 @@ describe('registerCoachBotHandlers', () => {
 
     expect(ctx.answerCbQuery).toHaveBeenCalledWith(coachBotContent.paymentAdmin.denied)
     expect(ctx.reply).toHaveBeenCalledWith(
-      `${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: legacy-user`
+      expect.stringContaining(coachBotContent.paymentAdmin.manualAccessDenied),
+      expect.objectContaining({ parse_mode: 'HTML' }),
     )
   })
 

@@ -44,6 +44,19 @@ export async function processZoomAudioOutboxItem(
   }
 
   const audioPayload = zoomAudioPayload as NonNullable<typeof zoomAudioPayload>
+  const zoomSessionId = String(audioPayload.zoomSessionId ?? '').trim()
+  if (!zoomSessionId) {
+    await prisma.runtimeOutbox.update({
+      where: { id: item.id },
+      data: {
+        status: 'FAILED',
+        processedAt: new Date(),
+        attempts: { increment: 1 },
+        lastError: 'missing_zoom_session_id',
+      },
+    }).catch(() => undefined)
+    return 'failed'
+  }
 
   const mediaType = audioPayload.mediaType === 'voice'
     ? 'TELEGRAM_VOICE'
@@ -270,8 +283,15 @@ export async function processZoomAudioOutboxItem(
       cleanupTasks.push(rawFile.cleanup)
     }
 
-    const matchedSessionResult = await matchZoomSessionForAudio(observedAt)
+    const matchedSessionResult = await matchZoomSessionForAudio(zoomSessionId)
     const matchedSession = matchedSessionResult.session
+    if (!matchedSession) {
+      throw new Error(
+        matchedSessionResult.matchMethod === 'not_found'
+          ? 'zoom_session_not_found'
+          : 'missing_zoom_session_id',
+      )
+    }
     let finalMatchedSession = matchedSession
 
     if (audioPayload.source !== 'cloudinary') {
@@ -293,6 +313,7 @@ export async function processZoomAudioOutboxItem(
       })
       const uploadedAsset = await uploadZoomAudioToCloudinary({
         localFilePath: rawFile.filePath,
+        zoomSessionId,
         sessionDate: matchedSession?.scheduledAt ?? observedAt,
         sessionType: storageType,
         username: storageType === 'INDIVIDUAL' ? resolveZoomSessionUsername(matchedSession) : null,

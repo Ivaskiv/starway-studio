@@ -553,6 +553,15 @@ export async function sendUserTelegramMessage(
   return sendDedupedTelegramMessage(chatId, text, options)
 }
 
+
+export function resolveOpsChatId(): string {
+  return normalizeTelegramChatIdForBotApi(
+    process.env.STARWAY_OPS_CHAT_ID?.trim()
+      || process.env.OPS_TELEGRAM_CHAT_ID?.trim()
+      || '',
+  )
+}
+
 export async function sendOpsTelegramMessage(
   text: string,
   options?: Parameters<typeof bot.telegram.sendMessage>[2],
@@ -561,41 +570,126 @@ export async function sendOpsTelegramMessage(
     source?: string
   },
 ): Promise<boolean> {
-  const rawChatId =
-    process.env.STARWAY_OPS_CHAT_ID?.trim() ||
-    process.env.OPS_TELEGRAM_CHAT_ID?.trim() ||
-    ''
-  const chatId = normalizeTelegramChatIdForBotApi(rawChatId)
+  const chatId = resolveOpsChatId()
+
   if (!chatId) {
-    console.warn('[telegram:ops] STARWAY_OPS_CHAT_ID / OPS_TELEGRAM_CHAT_ID is not configured')
+    console.warn(
+      '[telegram:ops] STARWAY_OPS_CHAT_ID / OPS_TELEGRAM_CHAT_ID is not configured',
+    )
     return false
   }
 
   const messageType =
-    routeMeta?.messageType?.trim() ||
-    text.split('\n')[0]?.trim() ||
-    'ops_message'
-  const source = routeMeta?.source?.trim() || 'sendOpsTelegramMessage'
-  const botName = 'coachBot'
+    routeMeta?.messageType?.trim()
+    || text.split('\n')[0]?.trim()
+    || 'ops_message'
 
-  console.info(
-    `[OPS_ROUTE_DEBUG] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName}`,
-  )
+  const source =
+    routeMeta?.source?.trim()
+    || 'sendOpsTelegramMessage'
 
-  try {
-    const sent = await sendDedupedTelegramMessage(chatId, text, options, coachBot)
+  const sendVia = async (
+    transportBot: typeof bot,
+    botName: 'coachBot' | 'mainBot',
+  ): Promise<boolean> => {
     console.info(
-      `[OPS_ROUTE_OK] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName} delivered=${sent}`,
+      `[OPS_ROUTE_DEBUG] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName}`,
     )
-    return sent
-  } catch (error) {
-    console.error(
-      `[OPS_ROUTE_ERROR] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName}`,
-      error,
-    )
-    return false
+
+    try {
+      const sent = await sendDedupedTelegramMessage(
+        chatId,
+        text,
+        options,
+        transportBot,
+      )
+
+      console.info(
+        `[OPS_ROUTE_OK] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName} delivered=${sent}`,
+      )
+
+      return sent
+    } catch (error) {
+      const description =
+        error
+        && typeof error === 'object'
+        && 'response' in error
+        && error.response
+        && typeof error.response === 'object'
+        && 'description' in error.response
+          ? String(error.response.description)
+          : ''
+
+      console.error(
+        `[OPS_ROUTE_ERROR] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName}`,
+        error,
+      )
+
+      if (
+        botName === 'coachBot'
+        && /chat not found/i.test(description)
+      ) {
+        console.warn(
+          `[OPS_ROUTE_FALLBACK] messageType=${messageType} chatId=${chatId} source=${source} from=coachBot to=mainBot`,
+        )
+
+        return sendVia(bot, 'mainBot')
+      }
+
+      return false
+    }
   }
+
+  return sendVia(coachBot, 'coachBot')
 }
+
+
+type OpsReplyTarget = {
+  userChatId: string
+  userId?: string
+  username?: string
+  promptMessageId: number
+  createdAt: number
+}
+
+const opsReplyTargets = new Map<string, OpsReplyTarget>()
+
+function buildOpsReplyTargetKey(
+  opsChatId: string,
+  operatorTelegramUserId: string,
+): string {
+  return `${opsChatId}:${operatorTelegramUserId}`
+}
+
+export function setOpsReplyTarget(
+  opsChatId: string,
+  operatorTelegramUserId: string,
+  target: OpsReplyTarget,
+): void {
+  opsReplyTargets.set(
+    buildOpsReplyTargetKey(opsChatId, operatorTelegramUserId),
+    target,
+  )
+}
+
+export function getOpsReplyTarget(
+  opsChatId: string,
+  operatorTelegramUserId: string,
+): OpsReplyTarget | null {
+  return opsReplyTargets.get(
+    buildOpsReplyTargetKey(opsChatId, operatorTelegramUserId),
+  ) ?? null
+}
+
+export function clearOpsReplyTarget(
+  opsChatId: string,
+  operatorTelegramUserId: string,
+): void {
+  opsReplyTargets.delete(
+    buildOpsReplyTargetKey(opsChatId, operatorTelegramUserId),
+  )
+}
+
 
 export async function sendToMentor(payload: {
   fromName: string

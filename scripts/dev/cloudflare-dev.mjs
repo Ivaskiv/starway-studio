@@ -293,7 +293,7 @@ async function waitForTunnelUrl() {
 function startTunnel() {
   tunnel = spawn(
     'cloudflared',
-    ['tunnel', '--url', localBackendOrigin, '--no-autoupdate'],
+    ['tunnel', '--url', localWebOrigin, '--no-autoupdate', '--protocol', 'http2'],
     {
       cwd: rootDir,
       stdio: ['ignore', 'pipe', 'pipe'],

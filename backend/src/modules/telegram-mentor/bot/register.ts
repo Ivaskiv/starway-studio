@@ -6,6 +6,7 @@ import {
 
 import { prisma } from '../../../db/client.js'
 import { bot } from '../../../lib/telegram.js'
+import { replyWithTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { logger } from '../../../utils/logger.js'
 import { isProductionRuntime } from '../runtime/botConfig.js'
 import { switchLocalTestPersona } from '../../../scripts/user-sync-test-state.js'
@@ -251,7 +252,7 @@ export async function registerMentorBot(
 
   bot.command('resend_block12', async (ctx) => {
    if (process.env.NODE_ENV === 'production') {
-   await ctx.reply('Команда доступна лише в dev середовищі.')
+   await replyWithTelegramMessage(ctx, 'Команда доступна лише в dev середовищі.')
    return
    }
    const commandText =
@@ -273,17 +274,17 @@ export async function registerMentorBot(
    select: { id: true },
    })
    if (!targetUser) {
-   await ctx.reply(`Користувача з telegram id ${telegramId} не знайдено.`)
+   await replyWithTelegramMessage(ctx, `Користувача з telegram id ${telegramId} не знайдено.`)
    return
    }
    const hasActiveFocus = await hasActiveFocusSubscription(targetUser.id)
    if (!hasActiveFocus) {
-   await ctx.reply(`Для ${telegramId} підписка ФОКУС неактивна.`)
+   await replyWithTelegramMessage(ctx, `Для ${telegramId} підписка ФОКУС неактивна.`)
    return
    }
    await markAbTestPaymentSuccess(targetUser.id)
    await resendFocusAccessTelegramMessage(targetUser.id)
-   await ctx.reply(` Block 12 відправлено користувачу ${telegramId}.`)
+   await replyWithTelegramMessage(ctx, ` Block 12 відправлено користувачу ${telegramId}.`)
    return
    }
 
@@ -292,12 +293,12 @@ export async function registerMentorBot(
    AB_TEST_ACTIONS.FOCUS_ALREADY_PAID
    )
    if (!resent) {
-   await ctx.reply(
+   await replyWithTelegramMessage(ctx,
    'Не вдалося повторно надіслати Block 12. Спробуй через меню «Я вже оплатив / оплатила».'
    )
    return
    }
-   await ctx.reply(' Block 12 повторно надіслано.')
+   await replyWithTelegramMessage(ctx, ' Block 12 повторно надіслано.')
    })
 
   registerPipelineCommands(bot)

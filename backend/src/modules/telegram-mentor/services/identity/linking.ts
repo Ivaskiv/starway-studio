@@ -129,24 +129,6 @@ export async function findLinkedUserId(params: {
     return reconciled.userId
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[telegram/linking] resolve user', {
-      chatId,
-      telegramUserId,
-      telegramUserName,
-      linkedUserId: existingLink?.userId ?? null,
-      identityUserId: foundByTelegramIdentity?.id ?? null,
-      identityCandidateIds: identityCandidates.map((candidate) => candidate.id),
-      source: existingLink?.userId
-        ? existingLink.userId === foundByTelegramIdentity?.id
-          ? 'link+identity'
-          : 'link'
-        : foundByTelegramIdentity?.id
-          ? 'identity'
-          : 'none',
-    })
-  }
-
   if (existingLink?.userId) {
     return existingLink.userId
   }

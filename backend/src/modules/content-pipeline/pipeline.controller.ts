@@ -1,6 +1,7 @@
 import type { Context, Telegraf } from 'telegraf'
 
 import { prisma } from '../../db/client.js'
+import { replyWithTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 import { pipelineContent } from './pipeline.content.js'
 import { cancelPipeline, handlePublish, handleVariantSelection, startPipeline } from './pipeline.service.js'
 
@@ -35,7 +36,7 @@ export function registerPipelineCommands(bot: Telegraf): void {
 
     const topic = ctx.message.text.replace('/reels', '').trim()
     if (!topic) {
-      await ctx.reply(pipelineContent.commandUsage)
+      await replyWithTelegramMessage(ctx, pipelineContent.commandUsage)
       return
     }
 
@@ -75,7 +76,7 @@ export async function dispatchPipelineCallback(
   if (cancelMatch) {
     await ctx.answerCbQuery('Скасовано').catch(() => undefined)
     await cancelPipeline(cancelMatch[1])
-    await ctx.reply(pipelineContent.cancelled)
+    await replyWithTelegramMessage(ctx, pipelineContent.cancelled)
     return true
   }
 

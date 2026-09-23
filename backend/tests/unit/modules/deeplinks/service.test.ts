@@ -97,13 +97,13 @@ describe('deeplinks service frontend origin', () => {
     const url = await generateCoachZoomWebDeepLink('coach-user-id')
 
     expect(url).toBe(
-      'https://starway-frontend.vercel.app/app/dashboard/zoom?dl=coach-zoom-token',
+      'https://starway-frontend.vercel.app/miniapp/zoom-calendar?dl=coach-zoom-token',
     )
     expect(mockDeepLinkCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         userId: 'coach-user-id',
         action: 'open_web',
-        path: COACH_ZOOM_RETURN_TARGET,
+        path: '/miniapp/zoom-calendar',
       }),
     }))
     expect(mockTrackEvent).toHaveBeenCalled()

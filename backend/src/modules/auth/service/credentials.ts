@@ -1,8 +1,9 @@
 import { prisma } from '../../../db/client.js'
+import type { TelegramBotContext } from '../../telegram-mentor/runtime/botConfig.js'
 import { assignUserToExpert } from '../../experts/ownership.service.js'
 import { resolveOrCreateUser } from '../../user/resolveOrCreateUser.js'
 import { UserCreationSource } from '../../user/userCreation.service.js'
-import { computeAvailableRoles,resolveActiveRole } from '../access/roles.js'
+import { computeAvailableRoles,isRoleAvailable,resolveActiveRole } from '../access/roles.js'
 import { isSuperAdminEmail } from '../access/superadmin.js'
 import { AuthServiceError } from '../errors.js'
 import {
@@ -60,7 +61,7 @@ export async function markUserLoggedIn(userId: string): Promise<void> {
   }
 }
 
-export async function createSessionForUserId(userId: string): Promise<AuthTokensPayload> {
+export async function createSessionForUserId(userId: string, botContext?: TelegramBotContext | null): Promise<AuthTokensPayload> {
   try {
     await markUserLoggedIn(userId)
 
@@ -78,15 +79,20 @@ export async function createSessionForUserId(userId: string): Promise<AuthTokens
     }
 
     const availableRoles = computeAvailableRoles({ role: baseUser.role })
-    const activeRole = resolveActiveRole((baseUser as any).activeRole ?? baseUser.role, availableRoles)
-    const accessToken = generateAccessToken({ id: baseUser.id, role: baseUser.role, activeRole, email: baseUser.email })
-    const refreshToken = generateRefreshToken(baseUser.id)
-    await storeRefreshToken(baseUser.id, refreshToken)
+    if (botContext === 'COACH' && !isRoleAvailable('EXPERT', availableRoles)) {
+      throw new AuthServiceError('forbidden_role', 403)
+    }
+    const contextualRole = botContext === 'USER' ? 'USER' : botContext === 'COACH' ? 'EXPERT' : null
+    const role = contextualRole ?? baseUser.role
+    const activeRole = contextualRole ?? resolveActiveRole(baseUser.activeRole ?? baseUser.role, availableRoles)
+    const accessToken = generateAccessToken({ id: baseUser.id, role, activeRole, email: baseUser.email })
+    const refreshToken = generateRefreshToken(baseUser.id, contextualRole ?? undefined)
+    const savedRefreshToken = await storeRefreshToken(baseUser.id, refreshToken)
 
     return {
-      user: safeUser,
+      user: contextualRole ? { ...safeUser, role, activeRole } : safeUser,
       accessToken,
-      refreshToken,
+      refreshToken: savedRefreshToken.token,
       needsProfile: !hasProfileName(baseUser),
       expiresIn: 15 * 60,
     }

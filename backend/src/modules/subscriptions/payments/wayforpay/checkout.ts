@@ -78,10 +78,12 @@ export async function buildShortWayForPayCheckoutUrl(
   backendBaseUrl: string,
   payload: Record<string, unknown>,
   query?: Record<string, string>,
+  tx?: Prisma.TransactionClient,
+  expiresAt?: Date,
 ) {
   const token = randomUUID().replace(/-/g, '')
   const encodedPayload = encodeCheckoutPayload(payload)
-  await saveCheckoutSession(token, encodedPayload)
+  await saveCheckoutSession(token, encodedPayload, tx, expiresAt)
 
   // FIX 2026-05-25 UX1: keep Telegram URL short (tokenized link only, no payload blob in query).
   const params = new URLSearchParams(query)
@@ -206,7 +208,11 @@ function resolveSessionMetadata(payload: Record<string, unknown>) {
   const productName = Array.isArray(payload.productName) ? String(payload.productName[0] ?? '') : ''
   const normalizedProductName = productName.toLowerCase()
   const productCode =
-    normalizedProductName.includes('пробний zoom') || orderReference.startsWith('trial_zoom_')
+    payload.paymentKind === 'battle_entry'
+      ? 'battle_entry'
+      : payload.paymentKind === 'zoom_individual' || orderReference.startsWith('zoom_individual_')
+      ? 'zoom_individual'
+      : normalizedProductName.includes('пробний zoom') || orderReference.startsWith('trial_zoom_')
       ? 'trial_zoom'
       : normalizedProductName.includes('focus')
         ? 'focus'
@@ -225,14 +231,17 @@ function resolveSessionMetadata(payload: Record<string, unknown>) {
 export async function saveCheckoutSession(
   token: string,
   payload: string,
+  tx?: Prisma.TransactionClient,
+  expiresAtOverride?: Date,
 ) {
   const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>
   const meta = resolveSessionMetadata(decoded)
-  if (!meta.userId || !meta.orderReference || !Number.isFinite(meta.amount) || meta.amount <= 0) {
+  const isDev = process.env.NODE_ENV !== "production";
+  if (!meta.userId || !meta.orderReference || !Number.isFinite(meta.amount) || (meta.amount <= 0 && !isDev)) {
     throw new Error('CHECKOUT_SESSION_INVALID_PAYLOAD')
   }
-  const expiresAt = new Date(Date.now() + CHECKOUT_SESSION_TTL_MS)
-  await prisma.checkoutSession.upsert({
+  const expiresAt = expiresAtOverride ?? new Date(Date.now() + CHECKOUT_SESSION_TTL_MS)
+  await (tx ?? prisma).checkoutSession.upsert({
     where: { token },
     update: {
       payload: decoded as Prisma.InputJsonValue,

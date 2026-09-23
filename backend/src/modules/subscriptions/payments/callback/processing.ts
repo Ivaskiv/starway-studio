@@ -1,4 +1,6 @@
 import { findByAmount } from '@/lib/payments/registry.js'
+import type { Prisma, ZoomCommerceRequest } from '@starway/db/prisma-client'
+import { markRequestPaid, resolveByPaymentReference } from '../../../zoom/commerce/zoom.commerce-request.service.js'
 import { sendOpsTelegramMessage } from '@/lib/telegram.js'
 import type { PaymentCallbackData } from '../../types.js'
 import { prisma } from '../../../../db/client.js'
@@ -20,8 +22,9 @@ type CheckoutVerificationResult =
       session: {
         amount: number
         currency: string
-        userId: string
+      userId: string
         productCode: string
+        payload: unknown
       }
     }
   | {
@@ -32,6 +35,7 @@ type CheckoutVerificationResult =
         | 'CHECKOUT_AMOUNT_MISMATCH'
         | 'CHECKOUT_CURRENCY_MISMATCH'
         | 'CHECKOUT_PRODUCT_MISMATCH'
+        | 'CHECKOUT_SESSION_INACTIVE'
     }
 
 function extractUuidUserIdFromPayRef(payRef: string): string | null {
@@ -220,7 +224,30 @@ async function processBattleEntryWebhook(input: {
     }
   }
 
-  const battle = await input.db.$transaction(async (tx) => {
+  const battle = await input.db.$transaction(async (tx) => finalizeBattleEntryPayment(input, battleEntryMeta, tx))
+
+  return {
+    duplicate: false,
+    scope: 'zoom',
+    productId: 'battle_entry',
+    planId: 'single',
+    payRef: input.payRef,
+    amount: input.amount,
+    result: {
+      status: 'approved',
+      userId: input.userId,
+      productId: 'battle_entry',
+      enrollmentId: battle.id,
+      expertId: battle.expertId ?? input.expertId,
+    },
+  }
+}
+
+async function finalizeBattleEntryPayment(
+  input: { data: PaymentCallbackData; payRef: string; amount: number; userId: string; expertId: string },
+  battleEntryMeta: NonNullable<ReturnType<typeof readBattleEntryMeta>>,
+  tx: Prisma.TransactionClient,
+) {
     const paymentLog = await tx.paymentLog.create({
       data: {
         orderReference: input.payRef,
@@ -270,23 +297,6 @@ async function processBattleEntryWebhook(input: {
     })
 
     return createdBattle
-  })
-
-  return {
-    duplicate: false,
-    scope: 'zoom',
-    productId: 'battle_entry',
-    planId: 'single',
-    payRef: input.payRef,
-    amount: input.amount,
-    result: {
-      status: 'approved',
-      userId: input.userId,
-      productId: 'battle_entry',
-      enrollmentId: battle.id,
-      expertId: battle.expertId ?? input.expertId,
-    },
-  }
 }
 
 export async function isProcessedPayment(
@@ -318,11 +328,23 @@ async function verifyCheckoutSessionContract(input: {
       currency: true,
       userId: true,
       productCode: true,
+      payload: true,
+      status: true,
+      expiresAt: true,
+      invalidatedAt: true,
     },
   }).catch(() => null)
 
   if (!checkoutSession) {
     return { ok: false, reason: 'CHECKOUT_SESSION_NOT_FOUND' }
+  }
+
+  if (
+    checkoutSession.expiresAt <= new Date()
+    || checkoutSession.invalidatedAt
+    || ['COMPLETED', 'EXPIRED', 'INVALIDATED'].includes(checkoutSession.status)
+  ) {
+    return { ok: false, reason: 'CHECKOUT_SESSION_INACTIVE' }
   }
 
   if (checkoutSession.userId !== input.userId) {
@@ -352,7 +374,78 @@ async function verifyCheckoutSessionContract(input: {
       currency: String(checkoutSession.currency),
       userId: String(checkoutSession.userId),
       productCode: String(checkoutSession.productCode),
+      payload: checkoutSession.payload,
     },
+  }
+}
+
+function readIndividualCheckoutMeta(payload: unknown): { zoomSessionId: string; userId: string } | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const value = payload as Record<string, unknown>
+  if (value.paymentKind !== 'zoom_individual') return null
+  const zoomSessionId = typeof value.zoomSessionId === 'string' ? value.zoomSessionId.trim() : ''
+  const userId = typeof value.userId === 'string' ? value.userId.trim() : ''
+  return zoomSessionId && userId ? { zoomSessionId, userId } : null
+}
+
+async function processZoomIndividualWebhook(input: {
+  data: PaymentCallbackData
+  payRef: string
+  amount: number
+  userId: string
+  checkout: Extract<CheckoutVerificationResult, { ok: true }>['session']
+  db: typeof prisma
+}): Promise<ProcessPaymentWebhookResult> {
+  const meta = readIndividualCheckoutMeta(input.checkout.payload)
+  if (!meta || meta.userId !== input.userId || input.amount !== 60 || String(input.data.currency ?? '').toUpperCase() !== 'EUR') {
+    return {
+      duplicate: false, scope: 'zoom', productId: 'zoom_individual', planId: 'single', payRef: input.payRef, amount: input.amount,
+      result: { status: 'failed', userId: input.userId, reason: 'ZOOM_INDIVIDUAL_CHECKOUT_MISMATCH' },
+    }
+  }
+
+  const result = await input.db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "ZoomSession" WHERE id = ${meta.zoomSessionId} FOR UPDATE`
+    const session = await tx.zoomSession.findUnique({
+      where: { id: meta.zoomSessionId },
+      include: { _count: { select: { attendees: true } } },
+    })
+    if (!session || session.status === 'CANCELLED') throw new Error('ZOOM_INDIVIDUAL_SESSION_UNAVAILABLE')
+
+    const existingPayment = await tx.paymentLog.findUnique({
+      where: { orderReference: input.payRef }, select: { id: true },
+    })
+    if (existingPayment) return { duplicate: true, sessionId: meta.zoomSessionId }
+
+    const existingAttendee = await tx.zoomSessionAttendee.findUnique({
+      where: { sessionId_userId: { sessionId: meta.zoomSessionId, userId: input.userId } }, select: { id: true },
+    })
+    if (!existingAttendee && session._count.attendees >= 1) throw new Error('ZOOM_INDIVIDUAL_SLOT_FULL')
+
+    await tx.paymentLog.create({
+      data: {
+        orderReference: input.payRef,
+        userId: input.userId,
+        expertId: session.expertId ?? (await ensureUserExpertId(input.userId)),
+        amountCents: 6000,
+        currency: 'EUR',
+        status: 'SUCCESS',
+        processedAt: new Date(),
+        metadata: { scope: 'zoom', type: 'zoom_individual', zoomSessionId: meta.zoomSessionId, transactionId: input.data.transaction_id ?? null },
+      },
+    })
+    if (!existingAttendee) {
+      await tx.zoomSessionAttendee.create({ data: { sessionId: meta.zoomSessionId, userId: input.userId, attended: false } })
+    }
+    return { duplicate: false, sessionId: meta.zoomSessionId }
+  })
+
+  if (result.duplicate) {
+    return { duplicate: true, scope: 'zoom', productId: 'zoom_individual', planId: 'single', payRef: input.payRef, amount: input.amount, result: null }
+  }
+  return {
+    duplicate: false, scope: 'zoom', productId: 'zoom_individual', planId: 'single', payRef: input.payRef, amount: input.amount,
+    result: { status: 'approved', userId: input.userId, productId: 'zoom_individual', enrollmentId: result.sessionId, expertId: null },
   }
 }
 
@@ -361,6 +454,31 @@ export async function processPaymentWebhook(
   db: typeof prisma = prisma
 ): Promise<ProcessPaymentWebhookResult> {
   const target = resolveWebhookPaymentTarget(data)
+  if (target?.payRef.startsWith('zoom_commerce_')) {
+    const request = await resolveByPaymentReference(target.payRef, db)
+    if (!request || data.transaction_status !== 'Approved') throw new Error('COMMERCE_PAYMENT_NOT_APPROVED')
+    const checkout = request.kind === 'BATTLE'
+      ? await db.checkoutSession.findFirst({ where: { orderReference: target.payRef }, select: { payload: true } })
+      : null
+    const battleMeta = request.kind === 'BATTLE' ? readBattleEntryMeta(checkout?.payload ?? null) : null
+    if (request.kind === 'BATTLE' && !battleMeta) throw new Error('BATTLE_ENTRY_METADATA_NOT_FOUND')
+    const paid = await markRequestPaid({
+      orderReference: target.payRef, userId: data.clientAccountId ?? request.requesterUserId,
+      zoomSessionId: request.zoomSessionId, paymentKind: target.productId!,
+      amount: Number(data.amount), currency: data.currency ?? '',
+    }, db, battleMeta ? async (tx, locked: ZoomCommerceRequest) => {
+      await finalizeBattleEntryPayment({
+        data, payRef: target.payRef, amount: Number(data.amount),
+        userId: locked.requesterUserId, expertId: locked.expertId,
+      }, battleMeta, tx)
+    } : undefined)
+    return { duplicate: paid.duplicate, scope: 'zoom', productId: target.productId,
+      planId: 'single', payRef: target.payRef, amount: Number(data.amount),
+      result: { status: 'approved', userId: request.requesterUserId,
+        productId: target.productId!,
+        enrollmentId: request.kind === 'INDIVIDUAL' && !paid.duplicate ? request.zoomSessionId : null,
+        expertId: request.expertId } }
+  }
   if (!target) {
     return {
       duplicate: false,
@@ -491,6 +609,17 @@ export async function processPaymentWebhook(
         reason: checkoutVerification.reason,
       },
     }
+  }
+
+  if (target.scope === 'zoom' && target.productId === 'zoom_individual') {
+    return processZoomIndividualWebhook({
+      data,
+      payRef,
+      amount,
+      userId: resolvedUserId,
+      checkout: checkoutVerification.session,
+      db,
+    })
   }
 
   const existingPaymentLog = await db.paymentLog
@@ -674,16 +803,53 @@ export async function processPaymentWebhook(
     })
 
     if (result.status === 'approved' && resolvedUserId) {
-      const opsEvent =
-        target.productId === 'trial_zoom'
-          ? 'TRIAL_ZOOM_PAID'
-          : target.productId === 'focus'
-            ? 'FOCUS_PAID'
-            : null
+      if (target.productId === 'focus') {
+        const focusSubscription = await db.productSubscription.findFirst({
+          where: {
+            userId: resolvedUserId,
+            product: {
+              is: {
+                code: {
+                  in: ['focus', 'FOCUS', 'stankey', 'STANKEY'],
+                },
+              },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+          select: { expiresAt: true },
+        }).catch(() => null)
 
-      if (opsEvent) {
+        const canonicalSubscription = await db.subscription.findFirst({
+          where: {
+            userId: resolvedUserId,
+            status: 'ACTIVE',
+            product: {
+              is: {
+                code: {
+                  in: ['focus', 'FOCUS', 'stankey', 'STANKEY'],
+                },
+              },
+            },
+          },
+          orderBy: { currentPeriodEnd: 'desc' },
+          select: { currentPeriodEnd: true },
+        }).catch(() => null)
+
+        const finalExpiresAt = canonicalSubscription?.currentPeriodEnd ?? focusSubscription?.expiresAt ?? null
         void sendOpsTelegramMessage(
-          `✅ ${opsEvent} | User: ${resolvedUserId} | Plan: ${target.planId} | Amount: €${amount}`,
+          [
+            '✅ Оплату ФОКУС підтверджено',
+            '',
+            `User: ${resolvedUserId}`,
+            `Plan: ${target.planId}`,
+            `Amount: ${amount} ${data.currency ?? 'UAH'}`,
+            `Order: ${payRef}`,
+            `Access active until: ${finalExpiresAt ? finalExpiresAt.toISOString() : 'unknown'}`,
+          ].join('\n'),
+        )
+      } else if (target.productId === 'trial_zoom') {
+        void sendOpsTelegramMessage(
+          `✅ TRIAL_ZOOM_PAID | User: ${resolvedUserId} | Plan: ${target.planId} | Amount: €${amount}`,
         )
       }
     }

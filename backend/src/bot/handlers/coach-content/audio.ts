@@ -3,6 +3,7 @@ import { Markup } from 'telegraf'
 
 import { enqueueRuntimeOutboxItem } from '../../../core/runtime/outbox.js'
 import { prisma } from '../../../db/client.js'
+import { replyWithTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { readCoachBotName, readCoachBotToken } from '../../../modules/telegram-mentor/runtime/botConfig.js'
 import {
   findCloudinaryZoomAudioById,
@@ -40,7 +41,7 @@ export async function showCoachAudioLibraryHome(ctx: Context, coach: CoachAccess
   ].join('\n'))
 
   if (months.length > 0) {
-    await ctx.reply(
+    await replyWithTelegramMessage(ctx,
       'Бібліотека по місяцях:',
       Markup.inlineKeyboard(
         months.map((month) => [Markup.button.callback(formatMonthLabel(month), `coach-library:month:${month}`)]),
@@ -68,7 +69,7 @@ export async function showCoachAudioLibraryMonth(ctx: Context, coach: CoachAcces
       `  analysis: ${report?.summary || report?.coachReport ? 'yes' : 'no'}`,
     ].join('\n')
 
-    await ctx.reply(
+    await replyWithTelegramMessage(ctx,
       text,
       Markup.inlineKeyboard([
         [Markup.button.callback('Відкрити картку Zoom', `coach-library:session:${session.id}:overview`)],
@@ -80,7 +81,7 @@ export async function showCoachAudioLibraryMonth(ctx: Context, coach: CoachAcces
 export async function showCoachAudioLibrarySession(ctx: Context, coach: CoachAccess, sessionId: string, section = 'overview'): Promise<void> {
   const session = await loadCoachAudioLibrarySession(coach, sessionId)
   if (!session) {
-    await ctx.reply('❌ Zoom-сесію не знайдено.').catch(() => undefined)
+    await replyWithTelegramMessage(ctx, '❌ Zoom-сесію не знайдено.').catch(() => undefined)
     return
   }
 
@@ -155,7 +156,7 @@ export async function showCoachAudioLibrarySession(ctx: Context, coach: CoachAcc
 
   const sectionKeyboard = buildCoachLibrarySectionsKeyboard(session.id)
   if ((section === 'audio' || section === 'overview') && audioUrl && audioDownloadUrl) {
-    await ctx.reply(
+    await replyWithTelegramMessage(ctx,
       body,
       {
         reply_markup: {
@@ -169,7 +170,7 @@ export async function showCoachAudioLibrarySession(ctx: Context, coach: CoachAcc
     return
   }
 
-  await ctx.reply(body, { reply_markup: sectionKeyboard }).catch(() => undefined)
+  await replyWithTelegramMessage(ctx, body, { reply_markup: sectionKeyboard }).catch(() => undefined)
 }
 
 async function listCoachAudioLibraryMonths(coach: CoachAccess): Promise<string[]> {
@@ -326,14 +327,14 @@ export async function enqueueCoachAudioUpload(ctx: Context): Promise<boolean> {
     || /\.(mp3|m4a|wav|ogg|oga|aac|flac|mp4|mpeg|webm)$/i.test(fileName)
 
   if (!isAudioLike) {
-    await ctx.reply('Надішли аудіо Zoom у форматі audio або document з аудіо-файлом.').catch(() => undefined)
+    await replyWithTelegramMessage(ctx, 'Надішли аудіо Zoom у форматі audio або document з аудіо-файлом.').catch(() => undefined)
     return true
   }
 
   const fileId = String(media.file_id ?? '').trim()
   const fileUniqueId = String(media.file_unique_id ?? '').trim() || null
   if (!fileId) {
-    await ctx.reply('Не вдалося прочитати файл Telegram. Спробуй надіслати його ще раз.').catch(() => undefined)
+    await replyWithTelegramMessage(ctx, 'Не вдалося прочитати файл Telegram. Спробуй надіслати його ще раз.').catch(() => undefined)
     return true
   }
 
@@ -391,11 +392,11 @@ export async function enqueueCoachAudioUpload(ctx: Context): Promise<boolean> {
   })
 
   if (outbox.duplicate) {
-    await ctx.reply('Цей файл уже в обробці або вже був завантажений.').catch(() => undefined)
+    await replyWithTelegramMessage(ctx, 'Цей файл уже в обробці або вже був завантажений.').catch(() => undefined)
     return true
   }
 
-  await ctx.reply([
+  await replyWithTelegramMessage(ctx, [
     '🎧 Zoom-аудіо прийнято.',
     'Далі під капотом підуть upload → transcript → analysis → content → library.',
     'Статус я надішлю сюди в цей чат.',
@@ -412,7 +413,7 @@ export async function handleCoachAudioAction(ctx: Context, action: string): Prom
   const item = await findCloudinaryZoomAudioById(audioId)
   if (!item) {
     await ctx.answerCbQuery('Аудіо не знайдено').catch(() => undefined)
-    await ctx.reply('❌ Не вдалося знайти аудіо. Спробуй оновити список через /audio.').catch(() => undefined)
+    await replyWithTelegramMessage(ctx, '❌ Не вдалося знайти аудіо. Спробуй оновити список через /audio.').catch(() => undefined)
     return true
   }
 
@@ -423,7 +424,7 @@ export async function handleCoachAudioAction(ctx: Context, action: string): Prom
   const primaryUrl = isDownload ? downloadUrl : playUrl
 
   await ctx.answerCbQuery(isDownload ? 'Готую download' : 'Відкриваю аудіо').catch(() => undefined)
-  await ctx.reply(
+  await replyWithTelegramMessage(ctx,
     [
       `🎧 ${item.fileName}`,
       '',

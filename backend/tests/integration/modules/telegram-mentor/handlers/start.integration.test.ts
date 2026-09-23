@@ -204,6 +204,7 @@ describe('handleStart — targeted home screen routing', () => {
     expect(JSON.stringify(replyMarkup)).not.toContain('ЗАГЛЯНУТИ')
     expect(JSON.stringify(replyMarkup)).not.toContain('ЗАПИСАТИСЯ НА ZOOM')
     expect(JSON.stringify(replyMarkup)).not.toContain('zoom-calendar')
+    expect(mockSyncAccessAwareChatEntryPoints).toHaveBeenCalledWith('113', 'user-state')
   })
 
   it('TEST_DONE + NO_ACCESS uses conversational returning home instead of result replay', async () => {
@@ -291,6 +292,7 @@ describe('handleStart — targeted home screen routing', () => {
     expect(text).toContain('Найближча групова Zoom-практика — 3 серпня о 19:00 за Києвом.')
     expect(JSON.stringify(options)).toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
     expect(JSON.stringify(options)).toMatch(/ПРО ПРОГРАМУ/)
+    expect(mockSyncAccessAwareChatEntryPoints).toHaveBeenCalledWith('120', 'user-focus-1')
   })
 
   it('completed returning USER with current NO_ACCESS renders expired state and no booking CTA', async () => {

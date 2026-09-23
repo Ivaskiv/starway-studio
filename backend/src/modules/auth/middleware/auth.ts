@@ -14,18 +14,6 @@ export async function authRequired(
 ) {
   try {
     const user = await getServerUser(req)
-    console.log('[AUTH]', {
-      userId: user?.id ?? null,
-      path: req.path,
-      method: req.method,
-      requestFingerprint: buildRequestFingerprint({
-        method: req.method,
-        path: req.path,
-        ip: req.ip,
-        userAgent: req.headers['user-agent'] as string | null | undefined,
-        userId: user?.id ?? null,
-      }),
-    })
     if (!user) {
       return res.status(401).json({ error: 'unauthorized' })
     }

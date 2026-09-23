@@ -2,13 +2,15 @@ import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-import BottomNav from '@/components/miniapp/BottomNav'
+import BottomNav, { type BottomNavTab, type BottomNavVariant } from '@/components/miniapp/BottomNav'
+import { useSystemState } from '@/features/auth/hooks/useSystemState'
 import DashboardSideRails from '@/layout/DashboardSideRails'
 import type { MiniAppPageId } from '@/features/social/types/miniapp'
 
 type MiniAppLayoutProps = {
   activeTab: MiniAppPageId
   children: ReactNode
+  navVariant?: BottomNavVariant
 }
 
 const START_PARAM_ROUTE_MAP: Record<string, string> = {
@@ -54,11 +56,14 @@ function getTelegramStartParam() {
 export default function MiniAppLayout({
   activeTab,
   children,
+  navVariant = 'user',
 }: MiniAppLayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { getModuleAccess, hasCoreAccess } = useSystemState()
   const handledRef = useRef(false)
   const lastAppliedParamRef = useRef<string | null>(null)
+  const hasAiMentorAccess = !getModuleAccess('AI_MENTOR').isLocked
 
   useEffect(() => {
     const telegram = (window as {
@@ -72,9 +77,23 @@ export default function MiniAppLayout({
 
     const applyStartParam = () => {
       const startParam = getTelegramStartParam()
-      const targetRoute = START_PARAM_ROUTE_MAP[startParam]
+      let targetRoute = START_PARAM_ROUTE_MAP[startParam]
 
       if (!startParam || !targetRoute) return
+      if (navVariant === 'user') {
+        if (targetRoute.startsWith('/miniapp/mentor') && !hasAiMentorAccess) {
+          targetRoute = '/miniapp/zoom-calendar?zoomRole=user&panel=ai'
+        }
+        if (targetRoute === '/miniapp/tracker' && !hasCoreAccess) {
+          targetRoute = '/miniapp/zoom-calendar?zoomRole=user&panel=progress'
+        }
+        if (targetRoute === '/miniapp/library') {
+          targetRoute = '/miniapp/zoom-calendar?zoomRole=user&panel=materials'
+        }
+        if (targetRoute.startsWith('/miniapp/profile')) {
+          targetRoute = '/miniapp/zoom-calendar?zoomRole=user&panel=more'
+        }
+      }
 
       const currentRoute = `${location.pathname}${location.search}`
       if (currentRoute === targetRoute) return
@@ -94,7 +113,30 @@ export default function MiniAppLayout({
     return () => {
       telegram?.WebApp?.offEvent?.('activated', applyStartParam)
     }
-  }, [location.pathname, location.search, navigate])
+  }, [hasAiMentorAccess, hasCoreAccess, location.pathname, location.search, navigate, navVariant])
+
+  useEffect(() => {
+    if (navVariant !== 'coach' || location.hash !== '#battle') return
+
+    document.getElementById('battle')?.scrollIntoView({ block: 'start' })
+  }, [location.hash, navVariant])
+
+  const userPanel = new URLSearchParams(location.search).get('panel')
+  const resolvedActiveTab: BottomNavTab = navVariant === 'coach' && location.hash === '#battle'
+    ? 'battle'
+    : navVariant === 'user' && location.pathname === '/miniapp/zoom-calendar' && userPanel === 'progress'
+      ? 'tracker'
+      : navVariant === 'user' && location.pathname === '/miniapp/zoom-calendar' && userPanel === 'materials'
+        ? 'library'
+        : navVariant === 'user' && location.pathname === '/miniapp/zoom-calendar' && userPanel === 'ai'
+          ? 'ai'
+          : navVariant === 'user' && location.pathname === '/miniapp/zoom-calendar' && userPanel === 'more'
+            ? 'profile'
+            : activeTab === 'mentor'
+              ? 'ai'
+              : activeTab === 'journal'
+                ? 'home'
+                : activeTab
 
   return (
     <div className="miniapp-page-shell mx-auto flex w-full flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
@@ -108,23 +150,41 @@ export default function MiniAppLayout({
       </div>
 
       <BottomNav
-        activeTab={activeTab === 'mentor' ? 'ai' : activeTab === 'journal' ? 'home' : activeTab}
-        onTabChange={(tab) => {
+        activeTab={resolvedActiveTab}
+        variant={navVariant}
+        onTabChange={(tab: BottomNavTab) => {
+          if (navVariant === 'coach') {
+            switch (tab) {
+              case 'battle':
+                navigate('/miniapp/zoom-calendar#battle')
+                return
+              case 'home':
+                navigate('/miniapp/zoom-calendar')
+                return
+              default:
+                return
+            }
+          }
+
           switch (tab) {
             case 'library':
-              navigate('/miniapp/library')
+              navigate('/miniapp/zoom-calendar?zoomRole=user&panel=materials')
               return
             case 'ai':
-              navigate('/miniapp/mentor')
+              navigate(hasAiMentorAccess
+                ? '/miniapp/mentor'
+                : '/miniapp/zoom-calendar?zoomRole=user&panel=ai')
               return
             case 'tracker':
-              navigate('/miniapp/tracker')
+              navigate(hasCoreAccess
+                ? '/miniapp/tracker'
+                : '/miniapp/zoom-calendar?zoomRole=user&panel=progress')
               return
             case 'profile':
-              navigate('/miniapp/profile')
+              navigate('/miniapp/zoom-calendar?zoomRole=user&panel=more')
               return
             default:
-              navigate('/miniapp/zoom-calendar')
+              navigate('/miniapp/zoom-calendar?zoomRole=user')
           }
         }}
       />

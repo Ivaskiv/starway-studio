@@ -7,7 +7,9 @@ import {
 import {
   buildCloudflareDevChildEnv,
   buildCloudflareDevEnvUpdates,
+  buildCloudflaredArgs,
   classifyCloudflareProcessExit,
+  shouldRelayDevOutputLine,
 } from '../../../../scripts/dev/cloudflare-dev.mjs'
 
 describe('sync-ngrok local telegram mode recovery', () => {
@@ -77,6 +79,29 @@ describe('sync-ngrok local telegram mode recovery', () => {
       WAYFORPAY_CALLBACK_URL:
         'https://fresh-cloudflare.trycloudflare.com/api/subscriptions/payments/wayforpay/callback',
     })
+  })
+
+  it('uses http2 transport for local cloudflare quick tunnels', () => {
+    expect(buildCloudflaredArgs()).toEqual([
+      'tunnel',
+      '--url',
+      'http://127.0.0.1:3001',
+      '--no-autoupdate',
+      '--protocol',
+      'http2',
+    ])
+  })
+
+  it('keeps normal dev output while hiding repeated local diagnostics unless debug is enabled', () => {
+    expect(
+      shouldRelayDevOutputLine('[ZOOM_ACCESS_REFRESH_BACKEND] {', {}),
+    ).toBe(false)
+    expect(
+      shouldRelayDevOutputLine('backend ready', {}),
+    ).toBe(true)
+    expect(
+      shouldRelayDevOutputLine('[AUTH DEBUG] {', { LOG_LEVEL: 'debug' }),
+    ).toBe(true)
   })
 
   it('does not let a post-readiness cloudflared exit terminate healthy backend/web runtime', () => {

@@ -16,7 +16,16 @@ import {
 import { activateProductSubscription } from '../../../modules/subscriptions/payments/activation.js'
 import { handleStart } from '../../../modules/telegram-mentor/handlers/start.js'
 import { isProductionRuntime } from '../../../modules/telegram-mentor/runtime/botConfig.js'
+import {
+  approveRequest as approveZoomCommerceRequest,
+  rejectRequest as rejectZoomCommerceRequest,
+} from '../../../modules/zoom/commerce/zoom.commerce-request.service.js'
+import { notifyAssignedPrivateSession } from '../../../modules/zoom/private/zoom.private-booking.service.js'
 import { switchLocalTestPersona } from '../../../scripts/user-sync-test-state.js'
+import {
+  removeTelegramReplyKeyboard,
+  replyWithTelegramMessage,
+} from '../../../lib/telegram/messageFormatter.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 import {
   handleCoachAudioCommand,
@@ -41,6 +50,7 @@ import {
 import {
   checkCoachAccess,
   isStarwayOpsChat,
+  resolveCoachAccessProfileByTelegramId,
   resolveLinkedCoachUserByTelegramId,
   resolveCoachUserId,
 } from './access.js'
@@ -51,13 +61,11 @@ import {
 import {
   MENU_AGENTS_PATTERN,
   MENU_ANALYTICS_PATTERN,
-  MENU_CALENDAR_PATTERN,
   MENU_CONDUCT_PATTERN,
   MENU_LIBRARY_PATTERN,
   MENU_NOTIFICATIONS_PATTERN,
   MENU_PAYMENTS_PATTERN,
   MENU_SETTINGS_PATTERN,
-  showCoachCalendarMenu,
   showCoachAgentsMenu,
   showCoachMenu,
   showCoachSettingsBack,
@@ -110,12 +118,12 @@ function buildTestRoleReplyMarkup() {
 async function showTestRoleMenu(ctx: Parameters<RegisteredHandler>[0]) {
   const linkedUser = await resolveCoachTestRoleOwner(ctx)
   if (!linkedUser) {
-    await ctx.reply('Тестова роль недоступна для цього акаунта.')
+    await replyWithTelegramMessage(ctx, 'Тестова роль недоступна для цього акаунта.')
     return
   }
 
   const currentRole = String(linkedUser.activeRole ?? linkedUser.role).trim() || linkedUser.role
-  await ctx.reply(`Test role: ${currentRole}`, buildTestRoleReplyMarkup())
+  await replyWithTelegramMessage(ctx, `Test role: ${currentRole}`, buildTestRoleReplyMarkup())
 }
 
 async function maybeHandleUserPersonaStart(ctx: Parameters<RegisteredHandler>[0]): Promise<boolean> {
@@ -132,11 +140,7 @@ async function maybeHandleUserPersonaStart(ctx: Parameters<RegisteredHandler>[0]
     return false
   }
 
-  await ctx.reply('…', {
-    reply_markup: {
-      remove_keyboard: true,
-    },
-  })
+  await removeTelegramReplyKeyboard(ctx)
   await handleStart(ctx)
   return true
 }
@@ -166,7 +170,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
 
     if (await isCoachPostEditingActive(userId)) {
       const step = await submitCoachEditedPost(userId, text)
-      await ctx.reply(step.text, {
+      await replyWithTelegramMessage(ctx, step.text, {
         parse_mode: 'HTML',
         ...(step.buttons.length
           ? { reply_markup: { inline_keyboard: step.buttons } }
@@ -180,7 +184,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     }
 
     const step = await submitCoachDialogues(userId, text)
-    await ctx.reply(step.text, {
+    await replyWithTelegramMessage(ctx, step.text, {
       parse_mode: 'HTML',
       ...(step.buttons.length
         ? { reply_markup: { inline_keyboard: step.buttons } }
@@ -197,7 +201,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
 
       const isCoach = await checkCoachAccess(ctx)
       if (!isCoach) {
-        await ctx.reply(coachBotContent.access.denied)
+        await replyWithTelegramMessage(ctx, coachBotContent.access.denied)
         return
       }
       await showCoachMenu(ctx)
@@ -262,12 +266,12 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
 
       const userId = await resolveCoachUserId(ctx)
       if (!userId) {
-        await ctx.reply('Не вдалося визначити профіль коуча.')
+        await replyWithTelegramMessage(ctx, 'Не вдалося визначити профіль коуча.')
         return
       }
 
       const step = await runCoachStartDay(userId)
-      await ctx.reply(step.text, {
+      await replyWithTelegramMessage(ctx, step.text, {
         parse_mode: 'HTML',
         ...(step.buttons.length
           ? { reply_markup: { inline_keyboard: step.buttons } }
@@ -375,7 +379,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       async (ctx) => {
         if (!(await checkCoachAccess(ctx))) return ctx.answerCbQuery()
         await ctx.answerCbQuery('Починаємо планування').catch(() => undefined)
-        await ctx.reply(
+        await replyWithTelegramMessage(ctx,
           [
             '📍 Зараз: Аналіз тижня',
             '⬜ Далі: Бізнес-сигнали → Інсайти → Тема → Контент-план',
@@ -453,13 +457,6 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
     })
   )
   telegramBot.hears(
-    MENU_CALENDAR_PATTERN,
-    withCoachRuntimeProtection('menu:calendar', async (ctx) => {
-      if (!(await checkCoachAccess(ctx))) return
-      await showCoachCalendarMenu(ctx)
-    })
-  )
-  telegramBot.hears(
     MENU_NOTIFICATIONS_PATTERN,
     withCoachRuntimeProtection('menu:notifications', async (ctx) => {
       if (!(await checkCoachAccess(ctx))) return
@@ -528,7 +525,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
           })
         }
 
-        await ctx.reply(
+        await replyWithTelegramMessage(ctx,
           alreadyActive
             ? `Доступ до ФОКУСУ вже був активний.\nuserId: ${userId}`
             : `${coachBotContent.paymentAdmin.manualAccessGranted}\nuserId: ${userId}`
@@ -538,7 +535,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       await ctx
         .answerCbQuery(coachBotContent.paymentAdmin.error)
         .catch(() => undefined)
-      await ctx.reply(
+      await replyWithTelegramMessage(ctx,
         `${coachBotContent.paymentAdmin.manualAccessFailed}\nПричина: ${result.message}\nuserId: ${userId}`
       )
     })
@@ -573,7 +570,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
         await ctx
           .answerCbQuery(coachBotContent.paymentAdmin.trialAccessGranted)
           .catch(() => undefined)
-        await ctx.reply(
+        await replyWithTelegramMessage(ctx,
           `${coachBotContent.paymentAdmin.manualTrialAccessGranted}\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference}`
         )
         return
@@ -583,7 +580,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
         await ctx
           .answerCbQuery(coachBotContent.paymentAdmin.askPaymentDetails)
           .catch(() => undefined)
-        await ctx.reply(
+        await replyWithTelegramMessage(ctx,
           `Підтверджена оплата для пробного Zoom не знайдена.\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference}`
         )
         return
@@ -592,7 +589,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
       await ctx
         .answerCbQuery(coachBotContent.paymentAdmin.error)
         .catch(() => undefined)
-      await ctx.reply(
+      await replyWithTelegramMessage(ctx,
         `${coachBotContent.paymentAdmin.manualTrialAccessFailed}\nПричина: ${result.message}\nuserId: ${checkoutTarget.userId}`
       )
     })
@@ -618,13 +615,59 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
         .answerCbQuery(coachBotContent.paymentAdmin.denied)
         .catch(() => undefined)
       await notifyUserFocusPaymentIssueDenied(userId).catch(() => undefined)
-      await ctx.reply(
+      await replyWithTelegramMessage(ctx,
         `${coachBotContent.paymentAdmin.manualAccessDenied}\nuserId: ${userId}`
       )
     })
   )
   telegramBot.action(
-  /^coach:zoom:confirm:(.+)$/,
+    /^coach:zoom:commerce:(approve|reject):(.+)$/,
+    withCoachRuntimeProtection('action:coach:zoom:commerce', async (ctx) => {
+      if (!await checkCoachAccess(ctx)) return ctx.answerCbQuery()
+      const telegramUserId = String(ctx.from?.id ?? '').trim()
+      const coach = telegramUserId
+        ? await resolveCoachAccessProfileByTelegramId(telegramUserId)
+        : null
+      if (!coach?.expertId) return ctx.answerCbQuery('Коуча не знайдено')
+
+      const raw = 'data' in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? '') : ''
+      const match = raw.match(/^coach:zoom:commerce:(approve|reject):(.+)$/)
+      const action = match?.[1]
+      const requestId = match?.[2]?.trim()
+      if (!action || !requestId) return ctx.answerCbQuery('Запит не знайдено')
+
+      if (action === 'reject') {
+        await rejectZoomCommerceRequest(requestId, coach.expertId)
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => undefined)
+        return ctx.answerCbQuery('Запит відхилено')
+      }
+
+      const approval = await approveZoomCommerceRequest(requestId, coach.expertId)
+      if (
+        approval.request.kind !== 'INDIVIDUAL'
+        || approval.request.status !== 'APPROVED_PENDING_PAYMENT'
+        || !approval.request.zoomSessionId
+        || !approval.checkoutUrl
+      ) throw new Error('individual_checkout_missing_after_approval')
+
+      await notifyAssignedPrivateSession({
+        commerceRequestId: approval.request.id,
+        sessionId: approval.request.zoomSessionId,
+        userId: approval.request.requesterUserId,
+        checkoutUrl: approval.checkoutUrl,
+        origin: 'user_approved',
+      }).catch((error: unknown) => {
+        console.error('[coach/zoom commerce approve] notification failed', {
+          commerceRequestId: approval.request.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => undefined)
+      return ctx.answerCbQuery('Сесію підтверджено')
+    })
+  )
+  telegramBot.action(
+    /^coach:zoom:confirm:(.+)$/,
   withCoachRuntimeProtection('action:coach:zoom:confirm', async (ctx) => {
     if (!await checkCoachAccess(ctx)) {
       return ctx.answerCbQuery()
@@ -669,7 +712,7 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
         await ctx
           .answerCbQuery(coachBotContent.paymentAdmin.askPaymentDetails)
           .catch(() => undefined)
-        await ctx.reply(
+        await replyWithTelegramMessage(ctx,
           `Запитай у користувача чек або деталі транзакції.\nuserId: ${checkoutTarget.userId}\norderReference: ${checkoutTarget.orderReference ?? 'unknown'}`
         )
       }

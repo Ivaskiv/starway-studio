@@ -338,21 +338,6 @@ function withTimeout<T>(promise: Promise<T>, ms = 4000): Promise<T> {
   ])
 }
 
-export async function syncAccessAwareChatMenuButton(
-  chatId: string | number,
-  userId: string | null
-): Promise<void> {
-  const normalizedChatId = typeof chatId === 'string' ? Number(chatId) : chatId
-  if (!Number.isFinite(normalizedChatId)) return
-  try {
-    await withTimeout(bot.telegram.setChatMenuButton({
-      chatId: normalizedChatId,
-      menuButton: { type: 'default' },
-    }))
-  } catch {
-    // silent — timeout or API error
-  }
-}
 export async function syncAccessAwareChatCommands(
   chatId: string | number,
   userId: string | null
@@ -375,10 +360,7 @@ export async function syncAccessAwareChatEntryPoints(
   chatId: string | number,
   userId: string | null
 ): Promise<void> {
-  await Promise.all([
-    syncAccessAwareChatMenuButton(chatId, userId),
-    syncAccessAwareChatCommands(chatId, userId),
-  ])
+  await syncAccessAwareChatCommands(chatId, userId)
 }
 export async function getAccessAwareAppReplyMarkupForContext(
   ctx: Context

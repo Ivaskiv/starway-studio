@@ -6,8 +6,14 @@ import type {
   ZoomCalendarMode,
   ZoomCalendarSession,
   CreateSessionPayload,
+  ZoomCompletionPayload,
+  ZoomCompletionDraft,
   LeaderboardEntry,
   AvailabilitySlot,
+  AvailabilityWeekChange,
+  AvailabilityWeekDay,
+  IndividualAvailabilityCandidate,
+  IndividualAvailabilitySummaryDay,
   ZoomSwapRequest,
 } from './zoom.types';
 
@@ -28,6 +34,27 @@ export const zoomCalendarApi = api.injectEndpoints({
       invalidatesTags: ['ZoomSession'],
     }),
 
+    createUserIndividualRequest: build.mutation<
+      { request: { id: string; status: string }; session: { id: string }; duplicate: boolean },
+      { scheduledAt: string; questionText: string }
+    >({
+      query: body => ({ url: '/zoom/individual-requests', method: 'POST', body }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    getIndividualAvailability: build.query<IndividualAvailabilityCandidate[], string>({
+      query: date => `/zoom/individual-availability?date=${encodeURIComponent(date)}`,
+      providesTags: ['ZoomSession'],
+    }),
+
+    getIndividualAvailabilitySummary: build.query<
+      IndividualAvailabilitySummaryDay[],
+      { from: string; to: string }
+    >({
+      query: ({ from, to }) => `/zoom/individual-availability/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      providesTags: ['ZoomSession'],
+    }),
+
     updateZoomSession: build.mutation<
       ZoomCalendarSession,
       { id: string; patch: Partial<CreateSessionPayload> }
@@ -36,8 +63,43 @@ export const zoomCalendarApi = api.injectEndpoints({
       invalidatesTags: ['ZoomSession'],
     }),
 
+
+    getZoomCompletionDraft: build.query<ZoomCompletionDraft, string>({
+      query: sessionId => `/zoom/sessions/${encodeURIComponent(sessionId)}/completion-draft`,
+    }),
+
+    completeZoomSession: build.mutation<
+      ZoomCalendarSession,
+      { id: string; payload: ZoomCompletionPayload }
+    >({
+      query: ({ id, payload }) => ({ url: `/zoom/sessions/${id}/complete`, method: 'PATCH', body: payload }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
     cancelZoomSession: build.mutation<ZoomCalendarSession, string>({
       query: id => ({ url: `/zoom/sessions/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    approveZoomCommerceRequest: build.mutation<
+      { request: { id: string; status: string }; checkoutUrl: string | null },
+      string
+    >({
+      query: requestId => ({
+        url: `/zoom/commerce/requests/${requestId}/approve`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    rejectZoomCommerceRequest: build.mutation<
+      { request: { id: string; status: string } },
+      string
+    >({
+      query: requestId => ({
+        url: `/zoom/commerce/requests/${requestId}/reject`,
+        method: 'POST',
+      }),
       invalidatesTags: ['ZoomSession'],
     }),
 
@@ -48,7 +110,7 @@ export const zoomCalendarApi = api.injectEndpoints({
 
     initiateBattle: build.mutation<
       | { type: 'subscriber'; costUAH: 0; battle: { id: string } }
-      | { type: 'non_subscriber'; costUAH: 99; orderReference: string; checkoutUrl: string; message: string },
+      | { type: 'non_subscriber'; costUAH: 99; request: { id: string; status: string }; checkoutUrl?: string | null; message: string },
       { challengerId: string; opponentId: string; goalA?: string; goalB?: string }
     >({
       query: body => ({ url: '/zoom/battle/initiate', method: 'POST', body }),
@@ -100,6 +162,16 @@ export const zoomCalendarApi = api.injectEndpoints({
       providesTags: ['ZoomSession'],
     }),
 
+    getAvailabilityWeek: build.query<AvailabilityWeekDay[], string>({
+      query: from => `/zoom/availability/week?from=${encodeURIComponent(from)}`,
+      providesTags: ['ZoomSession'],
+    }),
+
+    saveAvailabilityWeek: build.mutation<{ ok: boolean }, { from: string; days: AvailabilityWeekChange[] }>({
+      query: body => ({ url: '/zoom/availability/week', method: 'PUT', body }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
     saveAvailability: build.mutation<{ ok: boolean }, AvailabilitySlot[]>({
       query: slots => ({ url: '/zoom/availability', method: 'PUT', body: slots }),
       invalidatesTags: ['ZoomSession'],
@@ -140,8 +212,14 @@ export const zoomCalendarApi = api.injectEndpoints({
       providesTags: ['ZoomSession'],
     }),
 
-    bookPrivateSlot: build.mutation<{ success: boolean }, string>({
-      query: sessionId => ({ url: `/zoom/sessions/${sessionId}/book`, method: 'POST' }),
+    bookPrivateSlot: build.mutation<{
+      success: boolean;
+      request: { id: string; status: string };
+    }, string | { sessionId: string; questionText: string }>({
+      query: input => ({
+        url: `/zoom/sessions/${typeof input === 'string' ? input : input.sessionId}/book`,
+        method: 'POST', body: typeof input === 'string' ? undefined : { questionText: input.questionText },
+      }),
       invalidatesTags: ['ZoomSession'],
     }),
 
@@ -193,8 +271,15 @@ export const zoomCalendarApi = api.injectEndpoints({
 export const {
   useGetCalendarSessionsQuery,
   useCreateZoomSessionMutation,
+  useCreateUserIndividualRequestMutation,
+  useGetIndividualAvailabilityQuery,
+  useGetIndividualAvailabilitySummaryQuery,
   useUpdateZoomSessionMutation,
+  useCompleteZoomSessionMutation,
+  useLazyGetZoomCompletionDraftQuery,
   useCancelZoomSessionMutation,
+  useApproveZoomCommerceRequestMutation,
+  useRejectZoomCommerceRequestMutation,
   useGetLeaderboardQuery,
   useInitiateBattleMutation,
   useAcceptBattleMutation,
@@ -203,6 +288,8 @@ export const {
   useGetEligibleOpponentsQuery,
   useFinalizeBattleMutation,
   useGetAvailabilityQuery,
+  useGetAvailabilityWeekQuery,
+  useSaveAvailabilityWeekMutation,
   useSaveAvailabilityMutation,
   useGenerateSessionsMutation,
   useBookSlotMutation,

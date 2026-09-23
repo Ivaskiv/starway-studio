@@ -1,5 +1,6 @@
 import type { UserWithSub } from '../../../types/globalTypes.js'
 import { assignUserToExpert } from '../../experts/ownership.service.js'
+import type { TelegramBotContext } from '../../telegram-mentor/runtime/botConfig.js'
 import { findLinkedUserId } from '../../telegram-mentor/services/identity/linking.js'
 import { UserCreationSource } from '../../user/userCreation.service.js'
 import { isSuperAdminEmail } from '../access/superadmin.js'
@@ -24,7 +25,7 @@ findUserByEmail,
 findUserById,
 } from './users.js'
 
-export async function socialLoginUser(input: SocialAuthInput): Promise<AuthTokensPayload> {
+export async function socialLoginUser(input: SocialAuthInput, botContext?: TelegramBotContext | null): Promise<AuthTokensPayload> {
   const provider = input.provider
   const externalId = String(input.externalId ?? '').trim()
 
@@ -80,7 +81,7 @@ export async function socialLoginUser(input: SocialAuthInput): Promise<AuthToken
       throw new AuthServiceError('user_creation_failed', 500)
     }
 
-    const session = await createSessionForUserId(userId)
+    const session = await createSessionForUserId(userId, botContext)
 
     return {
       ...session,
@@ -111,7 +112,7 @@ export async function telegramMiniAppLoginUser(
   })
 
   if (linkedUserId) {
-    const session = await createSessionForUserId(linkedUserId)
+    const session = await createSessionForUserId(linkedUserId, telegramUser.botContext)
 
     return {
       ...session,
@@ -126,7 +127,7 @@ export async function telegramMiniAppLoginUser(
     username: telegramUser.username ?? undefined,
     name: telegramUser.firstName ?? undefined,
     requestId: requestId ?? null,
-  })
+  }, telegramUser.botContext)
 }
 
 export async function getCurrentUser(params: {

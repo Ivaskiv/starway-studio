@@ -1,4 +1,5 @@
 import { stankeyManifest } from '@/products/stankey/product.manifest.js'
+import type { Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../../../db/client.js'
 import { invalidateFunnelStage } from '../../../../lib/funnel/getUserFunnelStage.js'
 import { syncLifecycleForUser } from '../../../flow-control/service.js'
@@ -14,8 +15,10 @@ import {
   resolveEcosystemProductCode,
 } from './catalog.js'
 
+type PaymentDbClient = typeof prisma | Prisma.TransactionClient
+
 async function resolveProductByCodeCandidates(
-  db: typeof prisma,
+  db: PaymentDbClient,
   productCodes: readonly string[]
 ) {
   for (const code of productCodes) {
@@ -33,7 +36,7 @@ async function resolveProductByCodeCandidates(
 }
 
 async function upsertLegacySubscription(
-  db: typeof prisma,
+  db: PaymentDbClient,
   input: {
     userId: string
     productId: string
@@ -77,6 +80,17 @@ async function upsertLegacySubscription(
       currentPeriodEnd: input.expiresAt,
       autoRenew: true,
     },
+  })
+}
+
+async function withLockedUserPaymentScope<T>(
+  db: typeof prisma,
+  userId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "User" WHERE "id" = ${userId} FOR UPDATE`
+    return fn(tx)
   })
 }
 
@@ -194,115 +208,123 @@ export async function processEcosystemPayment(
     })
   }
 
-  const now = new Date()
-  const currentProductSubscription = await db.productSubscription.findFirst({
-    where: {
-      userId,
-      productId: product.id,
-      status: 'active',
-    },
-    orderBy: { updatedAt: 'desc' },
-    select: {
-      expiresAt: true,
-    },
-  })
-
-  const nextExpiresAtBase =
-    currentProductSubscription?.expiresAt &&
-    currentProductSubscription.expiresAt > now
-      ? currentProductSubscription.expiresAt
-      : now
-  const focusProduct =
-    productId === 'absystem_ai'
-      ? await resolveProductByCodeCandidates(db, ['focus'])
-      : null
-  const focusSubscription = focusProduct
-    ? await db.productSubscription.findFirst({
-        where: {
-          userId,
-          productId: focusProduct.id,
-          status: 'active',
-        },
-        orderBy: { updatedAt: 'desc' },
-        select: {
-          expiresAt: true,
-        },
-      })
-    : null
-
-  const focusCarryOverMs =
-    productId === 'absystem_ai' &&
-    focusSubscription?.expiresAt &&
-    focusSubscription.expiresAt > now
-      ? focusSubscription.expiresAt.getTime() - now.getTime()
-      : 0
-  const expiresAt = new Date(
-    nextExpiresAtBase.getTime() + plan.durationDays * 86400000 + focusCarryOverMs
-  )
   const amount = input.amount ?? plan.amount
   const planCode = `${productId}:${planId}`
   const isTrialZoom = productId === 'trial_zoom'
-  const trialZoomExpiresAt = isTrialZoom
-    ? resolveTrialZoomExpiryDate(now, plan.durationDays)
-    : null
-
-  await db.productSubscription.upsert({
-    where: {
-      userId_productId: {
+  const paymentState = await withLockedUserPaymentScope(db, userId, async (tx) => {
+    const now = new Date()
+    const currentProductSubscription = await tx.productSubscription.findFirst({
+      where: {
         userId,
         productId: product.id,
+        status: 'active',
       },
-    },
-    update: {
-      status: isTrialZoom ? 'trial' : 'active',
-      expiresAt: isTrialZoom ? null : expiresAt,
-      trialEndsAt: isTrialZoom ? trialZoomExpiresAt : null,
-      paidAt: now,
-      amount,
-    },
-    create: {
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        expiresAt: true,
+      },
+    })
+
+    const nextExpiresAtBase =
+      currentProductSubscription?.expiresAt &&
+      currentProductSubscription.expiresAt > now
+        ? currentProductSubscription.expiresAt
+        : now
+    const focusProduct =
+      productId === 'absystem_ai'
+        ? await resolveProductByCodeCandidates(tx, ['focus'])
+        : null
+    const focusSubscription = focusProduct
+      ? await tx.productSubscription.findFirst({
+          where: {
+            userId,
+            productId: focusProduct.id,
+            status: 'active',
+          },
+          orderBy: { updatedAt: 'desc' },
+          select: {
+            expiresAt: true,
+          },
+        })
+      : null
+
+    const focusCarryOverMs =
+      productId === 'absystem_ai' &&
+      focusSubscription?.expiresAt &&
+      focusSubscription.expiresAt > now
+        ? focusSubscription.expiresAt.getTime() - now.getTime()
+        : 0
+    const expiresAt = new Date(
+      nextExpiresAtBase.getTime() + plan.durationDays * 86400000 + focusCarryOverMs
+    )
+    const trialZoomExpiresAt = isTrialZoom
+      ? resolveTrialZoomExpiryDate(now, plan.durationDays)
+      : null
+
+    await tx.productSubscription.upsert({
+      where: {
+        userId_productId: {
+          userId,
+          productId: product.id,
+        },
+      },
+      update: {
+        status: isTrialZoom ? 'trial' : 'active',
+        expiresAt: isTrialZoom ? null : expiresAt,
+        trialEndsAt: isTrialZoom ? trialZoomExpiresAt : null,
+        paidAt: now,
+        amount,
+      },
+      create: {
+        userId,
+        productId: product.id,
+        status: isTrialZoom ? 'trial' : 'active',
+        expiresAt: isTrialZoom ? null : expiresAt,
+        trialEndsAt: isTrialZoom ? trialZoomExpiresAt : null,
+        paidAt: now,
+        amount,
+      },
+    })
+
+    await upsertLegacySubscription(tx, {
       userId,
       productId: product.id,
-      status: isTrialZoom ? 'trial' : 'active',
-      expiresAt: isTrialZoom ? null : expiresAt,
-      trialEndsAt: isTrialZoom ? trialZoomExpiresAt : null,
-      paidAt: now,
-      amount,
-    },
+      planCode,
+      expiresAt: trialZoomExpiresAt ?? expiresAt,
+    })
+
+    if (productId === 'focus') {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          focusPaid: true,
+          funnelStage: 'PAID',
+          funnelUpdatedAt: now,
+        },
+      })
+    }
+
+    await syncLifecycleForUser(userId, tx)
+    await invalidateFunnelStage(userId)
+
+    return {
+      now,
+      expiresAt,
+      trialZoomExpiresAt,
+    }
   })
 
   console.log('📝 [PAYMENT:ECOSYSTEM] Subscription updated', {
     userId,
     productId,
-    expiresAt,
+    expiresAt: paymentState.expiresAt,
   })
-
-  await upsertLegacySubscription(db, {
-    userId,
-    productId: product.id,
-    planCode,
-    expiresAt: trialZoomExpiresAt ?? expiresAt,
-  })
-
-  if (productId === 'focus') {
-    await db.user.update({
-      where: { id: userId },
-      data: {
-        focusPaid: true,
-        funnelStage: 'PAID',
-        funnelUpdatedAt: now,
-      },
-    })
-  }
-
-  await syncLifecycleForUser(userId, db)
-  await invalidateFunnelStage(userId)
 
   console.log('[ACCESS] Subscription activated', {
     userId,
     productId,
     planId,
-    expiresAt,
+    expiresAt: paymentState.expiresAt,
     lifecycle: 'synced_from_unified_runtime',
     durationDays: plan.durationDays,
   })

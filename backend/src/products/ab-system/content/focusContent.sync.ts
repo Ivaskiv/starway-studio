@@ -1,3 +1,4 @@
+import { PROGRAM_INFO_CTA_LABEL } from './abTest.shared.js'
 import { readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
@@ -95,7 +96,7 @@ const REQUIRED_SHARED_VALUES = {
   resultCtaMultiline: 'СПРОБУВАТИ\nПЕРШИЙ МІСЯЦЬ →',
   followupJoinCta: 'ХОЧУ У ФОКУС →',
   followupPayCta: 'ОПЛАТИТИ ФОКУС →',
-  showInsideCta: 'Як це виглядає зсередини?',
+  showInsideCta: PROGRAM_INFO_CTA_LABEL,
   paymentCta1m: 'ОПЛАТИТИ 1 МІСЯЦЬ — 33 €',
   paymentCta3m: 'ОПЛАТИТИ 3 МІСЯЦІ — 69 €',
   oneMonth: '1 місяць — 33 €',

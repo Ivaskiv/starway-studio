@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 
 const GREP_COMMAND =
-  "rg -n '\\.telegram\\.send(Message|Photo|Voice|Video|Document|Audio)\\(' " +
+  "rg -n '(?:ctx\\.reply\\(|\\.telegram\\.sendMessage\\(|telegram\\.sendMessage\\()' " +
   "backend/src -g '*.ts' || true"
 
 const SAFE_PATH_PATTERNS = [
@@ -11,7 +11,7 @@ const SAFE_PATH_PATTERNS = [
 ]
 
 describe('telegram delivery architecture', () => {
-  it('keeps direct telegram transport sends constrained to canonical gateways', () => {
+  it('keeps direct telegram text delivery constrained to canonical gateways', () => {
     const output = execSync(GREP_COMMAND, {
       cwd: process.cwd(),
       encoding: 'utf8',

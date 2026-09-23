@@ -13,6 +13,7 @@ const mockEventFindMany = vi.fn()
 const mockGetCachedLatestWeeklyReport = vi.fn()
 const mockUserFindUnique = vi.fn()
 const mockPrismaTransaction = vi.fn()
+const mockPaidCommerceFindFirst = vi.fn()
 const mockDb = vi.hoisted(() => ({ tx: null as null | Record<string, unknown> }))
 
 vi.mock('../../../../src/db/client.js', () => {
@@ -23,6 +24,7 @@ vi.mock('../../../../src/db/client.js', () => {
       findUnique: (...args: unknown[]) => mockZoomSessionFindUnique(...args),
       findMany: (...args: unknown[]) => mockZoomSessionFindMany(...args),
     },
+    zoomCommerceRequest: { findFirst: (...args: unknown[]) => mockPaidCommerceFindFirst(...args) },
     zoomSessionAttendee: {
       upsert: (...args: unknown[]) => mockZoomSessionAttendeeUpsert(...args),
       findUnique: (...args: unknown[]) => mockZoomSessionAttendeeFindUnique(...args),
@@ -78,6 +80,23 @@ describe('zoom booking service', () => {
       const next = queue.then(() => callback(mockDb.tx))
       queue = next.then(() => undefined, () => undefined)
       return next
+    })
+  })
+
+  it.each([false, true])('Individual attendee requires persisted paid commerce: %s', async (paid) => {
+    mockZoomSessionFindUnique.mockResolvedValue({ id: 'session-1', type: 'PRIVATE', requests: { type: 'individual' } })
+    mockPaidCommerceFindFirst.mockResolvedValue(paid ? { id: 'paid-request' } : null)
+    mockZoomSessionAttendeeUpsert.mockResolvedValue({ id: 'attendee-1' })
+    if (paid) {
+      await expect(registerAttendee('user-1', 'session-1')).resolves.toEqual({ id: 'attendee-1' })
+      expect(mockZoomSessionAttendeeUpsert).toHaveBeenCalledTimes(1)
+    } else {
+      await expect(registerAttendee('user-1', 'session-1')).rejects.toThrow('PAID_REQUIRED')
+      expect(mockZoomSessionAttendeeUpsert).not.toHaveBeenCalled()
+    }
+    expect(mockPaidCommerceFindFirst).toHaveBeenCalledWith({
+      where: { requesterUserId: 'user-1', zoomSessionId: 'session-1', kind: 'INDIVIDUAL', status: 'PAID' },
+      select: { id: true },
     })
   })
 
@@ -651,16 +670,108 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
         status: { not: 'CANCELLED' },
         OR: [
           { requests: { path: ['type'], equals: 'group_practice' } },
+          { requests: { path: ['type'], equals: 'individual' } },
           { type: 'GROUP' },
         ],
       },
-      include: { _count: { select: { attendees: true } } },
+      include: {
+        _count: { select: { attendees: true } },
+        attendees: {
+          select: {
+            userId: true,
+            goalText: true,
+            progress: true,
+            attended: true,
+            user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          },
+        },
+      },
       orderBy: { scheduledAt: 'asc' },
     })
     expect(sessions).toHaveLength(1)
     expect(sessions[0]).toMatchObject({
       id: 'session-1',
       isMyBooking: false,
+    })
+  })
+
+  it('projects subscriber calendars from group visibility plus ZoomSessionAttendee membership', async () => {
+    vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
+      state: 'FOCUS_ACTIVE',
+      isActive: true,
+      hasFocus: true,
+      expiresAt: new Date('2026-08-31T20:59:59.999Z'),
+    })
+    mockZoomSessionFindMany.mockResolvedValue([
+      {
+        id: 'group-session',
+        expertId: 'expert-1',
+        scheduledAt: new Date('2026-08-10T16:00:00.000Z'),
+        status: 'SCHEDULED',
+        type: 'GROUP',
+        topic: 'ФОКУС · Zoom-практика',
+        requests: { type: 'group_practice' },
+        _count: { attendees: 0 },
+      },
+      {
+        id: 'individual-session',
+        expertId: 'expert-1',
+        scheduledAt: new Date('2026-08-11T16:00:00.000Z'),
+        status: 'SCHEDULED',
+        type: 'GROUP',
+        topic: 'Індивідуальна сесія',
+        requests: { type: 'individual' },
+        _count: { attendees: 1 },
+      },
+      {
+        id: 'battle-session',
+        expertId: 'expert-1',
+        scheduledAt: new Date('2026-08-12T16:00:00.000Z'),
+        status: 'SCHEDULED',
+        type: 'GROUP',
+        topic: 'Zoom Battle',
+        requests: { type: 'battle_review' },
+        _count: { attendees: 2 },
+      },
+    ])
+    mockZoomSessionAttendeeFindMany.mockResolvedValue([
+      { sessionId: 'individual-session' },
+      { sessionId: 'battle-session' },
+    ])
+
+    const sessions = await getCalendarSessions({
+      from: new Date('2026-08-01T00:00:00.000Z'),
+      to: new Date('2026-08-14T00:00:00.000Z'),
+      role: 'user',
+      userId: 'user-1',
+      expertId: 'expert-1',
+    })
+
+    expect(mockZoomSessionFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [
+            { requests: { path: ['type'], equals: 'group_practice' } },
+            { requests: { path: ['type'], equals: 'individual' } },
+            { type: 'GROUP' },
+            { attendees: { some: { userId: 'user-1' } } },
+          ],
+        }),
+      }),
+    )
+    expect(sessions.map((session) => session.id)).toEqual([
+      'group-session',
+      'individual-session',
+      'battle-session',
+    ])
+    expect(sessions.find((session) => session.id === 'group-session')).toMatchObject({
+      isMyBooking: false,
+    })
+    expect(sessions.find((session) => session.id === 'individual-session')).toMatchObject({
+      isMyBooking: true,
+    })
+    expect(sessions.find((session) => session.id === 'battle-session')).toMatchObject({
+      isMyBooking: true,
     })
   })
 

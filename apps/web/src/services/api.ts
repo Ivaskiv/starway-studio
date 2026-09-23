@@ -175,6 +175,14 @@ const getRequestPath = (args: string | FetchArgs): string => {
   return pathWithoutQuery.startsWith('/') ? pathWithoutQuery : `/${pathWithoutQuery}`;
 };
 
+export function getTelegramMiniAppTransportHeaders(): Record<string, string> {
+  // Session bootstrap must reach the same JSON API as authenticated Mini App requests.
+  const isNgrokMiniAppRuntime = typeof window !== 'undefined'
+    && isTelegramMiniApp(window.location.pathname)
+    && window.location.hostname.endsWith('.ngrok-free.dev')
+  return isNgrokMiniAppRuntime ? { 'ngrok-skip-browser-warning': '1' } : {}
+}
+
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
   credentials: 'include',
@@ -205,16 +213,8 @@ const rawBaseQuery = fetchBaseQuery({
       headers.set('x-expert-id', expertId);
     }
 
-    // ngrok Free may return its browser-warning HTML to Telegram WebView
-    // instead of the requested API response. Bypass it only for the
-    // Telegram Mini App running through an ngrok origin.
-    const isNgrokMiniAppRuntime =
-      isMiniAppRuntime &&
-      typeof window !== 'undefined' &&
-      window.location.hostname.endsWith('.ngrok-free.dev')
-
-    if (isNgrokMiniAppRuntime) {
-      headers.set('ngrok-skip-browser-warning', '1')
+    for (const [name, value] of Object.entries(getTelegramMiniAppTransportHeaders())) {
+      headers.set(name, value)
     }
 
     return headers;

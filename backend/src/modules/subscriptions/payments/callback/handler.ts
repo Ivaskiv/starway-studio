@@ -252,6 +252,10 @@ export async function wayForPayCallback(req: Request, res: Response) {
       return res.status(200).send('OK') // 200 — prevent WayForPay retry loop
     }
 
+    if (data.order_reference.startsWith('zoom_commerce_') && data.transaction_status !== 'Approved') {
+      return res.status(200).send('OK')
+    }
+
     // fix with kimi 2026-05-28: removed pre-lock isProcessedPayment() — race condition, deduplication handled inside withRuntimeAdvisoryLock
 
     if (
@@ -302,6 +306,10 @@ if (
     }
 
     const webhookResult = result.value
+    // Commerce core persists payment atomically; attendee/notification delivery belongs to 01b.
+    if (webhookResult.payRef.startsWith('zoom_commerce_')) {
+      return res.status(200).send('OK')
+    }
     if (webhookResult.duplicate) {
       console.warn('[PAYMENT_LIFECYCLE] duplicate callback detected', {
         orderReference: data.order_reference,
@@ -374,6 +382,10 @@ console.log('[PAYMENT_LIFECYCLE] orchestration completion', {
     })
     return res.status(200).send('OK')
   } catch (err) {
+    const orderReference = req.body?.order_reference ?? req.body?.orderReference
+    if (typeof orderReference === 'string' && orderReference.startsWith('zoom_commerce_')) {
+      return res.status(500).send('FAIL')
+    }
     console.error('💥 Payment callback error', err)
     console.error(`[WayForPay] Callback failed: Internal Error`, {
       error: err instanceof Error ? err.message : 'unknown',

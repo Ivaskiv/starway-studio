@@ -486,6 +486,12 @@ for (const key of Object.keys(AB_TEST_RESULTS) as AbTestResultKey[]) {
   result.blocks = buildAbTestResultBlocks(key, result)
 }
 
+function formatResultPresentationText(text: string): string {
+  // Coach-authored emphasis wins; plain copy gets one consistent opening accent.
+  if (text.includes('**')) return text
+  return text.replace(/^([^.!?\n]+[.!?]?)/u, '**$1**')
+}
+
 function buildAbTestResultBlocks(
   resultKey: AbTestResultKey,
   result: AbTestResultDefinition
@@ -495,22 +501,22 @@ function buildAbTestResultBlocks(
 
   return {
     intro: [
-      telegramBlock.text(result.msg1),
-      telegramBlock.text(result.msg1_story),
-      telegramBlock.text(result.msg2_audio),
-      telegramBlock.video(AB_TEST_VIDEO_URLS.nadya_intro, result.msg1_audio),
+      telegramBlock.text(`**${result.title}**\n\n${formatResultPresentationText(result.msg1)}`),
+      telegramBlock.text(formatResultPresentationText(result.msg1_story)),
+      telegramBlock.text(formatResultPresentationText(result.msg2_audio)),
+      telegramBlock.video(AB_TEST_VIDEO_URLS.nadya_intro, formatResultPresentationText(result.msg1_audio)),
       telegramBlock.audio(AB_TEST_AUDIO_URL),
     ],
     practice: [
-      telegramBlock.video(AB_TEST_VIDEO_URLS.focus_presentation, result.msg2_practice),
-      telegramBlock.text(result.msg2_benefits),
-      telegramBlock.text(result.msg2_included),
+      telegramBlock.video(AB_TEST_VIDEO_URLS.focus_presentation, formatResultPresentationText(result.msg2_practice)),
+      telegramBlock.text(formatResultPresentationText(result.msg2_benefits)),
+      telegramBlock.text(formatResultPresentationText(result.msg2_included)),
     ],
     review: [
-      telegramBlock.text(reviewHeader),
+      telegramBlock.text(formatResultPresentationText(reviewHeader)),
       telegramBlock.image(AB_TEST_SCREENSHOT_URLS[screenshotKey]),
     ],
-    pricing: [telegramBlock.text(result.msg3_pricing)],
+    pricing: [telegramBlock.text(formatResultPresentationText(result.msg3_pricing))],
   }
 }
 

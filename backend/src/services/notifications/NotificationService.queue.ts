@@ -1,3 +1,4 @@
+import { getCommerceCheckoutUrl, hasPaidIndividualParticipation, isLegacyIndividualSession } from '../../modules/zoom/commerce/zoom.commerce-request.service.js'
 import { NotificationChannel, type Prisma, type Notification, NotificationStatus, NotificationType, type NotificationJob, type User, } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { trackEvent } from '../../modules/events/service.js'
@@ -111,6 +112,42 @@ export abstract class NotificationServiceQueue extends NotificationServiceBase {
   async processJob(job: NotificationJob): Promise<void> {
     const persisted = toPersistedJobPayload(job.payload)
     const payload = toJsonObject(persisted.payload)
+    const zoomTimer = asString(payload.flow_timer_id ?? payload.flowTimerId)
+    if (zoomTimer === 'ZOOM_REMINDER_2H' || zoomTimer === 'ZOOM_REMINDER_5M') {
+      const sessionId = asString(payload.sessionId ?? payload.session_id)
+      const session = sessionId ? await prisma.zoomSession.findUnique({ where: { id: sessionId } }) : null
+      if (!session || session.status === 'CANCELLED') return
+      if (isLegacyIndividualSession(session)) {
+        const requestId = asString(payload.individual_payment_request_id)
+        if (requestId) {
+          const paymentUrl = await getCommerceCheckoutUrl(requestId, persisted.userId)
+          if (!paymentUrl || session.scheduledAt <= new Date()) return
+          payload.payment_url = paymentUrl
+        } else if (!await hasPaidIndividualParticipation(persisted.userId, session.id)) {
+          const coach = session.expertId ? await prisma.user.findFirst({ where: {
+            id: persisted.userId, expertId: session.expertId, role: { in: ['EXPERT', 'SUPERADMIN'] }, deletedAt: null,
+          }, select: { id: true } }) : null
+          if (!coach) return
+        }
+      }
+    }
+    // Individual checkout reminders are transactional, independent of the FOCUS funnel.
+    if (payload.individual_payment_request_id && zoomTimer === 'ZOOM_REMINDER_2H') {
+      const user = await loadDeliveryUser(persisted.userId)
+      if (!user) throw new Error('notification_user_not_found')
+      const message = await this.buildMessage(persisted.event, user, payload)
+      const sent = await notificationDeliveryLayer.sendTelegram(user, message)
+      await this.createNotification({
+        userId: user.id, type: resolveNotificationType(persisted.event),
+        title: message.title, body: message.body,
+        data: buildNotificationData(persisted.event, payload, message),
+        templateKey: zoomTimer, channel: NotificationChannel.TELEGRAM,
+        status: sent ? NotificationStatus.SENT : NotificationStatus.FAILED,
+        sentAt: sent ? new Date() : null,
+      })
+      if (!sent) throw new Error('notification_delivery_failed')
+      return
+    }
     const flow = resolveFlowTimerContext({
       trigger_event: persisted.event,
       timer_id: asString(payload.flow_timer_id ?? payload.flowTimerId) as Parameters<typeof resolveFlowTimerContext>[0]['timer_id'] ?? null,

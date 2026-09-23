@@ -16,6 +16,8 @@ function decodeStoredCheckoutPayload(payload: string): Record<string, unknown> |
 }
 
 function refreshCheckoutPayloadForRetry(rawPayload: Record<string, unknown>): Record<string, unknown> {
+  // Approval binds one immutable reference; regenerating it disconnects the callback from its request.
+  if (rawPayload.zoomCommerceRequestId) return rawPayload
   const amount = Number(rawPayload.amount ?? 0)
   const currency = String(rawPayload.currency ?? 'UAH')
   const clientAccountId = String(rawPayload.clientAccountId ?? '').trim()
@@ -87,6 +89,10 @@ export async function renderWayForPayCheckoutPageHandler(req: Request, res: Resp
     ? decodeStoredCheckoutPayload(fallbackPayloadRaw)
     : null
   const payload = payloadFromSession ?? payloadFromExpiredSession ?? payloadFromFallback
+
+  if (payload?.zoomCommerceRequestId && !payloadFromSession) {
+    return res.status(410).send('Час оплати вичерпано. Поверніться до календаря, щоб обрати інший час.')
+  }
 
   if (!payload) {
     console.error('[WAYFORPAY_CHECKOUT] ❌ Invalid or expired checkout token', {

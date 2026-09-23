@@ -1,4 +1,5 @@
 import type { Context } from 'telegraf'
+import { replyWithTelegramMessage } from '@/lib/telegram/messageFormatter.js'
 import type { TelegramFlow } from '../flow-builder/flowTemplates.js'
 import { composeTelegramUx } from './uxComposition.js'
 
@@ -8,5 +9,5 @@ export async function renderTelegramFlow(ctx: Context, flow: TelegramFlow, mode:
   if (!payload.text.trim()) return
   const markup = { reply_markup: payload.reply_markup as any }
 
-  await ctx.reply(payload.text, { parse_mode: 'Markdown', ...markup })
+  await replyWithTelegramMessage(ctx, payload.text, markup)
 }

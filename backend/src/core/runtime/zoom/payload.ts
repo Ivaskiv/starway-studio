@@ -2,6 +2,7 @@ import type { Prisma } from '@starway/db/prisma-client'
 import type { ZoomAudioProcessingStrategy } from '../../../modules/voice/voice.service.js'
 
 export type ZoomAudioPayload = Prisma.JsonObject & {
+  zoomSessionId?: string | null
   fileId?: string
   fileUniqueId?: string | null
   chatId?: string

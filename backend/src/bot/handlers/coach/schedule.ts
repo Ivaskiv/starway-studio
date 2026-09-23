@@ -2,6 +2,7 @@ import { ZoomSlotStatus } from '@starway/db/prisma-client'
 import type { Context } from 'telegraf'
 
 import { prisma } from '../../../db/client.js'
+import { replyWithTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 
 const HOURS = [9, 11, 13, 15, 17, 19] as const
@@ -234,7 +235,7 @@ async function renderNextWeekMenu(ctx: Context, coachId: string, useEditMarkup =
     return
   }
 
-  await ctx.reply(text, {
+  await replyWithTelegramMessage(ctx, text, {
     reply_markup: {
       inline_keyboard: inlineKeyboard,
     },
@@ -255,7 +256,7 @@ async function renderHoursMenu(ctx: Context, coachId: string, useEditMarkup = fa
     return
   }
 
-  await ctx.reply(text, {
+  await replyWithTelegramMessage(ctx, text, {
     reply_markup: {
       inline_keyboard: inlineKeyboard,
     },
@@ -301,7 +302,7 @@ export async function scheduleMenuHandler(ctx: Context): Promise<void> {
     }
   })
 
-  await ctx.reply(lines.join('\n'), {
+  await replyWithTelegramMessage(ctx, lines.join('\n'), {
     reply_markup: {
       inline_keyboard: inlineKeyboard,
     },

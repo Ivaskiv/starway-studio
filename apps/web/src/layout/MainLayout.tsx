@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
-import BottomNav from '@/components/miniapp/BottomNav'
+import BottomNav, { type BottomNavTab } from '@/components/miniapp/BottomNav'
 import { normalizeDashboardRoutePath } from '@/config/routes'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { useAppSelector } from '@/app/hooks'
@@ -242,7 +242,7 @@ export default function MainLayout({
     return 'home' as const
   })()
 
-  const handleMiniAppTabChange = (tab: 'home' | 'library' | 'ai' | 'tracker' | 'profile') => {
+  const handleMiniAppTabChange = (tab: BottomNavTab) => {
     switch (tab) {
       case 'library':
         navigateTo('/dashboard/courses', { requiresAuth: true })

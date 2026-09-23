@@ -67,52 +67,6 @@ async function sendTelegramMessageWithFallback(
   }
 }
 
-async function sendFocusAccessConfirmation(input: {
-  chatId: string
-  firstName: string | null
-  planLabel: string
-  accessUntilLine: string
-  zoomUrl: string | null
-}) {
-  const name = getSafeName(input.firstName)
-  const greeting = name ? `${name}, ` : ''
-  const baseText =
-    `${greeting}оплата пройшла успішно ✅\n\n` +
-    `Тариф: ${input.planLabel}\n` +
-    `${input.accessUntilLine}\n\n` +
-    'Що тобі вже доступно:\n' +
-    '• календар Zoom-практик\n' +
-    '• запис на найближчий Zoom\n' +
-    '• канал ФОКУС\n' +
-    '• /start відкриває твій екран ФОКУС'
-
-  if (!input.zoomUrl) {
-    return sendTelegramMessageWithFallback(
-      input.chatId,
-      `${baseText}\n\nКалендар тимчасово без кнопки. Напиши /start, щоб продовжити.`
-    )
-  }
-
-  return sendTelegramMessageWithFallback(
-    input.chatId,
-    `${baseText}\n\nПочни з календаря практик нижче.`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
-              ? {
-                  text: 'ВІДКРИТИ КАЛЕНДАР',
-                  web_app: { url: input.zoomUrl },
-                }
-              : { text: 'ВІДКРИТИ КАЛЕНДАР', url: input.zoomUrl },
-          ],
-        ],
-      },
-    },
-  )
-}
-
 async function sendUpcomingScheduleSummary(input: {
   chatId: string
   lines: string
@@ -142,8 +96,55 @@ async function sendUpcomingScheduleSummary(input: {
   })
 }
 
+async function sendFocusAccessConfirmation(input: {
+  chatId: string
+  firstName: string | null
+  planLabel: string
+  accessUntilLine: string
+  zoomUrl: string | null
+}) {
+  const name = getSafeName(input.firstName)
+  const greeting = name ? `${name}, ` : ''
+  const baseText =
+    `${greeting}Доступ до ФОКУС активовано ✅\n\n` +
+    `Тариф: ${input.planLabel}\n` +
+    `${input.accessUntilLine}\n\n` +
+    'Що тобі вже доступно:\n' +
+    '• календар Zoom-практик\n' +
+    '• запис на найближчий Zoom\n' +
+    '• канал ФОКУС\n' +
+    '• /start відкриває твій екран ФОКУС'
+
+  if (!input.zoomUrl) {
+    return sendTelegramMessageWithFallback(
+      input.chatId,
+      `${baseText}\n\nКалендар тимчасово без кнопки. Напиши /start, щоб продовжити.`,
+    )
+  }
+
+  return sendTelegramMessageWithFallback(
+    input.chatId,
+    `${baseText}\n\nПочни з календаря практик нижче.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
+              ? {
+                  text: 'ВІДКРИТИ КАЛЕНДАР ZOOM',
+                  web_app: { url: input.zoomUrl },
+                }
+              : { text: 'ВІДКРИТИ КАЛЕНДАР ZOOM', url: input.zoomUrl },
+          ],
+        ],
+      },
+    },
+  )
+}
+
 type FocusPaymentOnboardingInput = {
   userId: string
+  orderReference: string
   paidUser: {
     id: string
     firstName: string | null
@@ -205,7 +206,7 @@ export async function sendFocusPaymentOnboardingIfNeeded(
       reason: 'already_sent',
       sentAt: input.focusSubscription.focusWelcomedAt.toISOString(),
     })
-    return false
+    return true
   }
 
   const zoomUrl = resolveZoomCalendarUrl()
@@ -225,12 +226,26 @@ export async function sendFocusPaymentOnboardingIfNeeded(
     zoomUrl,
   })
 
-  if (confirmationSent && input.upcomingLines.trim()) {
+  if (input.upcomingLines.trim()) {
     await sendUpcomingScheduleSummary({
       chatId: paidChatId,
       lines: input.upcomingLines,
       zoomUrl,
     })
+  }
+
+  if (confirmationSent && input.focusSubscription?.id && !input.focusSubscription.focusWelcomedAt) {
+    await prisma.productSubscription.update({
+      where: { id: input.focusSubscription.id },
+      data: {
+        focusWelcomedAt: new Date(),
+      },
+    }).catch((err) =>
+      console.error(
+        '[Focus] Failed to update subscription after onboarding send',
+        err,
+      ),
+    )
   }
 
   return confirmationSent

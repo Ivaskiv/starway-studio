@@ -2,7 +2,7 @@ import type { AppDispatch } from '@/app/store'
 import { clearAuth, setCredentials } from '@/features/auth/services/auth.slice'
 import { getRefreshToken, getToken, hasSessionHint } from '@/features/auth/services/token'
 import type { User } from '@/features/user/types/user.types'
-import { resolveApiUrl } from '@/services/api'
+import { getTelegramMiniAppTransportHeaders, resolveApiUrl } from '@/services/api'
 import { DEFAULT_ACCENT, normalizeUiMode, type UiMode } from '@/theme/accent.utils'
 
 const BAD_COLORS = new Set([
@@ -100,10 +100,9 @@ async function waitForTelegramRuntimeReady(timeoutMs = 1600): Promise<void> {
   const startedAt = Date.now()
 
   while (Date.now() - startedAt < timeoutMs) {
-    const runtimeUser = getTelegramRuntimeUser()
     const initData = getTelegramRuntimeInitData()
 
-    if (runtimeUser?.id || initData) {
+    if (initData) {
       return
     }
 
@@ -201,18 +200,24 @@ export async function syncAuthSession({
   }
 
   // In Mini App runtime Telegram identity is canonical and must win over stale web cookies/tokens.
-  if (telegramUser?.id && telegramInitData && isTelegramMiniAppRuntime) {
+  if (telegramInitData && isTelegramMiniAppRuntime) {
+    console.info('[MINIAPP_AUTH_INITDATA]', { present: true })
     try {
       const socialRes = await fetch(resolveApiUrl('/auth/telegram'), {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
         headers: {
+          ...getTelegramMiniAppTransportHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           initData: telegramInitData,
         }),
+      })
+      console.info('[MINIAPP_SESSION_RESTORE]', {
+        status: socialRes.status,
+        contentType: socialRes.headers.get('content-type'),
       })
       const socialData = await readJsonSafely(socialRes)
       if (socialData) {
@@ -227,7 +232,7 @@ export async function syncAuthSession({
             console.info('[sessionSync] restored via telegram initData', {
               userId: socialUser.id,
               email: socialUser.email ?? null,
-              telegramRuntimeUserId: telegramUser.id,
+              telegramRuntimeUserId: telegramUser?.id,
             })
           }
           dispatch(setCredentials({

@@ -12,6 +12,7 @@ import { activateProductSubscription } from '../activation.js'
 import { markCheckoutSessionCompleted } from '../wayforpay/checkout.js'
 import type { PaymentCallbackData } from '../../types.js'
 import { handleFocusPaymentSuccess } from './focus.js'
+import { notifyPrivateSessionPayment } from '../../../zoom/private/zoom.private-booking.service.js'
 
 export async function handleApprovedPayment(input: {
   userId: string
@@ -268,6 +269,18 @@ export async function handleApprovedPayment(input: {
           userId,
           flow: 'trial_zoom_success',
           sent: Boolean(sent),
+        })
+      } else if (webhookResult.scope === 'zoom' && payRef.startsWith('zoom_commerce_')) {
+        const { notifyCommercePaid } = await import('../../../zoom/commerce/zoom.commerce-telegram.js')
+        await notifyCommercePaid(payRef)
+      } else if (
+        webhookResult.scope === 'zoom' &&
+        webhookResult.productId === 'zoom_individual' &&
+        webhookResult.result?.enrollmentId
+      ) {
+        await notifyPrivateSessionPayment({
+          sessionId: webhookResult.result.enrollmentId,
+          userId,
         })
       
 }

@@ -292,6 +292,7 @@ async function deliver(
     text: string
     reply_markup: { inline_keyboard: StartMessagePayload['buttons'] }
     parseMode?: 'HTML'
+    digestText?: string
   },
 ): Promise<void> {
   const deliveryChatId = ctx.chat?.id ?? ctx.from?.id
@@ -317,10 +318,61 @@ async function deliver(
     text: payload.text,
     preformatted: payload.parseMode === 'HTML',
   })
+  const formattedDigest = payload.digestText
+    ? formatTelegramMessage({ text: payload.digestText, preformatted: payload.parseMode === 'HTML' })
+    : null
+  const webAppInlineKeyboard = payload.reply_markup.inline_keyboard
+    .map(row => row.filter(button => 'web_app' in button))
+    .filter(row => row.length > 0)
+
+  const zoomCalendarWebAppButton = webAppInlineKeyboard
+    .flat()
+    .find((button) => 'web_app' in button && Boolean(button.web_app?.url))
+  const inlineCalendarUrl = zoomCalendarWebAppButton && 'web_app' in zoomCalendarWebAppButton
+    ? zoomCalendarWebAppButton.web_app?.url ?? null
+    : null
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[USER_ZOOM_MENU_TRACE]', {
+      phase: 'inline_entrypoint',
+      url: inlineCalendarUrl,
+    })
+  }
+
+  const hasUserHomeMenu = payload.reply_markup.inline_keyboard
+    .flat()
+    .some((button) =>
+      'callback_data' in button
+      && (
+        button.callback_data === 'user_home:my_sessions'
+        || button.callback_data === 'ab_test:show_result'
+      ),
+    )
+
+  const menuReplyMarkup =
+    hasUserHomeMenu && zoomCalendarWebAppButton && 'web_app' in zoomCalendarWebAppButton
+      ? {
+          keyboard: [
+            [{
+              text: '📅 ZOOM КАЛЕНДАР',
+              web_app: { url: zoomCalendarWebAppButton.web_app.url },
+            }],
+            [
+              { text: '🗓 МОЇ СЕСІЇ' },
+              { text: '📊 МОЇ РЕЗУЛЬТАТИ' },
+            ],
+            [{ text: '💬 ПІДТРИМКА' }],
+          ],
+          resize_keyboard: true,
+          is_persistent: true,
+        }
+      : payload.reply_markup
   const dedupKey = String(deliveryChatId)
   const payloadSignature = JSON.stringify({
+    digestText: formattedDigest?.text ?? null,
+    webAppInlineKeyboard,
     text: formattedMessage.text,
-    reply_markup: payload.reply_markup,
+    reply_markup: menuReplyMarkup,
     parseMode: formattedMessage.parseMode,
   })
   const now = Date.now()
@@ -338,12 +390,19 @@ async function deliver(
   }
 
   try {
+    if (formattedDigest) {
+      await sendTelegramMessage(
+        ctx,
+        deliveryChatId,
+        formattedDigest,
+      )
+    }
     const sentMessage = await planMessage(
       ctx,
       'ctx.reply',
       'start_home_screen',
       formattedMessage.text,
-      payload.reply_markup,
+      menuReplyMarkup,
       formattedMessage.parseMode,
     )
     recentStartPayloadByChat.set(dedupKey, {
@@ -686,8 +745,7 @@ export async function handleStart(ctx: StartContext) {
 
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userId = user.id
     ;(ctx.state as { userId?: string | null; userIdResolved?: boolean }).userIdResolved = true
-    // fire-and-forget: не блокуємо deliver() якщо Telegram API зависає
-    void syncAccessAwareChatEntryPoints(chatId, user.id).catch(() => undefined)
+    await syncAccessAwareChatEntryPoints(chatId, user.id).catch(() => undefined)
 
     const isPlainStart = startPayload.length === 0
 

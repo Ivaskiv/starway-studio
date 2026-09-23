@@ -9,6 +9,8 @@ const mockScheduleFollowups = vi.fn()
 const mockHasTelegramCtaInteraction = vi.fn()
 const mockGetUserAccessState = vi.fn()
 const mockGetAbTestProfileEmail = vi.fn()
+
+const mockBuildAbTestEmailGateMessage = vi.fn(() => 'EMAIL_GATE_TEST_MESSAGE')
 const mockEnsureAbTestEmailCapturedFromProfile = vi.fn()
 const mockTrackAbTestEvent = vi.fn()
 const mockClearPendingTelegramIdentity = vi.fn()
@@ -90,13 +92,15 @@ vi.mock('../../../../../src/products/ab-system/telegram/scheduler.js', () => ({
 }))
 
 vi.mock('../../../../../src/products/ab-system/telegram/progress.js', () => ({
-  buildAbTestEmailGateMessage: vi.fn(),
+  buildAbTestEmailGateMessage: (...args: unknown[]) =>
+    mockBuildAbTestEmailGateMessage(...args),
   getAbTestProfileEmail: (...args: unknown[]) => mockGetAbTestProfileEmail(...args),
   getAbTestProgressFromUiSettings: vi.fn(),
   loadAbTestProgress: (...args: unknown[]) => mockLoadAbTestProgress(...args),
   loadUserUiSettings: vi.fn(),
   saveAbTestProgress: (...args: unknown[]) => mockSaveAbTestProgress(...args),
-  ensureAbTestEmailCapturedFromProfile: (...args: unknown[]) => mockEnsureAbTestEmailCapturedFromProfile(...args),
+  ensureAbTestEmailCapturedFromProfile: (...args: unknown[]) =>
+    mockEnsureAbTestEmailCapturedFromProfile(...args),
 }))
 
 vi.mock('../../../../../src/products/ab-system/telegram/callback.js', async () => {
@@ -147,6 +151,7 @@ vi.mock('@/modules/zoom/urls.js', () => ({
 
 import {
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
+  AB_TEST_RESULT_CONTINUE_BUTTON_TEXT,
   AB_TEST_SCREENSHOT_URLS,
   AB_TEST_VIDEO_URLS,
   telegramBlock,
@@ -163,6 +168,8 @@ import {
 import { handleShowResult } from '../../../../../src/products/ab-system/telegram/handler.ts'
 import { handleAbTestCallback } from '../../../../../src/products/ab-system/telegram/service.ts'
 import { getUpcomingZoomBookingView } from '@/modules/zoom/service.js'
+import { getAbTestResultDefinition } from '../../../../../src/products/ab-system/content/abTest.results.js'
+
 
 function createCtx() {
   return {
@@ -240,21 +247,22 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     await promise
 
     const sendMessageCalls = vi.mocked(ctx.telegram.sendMessage).mock.calls
-    const introTexts = sendMessageCalls
-      .map(([, text]) => text)
-      .filter((text): text is string => typeof text === 'string')
+    const deliveredTelegramPayload = JSON.stringify(sendMessageCalls)
 
-    expect(
-      introTexts.some((text) =>
-        text.includes('Ти вже знаєш, яке рішення хочеш прийняти. Але щоразу в останній момент відкладаєш його.'),
-      ),
-    ).toBe(true)
-    expect(
-      introTexts.some((text) =>
-        text.includes('«Я все розумію, але не роблю» — це була я. Роками.'),
-      ),
-    ).toBe(true)
-    expect(introTexts.some((text) => text.includes('**РІШЕННЯ**'))).toBe(false)
+    // Content ownership belongs to abTest.results.ts -> resultDef.blocks.intro.
+    // This regression verifies the canonical result content and that the
+    // Telegram delivery does not leak the legacy raw-markdown title.
+    const decisionResult = getAbTestResultDefinition('decision')
+    const introContent = JSON.stringify(decisionResult.blocks?.intro ?? [])
+    const introSemanticText = introContent.replace(/\*\*/g, '')
+
+    expect(introSemanticText).toContain(
+      'Ти вже знаєш, яке рішення хочеш прийняти. Але щоразу в останній момент відкладаєш його.',
+    )
+    expect(introSemanticText).toContain(
+      '«Я все розумію, але не роблю» — це була я. Роками.',
+    )
+    expect(deliveredTelegramPayload).not.toContain('**РІШЕННЯ**')
 
     const lastCall = vi.mocked(ctx.telegram.sendMessage).mock.calls.at(-1)
 
@@ -265,8 +273,8 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [{ text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' }],
-            [{ text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_DECISION' }],
+            [{ text: AB_TEST_RESULT_CONTINUE_BUTTON_TEXT, callback_data: 'show_inside_DECISION' }],
+            [{ text: 'Пройти тест ще раз', callback_data: 'ab_test:restart' }],
           ],
         },
       },
@@ -695,7 +703,46 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     ).toBe(false)
   })
 
-  it('propagates sendPhoto failures instead of marking the review step as delivered', async () => {
+  it('delivers the complete CHOICE sequence exactly once with its testimonial photo before the explicit offer', async () => {
+    const ctx = createCtx()
+
+    const promise = dispatchAbTestPracticeSequence(ctx as never, {
+      chatId: '42',
+      userId: 'user-1',
+      resultKey: 'choice',
+      firstName: 'Vira',
+    })
+
+    await vi.runAllTimersAsync()
+    await promise
+
+    expect(vi.mocked(ctx.telegram.sendVideo)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledWith(
+      '42',
+      'https://api.starway.test/deliverables/focus-review-choice.png',
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    )
+    expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledTimes(1)
+    expect(
+      vi.mocked(ctx.telegram.sendMessage).mock.calls.filter(
+        ([, text]) => typeof text === 'string' && text.includes('Коли Валентина прийшла у ФОКУС'),
+      ),
+    ).toHaveLength(1)
+    expect(
+      vi.mocked(ctx.telegram.sendVideo).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(ctx.telegram.sendPhoto).mock.invocationCallOrder[0])
+    const offerMessageIndex = vi.mocked(ctx.telegram.sendMessage).mock.calls.findIndex(
+      ([, , options]) => JSON.stringify(options?.reply_markup ?? {}).includes('open_focus_payment'),
+    )
+    expect(offerMessageIndex).toBeGreaterThanOrEqual(0)
+    expect(
+      vi.mocked(ctx.telegram.sendPhoto).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(ctx.telegram.sendMessage).mock.invocationCallOrder[offerMessageIndex],
+    )
+  })
+
+  it('propagates testimonial photo failures instead of marking the review step as delivered', async () => {
     const ctx = createCtx()
     vi.mocked(ctx.telegram.sendPhoto).mockRejectedValueOnce(
       new Error('telegram photo failed'),
@@ -704,15 +751,18 @@ describe('dispatchAbTestResultSequence practice preview keyboard', () => {
     const promise = dispatchAbTestPracticeSequence(ctx as never, {
       chatId: '42',
       userId: 'user-1',
-      resultKey: 'state',
+      resultKey: 'choice',
       firstName: 'Vira',
     })
+
     const expectation = expect(promise).rejects.toThrow('telegram photo failed')
-
     await vi.runAllTimersAsync()
-
     await expectation
-    expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledTimes(1)
+    expect(
+      vi.mocked(ctx.telegram.sendMessage).mock.calls.some(
+        ([, , options]) => JSON.stringify(options?.reply_markup ?? {}).includes('open_focus_payment'),
+      ),
+    ).toBe(false)
   })
 
   it('recovers legacy show_result state into canonical completed progress and skips duplicate delivery on repeat callback', async () => {
@@ -959,6 +1009,22 @@ describe('handleAbTestCallback show_inside direct route live regression', () => 
     )).toBe(false)
     expect(vi.mocked(ctx.telegram.sendMessage).mock.calls.length).toBeGreaterThan(0)
     expect(vi.mocked(ctx.answerCbQuery)).toHaveBeenCalled()
+  })
+
+  it('returns handled after the CHOICE testimonial is delivered once', async () => {
+    const ctx = createCtx()
+    ctx.callbackQuery.data = 'show_inside_CHOICE'
+
+    const callback = handleAbTestCallback(ctx as never, 'show_inside_CHOICE')
+    await vi.runAllTimersAsync()
+
+    expect(await callback).toBe(true)
+    expect(vi.mocked(ctx.telegram.sendPhoto)).toHaveBeenCalledTimes(1)
+    expect(
+      vi.mocked(ctx.telegram.sendMessage).mock.calls.filter(
+        ([, , options]) => JSON.stringify(options?.reply_markup ?? {}).includes('open_focus_payment'),
+      ),
+    ).toHaveLength(1)
   })
 })
 

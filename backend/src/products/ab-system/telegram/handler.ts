@@ -521,8 +521,10 @@ export async function handleShowResult(
   ctx: Context,
   userId: string
 ): Promise<boolean> {
-  await deactivateCallbackMarkup(ctx)
-  await ctx.answerCbQuery().catch(() => null)
+  if (ctx.callbackQuery) {
+    await deactivateCallbackMarkup(ctx)
+    await ctx.answerCbQuery().catch(() => null)
+  }
   const chatId = ctx.chat?.id ?? ctx.from?.id
   if (!chatId) return true
 
@@ -556,6 +558,18 @@ export async function handleShowResult(
     ? ['FOCUS_PAID', 'ZOOM_MEMBER', 'POST_ZOOM_1', 'UPSELL'].includes(userRecord.lifecycleState)
     : false
 
+  if (!ctx.callbackQuery) {
+    const { dispatchAbTestResultSequence } = await import('./view-result.js')
+    await dispatchAbTestResultSequence(ctx, {
+      chatId,
+      userId,
+      resultKey: resultKey as AbTestResultKey,
+      firstName: resolveFirstName(userRecord, ctx, userId),
+      deliverySource: 'show_result',
+    })
+    return true
+  }
+
   if (alreadyConverted) {
     const { sendResultSnapshot } = await import('./views.js')
     await sendResultSnapshot(ctx, {
@@ -564,25 +578,24 @@ export async function handleShowResult(
       resultKey: resultKey as AbTestResultKey,
       firstName: resolveFirstName(userRecord, ctx, userId),
     })
-    return true
+  } else {
+    const progress = await loadAbTestProgress(userId)
+    if (progress.status === 'completed' && progress.result_key) {
+      await renderCurrentView(ctx, userId, progress)
+    } else {
+      const recoveredProgress = buildAbTestProgressPatch(progress, {
+        status: 'completed',
+        stage: 'S3_TEST_RESULT',
+        current_question_id: null,
+        result_key: resultKey as AbTestResultKey,
+        last_event_at: new Date().toISOString(),
+      })
+      await saveAbTestProgress(userId, recoveredProgress)
+      const persistedRecoveredProgress = await loadAbTestProgress(userId)
+      await renderCurrentView(ctx, userId, persistedRecoveredProgress)
+    }
   }
 
-  const progress = await loadAbTestProgress(userId)
-  if (progress.status === 'completed' && progress.result_key) {
-    await renderCurrentView(ctx, userId, progress)
-    return true
-  }
-
-  const recoveredProgress = buildAbTestProgressPatch(progress, {
-    status: 'completed',
-    stage: 'S3_TEST_RESULT',
-    current_question_id: null,
-    result_key: resultKey as AbTestResultKey,
-    last_event_at: new Date().toISOString(),
-  })
-  await saveAbTestProgress(userId, recoveredProgress)
-  const persistedRecoveredProgress = await loadAbTestProgress(userId)
-  await renderCurrentView(ctx, userId, persistedRecoveredProgress)
   return true
 }
 

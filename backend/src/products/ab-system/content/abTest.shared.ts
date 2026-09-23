@@ -1,8 +1,11 @@
+export const PROGRAM_INFO_CTA_LABEL = 'ПРО ПРОГРАМУ' as const
+
 //backend/src/products/ab-system/content/abTest.shared.ts
 
 export const AB_TEST_START_BUTTON_TEXT = 'ПОЧАТИ ТЕСТ'
 export const AB_TEST_CONTINUE_BUTTON_TEXT = 'ПРОДОВЖИТИ ТЕСТ'
 export const AB_TEST_CONTINUE_SHORT_BUTTON_TEXT = 'ПРОДОВЖИТИ'
+export const AB_TEST_RESULT_CONTINUE_BUTTON_TEXT = PROGRAM_INFO_CTA_LABEL
 export const AB_TEST_SHOW_RESULT_BUTTON_TEXT = 'ПОКАЗАТИ РЕЗУЛЬТАТ'
 export const AB_TEST_MY_RESULT_BUTTON_TEXT = 'ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ'
 export const AB_TEST_RESTART_BUTTON_TEXT = 'ПОЧАТИ ТЕСТ ЗАНОВО'
@@ -225,12 +228,10 @@ export const AB_TEST_VOICE_NOTE_LINES = [
   AB_TEST_VOICE_NOTE_LINK_TEXT,
   '',
 ] as const
-export const AB_TEST_RESULT_AUDIO_INTRO_TEXT =
-  '**AB System** — це система з **5 елементів: СТАН, ЦІЛЬ, ВИБІР, РІШЕННЯ, ДІЯ**.\n\nСаме вони визначають чому одні люди отримують результат — а інші зупиняються на одному місці роками.\n\nТест показав де саме зупиняєшся ти. Коли це видно — стає зрозуміло що змінити і як іти далі.\n\n**Я знаю як допомогти тобі це пройти…**\n\nпрослухати голосове повідомлення 👇'
 export const AB_TEST_RESULT_AUDIO_PROMPT_TEXT =
   AB_TEST_VOICE_CAPTION_PROMPT
 
-export const AB_TEST_SHOW_INSIDE_CTA_TEXT = 'ПРО ПРОГРАМУ'
+export const AB_TEST_SHOW_INSIDE_CTA_TEXT = PROGRAM_INFO_CTA_LABEL
 export const AB_TEST_BOOK_ZOOM_CTA_TEXT = 'ЗАПИСАТИСЯ НА ZOOM'
 export const AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT = 'ОБРАТИ ZOOM-ПРАКТИКУ'
 export const AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT =
@@ -445,9 +446,6 @@ export const AB_TEST_FOCUS_PITCH_LINES = [
 ] as const
 
 export const AB_TEST_BOLD_LINES = new Set<string>([
-  'Тримаєшся з останніх сил.',
-  'Тест показав твою головну точку на зараз.',
-  'Я знаю як допомогти тобі це пройти…',
   AB_TEST_FOCUS_BENEFIT_HEADER,
   AB_TEST_FOCUS_INCLUDED_HEADER,
   AB_TEST_VOICE_NOTE_HEADER,

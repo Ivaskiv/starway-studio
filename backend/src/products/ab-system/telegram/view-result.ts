@@ -1,4 +1,6 @@
+import { runInPerChatFlow } from '@/modules/telegram-mentor/conversation/queue/perChatFlowQueue.js'
 //backend/src/products/ab-system/telegram/views.ts
+import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { absystemButtons, absystemContent } from '@/products/absystem/config/content.js'
 import type { Prisma } from '@starway/db/prisma-client'
 import type { Context } from 'telegraf'
@@ -34,6 +36,7 @@ import {
 } from '../content/abTest.results.js'
 import {
   AB_TEST_AUDIO_URL,
+  AB_TEST_RESULT_CONTINUE_BUTTON_TEXT,
   AB_TEST_BOLD_LINES,
   AB_TEST_PRACTICE_PREVIEW_PROMPT,
   AB_TEST_REVIEW_HEADER_VALUES,
@@ -113,8 +116,7 @@ async function sendAbTestDeliveryTelemetry(input: {
   console.info(
     `[OPS_ROUTE_DEBUG] messageType=ab_mentor_analytics chatId=${coachChatId} source=sendAbTestDeliveryTelemetry bot=coachBot`
   )
-  await coachBot.telegram
-    .sendMessage(coachChatId, analyticsText)
+  await sendTelegramMessage(coachBot, coachChatId, analyticsText)
     .then(() => {
       console.info(
         `[OPS_ROUTE_OK] messageType=ab_mentor_analytics chatId=${coachChatId} source=sendAbTestDeliveryTelemetry bot=coachBot`
@@ -139,6 +141,7 @@ export async function dispatchAbTestResultSequence(
     notifyOps?: boolean
   }
 ): Promise<void> {
+  return runInPerChatFlow(input.chatId, async () => {
   const resultDef = getAbTestResultDefinition(input.resultKey)
   const introBlocks = interpolateFirstNameInBlocks(
     resultDef.blocks?.intro ?? [],
@@ -160,7 +163,12 @@ export async function dispatchAbTestResultSequence(
     getUserAccessState(input.userId),
     getUpcomingZoomBookingView(input.userId),
   ])
-  const previewKeyboard = buildCanonicalResultKeyboard({
+  const previewKeyboard: InlineKeyboardMarkup = input.deliverySource === 'show_result'
+    ? { inline_keyboard: [
+        [{ text: AB_TEST_RESULT_CONTINUE_BUTTON_TEXT, callback_data: `show_inside_${input.resultKey.toUpperCase()}` }],
+        [{ text: 'Пройти тест ще раз', callback_data: AB_TEST_ACTIONS.RESTART }],
+      ] }
+    : buildCanonicalResultKeyboard({
     resultKey: input.resultKey,
     hasFocus: accessState.hasFocus,
     isMyBooking: upcomingZoom?.isMyBooking === true,
@@ -229,4 +237,5 @@ export async function dispatchAbTestResultSequence(
       deliverySource: input.deliverySource,
     }).catch(() => undefined)
   }
+  })
 }

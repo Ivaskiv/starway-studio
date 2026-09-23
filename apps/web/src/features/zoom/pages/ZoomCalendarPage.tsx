@@ -1,11 +1,12 @@
 import { useAppSelector } from '@/app/hooks'
-import { selectCurrentUser, selectAuthStatus } from '@/features/auth/services/auth.slice'
+import { selectCurrentUser, selectAuthStatus, selectUserRole } from '@/features/auth/services/auth.slice'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
 import { buildTelegramDeepLink } from '@/shared/telegram/telegramDeepLinks'
 import { CoachZoomPanel } from '@/features/zoom/CoachZoomPanel'
 import { UserZoomPanel } from '@/features/zoom/UserZoomPanel'
 import { hasPaidAccess } from '@/features/user/types/user.types'
 import { useEffect, useState } from 'react'
+import { isCoachRole } from '../utils/zoomCalendarRoute.utils'
 
 type ViewState = 'locked' | 'personal' | 'pending'
 
@@ -34,6 +35,7 @@ function resolveViewState(input: {
 export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
   const user = useAppSelector(selectCurrentUser)
   const authStatus = useAppSelector(selectAuthStatus)
+  const role = useAppSelector(selectUserRole)
   const pathname =
     typeof window !== 'undefined' ? window.location.pathname : ''
   const isTelegramRuntime = isTelegramMiniApp(pathname)
@@ -41,7 +43,8 @@ export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
     typeof window !== 'undefined' &&
       (window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim()
   )
-  const isCoach = Boolean(user && ['SUPERADMIN', 'ADMIN', 'EXPERT'].includes(user.role))
+  const effectiveRole = user?.activeRole ?? role ?? user?.role ?? null
+  const isCoach = Boolean(user && isCoachRole(effectiveRole))
   const canSeePersonalCalendar = Boolean(user && (isCoach || hasPaidAccess(user)))
   const shouldShowPersonalCalendar = canSeePersonalCalendar
   const isBrowserFallback = !isTelegramRuntime || !hasTelegramInitData

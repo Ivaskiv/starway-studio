@@ -2,6 +2,7 @@ import type { Context } from 'telegraf'
 import { Markup } from 'telegraf'
 
 import { prisma } from '../../../db/client.js'
+import { replyWithTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
 import { generateSessionsFromAvailability } from '../../../modules/zoom/booking/zoom.availability.service.js'
 import { FOCUS_PRODUCT_CODES } from '../../../modules/subscriptions/payments/focus-access.js'
@@ -11,7 +12,10 @@ import {
   resolveRequestedSessionType,
 } from '../../../modules/zoom/shared/zoom.session-selection.js'
 import { resolveCoachUserId } from './access.js'
-import { buildCoachMainMenuReplyMarkup } from './menu.js'
+import {
+  buildCoachMainMenuReplyMarkup,
+  resolveCoachCalendarUrl,
+} from './menu.js'
 import { resolveCoachAccess } from '../coach-content/shared.js'
 
 function formatSessionDate(value: Date): string {
@@ -111,9 +115,10 @@ export async function showCoachNewZoomPrompt(ctx: Context): Promise<void> {
   const coachAccess = await resolveCoachAccess(ctx)
 
   if (!coachUserId) {
-    await ctx.reply('Не вдалося визначити профіль коуча.')
+    await replyWithTelegramMessage(ctx, 'Не вдалося визначити профіль коуча.')
     return
   }
+  const calendarUrl = await resolveCoachCalendarUrl(ctx)
 
   const coach = await prisma.user.findUnique({
     where: { id: coachUserId },
@@ -135,7 +140,7 @@ export async function showCoachNewZoomPrompt(ctx: Context): Promise<void> {
     null
 
   if (!expertId) {
-    await ctx.reply('Активний профіль експерта не знайдено.')
+    await replyWithTelegramMessage(ctx, 'Активний профіль експерта не знайдено.')
     return
   }
 
@@ -158,7 +163,7 @@ export async function showCoachNewZoomPrompt(ctx: Context): Promise<void> {
   })
 
   if (!nextSession) {
-    await ctx.reply(
+    await replyWithTelegramMessage(ctx,
       'Не вдалося створити наступну Zoom-сесію. Перевір розклад коуча.'
     )
     return
@@ -166,7 +171,7 @@ export async function showCoachNewZoomPrompt(ctx: Context): Promise<void> {
 
   const zoomLink = extractZoomLinkFromRequests(nextSession.requests)
 
-  await ctx.reply(
+  await replyWithTelegramMessage(ctx,
     [
       'Новий Zoom',
       '',
@@ -182,7 +187,7 @@ export async function showCoachNewZoomPrompt(ctx: Context): Promise<void> {
       '5 хвилин — увімкнено',
     ].join('\n'),
     {
-      ...buildCoachMainMenuReplyMarkup(coachAccess?.role ?? 'EXPERT'),
+      ...buildCoachMainMenuReplyMarkup(coachAccess?.role ?? 'EXPERT', calendarUrl),
       ...Markup.inlineKeyboard([
         [
           Markup.button.callback(
@@ -244,7 +249,7 @@ export async function confirmCoachZoomSession(
 
   await ctx.answerCbQuery('Сесію відкрито').catch(() => undefined)
 
-  await ctx.reply(
+  await replyWithTelegramMessage(ctx,
     [
       'Сесію відкрито',
       '',

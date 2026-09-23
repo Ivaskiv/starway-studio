@@ -6,7 +6,7 @@ import type {
   ZoomSessionType,
 } from '../../zoom.types'
 import { COACH_ZOOM_SESSION_TYPES } from '../../zoom.types'
-import { getSessionMeta } from '../../zoom.utils'
+import { getSessionMeta, getZoomFormatInfo } from '../../zoom.utils'
 import type { AdminUser } from '@/features/admin/services/ownership.types'
 
 type SessionFormPayload = CreateSessionPayload & {
@@ -16,6 +16,63 @@ type SessionFormPayload = CreateSessionPayload & {
 
 const DEFAULT_GROUP_CAPACITY = 50
 const BATTLE_PARTICIPANTS_REQUIRED = 2
+const DEFAULT_SUBMIT_ERROR_MESSAGE = 'Не вдалося зберегти Zoom-сесію. Спробуйте ще раз.'
+const SCHEDULING_CONFLICT_ERROR_CODES = new Set([
+  'coach_session_conflict',
+  'user_session_conflict',
+])
+const GENERIC_SUBMIT_ERROR_CLASS =
+  'text-[11px] text-white/55'
+const CONFLICT_SUBMIT_ERROR_CLASS =
+  'rounded-lg border border-[rgba(var(--semantic-warning-rgb),0.38)] bg-[rgba(var(--semantic-warning-rgb),0.1)] px-3 py-2 text-[11px] text-[var(--semantic-warning)]'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function getSessionFormSubmitErrorMessage(error: unknown): string {
+  if (isRecord(error)) {
+    const data = error.data
+    if (isRecord(data)) {
+      if (typeof data.message === 'string' && data.message.trim()) {
+        return data.message.trim()
+      }
+      if (typeof data.error === 'string' && data.error.trim()) {
+        return data.error.trim()
+      }
+    }
+
+    if (typeof error.message === 'string' && error.message.trim()) {
+      return error.message.trim()
+    }
+    if (typeof error.error === 'string' && error.error.trim()) {
+      return error.error.trim()
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim()
+  }
+
+  return DEFAULT_SUBMIT_ERROR_MESSAGE
+}
+
+export function isSessionSchedulingConflictError(error: unknown): boolean {
+  if (!isRecord(error)) {
+    return false
+  }
+
+  const data = error.data
+  if (isRecord(data)) {
+    return typeof data.error === 'string' && SCHEDULING_CONFLICT_ERROR_CODES.has(data.error)
+  }
+
+  return typeof error.error === 'string' && SCHEDULING_CONFLICT_ERROR_CODES.has(error.error)
+}
+
+export function getSessionFormSubmitErrorClassName(isConflict: boolean): string {
+  return isConflict ? CONFLICT_SUBMIT_ERROR_CLASS : GENERIC_SUBMIT_ERROR_CLASS
+}
 
 function formatDateInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -94,6 +151,7 @@ export function SessionForm({
     initialValues?.participantUserIds ?? [],
   )
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitConflict, setIsSubmitConflict] = useState(false)
   const { data: attendees = [] } = useGetAttendeesQuery(sessionId ?? '', {
     skip: !sessionId,
     refetchOnMountOrArgChange: true,
@@ -126,6 +184,7 @@ export function SessionForm({
 
   useEffect(() => {
     setSubmitError(null)
+    setIsSubmitConflict(false)
     const previousType = previousTypeRef.current
     previousTypeRef.current = type
 
@@ -139,9 +198,10 @@ export function SessionForm({
     }
   }, [defaultGroupCapacity, isGroupPractice, isIndividual, type])
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitError(null)
+    setIsSubmitConflict(false)
 
     if (!date.trim()) {
       setSubmitError('Обери дату сесії.')
@@ -180,8 +240,15 @@ export function SessionForm({
     if (isIndividual) payload.participantUserId = nextParticipantUserId
     if (isBattleReview) payload.participantUserIds = nextParticipantUserIds
     if (isGroupPractice) payload.maxAttendees = maxAttendees
-    onSubmit(payload);
+    try {
+      await onSubmit(payload)
+    } catch (error) {
+      setSubmitError(getSessionFormSubmitErrorMessage(error))
+      setIsSubmitConflict(isSessionSchedulingConflictError(error))
+    }
   };
+
+  const submitErrorClassName = getSessionFormSubmitErrorClassName(isSubmitConflict)
 
   return (
     <form
@@ -193,22 +260,29 @@ export function SessionForm({
       <div>
         <label className="text-[11px] text-white/40 mb-1 block">Тип</label>
         <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-1">
-          {COACH_ZOOM_SESSION_TYPES.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setType(option)}
-              aria-pressed={type === option}
-              className={[
-                'rounded-lg px-3 py-2 text-[13px] font-semibold transition-all',
-                type === option
-                  ? 'bg-[rgba(var(--accent-rgb),0.12)] text-[rgb(var(--accent-rgb))] border border-[rgba(var(--accent-rgb),0.3)]'
-                  : 'text-white/65 hover:text-white',
-              ].join(' ')}
-            >
-              {getSessionMeta({ type: option })}
-            </button>
-          ))}
+          {COACH_ZOOM_SESSION_TYPES.map((option) => {
+            const selected = type === option
+            const format = getZoomFormatInfo(option)
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setType(option)}
+                aria-pressed={selected}
+                className={[
+                  'rounded-lg border px-3 py-2 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--accent-rgb),0.45)]',
+                  selected
+                    ? 'border-[rgba(var(--accent-rgb),0.46)] bg-[rgba(var(--accent-rgb),0.18)] text-white shadow-[0_0_0_1px_rgba(var(--accent-rgb),0.16)]'
+                    : 'border-transparent bg-transparent text-white/55 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/80',
+                ].join(' ')}
+              >
+                <span className="block text-[13px] font-semibold leading-tight">{getSessionMeta({ type: option })}</span>
+                <span className={['mt-1 block text-[11px] leading-snug', selected ? 'text-[rgb(var(--accent-soft-rgb))]' : 'text-white/38'].join(' ')}>
+                  {format.priceLabel ?? format.label}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -276,9 +350,9 @@ export function SessionForm({
             </p>
           )}
           {submitError && (
-            <p className="mt-1 text-[11px] text-white/55">
+            <div className={`mt-1 ${submitErrorClassName}`}>
               {submitError}
-            </p>
+            </div>
           )}
         </div>
       )}
@@ -334,9 +408,9 @@ export function SessionForm({
             </select>
           </div>
           {submitError && (
-            <p className="col-span-2 text-[11px] text-white/55">
+            <div className={`col-span-2 ${submitErrorClassName}`}>
               {submitError}
-            </p>
+            </div>
           )}
         </div>
       )}
@@ -373,9 +447,9 @@ export function SessionForm({
       </div>
 
       {submitError && !isIndividual && !isBattleReview && (
-        <p className="text-[11px] text-white/55">
+        <div className={submitErrorClassName}>
           {submitError}
-        </p>
+        </div>
       )}
 
       <div className="flex gap-2 pt-1">

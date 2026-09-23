@@ -2,9 +2,9 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
-import { COACH_ZOOM_SESSION_TYPES } from '../../zoom.types'
+import { COACH_ZOOM_SESSION_TYPES } from '@/features/zoom/zoom.types'
 
-vi.mock('../../services/zoom.api', () => ({
+vi.mock('@/features/zoom/services/zoom.api', () => ({
   useGetAttendeesQuery: (sessionId?: string) => ({
     data: sessionId ? [{ userId: 'user-1' }] : [],
     isFetching: false,
@@ -13,7 +13,7 @@ vi.mock('../../services/zoom.api', () => ({
 
 describe('SessionForm', () => {
   it('prefills the existing form for coach edit flow', async () => {
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),
@@ -58,7 +58,7 @@ describe('SessionForm', () => {
   })
 
   it('renders the new group form without a stale date and with capacity', async () => {
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),
@@ -81,7 +81,7 @@ describe('SessionForm', () => {
   })
 
   it('renders the individual participant select for coach create flow', async () => {
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),
@@ -117,7 +117,7 @@ describe('SessionForm', () => {
       'battle_review',
     ])
 
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),
@@ -134,7 +134,7 @@ describe('SessionForm', () => {
   })
 
   it('renders intensive through the shared form without group or individual-only fields', async () => {
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),
@@ -158,7 +158,7 @@ describe('SessionForm', () => {
   })
 
   it('renders battle review participant multi-select without group or individual-only fields', async () => {
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),
@@ -202,18 +202,36 @@ describe('SessionForm', () => {
     expect(markup).not.toContain('Місткість')
   })
 
+  it('renders format pricing from the shared Zoom pricing owner and marks active type clearly', async () => {
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
+    const markup = renderToStaticMarkup(
+      createElement(SessionForm, {
+        defaultDate: new Date('2026-09-03T16:30:00.000Z'),
+        initialValues: { type: 'battle_review' },
+        onSubmit: vi.fn(),
+        onClose: vi.fn(),
+        isLoading: false,
+      }),
+    )
+
+    expect(markup).toContain('aria-pressed="true"')
+    expect(markup).toContain('Входить у підписку')
+    expect(markup).toContain('60 €')
+    expect(markup).toContain('0 € / 25 €')
+  })
+
   it('maps picker date values into the existing form date state format', async () => {
     const {
       formatDatePickerValue,
       parseDatePickerValue,
-    } = await import('./SessionForm')
+    } = await import('@/features/zoom/components/calendar/SessionForm')
 
     expect(parseDatePickerValue('2026-09-17')).toBe('17.09.2026')
     expect(formatDatePickerValue('17.09.2026')).toBe('2026-09-17')
   })
 
   it('keeps scheduledAt payload composition in the existing local date/time owner', async () => {
-    const { buildScheduledAtIso } = await import('./SessionForm')
+    const { buildScheduledAtIso } = await import('@/features/zoom/components/calendar/SessionForm')
 
     expect(buildScheduledAtIso('17.09.2026', '19:00')).toBe(
       new Date(2026, 8, 17, 19, 0, 0).toISOString(),
@@ -221,7 +239,7 @@ describe('SessionForm', () => {
   })
 
   it('uses a Telegram WebView-compatible native date input tap target', async () => {
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),
@@ -237,7 +255,7 @@ describe('SessionForm', () => {
   })
 
   it('uses a Telegram WebView-compatible native time input tap target', async () => {
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),
@@ -253,7 +271,7 @@ describe('SessionForm', () => {
   })
 
   it('renders a single form title with a back action for create/edit views', async () => {
-    const { SessionForm } = await import('./SessionForm')
+    const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
         defaultDate: new Date('2026-09-03T16:30:00.000Z'),

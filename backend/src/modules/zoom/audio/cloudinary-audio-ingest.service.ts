@@ -12,6 +12,7 @@ type CloudinaryResource = {
   secure_url?: string | null
   created_at?: string | null
   original_filename?: string | null
+  context?: { custom?: Record<string, unknown> } | null
 }
 
 type CloudinaryResourcesResponse = {
@@ -156,6 +157,13 @@ function buildFileName(resource: CloudinaryResource): string {
   return extension ? `${base}.${extension}` : base
 }
 
+function resolveCloudinaryZoomSessionId(resource: CloudinaryResource): string | null {
+  const zoomSessionId = resource.context?.custom?.zoomSessionId
+  return typeof zoomSessionId === 'string' && zoomSessionId.trim()
+    ? zoomSessionId.trim()
+    : null
+}
+
 export type CloudinaryZoomAudioItem = {
   folder: string
   publicId: string
@@ -196,6 +204,7 @@ async function fetchCloudinaryFolderResources(folder: string): Promise<Cloudinar
         const url = new URL(`https://api.cloudinary.com/v1_1/${config.cloudName}/resources/${resourceType}/upload`)
         url.searchParams.set('prefix', folderPrefix)
         url.searchParams.set('max_results', String(CLOUDINARY_PAGE_SIZE))
+        url.searchParams.set('context', 'true')
         if (nextCursor) {
           url.searchParams.set('next_cursor', nextCursor)
         }
@@ -370,6 +379,7 @@ async function ingestCloudinaryFolder(folder: string) {
     const publicId = String(resource.public_id ?? '').trim()
     const assetId = String(resource.asset_id ?? '').trim()
     const secureUrl = String(resource.secure_url ?? '').trim()
+    const zoomSessionId = resolveCloudinaryZoomSessionId(resource)
     if (!publicId || !assetId || !secureUrl) {
       filteredResources.push({
         resource: resourceLabel,
@@ -383,6 +393,15 @@ async function ingestCloudinaryFolder(folder: string) {
           : !assetId
             ? 'asset_id'
             : 'secure_url',
+      })
+      continue
+    }
+
+    if (!zoomSessionId) {
+      filteredResources.push({
+        resource: resourceLabel,
+        reason: 'missing_zoom_session_id',
+        rule: 'context.custom.zoomSessionId',
       })
       continue
     }
@@ -429,6 +448,7 @@ async function ingestCloudinaryFolder(folder: string) {
         orchestrationPath: ['cloudinary_zoom_audio_ingest', folder],
       },
       payload: {
+        zoomSessionId,
         fileId: publicId,
         fileUniqueId: assetId,
         mediaType: 'audio',

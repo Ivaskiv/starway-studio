@@ -7,6 +7,9 @@ import {
   formatTelegramCaption,
   formatTelegramMessage,
   joinBlocks,
+  normalizeOutboundTelegramMessage,
+  removeTelegramReplyKeyboard,
+  replyWithTelegramMessage,
   sendTelegramDocument,
   sendTelegramMessage,
   sendTelegramPhoto,
@@ -19,6 +22,49 @@ import {
 } from '@/services/notifications/NotificationService.telegram.js'
 
 describe('messageFormatter', () => {
+  it('preserves canonical bold through every formatter entry and outbound normalization', async () => {
+    const expected = { text: '<b>TEST</b>', parseMode: 'HTML' }
+    expect(bold('TEST')).toBe(expected.text)
+    for (const input of [expected.text, { text: expected.text }, { text: expected.text, preformatted: true }]) {
+      const formatted = formatTelegramMessage(input)
+      expect(formatted).toEqual(expected)
+      expect(normalizeOutboundTelegramMessage(formatted)).toEqual(expected)
+      const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 })
+      await sendTelegramMessage({ sendMessage }, '42', formatted)
+      expect(sendMessage).toHaveBeenCalledWith('42', expected.text, { parse_mode: 'HTML' })
+    }
+  })
+
+  it('keeps bold through the patched Telegram transport used by start', async () => {
+    const { patchTelegramTransportFormatting } = await import('@/lib/telegram.js')
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 1 })
+    const telegram = {
+      sendMessage, sendPhoto: vi.fn(), sendVoice: vi.fn(), sendVideo: vi.fn(),
+      sendDocument: vi.fn(), sendAudio: vi.fn(), editMessageText: vi.fn(), editMessageCaption: vi.fn(),
+    }
+    patchTelegramTransportFormatting({ telegram } as never)
+    const formattedDigest = formatTelegramMessage({ text: bold('TEST'), preformatted: true })
+    await sendTelegramMessage({ telegram }, '42', formattedDigest)
+    expect(sendMessage).toHaveBeenCalledWith('42', '<b>TEST</b>', { parse_mode: 'HTML' })
+  })
+
+  it('escapes unknown markup without escaping surrounding approved bold', () => {
+    expect(formatTelegramMessage({ text: '<b>TEST</b> <unknown>', preformatted: true })).toEqual({
+      text: '<b>TEST</b> &lt;unknown&gt;', parseMode: 'HTML',
+    })
+    expect(formatTelegramMessage('<unknown>').text).toBe('&lt;unknown&gt;')
+    expect(formatTelegramMessage({ text: '&lt;b&gt;literal&lt;/b&gt;', preformatted: true }).text)
+      .toBe('&lt;b&gt;literal&lt;/b&gt;')
+  })
+
+  it('drops invalid entities on parse-error reply fallback', async () => {
+    const reply = vi.fn().mockRejectedValueOnce(new Error("can't parse entities")).mockResolvedValueOnce({ message_id: 2 })
+    await replyWithTelegramMessage({ reply } as any, { text: '<b>TEST</b>', parseMode: 'HTML' }, {
+      entities: [{ type: 'bold', offset: 50, length: 20 }],
+    })
+    expect(reply.mock.calls[1]).toEqual(['TEST', { parse_mode: 'HTML' }])
+  })
+
   it('bold escapes dynamic values', () => {
     expect(bold('<script>')).toBe('<b>&lt;script&gt;</b>')
   })
@@ -303,6 +349,40 @@ describe('messageFormatter', () => {
     expect(sendMessage).toHaveBeenCalledTimes(1)
   })
 
+  it('formats ctx.reply text through the canonical formatter', async () => {
+    const reply = vi.fn(async () => ({ message_id: 11 }))
+
+    await replyWithTelegramMessage(
+      { reply, chat: { id: 42 }, from: { id: 42 } } as any,
+      '**Акцент**\n> цитата',
+      { reply_markup: { inline_keyboard: [[{ text: 'CTA', callback_data: 'x' }]] } },
+    )
+
+    expect(reply).toHaveBeenCalledWith(
+      '<b>Акцент</b>\n\n<blockquote>цитата</blockquote>',
+      expect.objectContaining({
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [[{ text: 'CTA', callback_data: 'x' }]] },
+      }),
+    )
+  })
+
+  it('removes reply keyboard through the canonical invisible control message', async () => {
+    const reply = vi.fn(async () => ({ message_id: 12 }))
+
+    await removeTelegramReplyKeyboard(
+      { reply, chat: { id: 42 }, from: { id: 42 } } as any,
+    )
+
+    expect(reply).toHaveBeenCalledWith(
+      '\u2060',
+      expect.objectContaining({
+        parse_mode: 'HTML',
+        reply_markup: { remove_keyboard: true },
+      }),
+    )
+  })
+
   it('formats image captions through the canonical formatter', async () => {
     const sendPhoto = vi.fn(async () => ({ message_id: 4 }))
 
@@ -318,6 +398,29 @@ describe('messageFormatter', () => {
         parse_mode: 'HTML',
       }),
     )
+  })
+
+  it('reuses the upload fallback when Telegram cannot fetch a media URL', async () => {
+    const sendPhoto = vi.fn()
+      .mockRejectedValueOnce(new Error('400 Bad Request: failed to get HTTP URL content'))
+      .mockResolvedValueOnce({ message_id: 4 })
+    const fetchMock = vi.fn(async () => new Response(new Uint8Array([137, 80, 78, 71])))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sendTelegramPhoto(
+      { sendMessage: vi.fn(), sendPhoto },
+      '42',
+      'https://api.starway.test/deliverables/focus-review-choice.png',
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.starway.test/deliverables/focus-review-choice.png',
+    )
+    expect(sendPhoto).toHaveBeenCalledTimes(2)
+    expect(sendPhoto.mock.calls[1]?.[1]).toMatchObject({
+      filename: 'focus-review-choice.png',
+    })
+    vi.unstubAllGlobals()
   })
 
   it('formats audio captions through the canonical formatter', async () => {

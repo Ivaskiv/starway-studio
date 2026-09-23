@@ -6,8 +6,11 @@ const mockZoomSessionAttendeeFindUnique = vi.fn()
 const mockGetUserAccessState = vi.fn()
 const mockGetUpcomingZoom = vi.fn()
 const mockGetUpcomingZoomBookingView = vi.fn()
+const mockGetCurrentWeekZoomOverview = vi.fn()
 const mockGetOrCreateFocusInviteLink = vi.fn()
 const mockLoadAbTestProgress = vi.fn()
+const mockGetUserCalendarRequestsForWindow = vi.fn()
+const mockGetCommerceCheckoutUrl = vi.fn()
 
 vi.mock('@/db/client.js', () => ({
   prisma: {
@@ -22,8 +25,14 @@ vi.mock('@/modules/subscriptions/payments/focus-access.js', () => ({
 }))
 
 vi.mock('@/modules/zoom/service.js', () => ({
+  getCurrentWeekZoomOverview: (...args: unknown[]) => mockGetCurrentWeekZoomOverview(...args),
   getUpcomingZoom: (...args: unknown[]) => mockGetUpcomingZoom(...args),
   getUpcomingZoomBookingView: (...args: unknown[]) => mockGetUpcomingZoomBookingView(...args),
+}))
+
+vi.mock('@/modules/zoom/commerce/zoom.commerce-request.service.js', () => ({
+  getUserCalendarRequestsForWindow: (...args: unknown[]) => mockGetUserCalendarRequestsForWindow(...args),
+  getCommerceCheckoutUrl: (...args: unknown[]) => mockGetCommerceCheckoutUrl(...args),
 }))
 
 vi.mock('@/products/focus/payments/inviteLink.js', () => ({
@@ -54,7 +63,7 @@ vi.mock('@/modules/subscriptions/payments/business/checkout.js', () => ({
   })),
 }))
 
-import { buildHomeScreen } from '@/modules/telegram-mentor/handlers/homeScreen.builder.js'
+import { buildHomeScreen, buildUserSessionsMessage } from '@/modules/telegram-mentor/handlers/homeScreen.builder.js'
 import type { StartUserSnapshot } from '@/modules/telegram-mentor/handlers/start.js'
 import type { StartContext } from '@/modules/telegram-mentor/handlers/start.shared.js'
 
@@ -119,12 +128,45 @@ beforeEach(() => {
   })
   mockGetUpcomingZoom.mockResolvedValue(null)
   mockGetUpcomingZoomBookingView.mockResolvedValue(null)
+  mockGetCurrentWeekZoomOverview.mockResolvedValue({
+    week: { from: '2026-09-14T00:00:00.000Z', to: '2026-09-20T23:59:59.999Z' },
+    sessions: [],
+  })
+  mockGetUserCalendarRequestsForWindow.mockResolvedValue([])
+  mockGetCommerceCheckoutUrl.mockResolvedValue(null)
   mockGetOrCreateFocusInviteLink.mockResolvedValue('https://t.me/focus-channel')
   mockZoomSessionAttendeeFindUnique.mockResolvedValue(null)
   mockLoadAbTestProgress.mockResolvedValue(null)
 })
 
 describe('buildHomeScreen — /start funnel regression', () => {
+  it('uses persisted Individual payment terms with the existing checkout URL in My Sessions', async () => {
+    mockGetUserCalendarRequestsForWindow.mockResolvedValue([{
+      id: 'commerce-1',
+      zoomSessionId: 'session-1',
+      status: 'APPROVED_PENDING_PAYMENT',
+      amount: 1,
+      currency: 'UAH',
+      scheduledAt: new Date('2026-09-20T13:00:00.000Z'),
+      zoomSession: {
+        id: 'session-1',
+        scheduledAt: new Date('2026-09-20T13:00:00.000Z'),
+        topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED',
+        type: 'PRIVATE',
+      },
+    }])
+    mockGetCommerceCheckoutUrl.mockResolvedValue('https://checkout.example/existing')
+
+    const message = await buildUserSessionsMessage('test-user-id')
+
+    expect(message.buttons[0]).toEqual([{
+      text: 'ОПЛАТИТИ СЕСІЮ — 1 ГРН',
+      url: 'https://checkout.example/existing',
+    }])
+    expect(mockGetCommerceCheckoutUrl).toHaveBeenCalledWith('commerce-1', 'test-user-id')
+  })
+
   it('NEW_USER: shows welcome and test CTA', async () => {
     const snapshot = makeSnapshot({ lifecycleState: 'NEW_USER', firstName: 'Віра' })
     const screen = await buildHomeScreen(snapshot, fakeCtx)
@@ -133,7 +175,7 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(JSON.stringify(screen.reply_markup)).toMatch(/тест/i)
   })
 
-  it('TEST_DONE with completed result renders conversational returning home', async () => {
+  it('TEST_DONE with completed result renders separated, escaped returning-home sections', async () => {
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
       result_key: 'goal',
@@ -142,17 +184,41 @@ describe('buildHomeScreen — /start funnel regression', () => {
     const screen = await buildHomeScreen(snapshot, fakeCtx)
 
     expect(screen.text).toContain('Рада бачити тебе знову.')
-    expect(screen.text).toContain('Минулого разу твій тест показав <b>ЦІЛЬ</b>:')
+    expect(screen.text).toContain('✨ <b>Твій результат — ЦІЛЬ</b>')
     expect(screen.text).toContain('Ти хочеш змін, але не розумієш, з чого почати.')
-    expect(screen.text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
+    expect(screen.text).toContain('📅 <b>НАЙБЛИЖЧА ZOOM-ПРАКТИКА</b>')
+    expect(screen.text).toContain('🔒 <b>ФОКУС</b>')
     expect(screen.text).toContain('Зараз активного доступу до Zoom-практик немає.')
     expect(screen.text).toContain('Найближча групова Zoom-практика ще не запланована.')
+    expect(screen.text).toMatch(/Твій результат — ЦІЛЬ[\s\S]*?📅 <b>НАЙБЛИЖЧА ZOOM-ПРАКТИКА<\/b>[\s\S]*?🔒 <b>ФОКУС<\/b>/)
     const flat = JSON.stringify(screen.reply_markup)
     expect(flat).toMatch(/ОБРАТИ ФОРМАТ У ФОКУСІ/)
     expect(flat).toMatch(/ПРО ПРОГРАМУ/)
     expect(flat).not.toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
     expect(flat).toMatch(/show_inside_GOAL/)
     expect(flat).toMatch(/open_focus_payment/)
+  })
+
+  it('keeps dynamic name and nearest Zoom date escaped and separated', async () => {
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'goal',
+    })
+    mockGetUpcomingZoomBookingView.mockResolvedValue({
+      id: 'zoom-1',
+      scheduledAt: new Date('2026-09-28T16:00:00.000Z'),
+      isMyBooking: false,
+    })
+
+    const screen = await buildHomeScreen(
+      makeSnapshot({ lifecycleState: 'TEST_DONE', firstName: '<Віра>' }),
+      fakeCtx,
+    )
+
+    expect(screen.text.startsWith('&lt;Віра&gt;, рада бачити тебе знову.')).toBe(true)
+    expect(screen.text).toContain('&lt;Віра&gt;, Ти хочеш змін')
+    expect(screen.text).toContain('28 вересня о 19:00 за Києвом')
+    expect(screen.text).toContain('Ти ще не записувалась на неї.')
   })
 
   it('OFFER_SHOWN keeps offer CTA separate from TEST_DONE', async () => {

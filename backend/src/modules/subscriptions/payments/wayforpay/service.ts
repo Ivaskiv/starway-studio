@@ -22,6 +22,10 @@ function extractMerchantDomainFromUrl(raw: string | null | undefined): string {
 }
 
 export function readWayForPayCredentials() {
+  const merchantAccount =
+    process.env.WAYFORPAY_MERCHANT?.trim() ||
+    process.env.WAYFORPAY_MERCHANT_ACCOUNT?.trim() ||
+    ''
   const merchantDomainFromEnv =
     process.env.WAYFORPAY_MERCHANT_DOMAIN?.trim() ||
     process.env.WAYFORPAY_DOMAIN?.trim() ||
@@ -38,16 +42,13 @@ export function readWayForPayCredentials() {
       process.env.RENDER_EXTERNAL_URL?.trim() ||
       ''
   )
+  const configuredMerchantDomain = extractMerchantDomainFromUrl(merchantDomainFromEnv)
 
   return {
-    merchantAccount:
-      process.env.WAYFORPAY_MERCHANT?.trim() ||
-      process.env.WAYFORPAY_MERCHANT_ACCOUNT?.trim() ||
-      '',
-    merchantDomain:
-      merchantDomainFromEnv ||
-      merchantDomainFallback ||
-      '',
+    merchantAccount,
+    merchantDomain: configuredMerchantDomain && configuredMerchantDomain !== merchantAccount
+      ? configuredMerchantDomain
+      : merchantDomainFallback,
     merchantSecret:
       process.env.WAYFORPAY_SECRET?.trim() ||
       process.env.WAYFORPAY_MERCHANT_SECRET?.trim() ||
@@ -55,20 +56,25 @@ export function readWayForPayCredentials() {
   }
 }
 
-/** Генерує HMAC-MD5 підпис для ініціалізаційного запиту WayForPay */
-export function generatePaymentSignature(data: PaymentData, orderDate: number): string {
-  const { merchantAccount, merchantDomain, merchantSecret } = readWayForPayCredentials()
-  const str = [
+export function buildWayForPaySignatureFields(data: PaymentData, orderDate: number): string[] {
+  const { merchantAccount, merchantDomain } = readWayForPayCredentials()
+  return [
     merchantAccount,
     merchantDomain,
     data.payRef,
     orderDate.toString(),
     data.amount.toString(),
     data.currency ?? 'EUR',
-    ...(data.product_name  ?? [data.productId]),
+    ...(data.product_name ?? [data.productId]),
     ...(data.product_count ?? [1]).map(String),
     ...(data.product_price ?? [data.amount]).map(String),
-  ].join(';');
+  ]
+}
+
+/** Генерує HMAC-MD5 підпис для ініціалізаційного запиту WayForPay */
+export function generatePaymentSignature(data: PaymentData, orderDate: number): string {
+  const { merchantSecret } = readWayForPayCredentials()
+  const str = buildWayForPaySignatureFields(data, orderDate).join(';');
 
   return crypto.createHmac('md5', merchantSecret).update(str).digest('hex');
 }

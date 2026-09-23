@@ -1,4 +1,4 @@
-import { ZoomStatus, type Prisma } from '@starway/db/prisma-client'
+import { type Prisma } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { generateZoomTranscriptInsight } from '../../../modules/zoom/audio/zoomInsight.service.js'
 import type { EventSource } from '../../../modules/events/service.js'
@@ -59,13 +59,14 @@ export function resolveZoomSessionUsername(session: MatchedZoomSession | null): 
   )
 }
 
-export async function matchZoomSessionForAudio(observedAt: Date): Promise<{ session: MatchedZoomSession | null; matchMethod: 'scheduled_at_match' | 'heuristic_fallback' | 'not_found' }> {
-  const session = await prisma.zoomSession.findFirst({
-    where: {
-      scheduledAt: { lte: observedAt },
-      status: { not: ZoomStatus.CANCELLED },
-    },
-    orderBy: [{ scheduledAt: 'desc' }, { updatedAt: 'desc' }],
+export async function matchZoomSessionForAudio(zoomSessionId: string | null | undefined): Promise<{ session: MatchedZoomSession | null; matchMethod: 'canonical_id' | 'missing_identity' | 'not_found' }> {
+  const sessionId = String(zoomSessionId ?? '').trim()
+  if (!sessionId) {
+    return { session: null, matchMethod: 'missing_identity' }
+  }
+
+  const session = await prisma.zoomSession.findUnique({
+    where: { id: sessionId },
     select: {
       id: true,
       expertId: true,
@@ -89,38 +90,7 @@ export async function matchZoomSessionForAudio(observedAt: Date): Promise<{ sess
   }).catch(() => null)
 
   if (session) {
-    return { session, matchMethod: 'scheduled_at_match' }
-  }
-
-  const fallback = await prisma.zoomSession.findFirst({
-    where: {
-      status: { not: ZoomStatus.CANCELLED },
-    },
-    orderBy: [{ scheduledAt: 'desc' }, { updatedAt: 'desc' }],
-    select: {
-      id: true,
-      expertId: true,
-      topic: true,
-      type: true,
-      scheduledAt: true,
-      postSessionReport: true,
-      attendees: {
-        take: 1,
-        select: {
-          user: {
-            select: {
-              telegramUserName: true,
-              firstName: true,
-              email: true,
-            },
-          },
-        },
-      },
-    },
-  }).catch(() => null)
-
-  if (fallback) {
-    return { session: fallback, matchMethod: 'heuristic_fallback' }
+    return { session, matchMethod: 'canonical_id' }
   }
 
   return { session: null, matchMethod: 'not_found' }
@@ -133,7 +103,7 @@ export async function finalizeZoomTranscriptReport(input: {
   finalMatchedSession: MatchedZoomSession | null
   matchedSessionResult: {
     session: MatchedZoomSession | null
-    matchMethod: 'scheduled_at_match' | 'heuristic_fallback' | 'not_found'
+    matchMethod: 'canonical_id' | 'missing_identity' | 'not_found'
   }
   transcript: string
   fileId: string
@@ -221,7 +191,6 @@ export async function finalizeZoomTranscriptReport(input: {
         where: { id: fallbackSession.id },
         data: {
           postSessionReport: canonicalReport as Prisma.InputJsonValue,
-          status: ZoomStatus.COMPLETED,
         },
       })
     } else {

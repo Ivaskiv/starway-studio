@@ -7,7 +7,7 @@
   },
   "scripts": {
     "preinstall": "node -e \"const v=process.versions.node; const major=Number(v.split('.')[0]); if(major!==22){console.error('Node ' + v + ' is not allowed. Use Node 22.x only.'); process.exit(1);}\"",
-    "dev": "concurrently -c blue,magenta -n backend,web \"env -u NO_COLOR -u TELEGRAM_BOT_TOKEN -u TEST_TELEGRAM_BOT_TOKEN -u TELEGRAM_BOT_USERNAME -u TEST_TELEGRAM_BOT_USERNAME -u CONTENT_BOT_TOKEN -u TEST_BOT_TOKEN pnpm -s --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; env -u NO_COLOR pnpm -s --dir apps/web dev'\"",
+    "dev": "concurrently -c blue,magenta -n backend,web \"env -u NO_COLOR -u TELEGRAM_BOT_TOKEN -u TEST_TELEGRAM_BOT_TOKEN -u TELEGRAM_BOT_USERNAME -u TEST_TELEGRAM_BOT_USERNAME -u CONTENT_BOT_TOKEN -u TEST_BOT_TOKEN pnpm -s --dir backend dev\" \"/bin/sh -c 'until curl -sf http://127.0.0.1:3001/health >/dev/null; do sleep 1; done; env -u NO_COLOR __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=.trycloudflare.com pnpm -s --dir apps/web dev'\"",
     "dev:parallel": "bash scripts/dev-parallel.sh",
     "dev:tunnel": "node scripts/dev/cloudflare-dev.mjs",
     "dev:clean": "pnpm dev:tunnel",

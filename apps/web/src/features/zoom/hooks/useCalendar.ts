@@ -1,7 +1,4 @@
-import {
-  useEffect,
-  useState,
-} from 'react'
+import { useState } from 'react'
 
 import {
   useBookPrivateSlotMutation,
@@ -27,13 +24,13 @@ import type {
 import {
   getMonthGrid,
   getWeekDays,
+  isIndividualSession,
   isPrivateSession,
   isSameDay,
 } from '../zoom.utils'
 import {
   endOf,
   filterSessionsInRange,
-  getNearestSession,
   startOf,
 } from '../utils/calendar-range'
 import { buildCalendarEvent } from '../utils/calendar-event'
@@ -57,9 +54,10 @@ export interface CalendarProps {
   mode: ZoomCalendarMode;
   userId: string;
   expertId?: string;
+  sessionSource?: { from: string; to: string; sessions: ZoomCalendarSession[] };
 }
 
-export function useCalendar({ mode, userId, expertId }: CalendarProps) {
+export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarProps) {
   const [view, setView] = useState<CalendarView>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedSession, setSelectedSession] = useState<ZoomCalendarSession | null>(null);
@@ -84,10 +82,14 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
   const from = startOf(view, currentDate).toISOString();
   const to   = endOf(view, currentDate).toISOString();
 
-  const { data: sessions = [] } = useGetCalendarSessionsQuery(
+  const usesSessionSource = Boolean(sessionSource
+    && Date.parse(sessionSource.from) <= Date.parse(from)
+    && Date.parse(sessionSource.to) >= Date.parse(to));
+  const { data: fetchedSessions = [] } = useGetCalendarSessionsQuery(
     { from, to, role: mode, userId, expertId },
-    { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
+    { skip: usesSessionSource },
   );
+  const sessions = usesSessionSource && sessionSource ? sessionSource.sessions : fetchedSessions;
   const periodSessions = filterSessionsInRange(sessions, from, to)
   const visibleSessions = periodSessions.filter(
     (session) => new Date(session.scheduledAt) >= new Date(),
@@ -164,22 +166,6 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
 
   const todaySession = periodSessions.find(s => isSameDay(new Date(s.scheduledAt), new Date()));
 
-  useEffect(() => {
-    if (mode !== 'user' || selectedDate || visibleSessions.length === 0) {
-      return;
-    }
-
-    const nextSession = getNearestSession(visibleSessions);
-    if (!nextSession) {
-      return;
-    }
-
-    const nextSessionDate = new Date(nextSession.scheduledAt);
-    setSelectedDate(nextSessionDate);
-    setSelectedSessions([nextSession]);
-    setIsDaySheetOpen(true);
-  }, [mode, selectedDate, visibleSessions]);
-
   const handleCreate = async (payload: CreateSessionPayload & { participantUserId?: string }) => {
     await createSession(payload).unwrap();
     setCreateDate(null);
@@ -232,13 +218,18 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
       return;
     }
 
+    console.info('[ZOOM_USER_BOOK_ATTEMPT]', { sessionId: bookingQuestionSession.id, type: bookingQuestionSession.type });
     try {
-      if (isPrivateSession(bookingQuestionSession)) {
-        await bookPrivateSlot(bookingQuestionSession.id).unwrap();
+      let confirmationText = 'Ти записана на Zoom.\n\n👉 Я передам твоє питання коучу\n👉 і підготую для тебе розбір';
+      if (isPrivateSession(bookingQuestionSession) || isIndividualSession(bookingQuestionSession)) {
+        await bookPrivateSlot({ sessionId: bookingQuestionSession.id, questionText: normalizedQuestionText }).unwrap();
+        confirmationText = 'Запит на індивідуальну сесію надіслано коучу.';
+      } else if (bookingQuestionSession.isMyBooking) {
         await submitBookingQuestion({
           sessionId: bookingQuestionSession.id,
           questionText: normalizedQuestionText,
         }).unwrap();
+        confirmationText = 'Питання збережено. Повернемось до нього на Zoom.';
       } else {
         await registerAttendee({
           sessionId: bookingQuestionSession.id,
@@ -246,9 +237,10 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
         } as never).unwrap();
       }
 
+      console.info('[ZOOM_USER_BOOK_RESULT]', { sessionId: bookingQuestionSession.id, success: true });
       setBookingConfirmation({
         sessionId: bookingQuestionSession.id,
-        text: 'Ти записана на Zoom.\n\n👉 Я передам твоє питання коучу\n👉 і підготую для тебе розбір',
+        text: confirmationText,
       });
       setBookingQuestionSession(null);
       setBookingQuestionText('');
@@ -258,10 +250,19 @@ export function useCalendar({ mode, userId, expertId }: CalendarProps) {
       setSelectedDate(null);
       setSelectedSessions([]);
     } catch (error) {
-      console.error('[ZoomCalendar] booking with question failed', {
+      console.error('[ZOOM_USER_BOOK_RESULT]', {
         sessionId: bookingQuestionSession.id,
-        error,
+        success: false,
+        status: error && typeof error === 'object' && 'status' in error ? error.status : null,
       });
+      const errorCode =
+        error && typeof error === 'object' && 'data' in error
+          ? (error as { data?: { error?: string } }).data?.error
+          : null
+      if (errorCode === 'NO_ACTIVE_SUBSCRIPTION') {
+        setBookingQuestionError('Доступ до Zoom відкривається з активним ФОКУСОМ.')
+        return
+      }
       setBookingQuestionError('Не вдалося завершити запис. Спробуй ще раз.');
     }
   };

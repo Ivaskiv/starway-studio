@@ -20,6 +20,8 @@ import {
 import {
   handleCreateSession,
   handleUpdateSession,
+  handleCompleteSession,
+  handleGetCompletionDraft,
   handleCancelSession,
   handleGetCalendarSessions,
   handleGetLeaderboard,
@@ -31,12 +33,17 @@ import {
   handleGetEligibleOpponents,
   finalizeBattleResult,
   handleGetAvailability,
+  handleGetAvailabilityWeek,
+  handleGetIndividualAvailability,
+  handleGetIndividualAvailabilitySummary,
   handleSaveAvailability,
+  handleSaveAvailabilityWeek,
   handleGenerateSessions,
   handleBookSlot,
   handleUnbookSlot,
   handleGetAvailablePrivateSlots,
   handleBookPrivateSlot,
+  handleCreateUserIndividualRequest,
   handleCancelPrivateSlotBooking,
   handleCreateSwapRequest,
   handleAcceptSwapRequest,
@@ -46,6 +53,9 @@ import {
   handleToggleCoachSlot,
   handleInitiateZoomSwap,
   getAvailableSlots,
+  handleGetCommerceRequest,
+  handleApproveCommerceRequest,
+  handleRejectCommerceRequest,
 } from './zoom.admin.handler.js';
 
 const router = Router();
@@ -69,6 +79,8 @@ router.get('/calendar',                        getPublicCalendarSessionsCompat);
 router.get('/sessions/calendar',               authRequired, handleGetCalendarSessions);
 router.post('/sessions',                       authRequired, handleCreateSession);
 router.put('/sessions/:id',                    authRequired, handleUpdateSession);
+router.get('/sessions/:id/completion-draft',   authRequired, handleGetCompletionDraft);
+router.patch('/sessions/:id/complete',         authRequired, handleCompleteSession);
 router.delete('/sessions/:id',                 authRequired, handleCancelSession);
 
 // ── Battle ────────────────────────────────────────────────────────────────────
@@ -83,12 +95,20 @@ router.patch('/battle/:sessionId/result',      authRequired, finalizeBattleResul
 
 // ── Availability ──────────────────────────────────────────────────────────────
 router.get('/availability',                    authRequired, handleGetAvailability);
+router.get('/availability/week',               authRequired, handleGetAvailabilityWeek);
+router.get('/individual-availability/summary', authRequired, handleGetIndividualAvailabilitySummary);
+router.get('/individual-availability',         authRequired, handleGetIndividualAvailability);
 router.put('/availability',                    authRequired, handleSaveAvailability);
+router.put('/availability/week',               authRequired, handleSaveAvailabilityWeek);
 router.post('/availability/generate',          authRequired, handleGenerateSessions);
 
 // ── Slot booking ──────────────────────────────────────────────────────────────
 router.get('/slots/available',                telegramWebAppAuth(), getAvailableSlots);
 router.post('/sessions/:id/book',             telegramWebAppAuth(), handleBookPrivateSlot);
+router.post('/individual-requests',           authRequired, handleCreateUserIndividualRequest);
+router.get('/commerce/requests/:id',           authRequired, handleGetCommerceRequest);
+router.post('/commerce/requests/:id/approve',  authRequired, handleApproveCommerceRequest);
+router.post('/commerce/requests/:id/reject',   authRequired, handleRejectCommerceRequest);
 router.post('/sessions/:id/unbook',            authRequired, handleUnbookSlot);
 router.get('/sessions/private/available',      authRequired, handleGetAvailablePrivateSlots);
 router.delete('/sessions/:id/book',            authRequired, handleCancelPrivateSlotBooking);

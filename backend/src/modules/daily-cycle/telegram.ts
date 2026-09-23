@@ -4,6 +4,7 @@
  */
 
 import { bot as sharedTelegramBot, sendDedupedTelegramMessage } from '../../lib/telegram.js';
+import { replyWithTelegramMessage } from '../../lib/telegram/messageFormatter.js';
 import type { Context } from 'telegraf';
 import { prisma } from '../../db/client.js';
 import { checkDailyAccess } from './subscription.js';
@@ -38,7 +39,7 @@ export function registerDailyTelegramCommands() {
 
     if (!user) {
       const copy = buildRecoveryCopy('session_expired', resolveConversationProfile('absystem'))
-      await ctx.reply(`${absystemContent.dailyCycle.command.missingProfile}\n${copy.body}`);
+      await replyWithTelegramMessage(ctx, `${absystemContent.dailyCycle.command.missingProfile}\n${copy.body}`);
       return;
     }
 
@@ -55,12 +56,12 @@ export function registerDailyTelegramCommands() {
       const copy = buildRecoveryCopy('payment_interrupted', resolveConversationProfile('absystem'), {
         relationship,
       })
-      await ctx.reply(`${absystemContent.dailyCycle.command.accessDenied}\n${copy.body}`);
+      await replyWithTelegramMessage(ctx, `${absystemContent.dailyCycle.command.accessDenied}\n${copy.body}`);
       return;
     }
 
     const appUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    await ctx.reply(absystemContent.dailyCycle.command.webApp, {
+    await replyWithTelegramMessage(ctx, absystemContent.dailyCycle.command.webApp, {
       reply_markup: {
         inline_keyboard: [[{ text: absystemContent.dailyCycle.command.open, url: `${appUrl}/dashboard/cycle` }]],
       }

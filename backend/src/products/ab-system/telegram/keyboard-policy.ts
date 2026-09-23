@@ -1,3 +1,4 @@
+import { AB_TEST_RESULT_CONTINUE_BUTTON_TEXT } from '../content/abTest.shared.js'
 import type { InlineKeyboardMarkup } from 'telegraf/types'
 import type { AbTestResultKey } from '../content/abTest.results.js'
 
@@ -63,7 +64,7 @@ export function buildCanonicalResultKeyboard(
       ...(state.includeProgramDescription === false
         ? []
         : [[{
-            text: 'ПРО ПРОГРАМУ',
+            text: AB_TEST_RESULT_CONTINUE_BUTTON_TEXT,
             callback_data: `show_inside_${state.resultKey.toUpperCase()}`,
           }]]),
     ],

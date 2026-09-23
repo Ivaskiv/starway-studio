@@ -416,7 +416,7 @@ describe('telegram webhook contract', () => {
       },
       coach: {
         coachToken: 'coach-token',
-        coachBot: {} as never,
+        coachBot: { telegram: { setChatMenuButton: vi.fn(async () => undefined) } } as never,
         botName: 'Coach',
         webhookUrl: 'https://example.com/api/telegram/webhook',
         webhookSecret: 'coach-secret',

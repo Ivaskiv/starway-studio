@@ -1,3 +1,4 @@
+import { hasPaidIndividualParticipation, isLegacyIndividualSession } from '../commerce/zoom.commerce-request.service.js'
 import { ZoomSessionType, ZoomStatus } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js'
@@ -243,6 +244,10 @@ export async function registerAttendee(
 
     if (!session) {
       throw new Error('session_not_found')
+    }
+
+    if (isLegacyIndividualSession(session) && !await hasPaidIndividualParticipation(userId, sessionId, tx)) {
+      throw new Error('PAID_REQUIRED')
     }
 
     if (isGroupPracticeSession(session)) {

@@ -69,7 +69,14 @@ describe('assertCanBookGroupPracticeSession', () => {
 
     expect(mockZoomSessionFindUnique).toHaveBeenCalledWith({
       where: { id: 'session-1' },
-      include: { _count: { select: { attendees: true } } },
+      include: {
+        _count: { select: { attendees: true } },
+        attendees: {
+          where: { userId: 'user-1' },
+          select: { id: true },
+          take: 1,
+        },
+      },
     })
   })
 })

@@ -6,8 +6,11 @@ import {
 
 const mockProductSubscriptionFindFirst = vi.fn()
 const mockProductSubscriptionUpdate = vi.fn()
+const mockSubscriptionFindFirst = vi.fn()
 const mockCheckoutSessionFindFirst = vi.fn()
 const mockCheckoutSessionUpdate = vi.fn()
+const mockPaymentLogFindUnique = vi.fn()
+const mockPaymentLogFindMany = vi.fn()
 const mockUserFindUnique = vi.fn()
 const mockUserFindFirst = vi.fn()
 const mockRenderOutbound = vi.fn()
@@ -20,9 +23,16 @@ vi.mock('@/db/client.js', () => ({
       findFirst: (...args: unknown[]) => mockProductSubscriptionFindFirst(...args),
       update: (...args: unknown[]) => mockProductSubscriptionUpdate(...args),
     },
+    subscription: {
+      findFirst: (...args: unknown[]) => mockSubscriptionFindFirst(...args),
+    },
     checkoutSession: {
       findFirst: (...args: unknown[]) => mockCheckoutSessionFindFirst(...args),
       update: (...args: unknown[]) => mockCheckoutSessionUpdate(...args),
+    },
+    paymentLog: {
+      findUnique: (...args: unknown[]) => mockPaymentLogFindUnique(...args),
+      findMany: (...args: unknown[]) => mockPaymentLogFindMany(...args),
     },
     user: {
       findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
@@ -73,6 +83,9 @@ describe('callback.notifications — canonical Focus URL', () => {
     mockGetOrCreateFocusInviteLink.mockResolvedValue('https://t.me/+focus-canonical')
     mockProductSubscriptionUpdate.mockResolvedValue(undefined)
     mockCheckoutSessionUpdate.mockResolvedValue(undefined)
+    mockSubscriptionFindFirst.mockResolvedValue(null)
+    mockPaymentLogFindUnique.mockResolvedValue(null)
+    mockPaymentLogFindMany.mockResolvedValue([])
     mockRenderOutbound.mockResolvedValue(true)
     mockSendMessage.mockResolvedValue({ message_id: 1 })
   })
@@ -211,16 +224,32 @@ describe('callback.notifications — canonical Focus URL', () => {
   })
 
   it('renders focus payment success with zoom, channel, and focus menu actions', async () => {
-    mockCheckoutSessionFindFirst.mockResolvedValueOnce({
+    mockCheckoutSessionFindFirst.mockResolvedValue({
       id: 'checkout-focus',
+      amount: 780,
+      completedAt: new Date('2026-08-22T17:05:00.000Z'),
+      createdAt: new Date('2026-08-22T17:03:28.621Z'),
+      currency: 'UAH',
       payload: {},
-      orderReference: 'focus_order_1',
+      orderReference: 'focus_1month_11111111-1111-4111-8111-111111111111_456',
       productCode: 'focus',
     })
-    mockProductSubscriptionFindFirst.mockResolvedValueOnce({
-      focusChannelInviteLink: 'https://t.me/+focus-canonical',
-      channelJoinedAt: null,
+    mockPaymentLogFindUnique.mockResolvedValueOnce({
+      amountCents: 78000,
+      currency: 'UAH',
+      processedAt: new Date('2026-08-22T17:05:00.000Z'),
+      status: 'SUCCESS',
     })
+    mockProductSubscriptionFindFirst.mockResolvedValueOnce({
+      expiresAt: new Date('2026-09-15T17:03:28.621Z'),
+    })
+    mockSubscriptionFindFirst.mockResolvedValueOnce({
+      currentPeriodEnd: new Date('2026-09-21T17:03:28.621Z'),
+    })
+    mockPaymentLogFindMany.mockResolvedValueOnce([
+      { id: 'pay-1' },
+      { id: 'pay-2' },
+    ])
     mockUserFindUnique.mockResolvedValueOnce({
       telegramChatId: 'chat-focus',
       telegramLinks: [],
@@ -232,14 +261,25 @@ describe('callback.notifications — canonical Focus URL', () => {
     })
 
     expect(sent).toBe(true)
-    const serialized = JSON.stringify(mockRenderOutbound.mock.calls[0][1])
-    expect(serialized).toContain('Доступ до ФОКУСУ активовано.')
-    expect(serialized).toContain('"label":"ЗАПИСАТИСЯ НА ZOOM"')
-    expect(serialized).toContain('"value":"focus:next_zoom"')
-    expect(serialized).toContain('"label":"ПЕРЕЙТИ В КАНАЛ"')
-    expect(serialized).toContain('https://t.me/+focus-canonical')
-    expect(serialized).toContain('"label":"МЕНЮ ФОКУС"')
-    expect(serialized).toContain('"value":"ab_test:menu"')
+    expect(mockSendMessage).toHaveBeenCalledTimes(1)
+    const [chatId, messageText, options] = mockSendMessage.mock.calls[0]
+    expect(chatId).toBe('chat-focus')
+    expect(String(messageText)).toContain('✅ Оплату підтверджено')
+    expect(String(messageText)).toContain('Доступ ФОКУС активний ✅')
+    expect(String(messageText)).toContain('Продукт: ФОКУС')
+    expect(String(messageText)).toContain('Тариф: 1 місяць')
+    expect(String(messageText)).toContain('Сплачено: 780 UAH')
+    expect(String(messageText)).toContain('Платіж: focus_1month_11111111-1111-4111-8111-111111111111_456')
+    expect(String(messageText)).toContain('Доступ активний до: 21.09.2026')
+    expect(String(messageText)).toContain('Наступна дія: відкрий календар Zoom.')
+    expect(String(messageText)).toContain('Підтверджених оплат: 2')
+    expect(String(messageText)).toContain('Попередній оплачений час збережено.')
+    expect(JSON.stringify(options)).toContain('ВІДКРИТИ КАЛЕНДАР ZOOM')
+    expect(JSON.stringify(options)).toContain('ПЕРЕЙТИ ДО ФОКУСУ')
+    expect(JSON.stringify(options)).toContain('ГОЛОВНЕ МЕНЮ')
+    expect(JSON.stringify(options)).toContain('open_focus_info')
+    expect(JSON.stringify(options)).toContain('return_main_menu')
+    expect(mockRenderOutbound).not.toHaveBeenCalled()
   })
 
   it('dedupes repeated success sends for the same trial orderReference', async () => {
@@ -279,5 +319,36 @@ describe('callback.notifications — canonical Focus URL', () => {
     expect(second).toBe(false)
     expect(mockRenderOutbound).toHaveBeenCalledTimes(1)
     expect(mockCheckoutSessionUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('dedupes repeated success sends for the same focus orderReference', async () => {
+    mockCheckoutSessionFindFirst.mockResolvedValue({
+      id: 'checkout-focus',
+      amount: 780,
+      completedAt: new Date('2026-08-22T17:05:00.000Z'),
+      createdAt: new Date('2026-08-22T17:03:28.621Z'),
+      currency: 'UAH',
+      payload: {
+        telegramPaymentSuccess: {
+          deliveredAt: '2026-08-22T17:05:00.000Z',
+          productCode: 'focus',
+        },
+      },
+      orderReference: 'focus_1month_11111111-1111-4111-8111-111111111111_456',
+      productCode: 'focus',
+    })
+    mockUserFindUnique.mockResolvedValue({
+      telegramChatId: 'chat-focus',
+      telegramLinks: [],
+    })
+
+    const sent = await sendFocusPaymentSuccessTelegramMessageByOrder({
+      userId: 'user-focus',
+      orderReference: 'focus_1month_11111111-1111-4111-8111-111111111111_456',
+    })
+
+    expect(sent).toBe(false)
+    expect(mockSendMessage).not.toHaveBeenCalled()
+    expect(mockCheckoutSessionUpdate).not.toHaveBeenCalled()
   })
 })

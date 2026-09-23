@@ -3,6 +3,7 @@ import { ZoomSlotStatus } from '@starway/db/prisma-client'
 import type { Context } from 'telegraf'
 import { prisma } from '../../../../../db/client.js'
 import { acceptSwapRequest,bookPrivateSlot,cancelPrivateBooking,declineSwapRequest,getCoachWeekSlots,getUpcomingGroupSessions,toggleCoachSlotStatus } from '../../../../zoom/service.js'
+import { cancelRequest } from '../../../../zoom/commerce/zoom.commerce-request.service.js'
 import { planAck,planMessage } from '../../../conversation/delivery/planDelivery.js'
 
 export async function handleZoomCallback(ctx: Context, action: string, userId: string | null): Promise<boolean> {
@@ -133,9 +134,65 @@ export async function handleZoomCallback(ctx: Context, action: string, userId: s
   if (action.startsWith('zoom:book:')) {
     const [, , sessionId] = action.split(':')
     if (!sessionId) return true
-    await bookPrivateSlot(effectiveUserId, sessionId)
-    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_book_ok', '📅 Записано!').catch(() => undefined)
-    await planMessage(ctx, 'ctx.reply', 'zoom_book_confirm', '📅 Записано! Перевір Zoom-календар.').catch(() => undefined)
+    const result = await bookPrivateSlot(effectiveUserId, sessionId)
+    const canCancel = result.request.status === 'REQUESTED'
+      || result.request.status === 'APPROVED_PENDING_PAYMENT'
+    const message = result.request.status === 'PAID'
+      ? 'Індивідуальну Zoom-сесію вже оплачено та заброньовано.'
+      : result.request.status === 'APPROVED_PENDING_PAYMENT'
+        ? 'Запис підтверджено коучем і очікує оплати.'
+        : 'Запит на індивідуальну Zoom-сесію надіслано коучу.'
+    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_book_ok').catch(() => undefined)
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'zoom_book_requested',
+      message,
+      canCancel
+        ? { inline_keyboard: [[{
+            text: result.request.status === 'REQUESTED' ? 'Скасувати запит' : 'Скасувати запис',
+            callback_data: `zoom:commerce:cancel:${result.request.id}`,
+          }]] }
+        : undefined,
+    ).catch(() => undefined)
+    return true
+  }
+
+  if (action.startsWith('zoom:commerce:cancel:')) {
+    const requestId = action.slice('zoom:commerce:cancel:'.length).trim()
+    if (!requestId) return true
+    const request = await cancelRequest(requestId, effectiveUserId)
+    const session = request.zoomSessionId
+      ? await prisma.zoomSession.findUnique({
+          where: { id: request.zoomSessionId },
+          select: {
+            scheduledAt: true,
+            topic: true,
+            expert: { select: { displayName: true } },
+          },
+        })
+      : null
+    const dateTime = session?.scheduledAt.toLocaleString('uk-UA', {
+      timeZone: 'Europe/Kyiv',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => undefined)
+    await planAck(ctx, 'ctx.answerCbQuery', 'zoom_commerce_cancel_ok', 'Запис скасовано').catch(() => undefined)
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'zoom_commerce_cancel_confirm',
+      [
+        'Запис скасовано',
+        dateTime ? `Дата і час: ${dateTime}` : '',
+        session?.topic ? `Тема: ${session.topic}` : '',
+        session?.expert?.displayName ? `Коуч: ${session.expert.displayName}` : '',
+      ].filter(Boolean).join('\n'),
+    ).catch(() => undefined)
     return true
   }
 

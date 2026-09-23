@@ -81,6 +81,7 @@ async function uploadLarge(localFilePath: string, options: UploadApiOptions): Pr
 
 export async function uploadZoomAudioToCloudinary(input: {
   localFilePath: string
+  zoomSessionId: string
   sessionDate: Date
   sessionType: ZoomAudioStorageType
   username?: string | null
@@ -100,6 +101,7 @@ export async function uploadZoomAudioToCloudinary(input: {
     overwrite: false,
     unique_filename: true,
     use_filename: false,
+    context: { zoomSessionId: input.zoomSessionId },
     chunk_size: 6 * 1024 * 1024,
   })
 

@@ -277,20 +277,6 @@ export async function getUserAccessState(userId: string): Promise<UserAccessStat
   })
 
   const logResult = (result: UserAccessState) => {
-    console.info('[ZOOM_ACCESS_REFRESH_BACKEND]', {
-      telegramUserId: user?.telegramUserId ?? null,
-      telegramChatId: user?.telegramChatId ?? null,
-      resolvedUserId: userId,
-      productSubscriptions: subscriptionRows.map((row) => ({
-        productCode: row.product.code,
-        status: row.status,
-        paidAt: row.paidAt,
-        expiresAt: row.expiresAt,
-        trialEndsAt: row.trialEndsAt,
-      })),
-      calculatedHasFocus: result.hasFocus,
-      responseBody: result,
-    })
     return result
   }
 

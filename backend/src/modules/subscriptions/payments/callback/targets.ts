@@ -46,6 +46,13 @@ export function resolveWebhookPaymentTarget(
   const payRef = String(data.order_reference ?? '').trim()
   const amount = Number(data.amount)
 
+  const commerce = payRef.match(/^zoom_commerce_(individual|battle)_[0-9a-f-]{36}$/i)
+  if (commerce) {
+    return { scope: 'zoom', userId: data.clientAccountId ?? null,
+      productId: commerce[1] === 'individual' ? 'zoom_individual' : 'battle_entry',
+      planId: 'single', amount, payRef }
+  }
+
   if (stankeyOrder) {
     return {
       scope: 'stankey',
@@ -115,6 +122,18 @@ export function resolveWebhookPaymentTarget(
         typeof data.clientAccountId === 'string' ? data.clientAccountId : null,
       productId: 'zoom_swap',
       planId: null,
+      amount,
+      payRef,
+    }
+  }
+
+  if (payRef.startsWith('zoom_individual_')) {
+    return {
+      scope: 'zoom',
+      userId:
+        typeof data.clientAccountId === 'string' ? data.clientAccountId : null,
+      productId: 'zoom_individual',
+      planId: 'single',
       amount,
       payRef,
     }

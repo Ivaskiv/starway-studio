@@ -19,6 +19,14 @@ export interface ZoomPostSessionReport {
   recurringThemes?: string[]
   contentIdeas?: string[]
   analyzedAt?: string
+  source?: 'manual' | 'zoom'
+  completedAt?: string
+  actualAttendeeCount?: number
+  actualParticipantUserIds?: string[]
+  actualStartedAt?: string | null
+  actualEndedAt?: string | null
+  topic?: string
+  recordingAvailable?: boolean
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -51,5 +59,13 @@ export function parseZoomPostReport(v: unknown): ZoomPostSessionReport | null {
     recurringThemes: isStringArray(r.recurringThemes) ? r.recurringThemes : undefined,
     contentIdeas: isStringArray(r.contentIdeas) ? r.contentIdeas : undefined,
     analyzedAt: typeof r.analyzedAt === 'string' ? r.analyzedAt : undefined,
+    source: r.source === 'manual' || r.source === 'zoom' ? r.source : undefined,
+    completedAt: typeof r.completedAt === 'string' ? r.completedAt : undefined,
+    actualAttendeeCount: typeof r.actualAttendeeCount === 'number' ? r.actualAttendeeCount : undefined,
+    actualParticipantUserIds: isStringArray(r.actualParticipantUserIds) ? r.actualParticipantUserIds : undefined,
+    actualStartedAt: typeof r.actualStartedAt === 'string' ? r.actualStartedAt : null,
+    actualEndedAt: typeof r.actualEndedAt === 'string' ? r.actualEndedAt : null,
+    topic: typeof r.topic === 'string' ? r.topic : undefined,
+    recordingAvailable: typeof r.recordingAvailable === 'boolean' ? r.recordingAvailable : undefined,
   }
 }

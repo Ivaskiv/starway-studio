@@ -45,11 +45,14 @@ export function generateAccessToken(payload: AuthUser) {
   )
 }
 
-export function generateRefreshToken(userId: string) {
+export type RefreshTokenPayload = { id: string; contextualRole?: 'USER' | 'EXPERT' }
+
+export function generateRefreshToken(userId: string, contextualRole?: RefreshTokenPayload['contextualRole']) {
   return jwt.sign(
     {
       id: userId,
       jti: crypto.randomUUID(),
+      ...(contextualRole ? { contextualRole } : {}),
     },
     REFRESH_SECRET,
     { expiresIn: REFRESH_EXPIRES },
@@ -64,10 +67,12 @@ export function verifyAccessToken(token: string): AuthUser {
 }
 
 export function verifyRefreshToken(token: string) {
-  return jwt.verify(
-    token,
-    REFRESH_SECRET,
-  ) as { id: string }
+  const payload = jwt.verify(token, REFRESH_SECRET)
+  if (typeof payload === 'string' || typeof payload.id !== 'string'
+    || (payload.contextualRole !== undefined && payload.contextualRole !== 'USER' && payload.contextualRole !== 'EXPERT')) {
+    throw new AuthServiceError('invalid_refresh', 401)
+  }
+  return payload as RefreshTokenPayload
 }
 
 const fallbackRefreshTokens = new Map<
@@ -178,7 +183,7 @@ export async function storeRefreshToken(
         'code' in error &&
         error.code === 'P2002'
       ) {
-        token = generateRefreshToken(userId)
+        token = generateRefreshToken(userId, verifyRefreshToken(token).contextualRole)
         tries += 1
       } else {
         throw error

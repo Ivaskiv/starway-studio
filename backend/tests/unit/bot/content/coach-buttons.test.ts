@@ -8,7 +8,6 @@ import {
   MENU_LIBRARY_PATTERN,
   MENU_SETTINGS_PATTERN,
   buildCoachMainMenuReplyMarkup,
-  showCoachSystemMenu,
 } from '../../../../src/bot/handlers/coach/menu.ts'
 
 function createCtx() {
@@ -24,19 +23,20 @@ function hasDecorativeEmoji(value: string): boolean {
 }
 
 describe('coach button labels', () => {
-  it('renders the main coach reply keyboard without decorative emoji', () => {
+  it('renders the compact main coach reply keyboard', () => {
     const markup = buildCoachMainMenuReplyMarkup()
     const keyboard = markup.reply_markup.keyboard.flat()
+    const labels = keyboard.map((button) => typeof button === 'string' ? button : button.text)
 
-    expect(keyboard).toEqual([
-      coachBotContent.menu.conduct,
-      coachBotContent.menu.library,
+    expect(labels).toEqual([
+      coachBotContent.system.calendarCta,
+      coachBotContent.menu.members,
+      coachBotContent.menu.battle,
       coachBotContent.menu.analytics,
-      coachBotContent.menu.content,
-      coachBotContent.menu.settings,
-      coachBotContent.menu.agents,
+      coachBotContent.menu.more,
     ])
-    expect(keyboard.every((label) => !hasDecorativeEmoji(label))).toBe(true)
+    expect(labels).not.toContain(coachBotContent.menu.conduct)
+    expect(labels).not.toContain(coachBotContent.menu.calendar)
   })
 
   it('keeps legacy emoji-prefixed incoming menu text compatible with existing regex patterns', () => {
@@ -47,35 +47,26 @@ describe('coach button labels', () => {
     expect(MENU_SETTINGS_PATTERN.test('⚙️ Система')).toBe(true)
   })
 
-  it('keeps touched inline button labels free from decorative emoji and preserves routes', async () => {
-    const replies: Array<{ text: string; payload: any }> = []
-    const ctx = {
-      ...createCtx(),
-      reply: async (text: string, payload: any) => {
-        replies.push({ text, payload })
-        return undefined
-      },
-    }
+  it('keeps the calendar CTA as one WebApp button and removes the old first-row pair', () => {
+    const markup = buildCoachMainMenuReplyMarkup('EXPERT', 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token')
+    const keyboard = markup.reply_markup.keyboard
+    const labels = keyboard.flat().map((button) => typeof button === 'string' ? button : button.text)
 
-    await showCoachSystemMenu(ctx as never)
-
-    const inlineButtons = replies[0]?.payload?.reply_markup?.inline_keyboard?.flat() ?? []
-    const buttonTexts = inlineButtons.map((button: { text: string }) => button.text)
-    const callbackData = inlineButtons
-      .map((button: { callback_data?: string }) => button.callback_data)
-      .filter(Boolean)
-
-    expect(buttonTexts).toContain(coachBotContent.menu.schedule)
-    expect(buttonTexts).toContain(coachBotContent.menu.members)
-    expect(buttonTexts).toContain(coachBotContent.menu.notifications)
-    expect(buttonTexts).toContain(coachBotContent.menu.payments)
-    expect(buttonTexts.every((label: string) => !hasDecorativeEmoji(label))).toBe(true)
-    expect(callbackData).toEqual(expect.arrayContaining([
-      'coach:participants',
-      'coach:notifications',
-      'coach-content:payments',
-      'coach:analytics',
-    ]))
+    expect(keyboard[0]).toEqual([
+      expect.objectContaining({
+        text: coachBotContent.system.calendarCta,
+        web_app: { url: 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token' },
+      }),
+    ])
+    expect(labels).toEqual([
+      coachBotContent.system.calendarCta,
+      coachBotContent.menu.members,
+      coachBotContent.menu.battle,
+      coachBotContent.menu.analytics,
+      coachBotContent.menu.more,
+    ])
+    expect(labels).not.toContain(coachBotContent.menu.conduct)
+    expect(labels).not.toContain(coachBotContent.menu.calendar)
   })
 
   it('keeps next-week state buttons meaningful without emoji', () => {

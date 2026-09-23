@@ -1,5 +1,6 @@
 import type { Context } from 'telegraf'
 
+import { replyWithTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 
 const COACH_RUNTIME_ERROR_MESSAGE = coachBotContent.runtime.error
@@ -21,7 +22,7 @@ async function reportCoachRuntimeError(
   if (ctx.callbackQuery) {
     await ctx.answerCbQuery(COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
   }
-  await ctx.reply(COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
+  await replyWithTelegramMessage(ctx, COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
 }
 
 export function withCoachRuntimeProtection<T extends Context>(

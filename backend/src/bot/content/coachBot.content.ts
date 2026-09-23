@@ -43,8 +43,10 @@ export const coachBotContent = {
   menu: {
     calendar: 'Календар Zoom',
     conduct: 'Новий Zoom',
-    members: 'Учасники',
-    analytics: 'Аналітика',
+    members: '👥 УЧАСНИКИ',
+    battle: '⚔️ BATTLE',
+    more: '⚙️ ЩЕ',
+    analytics: '📊 АНАЛІТИКА',
     agents: 'AI-агенти',
     library: 'Бібліотека Zoom',
     content: 'Контент',
@@ -123,7 +125,7 @@ export const coachBotContent = {
     calendarTitle: 'Календар Zoom',
     calendarSubtitle:
       'Переглядайте всі заплановані практики,\nредагуйте сесії та керуйте учасниками.',
-    calendarCta: 'Відкрити календар Zoom',
+    calendarCta: '🗓 ВІДКРИТИ КАЛЕНДАР ZOOM',
     actions: {
       back: '← НАЗАД',
     },

@@ -1,3 +1,4 @@
+import { getCommerceCheckoutUrl, hasPaidIndividualParticipation, isLegacyIndividualSession } from '../commerce/zoom.commerce-request.service.js'
 import { NotificationType } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { buildZoomCalendarUrl } from '../urls.js'
@@ -33,6 +34,72 @@ function resolveReminderCtaUrl(windowId: ZoomReminderWindowId, session: ZoomRemi
 
   return calendarUrl
 }
+
+function resolveReminderMessageBody(
+  windowId: ZoomReminderWindowId,
+  session: ZoomReminderSession,
+): string {
+  const requests = asSessionRequests(session.requests)
+  const zoomLink = String(requests.zoomLink ?? '').trim()
+  const topic = session.topic?.trim() || 'Індивідуальна Zoom-сесія'
+
+  if (windowId === 'ZOOM_REMINDER_2H') {
+    return [
+      '🔔 НАГАДУВАННЯ',
+      '',
+      'Твоя Zoom-сесія розпочнеться через 2 години.',
+      '',
+      '🟣 Індивідуальна сесія',
+      `💬 ${topic}`,
+      '',
+      zoomLink
+        ? 'Zoom-посилання вже доступне в деталях сесії.'
+        : 'Zoom-посилання ще не додано. Відкрий деталі сесії.',
+    ].join('\n')
+  }
+
+  return [
+    '🔔 ZOOM ЧЕРЕЗ 5 ХВИЛИН',
+    '',
+    'Твоя Zoom-сесія починається зовсім скоро.',
+    '',
+    '🟣 Індивідуальна сесія',
+    `💬 ${topic}`,
+    '',
+    zoomLink
+      ? 'Переходь у Zoom за кнопкою нижче.'
+      : 'Zoom-посилання ще не додано. Відкрий деталі сесії.',
+  ].join('\n')
+}
+
+function resolveReminderCtaText(
+  windowId: ZoomReminderWindowId,
+  session: ZoomReminderSession,
+): string {
+  const zoomLink =
+    String(asSessionRequests(session.requests).zoomLink ?? '').trim()
+
+  if (zoomLink) {
+    return 'ПРИЄДНАТИСЯ ДО ZOOM'
+  }
+
+  return 'ДЕТАЛІ СЕСІЇ'
+}
+
+function resolveCanonicalReminderCtaUrl(
+  windowId: ZoomReminderWindowId,
+  session: ZoomReminderSession,
+): string {
+  const zoomLink =
+    String(asSessionRequests(session.requests).zoomLink ?? '').trim()
+
+  if (zoomLink) {
+    return zoomLink
+  }
+
+  return resolveReminderCtaUrl(windowId, session)
+}
+
 
 async function hasActiveReminderJob(userId: string, sessionId: string, windowId: ZoomReminderWindowId): Promise<boolean> {
   const existingJob = await prisma.notificationJob.findFirst({
@@ -79,7 +146,17 @@ async function enqueueReminderWindow(
   session: ZoomReminderSession,
   windowId: ZoomReminderWindowId,
   runAt: Date,
+  paymentRequestId?: string,
 ): Promise<void> {
+  const storedSession = await prisma.zoomSession.findUnique({ where: { id: session.id } })
+  if (!storedSession || storedSession.status === 'CANCELLED') return
+  const individual = isLegacyIndividualSession(storedSession)
+  const paymentUrl = paymentRequestId ? await getCommerceCheckoutUrl(paymentRequestId, userId) : null
+  if (paymentRequestId && !paymentUrl) return
+  if (individual && !paymentRequestId && !await hasPaidIndividualParticipation(userId, session.id)) {
+    const coaches = await getCoachReminderUserIds(storedSession.expertId)
+    if (!coaches.includes(userId)) return
+  }
   if (await hasActiveReminderJob(userId, session.id, windowId)) {
     return
   }
@@ -94,10 +171,21 @@ async function enqueueReminderWindow(
     runAt,
     {
       flow_timer_id: windowId,
+      ...(paymentRequestId ? {
+        individual_payment_request_id: paymentRequestId,
+        message_body: 'Індивідуальна сесія наближається. ОЧІКУЄ ОПЛАТУ. Оплати сесію для підтвердження участі.',
+        cta_text: 'ОПЛАТИТИ',
+        payment_url: paymentUrl,
+      } : {
+        message_body: resolveReminderMessageBody(windowId, session),
+        cta_text: resolveReminderCtaText(windowId, session),
+      }),
       sessionId: session.id,
       topic: session.topic,
       scheduledAt: session.scheduledAt.toISOString(),
-      cta_url: resolveReminderCtaUrl(windowId, session),
+      cta_url: paymentRequestId
+        ? resolveReminderCtaUrl(windowId, session)
+        : resolveCanonicalReminderCtaUrl(windowId, session),
       request_fingerprint: `zoom-reminder:${windowId}:${session.id}:${userId}`,
     },
   )
@@ -183,6 +271,14 @@ export async function enqueueDueReminderWindow(
   userId: string,
   session: ZoomReminderSession,
   windowId: ZoomReminderWindowId,
+  paymentRequestId?: string,
 ): Promise<void> {
+  if (paymentRequestId) {
+    await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`individual-payment-reminder:${session.id}:${userId}`})::bigint)`
+      await enqueueReminderWindow(userId, session, windowId, new Date(), paymentRequestId)
+    })
+    return
+  }
   await enqueueReminderWindow(userId, session, windowId, new Date())
 }

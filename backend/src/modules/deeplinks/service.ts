@@ -21,7 +21,7 @@ const TELEGRAM_START_PREFIX = 'dl_'
 let hasWarnedAboutMissingDeepLinkTable = false
 
 export const COACH_AGENTS_RETURN_TARGET = '/app/dashboard/admin/studio?tab=agents&item=agents.overview'
-export const COACH_ZOOM_RETURN_TARGET = '/app/dashboard/zoom'
+export const COACH_ZOOM_RETURN_TARGET = '/miniapp/zoom-calendar'
 
 interface DeepLinkTokenDelegateLike {
   create(args: Prisma.DeepLinkTokenCreateArgs): Promise<DeepLinkToken>

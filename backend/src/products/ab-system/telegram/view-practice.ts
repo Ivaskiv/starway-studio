@@ -1,3 +1,4 @@
+import { runInPerChatFlow } from '@/modules/telegram-mentor/conversation/queue/perChatFlowQueue.js'
 //backend/src/products/ab-system/telegram/views.ts
 import { absystemButtons, absystemContent } from '@/products/absystem/config/content.js'
 import type { Prisma } from '@starway/db/prisma-client'
@@ -84,6 +85,7 @@ export async function dispatchAbTestPracticeSequence(
     firstName?: string | null
   }
 ): Promise<void> {
+  return runInPerChatFlow(input.chatId, async () => {
   const resultDef = getAbTestResultDefinition(input.resultKey)
   const practiceBlocks = interpolateFirstNameInBlocks(
     resultDef.blocks?.practice ?? [],
@@ -173,6 +175,7 @@ export async function dispatchAbTestPracticeSequence(
     chatId: String(input.chatId),
     resultKey: input.resultKey,
     primaryAction: accessState.hasFocus ? 'zoom_calendar' : 'open_focus_payment',
+  })
   })
 }
 

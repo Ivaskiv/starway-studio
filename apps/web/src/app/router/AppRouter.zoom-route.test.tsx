@@ -52,7 +52,7 @@ vi.mock('@/app/router/routeConfig', () => ({
 vi.mock('@/app/router/routePages', () => ({
   AbTestLandingRouteView: () => createElement('div', undefined, 'AB_TEST_LANDING'),
   TestPage: () => createElement('div', undefined, 'AB_TEST_PAGE'),
-  FocusRouteView: () => createElement('div', undefined, 'FOCUS_ROUTE'),
+  FocusRouteView: () => createElement('div', undefined, 'FOCUS_ROUTE WEBSITE_FOOTER'),
   MiniAppPage: () => createElement('div', undefined, 'MINIAPP_PAGE'),
 }))
 
@@ -133,9 +133,10 @@ describe('AppRouter route access boundary', () => {
     )
 
     expect(markup).toContain('FOCUS_ROUTE')
+    expect(markup).toContain('WEBSITE_FOOTER')
   })
 
-  it('/miniapp/zoom-calendar without Telegram auth stays blocked and does not render protected content', async () => {
+  it('/miniapp/zoom-calendar keeps the Mini App shell after auth failure', async () => {
     authState.auth.user = null
     mockSessionOrchestrator.authRestoreStatus = 'failed'
     const { default: AppRouter } = await import('./AppRouter')
@@ -148,9 +149,29 @@ describe('AppRouter route access boundary', () => {
       ),
     )
 
-    expect(markup).toContain('FOCUS_ROUTE')
-    expect(markup).not.toContain('CLEAN_ZOOM_ROUTE')
+    expect(markup).toContain('CLEAN_ZOOM_ROUTE:/miniapp/zoom-calendar')
+    expect(markup).not.toContain('FOCUS_ROUTE')
+    expect(markup).not.toContain('WEBSITE_FOOTER')
     expect(markup).not.toContain('MINIAPP_PAGE')
+  })
+
+
+  it('keeps Telegram Mini App in its shell after auth restore fails', async () => {
+    authState.auth.user = null
+    mockSessionOrchestrator.authRestoreStatus = 'failed'
+    const { default: AppRouter } = await import('./AppRouter')
+
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/miniapp/zoom-calendar?tgWebAppPlatform=tdesktop'] },
+        createElement(AppRouter),
+      ),
+    )
+
+    expect(markup).toContain('CLEAN_ZOOM_ROUTE:/miniapp/zoom-calendar?tgWebAppPlatform=tdesktop')
+    expect(markup).not.toContain('FOCUS_ROUTE')
+    expect(markup).not.toContain('WEBSITE_FOOTER')
   })
 
   it('/miniapp/zoom-calendar?intent=booking preserves pathname and search for a valid Telegram session', async () => {

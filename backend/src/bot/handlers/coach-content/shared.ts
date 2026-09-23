@@ -1,6 +1,7 @@
 import type { Context } from 'telegraf'
 
 import { prisma } from '../../../db/client.js'
+import { replyWithTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 import { coachContent } from '../../content/coachContent.content.js'
 import { resolveCoachAccessProfileByTelegramId } from '../coach/access.js'
@@ -156,7 +157,7 @@ export async function replyOrEditPanelMessage(
     }
   }
 
-  await ctx.reply(text, extra).catch(() => undefined)
+  await replyWithTelegramMessage(ctx, text, extra).catch(() => undefined)
 }
 
 export async function reportCoachRuntimeError(ctx: Context, scope: string, error: unknown): Promise<void> {
@@ -166,7 +167,7 @@ export async function reportCoachRuntimeError(ctx: Context, scope: string, error
     await ctx.answerCbQuery(COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
   }
 
-  await ctx.reply(COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
+  await replyWithTelegramMessage(ctx, COACH_RUNTIME_ERROR_MESSAGE).catch(() => undefined)
 }
 
 export function withCoachRuntimeProtection<T extends Context>(

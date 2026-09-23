@@ -1,4 +1,3 @@
-import { useAppSelector } from '@/app/hooks'
 import { isProtectedPath } from '@/app/router/pathAccess'
 import {
   ADMIN_ROUTES,
@@ -14,14 +13,11 @@ import {
   MiniAppPage,
 } from '@/app/router/routePages'
 import { ROUTES, toAppRoutePath } from '@/config/routes'
-import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
-import { selectCurrentUser } from '@/features/auth/services/auth.slice'
 import {
   FOCUS_ALIAS_ROUTE,
   FOCUS_ROUTE,
 } from '@/features/landings/focus/content/constants'
 import { isTelegramMiniApp } from '@/features/social/utils/telegramWebApp'
-import LoadingFallback from '@/features/user/userMenu/LoadingFallback'
 import MiniAppCalendarRoute from '@/features/zoom/routes/MiniAppCalendarRoute'
 import MainLayout from '@/layout/MainLayout'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
@@ -52,31 +48,6 @@ function isTelegramMiniAppRoute(pathname: string): boolean {
     pathname === '/planner' ||
     pathname === '/content'
   )
-}
-
-function hasTelegramRuntimeEvidence(): boolean {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  const search = new URLSearchParams(window.location.search)
-  const hasTelegramQueryHints =
-    search.has('tgWebAppPlatform') ||
-    search.has('tgWebAppVersion') ||
-    search.has('tgWebAppThemeParams') ||
-    search.has('tgWebAppStartParam')
-
-  const initData = (
-    window as {
-      Telegram?: {
-        WebApp?: {
-          initData?: string
-        }
-      }
-    }
-  ).Telegram?.WebApp?.initData?.trim()
-
-  return Boolean(initData || hasTelegramQueryHints)
 }
 
 function resolveTelegramRuntimeTarget(
@@ -238,15 +209,8 @@ function ProtectedAppRouter() {
 
 export default function AppRouter() {
   const location = useLocation()
-  const user = useAppSelector(selectCurrentUser)
-  const { authRestoreStatus } = useSessionOrchestrator()
   const isTelegramRuntime = isTelegramMiniApp(location.pathname)
   const isMiniAppRoute = isTelegramMiniAppRoute(location.pathname)
-  const isZoomBookingEntry =
-    location.pathname === MINIAPP_ZOOM_TARGET &&
-    new URLSearchParams(location.search).get('intent') === 'booking'
-  const isAuthRestoring =
-    authRestoreStatus === 'idle' || authRestoreStatus === 'restoring'
 
   if (
     isTelegramRuntime &&
@@ -263,19 +227,7 @@ export default function AppRouter() {
   }
 
   if (isMiniAppRoute) {
-    if (isZoomBookingEntry) {
-      return <TelegramMiniAppRouter />
-    }
-
-    if (user) {
-      return <TelegramMiniAppRouter />
-    }
-
-    if (isAuthRestoring || hasTelegramRuntimeEvidence()) {
-      return <LoadingFallback />
-    }
-
-    return <PublicWebsiteRouter />
+    return <TelegramMiniAppRouter />
   }
   if (isProtectedPath(location.pathname)) {
     return <ProtectedAppRouter />

@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { verifyTelegramInitData } from '../../../../src/modules/auth/telegram.ts'
 
@@ -32,6 +32,10 @@ function buildInitData(botToken: string, user: { id: number; first_name: string;
   return params.toString()
 }
 
+beforeEach(() => {
+  for (const key of Object.keys(ORIGINAL_ENV)) delete process.env[key]
+})
+
 afterEach(() => {
   for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
     if (value === undefined) {
@@ -57,6 +61,7 @@ describe('verifyTelegramInitData', () => {
     })
 
     expect(verifyTelegramInitData(initData)).toEqual({
+      botContext: 'USER',
       id: '123456',
       firstName: 'Vira',
       username: 'vira',
@@ -77,6 +82,7 @@ describe('verifyTelegramInitData', () => {
     })
 
     expect(verifyTelegramInitData(initData)).toEqual({
+      botContext: 'USER',
       id: '987654',
       firstName: 'Anna',
       username: 'anna',
@@ -96,6 +102,7 @@ describe('verifyTelegramInitData', () => {
     })
 
     expect(verifyTelegramInitData(initData)).toEqual({
+      botContext: 'USER',
       id: '555777',
       firstName: 'Nadia',
       username: null,
@@ -117,6 +124,7 @@ describe('verifyTelegramInitData', () => {
     })
 
     expect(verifyTelegramInitData(initData)).toEqual({
+      botContext: 'USER',
       id: '424242',
       firstName: 'Key',
       username: 'key_bot_user',
@@ -138,10 +146,59 @@ describe('verifyTelegramInitData', () => {
     })
 
     expect(verifyTelegramInitData(initData)).toEqual({
+      botContext: 'COACH',
       id: '303030',
       firstName: 'Coach',
       username: 'coach_test',
     })
+  })
+
+  it.each(['development', 'production'])('preserves the same identity across bot contexts in %s', (runtime) => {
+    process.env.NODE_ENV = runtime
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'local-user-token'
+    process.env.TELEGRAM_BOT_TOKEN = 'production-user-token'
+    process.env.TEST_COACH_BOT_TOKEN = 'local-coach-token'
+    process.env.COACH_BOT_TOKEN = 'production-coach-token'
+    const userToken = runtime === 'production' ? 'production-user-token' : 'local-user-token'
+    const coachToken = runtime === 'production' ? 'production-coach-token' : 'local-coach-token'
+    const user = { id: 123456, first_name: 'Vira', username: 'vira' }
+    const expectedIdentity = { id: '123456', firstName: 'Vira', username: 'vira' }
+
+    expect(verifyTelegramInitData(buildInitData(userToken, user))).toEqual({
+      ...expectedIdentity,
+      botContext: 'USER',
+    })
+    expect(verifyTelegramInitData(buildInitData(coachToken, user))).toEqual({
+      ...expectedIdentity,
+      botContext: 'COACH',
+    })
+  })
+
+  it.each([
+    ['TEST_TELEGRAM_BOT_TOKEN', 'USER'],
+    ['TELEGRAM_BOT_TOKEN', 'COACH'],
+  ])('retains config priority when coach token collides with %s', (source, expectedContext) => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'runtime-user-token'
+    process.env.TEST_COACH_BOT_TOKEN = 'shared-token'
+    process.env[source] = 'shared-token'
+    const initData = buildInitData('shared-token', { id: 123456, first_name: 'Vira' })
+
+    expect(verifyTelegramInitData(initData).botContext).toBe(expectedContext)
+    expect(verifyTelegramInitData(initData, 'shared-token').botContext).toBe(expectedContext)
+  })
+
+  it('resolves configured overrides without assigning context to unknown overrides', () => {
+    process.env.NODE_ENV = 'development'
+    process.env.TEST_COACH_BOT_TOKEN = 'coach-token'
+    const user = { id: 123456, first_name: 'Vira' }
+
+    expect(verifyTelegramInitData(buildInitData('coach-token', user), 'coach-token').botContext).toBe('COACH')
+    expect(verifyTelegramInitData(buildInitData('explicit-token', user), 'explicit-token')).toEqual({
+      id: '123456', firstName: 'Vira', username: null, botContext: null,
+    })
+    expect(() => verifyTelegramInitData(buildInitData('coach-token', user), 'explicit-token'))
+      .toThrow('invalid_telegram_signature')
   })
 
   it('rejects tampered initData with an invalid signature', () => {

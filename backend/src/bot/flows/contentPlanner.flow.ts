@@ -3,6 +3,7 @@ import type { Context } from 'telegraf'
 
 import { coachOnly } from '../../middleware/coachOnly.middleware.js'
 import { prisma } from '../../db/client.js'
+import { replyWithTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 import { coachContent, buildPlannerResultTitle } from '../content/coachContent.content.js'
 import {
   generateContentPlannerDraft,
@@ -135,7 +136,7 @@ async function showPlannerPrompt(ctx: Context, mode: ContentPlanMode, userId: st
     return
   }
 
-  await ctx.reply([
+  await replyWithTelegramMessage(ctx, [
     `🧭 ${coachContent.planner.title} — ${coachContent.mode[mode]}`,
     '',
     coachContent.planner.intro,
@@ -158,7 +159,7 @@ async function generateAndShowDraft(ctx: Context, userId: string, topic?: string
     ? coachContent.planner.monthlyPrompt
     : coachContent.planner.generating
 
-  await ctx.reply(generatingMessage).catch(() => undefined)
+  await replyWithTelegramMessage(ctx, generatingMessage).catch(() => undefined)
 
   try {
     const draft = await generateContentPlannerDraft({
@@ -198,7 +199,7 @@ async function generateAndShowDraft(ctx: Context, userId: string, topic?: string
       draft.content,
     ].join('\n')
 
-    await ctx.reply(reply, buildPlannerKeyboard(session.mode)).catch(() => undefined)
+    await replyWithTelegramMessage(ctx, reply, buildPlannerKeyboard(session.mode)).catch(() => undefined)
     return
   } catch (error) {
     console.error('[coach-content] draft generation failed', error)
@@ -208,7 +209,7 @@ async function generateAndShowDraft(ctx: Context, userId: string, topic?: string
       ? coachContent.planner.aiNotConfigured
       : coachContent.planner.errorFallback
 
-    await ctx.reply(message).catch(() => undefined)
+    await replyWithTelegramMessage(ctx, message).catch(() => undefined)
   }
 }
 
@@ -229,7 +230,7 @@ async function saveCurrentDraft(ctx: Context, userId: string): Promise<void> {
     ? coachContent.planner.monthlySaved
     : coachContent.planner.saved
 
-  await ctx.reply([savedMessage, '', session.draft.content].join('\n')).catch(() => undefined)
+  await replyWithTelegramMessage(ctx, [savedMessage, '', session.draft.content].join('\n')).catch(() => undefined)
   clearPlannerSession(userId)
 }
 
@@ -242,7 +243,7 @@ async function promptForTopic(ctx: Context, userId: string): Promise<void> {
   session.draft = null
   setPlannerSession(session)
 
-  await ctx.reply([
+  await replyWithTelegramMessage(ctx, [
     coachContent.planner.collecting,
     coachContent.planner.collectingHint,
   ].join('\n')).catch(() => undefined)
@@ -266,13 +267,13 @@ async function handlePlannerText(ctx: Context, text: string): Promise<boolean> {
   if (noteCapture) {
     const noteText = text.trim()
     if (!noteText) {
-      await ctx.reply(coachContent.planner.noteEmpty).catch(() => undefined)
+      await replyWithTelegramMessage(ctx, coachContent.planner.noteEmpty).catch(() => undefined)
       return true
     }
 
     await saveCoachNote({ userId, content: noteText, source: 'coach_content_flow' })
     clearNoteCapture(userId)
-    await ctx.reply(coachContent.planner.noteSaved).catch(() => undefined)
+    await replyWithTelegramMessage(ctx, coachContent.planner.noteSaved).catch(() => undefined)
     return true
   }
 
@@ -281,7 +282,7 @@ async function handlePlannerText(ctx: Context, text: string): Promise<boolean> {
 
   const topic = text.trim()
   if (!topic) {
-    await ctx.reply(coachContent.planner.collectingHint).catch(() => undefined)
+    await replyWithTelegramMessage(ctx, coachContent.planner.collectingHint).catch(() => undefined)
     return true
   }
 
@@ -313,7 +314,7 @@ async function handlePlannerAction(ctx: Context, action: string): Promise<boolea
     await ctx.answerCbQuery(coachContent.buttons.cancel).catch(() => undefined)
     clearPlannerSession(userId)
     clearNoteCapture(userId)
-    await ctx.reply(coachContent.planner.cancelled).catch(() => undefined)
+    await replyWithTelegramMessage(ctx, coachContent.planner.cancelled).catch(() => undefined)
     return true
   }
 
@@ -359,12 +360,12 @@ async function handleNoteCommand(ctx: Context, payload: string): Promise<boolean
   if (inlineText) {
     await saveCoachNote({ userId, content: inlineText, source: 'coach_content_flow' })
     clearNoteCapture(userId)
-    await ctx.reply(coachContent.note.saved).catch(() => undefined)
+    await replyWithTelegramMessage(ctx, coachContent.note.saved).catch(() => undefined)
     return true
   }
 
   setNoteCapture({ userId, chatId, createdAt: Date.now() })
-  await ctx.reply([coachContent.note.title, '', coachContent.note.prompt].join('\n')).catch(() => undefined)
+  await replyWithTelegramMessage(ctx, [coachContent.note.title, '', coachContent.note.prompt].join('\n')).catch(() => undefined)
   return true
 }
 
@@ -392,7 +393,7 @@ export async function handleCoachContentZooms(ctx: Context): Promise<boolean> {
 
   const sessions = await listCoachZoomSessions(coachUserId)
   const message = formatZoomListMessage(sessions)
-  await ctx.reply(message).catch(() => undefined)
+  await replyWithTelegramMessage(ctx, message).catch(() => undefined)
   return true
 }
 

@@ -2,6 +2,7 @@
 import crypto from 'node:crypto'
 import type { Context } from 'telegraf'
 
+import { replyWithTelegramMessage } from '@/lib/telegram/messageFormatter.js'
 import { cleanupDuplicateUpdates } from '../dedupe/updateDedupe.js'
 import { getQueueDepth, runInPerChatQueue } from '../queue/perChatQueue.js'
 import type {
@@ -406,7 +407,7 @@ async function deliverPlan(
           item.deliveryKind === 'ab_test_email_gate' ? transition : item.text,
         ),
         execute: () =>
-          ctx.reply(item.text, {
+          replyWithTelegramMessage(ctx, item.text, {
             ...(item.parseMode ? { parse_mode: item.parseMode } : {}),
             ...(item.keyboard ? { reply_markup: item.keyboard as never } : {}),
           }),
@@ -461,7 +462,7 @@ export const planMessage = async (
 ): Promise<any> => {
   const resolvedParseMode = parseMode ?? 'HTML'
   if (method === 'ctx.reply') {
-    return ctx.reply(text, {
+    return replyWithTelegramMessage(ctx, text, {
       parse_mode: resolvedParseMode as any,
       reply_markup: markup,
     })

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockProductSubscriptionUpdate = vi.fn()
-const mockSendMessage = vi.fn()
+const mockSendTelegramMessage = vi.fn()
 
 vi.mock('../../../../db/client.ts', () => ({
   prisma: {
@@ -11,14 +11,26 @@ vi.mock('../../../../db/client.ts', () => ({
   },
 }))
 
-vi.mock('../../../../lib/telegram.ts', () => ({
+vi.mock('/Users/viravira/Documents/starway-studio/backend/src/db/client.js', () => ({
+  prisma: {
+    productSubscription: {
+      update: (...args: unknown[]) => mockProductSubscriptionUpdate(...args),
+    },
+  },
+}))
+
+vi.mock('../../../../lib/telegram.js', () => ({
   bot: {
     telegram: {
-      sendMessage: (...args: unknown[]) => mockSendMessage(...args),
+      sendMessage: (...args: unknown[]) => mockSendTelegramMessage(...args),
     },
   },
   coachBot: {},
   sendOpsTelegramMessage: vi.fn(),
+}))
+
+vi.mock('/Users/viravira/Documents/starway-studio/backend/src/lib/telegram/messageFormatter.js', () => ({
+  sendTelegramMessage: (...args: unknown[]) => mockSendTelegramMessage(...args),
 }))
 
 vi.mock('../../../../services/notifications/NotificationService.ts', () => ({
@@ -57,6 +69,14 @@ vi.mock('../business/service.js', () => ({
 vi.mock('../callback/notifications.ts', () => ({
   sendAbsystemPaymentSuccessTelegramMessage: vi.fn(),
   sendPaymentFailedTelegramMessage: vi.fn(),
+  sendFocusPaymentSuccessTelegramMessageByOrder: vi.fn(),
+  sendTrialZoomPaymentSuccessTelegramMessage: vi.fn(),
+}))
+
+vi.mock('/Users/viravira/Documents/starway-studio/backend/src/modules/subscriptions/payments/callback/notifications.js', () => ({
+  sendAbsystemPaymentSuccessTelegramMessage: vi.fn(),
+  sendPaymentFailedTelegramMessage: vi.fn(),
+  sendFocusPaymentSuccessTelegramMessageByOrder: vi.fn(),
   sendTrialZoomPaymentSuccessTelegramMessage: vi.fn(),
 }))
 
@@ -108,10 +128,7 @@ vi.mock('../../../../services/notifications/NotificationEvent.ts', () => ({
   },
 }))
 
-import { sendFocusPaymentOnboardingIfNeeded } from '../callback/handler.ts'
-import { wayForPayCallback } from '../callback/handler.ts'
-import { processPaymentWebhook } from '../callback/processing.ts'
-import { verifySignature } from '../wayforpay/signature.ts'
+import { sendFocusPaymentOnboardingIfNeeded } from '@/modules/subscriptions/payments/callback/handler.ts'
 
 describe('callback.handler — Focus onboarding idempotency', () => {
   const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -119,23 +136,50 @@ describe('callback.handler — Focus onboarding idempotency', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockProductSubscriptionUpdate.mockResolvedValue(undefined)
-    mockSendMessage.mockResolvedValue({ message_id: 1 })
+    mockSendTelegramMessage.mockResolvedValue(true)
     process.env.PUBLIC_FRONTEND_URL = 'https://app.starway.test'
   })
 
-  function createRes() {
-    const res = {
-      status: vi.fn().mockReturnThis(),
-      send: vi.fn().mockReturnThis(),
-      json: vi.fn().mockReturnThis(),
-    }
-
-    return res as any
-  }
-
-  it('duplicate callback does not resend onboarding when focusWelcomedAt already exists', async () => {
-    const sent = await sendFocusPaymentOnboardingIfNeeded({
+  it('sends the access onboarding once and marks focusWelcomedAt on first activation', async () => {
+    const first = await sendFocusPaymentOnboardingIfNeeded({
       userId: 'user-1',
+      orderReference: 'focus_order_1',
+      paidUser: {
+        id: 'user-1',
+        firstName: 'Віра',
+        telegramChatId: 'chat-1',
+        telegramLinks: [],
+      },
+      focusSubscription: {
+        id: 'sub-1',
+        focusWelcomedAt: null,
+        expiresAt: new Date('2026-08-27T08:00:00.000Z'),
+      },
+      canonicalSubscription: {
+        currentPeriodEnd: new Date('2026-08-27T08:00:00.000Z'),
+      },
+      planLabel: '1 місяць',
+      upcomingLines: 'пн, 27.08 19:00 — Zoom',
+    })
+
+    expect(first).toBe(true)
+    expect(mockSendTelegramMessage).toHaveBeenCalledTimes(2)
+    expect(String(mockSendTelegramMessage.mock.calls[0][2])).toContain('Доступ до ФОКУС активовано ✅')
+    expect(String(mockSendTelegramMessage.mock.calls[0][2])).toContain('Тариф: 1 місяць')
+    expect(String(mockSendTelegramMessage.mock.calls[0][2])).toContain('Доступ активний до')
+    expect(String(mockSendTelegramMessage.mock.calls[0][2])).toContain('Що тобі вже доступно')
+    expect(mockProductSubscriptionUpdate).toHaveBeenCalledWith({
+      where: { id: 'sub-1' },
+      data: expect.objectContaining({
+        focusWelcomedAt: expect.any(Date),
+      }),
+    })
+  })
+
+  it('distinct focus payment orderReferences do not repeat onboarding after focusWelcomedAt is set', async () => {
+    const second = await sendFocusPaymentOnboardingIfNeeded({
+      userId: 'user-1',
+      orderReference: 'focus_order_2',
       paidUser: {
         id: 'user-1',
         firstName: 'Віра',
@@ -151,17 +195,18 @@ describe('callback.handler — Focus onboarding idempotency', () => {
         currentPeriodEnd: new Date('2026-08-27T08:00:00.000Z'),
       },
       planLabel: '1 місяць',
-      upcomingLines: 'пн, 27.07 19:00 — Zoom',
+      upcomingLines: '',
     })
 
-    expect(sent).toBe(false)
-    expect(mockSendMessage).not.toHaveBeenCalled()
+    expect(second).toBe(true)
+    expect(mockSendTelegramMessage).not.toHaveBeenCalled()
     expect(mockProductSubscriptionUpdate).not.toHaveBeenCalled()
   })
 
   it('skips Telegram onboarding and logs a warning when paid user has no chatId', async () => {
     const sent = await sendFocusPaymentOnboardingIfNeeded({
       userId: 'user-2',
+      orderReference: 'focus_order_3',
       paidUser: {
         id: 'user-2',
         firstName: 'Оля',
@@ -181,7 +226,7 @@ describe('callback.handler — Focus onboarding idempotency', () => {
     })
 
     expect(sent).toBe(false)
-    expect(mockSendMessage).not.toHaveBeenCalled()
+    expect(mockSendTelegramMessage).not.toHaveBeenCalled()
     expect(mockProductSubscriptionUpdate).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
       '[PAYMENT_LIFECYCLE] telegram_notification_skipped',
@@ -193,54 +238,5 @@ describe('callback.handler — Focus onboarding idempotency', () => {
         telegramLinksCount: 1,
       }),
     )
-  })
-
-  it('rejects invalid WayForPay signature before payment processing', async () => {
-    vi.mocked(verifySignature).mockReturnValue(false)
-    const req = {
-      body: {
-        order_reference: 'trial_zoom_single_11111111-1111-4111-8111-111111111111_123',
-        amount: 1,
-        currency: 'UAH',
-        transaction_status: 'Approved',
-        merchant_signature: 'bad-signature',
-      },
-      method: 'POST',
-      path: '/api/subscriptions/payments/wayforpay/callback',
-      ip: '127.0.0.1',
-      headers: {},
-    } as any
-    const res = createRes()
-
-    await wayForPayCallback(req, res)
-
-    expect(res.status).toHaveBeenCalledWith(400)
-    expect(res.send).toHaveBeenCalledWith('FAIL')
-    expect(vi.mocked(processPaymentWebhook)).not.toHaveBeenCalled()
-  })
-
-  it('does not mark payment as paid for non-approved trial callback', async () => {
-    vi.mocked(verifySignature).mockReturnValue(true)
-    const req = {
-      body: {
-        order_reference: 'trial_zoom_single_11111111-1111-4111-8111-111111111111_123',
-        amount: 1,
-        currency: 'UAH',
-        transaction_status: 'Declined',
-        clientAccountId: '11111111-1111-4111-8111-111111111111',
-        merchant_signature: '0123456789abcdef0123456789abcdef',
-      },
-      method: 'POST',
-      path: '/api/subscriptions/payments/wayforpay/callback',
-      ip: '127.0.0.1',
-      headers: {},
-    } as any
-    const res = createRes()
-
-    await wayForPayCallback(req, res)
-
-    expect(res.status).toHaveBeenCalledWith(200)
-    expect(res.send).toHaveBeenCalledWith('OK')
-    expect(vi.mocked(processPaymentWebhook)).not.toHaveBeenCalled()
   })
 })

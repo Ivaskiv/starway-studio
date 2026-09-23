@@ -1,6 +1,7 @@
 import { ZoomStatus } from '@starway/db/prisma-client'
 
 import { prisma } from '../../../db/client.js'
+import { replyWithTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
 import {
   bot,
   sendOpsTelegramMessage,
@@ -80,7 +81,7 @@ export function registerZoomAdminHandlers(): void {
    if (!coachTelegramId || String(ctx.from?.id ?? '') !== coachTelegramId)
    return
 
-   await ctx.reply(
+   await replyWithTelegramMessage(ctx,
    'Команди управління розкладом:\n\n' +
    '/zoom month ММ.РРРР\n' +
    'Пн ДД.ММ | Тема | https://link\n' +
@@ -108,13 +109,13 @@ export function registerZoomAdminHandlers(): void {
    where: { id: sessionId },
    })
    if (!session) {
-   await ctx.reply(`Сесію ${sessionId} не знайдено.`)
+   await replyWithTelegramMessage(ctx, `Сесію ${sessionId} не знайдено.`)
    return
    }
 
    if (field === 'link') {
    if (!value.startsWith('https://')) {
-   await ctx.reply('Link має починатись з https://')
+   await replyWithTelegramMessage(ctx, 'Link має починатись з https://')
    return
    }
    const existingMeta =
@@ -130,7 +131,7 @@ export function registerZoomAdminHandlers(): void {
    zoomLink: value,
    },
    })
-   await ctx.reply(`Zoom-посилання оновлено.\n${session.topic}`)
+   await replyWithTelegramMessage(ctx, `Zoom-посилання оновлено.\n${session.topic}`)
    const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
    const panelUrl = panelBase
    ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom`
@@ -157,7 +158,7 @@ export function registerZoomAdminHandlers(): void {
         const normalized = value.replace(' ', 'T')
         const parsedDate = new Date(normalized)
         if (Number.isNaN(parsedDate.getTime())) {
-          await ctx.reply(
+          await replyWithTelegramMessage(ctx,
             'Невірний формат.\nПриклад: /zoom edit <id> time 2026-06-09 19:00'
           )
           return
@@ -176,7 +177,7 @@ export function registerZoomAdminHandlers(): void {
           affectedUserIds: attendees.map((attendee) => attendee.userId),
         }).catch((err) => console.error('[zoom edit] afterZoomOperation:', err))
 
-        await ctx.reply(
+        await replyWithTelegramMessage(ctx,
           `Час сесії оновлено.\n${updated.topic}\n` +
             `Новий час: ${updated.scheduledAt.toLocaleString('uk-UA')}\n` +
             'Нагадування перераховано.'
@@ -203,7 +204,7 @@ export function registerZoomAdminHandlers(): void {
         ).catch((err) => console.error('[zoom edit] ops report:', err))
       } catch (error) {
         logger.error('[telegram-thin-client:zoom_edit]', error)
-        await ctx.reply('Не вдалося оновити сесію. Перевір параметри і повтори.')
+        await replyWithTelegramMessage(ctx, 'Не вдалося оновити сесію. Перевір параметри і повтори.')
       }
     })
     bot.hears(/^\/zoom month\s+([\s\S]+)/, async (ctx) => {
@@ -215,18 +216,18 @@ export function registerZoomAdminHandlers(): void {
         const raw = ctx.match[1]
         const fullText = typeof raw === 'string' ? raw.trim() : ''
         if (!fullText) {
-          await ctx.reply(
+          await replyWithTelegramMessage(ctx,
             'Не передано тіло розкладу. Формат: /zoom month ММ.РРРР + рядки сесій.'
           )
           return
         }
 
-        await ctx.reply('Обробка розкладу...')
+        await replyWithTelegramMessage(ctx, 'Обробка розкладу...')
         await ctx.telegram.sendChatAction(ctx.chat.id, 'typing')
 
         const headerMatch = fullText.match(/(\d{2})\.(\d{4})/)
         if (!headerMatch) {
-          await ctx.reply(
+          await replyWithTelegramMessage(ctx,
             'Не вдалось розпізнати місяць. Формат першого рядка: /zoom month ММ.РРРР'
           )
           return
@@ -235,13 +236,13 @@ export function registerZoomAdminHandlers(): void {
         const { lines, errors } = parseMonthSchedule(fullText, year)
 
         if (errors.length > 0) {
-          await ctx.reply(
+          await replyWithTelegramMessage(ctx,
             `Знайдено помилки в розкладі:\n\n${errors.join('\n')}\n\nВиправ і надішли ще раз.`
           )
           return
         }
         if (lines.length === 0) {
-          await ctx.reply('Рядки розкладу не знайдено. Перевір формат.')
+          await replyWithTelegramMessage(ctx, 'Рядки розкладу не знайдено. Перевір формат.')
           return
         }
 
@@ -257,7 +258,7 @@ export function registerZoomAdminHandlers(): void {
           }))
 
         if (!expert) {
-          await ctx.reply('Expert не знайдено в БД.')
+          await replyWithTelegramMessage(ctx, 'Expert не знайдено в БД.')
           return
         }
 
@@ -316,7 +317,7 @@ export function registerZoomAdminHandlers(): void {
           })
           .join('\n')
 
-        await ctx.reply(
+        await replyWithTelegramMessage(ctx,
           `Розклад збережено: ${created.length} сесій.\n\n` +
             `${createdLines || 'Нових сесій не створено.'}` +
             (skipped.length > 0
@@ -334,7 +335,7 @@ export function registerZoomAdminHandlers(): void {
         )
       } catch (error) {
         logger.error('[telegram-thin-client:zoom_month]', error)
-        await ctx.reply('Не вдалося обробити розклад. Перевір формат і повтори.')
+        await replyWithTelegramMessage(ctx, 'Не вдалося обробити розклад. Перевір формат і повтори.')
       }
     })
 }

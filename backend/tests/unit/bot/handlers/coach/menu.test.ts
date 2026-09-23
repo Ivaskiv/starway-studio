@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../../../../src/modules/deeplinks/service.js', () => ({
+  generateCoachZoomWebDeepLink: vi.fn(async () => 'https://miniapp.example/miniapp/zoom-calendar?dl=coach-token'),
   COACH_AGENTS_RETURN_TARGET: '/app/dashboard/admin/studio?tab=agents&item=agents.overview',
+  COACH_ZOOM_RETURN_TARGET: '/miniapp/zoom-calendar',
   generateCoachAgentsWebDeepLink: vi.fn(async () =>
     'https://miniapp.example/app/dashboard/admin/studio?tab=agents&item=agents.overview&dl=coach-agents-token',
   ),
@@ -26,10 +28,17 @@ vi.mock('../../../../../src/bot/handlers/coach-content/shared.js', () => ({
   })),
 }))
 
+import { formatTelegramMessage } from '../../../../../src/lib/telegram/messageFormatter.js'
 import { coachBotContent } from '../../../../../src/bot/content/coachBot.content.ts'
 import { generateCoachAgentsWebDeepLink } from '../../../../../src/modules/deeplinks/service.js'
 import { replyOrEditPanelMessage, resolveCoachAccess } from '../../../../../src/bot/handlers/coach-content/shared.js'
-import { showCoachAgentsMenu, showCoachSystemMenu } from '../../../../../src/bot/handlers/coach/menu.ts'
+import {
+  buildCoachMainMenuReplyMarkup,
+  MENU_ANALYTICS_PATTERN,
+  MENU_SETTINGS_PATTERN,
+  showCoachAgentsMenu,
+  showCoachSystemMenu,
+} from '../../../../../src/bot/handlers/coach/menu.ts'
 
 function createCoachCtx() {
   return {
@@ -60,7 +69,7 @@ describe('showCoachAgentsMenu', () => {
     expect(ctx.telegram.deleteMessage).toHaveBeenCalledWith('42', 1001)
     expect(ctx.reply).toHaveBeenNthCalledWith(
       2,
-      `${coachBotContent.system.agentsTitle}\n\n${coachBotContent.system.agentsSubtitle}`,
+      formatTelegramMessage(`${coachBotContent.system.agentsTitle}\n\n${coachBotContent.system.agentsSubtitle}`).text,
       expect.objectContaining({
         reply_markup: expect.objectContaining({
           inline_keyboard: [[expect.objectContaining({
@@ -106,6 +115,22 @@ describe('showCoachSystemMenu', () => {
     await showCoachSystemMenu(ctx as never)
 
     expect(replyOrEditPanelMessage).not.toHaveBeenCalled()
-    expect(ctx.reply).toHaveBeenCalledWith('Налаштування доступні лише SUPERADMIN.')
+    expect(ctx.reply).toHaveBeenCalledWith('Налаштування доступні лише SUPERADMIN.', { parse_mode: 'HTML' })
+  })
+})
+
+describe('canonical coach main menu', () => {
+  it('preserves calendar auth URL and routes Battle through the existing calendar', () => {
+    const url = 'https://miniapp.example/miniapp/zoom-calendar?dl=coach-token'
+    const { reply_markup } = buildCoachMainMenuReplyMarkup('EXPERT', url)
+    expect(reply_markup.keyboard).toEqual([
+      ['👥 УЧАСНИКИ', expect.objectContaining({ text: '⚔️ BATTLE', web_app: { url: `${url}#battle` } })],
+      ['📊 АНАЛІТИКА', '⚙️ ЩЕ'],
+    ])
+    expect(reply_markup.resize_keyboard).toBe(true)
+    expect(reply_markup.is_persistent).toBe(true)
+    expect(MENU_ANALYTICS_PATTERN.test('📊 АНАЛІТИКА')).toBe(true)
+    expect(MENU_SETTINGS_PATTERN.test('⚙️ ЩЕ')).toBe(true)
+    expect(coachBotContent.menu.members).toBe('👥 УЧАСНИКИ')
   })
 })

@@ -2,11 +2,13 @@ import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
-type BottomNavTab = 'home' | 'library' | 'ai' | 'tracker' | 'profile'
+export type BottomNavTab = 'home' | 'library' | 'ai' | 'tracker' | 'profile' | 'participants' | 'battle' | 'analytics' | 'more'
+export type BottomNavVariant = 'user' | 'coach'
 
 export interface BottomNavProps {
   activeTab: BottomNavTab
   onTabChange: (tab: BottomNavTab) => void
+  variant?: BottomNavVariant
 }
 
 type NavItem = {
@@ -145,19 +147,33 @@ function ProfileIcon() {
   )
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'home', label: 'Головна', Icon: HomeIcon },
-  { id: 'library', label: 'Бібліотека', Icon: LibraryIcon },
-  { id: 'ai', label: 'Асистент', Icon: AIIcon },
-  { id: 'tracker', label: 'Трекер', Icon: TrackerIcon },
-  { id: 'profile', label: 'Я', Icon: ProfileIcon },
+const USER_NAV_ITEMS: NavItem[] = [
+  { id: 'home', label: 'Календар', Icon: HomeIcon },
+  { id: 'tracker', label: 'Мої цілі', Icon: TrackerIcon },
+  { id: 'ai', label: 'AI-агенти', Icon: AIIcon },
+  { id: 'library', label: 'Матеріали', Icon: LibraryIcon },
+  { id: 'profile', label: 'Ще', Icon: ProfileIcon },
 ]
 
-export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
+const COACH_NAV_ITEMS: NavItem[] = [
+  { id: 'home', label: 'Календар', Icon: HomeIcon },
+  { id: 'participants', label: 'Учасники', Icon: ProfileIcon },
+  { id: 'battle', label: 'Battle', Icon: TrackerIcon },
+  { id: 'analytics', label: 'Аналітика', Icon: LibraryIcon },
+  { id: 'more', label: 'Ще', Icon: AIIcon },
+]
+
+export default function BottomNav({
+  activeTab,
+  onTabChange,
+  variant = 'user',
+}: BottomNavProps) {
+  const navItems = variant === 'coach' ? COACH_NAV_ITEMS : USER_NAV_ITEMS
+
   return (
-    <nav className="miniapp-bottomnav-shell" aria-label="Mini App navigation">
+    <nav className="miniapp-bottomnav-shell" aria-label={variant === 'coach' ? 'Coach Mini App navigation' : 'Mini App navigation'} data-miniapp-nav-variant={variant}>
       <div className="miniapp-bottomnav">
-        {NAV_ITEMS.map(({ id, label, Icon }) => {
+        {navItems.map(({ id, label, Icon }) => {
           const active = activeTab === id
 
           return (
@@ -170,6 +186,7 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                 active && 'miniapp-bottomnav__item--active',
               )}
               aria-current={active ? 'page' : undefined}
+              aria-label={label}
             >
               <span
                 className={cn(

@@ -2,9 +2,13 @@ import { absystemContent } from '@/products/absystem/config/content.js'
 import { getOrCreateFocusInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
 import type { ConversationButton, ConversationResponse } from '@/modules/telegram-mentor/conversation/engine/types.js'
+import { sendTelegramMessage } from '@/lib/telegram/messageFormatter.js'
+import { bot } from '@/lib/telegram.js'
 import { hasActiveFocusSubscription } from '../focus-access.js'
 import { prisma } from '../../../../db/client.js'
 import { FOCUS_PRODUCT_CODES } from '../focus-access.js'
+import { resolveEcosystemPaymentPlan } from '../business/catalog.js'
+import type { EcosystemPaymentPlanId } from '../business/types.js'
 import {
   AB_TEST_BOOK_ZOOM_CTA_TEXT,
   AB_TEST_FOCUS_MENU_BUTTON_TEXT,
@@ -18,6 +22,18 @@ const PAYMENT_SUCCESS_DELIVERY_MARKER_KEY = 'telegramPaymentSuccess'
 const FOCUS_ZOOM_CALLBACK = 'focus:next_zoom'
 const MAIN_MENU_CALLBACK = 'return_main_menu'
 const FOCUS_MENU_CALLBACK = 'ab_test:menu'
+const KYIV_TIME_ZONE = 'Europe/Kyiv'
+const FOCUS_ORDER_REFERENCE_PATTERN = /^focus_(welcome_test|1month|3month|1year)_([0-9a-f-]{36})_\d+$/i
+
+const FOCUS_PLAN_LABELS: Record<EcosystemPaymentPlanId, string> = {
+  welcome_test: 'welcome_test',
+  '1month': '1 місяць',
+  '3month': '3 місяці',
+  '1year': '1 рік',
+  '1month_upgrade': '1 місяць',
+  '6month': '6 місяців',
+  single: 'single',
+}
 
 function getRenderer(): TelegramConversationRenderer {
   if (rendererInstance) {
@@ -74,20 +90,29 @@ function buildFocusZoomStepText(): string {
   ].join('\n')
 }
 
-function buildFocusChannelStepResponse(inviteUrl: string): ConversationResponse {
+function buildFocusChannelStepResponse(
+  inviteUrl: string,
+  paymentReference?: string | null,
+): ConversationResponse {
   const buttons: ConversationButton[] = [
     { kind: 'callback', label: AB_TEST_BOOK_ZOOM_CTA_TEXT, value: FOCUS_ZOOM_CALLBACK },
     { kind: 'url', label: AB_TEST_JOIN_CHANNEL_BUTTON_TEXT, value: inviteUrl },
     { kind: 'callback', label: AB_TEST_FOCUS_MENU_BUTTON_TEXT, value: FOCUS_MENU_CALLBACK },
   ]
   return buildMessageResponse(
-    buildFocusChannelStepText(),
+    [
+      buildFocusChannelStepText(),
+      paymentReference ? `Номер платежу: ${paymentReference}` : null,
+    ].filter(Boolean).join('\n\n'),
     buttons,
     'HTML',
   )
 }
 
-function buildFocusZoomStepResponse(inviteUrl?: string | null): ConversationResponse {
+function buildFocusZoomStepResponse(
+  inviteUrl?: string | null,
+  paymentReference?: string | null,
+): ConversationResponse {
   const buttons: ConversationButton[] = [
     { kind: 'callback', label: AB_TEST_BOOK_ZOOM_CTA_TEXT, value: FOCUS_ZOOM_CALLBACK },
   ]
@@ -99,18 +124,22 @@ function buildFocusZoomStepResponse(inviteUrl?: string | null): ConversationResp
   buttons.push({ kind: 'callback', label: AB_TEST_FOCUS_MENU_BUTTON_TEXT, value: FOCUS_MENU_CALLBACK })
 
   return buildMessageResponse(
-    buildFocusZoomStepText(),
+    [
+      buildFocusZoomStepText(),
+      paymentReference ? `Номер платежу: ${paymentReference}` : null,
+    ].filter(Boolean).join('\n\n'),
     buttons,
     'HTML',
   )
 }
 
-function buildTrialZoomSuccessResponse(): ConversationResponse {
+function buildTrialZoomSuccessResponse(paymentReference?: string | null): ConversationResponse {
   return buildMessageResponse(
     [
       '✅ Оплату підтверджено',
       '',
       'Тобі доступний один пробний Zoom за 1 грн.',
+      paymentReference ? `Номер платежу: ${paymentReference}` : '',
       '',
       'Обери найближчу Zoom-практику та запишись.',
     ].join('\n'),
@@ -123,6 +152,183 @@ function buildTrialZoomSuccessResponse(): ConversationResponse {
     ],
     'HTML',
   )
+}
+
+function parseFocusPaymentOrderReference(orderReference: string): {
+  planId: EcosystemPaymentPlanId
+  userId: string
+} | null {
+  const match = String(orderReference ?? '').trim().match(FOCUS_ORDER_REFERENCE_PATTERN)
+  if (!match) return null
+
+  return {
+    planId: match[1] as EcosystemPaymentPlanId,
+    userId: match[2],
+  }
+}
+
+function formatKyivDateTime(date: Date): string {
+  return new Intl.DateTimeFormat('uk-UA', {
+    timeZone: KYIV_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function formatPaymentAmount(amountCents: number, currency: string): string {
+  const amount = amountCents / 100
+  return `${Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2)} ${currency}`
+}
+
+function buildFocusPaymentSuccessButtons() {
+  const zoomCalendarUrl = buildZoomCalendarUrl({ intent: 'booking' })
+  return {
+    inline_keyboard: [
+      [
+        process.env.TELEGRAM_WEBAPP_BASE_URL?.trim()
+          ? {
+              text: 'ВІДКРИТИ КАЛЕНДАР ZOOM',
+              web_app: { url: zoomCalendarUrl },
+            }
+          : { text: 'ВІДКРИТИ КАЛЕНДАР ZOOM', url: zoomCalendarUrl },
+      ],
+      [{ text: 'ПЕРЕЙТИ ДО ФОКУСУ', callback_data: 'open_focus_info' }],
+      [{ text: 'ГОЛОВНЕ МЕНЮ', callback_data: MAIN_MENU_CALLBACK }],
+    ],
+  }
+}
+
+function buildFocusPaymentSuccessText(input: {
+  productLabel: string
+  planLabel: string
+  amountCents: number
+  currency: string
+  paidAt: Date
+  orderReference: string
+  periodStart: Date
+  finalExpiresAt: Date
+  confirmedPaymentsCount: number
+}): string {
+  const text = [
+    '✅ Оплату підтверджено',
+    '',
+    'Доступ ФОКУС активний ✅',
+    '',
+    `Продукт: ${input.productLabel}`,
+    `Тариф: ${input.planLabel}`,
+    `Сплачено: ${formatPaymentAmount(input.amountCents, input.currency)}`,
+    `Дата: ${formatKyivDateTime(input.paidAt)}`,
+    `Платіж: ${input.orderReference}`,
+    '',
+    `Доданий період: ${formatKyivDateTime(input.periodStart)} — ${formatKyivDateTime(input.finalExpiresAt)}`,
+    `Доступ активний до: ${formatKyivDateTime(input.finalExpiresAt)}`,
+    '',
+    'Наступна дія: відкрий календар Zoom.',
+  ]
+
+  if (input.confirmedPaymentsCount > 1) {
+    text.push(
+      '',
+      `Підтверджених оплат: ${input.confirmedPaymentsCount}`,
+      'Попередній оплачений час збережено.',
+    )
+  }
+
+  return text.join('\n')
+}
+
+async function resolveFocusPaymentSuccessContext(input: {
+  userId: string
+  orderReference?: string | null
+}) {
+  const checkout = await resolvePaymentSuccessCheckout({
+    userId: input.userId,
+    orderReference: input.orderReference,
+    productCode: 'focus',
+  })
+
+  if (!checkout || checkout.productCode !== 'focus') {
+    return null
+  }
+
+  const parsedReference = parseFocusPaymentOrderReference(checkout.orderReference)
+  if (!parsedReference) {
+    return null
+  }
+
+  const focusPlan = resolveEcosystemPaymentPlan('focus', parsedReference.planId)
+  if (!focusPlan) {
+    return null
+  }
+
+  const paymentLog = await prisma.paymentLog.findUnique({
+    where: { orderReference: checkout.orderReference },
+    select: {
+      amountCents: true,
+      currency: true,
+      processedAt: true,
+      status: true,
+    },
+  })
+
+  if (!paymentLog || paymentLog.status !== 'SUCCESS') {
+    return null
+  }
+
+  const subscription = await prisma.productSubscription.findFirst({
+    where: {
+      userId: input.userId,
+      product: { is: { code: { in: [...FOCUS_PRODUCT_CODES] } } },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      expiresAt: true,
+    },
+  })
+
+  if (!subscription?.expiresAt) {
+    return null
+  }
+
+  const canonicalSubscription = await prisma.subscription.findFirst({
+    where: {
+      userId: input.userId,
+      status: 'ACTIVE',
+      product: {
+        is: {
+          code: { in: [...FOCUS_PRODUCT_CODES] },
+        },
+      },
+    },
+    orderBy: { currentPeriodEnd: 'desc' },
+    select: {
+      currentPeriodEnd: true,
+    },
+  })
+
+  const confirmedPayments = await prisma.paymentLog.findMany({
+    where: {
+      userId: input.userId,
+      status: 'SUCCESS',
+      orderReference: { startsWith: 'focus_' },
+    },
+    select: { id: true },
+  })
+
+  const finalExpiresAt = canonicalSubscription?.currentPeriodEnd ?? subscription.expiresAt
+  const periodStart = new Date(finalExpiresAt.getTime() - focusPlan.durationDays * 86400000)
+
+  return {
+    checkout,
+    paymentLog,
+    planLabel: FOCUS_PLAN_LABELS[parsedReference.planId] ?? parsedReference.planId,
+    periodStart,
+    finalExpiresAt,
+    confirmedPaymentsCount: confirmedPayments.length,
+  }
 }
 
 type PaymentSuccessProductCode = 'focus' | 'trial_zoom'
@@ -173,6 +379,10 @@ async function resolvePaymentSuccessCheckout(input: {
       },
       select: {
         id: true,
+        amount: true,
+        completedAt: true,
+        createdAt: true,
+        currency: true,
         payload: true,
         orderReference: true,
         productCode: true,
@@ -189,6 +399,10 @@ async function resolvePaymentSuccessCheckout(input: {
     orderBy: { completedAt: 'desc' },
     select: {
       id: true,
+      amount: true,
+      completedAt: true,
+      createdAt: true,
+      currency: true,
       payload: true,
       orderReference: true,
       productCode: true,
@@ -244,8 +458,40 @@ async function sendCanonicalPaymentSuccessMessage(input: {
 
   let sent = false
 
-  if (input.productCode === 'trial_zoom') {
-    sent = await sendOutboundConversation(chatId, buildTrialZoomSuccessResponse())
+  if (input.productCode === 'focus') {
+    const context = await resolveFocusPaymentSuccessContext({
+      userId: input.userId,
+      orderReference: input.orderReference,
+    })
+
+    if (!context) {
+      return false
+    }
+
+    const paidAt = context.paymentLog.processedAt ?? context.checkout.completedAt ?? context.checkout.createdAt
+    const message = buildFocusPaymentSuccessText({
+      productLabel: 'ФОКУС',
+      planLabel: context.planLabel,
+      amountCents: context.paymentLog.amountCents,
+      currency: context.paymentLog.currency,
+      paidAt,
+      orderReference: context.checkout.orderReference,
+      periodStart: context.periodStart,
+      finalExpiresAt: context.finalExpiresAt,
+      confirmedPaymentsCount: context.confirmedPaymentsCount,
+    })
+
+    sent = await sendTelegramMessage(
+      bot,
+      chatId,
+      message,
+      { replyMarkup: buildFocusPaymentSuccessButtons() },
+    ).then(() => true).catch(() => false)
+  } else if (input.productCode === 'trial_zoom') {
+    sent = await sendOutboundConversation(
+      chatId,
+      buildTrialZoomSuccessResponse(checkout.orderReference),
+    )
   } else {
     const subscription = await prisma.productSubscription.findFirst({
       where: {
@@ -267,8 +513,8 @@ async function sendCanonicalPaymentSuccessMessage(input: {
       subscription.focusChannelInviteLink ?? (await getOrCreateFocusInviteLink(input.userId))
 
     const response = subscription.channelJoinedAt
-      ? buildFocusZoomStepResponse(inviteUrl)
-      : buildFocusChannelStepResponse(inviteUrl)
+      ? buildFocusZoomStepResponse(inviteUrl, checkout.orderReference)
+      : buildFocusChannelStepResponse(inviteUrl, checkout.orderReference)
 
     sent = await sendOutboundConversation(chatId, response)
   }

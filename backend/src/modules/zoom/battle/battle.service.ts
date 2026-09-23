@@ -157,8 +157,8 @@ function isSameBattleMeta(meta: BattleMeta, args: {
   opponentId: string;
   paymentOrderReference?: string | null;
 }): boolean {
-  if (args.paymentOrderReference && meta.paymentOrderReference === args.paymentOrderReference) {
-    return true;
+  if (args.paymentOrderReference) {
+    return meta.paymentOrderReference === args.paymentOrderReference;
   }
 
   return meta.challengerId === args.challengerId && meta.opponentId === args.opponentId;

@@ -18,6 +18,7 @@ model SuperAdmin {
 }
 
 model Expert {
+  commerceRequests    ZoomCommerceRequest[]
   id                  String               @id @default(uuid())
   email               String               @unique
   displayName         String
@@ -25,6 +26,7 @@ model Expert {
   telegramBotName     String?
   timezone            String               @default("UTC")
   zoomAvailability    Json                 @default("[]")
+  zoomAvailabilityOverrides ZoomAvailabilityOverride[]
   isActive            Boolean              @default(true)
   deletedAt           DateTime?
   createdAt           DateTime             @default(now())
@@ -55,7 +57,22 @@ model Expert {
   @@index([isActive, deletedAt])
 }
 
+model ZoomAvailabilityOverride {
+  id        String   @id @default(uuid())
+  expertId  String
+  date      DateTime @db.Date
+  timezone  String   @default("Europe/Kyiv")
+  windows   Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expert    Expert   @relation(fields: [expertId], references: [id], onDelete: Cascade)
+
+  @@unique([expertId, date])
+  @@index([expertId, date])
+}
+
 model User {
+  commerceRequests       ZoomCommerceRequest[]
   id                     String                        @id @default(uuid())
   expertId               String?
   email                  String                        @unique
@@ -1399,6 +1416,7 @@ model ContentPlan {
 }
 
 model ZoomSession {
+  commerceRequests  ZoomCommerceRequest[]
   id                String                @id @default(uuid())
   expertId          String?
   scheduledAt       DateTime
@@ -1416,6 +1434,44 @@ model ZoomSession {
 
   @@index([expertId, status])
   @@index([scheduledAt])
+}
+
+enum ZoomCommerceKind {
+  INDIVIDUAL
+  BATTLE
+}
+
+enum ZoomCommerceStatus {
+  REQUESTED
+  APPROVED_PENDING_PAYMENT
+  REJECTED
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+model ZoomCommerceRequest {
+  // Migration adds a partial unique coach/time index for approved/paid Individual requests.
+  id                     String             @id @default(uuid())
+  kind                   ZoomCommerceKind
+  status                 ZoomCommerceStatus @default(REQUESTED)
+  requesterUserId        String
+  expertId               String
+  zoomSessionId          String?
+  scheduledAt            DateTime
+  amount                 Decimal            @db.Decimal(10, 2)
+  currency               String
+  checkoutOrderReference String?            @unique
+  approvedAt             DateTime?
+  rejectedAt             DateTime?
+  paidAt                 DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  requester              User               @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
+  expert                 Expert             @relation(fields: [expertId], references: [id], onDelete: Restrict)
+  zoomSession            ZoomSession?       @relation(fields: [zoomSessionId], references: [id], onDelete: Restrict)
+
+  @@index([expertId, status, scheduledAt])
 }
 
 model ZoomChannelPost {

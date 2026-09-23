@@ -3,16 +3,144 @@
 import { formatDistanceToNow } from 'date-fns';
 import { uk } from 'date-fns/locale';
 
-import type { ZoomCalendarSession, ZoomSessionType } from './zoom.types';
+import type { ZoomCalendarSession, ZoomPaymentModel, ZoomSessionType, ZoomCommerceStatus } from './zoom.types';
 
 type SessionLike = {
   type?: string | null
+  paymentModel?: ZoomPaymentModel | null
+  status?: string | null
+  battleStatus?: string | null
+  winnerId?: string | null
   attendeesCount?: number | null
   participantsCount?: number | null
   maxParticipants?: number | null
   remainingSlots?: number | null
   isMyBooking?: boolean
   slotStatus?: string | null
+  commerceStatus?: ZoomCommerceStatus | null
+  commerceLabel?: string | null
+}
+
+
+export type ZoomFormatInfo = {
+  label: string
+  priceLabel: string | null
+  paymentModel: ZoomPaymentModel
+  description: string
+  winnerLabel?: string
+  loserLabel?: string
+}
+
+const ZOOM_FORMATS: Record<string, ZoomFormatInfo> = {
+  group_practice: {
+    label: 'Щомісячна підписка ФОКУС',
+    priceLabel: 'Входить у підписку',
+    paymentModel: 'included_in_subscription',
+    description: '4 групові Zoom-розбори на місяць + чат + записи.',
+  },
+  group: {
+    label: 'Щомісячна підписка ФОКУС',
+    priceLabel: 'Входить у підписку',
+    paymentModel: 'included_in_subscription',
+    description: '4 групові Zoom-розбори на місяць + чат + записи.',
+  },
+  individual: {
+    label: 'Індивідуальний розбір',
+    priceLabel: '60 €',
+    paymentModel: 'paid_required',
+    description: '1-на-1 Zoom (60 хв), глибока стратегія, аудит блогу та МК.',
+  },
+  private: {
+    label: 'Індивідуальний розбір',
+    priceLabel: '60 €',
+    paymentModel: 'paid_required',
+    description: '1-на-1 Zoom (60 хв), глибока стратегія, аудит блогу та МК.',
+  },
+  battle_review: {
+    label: 'Батл «Доміно»',
+    priceLabel: '0 € / 25 €',
+    paymentModel: 'result_based',
+    winnerLabel: 'переможець 0 €',
+    loserLabel: 'програвша 25 €',
+    description: 'Переможець платить 0 €. Програвша платить 25 € і отримує розбір помилок.',
+  },
+  intensive: {
+    label: 'Інтенсив',
+    priceLabel: null,
+    paymentModel: 'unknown',
+    description: 'Додатковий Zoom-формат програми.',
+  },
+}
+
+export function getZoomFormatInfo(input: SessionLike | string | null | undefined): ZoomFormatInfo {
+  const normalizedType = getNormalizedSessionType(input)
+  return ZOOM_FORMATS[normalizedType] ?? {
+    label: SESSION_TYPE_LABELS[normalizedType] ?? 'Zoom-сесія',
+    priceLabel: null,
+    paymentModel: 'unknown',
+    description: 'Zoom-сесія Starway.',
+  }
+}
+
+export function getZoomPaymentModel(input: SessionLike | string | null | undefined): ZoomPaymentModel {
+  if (typeof input !== 'string' && input?.paymentModel) return input.paymentModel
+  return getZoomFormatInfo(input).paymentModel
+}
+
+export function getZoomPriceLabel(input: SessionLike | string | null | undefined): string | null {
+  return getZoomFormatInfo(input).priceLabel
+}
+
+export type UserZoomCommercePresentationState =
+  | 'AVAILABLE'
+  | ZoomCommerceStatus
+
+export type UserZoomCommercePresentation = {
+  state: UserZoomCommercePresentationState
+  label: string
+  paymentVisible: boolean
+}
+
+const USER_ZOOM_COMMERCE_PRESENTATION: Record<
+  UserZoomCommercePresentationState,
+  Omit<UserZoomCommercePresentation, 'state'>
+> = {
+  AVAILABLE: { label: 'Доступно', paymentVisible: false },
+  REQUESTED: { label: 'Очікує підтвердження', paymentVisible: false },
+  APPROVED_PENDING_PAYMENT: { label: 'Очікує оплати', paymentVisible: true },
+  PAID: { label: 'Оплачено · Заплановано', paymentVisible: false },
+  EXPIRED: { label: 'Час вичерпано', paymentVisible: false },
+  CANCELLED: { label: 'Скасовано', paymentVisible: false },
+  REJECTED: { label: 'Відхилено', paymentVisible: false },
+}
+
+export function getUserZoomCommercePresentation(
+  session: Pick<SessionLike, 'commerceStatus'>,
+): UserZoomCommercePresentation {
+  const state: UserZoomCommercePresentationState =
+    session.commerceStatus ?? 'AVAILABLE'
+
+  return {
+    state,
+    ...USER_ZOOM_COMMERCE_PRESENTATION[state],
+  }
+}
+
+export function getZoomPaymentBadgeLabel(input: SessionLike | string | null | undefined): string | null {
+  if (typeof input !== 'string' && input?.commerceLabel) return input.commerceLabel
+  const model = getZoomPaymentModel(input)
+  const format = getZoomFormatInfo(input)
+
+  if (model === 'included_in_subscription') return 'Входить у підписку'
+  if (model === 'paid_required') return format.priceLabel
+  if (model === 'result_based') {
+    if (typeof input !== 'string' && (input?.winnerId || input?.battleStatus === 'completed' || input?.status === 'COMPLETED')) {
+      return 'За результатом: переможець 0 € · програвша 25 €'
+    }
+    return format.priceLabel ? `${format.priceLabel} · за результатом` : 'Оплата за результатом'
+  }
+  if (model === 'free') return 'Без оплати'
+  return null
 }
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
@@ -69,6 +197,46 @@ const SESSION_ICON_BG_CLASSES: Record<string, string> = {
   battle_review: 'bg-amber-500/20 text-amber-400',
 }
 
+type SessionStatusVariant = {
+  label: string
+  surfaceClass: string
+  textClass: string
+  badgeClass: string
+}
+
+const SESSION_STATUS_VARIANTS: Record<string, SessionStatusVariant> = {
+  scheduled: {
+    label: 'Заплановано',
+    surfaceClass: 'border-[var(--border-primary)] bg-[var(--glass-bg)]',
+    textClass: 'text-[var(--text-primary)]',
+    badgeClass: 'border border-[var(--border-primary)] bg-[var(--glass-bg)] text-[var(--text-muted)]',
+  },
+  pending: {
+    label: 'Заплановано',
+    surfaceClass: 'border-[var(--border-primary)] bg-[var(--glass-bg)]',
+    textClass: 'text-[var(--text-primary)]',
+    badgeClass: 'border border-[var(--border-primary)] bg-[var(--glass-bg)] text-[var(--text-muted)]',
+  },
+  active: {
+    label: 'Активний',
+    surfaceClass: 'border-[rgba(var(--accent-rgb),0.34)] bg-[rgba(var(--accent-rgb),0.12)]',
+    textClass: 'text-[rgb(var(--accent-soft-rgb))]',
+    badgeClass: 'border border-[rgba(var(--accent-rgb),0.34)] bg-[rgba(var(--accent-rgb),0.14)] text-[rgb(var(--accent-soft-rgb))]',
+  },
+  completed: {
+    label: 'Завершено',
+    surfaceClass: 'border-[rgba(var(--semantic-success-rgb),0.32)] bg-[rgba(var(--semantic-success-rgb),0.1)]',
+    textClass: 'text-[var(--semantic-success)]',
+    badgeClass: 'border border-[rgba(var(--semantic-success-rgb),0.34)] bg-[rgba(var(--semantic-success-rgb),0.12)] text-[var(--semantic-success)]',
+  },
+  cancelled: {
+    label: 'Пропущено',
+    surfaceClass: 'border-[rgba(var(--semantic-warning-rgb),0.26)] bg-[rgba(var(--semantic-warning-rgb),0.08)] opacity-75',
+    textClass: 'text-[var(--text-muted)]',
+    badgeClass: 'border border-[rgba(var(--semantic-warning-rgb),0.3)] bg-[rgba(var(--semantic-warning-rgb),0.1)] text-[var(--semantic-warning)]',
+  },
+}
+
 export function getNormalizedSessionType(input: SessionLike | string | null | undefined): string {
   const rawType =
     typeof input === 'string'
@@ -95,21 +263,30 @@ export function getParticipantsLabel(count: number): string {
 export function getSessionMeta(session: SessionLike): string {
   const normalizedType = getNormalizedSessionType(session)
   const label = SESSION_TYPE_LABELS[normalizedType] ?? 'Сесія'
+
+  const supportsCapacityVocabulary =
+    normalizedType === 'group_practice'
+    || normalizedType === 'group'
+    || normalizedType === 'intensive'
+
+  if (!supportsCapacityVocabulary) {
+    return label
+  }
+
   const participantsCount = getSessionParticipantCount(session)
   const hasParticipantsMeta =
     typeof session.maxParticipants === 'number'
     || typeof session.remainingSlots === 'number'
     || participantsCount !== null
-  const participantsLabel = hasParticipantsMeta && participantsCount !== null
-    ? getParticipantsLabel(participantsCount)
-    : ''
-  const parts = [label]
 
-  if (participantsLabel) {
-    parts.push(participantsLabel)
-  }
+  const participantsLabel =
+    hasParticipantsMeta && participantsCount !== null
+      ? getParticipantsLabel(participantsCount)
+      : ''
 
-  return parts.join(' · ').trim()
+  return participantsLabel
+    ? `${label} · ${participantsLabel}`
+    : label
 }
 
 export function getSessionTypeLabel(type: string): string {
@@ -131,6 +308,11 @@ export function getSessionIconKey(session: SessionLike): 'users' | 'person' | 'z
 
 export function getSessionIconBgClass(session: SessionLike): string {
   return SESSION_ICON_BG_CLASSES[getNormalizedSessionType(session)] ?? 'bg-blue-500/20 text-blue-400'
+}
+
+export function sessionStatusVariant(status: string | null | undefined): SessionStatusVariant {
+  const normalizedStatus = String(status ?? '').trim().toLowerCase()
+  return SESSION_STATUS_VARIANTS[normalizedStatus] ?? SESSION_STATUS_VARIANTS.scheduled
 }
 
 export function isBattleReviewSession(session: SessionLike): boolean {
@@ -300,4 +482,3 @@ export function formatPrice(priceCents: number, isSubscriber: boolean): string {
 export function getRemainingLabel(remaining: number, max: number): string {
   return `${remaining} з ${max} місць`;
 }
-

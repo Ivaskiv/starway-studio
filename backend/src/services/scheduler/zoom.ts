@@ -1,10 +1,20 @@
+import {
+  expireDueIndividualPaymentWindows,
+  isLegacyIndividualSession,
+} from '../../modules/zoom/commerce/zoom.commerce-request.service.js'
+import {
+  processZoomPaymentLifecycleNotifications,
+} from '../../modules/zoom/commerce/zoom.commerce-telegram.js'
 import { NotificationChannel,NotificationStatus,NotificationType,ZoomStatus,type UserLifecycleState } from '@starway/db/prisma-client'
 import type { Telegraf } from 'telegraf'
 import { prisma } from '../../db/client.js'
 import { bot,sendOpsTelegramMessage } from '../../lib/telegram.js'
 import { sendTelegramMessage } from '../../lib/telegram/messageFormatter.js'
 import { sendCoachZoomSummary } from '../../modules/ai-operator/operator.service.js'
-import { enqueueDueReminderWindow } from '../../modules/zoom/notifications/zoom.reminders.service.js'
+import {
+  enqueueDueReminderWindow,
+  getCoachReminderUserIds,
+} from '../../modules/zoom/notifications/zoom.reminders.service.js'
 import { buildZoomCalendarUrl } from '../../modules/zoom/urls.js'
 import { AB_TEST_LIFECYCLE_REMINDERS,type LifecycleReminderKey } from '../../products/ab-system/content/abTest.followups.js'
 import {
@@ -384,6 +394,15 @@ export async function scanZoomCoachSummary(): Promise<void> {
 
 export async function scanZoomSessionReminders(_telegramBot: Telegraf): Promise<void> {
   const now = new Date()
+
+  await expireDueIndividualPaymentWindows(now)
+
+  await processZoomPaymentLifecycleNotifications(now)
+    .catch((error) => {
+      console.error('[zoom] payment lifecycle notification scan failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
   const twoHourStart = new Date(now.getTime() + (ZOOM_REMINDER_2H_TARGET_MINUTES - ZOOM_REMINDER_2H_GRACE_MINUTES) * 60 * 1000)
   const twoHourEnd = new Date(now.getTime() + ZOOM_REMINDER_2H_TARGET_MINUTES * 60 * 1000)
   const fiveMinuteStart = new Date(now.getTime() - ZOOM_REMINDER_5M_GRACE_MINUTES * 60 * 1000)
@@ -402,6 +421,7 @@ export async function scanZoomSessionReminders(_telegramBot: Telegraf): Promise<
       topic: true,
       scheduledAt: true,
       expertId: true,
+      type: true,
       requests: true,
       attendees: {
         select: {
@@ -438,6 +458,49 @@ export async function scanZoomSessionReminders(_telegramBot: Telegraf): Promise<
           error: error instanceof Error ? error.message : String(error),
         })
       })
+    }
+
+    // USER attendees receive the canonical reminder above.
+    // COACH receives the same T-2h / T-5m cadence.
+    //
+    // For Individual sessions attendee is created only after PAID,
+    // therefore an unpaid Individual must never notify the coach
+    // that a confirmed Zoom session is approaching.
+    const individual = isLegacyIndividualSession({
+      type: session.type,
+      requests: session.requests,
+    })
+
+    const shouldNotifyCoach =
+      !individual || session.attendees.length > 0
+
+    if (shouldNotifyCoach) {
+      const coachUserIds = await getCoachReminderUserIds(session.expertId)
+      const attendeeUserIds = new Set(
+        session.attendees.map(attendee => attendee.userId),
+      )
+
+      for (const coachUserId of coachUserIds) {
+        if (attendeeUserIds.has(coachUserId)) continue
+
+        await enqueueDueReminderWindow(
+          coachUserId,
+          {
+            id: session.id,
+            scheduledAt: session.scheduledAt,
+            topic: session.topic ?? '',
+            requests: session.requests,
+          },
+          reminderType,
+        ).catch((error) => {
+          console.error('[zoom] failed to enqueue coach reminder job', {
+            coachUserId,
+            sessionId: session.id,
+            reminderType,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
+      }
     }
   }
 }

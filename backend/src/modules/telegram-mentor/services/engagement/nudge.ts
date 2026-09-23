@@ -14,7 +14,6 @@ import { listMicroTasksForUser } from '../../../microTask/service.js'
 import { telegramContentRegistry } from '../../content/contentRegistry.js'
 import { planMessage } from '../../conversation/delivery/planDelivery.js'
 import { TelegramConversationRenderer } from '../../conversation/renderers/telegramConversationRenderer.js'
-import { syncAccessAwareChatMenuButton } from '../../handlers/start.js'
 import { pickBestTask,type Task } from './task-priority.js'
 
 const NUDGE_MARKER_PREFIX = 'NUDGE_SENT:'
@@ -435,8 +434,6 @@ async function sendNudgeMessage(userId: string, task: Task, templateKey: string,
   if (!(ctx?.chat?.id) && await hasReachedTelegramDailyLimit(userId)) {
     return false
   }
-
-  await syncAccessAwareChatMenuButton(chatId, userId)
 
   const payload = {
     reply_markup: {

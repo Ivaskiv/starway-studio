@@ -1,7 +1,8 @@
 import crypto from 'crypto'
 
 import {
-readTelegramVerificationTokens,
+  readTelegramVerificationBots,
+  type TelegramBotContext,
 } from '../telegram-mentor/runtime/botConfig.js'
 import { AuthServiceError } from './errors.js'
 
@@ -9,15 +10,22 @@ export type TelegramMiniAppProfile = {
   id: string
   firstName: string | null
   username: string | null
+  botContext: TelegramBotContext | null
 }
 
-function collectVerificationTokens(botTokenOverride?: string): string[] {
+function collectVerificationBots(botTokenOverride?: string): {
+  token: string
+  botContext: TelegramBotContext | null
+}[] {
+  const configuredBots = readTelegramVerificationBots()
   const explicitToken = String(botTokenOverride ?? '').trim()
+
   if (explicitToken) {
-    return [explicitToken]
+    const configuredBot = configuredBots.find(({ token }) => token === explicitToken)
+    return [configuredBot ?? { token: explicitToken, botContext: null }]
   }
 
-  return readTelegramVerificationTokens()
+  return configuredBots
 }
 
 export function verifyTelegramInitData(
@@ -52,39 +60,20 @@ export function verifyTelegramInitData(
     .join('\n')
 
   const receivedHashBuffer = Buffer.from(hash, 'hex')
-  const candidateTokens = collectVerificationTokens(botTokenOverride)
-  console.log('[AUTH DEBUG]', {
-    initData: raw.slice(0, 120),
-    tokensCount: candidateTokens.length,
+  const candidateBots = collectVerificationBots(botTokenOverride)
+  const verifiedBot = candidateBots.find(({ token }) => {
+    const secret = crypto.createHmac('sha256', 'WebAppData').update(token).digest()
+    const expectedHash = crypto.createHmac('sha256', secret).update(dataCheckString).digest('hex')
+    const expectedHashBuffer = Buffer.from(expectedHash, 'hex')
+
+    return expectedHashBuffer.length === receivedHashBuffer.length
+      && crypto.timingSafeEqual(expectedHashBuffer, receivedHashBuffer)
   })
 
-  const validHash = candidateTokens.some((botToken) => {
-    try {
-      const secret = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest()
-      const expectedHash = crypto.createHmac('sha256', secret).update(dataCheckString).digest('hex')
-      const expectedHashBuffer = Buffer.from(expectedHash, 'hex')
-      const isMatch =
-        expectedHashBuffer.length === receivedHashBuffer.length
-        && crypto.timingSafeEqual(expectedHashBuffer, receivedHashBuffer)
-
-      if (!isMatch) {
-        throw new AuthServiceError('invalid_telegram_signature', 401)
-      }
-
-      console.log('[AUTH SUCCESS]', botToken.slice(0, 10))
-      return true
-    } catch (error) {
-      console.log('[AUTH FAIL]', botToken.slice(0, 10), {
-        error: error instanceof Error ? error.message : String(error),
-      })
-      return false
-    }
-  })
-
-  if (!validHash) {
+  if (!verifiedBot) {
     console.warn('[auth:telegram] initData signature mismatch', {
       keys: initDataKeys,
-      candidateTokenCount: candidateTokens.length,
+      candidateTokenCount: candidateBots.length,
     })
     throw new AuthServiceError('invalid_telegram_signature', 401)
   }
@@ -107,12 +96,8 @@ export function verifyTelegramInitData(
     throw new AuthServiceError('invalid_telegram_user_payload', 401)
   }
 
-  console.info('[auth:telegram] initData validated', {
-    telegramUserId: telegramId,
-    keys: initDataKeys,
-  })
-
   return {
+    botContext: verifiedBot.botContext,
     id: telegramId,
     firstName: parsedUser?.first_name?.trim() || null,
     username: parsedUser?.username?.trim() || null,

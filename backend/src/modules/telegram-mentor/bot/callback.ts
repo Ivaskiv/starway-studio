@@ -1,4 +1,10 @@
+import { handleCommerceCallback } from '../../zoom/commerce/zoom.commerce-telegram.js'
+import { handleUserHomeMessage } from './messages.js'
 import type { Context } from 'telegraf'
+import {
+  resolveOpsChatId,
+  setOpsReplyTarget,
+} from '../../../lib/telegram.js'
 
 import { bot } from '../../../lib/telegram.js'
 import { logger } from '../../../utils/logger.js'
@@ -117,6 +123,72 @@ export function registerCallbackHandler(): void {
         userId: (ctx.state as { userId?: string | null }).userId ?? null,
       })
       try {
+        if (await handleCommerceCallback(ctx)) return
+        if (action.startsWith('ops:support:reply:')) {
+          const opsChatId = String(ctx.chat?.id ?? '')
+          const operatorTelegramUserId = String(ctx.from?.id ?? '')
+          const targetChatId = action.slice('ops:support:reply:'.length).trim()
+
+          if (
+            !opsChatId ||
+            opsChatId !== resolveOpsChatId() ||
+            !operatorTelegramUserId ||
+            !/^-?\d+$/.test(targetChatId)
+          ) {
+            await ctx.answerCbQuery('Не вдалося визначити звернення').catch(() => undefined)
+            return
+          }
+
+          const sourceMessageId =
+            'message' in ctx.callbackQuery && ctx.callbackQuery.message
+              ? ctx.callbackQuery.message.message_id
+              : undefined
+
+          const prompt = await ctx.reply(
+            `✍️ <b>ВІДПОВІДЬ КОРИСТУВАЧУ</b>
+
+<a href="tg://user?id=${operatorTelegramUserId}">Операторе</a>, відповідай у поле, яке Telegram відкрив під цим повідомленням.`,
+            {
+              parse_mode: 'HTML',
+              ...(sourceMessageId
+                ? {
+                    reply_parameters: {
+                      message_id: sourceMessageId,
+                    },
+                  }
+                : {}),
+              reply_markup: {
+                force_reply: true,
+                selective: true,
+                input_field_placeholder: 'Напиши відповідь…',
+              },
+            },
+          )
+
+          setOpsReplyTarget(
+            opsChatId,
+            operatorTelegramUserId,
+            {
+              userChatId: targetChatId,
+              promptMessageId: prompt.message_id,
+              createdAt: Date.now(),
+            },
+          )
+
+          console.info(
+            `[OPS_REPLY_ARMED] opsChatId=${opsChatId} operator=${operatorTelegramUserId} targetChatId=${targetChatId} promptMessageId=${prompt.message_id}`,
+          )
+
+          await ctx.answerCbQuery('Напиши відповідь').catch(() => undefined)
+          return
+        }
+
+        if (action === 'user_home:support' || action === 'user_home:my_sessions') {
+          await ctx.answerCbQuery()
+          const userId = await resolveLinkedUserIdFromContext(ctx)
+          await handleUserHomeMessage(ctx, action === 'user_home:support' ? 'ПІДТРИМКА' : 'МОЇ СЕСІЇ', userId)
+          return
+        }
         if (action.startsWith(USER_CALLBACK_PREFIX)) {
           const callbackPreset = resolveUserCallbackPreset(action)
 
@@ -200,7 +272,8 @@ export function registerCallbackHandler(): void {
           action === 'ab_test:menu' ||
           action === 'skip_email_before_result' ||
           action === 'open_focus_payment' ||
-          action.startsWith('open_focus_payment:')
+          action.startsWith('open_focus_payment:') ||
+          action.startsWith('zoom:commerce:cancel:')
         if (!isStaleExempt && isStaleCallback(ctx)) {
           await planAck(
             ctx,

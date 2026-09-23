@@ -1,3 +1,4 @@
+import { isLegacyIndividualSession } from '../commerce/zoom.commerce-request.service.js'
 // backend/src/modules/zoom/zoom.admin.handler.ts
 // Coach/admin-only handlers: finalize battle result, update session
 
@@ -12,7 +13,20 @@ import {
 } from '../battle/battle.service.js';
 import type { BattleOutcome } from '../battle/battle.service.js';
 import {
+  approveRequest as approveZoomCommerceRequest,
+  createRequest as createZoomCommerceRequest,
+  createUserIndividualRequest,
+  getCalendarRequests as getZoomCommerceCalendarRequests,
+  getUserCalendarRequestsForWindow,
+  getCommerceCheckoutUrl,
+  resolveZoomIndividualPaymentTerms,
+  getRequestById as getZoomCommerceRequestById,
+  rejectRequest as rejectZoomCommerceRequest,
+} from '../commerce/zoom.commerce-request.service.js';
+import { afterZoomOperation } from '../core/zoom.operations.service.js';
+import {
   updateSession,
+  completeZoomSession,
   cancelSession,
   createFullSession,
   registerAttendee,
@@ -34,17 +48,51 @@ import {
 import { getZoomLeaderboard } from '../battle/zoom.leaderboard.js';
 import {
   getAvailability,
+  getAvailabilityWeek,
+  type AvailabilityWeekChange,
+  getIndividualAvailabilityForDate,
+  getIndividualAvailabilitySummary,
+  getIndividualAvailabilityForScheduledAt,
+  hasCoachCalendarConflict,
+  intervalsOverlap,
   saveAvailability,
+  saveAvailabilityWeek,
   generateSessionsFromAvailability,
 } from '../booking/zoom.availability.service.js';
 import type { AvailabilitySlot } from '../booking/zoom.availability.service.js';
+import { getQuestionSummariesBySessionId } from '../reports/zoom.reports.service.js';
+import { getZoomCompletionDraft } from '../reports/zoomCompletionDraft.service.js';
+import { parseZoomPostReport } from '../reports/zoomPostReport.types.js';
+import { notifyAssignedPrivateSession, notifyPrivateSessionRequest } from '../private/zoom.private-booking.service.js';
+import { getIndividualSessionStatusLabel } from '../domain/individual-session-lifecycle.js';
 import { prisma } from '../../../db/client.js';
-import { sendOpsTelegramMessage } from '../../../lib/telegram.js';
+import { enqueueRuntimeOutboxItem } from '../../../core/runtime/outbox.js';
+import { bot, sendOpsTelegramMessage } from '../../../lib/telegram.js';
 import { Prisma, SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/prisma-client';
 import { syncZoomRegistrationLifecycle } from './controller.js';
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js';
 
 const BATTLE_PARTICIPANTS_REQUIRED = 2;
+const DEFAULT_SESSION_DURATION_MINUTES = 60;
+const USER_SESSION_CONFLICT_ERROR =
+  'Цей учасник уже має Zoom-сесію на вибраний час. Оберіть інший час.';
+const COACH_SESSION_CONFLICT_ERROR =
+  'На цей час уже запланована інша Zoom-сесія. Оберіть інший час.';
+
+const COMMERCE_STATUS_LABELS = {
+  user: {
+    REQUESTED: 'Очікує підтвердження коуча',
+    APPROVED_PENDING_PAYMENT: 'Очікує оплату · 60 €',
+    PAID: 'Оплачено · Заброньовано',
+    REJECTED: 'ВІДХИЛЕНО', EXPIRED: 'ТЕРМІН ОПЛАТИ МИНУВ', CANCELLED: 'СКАСОВАНО',
+  },
+  coach: {
+    REQUESTED: 'Потребує підтвердження',
+    APPROVED_PENDING_PAYMENT: 'Очікує оплату користувачем',
+    PAID: 'Оплачено',
+    REJECTED: 'ВІДХИЛЕНО', EXPIRED: 'ТЕРМІН ОПЛАТИ МИНУВ', CANCELLED: 'СКАСОВАНО',
+  },
+} as const;
 
 function normalizeParticipantUserIds(input: unknown): string[] {
   if (Array.isArray(input)) {
@@ -136,6 +184,65 @@ async function findMissingParticipantUserId(participantUserIds: string[]): Promi
   }
 
   return null
+}
+
+function resolveDurationMinutes(requests: unknown): number {
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object') {
+    return DEFAULT_SESSION_DURATION_MINUTES
+  }
+
+  const value = (requests as Record<string, unknown>).durationMinutes
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_SESSION_DURATION_MINUTES
+}
+
+async function findParticipantSessionConflict(args: {
+  participantUserIds: string[]
+  scheduledAt: Date
+  durationMinutes: number
+  excludeSessionId?: string
+}): Promise<boolean> {
+  if (args.participantUserIds.length === 0) return false
+
+  const endsAt = new Date(args.scheduledAt.getTime() + args.durationMinutes * 60 * 1000)
+  const sessions = await prisma.zoomSession.findMany({
+    where: {
+      id: args.excludeSessionId ? { not: args.excludeSessionId } : undefined,
+      status: { in: [ZoomStatus.SCHEDULED, ZoomStatus.ACTIVE] },
+      scheduledAt: { lt: endsAt },
+      attendees: { some: { userId: { in: args.participantUserIds } } },
+    },
+    select: { scheduledAt: true, requests: true },
+  })
+
+  return sessions.some((session) => intervalsOverlap(
+    args.scheduledAt,
+    endsAt,
+    session.scheduledAt,
+    new Date(session.scheduledAt.getTime() + resolveDurationMinutes(session.requests) * 60_000),
+  ))
+}
+
+async function rejectSessionConflictIfAny(args: {
+  expertId: string
+  scheduledAt: Date
+  participantUserIds: string[]
+  durationMinutes: number
+  res: Response
+  excludeSessionId?: string
+}): Promise<boolean> {
+  if (await findParticipantSessionConflict(args)) {
+    args.res.status(409).json({ error: 'user_session_conflict', message: USER_SESSION_CONFLICT_ERROR })
+    return true
+  }
+
+  if (await hasCoachCalendarConflict(args)) {
+    args.res.status(409).json({ error: 'coach_session_conflict', message: COACH_SESSION_CONFLICT_ERROR })
+    return true
+  }
+
+  return false
 }
 
 async function requireActiveFocusSubscription(userId: string, res: Response): Promise<boolean> {
@@ -246,6 +353,33 @@ export async function handleCreateSession(
       return res.status(404).json({ error: 'participant_not_found' })
     }
 
+    const durationMinutes =
+      typeof req.body.durationMinutes === 'number' && Number.isFinite(req.body.durationMinutes) && req.body.durationMinutes > 0
+        ? req.body.durationMinutes
+        : DEFAULT_SESSION_DURATION_MINUTES
+    if (nextType === 'individual') {
+      const availability = await getIndividualAvailabilityForScheduledAt({
+        expertId: user.expertId,
+        scheduledAt: parsedAt,
+      })
+      if (!availability.candidate.available) {
+        return res.status(409).json({
+          error: 'COMMERCE_SLOT_UNAVAILABLE',
+          message: 'Цей час уже зайнятий. Обери інший доступний час.',
+          alternatives: availability.alternatives,
+        })
+      }
+    }
+    if (await rejectSessionConflictIfAny({
+      expertId: user.expertId,
+      scheduledAt: parsedAt,
+      participantUserIds,
+      durationMinutes,
+      res,
+    })) {
+      return
+    }
+
     const requests = buildBattleRequests(buildIndividualRequests({
       type: nextType,
       zoomLink: zoomLink ?? '',
@@ -255,23 +389,72 @@ export async function handleCreateSession(
       notify2h: notify2h !== false,
       notifiedAt24h: null,
       notifiedAt2h: null,
+      durationMinutes,
     }), participantUserIds);
 
-    const session = await createFullSession({
-      expertId: user.expertId,
-      scheduledAt: parsedAt,
-      topic,
-      requests: requests as Prisma.InputJsonValue,
-    });
+    const session = await createFullSession(
+      {
+        expertId: user.expertId,
+        scheduledAt: parsedAt,
+        topic,
+        requests: requests as Prisma.InputJsonValue,
+      },
+      nextType === 'individual' || nextType === 'battle_review'
+        ? { suppressAutomation: true }
+        : undefined,
+    );
 
-    for (const participantUserId of participantUserIds) {
-      await registerAttendee(participantUserId, session.id)
+    let commerceResult: Record<string, unknown> | null = null
+    if (nextType === 'individual') {
+      const participantUserId = participantUserIds[0]
+      if (!participantUserId) {
+        throw new Error('individual_participant_required')
+      }
+
+      const individualPayment = resolveZoomIndividualPaymentTerms()
+      const commerceRequest = await createZoomCommerceRequest({
+        kind: 'INDIVIDUAL',
+        requesterUserId: participantUserId,
+        expertId: user.expertId,
+        zoomSessionId: session.id,
+        scheduledAt: parsedAt,
+        amount: individualPayment.amount,
+        currency: individualPayment.currency,
+      })
+
+      const approval = await approveZoomCommerceRequest(
+        commerceRequest.id,
+        user.expertId,
+      )
+
+      if (!approval.checkoutUrl) {
+        throw new Error('individual_checkout_missing_after_approval')
+      }
+
+      commerceResult = { request: approval.request, checkoutUrl: approval.checkoutUrl }
+      await notifyAssignedPrivateSession({
+        commerceRequestId: approval.request.id,
+        sessionId: session.id,
+        userId: participantUserId,
+        checkoutUrl: approval.checkoutUrl,
+        origin: 'coach_created',
+      }).catch((error: unknown) => {
+        console.error('[zoom/POST sessions] individual approval notification failed', {
+          sessionId: session.id,
+          commerceRequestId: approval.request.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    } else {
+      for (const participantUserId of participantUserIds) {
+        await registerAttendee(participantUserId, session.id)
+      }
     }
     if (nextType === 'battle_review') {
       await notifyBattleCreatedByCoach(session as Parameters<typeof notifyBattleCreatedByCoach>[0])
     }
     console.log('[zoom/POST sessions] created session:', session.id);
-    return res.status(201).json(session);
+    return res.status(201).json(commerceResult ? { ...session, commerce: commerceResult } : session);
   } catch (err) {
     console.error('[zoom/POST sessions] ERROR:', err);
     next(err);
@@ -285,7 +468,7 @@ export async function handleUpdateSession(
 ) {
   try {
     const { id } = req.params;
-    const { scheduledAt, topic, zoomLink, type } = req.body;
+    const { scheduledAt, topic, zoomLink, type, durationMinutes } = req.body;
     const participantUserIds = normalizeParticipantUserIds(
       req.body.participantUserIds ?? req.body.participantUserId,
     )
@@ -302,10 +485,13 @@ export async function handleUpdateSession(
     }
     if (topic) patch.topic = topic;
 
-    if (zoomLink !== undefined || type !== undefined) {
+    if (zoomLink !== undefined || type !== undefined || durationMinutes !== undefined) {
       const meta = { ...existingMeta };
       if (zoomLink !== undefined) meta.zoomLink = zoomLink;
       if (type !== undefined) meta.type = type;
+      if (typeof durationMinutes === 'number' && Number.isFinite(durationMinutes) && durationMinutes > 0) {
+        meta.durationMinutes = durationMinutes;
+      }
       patch.requests = {
         ...meta,
       };
@@ -318,13 +504,14 @@ export async function handleUpdateSession(
     )
 
     const isManagedParticipantSession = nextType === 'individual' || nextType === 'battle_review'
+    let nextParticipantUserIds: string[] = []
 
     if (isManagedParticipantSession) {
       const existingAttendees = await prisma.zoomSessionAttendee.findMany({
         where: { sessionId: id },
         select: { userId: true },
       })
-      const nextParticipantUserIds =
+      nextParticipantUserIds =
         participantUserIds.length > 0
           ? participantUserIds
           : existingAttendees.map((attendee) => attendee.userId)
@@ -352,6 +539,19 @@ export async function handleUpdateSession(
 
       patch.requests = buildBattleRequests(buildIndividualRequests(baseRequests), nextParticipantUserIds);
 
+      const nextScheduledAt = patch.scheduledAt instanceof Date ? patch.scheduledAt : existing.scheduledAt
+      const nextDurationMinutes = resolveDurationMinutes(patch.requests)
+      if (await rejectSessionConflictIfAny({
+        expertId: existing.expertId ?? '',
+        scheduledAt: nextScheduledAt,
+        participantUserIds: nextParticipantUserIds,
+        durationMinutes: nextDurationMinutes,
+        res,
+        excludeSessionId: id,
+      })) {
+        return
+      }
+
       const existingParticipantKey = existingAttendees.map((attendee) => attendee.userId).sort().join('|')
       const nextParticipantKey = [...nextParticipantUserIds].sort().join('|')
 
@@ -360,6 +560,21 @@ export async function handleUpdateSession(
         for (const participantUserId of nextParticipantUserIds) {
           await registerAttendee(participantUserId, id)
         }
+      }
+    }
+
+    if (!isManagedParticipantSession) {
+      const nextScheduledAt = patch.scheduledAt instanceof Date ? patch.scheduledAt : existing.scheduledAt
+      const nextDurationMinutes = resolveDurationMinutes(nextRequests)
+      if (await rejectSessionConflictIfAny({
+        expertId: existing.expertId ?? '',
+        scheduledAt: nextScheduledAt,
+        participantUserIds: nextParticipantUserIds,
+        durationMinutes: nextDurationMinutes,
+        res,
+        excludeSessionId: id,
+      })) {
+        return
       }
     }
 
@@ -379,6 +594,128 @@ export async function handleUpdateSession(
     return res.status(200).json(updated);
   } catch (err) {
     next(err);
+  }
+}
+
+
+
+export async function handleGetCompletionDraft(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { id } = req.params
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, expertId: true },
+    })
+    if (!user) return res.status(401).json({ error: 'Unauthorized' })
+
+    const draft = await getZoomCompletionDraft({
+      sessionId: id,
+      actor: {
+        userId,
+        role: user.role,
+        expertId: user.expertId,
+      },
+    })
+
+    if (!draft.available && draft.reason === 'session_not_found') {
+      return res.status(404).json(draft)
+    }
+    if (!draft.available && draft.reason === 'forbidden') {
+      return res.status(403).json(draft)
+    }
+
+    return res.status(200).json(draft)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function handleCompleteSession(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { id } = req.params
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, expertId: true },
+    })
+    if (!user) return res.status(401).json({ error: 'Unauthorized' })
+
+    const completed = await completeZoomSession({
+      sessionId: id,
+      actor: {
+        userId,
+        role: user.role,
+        expertId: user.expertId,
+      },
+      source: 'manual',
+      actualParticipantUserIds: Array.isArray(req.body.actualParticipantUserIds)
+        ? req.body.actualParticipantUserIds
+        : undefined,
+      attendeeCount: typeof req.body.attendeeCount === 'number'
+        ? req.body.attendeeCount
+        : undefined,
+      topic: typeof req.body.topic === 'string' ? req.body.topic : null,
+      summary: typeof req.body.summary === 'string' ? req.body.summary : null,
+      recordingRef: typeof req.body.recordingRef === 'string' ? req.body.recordingRef : null,
+      startedAt: typeof req.body.startedAt === 'string' ? req.body.startedAt : null,
+      endedAt: typeof req.body.endedAt === 'string' ? req.body.endedAt : null,
+    })
+
+    const recordingRef = typeof req.body.recordingRef === 'string' ? req.body.recordingRef.trim() : ''
+    if (recordingRef && completed.type === 'GROUP') {
+      await enqueueRuntimeOutboxItem({
+        scope: 'zoom_audio_ingest',
+        type: 'ZOOM_AUDIO_UPLOADED',
+        source: 'cloudinary',
+        userId,
+        state: 'uploaded',
+        tenantId: id,
+        runtime: {
+          requestFingerprint: `${id}:${recordingRef}`,
+          orchestrationPath: ['zoom_session_completion', id],
+        },
+        payload: {
+          zoomSessionId: id,
+          fileId: recordingRef,
+          fileUniqueId: null,
+          mediaType: 'audio',
+          fileName: 'zoom-recording',
+          mimeType: null,
+          caption: null,
+          source: 'cloudinary',
+          observedAt: new Date().toISOString(),
+          uploadedAt: new Date().toISOString(),
+          cloudinaryUrl: recordingRef,
+          downloadUrl: recordingRef,
+        },
+      })
+    }
+
+    return res.status(200).json(completed)
+  } catch (err) {
+    if (err instanceof Error && err.message === 'SESSION_NOT_FOUND') {
+      return res.status(404).json({ error: 'session_not_found' })
+    }
+    if (err instanceof Error && err.message === 'FORBIDDEN') {
+      return res.status(403).json({ error: 'forbidden' })
+    }
+    if (err instanceof Error && err.message === 'SESSION_CANCELLED') {
+      return res.status(409).json({ error: 'session_cancelled' })
+    }
+    next(err)
   }
 }
 
@@ -443,14 +780,60 @@ export async function handleGetCalendarSessions(
       expertId: user?.expertId ?? undefined,
     });
 
+    const calendarRole = role === 'coach' ? 'coach' : 'user';
+    const commerceRequests = calendarRole === 'user'
+      ? await getUserCalendarRequestsForWindow({
+          requesterUserId: userId,
+          from: fromDate,
+          to: toDate,
+          includeInactive: true,
+        })
+      : await getZoomCommerceCalendarRequests({
+          zoomSessionIds: sessions.map((session) => session.id),
+          includeInactive: true,
+        });
+    const commercePriority = { REQUESTED: 1, APPROVED_PENDING_PAYMENT: 2, PAID: 3, REJECTED: 0, EXPIRED: 0, CANCELLED: 0 } as const;
+    type CalendarCommerceStatus = keyof typeof commercePriority;
+    type CalendarCommerceRequest = typeof commerceRequests[number] & { status: CalendarCommerceStatus };
+    const commerceBySessionId = new Map<string, CalendarCommerceRequest>();
+    for (const request of commerceRequests) {
+      if (!request.zoomSessionId || !(request.status in commercePriority)) continue;
+      const calendarRequest = request as CalendarCommerceRequest;
+      const current = commerceBySessionId.get(request.zoomSessionId);
+      if (!current) {
+        commerceBySessionId.set(request.zoomSessionId, calendarRequest);
+      }
+    }
+
+    const questionSummaries = await getQuestionSummariesBySessionId(sessions.map((session) => session.id));
+
     type SessionRow = typeof sessions[number];
-    const result = sessions.map((s: SessionRow) => {
+    const getAttendeeName = (attendee: {
+      userId: string
+      user?: { firstName: string | null; lastName: string | null; email: string | null }
+    } | undefined) => {
+      if (!attendee) return null;
+      return [attendee.user?.firstName, attendee.user?.lastName].filter(Boolean).join(' ').trim()
+        || attendee.user?.email
+        || null;
+    };
+    const result = await Promise.all(sessions.map(async (s: SessionRow) => {
       const meta = (s.requests as Record<string, unknown>) ?? {};
       const isArray = Array.isArray(meta);
       const attendeesCount = (s as { _count?: { attendees?: number } })._count?.attendees ?? 0;
       const maxSlots = isArray ? 50 : typeof meta.maxSlots === 'number' ? meta.maxSlots : 50;
+      const isIndividual = isLegacyIndividualSession(s)
+      const commerceRequest = commerceBySessionId.get(s.id);
+      const commerceBlocksSlot = commerceRequest?.status === 'APPROVED_PENDING_PAYMENT'
+        || commerceRequest?.status === 'PAID';
       const attendees = (s as {
-        attendees?: Array<{ userId: string; goalText: string | null; progress: unknown }>
+        attendees?: Array<{
+          userId: string
+          goalText: string | null
+          progress: unknown
+          attended?: boolean
+          user?: { firstName: string | null; lastName: string | null; email: string | null }
+        }>
       }).attendees ?? [];
       const challenger = attendees.find((attendee) => attendee.userId === meta.challengerId);
       const opponent = attendees.find((attendee) => attendee.userId === meta.opponentId);
@@ -458,13 +841,19 @@ export async function handleGetCalendarSessions(
       const ownProgress = Array.isArray(ownAttendee?.progress) ? ownAttendee.progress : [];
       const challengerProgress = Array.isArray(challenger?.progress) ? challenger.progress : [];
       const opponentProgress = Array.isArray(opponent?.progress) ? opponent.progress : [];
+      const questionSummary = questionSummaries.get(s.id);
+      const report = parseZoomPostReport(s.postSessionReport);
+      const actualAttendeeCount = attendees.filter((attendee) => attendee.attended === true).length;
+      const recordingUrl = report?.audioUrl?.trim() || null;
+      const individualPaid = !(isIndividual || commerceRequest?.kind === 'BATTLE') || (commerceRequest?.requesterUserId === userId && commerceRequest.status === 'PAID');
+      const canViewRecording = (role === 'coach' || individualPaid) && Boolean(recordingUrl) && (role === 'coach' || Boolean((s as { isMyBooking?: boolean }).isMyBooking));
       return {
         id: s.id,
         scheduledAt: s.scheduledAt.toISOString(),
         topic: s.topic,
         status: s.status,
         type: isArray ? 'group_practice' : (meta.type ?? 'group_practice'),
-        zoomLink: isArray ? '' : (meta.zoomLink ?? ''),
+        zoomLink: isArray || (role !== 'coach' && !individualPaid) ? '' : (meta.zoomLink ?? ''),
         attendeesCount,
         notifiedAt24h: isArray ? null : ((meta.notifiedAt24h as string | null) ?? null),
         notifiedAt2h: isArray ? null : ((meta.notifiedAt2h as string | null) ?? null),
@@ -472,19 +861,73 @@ export async function handleGetCalendarSessions(
         battleProgress: isArray ? [] : ownProgress,
         goalA: isArray ? null : (challenger?.goalText ?? null),
         goalB: isArray ? null : (opponent?.goalText ?? null),
+        participantNames: attendees.map((attendee) => getAttendeeName(attendee)).filter(Boolean),
+        attendees: attendees.map((attendee) => ({
+          userId: attendee.userId,
+          name: getAttendeeName(attendee),
+          attended: attendee.attended === true,
+        })),
+        actualAttendeeCount: report?.actualAttendeeCount ?? actualAttendeeCount,
+        completedAt: report?.completedAt ?? null,
+        completionSource: report?.source ?? null,
+        actualStartedAt: report?.actualStartedAt ?? null,
+        actualEndedAt: report?.actualEndedAt ?? null,
+        outcomeTopic: report?.topic ?? null,
+        summary: report?.summary?.trim() || null,
+        recordingUrl,
+        recordingAvailable: report?.recordingAvailable ?? Boolean(recordingUrl),
+        canViewRecording,
+        challengerName: getAttendeeName(challenger),
+        opponentName: getAttendeeName(opponent),
         progressA: isArray ? 0 : challengerProgress.length,
         progressB: isArray ? 0 : opponentProgress.length,
         battleStatus: isArray ? null : ((meta.battleStatus as string | null) ?? null),
         challengerId: isArray ? null : ((meta.challengerId as string | null) ?? null),
         opponentId: isArray ? null : ((meta.opponentId as string | null) ?? null),
+        winnerId: isArray ? null : ((meta.winnerId as string | null) ?? null),
+        questionPreviews: questionSummary?.questionPreviews ?? [],
+        questionsCount: questionSummary?.questionsCount ?? 0,
+        remainingQuestionsCount: questionSummary?.remainingQuestionsCount ?? 0,
         canEdit: role === 'coach',
-        slotStatus: isArray ? 'available' : ((meta.slotStatus as string) ?? 'available'),
-        remainingSlots: maxSlots - attendeesCount,
-        isMyBooking: (s as { isMyBooking?: boolean }).isMyBooking ?? false,
-        priceCents: isArray ? 0 : typeof meta.priceCents === 'number' ? meta.priceCents : 0,
+        checkoutUrl: calendarRole === 'user'
+          && commerceRequest?.requesterUserId === userId
+          && commerceRequest.status === 'APPROVED_PENDING_PAYMENT'
+          ? await getCommerceCheckoutUrl(commerceRequest.id, userId)
+          : null,
+        paymentDeadline: calendarRole === 'user'
+          && commerceRequest?.requesterUserId === userId
+          && commerceRequest.status === 'APPROVED_PENDING_PAYMENT'
+          && commerceRequest.checkoutOrderReference
+          ? (await prisma.checkoutSession.findFirst({
+              where: { orderReference: commerceRequest.checkoutOrderReference },
+              select: { expiresAt: true },
+            }))?.expiresAt.toISOString() ?? null
+          : null,
+        commerceRequestId: commerceRequest?.id ?? null,
+        commerceStatus: commerceRequest?.status ?? null,
+        commerceLabel: isIndividual
+          ? getIndividualSessionStatusLabel({
+              role: calendarRole,
+              sessionStatus: s.status,
+              commerceStatus: commerceRequest?.status,
+            })
+          : commerceRequest
+            ? COMMERCE_STATUS_LABELS[calendarRole][commerceRequest.status]
+            : null,
+        slotStatus: isIndividual && (attendeesCount >= 1 || commerceBlocksSlot)
+          ? 'booked'
+          : isArray ? 'available' : ((meta.slotStatus as string) ?? 'available'),
+        remainingSlots: isIndividual && (attendeesCount >= 1 || commerceBlocksSlot) ? 0 : maxSlots - attendeesCount,
+        isMyBooking: individualPaid && ((s as { isMyBooking?: boolean }).isMyBooking ?? false),
+        isMyPendingPayment: commerceRequest?.requesterUserId === userId
+          && commerceRequest.status === 'APPROVED_PENDING_PAYMENT',
+        priceCents: isIndividual
+          ? Math.round(Number(commerceRequest?.amount ?? 60) * 100)
+          : isArray ? 0 : typeof meta.priceCents === 'number' ? meta.priceCents : 0,
+        currency: isIndividual ? commerceRequest?.currency ?? 'EUR' : undefined,
         durationMinutes: isArray ? 60 : typeof meta.durationMinutes === 'number' ? meta.durationMinutes : 60,
       };
-    });
+    }));
 
     return res.status(200).json(result);
   } catch (err) {
@@ -553,49 +996,57 @@ export async function handleInitiateBattle(
 
     const challengerIsSubscriber = await isActiveFocusSubscriber(userId)
     if (!challengerIsSubscriber) {
-      const orderReference = `battle_entry_99_${userId}_${Date.now()}`
-      const { buildPaymentRequest } = await import('../../subscriptions/payments/wayforpay/service.js')
-      const { buildShortWayForPayCheckoutUrl } = await import('../../subscriptions/payments/wayforpay/checkout.js')
-      const backendBaseUrl = (
-        process.env.PUBLIC_API_URL?.trim()
-        || process.env.APP_URL?.trim()
-        || process.env.TELEGRAM_WEBHOOK_URL?.trim()
-        || process.env.INTERNAL_API_URL?.trim()?.replace(/\/api$/, '')
-        || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : 'http://127.0.0.1:3001')
-      ).replace(/\/$/, '')
-
+      const existing = await prisma.zoomCommerceRequest.findFirst({
+        where: { kind: 'BATTLE', requesterUserId: userId, expertId: user.expertId,
+          scheduledAt: { gt: new Date() }, status: { in: ['REQUESTED', 'APPROVED_PENDING_PAYMENT', 'PAID'] } },
+        include: { zoomSession: true }, orderBy: { createdAt: 'desc' },
+      })
+      if (existing) {
+        const { sendCommerceTicket } = await import('../commerce/zoom.commerce-telegram.js')
+        await sendCommerceTicket(existing.id)
+        return res.status(200).json({ type: 'non_subscriber', costUAH: Number(existing.amount),
+          request: existing, battle: existing.zoomSession,
+          checkoutUrl: await getCommerceCheckoutUrl(existing.id, userId),
+          message: 'Запит на Zoom Battle надіслано коучу.' })
+      }
       const scheduledAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-      const payment = buildPaymentRequest({
-        userId,
-        productId: 'battle_entry',
+      const session = await createFullSession({
+        expertId: user.expertId,
+        scheduledAt,
+        topic: `Battle: ${userId} vs ${opponent.id}`,
+        requests: {
+          type: 'battle_review',
+          battleStatus: 'pending',
+          challengerId: userId,
+          opponentId: opponent.id,
+          goalA: goalA ?? null,
+          goalB: goalB ?? null,
+          entryFee: 99,
+          paymentOrderReference: null,
+        },
+      }, { suppressAutomation: true })
+      const commerceRequest = await createZoomCommerceRequest({
+        kind: 'BATTLE',
+        requesterUserId: userId,
+        expertId: user.expertId,
+        zoomSessionId: session.id,
+        scheduledAt,
         amount: 99,
         currency: 'UAH',
-        payRef: orderReference,
-        product_name: [`Zoom Battle vs ${opponent.firstName ?? opponent.id}`],
-        product_count: [1],
-        product_price: [99],
-      }) as Record<string, unknown>
-
-      payment.battleEntryMeta = {
-        expertId: user.expertId,
-        challengerId: userId,
-        opponentId,
-        goalA: goalA ?? null,
-        goalB: goalB ?? null,
-        scheduledAt: scheduledAt.toISOString(),
-      }
-
-      const checkoutUrl = await buildShortWayForPayCheckoutUrl(backendBaseUrl, payment, {
-        product: 'battle_entry',
-        opponentId,
       })
 
-      return res.status(200).json({
+      if (commerceRequest.zoomSessionId !== session.id) {
+        await prisma.zoomSession.update({ where: { id: session.id }, data: { status: 'CANCELLED' } })
+      }
+      const { sendCommerceTicket } = await import('../commerce/zoom.commerce-telegram.js')
+      await sendCommerceTicket(commerceRequest.id)
+      return res.status(201).json({
         type: 'non_subscriber',
         costUAH: 99,
-        orderReference,
-        checkoutUrl,
-        message: 'Оплатіть 99 грн, і battle буде створено автоматично після підтвердження платежу.',
+        request: commerceRequest,
+        battle: commerceRequest.zoomSessionId === session.id ? session
+          : await prisma.zoomSession.findUnique({ where: { id: commerceRequest.zoomSessionId! } }),
+        message: 'Запит на Zoom Battle надіслано коучу.',
       })
     }
 
@@ -709,6 +1160,68 @@ export async function handleGetAvailability(
   }
 }
 
+export async function handleGetAvailabilityWeek(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id;
+    const from = typeof req.query.from === 'string' ? req.query.from : '';
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } });
+    if (!user?.expertId) return res.status(403).json({ error: 'Expert only' });
+    return res.status(200).json(await getAvailabilityWeek(user.expertId, from));
+  } catch (error) {
+    if (error instanceof Error && ['invalid_date', 'week_must_start_monday'].includes(error.message)) {
+      return res.status(400).json({ error: error.message });
+    }
+    next(error);
+  }
+}
+
+export async function handleGetIndividualAvailability(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id;
+    const date = typeof req.query.date === 'string' ? req.query.date : '';
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'invalid_date' });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } });
+    if (!user?.expertId) return res.status(409).json({ error: 'COMMERCE_EXPERT_CONTEXT_REQUIRED' });
+    return res.status(200).json(await getIndividualAvailabilityForDate({ expertId: user.expertId, date }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleGetIndividualAvailabilitySummary(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id;
+    const from = typeof req.query.from === 'string' ? req.query.from : '';
+    const to = typeof req.query.to === 'string' ? req.query.to : '';
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ error: 'invalid_date' });
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } });
+    if (!user?.expertId) return res.status(409).json({ error: 'COMMERCE_EXPERT_CONTEXT_REQUIRED' });
+    return res.status(200).json(await getIndividualAvailabilitySummary({ expertId: user.expertId, from, to }));
+  } catch (err) {
+    if (err instanceof Error && err.message === 'invalid_date_range') {
+      return res.status(400).json({ error: 'invalid_date_range' });
+    }
+    next(err);
+  }
+}
+
 export async function handleSaveAvailability(
   req: AuthenticatedRequest,
   res: Response,
@@ -725,6 +1238,28 @@ export async function handleSaveAvailability(
     return res.status(200).json({ ok: true });
   } catch (err) {
     next(err);
+  }
+}
+
+export async function handleSaveAvailabilityWeek(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id;
+    const body = req.body as { from?: unknown; days?: unknown };
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (typeof body.from !== 'string' || !Array.isArray(body.days)) return res.status(400).json({ error: 'invalid_availability_week' });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } });
+    if (!user?.expertId) return res.status(403).json({ error: 'Expert only' });
+    await saveAvailabilityWeek({ expertId: user.expertId, from: body.from, days: body.days as AvailabilityWeekChange[] });
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    if (error instanceof Error && ['invalid_date', 'week_must_start_monday', 'invalid_availability_week', 'invalid_availability_window', 'overlapping_availability_windows'].includes(error.message)) {
+      return res.status(400).json({ error: error.message });
+    }
+    next(error);
   }
 }
 
@@ -824,6 +1359,80 @@ export async function getAvailableSlots(
   }
 }
 
+export async function handleGetCommerceRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const request = await getZoomCommerceRequestById(req.params.id)
+    if (!request) return res.status(404).json({ error: 'commerce_request_not_found' })
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } })
+    if (request.requesterUserId !== userId && request.expertId !== user?.expertId) {
+      return res.status(403).json({ error: 'commerce_request_forbidden' })
+    }
+    return res.status(200).json({ request })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function handleApproveCommerceRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } })
+    if (!user?.expertId) return res.status(403).json({ error: 'Expert only' })
+    const approval = await approveZoomCommerceRequest(req.params.id, user.expertId)
+    if (
+      approval.request.kind === 'INDIVIDUAL'
+      && approval.request.status === 'APPROVED_PENDING_PAYMENT'
+      && approval.request.zoomSessionId
+      && approval.checkoutUrl
+    ) {
+      await notifyAssignedPrivateSession({
+        commerceRequestId: approval.request.id,
+        sessionId: approval.request.zoomSessionId,
+        userId: approval.request.requesterUserId,
+        checkoutUrl: approval.checkoutUrl,
+        origin: 'user_approved',
+      }).catch((error: unknown) => {
+        console.error('[zoom/commerce approve] individual approval notification failed', {
+          commerceRequestId: approval.request.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+    return res.status(200).json(approval)
+  } catch (err) {
+    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    next(err)
+  }
+}
+
+export async function handleRejectCommerceRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } })
+    if (!user?.expertId) return res.status(403).json({ error: 'Expert only' })
+    return res.status(200).json({ request: await rejectZoomCommerceRequest(req.params.id, user.expertId) })
+  } catch (err) {
+    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    next(err)
+  }
+}
+
 export async function handleBookPrivateSlot(
   req: AuthenticatedRequest,
   res: Response,
@@ -832,13 +1441,72 @@ export async function handleBookPrivateSlot(
   try {
     const userId = req.user?.id
     if (!userId) return res.status(401).json({ error: 'Unauthorized' })
-    if (!(await requireActiveFocusSubscription(userId, res))) return
     const { id } = req.params
-    const result = await bookPrivateSlot(userId, id)
-    await syncZoomRegistrationLifecycle(userId, id)
+    const result = await bookPrivateSlot(userId, id, typeof req.body?.questionText === 'string' ? req.body.questionText : undefined)
     return res.status(200).json(result)
   } catch (err) {
     if (err instanceof Error) {
+      return res.status(409).json({ error: err.message })
+    }
+    next(err)
+  }
+}
+
+export async function handleCreateUserIndividualRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[USER_INDIVIDUAL_REQUEST_TRACE]', {
+        phase: 'handler_enter',
+        userId,
+        scheduledAt: typeof req.body?.scheduledAt === 'string' ? req.body.scheduledAt : null,
+        hasQuestion: typeof req.body?.questionText === 'string' && req.body.questionText.trim().length > 0,
+      })
+    }
+    const scheduledAt = new Date(req.body?.scheduledAt)
+    const questionText = typeof req.body?.questionText === 'string' ? req.body.questionText : ''
+    const result = await createUserIndividualRequest({
+      requesterUserId: userId,
+      scheduledAt,
+      questionText,
+    })
+    if (!result.duplicate) {
+      await notifyPrivateSessionRequest({
+        commerceRequestId: result.request.id,
+        sessionId: result.session.id,
+        userId,
+      }).catch((error: unknown) => {
+        console.error('[zoom/user individual request] notification failed', {
+          commerceRequestId: result.request.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+    return res.status(201).json(result)
+  } catch (err) {
+    if (err instanceof Error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[USER_INDIVIDUAL_REQUEST_TRACE]', {
+          phase: 'backend_rejected',
+          errorName: err.name,
+          errorCode: err.message,
+          message: err.message,
+        })
+      }
+      if (err.message === 'COMMERCE_SLOT_UNAVAILABLE') {
+        const availabilityError = err as Error & { alternatives?: unknown }
+        return res.status(409).json({
+          error: err.message,
+          message: 'Цей час уже зайнятий. Обери інший доступний час.',
+          alternatives: availabilityError.alternatives ?? [],
+        })
+      }
       return res.status(409).json({ error: err.message })
     }
     next(err)

@@ -34,10 +34,6 @@ function normalizeEnv(value: string | undefined): string {
   return String(value ?? '').trim()
 }
 
-function uniqueTokens(tokens: string[]): string[] {
-  return Array.from(new Set(tokens.filter(Boolean)))
-}
-
 const LOCAL_TELEGRAM_USERNAME = 'test_starway_bot'
 
 export function isProductionRuntime(): boolean {
@@ -168,17 +164,34 @@ export function assertTelegramBotIdentity(
   return normalizedExpected
 }
 
-export function readTelegramVerificationTokens(): string[] {
-  const runtimeToken = readTelegramBotConfig().token
+export type TelegramBotContext = 'USER' | 'COACH'
 
-  return uniqueTokens([
-    runtimeToken,
-    readCoachBotToken(),
-    normalizeEnv(process.env.TELEGRAM_BOT_TOKEN),
-    normalizeEnv(process.env.TEST_TELEGRAM_BOT_TOKEN),
-    normalizeEnv(process.env.CONTENT_BOT_TOKEN),
-    normalizeEnv(process.env.TEST_BOT_TOKEN),
-  ])
+export type TelegramVerificationBot = {
+  token: string
+  botContext: TelegramBotContext
+}
+
+export function readTelegramVerificationBots(): TelegramVerificationBot[] {
+  const candidates: TelegramVerificationBot[] = [
+    { token: readTelegramBotConfig().token, botContext: 'USER' },
+    { token: readCoachBotToken(), botContext: 'COACH' },
+    { token: normalizeEnv(process.env.TELEGRAM_BOT_TOKEN), botContext: 'USER' },
+    { token: normalizeEnv(process.env.TEST_TELEGRAM_BOT_TOKEN), botContext: 'USER' },
+    { token: normalizeEnv(process.env.CONTENT_BOT_TOKEN), botContext: 'USER' },
+    { token: normalizeEnv(process.env.TEST_BOT_TOKEN), botContext: 'USER' },
+  ]
+  const seen = new Set<string>()
+
+  // Shared tokens retain the first configured source's context and verification priority.
+  return candidates.filter(({ token }) => {
+    if (!token || seen.has(token)) return false
+    seen.add(token)
+    return true
+  })
+}
+
+export function readTelegramVerificationTokens(): string[] {
+  return readTelegramVerificationBots().map(({ token }) => token)
 }
 
 export function resolveTelegramDeliveryMode(): TelegramDeliveryMode {

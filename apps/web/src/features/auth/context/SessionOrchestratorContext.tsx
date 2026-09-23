@@ -495,7 +495,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
       return restorePromiseRef.current
     }
 
-    if (reason !== 'bootstrap' && now - lastSyncStartedAtRef.current < REHYDRATE_COOLDOWN_MS) {
+    if (reason !== 'bootstrap' && reason !== 'manual' && now - lastSyncStartedAtRef.current < REHYDRATE_COOLDOWN_MS) {
       pushDebugEvent('restore.skipped_cooldown', { reason, deltaMs: now - lastSyncStartedAtRef.current })
       return isAuthenticatedRef.current
     }
@@ -739,6 +739,21 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
     pendingNavigation,
     pushDebugEvent,
   ])
+
+  useEffect(() => {
+    const retryTelegramRestore = () => {
+      if (document.visibilityState === 'hidden' || isAuthenticatedRef.current || !isTelegramMiniAppAuthContext()) return
+      void restoreSession('manual')
+    }
+    window.addEventListener('focus', retryTelegramRestore)
+    window.addEventListener('load', retryTelegramRestore)
+    document.addEventListener('visibilitychange', retryTelegramRestore)
+    return () => {
+      window.removeEventListener('focus', retryTelegramRestore)
+      window.removeEventListener('load', retryTelegramRestore)
+      document.removeEventListener('visibilitychange', retryTelegramRestore)
+    }
+  }, [restoreSession])
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {

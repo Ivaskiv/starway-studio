@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const authState = {
   auth: {
@@ -9,11 +9,13 @@ const authState = {
       | {
           id: string
           role: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
+          activeRole?: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
           expertId?: string | null
           access?: { isPaid?: boolean }
           subscriptionStatus?: string | null
         },
     status: 'authenticated' as 'authenticated' | 'loading' | 'guest',
+    role: null as null | 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN',
   },
 }
 
@@ -26,6 +28,12 @@ vi.mock('@/app/hooks', () => ({
   useAppSelector: (
     selector: (state: typeof authState) => unknown
   ) => selector(authState),
+}))
+
+vi.mock('@/features/auth/services/auth.slice', () => ({
+  selectCurrentUser: (state: typeof authState) => state.auth.user,
+  selectAuthStatus: (state: typeof authState) => state.auth.status,
+  selectUserRole: (state: typeof authState) => state.auth.role,
 }))
 
 vi.mock('@/features/zoom/CoachZoomPanel', () => ({
@@ -47,7 +55,7 @@ vi.mock('@/shared/telegram/telegramDeepLinks', () => ({
 }))
 
 describe('ZoomCalendarPage', () => {
-  beforeAll(() => {
+  beforeEach(() => {
     vi.stubGlobal('localStorage', {
       getItem: vi.fn(() => null),
       setItem: vi.fn(),
@@ -58,6 +66,9 @@ describe('ZoomCalendarPage', () => {
   afterEach(() => {
     telegramRuntime.miniApp = false
     telegramRuntime.initData = ''
+    authState.auth.user = null
+    authState.auth.role = null
+    authState.auth.status = 'authenticated'
     vi.unstubAllGlobals()
   })
 
@@ -71,8 +82,9 @@ describe('ZoomCalendarPage', () => {
         access: { isPaid: false },
         subscriptionStatus: null,
       }
+      authState.auth.role = role
 
-      const { default: ZoomCalendarPage } = await import('./ZoomCalendarPage')
+      const { default: ZoomCalendarPage } = await import('@/features/zoom/pages/ZoomCalendarPage')
       const markup = renderToStaticMarkup(createElement(ZoomCalendarPage))
 
       expect(markup).toContain('COACH_PANEL:expert-1')
@@ -89,8 +101,9 @@ describe('ZoomCalendarPage', () => {
       access: { isPaid: false },
       subscriptionStatus: null,
     }
+    authState.auth.role = 'ADMIN'
 
-    const { default: ZoomCalendarPage } = await import('./ZoomCalendarPage')
+    const { default: ZoomCalendarPage } = await import('@/features/zoom/pages/ZoomCalendarPage')
     const markup = renderToStaticMarkup(createElement(ZoomCalendarPage))
 
     expect(markup).toContain('COACH_PANEL:null')
@@ -105,8 +118,9 @@ describe('ZoomCalendarPage', () => {
       access: { isPaid: true },
       subscriptionStatus: null,
     }
+    authState.auth.role = 'USER'
 
-    const { default: ZoomCalendarPage } = await import('./ZoomCalendarPage')
+    const { default: ZoomCalendarPage } = await import('@/features/zoom/pages/ZoomCalendarPage')
     const markup = renderToStaticMarkup(createElement(ZoomCalendarPage))
 
     expect(markup).toContain('USER_PANEL:user-1')
@@ -121,8 +135,9 @@ describe('ZoomCalendarPage', () => {
       access: { isPaid: false },
       subscriptionStatus: null,
     }
+    authState.auth.role = 'USER'
 
-    const { default: ZoomCalendarPage } = await import('./ZoomCalendarPage')
+    const { default: ZoomCalendarPage } = await import('@/features/zoom/pages/ZoomCalendarPage')
     const markup = renderToStaticMarkup(createElement(ZoomCalendarPage))
 
     expect(markup).toContain('Персональний календар доступний тільки після входу через Telegram Mini App або з активним доступом ФОКУС.')
@@ -149,8 +164,9 @@ describe('ZoomCalendarPage', () => {
       access: { isPaid: true },
       subscriptionStatus: null,
     }
+    authState.auth.role = 'USER'
 
-    const { default: ZoomCalendarPage } = await import('./ZoomCalendarPage')
+    const { default: ZoomCalendarPage } = await import('@/features/zoom/pages/ZoomCalendarPage')
     const markup = renderToStaticMarkup(createElement(ZoomCalendarPage))
 
     expect(markup).toContain('USER_PANEL:focus-user')

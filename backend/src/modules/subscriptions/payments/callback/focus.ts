@@ -1,19 +1,19 @@
-import { telegramContentRegistry } from '@/modules/telegram-mentor/content/contentRegistry.js'
-import { TelegramConversationRenderer } from '@/modules/telegram-mentor/conversation/renderers/telegramConversationRenderer.js'
-import { FOCUS_WELCOME } from '@/products/ab-system/content/abTest.focus.js'
 import { loadAbTestProgress } from '@/products/ab-system/telegram/progress.js'
 import { cancelPendingAbTestSalesFollowups, scheduleFollowups } from '@/products/ab-system/telegram/scheduler.js'
 
 import { prisma } from '../../../../db/client.js'
-import { bot, sendOpsTelegramMessage } from '../../../../lib/telegram.js'
+import { coachBot, sendOpsTelegramMessage } from '../../../../lib/telegram.js'
 import { NotificationEvent } from '../../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../../services/notifications/NotificationService.js'
+import { notifyCoachAboutSuccessfulPayment } from '../../../admin/notifications/coach.service.js'
 import { getUpcomingGroupSessions } from '../../../zoom/service.js'
 import { resolveFocusChannelInviteLink, simulateFocusActivation } from '../business/service.js'
 import type { PaymentCallbackData } from '../../types.js'
-import { getSafeName, resolvePaidTelegramChatId, sendFocusPaymentOnboardingIfNeeded } from './focus-onboarding.js'
-
-const conversationRenderer = new TelegramConversationRenderer()
+import {
+  getSafeName,
+  sendFocusPaymentOnboardingIfNeeded,
+} from './focus-onboarding.js'
+import { sendFocusPaymentSuccessTelegramMessageByOrder } from './notifications.js'
 
 export async function handleFocusPaymentSuccess(input: {
   userId: string
@@ -109,54 +109,18 @@ export async function handleFocusPaymentSuccess(input: {
           select: { currentPeriodEnd: true },
         })
         const planLabelMap: Record<string, string> = {
-          focus_1month: '1 місяць',
-          focus_3month: '3 місяці',
+          '1month': '1 місяць',
+          '3month': '3 місяці',
+          '6month': '6 місяців',
+          '1year': '1 рік',
+          '1month_upgrade': '1 місяць',
           welcome_test: 'welcome_test',
         }
         const planLabel = webhookResult.planId
           ? (planLabelMap[webhookResult.planId] ?? webhookResult.planId)
           : 'невідомо'
-        const dateStr = new Date().toLocaleString('uk-UA', {
-          day: '2-digit',
-          month: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-        const activeCount = await prisma.productSubscription.count({
-          where: { status: 'ACTIVE' },
-        })
+        const finalExpiresAt = canonicalSubscription?.currentPeriodEnd ?? focusSubscription?.expiresAt ?? null
         const payerName = getSafeName(paidUser?.firstName)
-        const opsSent = await sendOpsTelegramMessage(
-          `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n` +
-            `Тип події: Нова оплата\n` +
-            `Учасник: ${payerName || 'Користувач'} · ${paidUser?.email ?? 'email невідомий'}\n` +
-            `Тариф: ${planLabel}\n` +
-            `Сума: ${amount} ${data.currency ?? 'UAH'}\n` +
-            `Order: ${data.order_reference}\n` +
-            `Час: ${dateStr}\n` +
-            `Активних підписок: ${activeCount}`,
-          process.env.PUBLIC_FRONTEND_URL?.trim()
-            ? {
-                reply_markup: {
-                  inline_keyboard: [
-                    [
-                      {
-                        text: 'ПАНЕЛЬ КЕРУВАННЯ',
-                        url: `${process.env.PUBLIC_FRONTEND_URL!.replace(/\/$/, '')}/app/dashboard`,
-                      },
-                    ],
-                  ],
-                },
-              }
-            : undefined
-        ).catch((err) => {
-          console.error('[payment] notify ops:', err)
-          return false
-        })
-        console.log('[PAYMENT_LIFECYCLE] ops report delivered', {
-          userId,
-          delivered: Boolean(opsSent),
-        })
 
         const upcoming = await getUpcomingGroupSessions(8)
         const lines = upcoming
@@ -171,78 +135,42 @@ export async function handleFocusPaymentSuccess(input: {
             })} — ${session.topic}`
           })
           .join('\n')
+
+        await sendFocusPaymentSuccessTelegramMessageByOrder({
+          userId,
+          orderReference: data.order_reference,
+        })
+
+        const coachChatId = process.env.COACH_TELEGRAM_ID?.trim()
+        if (coachChatId && finalExpiresAt) {
+          const coachSent = await notifyCoachAboutSuccessfulPayment({
+            coachBot,
+            coachChatId,
+            userId,
+            userLabel: payerName ? `${payerName} · ${paidUser?.email ?? 'email невідомий'}` : (paidUser?.email ?? null),
+            productLabel: 'ФОКУС',
+            planLabel,
+            amount,
+            currency: data.currency ?? 'UAH',
+            orderReference: data.order_reference,
+            finalExpiresAt,
+          })
+
+          console.log('[PAYMENT_LIFECYCLE] coach payment report delivered', {
+            userId,
+            delivered: coachSent,
+          })
+        }
+
         await sendFocusPaymentOnboardingIfNeeded({
           userId,
+          orderReference: data.order_reference,
           paidUser,
           focusSubscription,
           canonicalSubscription,
           planLabel,
           upcomingLines: lines,
         })
-
-        if (!focusSubscription?.focusWelcomedAt) {
-          const paidChatId = resolvePaidTelegramChatId({
-            userId,
-            paidUser,
-            operation: 'focus_block12_send',
-          })
-          const channelLink = process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK?.trim() ?? ''
-          if (paidChatId) {
-            await conversationRenderer.renderOutbound({
-              chatId: paidChatId,
-              transportBot: bot,
-            }, {
-              text: FOCUS_WELCOME.msg1.body,
-              buttons: channelLink
-                ? [{ kind: 'url', label: telegramContentRegistry.buttons.focusChannel, value: channelLink }]
-                : [],
-              cards: [],
-              media: [],
-              nextActions: [],
-              telemetry: {},
-              analytics: {},
-            }).catch((err: unknown) => {
-              console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
-                operation: 'focus_block12_send',
-                userId,
-                orderReference: data.order_reference,
-                error: err instanceof Error ? err.message : String(err),
-              })
-            })
-            if (focusSubscription?.id) {
-              await prisma.productSubscription.update({
-                where: { id: focusSubscription.id },
-                data: { focusWelcomedAt: new Date() },
-              }).catch(async (err: unknown) => {
-                const errorMessage =
-                  err instanceof Error ? err.message : String(err)
-                console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
-                  operation: 'focus_subscription_mark_welcomed',
-                  userId,
-                  payRef,
-                  orderReference: data.order_reference,
-                  error: errorMessage,
-                })
-                await sendOpsTelegramMessage(
-                  `[PAYMENT_LIFECYCLE] focusWelcomedAt update failed\nuserId: ${userId}\npayRef: ${payRef}\norderReference: ${data.order_reference}\nsubscriptionId: ${focusSubscription.id}\nerror: ${errorMessage}`
-                ).catch((opsErr: unknown) => {
-                  console.error('[PAYMENT_LIFECYCLE] ops_alert_failed', {
-                    operation: 'focus_subscription_mark_welcomed',
-                    userId,
-                    payRef,
-                    orderReference: data.order_reference,
-                    error:
-                      opsErr instanceof Error ? opsErr.message : String(opsErr),
-                  })
-                })
-              })
-            }
-            console.log('[FOCUS_BLOCK12] sent', {
-              userId,
-              channelLink: Boolean(channelLink),
-            })
-          }
-        }
 
         void loadAbTestProgress(userId)
           .then((progress) => scheduleFollowups(userId, progress, 'S6_ZOOM'))

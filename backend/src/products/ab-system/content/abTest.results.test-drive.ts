@@ -26,7 +26,7 @@ import {
   AB_TEST_FOCUS_WEEKLY_TEXT,
   AB_TEST_FOCUS_WEEKLY_TEXT_BOLD,
   AB_TEST_SCREENSHOT_URLS,
-  AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT,
+  AB_TEST_RESULT_CONTINUE_BUTTON_TEXT,
   AB_TEST_VOICE_NOTE_LINES,
   telegramBlock,
   type TelegramContentBlock,
@@ -168,7 +168,7 @@ export function getTestDriveResultSurface(input: {
     buttons: [
       [
         {
-          text: AB_TEST_SHOW_INSIDE_CTA_MULTILINE_TEXT,
+          text: AB_TEST_RESULT_CONTINUE_BUTTON_TEXT,
           callback_data: `show_inside_${input.resultKey?.toUpperCase()}`,
         },
       ],

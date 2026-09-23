@@ -2,12 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockResolveLinkedUserIdFromContext = vi.fn()
 const mockGetUserAccessState = vi.fn()
+const mockSetChatMenuButton = vi.fn()
+const mockSetMyCommands = vi.fn()
 
-vi.mock('@/products/absystem/config/content.js', () => ({
-  absystemContent: {
-    START_FLOWS: {},
-  },
-}))
+vi.mock('@/products/absystem/config/content.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/products/absystem/config/content.js')>()
+  return {
+    ...actual,
+    absystemContent: {
+      ...actual.absystemContent,
+      START_FLOWS: {},
+    },
+  }
+})
 
 vi.mock('@/products/stankey/config/stankey.content.js', () => ({
   stankeyContent: {
@@ -23,32 +30,32 @@ vi.mock('@/content/telegram.product-context.js', () => ({
   getTelegramProductContext: vi.fn(() => ({ cta: {} })),
 }))
 
-vi.mock('../../../../core/continuity/behavioralContinuity.ts', () => ({
+vi.mock('../../../../../src/core/continuity/behavioralContinuity.ts', () => ({
   resolveBehavioralContinuity: vi.fn(),
 }))
 
-vi.mock('../../../../core/decision/decision.resolver.ts', () => ({
+vi.mock('../../../../../src/core/decision/decision.resolver.ts', () => ({
   resolveDecision: vi.fn(),
 }))
 
-vi.mock('../../../../core/flow-builder/flowBuilder.ts', () => ({
+vi.mock('../../../../../src/core/flow-builder/flowBuilder.ts', () => ({
   buildAbsystemStartFlow: vi.fn(),
 }))
 
-vi.mock('../../../../core/memory/relationshipMemory.ts', () => ({
+vi.mock('../../../../../src/core/memory/relationshipMemory.ts', () => ({
   resolveRelationshipMemory: vi.fn(),
 }))
 
-vi.mock('../../../../core/state-machine/conversationPresentation.ts', () => ({
+vi.mock('../../../../../src/core/state-machine/conversationPresentation.ts', () => ({
   buildRelationshipContinuityLead: vi.fn(() => []),
   resolveConversationProfile: vi.fn(() => 'focus'),
 }))
 
-vi.mock('../../../../core/transport/telegramTransport.ts', () => ({
+vi.mock('../../../../../src/core/transport/telegramTransport.ts', () => ({
   deliverTelegramFlow: vi.fn(),
 }))
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('../../../../../src/db/client.ts', () => ({
   prisma: {
     runtimeOutbox: {
       findUnique: vi.fn(),
@@ -58,35 +65,39 @@ vi.mock('../../../../db/client.ts', () => ({
   },
 }))
 
-vi.mock('../../../../lib/telegram.ts', () => ({
+vi.mock('../../../../../src/lib/telegram.ts', () => ({
   bot: {
     telegram: {
-      setChatMenuButton: vi.fn(),
-      setMyCommands: vi.fn(),
+      setChatMenuButton: (...args: unknown[]) => mockSetChatMenuButton(...args),
+      setMyCommands: (...args: unknown[]) => mockSetMyCommands(...args),
     },
   },
 }))
 
-vi.mock('../../../events/service.ts', () => ({
+vi.mock('../../../../../src/modules/zoom/urls.js', () => ({
+  buildZoomCalendarUrl: vi.fn(() => 'https://miniapp.example/miniapp/zoom-calendar'),
+}))
+
+vi.mock('../../../../../src/modules/events/service.ts', () => ({
   trackEvent: vi.fn(),
 }))
 
-vi.mock('../../../subscriptions/payments/focus-access.ts', () => ({
+vi.mock('../../../../../src/modules/subscriptions/payments/focus-access.ts', () => ({
   getUserAccessState: (...args: unknown[]) => mockGetUserAccessState(...args),
 }))
 
-vi.mock('../../core/state.service.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/core/state.service.ts', () => ({
   isExplicitWaitlistUser: vi.fn(() => false),
   resolveLinkedUserIdFromContext: (...args: unknown[]) =>
     mockResolveLinkedUserIdFromContext(...args),
   resolveUserState: vi.fn(),
 }))
 
-vi.mock('../../flows/onboarding.flow.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/flows/onboarding.flow.ts', () => ({
   sendWaitlist: vi.fn(),
 }))
 
-vi.mock('../../keyboards.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/keyboards.ts', () => ({
   getTelegramAppUrl: vi.fn(() => 'https://example.com/miniapp'),
   openAppKeyboard: vi.fn(() => ({
     reply_markup: {
@@ -96,16 +107,16 @@ vi.mock('../../keyboards.ts', () => ({
   withDevTestPaymentButton: vi.fn((buttons) => buttons),
 }))
 
-vi.mock('../../renderers/decisionTelegram.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/renderers/decisionTelegram.ts', () => ({
   renderTelegramDecision: vi.fn(),
 }))
 
-vi.mock('../../services/product/room.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/product/room.ts', () => ({
   resolveTelegramAccessOrchestration: vi.fn(),
   resolveTelegramRoomLaunch: vi.fn(),
 }))
 
-vi.mock('../../services/product/summary.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/services/product/summary.ts', () => ({
   resolveTelegramProductSummary: vi.fn(),
 }))
 
@@ -113,24 +124,29 @@ vi.mock('@/products/focus/payments/inviteLink.js', () => ({
   getOrCreateFocusInviteLink: vi.fn(),
 }))
 
-vi.mock('../../conversation/delivery/planDelivery.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/conversation/delivery/planDelivery.ts', () => ({
   planMessage: vi.fn(),
 }))
 
-vi.mock('../start.shared.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/handlers/start.shared.ts', () => ({
   resolveReferralButton: vi.fn(() => null),
 }))
 
-vi.mock('../start.recovery.ts', () => ({
+vi.mock('../../../../../src/modules/telegram-mentor/handlers/start.recovery.ts', () => ({
   resolveStartScenario: vi.fn(),
 }))
 
-import { getAccessAwareAppReplyMarkupForContext } from '../start.menu.ts'
+import {
+  getAccessAwareAppReplyMarkupForContext,
+  syncAccessAwareChatEntryPoints,
+} from '../../../../../src/modules/telegram-mentor/handlers/start.menu.ts'
 
 describe('getAccessAwareAppReplyMarkupForContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockResolveLinkedUserIdFromContext.mockResolvedValue('user-1')
+    mockSetChatMenuButton.mockResolvedValue(undefined)
+    mockSetMyCommands.mockResolvedValue(undefined)
   })
 
   it('does not expose platform entry when canonical access is NO_ACCESS', async () => {
@@ -160,5 +176,15 @@ describe('getAccessAwareAppReplyMarkupForContext', () => {
     expect(result).toEqual({
       inline_keyboard: [[{ text: 'Starway', web_app: { url: 'https://example.com/miniapp?startapp=ai' } }]],
     })
+  })
+})
+
+describe('syncAccessAwareChatEntryPoints', () => {
+  it('does not override the bot-level Zoom Calendar menu for any USER state', async () => {
+    await syncAccessAwareChatEntryPoints('12345', 'user-requested')
+    await syncAccessAwareChatEntryPoints('12345', 'user-paid')
+
+    expect(mockSetChatMenuButton).not.toHaveBeenCalled()
+    expect(mockSetMyCommands).toHaveBeenCalledTimes(2)
   })
 })

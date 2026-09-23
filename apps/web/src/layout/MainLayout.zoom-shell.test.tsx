@@ -14,6 +14,8 @@ const sessionOrchestrator = {
   openAuthModal: vi.fn(),
 }
 
+const telegramRuntime = { miniApp: true }
+
 const systemState = {
   state: {
     permissions: {
@@ -40,7 +42,7 @@ vi.mock('@/features/auth/context/SessionOrchestratorContext', () => ({
 }))
 
 vi.mock('@/features/social/utils/telegramWebApp', () => ({
-  isTelegramMiniApp: () => true,
+  isTelegramMiniApp: () => telegramRuntime.miniApp,
 }))
 
 vi.mock('@/hooks/useSmartNavigation', () => ({
@@ -78,6 +80,7 @@ describe('MainLayout zoom shell ownership', () => {
     vi.clearAllMocks()
     state.auth.user = null
     state.auth.role = null
+    telegramRuntime.miniApp = true
     systemState.state = {
       permissions: {
         role: 'USER',
@@ -122,6 +125,7 @@ describe('MainLayout zoom shell ownership', () => {
   it('hides USER bottom nav for privileged staff on /app/dashboard/admin/studio even if system role is stale USER', async () => {
     state.auth.user = { id: 'staff-1', role: 'ADMIN' }
     state.auth.role = 'ADMIN'
+    telegramRuntime.miniApp = true
     systemState.state = {
       permissions: {
         role: 'USER',
@@ -156,6 +160,7 @@ describe('MainLayout zoom shell ownership', () => {
   it('keeps USER bottom nav for user shell on /app/dashboard/zoom', async () => {
     state.auth.user = { id: 'user-1', role: 'USER' }
     state.auth.role = 'USER'
+    telegramRuntime.miniApp = true
     systemState.state = {
       permissions: {
         role: 'USER',
@@ -186,4 +191,35 @@ describe('MainLayout zoom shell ownership', () => {
     expect(markup).toContain('USER_ZOOM_PANEL')
     expect(markup).toContain('BOTTOM_NAV')
   })
+
+  it('keeps the website footer outside Mini App context', async () => {
+    telegramRuntime.miniApp = false
+    state.auth.user = { id: 'user-1', role: 'USER' }
+    state.auth.role = 'USER'
+
+    const { default: MainLayout } = await import('./MainLayout')
+
+    const markup = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/app/dashboard/zoom'] },
+        createElement(
+          Routes,
+          undefined,
+          createElement(
+            Route,
+            { element: createElement(MainLayout, { dashboard: true }) },
+            createElement(Route, {
+              path: '/app/dashboard/zoom',
+              element: createElement('div', undefined, 'USER_ZOOM_PANEL'),
+            }),
+          ),
+        ),
+      ),
+    )
+
+    expect(markup).toContain('USER_ZOOM_PANEL')
+    expect(markup).toContain('FOOTER')
+  })
+
 })

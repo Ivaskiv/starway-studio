@@ -2,6 +2,7 @@ import type { Request,Response } from 'express'
 import { buildClearSecureCookieOptions,buildSecureCookieOptions } from '../../../core/state-machine/securityFoundation.js'
 import { withRetry } from '../../../db/client.js'
 import type { AuthenticatedRequest,AuthUser } from '../../../types/globalTypes.js'
+import { computeAvailableRoles,isRoleAvailable } from '../access/roles.js'
 import { AuthServiceError } from '../errors.js'
 import { assertHumanVerification } from '../human-verification.js'
 
@@ -256,6 +257,15 @@ export async function refresh(req: Request, res: Response) {
     const decoded = verifyRefreshToken(token)
     console.log('[AUTH][REFRESH]', { tokenPresent: true, userId: decoded?.id ?? null })
 
+    // Re-check permission before grace/in-flight reuse so revocation cannot reuse an EXPERT session.
+    const expertUser = decoded.contextualRole === 'EXPERT'
+      ? await withRetry(() => resolveSafeUserById(decoded.id))
+      : null
+    if (decoded.contextualRole === 'EXPERT'
+      && (!expertUser || !isRoleAvailable('EXPERT', computeAvailableRoles({ role: expertUser.role })))) {
+      throw new AuthServiceError('forbidden_role', 403)
+    }
+
     const recent = getRecentRefreshSession(token)
     if (recent) {
       res.cookie('refreshToken', recent.refreshToken, COOKIE_OPTIONS)
@@ -278,20 +288,26 @@ export async function refresh(req: Request, res: Response) {
         throw new AuthServiceError('refresh_user_mismatch', 401, 'Refresh token user mismatch')
       }
 
-      const user = await withRetry(() => resolveSafeUserById(exists.userId))
+      const user = expertUser ?? await withRetry(() => resolveSafeUserById(exists.userId))
       if (!user) {
         throw new AuthServiceError('user_not_found', 401, 'User not found')
       }
 
-      const newAccess = generateAccessToken({ id: user.id, role: user.role, email: user.email } as AuthUser)
-      const newRefresh = generateRefreshToken(user.id)
-      await withRetry(() => storeRefreshToken(user.id, newRefresh))
+      const sessionUser = decoded.contextualRole
+        ? { ...user, role: decoded.contextualRole, activeRole: decoded.contextualRole }
+        : user
+      const newAccess = generateAccessToken({
+        id: user.id, role: sessionUser.role, email: user.email,
+        ...(decoded.contextualRole ? { activeRole: decoded.contextualRole } : {}),
+      } as AuthUser)
+      const newRefresh = generateRefreshToken(user.id, decoded.contextualRole)
+      const savedRefreshToken = await withRetry(() => storeRefreshToken(user.id, newRefresh))
       await withRetry(() => removeRefreshToken(token))
 
       return {
         accessToken: newAccess,
-        refreshToken: newRefresh,
-        user,
+        refreshToken: savedRefreshToken.token,
+        user: sessionUser,
       }
     })()
 

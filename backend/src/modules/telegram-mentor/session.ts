@@ -135,3 +135,18 @@ export async function getUserIdByChatId(chatId: string): Promise<string | null> 
   const link = await prisma.telegramLink.findFirst({ where: { chatId } })
   return link?.userId ?? null
 }
+
+export async function setSupportPending(userId: string, chatId: string, pending: boolean): Promise<void> {
+  const mentor = await ensureMentor(userId)
+  await prisma.$transaction(async tx => {
+    await tx.aiMentorSession.upsert({
+      where: { userId },
+      create: { userId, chatId, state: 'idle', step: 0, data: {}, userMentorId: mentor.id },
+      update: {},
+    })
+    // Preserve concurrently updated question/mentor state and unrelated session data.
+    await tx.$executeRaw`UPDATE "mentor_sessions"
+      SET data = COALESCE(data, '{}'::jsonb) || jsonb_build_object('supportPending', ${pending}::boolean)
+      WHERE "userId" = ${userId}`
+  })
+}
