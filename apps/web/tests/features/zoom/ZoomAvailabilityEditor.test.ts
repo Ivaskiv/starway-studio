@@ -1,9 +1,30 @@
 import { describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+
+const { weekDays } = vi.hoisted(() => {
+  const window = (dayOfWeek: number, hour: number, endHour: number) => ({
+    id: `window-${dayOfWeek}`, dayOfWeek, hour, minute: 0, endHour, endMinute: 0,
+    timezone: 'Europe/Kyiv', sessionType: 'individual', maxSlots: 1,
+    priceCents: 0, durationMinutes: 60, active: true,
+  })
+  return {
+    weekDays: [
+      { date: '2026-09-21', source: 'recurring', hasOverride: false, windows: [window(1, 9, 16)] },
+      { date: '2026-09-22', source: 'override', hasOverride: true, windows: [window(2, 16, 20)] },
+      { date: '2026-09-23', source: 'recurring', hasOverride: false, windows: [window(3, 10, 14)] },
+      { date: '2026-09-24', source: 'recurring', hasOverride: false, windows: [] },
+      { date: '2026-09-25', source: 'recurring', hasOverride: false, windows: [] },
+      { date: '2026-09-26', source: 'recurring', hasOverride: false, windows: [] },
+      { date: '2026-09-27', source: 'recurring', hasOverride: false, windows: [] },
+    ],
+  }
+})
 
 vi.mock('../../../src/features/zoom/zoom.api', () => ({
-  useGetAvailabilityQuery: () => ({ data: [] }),
-  useGetAvailabilityWeekQuery: () => ({ data: [] }),
+  useGetAvailabilityQuery: () => ({ data: [], refetch: vi.fn() }),
+  useGetAvailabilityWeekQuery: () => ({ data: weekDays, refetch: vi.fn() }),
   useSaveAvailabilityWeekMutation: () => [vi.fn(), { isLoading: false }],
   useSaveAvailabilityMutation: () => [vi.fn(), { isLoading: false }],
 }))
@@ -15,6 +36,7 @@ import {
   getWeekDateKeys,
   timeValue,
   validateIndividualWindow,
+  ZoomAvailabilityEditor,
 } from '../../../src/features/zoom/ZoomAvailabilityEditor'
 
 describe('ZoomAvailabilityEditor recurring-window contract', () => {
@@ -88,5 +110,19 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
       { date: '2026-09-22', reset: true },
       { date: '2026-09-23', reset: true },
     ])
+  })
+
+  it('renders exactly seven compact canonical week rows without opening date editors', () => {
+    const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+      weekAnchor: new Date('2026-09-23T12:00:00.000Z'), sessions: [],
+      onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+    }))
+
+    expect(markup.match(/data-availability-week-row/g)).toHaveLength(7)
+    expect(markup).toContain('Пн, 21.09')
+    expect(markup).toContain('09:00–16:00')
+    expect(markup).toContain('ВИХІДНИЙ')
+    expect(markup).not.toContain('Доступний час')
+    expect(markup).not.toContain('ЗБЕРЕГТИ ТИЖДЕНЬ')
   })
 })
