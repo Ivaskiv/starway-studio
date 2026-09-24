@@ -122,6 +122,8 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
     expect(markup).toContain('Пн, 21.09')
     expect(markup).toContain('09:00–16:00')
     expect(markup).toContain('ВИХІДНИЙ')
+    expect(markup).toContain('ЗАСТОСУВАТИ ЗВИЧНИЙ ГРАФІК')
+    expect(markup.indexOf('ЗАСТОСУВАТИ ЗВИЧНИЙ ГРАФІК')).toBeGreaterThan(markup.lastIndexOf('data-availability-week-row'))
     expect(markup).not.toContain('Доступний час')
     expect(markup).not.toContain('ЗБЕРЕГТИ ТИЖДЕНЬ')
   })
