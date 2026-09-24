@@ -10,6 +10,8 @@ vi.mock('../../../src/features/zoom/zoom.api', () => ({
 
 import {
   createIndividualWindow,
+  buildDayToggleChange,
+  buildWeekOverrideResets,
   getWeekDateKeys,
   timeValue,
   validateIndividualWindow,
@@ -56,5 +58,35 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
     const sundayWindows = [monday].filter((slot) => slot.dayOfWeek === 0)
 
     expect(sundayWindows).toEqual([])
+  })
+
+  it('persists a working day as an explicit empty override in one toggle action', () => {
+    const change = buildDayToggleChange({
+      date: '2026-09-21', source: 'recurring', hasOverride: false,
+      windows: [createIndividualWindow(1)],
+    })
+
+    expect(change).toEqual({ date: '2026-09-21', windows: [] })
+  })
+
+  it('restores inheritance only by deleting an existing empty override', () => {
+    const explicitOff = buildDayToggleChange({ date: '2026-09-22', source: 'override', hasOverride: true, windows: [] })
+    const recurringOff = buildDayToggleChange({ date: '2026-09-23', source: 'recurring', hasOverride: false, windows: [] })
+
+    expect(explicitOff).toEqual({ date: '2026-09-22', reset: true })
+    expect(recurringOff).toBeNull()
+  })
+
+  it('applies the recurring schedule by resetting only existing date overrides', () => {
+    const changes = buildWeekOverrideResets([
+      { date: '2026-09-21', source: 'recurring', hasOverride: false, windows: [createIndividualWindow(1)] },
+      { date: '2026-09-22', source: 'override', hasOverride: true, windows: [] },
+      { date: '2026-09-23', source: 'override', hasOverride: true, windows: [createIndividualWindow(3)] },
+    ])
+
+    expect(changes).toEqual([
+      { date: '2026-09-22', reset: true },
+      { date: '2026-09-23', reset: true },
+    ])
   })
 })

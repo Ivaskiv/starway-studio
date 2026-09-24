@@ -49,7 +49,8 @@ function formatWeekRange(from: string, to: string) {
   const end = new Date(to)
   const day = (date: Date) => new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', day: 'numeric' }).format(date)
   const month = (date: Date) => MONTHS[Number(new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', month: 'numeric' }).format(date)) - 1]
-  return month(start) === month(end) ? `${day(start)}–${day(end)} ${month(start)}` : `${day(start)} ${month(start)} — ${day(end)} ${month(end)}`
+  const year = new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', year: 'numeric' }).format(start)
+  return month(start) === month(end) ? `${day(start)}–${day(end)} ${month(start)} ${year}` : `${day(start)} ${month(start)} — ${day(end)} ${month(end)} ${year}`
 }
 
 function dateLabel(date: Date) {
@@ -67,6 +68,15 @@ export function getWeekDateKeys(weekAnchor: Date) {
   const range = getKyivWeekRange(weekAnchor)
   const fromKey = getKyivDateKey(new Date(range.from))
   return Array.from({ length: 7 }, (_, index) => addKyivDays(fromKey, index))
+}
+
+export function buildDayToggleChange(day: AvailabilityWeekDay): AvailabilityWeekChange | null {
+  if (day.windows.length > 0) return { date: day.date, windows: [] }
+  return day.hasOverride ? { date: day.date, reset: true } : null
+}
+
+export function buildWeekOverrideResets(days: AvailabilityWeekDay[]): AvailabilityWeekChange[] {
+  return days.filter((day) => day.hasOverride).map((day) => ({ date: day.date, reset: true }))
 }
 
 function AvailabilityWindowEditor({ slot, onChange, onDelete, onDone }: { slot: AvailabilitySlot; onChange: (next: AvailabilitySlot) => void; onDelete: () => void; onDone: () => void }) {
@@ -104,14 +114,15 @@ function RegularScheduleSummary({ slots }: { slots: AvailabilitySlot[] }) {
   })}</div>
 }
 
-function WeekPreview({ weekAnchor, sessions, recurringSlots }: { weekAnchor: Date; sessions: ZoomCalendarSession[]; recurringSlots: AvailabilitySlot[] }) {
+function WeekPreview({ weekAnchor, sessions }: { weekAnchor: Date; sessions: ZoomCalendarSession[] }) {
   const from = getWeekDateKeys(weekAnchor)[0]!
-  const { data: persistedDays = [], isFetching, refetch } = useGetAvailabilityWeekQuery(from)
+  const { data: persistedDays = [], isFetching, isError, refetch } = useGetAvailabilityWeekQuery(from)
   const [saveWeek, { isLoading }] = useSaveAvailabilityWeekMutation()
   const [draft, setDraft] = useState<AvailabilityWeekDay[]>(persistedDays)
   const [resetDates, setResetDates] = useState<Set<string>>(new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saveError, setSaveError] = useState(false)
+  const [savingDate, setSavingDate] = useState<string | null>(null)
   const persistedKey = useMemo(() => JSON.stringify(persistedDays), [persistedDays])
   const draftKey = useMemo(() => JSON.stringify(draft), [draft])
   const previousPersistedKey = useRef(persistedKey)
@@ -130,11 +141,14 @@ function WeekPreview({ weekAnchor, sessions, recurringSlots }: { weekAnchor: Dat
     setResetDates((dates) => { const next = new Set(dates); next.delete(date); return next })
     setSaveError(false)
   }
-  const applyRegularSchedule = () => {
-    setDraft((days) => days.map((day) => ({ ...day, source: 'recurring', hasOverride: false, windows: recurringSlots.filter((slot) => slot.active && slot.sessionType === 'individual' && slot.dayOfWeek === availabilityDayOfWeek(new Date(day.date))).map((slot) => ({ ...slot })) })))
-    setResetDates(new Set(persistedDays.filter((day: AvailabilityWeekDay) => day.hasOverride).map((day: AvailabilityWeekDay) => day.date)))
-    setSaveError(false)
+  const refreshWeek = async () => { const refreshed = await refetch(); if (refreshed.data) setDraft(refreshed.data); setResetDates(new Set()) }
+  const persistChanges = async (changes: AvailabilityWeekChange[], date?: string) => {
+    if (changes.length === 0) return
+    setSaveError(false); setSavingDate(date ?? null)
+    try { await saveWeek({ from, days: changes }).unwrap(); await refreshWeek() } catch { setSaveError(true) } finally { setSavingDate(null) }
   }
+  const applyRegularSchedule = () => { void persistChanges(buildWeekOverrideResets(persistedDays)) }
+  const toggleDay = (day: AvailabilityWeekDay) => { const change = buildDayToggleChange(day); if (change) void persistChanges([change], day.date) }
   const save = async () => {
     if (!dirty) return
     const changes: AvailabilityWeekChange[] = draft.flatMap((day): AvailabilityWeekChange[] => {
@@ -144,20 +158,20 @@ function WeekPreview({ weekAnchor, sessions, recurringSlots }: { weekAnchor: Dat
     })
     if (changes.length === 0) return
     setSaveError(false)
-    try { const result = await saveWeek({ from, days: changes }).unwrap(); void result; const refreshed = await refetch(); if (refreshed.data) setDraft(refreshed.data); setResetDates(new Set()) } catch { setSaveError(true) }
+    try { await saveWeek({ from, days: changes }).unwrap(); await refreshWeek() } catch { setSaveError(true) }
   }
   const invalidWindow = draft.flatMap((day) => day.windows).map(validateIndividualWindow).find(Boolean)
-  const hasRecurringIndividualWindows = recurringSlots.some((slot) => slot.active && slot.sessionType === 'individual')
-  return <div className="space-y-3"><button type="button" disabled={!hasRecurringIndividualWindows} onClick={applyRegularSchedule} className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-white/75 disabled:cursor-not-allowed disabled:opacity-40">ЗАСТОСУВАТИ ЗВИЧНИЙ ГРАФІК</button>{isFetching && persistedDays.length === 0 ? <p className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-xs text-white/55">Завантажуємо доступність…</p> : draft.map((day) => {
+  const hasOverrides = persistedDays.some((day) => day.hasOverride)
+  return <div className="space-y-3"><button type="button" disabled={!hasOverrides || isLoading} onClick={applyRegularSchedule} className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-white/75 disabled:cursor-not-allowed disabled:opacity-40">ЗАСТОСУВАТИ ЗВИЧНИЙ ГРАФІК</button>{isFetching && persistedDays.length === 0 ? <p className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-xs text-white/55">Завантажуємо доступність…</p> : isError ? <div className="rounded-xl border border-red-300/25 bg-red-500/10 p-3 text-sm text-red-100">Не вдалося завантажити доступність.<button type="button" onClick={() => void refetch()} className="ml-2 font-semibold underline">Повторити</button></div> : draft.map((day) => {
     const date = new Date(day.date)
     const dateSessions = sessions.filter((session) => getKyivDateKey(new Date(session.scheduledAt)) === getKyivDateKey(date))
-    const restoreRecurring = () => { setResetDates((dates) => new Set(dates).add(day.date)); setDraft((days) => days.map((item) => item.date === day.date ? { ...item, source: 'recurring', hasOverride: false, windows: recurringSlots.filter((slot) => slot.active && slot.sessionType === 'individual' && slot.dayOfWeek === availabilityDayOfWeek(date)).map((slot) => ({ ...slot })) } : item)) }
-    return <section key={day.date} className="border-b border-white/10 pb-3 last:border-0"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-white">{dateLabel(date)}</h3>{day.hasOverride && <span className="text-[10px] font-semibold text-sky-100">ЗМІНЕНО</span>}</div>{day.windows.length ? <div className="mt-2 space-y-2">{day.windows.map((slot) => editingId === slot.id ? <AvailabilityWindowEditor key={slot.id} slot={slot} onChange={(next) => updateWindows(day.date, day.windows.map((item) => item.id === slot.id ? next : item))} onDelete={() => { updateWindows(day.date, day.windows.filter((item) => item.id !== slot.id)); setEditingId(null) }} onDone={() => setEditingId(null)} /> : <div key={slot.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2"><span className="text-sm text-white">{timeValue(slot.hour, slot.minute)} — {timeValue(slot.endHour ?? slot.hour + 1, slot.endMinute ?? slot.minute)}</span><button type="button" onClick={() => setEditingId(slot.id)} className="text-xs font-semibold text-sky-100">ЗМІНИТИ</button></div>)}</div> : <><p className="mt-2 text-sm text-white/45">ВИХІДНИЙ</p><button type="button" onClick={() => updateWindows(day.date, [createIndividualWindow(availabilityDayOfWeek(date))])} className="mt-2 rounded-xl border border-sky-300/25 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-100">ВІДКРИТИ ДЕНЬ</button></>}{(day.windows.length > 0 || day.hasOverride) && <div className="mt-2 flex gap-3">{day.windows.length > 0 && <><button type="button" onClick={() => updateWindows(day.date, [...day.windows, createIndividualWindow(availabilityDayOfWeek(date))])} className="text-xs font-semibold text-sky-100">+ ДОДАТИ</button><button type="button" onClick={() => updateWindows(day.date, [])} className="text-xs font-semibold text-white/55">ЗРОБИТИ ВИХІДНИМ</button></>}{day.hasOverride && <button type="button" onClick={restoreRecurring} className="text-xs font-semibold text-white/55">ПОВЕРНУТИ ЗВИЧНИЙ ГРАФІК</button>}</div>}{dateSessions.map((session) => <div key={session.id} className="mt-2 rounded-xl border border-white/10 bg-black/15 px-3 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-white/55">{session.type === 'individual' ? 'ЗАПИСАНО' : session.type === 'group_practice' ? 'ГРУПОВА ПРАКТИКА' : 'СЕСІЯ'}</p><p className="mt-1 text-sm text-white">{formatSessionTime(session.scheduledAt, session.durationMinutes)} · {session.topic}</p><p className="mt-1 text-xs text-white/45">Вже заплановано</p></div>)}</section>
+    const dayChange = buildDayToggleChange(day)
+    return <section key={day.date} className="border-b border-white/10 pb-3 last:border-0"><div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-white">{dateLabel(date)}</h3><p className="mt-1 text-xs text-white/55">{day.windows.length ? day.windows.map((slot) => `${timeValue(slot.hour, slot.minute)} — ${timeValue(slot.endHour ?? slot.hour + 1, slot.endMinute ?? slot.minute)}`).join(', ') : 'ВИХІДНИЙ'}</p></div><div className="flex items-center gap-2">{day.hasOverride && <span className="text-[10px] font-semibold text-sky-100">ЗМІНЕНО</span>}<button type="button" aria-label={`${dateLabel(date)}: ${day.windows.length ? 'зробити вихідним' : 'відновити звичний графік'}`} disabled={!dayChange || Boolean(savingDate) || isLoading} onClick={() => toggleDay(day)} className={`rounded-full px-3 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${day.windows.length ? 'bg-sky-500/25 text-sky-100' : 'bg-white/[0.08] text-white/55'}`}>{savingDate === day.date ? '…' : day.windows.length ? 'ON' : 'OFF'}</button></div></div>{day.windows.length ? <div className="mt-2 space-y-2">{day.windows.map((slot) => editingId === slot.id ? <AvailabilityWindowEditor key={slot.id} slot={slot} onChange={(next) => updateWindows(day.date, day.windows.map((item) => item.id === slot.id ? next : item))} onDelete={() => { updateWindows(day.date, day.windows.filter((item) => item.id !== slot.id)); setEditingId(null) }} onDone={() => setEditingId(null)} /> : <div key={slot.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2"><span className="text-sm text-white">{timeValue(slot.hour, slot.minute)} — {timeValue(slot.endHour ?? slot.hour + 1, slot.endMinute ?? slot.minute)}</span><button type="button" onClick={() => setEditingId(slot.id)} className="text-xs font-semibold text-sky-100">ЗМІНИТИ</button></div>)}</div> : <button type="button" onClick={() => updateWindows(day.date, [createIndividualWindow(availabilityDayOfWeek(date))])} className="mt-2 rounded-xl border border-sky-300/25 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-100">НАЛАШТУВАТИ ЧАС</button>}{(day.windows.length > 0 || day.hasOverride) && <div className="mt-2 flex gap-3">{day.windows.length > 0 && <button type="button" onClick={() => updateWindows(day.date, [...day.windows, createIndividualWindow(availabilityDayOfWeek(date))])} className="text-xs font-semibold text-sky-100">+ ДОДАТИ</button>}{day.hasOverride && <button type="button" onClick={() => void persistChanges([{ date: day.date, reset: true }], day.date)} className="text-xs font-semibold text-white/55">ПОВЕРНУТИ ЗВИЧНИЙ ГРАФІК</button>}</div>}{dateSessions.map((session) => <div key={session.id} className="mt-2 rounded-xl border border-white/10 bg-black/15 px-3 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-white/55">{session.type === 'individual' ? 'ЗАПИСАНО' : session.type === 'group_practice' ? 'ГРУПОВА ПРАКТИКА' : 'СЕСІЯ'}</p><p className="mt-1 text-sm text-white">{formatSessionTime(session.scheduledAt, session.durationMinutes)} · {session.topic}</p><p className="mt-1 text-xs text-white/45">Вже заплановано</p></div>)}</section>
   })}{saveError && <p className="text-sm text-red-200">Не вдалося зберегти тиждень.</p>}<button type="button" disabled={!dirty || Boolean(invalidWindow) || isLoading} onClick={() => void save()} className="w-full rounded-xl border border-sky-300/30 bg-sky-500/20 px-3 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{isLoading ? 'ЗБЕРІГАЄМО…' : 'ЗБЕРЕГТИ ТИЖДЕНЬ'}</button></div>
 }
 
 export function ZoomAvailabilityEditor({ weekAnchor, sessions, onPreviousWeek, onNextWeek, onCurrentWeek }: { weekAnchor: Date; sessions: ZoomCalendarSession[]; onPreviousWeek: () => void; onNextWeek: () => void; onCurrentWeek: () => void }) {
-  const { data: persistedSlots = [] } = useGetAvailabilityQuery()
+  const { data: persistedSlots = [], refetch: refetchAvailability } = useGetAvailabilityQuery()
   const [saveAvailability, { isLoading }] = useSaveAvailabilityMutation()
   const [mode, setMode] = useState<AvailabilityEditorMode>('week')
   const [draft, setDraft] = useState<AvailabilitySlot[]>(persistedSlots)
@@ -179,9 +193,9 @@ export function ZoomAvailabilityEditor({ weekAnchor, sessions, onPreviousWeek, o
   const save = async () => {
     if (!dirty || invalidWindow) return
     setSaveError(false); setSaved(false)
-    try { await saveAvailability(draft).unwrap(); setSaved(true); setRegularEditing(false) } catch { setSaveError(true) }
+    try { await saveAvailability(draft).unwrap(); await refetchAvailability(); setSaved(true); setRegularEditing(false) } catch { setSaveError(true) }
   }
   return <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(2,8,23,0.95))] p-4 text-white"><h2 className="text-lg font-semibold">МОЯ ДОСТУПНІСТЬ</h2><p className="mt-1 text-sm leading-relaxed text-white/55">Коли користувачі можуть записатися<br />на індивідуальну сесію</p><div className="mt-4 grid grid-cols-2 rounded-xl border border-white/10 bg-black/15 p-1"><button type="button" onClick={() => setMode('week')} className={`rounded-lg px-3 py-2 text-xs font-semibold ${mode === 'week' ? 'bg-sky-500/20 text-white' : 'text-white/55'}`}>ЦЕЙ ТИЖДЕНЬ</button><button type="button" onClick={() => setMode('regular')} className={`rounded-lg px-3 py-2 text-xs font-semibold ${mode === 'regular' ? 'bg-sky-500/20 text-white' : 'text-white/55'}`}>ЗВИЧНИЙ ГРАФІК</button></div>
-    {mode === 'week' ? <><div className="mt-4 flex items-center justify-between gap-2"><button type="button" aria-label="Попередній тиждень доступності" onClick={onPreviousWeek} className="h-9 w-9 rounded-xl border border-white/10 text-white/80">‹</button><p className="text-center text-sm font-semibold text-white">{formatWeekRange(weekRange.from, weekRange.to)}</p><button type="button" aria-label="Наступний тиждень доступності" onClick={onNextWeek} className="h-9 w-9 rounded-xl border border-white/10 text-white/80">›</button></div><button type="button" onClick={onCurrentWeek} className="mt-3 w-full rounded-xl border border-sky-300/25 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-100">ЦЕЙ ТИЖДЕНЬ</button><WeekPreview weekAnchor={weekAnchor} sessions={sessions} recurringSlots={persistedSlots} /></> : <><div className="mt-4"><h3 className="text-base font-semibold">ЗВИЧНИЙ ГРАФІК</h3><p className="mt-1 text-sm text-white/55">Твій стандартний робочий тиждень</p></div>{!regularEditing ? <><RegularScheduleSummary slots={persistedSlots} />{saved && <p className="mt-3 text-sm text-emerald-200">Звичний графік оновлено.</p>}<button type="button" onClick={() => { setRegularEditing(true); setSaved(false); setSaveError(false) }} className="mt-4 w-full rounded-xl border border-sky-300/30 bg-sky-500/20 px-3 py-3 text-sm font-semibold text-white">{hasRecurringIndividualWindows ? 'ОНОВИТИ ЗВИЧНИЙ ГРАФІК' : 'СТВОРИТИ ЗВИЧНИЙ ГРАФІК'}</button></> : <><div className="mt-4"><RegularSchedule slots={draft} onChange={(next) => { setDraft(next); setSaved(false); setSaveError(false) }} /></div><p className="mt-4 text-xs text-white/55">Індивідуальна сесія: 60 хв<br />Крок запису: 15 хв<br />Час: {timezone === 'Europe/Kyiv' ? 'Київ' : timezone}</p><p className="mt-4 text-xs leading-relaxed text-white/45">Зміни доступності не скасовують уже створені записи.</p>{saveError && <p className="mt-3 text-sm text-red-200">Не вдалося зберегти графік.</p>}<button type="button" disabled={!dirty || Boolean(invalidWindow) || isLoading} onClick={() => void save()} className="mt-4 w-full rounded-xl border border-sky-300/30 bg-sky-500/20 px-3 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{saveError ? 'ПОВТОРИТИ' : isLoading ? 'ЗБЕРІГАЄМО…' : hasRecurringIndividualWindows ? 'ЗБЕРЕГТИ ЗВИЧНИЙ ГРАФІК' : 'СТВОРИТИ ЗВИЧНИЙ ГРАФІК'}</button></>}</>}
+    {mode === 'week' ? <><div className="mt-4 flex items-center justify-between gap-2"><button type="button" aria-label="Попередній тиждень доступності" onClick={onPreviousWeek} className="h-9 w-9 rounded-xl border border-white/10 text-white/80">‹</button><p className="text-center text-sm font-semibold text-white">{formatWeekRange(weekRange.from, weekRange.to)}</p><button type="button" aria-label="Наступний тиждень доступності" onClick={onNextWeek} className="h-9 w-9 rounded-xl border border-white/10 text-white/80">›</button></div><WeekPreview weekAnchor={weekAnchor} sessions={sessions} /></> : <><div className="mt-4"><h3 className="text-base font-semibold">ЗВИЧНИЙ ГРАФІК</h3><p className="mt-1 text-sm text-white/55">Твій стандартний робочий тиждень</p></div>{!regularEditing ? <><RegularScheduleSummary slots={persistedSlots} />{saved && <p className="mt-3 text-sm text-emerald-200">Звичний графік оновлено.</p>}<button type="button" onClick={() => { setRegularEditing(true); setSaved(false); setSaveError(false) }} className="mt-4 w-full rounded-xl border border-sky-300/30 bg-sky-500/20 px-3 py-3 text-sm font-semibold text-white">{hasRecurringIndividualWindows ? 'ОНОВИТИ ЗВИЧНИЙ ГРАФІК' : 'СТВОРИТИ ЗВИЧНИЙ ГРАФІК'}</button></> : <><div className="mt-4"><RegularSchedule slots={draft} onChange={(next) => { setDraft(next); setSaved(false); setSaveError(false) }} /></div><p className="mt-4 text-xs text-white/55">Індивідуальна сесія: 60 хв<br />Крок запису: 15 хв<br />Час: {timezone === 'Europe/Kyiv' ? 'Київ' : timezone}</p><p className="mt-4 text-xs leading-relaxed text-white/45">Зміни доступності не скасовують уже створені записи.</p>{saveError && <p className="mt-3 text-sm text-red-200">Не вдалося зберегти графік.</p>}<button type="button" disabled={!dirty || Boolean(invalidWindow) || isLoading} onClick={() => void save()} className="mt-4 w-full rounded-xl border border-sky-300/30 bg-sky-500/20 px-3 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{saveError ? 'ПОВТОРИТИ' : isLoading ? 'ЗБЕРІГАЄМО…' : hasRecurringIndividualWindows ? 'ЗБЕРЕГТИ ЗВИЧНИЙ ГРАФІК' : 'СТВОРИТИ ЗВИЧНИЙ ГРАФІК'}</button></>}</>}
   </section>
 }
